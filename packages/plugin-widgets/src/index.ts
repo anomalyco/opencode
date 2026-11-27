@@ -4,6 +4,7 @@ import { Plugin } from "@opencode/plugin/effect"
 import type { RpcRegistration } from "@opencode/plugin/effect/rpc"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { Skill } from "@opencode/schema/skill"
 import { Tool } from "@opencode/schema/tool"
 import { Widget } from "@opencode/schema/widget"
@@ -89,18 +90,60 @@ export default Plugin.define({
         )
       })
 
-      const list = Effect.fn("WidgetPlugin.list")(function* (sessionID: string) {
+      // Every state under `prefix`: one Session's (`state:<sessionID>:`) or the server's (`state:`).
+      const scan = Effect.fnUntraced(function* (prefix: string) {
         const states: Widget.State[] = []
         let after: string | undefined
         do {
-          const page = yield* ctx.storage.scan({ prefix: `state:${sessionID}:`, after, limit: 100 })
+          const page = yield* ctx.storage.scan({ prefix, after, limit: 100 })
           for (const entry of page.entries) {
             const state = Option.getOrUndefined(decodeState(entry.value))
             if (state) states.push(state)
           }
           after = page.next
         } while (after !== undefined)
-        return states.toSorted((a, b) => a.time.created - b.time.created)
+        return states
+      })
+
+      const list = Effect.fn("WidgetPlugin.list")(function* (sessionID: string) {
+        return (yield* scan(`state:${sessionID}:`)).toSorted((a, b) => a.time.created - b.time.created)
+      })
+
+      // The data lives only in the tool call's input, so each widget's message is read (once per message). A widget
+      // whose Session is gone is left out; states of a deleted Session are removed anyway.
+      const instances = Effect.fn("WidgetPlugin.instances")(function* () {
+        const sessions = new Map<string, Option.Option<Session.Info>>()
+        const messages = new Map<string, Option.Option<SessionMessage.Info>>()
+        const found: Widget.Instance[] = []
+        for (const state of yield* scan("state:")) {
+          if (state.status === "superseded") continue
+          const sessionID = Session.ID.make(state.sessionID)
+          const session = sessions.get(state.sessionID) ?? (yield* ctx.session.get({ sessionID }).pipe(Effect.option))
+          sessions.set(state.sessionID, session)
+          if (Option.isNone(session)) continue
+          const message =
+            messages.get(state.messageID) ??
+            (yield* ctx.session.message
+              .get({ sessionID, messageID: SessionMessage.ID.make(state.messageID) })
+              .pipe(Effect.option))
+          messages.set(state.messageID, message)
+          const info = Option.getOrUndefined(message)
+          const part =
+            info?.type === "assistant"
+              ? info.content.find((part) => part.type === "tool" && part.id === state.callID)
+              : undefined
+          const data = part?.type === "tool" && part.state.status !== "streaming" ? part.state.input.data : undefined
+          found.push({
+            state,
+            ...(data === undefined ? {} : { data: data as Schema.Json }),
+            session: {
+              ...(session.value.title === undefined ? {} : { title: session.value.title }),
+              location: session.value.location,
+            },
+            updated: state.time.responded ?? state.time.created,
+          })
+        }
+        return found.toSorted((a, b) => b.updated - a.updated)
       })
 
       // Admitted as a steered synthetic message, so it reaches the model like a prompt: an idle Session wakes into a
@@ -247,6 +290,7 @@ export default Plugin.define({
               : widgetTemplates.get(input.name, input.version)
             ).pipe(Effect.mapError((error) => call.error("not_found", error.message, {}))),
           states: (input) => list(input.sessionID),
+          instances: () => instances(),
           respond: (input, call) =>
             Effect.gen(function* () {
               const outcome = yield* respond(input, input.response)

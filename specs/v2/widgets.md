@@ -707,6 +707,7 @@ A widget goes `open → submitted`, `open → dismissed` or `open → superseded
 | `widgetTemplates` | `{}` | `Summary[]`: latest version of every widget template, sorted by name, without source | |
 | `program` | `{ name, version? }` | `Program`: that immutable version, or the latest when `version` is omitted | `not_found` |
 | `states` | `{ sessionID }` | `State[]` of the Session, oldest first | |
+| `instances` | `{}` | `Instance[]`: every widget of the server, last updated first (see Instances) | |
 | `respond` | `{ sessionID, messageID, callID, response: { value } \| { dismiss: true } }` | the new `State` | `not_found`, `closed` (`data: { status }`) |
 | `send` | `{ sessionID, messageID, callID, value, wake? }` | the `State` (unchanged) | `not_found`, `closed`, `rate_limited` |
 | `report` | `{ sessionID, messageID, callID, error: { phase, message, line?, column? }, client, ask? }` | the `State`, with `failure` | `not_found` |
@@ -719,6 +720,27 @@ type Summary = {
 }
 type Program = Summary & { source: string; program: string }   // program as served (Prelude and step ABI)
 ```
+
+#### Instances
+
+`instances` lists the widgets of every Session for clients that show widgets outside their Session's timeline (the
+apps' "Mini apps" dashboard). States live in the plugin's server-wide storage, so any Location answers it; superseded
+widgets and widgets of a Session that can't be read are left out.
+
+```ts
+type Instance = {
+  state: State
+  data?: unknown            // the widget tool call's `data`, read from its message; absent when that can't be read
+  session: { title?: string; location: { directory: string; workspaceID?: string } }
+  updated: number           // epoch ms: time.responded ?? time.created
+}
+```
+
+An instance renders like the widget in its timeline: its program from `program` (`state.widgetTemplate`), `data`, and
+`state`. Its calls (`program`, `respond`, `send`, `report`) go to its Session's Location, as in the timeline. A client
+refetches `instances` when it opens the view or reconnects and applies `changed` after that; a `changed` for a widget
+it doesn't know means a new widget. The plugin reads each widget's message through the plugin API's
+`session.message.get`, once per message.
 
 Event `changed`, `{ sessionID, state: State }`, published (as `rpc.opencode.widget.changed`) in the Session's Location
 whenever a widget is posted or answered. A client fetches `states` when it opens a Session or reconnects, since changes

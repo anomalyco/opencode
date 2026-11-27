@@ -36,6 +36,9 @@ export const make = Effect.gen(function* () {
     resume?: boolean | null
   }> = []
   const asserted: Array<{ action: string; resources: ReadonlyArray<string> }> = []
+  // Sessions and messages the plugin may read, by ID; reading a missing one fails like the server does.
+  const sessions = new Map<string, { title?: string; location: { directory: string } }>()
+  const messages = new Map<string, unknown>()
   const published = yield* Queue.unbounded<{ type: "session.deleted"; data: { sessionID: string } }>()
   const disposed = { dispose: Effect.void }
 
@@ -98,6 +101,16 @@ export const make = Effect.gen(function* () {
     },
     session: {
       synthetic: (input: (typeof synthetic)[number]) => Effect.sync(() => void synthetic.push(input)),
+      get: (input: { sessionID: string }) => {
+        const session = sessions.get(input.sessionID)
+        return session ? Effect.succeed({ id: input.sessionID, ...session }) : Effect.fail("not found")
+      },
+      message: {
+        get: (input: { messageID: string }) => {
+          const message = messages.get(input.messageID)
+          return message ? Effect.succeed(message) : Effect.fail("not found")
+        },
+      },
     },
     event: { subscribe: () => Stream.fromQueue(published) },
   }
@@ -116,5 +129,18 @@ export const make = Effect.gen(function* () {
       RpcFailure
     >
 
-  return { context, storage, tools, skills, permissions, events, synthetic, asserted, published, call }
+  return {
+    context,
+    storage,
+    tools,
+    skills,
+    permissions,
+    events,
+    synthetic,
+    asserted,
+    published,
+    sessions,
+    messages,
+    call,
+  }
 })

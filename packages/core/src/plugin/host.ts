@@ -625,6 +625,16 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
           .pipe(Effect.map((interrupted) => ({ interrupted }))),
       wait: (input) => sessions.wait(input.sessionID),
       context: (input) => sessions.context(input.sessionID),
+      message: {
+        get: (input) =>
+          sessions
+            .message(input)
+            .pipe(
+              Effect.flatMap((message) =>
+                message ? Effect.succeed(message) : Effect.fail(new Session.MessageNotFoundError(input)),
+              ),
+            ),
+      },
       instructions: {
         entry: {
           list: Effect.fn(function* (input) {

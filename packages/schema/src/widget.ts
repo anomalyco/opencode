@@ -1,6 +1,7 @@
 export * as Widget from "./widget.js"
 
 import { Schema } from "effect"
+import { Location } from "./location.js"
 import { Rpc } from "./rpc.js"
 import { optional } from "./schema.js"
 
@@ -135,6 +136,20 @@ export const State = Schema.Struct({
   time: Schema.Struct({ created: Schema.Number, responded: optional(Schema.Number) }),
 }).annotate({ identifier: "Widget.State" })
 
+/**
+ * A widget with what a client needs to show it outside its Session's timeline (a dashboard): its state, the `data` of
+ * its `widget` tool call, and its Session, whose Location the widget's calls go to.
+ */
+export interface Instance extends Schema.Schema.Type<typeof Instance> {}
+export const Instance = Schema.Struct({
+  state: State,
+  /** The tool call's `data`; absent when its message can't be read. */
+  data: optional(Schema.Json),
+  session: Schema.Struct({ title: optional(Schema.String), location: Location.Ref }),
+  /** Epoch milliseconds: when the widget was posted or answered last. */
+  updated: Schema.Number,
+}).annotate({ identifier: "Widget.Instance" })
+
 const Call = { sessionID: Schema.String, messageID: Schema.String, callID: Schema.String }
 const standard = Schema.toStandardSchemaV1
 const NotFound = standard(Schema.Struct({}))
@@ -158,6 +173,8 @@ export const Definition = Rpc.define({
     },
     /** Every widget of a Session, oldest first. */
     states: { input: standard(Schema.Struct({ sessionID: Schema.String })), output: standard(Schema.Array(State)) },
+    /** Every widget of the server across Sessions, except superseded ones, last updated first. Any Location answers. */
+    instances: { input: standard(Schema.Struct({})), output: standard(Schema.Array(Instance)) },
     /** The final answer, once: a submitted value or a dismissal. */
     respond: {
       input: standard(Schema.Struct({ ...Call, response: Response })),

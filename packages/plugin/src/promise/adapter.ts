@@ -698,6 +698,7 @@ export function fromPromise(plugin: Plugin) {
             move: adaptApiMethod(SessionEndpoints["session.move"], host.session.move),
             wait: adaptApiMethod(SessionEndpoints["session.wait"], host.session.wait),
             context: adaptApiMethod(SessionEndpoints["session.context"], host.session.context),
+            message: { get: adaptApiMethod(SessionEndpoints["session.message"], host.session.message.get) },
             instructions: {
               entry: {
                 list: adaptApiMethod(

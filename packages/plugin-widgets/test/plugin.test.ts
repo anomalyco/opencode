@@ -850,3 +850,64 @@ describe("replacing a widget", () => {
       }),
     ))
 })
+
+describe("instances", () => {
+  const instances = (fake: Effect.Success<typeof make>) => fake.call<ReadonlyArray<Widget.Instance>>("instances", {})
+  const assistant = (calls: ReadonlyArray<{ id: string; data: unknown }>) => ({
+    type: "assistant",
+    content: calls.map((call) => ({
+      type: "tool",
+      id: call.id,
+      name: "widget",
+      state: { status: "completed", input: { widgetTemplate: "confirm", data: call.data }, content: [] },
+    })),
+  })
+
+  test("lists every Session's widgets with their data and Session, last updated first, without superseded ones", () =>
+    run((fake) =>
+      Effect.gen(function* () {
+        const other = Session.ID.make("ses_widget_other")
+        const gone = Session.ID.make("ses_widget_gone")
+        const otherMessage = SessionMessage.ID.make("msg_widget_other")
+        fake.sessions.set(sessionID, { title: "Deploys", location: { directory: "/work/a" } })
+        fake.sessions.set(other, { location: { directory: "/work/b" } })
+        const first = context()
+        const second = context()
+        const third = context({ sessionID: other, messageID: otherMessage })
+        const fourth = context({ sessionID: gone })
+        yield* execute(fake, "widget", { widgetTemplate: "confirm", data: confirmData, title: "Deploy" }, first)
+        const newer = { ...confirmData, message: "Deploys main and docs." }
+        yield* execute(fake, "widget", { widgetTemplate: "confirm", data: newer, replaces: first.id }, second)
+        yield* execute(fake, "widget", { widgetTemplate: "confirm", data: confirmData }, third)
+        yield* execute(fake, "widget", { widgetTemplate: "confirm", data: confirmData }, fourth)
+        fake.messages.set(
+          messageID,
+          assistant([
+            { id: first.id, data: confirmData },
+            { id: second.id, data: newer },
+          ]),
+        )
+        // The first Session's widget is answered last, so it is the most recently updated.
+        yield* Effect.sleep("2 millis")
+        yield* fake.call("respond", { sessionID, messageID, callID: second.id, response: { value: true } })
+
+        const listed = yield* instances(fake)
+        expect(listed).toMatchObject([
+          {
+            state: { sessionID, messageID, callID: second.id, status: "submitted" },
+            data: newer,
+            session: { title: "Deploys", location: { directory: "/work/a" } },
+          },
+          {
+            state: { sessionID: other, callID: third.id, status: "open" },
+            session: { location: { directory: "/work/b" } },
+          },
+        ])
+        // The other Session's message can't be read: listed without data; a gone Session's widget is left out.
+        expect(listed[1]).not.toHaveProperty("data")
+        expect(listed[1]?.session).not.toHaveProperty("title")
+        expect(listed[0]?.updated).toBe(listed[0]?.state.time.responded ?? -1)
+        expect(listed[1]?.updated).toBe(listed[1]?.state.time.created)
+      }),
+    ))
+})

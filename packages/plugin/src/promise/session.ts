@@ -239,6 +239,7 @@ export type SessionDomain = Pick<
   | "update"
   | "move"
   | "context"
+  | "message"
 > &
   Pick<ExperimentalSessionApi, "wait" | "instructions"> & {
     readonly hook: ModelHooks<SessionHooks>
