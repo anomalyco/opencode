@@ -6,7 +6,16 @@ import { compileRequest } from "../src/route/client.js"
 import { AnthropicMessages } from "../src/protocols/anthropic-messages.js"
 import { OpenAIResponses } from "../src/protocols/openai-responses.js"
 import { Gemini } from "../src/protocols/gemini.js"
-import { AmazonBedrockMantle, GoogleVertexMessages, OpenAI } from "../src/providers.js"
+import {
+  Alibaba,
+  AmazonBedrockMantle,
+  GoogleVertexMessages,
+  Meta,
+  OpenAI,
+  OpenRouter,
+  XAI,
+  ZAICodingPlan,
+} from "../src/providers.js"
 import { OpenAICompatibleResponses } from "../src/protocols/openai-compatible-responses.js"
 import { applyEffortUpdates } from "../src/effort-updates.js"
 import { it, testEffect } from "./lib/effect.js"
@@ -609,4 +618,59 @@ describe("Open Responses effort updates", () => {
       expect(prepared.body.reasoning).toEqual({ effort: "low" })
     }),
   )
+})
+
+describe("Routes built on the Anthropic Messages and Open Responses formats", () => {
+  // Each of these routes makes its own protocol from a shared body; the effort update support must come along.
+  const wrapped = [
+    ...Alibaba.routes,
+    ...Meta.routes,
+    ...ZAICodingPlan.routes,
+    ...XAI.routes,
+    ...OpenRouter.routes,
+  ].filter((route) => route.id.endsWith("-messages") || route.id.endsWith("-responses"))
+
+  test("covers every wrapping route", () => {
+    expect(wrapped.map((route) => route.id).toSorted()).toEqual([
+      "alibaba-messages",
+      "alibaba-responses",
+      "meta-messages",
+      "meta-responses",
+      "openrouter-responses",
+      "xai-responses",
+      "zai-coding-messages",
+      "zai-coding-responses",
+    ])
+  })
+
+  for (const route of wrapped) {
+    const model = (updates?: boolean) =>
+      route
+        .with({ endpoint: { baseURL: "https://api.example.test/v1" }, auth: Auth.bearer("test") })
+        .model({ id: "test-model", capabilities: updates === undefined ? undefined : { reasoning: { updates } } })
+    const messages = route.id.endsWith("-messages")
+
+    it.effect(`${route.id} sends effort updates only for models that opt in`, () =>
+      Effect.gen(function* () {
+        const send = (updates?: boolean) =>
+          compileRequest(
+            ai.request({
+              model: model(updates),
+              messages: conversation,
+              providerOptions: messages ? { effort: "low" } : { reasoningEffort: "low" },
+              cache: "none",
+            }),
+          ).pipe(
+            Effect.map((prepared) => {
+              const body = prepared.body as { messages?: Array<{ role: string }>; input?: Array<{ type?: string }> }
+              return messages
+                ? (body.messages ?? []).some((message) => message.role === "system")
+                : (body.input ?? []).some((item) => item.type === "configuration_update")
+            }),
+          )
+        expect(yield* send(true)).toBe(true)
+        expect(yield* send()).toBe(false)
+      }),
+    )
+  }
 })
