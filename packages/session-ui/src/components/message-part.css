@@ -1,4 +1,6 @@
 [data-component="user-message"] {
+  --user-message-max-width: min(82%, 64ch);
+
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base);
   font-style: normal;
@@ -20,7 +22,7 @@
     justify-content: flex-end;
     gap: 8px;
     width: fit-content;
-    max-width: min(82%, 64ch);
+    max-width: var(--user-message-max-width);
     margin-inline-start: auto;
   }
 
@@ -117,7 +119,7 @@
 
   [data-slot="user-message-body"] {
     width: fit-content;
-    max-width: min(82%, 64ch);
+    max-width: var(--user-message-max-width);
     margin-inline-start: auto;
     display: flex;
     flex-direction: column;
@@ -526,15 +528,17 @@
     }
   }
 
-  /* Without hover the chevron always shows, so the first line keeps room for it instead of fading text under it. The
-     float also widens a short bubble, so a one-word prompt stays readable. 20px spans the 20px button, less the 12px
-     text padding it overlaps, plus a 4px gap at the 8px inset. */
+  /* Without hover the chevron always shows, so it gets its own padding instead of taking 20px out of the first line
+     of text. The same 20px widens the bubble so the text keeps the width it has on hover devices; a short bubble grows
+     by that amount too, so a one-word prompt stays readable. 20px spans the 20px button, less the 12px text padding
+     it overlaps, plus a 4px gap at the 8px inset. */
   @media not (hover: hover) {
-    [data-slot="user-message-text"]:has(> [data-slot="user-message-menu"])::before {
-      content: "";
-      float: inline-end;
-      width: 20px;
-      height: 1lh;
+    [data-slot="user-message-body"] {
+      max-width: calc(var(--user-message-max-width) + 20px);
+    }
+
+    [data-slot="user-message-text"]:has(> [data-slot="user-message-menu"]) {
+      padding-inline-end: 32px;
     }
 
     [data-slot="user-message-text"] > [data-slot="user-message-menu"] {
