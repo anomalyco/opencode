@@ -54,12 +54,20 @@ const run = Effect.fnUntraced(function* (
   cache?: Provider.Cache,
   usage: ReadonlyArray<typeof hit> = [],
   ping = Duration.zero,
+  archived = false,
 ) {
   const warms: number[] = []
   const events = yield* Queue.unbounded<
-    SessionEvent.Execution.Succeeded | SessionEvent.Compaction.Failed | SessionEvent.Deleted
+    | SessionEvent.Execution.Succeeded
+    | SessionEvent.Compaction.Failed
+    | SessionEvent.Deleted
+    | SessionEvent.Archived
+    | SessionEvent.Unarchived
   >()
   const hooks = new Map<string, (input: SessionContext) => Effect.Effect<void>>()
+  let currentSession: Session.Info = archived
+    ? { ...session, time: { ...session.time, archived: DateTime.makeUnsafe(0) } }
+    : session
   yield* WarmingPlugin.Plugin.effect(
     host({
       model: {
@@ -70,7 +78,7 @@ const run = Effect.fnUntraced(function* (
       },
       event: { subscribe: () => Stream.fromQueue(events) },
       session: {
-        get: () => Effect.succeed(session),
+        get: () => Effect.succeed(currentSession),
         generate: () =>
           Clock.currentTimeMillis.pipe(
             Effect.map((now) => {
@@ -124,10 +132,40 @@ const run = Effect.fnUntraced(function* (
   const remove = emit(
     Queue.offer(events, { id: Event.ID.create(), created: 0, durable, type: "session.deleted", data: { sessionID } }),
   )
+  const archive = emit(
+    Queue.offer(events, {
+      id: Event.ID.create(),
+      created: 0,
+      durable,
+      type: "session.archived",
+      data: { sessionID },
+    }).pipe(
+      Effect.andThen(
+        Effect.sync(() => {
+          currentSession = { ...currentSession, time: { ...currentSession.time, archived: DateTime.makeUnsafe(0) } }
+        }),
+      ),
+    ),
+  )
+  const unarchive = emit(
+    Queue.offer(events, {
+      id: Event.ID.create(),
+      created: 0,
+      durable,
+      type: "session.unarchived",
+      data: { sessionID },
+    }).pipe(
+      Effect.andThen(
+        Effect.sync(() => {
+          currentSession = { ...currentSession, time: { ...currentSession.time, archived: undefined } }
+        }),
+      ),
+    ),
+  )
   /** One whole turn whose response ends right away. */
   const turn = send.pipe(Effect.andThen(end))
   const at = (minutes: number) => TestClock.setTime(minutes * 60_000).pipe(Effect.andThen(Effect.yieldNow))
-  return { warms, send, end, compact, compactionFailed, remove, turn, at }
+  return { warms, send, end, compact, compactionFailed, remove, archive, unarchive, turn, at }
 })
 
 describe("WarmingPlugin interval", () => {
@@ -307,6 +345,42 @@ describe("WarmingPlugin lifecycle", () => {
       yield* warming.remove
       for (const minutes of [8, 12]) yield* warming.at(minutes)
       expect(warming.warms).toEqual([4])
+    }),
+  )
+
+  it.effect("stops warming an archived session and ignores later requests while archived", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true)
+      yield* warming.turn
+      yield* warming.at(4)
+      yield* warming.archive
+      // The store now reports the session as archived, so a new request must not re-arm the loop.
+      yield* warming.send
+      for (const minutes of [8, 12]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4])
+    }),
+  )
+
+  it.effect("does not warm a session that is already archived", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true, undefined, [], Duration.zero, true)
+      yield* warming.turn
+      for (const minutes of [4, 8]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([])
+    }),
+  )
+
+  it.effect("warms again only on a request after unarchive", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true)
+      yield* warming.turn
+      yield* warming.archive
+      yield* warming.unarchive
+      yield* warming.at(4)
+      expect(warming.warms).toEqual([])
+      yield* warming.turn
+      yield* warming.at(8)
+      expect(warming.warms).toEqual([8])
     }),
   )
 
