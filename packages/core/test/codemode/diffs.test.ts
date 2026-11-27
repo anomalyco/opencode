@@ -6,20 +6,52 @@ import { fileDiff } from "../../src/tool/plugin/file-diff"
 const patchResult = (...files: ReturnType<typeof fileDiff>[]) => ({ output: {}, metadata: { files } })
 
 describe("CodeModeDiffs", () => {
-  test("two patches to one file are two changes, in order, each with the diff its result returned", () => {
+  test("changes to one file fold into one entry, its diff from before the first to after the last", () => {
     const diffs = CodeModeDiffs.make()
-    const first = fileDiff("src/app.ts", "one\ntwo\n", "one\nTWO\n")
-    const second = fileDiff("src/app.ts", "one\nTWO\n", "one\nTWO\nthree\n")
+    const lines = Array.from({ length: 60 }, (_, index) => `line ${index + 1}`)
+    const text = (items: string[]) => `${items.join("\n")}\n`
+    const first = lines.with(2, "CHANGED 3")
+    const second = first.toSpliced(40, 0, "inserted a", "inserted b")
+    const third = second.with(3, "CHANGED 4").toSpliced(55, 1)
     const call = (file: ReturnType<typeof fileDiff>) =>
       Effect.runPromise(CodeModeDiffs.around(diffs, "patch", {}, Effect.succeed(patchResult(file))))
-    return call(first)
-      .then(() => call(second))
+    return call(fileDiff("src/app.ts", text(lines), text(first)))
+      .then(() => call(fileDiff("src/other.ts", "a\n", "b\n")))
+      .then(() => call(fileDiff("src/app.ts", text(first), text(second))))
+      .then(() => call(fileDiff("src/app.ts", text(second), text(third))))
       .then(() => {
+        const whole = fileDiff("src/app.ts", text(lines), text(third))
         expect(diffs.files()).toEqual([
-          { file: "src/app.ts", status: "modified", additions: 1, deletions: 1, patch: first.patch },
-          { file: "src/app.ts", status: "modified", additions: 1, deletions: 0, patch: second.patch },
+          { file: "src/app.ts", status: "modified", additions: 4, deletions: 3, patch: whole.patch },
+          expect.objectContaining({ file: "src/other.ts", additions: 1, deletions: 1 }),
         ])
       })
+  })
+
+  test("a created file stays created, an undone change counts nothing, and a change with no diff stands apart", () => {
+    const diffs = CodeModeDiffs.make()
+    diffs.record({ ...fileDiff("new.ts", "", "a\nb\n", "added"), status: "added" })
+    diffs.record({ ...fileDiff("new.ts", "a\nb\n", "a\nB\nc\n"), status: "modified" })
+    diffs.record({ ...fileDiff("undo.ts", "a\n", "b\n"), status: "modified" })
+    diffs.record({ ...fileDiff("undo.ts", "b\n", "a\n"), status: "modified" })
+    diffs.record({ file: "new.ts", status: "modified", additions: 1, deletions: 0 })
+    diffs.record({ file: "new.ts", status: "deleted" })
+    expect(diffs.files()).toEqual([
+      { ...fileDiff("new.ts", "", "a\nB\nc\n", "added"), status: "added" },
+      { ...fileDiff("undo.ts", "a\n", "a\n"), status: "modified" },
+      { file: "new.ts", status: "modified", additions: 1, deletions: 0 },
+      { file: "new.ts", status: "deleted" },
+    ])
+  })
+
+  test("diffs that don't line up stay two changes", () => {
+    const first = fileDiff("a.ts", "one\ntwo\n", "one\nTWO\n")
+    const stale = fileDiff("a.ts", "one\ntwo\n", "one\nthree\n")
+    expect(CodeModeDiffs.compose("a.ts", first.patch, stale.patch, "modified")).toBeUndefined()
+    const diffs = CodeModeDiffs.make()
+    diffs.record({ ...first, status: "modified" })
+    diffs.record({ ...stale, status: "modified" })
+    expect(diffs.files()).toHaveLength(2)
   })
 
   test("an edit's result gives its diff; a write's created file counts its content, an overwrite keeps no counts", () => {

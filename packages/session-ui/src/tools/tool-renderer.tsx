@@ -1139,9 +1139,9 @@ function scriptChangePartID(file: FileFact) {
 }
 
 /**
- * The changes a script made, in order, one card each: the same file changed twice is two cards. A change without a
- * diff, past the size cap, to a binary file, a copy or a delete, shows what it did as a patch's file header does. Each
- * card opens by the change's own id.
+ * The changes a script made, in order, one card each: the server folds a file's changes into one, but older sessions,
+ * and changes it can't fold, list a file again. A change without a diff, past the size cap, to a binary file, a copy
+ * or a delete, shows what it did as a patch's file header does. Each card opens by the change's own id.
  */
 export function ScriptChanges(props: {
   files: readonly FileFact[]

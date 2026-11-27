@@ -396,7 +396,7 @@ describe("Bun", () => {
     expect(asked[1]?.metadata?.files).toMatchObject([{ file: "notes.txt", status: "modified", additions: 1 }])
   })
 
-  test("a script's changes are recorded one per change, from diffs the write paths already build", async () => {
+  test("a script's changes are recorded one per file, from diffs the write paths already build", async () => {
     await using tmp = await tmpdir()
     await Bun.write(path.join(tmp.path, "notes.txt"), "old\n")
     await Bun.write(path.join(tmp.path, "gone.txt"), "bye\n")
@@ -429,7 +429,6 @@ describe("Bun", () => {
         ({ file, status, additions, patch }) => [file, status, additions, patch !== undefined],
       ),
     ).toEqual([
-      ["notes.txt", "modified", 1, true],
       ["notes.txt", "modified", 1, true],
       ["created.txt", "added", 2, true],
       ["log.txt", "added", 1, true],
