@@ -6,13 +6,19 @@ export function terminalKeyInput(event: KeyboardEvent) {
   return "\x15"
 }
 
-/** Shift+PageUp, PageDown, Home and End: the scrollback moves other terminals give these keys. */
+/**
+ * The scrollback moves other terminals give these keys: Shift+PageUp and Shift+PageDown (Ctrl+Shift too, as in Windows
+ * Terminal) page, and Ctrl+Shift+Home and Ctrl+Shift+End go to the top and bottom. Shift+Home and Shift+End stay with
+ * the shell, whose line editor selects with them (PSReadLine does by default).
+ */
 export function terminalScrollKey(event: KeyboardEvent) {
-  if (!event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return
+  if (!event.shiftKey || event.altKey || event.metaKey) return
 
   if (event.key === "PageUp") return "page-up"
 
   if (event.key === "PageDown") return "page-down"
+
+  if (!event.ctrlKey) return
 
   if (event.key === "Home") return "top"
 

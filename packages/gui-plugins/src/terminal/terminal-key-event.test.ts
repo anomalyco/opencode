@@ -36,18 +36,22 @@ describe("terminalKeyEvent", () => {
     expect(consumeTerminalMetaKey(keyEvent({ key: "c", code: "KeyI", metaKey: true }), { copy: () => true })).toBe(true)
   })
 
-  test("maps Shift+PageUp, PageDown, Home and End to scrollback moves", () => {
+  test("pages with Shift+PageUp and Shift+PageDown, and goes to the ends with Ctrl+Shift+Home and End", () => {
     expect(terminalScrollKey(keyEvent({ key: "PageUp", code: "PageUp", shiftKey: true }))).toBe("page-up")
     expect(terminalScrollKey(keyEvent({ key: "PageDown", code: "PageDown", shiftKey: true }))).toBe("page-down")
-    expect(terminalScrollKey(keyEvent({ key: "Home", code: "Home", shiftKey: true }))).toBe("top")
-    expect(terminalScrollKey(keyEvent({ key: "End", code: "End", shiftKey: true }))).toBe("bottom")
+    expect(terminalScrollKey(keyEvent({ key: "PageUp", code: "PageUp", shiftKey: true, ctrlKey: true }))).toBe(
+      "page-up",
+    )
+    expect(terminalScrollKey(keyEvent({ key: "Home", code: "Home", shiftKey: true, ctrlKey: true }))).toBe("top")
+    expect(terminalScrollKey(keyEvent({ key: "End", code: "End", shiftKey: true, ctrlKey: true }))).toBe("bottom")
   })
 
-  test("leaves PageUp and other chords to the shell", () => {
+  test("leaves Shift+Home and Shift+End, unshifted keys and other chords to the shell", () => {
+    expect(terminalScrollKey(keyEvent({ key: "Home", code: "Home", shiftKey: true }))).toBeUndefined()
+    expect(terminalScrollKey(keyEvent({ key: "End", code: "End", shiftKey: true }))).toBeUndefined()
     expect(terminalScrollKey(keyEvent({ key: "PageUp", code: "PageUp" }))).toBeUndefined()
-    expect(
-      terminalScrollKey(keyEvent({ key: "PageUp", code: "PageUp", shiftKey: true, ctrlKey: true })),
-    ).toBeUndefined()
+    expect(terminalScrollKey(keyEvent({ key: "Home", code: "Home", ctrlKey: true }))).toBeUndefined()
+    expect(terminalScrollKey(keyEvent({ key: "PageUp", code: "PageUp", shiftKey: true, altKey: true }))).toBeUndefined()
     expect(terminalScrollKey(keyEvent({ key: "Home", code: "Home", shiftKey: true, metaKey: true }))).toBeUndefined()
     expect(terminalScrollKey(keyEvent({ key: "A", code: "KeyA", shiftKey: true }))).toBeUndefined()
   })
