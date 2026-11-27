@@ -196,7 +196,7 @@ describe("script labels", () => {
       },
     )
 
-    expect(activityText(activityLabel([unknown], i18n, true))?.text).toBe("Used Tool")
+    expect(activityText(activityLabel([unknown], i18n, true))?.text).toBe("Used tool")
     expect(activityText(activityLabel([unknown], i18n))?.text).toBe("Ran 1 command")
   })
 })
