@@ -4,7 +4,7 @@ import { Effect, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 
 export class Failure extends Schema.TaggedError<Failure>()("RemoteCliFailure", {
-  code: Schema.Literals(["platform", "version", "install"]),
+  code: Schema.Literals(["platform", "install"]),
   detail: Schema.String,
 }) {
   override get message() {
@@ -18,7 +18,7 @@ export function quote(value: string) {
 
 export function requireVersion(version: string) {
   if (version !== "local" && !/^[0-9][a-zA-Z0-9.+-]*$/.test(version))
-    throw new Failure({ code: "version", detail: version })
+    throw new Failure({ code: "install", detail: version })
 
   return version
 }

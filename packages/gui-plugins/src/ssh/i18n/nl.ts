@@ -14,15 +14,12 @@ export default {
   "session.reconnect": "Maak opnieuw verbinding",
   trust: "Vertrouw en verbind",
   continue: "Ga door",
-  update: "Update en maak opnieuw verbinding",
   project: "Project openen op {{host}}",
-  "stage.incompatible": "Serverupdate vereist",
   "error.input":
     "Voer een host- of SSH-verbindingsopdracht in. Externe opdrachten en niet-ondersteunde SSH-opties zijn niet toegestaan.",
   "error.connection": "Kan de SSH-verbinding niet tot stand brengen. Controleer uw netwerk- en SSH-configuratie.",
   "error.platform":
     "Dit externe platform wordt niet ondersteund. Voor automatische configuratie is momenteel Linux of macOS op x64 of arm64 vereist.",
-  "error.version": "De externe service moet overeenkomen met deze desktopversie voordat verbinding wordt gemaakt.",
   "error.install":
     "Kan de externe server niet installeren. Controleer de connectiviteit, schijfruimte en of tar is geïnstalleerd.",
   "error.unpublished":

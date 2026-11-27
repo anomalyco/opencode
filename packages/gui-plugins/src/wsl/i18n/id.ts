@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} belum terinstal.",
   "onboarding.openDistroOnce": "Buka {{distro}} sekali untuk menyelesaikan pengaturan.",
   "onboarding.updatingOpencode": "Memperbarui OpenCode…",
-  "onboarding.updateOpencode": "Perbarui OpenCode",
   "onboarding.installOpencode": "Instal OpenCode",
   "onboarding.installedDistros": "Distro terinstal",
   "onboarding.checkAgain": "Periksa lagi",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "opencode belum terinstal di distro ini",
   "error.opencodeCannotRun": "opencode telah terinstal, tetapi tidak dapat dijalankan",
   "error.opencodeNotInstalled": "OpenCode belum terinstal di {{distro}}",
-  "error.updateVersion":
-    "Pembaruan OpenCode selesai, tetapi {{distro}} masih melaporkan {{installed}}; seharusnya {{expected}}",
-  "error.noVersion": "tanpa versi",
   "error.serverExited": "Server WSL berhenti setelah dimulai (kode={{code}} sinyal={{signal}})",
   "error.serverExitedBeforeHealthy": "Server WSL berhenti sebelum siap (kode={{code}} sinyal={{signal}}){{output}}",
   "error.healthTimeout": "Pemeriksaan kesehatan sidecar untuk {{distro}} kehabisan waktu setelah {{timeout}}ms",

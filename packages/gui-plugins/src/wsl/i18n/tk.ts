@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} entek gurlanok.",
   "onboarding.openDistroOnce": "Gurmak işini tamamlamak üçin {{distro}} bir gezek açyň.",
   "onboarding.updatingOpencode": "OpenCode täzelenmek …",
-  "onboarding.updateOpencode": "OpenCode täzeläň",
   "onboarding.installOpencode": "OpenCode guruň",
   "onboarding.installedDistros": "Gurlan distroslar",
   "onboarding.checkAgain": "Againene bir gezek barlaň",
@@ -42,9 +41,6 @@ export default {
   "error.opencodeMissing": "açyk kod bu distroda gurlanok",
   "error.opencodeCannotRun": "opencode guruldy, ýöne işledip bilmedi",
   "error.opencodeNotInstalled": "OpenCode {{distro}} gurulmady",
-  "error.updateVersion":
-    "OpenCode täzelenmesi gutardy, ýöne {{distro}} henizem {{installed}} habar berýär; garaşylýan {{expected}}",
-  "error.noVersion": "wersiýasy ýok",
   "error.serverExited": "WSL serweri işe başlandan soň çykdy (kod = {{code}} signal = {{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL serweri sagdyn bolmanka çykdy (kod = {{code}} signal = {{signal}}) {{output}}",

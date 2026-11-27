@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} vēl nav instalēta.",
   "onboarding.openDistroOnce": "Atveriet {{distro}} vienu reizi, lai pabeigtu iestatīšanu.",
   "onboarding.updatingOpencode": "Atjauninu OpenCode…",
-  "onboarding.updateOpencode": "Atjauniniet OpenCode",
   "onboarding.installOpencode": "Instalējiet OpenCode",
   "onboarding.installedDistros": "Instalētās distribūcijas",
   "onboarding.checkAgain": "Pārbaudīt vēlreiz",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "opencode nav instalēts šajā distribūcijā",
   "error.opencodeCannotRun": "opencode ir instalēts, bet to nevar palaist",
   "error.opencodeNotInstalled": "OpenCode nav instalēts {{distro}}",
-  "error.updateVersion":
-    "OpenCode atjaunināšana pabeigta, bet {{distro}} joprojām rāda {{installed}}; gaidīts {{expected}}",
-  "error.noVersion": "nav versijas",
   "error.serverExited": "WSL serveris izslēdzās pēc palaišanas (kods={{code}} signāls={{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL serveris izslēdzās pirms kļuva gatavs darbam (kods={{code}} signāls={{signal}}){{output}}",

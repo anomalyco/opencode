@@ -14,14 +14,11 @@ export default {
   "session.reconnect": "Ühendage uuesti",
   trust: "Usalda ja ühenda",
   continue: "Jätka",
-  update: "Värskendage ja ühendage uuesti",
   project: "Avatud projekt saidil {{host}}",
-  "stage.incompatible": "Vajalik serveri värskendus",
   "error.input": "Sisestage hosti või SSH ühenduse käsk. Kaugkäsklused ja toetamata SSH suvandid pole lubatud.",
   "error.connection": "Ühendust SSH ei õnnestunud luua. Kontrollige oma võrku ja SSH konfiguratsiooni.",
   "error.platform":
     "Seda kaugplatvormi ei toetata. Automaatne seadistamine nõuab praegu mudelit x64 või arm64 Linux või macOS.",
-  "error.version": "Kaugteenus peab enne ühenduse loomist vastama sellele töölauaversioonile.",
   "error.install":
     "Kaugserverit ei saanud installida. Kontrollige ühenduvust, kettaruumi ja seda, kas tar on installitud.",
   "error.unpublished":

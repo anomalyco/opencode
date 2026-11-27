@@ -17,14 +17,14 @@ done
 `
 
 export const discoverScript = `set -eu
-${RemoteCli.discoverScript({ fromPath: true, cache: { directory: ".opencode/desktop-ssh", prefix: "0.0.0-beta-" } })}
+${RemoteCli.discoverScript({ fromPath: true, cache: { directory: ".opencode/desktop-ssh", prefix: "" } })}
 if [ -z "$cli" ]; then exit 0; fi
 ${registrationScript}`
 
-export function startScript(version: string, replace = false) {
+export function startScript(version: string) {
   return `set -eu
 cli="${binaryPath(version)}"
-"$cli" service ${replace ? "restart" : "start"}
+"$cli" service start
 ${registrationScript}`
 }
 
@@ -78,7 +78,6 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
   version: string
   development?: boolean
   env: NodeJS.ProcessEnv
-  replace?: boolean
 }) {
   const run = (script: string) =>
     runSsh({
@@ -89,13 +88,13 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
 
   const registered = parseRegistration(yield* run(discoverScript))
 
-  if (registered && (input.development || registered.version === input.version))
+  // Any running service is usable, whatever its version; this app's CLI is installed only when none runs.
+  if (registered)
     return yield* Effect.try({
       try: () => connectionAddress(registered.url, registered.password),
       catch: SshFailure.from,
     })
 
-  if (registered && !input.replace) return yield* Effect.fail(new SshFailure("version", registered.version))
   const destination = yield* Effect.try({ try: () => binaryPath(input.version), catch: SshFailure.from })
   const existing = yield* run(RemoteCli.versionScript(`"${destination}"`))
   const staged = RemoteCli.parseVersion(existing) === input.version
@@ -146,12 +145,9 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
     )
   }
 
-  const registration = parseRegistration(yield* run(startScript(version, input.replace)))
+  const registration = parseRegistration(yield* run(startScript(version)))
 
   if (!registration) return yield* Effect.fail(new SshFailure("service"))
-
-  if (!input.development && registration.version !== input.version)
-    return yield* Effect.fail(new SshFailure("version", registration.version))
 
   return yield* Effect.try({
     try: () => connectionAddress(registration.url, registration.password),

@@ -14,15 +14,12 @@ export default {
   "session.reconnect": "Torna a connectar",
   trust: "Confia i connecta",
   continue: "Continuar",
-  update: "Actualitza i torna a connectar",
   project: "Projecte obert a {{host}}",
-  "stage.incompatible": "Cal actualitzar el servidor",
   "error.input":
     "Introduïu un host o una ordre de connexió SSH. Les ordres remotes i les opcions SSH no admeses no es permeten.",
   "error.connection": "No s'ha pogut establir la connexió SSH. Comproveu la vostra xarxa i la configuració de SSH.",
   "error.platform":
     "Aquesta plataforma remota no és compatible. Actualment, la configuració automàtica requereix Linux o macOS a x64 o arm64.",
-  "error.version": "El servei remot ha de coincidir amb aquesta versió d'escriptori abans de connectar-se.",
   "error.install":
     "No s'ha pogut instal·lar el servidor remot. Comproveu la connectivitat, l'espai en disc i que el tar està instal·lat.",
   "error.unpublished":

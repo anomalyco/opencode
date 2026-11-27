@@ -194,8 +194,6 @@ function addServerDistroStatus(input: {
 
   if (!check) return probing ? checkingStatus() : undefined
 
-  if (check.matchesDesktop === false) return { label: { key: "onboarding.updateOpencode" }, tone: "warning" }
-
   if (!check.resolvedPath) return { label: { key: "onboarding.distroStatus.opencodeMissing" }, tone: "warning" }
 
   if (check.error) return { label: { key: "onboarding.installOpencode" }, tone: "warning" }
@@ -236,19 +234,13 @@ function addServerPrimaryButton(input: {
   }
 
   if (!addServerOpencodeReady(input.opencodeCheck)) {
-    const update = !!input.opencodeCheck?.resolvedPath && input.opencodeCheck.matchesDesktop === false
-
     return {
       variant: "neutral",
-      label: installingOpencode
-        ? { key: "onboarding.updatingOpencode" }
-        : update
-          ? { key: "onboarding.updateOpencode" }
-          : { key: "onboarding.installOpencode" },
+      label: installingOpencode ? { key: "onboarding.updatingOpencode" } : { key: "onboarding.installOpencode" },
       disabled: input.busy,
       action: "install-opencode",
       loading: installingOpencode,
-      width: update ? "138px" : "129px",
+      width: "129px",
     }
   }
 
@@ -263,7 +255,7 @@ function addServerPrimaryButton(input: {
 }
 
 function addServerOpencodeReady(check: WslOpencodeCheck | null) {
-  return !!check?.resolvedPath && check.matchesDesktop !== false && !check.error
+  return !!check?.resolvedPath && !check.error
 }
 
 function addServerSelectedDistroSettled(state: WslServersState | undefined, selectedDistro: string | null) {

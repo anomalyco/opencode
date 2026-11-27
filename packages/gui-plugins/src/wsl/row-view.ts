@@ -20,6 +20,4 @@ function opencodeAction(check: WslOpencodeCheck | undefined) {
   if (!check) return
 
   if (!check.resolvedPath) return "onboarding.installOpencode"
-
-  if (check.matchesDesktop === false) return "onboarding.updateOpencode"
 }

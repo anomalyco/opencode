@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} chưa được cài đặt.",
   "onboarding.openDistroOnce": "Mở {{distro}} một lần để hoàn tất thiết lập.",
   "onboarding.updatingOpencode": "Đang cập nhật OpenCode…",
-  "onboarding.updateOpencode": "Cập nhật OpenCode",
   "onboarding.installOpencode": "Cài đặt OpenCode",
   "onboarding.installedDistros": "Các bản phân phối đã cài đặt",
   "onboarding.checkAgain": "Kiểm tra lại",
@@ -42,9 +41,6 @@ export default {
   "error.opencodeMissing": "opencode chưa được cài đặt trong bản phân phối này",
   "error.opencodeCannotRun": "opencode đã được cài đặt nhưng không thể chạy",
   "error.opencodeNotInstalled": "OpenCode chưa được cài đặt trong {{distro}}",
-  "error.updateVersion":
-    "Đã cập nhật OpenCode nhưng {{distro}} vẫn báo phiên bản {{installed}}; phiên bản dự kiến là {{expected}}",
-  "error.noVersion": "không có phiên bản",
   "error.serverExited": "Máy chủ WSL đã thoát sau khi khởi động (mã={{code}} tín hiệu={{signal}})",
   "error.serverExitedBeforeHealthy":
     "Máy chủ WSL đã thoát trước khi sẵn sàng (mã={{code}} tín hiệu={{signal}}){{output}}",

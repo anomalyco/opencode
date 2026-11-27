@@ -3,16 +3,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { RemoteCli } from "./remote-cli"
 
 export class SshFailure extends Schema.TaggedError<SshFailure>()("SshFailure", {
-  code: Schema.Literals([
-    "input",
-    "connection",
-    "platform",
-    "version",
-    "install",
-    "service",
-    "unpublished",
-    "ssh-missing",
-  ]),
+  code: Schema.Literals(["input", "connection", "platform", "install", "service", "unpublished", "ssh-missing"]),
   detail: Schema.String,
 }) {
   constructor(code: SshFailure["code"], detail = "") {

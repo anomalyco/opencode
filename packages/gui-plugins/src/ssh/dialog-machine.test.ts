@@ -113,9 +113,7 @@ describe("ssh dialog", () => {
   test("main going away while the dialog starts fails instead of connecting forever", () => {
     const started = transitionSshDialog(adding().state, { type: "submitted", snapshot: snapshot({}) })
 
-    expect(started.effects).toEqual([
-      { type: "connect", config: { id: config.id, target: config.target, name: "" }, replace: false },
-    ])
+    expect(started.effects).toEqual([{ type: "connect", config: { id: config.id, target: config.target, name: "" } }])
 
     // `start` resolved, then main dropped: the attempt settled without a server and without an error.
     const gone = snapshot({})
@@ -140,7 +138,7 @@ describe("ssh dialog", () => {
     })
   })
 
-  test("a confirm prompt is answered with yes, and an incompatible server updates", () => {
+  test("a confirm prompt is answered with yes", () => {
     const item = server({ stage: "authentication", prompt: hostKey })
     const asked = snapshot({ item, activeAttempt: true })
 
@@ -152,19 +150,6 @@ describe("ssh dialog", () => {
 
     expect(confirmed.effects.at(-1)).toEqual({ type: "respond", prompt: hostKey.id, value: "yes" })
     expect(viewSshDialog(confirmed.state, asked).primary.label).toBe("trust")
-
-    const incompatible = snapshot({ item: server({ stage: "incompatible", error: "version" }) })
-    const state = transitionSshDialog(confirmed.state, { type: "synced", snapshot: incompatible }).state
-
-    expect(viewSshDialog(state, incompatible)).toMatchObject({
-      showForm: false,
-      incompatible: true,
-      error: undefined,
-      primary: { action: "submit", label: "update" },
-    })
-    expect(transitionSshDialog(state, { type: "submitted", snapshot: incompatible }).effects).toEqual([
-      { type: "connect", config: { id: config.id, target: config.target, name: "" }, replace: true },
-    ])
   })
 
   test("an empty response or one already sent is not sent", () => {

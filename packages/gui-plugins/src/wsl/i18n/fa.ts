@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} هنوز نصب نشده است.",
   "onboarding.openDistroOnce": "{{distro}} را یک بار باز کنید تا راه‌اندازی تمام شود.",
   "onboarding.updatingOpencode": "در حال به روز رسانی OpenCode…",
-  "onboarding.updateOpencode": "OpenCode را به روز کنید",
   "onboarding.installOpencode": "OpenCode را نصب کنید",
   "onboarding.installedDistros": "توزیع های نصب شده",
   "onboarding.checkAgain": "دوباره چک کنید",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "opencode در این توزیع نصب نشده است",
   "error.opencodeCannotRun": "opencode نصب شده است اما اجرا نمی شود",
   "error.opencodeNotInstalled": "OpenCode در {{distro}} نصب نشده است",
-  "error.updateVersion":
-    "به‌روزرسانی OpenCode به پایان رسید، اما {{distro}} همچنان {{installed}} را گزارش می‌کند. مورد انتظار {{expected}}",
-  "error.noVersion": "بدون نسخه",
   "error.serverExited": "سرور WSL پس از راه اندازی خارج شد (کد={{code}} سیگنال={{signal}})",
   "error.serverExitedBeforeHealthy": "سرور WSL قبل از سالم شدن خارج شد (کد={{code}} سیگنال={{signal}}){{output}}",
   "error.healthTimeout": "Sidecar برای بررسی سلامت {{distro}} پس از {{timeout}}ms به پایان رسید",

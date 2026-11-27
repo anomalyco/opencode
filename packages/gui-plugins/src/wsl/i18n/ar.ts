@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "لم يتم تثبيت {{distro}} بعد.",
   "onboarding.openDistroOnce": "افتح {{distro}} مرة واحدة لإكمال الإعداد.",
   "onboarding.updatingOpencode": "جارٍ تحديث OpenCode…",
-  "onboarding.updateOpencode": "تحديث OpenCode",
   "onboarding.installOpencode": "تثبيت OpenCode",
   "onboarding.installedDistros": "التوزيعات المثبتة",
   "onboarding.checkAgain": "تحقق مجددًا",
@@ -42,9 +41,6 @@ export default {
   "error.opencodeMissing": "opencode غير مثبت في هذه التوزيعة",
   "error.opencodeCannotRun": "opencode مثبت، لكن تعذر تشغيله",
   "error.opencodeNotInstalled": "OpenCode غير مثبت في {{distro}}",
-  "error.updateVersion":
-    "اكتمل تحديث OpenCode، لكن {{distro}} ما زالت تعرض الإصدار {{installed}}؛ الإصدار المتوقع هو {{expected}}",
-  "error.noVersion": "لا يوجد إصدار",
   "error.serverExited": "خرج خادم WSL بعد بدء التشغيل (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy": "خرج خادم WSL قبل أن يصبح سليمًا (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "انتهت مهلة فحص سلامة العملية المصاحبة للتوزيعة {{distro}} بعد {{timeout}}ms",

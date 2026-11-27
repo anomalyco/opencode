@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} 배포판이 아직 설치되지 않았습니다.",
   "onboarding.openDistroOnce": "설정을 완료하려면 {{distro}} 배포판을 한 번 여세요.",
   "onboarding.updatingOpencode": "OpenCode 업데이트 중…",
-  "onboarding.updateOpencode": "OpenCode 업데이트",
   "onboarding.installOpencode": "OpenCode 설치",
   "onboarding.installedDistros": "설치된 배포판",
   "onboarding.checkAgain": "다시 확인",
@@ -42,9 +41,6 @@ export default {
   "error.opencodeMissing": "이 배포판에 opencode가 설치되어 있지 않습니다",
   "error.opencodeCannotRun": "opencode가 설치되어 있지만 실행할 수 없습니다",
   "error.opencodeNotInstalled": "{{distro}}에 OpenCode가 설치되어 있지 않습니다",
-  "error.updateVersion":
-    "OpenCode 업데이트가 완료되었지만 {{distro}}에서 여전히 {{installed}} 버전으로 표시됩니다. 예상 버전: {{expected}}",
-  "error.noVersion": "버전 없음",
   "error.serverExited": "WSL 서버가 시작 후 종료되었습니다(코드={{code}} 신호={{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL 서버가 정상 상태가 되기 전에 종료되었습니다(코드={{code}} 신호={{signal}}){{output}}",

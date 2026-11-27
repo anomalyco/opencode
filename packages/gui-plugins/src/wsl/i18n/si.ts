@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} තවම ස්ථාපනය කර නැත.",
   "onboarding.openDistroOnce": "පිහිටුවීම අවසන් කිරීමට {{distro}} වරක් විවෘත කරන්න.",
   "onboarding.updatingOpencode": "OpenCode යාවත්කාලීන කරමින්…",
-  "onboarding.updateOpencode": "OpenCode යාවත්කාලීන කරන්න",
   "onboarding.installOpencode": "OpenCode ස්ථාපනය කරන්න",
   "onboarding.installedDistros": "ස්ථාපිත distros",
   "onboarding.checkAgain": "නැවත පරීක්ෂා කරන්න",
@@ -42,9 +41,6 @@ export default {
   "error.opencodeMissing": "මෙම distro හි opencode ස්ථාපනය කර නොමැත",
   "error.opencodeCannotRun": "opencode ස්ථාපනය කර ඇති නමුත් ධාවනය කල නොහැක",
   "error.opencodeNotInstalled": "OpenCode {{distro}} හි ස්ථාපනය කර නැත",
-  "error.updateVersion":
-    "OpenCode යාවත්කාලීන කිරීම අවසන් නමුත් {{distro}} තවමත් වාර්තා කරන්නේ {{installed}}; අපේක්ෂිත {{expected}}",
-  "error.noVersion": "අනුවාදයක් නැත",
   "error.serverExited": "WSL සේවාදායකය ආරම්භයෙන් පසු ඉවත් විය (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL සේවාදායකය නිරෝගී වීමට පෙර ඉවත් විය (code={{code}} signal={{signal}}){{output}}",

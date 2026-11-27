@@ -34,8 +34,6 @@ const check = (distro: string, version: string | null) => ({
   distro,
   resolvedPath: "/usr/bin/opencode",
   version,
-  expectedVersion: "1.0",
-  matchesDesktop: version === "1.0",
   error: null,
 })
 
@@ -54,7 +52,7 @@ const distros = {
 const idle = wsl({
   ...distros,
   distroProbes: { Ubuntu: probe("Ubuntu"), Debian: probe("Debian") },
-  opencodeChecks: { Ubuntu: check("Ubuntu", "1.0"), Debian: check("Debian", "0.9") },
+  opencodeChecks: { Ubuntu: check("Ubuntu", "1.0"), Debian: { ...check("Debian", null), resolvedPath: null } },
 })
 
 // The same distros before any probe, so the main view wants to probe them.

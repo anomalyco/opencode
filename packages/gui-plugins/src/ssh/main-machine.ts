@@ -9,7 +9,6 @@ export const SSH_RETRY_DELAY_MS = 3_000
 export type SshResting =
   | { readonly status: "disconnected" }
   | { readonly status: "authentication" }
-  | { readonly status: "incompatible"; readonly detail: string }
   | { readonly status: "failed"; readonly code: SshError; readonly detail: string; readonly failures: number }
 
 /**
@@ -21,7 +20,6 @@ export type SshResting =
 export type SshServerPhase =
   | { readonly status: "disconnected" }
   | { readonly status: "authentication" }
-  | { readonly status: "incompatible"; readonly detail: string }
   | {
       readonly status: "connecting"
       readonly attempt: number
@@ -110,7 +108,6 @@ export type SshMainEffect =
       readonly id: string
       readonly attempt: number
       readonly config: SshConfig
-      readonly replace: boolean
     }
   | { readonly type: "attempt.stop"; readonly attempt: number }
   | { readonly type: "attempt.respond"; readonly attempt: number; readonly promptID: string; readonly value: string }
@@ -226,7 +223,7 @@ export function transitionSshMain(state: SshMainState, event: SshMainEvent): Ssh
       ),
       effects: [
         { type: "attempt.stop", attempt: phase.attempt },
-        { type: "attempt.start", id: event.id, attempt, config: server.config, replace: false },
+        { type: "attempt.start", id: event.id, attempt, config: server.config },
       ],
     }
   }
@@ -248,7 +245,7 @@ export function transitionSshMain(state: SshMainState, event: SshMainEvent): Ssh
           },
         },
       ),
-      effects: [{ type: "attempt.start", id: event.id, attempt, config: server.config, replace: false }],
+      effects: [{ type: "attempt.start", id: event.id, attempt, config: server.config }],
     }
   }
 
@@ -336,18 +333,10 @@ export function selectSshServers(state: SshMainState, viewer?: number): SshItem[
       prompt: phase.status === "authenticating" && phase.owner === viewer ? phase.prompt : undefined,
       authenticatingElsewhere: phase.status === "authenticating" && phase.owner !== viewer,
       retrying: phase.status === "failed" && phase.retry ? true : undefined,
-      detail: phase.status === "failed" || phase.status === "incompatible" ? phase.detail : "",
-      error: error(phase),
+      detail: phase.status === "failed" ? phase.detail : "",
+      error: phase.status === "failed" ? phase.code : undefined,
     }
   })
-}
-
-function error(phase: SshServerPhase): SshError | undefined {
-  if (phase.status === "failed") return phase.code
-
-  if (phase.status === "incompatible") return "version"
-
-  return undefined
 }
 
 /** An interactive attempt waits on its prompt; the remote service may take that long to answer. */
@@ -390,7 +379,7 @@ function start(state: SshMainState, request: SshStart, owner: number | undefined
         waiters: server?.waiters ?? [],
       },
     ),
-    effects: [...halt(phase), { type: "attempt.start", id, attempt, config, replace: !!request.replace }],
+    effects: [...halt(phase), { type: "attempt.start", id, attempt, config }],
   }
 }
 
@@ -409,12 +398,6 @@ function failed(
 
   // A failed attempt shows the saved server again, not the target it tried.
   const config = server.savedConfig ?? server.config
-
-  if (code === "version")
-    return {
-      state: put(state, { ...server, config, phase: { status: "incompatible", detail }, waiters: [] }),
-      effects: release(server.waiters),
-    }
 
   // Only a saved server reconnects by itself, and only from failures that another try can fix.
   const retry =
@@ -475,8 +458,6 @@ function resting(phase: SshServerPhase): SshResting {
   if (isActive(phase)) return phase.resting
 
   if (phase.status === "authentication") return phase
-
-  if (phase.status === "incompatible") return { status: "incompatible", detail: phase.detail }
 
   if (phase.status === "failed")
     return { status: "failed", code: phase.code, detail: phase.detail, failures: phase.failures }

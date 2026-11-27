@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "ยังไม่ได้ติดตั้ง {{distro}}",
   "onboarding.openDistroOnce": "เปิด {{distro}} หนึ่งครั้งเพื่อให้การตั้งค่าเสร็จสมบูรณ์",
   "onboarding.updatingOpencode": "กำลังอัปเดต OpenCode…",
-  "onboarding.updateOpencode": "อัปเดต OpenCode",
   "onboarding.installOpencode": "ติดตั้ง OpenCode",
   "onboarding.installedDistros": "ดิสโทรที่ติดตั้งแล้ว",
   "onboarding.checkAgain": "ตรวจสอบอีกครั้ง",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "ไม่ได้ติดตั้ง opencode ในดิสโทรนี้",
   "error.opencodeCannotRun": "ติดตั้ง opencode แล้ว แต่ไม่สามารถเรียกใช้ได้",
   "error.opencodeNotInstalled": "ไม่ได้ติดตั้ง OpenCode ใน {{distro}}",
-  "error.updateVersion":
-    "อัปเดต OpenCode เสร็จแล้ว แต่ {{distro}} ยังคงรายงานเวอร์ชัน {{installed}} ทั้งที่ควรเป็น {{expected}}",
-  "error.noVersion": "ไม่มีเวอร์ชัน",
   "error.serverExited": "เซิร์ฟเวอร์ WSL หยุดทำงานหลังเริ่มต้น (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "เซิร์ฟเวอร์ WSL หยุดทำงานก่อนพร้อมใช้งาน (code={{code}} signal={{signal}}){{output}}",

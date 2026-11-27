@@ -91,7 +91,7 @@ export function createSshController(input: {
     tasks.set(id, abort)
 
     void api
-      .start({ ...effect.config, replace: effect.replace })
+      .start(effect.config)
       // Observe admission before treating an older disconnected snapshot as the attempt's outcome.
       .then((revision) => input.refresh(revision, AbortSignal.any([abort.signal, lifetime.signal])))
       .then(
@@ -195,17 +195,13 @@ export function createSshController(input: {
         dispatch({ type: "dialog.failed", id, attempt, saved: !!current(id)?.saved }),
     },
     /** `onConnected` runs once the attempt settles, with whether the server is ready. */
-    connect: (
-      config: SshConfig,
-      options?: { dialog?: boolean; replace?: boolean; onConnected?: (ready: boolean) => void },
-    ) =>
+    connect: (config: SshConfig, options?: { dialog?: boolean; onConnected?: (ready: boolean) => void }) =>
       dispatch({
         type: "connect.requested",
         config,
         ipcActive: !!untrack(input.api),
         item: current(config.id),
         dialog: options?.dialog,
-        replace: options?.replace,
         onConnected: options?.onConnected,
       }),
     respond: (id: string, prompt: string, value: string) =>

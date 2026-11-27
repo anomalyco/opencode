@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} ei ole vielä asennettu.",
   "onboarding.openDistroOnce": "Avaa {{distro}} kerran viimeistelläksesi asetukset.",
   "onboarding.updatingOpencode": "Päivitetään OpenCodea…",
-  "onboarding.updateOpencode": "Päivitä OpenCode",
   "onboarding.installOpencode": "Asenna OpenCode",
   "onboarding.installedDistros": "Asennetut jakelut",
   "onboarding.checkAgain": "Tarkista uudelleen",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "opencodea ei ole asennettu tähän jakeluun",
   "error.opencodeCannotRun": "opencode on asennettu, mutta sitä ei voitu suorittaa",
   "error.opencodeNotInstalled": "OpenCodea ei ole asennettu jakeluun {{distro}}",
-  "error.updateVersion":
-    "OpenCoden päivitys valmistui, mutta {{distro}} ilmoittaa yhä version {{installed}}; odotettu versio on {{expected}}",
-  "error.noVersion": "ei versiota",
   "error.serverExited": "WSL-palvelin sulkeutui käynnistyksen jälkeen (koodi={{code}} signaali={{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL-palvelin sulkeutui ennen toimintavalmiutta (koodi={{code}} signaali={{signal}}){{output}}",

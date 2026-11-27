@@ -208,7 +208,6 @@ describe("ssh reconnect budget", () => {
         "rejected key",
         { type: "attempt.failed", id: box.id, attempt: 2, code: "service", detail: "Permission denied (publickey)" },
       ],
-      ["version", { type: "attempt.failed", id: box.id, attempt: 2, code: "version", detail: "1.0.0" }],
       ["prompt", { type: "prompt.received", id: box.id, attempt: 2, prompt }],
     ]
 
@@ -279,7 +278,7 @@ describe("ssh reconnect budget", () => {
     expect(result.effects).toEqual([
       { type: "health.probe", id: box.id, attempt: 1, http, waiter: 1 },
       { type: "attempt.stop", attempt: 1 },
-      { type: "attempt.start", id: box.id, attempt: 2, config: box, replace: false },
+      { type: "attempt.start", id: box.id, attempt: 2, config: box },
       { type: "configs.save", configs: [box] },
       { type: "waiters.resolve", waiters: [1], http },
     ])

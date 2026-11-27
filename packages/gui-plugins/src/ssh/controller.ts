@@ -130,7 +130,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
     const fiber = yield* Effect.forEach(previous, (connection) => Fiber.interrupt(connection.fiber), {
       discard: true,
     }).pipe(
-      Effect.andThen(connect(effect.config, effect.attempt, effect.replace)),
+      Effect.andThen(connect(effect.config, effect.attempt)),
       Effect.catchCause((cause) => {
         if (Cause.hasInterruptsOnly(cause)) return Effect.void
         const failure = SshFailure.from(Cause.squash(cause))
@@ -153,7 +153,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
   const exec = (options: Parameters<typeof runSsh>[0]) =>
     runSsh(options).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner))
 
-  const connect = Effect.fn("Ssh.connect")(function* (config: SshConfig, attempt: number, replace: boolean) {
+  const connect = Effect.fn("Ssh.connect")(function* (config: SshConfig, attempt: number) {
     const id = config.id
     const target = yield* Effect.try({ try: () => parseTarget(config.target), catch: SshFailure.from })
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "oc-ssh-" })
@@ -213,7 +213,6 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
         version: input.version,
         development: input.development,
         env: askpass.env,
-        replace,
       }).pipe(
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.provideService(HttpClient.HttpClient, httpClient),

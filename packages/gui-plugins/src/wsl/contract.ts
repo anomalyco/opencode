@@ -57,8 +57,6 @@ export const WslOpencodeCheck = Schema.Struct({
   distro: Schema.String,
   resolvedPath: Schema.NullOr(Schema.String),
   version: Schema.NullOr(Schema.String),
-  expectedVersion: Schema.NullOr(Schema.String),
-  matchesDesktop: Schema.NullOr(Schema.Boolean),
   error: Schema.NullOr(Schema.String),
 })
 
