@@ -100,7 +100,9 @@ import { ShellTool } from "../tool/plugin/shell.js"
 import { SkillTool } from "../tool/plugin/skill.js"
 import { SubagentTool } from "../tool/plugin/subagent.js"
 import { CodeModeAgentsPlugin } from "../tool/plugin/codemode-agents.js"
+import { SavedToolsPlugin } from "../tool/plugin/saved-tools.js"
 import { CodeModeAgents } from "../codemode/agents.js"
+import { CodeModeSavedTools } from "../codemode/saved-tools.js"
 import { TodoTool } from "../tool/plugin/todo.js"
 import { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
@@ -143,6 +145,8 @@ const nodes = [
   BrowserTunnelGateway.node,
   BlobStore.node,
   CodeModeAgents.node,
+  CodeModeSavedTools.node,
+  CodeModeSavedTools.storeNode,
   Provider.node,
   Model.node,
   Command.node,
@@ -253,6 +257,8 @@ const pre = [
   WebFetchTool.Plugin,
   WebSearchTool.Plugin,
   WriteTool.Plugin,
+  // After the other tools, so a saved tool never takes a built-in tool's name.
+  SavedToolsPlugin.Plugin,
   WarmingPlugin.Plugin,
 ] as const satisfies readonly InternalPlugin[]
 

@@ -30,6 +30,7 @@ import { CodeModeDiffs } from "./diffs.js"
 import { CodeModeExecution } from "./execution.js"
 import { CodeModeFetch } from "./fetch.js"
 import { CodeModePath } from "./path.js"
+import { CodeModeSavedTools } from "./saved-tools.js"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -105,16 +106,21 @@ export type Inventory = {
 /** With the `codemode_agents` flag, the session's agent() and llm(): see `CodeModeAgents`. */
 export type Agents = CodeModeAgents.Service
 
+/** With the `saved_tools` flag, what runs tool.define() and tool.delete(): see `CodeModeSavedTools`. */
+export type SavedTools = CodeModeSavedTools.Service
+
 const extensions = [
   CodeModeFetch.extension,
   CodeModePath.extension,
   CodeModeBun.extension,
   CodeModeAgents.extension,
+  CodeModeSavedTools.extension,
 ] as const
-const runExtensions = (full: boolean, agents: boolean) => [
+const runExtensions = (full: boolean, agents: boolean, saved: boolean) => [
   CodeModeFetch.extension,
   ...(full ? [CodeModePath.extension, CodeModeBun.extension] : []),
   ...(agents ? [CodeModeAgents.extension] : []),
+  ...(saved ? [CodeModeSavedTools.extension] : []),
 ]
 
 const executionServices = (
@@ -123,11 +129,14 @@ const executionServices = (
   services?: Context.Context<Services>,
   api?: Context.Context<Api>,
   agents?: Context.Context<Agents>,
+  saved?: Context.Context<SavedTools>,
 ) =>
   Effect.map(Effect.abortSignal, (signal) =>
-    Context.merge(
-      Context.merge(services ?? Context.empty(), api ?? Context.empty()),
+    Context.mergeAll(
+      services ?? Context.empty(),
+      api ?? Context.empty(),
       agents ?? Context.make(CodeModeAgents.Service, CodeModeAgents.unavailable),
+      saved ?? Context.make(CodeModeSavedTools.Service, CodeModeSavedTools.unavailable),
     ).pipe(Context.add(CodeModeExecution.Service, { ...context, signal }), Context.add(Permission.Service, permission)),
   )
 
@@ -176,6 +185,8 @@ export const create = (
   api?: Context.Context<Api>,
   /** With `codemode_agents`, what runs agent() and llm(). Without it, programs don't get them. */
   agents?: Context.Context<Agents>,
+  /** With `saved_tools`, what runs tool.define() and tool.delete(). Without it, programs don't get them. */
+  saved?: Context.Context<SavedTools>,
 ) => {
   return {
     name: "execute",
@@ -220,7 +231,7 @@ export const create = (
         const diffs = CodeModeDiffs.make(record(() => {}))
         const result = yield* runtime(inventory)
           .execute(code, undefined, {
-            extensions: runExtensions(services !== undefined, agents !== undefined),
+            extensions: runExtensions(services !== undefined, agents !== undefined, saved !== undefined),
           })
           .pipe(
             Effect.provideService(Run, {
@@ -259,7 +270,7 @@ export const create = (
               lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
             ),
             // Readers outlive the fetch call that returned them, up to the end of this program's scope.
-            Effect.provide(yield* executionServices(context, permission, services, api, agents)),
+            Effect.provide(yield* executionServices(context, permission, services, api, agents, saved)),
             Effect.provideService(CodeModeDiffs.Service, diffs),
           )
         const toolCalls = calls.slice()
@@ -331,6 +342,9 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => void) => 
             status: "running",
             input: CodeModeAgents.display(call.name, call.args),
           })
+        case "tool.define":
+        case "tool.delete":
+          return start(call, { tool: call.name, status: "running", input: CodeModeSavedTools.display(call.args) })
         default:
           if (call.extension === "bun")
             return start(call, { status: "running", ...CodeModeBun.display(call.name, call.args) })
@@ -393,7 +407,9 @@ function renderCatalog(root: CatalogNode): ReadonlyArray<CodeModeCatalog.Tool | 
 // once per inventory and shared by its catalog and every execution.
 const runtimes = new WeakMap<
   Inventory,
-  CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service | CodeModeAgents.Service>
+  CodeMode.Runtime<
+    Run | CodeModeExecution.Service | Permission.Service | CodeModeAgents.Service | CodeModeSavedTools.Service
+  >
 >()
 
 function runtime(inventory: Inventory) {
@@ -425,7 +441,7 @@ export const check = (
     hooks: runHooks,
     limits: input.limits,
   })
-    .execute(input.code, input.bindings, { extensions: runExtensions(input.services !== undefined, false) })
+    .execute(input.code, input.bindings, { extensions: runExtensions(input.services !== undefined, false, false) })
     .pipe(
       Effect.provideService(Run, {
         executeTool: (name, tool, input) => executeTool(name, tool, input).pipe(Effect.map(resultValue)),
