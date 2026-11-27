@@ -25,7 +25,7 @@ import {
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { compileRequest } from "@opencode/ai/testing"
 import { expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
@@ -453,12 +453,13 @@ it.effect("does not echo AI SDK events as raw provider frames", () =>
     })
 
     const resolved = yield* aisdk.model(model("@ai-sdk/gateway"))
-    const response = yield* LLMClient.generate(ai.request({ model: resolved, prompt: "Hi", includeRaw: true })).pipe(
+    const events = yield* LLMClient.stream(ai.request({ model: resolved, prompt: "Hi", includeRaw: true })).pipe(
+      Stream.runCollect,
       Effect.provide(client),
     )
 
-    expect(response.events.filter((event) => event.type === "raw")).toEqual([])
-    expect(response.text).toBe("Hi")
+    expect(Array.from(events).filter((event) => event.type === "raw")).toEqual([])
+    expect(Array.from(events).filter((event) => event.type === "text-delta")).toHaveLength(1)
   }),
 )
 
