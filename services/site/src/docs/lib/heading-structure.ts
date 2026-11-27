@@ -1,9 +1,9 @@
 /**
  * A page's heading structure, for translations: the depths of its headings in source order. A
  * translated page reuses the English ids by position (rehype-headings.ts), so a translation whose
- * headings were added, removed or reordered would put anchors on the wrong sections. The build and
- * check-translations.ts compare this sequence and treat such a translation as stale: the page falls
- * back to English until it is brought back in line.
+ * headings were added, removed or reordered would put anchors on the wrong sections. The build
+ * compares this sequence and treats such a translation as stale: the page falls back to English
+ * until it is brought back in line.
  */
 export function headingDepths(source: string) {
   const body = source.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "")

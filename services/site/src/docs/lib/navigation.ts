@@ -11,7 +11,7 @@ export interface DocsNavItem {
 
 /**
  * A section or group label that is UI copy rather than a page title: the sidebar reads it from the
- * page language's dictionary (`docs.nav.*`), while page titles come from the pages themselves.
+ * page language's dictionary, while page titles come from the pages themselves.
  */
 export type DocsNavLabel =
   | "nav.docs"
