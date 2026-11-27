@@ -25,6 +25,7 @@
 | harness | harness | Не склоняется: «в harness», «для harness» |
 | command / slash command | команда / слеш-команда | |
 | permission | разрешение | |
+| Allow once / Allow always / Reject | Allow once / Allow always / Reject | Метки вариантов ответа в интерфейсе подтверждения не переводятся |
 | policy / policies | политика / политики | |
 | budget | бюджет | |
 | credits | кредиты | credit balance → баланс кредитов |
@@ -35,6 +36,10 @@
 | gateway | шлюз | |
 | endpoint | эндпоинт | |
 | API key | API-ключ | |
+| HTTP Basic auth | HTTP-аутентификация по схеме Basic | `Basic` — название схемы |
+| user agent (HTTP header) | заголовок User-Agent | Имя заголовка не переводится |
+| pull request | пул-реквест | |
+| schema | схема | Имена схем и ссылки на них не меняются |
 | service account | сервисный аккаунт | |
 | owner / admin / member | владелец / администратор / участник | Жирные UI-метки **Owner**, **Admin**, **Member** остаются по-английски |
 | single sign-on | единый вход | SSO остаётся |

@@ -3,7 +3,7 @@ title: "Сервер"
 description: "Создайте серверную часть плагина OpenCode: инструменты, хуки, интеграции, команды и агентов."
 ---
 
-Серверная часть плагина работает в сервере OpenCode. Она изменяет поведение OpenCode и добавляет функции: инструменты,
+Серверная часть плагина выполняется в процессе сервера OpenCode. Она изменяет поведение OpenCode и добавляет функции: инструменты,
 хуки, интеграции, команды и агентов. О том, как устроен, загружается и публикуется пакет плагина, см. [Обзор](/build/plugins).
 
 ```ts title=".opencode/plugins/example/index.ts"
@@ -36,9 +36,9 @@ export default Plugin.define({
 ### Контекст
 
 Контекст плагина — по сути [клиент сервера OpenCode](/build/client).
-Его методы чтения и действий используют те же входы и ответы, что и клиент. Он
-добавляет методы только для плагинов: преобразования, хуки времени выполнения, перезагрузки, регистрации
-и параметры плагина.
+Методы чтения и выполнения действий принимают те же аргументы и возвращают те же ответы, что и методы клиента.
+Контекст также предоставляет возможности, доступные только плагинам: преобразования, хуки, перезагрузку,
+регистрацию и доступ к параметрам плагина.
 
 ```ts
 setup(ctx) {
@@ -91,11 +91,11 @@ export default Plugin.define({
 
 ## Преобразования
 
-Преобразования — синхронные правки состояния доменов OpenCode, и каждое опирается на предыдущие регистрации в своём домене.
-Чтения реестра, такие как `ctx.model.list()`, отражают каждую регистрацию на данный момент, в том числе во время setup плагина;
-пакетная обработка запуска только объединяет уведомления об обновлениях и никогда не задерживает результат чтения. API состояния ресурсов по-прежнему
-сообщают состояние работающих ресурсов: зарегистрированное определение не означает, что его подключение или другая работа с ресурсом
-завершены.
+Преобразования синхронно меняют состояние доменов OpenCode. Каждое преобразование учитывает то, что уже зарегистрировано в его домене.
+При чтении реестра, например через `ctx.model.list()`, видны все записи, зарегистрированные к этому моменту, в том числе во время setup плагина.
+При запуске в пакеты объединяются только уведомления об обновлениях; чтение не ждёт отправки этих уведомлений. API состояния по-прежнему
+показывают фактическое состояние ресурсов: регистрация определения не означает, что подключение или другая операция с ресурсом
+уже завершилась.
 
 Источники добавляют провайдеров и неизменяемые определения моделей через `ctx.provider.transform`.
 
@@ -227,7 +227,7 @@ await ctx.agent.reload()
 
 #### Справочник
 
-Schema: [`Agent.Info`](/api#schema-Agent.Info)
+Схема: [`Agent.Info`](/api#schema-Agent.Info)
 
 ```ts
 interface AgentContext {
@@ -301,7 +301,7 @@ await ctx.provider.transform((editor) => {
 
 #### Справочник
 
-Schemas: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info)
+Схемы: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info)
 
 ```ts
 interface ProviderDomain extends ProviderApi {
@@ -371,7 +371,7 @@ await ctx.model.reload()
 
 #### Справочник
 
-Schema: [`Model.Info`](/api#schema-Model.Info)
+Схема: [`Model.Info`](/api#schema-Model.Info)
 
 ```ts
 interface ModelDomain extends ModelApi {
@@ -430,7 +430,7 @@ await ctx.command.reload()
 
 #### Справочник
 
-Schemas: [`Command.Info`](/api#schema-Command.Info),
+Схемы: [`Command.Info`](/api#schema-Command.Info),
 [`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery)
 
 ```ts
@@ -524,7 +524,7 @@ await ctx.integration.reload()
 
 #### Справочник
 
-Schemas: [`Integration.Info`](/api#schema-Integration.Info), [`Integration.Method`](/api#schema-Integration.Method),
+Схемы: [`Integration.Info`](/api#schema-Integration.Info), [`Integration.Method`](/api#schema-Integration.Method),
 [`Connection.Info`](/api#schema-Connection.Info), [`Form.Answer`](/api#schema-Form.Answer)
 
 ```ts
@@ -625,7 +625,7 @@ await ctx.mcp.reload()
 
 #### Справочник
 
-Schemas: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded),
+Схемы: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded),
 [`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded)
 
 ```ts
@@ -654,7 +654,7 @@ const plugins = await ctx.plugin.list()
 
 #### Справочник
 
-Schemas: [`Plugin.Info`](/api#schema-Plugin.Info), [`Plugin.Source`](/api#schema-Plugin.Source)
+Схемы: [`Plugin.Info`](/api#schema-Plugin.Info), [`Plugin.Source`](/api#schema-Plugin.Source)
 
 ```ts
 interface PluginContext {
@@ -691,7 +691,7 @@ await ctx.reference.reload()
 
 #### Справочник
 
-Schemas: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource`](/api#schema-Reference.LocalSource),
+Схемы: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource`](/api#schema-Reference.LocalSource),
 [`Reference.GitSource`](/api#schema-Reference.GitSource)
 
 ```ts
@@ -847,7 +847,7 @@ await ctx.session.instructions.entry.remove({ sessionID, key: "deploy-target" })
 
 #### Справочник
 
-Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
+Схемы: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
 [`Session.Inbox.User`](/api#schema-Session.Inbox.User), [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic),
 [`InstructionEntry.Info`](/api#schema-InstructionEntry.Info)
 
@@ -920,7 +920,7 @@ await ctx.skill.reload()
 
 #### Справочник
 
-Schema: [`Skill.Info`](/api#schema-Skill.Info)
+Схема: [`Skill.Info`](/api#schema-Skill.Info)
 
 ```ts
 interface SkillContext {
@@ -1083,7 +1083,7 @@ await registration.dispose()
 
 #### Справочник
 
-Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
+Схемы: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
 [`Tool.FileContent`](/api#schema-Tool.FileContent)
 
 ```ts
@@ -1142,7 +1142,7 @@ await ctx.vcs.transform((editor) => {
 
 #### Справочник
 
-Schemas: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
+Схемы: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
 [`FileDiff.Info`](/api#schema-FileDiff.Info)
 
 ```ts
@@ -1326,7 +1326,7 @@ await ctx.websearch.reload()
 
 #### Справочник
 
-Schemas: [`WebSearch.Provider`](/api#schema-WebSearch.Provider), [`WebSearch.Result`](/api#schema-WebSearch.Result)
+Схемы: [`WebSearch.Provider`](/api#schema-WebSearch.Provider), [`WebSearch.Result`](/api#schema-WebSearch.Result)
 
 ```ts
 interface WebSearchContext {
@@ -1361,7 +1361,7 @@ return () => controller.abort()
 
 #### Справочник
 
-Schema: [`V2EventEncoded`](/api#schema-V2EventEncoded)
+Схема: [`V2EventEncoded`](/api#schema-V2EventEncoded)
 
 ```ts
 type EventType = Exclude<OpenCodeEvent["type"], "server.connected">
@@ -1400,7 +1400,7 @@ await ctx.session.hook("fork", ({ sessionID }) => console.log(sessionID))
 
 #### Приём промпта
 
-Перехватывайте входящие пользовательские промпты до разрешения вложений и навыков и устойчивого приёма во входящие:
+Хук перехватывает пользовательский промпт до обработки вложений и навыков и до записи промпта в постоянную очередь входящих:
 
 ```ts
 await ctx.session.hook("prompt", (event) => {

@@ -123,7 +123,7 @@ $ OPENCODE_PASSWORD="a-long-secret" opencode serve --port 4096
 $ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
 ```
 
-Другие клиенты HTTP используют Basic auth. Имя пользователя всегда `opencode`, менять можно только пароль.
+Другие HTTP-клиенты используют аутентификацию по схеме Basic. Имя пользователя всегда `opencode`, менять можно только пароль.
 
 ```bash
 $ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
