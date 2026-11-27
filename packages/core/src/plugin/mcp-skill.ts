@@ -13,7 +13,7 @@ import { SkillDiscovery } from "../skill/discovery.js"
 /**
  * Registers the skills connected MCP servers list as `<server>:<name>`, and resolves `<server>:<SKILL.md uri>` to a skill
  * the server confirms through `skills/get` without listing it. Nothing is read until a skill or one of its files is used, and the MCP client checks every file it reads against the listed size and digest. Verified files are
- * kept in memory by digest, so a skill whose SKILL.md was loaded once lists its content.
+ * kept in memory by server, skill and digest, so a skill whose SKILL.md was loaded once lists its content.
  */
 export const Plugin = define({
   id: "opencode.mcp.skill",
@@ -53,8 +53,7 @@ export const Plugin = define({
 
     const read = (skill: Served, id: Skill.ID, digest: string, file?: Skill.FilePath) =>
       Effect.suspend(() => {
-        // The SKILL.md key is separate because only a SKILL.md read carries the body without frontmatter.
-        const key = file === undefined ? `${digest} SKILL.md` : digest
+        const key = cacheKey(skill, digest, file)
         const cached = cache.get(key)
         if (cached) return Effect.succeed(cached)
         return mcp.readSkill({ server: skill.server, entry: skill.entry, ref: file }).pipe(
@@ -106,7 +105,7 @@ export const Plugin = define({
             description: skill.description,
             path: AbsolutePath.make(Skill.uri(id, Skill.manifest)),
             content:
-              cache.get(`${skill.manifest} SKILL.md`)?.body ??
+              cache.get(cacheKey(skill, skill.manifest))?.body ??
               read(skill, id, skill.manifest).pipe(
                 Effect.map((result) => result.body ?? ""),
                 // Lists the loaded content from now on.
@@ -119,7 +118,7 @@ export const Plugin = define({
               read(skill, id, digest, file).pipe(Effect.map((result) => result.bytes)),
             ]),
           ),
-          { type: "mcp", server: skill.server },
+          { type: "mcp", server: skill.server, version: skill.version },
         )
       }
     })
@@ -137,6 +136,8 @@ export interface Served {
   readonly manifest: string
   /** Its other files, with their digests. */
   readonly files: ReadonlyMap<Skill.FilePath, string>
+  /** `sha256:` over the server, the skill's URI and every listed file's URI and digest, so it changes with any file. */
+  readonly version: string
 }
 
 export type Parsed =
@@ -173,9 +174,21 @@ export function parseEntry(skill: Mcp.Skill): Parsed {
       description: entry.frontmatter.description,
       manifest,
       files: listed,
+      version: `sha256:${Hash.sha256(
+        [skill.server, entry.uri, ...entry.resources.map((resource) => `${resource.uri} ${resource.digest}`).toSorted()]
+          .map((part) => `${part.length}:${part}`)
+          .join(""),
+      )}`,
     },
   }
 }
+
+/**
+ * Verified files are kept by server, skill and digest, so one server's file is never served for another's. SKILL.md
+ * reads are what carry the body without frontmatter.
+ */
+const cacheKey = (skill: Served, digest: string, file?: Skill.FilePath) =>
+  `${skill.server} ${skill.entry.uri} ${file ?? Skill.manifest} ${digest}`
 
 /** The entries that parse, logging the rest once with why. */
 const accept = (skills: ReadonlyArray<Mcp.Skill>) =>

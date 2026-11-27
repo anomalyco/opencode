@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { McpServer, WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/server"
 import { skillEntry, SkillsExtension, type Skill as ServedSkill } from "@modelcontextprotocol/server/ext/skills"
+import { Agent } from "@opencode/schema/agent"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
+import type { Permission } from "@opencode/schema/permission"
 import { Document, Info } from "@opencode/schema/config"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
@@ -13,6 +15,7 @@ import { Integration } from "@opencode/core/integration"
 import { Location } from "@opencode/core/location"
 import type { McpClient } from "@opencode/core/mcp/client"
 import { Mcp } from "@opencode/core/mcp/index"
+import { PermissionPolicy } from "@opencode/core/permission/policy"
 import { McpSkillPlugin } from "@opencode/core/plugin/mcp-skill"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Skill } from "@opencode/core/skill"
@@ -175,6 +178,21 @@ describe("McpSkillPlugin.parseEntry", () => {
     expect(parsed._tag === "Served" && parsed.skill.files.size).toBe(0)
   })
 
+  test("versions a skill by its server and every listed file", () => {
+    const version = (skill: Mcp.Skill) => {
+      const parsed = McpSkillPlugin.parseEntry(skill)
+      if (parsed._tag !== "Served") throw new Error("expected a served skill")
+      return parsed.skill.version
+    }
+    const listed = entry([file("SKILL.md"), file("references/FORMS.md")])
+    expect(version(listed)).toMatch(/^sha256:[0-9a-f]{64}$/)
+    expect(version(entry([file("references/FORMS.md"), file("SKILL.md")]))).toBe(version(listed))
+    expect(version(entry([file("SKILL.md"), { ...file("references/FORMS.md"), digest: "sha256:changed" }]))).not.toBe(
+      version(listed),
+    )
+    expect(version({ ...listed, server: Mcp.ServerName.make("other") })).not.toBe(version(listed))
+  })
+
   test("rejects dynamic skills and skills that don't list SKILL.md", () => {
     expect(McpSkillPlugin.parseEntry(entry("dynamic"))).toMatchObject({ _tag: "Rejected", reason: "dynamic" })
     expect(McpSkillPlugin.parseEntry(entry([file("references/FORMS.md")]))).toMatchObject({
@@ -249,6 +267,36 @@ describe("MCP skills", () => {
         "Skill.LoadError",
       )
       expect(yield* skills.resolve("team:not-an-address")).toBeUndefined()
+    }),
+  )
+
+  it.live("asks to load an MCP skill once per version unless config allows it", () =>
+    Effect.gen(function* () {
+      const server = yield* skillServer({ deploy })
+      yield* connect("team", server.url, ["team:deploy"])
+      const skills = yield* Skill.Service
+      const approval = yield* skills.approval(id)
+      expect(approval.resources[0]).toBe(id)
+      expect(approval.resources[1]).toMatch(/^team:deploy@sha256:[0-9a-f]{64}$/)
+      expect(approval.save).toEqual([approval.resources[1]])
+
+      const defaults = Agent.Info.default(Agent.ID.make("build")).permissions
+      const effect = (...rules: Permission.Ruleset) =>
+        PermissionPolicy.evaluateAll(PermissionPolicy.fromRules(defaults, rules), "skill", approval.resources)
+      expect(effect()).toBe("ask")
+      expect(PermissionPolicy.evaluateAll(PermissionPolicy.fromRules(defaults), "skill", ["local-skill"])).toBe("allow")
+      expect(effect({ action: "skill", resource: "team:*", effect: "allow" })).toBe("allow")
+      expect(effect({ action: "skill", resource: "team:deploy", effect: "deny" })).toBe("deny")
+      const saved = PermissionPolicy.fromRules(
+        approval.save.map((resource) => ({ action: "skill", resource, effect: "allow" as const })),
+      )
+      expect(
+        PermissionPolicy.evaluateAll(
+          PermissionPolicy.fallback(PermissionPolicy.fromRules(defaults), saved),
+          "skill",
+          approval.resources,
+        ),
+      ).toBe("allow")
     }),
   )
 
