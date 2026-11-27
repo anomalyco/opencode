@@ -229,6 +229,28 @@ function admitted(sessionID: string, inboxID: string): OpenCodeEvent {
   }
 }
 
+test("retains a non-tab transcript until its final viewer releases it", async () => {
+  const setup = await renderSessionTabs("main", { tabsEnabled: false })
+  try {
+    const releaseFirst = setup.tabs.retain("aside")
+    const releaseSecond = setup.tabs.retain("aside")
+    await setup.data.session.sync("aside")
+    setup.emit(admitted("aside", "msg_1"))
+    const messages = () => setup.data.session.message.list("aside")
+    await wait(() => messages().length === 1)
+
+    releaseFirst()
+    releaseFirst()
+    expect(messages()).toHaveLength(1)
+    expect(setup.tabs.tabs()).toHaveLength(0)
+
+    releaseSecond()
+    await wait(() => messages().length === 0)
+  } finally {
+    await setup.destroy()
+  }
+})
+
 test("loads persisted tab metadata concurrently on connect", async () => {
   let release!: () => void
   const sessionGate = new Promise<void>((resolve) => (release = resolve))

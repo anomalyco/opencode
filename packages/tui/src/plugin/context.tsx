@@ -16,7 +16,7 @@ import {
 import path from "path"
 import { stat } from "fs/promises"
 import { fileURLToPath } from "url"
-import type { Page } from "@opencode/plugin/tui/context"
+import type { Page, UI } from "@opencode/plugin/tui/context"
 import { Host } from "@opencode/plugin/host"
 import { resolveSlots, type Claim } from "./structure"
 import { createStore, produce, reconcile as reconcileStore, unwrap } from "solid-js/store"
@@ -85,8 +85,14 @@ type Trace = <T>(stage: string, tags: LogTags, task: () => Promise<T>) => Promis
 
 const PluginContext = createContext<Value>()
 
-export function PluginProvider(props: ParentProps<{ packages: PackageSource; directories: string[] }>) {
-  const host = usePluginHost()
+export function PluginProvider(
+  props: ParentProps<{
+    packages: PackageSource
+    directories: string[]
+    sessionTranscript: UI["session"]["transcript"]
+  }>,
+) {
+  const host = usePluginHost(props.sessionTranscript)
   const log = useLog({ component: "plugin" })
   const config = useConfig()
   const lifecycle = useTuiLifecycle()

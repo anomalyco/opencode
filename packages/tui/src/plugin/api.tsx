@@ -1,6 +1,7 @@
 import { PluginContextProvider } from "@opencode/plugin/tui"
 import {
   children,
+  createComponent,
   createMemo,
   createRoot,
   createUniqueId,
@@ -22,6 +23,7 @@ import type {
   SlotMap,
   SlotPath,
   Toast,
+  UI,
 } from "@opencode/plugin/tui/context"
 import type { Placement, PlacementKind } from "./structure"
 import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
@@ -75,7 +77,7 @@ export type Registry = {
 
 // The host services a plugin context adapts. Collected once by the provider
 // (hooks must run during component setup) and shared by every activation.
-export function usePluginHost() {
+export function usePluginHost(sessionTranscript: UI["session"]["transcript"]) {
   return {
     owner: getOwner(),
     renderer: useRenderer(),
@@ -94,6 +96,7 @@ export function usePluginHost() {
     attention: useAttention(),
     storage: useStorage(),
     sessionTabs: useSessionTabs(),
+    sessionTranscript,
     panel: useOptionalPanel(),
     local: useLocal(),
   }
@@ -259,6 +262,9 @@ export function createPluginContext(input: {
           if (current?.plugin !== input.id) return
           return { name: current.name, sessionID: current.sessionID }
         },
+      },
+      session: {
+        transcript: (input) => createComponent(host.sessionTranscript, input),
       },
       tabs: {
         enabled: host.sessionTabs.enabled,

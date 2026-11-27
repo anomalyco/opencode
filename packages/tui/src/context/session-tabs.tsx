@@ -137,11 +137,27 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       unread: {},
     })
     const current = () => (route.data.type === "session" ? root(route.data.sessionID) : undefined)
+    const [retained, setRetained] = createSignal(new Map<string, number>())
+    function retain(sessionID: string) {
+      setRetained((current) => new Map(current).set(sessionID, (current.get(sessionID) ?? 0) + 1))
+      let released = false
+      return () => {
+        if (released) return
+        released = true
+        setRetained((current) => {
+          const next = new Map(current)
+          const count = next.get(sessionID) ?? 0
+          if (count > 1) next.set(sessionID, count - 1)
+          else next.delete(sessionID)
+          return next
+        })
+      }
+    }
     createSessionRetention({
       session: data.session,
       current: () =>
         route.data.type === "session" && route.data.sessionID !== "dummy" ? route.data.sessionID : undefined,
-      keep: () => (enabled() ? state().tabs.map((tab) => tab.sessionID) : []),
+      keep: () => [...retained().keys(), ...(enabled() ? state().tabs.map((tab) => tab.sessionID) : [])],
       limit: 3,
     })
     const newTab = createMemo((open = false) => {
@@ -402,6 +418,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       },
       current,
       status,
+      retain,
       scrollAnchor(sessionID: string) {
         const target = root(sessionID)
         if (!state().tabs.some((tab) => tab.sessionID === target)) return
