@@ -9,8 +9,6 @@ export * as WriteTool from "./write.js"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
-import { Config } from "../../config.js"
-import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { FileWrite } from "../../file-write.js"
 import { Flag } from "../../flag.js"
 
@@ -36,15 +34,13 @@ export const Plugin = {
   id: "opencode.tool.write",
   effect: Effect.fn("WriteTool.Plugin")(function* (ctx: Context) {
     const fileWrite = yield* FileWrite.Service
-    const config = yield* Config.Service
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
 
     yield* ctx.tool
       .transform((editor) =>
         editor.add({
           name,
-          options: flags.resolve(loaded.entries).full_codemode.enabled
+          options: flags.current().full_codemode.enabled
             ? {
                 codemode: {
                   pinned: true,

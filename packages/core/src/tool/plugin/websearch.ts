@@ -4,8 +4,6 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema, Semaphore } from "effect"
 import { HttpClientError } from "effect/http"
-import { Config } from "../../config.js"
-import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
 import { Form } from "../../form.js"
 import { Permission } from "../../permission.js"
@@ -42,8 +40,6 @@ export const Plugin = {
     const permission = yield* Permission.Service
     const forms = yield* Form.Service
     const websearch = yield* WebSearch.Service
-    const config = yield* Config.Service
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
 
     yield* ctx.tool
@@ -51,9 +47,7 @@ export const Plugin = {
         editor.add({
           name,
           // Pinned so quick questions call it without searching the catalog first.
-          options: flags.resolve(loaded.entries).full_codemode.enabled
-            ? { codemode: { pinned: true } }
-            : { codemode: false },
+          options: flags.current().full_codemode.enabled ? { codemode: { pinned: true } } : { codemode: false },
           description,
           input: Input,
           output: Output,

@@ -9,6 +9,7 @@ import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { Effect, Layer } from "effect"
 import { it } from "../lib/effect"
+import { drain } from "../lib/clock"
 import { PluginTestLayer } from "../plugin/fixture"
 
 const documents = (on: boolean) => [
@@ -16,7 +17,7 @@ const documents = (on: boolean) => [
 ]
 
 describe("ConfigSessionSearchPlugin.Plugin", () => {
-  it.live("starts the build once the location's config turns sqlite_fts on", () => {
+  it.effect("starts the build once the location's config turns sqlite_fts on", () => {
     const starts = { count: 0 }
     const build = Layer.succeed(
       SessionSearchBuild.Service,
@@ -35,13 +36,15 @@ describe("ConfigSessionSearchPlugin.Plugin", () => {
 
       yield* config.setEntries(documents(true))
       yield* bus.publish(Event.Updated, {})
-      const deadline = Date.now() + 10_000
-      while (starts.count === 0 && Date.now() < deadline) yield* Effect.sleep("10 millis")
-      expect(starts.count).toBeGreaterThan(0)
+      yield* drain
+      expect(starts.count).toBe(1)
+      yield* bus.publish(Event.Updated, {})
+      yield* drain
+      expect(starts.count).toBe(1)
     }).pipe(Effect.scoped, Effect.provide(build), Effect.provide(PluginTestLayer))
   })
 
-  it.live("starts the build immediately when sqlite_fts is already on at load", () => {
+  it.effect("starts the build immediately when sqlite_fts is already on at load", () => {
     const starts = { count: 0 }
     const build = Layer.succeed(
       SessionSearchBuild.Service,
@@ -51,9 +54,12 @@ describe("ConfigSessionSearchPlugin.Plugin", () => {
       }),
     )
     return Effect.gen(function* () {
+      const bus = yield* Bus.Service
       const config = yield* Config.Test
       const plugins = yield* Plugin.Service
       yield* config.setEntries(documents(true))
+      yield* bus.publish(Event.Updated, {})
+      yield* drain
       yield* ConfigSessionSearchPlugin.Plugin.effect(yield* PluginHost.make(plugins, "test"))
       expect(starts.count).toBe(1)
     }).pipe(Effect.scoped, Effect.provide(build), Effect.provide(PluginTestLayer))

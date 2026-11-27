@@ -8,6 +8,9 @@ import { Effect, Fiber, Layer, Random, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Agent } from "@opencode/core/agent"
+import { Artifact } from "@opencode/core/artifact"
+import { Tool } from "@opencode/core/tool"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { App } from "@opencode/core/app"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
@@ -1732,6 +1735,81 @@ describe("OpencodePlugin", () => {
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
+  )
+
+  it.effect("withholds instructions, skills, watches and artifacts when a policies-only document is Withheld", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const config = yield* Config.Test
+      const bus = yield* Bus.Service
+      const discovery = yield* InstructionDiscovery.Service
+      const skills = yield* Skill.Service
+      const tools = yield* Tool.Service
+      const artifacts = yield* Artifact.Service
+      const policies: ConfigPolicy.Info[] = [{ action: "tool.use", resource: "shell:sudo *", effect: "deny" }]
+      const requests: string[] = []
+      const results: Config.IntegrationResult[] = []
+      yield* config.setEntries([
+        new Document({
+          type: "document",
+          info: new Info({ experimental: new ConfigExperimental.Info({ console_watches: true, artifacts: true }) }),
+        }),
+      ])
+      yield* bus.publish(Event.Updated, {})
+      yield* drain
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+      })
+      yield* addPlugin().pipe(
+        Effect.provideService(Config.Service, {
+          ...config,
+          integration: (id, document) =>
+            Effect.gen(function* () {
+              // Config's managed-policy test proves this decision. Here its effective policies-only document
+              // deliberately equals the input, so consumers must honor the tag rather than compare documents.
+              const result = document ? ConfigIntegration.result(document, false) : { _tag: "Cleared" as const }
+              expect(result._tag === "Cleared" ? undefined : result.document).toEqual(document)
+              yield* config.integration?.(id, result._tag === "Cleared" ? undefined : result.document) ?? Effect.void
+              results.push(result)
+              return result
+            }),
+        }),
+        inProcess({
+          fetch: (request) => {
+            const path = new URL(request.url).pathname
+            requests.push(path)
+            if (path === "/api/v2/config")
+              return Response.json(
+                { policies },
+                {
+                  headers: {
+                    ...withLists.headers,
+                    "x-opencode-event-watches": "1",
+                    "x-opencode-artifacts": "1",
+                  },
+                },
+              )
+            if (path === "/api/v2/instructions")
+              return Response.json({ instructions: [{ id: "style", content: "Use tabs." }] })
+            if (path === "/api/v2/skills") return Response.json({ skills: [{ slug: "deploy", version: "1" }] })
+            if (path === "/api/v2/skills/deploy") return Response.json(skillBundle)
+            return new Response(null, { status: 404 })
+          },
+        }),
+      )
+      yield* drain
+      expect(results.some((result) => result._tag === "Withheld")).toBe(true)
+      expect(yield* consolePolicies(config)).toEqual(policies)
+      const instructions = yield* discovery.list()
+      expect(
+        Array.isArray(instructions) ? instructions.filter((file) => file.path.startsWith("OpenCode Console")) : [],
+      ).toEqual([])
+      expect(yield* skills.get(Skill.ID.make("deploy"))).toBeUndefined()
+      expect((yield* tools.list()).some((tool) => tool.id.startsWith("console_watch"))).toBe(false)
+      expect((yield* artifacts.providers()).some((provider) => provider.id === "console")).toBe(false)
+      expect(requests.some((path) => path.startsWith("/api/event-watches"))).toBe(false)
+    }),
   )
 
   it.effect("keeps Console instructions and skills through an edit or a Console error, and clears them on 404", () =>

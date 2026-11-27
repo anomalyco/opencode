@@ -1,9 +1,7 @@
 export * as OpenAISubscriptionModels from "./openai-subscription-models.js"
 
-import { Event } from "@opencode/schema/config"
 import { Effect, Stream } from "effect"
 import { Bus } from "../../bus.js"
-import { Config } from "../../config.js"
 import { Flag } from "../../flag.js"
 import { Provider } from "../../provider.js"
 import { ModelsDev } from "../../models-dev.js"
@@ -24,11 +22,9 @@ export const track = Effect.fnUntraced(function* (
 ) {
   const modelsDev = yield* ModelsDev.Service
   const bus = yield* Bus.Service
-  const config = yield* Config.Service
   const flags = yield* Flag.Service
   // Same catalog view as the models.dev plugin, so both read one cached copy.
-  const read = config.entries().pipe(
-    Effect.flatMap((entries) => modelsDev.get(flags.resolve(entries).recommended_api.enabled)),
+  const read = Effect.suspend(() => modelsDev.get(flags.current().recommended_api.enabled)).pipe(
     Effect.map((data) => {
       const ids = data.find((provider) => provider.info.id === Provider.ID.openai)?.subscriptions?.[list]
       // An empty list is treated as missing, so a bad catalog edit can't hide every model.
@@ -43,7 +39,12 @@ export const track = Effect.fnUntraced(function* (
       return reload
     }),
   )
-  yield* bus.subscribe([ModelsDev.Event.Refreshed, Event.Updated]).pipe(
+  yield* bus.subscribe(ModelsDev.Event.Refreshed).pipe(
+    Stream.runForEach(() => update),
+    Effect.forkScoped({ startImmediately: true }),
+  )
+  yield* flags.changes().pipe(
+    Stream.filter((keys) => keys.has("recommended_api")),
     Stream.runForEach(() => update),
     Effect.forkScoped({ startImmediately: true }),
   )
