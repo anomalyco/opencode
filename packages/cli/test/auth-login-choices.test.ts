@@ -12,6 +12,9 @@ test("groups the CLI choices like /connect while keeping stable login IDs", () =
   expect(
     loginChoices([
       integration({ id: "mistral", name: "Mistral" }),
+      integration({ id: "github-copilot", name: "GitHub Copilot" }),
+      integration({ id: "claude-agent", name: "Claude Agent" }),
+      integration({ id: "anthropic", name: "Anthropic" }),
       integration({ id: "openai", name: "OpenAI" }),
       integration({ id: "linear", name: "Linear", metadata: { source: "mcp" } }),
       integration({ id: "github", name: "GitHub", metadata: { source: "mcp" } }),
@@ -29,6 +32,9 @@ test("groups the CLI choices like /connect while keeping stable login IDs", () =
     { value: "opencode-go", label: "OpenCode Go", category: "Popular", connected: true },
     { value: "opencode", label: "OpenCode Console", category: "Popular", connected: false },
     { value: "openai", label: "OpenAI", category: "Popular", connected: false },
+    { value: "anthropic", label: "Anthropic", category: "Popular", connected: false },
+    { value: "claude-agent", label: "Claude Agent", category: "Popular", connected: false },
+    { value: "github-copilot", label: "GitHub Copilot", category: "Popular", connected: false },
     { value: "mistral", label: "Mistral", category: "Services", connected: false },
   ])
 })
