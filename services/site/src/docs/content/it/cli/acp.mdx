@@ -288,9 +288,9 @@ Se OpenCode non riesce a mostrare una domanda, la annulla e dice al modello di c
 
 ### Compattazione
 
-Se il client annuncia `session.compaction`, OpenCode riporta la compattazione con gli aggiornamenti `compaction_update` e
-`compaction_summary_chunk` della
-[session compaction](https://agentclientprotocol.com/rfds/session-compaction) di ACP, in Preview. Quando il client carica una sessione, OpenCode riproduce ogni compattazione completata o fallita come un unico
+Se il client annuncia `session.compaction`, OpenCode segnala la compattazione con gli aggiornamenti `compaction_update` e
+`compaction_summary_chunk` della RFD di ACP sulla
+[session compaction](https://agentclientprotocol.com/rfds/session-compaction), attualmente in anteprima. Quando il client carica una sessione, OpenCode riproduce ogni compattazione completata o fallita come un unico
 aggiornamento.
 
 ```json

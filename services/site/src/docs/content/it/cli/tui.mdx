@@ -1,9 +1,9 @@
 ---
 title: "TUI"
-description: "Avvia una sessione e usa i flussi di lavoro quotidiani nell'interfaccia del terminale."
+description: "Avvia una sessione e scopri come svolgere le operazioni più comuni nell'interfaccia da terminale."
 ---
 
-Esegui OpenCode dal tuo progetto, digita una richiesta e premi **Enter**.
+Avvia OpenCode dalla directory del progetto, digita una richiesta e premi **Enter**.
 
 ```bash
 cd ~/code/my-project
@@ -27,18 +27,18 @@ Passa una directory per avviare OpenCode in un altro progetto:
 opencode ~/code/another-project
 ```
 
-Premi **Ctrl+O** per aprire le sessioni e i progetti recenti. Seleziona un progetto e premi **Right** per elencarne i worktree.
+Premi **Ctrl+O** per aprire l'elenco delle sessioni e dei progetti recenti. Seleziona un progetto e premi **Right** per vederne i worktree.
 Da quell'elenco, premi **Ctrl+N** per crearne uno.
 
 ## Contesto
 
-Digita `@` per cercare un file, poi selezionalo per allegare quel file al prompt. Continua a digitare dopo `@` per restringere i risultati.
+Digita `@` per cercare un file, poi selezionalo per allegarlo al prompt. Continua a digitare dopo `@` per restringere i risultati.
 
 ```text
 Review @src/auth.ts for error handling problems
 ```
 
-Puoi includere una riga o un intervallo dopo il percorso.
+Puoi indicare il numero di una riga o un intervallo di righe dopo il percorso.
 
 ```text
 Explain @src/auth.ts#20-45
@@ -52,7 +52,7 @@ Digita `!` all'inizio di un prompt vuoto per entrare in modalità shell. Inseris
 !git status
 ```
 
-I comandi shell vengono eseguiti nella directory di lavoro della sessione e il loro output resta nella sessione.
+OpenCode esegue i comandi shell nella directory di lavoro della sessione e ne conserva l'output nella stessa sessione.
 
 ## Comandi
 
@@ -62,13 +62,13 @@ Digita `/` per elencare i comandi slash. Continua a digitare per filtrare l'elen
 /models
 ```
 
-Tra i comandi comuni ci sono `/new`, `/sessions`, `/models`, `/agents`, `/undo`, `/redo` e `/editor`. Premi **Ctrl+P** per aprire la palette dei comandi per ogni azione disponibile nella vista corrente.
+Tra i comandi più comuni ci sono `/new`, `/sessions`, `/models`, `/agents`, `/undo`, `/redo` e `/editor`. Premi **Ctrl+P** per aprire la palette dei comandi con tutte le azioni disponibili nella vista corrente.
 
-Dopo un aggiornamento, OpenCode mostra una volta nella schermata iniziale le novità della release. Esegui `/highlights` per rivederle, oppure imposta `"highlights": false` in [`cli.json`](/cli/config#alerts) per impedire che si aprano automaticamente.
+Dopo un aggiornamento, OpenCode mostra nella schermata iniziale le novità della versione una sola volta. Esegui `/highlights` per rivederle oppure imposta `"highlights": false` in [`cli.json`](/cli/config#alerts) per non mostrarle automaticamente.
 
 ## Domande a margine
 
-Esegui `/btw <question>` per fare una domanda rapida sulla conversazione finora. La risposta usa il contesto della sessione e il modello corrente ma non viene aggiunta alla conversazione, quindi non influisce sui prompt successivi. Un indicatore `/btw` compare nel piè di pagina del prompt mentre è in esecuzione, e la risposta si apre in un dialogo; premi **C** per copiarla.
+Esegui `/btw <question>` per fare una domanda veloce su quanto emerso nella conversazione. OpenCode risponde usando il contesto della sessione e il modello corrente, ma non aggiunge la risposta alla conversazione. La risposta quindi non influisce sui prompt successivi. Mentre OpenCode la elabora, sotto il prompt compare l'indicatore `/btw`. La risposta si apre in una finestra di dialogo. Premi **C** per copiarla.
 
 ```text
 /btw why did the test in step 2 fail?
@@ -94,7 +94,7 @@ Le schede sono abilitate per impostazione predefinita. Usa **Ctrl+Tab** e **Ctrl
 
 ## Cronologia
 
-Premi **Ctrl+X**, poi **U**, o esegui `/undo`, per annullare l'ultimo messaggio utente e il lavoro che è seguito. Il prompt annullato torna nell'area di composizione, così puoi modificarlo.
+Premi **Ctrl+X**, poi **U**, o esegui `/undo`, per annullare il tuo ultimo messaggio e il lavoro svolto da quel punto in poi. Il prompt annullato torna nell'area di composizione, così puoi modificarlo.
 
 Premi **Ctrl+X**, poi **R**, o esegui `/redo`, per ripristinare il lavoro annullato. Se invece invii un nuovo prompt, confermi l'annullamento e riprendi da quel punto.
 

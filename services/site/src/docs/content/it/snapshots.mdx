@@ -44,8 +44,8 @@ model edits src/api.ts
 step finishes ────── snapshot B ── changed: src/api.ts
 ```
 
-La cattura è best effort. Se uno dei due snapshot non è disponibile, la conversazione continua, ma quel passo potrebbe non avere modifiche ai file
-da ripristinare.
+OpenCode acquisisce gli snapshot quando può. Se ne manca uno, la conversazione continua, ma potrebbe non essere possibile ripristinare
+le modifiche ai file di quel passo.
 
 ## Ambito
 

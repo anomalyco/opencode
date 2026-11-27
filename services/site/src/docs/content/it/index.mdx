@@ -24,12 +24,12 @@ OpenCode è un agente di coding open source. Puoi usarlo da terminale, dall'app 
   ]}
 />
 
-Il pacchetto npm usa uno script postinstall per selezionare il binario nativo `opencode` per la tua piattaforma. I comandi Bun e pnpm consentono esplicitamente lo script richiesto; Vite+ non richiede alcun flag aggiuntivo. Il comando mise richiede mise 2026.10.9 o successivo; le versioni precedenti installano OpenCode 1.
+Il pacchetto npm usa uno script postinstall per selezionare il binario nativo `opencode` adatto alla tua piattaforma. I comandi Bun e pnpm autorizzano esplicitamente l'esecuzione dello script. Con Vite+ non serve alcun flag aggiuntivo. Per il comando mise serve mise 2026.10.9 o una versione successiva: le versioni precedenti installano OpenCode 1.
 
 I gestori di pacchetti di Windows non sono supportati.
 
 
-Scarica un binario CLI autonomo per la tua piattaforma.
+Scarica il binario autonomo della CLI per la tua piattaforma.
 
 - **macOS:** [Apple silicon](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-arm64.zip) · [Intel](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64.zip) · [Intel (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64-baseline.zip)
 - **Windows:** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-arm64.zip) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64.zip) · [x64 (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64-baseline.zip)
@@ -61,25 +61,25 @@ $ opencode pair
 
 ## Docker
 
-Le immagini Docker usano tag con la versione, ad esempio `ghcr.io/anomalyco/opencode:2.0.0`. Consulta [Docker](/cli/web#docker) per eseguire il server in un container.
+I tag delle immagini Docker indicano la versione, ad esempio `ghcr.io/anomalyco/opencode:2.0.0`. Consulta [Docker](/cli/web#docker) per eseguire il server in un container.
 
 ---
 
 ## Connessione
 
-OpenCode supporta nativamente molti provider LLM. Puoi collegarti direttamente [nella TUI](/cli/providers) con `/connect`.
+OpenCode supporta nativamente molti provider LLM. Puoi collegare il tuo account direttamente [nella TUI](/cli/providers) con `/connect`.
 
 Vedi [Provider](/providers) per configurare provider personalizzati.
 
-Se vuoi un accesso semplice ai migliori modelli di coding, prova [OpenCode Console](/console).
+Per accedere facilmente ai migliori modelli di coding, prova [OpenCode Console](/console).
 
-Puoi anche provare [OpenCode Go](/console/go), un abbonamento da $10/mese che ti dà accesso ai migliori modelli di coding.
+Puoi anche provare [OpenCode Go](/console/go), l'abbonamento da $10/mese per accedere ai migliori modelli di coding.
 
 ---
 
 ## Personalizza
 
-Personalizza OpenCode modificando il file di configurazione ([OpenCode config](/config)), [caricando plugin](/plugins), [collegando server MCP](/mcp-servers) o [creando comandi](/commands). Per i temi dell'interfaccia da terminale e le scorciatoie da tastiera, vedi [Impostazioni della CLI](/cli/config).
+Personalizza OpenCode: modifica la configurazione descritta in [OpenCode config](/config) oppure estendine le funzionalità [caricando plugin](/plugins), [collegando server MCP](/mcp-servers) o [creando comandi](/commands). Per i temi dell'interfaccia da terminale e le scorciatoie da tastiera, vedi [Impostazioni della CLI](/cli/config).
 
 ---
 

@@ -37,9 +37,9 @@ export default Plugin.define({
 ### Contesto
 
 Il contesto del plugin è essenzialmente un [client del server OpenCode](/build/client).
-I suoi metodi di lettura e azione usano gli stessi input e risposte del client. Aggiunge
-metodi specifici del plugin per trasformazioni, hook runtime, ricaricamenti, registrazioni
-e opzioni del plugin.
+I metodi di lettura e di azione accettano gli stessi input e restituiscono le stesse risposte di quelli del client. Il contesto aggiunge
+metodi riservati ai plugin per trasformazioni, hook a runtime, ricaricamenti, registrazioni
+e opzioni.
 
 ```ts
 setup(ctx) {
@@ -127,7 +127,7 @@ export default Plugin.define({
 ```
 
 Qualsiasi registrazione, rimozione o `reload()` segna il registro come modificato; la lettura successiva lo ricostruisce riproducendo ogni
-trasformazione attiva nell'ordine di registrazione su un valore nuovo. Mantieni le trasformazioni economiche e ripetibili. Un valore che hai
+trasformazione attiva nell'ordine di registrazione su un valore nuovo. Mantieni le trasformazioni leggere e ripetibili. Un valore che hai
 già letto non viene mai modificato dalle ricostruzioni successive.
 
 Dopo che le trasformazioni dei provider e la disponibilità sono risolte, OpenCode materializza i modelli dei provider attivi e riproduce
@@ -839,7 +839,7 @@ Per impostazione predefinita, la compattazione parte al successivo confine tra d
 const compaction = await ctx.session.compact({ sessionID })
 ```
 
-Allega, elenca o rimuovi voci di istruzioni della sessione con chiave tramite `instructions.entry`. Le voci vengono renderizzate come blocchi `<context key="...">` nelle istruzioni della sessione, e aggiornamenti o rimozioni vengono annunciati al confine del passo successivo senza accodare un turno di messaggio.
+Usa `instructions.entry` per allegare, elencare o rimuovere le voci delle istruzioni della sessione identificate da una chiave. OpenCode le inserisce come blocchi `<context key="...">` nelle istruzioni della sessione e segnala gli aggiornamenti o le rimozioni al confine del passo successivo, senza accodare un nuovo turno di conversazione.
 
 ```ts
 await ctx.session.instructions.entry.put({ sessionID, key: "deploy-target", value: "production" })
@@ -1080,9 +1080,9 @@ await registration.dispose()
 ```
 
 Ogni richiesta al modello acquisisce uno snapshot stabile ed eseguibile degli strumenti. Trasformazioni, ricaricamenti ed eliminazioni successivi influiscono sugli snapshot
-futuri, non sulle definizioni, sulle descrizioni del namespace di Code Mode o sugli executor già acquisiti. Gli executor che chiudono
-su dati mutabili del plugin osservano comunque quei dati; acquisisci un valore dentro la trasformazione quando deve restare legato a
-quella definizione.
+futuri, non sulle definizioni, sulle descrizioni del namespace di Code Mode o sugli executor già acquisiti. Gli executor che catturano
+dati modificabili del plugin continuano a vederne le modifiche. Se un valore deve restare legato alla definizione, acquisiscilo
+all'interno della trasformazione.
 
 #### Riferimento
 
@@ -1134,8 +1134,8 @@ await ctx.vcs.transform((editor) => {
 })
 ```
 
-I callback dei provider ricevono la location corrente, la radice della copia di lavoro, la radice canonica del progetto e l'eventuale repository
-store. I callback dei diff ricevono anche la modalità selezionata, il contesto richiesto e il limite di byte dell'output. Il rilevamento automatico dei repository
+I callback dei provider ricevono la location corrente, la radice della copia di lavoro, la radice canonica del progetto e l'eventuale store
+del repository. I callback dei diff ricevono anche la modalità selezionata, il contesto richiesto e il limite di byte dell'output. Il rilevamento automatico dei repository
 continua a usare i rilevatori Git e Mercurial integrati di OpenCode.
 
 I provider possono facoltativamente implementare `init(scope, { signal })` per creare un repository in `scope.worktree`. L'inizializzazione
@@ -1176,8 +1176,8 @@ interface VcsDefinition {
 
 ### Worktree
 
-Registra una strategia locale per i worktree usando il normale ciclo di vita del plugin. Il modulo di implementazione in questo esempio possiede
-la validazione delle opzioni e le operazioni `create`, `remove` e `list` del backend.
+Registra una strategia locale per i worktree usando il normale ciclo di vita del plugin. In questo esempio il modulo di implementazione
+convalida le opzioni e gestisce le operazioni `create`, `remove` e `list` del backend.
 
 ```ts title="plugins/worktrees/index.ts"
 import { Plugin } from "@opencode/plugin"
@@ -1223,19 +1223,19 @@ await ctx.worktree.refresh({ projectID })
 await ctx.worktree.remove({ projectID, directory: created.directory, force: false })
 ```
 
-Create carica configurazione e plugin dalla directory `canonical` salvata del progetto e usa la loro strategia selezionata.
-Accetta una `directory` padre facoltativa, una `from` di origine, un `branch` iniziale e un `name`.
-L'origine è il checkout canonico per impostazione predefinita, e una `from` sostitutiva deve appartenere a quel progetto. Scegliere un'origine
+L'operazione di creazione carica la configurazione e i plugin dalla directory `canonical` salvata del progetto e usa la strategia selezionata per quel checkout.
+Accetta una directory padre facoltativa (`directory`), un'origine (`from`), un branch iniziale (`branch`) e un nome (`name`).
+L'origine predefinita è il checkout canonico. Se la cambi con `from`, la nuova origine deve appartenere allo stesso progetto. Scegliere un'origine
 non cambia la radice della configurazione.
 Un ref iniziale fornito deve essere supportato dalla strategia selezionata;
 l'operazione snapshot nativa di Rift, ad esempio, non ha un'opzione di selezione del ref.
 
-Create e refresh aspettano che i plugin del checkout canonico si attivino. Le chiamate fatte durante il setup dei plugin di quel checkout
-vedono le registrazioni fatte finora e non aspettano la propria attivazione.
+La creazione e l'aggiornamento dell'elenco aspettano che si attivino i plugin del checkout canonico. Le chiamate effettuate durante l'inizializzazione dei plugin
+di quel checkout vedono le registrazioni già effettuate e non aspettano che termini l'attivazione del plugin da cui partono.
 
-Remove carica la configurazione canonica e attiva i suoi plugin, poi usa la strategia registrata del worktree invece
-del valore predefinito attualmente selezionato. Un proprietario registrato non disponibile produce un errore. La destinazione del worktree può
-essere altrove:
+La rimozione carica la configurazione canonica e attiva i relativi plugin. Usa poi la strategia registrata per il worktree,
+non quella predefinita al momento. Se la strategia registrata non è disponibile, restituisce un errore. La directory del worktree può
+trovarsi altrove:
 
 ```ts
 await ctx.worktree.remove({
@@ -1245,14 +1245,14 @@ await ctx.worktree.remove({
 })
 ```
 
-I proprietari mancanti fanno fallire la rimozione invece di ricadere su Git. Una strategia può lanciare `new Worktree.OperationError({
-message: "Uncommitted changes", forceRequired: true })`, importing `Worktree` from `@opencode/plugin`, per richiedere
-la conferma forzata senza dipendere da errori di Core o Git.
+Se la strategia registrata non è disponibile, la rimozione fallisce senza riprovare con Git. Una strategia può lanciare `new Worktree.OperationError({
+message: "Uncommitted changes", forceRequired: true })`, importando `Worktree` da `@opencode/plugin`, per chiedere conferma prima di forzare
+la rimozione, senza dipendere dagli errori di Core o Git.
 
-Refresh carica la configurazione canonica e chiede a tutte le strategie disponibili di trovare worktree tra le radici di checkout note.
+Per aggiornare l'elenco, OpenCode carica la configurazione canonica e chiede a tutte le strategie disponibili di cercare worktree nelle radici dei checkout noti.
 Combina i risultati, conserva le associazioni già registrate e rimuove le directory mancanti. Se una fonte di rilevamento restituisce un errore,
 OpenCode lo scrive nel log senza interrompere le altre fonti. Le directory esistenti restano salvate anche se nessuna strategia disponibile le restituisce. Osserva
-`worktree.updated` e chiama di nuovo `list` per leggere l'inventario cambiato.
+`worktree.updated` e chiama di nuovo `list` per leggere l'elenco aggiornato.
 
 ```ts
 await ctx.worktree.refresh({ projectID })
@@ -1641,7 +1641,7 @@ Le decisioni di retry seguono queste regole:
 
 - Più hook vengono eseguiti nell'ordine di registrazione, e gli hook successivi vedono la decisione corrente.
 - Il numero massimo di tentativi integrato resta un limite rigido.
-- `attempt` è il tentativo fisico in esame. La richiesta iniziale è `1`, quindi il primo retry è `2`.
+- `attempt` è il numero del tentativo effettivo in esame. La richiesta iniziale è `1`, quindi il primo retry è `2`.
 - I ritardi non validi come `NaN`, infinito o valori negativi ricadono sul ritardo calcolato.
 - Il recupero dall'overflow di contesto è separato perché compatta la conversazione invece di riprovare la stessa richiesta.
 
@@ -1882,7 +1882,7 @@ export default {
 - V1 chiama `server()` e usa gli hook restituiti.
 - V2 legge `id` e `setup()` del default export (o `effect()` per i plugin Effect), ignorando `server()`.
 - Mantieni ogni implementazione sulla propria API; condividere un export non traduce gli hook V1 in hook V2.
-- Espandi `Plugin.define(...)` nell'oggetto esportato così type-checka la definizione V2 separatamente da `server()`.
+- Usa la sintassi spread per includere `Plugin.define(...)` nell'oggetto esportato. In questo modo TypeScript verifica i tipi della definizione V2 separatamente da `server()`.
 
 La forma a oggetto V1 è supportata in OpenCode `1.18.29`. Le release V1 più vecchie possono
 aspettarsi invece export di funzioni; prova il pacchetto installato con la release V1 più vecchia

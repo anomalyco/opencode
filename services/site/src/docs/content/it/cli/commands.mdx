@@ -15,7 +15,7 @@ $ opencode run "Explain this repository"
 
 ### CI
 
-In CI, passa una chiave API del provider come segreto e usa la modalità standalone, così il server privato la riceve. Ad esempio, questo job di GitHub Actions analizza il repository di cui è stato fatto il checkout:
+Nel flusso di CI, passa la chiave API del provider come segreto e usa la modalità standalone, così il server privato riceve la chiave. Ad esempio, questo job di GitHub Actions esamina il repository dopo il checkout:
 
 ```yaml
 name: OpenCode review

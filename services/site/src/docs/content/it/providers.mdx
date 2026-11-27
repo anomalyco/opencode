@@ -3,7 +3,7 @@ title: "Provider"
 description: "Collega OpenCode a provider di modelli come OpenCode Go, ChatGPT, Amazon Bedrock, Google Vertex, GitHub Copilot e Ollama, o aggiungine uno personalizzato."
 ---
 
-OpenCode include un catalogo di provider e modelli da [models.dev](https://models.dev). Per la maggior parte dei provider, collega prima un
+OpenCode include il catalogo di provider e modelli di [models.dev](https://models.dev). Per la maggior parte dei provider, collega prima un
 account, poi seleziona un modello.
 
 ## Configurazione
@@ -18,7 +18,7 @@ Esegui `/connect`, scegli un provider e inserisci le sue credenziali. Poi esegui
 ## Go
 
 [OpenCode Go](/console/go) è un abbonamento facoltativo per i modelli di coding testati dal team di OpenCode. Abbonati nella
-[Console](https://opencode.ai/console), copia la tua chiave API, poi collegala come **OpenCode Go**.
+[Console](https://opencode.ai/console), copia la tua chiave API, poi seleziona **OpenCode Go** come provider e inserisci la chiave.
 
 ```text
 /connect
@@ -30,8 +30,8 @@ Vedi la [guida a Go](/console/go) per limiti di utilizzo, endpoint e dettagli su
 
 ## ChatGPT
 
-Usa un piano ChatGPT Plus or Pro invece di una chiave API OpenAI. Collega **OpenAI**, poi scegli **Sign in with ChatGPT**
-o uno dei metodi di accesso legacy **Codex**. L'utilizzo viene conteggiato nel tuo piano, quindi questi modelli non mostrano costi.
+Puoi usare un abbonamento ChatGPT Plus or Pro al posto di una chiave API OpenAI. Collega **OpenAI**, poi scegli **Sign in with ChatGPT**
+o uno dei metodi di accesso precedenti di **Codex**. L'utilizzo rientra nel tuo abbonamento, quindi OpenCode non indica costi per questi modelli.
 
 ```text
 /connect
@@ -40,15 +40,15 @@ o uno dei metodi di accesso legacy **Codex**. L'utilizzo viene conteggiato nel t
 
 ### Limiti di contesto
 
-Per impostazione predefinita, OpenCode limita la finestra di contesto di questi accessi sotto il limite reale di ogni modello. I limiti corrispondono ai
-valori predefiniti di Codex, così l'utilizzo del tuo piano viene consumato a un ritmo simile a quello di altri prodotti OpenAI.
+Con questi metodi di accesso, OpenCode imposta di default una finestra di contesto inferiore al limite effettivo di ogni modello.
+Usa gli stessi limiti predefiniti di Codex, così consumi la quota del tuo piano a un ritmo simile a quello degli altri prodotti OpenAI.
 
 | Modello                | Limite di input |
 | ---------------------- | --------------- |
-| GPT-6.1 Sol e successivi | 500.000       |
-| Modelli precedenti     | 272.000         |
+| GPT-6.1 Sol e successivi | 500,000       |
+| Modelli precedenti     | 272,000         |
 
-Per disattivare il limite, disabilita il plugin del limite nella tua configurazione. Il prefisso `-` disattiva un plugin integrato; tutti gli altri plugin restano
+Per rimuovere il limite, disattiva nella configurazione il plugin che lo impone. Il prefisso `-` disattiva un plugin integrato; tutti gli altri plugin restano
 abilitati.
 
 ```jsonc title="opencode.jsonc"
@@ -88,7 +88,7 @@ L'oggetto `providers` ha come chiave l'ID del provider usato nei riferimenti ai 
 | Campo | Scopo |
 | --- | --- |
 | `name` | Nome visualizzato. |
-| `env` | Nomi ordinati di variabili d'ambiente che possono fornire la credenziale. |
+| `env` | Elenco ordinato dei nomi delle variabili d'ambiente da cui leggere la credenziale. |
 | `package` | Pacchetto del provider a runtime. |
 | `canonical` | ID di un provider integrato di cui questo provider eredita i valori predefiniti del catalogo. |
 | `compatibility` | Particolarità dell'API condivise da ogni modello di questo provider. Vedi [Compatibilità](/models#compatibility). |
@@ -99,8 +99,8 @@ L'oggetto `providers` ha come chiave l'ID del provider usato nei riferimenti ai 
 
 ## Endpoint
 
-Sovrascrivi `settings.baseURL` per inviare un provider del catalogo tramite un proxy o un endpoint compatibile. Il suo pacchetto,
-i modelli e la connessione esistenti si applicano comunque.
+Sovrascrivi `settings.baseURL` per inoltrare le richieste a un provider del catalogo tramite un proxy o un endpoint compatibile. Il pacchetto,
+i modelli e la connessione del provider restano gli stessi.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -139,7 +139,7 @@ Usa `headers` per header HTTP aggiuntivi e `body` per i campi JSON da unire a og
 }
 ```
 
-Entrambi i campi possono essere impostati anche su un modello o una variante quando solo una parte del traffico di un provider ha bisogno della sostituzione.
+Se vuoi modificare solo una parte delle richieste al provider, puoi impostare entrambi i campi anche sul singolo modello o sulla singola variante.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -164,11 +164,11 @@ Entrambi i campi possono essere impostati anche su un modello o una variante qua
 
 ## Timeout
 
-Le richieste HTTP aspettano fino a cinque minuti per gli header di risposta e fino a quindici minuti tra i chunk di risposta in streaming.
+Per le richieste HTTP, OpenCode attende fino a cinque minuti per gli header della risposta e fino a quindici minuti tra due chunk della risposta in streaming.
 Imposta `settings.headerTimeout` o `settings.chunkTimeout` del provider su un numero di millisecondi per cambiare un limite,
 o su `false` per disattivarlo. `settings.timeout` limita inoltre l'intera richiesta dall'invio al completamento
-della risposta; non ha un valore predefinito. Queste impostazioni di configurazione si applicano a tutto il provider, non per modello o variante. Su un
-trasporto WebSocket, `chunkTimeout` limita invece l'intervallo tra i frame e il valore predefinito è trenta minuti.
+della risposta e non ha un valore predefinito. Queste impostazioni valgono per l'intero provider, non per singolo modello o variante. Con il
+trasporto WebSocket, `chunkTimeout` limita invece l'intervallo tra due frame. Il valore predefinito è trenta minuti.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -184,15 +184,14 @@ trasporto WebSocket, `chunkTimeout` limita invece l'intervallo tra i frame e il 
 }
 ```
 
-Una richiesta che supera uno dei due limiti fallisce con un errore di trasporto. OpenCode riprova una richiesta scaduta fino a tre
-volte prima di arrendersi.
+Una richiesta che supera uno dei due limiti restituisce un errore di trasporto. Dopo un timeout, OpenCode riprova fino a tre volte.
 
 ## Codifica delle richieste
 
 `settings.encoding` comprime i corpi delle richieste HTTP con `"zstd"` o `"gzip"`, oppure invia JSON semplice con `"none"`. Impostalo
-su un provider, modello o variante; vince il valore più specifico. Abilita solo una codifica che l'endpoint decodifica: la maggior parte
-dei provider e dei gateway rifiuta i corpi compressi. OpenAI usa `"zstd"` per impostazione predefinita quando accedi con ChatGPT e non è configurato un
-`baseURL` personalizzato; le chiavi API inviano JSON semplice. I messaggi WebSocket non sono interessati.
+su un provider, modello o variante; ha la precedenza il valore più specifico. Usa solo una codifica supportata dall'endpoint: la maggior parte
+dei provider e dei gateway rifiuta i corpi compressi. OpenAI usa `"zstd"` per impostazione predefinita quando accedi con ChatGPT senza impostare un
+`baseURL` personalizzato. Con una chiave API, OpenCode invia JSON non compresso. L'impostazione non influisce sui messaggi WebSocket.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -294,15 +293,15 @@ l'ID inviato al provider.
 | `modelID` | ID del modello o del deployment inviato al provider. |
 | `name` | Nome visualizzato. |
 | `family` | Famiglia del modello usata per raggruppare modelli correlati. |
-| `type` | Cosa produce il modello: `chat`, `decision`, `image`, `video`, `realtime`, `embedding` o `transcription`. Il valore predefinito è `chat`; solo i modelli chat vengono offerti per le sessioni. I modelli realtime che rispondono a voce vengono offerti per la voce, e con `disabled: true` no. |
+| `type` | Cosa produce il modello: `chat`, `decision`, `image`, `video`, `realtime`, `embedding` o `transcription`. Il valore predefinito è `chat`. Nelle sessioni puoi scegliere solo modelli chat. Per l'uso vocale sono disponibili i modelli in tempo reale che rispondono a voce, salvo quelli con `disabled: true`. |
 | `releaseDate` | Data di rilascio come `YYYY-MM-DD` o `YYYY-MM`. |
-| `package` | Sostituzione del runtime per questo modello. Un modello di trascrizione indica il suo protocollo di trascrizione, ad esempio `@opencode/ai/protocols/openai-transcription`; un modello realtime non ne prende nessuno, perché le sessioni vocali partono tramite la sua API. |
+| `package` | Runtime alternativo per il modello. Per un modello di trascrizione indica il protocollo, ad esempio `@opencode/ai/protocols/openai-transcription`. Per un modello in tempo reale non indicarne nessuno: le sessioni vocali si avviano tramite la sua API. |
 | `settings` | Controlli di OpenCode a livello di modello e impostazioni JSON specifiche del pacchetto. |
 | `headers` | Header di richiesta aggiuntivi con valori stringa. |
 | `body` | Campi JSON aggiuntivi del corpo della richiesta. |
 | `capabilities` | Supporto agli strumenti, tipi di media di input e output accettati, supporto della temperatura e controlli di ragionamento. |
 | `compatibility` | Particolarità dell'API per questo modello, che sovrascrivono quelle del provider. Vedi [Compatibilità](/models#compatibility). |
-| `variants` | Varianti con nome con propri `settings`, `headers` e `body`. |
+| `variants` | Varianti identificate da un nome, ciascuna con i propri `settings`, `headers` e `body`. |
 | `cost` | Prezzi per milione di token in input e in output, con prezzi facoltativi per la cache. |
 | `limit` | Limiti di token di contesto, input e output. |
 | `disabled` | Rimuove il modello dalla selezione quando è `true`. |
@@ -348,7 +347,7 @@ az login
 Inserisci il nome della risorsa al collegamento se non è già fornito dalla configurazione o dall'ambiente. Un nome della risorsa
 salvato con una connessione ha la precedenza sulla configurazione; collegati di nuovo per cambiarlo.
 
-Le connessioni della CLI di Azure usano l'account selezionato nella CLI di Azure. Per una risorsa in un altro tenant o subscription,
+Le connessioni tramite la CLI di Azure usano l'account attivo nella CLI. Se la risorsa appartiene a un altro tenant o a un'altra sottoscrizione Azure,
 seleziona entrambi esplicitamente.
 
 ```bash
@@ -361,16 +360,16 @@ Invece della configurazione, `AZURE_RESOURCE_NAME` fornisce il nome della risors
 
 ### Deployment
 
-Azure serve un modello solo tramite un deployment, quindi OpenCode elenca i deployment della tua risorsa e mostra quelli
-invece dell'intero catalogo Azure. L'elenco si carica in background dopo l'avvio, dopo il collegamento e dopo il
+Azure rende disponibili i modelli solo tramite deployment, quindi OpenCode mostra i deployment della tua risorsa
+anziché l'intero catalogo Azure. OpenCode carica l'elenco in background dopo l'avvio, dopo il collegamento e dopo il
 cambio di account. Per rilevare un deployment aggiunto dopo, riavvia OpenCode o collegati di nuovo.
 
-- Finché l'elenco non si carica per una connessione, o se fallisce, l'intero catalogo resta disponibile.
-- Un ricaricamento fallito per la stessa connessione conserva il suo ultimo inventario completo.
-- Cambiare account non mostra mai l'inventario dell'account precedente; il nuovo account parte dall'intero catalogo.
+- Durante il primo caricamento per una connessione, o se il caricamento non riesce, l'intero catalogo resta disponibile.
+- Se un aggiornamento per la stessa connessione non riesce, OpenCode conserva l'ultimo elenco completo.
+- Quando cambi account, OpenCode mostra l'intero catalogo in attesa del nuovo elenco, mai quello dell'account precedente.
 - I deployment ereditano limiti, costi e capacità dai loro modelli del catalogo.
 
-I nomi dei deployment sono i loro ID modello, in minuscolo perché Azure ignora il maiuscolo nei nomi, ad esempio
+OpenCode usa i nomi dei deployment come ID dei modelli, in minuscolo perché Azure non distingue tra maiuscole e minuscole, ad esempio
 `azure/gpt-production`. Un deployment chiamato come il suo modello, come `gpt-6-luna`, mantiene l'ID del catalogo. Questi ID restano
 stabili quando altri deployment vengono aggiunti o rimossi.
 
@@ -413,16 +412,16 @@ az login --tenant TENANT_ID
 
 ## Bedrock
 
-Amazon Bedrock usa la catena di credenziali predefinita di AWS. Un profilo AWS con nome è la configurazione durevole più semplice; OpenCode riconosce anche
-ambienti con chiavi di accesso, identità web e credenziali dei container.
+Amazon Bedrock usa la catena di credenziali predefinita di AWS. Per una configurazione persistente, la soluzione più semplice è usare un profilo AWS con nome.
+OpenCode riconosce anche le chiavi di accesso nelle variabili d'ambiente, le identità web e le credenziali dei container.
 
 ```bash
 aws configure sso --profile work
 aws sso login --profile work
 ```
 
-Seleziona profilo e regione nelle impostazioni del provider. Un `profile`, `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`, file di token di
-identità web o URI delle credenziali dei container configurati attivano il provider; una regione da sola no.
+Seleziona profilo e regione nelle impostazioni del provider. Per attivarlo, configura uno tra `profile`, `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`,
+un file con un token di identità web o l'URI delle credenziali del container. La sola regione non basta.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -462,7 +461,7 @@ con chiave API di OpenCode.
 ## Vertex
 
 Google Vertex usa le credenziali predefinite dell'applicazione (ADC) e richiede un progetto prima che i suoi modelli diventino disponibili.
-Crea ADC locali, poi imposta progetto e location nelle impostazioni del provider.
+Configura le ADC in locale, poi indica il progetto e la regione nelle impostazioni del provider.
 
 ```bash
 gcloud auth application-default login
@@ -482,9 +481,9 @@ gcloud auth application-default login
 }
 ```
 
-OpenCode risolve anche il progetto da `GOOGLE_VERTEX_PROJECT`, `GOOGLE_CLOUD_PROJECT`, `GCP_PROJECT` o
-`GCLOUD_PROJECT`, in quest'ordine. Risolve la location da `GOOGLE_VERTEX_LOCATION`, `GOOGLE_CLOUD_LOCATION` o
-`VERTEX_LOCATION`, e il valore predefinito è `us-central1`.
+OpenCode cerca il progetto anche in `GOOGLE_VERTEX_PROJECT`, `GOOGLE_CLOUD_PROJECT`, `GCP_PROJECT` o
+`GCLOUD_PROJECT`, in quest'ordine. Per la regione usa `GOOGLE_VERTEX_LOCATION`, `GOOGLE_CLOUD_LOCATION` o
+`VERTEX_LOCATION`. Il valore predefinito è `us-central1`.
 
 ```bash
 GOOGLE_CLOUD_PROJECT=my-project GOOGLE_VERTEX_LOCATION=europe-west4 opencode --standalone
@@ -504,8 +503,8 @@ ID provider `google-vertex-anthropic` non è disponibile in V2.
 
 ## Copilot
 
-GitHub Copilot supporta OAuth dispositivo invece dell'inserimento manuale della chiave API. Collega **GitHub Copilot**, scegli GitHub.com o
-GitHub Enterprise, completa il flusso dispositivo, poi apri `/models`.
+GitHub Copilot usa il flusso OAuth con codice dispositivo invece di chiederti una chiave API. Collega **GitHub Copilot**, scegli GitHub.com o
+GitHub Enterprise, completa l'autorizzazione del dispositivo e poi apri `/models`.
 
 ```text
 /connect
@@ -520,13 +519,13 @@ da GitHub quando disponibile; altrimenti deriva l'endpoint dal dominio enterpris
 company.ghe.com
 ```
 
-L'account collegato ha bisogno dell'accesso a Copilot Chat. Se GitHub segnala che non hai il diritto, iscriviti a Copilot Free o chiedi
+L'account collegato deve avere accesso a Copilot Chat. Se GitHub segnala che l'account non è abilitato, attiva Copilot Free o chiedi
 all'organizzazione di assegnare un posto Copilot, poi collegati di nuovo. OpenCode recupera l'elenco dei modelli correnti dell'account dopo l'accesso
 e ogni volta che l'account Copilot attivo cambia.
 
 ## Ollama
 
-Avvia Ollama e scarica un modello. OpenCode sonda `http://127.0.0.1:11434`, scopre i modelli di completamento e li aggiunge a
+Avvia Ollama e scarica un modello. OpenCode interroga `http://127.0.0.1:11434`, rileva i modelli di completamento e li aggiunge a
 `/models` senza collegare un account.
 
 ```bash
@@ -571,7 +570,7 @@ OpenCode rileva automaticamente anche i modelli locali di LM Studio e vLLM. I lo
 }
 ```
 
-Per LM Studio, OpenCode rileva i modelli linguistici da `/api/v1/models`. Per vLLM, controlla `/health` prima di leggere `/v1/models`. Il rilevamento automatico non può stabilire se i modelli vLLM supportano gli strumenti, quindi li lascia disattivati. Per un altro runtime compatibile con OpenAI, segui l'esempio del [provider personalizzato](#custom) ed elenca esplicitamente i modelli.
+Per LM Studio, OpenCode rileva i modelli linguistici da `/api/v1/models`. Per vLLM, controlla `/health` prima di leggere `/v1/models`. Il rilevamento automatico non può stabilire se i modelli vLLM supportano gli strumenti, quindi per questi modelli gli strumenti restano disattivati. Per un altro runtime compatibile con OpenAI, segui l'esempio del [provider personalizzato](#custom) ed elenca esplicitamente i modelli.
 
 ## Gateway
 
@@ -586,7 +585,7 @@ account OpenRouter, poi fai riferimento ai modelli con l'ID completo del modello
 ```
 
 Mantieni il pacchetto nativo di OpenRouter quando sovrascrivi il suo endpoint o instradi tramite un gateway compatibile con OpenRouter.
-Questo preserva il comportamento di richiesta e ragionamento di OpenRouter.
+Così mantieni il comportamento di OpenRouter nella gestione delle richieste e del ragionamento.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -628,13 +627,13 @@ La chiave di configurazione diventa il prefisso del provider e ogni chiave `mode
 
 ## Errori
 
-Gli errori di provider e modelli di solito identificano la fase fallita. Controlla l'ambiente del processo del server e l'esatto ID
+Gli errori dei provider e dei modelli di solito indicano in quale fase si è verificato il problema. Controlla l'ambiente del processo del server e l'ID esatto
 del modello prima di cambiare pacchetti.
 
 | Errore o sintomo | Verifica |
 | --- | --- |
 | `No model is available for session ...` | Nessun modello abilitato è selezionabile al momento. Completa la configurazione specifica del provider, poi scegli un modello in `/models`. |
-| `Model unavailable: provider/model` | Il provider è inattivo, l'ID del modello è assente o disabilitato, o la scoperta dinamica non lo restituisce più. Per gli alias personalizzati, controlla la chiave della mappa `models` invece di `modelID`. |
+| `Model unavailable: provider/model` | Il provider è inattivo, l'ID del modello manca, il modello è disabilitato o il rilevamento automatico non lo trova più. Per gli alias personalizzati, controlla la chiave della mappa `models` invece di `modelID`. |
 | `Cannot initialize provider/model: NAME is required to resolve the provider endpoint` | Un segnaposto `${NAME}` resta in `baseURL`. Imposta quella variabile sul server OpenCode o sostituisci il template con un endpoint completo. |
 | `Azure resource name is missing` | Imposta `providers.azure.settings.resourceName`, `AZURE_RESOURCE_NAME` o un `settings.baseURL` completo. |
 | Vertex non compare | Imposta un progetto risolvibile nelle impostazioni del provider o una variabile di progetto supportata. ADC da solo non attiva il provider. |
@@ -642,7 +641,7 @@ del modello prima di cambiare pacchetti.
 | Ollama non ha modelli | Conferma che il server esponga `/api/tags` e `/api/show` al percorso derivato da `baseURL`, e che `/api/show` riporti la capacità `completion`. |
 | Copilot non ha modelli | Conferma che l'account OAuth attivo abbia accesso a Copilot Chat. Una sincronizzazione dei modelli fallita viene registrata come `failed to sync GitHub Copilot models`. |
 
-V2 rifiuta gli ID provider ritirati con una sostituzione diretta. Usa `azure/<model>` invece di
+V2 non accetta più gli ID dei provider dismessi. Usa `azure/<model>` invece di
 `azure-cognitive-services/<model>`, e `google-vertex/<model>` invece di `google-vertex-anthropic/<model>`.
 
 ## WebSocket
@@ -666,9 +665,8 @@ Il comportamento WebSocket segue queste regole:
 
 - I provider integrati attivano le route supportate secondo la propria policy.
 - `settings.transport: "websocket"` del provider lo abilita; `"http"` lo disabilita.
-- `"websocket"` su una route senza canale WebSocket registra un avviso e ricade su HTTP.
+- Se imposti `"websocket"` per una route senza canale WebSocket, OpenCode registra un avviso e ripiega su HTTP.
 - La compattazione del provider OpenAI usa la stessa connessione.
-- xAI continua solo dalle risposte archiviate. Con il suo `store: false` predefinito, ogni passo viene inviato per intero sulla connessione
-  riusata.
-- Un socket chiuso si riconnette al passo successivo. Se la connessione non si apre, la sessione continua su HTTP.
+- xAI può proseguire solo a partire da risposte salvate. Con il valore predefinito `store: false`, OpenCode riutilizza la connessione ma invia ogni passo per intero.
+- Se la connessione si chiude, OpenCode prova a riaprirla al passo successivo. Se non ci riesce, la sessione continua su HTTP.
 - I plugin dei provider con hook `http.request` o `http.response` restano su HTTP, così ogni richiesta resta osservabile.
