@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
 import { Config } from "@opencode/core/config"
 import { Directory, Document, type Entry, Event, Info } from "@opencode/schema/config"
 import { ConfigSkillPlugin } from "@opencode/core/config/plugin/skill"
@@ -177,6 +177,33 @@ metadata:
 })
 
 describe("ConfigSkillPlugin.Plugin", () => {
+  it.live("warns at the default level when a skill file is skipped", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const skills = path.join(tmp.path, "skills")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(skills, "good"), { recursive: true })
+            await fs.mkdir(path.join(skills, "repro"), { recursive: true })
+            await write(skills, "good", "Good")
+            await fs.writeFile(
+              path.join(skills, "repro", "SKILL.md"),
+              '---\nname: repro\ndescription: "unterminated\n---\nbody',
+            )
+          })
+          const warnings: string[] = []
+          const logger = Logger.make((entry) => {
+            const message = entry.message as readonly unknown[]
+            if (entry.logLevel === "Warn" && message[0] === "skill file skipped") warnings.push(String(message[0]))
+          })
+          const skill = yield* start([skills], tmp.path).pipe(Effect.provide(Logger.layer([logger])))
+          expect((yield* skill.list()).map((item) => item.id)).toEqual([Skill.ID.make("good")])
+          expect(warnings).toEqual(["skill file skipped"])
+        }),
+      ),
+    ),
+  )
+
   it.live("maps config entry types to skill directories", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>

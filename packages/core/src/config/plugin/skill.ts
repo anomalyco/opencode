@@ -6,7 +6,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import path from "path"
 import { isDeepStrictEqual } from "node:util"
-import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
+import { Effect, FiberMap, PubSub, Semaphore, SchemaIssue, Stream } from "effect"
 import { Config } from "../../config.js"
 import { Watcher } from "../../filesystem/watcher.js"
 import { Location } from "../../location.js"
@@ -15,6 +15,8 @@ import { Skill } from "../../skill.js"
 import { SkillDiscovery } from "../../skill/discovery.js"
 import { SkillFile } from "./skill-file.js"
 import { SkillScan } from "./skill-scan.js"
+
+const formatIssue = SchemaIssue.makeFormatterDefault()
 
 type Source = Skill.DirectorySource | Skill.UrlSource
 
@@ -131,10 +133,10 @@ export const Plugin = define({
           if (!content) continue
           const parsed = SkillFile.parse(directory, filepath, content)
           if (parsed._tag === "Skipped") {
-            yield* Effect.logDebug("skill file skipped", {
+            yield* Effect.logWarning("skill file skipped", {
               filepath,
               reason: parsed.reason,
-              ...(parsed.reason === "frontmatter" ? { issue: parsed.issue } : {}),
+              ...(parsed.reason === "frontmatter" ? { issue: formatIssue(parsed.issue) } : {}),
             })
             continue
           }
