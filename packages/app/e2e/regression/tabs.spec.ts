@@ -2713,6 +2713,7 @@ test("a working session finishing in the inbox shelf leaves the list where it wa
       storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true, recentExpanded: true } },
     },
   })
+
   await page.goto("/")
 
   const inbox = page.locator('[data-slot="sidebar-inbox"]')
