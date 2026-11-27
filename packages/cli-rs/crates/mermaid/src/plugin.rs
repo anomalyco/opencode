@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use opencode_plugin_abi::{Color, Fenced, Plugin, Rgba, Setup, Span};
 
-use crate::flowchart::drawing::italic;
+use crate::flowchart::drawing::{bold, italic};
 use crate::{Diagram, Kind, Palette, Rendered, render};
 
 pub const ID: &str = "opencode.merman";
@@ -59,6 +59,7 @@ pub fn fenced(diagram: &Diagram) -> Fenced {
                     fg: run.fg.map(Color::Rgba),
                     bg: run.bg.map(Color::Rgba),
                     italic: run.attributes & italic() != 0,
+                    bold: run.attributes & bold() != 0,
                     ..Span::new(run.text.clone())
                 })
                 .collect()

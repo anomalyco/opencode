@@ -9,32 +9,30 @@ import { Field } from "@opencode/ui/field"
 import { DialogBody, DialogHeader, DialogTitle, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
 import { RedirectPasteForm } from "@opencode/ui/redirect-paste"
 import { TextInput } from "@opencode/ui/text-input"
-import { Tooltip } from "@opencode/ui/tooltip"
 import { type Component, createMemo, createUniqueId, For, type JSX, Match, onMount, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useServerSDK } from "@/runtime/server/client"
-import { consoleProviderName } from "@/providers/catalog/console"
 import { useIntegrations } from "@/providers/catalog/integrations"
 import { popularProviders } from "@/providers/catalog/order"
-import { ProviderModelGroup, ProviderModelIcon } from "@/providers/models/provider-group"
+import { ProviderModelIcon } from "@/providers/models/provider-group"
 import type { ModelSelection } from "@/providers/models/selection"
 import { decode64 } from "@/runtime/persistence/base64"
-import { SettingsList } from "@/settings/list"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { Schema } from "effect"
 import type { FormField, IntegrationInfo } from "@opencode/client/promise"
-import { createProviderDialogController, modelKey } from "./controller"
+import { createProviderDialogController } from "./controller"
 import { CONSOLE_INTEGRATION, type ProviderDialogBody } from "./dialog-machine"
 import { connectMethods, selectProviderConnectView, type ProviderConnectMethod } from "./machine"
 import type { ProviderFormInput, ProviderFormView } from "./form-machine"
 import { ConsoleAuthorization } from "./console"
 import { StepActions, WaitingButton } from "./step-actions"
 import { DialogChatGPTPlanWelcome } from "./chatgpt-welcome"
-import { authServerName } from "./remote"
+import { authServerName, RemoteServerLabel } from "./remote"
+import { ConnectedModelPicker } from "./connected-models"
 import { providerAccounts } from "@/settings/providers/accounts"
 import { AccountNameInput } from "@/settings/providers/account-name"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -42,7 +40,6 @@ import { Menu } from "@opencode/ui/menu"
 import { writeClipboard } from "@opencode/session-ui/copy"
 import { showToast } from "@/shell/notifications/toast"
 import "@/shell/search-list.css"
-import "./models.css"
 
 export function useProviderConnectController() {
   const [store, setStore] = createStore<{ selected?: string }>({})
@@ -126,151 +123,140 @@ export const DialogConnectProvider: Component<{
       }}
       class="[font-family:var(--v2-font-family-sans)]"
       classList={{
-        "[&_[data-slot=dialog-header]]:!px-4 [&_[data-slot=dialog-header]]:!pt-3.5 [&_[data-slot=dialog-close-button]]:!mt-0 [&_[data-slot=dialog-close-button]]:!-me-0.5": true,
-        "[&_[data-slot=dialog-header]]:!pb-2": frame() !== "models",
-        "[&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]":
-          frame() === "models",
+        "[&_[data-slot=dialog-header]]:!px-4 [&_[data-slot=dialog-header]]:!pt-3.5 [&_[data-slot=dialog-header]]:!pb-2 [&_[data-slot=dialog-close-button]]:!mt-0 [&_[data-slot=dialog-close-button]]:!-me-0.5": true,
         "search-dialog": frame() === "picker" || frame() === "accounts",
+        "command-palette model-dialog": frame() === "models",
       }}
     >
-      <DialogHeader closeLabel={language.t("common.close")}>
-        <Switch>
-          <Match when={frame() === "models" && view().provider}>
-            {(provider) => (
-              <div class="flex items-center gap-2">
-                <ProviderModelIcon provider={{ id: provider(), name: controller.providerName() }} class="shrink-0" />
-                <DialogTitle>
-                  {language.t("provider.connect.models.title", { provider: controller.providerName() })}
-                </DialogTitle>
-              </div>
-            )}
-          </Match>
-          <Match when={view().provider}>
-            {(provider) => (
-              <>
-                <nav
-                  aria-label={language.t("provider.connect.breadcrumb.label")}
-                  class="flex min-w-0 flex-1 items-center gap-1 text-[13px] leading-5 tracking-[-0.04px]"
-                >
-                  <For each={view().crumbs}>
-                    {(crumb, index) => {
-                      const last = () => index() === view().crumbs.length - 1
-                      const target = () => crumb.target
+      <Show
+        when={frame() !== "models"}
+        fallback={
+          <ConnectedModelPicker
+            providerName={providerName()}
+            server={remoteServer()}
+            groups={controller.connectionGroups()}
+            workspace={controller.managedProviders()}
+            onSelect={(model) =>
+              controller.dispatch({
+                type: "model.confirmed",
+                selection: { providerID: model.providerID, modelID: model.id },
+              })
+            }
+          />
+        }
+      >
+        <DialogHeader closeLabel={language.t("common.close")}>
+          <Switch>
+            <Match when={view().provider}>
+              {(provider) => (
+                <>
+                  <nav
+                    aria-label={language.t("provider.connect.breadcrumb.label")}
+                    class="flex min-w-0 flex-1 items-center gap-1 text-[13px] leading-5 tracking-[-0.04px]"
+                  >
+                    <For each={view().crumbs}>
+                      {(crumb, index) => {
+                        const last = () => index() === view().crumbs.length - 1
+                        const target = () => crumb.target
 
-                      const label = () =>
-                        crumb.kind === "root" ? language.t("provider.connect.breadcrumb.root") : providerName()
+                        const label = () =>
+                          crumb.kind === "root" ? language.t("provider.connect.breadcrumb.root") : providerName()
 
-                      const content = () => (
-                        <>
-                          <Show when={crumb.kind === "provider"}>
-                            <ProviderModelIcon
-                              provider={{ id: provider(), name: providerName() }}
-                              class="shrink-0 text-v2-icon-icon-base"
-                            />
-                          </Show>
-                          <span class="min-w-0 truncate">{label()}</span>
-                        </>
-                      )
+                        const content = () => (
+                          <>
+                            <Show when={crumb.kind === "provider"}>
+                              <ProviderModelIcon
+                                provider={{ id: provider(), name: providerName() }}
+                                class="shrink-0 text-v2-icon-icon-base"
+                              />
+                            </Show>
+                            <span class="min-w-0 truncate">{label()}</span>
+                          </>
+                        )
 
-                      return (
-                        <>
-                          <Show when={index() > 0}>
-                            <Icon name="chevron-right" class="shrink-0 text-v2-icon-icon-muted" />
-                          </Show>
-                          <Switch>
-                            <Match when={last()}>
-                              {/* A sign-in started from the accounts list ends at the provider, which leads back to it. */}
-                              <Show
-                                when={target()}
-                                fallback={
-                                  <span class="flex min-w-0 items-center gap-1.5 font-[530] text-v2-text-text-base">
-                                    {content()}
-                                  </span>
-                                }
-                              >
+                        return (
+                          <>
+                            <Show when={index() > 0}>
+                              <Icon name="chevron-right" class="shrink-0 text-v2-icon-icon-muted" />
+                            </Show>
+                            <Switch>
+                              <Match when={last()}>
+                                {/* A sign-in started from the accounts list ends at the provider, which leads back to it. */}
+                                <Show
+                                  when={target()}
+                                  fallback={
+                                    <span class="flex min-w-0 items-center gap-1.5 font-[530] text-v2-text-text-base">
+                                      {content()}
+                                    </span>
+                                  }
+                                >
+                                  {(value) => (
+                                    <button
+                                      type="button"
+                                      class="flex min-w-0 items-center gap-1.5 rounded-[4px] font-[530] text-v2-text-text-base hover:text-v2-text-text-muted"
+                                      onClick={() => controller.navigate(value())}
+                                    >
+                                      {content()}
+                                    </button>
+                                  )}
+                                </Show>
+                              </Match>
+                              <Match when={target()}>
                                 {(value) => (
                                   <button
                                     type="button"
-                                    class="flex min-w-0 items-center gap-1.5 rounded-[4px] font-[530] text-v2-text-text-base hover:text-v2-text-text-muted"
+                                    class="flex min-w-0 shrink items-center gap-1.5 rounded-[4px] font-[440] text-v2-text-text-faint hover:text-v2-text-text-base"
                                     onClick={() => controller.navigate(value())}
                                   >
                                     {content()}
                                   </button>
                                 )}
-                              </Show>
-                            </Match>
-                            <Match when={target()}>
-                              {(value) => (
-                                <button
-                                  type="button"
-                                  class="flex min-w-0 shrink items-center gap-1.5 rounded-[4px] font-[440] text-v2-text-text-faint hover:text-v2-text-text-base"
-                                  onClick={() => controller.navigate(value())}
-                                >
+                              </Match>
+                              <Match when={true}>
+                                <span class="flex min-w-0 shrink items-center gap-1.5 font-[440] text-v2-text-text-faint">
                                   {content()}
-                                </button>
-                              )}
-                            </Match>
-                            <Match when={true}>
-                              <span class="flex min-w-0 shrink items-center gap-1.5 font-[440] text-v2-text-text-faint">
-                                {content()}
-                              </span>
-                            </Match>
-                          </Switch>
-                        </>
-                      )
-                    }}
-                  </For>
-                </nav>
-                {/* The breadcrumb shows where the dialog is; the dialog itself is named for what it does. */}
-                <div class="sr-only">
-                  <DialogTitle>{language.t("provider.connect.title", { provider: providerName() })}</DialogTitle>
-                </div>
-              </>
-            )}
-          </Match>
-          <Match when={true}>
-            <DialogTitleGroup
-              title={language.t("dialog.provider.title")}
-              description={language.t("dialog.provider.description")}
-            />
-          </Match>
-        </Switch>
-        <Show when={remoteServer()}>
-          {(server) => (
-            <Tooltip
-              value={language.t("provider.connect.remote.description")}
-              placement="bottom"
-              contentClass="!max-w-64 !whitespace-normal"
-              triggerTabIndex={0}
-              class="me-3 flex min-w-0 shrink-0 !cursor-default items-center gap-1.5 rounded-sm text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
-            >
-              <Icon name="server" class="shrink-0 text-v2-icon-icon-muted" />
-              <span class="max-w-40 truncate">{language.t("provider.connect.remote.label", { server: server() })}</span>
-            </Tooltip>
-          )}
-        </Show>
-      </DialogHeader>
-      <DialogBody
-        class={`min-h-0 flex-1 overflow-hidden ${
-          frame() === "provider" || frame() === "models"
-            ? `px-2 ${frame() === "models" ? "pb-0" : "pb-2"}`
-            : "px-2 pb-2"
-        }`}
-      >
-        {/* Outside the scrolling content, so it can reach across the body's padding without scrolling sideways. */}
-        <Show when={frame() === "accounts"}>
-          <div data-slot="search-dialog-divider" class="!-mx-2" />
-        </Show>
-        <div ref={focusHost} tabIndex={-1} class="flex min-h-0 flex-1 flex-col outline-none">
-          <Show
-            keyed
-            when={view().provider}
-            fallback={<ProviderPicker directory={props.directory} onSelect={controller.select} onPrepare={holdFocus} />}
-          >
-            {(provider) => <ProviderSteps provider={provider} controller={controller} />}
+                                </span>
+                              </Match>
+                            </Switch>
+                          </>
+                        )
+                      }}
+                    </For>
+                  </nav>
+                  {/* The breadcrumb shows where the dialog is; the dialog itself is named for what it does. */}
+                  <div class="sr-only">
+                    <DialogTitle>{language.t("provider.connect.title", { provider: providerName() })}</DialogTitle>
+                  </div>
+                </>
+              )}
+            </Match>
+            <Match when={true}>
+              <DialogTitleGroup
+                title={language.t("dialog.provider.title")}
+                description={language.t("dialog.provider.description")}
+              />
+            </Match>
+          </Switch>
+          <Show when={remoteServer()}>{(server) => <RemoteServerLabel server={server()} class="me-3" />}</Show>
+        </DialogHeader>
+        <DialogBody class="min-h-0 flex-1 overflow-hidden px-2 pb-2">
+          {/* Outside the scrolling content, so it can reach across the body's padding without scrolling sideways. */}
+          <Show when={frame() === "accounts"}>
+            <div data-slot="search-dialog-divider" class="!-mx-2" />
           </Show>
-        </div>
-      </DialogBody>
+          <div ref={focusHost} tabIndex={-1} class="flex min-h-0 flex-1 flex-col outline-none">
+            <Show
+              keyed
+              when={view().provider}
+              fallback={
+                <ProviderPicker directory={props.directory} onSelect={controller.select} onPrepare={holdFocus} />
+              }
+            >
+              {(provider) => <ProviderSteps provider={provider} controller={controller} />}
+            </Show>
+          </div>
+        </DialogBody>
+      </Show>
     </Dialog>
   )
 }
@@ -1342,147 +1328,6 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
     )
   }
 
-  function FirstConnectionModels(input: { body: Extract<ProviderDialogBody, { kind: "models" }> }) {
-    const managed = props.controller.managedProviders
-    const groups = props.controller.connectionGroups
-
-    const selected = () =>
-      props.controller.connectionModels().find((model) => modelKey(model) === input.body.selectedModel)
-
-    const collapse = (providerID: string, collapsed: boolean) =>
-      props.controller.dispatch({ type: "group.collapsed", providerID, collapsed })
-
-    const confirm = () => {
-      const model = selected()
-
-      if (model)
-        props.controller.dispatch({
-          type: "model.confirmed",
-          selection: { providerID: model.providerID, modelID: model.id },
-        })
-    }
-
-    function ConnectionModelList(listProps: { items: ReturnType<ProviderDialogController["connectionModels"]> }) {
-      return (
-        <SettingsList>
-          <For each={listProps.items}>
-            {(model) => {
-              const checked = () => input.body.selectedModel === modelKey(model)
-
-              return (
-                <div data-component="connected-model-row-shell" class="connected-model-row-shell">
-                  <button
-                    type="button"
-                    role="radio"
-                    data-component="settings-row"
-                    data-first-provider-model=""
-                    data-selected={checked() ? "" : undefined}
-                    aria-checked={checked()}
-                    class="connected-model-row text-start"
-                    onClick={() => props.controller.dispatch({ type: "model.selected", modelKey: modelKey(model) })}
-                  >
-                    <div data-slot="settings-row-copy">
-                      <div data-slot="settings-row-title">
-                        <span class="min-w-0 truncate">{model.name}</span>
-                      </div>
-                    </div>
-                    <div data-slot="settings-row-control" class="size-4">
-                      <Show when={checked()}>
-                        <Icon name="check" class="shrink-0 text-v2-icon-icon-base" />
-                      </Show>
-                    </div>
-                  </button>
-                </div>
-              )
-            }}
-          </For>
-        </SettingsList>
-      )
-    }
-
-    return (
-      <div data-component="first-provider-models" class="flex min-h-0 flex-1 flex-col px-2">
-        <p class="shrink-0 pb-5 text-[13px] leading-5 text-v2-text-text-muted">
-          {language.t("provider.connect.models.description")}
-        </p>
-        <div
-          data-component="first-provider-model-scroll"
-          class="settings-panel settings-models min-h-0 flex-1 overflow-y-auto pb-4"
-        >
-          <div data-component="available-models-heading" class="flex items-center gap-1.5">
-            <span class="text-[13px] font-[530] leading-4 text-v2-text-text-base">
-              {language.t("provider.connect.models.available")}
-            </span>
-            <Show when={managed()}>{(group) => <Badge>{group().workspace}</Badge>}</Show>
-          </div>
-          <div role="radiogroup" aria-label={language.t("provider.connect.models.list", { provider: name() })}>
-            <Show
-              when={managed()}
-              fallback={
-                <Show when={groups().length > 1} fallback={<ConnectionModelList items={groups()[0]?.models ?? []} />}>
-                  <For each={groups()}>
-                    {(group) => {
-                      const expanded = () => !input.body.collapsed[group.provider.id]
-
-                      return (
-                        <section class="settings-section" data-expanded={expanded() ? "" : undefined}>
-                          <h3 class="settings-models-group-header sticky top-0 z-[1] box-content bg-v2-background-bg-base">
-                            <button
-                              type="button"
-                              class="settings-models-group-trigger"
-                              aria-expanded={expanded()}
-                              onClick={() => collapse(group.provider.id, expanded())}
-                            >
-                              <span class="settings-models-group-chevron">
-                                <Icon name="chevron-down" classList={{ collapsed: !expanded() }} />
-                              </span>
-                              <span class="settings-models-group-label">
-                                <ProviderModelIcon provider={group.provider} class="shrink-0" />
-                                <span class="settings-section-title">{group.provider.name}</span>
-                              </span>
-                            </button>
-                          </h3>
-                          <Show when={expanded()}>
-                            <ConnectionModelList items={group.models} />
-                          </Show>
-                        </section>
-                      )
-                    }}
-                  </For>
-                </Show>
-              }
-            >
-              {(group) => (
-                <div class="provider-model-groups provider-model-groups--dialog">
-                  <For each={groups()}>
-                    {(item) => (
-                      <ProviderModelGroup
-                        provider={item.provider}
-                        name={consoleProviderName(group(), item.provider.name)}
-                        expanded={!input.body.collapsed[item.provider.id]}
-                        onExpandedChange={(value) => collapse(item.provider.id, !value)}
-                      >
-                        <ConnectionModelList items={item.models} />
-                      </ProviderModelGroup>
-                    )}
-                  </For>
-                </div>
-              )}
-            </Show>
-          </div>
-        </div>
-        <div
-          data-component="first-provider-model-footer"
-          class="-mx-4 flex h-15 shrink-0 items-center justify-end border-t border-v2-border-border-muted px-4"
-        >
-          <Button variant="contrast" disabled={!selected()} onClick={confirm}>
-            {language.t("common.continue")}
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
   const kind = (value: ProviderDialogBody["kind"]) => body().kind === value
 
   function narrow<K extends ProviderDialogBody["kind"]>(value: K) {
@@ -1553,9 +1398,5 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
     )
   }
 
-  return (
-    <Show when={narrow("models")} fallback={<StepContent />}>
-      {(models) => <FirstConnectionModels body={models()} />}
-    </Show>
-  )
+  return <StepContent />
 }

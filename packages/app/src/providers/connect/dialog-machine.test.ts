@@ -142,7 +142,7 @@ function consoleWithoutModels(pending: boolean) {
       result(
         refreshing.state,
         { type: "refresh.succeeded", attempt: refreshing.attempt },
-        { pending, firstModel: undefined },
+        { pending, hasModels: false },
       ),
     ],
     refreshing.state,
@@ -168,7 +168,7 @@ function claudeChecking(from: Run) {
       result(
         saved.state,
         { type: "refresh.succeeded", attempt: refresh.attempt },
-        { pending: false, firstModel: undefined },
+        { pending: false, hasModels: false },
       ),
     ],
     saved.state,
@@ -287,10 +287,7 @@ test("leaving a Claude Agent check ignores its late confirmation", () => {
   expect(back.state.status).toBe("picker")
   expect(back.effects).toContainEqual({ type: "claude.timer.stop" })
 
-  const late = replay(
-    [{ type: "claude.confirmed", session, check, hasProblem: false, firstModel: "claude-agent:sonnet" }],
-    back.state,
-  )
+  const late = replay([{ type: "claude.confirmed", session, check, hasProblem: false, hasModels: true }], back.state)
 
   expect(late.state).toBe(back.state)
   expect(late.effects).toEqual([])
@@ -309,7 +306,7 @@ test("a new Claude Agent check ignores the confirmation of the one it replaced",
   expect(claudeCheck(again.state)).not.toBe(first)
 
   const late = replay(
-    [{ type: "claude.confirmed", session, check: first, hasProblem: false, firstModel: "claude-agent:sonnet" }],
+    [{ type: "claude.confirmed", session, check: first, hasProblem: false, hasModels: true }],
     again.state,
   )
 
@@ -330,16 +327,12 @@ test("a Claude Agent check that outlives its timeout still finishes", () => {
   const done = replay(
     [
       { type: "claude.status.changed", hasProblem: false, hasModels: true },
-      { type: "claude.confirmed", session, check, hasProblem: false, firstModel: "claude-agent:sonnet" },
+      { type: "claude.confirmed", session, check, hasProblem: false, hasModels: true },
     ],
     timedOut.state,
   )
 
-  expect(selectProviderDialogView(done.state).body).toEqual({
-    kind: "models",
-    selectedModel: "claude-agent:sonnet",
-    collapsed: {},
-  })
+  expect(selectProviderDialogView(done.state).body).toEqual({ kind: "models" })
   expect(types(done.effects)).toEqual(["models.reveal", "toast.connected"])
 })
 
@@ -494,13 +487,7 @@ test("Refresh on a Console connection whose models were still loading continues 
   const attempt = connectEffect(refreshing.effects, "refresh").attempt
 
   const models = replay(
-    [
-      result(
-        refreshing.state,
-        { type: "refresh.succeeded", attempt },
-        { pending: false, firstModel: "console-google:gemini" },
-      ),
-    ],
+    [result(refreshing.state, { type: "refresh.succeeded", attempt }, { pending: false, hasModels: true })],
     refreshing.state,
   )
 
@@ -533,7 +520,7 @@ test("a connection without models closes the dialog", () => {
       result(
         refreshing.state,
         { type: "refresh.succeeded", attempt: connectEffect(refreshing.effects, "refresh").attempt },
-        { pending: false, firstModel: undefined },
+        { pending: false, hasModels: false },
       ),
     ],
     refreshing.state,
@@ -554,9 +541,8 @@ test("confirming a model closes once and keeps the outcome through disposal", ()
       result(
         refreshing.state,
         { type: "refresh.succeeded", attempt: connectEffect(refreshing.effects, "refresh").attempt },
-        { pending: false, firstModel: "opencode:big" },
+        { pending: false, hasModels: true },
       ),
-      { type: "model.selected", modelKey: "opencode:small" },
     ],
     refreshing.state,
   )
@@ -569,6 +555,28 @@ test("confirming a model closes once and keeps the outcome through disposal", ()
 
   const disposed = replay([{ type: "disposed" }], confirmed.state)
   expect(disposed.state).toMatchObject({ status: "disposed", completed: true })
+})
+
+test("closing the models step without a pick applies no model", () => {
+  const empty = consoleWithoutModels(true)
+  const refreshing = replay([{ type: "connect.input", event: { type: "refresh" } }], empty.state)
+
+  const models = replay(
+    [
+      result(
+        refreshing.state,
+        { type: "refresh.succeeded", attempt: connectEffect(refreshing.effects, "refresh").attempt },
+        { pending: false, hasModels: true },
+      ),
+    ],
+    refreshing.state,
+  )
+
+  expect(selectProviderDialogView(models.state).body).toEqual({ kind: "models" })
+
+  const disposed = replay([{ type: "disposed" }], models.state)
+  expect(disposed.effects).toEqual([])
+  expect(disposed.state).toMatchObject({ status: "disposed", completed: false })
 })
 
 test("closing the dialog during a sign-in cancels it", () => {
@@ -595,7 +603,7 @@ test("a ChatGPT token sharing sign-in shows the welcome on close", () => {
       result(
         refreshing.state,
         { type: "refresh.succeeded", attempt: connectEffect(refreshing.effects, "refresh").attempt },
-        { pending: false, firstModel: "openai:gpt" },
+        { pending: false, hasModels: true },
       ),
     ],
     refreshing.state,

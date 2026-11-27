@@ -16,7 +16,7 @@ Line comment **display** and **editor** cards aligned with OpenCode line-comment
 - Compact editors show a cancel action when empty, unless \`allowEmpty\` enables submitting an optional comment.
 
 ### Send with the comment
-- \`alternateSubmit\` adds a second action on Mod+Enter or a modified click, which the app uses to send the comment to the session now. The browser pane, file viewer and review diff label it by the session: **Send comment** while idle, and while it works **Steer comment** or **Queue comment** as the follow-up behavior setting says. (The composer's own quote editor says **Send quote**, **Steer with quote** or **Queue quote**; see Composer/QuoteComment.)
+- \`alternateSubmit\` adds a second action on Mod+Enter or a modified click, which the app uses to send the comment to the session now. The browser pane, file viewer and review diff label it by the session: **Send comment** while idle, and while it works **Steer comment** or **Queue comment** as the follow-up behavior setting says. (The composer's own quote editor says **Send quote**, **Steer with quote** or **Queue quote**; see App/Quotes/Quote comment.)
 - The submit button's tooltip lists both actions, and holding the modifier switches the button to the second one. \`disabled\` keeps it listed while nothing can be sent.
 `
 

@@ -882,7 +882,7 @@ export function Autocomplete(props: {
         scrollAcceleration={scrollAcceleration()}
       >
         <Index
-          each={options()}
+          each={store.visible ? options() : []}
           fallback={
             <AutocompleteRail enabled={newDesigns()}>
               <box

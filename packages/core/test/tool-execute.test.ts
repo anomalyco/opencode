@@ -68,6 +68,33 @@ test("execute takes raw code as freeform text, and Code Mode calls freeform tool
   expect(calls.output.toolCalls.map((call) => call.input)).toEqual([{ text: "first" }, { text: "second" }])
 })
 
+test("execute rows cap long input strings, and cut them to a preview once a script's rows hold 1M chars", async () => {
+  const input = Schema.Struct({ text: Schema.String })
+  const received: Array<number> = []
+  const echo = {
+    name: "echo",
+    description: "Echo text",
+    input,
+    output: Schema.String,
+    execute: ({ text }) => Effect.sync(() => received.push(text.length)).pipe(Effect.as({ output: "ok" })),
+  } satisfies Info<typeof input, typeof Schema.String>
+  const result = await Effect.runPromise(
+    createCodeMode(new Map([["echo", echo]])).execute(
+      {
+        code: 'for (let i = 0; i < 64; i++) await tools.echo({ text: "x".repeat(20000) })\nawait tools.echo({ text: "short" })',
+      },
+      context,
+    ),
+  )
+  const texts = result.output.toolCalls.map((call) => call.input?.text)
+  expect(received).toEqual([...Array(64).fill(20000), 5])
+  expect(texts[0]).toBe(`${"x".repeat(16000)}… [4000 more chars]`)
+  expect(texts[62]).toBe(texts[0])
+  expect(texts[63]).toBe(`${"x".repeat(200)}… [19800 more chars]`)
+  expect(texts[64]).toBe("short")
+  expect(result.metadata).toEqual({ toolCalls: result.output.toolCalls })
+})
+
 test("with full_codemode, raw-text models set execute's timeout and background on a first line", async () => {
   const base = OpenAI.model("gpt-5.4", { apiKey: "test" })
   const model = LanguageModel.update(base, {

@@ -956,6 +956,13 @@ export const content = {
           name: "Logotype, blanc",
         },
       },
+      avatars: {
+        body: "Des avatars carrés pour X, GitHub, Slack, LinkedIn et d'autres profils. Le symbole reste bien à l'intérieur du cercle, pour résister à un recadrage rond. Les PNG font 1024 et 400 px de large.",
+        items: {
+          "avatar-dark": { name: "Avatar, sombre" },
+          "avatar-light": { name: "Avatar, clair" },
+        },
+      },
       all: {
         text: "Tout télécharger",
       },

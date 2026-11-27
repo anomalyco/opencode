@@ -29,6 +29,9 @@ export function createComponentTheme(
     get diff() {
       return view().diff
     },
+    get find() {
+      return view().find
+    },
     get syntax() {
       return view().syntax
     },

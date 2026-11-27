@@ -27,6 +27,7 @@ and `clippy.toml` forbids calling `url`'s parsers anywhere else:
   discovery treats it as not answering;
 - a server URL with a non-ASCII host (`pair`, `/pair`) gets no link in the TUI, and in the CLI
   keeps the `<url>/auth/connect/<code>` fallback;
+- a bare URL with a non-ASCII host in a user prompt stays plain text in the transcript;
 - an ACP resource or link whose URI has a non-ASCII host is treated as an unparsable URI: its
   name comes from the last path segment, and an embedded text resource is labelled with the URI;
 - an OTLP endpoint (`OTEL_EXPORTER_OTLP_ENDPOINT`) with a non-ASCII host exports nothing;

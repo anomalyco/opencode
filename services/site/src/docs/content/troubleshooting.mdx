@@ -112,6 +112,36 @@ grep 'role=server' ~/.local/share/opencode/log/opencode.log
 grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
 ```
 
+## Export telemetry
+
+OpenCode can send its logs and traces to an OpenTelemetry collector or an APM backend that accepts OTLP over HTTP. Set
+the collector's base URL, without a path:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer example-token"
+export OTEL_RESOURCE_ATTRIBUTES="team=platform,host.name=dev-laptop"
+opencode
+```
+
+| Variable                      | Behavior                                                                                                       |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Base URL. Logs go to `<endpoint>/v1/logs` and traces to `<endpoint>/v1/traces`. Unset turns export off.        |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | Comma-separated `key=value` headers sent with every export, such as an API key.                                |
+| `OTEL_RESOURCE_ATTRIBUTES`    | Comma-separated, URL-encoded `key=value` attributes added to every record. One malformed entry drops them all. |
+
+Every record also carries `service.name` (`opencode`), `service.version`, `deployment.environment.name` (the release
+channel), `opencode.client`, and `opencode.run`, the same run ID as in the log file.
+
+The background service is a separate process and doesn't inherit your shell. Set the variables on it too, so model
+calls and tool runs are traced:
+
+```bash
+opencode service set env OTEL_EXPORTER_OTLP_ENDPOINT http://localhost:4318
+opencode service set env OTEL_EXPORTER_OTLP_HEADERS "authorization=Bearer example-token"
+opencode service start
+```
+
 ## Capture a heap snapshot
 
 Write a memory (heap) snapshot of the running background server on any platform:

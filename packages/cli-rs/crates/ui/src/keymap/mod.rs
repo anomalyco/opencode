@@ -13,8 +13,8 @@ use opentui::input::KeyEvent;
 use opentui::keymap::addons::{self, EDIT_COMMANDS, ManagedTextarea, TimedLeader};
 use opentui::keymap::extras::{FormatOptions, format_command_bindings, format_key_sequence};
 use opentui::keymap::{
-    Binding, Command, CommandQuery, Condition, Disposer, Key, KeyResult, Keymap, Layer, Outcome, RunResult, Stroke,
-    Visibility,
+    Binding, Command, CommandQuery, Condition, Disposer, Key, KeyReason, KeyResult, Keymap, Layer, Outcome, RunResult,
+    Stroke, Visibility,
 };
 use opentui::widget::EditorAction;
 use std::cell::{Cell, RefCell};
@@ -451,7 +451,13 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
     /// Passes a key to the keymap. Skip the focused widget's own handling when the result stops propagation.
     pub fn handle_key(&self, event: &KeyEvent) -> KeyResult {
         self.sync_mode();
-        self.keymap.handle_key(event)
+        let leader = self.leader_active();
+        let result = self.keymap.handle_key(event);
+        // A leader sequence with no reachable command must not type its last key into the focused input.
+        if leader && result.reason == KeyReason::SequenceMiss {
+            return KeyResult { handled: true, prevent_default: true, stop_propagation: true, ..result };
+        }
+        result
     }
 
     /// Runs a reachable command by ID; its handler receives `input`.
