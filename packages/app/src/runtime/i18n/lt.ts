@@ -689,7 +689,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, atvirojo kodo kodavimo agentas",
   "settings.about.trademark": "OpenCode yra registruotasis Anomaly Innovations, Inc. prekės ženklas.",
-  "settings.about.typeset": "Rinkinys „Inter“ ir „IBM Plex Mono“.",
+  "settings.about.typeset": "Rinkinys „Inter“ ir „OpenMono“.",
   "settings.about.tagline": "AI negali sukurti puikios programinės įrangos be jūsų",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "Redaguoti projektą",

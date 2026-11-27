@@ -26,7 +26,7 @@ import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { Cause, Context, DateTime, Deferred, Effect, Exit, Layer, LayerMap, Schema, Scope } from "effect"
+import { Cause, Context, DateTime, Deferred, Effect, Exit, Layer, Schema, Scope } from "effect"
 import { eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -726,7 +726,7 @@ function buildExecution(scope: Scope.Scope, drain: Drain) {
     )
     const locations = Layer.effect(
       LocationServiceMap.Service,
-      LayerMap.make(
+      LocationServiceMap.make(
         () =>
           // The settlement test only needs the Session runner from the Location graph.
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion

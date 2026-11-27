@@ -48,6 +48,8 @@ export function createDesktopPlatform(api: ElectronAPI, windowState: DesktopWind
     setPinchZoomEnabled,
     getSpellcheckEnabled: () => api.getSpellcheckEnabled(),
     setSpellcheckEnabled: (enabled) => api.setSpellcheckEnabled(enabled),
+    getSmoothScrollingEnabled: () => api.getSmoothScrollingEnabled(),
+    setSmoothScrollingEnabled: (enabled) => api.setSmoothScrollingEnabled(enabled),
     getKeepServiceRunning: () => api.getKeepServiceRunning(),
     setKeepServiceRunning: (enabled) => api.setKeepServiceRunning(enabled),
     onDeepLinks,

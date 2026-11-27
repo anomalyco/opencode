@@ -86,6 +86,8 @@ export type ElectronAPI = {
   setForceFocus(enabled: boolean): Promise<void>
   getSpellcheckEnabled(): Promise<boolean>
   setSpellcheckEnabled(enabled: boolean): Promise<void>
+  getSmoothScrollingEnabled(): Promise<boolean>
+  setSmoothScrollingEnabled(enabled: boolean): Promise<void>
   getKeepServiceRunning(): Promise<boolean>
   setKeepServiceRunning(enabled: boolean): Promise<void>
   recordFatalRendererError(error: FatalRendererError): Promise<void>

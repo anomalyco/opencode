@@ -4,6 +4,7 @@ import { abort } from "@opencode/util/abort"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import type { SessionUserActions } from "@opencode/session-ui/actions"
+import { useData } from "@opencode/session-ui/context"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -116,10 +117,13 @@ export function MessageTimeline(props: MessageTimelineProps) {
 }
 
 function MountedTimeline(props: MessageTimelineProps & { next: boolean }) {
+  const data = useData()
+
   const controller = createTimelineController({
     session: props.session,
     active: () => props.active !== false,
     next: props.next,
+    scriptDiffs: () => data.flag("full_codemode"),
   })
 
   const tail = props.follow.following() ? controller.data.projection.rows().at(-1) : undefined

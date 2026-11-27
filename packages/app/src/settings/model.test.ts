@@ -232,9 +232,9 @@ test.each(["local", "dev", "beta", "prod", undefined] as const)("Recent availabi
   expect(recentSessionsAvailable("web", channel)).toBe(false)
 })
 
-test("font defaults are Inter and IBM Plex Mono", () => {
+test("font defaults are Inter and OpenMono", () => {
   expect(sansDefault).toBe("Inter")
-  expect(monoDefault).toBe("IBM Plex Mono")
+  expect(monoDefault).toBe("OpenMono")
 })
 
 test.each([
@@ -242,11 +242,11 @@ test.each([
   { name: "sans", family: sansFontFamily, font: "", prefix: '"Inter", ' },
   { name: "sans", family: sansFontFamily, font: "   ", prefix: '"Inter", ' },
   { name: "sans", family: sansFontFamily, font: "Custom Sans", prefix: '"Custom Sans", "Inter", ' },
-  { name: "mono", family: monoFontFamily, font: undefined, prefix: '"IBM Plex Mono", ' },
-  { name: "mono", family: monoFontFamily, font: "", prefix: '"IBM Plex Mono", ' },
-  { name: "mono", family: monoFontFamily, font: "   ", prefix: '"IBM Plex Mono", ' },
-  { name: "mono", family: monoFontFamily, font: "Custom Mono", prefix: '"Custom Mono", "IBM Plex Mono", ' },
-  { name: "terminal", family: terminalFontFamily, font: undefined, prefix: '"JetBrainsMono Nerd Font Mono", ' },
+  { name: "mono", family: monoFontFamily, font: undefined, prefix: '"OpenMono", ' },
+  { name: "mono", family: monoFontFamily, font: "", prefix: '"OpenMono", ' },
+  { name: "mono", family: monoFontFamily, font: "   ", prefix: '"OpenMono", ' },
+  { name: "mono", family: monoFontFamily, font: "Custom Mono", prefix: '"Custom Mono", "OpenMono", ' },
+  { name: "terminal", family: terminalFontFamily, font: undefined, prefix: '"OpenMono", ' },
 ])("$name font family for $font starts with $prefix", ({ family, font, prefix }) => {
   expect(family(font)).toStartWith(prefix)
 })

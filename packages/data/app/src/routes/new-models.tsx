@@ -1,5 +1,5 @@
 import { ProviderIcon } from "@opencode/ui/provider-icon"
-import { createMemo, For, Show } from "solid-js"
+import { createMemo, createSignal, For, Show } from "solid-js"
 import { ChartDataTable } from "../component/chart-data-table"
 import { useLanguage } from "../context/language"
 import { selectBreakout } from "../lib/breakout"
@@ -21,13 +21,16 @@ export function NewModelsSection(props: {
 }) {
   const language = useLanguage()
   const breakout = createMemo(() => selectBreakout(props.data))
+  const [selected, setSelected] = createSignal<string>()
 
   return (
     <Show when={breakout()}>
       {(item) => {
-        const model = () => item().model
-        const peak = () => item().peak
-        const days = () => item().days
+        const model = () => props.data.find((other) => other.model === selected()) ?? item().model
+        // Leaves out the partial current day, unless the model launched today and has nothing else.
+        const days = () => (model().daily.length > 1 ? model().daily.slice(0, -1) : model().daily)
+        const others = () => [item().model, ...item().alsoNew].filter((other) => other !== model())
+        const peak = () => days().reduce((top, day) => (day.tokens > top.tokens ? day : top))
         const known = () => isKnownCatalogLab(model().provider, props.catalogLabs)
         return (
           <section id="new-models" data-section="new-models">
@@ -54,20 +57,10 @@ export function NewModelsSection(props: {
                     </Show>
                   </span>
                 </span>
-                <span data-slot="breakout-share">{Math.round(peak().share * 100)}%</span>
-                <span data-slot="breakout-caption">
-                  of daily tokens on {formatDay(peak().date)}, day {item().peakDay}
-                </span>
-                <span data-slot="breakout-stats">
-                  <span>
-                    <b>#{peak().rank}</b>
-                    <small>model that day</small>
-                  </span>
-                  <span>
-                    <b>{formatCount(peak().users)}</b>
-                    <small>users that day</small>
-                  </span>
-                </span>
+                <span data-slot="breakout-tokens">{formatTokens(model().tokens)}</span>
+                <span data-slot="breakout-caption">tokens since launch</span>
+                <span data-slot="breakout-users">{formatCount(model().users)}</span>
+                <span data-slot="breakout-caption">users tried it</span>
               </span>
               <span
                 data-slot="breakout-chart"
@@ -78,9 +71,9 @@ export function NewModelsSection(props: {
                   {(day, index) => (
                     <span data-slot="breakout-day" data-peak={day === peak() ? "true" : undefined}>
                       <span data-slot="breakout-plot">
-                        <i style={{ height: `${(day.share / peak().share) * 100}%` }}>
+                        <i style={{ height: `${(day.tokens / peak().tokens) * 100}%` }}>
                           <Show when={days().length <= 7 || day === peak()}>
-                            <b>{formatShare(day.share)}</b>
+                            <b>{formatTokens(day.tokens)}</b>
                           </Show>
                         </i>
                       </span>
@@ -99,32 +92,28 @@ export function NewModelsSection(props: {
                 </For>
               </span>
             </a>
-            <Show when={item().alsoNew.length > 0}>
+            <Show when={others().length > 0}>
               <p data-slot="breakout-also">
                 <span>Also new</span>
-                <For each={item().alsoNew}>{(other) => <a href={language.route(other.path)}>{other.name}</a>}</For>
+                <For each={others()}>
+                  {(other) => (
+                    <button type="button" onClick={() => setSelected(other.model)}>
+                      {other.name}
+                    </button>
+                  )}
+                </For>
               </p>
             </Show>
             <ChartDataTable
               caption={`${model().name} daily usage`}
-              headers={["Date", "Share of daily tokens", "Rank", "Tokens", "Users"]}
-              rows={days().map((day) => [
-                day.date,
-                formatShare(day.share),
-                day.rank,
-                formatTokens(day.tokens),
-                formatCount(day.users),
-              ])}
+              headers={["Date", "Tokens", "Rank", "Users"]}
+              rows={days().map((day) => [day.date, formatTokens(day.tokens), day.rank, formatCount(day.users)])}
             />
           </section>
         )
       }}
     </Show>
   )
-}
-
-function formatShare(value: number) {
-  return `${(value * 100).toFixed(1)}%`
 }
 
 function formatCount(value: number) {

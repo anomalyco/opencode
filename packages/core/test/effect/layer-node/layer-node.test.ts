@@ -46,6 +46,13 @@ describe("layer node", () => {
     }),
   )
 
+  test("exposes the service a node was declared for", () => {
+    const named = make({ name: "named", layer: valueLayer, deps: [] })
+    expect(value.service).toBe(Value)
+    expect(LayerNode.unbound(FnService, tags.values.app).service).toBe(FnService)
+    expect(named.service).toBeUndefined()
+  })
+
   it.effect("mocks single-service and unbound nodes with partial implementations", () =>
     Effect.gen(function* () {
       const actions = make({

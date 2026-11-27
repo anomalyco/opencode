@@ -139,7 +139,19 @@ export interface Options {
   // AGENTS.md instructions — that is session-time context, not boot-time
   // population.
   readonly discovery?: boolean
+  // Child replacements for this instance (or all replacements when `host` is omitted). With `host`, global
+  // replacements are rejected because the host already built them into `host.context`.
   readonly replacements?: LayerNode.Replacements
+  // Global services and inherited replacements the host built once for all of its instances (see `globals`).
+  // Without it, the instance builds its globals through the enclosing memo map.
+  readonly host?: LayerNode.Host
+}
+
+/** The global nodes instances read from `hostContext`, which a host builds with its `replacements`. */
+export function globals(replacements: LayerNode.Replacements = []) {
+  return LayerNode.group(
+    LayerNode.tagged(LayerNode.group([graph, ...Location.dependencies]), Node.tags.values.global, replacements),
+  )
 }
 
 // Vanilla neutralizes the discovery inputs; the plugin list stays untouched.
@@ -166,7 +178,11 @@ export function layer(ref: Location.Ref, options: Options = {}): Layer.Layer<Ser
     InstancePlugins.node.replace(InstancePlugins.bound(options.plugins ?? [])),
   ]
 
-  return LayerNode.compile(graph, { replacements, shared: Node.tags.values.global }).pipe(
+  return (
+    options.host
+      ? LayerNode.compileChild(graph, { host: options.host, replacements })
+      : LayerNode.compile(graph, { replacements, shared: Node.tags.values.global })
+  ).pipe(
     // A missing directory is expected; other instance boot failures remain defects.
     Layer.catchCause(
       (cause): Layer.Layer<Services, Error> =>

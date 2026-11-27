@@ -175,8 +175,8 @@ Semantic tokens assign colors to UI roles. Components use these roles instead of
 
 | Group | Purpose |
 | --- | --- |
-| `text` | Base, muted, faint, action, form-field, and feedback text. `faint` defaults to `muted`. |
-| `background` | Base, raised surfaces, actions, form fields, and feedback fills. |
+| `text` | Base, muted, faint, selection, action, form-field, and feedback text. `faint` defaults to `muted`. |
+| `background` | Base, selection, raised surfaces, actions, form fields, and feedback fills. |
 | `border`, `scrollbar` | Border and scrollbar colors. |
 | `diff` | Added, removed, context, highlight, and line-number colors. |
 | `syntax` | Source-code highlighting. |
@@ -200,6 +200,8 @@ For example, `text.muted` controls secondary text while `background.raised` defi
   }
 }
 ```
+
+`text.selection` and `background.selection` color text you select with the mouse or keyboard. They default to the focused primary action, `text.action.primary.$focused` on `background.action.primary.$focused`.
 
 Syntax keys are `comment`, `keyword`, `function`, `variable`, `string`, `number`, `type`, `operator`, and `punctuation`.
 

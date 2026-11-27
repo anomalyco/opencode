@@ -332,7 +332,7 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => void) => 
           })
         default:
           if (call.extension === "bun")
-            return start(call, { tool: "Bun", status: "running", input: CodeModeBun.display(call.name, call.args) })
+            return start(call, { status: "running", ...CodeModeBun.display(call.name, call.args) })
           return Effect.void
       }
     },

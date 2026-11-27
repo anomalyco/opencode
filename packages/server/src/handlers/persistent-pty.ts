@@ -25,6 +25,7 @@ import { makeJob } from "./job"
 import { makeMachine, makeMachineLink } from "./machine"
 import { makeMediaGet } from "./media"
 import { makePush } from "./push"
+import { makeSpace } from "./space"
 import { type Outbound, runPtySocket } from "./pty-socket"
 
 export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experimental", (handlers) =>
@@ -34,6 +35,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const pty = yield* PersistentPty.Service
     const artifact = yield* makeArtifact
     const job = yield* makeJob
+    const space = yield* makeSpace
     const mediaGet = yield* makeMediaGet
     const blobGet = yield* makeBlobGet
     const automation = yield* makeAutomation
@@ -61,6 +63,11 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
       .handle("push.session.set", (ctx) => push.setSessionBell(ctx.params.sessionID, ctx.payload))
       .handle("push.session.remove", (ctx) => push.removeSessionBell(ctx.params.sessionID))
       .handle("push.settings.set", (ctx) => push.setSettings(ctx.payload))
+      .handle("space.write", (ctx) => space.write(ctx.payload.changes))
+      .handle("space.sync", (ctx) => space.sync(ctx.payload.spaces))
+      .handle("space.subscribe", (ctx) => space.subscribe(ctx.payload))
+      .handle("space.unsubscribe", (ctx) => space.unsubscribe(ctx.payload))
+      .handle("space.reset", () => space.reset())
       .handle("artifacts.providers", (ctx) => artifact.providers(ctx.query, ctx.request))
       .handle("artifacts.list", (ctx) => artifact.list(ctx.query, ctx.request))
       .handle("artifacts.create", (ctx) => artifact.create(ctx.query, ctx.payload, ctx.request))

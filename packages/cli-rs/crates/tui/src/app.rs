@@ -1032,6 +1032,8 @@ fn app_theme(theme: &Theme) -> opentui::theme::Theme {
         background: theme.background.base,
         foreground: theme.text.base,
         muted: theme.text.muted,
+        selection_bg: theme.background.selection,
+        selection_fg: theme.text.selection,
         ..opentui::theme::Theme::default()
     }
 }

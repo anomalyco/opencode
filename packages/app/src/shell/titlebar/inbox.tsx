@@ -24,7 +24,8 @@ import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Loader } from "@opencode/ui/loader"
 import { displayName } from "@opencode/ui/project-avatar"
-import { useServers } from "@/runtime/server/registry"
+import type { SessionInfo } from "@opencode/client/promise"
+import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useLanguage } from "@/runtime/i18n/language"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
@@ -32,6 +33,7 @@ import type { LocalProject } from "@/shell/state/layout"
 import { sessionTabTitle } from "./tab-title"
 import { sessionLabel, sessionTitle } from "@/session/title"
 import { createSessionExporter } from "@/session/commands/export-session"
+import { SessionCopyMenu } from "@/session/session-copy-menu"
 import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { RenameDialog } from "./project-session-row"
 import { createSessionInbox, inboxArchived, inboxWaiting, type InboxEntry, type InboxStatus } from "./inbox-model"
@@ -43,6 +45,7 @@ import { createDraftComposerState } from "@/composer/state"
 import { pinnedRefs, pinKey } from "@/shell/tabs/pins"
 import { usePins } from "./pinned-area"
 import { createSessionRowNavigation } from "./tab-strip"
+import { inboxSuccessor } from "./inbox-successor"
 import { isAttachment } from "@/composer/prompt-parts"
 
 const RECENT_LIMIT = 10
@@ -66,8 +69,6 @@ export function SidebarInbox() {
   const layout = useLayout()
   const global = useGlobal()
   const pins = usePins()
-
-  const exporter = createSessionExporter()
 
   const [state, setState, , ready] = persisted(Persist.global("sidebar.inbox"), InboxState, {
     workingExpanded: true,
@@ -172,13 +173,21 @@ export function SidebarInbox() {
     }
   })
 
+  const selectedWorking = createMemo(() => sections().working.find((entry) => inbox.selected(entry))?.key)
+
+  // Collapsed, Working still shows the selected session, so the open session never drops out of the list.
+  const workingPeek = () => !state.workingExpanded && selectedWorking() !== undefined
+
+  const workingRows = () =>
+    state.workingExpanded ? sections().working : sections().working.filter((entry) => entry.key === selectedWorking())
+
   // The vertical tab strip's shortcuts, over the session rows in the order they show: ⌘1-9, ⌥↑/⌥↓ and ⇧⌥↑/⇧⌥↓.
   const rowRefs = new Map<string, HTMLElement>()
 
   const navigationKeys = () => {
     const visible = sections()
 
-    const working = state.workingExpanded ? visible.working : []
+    const working = workingRows()
 
     return [
       ...visible.current,
@@ -207,6 +216,44 @@ export function SidebarInbox() {
       if (reveal) rowRefs.get(key)?.scrollIntoView({ behavior: "instant", block: "nearest" })
     },
   })
+
+  // Archiving or deleting the open session opens the row below it, as the list showed before the session left, rather
+  // than its neighbour in the hidden tab order. Neither a row moving to Archived nor one leaving updates the snapshot.
+  let shown: { entry: InboxEntry; keys: string[] } | undefined
+
+  createEffect(() => {
+    const keys = navigationKeys()
+    const current = inbox.entries().find((entry) => inbox.selected(entry))
+
+    if (!current || !keys.includes(current.key)) return
+
+    if (inboxArchived(current) && shown?.entry.key === current.key) return
+    shown = { entry: current, keys }
+  })
+
+  onCleanup(
+    tabs.setRemovedSessionSuccessor((detail) => {
+      const gone = (entry: InboxEntry) => entry.server === detail.server && detail.sessionIDs.includes(entry.session.id)
+
+      if (!shown || !gone(shown.entry)) return false
+
+      // Only a row the list still shows, so a session that left alongside it is skipped.
+      const visible = new Set(navigationKeys())
+
+      const key = inboxSuccessor(shown.keys, shown.entry.key, (key) => {
+        const entry = inbox.byKey().get(key)
+
+        return !!entry && visible.has(key) && !gone(entry)
+      })
+
+      const next = key && inbox.byKey().get(key)
+
+      if (!next) return false
+      inbox.open(next)
+
+      return true
+    }),
+  )
 
   // The inbox lists sessions, not tabs, so drafts get their own group: the open one and every other still holding
   // something, newest first. Without it a draft left for a session can't be reached again.
@@ -246,8 +293,6 @@ export function SidebarInbox() {
     if (index !== -1) tabs.closeTab(index)
   }
 
-  const selectedWorking = createMemo(() => sections().working.find((entry) => inbox.selected(entry))?.key)
-
   // Expand when a working session becomes current, not on each update or manual collapse.
   createEffect(() => {
     if (!ready() || !selectedWorking()) return
@@ -281,6 +326,7 @@ export function SidebarInbox() {
                 rowRefs.set(key, element)
                 onCleanup(() => rowRefs.get(key) === element && rowRefs.delete(key))
               }}
+              focusKey={`inbox:${key}`}
               project={entry().ctx.projects.forSession(entry().session)}
               directory={entry().session.location.directory}
               title={entry().session.title}
@@ -294,35 +340,22 @@ export function SidebarInbox() {
               archived={inboxArchived(entry())}
               pinned={pinned(entry())}
               actions={
-                <>
-                  <Menu.Item
-                    onSelect={() => (pinned(entry()) ? pins.unpin(pinRef(entry())) : pins.pin(pinRef(entry())))}
-                  >
-                    {language.t(pinned(entry()) ? "sidebar.recent.unpin" : "sidebar.recent.pin")}
-                  </Menu.Item>
-                  <Menu.Item
-                    onSelect={() => {
-                      const current = entry()
+                <InboxSessionMenuItems
+                  server={entry().server}
+                  session={entry().session}
+                  pinned={pinned(entry())}
+                  onRename={() => {
+                    const current = entry()
 
-                      void dialog.show(() => (
-                        <RenameDialog
-                          title={sessionLabel(current.session)}
-                          onRename={(title) => inbox.rename(current, title)}
-                        />
-                      ))
-                    }}
-                  >
-                    {language.t("common.rename")}
-                  </Menu.Item>
-                  <Menu.Item
-                    disabled={exporter.exporting({ server: entry().server, sessionID: entry().session.id })}
-                    onSelect={() => exporter.export({ server: entry().server, sessionID: entry().session.id })}
-                  >
-                    {language.t("common.export")}…
-                  </Menu.Item>
-                  <SessionReadMenuItem server={entry().server} session={entry().session} />
-                  <Menu.Separator />
-                </>
+                    void dialog.show(() => (
+                      <RenameDialog
+                        title={sessionLabel(current.session)}
+                        onRename={(title) => inbox.rename(current, title)}
+                      />
+                    ))
+                  }}
+                  onTogglePin={() => (pinned(entry()) ? pins.unpin(pinRef(entry())) : pins.pin(pinRef(entry())))}
+                />
               }
               onOpen={() => inbox.open(entry())}
               onArchive={() => void inbox.archive(entry())}
@@ -409,9 +442,12 @@ export function SidebarInbox() {
       get count() {
         return shelf() ? 0 : sections().working.length
       },
-      rows: () => rows(() => sections().working),
+      rows: () => rows(workingRows),
       get expanded() {
         return state.workingExpanded
+      },
+      get peek() {
+        return workingPeek()
       },
       get shimmer() {
         return !state.workingExpanded
@@ -449,9 +485,12 @@ export function SidebarInbox() {
         get count() {
           return shelf() ? sections().working.length : 0
         },
-        rows: () => rows(() => sections().working),
+        rows: () => rows(workingRows),
         get expanded() {
           return state.workingExpanded
+        },
+        get peek() {
+          return workingPeek()
         },
         onToggle: () => setState("workingExpanded", !state.workingExpanded),
       }}
@@ -530,10 +569,12 @@ export function InboxSessionList(props: {
     /** Named for assistive tech only, without a visible header. */
     unlabeled?: boolean
     expanded?: boolean
+    /** Collapsed, but its rows still render: the section passes only the selected session's row. */
+    peek?: boolean
     shimmer?: boolean
     onToggle?: () => void
   }[]
-  working: { count: number; rows: () => JSX.Element; expanded: boolean; onToggle: () => void }
+  working: { count: number; rows: () => JSX.Element; expanded: boolean; peek?: boolean; onToggle: () => void }
   /** Items for the list's own context menu, opened anywhere outside a card. */
   menu?: () => JSX.Element
 }) {
@@ -549,9 +590,10 @@ export function InboxSessionList(props: {
       () => [
         props.loading,
         props.current.count,
-        ...props.sections.flatMap((section) => [section.count, section.expanded]),
+        ...props.sections.flatMap((section) => [section.count, section.expanded, section.peek]),
         props.working.count,
         props.working.expanded,
+        props.working.peek,
       ],
       () => {
         if (props.loading) return
@@ -658,10 +700,10 @@ export function InboxSessionList(props: {
                             onToggle={section.onToggle}
                           />
                         </Show>
-                        <Show when={section.expanded !== false}>
+                        <Show when={section.expanded !== false || section.peek}>
                           <div class="flex flex-col gap-0.5">{section.rows()}</div>
-                          {section.more?.()}
                         </Show>
+                        <Show when={section.expanded !== false}>{section.more?.()}</Show>
                       </div>
                     </Show>
                   )}
@@ -702,7 +744,7 @@ export function InboxSessionList(props: {
                     shimmer={!props.working.expanded}
                     onToggle={props.working.onToggle}
                   />
-                  <Show when={props.working.expanded}>
+                  <Show when={props.working.expanded || props.working.peek}>
                     <div data-scrollable class="flex min-h-0 flex-col gap-0.5 overflow-y-auto">
                       {props.working.rows()}
                     </div>
@@ -828,8 +870,40 @@ export function InboxDraftCard(props: {
   )
 }
 
+export function InboxSessionMenuItems(props: {
+  server: ServerConnection.Key
+  session: SessionInfo
+  pinned: boolean
+  onRename: () => void
+  onTogglePin: () => void
+}) {
+  const language = useLanguage()
+
+  const exporter = createSessionExporter()
+
+  return (
+    <>
+      <Menu.Item onSelect={props.onRename}>{language.t("common.rename")}</Menu.Item>
+      <Menu.Item onSelect={props.onTogglePin}>
+        {language.t(props.pinned ? "sidebar.recent.unpin" : "sidebar.recent.pin")}
+      </Menu.Item>
+      <SessionReadMenuItem server={props.server} session={props.session} />
+      <Menu.Separator />
+      <SessionCopyMenu server={props.server} session={props.session} />
+      <Menu.Item
+        disabled={exporter.exporting({ server: props.server, sessionID: props.session.id })}
+        onSelect={() => exporter.export({ server: props.server, sessionID: props.session.id })}
+      >
+        {language.t("common.export")}…
+      </Menu.Item>
+    </>
+  )
+}
+
 export function InboxSessionCard(props: {
   ref?: (element: HTMLButtonElement) => void
+  // A session changing section remounts its card, and focus rescue follows this key to the new one.
+  focusKey?: string
   project?: LocalProject
   directory: string
   title?: string
@@ -885,6 +959,7 @@ export function InboxSessionCard(props: {
         tabIndex={navigation ? (navigation() === id ? 0 : -1) : 0}
         aria-current={props.selected ? "page" : undefined}
         data-slot="sidebar-inbox-item"
+        data-focus-key={props.focusKey}
         data-roving
         onPointerDown={(event: PointerEvent) => event.stopPropagation()}
         data-status={status()}
@@ -970,13 +1045,13 @@ export function InboxSessionCard(props: {
       <Menu.Context.Portal>
         <Menu.Context.Content>
           {props.actions}
+          <Menu.Separator />
           <Show
             when={props.archived}
             fallback={<Menu.Item onSelect={props.onArchive}>{language.t("common.archive")}</Menu.Item>}
           >
             <Menu.Item onSelect={props.onUnarchive}>{language.t("sidebar.inbox.unarchive")}</Menu.Item>
           </Show>
-          <Menu.Separator />
           <Menu.Item onSelect={props.onDelete}>{language.t("common.delete")}…</Menu.Item>
         </Menu.Context.Content>
       </Menu.Context.Portal>

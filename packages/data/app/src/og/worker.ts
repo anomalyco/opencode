@@ -9,7 +9,7 @@ import harfbuzz from "./harfbuzz.wasm"
 import resvg from "./resvg.wasm"
 import layout from "./satori-layout.wasm"
 import sprite from "../../../../ui/src/components/provider-icons/sprite.svg"
-import type { OgCard } from "./card"
+import { ogFontFamilies, type OgCard } from "./card"
 import { renderOgPng } from "./render-png"
 
 // Satori shapes text with HarfBuzz, whose Wasm it inlines as bytes and compiles at runtime, which Workers forbid. The
@@ -25,10 +25,10 @@ WebAssembly.instantiate = ((source: BufferSource | WebAssembly.Module, imports?:
       }))) as typeof WebAssembly.instantiate
 
 const fonts = [
-  { name: "OpenMono", data: regularLatin, weight: 400 as const },
-  { name: "OpenMono", data: regularRest, weight: 400 as const },
-  { name: "OpenMono", data: boldLatin, weight: 700 as const },
-  { name: "OpenMono", data: boldRest, weight: 700 as const },
+  { name: ogFontFamilies.latin, data: regularLatin, weight: 400 as const },
+  { name: ogFontFamilies.rest, data: regularRest, weight: 400 as const },
+  { name: ogFontFamilies.latin, data: boldLatin, weight: 700 as const },
+  { name: ogFontFamilies.rest, data: boldRest, weight: 700 as const },
 ]
 
 export default {

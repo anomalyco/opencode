@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Clock, Deferred, Duration, Effect, Layer, LayerMap, Stream } from "effect"
+import { Clock, Deferred, Duration, Effect, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { define } from "@opencode/plugin/effect/plugin"
@@ -58,7 +58,7 @@ const packages = { available: false, delay: Duration.zero, checks: 0, stays: [] 
 const instances = Layer.effect(
   LocationServiceMap.Service,
   Effect.gen(function* () {
-    const map = yield* LayerMap.make(
+    const map = yield* LocationServiceMap.make(
       (ref: Location.Ref) =>
         Instance.layer(ref, { discovery: false, plugins: [greeter("instance-greet")], replacements: bindings }),
       { idleTimeToLive: Duration.infinity },

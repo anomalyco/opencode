@@ -22,7 +22,10 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { rawTime } from "@/runtime/server/data"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
+import { createSessionExporter } from "@/session/commands/export-session"
 import { sessionTreeIDs } from "@/session/requests/session-request-tree"
+import { SessionCopyMenu } from "@/session/session-copy-menu"
+import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { errorMessage } from "@/shell/layout/helpers"
 import { sessionStatus, useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { projectSettingsKey, useSettings } from "@/settings/model"
@@ -1246,7 +1249,7 @@ function SectionHeader(props: { id: string; label: string }) {
   )
 }
 
-type RecentSessionTabProps = {
+export type RecentSessionTabProps = {
   item: () => RecentSession
   selected: () => boolean
   shortcut: () => number | undefined
@@ -1296,7 +1299,7 @@ function PinnedSessionRow(props: RecentSessionTabProps & { index: () => number }
 }
 
 // Renders the session as the side tabs do, from the same status, with the Recent menu and no close actions.
-function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean }) {
+export function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean }) {
   const global = useGlobal()
   const language = useLanguage()
 
@@ -1329,13 +1332,28 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
     onCleanup(() => window.clearTimeout(timer))
   })
 
+  const exporter = createSessionExporter()
+
+  const exportTarget = () => ({ server: server(), sessionID: item().session.id })
+
   const menu = (rename: () => void) => (
     <>
+      <Menu.Item onSelect={rename}>{language.t("common.rename")}</Menu.Item>
       <Show
         when={props.pinned}
         fallback={<Menu.Item onSelect={props.onPin}>{language.t("sidebar.recent.pin")}</Menu.Item>}
       >
         <Menu.Item onSelect={props.onUnpin}>{language.t("sidebar.recent.unpin")}</Menu.Item>
+      </Show>
+      <SessionReadMenuItem server={server()} session={item().session} />
+      <Menu.Item onSelect={() => global.sessionPreferences.update("muted", server(), item().session.id, !muted())}>
+        {language.t(muted() ? "sidebar.recent.unmute" : "sidebar.recent.mute")}
+      </Menu.Item>
+      <Menu.Item onSelect={() => global.sessionPreferences.update("hidden", server(), item().session.id, true)}>
+        {language.t("sidebar.recent.hide")}
+      </Menu.Item>
+      <Show when={props.pinned}>
+        <Menu.Separator />
         <Menu.Item disabled={!props.canMoveUp()} onSelect={props.onMoveUp}>
           {language.t("sidebar.recent.moveUp")}
         </Menu.Item>
@@ -1343,16 +1361,13 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
           {language.t("sidebar.recent.moveDown")}
         </Menu.Item>
       </Show>
-      <Menu.Item onSelect={() => global.sessionPreferences.update("muted", server(), item().session.id, !muted())}>
-        {language.t(muted() ? "sidebar.recent.unmute" : "sidebar.recent.mute")}
-      </Menu.Item>
-      <Menu.Item onSelect={() => global.sessionPreferences.update("hidden", server(), item().session.id, true)}>
-        {language.t("sidebar.recent.hide")}
+      <Menu.Separator />
+      <SessionCopyMenu server={server()} session={item().session} />
+      <Menu.Item disabled={exporter.exporting(exportTarget())} onSelect={() => exporter.export(exportTarget())}>
+        {language.t("common.export")}…
       </Menu.Item>
       <Menu.Separator />
-      <Menu.Item onSelect={rename}>{language.t("common.rename")}</Menu.Item>
       <Menu.Item onSelect={props.onArchive}>{language.t("common.archive")}</Menu.Item>
-      <Menu.Separator />
       <Menu.Item onSelect={props.onDelete}>{language.t("common.delete")}…</Menu.Item>
     </>
   )

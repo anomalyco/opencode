@@ -17,10 +17,10 @@
     },
     "overrides": {
       "syntax-comment": "#6b6f7a",
-      "syntax-keyword": "#9854f1",
-      "syntax-primitive": "#1f6fd4",
-      "syntax-property": "#007197",
-      "syntax-constant": "#b15c00"
+      "syntax-keyword": "#833ad8",
+      "syntax-primitive": "#0b62c5",
+      "syntax-property": "#006c91",
+      "syntax-constant": "#9c5000"
     }
   },
   "dark": {
@@ -37,7 +37,7 @@
       "diffDelete": "#c34043"
     },
     "overrides": {
-      "syntax-comment": "#565f89",
+      "syntax-comment": "#68719c",
       "syntax-keyword": "#bb9af7",
       "syntax-primitive": "#7aa2f7",
       "syntax-property": "#7dcfff",
