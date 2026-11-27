@@ -376,10 +376,31 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     withRegistration(shouldStart, (current) => oneShot(current, value)),
   )
 
+  // A lost reply is never replayed: the request may have run. But a daemon that no longer answers a ping either is
+  // wedged, and every later request would time out against it the same way until the server restarts. Stop it, so
+  // the next request starts a fresh one.
+  const probe = Effect.fnUntraced(function* () {
+    const current = registration
+    if (!current) return
+    const failed = yield* oneShot(current, { op: "ping" }).pipe(
+      Effect.as(undefined),
+      Effect.catch((error) => Effect.succeed(error)),
+    )
+    if (!failed || registration !== current) return
+    if (failed.kind === "connect") {
+      registration = undefined
+      return
+    }
+    yield* Effect.logWarning("opencode-pty stopped answering; replacing it", { pid: current.pid })
+    abandon()
+    yield* Effect.try(() => process.kill(current.pid)).pipe(Effect.ignore)
+  })
+
   const request = Effect.fn("PersistentPty.daemon.request")(function* (value: object, shouldStart = false) {
     return yield* attempt(value, shouldStart).pipe(
       Effect.catch((error) => {
         if (error.kind === "registration") return attempt(value, shouldStart)
+        if (error.kind === "response") return probe().pipe(Effect.andThen(Effect.fail(error)))
         if (error.kind !== "connect") return Effect.fail(error)
         registration = undefined
         if (!shouldStart) return Effect.fail(error)

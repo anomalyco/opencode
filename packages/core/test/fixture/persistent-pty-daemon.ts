@@ -102,10 +102,16 @@ export function frame(value: object) {
   return output
 }
 
-export function writeRegistration(directory: string, socket: string, instance = "test", token = "test") {
+export function writeRegistration(
+  directory: string,
+  socket: string,
+  instance = "test",
+  token = "test",
+  pid = process.pid,
+) {
   return writeFile(
     path.join(directory, "service.json"),
-    JSON.stringify({ instance_id: instance, pid: process.pid, protocol: 9, socket, token, features: [] }),
+    JSON.stringify({ instance_id: instance, pid, protocol: 9, socket, token, features: [] }),
   )
 }
 
