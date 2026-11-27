@@ -638,7 +638,7 @@ describe("Config", () => {
           Effect.andThen(
             Effect.gen(function* () {
               const config = yield* Config.Service
-              const install = () =>
+              const install = (policiesOnly = false) =>
                 config.integration!(
                   opencode,
                   ConfigIntegration.make({
@@ -646,20 +646,25 @@ describe("Config", () => {
                     connection: { type: "credential", id: credentialID, label: "Console", method: "key" },
                     organization: org,
                     info: decodeInfo({
-                      mcp: { servers: { docs: { type: "remote", url: "https://docs.acme.com/mcp" } } },
+                      ...(policiesOnly
+                        ? {}
+                        : { mcp: { servers: { docs: { type: "remote", url: "https://docs.acme.com/mcp" } } } }),
                       policies: [{ action: "mcp.use", resource: "github", effect: "deny" }],
                     }),
                   }),
                 )
-              yield* install()
+              expect((yield* install())._tag).toBe("Withheld")
               // The personal account's servers and the denied well-known origin's config are gone; their policies stay.
               expect(supplied(yield* config.entries())).toEqual([
                 { servers: [], policies: 1 },
                 { servers: [], policies: 1 },
               ])
+              const withheld = yield* install(true)
+              expect(withheld._tag).toBe("Withheld")
+              expect(yield* install(true)).toEqual(withheld)
               org = allowed
-              yield* config.integration!(opencode, undefined)
-              yield* install()
+              expect(yield* config.integration!(opencode, undefined)).toEqual({ _tag: "Cleared" })
+              expect((yield* install())._tag).toBe("Applied")
               expect(supplied(yield* config.entries())).toEqual([
                 { servers: ["docs"], policies: 1 },
                 { servers: [], policies: 1 },

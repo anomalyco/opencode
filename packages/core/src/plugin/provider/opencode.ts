@@ -1,4 +1,3 @@
-import { isDeepStrictEqual } from "node:util"
 import { Duration, Effect, Equal, FiberHandle, Option, Random, Schema, Scope, Semaphore, Stream } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
@@ -312,11 +311,10 @@ export const OpencodePlugin = define<
     // while the rest of the document merges through config.
     let integrated: ConfigIntegration.Document | undefined
     const integrate = Effect.fnUntraced(function* (document: ConfigIntegration.Document | undefined) {
-      yield* config.integration?.(Integration.ID.make("opencode"), document) ?? Effect.void
-      integrated = (yield* config.entries()).find(
-        (entry): entry is ConfigIntegration.Document =>
-          entry instanceof ConfigIntegration.Document && entry.integrationID === Integration.ID.make("opencode"),
-      )
+      const result = yield* config.integration?.(Integration.ID.make("opencode"), document) ??
+        Effect.succeed({ _tag: "Cleared" as const })
+      integrated = result._tag === "Cleared" ? undefined : result.document
+      return result
     })
     // Policies and providers ride on the snapshot, so a credential switch, disconnect, or 404 replaces them too.
     const publish = Effect.fnUntraced(function* (next: typeof snapshot) {
@@ -334,11 +332,8 @@ export const OpencodePlugin = define<
           // `make` keeps only the standard config keys, so instructions and skills stay here.
           info: next.remote,
         })
-      yield* integrate(document)
-      // Managed `integration.use: deny` makes config layer a policies-only copy, which withholds instructions,
-      // skills and event watches too. Config keeps the document it holds when handed a deep-equal one, so compare by
-      // content.
-      const allowed = document !== undefined && (!config.integration || isDeepStrictEqual(integrated, document))
+      const result = yield* integrate(document)
+      const allowed = result._tag === "Applied"
       yield* syncInstructionsAndSkills(next, allowed)
       const watching = allowed && next.remote?.watches === true && (yield* flags.enabled("console_watches"))
       yield* syncWatches(watching ? next.connection : undefined)

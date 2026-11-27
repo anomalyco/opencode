@@ -32,6 +32,8 @@ export function latest<K extends keyof Info>(entries: readonly Entry[], key: K):
     ?.info[key]
 }
 
+export type IntegrationResult = ConfigIntegration.IntegrationResult
+
 export interface Interface {
   /** Returns location config documents and discovery sources from lowest to highest priority. */
   readonly entries: () => Effect.Effect<Entry[]>
@@ -56,7 +58,7 @@ export interface Interface {
   readonly integration?: (
     integrationID: ConfigIntegration.Document["integrationID"],
     document: ConfigIntegration.Document | undefined,
-  ) => Effect.Effect<void>
+  ) => Effect.Effect<IntegrationResult>
 }
 
 export const Options = Schema.Struct({
@@ -112,7 +114,13 @@ export const testLayer = (
             const next = new Map(current)
             next.delete(integrationID)
             return document ? next.set(integrationID, document) : next
-          }),
+          }).pipe(
+            Effect.andThen(Ref.get(integrations)),
+            Effect.map((documents): IntegrationResult => {
+              const document = documents.get(integrationID)
+              return document ? { _tag: "Applied", document } : { _tag: "Cleared" }
+            }),
+          ),
       })
       return Context.empty().pipe(Context.add(Service, service), Context.add(Test, service))
     }),
@@ -191,13 +199,15 @@ export const layer = (options?: Options) =>
         // Logging out drops the saved remote config, so the source supplies nothing until a fresh fetch succeeds.
         if (!variables) return yield* wellknown.clearCached(entry.origin).pipe(Effect.as([]))
         // A failed refresh keeps the last resolved config so remote providers and allowlists do not disappear.
-        const configs = yield* wellknown.resolve(entry, variables).pipe(
-          Effect.catch((error) =>
-            Effect.logWarning("failed to load wellknown config", { source: entry.origin, error }).pipe(
-              Effect.andThen(wellknown.cached(entry.origin)),
+        const configs = yield* wellknown
+          .resolve(entry, variables)
+          .pipe(
+            Effect.catch((error) =>
+              Effect.logWarning("failed to load wellknown config", { source: entry.origin, error }).pipe(
+                Effect.andThen(wellknown.cached(entry.origin)),
+              ),
             ),
-          ),
-        )
+          )
         return yield* Effect.forEach(configs, (config) =>
           ConfigVariable.substitute({
             type: "virtual",
@@ -357,11 +367,7 @@ export const layer = (options?: Options) =>
         const lockdown = ManagedPolicy.statements(managedPolicies)
         const integrated = yield* Effect.forEach(integrations.values(), (document) =>
           supplies(lockdown, document.integrationID, document.connection).pipe(
-            Effect.map((allowed) =>
-              allowed
-                ? document
-                : new ConfigIntegration.Document({ ...document, info: new Info({ policies: document.info.policies }) }),
-            ),
+            Effect.map((allowed) => ConfigIntegration.result(document, allowed)),
           ),
         )
         const wellknownDocuments = yield* Effect.forEach(yield* loadWellknown(references).pipe(Effect.orDie), (entry) =>
@@ -381,7 +387,7 @@ export const layer = (options?: Options) =>
         )
         const below = [
           ...managedPolicies,
-          ...integrated,
+          ...integrated.map((result) => result.document),
           ...wellknownDocuments.flat(),
           ...globalSupplementary,
           ...explicit,
@@ -397,6 +403,7 @@ export const layer = (options?: Options) =>
           : undefined
         const effective = overlay ? { ...sources, project: [...sources.project, overlay] } : sources
         return {
+          integrationResults: new Map(integrated.map((result) => [result.document.integrationID, result])),
           configs: [
             ...below,
             ...(overlay?.present ? yield* loadDirectory(overlay.path, references).pipe(Effect.orDie) : []),
@@ -408,7 +415,7 @@ export const layer = (options?: Options) =>
       })
 
       const initial = yield* ConfigDiscovery.discover(options)
-      let { configs, isInput, sources } = yield* load(initial)
+      let { configs, isInput, sources, integrationResults } = yield* load(initial)
       const updates = yield* PubSub.unbounded<Watcher.Update>()
       const reloads = yield* PubSub.sliding<void>(1)
       // Readiness rescans recover writes made before a watch attached.
@@ -442,21 +449,21 @@ export const layer = (options?: Options) =>
         }
       })
 
-      const reload = Effect.fn("Config.reload")(
-        function* () {
-          const next = yield* load(yield* ConfigDiscovery.discover(options))
-          isInput = next.isInput
-          yield* reconcile(next.sources)
-          const compatibilityChanged =
-            !isDeepStrictEqual(sources.claude, next.sources.claude) ||
-            !isDeepStrictEqual(sources.agents, next.sources.agents)
-          if (isDeepStrictEqual(configs, next.configs) && !compatibilityChanged) return
-          sources = next.sources
-          configs = next.configs
-          yield* bus.publish(Event.Updated, {})
-        },
-        (effect) => reloadLock.withPermit(effect),
-      )
+      const reloadUnlocked = Effect.fn("Config.reload")(function* () {
+        const next = yield* load(yield* ConfigDiscovery.discover(options))
+        isInput = next.isInput
+        integrationResults = next.integrationResults
+        yield* reconcile(next.sources)
+        const compatibilityChanged =
+          !isDeepStrictEqual(sources.claude, next.sources.claude) ||
+          !isDeepStrictEqual(sources.agents, next.sources.agents)
+        if (isDeepStrictEqual(configs, next.configs) && !compatibilityChanged) return
+        sources = next.sources
+        configs = next.configs
+        yield* bus.publish(Event.Updated, {})
+      })
+
+      const reload = () => reloadLock.withPermit(reloadUnlocked())
 
       // Subscribe eagerly so synchronous watch readiness isn't dropped.
       const pendingReloads = yield* PubSub.subscribe(reloads)
@@ -540,15 +547,32 @@ export const layer = (options?: Options) =>
           }),
         changes: () => Stream.fromPubSub(updates),
         update,
-        integration: Effect.fn("Config.integration")(function* (integrationID, document) {
-          if (isDeepStrictEqual(integrations.get(integrationID), document)) return
-          integrations.delete(integrationID)
-          if (document) integrations.set(integrationID, document)
-          yield* reload().pipe(
-            Effect.provide(context),
-            Effect.catchCause((cause) => Effect.logError("failed to reload config", { cause })),
-          )
-        }),
+        integration: Effect.fn("Config.integration")(
+          function* (integrationID, document) {
+            if (!isDeepStrictEqual(integrations.get(integrationID), document)) {
+              const previous = integrations.get(integrationID)
+              integrations.delete(integrationID)
+              if (document) integrations.set(integrationID, document)
+              const failed = yield* reloadUnlocked().pipe(
+                Effect.provide(context),
+                Effect.as(false),
+                Effect.catchCause((cause) =>
+                  Effect.logError("failed to reload integration config", { integrationID, cause }).pipe(
+                    Effect.as(true),
+                  ),
+                ),
+              )
+              if (failed) {
+                integrations.delete(integrationID)
+                if (previous) integrations.set(integrationID, previous)
+                // Fail closed with a stripped policies-only document so a failed reload never registers denied providers.
+                return document ? ConfigIntegration.result(document, false) : { _tag: "Cleared" as const }
+              }
+            }
+            return integrationResults.get(integrationID) ?? { _tag: "Cleared" as const }
+          },
+          (effect) => reloadLock.withPermit(effect),
+        ),
       })
     }),
   )

@@ -41,7 +41,7 @@ export const codeModeServices = (
             Flag.node.replace(
               Layer.mock(Flag.Service, {
                 enabled: () => Effect.succeed(false),
-                resolve: (entries) => Flag.resolve({ entries, channel: "release" }),
+                current: () => Flag.resolve({ entries: [], channel: "release" }),
               }),
             ),
             Machines.node.replace(
