@@ -2063,6 +2063,25 @@ function activityFixture(read: () => Response | Promise<Response>, sessions: Ses
   }))
 }
 
+test("a committed revert removes its boundary and what follows it in transcript order", async () => {
+  // Automation prompt IDs sort after every other message ID, even when the prompt came first.
+  const setup = transcript([...notes(1, 1), { ...notes(2, 2)[0], id: "msg_aut_002" }, ...notes(3, 4)])
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    setup.emit({
+      id: "evt_committed",
+      created: 5,
+      type: "session.revert.committed",
+      durable: { aggregateID: "ses_refresh", seq: 5, version: 1 },
+      data: { sessionID: "ses_refresh", to: "msg_004" },
+    })
+
+    expect(setup.ids()).toEqual(["msg_001", "msg_aut_002", "msg_003"])
+  } finally {
+    setup.dispose()
+  }
+})
+
 function notes(first: number, last: number): SessionMessageInfo[] {
   return Array.from({ length: last - first + 1 }, (_, index) => ({
     id: `msg_${String(first + index).padStart(3, "0")}`,

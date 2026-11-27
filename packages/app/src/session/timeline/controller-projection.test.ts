@@ -99,6 +99,18 @@ describe("visibleTimelineMessages", () => {
     })
   })
 
+  test("hides the revert boundary and what follows it by position, not by message ID", () => {
+    const reply = (id: string) => ({ ...work, id }) satisfies SessionMessageInfo
+    // A steered prompt keeps the ID it was sent with, older than the replies it joined after.
+    const steered = [messages[0], reply("msg_5"), messages[2], reply("msg_6")]
+    expect(visibleTimelineMessages(steered, [], "msg_3").map((message) => message.id)).toEqual(["msg_1", "msg_5"])
+
+    // Automation prompt IDs sort after every other message ID.
+    const automation = { ...messages[0], id: "msg_aut_1" } satisfies SessionMessageInfo
+    const scheduled = [automation, messages[1], messages[3], reply("msg_5")]
+    expect(visibleTimelineMessages(scheduled, [], "msg_4").map((message) => message.id)).toEqual(["msg_aut_1", "msg_2"])
+  })
+
   test("moves a queued input after existing work when changed to steer", () => {
     const source = [...messages.slice(0, 3), work]
     expect(visibleTimelineMessages(source, [{ ...steer, delivery: "queue" }]).map((message) => message.id)).toEqual([

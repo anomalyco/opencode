@@ -1404,7 +1404,9 @@ export function createData(config: CreateDataInput) {
           (store.session.pending[event.data.sessionID] ?? []).filter((item) => item.id < event.data.to),
         )
         message.update(event.data.sessionID, (draft, index) => {
-          const position = draft.findIndex((item) => item.id >= event.data.to)
+          // The server deletes by transcript position, which IDs don't follow. An unloaded boundary falls back to them.
+          const boundary = draft.findIndex((item) => item.id === event.data.to)
+          const position = boundary === -1 ? draft.findIndex((item) => item.id >= event.data.to) : boundary
           if (position === -1) return
           for (const item of draft.splice(position)) index.delete(item.id)
         })

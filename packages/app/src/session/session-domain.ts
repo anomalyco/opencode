@@ -1,4 +1,5 @@
 import type { SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
+import { messagesBeforeRevert } from "@opencode/client/solid"
 
 export function selectSessionUserMessages(messages: SessionMessageInfo[]) {
   return messages.filter((message): message is SessionMessageUser => message.type === "user")
@@ -29,5 +30,5 @@ export function selectUnansweredPrompt(messages: SessionMessageInfo[]) {
 export function selectVisibleSessionUserMessages(messages: SessionMessageUser[], revertMessageID?: string) {
   if (!revertMessageID) return messages
 
-  return messages.filter((message) => message.id < revertMessageID)
+  return messagesBeforeRevert(messages, revertMessageID)
 }

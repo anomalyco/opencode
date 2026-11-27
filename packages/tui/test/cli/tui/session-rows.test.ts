@@ -8,6 +8,7 @@ import {
   messageBoundaryIDs,
   reduceSessionRows as reduceRows,
   sessionRowID,
+  visibleSessionMessages,
   type SessionRow,
 } from "../../../src/routes/session/rows"
 
@@ -470,6 +471,18 @@ test("renders synthetic messages with descriptions", () => {
       children: [partChild("assistant-2", "grep-1")],
     },
   ])
+})
+
+test("the revert hides its boundary and what follows it by position, not by message ID", () => {
+  const user = (id: string): SessionMessageInfo => ({ type: "user", id, text: id, time: { created: 1 } })
+  const ids = (messages: SessionMessageInfo[]) => messages.map((message) => message.id)
+  // Automation prompt IDs sort after every other message ID.
+  const scheduled = [user("msg_aut_1"), assistant("msg_1", []), user("msg_2"), assistant("msg_3", [])]
+  expect(ids(visibleSessionMessages(scheduled, [], "msg_2"))).toEqual(["msg_aut_1", "msg_1"])
+
+  // A steered prompt keeps the ID it was sent with, older than the replies it joined after.
+  const steered = [user("msg_1"), assistant("msg_3", []), user("msg_2"), assistant("msg_4", [])]
+  expect(ids(visibleSessionMessages(steered, [], "msg_2"))).toEqual(["msg_1", "msg_3"])
 })
 
 function partChild(messageID: string, partID: string) {

@@ -356,6 +356,32 @@ describe("transitionSessionRevert", () => {
   })
 })
 
+describe("message IDs out of transcript order", () => {
+  // Automation prompt IDs sort after every other message ID, so only their position says they came first.
+  const automation = user("msg_aut_1")
+  const history = [user("msg_1"), automation, m2]
+  const idle = createSessionRevertState()
+
+  test("an earlier automation prompt can still be undone after a later prompt is reverted", () => {
+    expect(viewSessionRevert(idle, { messages: [automation, m2], revertMessageID: "msg_2" }).canUndo).toBe(true)
+  })
+
+  test("undo rewinds the last prompt before the boundary by position", () => {
+    const event: SessionRevertEvent = {
+      type: "undo.requested",
+      revertMessageID: "msg_2",
+      messages: history,
+      inboxIDs: new Set(),
+    }
+
+    expect(transitionSessionRevert(idle, event).state).toMatchObject({
+      status: "running",
+      operation: { type: "rewind", message: automation, prior: "msg_2" },
+    })
+    expect(selectCursorAfterRevert({ messages: history, inboxIDs: new Set() }, "msg_2")).toBe("msg_aut_1")
+  })
+})
+
 describe("selectCursorAfterRevert", () => {
   test("selects the prompt before the boundary, or the latest delivered prompt without one", () => {
     expect(selectCursorAfterRevert(delivered, "msg_3")).toBe("msg_2")

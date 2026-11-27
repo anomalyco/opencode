@@ -1,4 +1,5 @@
 import type { SessionMessageUser } from "@opencode/client/promise"
+import { messagesBeforeRevert } from "@opencode/client/solid"
 import type { ContextItem, Prompt } from "@/composer/state"
 
 // A hung wait, media pin or revert request fails, so undo and redo cannot stay disabled forever.
@@ -121,7 +122,7 @@ export function transitionSessionRevert(state: SessionRevertState, event: Sessio
   if (event.type === "undo.requested") {
     if (state.status === "running") return unchanged(state)
     const boundary = effectiveRevertMessageID(state, event.revertMessageID)
-    const message = event.messages.filter((item) => !boundary || item.id < boundary).at(-1)
+    const message = (boundary ? messagesBeforeRevert(event.messages, boundary) : event.messages).at(-1)
 
     if (!message) return unchanged(state)
 
@@ -261,7 +262,7 @@ export function effectiveRevertMessageID(state: SessionRevertState, serverRevert
 
 /** The prompt before the boundary, or the latest delivered prompt when nothing is reverted. */
 export function selectCursorAfterRevert(input: RevertMessages, boundary: string | undefined) {
-  if (boundary) return input.messages.filter((item) => item.id < boundary).at(-1)?.id
+  if (boundary) return messagesBeforeRevert(input.messages, boundary).at(-1)?.id
 
   return input.messages.filter((item) => !input.inboxIDs.has(item.id)).at(-1)?.id
 }
@@ -276,7 +277,9 @@ export function viewSessionRevert(
   return {
     busy,
     revertMessageID,
-    canUndo: !busy && context.messages.some((item) => !revertMessageID || item.id < revertMessageID),
+    canUndo:
+      !busy &&
+      (revertMessageID ? messagesBeforeRevert(context.messages, revertMessageID) : context.messages).length > 0,
     canRedo: !busy && !!revertMessageID,
   }
 }

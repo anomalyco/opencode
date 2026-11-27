@@ -157,9 +157,12 @@ export function DialogJumpToMessage(props: {
   })
 
   const prompts = createMemo(() => {
-    const all = new Map(selectJumpHistory(state()).map((row) => [row.id, row]))
-
     const reverted = data.session.get(id)?.revert?.messageID
+
+    const history = selectJumpHistory(state())
+
+    // The history is newest first, so the revert hides the rows up to and including its boundary.
+    const all = new Map(history.slice(history.findIndex((row) => row.id === reverted) + 1).map((row) => [row.id, row]))
 
     for (const message of props.session.history.visibleUserMessages()) {
       all.set(message.id, prompt(message, language.t("common.attachment")))
@@ -167,9 +170,7 @@ export function DialogJumpToMessage(props: {
 
     const pending = new Set(data.session.input.list(id))
 
-    return [...all.values()].filter(
-      (row) => row.text.trim() && !pending.has(row.id) && (!reverted || row.id < reverted),
-    )
+    return [...all.values()].filter((row) => row.text.trim() && !pending.has(row.id))
   })
 
   const status = () => {

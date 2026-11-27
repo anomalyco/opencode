@@ -174,7 +174,14 @@ export function createTimelineCursor(input: {
     on(
       () => input.visibleUserMessages().at(-1)?.id,
       (lastID, previousID) => {
-        if (lastID && previousID && lastID > previousID) dispatch(LATEST_ADVANCED_EVENT)
+        // IDs don't follow the transcript, so the latest advanced when the previous one is still shown before it.
+        if (
+          lastID &&
+          previousID &&
+          lastID !== previousID &&
+          untrack(input.visibleUserMessages).some((message) => message.id === previousID)
+        )
+          dispatch(LATEST_ADVANCED_EVENT)
       },
     ),
   )

@@ -30,6 +30,19 @@ test("selects user history strictly before the revert boundary", () => {
   expect(selectVisibleSessionUserMessages(users)).toBe(users)
 })
 
+test("the revert hides by transcript position, not by message ID", () => {
+  // Automation prompt IDs sort after every other message ID, and a steered prompt keeps its send-time ID.
+  const users = [user("msg_1"), user("msg_aut_1"), user("msg_3"), user("msg_2"), user("msg_4")]
+
+  expect(selectVisibleSessionUserMessages(users, "msg_2").map((message) => message.id)).toEqual([
+    "msg_1",
+    "msg_aut_1",
+    "msg_3",
+  ])
+  // Without the boundary loaded its position is unknown, so IDs decide.
+  expect(selectVisibleSessionUserMessages(users.slice(0, 3), "msg_2").map((message) => message.id)).toEqual(["msg_1"])
+})
+
 test.each([
   ["only reasoning", [{ type: "reasoning", text: "Thinking" }], "msg_b"],
   ["text", [{ type: "text", text: "Hello" }], undefined],

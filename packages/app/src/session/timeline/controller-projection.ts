@@ -1,4 +1,5 @@
 import type { ModelRef, SessionInboxInfo, SessionMessageInfo } from "@opencode/client/promise"
+import { messagesBeforeRevert } from "@opencode/client/solid"
 import type { SessionMessageHandoff } from "@/session/handoff"
 
 // Projects a submitted prompt, and the agent and model switches it makes, until the server's echoes replace them.
@@ -82,8 +83,8 @@ export function visibleTimelineMessages(
 
   if (queued.size === 0 && inputs.size === 0 && !revertMessageID) return messages
 
-  const visible = messages.filter(
-    (message) => !queued.has(message.id) && (!revertMessageID || message.id < revertMessageID),
+  const visible = (revertMessageID ? messagesBeforeRevert(messages, revertMessageID) : messages).filter(
+    (message) => !queued.has(message.id),
   )
 
   if (inputs.size === 0) return visible
