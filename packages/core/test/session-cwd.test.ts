@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
-import { Effect, Fiber, Layer } from "effect"
+import { Effect, Fiber, Layer, Option } from "effect"
 import type { ChildProcess } from "effect/process"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Agent } from "@opencode/core/agent"
@@ -19,6 +19,7 @@ import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Job } from "@opencode/core/job"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { Join } from "@opencode/core/machine/join"
 import { Machines } from "@opencode/core/machine/machines"
 import { Permission } from "@opencode/core/permission"
 import { PersistentPty } from "@opencode/core/persistent-pty"
@@ -261,6 +262,9 @@ const fixture = (directory: string): Fixture => ({ directory, assertions: [], pr
 const connected = (machines: Machines.Interface, name: string) =>
   Effect.gen(function* () {
     const id = yield* machines.add(name)
+    const invite = yield* machines.invite(id, { reach: [{ type: "url", url: "https://home.example" }] })
+    const secret = Option.getOrThrow(Join.decode(invite)).secret
+    yield* machines.join({ secret, key: crypto.getRandomValues(new Uint8Array(32)) })
     const worker = yield* makeWorker({ connect: (connection) => machines.connect(id, connection) })
     yield* worker.restore
     return { id, worker }
