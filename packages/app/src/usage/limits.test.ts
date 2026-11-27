@@ -180,7 +180,7 @@ describe("modelBadge", () => {
 describe("usageBlock", () => {
   const now = RESET - 86_400_000
 
-  test("reads a reached budget or Go window from the usage limits", () => {
+  test("reads a reached budget from the usage limits, but not a Go window", () => {
     expect(usageBlock({ model: opusModel, free: false, info: info(budget({ id: "all", spent: 100 })), now })).toEqual({
       kind: "workspace",
       resetsAt: RESET,
@@ -200,20 +200,29 @@ describe("usageBlock", () => {
     expect(usageBlock({ model: opusModel, free: true, info: info(perModel), now })).toBeUndefined()
 
     const goModel = { ...opusModel, id: "glm-5", provider: { id: "opencode-go", integrationID: "opencode" } }
-    const go = (limited: boolean) => ({
+    const limited = {
       ...info(),
       go: {
-        rolling: { percent: 40, limited: false, resetsAt: now + 3_600_000 },
-        weekly: { percent: 100, limited, resetsAt: now + 3 * 86_400_000 },
+        rolling: { percent: 100, limited: true, resetsAt: now + 3_600_000 },
+        weekly: { percent: 100, limited: true, resetsAt: now + 3 * 86_400_000 },
         monthly: { percent: 60, limited: false, resetsAt: RESET },
       },
-    })
-    expect(usageBlock({ model: goModel, free: false, info: go(true), now })).toEqual({
+    }
+    expect(usageBlock({ model: goModel, free: false, info: limited, now })).toBeUndefined()
+    const refused = {
+      model: { providerID: "opencode-go", id: "glm-5" },
+      time: { created: now },
+      error: {
+        type: "provider.go-limit",
+        retryAfterMs: 3_600_000,
+        response: { body: JSON.stringify({ metadata: { limitName: "5 hour" } }) },
+      },
+    }
+    expect(usageBlock({ model: goModel, free: false, info: limited, last: refused, now })).toEqual({
       kind: "go",
-      window: "weekly",
-      resetsAt: now + 3 * 86_400_000,
+      window: "rolling",
+      resetsAt: now + 3_600_000,
     })
-    expect(usageBlock({ model: goModel, free: false, info: go(false), now })).toBeUndefined()
     // A direct provider is never limited by the workspace.
     const direct = { ...opusModel, provider: { id: "anthropic" } }
     expect(

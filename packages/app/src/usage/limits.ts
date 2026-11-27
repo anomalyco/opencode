@@ -215,7 +215,9 @@ const UNKNOWN_RESET_HOLD_MS = 3_600_000
 
 /**
  * Whether the selected model is out, from the session's last refusal for this model or from the usage limits. A refusal
- * holds until it resets or the model changes; usage limits catch a model that is out before anything is sent.
+ * holds until it resets or the model changes; usage limits catch a model that is out before anything is sent. A Go
+ * window at its limit blocks nothing until Console refuses: with Extra Usage on, Go keeps serving on credits, and the
+ * limits don't say whether it is on.
  */
 export function usageBlock(input: {
   readonly model: LimitedModel | undefined
@@ -252,12 +254,6 @@ function limitsBlock(
   now: number,
 ): UsageBlock | undefined {
   if (!info) return undefined
-  if (model.provider.id === "opencode-go") {
-    const go = info.go
-    const window =
-      go && (["rolling", "weekly", "monthly"] as const).find((item) => go[item].limited && go[item].resetsAt > now)
-    return go && window ? { kind: "go", window, resetsAt: go[window].resetsAt } : undefined
-  }
   const usage = modelUsage(info, model)
   if (!usage?.reached || usage.resetsAt <= now) return undefined
   const blocking = servedByConsole(model)
