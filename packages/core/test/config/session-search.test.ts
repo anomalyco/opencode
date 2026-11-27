@@ -54,12 +54,9 @@ describe("ConfigSessionSearchPlugin.Plugin", () => {
       }),
     )
     return Effect.gen(function* () {
-      const bus = yield* Bus.Service
       const config = yield* Config.Test
       const plugins = yield* Plugin.Service
       yield* config.setEntries(documents(true))
-      yield* bus.publish(Event.Updated, {})
-      yield* drain
       yield* ConfigSessionSearchPlugin.Plugin.effect(yield* PluginHost.make(plugins, "test"))
       expect(starts.count).toBe(1)
     }).pipe(Effect.scoped, Effect.provide(build), Effect.provide(PluginTestLayer))

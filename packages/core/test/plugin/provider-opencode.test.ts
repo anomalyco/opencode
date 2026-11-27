@@ -1737,26 +1737,23 @@ describe("OpencodePlugin", () => {
     ),
   )
 
-  it.effect("withholds instructions, skills, watches and artifacts when a policies-only document is Withheld", () =>
+  it.effect("withholds providers, instructions, skills, watches and artifacts when integration is Withheld", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
       const config = yield* Config.Test
-      const bus = yield* Bus.Service
+      const catalog = yield* Provider.Service
       const discovery = yield* InstructionDiscovery.Service
       const skills = yield* Skill.Service
       const tools = yield* Tool.Service
       const artifacts = yield* Artifact.Service
       const policies: ConfigPolicy.Info[] = [{ action: "tool.use", resource: "shell:sudo *", effect: "deny" }]
       const requests: string[] = []
-      const results: Config.IntegrationResult[] = []
       yield* config.setEntries([
         new Document({
           type: "document",
           info: new Info({ experimental: new ConfigExperimental.Info({ console_watches: true, artifacts: true }) }),
         }),
       ])
-      yield* bus.publish(Event.Updated, {})
-      yield* drain
       yield* credentials.create({
         integrationID: Integration.ID.make("opencode"),
         value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
@@ -1766,12 +1763,8 @@ describe("OpencodePlugin", () => {
           ...config,
           integration: (id, document) =>
             Effect.gen(function* () {
-              // Config's managed-policy test proves this decision. Here its effective policies-only document
-              // deliberately equals the input, so consumers must honor the tag rather than compare documents.
               const result = document ? ConfigIntegration.result(document, false) : { _tag: "Cleared" as const }
-              expect(result._tag === "Cleared" ? undefined : result.document).toEqual(document)
               yield* config.integration?.(id, result._tag === "Cleared" ? undefined : result.document) ?? Effect.void
-              results.push(result)
               return result
             }),
         }),
@@ -1781,26 +1774,19 @@ describe("OpencodePlugin", () => {
             requests.push(path)
             if (path === "/api/v2/config")
               return Response.json(
-                { policies },
-                {
-                  headers: {
-                    ...withLists.headers,
-                    "x-opencode-event-watches": "1",
-                    "x-opencode-artifacts": "1",
-                  },
-                },
+                { policies, providers: { remote: { name: "Remote" } } },
+                { headers: { ...withLists.headers, "x-opencode-event-watches": "1", "x-opencode-artifacts": "1" } },
               )
             if (path === "/api/v2/instructions")
               return Response.json({ instructions: [{ id: "style", content: "Use tabs." }] })
             if (path === "/api/v2/skills") return Response.json({ skills: [{ slug: "deploy", version: "1" }] })
-            if (path === "/api/v2/skills/deploy") return Response.json(skillBundle)
             return new Response(null, { status: 404 })
           },
         }),
       )
       yield* drain
-      expect(results.some((result) => result._tag === "Withheld")).toBe(true)
       expect(yield* consolePolicies(config)).toEqual(policies)
+      expect(yield* catalog.get(Provider.ID.make("remote"))).toBeUndefined()
       const instructions = yield* discovery.list()
       expect(
         Array.isArray(instructions) ? instructions.filter((file) => file.path.startsWith("OpenCode Console")) : [],
@@ -1869,57 +1855,58 @@ describe("OpencodePlugin", () => {
     }),
   )
 
-  it.effect("applies Console policies while its instructions and skills fail, and keeps a list over a malformed one", () =>
-    Effect.gen(function* () {
-      const credentials = yield* Credential.Service
-      const config = yield* Config.Service
-      const discovery = yield* InstructionDiscovery.Service
-      const sudo: ConfigPolicy.Info = { action: "tool.use", resource: "shell:sudo *", effect: "deny" }
-      const state: { lists: "down" | "ok" | "malformed" } = { lists: "down" }
-      const server = {
-        fetch: (request: Request) => {
-          const path = new URL(request.url).pathname
-          if (path === "/api/v2/config")
-            return Response.json({ providers: {}, policies: [sudo] }, withLists)
-          if (path !== "/api/v2/instructions" && path !== "/api/v2/skills") return new Response(null, { status: 404 })
-          if (state.lists === "down") return new Response("Unavailable", { status: 503 })
-          if (path === "/api/v2/skills") return Response.json({ skills: [] })
-          if (state.lists === "malformed") return Response.json({ instructions: [{ id: "style" }] })
-          return Response.json({ instructions: [{ id: "style", content: "Use tabs." }] })
-        },
-      }
-      const instructions = discovery
-        .list()
-        .pipe(
-          Effect.map((files) =>
-            Array.isArray(files)
-              ? files.filter((file) => file.path.startsWith("OpenCode Console")).map((file) => file.content)
-              : [],
-          ),
-        )
-      yield* credentials.create({
-        integrationID: Integration.ID.make("opencode"),
-        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
-      })
+  it.effect(
+    "applies Console policies while its instructions and skills fail, and keeps a list over a malformed one",
+    () =>
+      Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        const config = yield* Config.Service
+        const discovery = yield* InstructionDiscovery.Service
+        const sudo: ConfigPolicy.Info = { action: "tool.use", resource: "shell:sudo *", effect: "deny" }
+        const state: { lists: "down" | "ok" | "malformed" } = { lists: "down" }
+        const server = {
+          fetch: (request: Request) => {
+            const path = new URL(request.url).pathname
+            if (path === "/api/v2/config") return Response.json({ providers: {}, policies: [sudo] }, withLists)
+            if (path !== "/api/v2/instructions" && path !== "/api/v2/skills") return new Response(null, { status: 404 })
+            if (state.lists === "down") return new Response("Unavailable", { status: 503 })
+            if (path === "/api/v2/skills") return Response.json({ skills: [] })
+            if (state.lists === "malformed") return Response.json({ instructions: [{ id: "style" }] })
+            return Response.json({ instructions: [{ id: "style", content: "Use tabs." }] })
+          },
+        }
+        const instructions = discovery
+          .list()
+          .pipe(
+            Effect.map((files) =>
+              Array.isArray(files)
+                ? files.filter((file) => file.path.startsWith("OpenCode Console")).map((file) => file.content)
+                : [],
+            ),
+          )
+        yield* credentials.create({
+          integrationID: Integration.ID.make("opencode"),
+          value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+        })
 
-      // Once the lists' retries run out, startup still applies the config's policies, just without the lists.
-      const started = yield* addPlugin().pipe(inProcess(server), Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("10 seconds")
-      yield* Fiber.join(started)
-      expect(yield* consolePolicies(config)).toEqual([sudo])
-      expect(yield* instructions).toEqual([])
+        // Once the lists' retries run out, startup still applies the config's policies, just without the lists.
+        const started = yield* addPlugin().pipe(inProcess(server), Effect.forkChild({ startImmediately: true }))
+        yield* TestClock.adjust("10 seconds")
+        yield* Fiber.join(started)
+        expect(yield* consolePolicies(config)).toEqual([sudo])
+        expect(yield* instructions).toEqual([])
 
-      state.lists = "ok"
-      yield* TestClock.adjust("6 minutes")
-      yield* drain
-      expect(yield* instructions).toEqual(["Use tabs."])
+        state.lists = "ok"
+        yield* TestClock.adjust("6 minutes")
+        yield* drain
+        expect(yield* instructions).toEqual(["Use tabs."])
 
-      state.lists = "malformed"
-      yield* TestClock.adjust("6 minutes")
-      yield* drain
-      expect(yield* instructions).toEqual(["Use tabs."])
-      expect(yield* consolePolicies(config)).toEqual([sudo])
-    }),
+        state.lists = "malformed"
+        yield* TestClock.adjust("6 minutes")
+        yield* drain
+        expect(yield* instructions).toEqual(["Use tabs."])
+        expect(yield* consolePolicies(config)).toEqual([sudo])
+      }),
   )
 
   it.effect("requests Console instructions and skills together", () =>

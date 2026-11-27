@@ -449,22 +449,21 @@ export const layer = (options?: Options) =>
         }
       })
 
-      const reload = Effect.fn("Config.reload")(
-        function* () {
-          const next = yield* load(yield* ConfigDiscovery.discover(options))
-          isInput = next.isInput
-          integrationResults = next.integrationResults
-          yield* reconcile(next.sources)
-          const compatibilityChanged =
-            !isDeepStrictEqual(sources.claude, next.sources.claude) ||
-            !isDeepStrictEqual(sources.agents, next.sources.agents)
-          if (isDeepStrictEqual(configs, next.configs) && !compatibilityChanged) return
-          sources = next.sources
-          configs = next.configs
-          yield* bus.publish(Event.Updated, {})
-        },
-        (effect) => reloadLock.withPermit(effect),
-      )
+      const reloadUnlocked = Effect.fn("Config.reload")(function* () {
+        const next = yield* load(yield* ConfigDiscovery.discover(options))
+        isInput = next.isInput
+        integrationResults = next.integrationResults
+        yield* reconcile(next.sources)
+        const compatibilityChanged =
+          !isDeepStrictEqual(sources.claude, next.sources.claude) ||
+          !isDeepStrictEqual(sources.agents, next.sources.agents)
+        if (isDeepStrictEqual(configs, next.configs) && !compatibilityChanged) return
+        sources = next.sources
+        configs = next.configs
+        yield* bus.publish(Event.Updated, {})
+      })
+
+      const reload = () => reloadLock.withPermit(reloadUnlocked())
 
       // Subscribe eagerly so synchronous watch readiness isn't dropped.
       const pendingReloads = yield* PubSub.subscribe(reloads)
@@ -548,29 +547,32 @@ export const layer = (options?: Options) =>
           }),
         changes: () => Stream.fromPubSub(updates),
         update,
-        integration: Effect.fn("Config.integration")(function* (integrationID, document) {
-          if (!isDeepStrictEqual(integrations.get(integrationID), document)) {
-            const previous = integrations.get(integrationID)
-            integrations.delete(integrationID)
-            if (document) integrations.set(integrationID, document)
-            const failed = yield* reload().pipe(
-              Effect.provide(context),
-              Effect.as(false),
-              Effect.catchCause((cause) =>
-                Effect.logError("failed to reload integration config", { integrationID, cause }).pipe(Effect.as(true)),
-              ),
-            )
-            if (failed) {
+        integration: Effect.fn("Config.integration")(
+          function* (integrationID, document) {
+            if (!isDeepStrictEqual(integrations.get(integrationID), document)) {
+              const previous = integrations.get(integrationID)
               integrations.delete(integrationID)
-              if (previous) integrations.set(integrationID, previous)
-              // Fail closed if the reload dies so a retry still reloads and withholding is never bypassed.
-              return document
-                ? { _tag: "Withheld" as const, document }
-                : (integrationResults.get(integrationID) ?? { _tag: "Cleared" as const })
+              if (document) integrations.set(integrationID, document)
+              const failed = yield* reloadUnlocked().pipe(
+                Effect.provide(context),
+                Effect.as(false),
+                Effect.catchCause((cause) =>
+                  Effect.logError("failed to reload integration config", { integrationID, cause }).pipe(
+                    Effect.as(true),
+                  ),
+                ),
+              )
+              if (failed) {
+                integrations.delete(integrationID)
+                if (previous) integrations.set(integrationID, previous)
+                // Fail closed with a stripped policies-only document so a failed reload never registers denied providers.
+                return document ? ConfigIntegration.result(document, false) : { _tag: "Cleared" as const }
+              }
             }
-          }
-          return integrationResults.get(integrationID) ?? { _tag: "Cleared" as const }
-        }),
+            return integrationResults.get(integrationID) ?? { _tag: "Cleared" as const }
+          },
+          (effect) => reloadLock.withPermit(effect),
+        ),
       })
     }),
   )
