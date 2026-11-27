@@ -181,7 +181,7 @@ export const content = {
   },
   getStarted: {
     title: "开始使用",
-    lead: "最简单的入门方式是下载 OpenCode 并使用免费模型，无需账户。想要更多，可以使用你自己的订阅或 OpenCode Go。",
+    lead: "最简单的入门方式是下载 OpenCode 并使用免费模型，无需账号。想要更多，可以使用你自己的订阅或 OpenCode Go。",
     phrases: {
       "download-opencode": { text: "下载 OpenCode" },
       "free-models": { text: "免费模型" },
@@ -192,7 +192,7 @@ export const content = {
     subscriptions: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } },
     steps: {
       download: { title: "下载", line: "桌面应用、终端或移动应用。" },
-      "use-free-models": { title: "使用免费模型", line: "OpenCode 内置一组免费模型，无需账户。" },
+      "use-free-models": { title: "使用免费模型", line: "OpenCode 内置一组免费模型，无需账号。" },
       "add-more-models": {
         title: "添加更多模型",
         line: "使用你自己的订阅，或选择 OpenCode Go 的精选模型，每月 $10 起。",
@@ -400,7 +400,7 @@ export const content = {
       products: {
         "opencode-console": {
           name: "OpenCode Console",
-          long: "OpenCode Console 是一款 Web 应用，开发者和团队可以在这里为 OpenCode 及其他编程 agent 购买和管理 AI 模型访问权限。它为前沿模型和开放权重模型提供按量付费的推理服务，按请求从预付额度中扣费，同时提供 OpenCode Go 订阅。团队可以获得带有成员、管理员和所有者角色的工作区，工作区级和单个用户的支出上限，通过 Okta、Microsoft Entra ID 或 Google Workspace 进行单点登录，以及 SCIM。Console 支持 30 多家提供商，团队可以接入已有的提供商账户，其自有推理服务是可选的。访问地址为 opencode.ai/console。",
+          long: "OpenCode Console 是一款 Web 应用，开发者和团队可以在这里为 OpenCode 及其他编程 agent 购买和管理 AI 模型访问权限。它为前沿模型和开放权重模型提供按量付费的推理服务，按请求从预付额度中扣费，同时提供 OpenCode Go 订阅。团队可以获得带有成员、管理员和所有者角色的工作区，工作区级和单个用户的支出上限，通过 Okta、Microsoft Entra ID 或 Google Workspace 进行单点登录，以及 SCIM。Console 支持 30 多家提供商，团队可以接入已有的提供商账号，其自有推理服务是可选的。访问地址为 opencode.ai/console。",
           short:
             "OpenCode Console 是 Anomaly 的 Web 应用，提供按量付费的 AI 模型访问、OpenCode Go 订阅，以及预算和单点登录等团队管控功能。",
         },
@@ -556,7 +556,7 @@ export const content = {
         support: {
           links: { "github-issues": { text: "GitHub 议题" }, "help-anoma-ly": { text: "help@anoma.ly" } },
           title: "支持",
-          body: "如需 OpenCode 使用帮助，请提交 issue 或在社区提问。账户和账单问题请发送邮件给我们。",
+          body: "如需 OpenCode 使用帮助，请提交 issue 或在社区提问。账号和账单问题请发送邮件给我们。",
         },
         security: {
           links: { "report-a-vulnerability": { text: "报告漏洞" }, "security-anoma-ly": { text: "security@anoma.ly" } },
