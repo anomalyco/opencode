@@ -229,3 +229,31 @@ fn narrow_terminal_hides_next_and_previous_hints_and_keeps_esc_close() {
     assert!(!screen.contains("shift+enter previous"), "{screen}");
     assert!(!screen.contains("enter next"), "{screen}");
 }
+
+#[test]
+fn table_find_highlights_keep_the_theme_border_color_across_restyle() {
+    let table = "| key | value |\n| --- | --- |\n| needle | alpha |\n| beta | needle |";
+    let h = mount_session(100, 30, vec![assistant_msg("m1", table, 1)], true);
+    assert!(h.app.wait_until(WAIT, || h.app.text().contains("┌") && h.app.text().contains("needle")));
+    let corner_fg = |h: &Harness| h.app.render().cells.iter().find(|cell| cell.symbol == "┌").expect("table corner").fg;
+    let initial = h.tui.page();
+    assert_eq!(corner_fg(&h), initial.border.base);
+
+    h.app.press("ctrl+x");
+    h.app.press("f");
+    assert!(h.app.wait_until(WAIT, || h.app.text().contains("Find in session...")));
+    h.app.type_text("needle");
+    assert!(h.app.wait_until(WAIT, || h.app.text().contains("Find · 1 of 2")));
+    assert_eq!(corner_fg(&h), initial.border.base);
+    assert_eq!(painted_runs(&h, initial.find.background.current), vec!["needle"]);
+    assert_eq!(painted_runs(&h, initial.find.background.r#match), vec!["needle"]);
+
+    assert!(h.tui.theme.borrow_mut().set("tokyonight"));
+    h.tui.theme_changed();
+    h.app.render();
+    let switched = h.tui.page();
+    assert_ne!(switched.border.base, initial.border.base);
+    assert_eq!(corner_fg(&h), switched.border.base);
+    assert_eq!(painted_runs(&h, switched.find.background.current), vec!["needle"]);
+    assert_eq!(painted_runs(&h, switched.find.background.r#match), vec!["needle"]);
+}
