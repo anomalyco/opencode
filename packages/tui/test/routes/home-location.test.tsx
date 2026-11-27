@@ -1,13 +1,21 @@
-import { expect, test } from "bun:test"
+import { beforeEach, expect, test } from "bun:test"
 import { InputRenderable } from "@opentui/core"
 import path from "node:path"
 import { createAppFixture } from "../fixture/app"
 import { tmpdir } from "../fixture/fixture"
 import { json, worktree } from "../fixture/tui-client"
+import { takeDraft } from "../../src/component/prompt/draft-stash"
 
 const alpha = "/tmp/wt-alpha"
 const beta = "/tmp/wt-beta"
 const project = { id: "proj_test", directory: worktree, canonical: worktree }
+
+// Home drafts live in a module-level stash that outlives each app fixture. A draft another test file left
+// behind (file order differs per platform) would be restored into this Home prompt, so "/worktrees" would be
+// typed after it and never open the dialog.
+beforeEach(() => {
+  takeDraft(undefined)
+})
 
 test("switching Home between worktrees loads the branch of each", async () => {
   await using state = await tmpdir()
