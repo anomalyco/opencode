@@ -228,10 +228,12 @@ function createNumberIgnition(runs: () => boolean, prompt: () => number, animati
   return ignition
 }
 
-function fadeTitleColor(color: RGBA, background: RGBA, index: number, length: number, leading: number) {
+export function fadeTitleColor(color: RGBA, background: RGBA, index: number, length: number, leading: number) {
   const fade = (position: number) => (position <= 0 ? 0 : 0.2 + 0.72 * ((position - 1) / Math.max(1, FADE_WIDTH - 1)))
-  const start = index < FADE_WIDTH ? FADE_WIDTH - index : 0
-  const end = index - (length - FADE_WIDTH) + 1
+  // Narrow titles shorten both fades so they never overlap and the middle cell stays fully opaque.
+  const width = Math.min(FADE_WIDTH, Math.floor((length - 1) / 2))
+  const start = index < width ? FADE_WIDTH - index : 0
+  const end = index >= length - width ? index - (length - FADE_WIDTH) + 1 : 0
   const opacity = Math.max(fade(start) * leading, fade(end))
   return opacity === 0 ? color : tint(color, background, opacity)
 }

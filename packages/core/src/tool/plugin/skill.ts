@@ -51,8 +51,7 @@ export const Plugin = {
               return yield* Effect.gen(function* () {
                 yield* permission.assert({
                   action: name,
-                  resources: [skill.id],
-                  save: [skill.id],
+                  ...(yield* skills.approval(skill.id)),
                   ...Permission.invocation(context),
                 })
                 const { directory, output: content } = yield* Skill.prepare(

@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use opencode_api::generated::SessionID;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
+use opencode_tui::dialogs::settings;
 use opencode_tui::{Deps, Route};
 use opentui::prelude::*;
 use serde_json::{Value, json};
@@ -335,6 +336,33 @@ fn history_steps_through_submitted_prompts_and_is_written_as_typescript_writes_i
     setup.app.press("backspace");
     setup.app.press("down");
     assert_eq!(setup.textarea().text(), "one\ntwo");
+}
+
+/// With history unbound, Down still moves through a multi-line prompt before it opens the subagent picker (#64301).
+#[test]
+fn down_moves_through_a_multiline_prompt_when_history_is_unbound() {
+    let setup = Setup::new(session_route());
+    setup.ready();
+    settings::update(&setup.tui, |draft| {
+        settings::set_path(draft, &["keybinds", "prompt.history.next"], json!("none"));
+        settings::set_path(draft, &["keybinds", "prompt.history.previous"], json!("none"));
+    });
+    setup.wait("history unbound", || setup.tui.keymap.shortcut("prompt.history.next").is_none());
+    let textarea = setup.textarea();
+    setup.app.type_text("one");
+    setup.app.press("shift+return");
+    setup.app.type_text("two");
+    setup.app.press("shift+return");
+    setup.app.type_text("three");
+    textarea.set_cursor_offset(0);
+
+    setup.app.press("down");
+    assert_eq!(textarea.cursor_offset(), "one\n".len() as u32);
+    setup.app.press("down");
+    assert_eq!(textarea.cursor_offset(), "one\ntwo\n".len() as u32);
+    assert!(setup.app.app().focused().is_some_and(|widget| widget.id() == textarea.id()));
+    setup.app.press("down");
+    setup.wait("the subagent picker", || setup.app.text().contains("No active subagents"));
 }
 
 #[test]

@@ -45,7 +45,6 @@ export function CommentCard(props: {
   active?: boolean
   title?: string
   tooltip?: boolean
-  wide?: boolean
   onClick?: () => void
 }) {
   const i18n = useI18n()
@@ -88,14 +87,12 @@ export function CommentCard(props: {
       openDelay={1000}
       value={props.title ?? (note() && !props.comment.trim() ? `${heading()}\n${subtitle()}` : heading())}
       disabled={tooltipDisabled()}
-      class={props.wide ? "w-full" : undefined}
       contentStyle={{ "max-width": "320px", "white-space": "pre-wrap" }}
     >
       <AttachmentCard
         title={heading()}
         active={props.active}
         clickable={!!props.onClick}
-        wide={props.wide}
         surface="base"
         titleRef={(element) => {
           title = element

@@ -15,6 +15,15 @@ pub struct Watch {
     _stop: std::io::PipeWriter,
     #[cfg(not(target_os = "linux"))]
     _stop: mpsc::Sender<()>,
+    _also: Option<Box<Watch>>,
+}
+
+impl Watch {
+    /// Keeps `other` running for as long as this watch.
+    pub fn with(mut self, other: Option<Watch>) -> Watch {
+        self._also = other.map(Box::new);
+        self
+    }
 }
 
 /// Whether `OPENCODE_FILEWATCHER_DISABLE`, else `OPENCODE_DISABLE_FILEWATCHER`, is `1` or `true`.
@@ -76,7 +85,7 @@ fn start(
             let _ = tx.send(());
         }
     });
-    Ok(Watch { _stop: stop_tx })
+    Ok(Watch { _stop: stop_tx, _also: None })
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -109,7 +118,7 @@ fn start(dir: &Path, filter: impl Fn(&OsStr) -> bool + Send + 'static, tx: mpsc:
             log::error!("Watch failed, live-reload disabled: {}: {error}", dir.display());
         }
     });
-    Ok(Watch { _stop: stop_tx })
+    Ok(Watch { _stop: stop_tx, _also: None })
 }
 
 #[cfg(target_os = "linux")]

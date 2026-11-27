@@ -145,8 +145,6 @@ export function CurrentSessionTimelineStory(props: {
                   shellToolDefaultOpen={props.shellToolDefaultOpen}
                   editToolDefaultOpen={props.editToolDefaultOpen}
                   turnDiffs={props.turnDiffs}
-                  // Stories show the timeline as local and dev builds do.
-                  inlineQuotes
                 />
               </CurrentSessionProviders>
             </div>

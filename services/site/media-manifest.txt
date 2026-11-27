@@ -126,6 +126,7 @@ c1c71f19753b06de76c3bdac4a8624adadeb2743b1faed5475e33b0836b92a74  354950  /media
 04f5da935b3c06169608357d18276b6dca64bc0c2c660d2aca31dff5e6338695  214867  /media/heroes/terminal-landscape-light.1344.hevc.04f5da93.mp4
 927d3f29a862b2af9853d2ba951f29e4ff381e0c5f1b08c7d8b34cd62b7128e2  2818872  /opencode-brand-assets.zip
 0f1d6dfc747f2d88650b2073bb04cd41380241adfa4de3e2f070bdc4bb367579  272426  /press/anomaly/anomaly-logo.zip
+5b5ca8eb5f14ffba7dd16940ef22c7d25e299722bf868ba0f29836d2396ae2c0  333716  /press/anomaly/anomaly-logo-v2.zip
 9cba0d1d2108c8af4e22cc54cafcd8532101d6bbd2809ac18dd26ff1aaf615b3  5999115  /press-media/zips/opencode-desktop-media.zip
 abb8006a7c78f52db1f5536c0f99a25bfe9e29703eb09a336d753475576f3b30  7454565  /press-media/zips/opencode-mobile-media.zip
 a8a6aaa627d1ceeb57ff3f63c4b2e468027714719916d3460b37a6a838447fdd  9723829  /press-media/zips/opencode-sdk-media.zip

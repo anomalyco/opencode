@@ -247,7 +247,10 @@ function makeRoutes(
         HttpRouter.provideRequest(requestServices),
         Layer.merge(defectResponseLayer),
         Layer.provideMerge(services),
-        Layer.provideMerge(HttpRouter.layer),
+        // MCP server names are path parameters, and clients name servers longer than find-my-way's default 100 characters.
+        Layer.provideMerge(
+          HttpRouter.layer.pipe(Layer.provide(Layer.succeed(HttpRouter.RouterConfig)({ maxParamLength: 512 }))),
+        ),
         Layer.tap((context) =>
           Effect.sync(() => {
             internal = Context.get(context, HttpRouter.HttpRouter)

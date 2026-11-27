@@ -2402,7 +2402,7 @@ test("opening a session from the inbox keeps the list's scroll position and rows
   await expect(items).toHaveCount(10)
   await expect(items).toContainText(Array.from({ length: 10 }, (_, index) => `Inbox session ${23 - index}`))
   await expect(list.getByRole("group", { name: "Recent", exact: true })).toBeVisible()
-  await expect(list.getByText("Recent", { exact: true })).toHaveCount(0)
+  await expect(list.getByText("Recent", { exact: true })).toBeVisible()
   await list.evaluate((element) => element.scrollTo(0, element.scrollHeight))
   await expect(target).toBeInViewport({ ratio: 1 })
   // Git metadata must load for an unopened worktree, not only after selecting its session.
@@ -2813,7 +2813,12 @@ test("a working session finishing in the inbox shelf leaves the list where it wa
   await expect(recent).toHaveCount(12)
   expect(await list.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
 
-  // Open the first session, then move focus down the list to the working card without opening it.
+  // Open the first session, then move focus down the list to the working card without opening it. The card that
+  // opened the session hands focus to its composer once the session loads, so wait for that before going back to the
+  // list: otherwise the composer can take focus from the list partway through.
+  await recent.first().click()
+  await expectPath(page, sessionHref("ses_finish_read_00"))
+  await expect(page.locator('[data-component="composer-editor"]')).toBeFocused()
   await recent.first().click()
   await expectPath(page, sessionHref("ses_finish_read_00"))
   await expect(recent.first()).toBeFocused()
