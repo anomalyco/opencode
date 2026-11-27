@@ -192,21 +192,6 @@ export function UsageDialogContent(props: {
   const vendors = (list: readonly string[]) =>
     new Intl.ListFormat(language.intl(), { style: "long", type: "conjunction" }).format(list)
 
-  const duration = (until: number) => {
-    const minutes = Math.max(1, Math.floor((until - Date.now()) / 60_000))
-
-    if (minutes >= 1_440)
-      return language.t("usage.duration.days", {
-        days: Math.floor(minutes / 1_440),
-        hours: Math.floor((minutes % 1_440) / 60),
-      })
-
-    if (minutes >= 60)
-      return language.t("usage.duration.hours", { hours: Math.floor(minutes / 60), minutes: minutes % 60 })
-
-    return language.t("usage.duration.minutes", { minutes })
-  }
-
   const label = (value: BudgetLabel): string => {
     if (value.kind === "all") return language.t("usage.budget.all")
 
@@ -367,7 +352,7 @@ export function UsageDialogContent(props: {
                       <Divider />
                     </Show>
                     <GoItem row={row} used={language.t("usage.go.used", { percent: Math.round(row.percent) })}>
-                      {language.t("usage.go.resetsIn", { duration: duration(row.resetsAt) })}
+                      {language.t("usage.go.resetsIn", { duration: format.duration(row.resetsAt) })}
                     </GoItem>
                   </>
                 )}
@@ -557,7 +542,7 @@ function Spend(props: { status: string; reached: boolean; children: JSX.Element 
   )
 }
 
-function Track(props: { fill: number; reached: boolean }) {
+export function Track(props: { fill: number; reached: boolean }) {
   return (
     <div class="flex h-2 items-center self-stretch overflow-hidden rounded-[2px] bg-v2-background-bg-layer-03">
       <div

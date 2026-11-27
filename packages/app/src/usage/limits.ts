@@ -1,4 +1,4 @@
-import type { UsageLimitsBudget, UsageLimitsInfo } from "@opencode/client/promise"
+import type { UsageLimitsBudget, UsageLimitsGo, UsageLimitsInfo } from "@opencode/client/promise"
 
 /** The model the member is using, so a per-model budget shows this model's own counter. */
 export type CurrentModel = { readonly providerID: string; readonly modelID: string; readonly name: string }
@@ -87,11 +87,10 @@ export function usageView(
   const anyReached = budgets.some((entry) => entry.reached)
   const reachedModels = budgets.find((entry) => entry.reached && entry.budget.coverage === "models")
   const resetsAt = Math.min(...info.budgets.map((budget) => budget.resetsAt))
-  const go = info.go
   return {
     workspace: info.workspace.name,
     callout,
-    go: go && (["rolling", "weekly", "monthly"] as const).map((window) => ({ window, ...go[window] })),
+    go: info.go && goRows(info.go),
     budgets: budgets.map((entry, index) => ({
       id: entry.budget.id,
       label: label(entry.budget),
@@ -120,6 +119,29 @@ export function usageView(
         ? { kind: "credits-only" }
         : { kind: context.credits ? "budgets-reset" : "resets", resetsAt },
   }
+}
+
+/** The Go allowance's windows, shortest first. */
+export function goRows(go: UsageLimitsGo): readonly GoRow[] {
+  return (["rolling", "weekly", "monthly"] as const).map((window) => ({ window, ...go[window] }))
+}
+
+/** What the model picker's Go meter says: the highest window's percent, or when Go serves requests again. */
+export type GoMeter =
+  | { readonly kind: "used"; readonly percent: number }
+  | { readonly kind: "limited"; readonly resetsAt: number }
+
+/**
+ * The Go meter for the model picker. Go refuses requests until the last limited window resets. Otherwise the meter
+ * reads the highest window, so its label never switches between windows.
+ */
+export function goMeter(go: UsageLimitsGo): GoMeter {
+  const rows = goRows(go)
+  const limited = rows.filter((row) => row.limited)
+
+  if (limited.length > 0) return { kind: "limited", resetsAt: Math.max(...limited.map((row) => row.resetsAt)) }
+
+  return { kind: "used", percent: Math.max(...rows.map((row) => row.percent)) }
 }
 
 /** What the member's budgets leave for one model: the least any budget covering it has left. */

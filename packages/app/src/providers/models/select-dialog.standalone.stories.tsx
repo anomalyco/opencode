@@ -1,3 +1,4 @@
+import type { UsageLimitsInfo } from "@opencode/client/promise"
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { onMount } from "solid-js"
@@ -162,6 +163,22 @@ const consoleAccounts = (...labels: string[]) => [
   },
 ]
 
+// The workspace's Go allowance, its windows resetting in 2 hours, 4 days and 18 days.
+const goUsage = (percents: [number, number, number], limited = false): UsageLimitsInfo => {
+  const now = Date.now()
+  const window = (percent: number, hours: number) => ({
+    percent,
+    limited: limited && percent >= 100,
+    resetsAt: now + hours * 3_600_000,
+  })
+
+  return {
+    workspace: { id: "wrk_story", name: "Personal", usageURL: "https://opencode.ai/workspace/wrk_story/usage" },
+    go: { rolling: window(percents[0], 2), weekly: window(percents[1], 96), monthly: window(percents[2], 432) },
+    budgets: [],
+  }
+}
+
 const keyOf = (model: StoryModel) => `${model.provider.id}:${model.id}`
 
 function SelectorStory(props: {
@@ -290,6 +307,24 @@ export const Workspace = {
 export const WorkspaceOneAccount = {
   render: () => (
     <DialogStoryRuntime integrations={consoleAccounts("Personal")}>
+      <SelectorStory workspace />
+    </DialogStoryRuntime>
+  ),
+}
+
+/** The workspace's Go usage beside its accounts: the highest window, here the weekly one, names the meter. */
+export const WorkspaceGoUsage = {
+  render: () => (
+    <DialogStoryRuntime integrations={consoleAccounts("Personal", "Acme")} usageLimits={goUsage([35, 62, 41])}>
+      <SelectorStory workspace />
+    </DialogStoryRuntime>
+  ),
+}
+
+/** Go's 5-hour limit is reached: the meter says when Go serves requests again. */
+export const WorkspaceGoLimited = {
+  render: () => (
+    <DialogStoryRuntime integrations={consoleAccounts("Personal")} usageLimits={goUsage([100, 78, 52], true)}>
       <SelectorStory workspace />
     </DialogStoryRuntime>
   ),

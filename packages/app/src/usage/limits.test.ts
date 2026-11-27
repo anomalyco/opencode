@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { UsageLimitsBudget, UsageLimitsInfo } from "@opencode/client/promise"
-import { modelUsage, usageView } from "./limits"
+import { goMeter, goRows, modelUsage, usageView } from "./limits"
 
 const RESET = Date.UTC(2026, 10, 1)
 
@@ -137,5 +137,24 @@ describe("usageView", () => {
     expect(view.callout).toEqual({ kind: "credits" })
     expect(view.footer).toEqual({ kind: "budgets-reset", resetsAt: RESET })
     expect(usageView(info(), { credits: true }).footer).toEqual({ kind: "credits-only" })
+  })
+})
+
+describe("goMeter", () => {
+  const meter = (percent: number, limited = false, resetsAt = RESET) => ({ percent, limited, resetsAt })
+
+  test("reads the highest window, whichever it is", () => {
+    const go = { rolling: meter(10), weekly: meter(62), monthly: meter(40) }
+    expect(goRows(go).map((row) => row.window)).toEqual(["rolling", "weekly", "monthly"])
+    expect(goMeter(go)).toEqual({ kind: "used", percent: 62 })
+    expect(goMeter({ ...go, rolling: meter(80) })).toEqual({ kind: "used", percent: 80 })
+  })
+
+  test("a limited window holds requests until the last limited window resets", () => {
+    const later = RESET + 86_400_000
+    expect(goMeter({ rolling: meter(100, true), weekly: meter(100, true, later), monthly: meter(40) })).toEqual({
+      kind: "limited",
+      resetsAt: later,
+    })
   })
 })

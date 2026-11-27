@@ -33,6 +33,23 @@ export function useUsageFormat() {
             .zone.formatToParts(at)
             .find((part) => part.type === "timeZoneName")?.value ?? "",
       }),
+    /** How long until a reset, to the minute. */
+    duration: (until: number) => {
+      const minutes = Math.max(1, Math.floor((until - Date.now()) / 60_000))
+
+      if (minutes >= 1_440)
+        return language.t("usage.duration.days", {
+          days: Math.floor(minutes / 1_440),
+          hours: Math.floor((minutes % 1_440) / 60),
+        })
+
+      if (minutes >= 60)
+        return language.t("usage.duration.hours", { hours: Math.floor(minutes / 60), minutes: minutes % 60 })
+
+      return language.t("usage.duration.minutes", { minutes })
+    },
+    /** A reset time within the next day, as a time of day alone. */
+    clock: (at: number) => (at - Date.now() < 86_400_000 ? formats().time : formats().short).format(at),
     /** A reset time where there is no room for its time zone. */
     shortTime: (at: number) => formats().short.format(at),
   }

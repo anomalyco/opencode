@@ -1,0 +1,60 @@
+[data-slot="go-meter-trigger"] {
+  display: inline-flex;
+  min-width: 0;
+  height: 20px;
+  align-items: center;
+  gap: 6px;
+  padding-inline: 8px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--v2-text-text-muted);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  cursor: default;
+
+  &:hover,
+  &[data-expanded] {
+    background: var(--v2-overlay-simple-overlay-hover);
+  }
+
+  /* Inset, so the ring clears the row below. */
+  &:focus-visible {
+    outline-offset: -2px;
+  }
+
+  &[data-state="limited"] {
+    color: var(--v2-state-fg-danger);
+  }
+}
+
+/* Square-ended lines: the 5-hour dashes over the solid weekly line. */
+[data-slot="go-meter-bars"] {
+  display: block;
+  flex: none;
+  shape-rendering: crispEdges;
+}
+
+[data-slot="go-meter-dash"] {
+  fill: var(--v2-background-bg-layer-04);
+
+  &[data-filled] {
+    fill: var(--v2-background-bg-inverse);
+  }
+
+  [data-limited] > &[data-filled] {
+    fill: var(--v2-state-fg-danger);
+  }
+}
+
+/* Wider than the shared menu's 160px minimum, so each window's bar has room. */
+[data-component="menu-v2-content"][data-slot="go-meter-popover"] {
+  min-width: 288px;
+  /* The Usage dialog's reached colour, for the windows' bars and percents. */
+  --usage-reached: var(--v2-red-900);
+}
+
+[data-color-scheme="dark"] [data-component="menu-v2-content"][data-slot="go-meter-popover"] {
+  --usage-reached: var(--v2-state-fg-danger);
+}
