@@ -192,6 +192,97 @@ export function modelBadge(
   return level === "low" || level === "out" ? { kind: "left", left: usage.left } : undefined
 }
 
+/** Why the selected model can't run, which the composer gives way to. */
+export type UsageBlock =
+  | { readonly kind: "go"; readonly window?: GoRow["window"]; readonly resetsAt?: number }
+  | { readonly kind: "model" | "workspace"; readonly resetsAt?: number }
+  | { readonly kind: "credits" }
+
+/** A failed step as it is kept on the session's last assistant message. */
+export type UsageRefusal = {
+  readonly model: { readonly providerID: string; readonly id: string }
+  readonly time: { readonly created: number; readonly completed?: number }
+  readonly error?: {
+    readonly type: string
+    readonly status?: number
+    readonly retryAfterMs?: number
+    readonly response?: { readonly body: string }
+  }
+}
+
+// A refusal that doesn't say when it resets holds this long, so the composer comes back to try again.
+const UNKNOWN_RESET_HOLD_MS = 3_600_000
+
+/**
+ * Whether the selected model is out, from the session's last refusal for this model or from the usage limits. A refusal
+ * holds until it resets or the model changes; usage limits catch a model that is out before anything is sent. A Go
+ * window at its limit blocks nothing until Console refuses: with Extra Usage on, Go keeps serving on credits, and the
+ * limits don't say whether it is on.
+ */
+export function usageBlock(input: {
+  readonly model: LimitedModel | undefined
+  readonly free: boolean
+  readonly info: UsageLimitsInfo | null | undefined
+  readonly last?: UsageRefusal
+  readonly now: number
+}): UsageBlock | undefined {
+  const model = input.model
+  if (!model) return undefined
+  return (
+    refusalBlock(model, input.last, input.now) ?? (input.free ? undefined : limitsBlock(model, input.info, input.now))
+  )
+}
+
+function refusalBlock(model: LimitedModel, last: UsageRefusal | undefined, now: number): UsageBlock | undefined {
+  const error = last?.error
+  if (!last || !error || last.model.providerID !== model.provider.id || last.model.id !== model.id) return undefined
+  const body = error.response?.body ?? ""
+  const refused = last.time.completed ?? last.time.created
+  const resetsAt = refusalReset(body) ?? retryReset(error.retryAfterMs, refused)
+  if ((resetsAt ?? refused + UNKNOWN_RESET_HOLD_MS) <= now) return undefined
+  if (error.type === "provider.go-limit") return { kind: "go", window: goWindow(body), resetsAt }
+  if (error.type === "provider.model-budget-limit") return { kind: "model", resetsAt }
+  if (error.type === "provider.budget-limit") return { kind: "workspace", resetsAt }
+  // OpenCode Console refuses with 402 only when the workspace can't pay.
+  if (error.status === 402 && servedByConsole(model)) return { kind: "credits" }
+  return undefined
+}
+
+function limitsBlock(
+  model: LimitedModel,
+  info: UsageLimitsInfo | null | undefined,
+  now: number,
+): UsageBlock | undefined {
+  if (!info) return undefined
+  const usage = modelUsage(info, model)
+  if (!usage?.reached || usage.resetsAt <= now) return undefined
+  const blocking = servedByConsole(model)
+    ? info.budgets.find((budget) => budget.coverage === "all" && budget.spent >= budget.limit)
+    : undefined
+  return blocking ? { kind: "workspace", resetsAt: blocking.resetsAt } : { kind: "model", resetsAt: usage.resetsAt }
+}
+
+/** OpenCode Console names the reset `resetsAt` in every protocol's error envelope. */
+function refusalReset(body: string) {
+  const at = Date.parse(/"resetsAt"\s*:\s*"([^"]+)"/.exec(body)?.[1] ?? "")
+  return Number.isNaN(at) ? undefined : at
+}
+
+/** A `retry-after` counted from the refusal; nothing past 45 days, as a bad header. */
+function retryReset(delay: number | undefined, base: number) {
+  if (delay === undefined || !Number.isFinite(delay) || delay < 0 || delay > 45 * 86_400_000) return undefined
+  return base + delay
+}
+
+/** Which Go limit refused a request, as OpenCode Console names it in the metadata ("5 hour", "weekly", "monthly"). */
+function goWindow(body: string): GoRow["window"] | undefined {
+  const name = /"limitName"\s*:\s*"([^"]+)"/.exec(body)?.[1]
+  if (!name) return undefined
+  if (/week/i.test(name)) return "weekly"
+  if (/month/i.test(name)) return "monthly"
+  return "rolling"
+}
+
 /** The spend a budget's cap compares against: a per-model budget's counter for the current model, when it covers it. */
 function spend(budget: UsageLimitsBudget, model: CurrentModel | undefined) {
   const current =

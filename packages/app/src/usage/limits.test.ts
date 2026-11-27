@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { UsageLimitsBudget, UsageLimitsInfo } from "@opencode/client/promise"
-import { modelBadge, modelUsage, usageLevel, usageView } from "./limits"
+import { modelBadge, modelUsage, usageBlock, usageLevel, usageView } from "./limits"
 
 const RESET = Date.UTC(2026, 10, 1)
 
@@ -174,5 +174,91 @@ describe("modelBadge", () => {
     expect(modelBadge(opusModel, { free: false, info: info(budget({ id: "all", spent: 100 })) })).toBeUndefined()
     const direct = { ...opusModel, provider: { id: "anthropic" } }
     expect(modelBadge(direct, { free: false, info: info(budget({ id: "all", spent: 98 })) })).toBeUndefined()
+  })
+})
+
+describe("usageBlock", () => {
+  const now = RESET - 86_400_000
+
+  test("reads a reached budget from the usage limits, but not a Go window", () => {
+    expect(usageBlock({ model: opusModel, free: false, info: info(budget({ id: "all", spent: 100 })), now })).toEqual({
+      kind: "workspace",
+      resetsAt: RESET,
+    })
+    const perModel = budget({
+      id: "anthropic",
+      coverage: "models",
+      per: "model",
+      limit: 50,
+      models: [{ ...opus, spent: 50 }],
+    })
+    expect(usageBlock({ model: opusModel, free: false, info: info(perModel), now })).toEqual({
+      kind: "model",
+      resetsAt: RESET,
+    })
+    expect(usageBlock({ model: opusModel, free: false, info: info(perModel), now: RESET })).toBeUndefined()
+    expect(usageBlock({ model: opusModel, free: true, info: info(perModel), now })).toBeUndefined()
+
+    const goModel = { ...opusModel, id: "glm-5", provider: { id: "opencode-go", integrationID: "opencode" } }
+    const limited = {
+      ...info(),
+      go: {
+        rolling: { percent: 100, limited: true, resetsAt: now + 3_600_000 },
+        weekly: { percent: 100, limited: true, resetsAt: now + 3 * 86_400_000 },
+        monthly: { percent: 60, limited: false, resetsAt: RESET },
+      },
+    }
+    expect(usageBlock({ model: goModel, free: false, info: limited, now })).toBeUndefined()
+    const refused = {
+      model: { providerID: "opencode-go", id: "glm-5" },
+      time: { created: now },
+      error: {
+        type: "provider.go-limit",
+        retryAfterMs: 3_600_000,
+        response: { body: JSON.stringify({ metadata: { limitName: "5 hour" } }) },
+      },
+    }
+    expect(usageBlock({ model: goModel, free: false, info: limited, last: refused, now })).toEqual({
+      kind: "go",
+      window: "rolling",
+      resetsAt: now + 3_600_000,
+    })
+    // A direct provider is never limited by the workspace.
+    const direct = { ...opusModel, provider: { id: "anthropic" } }
+    expect(
+      usageBlock({ model: direct, free: false, info: info(budget({ id: "all", spent: 100 })), now }),
+    ).toBeUndefined()
+  })
+
+  test("holds a refusal for the model that was refused, until it resets", () => {
+    const last = {
+      model: { providerID: "opencode", id: "claude-opus-5" },
+      time: { created: now },
+      error: {
+        type: "provider.go-limit",
+        retryAfterMs: 3_600_000,
+        response: { body: JSON.stringify({ metadata: { limitName: "weekly" } }) },
+      },
+    }
+    expect(usageBlock({ model: opusModel, free: false, info: undefined, last, now })).toEqual({
+      kind: "go",
+      window: "weekly",
+      resetsAt: now + 3_600_000,
+    })
+    expect(usageBlock({ model: opusModel, free: false, info: undefined, last, now: now + 3_600_000 })).toBeUndefined()
+    const other = { ...opusModel, id: "claude-sonnet-5" }
+    expect(usageBlock({ model: other, free: false, info: undefined, last, now })).toBeUndefined()
+
+    // A refusal that doesn't say when it resets holds for an hour.
+    const credits = { ...last, error: { type: "provider.quota", status: 402 } }
+    expect(usageBlock({ model: opusModel, free: false, info: undefined, last: credits, now })).toEqual({
+      kind: "credits",
+    })
+    expect(
+      usageBlock({ model: opusModel, free: false, info: undefined, last: credits, now: now + 3_600_000 }),
+    ).toBeUndefined()
+    const direct = { ...opusModel, provider: { id: "anthropic" } }
+    const directCredits = { ...credits, model: { providerID: "anthropic", id: "claude-opus-5" } }
+    expect(usageBlock({ model: direct, free: false, info: undefined, last: directCredits, now })).toBeUndefined()
   })
 })

@@ -38,8 +38,8 @@ import { useSessionFork } from "../fork"
 import { SessionComposerRegion } from "./session-composer-region"
 import { createSessionComposerController, type SessionComposerController } from "./controller"
 import { SessionQueuePanel } from "./queue-panel"
-import { SessionGoLimitTray } from "./go-limit-tray"
 import { SessionFreeLimitPanel, useFreeLimit } from "./free-limit-panel"
+import { SessionUsageBlockPanel, useUsageBlock } from "./limit-panel"
 import { reuseActivityItems, SessionActivityChips, type SessionActivityItem } from "./activity-chips"
 import { SessionComposerLane, useComposerLaneAlignment } from "./composer-lane"
 import { SessionTodoPill } from "./todo-pill"
@@ -440,6 +440,7 @@ export function ActiveSessionComposerRegion(props: {
   const server = useServerSDK()
   const language = useLanguage()
   const openRoute = useOpenSessionRoute()
+  const command = useCommand()
 
   // Only the server's LocationNotFoundError for the session's own Location replaces the composer.
   // A refetched session info (on reconnect) must not remount the keyed view and close its open menu.
@@ -600,6 +601,13 @@ export function ActiveSessionComposerRegion(props: {
   }
 
   const freeLimit = useFreeLimit(() => props.model.composer.model.paid)
+  // The refusal is kept on the session's last assistant message, so the panel comes back after a reload.
+  const lastAssistant = createMemo(() => {
+    const message = props.session.history.messages().findLast((item) => item.type === "assistant")
+
+    return message?.type === "assistant" ? message : undefined
+  })
+  const usageBlock = useUsageBlock({ selection: () => props.model.composer.model.selection, last: lastAssistant })
 
   return (
     <SessionComposerRegion
@@ -640,10 +648,6 @@ export function ActiveSessionComposerRegion(props: {
             <SessionPluginPills session={props.view()} screen={props.screen} alignment={alignment} />
           </SessionComposerLane>
           <SessionQueuePanel queue={props.model.queue} hidden={props.model.region.state.blocked()} />
-          <SessionGoLimitTray
-            sessionID={props.session.identity.params.id}
-            selection={() => props.model.composer.model.selection}
-          />
         </Show>
       }
       composer={
@@ -663,14 +667,28 @@ export function ActiveSessionComposerRegion(props: {
                   />
                 }
               >
-                <VoiceComposer session={props.session.data.info()}>
-                  <Composer
-                    model={props.model.composer}
-                    borderUnderlay
-                    readOnly={props.model.queue.undoing()}
-                    suggestionBoundary={props.suggestionBoundary}
-                  />
-                </VoiceComposer>
+                {/* A running turn keeps the composer for its stop button; a refusal ends the turn. */}
+                <Show
+                  when={!props.session.data.working() && usageBlock()}
+                  fallback={
+                    <VoiceComposer session={props.session.data.info()}>
+                      <Composer
+                        model={props.model.composer}
+                        borderUnderlay
+                        readOnly={props.model.queue.undoing()}
+                        suggestionBoundary={props.suggestionBoundary}
+                      />
+                    </VoiceComposer>
+                  }
+                >
+                  {(block) => (
+                    <SessionUsageBlockPanel
+                      block={block()}
+                      model={props.model.composer.model.selection.current()?.name ?? ""}
+                      onChangeModel={() => command.trigger("model.choose")}
+                    />
+                  )}
+                </Show>
               </Show>
             </div>
           }

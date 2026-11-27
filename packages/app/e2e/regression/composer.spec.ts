@@ -376,119 +376,109 @@ test("the free usage limit opens the Go dialog once, swaps the composer for the 
   await expect(view.editor).toHaveText("")
 })
 
-for (const action of ["tray", "picker"] as const) {
-  test(`the Go usage limit restores the prompt and dismisses the tray when switching models through the ${action}`, async ({
-    page,
-    context,
-  }) => {
-    await page.clock.setFixedTime(T0)
-    await context.route("https://opencode.ai/**", (route) => route.fulfill({ body: "Go" }))
-    const sessionID = "ses_go_limit"
-    const model = { id: "glm-5-go", providerID: "opencode-go" }
+test("the Go usage limit replaces the composer until another model is chosen, keeping the prompt", async ({ page }) => {
+  await page.clock.setFixedTime(T0)
+  const sessionID = "ses_go_limit"
+  const model = { id: "glm-5-go", providerID: "opencode-go" }
 
-    const view = await openSession(page, {
-      name: "GoLimit",
-      sessions: [{ id: sessionID, agent: "build", model }],
-      onFileWrite: () => undefined,
-      provider: () => ({
-        all: [
-          {
-            id: "opencode",
-            name: "OpenCode",
-            models: {
-              "big-pickle": {
-                id: "big-pickle",
-                name: "Big Pickle",
-                cost: { input: 0, output: 0 },
-                limit: { context: 200_000 },
-              },
+  const view = await openSession(page, {
+    name: "GoLimit",
+    sessions: [{ id: sessionID, agent: "build", model }],
+    onFileWrite: () => undefined,
+    provider: () => ({
+      all: [
+        {
+          id: "opencode",
+          name: "OpenCode",
+          models: {
+            "big-pickle": {
+              id: "big-pickle",
+              name: "Big Pickle",
+              cost: { input: 0, output: 0 },
+              limit: { context: 200_000 },
             },
-          },
-          {
-            id: "opencode-go",
-            name: "OpenCode Go",
-            models: {
-              "glm-5-go": {
-                id: "glm-5-go",
-                name: "GLM-5 Go",
-                cost: { input: 1, output: 1 },
-                limit: { context: 200_000 },
-              },
-            },
-          },
-        ],
-        connected: ["opencode", "opencode-go"],
-        default: { build: "opencode-go/glm-5-go" },
-      }),
-      pageMessages: () => ({
-        items: [
-          { id: "msg_go_user", type: "user", text: "Refactor the parser", time: { created: T0 } },
-          { id: "msg_go_assistant", type: "assistant", agent: "build", model, content: [], time: { created: T0 + 1 } },
-        ],
-      }),
-    })
-
-    await expect(page.getByText("Refactor the parser", { exact: true })).toBeVisible()
-    // Loading the selected model clears the tray, just like switching models does.
-    const modelButton = page.locator('[data-action="composer-model"]')
-    await expect(modelButton).toContainText("GLM-5 Go")
-
-    // The refusal OpenCode Console sends a Go subscriber at a limit, as core records it.
-    const body = {
-      type: "error",
-      error: { type: "GoUsageLimitError", message: "Go usage limit exceeded" },
-      metadata: { workspace: "wrk_go_limit", limitName: "5 hour" },
-    }
-
-    await view.push([
-      {
-        id: "evt_go_limit_1",
-        created: T0 + 2,
-        type: "session.step.failed",
-        location: { directory: view.directory },
-        durable: { aggregateID: sessionID, seq: 1, version: 1 },
-        data: {
-          sessionID,
-          assistantMessageID: "msg_go_assistant",
-          error: {
-            type: "provider.go-limit",
-            message: "OpenCode Go 5 hour usage limit reached.",
-            status: 429,
-            response: { body: JSON.stringify(body) },
-            retryAfterMs: 3_600_000,
           },
         },
-      },
-    ])
-
-    const tray = page.locator('[data-component="session-go-limit-tray"]')
-    await expect(tray).toContainText(/Go 5 hour usage limit reached\. It resets at .+?\./)
-    await expect(
-      page.getByRole("status").filter({ hasText: /^You've reached your OpenCode Go usage limit\. It resets at / }),
-    ).toBeVisible()
-    await expect(view.editor).toHaveText("Refactor the parser")
-    await expect(page.getByText("OpenCode Go 5 hour usage limit reached.")).toHaveCount(0)
-    await expect(page.getByRole("dialog")).toHaveCount(0)
-
-    // Extra Usage is turned on from the workspace's Go page in OpenCode Console.
-    const popup = page.waitForEvent("popup")
-    await tray.getByRole("button", { name: "Turn on Extra Usage", exact: true }).click()
-    await expect(await popup).toHaveURL("https://opencode.ai/console/wrk_go_limit/go")
-
-    if (action === "tray") await tray.getByRole("button", { name: "Switch to a free model", exact: true }).click()
-
-    if (action === "picker") {
-      await modelButton.click()
-      const picker = page.getByRole("dialog", { name: "Select model", exact: true })
-      await picker.getByRole("combobox", { name: "Search models", exact: true }).fill("Big Pickle")
-      await picker.getByRole("option", { name: /Big Pickle/ }).click()
-    }
-
-    await expect(modelButton).toContainText("Big Pickle")
-    await expect(tray).toHaveCount(0)
-    await expect(view.editor).toHaveText("Refactor the parser")
+        {
+          id: "opencode-go",
+          name: "OpenCode Go",
+          models: {
+            "glm-5-go": {
+              id: "glm-5-go",
+              name: "GLM-5 Go",
+              cost: { input: 1, output: 1 },
+              limit: { context: 200_000 },
+            },
+          },
+        },
+      ],
+      connected: ["opencode", "opencode-go"],
+      default: { build: "opencode-go/glm-5-go" },
+    }),
+    pageMessages: () => ({
+      items: [
+        { id: "msg_go_user", type: "user", text: "Refactor the parser", time: { created: T0 } },
+        { id: "msg_go_assistant", type: "assistant", agent: "build", model, content: [], time: { created: T0 + 1 } },
+      ],
+    }),
   })
-}
+
+  await expect(page.getByText("Refactor the parser", { exact: true })).toBeVisible()
+  const modelButton = page.locator('[data-action="composer-model"]')
+  await expect(modelButton).toContainText("GLM-5 Go")
+
+  // The refusal OpenCode Console sends a Go subscriber at a limit, as core records it.
+  const body = {
+    type: "error",
+    error: { type: "GoUsageLimitError", message: "Go usage limit exceeded" },
+    metadata: { workspace: "wrk_go_limit", limitName: "5 hour" },
+  }
+
+  await view.push([
+    {
+      id: "evt_go_limit_1",
+      created: T0 + 2,
+      type: "session.step.failed",
+      location: { directory: view.directory },
+      durable: { aggregateID: sessionID, seq: 1, version: 1 },
+      data: {
+        sessionID,
+        assistantMessageID: "msg_go_assistant",
+        error: {
+          type: "provider.go-limit",
+          message: "OpenCode Go 5 hour usage limit reached.",
+          status: 429,
+          response: { body: JSON.stringify(body) },
+          retryAfterMs: 3_600_000,
+        },
+      },
+    },
+  ])
+
+  const panel = page.locator('[data-component="session-usage-block-go"]')
+  await expect(panel).toContainText("Go usage limit reached")
+  await expect(panel).toContainText(/Your 5-hour limit resets at .+?\./)
+  await expect(
+    page.getByRole("status").filter({ hasText: /^You've reached your OpenCode Go usage limit\. It resets at / }),
+  ).toBeVisible()
+  await expect(view.editor).toHaveCount(0)
+  await expect(page.getByText("OpenCode Go 5 hour usage limit reached.")).toHaveCount(0)
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  // The composer had focus, so it passes to the panel's one action.
+  const change = panel.getByRole("button", { name: "Change model", exact: true })
+  await expect(panel.getByRole("button")).toHaveCount(1)
+  await expect(change).toBeFocused()
+
+  await change.click()
+  const picker = page.getByRole("dialog", { name: "Select model", exact: true })
+  await picker.getByRole("combobox", { name: "Search models", exact: true }).fill("Big Pickle")
+  await picker.getByRole("option", { name: /Big Pickle/ }).click()
+
+  await expect(panel).toHaveCount(0)
+  await expect(modelButton).toContainText("Big Pickle")
+  await expect(view.editor).toHaveText("Refactor the parser")
+  await expect(view.editor).toBeFocused()
+})
 
 test("ChatGPT's usage limit opens the ChatGPT usage dialog", async ({ page }) => {
   await page.clock.setFixedTime(T0)
