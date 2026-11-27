@@ -3,6 +3,7 @@ import path from "node:path"
 import { expect } from "bun:test"
 import { UsageLimits } from "@opencode/core/usage-limits"
 import { Money } from "@opencode/schema/money"
+import { Provider } from "@opencode/schema/provider"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Effect, Layer } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
@@ -43,6 +44,7 @@ const request = (get: UsageLimits.Interface["get"]) =>
 it.live("returns the usage limits of the OpenCode Console workspace a location is signed in to", () =>
   Effect.gen(function* () {
     const limits: UsageLimits.Info = {
+      allowances: [],
       workspace: { id: "wrk_anomaly", usageURL: "https://opencode.ai/console/wrk_anomaly/activity/overview" },
       budgets: [
         {
@@ -67,7 +69,28 @@ it.live("returns the usage limits of the OpenCode Console workspace a location i
   }),
 )
 
-it.live("returns null for a location that isn't signed in to OpenCode Console", () =>
+it.live("returns subscription windows without a Console workspace", () =>
+  Effect.gen(function* () {
+    const limits = {
+      unavailable: [Provider.ID.opencode],
+      allowances: [
+        {
+          providerID: Provider.ID.openai,
+          name: "OpenAI",
+          windows: [
+            { id: "codex-primary", percent: 18, limited: false, resetsAt: 1793491200000, windowSeconds: 18000 },
+          ],
+        },
+      ],
+      budgets: [],
+    }
+    const result = yield* request(() => Effect.succeed(limits))
+    expect(result.status).toBe(200)
+    expect(result.body.data).toEqual(limits)
+  }),
+)
+
+it.live("returns null when no usage data is available", () =>
   Effect.gen(function* () {
     const result = yield* request(() => Effect.succeed(undefined))
 

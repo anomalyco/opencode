@@ -140,6 +140,7 @@ export const server = {
   ],
   "/api/experimental/usage/limits": {
     workspace: { id: "wrk_1", name: "Acme", usageURL: "https://opencode.ai/console/wrk_1/usage" },
+    allowances: [],
     budgets: [
       budget("all", {}),
       budget("sonnet", {

@@ -1988,6 +1988,7 @@ export type ConfigInfoEncoded = {
         portable_shell_scanner: boolean?,
         codemode_vm: boolean?,
         all_flags: boolean?,
+        openai_usage: boolean?,
         todo: boolean?,
         media_blob: boolean?,
         artifacts: boolean?,
@@ -4600,6 +4601,14 @@ export type TuiToastShow = _Event1<"tui.toast.show", {
     duration: number?,
 }>
 
+export type UsageLimitsAllowance = {
+    providerID: ProviderID,
+    name: string,
+    usageURL: string?,
+    plan: string?,
+    windows: { UsageLimitsWindow },
+}
+
 export type UsageLimitsBudget = {
     id: string,
     limit: MoneyUSD,
@@ -4622,23 +4631,21 @@ export type UsageLimitsBudgetModel = {
     spent: MoneyUSD?,
 }
 
-export type UsageLimitsGo = {
-    rolling: UsageLimitsMeter,
-    weekly: UsageLimitsMeter,
-    monthly: UsageLimitsMeter,
-}
-
 export type UsageLimitsInfo = {
     workspace: {
         id: string,
         name: string?,
         usageURL: string,
-    },
-    go: UsageLimitsGo?,
+    }?,
+    allowances: { UsageLimitsAllowance },
+    unavailable: { ProviderID }?,
     budgets: { UsageLimitsBudget },
 }
 
-export type UsageLimitsMeter = {
+export type UsageLimitsWindow = {
+    id: string,
+    name: string?,
+    windowSeconds: number?,
     percent: number,
     limited: boolean,
     resetsAt: number,

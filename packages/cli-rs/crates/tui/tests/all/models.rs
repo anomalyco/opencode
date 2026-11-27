@@ -239,6 +239,19 @@ fn usage_dialogs_match_typescript() {
     support::wait_fixture(&kit.app, "E.16/usage-model");
 }
 
+#[test]
+fn usage_distinguishes_unavailable_console_from_signed_out() {
+    let mut server = Arc::into_inner(Server::new()).unwrap();
+    server.routes["/api/experimental/usage/limits"] = json!({
+        "allowances": [{"providerID":"openai","name":"OpenAI","windows":[]}],
+        "budgets": [],
+        "unavailable": ["opencode"]
+    });
+    let kit = kit_with(90, 34, Arc::new(server));
+    usage::show(&kit.local);
+    kit.wait_for("OpenCode Console usage could not be loaded");
+}
+
 /// A limit on whole vendors names them as a list, and its price floor in dollars.
 #[test]
 fn a_vendor_limit_names_its_vendors_and_its_price_floor() {

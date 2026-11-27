@@ -22,7 +22,7 @@ pub fn show(local: &Rc<Local>, model: ModelInfo) {
                 return layout(cx, &head, &body, None);
             };
             let short = matches!(level(&usage, &model), Level::Out | Level::Reached);
-            let workspace = local.usage().flatten().and_then(|info| info.workspace.name);
+            let workspace = local.usage().flatten().and_then(|info| info.workspace?.name);
             let summary = View::new(app)
                 .child(
                     &Text::new(app, format!("{} remaining", format_dollars(usage.left)))

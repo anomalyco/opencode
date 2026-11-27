@@ -51,7 +51,7 @@ export function useUsageLimits() {
     served: (providerID: string) => servedByConsole(providers().get(providerID)),
     /** A paid model OpenCode Console serves without any limit on it. */
     unlimited: (model: ModelInfo) =>
-      Boolean(info()) &&
+      Boolean(info()?.workspace) &&
       servedByConsole(providers().get(model.providerID)) &&
       !model.cost.every((cost) => cost.input === 0) &&
       usage(model) === undefined,
@@ -90,12 +90,12 @@ export function DialogUsage() {
 
   return (
     <Switch>
-      <Match when={limits.info()}>
+      <Match when={limits.info()?.workspace}>
         {(info) => (
           <DialogSelect
             title="Usage"
             description={[
-              info().workspace.name ? `Workspace: ${info().workspace.name}` : undefined,
+              info().name ? `Workspace: ${info().name}` : undefined,
               rows().length > 0 ? `Resets ${formatReset(resets())}` : undefined,
             ]
               .filter(Boolean)
@@ -119,10 +119,12 @@ export function DialogUsage() {
           />
         )}
       </Match>
-      <Match when={limits.info() === null}>
+      <Match when={limits.info() !== undefined}>
         <DialogLayout header={<DialogHeader title="Usage" />}>
           <text fg={theme.text.muted} wrapMode="word">
-            Sign in to OpenCode Console with /connect to see your workspace's usage limits.
+            {limits.info()?.unavailable?.includes("opencode")
+              ? "OpenCode Console usage could not be loaded. Reopen /usage to retry."
+              : "Sign in to OpenCode Console with /connect to see your workspace's usage limits."}
           </text>
         </DialogLayout>
       </Match>
@@ -146,7 +148,7 @@ export function DialogUsageModel(props: { model: ModelInfo }) {
     const level = usageLevel(value, props.model)
     return level === "out" || level === "reached"
   }
-  const workspace = () => limits.info()?.workspace.name
+  const workspace = () => limits.info()?.workspace?.name
 
   return (
     <DialogLayout
@@ -281,7 +283,7 @@ export function useLimitNotice(message: () => SessionMessageAssistant) {
       }
     if (error.status === 402 && limits.served(value.model.providerID))
       return {
-        title: `${limits.info()?.workspace.name ?? "Your workspace"} is out of credits`,
+        title: `${limits.info()?.workspace?.name ?? "Your workspace"} is out of credits`,
         body: "Paid models are paused until an admin adds credits in OpenCode Console.",
       }
     return undefined

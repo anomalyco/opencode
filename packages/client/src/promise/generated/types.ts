@@ -417,7 +417,14 @@ export type WebSearchID = string
 
 export type WebSearchResult = { url: string; title?: string; content?: string; time: { published?: number } }
 
-export type UsageLimitsMeter = { percent: number; limited: boolean; resetsAt: number }
+export type UsageLimitsWindow = {
+  id: string
+  name?: string
+  windowSeconds?: number
+  percent: number
+  limited: boolean
+  resetsAt: number
+}
 
 export type McpProtocol = "legacy" | "auto" | "2026-07-28"
 
@@ -1085,7 +1092,13 @@ export type VcsInfo = { provider?: string; branch: VcsBranch }
 
 export type WebSearchProvider = { id: WebSearchID; name: string }
 
-export type UsageLimitsGo = { rolling: UsageLimitsMeter; weekly: UsageLimitsMeter; monthly: UsageLimitsMeter }
+export type UsageLimitsAllowance = {
+  providerID: ProviderID
+  name: string
+  usageURL?: string
+  plan?: string
+  windows: Array<UsageLimitsWindow>
+}
 
 export type ConfigModelCapabilities = {
   tools?: boolean
@@ -2769,6 +2782,7 @@ export type ConfigEntry =
           portable_shell_scanner?: boolean
           codemode_vm?: boolean
           all_flags?: boolean
+          openai_usage?: boolean
           todo?: boolean
           media_blob?: boolean
           artifacts?: boolean
@@ -2810,8 +2824,9 @@ export type ConfigEntry =
 export type AutomationAction = AutomationActionPrompt | AutomationActionCode | AutomationActionShell
 
 export type UsageLimitsInfo = {
-  workspace: { id: string; name?: string; usageURL: string }
-  go?: UsageLimitsGo
+  workspace?: { id: string; name?: string; usageURL: string }
+  allowances: Array<UsageLimitsAllowance>
+  unavailable?: Array<ProviderID>
   budgets: Array<UsageLimitsBudget>
 }
 

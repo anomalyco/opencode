@@ -17436,7 +17436,7 @@
             }
           }
         },
-        "description": "Return the OpenCode Go allowance and Console budgets of the OpenCode Console workspace the location is signed in to, or null when it isn't signed in.",
+        "description": "Experimental: may change without compatibility guarantees. Return subscription allowances and Console budgets for this location, or null when no usage data is available.",
         "summary": "Get usage limits"
       }
     },
@@ -19011,6 +19011,9 @@
                 "type": "boolean"
               },
               "all_flags": {
+                "type": "boolean"
+              },
+              "openai_usage": {
                 "type": "boolean"
               },
               "todo": {
@@ -27956,6 +27959,31 @@
         "required": ["_tag", "providerID", "modelID", "capability", "message"],
         "additionalProperties": false
       },
+      "UsageLimits.Allowance": {
+        "type": "object",
+        "properties": {
+          "providerID": {
+            "$ref": "#/components/schemas/Provider.ID"
+          },
+          "name": {
+            "type": "string"
+          },
+          "usageURL": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageLimits.Window"
+            }
+          }
+        },
+        "required": ["providerID", "name", "windows"],
+        "additionalProperties": false
+      },
       "UsageLimits.Budget": {
         "type": "object",
         "properties": {
@@ -28040,22 +28068,6 @@
         "required": ["providerID", "modelID", "name"],
         "additionalProperties": false
       },
-      "UsageLimits.Go": {
-        "type": "object",
-        "properties": {
-          "rolling": {
-            "$ref": "#/components/schemas/UsageLimits.Meter"
-          },
-          "weekly": {
-            "$ref": "#/components/schemas/UsageLimits.Meter"
-          },
-          "monthly": {
-            "$ref": "#/components/schemas/UsageLimits.Meter"
-          }
-        },
-        "required": ["rolling", "weekly", "monthly"],
-        "additionalProperties": false
-      },
       "UsageLimits.Info": {
         "type": "object",
         "properties": {
@@ -28075,8 +28087,17 @@
             "required": ["id", "usageURL"],
             "additionalProperties": false
           },
-          "go": {
-            "$ref": "#/components/schemas/UsageLimits.Go"
+          "allowances": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageLimits.Allowance"
+            }
+          },
+          "unavailable": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Provider.ID"
+            }
           },
           "budgets": {
             "type": "array",
@@ -28085,12 +28106,21 @@
             }
           }
         },
-        "required": ["workspace", "budgets"],
+        "required": ["allowances", "budgets"],
         "additionalProperties": false
       },
-      "UsageLimits.Meter": {
+      "UsageLimits.Window": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "windowSeconds": {
+            "type": "number"
+          },
           "percent": {
             "type": "number",
             "minimum": 0,
@@ -28104,7 +28134,7 @@
             "description": "Milliseconds since the Unix epoch"
           }
         },
-        "required": ["percent", "limited", "resetsAt"],
+        "required": ["id", "percent", "limited", "resetsAt"],
         "additionalProperties": false
       },
       "V2Event": {

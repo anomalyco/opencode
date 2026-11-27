@@ -455,6 +455,7 @@
         "name": "Acme",
         "usageURL": "https://opencode.ai/console/wrk_1/usage"
       },
+      "allowances": [],
       "budgets": [
         {
           "id": "all",

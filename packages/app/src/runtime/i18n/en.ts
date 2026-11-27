@@ -1623,6 +1623,7 @@ export const dict = {
   "usage.footer.creditsOnly": "Spend is limited only by {{workspace}}'s credits",
   "usage.footer.details": "View details",
   "usage.signedOut.title": "Not signed in to OpenCode Console",
+  "usage.consoleUnavailable.body": "OpenCode Console couldn't return your usage. Reopen the dialog to try again.",
   "usage.signedOut.body": "Connect OpenCode Console to see your workspace's budgets and Go usage.",
   "usage.error": "Usage limits couldn't be loaded.",
   "usage.retry": "Try again",

@@ -64,10 +64,14 @@ export function DialogUsage(props: {
   const ready = createMemo(() => {
     const current = view()
 
-    return current.status === "ready" ? current.info : undefined
+    return current.status === "ready" && current.info.workspace ? current.info : undefined
   })
 
   let timer: ReturnType<typeof setTimeout> | undefined
+  const consoleUnavailable = () => {
+    const current = view()
+    return current.status === "ready" && current.info.unavailable?.includes("opencode")
+  }
 
   const dispatch = (event: UsageDialogEvent) => {
     const previous = untrack(usageState)
@@ -130,12 +134,12 @@ export function DialogUsage(props: {
       fallback={
         <UsageFrame>
           <Switch>
-            <Match when={view().status === "signed-out"}>
+            <Match when={view().status === "signed-out" || view().status === "ready"}>
               <div class="flex flex-col px-3 pb-3">
                 <Panel gap={8}>
                   <Message
-                    title={language.t("usage.signedOut.title")}
-                    body={language.t("usage.signedOut.body")}
+                    title={language.t(consoleUnavailable() ? "usage.error" : "usage.signedOut.title")}
+                    body={language.t(consoleUnavailable() ? "usage.consoleUnavailable.body" : "usage.signedOut.body")}
                   />
                 </Panel>
               </div>
@@ -336,7 +340,7 @@ export function UsageDialogContent(props: {
           <Button
             variant="ghost"
             class="text-v2-text-text-muted!"
-            onClick={() => platform.openExternal(props.info.workspace.usageURL)}
+            onClick={() => props.info.workspace && platform.openExternal(props.info.workspace.usageURL)}
           >
             {language.t("usage.footer.details")}
           </Button>

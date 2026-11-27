@@ -308,7 +308,7 @@ fn limit_notice(
         _ if error.status == Some(402)
             && usage::served_by_console(local.provider(message.model.provider_id.as_str()).as_ref()) =>
         {
-            let workspace = local.usage().flatten().and_then(|info| info.workspace.name.clone());
+            let workspace = local.usage().flatten().and_then(|info| info.workspace?.name);
             Some(LimitNotice {
                 title: format!("{} is out of credits", workspace.as_deref().unwrap_or("Your workspace")),
                 body: "Paid models are paused until an admin adds credits in OpenCode Console.".to_owned(),

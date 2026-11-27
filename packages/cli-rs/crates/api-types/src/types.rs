@@ -12265,7 +12265,17 @@ pub struct UsageLimitsInfoWorkspace {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct UsageLimitsMeter {
+pub struct UsageLimitsWindow {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(
+        rename = "windowSeconds",
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub window_seconds: Option<f64>,
     #[serde(serialize_with = "crate::ser::number")]
     pub percent: f64,
     pub limited: bool,
@@ -12274,10 +12284,15 @@ pub struct UsageLimitsMeter {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct UsageLimitsGo {
-    pub rolling: UsageLimitsMeter,
-    pub weekly: UsageLimitsMeter,
-    pub monthly: UsageLimitsMeter,
+pub struct UsageLimitsAllowance {
+    #[serde(rename = "providerID")]
+    pub provider_id: ProviderID,
+    pub name: String,
+    #[serde(rename = "usageURL", default, skip_serializing_if = "Option::is_none")]
+    pub usage_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan: Option<String>,
+    pub windows: Vec<UsageLimitsWindow>,
 }
 
 literal_enum! {
@@ -12339,9 +12354,11 @@ pub struct UsageLimitsBudget {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct UsageLimitsInfo {
-    pub workspace: UsageLimitsInfoWorkspace,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub go: Option<UsageLimitsGo>,
+    pub workspace: Option<UsageLimitsInfoWorkspace>,
+    pub allowances: Vec<UsageLimitsAllowance>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable: Option<Vec<ProviderID>>,
     pub budgets: Vec<UsageLimitsBudget>,
 }
 
@@ -13136,6 +13153,8 @@ pub struct ConfigEntryDocumentInfoExperimental {
     pub codemode_vm: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub all_flags: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub openai_usage: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub todo: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

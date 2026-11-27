@@ -9,23 +9,26 @@ import { optional } from "./schema.js"
 const Percent = Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 100 }))
 const Instant = Schema.Finite.annotate({ description: "Milliseconds since the Unix epoch" })
 
-/** One window of the OpenCode Go allowance. */
-export interface Meter extends Schema.Schema.Type<typeof Meter> {}
-export const Meter = Schema.Struct({
-  /** How much of the window's allowance is used. */
+/** One provider-reported quota window. */
+export interface Window extends Schema.Schema.Type<typeof Window> {}
+export const Window = Schema.Struct({
+  id: Schema.String,
+  name: optional(Schema.String),
+  windowSeconds: Schema.Finite.pipe(optional),
   percent: Percent,
-  /** Go refuses requests until the window resets. */
   limited: Schema.Boolean,
   resetsAt: Instant,
-}).annotate({ identifier: "UsageLimits.Meter" })
+}).annotate({ identifier: "UsageLimits.Window" })
 
-/** The OpenCode Go allowance of a workspace the member subscribes to Go in. */
-export interface Go extends Schema.Schema.Type<typeof Go> {}
-export const Go = Schema.Struct({
-  rolling: Meter,
-  weekly: Meter,
-  monthly: Meter,
-}).annotate({ identifier: "UsageLimits.Go" })
+/** A provider's allowance for the connected account. */
+export interface Allowance extends Schema.Schema.Type<typeof Allowance> {}
+export const Allowance = Schema.Struct({
+  providerID: Provider.ID,
+  name: Schema.String,
+  usageURL: optional(Schema.String),
+  plan: optional(Schema.String),
+  windows: Schema.Array(Window),
+}).annotate({ identifier: "UsageLimits.Allowance" })
 
 /** A model a budget covers, by the IDs OpenCode knows it by. */
 export interface BudgetModel extends Schema.Schema.Type<typeof BudgetModel> {}
@@ -62,7 +65,7 @@ export const Budget = Schema.Struct({
   resetsAt: Instant,
 }).annotate({ identifier: "UsageLimits.Budget" })
 
-/** The usage limits of the OpenCode Console workspace a location is signed in to. */
+/** Usage limits available to the accounts connected at a location. */
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   workspace: Schema.Struct({
@@ -70,7 +73,9 @@ export const Info = Schema.Struct({
     name: Schema.String.pipe(optional),
     /** The member's usage page in OpenCode Console. */
     usageURL: Schema.String,
-  }),
-  go: Go.pipe(optional),
+  }).pipe(optional),
+  allowances: Schema.Array(Allowance),
+  /** Sources that could not be read while another source returned data. */
+  unavailable: Schema.Array(Provider.ID).pipe(optional),
   budgets: Schema.Array(Budget),
 }).annotate({ identifier: "UsageLimits.Info" })
