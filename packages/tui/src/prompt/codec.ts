@@ -1,14 +1,19 @@
 import { mediaHashFromUri, type PromptAttachment } from "@opencode/client"
 import type { Prompt, PromptInput } from "@opencode/schema"
 import { Skill } from "@opencode/schema/skill"
-import type { Types } from "effect"
+import { Schema, type Types } from "effect"
 
 export type EditablePromptInput = Types.DeepMutable<PromptInput.Prompt>
 
 export type ProjectedPrompt = Pick<Prompt, "text" | "agents"> & {
   readonly files?: ReadonlyArray<PromptAttachment>
   readonly skills?: ReadonlyArray<{ readonly id: string; readonly mention?: PromptInput.SkillAttachment["mention"] }>
+  readonly metadata?: { readonly [key: string]: unknown }
 }
+
+const isCommandMetadata = Schema.is(
+  Schema.Struct({ command: Schema.Struct({ name: Schema.String, arguments: Schema.String }) }),
+)
 
 /** A projected prompt as composer input. Files the server kept as `media:<hash>` refs stay refs. */
 export function projectedPromptInput(input: ProjectedPrompt): EditablePromptInput {
@@ -40,13 +45,13 @@ export function projectedPromptInput(input: ProjectedPrompt): EditablePromptInpu
  * {@link projectedPromptInput} with every `media:<hash>` file read back into a `data:` URI, for putting a sent prompt
  * back in the composer. The draft then keeps its bytes after the server releases the blob (an inbox cancel, or a
  * committed revert), and the composer previews and resends it like any pasted image. A read that resolves `undefined`
- * leaves its file out.
+ * leaves its file out. A prompt expanded from a slash command comes back as the command that was typed.
  */
 export async function restoredPromptInput(
   input: ProjectedPrompt,
   read: (uri: string) => Promise<Uint8Array | undefined>,
 ): Promise<EditablePromptInput> {
-  const output = projectedPromptInput(input)
+  const output = { ...projectedPromptInput(input), text: typedText(input) }
   if (!output.files?.some((file) => mediaHashFromUri(file.uri))) return output
   const files = await Promise.all(
     output.files.map(async (file, index) => {
@@ -58,4 +63,10 @@ export async function restoredPromptInput(
     }),
   )
   return { ...output, files: files.flat() }
+}
+
+function typedText(input: ProjectedPrompt) {
+  if (!isCommandMetadata(input.metadata)) return input.text
+  const command = input.metadata.command
+  return command.arguments ? `/${command.name} ${command.arguments}` : `/${command.name}`
 }
