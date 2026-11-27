@@ -71,7 +71,7 @@ export const Plugin = define({
         )
       })
 
-    yield* bus.subscribe(Mcp.SkillsChanged).pipe(
+    yield* bus.subscribe(Mcp.SkillsChanged, { overflow: "slide" }).pipe(
       Stream.runForEach((event) =>
         mcp.skills().pipe(
           Effect.flatMap(accept),

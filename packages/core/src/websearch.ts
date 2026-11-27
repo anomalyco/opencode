@@ -94,7 +94,16 @@ const layer = Layer.effect(
     const cooldowns = new Map<ID, { until: number; error: RequestError }>()
     const preferred = new Map<Session.ID | undefined, { provider?: ID }>()
     yield* Effect.addFinalizer(() => Effect.sync(() => preferred.clear()))
-    yield* bus.subscribe([SessionEvent.Deleted, SessionEvent.Moved]).pipe(
+    const reconcileAffinity = Effect.sync(() => {
+      for (const sessionID of preferred.keys()) {
+        if (sessionID !== undefined) preferred.delete(sessionID)
+      }
+    })
+    yield* Bus.restartOnOverflow(
+      (onSubscribed) =>
+        bus.subscribe([SessionEvent.Deleted, SessionEvent.Moved], { overflow: "fail", onSubscribed }),
+      reconcileAffinity,
+    ).pipe(
       Stream.runForEach((event) =>
         Effect.sync(() => {
           preferred.delete(event.data.sessionID)

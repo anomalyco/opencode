@@ -20,6 +20,7 @@ import { Credential } from "@opencode/core/credential"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
+// Bus test doubles never overflow. The double cast only adapts their error channel to the live Bus contract.
 import { ID, type Payload } from "@opencode/schema/event"
 import { Form } from "@opencode/core/form"
 import { Integration } from "@opencode/core/integration"
@@ -2273,7 +2274,7 @@ test("reconciles only changed MCP server config", async () => {
               subscribe: ((definition?: { readonly type: string }) =>
                 Stream.fromPubSub(updates).pipe(
                   Stream.filter((event) => !definition || event.type === definition.type),
-                )) as Bus.Interface["subscribe"],
+                )) as unknown as Bus.Interface["subscribe"],
             }),
           ),
         )
@@ -3269,7 +3270,7 @@ for (const source of ["config", "organization"] as const) {
             subscribe: ((definition?: { readonly type: string }) =>
               Stream.fromPubSub(updates).pipe(
                 Stream.filter((event) => !definition || event.type === definition.type),
-              )) as Bus.Interface["subscribe"],
+              )) as unknown as Bus.Interface["subscribe"],
           }),
         ),
       )
@@ -3648,7 +3649,7 @@ describe("MCP pool", () => {
             subscribe: ((definition?: { readonly type: string }) =>
               Stream.fromPubSub(hub).pipe(
                 Stream.filter((event) => !definition || event.type === definition.type),
-              )) as Bus.Interface["subscribe"],
+              )) as unknown as Bus.Interface["subscribe"],
           })
           const b = yield* open(config, pool, directories[1], { bus })
           const command = Context.get(yield* Layer.build(Command.layer.pipe(Layer.provide(bus))), Command.Service)
@@ -4116,7 +4117,7 @@ describe("MCP events", () => {
       subscribe: ((definition?: { readonly type: string }) =>
         Stream.fromPubSub(hub).pipe(
           Stream.filter((event) => !definition || event.type === definition.type),
-        )) as Bus.Interface["subscribe"],
+        )) as unknown as Bus.Interface["subscribe"],
     })
     // Recheck the snapshot on publication; buffer signals that arrived before the assertion.
     const until = <A>(snapshot: Effect.Effect<A>, ready: (value: A) => boolean) =>

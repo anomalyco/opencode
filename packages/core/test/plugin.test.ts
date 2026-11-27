@@ -707,6 +707,22 @@ it.effect("activates a saved credential through the context", () =>
   }),
 )
 
+it.effect("host event subscriptions without a type list receive public events", () =>
+  Effect.gen(function* () {
+    const bus = yield* Bus.Service
+    const host = yield* PluginHost.make(yield* Plugin.Service, "test")
+    const received: string[] = []
+    const fiber = yield* host.event.subscribe().pipe(
+      Stream.runForEach((event) => Effect.sync(() => void received.push(event.type))),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    yield* bus.publish(Rpc.eventDefinition("rpc.test.ping"), { value: 1 })
+    yield* Effect.yieldNow
+    expect(received).toEqual(["rpc.test.ping"])
+    yield* Fiber.interrupt(fiber)
+  }),
+)
+
 it.effect("host event subscriptions deliver requested rpc types and ignore unknown types", () =>
   Effect.gen(function* () {
     const bus = yield* Bus.Service

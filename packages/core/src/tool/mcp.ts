@@ -129,7 +129,7 @@ export const layer = Layer.effect(
     // Servers announce tools in bursts and each read loads the whole catalog, so settle and refresh
     // once. The bus subscription stays eager; only the already-open sliding subscription is debounced.
     const changes = yield* PubSub.sliding<void>(1)
-    yield* bus.subscribe(McpEvent.ToolsChanged).pipe(
+    yield* bus.subscribe(McpEvent.ToolsChanged, { overflow: "slide" }).pipe(
       Stream.runForEach(() => PubSub.publish(changes, undefined)),
       Effect.forkScoped({ startImmediately: true }),
     )

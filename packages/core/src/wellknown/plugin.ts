@@ -28,7 +28,7 @@ export const Plugin = define({
         })
       })
     })
-    yield* bus.subscribe(WellKnown.Event.Updated).pipe(
+    yield* bus.subscribe(WellKnown.Event.Updated, { overflow: "slide" }).pipe(
       Stream.runForEach(() => ctx.integration.reload()),
       Effect.forkScoped({ startImmediately: true }),
     )

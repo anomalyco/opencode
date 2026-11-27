@@ -19,6 +19,7 @@ import { Bus } from "../bus.js"
 import { Pty } from "@opencode/schema/pty"
 import { Global } from "@opencode/util/global"
 import { ShellSelect } from "../shell/select.js"
+import { SessionStore } from "../session/store.js"
 import {
   makeDaemonTransport,
   type DaemonAttachment,
@@ -200,6 +201,7 @@ const makeLayer = (options: Options = {}) =>
     Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
+      const sessions = yield* SessionStore.Service
       const global = yield* Global.Service
       const runFork = yield* FiberSet.makeRuntime()
       let binary: Promise<string> | undefined
@@ -423,8 +425,29 @@ const makeLayer = (options: Options = {}) =>
           Effect.ensuring(Effect.sync(() => current.delete(sessionID))),
         )
 
+      const reconcileSessions = Effect.gen(function* () {
+        const terminals = yield* list().pipe(
+          Effect.catchTag("PersistentPty.UnavailableError", (error) =>
+            Effect.logWarning("failed to list terminals after subscriber overflow", { error: error.message }).pipe(
+              Effect.as([]),
+            ),
+          ),
+        )
+        yield* Effect.forEach(
+          new Set(terminals.map((terminal) => terminal.sessionID)),
+          (sessionID) =>
+            sessions
+              .get(sessionID)
+              .pipe(Effect.flatMap((session) => (session ? Effect.void : removeSession(sessionID)))),
+          { discard: true },
+        )
+      })
+
       // Errors are handled per event so one failed cleanup does not end the subscription.
-      yield* bus.subscribe(SessionEvent.Deleted).pipe(
+      yield* Bus.restartOnOverflow(
+        (onSubscribed) => bus.subscribe(SessionEvent.Deleted, { overflow: "fail", onSubscribed }),
+        reconcileSessions,
+      ).pipe(
         Stream.runForEach((event) => removeSession(event.data.sessionID)),
         Effect.forkScoped({ startImmediately: true }),
       )
@@ -543,7 +566,7 @@ export const configured = (options?: Options) =>
   makeGlobalNode({
     service: Service,
     layer: options === undefined ? layer : makeLayer(options),
-    deps: [Bus.node, Global.node],
+    deps: [Bus.node, Global.node, SessionStore.node],
   })
 export const node = configured()
 

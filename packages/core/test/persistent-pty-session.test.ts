@@ -1,8 +1,10 @@
 import { describe, expect } from "bun:test"
 import path from "node:path"
-import { Effect, Fiber, Layer, Option, Stream } from "effect"
+import { Clock, Deferred, Effect, Fiber, Layer, Option, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Database } from "@opencode/core/database/database"
 import { Bus } from "@opencode/core/bus"
 import { Instance } from "@opencode/core/instance/service"
@@ -11,12 +13,14 @@ import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Project } from "@opencode/core/project"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
+import { SessionEvent } from "@opencode/schema/session-event"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionStore } from "@opencode/core/session/store"
 import { SessionEnvironment } from "@opencode/core/session/environment"
 import { LocationServiceMap } from "@opencode/core/location-services"
+import { Global } from "@opencode/util/global"
 import { Removed, Updated } from "@opencode/schema/persistent-pty"
 import { Pty } from "@opencode/schema/pty"
 import { fakeDaemon } from "./fixture/persistent-pty-daemon"
@@ -56,6 +60,65 @@ describe("PersistentPty session cleanup", () => {
         expect(yield* pty.list(deleted.id)).toEqual([])
         expect((yield* pty.list()).map((item) => item.id)).toEqual([other.id])
       }).pipe(Effect.provide(layer(daemon)))
+    }),
+  )
+
+  it.effect("reconciles deleted sessions after subscriber overflow", () =>
+    Effect.gen(function* () {
+      const daemon = yield* fakeDaemon()
+      yield* Effect.gen(function* () {
+        const session = yield* Session.Service
+        const pty = yield* PersistentPty.Service
+        const bus = yield* Bus.Service
+        const directory = yield* tmpdirScoped()
+        const location = Location.Ref.make({ directory: AbsolutePath.make(directory.path) })
+        const kept = yield* session.create({ location })
+        const deleted = [
+          Session.ID.make("ses_pty_overflow_first"),
+          Session.ID.make("ses_pty_overflow_second"),
+          Session.ID.make("ses_pty_overflow_third"),
+        ]
+        const keptTerminal = yield* pty.create(kept.id, {
+          args: [],
+          cwd: directory.path,
+          title: "kept",
+          env: {},
+        })
+        const terminals = yield* Effect.forEach(deleted, (sessionID) =>
+          pty.create(sessionID, { args: [], cwd: directory.path, title: "deleted", env: {} }),
+        )
+        const expected = new Set(terminals.map((terminal) => terminal.id))
+        const held = Promise.withResolvers<void>()
+        const lists = daemon.ops.filter((op) => op === "list").length
+        daemon.holdList.until = held.promise
+        const done = yield* Deferred.make<void>()
+        const removedIDs = new Set<Pty.ID>()
+        const removed = yield* bus.subscribe(Removed, { capacity: 10 }).pipe(
+          Stream.runForEach((event) =>
+            Effect.gen(function* () {
+              removedIDs.add(event.data.ptyID)
+              if (removedIDs.size === expected.size) yield* Deferred.succeed(done, undefined)
+            }),
+          ),
+          Effect.forkScoped({ startImmediately: true }),
+        )
+
+        yield* bus.publish(SessionEvent.Deleted, { sessionID: deleted[0] })
+        for (let attempt = 0; attempt < 100 && daemon.ops.filter((op) => op === "list").length === lists; attempt++)
+          yield* TestClock.withLive(Effect.sleep(10))
+        expect(daemon.ops.filter((op) => op === "list").length).toBeGreaterThan(lists)
+        yield* bus.publish(SessionEvent.Deleted, { sessionID: deleted[1] })
+        const publisher = yield* Effect.uninterruptible(
+          bus.publish(SessionEvent.Deleted, { sessionID: deleted[2] }),
+        ).pipe(Effect.forkScoped({ startImmediately: true }))
+        yield* TestClock.adjust("5 seconds")
+        yield* Fiber.join(publisher)
+        held.resolve()
+
+        yield* Deferred.await(done)
+        expect((yield* pty.list()).map((terminal) => terminal.id)).toEqual([keptTerminal.id])
+        yield* Fiber.interrupt(removed)
+      }).pipe(Effect.provide(overflowLayer(daemon)))
     }),
   )
 
@@ -258,27 +321,43 @@ const nextRemoved = (bus: Bus.Interface) =>
     .subscribe(Removed)
     .pipe(Stream.runHead, Effect.map(Option.getOrThrow), Effect.forkScoped({ startImmediately: true }))
 
-const layer = (daemon: { readonly options: PersistentPty.Options }) =>
-  AppNodeBuilder.build(
-    LayerNode.group([
-      Database.node,
-      Bus.node,
-      SessionProjector.node,
-      SessionStore.node,
-      SessionEnvironment.node,
-      Session.node,
-      Instance.node,
-      LocationServiceMap.node,
-      PersistentPty.node,
-    ]),
-    [
-      Project.node.replace(globalProjectNode),
-      SessionExecution.node.replace(SessionExecution.noopLayer),
-      SessionModelTransport.node.replace(transport),
-      PersistentPty.node.replace(PersistentPty.configured(daemon.options)),
-      offlineModels,
-    ],
-  )
+const nodes = LayerNode.group([
+  Database.node,
+  Bus.node,
+  SessionProjector.node,
+  SessionStore.node,
+  SessionEnvironment.node,
+  Session.node,
+  Instance.node,
+  LocationServiceMap.node,
+  PersistentPty.node,
+])
+const ptyLayer = (daemon: { readonly options: PersistentPty.Options }) => PersistentPty.configured(daemon.options)
+const replacements = (daemon: { readonly options: PersistentPty.Options }) => [
+  Project.node.replace(globalProjectNode),
+  SessionExecution.node.replace(SessionExecution.noopLayer),
+  SessionModelTransport.node.replace(transport),
+  PersistentPty.node.replace(ptyLayer(daemon)),
+  offlineModels,
+]
+const layer = (daemon: { readonly options: PersistentPty.Options }) => AppNodeBuilder.build(nodes, replacements(daemon))
+const overflowLayer = (daemon: { readonly options: PersistentPty.Options }) =>
+  AppNodeBuilder.build(nodes, [
+    Project.node.replace(globalProjectNode),
+    SessionExecution.node.replace(SessionExecution.noopLayer),
+    SessionModelTransport.node.replace(transport),
+    PersistentPty.node.replace(
+      makeGlobalNode({
+        service: PersistentPty.Service,
+        layer: PersistentPty.layerWith(daemon.options).pipe(
+          Layer.provide(Layer.succeed(Clock.Clock, Clock.Clock.defaultValue())),
+        ),
+        deps: [Bus.node, Global.node, SessionStore.node],
+      }),
+    ),
+    offlineModels,
+    Bus.node.replace(Bus.configured({ subscriberCapacity: 1 })),
+  ])
 
 describe("PersistentPty handoff", () => {
   it.live("prepares a handoff more than once on the same owner connection", () =>

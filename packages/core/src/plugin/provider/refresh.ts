@@ -15,8 +15,15 @@ export type Options = { readonly interval?: Duration.Input; readonly force?: boo
 export const onSwitch = <E, R>(integrationID: string, effect: Effect.Effect<unknown, E, R>) =>
   Effect.gen(function* () {
     const bus = yield* Bus.Service
-    yield* bus.subscribe(Credential.Event.Switched).pipe(
-      Stream.filter((event) => event.data.integrationID === integrationID),
+    yield* Bus.restartOnOverflow(
+      (onSubscribed) =>
+        bus.subscribe(Credential.Event.Switched, {
+          overflow: "fail",
+          where: (event) => event.data.integrationID === integrationID,
+          onSubscribed,
+        }),
+      effect.pipe(Effect.asVoid),
+    ).pipe(
       Stream.runForEach(() => effect),
       Effect.forkScoped({ startImmediately: true }),
     )

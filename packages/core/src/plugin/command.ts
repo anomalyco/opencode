@@ -15,7 +15,7 @@ export const Plugin = define({
     const mcp = yield* Mcp.Service
     const bus = yield* Bus.Service
     const loaded = { prompts: [] as Mcp.Prompt[] }
-    yield* bus.subscribe(Mcp.PromptsChanged).pipe(
+    yield* bus.subscribe(Mcp.PromptsChanged, { overflow: "slide" }).pipe(
       Stream.runForEach(() =>
         mcp.prompts().pipe(
           Effect.tap((prompts) => Effect.sync(() => (loaded.prompts = prompts))),

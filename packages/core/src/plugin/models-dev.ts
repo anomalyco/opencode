@@ -79,7 +79,7 @@ export const ModelsDevPlugin = define({
       loaded.data = latest
       return ctx.integration.reload().pipe(Effect.andThen(ctx.provider.reload()))
     }
-    yield* bus.subscribe([ModelsDev.Event.Refreshed, Event.Updated]).pipe(
+    yield* bus.subscribe([ModelsDev.Event.Refreshed, Event.Updated], { overflow: "slide" }).pipe(
       Stream.runForEach(() => get.pipe(Effect.flatMap(apply))),
       Effect.forkScoped({ startImmediately: true }),
     )

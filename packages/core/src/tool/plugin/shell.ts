@@ -407,7 +407,7 @@ export const Plugin = {
 
     // The descriptions name the selected shell, so they're rebuilt whenever it changes.
     const bus = yield* Bus.Service
-    yield* bus.subscribe(ShellSelect.Event.Updated).pipe(
+    yield* bus.subscribe(ShellSelect.Event.Updated, { overflow: "slide" }).pipe(
       Stream.runForEach(() => ctx.tool.reload()),
       Effect.forkScoped({ startImmediately: true }),
     )
