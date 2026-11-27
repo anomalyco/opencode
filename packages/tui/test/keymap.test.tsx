@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import type { KeymapCommand } from "@opencode/plugin/tui/context"
+import type { TextareaRenderable } from "@opentui/core"
 import { useKeymap } from "@opentui/keymap/solid"
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
@@ -238,6 +239,41 @@ test("global commands stay reachable when the mode changes", async () => {
   try {
     exercise()
     expect(calls).toEqual(["global", "base", "global"])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("unmatched leader sequences do not type into the focused input", async () => {
+  const calls: string[] = []
+  let input!: TextareaRenderable
+
+  function Harness() {
+    Keymap.createLayer(() => ({
+      commands: [{ id: "demo.command", bind: "<leader>a", run: () => void calls.push("leader") }],
+    }))
+    return <textarea ref={(value: TextareaRenderable) => (input = value)} focused />
+  }
+
+  const app = await testRender(
+    () => (
+      <ConfigProvider config={createTuiResolvedConfig()}>
+        <Keymap.Provider>
+          <Harness />
+        </Keymap.Provider>
+      </ConfigProvider>
+    ),
+    { width: 40, height: 5, kittyKeyboard: true },
+  )
+  try {
+    app.mockInput.typeText("probe-")
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressKey("z")
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressKey("a")
+    app.mockInput.typeText("z")
+    expect(input.plainText).toBe("probe-z")
+    expect(calls).toEqual(["leader"])
   } finally {
     app.renderer.destroy()
   }

@@ -726,3 +726,31 @@ fn watch_reloads_a_config_file_created_in_a_missing_directory() {
     fs::write(config.path(), "{ \"mouse\": false }\n").unwrap();
     changed.recv_timeout(Duration::from_secs(5)).unwrap();
 }
+
+/// Editing the target of a symlinked `cli.json` changes nothing in the config directory, so the TS
+/// watcher also watches the target's directory.
+#[cfg(unix)]
+#[test]
+fn watch_reloads_when_a_symlinked_config_target_changes() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    let paths = paths(home.path());
+    let dotfiles = home.path().join("dotfiles");
+    fs::create_dir_all(&paths.config).unwrap();
+    fs::create_dir_all(&dotfiles).unwrap();
+    let target = dotfiles.join("cli.json");
+    fs::write(&target, "{ \"mouse\": true }\n").unwrap();
+    let config = CliConfig::with_content(&paths, None);
+    std::os::unix::fs::symlink(&target, config.path()).unwrap();
+    let (sender, changed) = std::sync::mpsc::channel();
+    let _watch = config
+        .watch(move || {
+            let _ = sender.send(());
+        })
+        .expect("watching the config directory");
+    // The watch may start after the first write, so write again until it calls back.
+    let reloaded = (0..20).any(|_| {
+        fs::write(&target, "{ \"mouse\": false }\n").unwrap();
+        changed.recv_timeout(Duration::from_millis(250)).is_ok()
+    });
+    assert!(reloaded, "editing the symlink target did not call back");
+}

@@ -131,8 +131,7 @@ pub fn next(prompt: &Inner, history: &History) -> bool {
     let textarea = &prompt.textarea;
     let end = prompt.text_end();
     if textarea.cursor_offset() != end {
-        let last = textarea.view().info(false).map_or(0, |info| info.total_virtual_line_count.saturating_sub(1));
-        if visual_row(textarea) == last {
+        if !above_last_row(textarea) {
             textarea.set_cursor_offset(end);
             return true;
         }
@@ -143,6 +142,12 @@ pub fn next(prompt: &Inner, history: &History) -> bool {
     prompt.restore(item);
     textarea.set_cursor_offset(prompt.text_end());
     true
+}
+
+/// Whether the cursor sits above the prompt's last visual line, so Down moves it.
+pub fn above_last_row(textarea: &Textarea) -> bool {
+    let last = textarea.view().info(false).map_or(0, |info| info.total_virtual_line_count.saturating_sub(1));
+    visual_row(textarea) < last
 }
 
 fn visual_row(textarea: &Textarea) -> u32 {
