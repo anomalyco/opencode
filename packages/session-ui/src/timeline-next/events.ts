@@ -8,6 +8,8 @@ export type TimelineEventKind = "subagent" | "shell"
 export type TimelineEventVerb = "started" | "ran" | "finished" | "stopped"
 
 export type TimelineEvent = {
+  /** The call or notice the event came from. A list keeps an event's place by it. */
+  id: string
   verb: TimelineEventVerb | "updated"
   kind: TimelineEventKind
   failed: boolean
@@ -51,6 +53,7 @@ export function toolEvent(tool: SessionMessageAssistantTool): TimelineEvent | un
   const followUp = kind === "subagent" ? Option.getOrUndefined(decodeText(input.sessionID)) : undefined
 
   const item = {
+    id: tool.id,
     kind,
     title: Option.getOrUndefined(decodeText(kind === "shell" ? input.command : input.description)),
     agent: kind === "subagent" ? Option.getOrUndefined(decodeText(input.agent ?? input.subagent_type)) : undefined,
@@ -83,6 +86,7 @@ export function noticeEvent(message: SessionMessageInfo): TimelineEvent | undefi
   const state = message.metadata?.state
 
   const item = {
+    id: message.id,
     kind: source,
     title: Option.getOrUndefined(decodeText(message.description)),
     agent: Option.getOrUndefined(decodeText(message.metadata?.agent)),

@@ -240,6 +240,104 @@ test.describe("timeline history", () => {
     await expect.poll(positions).toEqual(before)
   })
 
+  test("an events row keeps its links while an older page lands", async ({ page }) => {
+    // The New timeline builds a row's events again whenever the session's messages change. A list keyed by those
+    // objects built every link again too, and the link with focus went with them.
+    const older = Promise.withResolvers<void>()
+    const requests: { before?: string; phase: "start" | "end" }[] = []
+
+    const messages: SessionMessageInfo[] = [
+      ...historyMessages(20),
+      userMessage(),
+      assistantMessage([textPart("prt_events_started", "Started the server.")]),
+      shellFinished("msg_1002_shell_finished", "shell_serve", "bun serve.ts"),
+      ...laterTurn(),
+    ]
+
+    // The latest page starts at the turn with the events row. Everything older is one more page, held until released.
+    const first = messages.findIndex((message) => message.id === userID)
+    await setupTimeline(page, {
+      sessionMessages: messages,
+      settings: { newTimeline: true },
+      pageMessages: (_, __, before) =>
+        before ? { items: messages.slice(0, first) } : { items: messages.slice(first), cursor: messages[first]!.id },
+      beforeMessagesResponse: ({ before }) => (before ? older.promise : Promise.resolve()),
+      onMessages: (request) => requests.push(request),
+    })
+    const scroller = timelineScroller(page)
+    const row = page.locator('[data-component="timeline-event-row"]')
+    const link = row.getByRole("button", { name: /bun serve\.ts$/ })
+    await expect(page.getByText("Later line 60.", { exact: true })).toBeInViewport()
+    await scroller.hover()
+    await page.mouse.wheel(0, -100_000)
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0)
+    // At the top the timeline asks for the older page.
+    await expect.poll(() => requests.some((request) => request.before && request.phase === "start")).toBe(true)
+
+    await row.getByRole("button", { name: /^Finished/ }).click()
+    await page.keyboard.press("Tab")
+    await expect(link).toBeFocused()
+    const focused = await link.elementHandle()
+    const height = await scroller.evaluate((element) => element.scrollHeight)
+    older.resolve()
+    await expect.poll(() => requests.some((request) => request.before && request.phase === "end")).toBe(true)
+    // The older page has landed above the row.
+    await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
+    expect(await focused!.evaluate(focusedLink)).toBe("focused on bun serve.ts")
+  })
+
+  test("a link in an events row stays its own shell's link when an older page adds an event before it", async ({
+    page,
+  }) => {
+    // The page boundary falls between two shell notices of one turn. The older page's notice joins the row ahead of
+    // the one shown, and the row stays mounted. In a list by position the reader's link is then the other shell's:
+    // Enter opens what they did not choose.
+    const older = Promise.withResolvers<void>()
+    const requests: { before?: string; phase: "start" | "end" }[] = []
+
+    const messages: SessionMessageInfo[] = [
+      ...historyMessages(20),
+      userMessage(),
+      assistantMessage([textPart("prt_events_started", "Started two servers.")]),
+      shellFinished("msg_1002_shell_finished", "shell_serve", "bun serve.ts"),
+      shellFinished("msg_1003_shell_finished", "shell_watch", "bun watch.ts"),
+      ...laterTurn(),
+    ]
+
+    // The latest page starts at the second notice.
+    const first = messages.findIndex((message) => message.id === "msg_1003_shell_finished")
+    await setupTimeline(page, {
+      sessionMessages: messages,
+      settings: { newTimeline: true },
+      pageMessages: (_, __, before) =>
+        before ? { items: messages.slice(0, first) } : { items: messages.slice(first), cursor: messages[first]!.id },
+      beforeMessagesResponse: ({ before }) => (before ? older.promise : Promise.resolve()),
+      onMessages: (request) => requests.push(request),
+    })
+    const scroller = timelineScroller(page)
+    const row = page.locator('[data-component="timeline-event-row"]')
+    const link = row.getByRole("button", { name: /bun watch\.ts$/ })
+    await expect(page.getByText("Later line 60.", { exact: true })).toBeInViewport()
+    await scroller.hover()
+    await page.mouse.wheel(0, -100_000)
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0)
+    await expect.poll(() => requests.some((request) => request.before && request.phase === "start")).toBe(true)
+
+    await row.getByRole("button", { name: /^Finished/ }).click()
+    await page.keyboard.press("Tab")
+    await expect(link).toBeFocused()
+    const focused = await link.elementHandle()
+    older.resolve()
+    // The older notice has joined the same row, ahead of the link.
+    await expect(row.getByRole("button", { name: /bun (serve|watch)\.ts$/ })).toHaveText([
+      /bun serve\.ts$/,
+      /bun watch\.ts$/,
+    ])
+    // Focus is not checked: as the turn regroups, the timeline takes this row out of the page and puts it back, and
+    // focus does not survive that.
+    expect(await focused!.evaluate(focusedLink)).toMatch(/ on bun watch\.ts$/)
+  })
+
   // Each native scroll write forces a layout of the rows resized before it.
   test("corrects the scroll position once for each batch of rows an older page measures", async ({ page }) => {
     const messages = [
@@ -910,6 +1008,45 @@ async function openStressTarget(page: Page, input: Parameters<typeof mockStressT
   await page.goto(sessionHref(fixture.targetID))
   await expectSessionTitle(page, fixture.expected.targetTitle)
   await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+}
+
+// A background shell's report that it finished.
+function shellFinished(id: string, shellID: string, command: string): SessionMessageInfo {
+  return {
+    id,
+    type: "synthetic",
+    text: `<shell id="${shellID}" state="completed" command="${command}">\nlistening\n</shell>`,
+    description: command,
+    metadata: { source: "shell", shellID, state: "completed" },
+    time: { created: 1700000003000 },
+  }
+}
+
+// A later turn, long enough that the reader can scroll up to the turn before it.
+function laterTurn() {
+  const user = "msg_1008_later_user"
+
+  return [
+    userMessage(undefined, { id: user, created: 1700000008000 }),
+    assistantMessage(
+      [
+        {
+          id: "prt_events_later",
+          type: "text",
+          text: Array.from({ length: 60 }, (_, index) => `Later line ${index + 1}.`).join("\n\n"),
+        },
+      ],
+      { id: "msg_1009_later_assistant", parentID: user, created: 1700000009000 },
+    ),
+  ]
+}
+
+// What became of a link the reader focused: the same element or not, with focus or not, and the event it shows.
+function focusedLink(link: Element) {
+  if (!link.isConnected) return "replaced"
+  const title = link.querySelector('[data-slot="timeline-event-item-title"]')?.textContent
+
+  return `${document.activeElement === link ? "focused" : "not focused,"} on ${title}`
 }
 
 function timelineScroller(page: Page) {
