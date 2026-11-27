@@ -104,12 +104,12 @@ skills, storage, VCS, worktrees, and web search. See the [complete plugin contex
 Earlier plugin builds published providers and models through `ctx.catalog`. OpenCode now exposes `ctx.provider` and
 `ctx.model` as separate domains, so a plugin that calls `ctx.catalog.transform` fails to load.
 
-| Earlier catalog API | Current equivalent |
-| ------------------- | ------------------ |
-| `ctx.catalog.transform(draft => …)` | `ctx.provider.transform(editor => …)` and `ctx.model.transform(editor => …)` |
-| `draft.provider.update(id, fn)` | `editor.update(id, fn)` on `ctx.provider` |
-| `draft.model.update(providerID, modelID, fn)` | `editor.update(providerID, modelID, fn)` on `ctx.model` |
-| `ctx.catalog.reload()` | `ctx.provider.reload()` and `ctx.model.reload()` |
+| Earlier catalog API                           | Current equivalent                                                           |
+| --------------------------------------------- | ---------------------------------------------------------------------------- |
+| `ctx.catalog.transform(draft => …)`           | `ctx.provider.transform(editor => …)` and `ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)`               | `editor.update(id, fn)` on `ctx.provider`                                    |
+| `draft.model.update(providerID, modelID, fn)` | `editor.update(providerID, modelID, fn)` on `ctx.model`                      |
+| `ctx.catalog.reload()`                        | `ctx.provider.reload()` and `ctx.model.reload()`                             |
 
 ```ts
 await ctx.provider.transform((editor) => {
