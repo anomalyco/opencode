@@ -1,4 +1,3 @@
-import type { ComposerModel } from "@opencode/plugin/gui"
 import type { Goal } from "@opencode/schema/goal"
 
 /** How long `get` may take before the snapshot counts as failed. */
@@ -11,9 +10,6 @@ export const GOAL_COMMAND_TIMEOUT_MS = 15_000
 const RETRY_DELAYS = [1_000, 2_000, 4_000]
 
 export type GoalAction = "pause" | "resume" | "clear"
-
-/** The agent and model picked in the composer when the user resumed: the goal continues with them. */
-export type GoalSelection = { readonly agent?: string; readonly model?: ComposerModel }
 
 /**
  * What the window knows of one session's goal, keyed by `session.key`. Only the routed session is fetched; another
@@ -80,7 +76,6 @@ export type GoalEvent =
       readonly serverID: string
       readonly sessionID: string
       readonly action: GoalAction
-      readonly selection?: GoalSelection
     }
   | { readonly type: "command.succeeded"; readonly key: string; readonly attempt: number }
   /** `message` is the server's error; undefined when the command timed out. */
@@ -107,7 +102,6 @@ export type GoalEffect =
       readonly serverID: string
       readonly sessionID: string
       readonly action: GoalAction
-      readonly selection?: GoalSelection
     }
   /** Stops a fetch, retry timer or command of `attempt`; its result, if any, is ignored. */
   | { readonly type: "cancel"; readonly attempt: number }
@@ -192,7 +186,6 @@ export function transitionGoal(state: GoalState, event: GoalEvent): GoalTransiti
           serverID: event.serverID,
           sessionID: event.sessionID,
           action: event.action,
-          ...(event.selection && { selection: event.selection }),
         },
       ],
     }

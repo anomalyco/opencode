@@ -621,15 +621,6 @@ export interface Composer {
    */
   setText(text: string): void
   /**
-   * The name of the agent the next prompt is sent with: the user's choice for the routed session, else the session's
-   * agent, else the app's default. Sending a prompt switches the session to it; until then the session keeps its own.
-   * Undefined while the agent list loads and in a subagent's session, which has no composer. Reactive.
-   *
-   * @example
-   * const planning = () => screen.composer.agent() === "plan"
-   */
-  agent(): string | undefined
-  /**
    * The model the next prompt is sent with: the user's choice for the routed session, else the session's agent
    * default, else the app's default. Undefined while the model catalog loads, when no connected provider offers the
    * choice, and in a subagent's session, which has no composer. Reactive.
@@ -651,6 +642,17 @@ export interface Composer {
    * @param variant - The variant. Undefined selects the model's default.
    */
   setVariant(variant: string | undefined): boolean
+  /**
+   * Switches the routed session to the agent and model the next prompt is sent with, as sending a prompt does: the
+   * session's next steps run with them, and the composer follows the session again once the server confirms. Call it
+   * before an action that makes the session work without a prompt from the composer, such as resuming paused work.
+   * Resolves once the server took both, at once when they already match, and does nothing while the model catalog
+   * loads and in a subagent's session. Rejects when the server refuses a switch; the composer then keeps the choice.
+   *
+   * @example
+   * await screen.composer.applySelection()
+   */
+  applySelection(): Promise<void>
   /**
    * Attaches a file, a note or a quote to the next prompt. Focus stays where it is; call `focus` to move it. Before
    * the session's draft loads, it waits and applies in call order.

@@ -621,13 +621,17 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
   expect(switches).toEqual([{ model: { id: "beta", providerID: "opencode" } }])
 })
 
-test("resuming a paused goal switches to the model picked in the composer first", async ({ page }) => {
+test("resuming a paused goal switches to the composer's pick first, and the composer follows the session after", async ({
+  page,
+}) => {
   const sessionID = "ses_goal_resume"
   const requests: unknown[] = []
+  const alpha = { id: "alpha", providerID: "opencode" }
+  const beta = { id: "beta", providerID: "opencode" }
 
-  await openSession(page, {
+  const view = await openSession(page, {
     name: "GoalResume",
-    sessions: [{ id: sessionID, agent: "build", model: { id: "alpha", providerID: "opencode" } }],
+    sessions: [{ id: sessionID, agent: "build", model: alpha }],
     provider: provider({ id: "alpha", name: "Alpha" }, { id: "beta", name: "Beta" }),
     goal: (id) =>
       id === sessionID
@@ -658,10 +662,24 @@ test("resuming a paused goal switches to the model picked in the composer first"
   await page.getByRole("button", { name: "Goal paused", exact: true }).click()
   await page.getByRole("button", { name: "Resume", exact: true }).click()
 
-  // The goal's continuations run with the session's agent and model, so both are set before the command.
-  await expect
-    .poll(() => requests)
-    .toEqual([{ agent: "build" }, { model: { id: "beta", providerID: "opencode" } }, { name: "goal", text: "resume" }])
+  // The goal's continuations run with the session's model, so it is switched before the command. The agent is
+  // already the session's, so only the model changes.
+  await expect.poll(() => requests).toEqual([{ model: beta }, { name: "goal", text: "resume" }])
+
+  const selected = (seq: number, model: typeof alpha, previous: typeof alpha) => ({
+    id: `evt_goal_model_${seq}`,
+    created: T0 + seq,
+    type: "session.model.selected" as const,
+    location: { directory: view.directory },
+    durable: { aggregateID: sessionID, seq, version: 1 as const },
+    data: { sessionID, model, previous },
+  })
+
+  // The server confirms the switch; then another client switches the session back. The composer follows it, as it
+  // does after a send, instead of keeping its own pick.
+  await view.push([selected(1, beta, alpha)])
+  await view.push([selected(2, alpha, beta)])
+  await expect(control).toHaveText("Alpha")
 })
 
 test("an existing session's model never shows a fallback while its agent loads", async ({ page }) => {

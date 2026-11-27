@@ -892,8 +892,8 @@ function sendCommand(
   })
 }
 
-async function applySelection(
-  session: ComposerSession,
+export async function applySelection(
+  session: Pick<ComposerSession, "id" | "current"> & { api: Pick<ComposerSession["api"], "switchAgent" | "switchModel"> },
   selection: ComposerSelection,
   track?: ModelSelection["trackSessionCommit"],
   beforeModel?: () => Promise<void>,

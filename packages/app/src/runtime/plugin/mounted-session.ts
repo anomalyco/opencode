@@ -25,6 +25,7 @@ import type {
 import { useComments } from "@/composer/comments"
 import { createComposerEditorActions } from "@/composer/editor/actions"
 import { useComposerState } from "@/composer/persistence"
+import { applySelection } from "@/composer/submit"
 import type { ComposerStateValue } from "@/composer/state"
 import { useLocal } from "@/providers/models/selection"
 import { useServer } from "@/runtime/server/current"
@@ -252,7 +253,6 @@ export function createMountedSession(session: SessionModel) {
       if (value) edit((draft) => draft.addText(value))
     },
     setText: (value) => edit((draft) => draft.setText(value.replace(/\r\n?/g, "\n"))),
-    agent: () => (session.data.isChild() ? undefined : local.agent.current()?.name),
     model() {
       const item = session.data.isChild() ? undefined : local.model.current()
 
@@ -281,6 +281,19 @@ export function createMountedSession(session: SessionModel) {
       local.model.variant.set(variant)
 
       return true
+    },
+    async applySelection() {
+      const id = session.identity.sessionID()
+      const agent = local.agent.current()?.name
+      const model = local.model.current()
+
+      if (session.data.isChild() || !id || !agent || !model) return
+
+      await applySelection(
+        { id, current: () => server.ctx.data.session.get(id), api: server.ctx.sdk.api.session },
+        { agent, model: { providerID: model.provider.id, modelID: model.id }, variant: local.model.variant.current() },
+        local.model.trackSessionCommit,
+      )
     },
     attach: (part) => write((draft) => draft.context.add(part)),
     quotable: () => !!prompt()?.quotable(),
