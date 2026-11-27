@@ -167,8 +167,6 @@ async function record(name: string, file: string) {
   await Bun.write(`${parity}fixtures/${name}.app.json`, recordingText(recording))
 }
 
-// A fake IDE MCP server (E.5): it answers `initialize`, keeps every message a client sends, and pushes
-// notifications to the clients that finished the handshake.
 async function omitSidebarPosition() {
   const { settings } = await import("../../../tui/src/component/dialog-config")
   const index = settings.findIndex((setting) => setting.path.join(".") === "session.sidebar_position")
@@ -177,6 +175,8 @@ async function omitSidebarPosition() {
   return { [Symbol.dispose]: () => settings.splice(index, 0, ...removed) }
 }
 
+// A fake IDE MCP server (E.5): it answers `initialize`, keeps every message a client sends, and pushes
+// notifications to the clients that finished the handshake.
 function startIde() {
   const received: unknown[] = []
   const ready = new Set<ServerWebSocket<unknown>>()
