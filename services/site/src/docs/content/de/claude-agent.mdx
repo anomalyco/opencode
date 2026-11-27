@@ -1,0 +1,183 @@
+---
+title: "Claude Agent"
+description: "Nutze einen Claude-Tarif oder eine Claude Code-Anmeldung in OpenCode über Claude Agent, das Claude Code auf deiner Maschine ausführt."
+noindex: true
+---
+
+Nutze deinen Claude-Tarif oder eine andere Claude Code-Anmeldung. Claude Agent führt Claude Code auf deiner Maschine aus,
+installiere also Claude Code 2.1.248 oder neuer und melde dich zuerst an.
+
+```bash
+claude auth login
+```
+
+Verbinde dann **Claude Agent** und wähle ein Modell. Die Modellliste stammt von Claude Code. Effort-Stufen sind Varianten,
+etwa `claude-agent/opus#high`.
+
+```text
+/connect
+# Select Claude Agent.
+/models
+```
+
+Du kannst auch aus der CLI mit `auth login claude-agent` verbinden.
+
+OpenCode findet `claude` in deinem `PATH`. Um eine andere Kopie zu nutzen, setze `OPENCODE_CLAUDE_PATH` auf dem Server.
+
+```bash
+opencode service set env OPENCODE_CLAUDE_PATH /opt/claude/bin/claude
+```
+
+## So funktioniert es
+
+Claude Code ruft das Modell auf, und OpenCode erledigt alles andere.
+
+- Claude erhält den System-Prompt von Claude Code plus den Prompt deines Agenten, `AGENTS.md`-Dateien, Skills und
+  MCP-Anweisungen.
+- Claude nutzt die Tools und Berechtigungen von OpenCode statt der eingebauten Tools von Claude Code.
+- Deine Claude Code-Einstellungen, `CLAUDE.md`-Dateien, Hooks, MCP-Server, Skills und Memory werden nicht geladen.
+- OpenCode führt Compaction und Subagenten aus.
+- Du kannst in derselben Session zwischen Claude Agent und anderen Modellen wechseln.
+
+## Kosten
+
+Die Kosten hängen davon ab, wie Claude Code angemeldet ist.
+
+| Anmeldung | Angezeigte Kosten |
+| --- | --- |
+| Claude-Abo | Keine, dein Tarif deckt sie ab |
+| Anthropic API-Schlüssel oder Claude Platform auf AWS oder Google Cloud | Anthropic-Preise |
+| Amazon Bedrock | Bedrock-Preise oder Anthropic-Preise auf Bedrock Mantle |
+| Google Vertex | Vertex-Preise |
+| Microsoft Foundry | Azure-Preise |
+| Eigene Basis-URL | Keine |
+
+## Konfigurieren
+
+Verbindungseinstellungen am Anbieter `claude-agent` werden an Claude Code übergeben. Sie überschreiben dieselben
+Variablen, die in deiner Shell gesetzt sind.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": {
+        "baseURL": "https://llm-proxy.example.com/anthropic",
+      },
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+    },
+  },
+}
+```
+
+| Konfiguration | Claude Code-Variable |
+| --- | --- |
+| `settings.baseURL` | `ANTHROPIC_BASE_URL` |
+| `settings.apiKey` | `ANTHROPIC_API_KEY` |
+| `settings.authToken` | `ANTHROPIC_AUTH_TOKEN` |
+| `settings.headerTimeout` | `API_TIMEOUT_MS` |
+| `settings.chunkTimeout` | `CLAUDE_STREAM_IDLE_TIMEOUT_MS` |
+| `settings.configDir` | `CLAUDE_CONFIG_DIR` |
+| `headers` | `ANTHROPIC_CUSTOM_HEADERS` |
+| `body` | `CLAUDE_CODE_EXTRA_BODY` |
+
+Setze sie an einem Modell, um die Werte des Anbieters für dieses Modell zu überschreiben.
+
+## Ein zweites Claude-Konto nutzen
+
+Melde dich beim zweiten Konto in seinem eigenen Ordner an. Deine übliche Anmeldung bleibt unverändert.
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-2" claude auth login
+```
+
+In PowerShell:
+
+```powershell
+$env:CLAUDE_CONFIG_DIR = "$HOME\.claude-2"; claude auth login
+```
+
+Füge dann Modelle hinzu, die diesen Ordner nutzen:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "models": {
+        "sonnet-2": {
+          "modelID": "sonnet",
+          "name": "Sonnet (Claude 2)",
+          "settings": { "configDir": "~/.claude-2" },
+        },
+      },
+    },
+  },
+}
+```
+
+Um ein Konto für jedes Modell in einem Projekt zu nutzen, setze `settings.configDir` stattdessen am Anbieter in der
+Konfiguration dieses Projekts.
+
+## Zwischen Konten wechseln
+
+Wenn du mehrere austauschbare Konten hast, kann OpenCode zum nächsten wechseln, wenn ein Konto sein Nutzungslimit
+erreicht. Melde dich bei jedem zusätzlichen Konto in seinem eigenen Ordner an. Deine bestehende Anmeldung in `~/.claude`
+kann bleiben, wie sie ist:
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-1" claude auth login
+```
+
+Liste dann die Ordner auf:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": { "configDir": ["~/.claude", "~/.claude-1"] },
+    },
+  },
+}
+```
+
+Ein Chat bleibt bei dem Konto, das ihn zuletzt beantwortet hat, und neue Chats starten mit dem Konto, das zuletzt
+funktioniert hat. Die Rotation gilt nur für Claude-Abo-Anmeldungen, nicht für `apiKey` oder `authToken`.
+
+## Websuche
+
+Claude Agent kann die Websuche in OpenCode über WebSearch von Claude Code ausführen. Die Suchanfragen werden auf deinen
+Claude-Tarif angerechnet; ein API-Schlüssel für die Suche ist nicht nötig. Jedes Modell kann diese Websuche nutzen. Wähle
+sie in `opencode.jsonc` aus:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+Siehe [Websuche](/websearch#claude-agent) für Details.
+
+## Einschränkungen
+
+- Claude Code muss auf derselben Maschine wie der OpenCode-Server installiert sein. Claude Agent ist in entfernten
+  Workspaces nicht verfügbar.
+- Der System-Prompt von Claude Code ersetzt den eingebauten Prompt von OpenCode. Eigene Agenten-Prompts gelten weiterhin.
+- Temperature, Top-p, Top-k, Seed und Stop-Sequenzen werden nicht unterstützt.
+- Plugin-Hooks `http.request` und `http.response` laufen nicht, weil Claude Code die API-Aufrufe macht.
+- Claude Code-Funktionen wie `/usage`, `/loop`, Auto-Modus und Agent-Teams sind nicht verfügbar.
+
+## Fehler
+
+| Fehler oder Symptom | Prüfen |
+| --- | --- |
+| `Claude Code is not installed` | Installiere Claude Code oder setze `OPENCODE_CLAUDE_PATH` auf seinen Pfad. |
+| `Claude Code is not logged in` | Führe `claude auth login` aus und verbinde Claude Agent dann erneut. Mit `configDir` führe den Befehl aus, den der Fehler für diesen Ordner zeigt. |
+| `Claude Code ... is too old` | Führe `claude update` aus. |

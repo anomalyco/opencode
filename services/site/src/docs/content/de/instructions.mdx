@@ -1,0 +1,161 @@
+---
+title: "Anweisungen"
+description: "Gib OpenCode mit AGENTS.md-Dateien dauerhafte Projektanweisungen, und erfahre, wo sie gelten, in welcher Reihenfolge sie geladen werden und wie der CLAUDE.md-Fallback funktioniert."
+---
+
+Füge eine `AGENTS.md`-Datei hinzu, um OpenCode dauerhafte Projektanweisungen zu geben. Nutze sie für Build-Befehle, Architekturnotizen, Code-Konventionen und Verifikationsanforderungen.
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+Nimm Anweisungsdateien für das Projekt ins Repository auf, damit alle, die daran arbeiten, dieselben Anweisungen erhalten.
+
+## Geltungsbereich
+
+Lege `AGENTS.md` in das Verzeichnis, in dem seine Anweisungen gelten sollen. OpenCode lädt die globale Datei und dann
+jede `AGENTS.md` vom aktuellen Workspace-Verzeichnis in Richtung Home-Verzeichnis. Bei Workspaces außerhalb des
+Home-Verzeichnisses endet es an der Projektwurzel.
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+In diesem Beispiel werden alle vier Dateien geladen. Sie werden in dieser Reihenfolge kombiniert:
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+Halte Anweisungen, die überall gelten, in der globalen Datei. Lege repositoryweite Anweisungen in die Projektwurzel und
+spezifischere Anweisungen näher am Code, den sie betreffen. OpenCode kombiniert die Dateien und löst keine Konflikte
+zwischen ihnen.
+
+Wenn der Workspace außerhalb der Projektwurzel liegt, wird nur die globale Datei geladen. Setze
+`OPENCODE_DISABLE_PROJECT_CONFIG=1`, um die Suche nach Projekt-`AGENTS.md` zu überspringen, ohne die globale Datei zu
+deaktivieren.
+
+### CLAUDE.md-Fallback
+
+In jedem Verzeichnis ohne `AGENTS.md` liest OpenCode stattdessen `CLAUDE.md`. Ohne globale
+`~/.config/opencode/AGENTS.md` liest es `~/.claude/CLAUDE.md`. Die `AGENTS.md` eines Verzeichnisses gewinnt immer
+gegenüber seiner `CLAUDE.md`, daher wird ein Symlink zwischen beiden nur einmal geladen.
+
+Setze `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1`, um jede `CLAUDE.md` zu überspringen, oder
+`OPENCODE_DISABLE_CLAUDE_CODE=1`, um zusätzlich `.claude`-Skills zu überspringen. Der Server liest beide beim Start. Für
+den Hintergrunddienst speichere sie mit `opencode service set env` und führe `opencode service restart` aus.
+
+## Automatische Suche
+
+OpenCode findet Anweisungsdateien unterhalb des Workspace, während der Agent das Projekt erkundet. Wenn er eine Datei
+liest oder ein Verzeichnis auflistet, lädt OpenCode alle `AGENTS.md`-Dateien zwischen diesem Ziel und dem Workspace.
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+Verschachtelte Dateien werden von der nächsten zur fernsten geladen und dedupliziert, solange ihr
+Anweisungseintrag in der modellsichtbaren Historie bleibt. Das erneute Lesen desselben Bereichs fügt sie normalerweise
+nicht erneut ein. Wenn Compaction oder ein Revert diesen Eintrag entfernt, kann ein späteres Lesen die Datei erneut
+laden.
+
+Änderungen an einer verschachtelten Datei werden nach dem Laden nicht automatisch erkannt. Starte eine neue Session,
+wenn aktualisierter Text sofort gelten muss.
+
+## Reihenfolge
+
+Der System-Prompt des gewählten Agenten oder Anbieters wird zuerst gesendet. OpenCode stellt dann die anfänglichen
+Anweisungen in dieser Reihenfolge zusammen:
+
+```text
+1. Agent or provider system prompt
+2. Code Mode tool guidance, when enabled
+3. MCP server, reference, and skill guidance
+4. Global and project AGENTS.md files, then configured instructions
+5. Built-in date and environment context
+6. Session-specific instruction entries supplied through the API
+```
+
+OpenCode führt die Quellen zusammen, statt sie zu überschreiben. Findet es später weitere `AGENTS.md`-Dateien in
+Unterverzeichnissen, fügt es sie in der Reihenfolge, in der es sie findet, zum Session-Verlauf hinzu.
+
+## Aktualisierungen
+
+Bearbeite während einer laufenden Session eine globale oder bei der Suche nach oben gefundene `AGENTS.md`,
+um die Anweisungen zu aktualisieren.
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+Vor der nächsten Modellanfrage erkennt OpenCode die Änderung und fügt eine Anweisungsaktualisierung hinzu, bevor
+ausstehende Eingaben zugestellt werden:
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- Wenn du alle bei der Suche nach oben gefundenen `AGENTS.md`-Dateien entfernst, erfährt die Session, dass die
+  bisherigen Anweisungen aus diesen Dateien nicht mehr gelten.
+- Ein vorübergehender Lesefehler bewahrt die zuletzt bekannten Anweisungen, statt sie als gelöscht zu behandeln.
+- Das Verschieben einer Session behält ihren Anweisungszustand, daher werden Anweisungen am Ziel als Aktualisierung
+  eingeführt.
+- Das Committen eines Session-Reverts löscht ihren Anweisungszustand und lädt Anweisungen vor dem nächsten Prompt neu.
+
+Anweisungswerte bleiben privilegiert. Clients können sehen, welche Quellen sich geändert haben, aber nicht ihre Inhalte.
+
+## Konfiguration
+
+Nutze das Array `instructions`, um neben entdeckten `AGENTS.md`-Dateien Dateien, Glob-Muster oder HTTP(S)-URLs
+hinzuzufügen:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "CONTRIBUTING.md",
+    "docs/guidelines/*.md",
+    "~/rules/opencode.md",
+    "https://example.com/instructions.md",
+  ],
+}
+```
+
+Konfigurierte Anweisungen werden nach `AGENTS.md`-Dateien geladen, in der Reihenfolge, in der sie aufgeführt sind.
+Einträge aus jedem Konfigurationsdokument werden kombiniert.
+
+| Eintrag                 | Auflösung                                                              |
+| ----------------------- | ---------------------------------------------------------------------- |
+| Relativer Pfad oder Glob | In jedem Verzeichnis vom Workspace bis zur Projektwurzel gesucht       |
+| `~/`-Pfad               | Vom Home-Verzeichnis aufgelöst                                         |
+| Absoluter Pfad          | Unverändert verwendet; der Dateiname darf ein Glob sein                |
+| `http://` oder `https://` | Beim Laden der Konfiguration abgerufen, mit fünf Sekunden Timeout    |
+
+- Lokale Dateien aktualisieren sich wie `AGENTS.md`, wenn sie sich ändern. Neue Dateien, die zu einem Glob passen,
+  werden bei der nächsten Konfigurationsänderung geladen.
+- Fehlende Dateien werden übersprungen. Eine URL, die nicht abgerufen werden kann, wird übersprungen oder behält ihren
+  zuletzt abgerufenen Inhalt.
+- Mit `OPENCODE_DISABLE_PROJECT_CONFIG=1` oder wenn der Workspace außerhalb des Projekts liegt, werden relative Einträge
+  relativ zum globalen Konfigurationsverzeichnis aufgelöst.
+
+Ein verbundener [OpenCode Console](/console)-Workspace kann ebenfalls Anweisungen teilen.
+
+Siehe [Konfiguration](/config) für Speicherorte und Rangfolge der Konfiguration.

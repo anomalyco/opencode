@@ -1,0 +1,110 @@
+---
+title: "TUI"
+description: "Starte eine Session und nutze die alltäglichen Workflows in der Terminal-Oberfläche."
+---
+
+Führe OpenCode in deinem Projekt aus, tippe eine Anfrage und drücke **Enter**.
+
+```bash
+cd ~/code/my-project
+opencode
+```
+
+```text
+Explain how authentication works in this project
+```
+
+Drücke **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** oder **Ctrl+J** für eine neue Zeile. Während OpenCode arbeitet,
+kannst du mit **Enter** einen Prompt senden, um die laufende Session zu steuern. Drücke **Ctrl+X** und dann **Enter**,
+um den Prompt für später einzureihen.
+
+## Kontext
+
+Tippe `@`, um nach einer Datei zu suchen, und wähle sie dann aus, um sie an den Prompt anzuhängen. Tippe nach `@` weiter,
+um die Ergebnisse einzugrenzen.
+
+```text
+Review @src/auth.ts for error handling problems
+```
+
+Du kannst nach dem Pfad eine Zeile oder einen Bereich angeben.
+
+```text
+Explain @src/auth.ts#20-45
+```
+
+## Shell
+
+Tippe `!` am Anfang eines leeren Prompts, um den Shell-Modus zu öffnen. Gib einen Befehl ein und drücke **Enter**;
+drücke **Esc**, um den Shell-Modus zu verlassen, ohne einen auszuführen.
+
+```text
+!git status
+```
+
+Shell-Befehle laufen im Arbeitsverzeichnis der Session, und ihre Ausgabe bleibt in der Session.
+
+## Befehle
+
+Tippe `/`, um die Slash-Befehle aufzulisten. Tippe weiter, um die Liste zu filtern, und drücke dann **Enter**, um den
+ausgewählten Befehl auszuführen.
+
+```text
+/models
+```
+
+Häufige Befehle sind `/new`, `/sessions`, `/models`, `/agents`, `/undo`, `/redo` und `/editor`. Drücke **Ctrl+P**, um die
+Befehlspalette mit jeder in der aktuellen Ansicht verfügbaren Aktion zu öffnen.
+
+Nach einem Update zeigt OpenCode einmal auf dem Startbildschirm, was im Release neu ist. Führe `/highlights` aus, um es
+erneut zu sehen, oder setze `"highlights": false` in [`cli.json`](/cli/config#alerts), damit es sich nicht mehr
+automatisch öffnet.
+
+## Nebenfragen
+
+Führe `/btw <question>` aus, um eine schnelle Frage zur bisherigen Unterhaltung zu stellen. Die Antwort nutzt den Kontext
+der Session und das aktuelle Modell, wird aber nicht zur Unterhaltung hinzugefügt und beeinflusst daher spätere Prompts
+nicht. Während sie läuft, zeigt die Prompt-Fußzeile einen `/btw`-Hinweis, und die Antwort öffnet sich in einem Dialog;
+drücke **C**, um sie zu kopieren.
+
+```text
+/btw why did the test in step 2 fail?
+```
+
+## Modelle
+
+Drücke **Ctrl+X** und dann **M**, um ein Modell zu wählen, oder führe `/models` aus. Drücke **F2**, um durch zuletzt
+genutzte Modelle zu wechseln.
+
+Drücke **Ctrl+X** und dann **A**, um einen Agenten zu wählen, oder führe `/agents` aus. Drücke **Shift+Tab**, um Agenten
+zu wechseln.
+
+## Sessions
+
+Drücke **Ctrl+X** und dann **N**, um eine neue Session zu starten. Drücke **Ctrl+X** und dann **L** oder führe
+`/sessions` aus, um zu einer bestehenden Session zurückzukehren. **Ctrl+O** öffnet eine gemeinsame Liste der zuletzt
+genutzten Sessions und Projekte.
+
+Tabs sind standardmäßig aktiviert. Wechsle mit **Ctrl+Tab** und **Ctrl+Shift+Tab** zwischen ihnen, schließe einen mit
+**Ctrl+X** und dann **W**, und öffne den zuletzt geschlossenen Tab mit **Ctrl+Shift+T** wieder.
+
+## Verlauf
+
+Drücke **Ctrl+X** und dann **U**, oder führe `/undo` aus, um die letzte Nutzernachricht und die darauf folgende Arbeit
+zurückzunehmen. Der zurückgenommene Prompt erscheint wieder im Eingabefeld, sodass du ihn bearbeiten kannst.
+
+Drücke **Ctrl+X** und dann **R**, oder führe `/redo` aus, um die zurückgenommene Arbeit wiederherzustellen. Wenn du
+stattdessen einen neuen Prompt sendest, akzeptierst du das Zurücknehmen und machst von diesem Punkt aus weiter.
+
+## Editor
+
+Setze `VISUAL` oder `EDITOR`, drücke dann **Ctrl+X** und dann **E**, oder führe `/editor` aus, um den aktuellen Prompt in
+diesem Editor zu bearbeiten. Speichere den Text und schließe den Editor, um den Text ins Eingabefeld zu übernehmen.
+Drücke dann **Enter**, um ihn zu senden.
+
+```bash
+export EDITOR="nvim"
+opencode
+```
+
+Die Leader-Taste ist standardmäßig **Ctrl+X**. Siehe [Tastenbelegung](/cli/keybinds), um diese Tastenkürzel zu ändern.

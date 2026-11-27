@@ -1,0 +1,105 @@
+---
+title: "Abrechnung"
+description: "Lade in OpenCode Console Guthaben auf, richte die automatische Aufladung ein, verwalte Zahlungsmethoden und lade Rechnungen herunter."
+---
+
+Die Console ist unabhängig von der Teamgröße kostenlos. Es fallen keine Gebühren pro Lizenz an.
+Du zahlst nur für die Nutzung, und zwar aus einem im Voraus aufgeladenen Guthaben für den gesamten Workspace.
+Owner und Admins verwalten die Abrechnung unter
+**Settings › Billing**.
+
+Die Nutzung über [deine eigenen Anbieter](/console/providers) wird vom Anbieter abgerechnet, nicht von der Console.
+
+## Zahlungsmethode hinzufügen
+
+1. Öffne **Settings › Billing**.
+2. Klicke unter **Payment methods** auf **Add**.
+3. Wähle eine Methode und schließe die Stripe-Einrichtung ab.
+
+Unterstützte Zahlungsmethoden:
+
+- Karte
+- Link
+- Alipay
+- UPI
+- WeChat Pay
+
+Wähle über **⋯ › Make default** die Zahlungsmethode für automatische Abbuchungen. Wenn du eine Methode
+entfernst, kann das die automatische Aufladung und die Go-Verlängerungen unterbrechen, die über diese Methode
+laufen.
+
+## Guthaben hinzufügen
+
+1. Klicke unter **Credits** auf **Add credits**.
+2. Wähle $10, $50 oder $100. Für einen anderen Betrag wähle **Other** und gib den Betrag ein.
+3. Wähle eine Zahlungsmethode und klicke auf **Confirm and pay**.
+
+Hinzu kommt eine Bearbeitungsgebühr von 4,6 % + $0.31. Eine Aufladung um $50 kostet also insgesamt $52.61. Die
+vollen $50 landen auf deinem Guthaben.
+
+## Automatische Aufladung
+
+Die automatische Aufladung stockt dein Guthaben auf, wenn es zur Neige geht.
+
+1. Klicke unter **Auto-recharge** auf **Add rule**.
+2. Lege fest, bei welchem Guthabenstand eine Abbuchung ausgelöst wird und wie viel Guthaben du aufladen
+   möchtest.
+3. Klicke auf **Save**.
+
+Für eine automatische Aufladung wird deine Standardzahlungsmethode mit dem Aufladebetrag zuzüglich
+Bearbeitungsgebühr belastet. Schlägt eine Abbuchung fehl, bleibt die automatische Aufladung deaktiviert, bis
+du sie erneut einrichtest.
+
+## Guthaben prüfen
+
+Die Karte **Billing** unter **Activity** zeigt Ownern und Admins das Guthaben. Sie führt zu
+**Settings › Billing**.
+
+Über **Billing** in der Kopfzeile des Workspace oder die Taste `B` öffnest du einen Seitenbereich mit den
+aktuellen Go-Limits, dem Guthaben und der Nutzung. Owner und Admins sehen das Guthaben, die Nutzung und die
+automatische Aufladung des Workspace. Mitglieder sehen nur ihre eigene Nutzung und ihre Limits.
+
+## Wenn das Guthaben aufgebraucht ist
+
+Sobald das Guthaben aufgebraucht ist, schlagen kostenpflichtige Anfragen mit HTTP `402` fehl. Das Guthaben
+kann nicht ins Minus rutschen.
+
+```text
+Upstream request failed: Insufficient account funds
+```
+
+## Rechnungen
+
+Jede Zahlung erscheint unter **Invoices** mit ihrem Status und einem Link zu **Download invoice** oder
+**View receipt**.
+
+| Eintrag              | Erstellt durch                                    |
+| -------------------- | ------------------------------------------------- |
+| Balance top-up       | Guthaben hinzufügen                               |
+| Automatic top-up     | Automatische Aufladung                                     |
+| Go subscription      | Go, Go Plus oder Go Teams abonnieren              |
+| Go renewal           | Monatliche Go-Verlängerung                        |
+| Go Plus upgrade      | Upgrade von Go auf Go Plus                        |
+| Go Teams upgrade     | Upgrade von Go oder Go Plus auf Go Teams          |
+| Go Teams member      | Ein Mitglied tritt einem Workspace mit Go Teams bei |
+| Monthly Usage | Abrechnung per Rechnung |
+
+## Steuerformulare
+
+US-Kunden können das [W-9-Formular von Anomaly Innovations Inc.](/assets/anomaly-w9.pdf) herunterladen.
+
+## Abrechnung per Rechnung
+
+Workspaces mit einer Kreditvereinbarung können die Nutzung monatlich per Rechnung bezahlen, statt Guthaben
+aufzuladen. Wende dich zur Einrichtung an den Support.
+
+- Die Nutzung wird auf einen Kreditrahmen angerechnet statt mit im Voraus aufgeladenem Guthaben bezahlt.
+- Die Rechnung für jeden Monat wird am 1. (UTC) ausgestellt und ist 14 Tage später fällig.
+- Offene Rechnungen haben eine Schaltfläche **Pay now**.
+- Anfragen schlagen mit HTTP `402` fehl, wenn der Kreditrahmen ausgeschöpft oder eine Rechnung überfällig ist.
+
+## Go
+
+[OpenCode Go](/console/go)-Abos verwenden dieselben Zahlungsmethoden und erscheinen in derselben Rechnungsliste. Du kannst
+Go auch [mit Guthaben bezahlen](/console/go#pay-with-credit). Aktiviere **Extra Usage** auf der Seite **Go**, um aus
+Guthaben zu zahlen, sobald ein Go-Limit erreicht ist.
