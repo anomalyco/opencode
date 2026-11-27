@@ -27,7 +27,7 @@ import { SessionStore } from "../store.js"
 import { SessionMessageTable } from "../sql.js"
 import { SessionTitle } from "../title.js"
 import { toSessionError } from "../to-session-error.js"
-import { DrainResult, Service, type Interface } from "./index.js"
+import { DrainResult, reach, Service, type Interface, type Position } from "./index.js"
 import { Snapshot } from "../../snapshot.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { llmClient } from "../../effect/app-node-platform.js"
@@ -70,17 +70,15 @@ const layer = Layer.effect(
     // Each drain is one turn and starts its own trace, whatever fiber woke it.
     const drain = Effect.fn("SessionRunner.drain", { root: true })(function* (input: DrainInput) {
       const sessionID = input.sessionID
-      let force = input.force
-      let continuing = input.continuation !== undefined
-      let step = input.continuation?.step ?? 1
-      let entering = true
-      let stepped = input.stepped ?? false
       const promotable = input.promotable ?? "input"
-      if (!force && !continuing && !stepped) {
-        const pending = yield* SessionInbox.nextPromotable(db, sessionID, "input")
-        if (!pending) return DrainResult.Complete()
-        const control = pending.type === "compaction" || pending.type === "move"
-        if (promotable === "steer" && pending.delivery === "queue" && !control) return DrainResult.Complete()
+      let at: Position = input.at ?? { _tag: "Fresh", forced: false }
+      // The step allowance. `at` carries it for a handoff: a mid-turn reset to step 1 always runs
+      // that step, which records the next position, before the next handoff can happen.
+      let step = at._tag === "Continue" ? at.step : 1
+      let entering = true
+      if (at._tag === "Fresh" && !at.forced) {
+        const pending = yield* SessionInbox.boundary(db, sessionID, reach(at, entering, promotable))
+        if (pending._tag === "Empty" || pending._tag === "Parked") return DrainResult.Complete()
       }
       yield* plugins.awaitActivation
       yield* settleStaleCompactions(sessionID)
@@ -92,49 +90,47 @@ const layer = Layer.effect(
             while (true) {
               if (lifecycle.isClosed()) {
                 yield* restore(modelTransport.close(sessionID))
-                return DrainResult.Reloaded({
-                  force,
-                  continuation: continuing ? { step } : undefined,
-                  stepped: !continuing && stepped ? true : undefined,
-                })
+                return DrainResult.Reloaded({ at })
               }
               // Location entry and idle boundaries allow queued controls, not necessarily queued prompts.
               const pending = yield* inbox.serialized(
                 sessionID,
                 Effect.gen(function* () {
-                  const next = yield* SessionInbox.nextPromotable(
-                    db,
-                    sessionID,
-                    entering || !continuing ? "input" : "steer",
-                  )
-                  if (next?.type === "compaction")
+                  const next = yield* SessionInbox.boundary(db, sessionID, reach(at, entering, promotable))
+                  if (next._tag !== "Control") return next
+                  const item = next.item
+                  if (item.type === "compaction")
                     yield* bus.publishAll([
-                      [SessionEvent.InboxDelivered, { sessionID, inboxID: next.id }],
-                      [SessionEvent.Compaction.Started, { sessionID, reason: "manual", inputID: next.id }],
+                      [SessionEvent.InboxDelivered, { sessionID, inboxID: item.id }],
+                      [SessionEvent.Compaction.Started, { sessionID, reason: "manual", inputID: item.id }],
                     ])
-                  if (next?.type === "move")
+                  if (item.type === "move")
                     yield* restore(
                       Effect.gen(function* () {
                         yield* modelTransport.close(sessionID)
                         yield* bus.publishAll([
-                          [SessionEvent.InboxDelivered, { sessionID, inboxID: next.id }],
-                          [SessionEvent.Moved, { sessionID, ...next.payload }],
+                          [SessionEvent.InboxDelivered, { sessionID, inboxID: item.id }],
+                          [SessionEvent.Moved, { sessionID, ...item.payload }],
                         ])
                       }),
                     )
                   return next
                 }),
               )
-              if (!continuing && pending?.delivery !== "steer") {
+              // Anything but a steer outside a turn starts a fresh one, with a fresh step allowance.
+              const steered =
+                pending._tag === "Control"
+                  ? pending.item.delivery === "steer"
+                  : pending._tag === "Promote" && pending.items[0].delivery === "steer"
+              if (at._tag !== "Continue" && !steered) {
                 entering = true
                 step = 1
               }
-              if (pending?.type === "move")
-                return DrainResult.Moved({
-                  continuation: continuing ? { step } : undefined,
-                  stepped: !continuing && stepped ? true : undefined,
-                })
-              if (pending?.type === "compaction") {
+              // The destination drain picks up unforced: the move itself was this boundary's work.
+              if (pending._tag === "Control" && pending.item.type === "move")
+                return DrainResult.Moved({ at: at._tag === "Fresh" ? { _tag: "Fresh", forced: false } : at })
+              if (pending._tag === "Control") {
+                const inputID = pending.item.id
                 const compacted = yield* restore(
                   Effect.gen(function* () {
                     yield* plugins.awaitActivation
@@ -147,7 +143,7 @@ const layer = Layer.effect(
                     const history = yield* SessionHistory.preview(db, sessionID, selected.instructions, model.ref)
                     return yield* compaction.compact({
                       reason: "manual",
-                      inputID: pending.id,
+                      inputID,
                       context: {
                         session: selected.session,
                         agent: selected.agent,
@@ -162,7 +158,7 @@ const layer = Layer.effect(
                       bus.publish(SessionEvent.Compaction.Failed, {
                         sessionID,
                         reason: "manual",
-                        inputID: pending.id,
+                        inputID,
                         error: toSessionError(error),
                       }),
                     ),
@@ -175,16 +171,16 @@ const layer = Layer.effect(
                     error: Cause.hasInterruptsOnly(compacted.cause)
                       ? { type: "aborted", message: "Compaction cancelled" }
                       : { type: "compaction.failed", message: Cause.pretty(compacted.cause) },
-                    inputID: pending.id,
+                    inputID,
                   })
                   return yield* Effect.failCause(compacted.cause)
                 }
-                force = false
+                if (at._tag === "Fresh") at = { _tag: "Fresh", forced: false }
                 continue
               }
-              if (!force && !continuing && (!pending || (pending.delivery === "queue" && promotable === "steer"))) {
+              if ((at._tag === "BetweenTurns" || (at._tag === "Fresh" && !at.forced)) && pending._tag !== "Promote") {
                 // Control-only drains such as a manual compaction never ran the model, so they skip the hook.
-                if (pending || !stepped) return DrainResult.Complete()
+                if (pending._tag === "Parked" || at._tag !== "BetweenTurns") return DrainResult.Complete()
                 // The Session would go idle; a plugin may admit input to keep this execution working.
                 yield* restore(
                   SessionBackground.outstanding(jobs, store, sessionID).pipe(
@@ -199,7 +195,11 @@ const layer = Layer.effect(
               const ready = yield* restore(
                 Effect.gen(function* () {
                   const selected = yield* prepareContext(sessionID)
-                  const promoted = yield* inbox.promote(sessionID, entering && !continuing ? promotable : "steer")
+                  // Delivery re-plans after preparation; only a fresh turn's entry may take a queued prompt.
+                  const promoted = yield* inbox.promote(
+                    sessionID,
+                    entering && at._tag !== "Continue" ? promotable : "steer",
+                  )
                   // A control admitted during context preparation owns this boundary.
                   if (promoted === undefined) return undefined
                   if (promoted > 0 && !selected.session.parentID && SessionTitle.isUntitled(selected.session))
@@ -219,10 +219,9 @@ const layer = Layer.effect(
       while (true) {
         const next = yield* advanceToStep()
         if (next._tag !== "Ready") return next
-        continuing = yield* runStep(next.context, step, input.interruption)
-        stepped = true
+        const continuing = yield* runStep(next.context, step, input.interruption)
         step++
-        force = false
+        at = continuing ? { _tag: "Continue", step } : { _tag: "BetweenTurns" }
         entering = false
       }
     })
