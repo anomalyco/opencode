@@ -958,7 +958,8 @@ export const dict = {
   "settings.experimental.row.newQuestionUI.title": "New question UI",
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
   "settings.experimental.row.automations.title": "Automations",
-  "settings.experimental.row.automations.description": "Show the automations each server runs, and pause, resume or delete them",
+  "settings.experimental.row.automations.description":
+    "Show the automations each server runs, and pause, resume or delete them",
   "settings.experimental.row.tabGroups.title": "Tab groups",
   "settings.experimental.row.tabGroups.description": "Group session tabs in side tabs with inline session search",
   "settings.experimental.row.sidebarOrganize.title": "Organize vertical sidebar",
