@@ -64,6 +64,7 @@ import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useClient } from "../../context/client"
 import { useEditorContext } from "../../context/editor"
 import { useDialog } from "../../ui/dialog"
+import { clickedLink, LinkedText } from "../../ui/link"
 import { DialogSelect } from "../../ui/dialog-select"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { TodoItem } from "../../component/todo-item"
@@ -2414,8 +2415,10 @@ function UserMessage(props: { message: SessionMessageUser }) {
           onMouseOut={() => {
             setHover(false)
           }}
-          onMouseUp={() => {
+          onMouseUp={(event) => {
             if (renderer.getSelection()?.getSelectedText()) return
+            // The app opens the clicked link; the message dialog would open on top of the browser handoff.
+            if (clickedLink(renderer, event)) return
             if (delivery() === "steer") {
               dialog.replace(() => (
                 <DialogSelect
@@ -2443,7 +2446,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
           backgroundColor={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
           flexShrink={0}
         >
-          <text fg={theme.text.base}>{props.message.text}</text>
+          <LinkedText text={props.message.text} fg={theme.text.base} linkFg={theme.markdown.linkText} />
           <Show when={skills().length}>
             <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
               <For each={skills()}>
