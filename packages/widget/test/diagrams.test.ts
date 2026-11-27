@@ -78,8 +78,10 @@ describe("every diagram", () => {
       expect(widgetTemplate(name).description.length).toBeGreaterThan(20)
       const session = await start(name, examples[name])
       expect(texts(session.view)[0]).toBe(examples[name].title)
-      const list = canvases(session.view)
-      expect(list.length).toBeGreaterThan(0)
+      // The table is a native table node, not a canvas.
+      if (name === "table") expect(nodes(session.view).some((node) => node.type === "table")).toBe(true)
+      const list = name === "table" ? [] : canvases(session.view)
+      if (name !== "table") expect(list.length).toBeGreaterThan(0)
       for (const canvas of list) {
         expect(canvas.id).toBeString()
         expect(canvas.alt?.length).toBeGreaterThan(10)
@@ -428,46 +430,37 @@ test("sequence: messages in rows, tap one, choose; unknown participants fail", a
   ).rejects.toBeInstanceOf(StepError)
 })
 
-test("table: aligned monospace rows, sort, sparklines, select a row, choose", async () => {
+test("table: a native table, sorted by a header press, text sparklines, select a row, choose", async () => {
   const session = await start("table", examples.table)
-  const rows = () =>
-    texts(session.view).filter((text) => text.startsWith("GET") || text.startsWith("POST") || text.startsWith("PUT"))
-  expect(rows()).toEqual([
-    "GET /users     182,400  120 ms   0.12%",
-    "POST /orders    64,200  340 ms   1.40%",
-    "GET /search    120,900  210 ms   0.30%",
-    "PUT /profile     8,800   95 ms   0.05%",
+  type Table = Extract<Node, { type: "table" }>
+  const table = () => nodes(session.view).find((node): node is Table => node.type === "table")!
+  const first = () => table().rows.map((row) => row[0])
+  expect(table().columns).toEqual([
+    { label: "Endpoint", align: "start" },
+    { label: "Requests", align: "end" },
+    { label: "p95", align: "end" },
+    { label: "Errors", align: "end" },
+    { label: "7d requests" },
   ])
-  await press(session, "Requests")
-  expect(rows().map((row) => row.split("  ")[0].trim())).toEqual([
-    "GET /users",
-    "GET /search",
-    "POST /orders",
-    "PUT /profile",
-  ])
-  expect(button(session.view, "Requests")).toMatchObject({ label: "Requests ↓", variant: "primary" })
-  await press(session, "Requests")
-  expect(rows()[0].startsWith("PUT /profile")).toBe(true)
-  await press(session, "Endpoint")
-  expect(rows()[0].startsWith("GET /search")).toBe(true)
-  // Rows are keyed by their index in the data, so sorting keeps each row's (and its sparkline's) id.
-  expect(canvases(session.view).map((canvas) => canvas.id)).toEqual([
-    "0/:2/0/:spark2",
-    "0/:0/0/:spark0",
-    "0/:1/0/:spark1",
-    "0/:3/0/:spark3",
-  ])
-  const spark = canvases(session.view)[1]
-  expect(spark).toMatchObject({ width: 96, height: 22, alt: "7d requests: 20, 22, 25, 24, 27, 30, 34" })
-  const first = (await session.draw(frame(spark, 0))).commands
-  const end = (await session.draw(frame(spark, 1))).commands
-  const line = (commands: ReadonlyArray<Command>) =>
-    commands.find((command) => command[0] === "path" && command[2].width === 1.5)
-  expect(line(first)?.[1]).toHaveLength(1)
-  expect(line(end)?.[1]).toHaveLength(7)
-  expect(end.filter((command) => command[0] === "circle")).toHaveLength(1)
-  const row = nodes(session.view).find((node) => node.type === "card" && node.id?.endsWith("/:2"))
-  await session.dispatch({ id: row?.type === "card" ? (row.id ?? "") : "", type: "press" })
+  expect(table().rows[0]).toEqual(["GET /users", "182,400", "120 ms", "0.12%", "▁▂▄▃▅▆█"])
+  expect([table().sortable, table().selectable, table().sort]).toEqual([true, true, undefined])
+  const sort = (column: number) => session.dispatch({ id: table().id!, type: "change", value: column })
+  await sort(1)
+  expect(first()).toEqual(["GET /users", "GET /search", "POST /orders", "PUT /profile"])
+  expect(table().sort).toEqual({ column: 1, descending: true })
+  await sort(1)
+  expect(first()[0]).toBe("PUT /profile")
+  await sort(0)
+  expect(first()[0]).toBe("GET /search")
+  expect(table().sort).toEqual({ column: 0, descending: false })
+  // The trend column doesn't sort.
+  await sort(4)
+  expect(table().sort).toEqual({ column: 0, descending: false })
+  // A row press selects the row shown there, which stays selected when the order changes.
+  await session.dispatch({ id: table().id!, type: "press", value: 0 })
+  expect(table().selected).toBe(0)
+  await sort(0)
+  expect(table().selected).toBe(3)
   expect(button(session.view, "Choose")).toMatchObject({ label: "Choose GET /search", disabled: false })
   expect(await choose(session)).toEqual({
     index: 2,
@@ -475,9 +468,20 @@ test("table: aligned monospace rows, sort, sparklines, select a row, choose", as
   })
 })
 
-test("table: a large table builds in linear time and lines up exactly", async () => {
-  // Past the 50-row schema cap on purpose: clients may run old or hand-written data, and a view that rescans every row
-  // per row (as `line` once did) blows the step and slice budgets there.
+test("table: without choose, rows take no presses; without trends, no trend column", async () => {
+  const data = { title: "t", columns: [{ label: "Name" }, { label: "Count" }], rows: [{ cells: ["a", 1] }] }
+  const view = (await step(program(widgetTemplate("table").source), { phase: "init", data }, { timeoutMs: 5000 })).view
+  const table = nodes(view).find((node) => node.type === "table") as Extract<Node, { type: "table" }>
+  expect([table.selectable, table.sortable, table.columns.length, table.rows]).toEqual([
+    undefined,
+    true,
+    2,
+    [["a", "1"]],
+  ])
+})
+
+test("table: a large table builds in linear time", async () => {
+  // Past the 50-row schema cap on purpose: clients may run old or hand-written data.
   const rows = 300
   const data = {
     title: "Big",
@@ -495,15 +499,10 @@ test("table: a large table builds in linear time and lines up exactly", async ()
     view = (await step(source, { phase: "init", data }, { timeoutMs: 5000 })).view
     times.push(performance.now() - started)
   }
-  // About 50 ms on a laptop; the quadratic version took over twice that, and 800 rows hit the 250 ms step timeout.
   expect(times.toSorted((a, b) => a - b)[1]).toBeLessThan(200)
-  const lines = texts(view!).filter((text) => text.startsWith("item "))
-  expect(lines).toHaveLength(rows)
-  // Names pad right and counts left, to the widest cell of each column.
-  const count = (index: number) => String(index * 7).replace(/\B(?=(\d{3})+(?!\d))/g, ",")
-  expect(lines.slice(0, 2)).toEqual(["item 0    " + "0".padStart(5), "item 1    " + "7".padStart(5)])
-  expect(lines.at(-1)).toBe("item 299  " + count(299).padStart(5))
-  expect(canvases(view!)).toHaveLength(rows)
+  const table = nodes(view!).find((node) => node.type === "table") as Extract<Node, { type: "table" }>
+  expect(table.rows).toHaveLength(rows)
+  expect(table.rows.at(-1)).toEqual(["item 299", "2,093", "▁▅█"])
 })
 
 test("in full screen, diagrams with content in the top-right corner lay out below the close button", async () => {

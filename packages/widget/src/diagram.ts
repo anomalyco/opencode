@@ -539,7 +539,7 @@ export const diagrams: ReadonlyArray<WidgetTemplate> = [
   ),
   make(
     "table",
-    "A sortable data table with aligned columns and an optional sparkline per row. Choose submits { index, row: { [column]: cell } }.",
+    "A sortable data table, drawn as the client's native table, with an optional text sparkline per row. Choose submits { index, row: { [column]: cell } }.",
     object(
       {
         title,

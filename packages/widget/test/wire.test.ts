@@ -91,7 +91,7 @@ const emitted = (value: unknown): unknown =>
 
 const drops = new Set(["function-in-a-prop", "function-as-a-child", "function-in-an-option", "function-as-an-id"])
 // Events protocol 1's prelude doesn't know: it can't agree on them.
-const newer = new Set(cases.flatMap((item) => (item.newer ? [item.name] : [])))
+const newer = new Set([...cases.flatMap((item) => (item.newer ? [item.name] : [])), "builtin-table"])
 
 for (const file of files) {
   test(`wire fixture ${file}`, async () => {

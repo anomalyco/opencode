@@ -119,7 +119,8 @@ const data: Record<string, unknown> = {
 }
 
 test("every built-in's view comes out byte-identical to the reference tree building", async () => {
-  const step = builtins.filter((template) => template.mode === "step")
+  // The reference predates the table node, which the built-in `table` is (its wire fixture covers it).
+  const step = builtins.filter((template) => template.mode === "step" && template.name !== "table")
   expect(step.map((template) => template.name).filter((name) => !(name in data))).toEqual([])
   for (const template of step) {
     const [fast, slow] = await trees(template.source, data[template.name])

@@ -23,6 +23,6 @@ from `widget_template` action `list`; `packages/widget/test/fixtures/diagrams.ts
 | `boxplot` | `groups: { label, values? \| stats? }[]` (≤ 12) | Comparing distributions across groups (build times per runner) including spread and outliers. |
 | `flowchart` | `nodes: { id, label?, shape? }[]` (process, decision, terminal, io), `edges: { from, to, label? }[]` | Processes and decision logic; laid out top down automatically, loops allowed. |
 | `sequence` | `participants: string[]`, `messages: { from, to, label, kind? }[]` (sync, async, reply) | Interactions over time between systems or people (request flows, protocols). |
-| `table` | `columns: { label, unit?, digits? }[]`, `rows: { cells, trend? }[]` (≤ 50) | Exact values the user wants to scan and sort, with a sparkline trend per row. |
+| `table` | `columns: { label, unit?, digits? }[]`, `rows: { cells, trend? }[]` (≤ 50) | Exact values the user wants to scan and sort, with a sparkline trend per row. A native `table` node: clients draw it like their markdown tables (the TUI as aligned text); a header press sorts, the trend is a text sparkline column (`▁▂▃▅▇`). |
 
 For one or two plain series over categories or time, use `chart` (bar or line).
