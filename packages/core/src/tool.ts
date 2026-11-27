@@ -5,6 +5,7 @@ export type { Context, Info, Metadata, Namespace, Options, Result } from "@openc
 import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
 import type { CodeMode } from "@opencode/codemode"
 import { Tool } from "@opencode/schema/tool"
+import { editDistance } from "@opencode/util/edit-distance"
 import { isRecord } from "@opencode/util/record"
 import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Types } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -399,12 +400,14 @@ const layer = Layer.effect(
               const name = requested?.name ?? event.tool
               // A tool this request only offers inside Code Mode, called by the model at the top level or renamed there by
               // a plugin, runs as a Code Mode call when the request offered execute.
-              const found =
+              const inCodeMode =
                 codemode &&
-                name !== "execute" &&
-                !direct.has(name) &&
                 (!input.definitions || Array.from(input.definitions.values()).some((item) => item.name === "execute"))
-                  ? CodeModeTool.find(codemode.inventory, name)
+                  ? codemode
+                  : undefined
+              const found =
+                inCodeMode && name !== "execute" && !direct.has(name)
+                  ? CodeModeTool.find(inCodeMode.inventory, name)
                   : undefined
               if (codemode && (name === "execute" || found)) {
                 // Like an execute program, it moves to the background when it runs long.
@@ -419,8 +422,24 @@ const layer = Layer.effect(
               }
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)
+              const suggestions = similarTools(
+                new Set([
+                  ...(input.definitions
+                    ? input.definitions.keys()
+                    : [...direct.keys(), ...(codemode ? ["execute"] : [])]),
+                  // Called by name, these run as Code Mode calls (see found above).
+                  ...(inCodeMode ? inCodeMode.inventory.tools.keys() : []),
+                ]),
+                name,
+              )
+              const hint =
+                suggestions.length === 0
+                  ? ""
+                  : suggestions.length === 1
+                    ? ` Did you mean "${suggestions[0]}"?`
+                    : ` Did you mean one of: ${suggestions.map((item) => `"${item}"`).join(", ")}?`
               return yield* new Tool.Error({
-                message: `No tool named "${name}" is currently available. Please use a tool from the available tool list.`,
+                message: `No tool named "${name}" is currently available.${hint} Please use a tool from the available tool list.`,
               })
             }),
           }
@@ -580,3 +599,27 @@ const executeOptions = (input: unknown): CodeModeJob.Options | undefined => {
     ...(background === true ? { background } : {}),
   }
 }
+
+// Models often join an MCP server and tool with "-" instead of "_", change case, or drop the server, so compare names
+// without case or separators: the same name, then one containing the other, then a near typo.
+const similarTools = (names: Iterable<string>, requested: string) => {
+  const wanted = comparable(requested)
+  const typos = Math.max(2, Math.floor(wanted.length / 4))
+  const ranked = Array.from(names)
+    .flatMap((name) => {
+      const found = comparable(name)
+      if (found === wanted) return [{ name, rank: 0 }]
+      if (Math.min(found.length, wanted.length) >= 4 && (found.includes(wanted) || wanted.includes(found)))
+        return [{ name, rank: 1 }]
+      if (Math.abs(found.length - wanted.length) > typos) return []
+      const distance = editDistance(found, wanted)
+      return distance <= typos ? [{ name, rank: 1 + distance }] : []
+    })
+    .toSorted((a, b) => a.rank - b.rank || a.name.localeCompare(b.name))
+  // A name that differs only in case or separators is the one meant.
+  return (ranked[0]?.rank === 0 ? ranked.filter((item) => item.rank === 0) : ranked.slice(0, 3)).map(
+    (item) => item.name,
+  )
+}
+
+const comparable = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "")

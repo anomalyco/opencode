@@ -4,6 +4,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import path, { basename, dirname, extname, isAbsolute, join, relative } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
+import { editDistance } from "@opencode/util/edit-distance"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
@@ -339,17 +340,6 @@ const canonical = (name: string) =>
     .replace(/[\u2018\u2019]/g, "'")
 
 const stem = (name: string) => name.slice(0, name.length - extname(name).length) || name
-
-const editDistance = (a: string, b: string) => {
-  let previous = Array.from({ length: b.length + 1 }, (_, index) => index)
-  for (let i = 1; i <= a.length; i++) {
-    const current = [i]
-    for (let j = 1; j <= b.length; j++)
-      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
-    previous = current
-  }
-  return previous[b.length]
-}
 
 const toOutput = (
   output: ReadToolFileSystem.TextPage | ReadToolFileSystem.DirectoryContent | ReadToolFileSystem.Media,

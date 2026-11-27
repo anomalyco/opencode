@@ -1656,6 +1656,95 @@ test("settles modern MCP URL elicitations when the user confirms", async () => {
   )
 })
 
+describe.each([
+  ["legacy", false],
+  ["modern", true],
+] as const)("%s MCP elicitations during a session's tool call", (_, modern) => {
+  test("belong to that session and point at the tool call (#66682)", async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const server = yield* resourceServer({ modern, resources: false, urlElicitation: true })
+          const created = yield* Deferred.make<CreatedForm>()
+          const sessionID = Session.ID.make("ses_mcp_elicitation")
+          yield* Effect.gen(function* () {
+            const service = yield* Mcp.Service
+            const forms = yield* Form.Service
+            const call = yield* service
+              .callTool({
+                server: "resources",
+                name: "url-elicitation",
+                sessionID,
+                tool: { messageID: "msg_mcp", id: "call_mcp" },
+              })
+              .pipe(Effect.forkScoped)
+            const { form } = yield* Deferred.await(created)
+            expect(form.sessionID).toBe(sessionID)
+            expect(form.metadata).toMatchObject({
+              kind: "mcp-elicitation",
+              server: "resources",
+              tool: { messageID: "msg_mcp", id: "call_mcp" },
+            })
+            yield* forms.reply({ id: form.id, answer: { elicitation: true } })
+            if (!modern) yield* Effect.promise(server.completeElicitation)
+            yield* Fiber.join(call)
+          }).pipe(
+            Effect.provide(
+              resourceMcpLayer(
+                new ConfigMCP.Remote({
+                  type: "remote",
+                  url: server.url,
+                  oauth: false,
+                  protocol: modern ? "2026-07-28" : "legacy",
+                }),
+                (form) => recordForm(created, form),
+              ),
+            ),
+          )
+        }),
+      ),
+    )
+  })
+})
+
+test("keeps MCP elicitations global when sessions share the server's calls", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({ resources: false, urlElicitation: true })
+        const created: Form.Info[] = []
+        const both = yield* Deferred.make<void>()
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          const forms = yield* Form.Service
+          const calls = yield* Effect.forEach(["ses_mcp_one", "ses_mcp_two"], (id) =>
+            service
+              .callTool({ server: "resources", name: "url-elicitation", sessionID: Session.ID.make(id) })
+              .pipe(Effect.forkScoped),
+          )
+          yield* Deferred.await(both)
+          // The first may arrive while only its own session is calling; the second can't be told apart.
+          expect(created[1]?.sessionID).toBe("global")
+          yield* Effect.forEach(created, (form) => forms.reply({ id: form.id, answer: { elicitation: true } }))
+          yield* Effect.promise(server.completeElicitation)
+          yield* Effect.forEach(calls, Fiber.await)
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(
+              new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "legacy" }),
+              (form) =>
+                Effect.suspend(() => {
+                  created.push(form)
+                  return created.length === 2 ? Deferred.succeed(both, undefined) : Effect.void
+                }).pipe(Effect.asVoid),
+            ),
+          ),
+        )
+      }),
+    ),
+  )
+})
+
 test("loads and reads MCP resources", async () => {
   await Effect.runPromise(
     Effect.scoped(
@@ -2189,6 +2278,47 @@ testEffect(Layer.empty).live("batches MCP transforms without connecting intermed
   }),
 )
 
+testEffect(Layer.empty).live("connects MCP servers added together concurrently (#66790)", () =>
+  Effect.gen(function* () {
+    const entered = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const slow = yield* resourceServer({
+      respond: async (request) => {
+        if (request.method !== "POST") return undefined
+        const body: unknown = await request.clone().json()
+        if (!isRecord(body) || body.method !== "initialize") return undefined
+        await Effect.runPromise(Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))))
+        return undefined
+      },
+    })
+    const fast = yield* resourceServer()
+    const remote = (url: string) => new ConfigMCP.Remote({ type: "remote", url, oauth: false, protocol: "legacy" })
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      const adding = yield* service.add("slow", remote(slow.url)).pipe(Effect.forkScoped({ startImmediately: true }))
+      yield* Deferred.await(entered)
+      // The same config again has nothing to reconcile, but still waits for the connection it joins.
+      const again = yield* service.add("slow", remote(slow.url)).pipe(Effect.forkScoped({ startImmediately: true }))
+      yield* service.add("fast", remote(fast.url)).pipe(Effect.timeout("5 seconds"))
+      expect(adding.pollUnsafe()).toBeUndefined()
+      expect(again.pollUnsafe()).toBeUndefined()
+      expect((yield* service.tools()).map((tool) => tool.server)).toEqual([Mcp.ServerName.make("fast")])
+      yield* service.callTool({ server: "fast", name: "echo" })
+      yield* Deferred.succeed(release, undefined)
+      yield* Fiber.join(adding)
+      yield* Fiber.join(again)
+      expect((yield* service.servers()).map((server) => [server.name, server.status.status])).toEqual([
+        ["fast", "connected"],
+        ["resources", "disabled"],
+        ["slow", "connected"],
+      ])
+    }).pipe(
+      Effect.ensuring(Deferred.succeed(release, undefined)),
+      Effect.provide(resourceMcpLayer({ type: "local", command: ["unused"], disabled: true })),
+    )
+  }),
+)
+
 test("reconciles only changed MCP server config", async () => {
   await Effect.runPromise(
     Effect.scoped(
@@ -2407,7 +2537,11 @@ shutdownIt.effect("discards in-flight and queued MCP notifications after its lay
     yield* Fiber.join(first)
     yield* Fiber.join(second)
     expect(observed).toEqual([])
-    expect((yield* service.servers()).map((server) => server.name)).toEqual([Mcp.ServerName.make("fixture")])
+    // Different names reconcile concurrently, so the first reload added "queued" next to the blocked "fixture".
+    expect((yield* service.servers()).map((server) => server.name)).toEqual([
+      Mcp.ServerName.make("fixture"),
+      Mcp.ServerName.make("queued"),
+    ])
   }),
 )
 
@@ -2887,6 +3021,7 @@ it.effect("forwards the invoking session through direct and Code Mode MCP tools"
       name: "lookup",
       args: {},
       sessionID: directSessionID,
+      tool: { messageID: toolIdentity.messageID, id: "call_mcp_direct" },
     })
 
     const codeModeSessionID = Session.ID.make("ses_mcp_codemode")

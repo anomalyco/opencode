@@ -58,7 +58,15 @@ describe("acp elicitation mapping", () => {
   test("cancels forms from unsupported clients, unknown flows, and credential-looking fields", () => {
     const fields: ACPElicitation.AskedForm["fields"] = [{ key: "name", type: "string" }]
     expect(ACPElicitation.requestedSchema(form(fields), { ...capable, formElicitation: false })).toBeUndefined()
-    expect(ACPElicitation.requestedSchema(form(fields, { kind: "mcp-elicitation" }), capable)).toBeUndefined()
+    expect(ACPElicitation.requestedSchema(form(fields, { kind: "mcp-elicitation" }), capable)).toBeDefined()
+    expect(
+      ACPElicitation.requestedSchema(
+        form([{ key: "elicitation", type: "external", url: "https://example.com/connect" }], {
+          kind: "mcp-elicitation",
+        }),
+        capable,
+      ),
+    ).toBeUndefined()
     expect(ACPElicitation.requestedSchema(form(fields, {}), capable)).toBeUndefined()
     expect(ACPElicitation.requestedSchema(form(fields, { kind: "websearch.provider" }), capable)).toBeDefined()
     const credentials: Array<ACPElicitation.AskedForm["fields"]> = [
@@ -145,6 +153,50 @@ describe("acp elicitation over the wire", () => {
     ])
     expect(acp.server.cancelledForms).toEqual([])
     expect(acp.updates.some((item) => item.update.sessionUpdate === "agent_message_chunk")).toBe(true)
+  })
+
+  test("forwards an MCP server's input request made during the session's tool call (#66682)", async () => {
+    await using acp = await startSession({
+      capabilities: { elicitation: true },
+      onPrompt: ({ sessionID, id }) => [
+        delivered(sessionID, id),
+        toolStarted(sessionID, "call_deploy", "team_deploy"),
+        ephemeralEvent("form.created", {
+          form: {
+            id: "frm_mcp",
+            sessionID,
+            title: "team is requesting input",
+            metadata: {
+              kind: "mcp-elicitation",
+              server: "team",
+              message: "Continue?",
+              tool: { messageID: "msg_tools", id: "call_deploy" },
+            },
+            fields: [{ key: "confirmed", title: "confirmed", type: "boolean", required: true }],
+          },
+        }),
+      ],
+      elicitation: () => accept({ confirmed: true }),
+      onFormReply: ({ sessionID, formID }) => [
+        ephemeralEvent("form.replied", { sessionID, id: formID, answer: {} }),
+        toolSucceeded(sessionID, "call_deploy", {}, "deployed"),
+        succeeded(sessionID),
+      ],
+    })
+
+    expect((await acp.prompt(acp.sessionId, "deploy")).stopReason).toBe("end_turn")
+    expect(acp.elicitations).toMatchObject([
+      {
+        mode: "form",
+        sessionId: acp.sessionId,
+        toolCallId: "call_deploy",
+        message: "team is requesting input: Continue?",
+        requestedSchema: { properties: { confirmed: { type: "boolean" } }, required: ["confirmed"] },
+      },
+    ])
+    expect(acp.server.repliedForms).toEqual([
+      { sessionID: acp.sessionId, formID: "frm_mcp", answer: { confirmed: true } },
+    ])
   })
 
   test("cancels the form when the client declines, cancels, fails, or sends a wrong value type", async () => {
