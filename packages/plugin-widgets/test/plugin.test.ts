@@ -863,7 +863,7 @@ describe("instances", () => {
     })),
   })
 
-  test("lists every Session's widgets with their data and Session, last updated first, without superseded ones", () =>
+  test("lists every Session's widgets with their data and Session, last updated first, superseded ones under their replacement", () =>
     run((fake) =>
       Effect.gen(function* () {
         const other = Session.ID.make("ses_widget_other")
@@ -904,10 +904,30 @@ describe("instances", () => {
           },
         ])
         // The other Session's message can't be read: listed without data; a gone Session's widget is left out.
+        // The replaced widget is listed only under its replacement, so a client holding its key follows it.
+        expect(listed[0]?.replaced).toEqual([{ messageID, callID: first.id }])
+        expect(listed[1]).not.toHaveProperty("replaced")
         expect(listed[1]).not.toHaveProperty("data")
         expect(listed[1]?.session).not.toHaveProperty("title")
         expect(listed[0]?.updated).toBe(listed[0]?.state.time.responded ?? -1)
         expect(listed[1]?.updated).toBe(listed[1]?.state.time.created)
+      }),
+    ))
+
+  test("follows a chain of replacements to the current widget", () =>
+    run((fake) =>
+      Effect.gen(function* () {
+        fake.sessions.set(sessionID, { location: { directory: "/work/a" } })
+        const [first, second, third] = [context(), context(), context()]
+        yield* execute(fake, "widget", { widgetTemplate: "confirm", data: confirmData }, first)
+        yield* execute(fake, "widget", { widgetTemplate: "confirm", data: confirmData, replaces: first.id }, second)
+        yield* execute(fake, "widget", { widgetTemplate: "confirm", data: confirmData, replaces: second.id }, third)
+        const listed = yield* instances(fake)
+        expect(listed.map((instance) => instance.state.callID)).toEqual([third.id])
+        expect(listed[0]?.replaced).toEqual([
+          { messageID, callID: first.id },
+          { messageID, callID: second.id },
+        ])
       }),
     ))
 })

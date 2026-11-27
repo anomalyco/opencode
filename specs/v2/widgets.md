@@ -724,8 +724,14 @@ type Program = Summary & { source: string; program: string }   // program as ser
 #### Instances
 
 `instances` lists the widgets of every Session for clients that show widgets outside their Session's timeline (the
-apps' "Mini apps" dashboard). States live in the plugin's server-wide storage, so any Location answers it; superseded
-widgets and widgets of a Session that can't be read are left out.
+apps' "Mini apps" dashboard, standalone widget windows). States live in the plugin's server-wide storage, so any
+Location answers it. Widgets of a Session that can't be read are left out.
+
+**One widget everywhere.** An agent updates a shown widget by posting a new one with `replaces` (new data, often a new
+template version); the old one becomes `superseded`. A superseded widget isn't listed itself but under its current
+replacement's `replaced` (following chains), so a client that keeps a widget's key (a dashboard tile, a window)
+resolves it to the current widget, at that widget's version, and shows the same widget as the timeline. While running,
+a `changed` with `supersededBy` moves the view to the new key; a key it doesn't know yet means refetching `instances`.
 
 ```ts
 type Instance = {
@@ -733,6 +739,7 @@ type Instance = {
   data?: unknown            // the widget tool call's `data`, read from its message; absent when that can't be read
   session: { title?: string; location: { directory: string; workspaceID?: string } }
   updated: number           // epoch ms: time.responded ?? time.created
+  replaced?: { messageID: string; callID: string }[]   // superseded widgets it replaced, directly or not
 }
 ```
 

@@ -148,6 +148,11 @@ export const Instance = Schema.Struct({
   session: Schema.Struct({ title: optional(Schema.String), location: Location.Ref }),
   /** Epoch milliseconds: when the widget was posted or answered last. */
   updated: Schema.Number,
+  /**
+   * The superseded widgets this one replaced, directly or through others (`replaces`), in its Session: a client
+   * showing one of them follows the update to this one.
+   */
+  replaced: optional(Schema.Array(Schema.Struct({ messageID: Schema.String, callID: Schema.String }))),
 }).annotate({ identifier: "Widget.Instance" })
 
 const Call = { sessionID: Schema.String, messageID: Schema.String, callID: Schema.String }
@@ -173,7 +178,10 @@ export const Definition = Rpc.define({
     },
     /** Every widget of a Session, oldest first. */
     states: { input: standard(Schema.Struct({ sessionID: Schema.String })), output: standard(Schema.Array(State)) },
-    /** Every widget of the server across Sessions, except superseded ones, last updated first. Any Location answers. */
+    /**
+     * Every widget of the server across Sessions, last updated first, each with the superseded ones it replaced (not
+     * listed themselves). Any Location answers.
+     */
     instances: { input: standard(Schema.Struct({})), output: standard(Schema.Array(Instance)) },
     /** The final answer, once: a submitted value or a dismissal. */
     respond: {

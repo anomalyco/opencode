@@ -42,13 +42,13 @@ Not for one free-text question, a passing yes/no or an explanation (use `questio
 All take `title`. Exact schemas: `widget_template` `list`; real sources to copy: `widget_template` `get <name>`.
 Diagrams submit nothing unless `choose: true` adds a Choose button that submits the selected element.
 
-| Widget template | Data | Submits |
-| --- | --- | --- |
-| `suggestions` | `options: { label, note?, images[1-3], recommended? }[2-3]`, `allowNote?` | `{ choice, index, note? }` |
-| `form` | `fields[]` of `text`, `number` (slider: min, max, step), `boolean`, `select` (options, multiple) | `{ [key]: value }` |
-| `confirm` | `message` (markdown), `confirmLabel?`, `danger?` | `{ confirmed }` |
-| `chart` | `kind: bar \| line`, `labels`, `series: { label, values }[≤6]`, `unit?`, `choose?` | nothing, or the tapped point |
-| `backdrop` | `preset: plasma \| aurora \| waves`, `text?`, `accent?` (an animated shader banner) | nothing |
+| Widget template | Data                                                                                             | Submits                      |
+| --------------- | ------------------------------------------------------------------------------------------------ | ---------------------------- |
+| `suggestions`   | `options: { label, note?, images[1-3], recommended? }[2-3]`, `allowNote?`                        | `{ choice, index, note? }`   |
+| `form`          | `fields[]` of `text`, `number` (slider: min, max, step), `boolean`, `select` (options, multiple) | `{ [key]: value }`           |
+| `confirm`       | `message` (markdown), `confirmLabel?`, `danger?`                                                 | `{ confirmed }`              |
+| `chart`         | `kind: bar \| line`, `labels`, `series: { label, values }[≤6]`, `unit?`, `choose?`               | nothing, or the tapped point |
+| `backdrop`      | `preset: plasma \| aurora \| waves`, `text?`, `accent?` (an animated shader banner)              | nothing                      |
 
 **Diagrams** (field names in `list`): `pie` slices ≤ 12 (parts of a whole) · `scatter` x/y points, `size`, `trend` ·
 `histogram` raw values ≤ 2,000 · `area` series over time, stacked/percent/stream · `heatmap` matrix or calendar ·
@@ -81,7 +81,10 @@ Handlers get `(state, value)` and return the next state, `submit(value)` / `dism
 
 ```js
 function view(state, data) {
-  return ui.column({ gap: 1 }, data.items.map((item) => ui.button(item, { onPress: () => submit({ pick: item }) })))
+  return ui.column(
+    { gap: 1 },
+    data.items.map((item) => ui.button(item, { onPress: () => submit({ pick: item }) })),
+  )
 }
 ```
 
@@ -97,7 +100,10 @@ only while something moves; render only when the view (or a canvas's `values`) c
 async function main(data) {
   let left = data.seconds
   widget.render(ui.button("Stop", { onPress: () => widget.submit({ left }) }))
-  while (left > 0) { await widget.sleep(1000); left-- }
+  while (left > 0) {
+    await widget.sleep(1000)
+    left--
+  }
   widget.submit({ left })
 }
 ```

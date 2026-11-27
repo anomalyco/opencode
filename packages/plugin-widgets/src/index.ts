@@ -111,11 +111,26 @@ export default Plugin.define({
 
       // The data lives only in the tool call's input, so each widget's message is read (once per message). A widget
       // whose Session is gone is left out; states of a deleted Session are removed anyway.
+      // A superseded widget is listed under the one that replaced it, so a client holding its key follows the update.
       const instances = Effect.fn("WidgetPlugin.instances")(function* () {
         const sessions = new Map<string, Option.Option<Session.Info>>()
         const messages = new Map<string, Option.Option<SessionMessage.Info>>()
         const found: Widget.Instance[] = []
-        for (const state of yield* scan("state:")) {
+        const states = yield* scan("state:")
+        const byKey = new Map(states.map((state) => [stateKey(state), state]))
+        const replaced = new Map<string, Array<{ messageID: string; callID: string }>>()
+        for (const old of states) {
+          let current = old
+          for (let hops = 0; current.supersededBy && hops < states.length; hops++) {
+            const next = byKey.get(stateKey({ sessionID: current.sessionID, ...current.supersededBy }))
+            if (!next) break
+            current = next
+          }
+          if (current === old || current.status === "superseded") continue
+          const key = stateKey(current)
+          replaced.set(key, [...(replaced.get(key) ?? []), { messageID: old.messageID, callID: old.callID }])
+        }
+        for (const state of states) {
           if (state.status === "superseded") continue
           const sessionID = Session.ID.make(state.sessionID)
           const session = sessions.get(state.sessionID) ?? (yield* ctx.session.get({ sessionID }).pipe(Effect.option))
@@ -141,6 +156,7 @@ export default Plugin.define({
               location: session.value.location,
             },
             updated: state.time.responded ?? state.time.created,
+            ...(replaced.has(stateKey(state)) ? { replaced: replaced.get(stateKey(state)) } : {}),
           })
         }
         return found.toSorted((a, b) => b.updated - a.updated)
