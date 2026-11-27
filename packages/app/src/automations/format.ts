@@ -55,15 +55,20 @@ function describeCron(cron: string, language: Language) {
   if (hours.length) {
     const step = hours[1]! - hours[0]!
 
+    // Evenly spaced across the whole day; `0 9-17 * * *` keeps its cron text.
     if (
       minutes.length !== 1 ||
       hours.length < 2 ||
-      24 % step ||
+      hours.length * step !== 24 ||
       !hours.every((hour, index) => hour === hours[0]! + index * step)
     )
       return
 
-    return language.t("automations.trigger.hours", { count: step, minute: String(minutes[0]).padStart(2, "0") })
+    const minute = String(minutes[0]).padStart(2, "0")
+
+    if (step === 1) return language.t("automations.trigger.hourly", { minute })
+
+    return language.t("automations.trigger.hours", { count: step, minute })
   }
 
   if (minutes.length === 1)
