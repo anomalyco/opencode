@@ -51,8 +51,8 @@ const make = Effect.fnUntraced(function* (updates: Stream.Stream<unknown>) {
   return Service.of({
     current: () => current,
     changes: () => Stream.fromPubSub(changes),
-    all: Effect.sync(() => current),
-    enabled: (key) => Effect.sync(() => current[key].enabled),
+    all: Effect.map(config.entries(), resolveEntries),
+    enabled: (key) => Effect.map(config.entries(), (entries) => resolveEntries(entries)[key].enabled),
   })
 })
 
@@ -81,7 +81,7 @@ export const node = makeLocationNode({
   deps: [App.node, Config.node, Bus.node],
 })
 
-/** Every flag with its value and where it came from, cached from the location's latest config update. */
+/** Every flag with its value and where it came from. */
 export const all = Service.use((flags) => flags.all)
 
 export const enabled = (key: Key) => Service.use((flags) => flags.enabled(key))
