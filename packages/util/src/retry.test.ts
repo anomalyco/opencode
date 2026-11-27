@@ -71,6 +71,36 @@ describe("client retry", () => {
     expect(failures).toHaveLength(1)
   })
 
+  test("keeps retrying past the attempt count until the timeout budget expires", async () => {
+    const startedAt = Date.now()
+    const failures: string[] = []
+    await expect(
+      retry(
+        async () => {
+          failures.push("attempt")
+          throw new Error("retry me")
+        },
+        { attempts: 2, delay: 10, factor: 1, timeout: 100, retryIf: () => true },
+      ),
+    ).rejects.toThrow("retry me")
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(90)
+    expect(failures.length).toBeGreaterThan(2)
+  })
+
+  test("succeeds within the timeout even after more failures than the attempt count", async () => {
+    const failures: string[] = []
+    const value = await retry(
+      async () => {
+        failures.push("attempt")
+        if (failures.length < 5) throw new Error("retry me")
+        return "ready"
+      },
+      { attempts: 3, delay: 0, timeout: 1_000, retryIf: () => true },
+    )
+    expect(value).toBe("ready")
+    expect(failures).toHaveLength(5)
+  })
+
   test("uses a caller-owned retry condition", async () => {
     const failures: string[] = []
     await expect(

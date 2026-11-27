@@ -1,5 +1,5 @@
 import { createSimpleContext } from "@opencode/ui/context"
-import { isLocationNotFoundError, type LocationGetOutput, type LocationRef } from "@opencode/client/promise"
+import { isLocationNotFoundError, isServiceUnavailableError, type LocationGetOutput, type LocationRef } from "@opencode/client/promise"
 import { type Accessor, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { type LocationContext, useServerSDK } from "@/runtime/server/client"
 import { useData, useServer } from "@/runtime/server/current"
@@ -11,6 +11,7 @@ import {
   type LocationSyncEffect,
   type LocationSyncEvent,
 } from "./location-machine"
+
 
 export type WorkspaceLocation = LocationContext & {
   readonly ref: LocationRef
@@ -69,17 +70,28 @@ const context = createSimpleContext({
         })
         .then(
           () => dispatch({ type: "sync.succeeded", attempt: effect.attempt }),
-          (error) =>
-            dispatch({
-              type: isLocationNotFoundError(error) ? "sync.missing" : "sync.failed",
-              attempt: effect.attempt,
-            }),
+          (error) => {
+            if (isLocationNotFoundError(error)) {
+              // 目录不存在，立刻停止，不再重试
+              dispatch({ type: "sync.missing", attempt: effect.attempt })
+            } else if (isServiceUnavailableError(error)) {
+              // 503冷启动，允许走长窗口持续重试
+              dispatch({ type: "sync.failed", attempt: effect.attempt })
+            } else {
+              // 其余所有错误（500、格式错误等）：最多3次，到次数直接放弃
+              if (effect.attempt >= 3) {
+                dispatch({ type: "sync.giveup" })
+              } else {
+                dispatch({ type: "sync.failed", attempt: effect.attempt })
+              }
+            }
+          },
         )
     }
 
     createEffect(() => {
-      const event = { type: "target.updated", location: ref(), connected: connected() } as const
-      untrack(() => dispatch(event))
+     const event = { type: "target.updated", location: ref(), connected: connected() } as const
+     untrack(() => dispatch(event))
     })
     onCleanup(() => dispatch({ type: "disposed" }))
     const missing = createMemo(() => missingLocation(syncState(), ref()))

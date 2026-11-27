@@ -3,6 +3,8 @@ export interface RetryOptions {
   delay?: number
   factor?: number
   maxDelay?: number
+  /** Keep retrying, regardless of `attempts`, until the operation has run for at least this many milliseconds total. */
+  timeout?: number
   retryIf?: (error: unknown) => boolean
 }
 
@@ -35,17 +37,19 @@ export async function retry<T>(operation: () => Promise<T>, options: RetryOption
   const delay = options.delay ?? 500
   const factor = options.factor ?? 2
   const maxDelay = options.maxDelay ?? 10_000
+  const timeout = options.timeout ?? 0
   const retryIf = options.retryIf ?? isTransientError
-  let lastError: unknown
+  const startedAt = Date.now()
 
-  for (let attempt = 0; attempt < attempts; attempt++) {
+  for (let attempt = 0; ; attempt++) {
     try {
       return await operation()
     } catch (error) {
-      lastError = error
-      if (attempt === attempts - 1 || !retryIf(error)) throw error
-      await new Promise((resolve) => setTimeout(resolve, Math.min(delay * Math.pow(factor, attempt), maxDelay)))
+      const withinAttempts = attempt + 1 < attempts
+      const withinTimeout = Date.now() - startedAt < timeout
+      if (!retryIf(error) || (!withinAttempts && !withinTimeout)) throw error
+      const wait = Math.min(delay * Math.pow(factor, attempt), maxDelay)
+      await new Promise((resolve) => setTimeout(resolve, wait))
     }
   }
-  throw lastError
 }
