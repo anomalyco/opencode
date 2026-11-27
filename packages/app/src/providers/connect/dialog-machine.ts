@@ -343,6 +343,9 @@ export type ProviderDialogBody =
   | { readonly kind: "claude"; readonly checking: boolean; readonly canCheck: boolean; readonly timedOut: boolean }
   | { readonly kind: "no-models"; readonly catalogPending: boolean; readonly refreshing: boolean }
   | { readonly kind: "console-sign-in"; readonly copy: "idle" | "copied" | "failed" }
+  /** OpenCode's first screen: the account sign-in, with its API key as the way out. Values are method indexes. */
+  | { readonly kind: "console-start"; readonly signIn: number; readonly apiKey: number | undefined }
+  | { readonly kind: "console-key"; readonly signIn: number | undefined }
   | { readonly kind: ProviderConnectScreen }
 
 export function selectProviderDialogView(state: ProviderDialogState) {
@@ -425,6 +428,15 @@ function selectBody(
 
   if (step.kind === "no-models")
     return { kind: "no-models", catalogPending: step.catalogPending, refreshing: connect.status === "refreshing" }
+
+  if (state.provider === CONSOLE_INTEGRATION && (connect.screen === "methods" || connect.screen === "key")) {
+    const signIn = connect.methods.findIndex((method) => method.type === "oauth")
+    const apiKey = connect.methods.findIndex((method) => method.type === "key")
+
+    if (connect.screen === "key") return { kind: "console-key", signIn: signIn < 0 ? undefined : signIn }
+
+    if (signIn >= 0) return { kind: "console-start", signIn, apiKey: apiKey < 0 ? undefined : apiKey }
+  }
 
   if (state.provider === CONSOLE_INTEGRATION && connect.screen === "browser") {
     const copy = step.copy?.attemptID === connect.authorization?.attemptID ? step.copy : undefined

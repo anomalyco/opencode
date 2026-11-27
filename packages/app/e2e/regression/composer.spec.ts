@@ -299,7 +299,7 @@ test("the free usage limit opens the Go dialog once, swaps the composer for the 
   // without opening a new draft tab.
   await upsell.getByRole("button", { name: "Subscribe", exact: true }).click()
   const connect = page.getByRole("dialog", { name: "Connect OpenCode", exact: true })
-  await connect.getByRole("button", { name: "OpenCode account", exact: true }).click()
+  await connect.getByRole("button", { name: "Sign in with OpenCode", exact: true }).click()
   const connected = page.getByRole("dialog", { name: "Connected to OpenCode" })
   await connected.getByRole("combobox", { name: "Search OpenCode models", exact: true }).fill("glm")
   await connected.getByRole("option", { name: "GLM-5 Go", exact: true }).click()

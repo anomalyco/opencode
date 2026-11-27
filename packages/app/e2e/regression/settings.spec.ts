@@ -1851,14 +1851,12 @@ test("providers: OpenCode Console signs in from its method list", async ({ page,
     .getByRole("button", { name: "Connect", exact: true })
     .click()
   const methods = page.getByRole("dialog", { name: "Connect OpenCode", exact: true })
-  // The methods come from the integration in the TUI's order: sign-ins first, API keys last.
-  await expect(methods.locator('[data-action="provider-connect-method"]')).toHaveText([
-    "OpenCode account",
-    "API key (service account)",
-  ])
+  // The account sign-in leads, with the API key as the way out.
+  await expect(methods.locator('[data-action="console-sign-in"]')).toHaveText("Sign in with OpenCode")
+  await expect(methods.locator('[data-action="console-api-key"]')).toHaveText("Use an API key instead")
 
   const popup = page.waitForEvent("popup")
-  await methods.getByRole("button", { name: "OpenCode account", exact: true }).click()
+  await methods.getByRole("button", { name: "Sign in with OpenCode", exact: true }).click()
   await expect(await popup).toHaveURL(url)
 
   const signIn = page.getByRole("dialog", { name: "Connect OpenCode", exact: true })
@@ -1998,13 +1996,11 @@ test("providers: the free tier upsell opens OpenCode on its own, sized to its co
     .getByRole("button", { name: "Subscribe", exact: true })
     .click()
 
-  // Go connects through the OpenCode connection, so the upsell opens its sign-in methods.
+  // Go connects through the OpenCode connection, so the upsell opens its sign-in.
   const dialog = page.getByRole("dialog", { name: "Connect OpenCode", exact: true })
   const container = page.locator('[data-slot="dialog-container"]')
-  await expect(dialog.locator('[data-action="provider-connect-method"]')).toHaveText([
-    "OpenCode account",
-    "API key (service account)",
-  ])
+  await expect(dialog.locator('[data-action="console-sign-in"]')).toHaveText("Sign in with OpenCode")
+  await expect(dialog.locator('[data-action="console-api-key"]')).toHaveText("Use an API key instead")
   // Nothing to go back to: the upsell opened the dialog straight on OpenCode.
   await expect(dialog.getByRole("navigation").getByRole("button")).toHaveCount(0)
   await expect.poll(async () => (await container.boundingBox())?.height).toBeLessThan(368)
@@ -2258,15 +2254,12 @@ test("providers: Back from a Console connection without models returns to its si
     .click()
   const dialog = connectDialog(page)
   const popup = page.waitForEvent("popup")
-  await dialog.getByRole("button", { name: "OpenCode account", exact: true }).click()
+  await dialog.getByRole("button", { name: "Sign in with OpenCode", exact: true }).click()
   await popup
   await expect(page.getByRole("dialog").getByText("OpenCode connected", { exact: true })).toBeVisible()
 
   await dialog.getByRole("navigation").getByRole("button", { name: "OpenCode", exact: true }).click()
-  await expect(dialog.locator('[data-action="provider-connect-method"]')).toHaveText([
-    "OpenCode account",
-    "API key (service account)",
-  ])
+  await expect(dialog.locator('[data-action="console-sign-in"]')).toHaveText("Sign in with OpenCode")
 })
 
 test("providers: the account options rename and remove the active account", async ({ page }) => {
