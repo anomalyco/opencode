@@ -836,4 +836,24 @@ describe("OpenAI-compatible Chat route", () => {
       })
     }),
   )
+
+  it.effect("sends null content for an assistant turn whose only text part is empty", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [
+            Message.user("What is the weather?"),
+            Message.assistant([
+              { type: "text", text: "" },
+              ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } }),
+            ]),
+            Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages[1]).toMatchObject({ role: "assistant", content: null })
+    }),
+  )
 })
