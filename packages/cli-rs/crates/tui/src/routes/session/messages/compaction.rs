@@ -4,7 +4,7 @@ use opencode_api::generated::{SessionMessageCompaction, TokenUsageInfo};
 use opencode_ui::motion::Spinner;
 use opentui::widget::Markdown;
 
-use super::super::find::FindPartKey;
+use super::super::find::FindPartId;
 use super::super::find_view::FindMarkdown;
 use super::list::Context;
 use crate::features::session_links::{self, Links};
@@ -98,7 +98,7 @@ impl Compaction {
         self.markdown.conceal(cx.conceal);
         if !self.stale.replace(false) && self.rendered.borrow().as_ref() == Some(&rendered) {
             if !rendered.content.is_empty() {
-                self.find.sync(cx, &self.markdown, &self._links, FindPartKey::message(message_id), &rendered.content);
+                self.find.sync(cx, &self.markdown, &self._links, message_id, FindPartId::Message, &rendered.content);
             }
             return;
         }
@@ -131,7 +131,7 @@ impl Compaction {
         }
         self.body.visible(!rendered.content.is_empty());
         if !rendered.content.is_empty() {
-            self.find.sync(cx, &self.markdown, &self._links, FindPartKey::message(message_id), &rendered.content);
+            self.find.sync(cx, &self.markdown, &self._links, message_id, FindPartId::Message, &rendered.content);
         }
         *self.rendered.borrow_mut() = Some(rendered);
     }
@@ -139,7 +139,7 @@ impl Compaction {
     pub fn update_find(&self, cx: &Context<'_>, message_id: &str) {
         let content = self.rendered.borrow().as_ref().map(|r| r.content.clone()).unwrap_or_default();
         if !content.is_empty() {
-            self.find.sync(cx, &self.markdown, &self._links, FindPartKey::message(message_id), &content);
+            self.find.sync(cx, &self.markdown, &self._links, message_id, FindPartId::Message, &content);
         }
     }
 }

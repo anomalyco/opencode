@@ -3,7 +3,7 @@
 use opencode_api::generated::{SessionMessageAssistant, SessionMessageAssistantText};
 use opentui::widget::{Markdown, MarkdownTableOptions, MarkdownTableStyle};
 
-use super::super::find::FindPartKey;
+use super::super::find::FindPartId;
 use super::super::find_view::FindMarkdown;
 use super::list::Context;
 use crate::features::session_links::{self, Links};
@@ -65,7 +65,7 @@ impl TextPart {
         if text.is_empty() {
             return;
         }
-        self.find.sync(cx, &self.markdown, &self._links, FindPartKey::text(&message.id.0, ordinal), text);
+        self.find.sync(cx, &self.markdown, &self._links, &message.id.0, FindPartId::Text(ordinal), text);
     }
 
     fn show(
@@ -85,7 +85,7 @@ impl TextPart {
             self.markdown.streaming(streaming);
         }
         if !text.is_empty() {
-            self.find.sync(cx, &self.markdown, &self._links, FindPartKey::text(&message.id.0, ordinal), text);
+            self.find.sync(cx, &self.markdown, &self._links, &message.id.0, FindPartId::Text(ordinal), text);
         }
     }
 }

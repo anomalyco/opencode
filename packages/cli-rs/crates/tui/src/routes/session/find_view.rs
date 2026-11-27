@@ -7,8 +7,8 @@ use opentui::syntax::SyntaxTheme;
 use opentui::widget::{CodeBlock, InlineContext, InlineSpan, Input, Markdown, MarkdownColors, WeakWidget};
 
 use super::find::{
-    FindMatch, FindPartKey, FindPattern, PLAIN_FENCE_LANG, TopBlock, find_matches, find_pattern, find_ranges,
-    paint_inline_spans, paint_spans, scan_fences, tag_plain_fences, top_level_blocks, wrapped_row,
+    FindMatch, FindPartId, FindPartKey, FindPattern, PLAIN_FENCE_LANG, TopBlock, find_matches, find_pattern,
+    find_ranges, paint_inline_spans, paint_spans, scan_fences, tag_plain_fences, top_level_blocks, wrapped_row,
 };
 use super::messages::list::{Context, Transcript};
 use super::scroll::{self, after_layout};
@@ -649,13 +649,22 @@ impl FindMarkdown {
     }
 
     /// Synchronizes Find highlights and counts on `markdown`.
-    pub fn sync(&self, cx: &Context<'_>, markdown: &Markdown, links: &Rc<Links>, part_key: FindPartKey, source: &str) {
+    pub fn sync(
+        &self,
+        cx: &Context<'_>,
+        markdown: &Markdown,
+        links: &Rc<Links>,
+        message_id: &str,
+        part: FindPartId,
+        source: &str,
+    ) {
         let Some(active) = cx.find else {
             if self.active.replace(false) {
                 self.clear(cx.tui, markdown, links, cx.renderers, source);
             }
             return;
         };
+        let part_key = FindPartKey { message_id: message_id.to_owned(), part };
         let colors = (cx.theme.find.text.current, cx.theme.find.background.r#match, cx.theme.find.background.current);
         let my_current = active.current_occurrence(&part_key);
         let state = {
