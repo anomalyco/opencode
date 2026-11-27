@@ -4,62 +4,62 @@ export const content = {
   products: {
     desktop: {
       name: "Desktop",
-      body: "セッション、タブ、差分、内蔵ブラウザ、拡張機能。macOS、Windows、Linuxに対応。",
+      body: "セッション、タブ、差分、内蔵ブラウザ、拡張機能。macOS、Windows、Linux に対応。",
       action: "ダウンロード",
     },
     mobile: {
       name: "Mobile",
-      body: "どこにいても、スマートフォンからセッションを開始、指示、承認できます。",
+      body: "外出先でも、スマートフォンからセッションを始め、指示を出し、変更を承認できます。",
       action: "ダウンロード",
     },
     terminal: {
       name: "Terminal",
-      body: "どのシェル、エディタ、リモートサーバーでも動く高速なターミナルUI。",
+      body: "どのシェル、エディター、リモートサーバーでも動く高速なターミナル UI。",
       action: "インストール",
     },
     sdk: {
       name: "SDK",
-      body: "自分のスクリプト、CIジョブ、ツールからOpenCodeを操作できます。",
-      action: "ドキュメント",
+      body: "スクリプト、CI ジョブ、独自のツールから OpenCode を操作できます。",
+      action: "ドキュメントを読む",
     },
     mini: {
       name: "Mini",
-      body: "最小限のターミナルインターフェース。返答はスクロールバックに出力され、下にはプロンプトが1つだけ残ります。",
+      body: "必要最小限のターミナル UI。返答はスクロールバックに流れ、画面下部には入力欄が 1 つだけ。",
       action: "インストール",
     },
   },
   productDetails: {
     desktop: {
-      title: "OpenCode | macOS、Windows、Linux向けデスクトップアプリ",
+      title: "OpenCode | macOS、Windows、Linux 向けデスクトップアプリ",
       description:
-        "OpenCodeエージェントを好きなだけ並列で実行し、すべての変更を横のブラウザで確認して、どのデバイスからでも再開できます。macOS、Windows、Linuxに対応。",
+        "OpenCode のエージェントを好きなだけ並行実行。すべての変更を隣のブラウザで確認でき、どのデバイスでも続きから再開できます。macOS、Windows、Linux に対応。",
       intro:
-        "複数のエージェントを同時に実行し、セッションごとに専用のタブで管理できます。すべての変更を差分で確認し、任意の行にコメントして、内蔵ブラウザで結果をチェックできます。macOS、Windows、Linuxに対応しています。",
+        "セッションごとにタブを開き、複数のエージェントを同時に実行できます。すべての変更を差分で確認し、どの行にもコメントでき、結果は内蔵ブラウザで確認できます。macOS、Windows、Linux に対応。",
       showcase: {
         "parallel-agents": {
-          title: "並列エージェント",
-          body: "エージェントを好きなだけ起動して、すべて並列で作業させられます。終わったものから切り替えて確認できます。",
+          title: "エージェントを並行実行",
+          body: "エージェントを好きなだけ起動して、同時に作業を進められます。終わったものから切り替えて確認できます。",
         },
         "see-it-in-the-browser": {
           title: "ブラウザで確認",
-          body: "アプリがエージェントの横のブラウザで開くので、あなたとエージェントの両方がすべての変更をその場で確認できます。",
+          body: "エージェントの隣で開発中のアプリをブラウザ表示。反映された変更を、エージェントと一緒にその場で確認できます。",
         },
         "on-every-device": {
-          title: "あらゆるデバイスで",
-          body: "すべてのデバイスでエージェントを起動し、デスクトップアプリ、ターミナル、スマートフォンから続きを再開できます。",
+          title: "どのデバイスからでも",
+          body: "どのデバイスからでもエージェントを起動。デスクトップアプリ、ターミナル、スマートフォンで作業を再開できます。",
         },
         "extend-it": {
-          title: "拡張する",
-          body: "ツールやサービスを接続すれば、エージェントはどんなものでも扱えます。OpenCodeに自分用のプラグインを作らせ、サイドバーに専用のUIを表示することもできます。",
+          title: "自分仕様に拡張",
+          body: "ツールやサービスを接続して、エージェントにできることを広げましょう。OpenCode にプラグインを作らせ、その専用 UI をサイドバーに表示することもできます。",
         },
       },
     },
     mobile: {
-      title: "OpenCode | Mobile、スマートフォンで操作するコーディングセッション",
+      title: "OpenCode | Mobile でコーディングセッションを手のひらに",
       description:
-        "スマートフォンからOpenCodeのセッションを開始して操作できます。エージェントがコンピューターで動く間も、会話できます。",
+        "スマートフォンから OpenCode のセッションを始めて、指示を出せます。手元のコンピューターで作業するエージェントと、そのまま話せます。",
       intro:
-        "どこにいても、スマートフォンからセッションを開始して操作できます。セッションに通話してエージェントと話したり、セッションを開いて続きから再開できます。すべて自分のコンピューターで動くOpenCode上で行われます。",
+        "どこからでも、スマートフォンでセッションを始めて指示を出せます。セッションを開いて作業を再開したり、通話でエージェントと話したり。OpenCode はすべて自分のコンピューター上で動きます。",
       features: {
         "notify-when-done": { title: "完了を通知", body: "開始したセッションが終わると、短い要約が届きます。" },
         "pair-from-anywhere": {
@@ -77,22 +77,21 @@ export const content = {
         "mute-sessions": { title: "ミュート", body: "通知を受け取らずに、セッションをリストに残せます。" },
       },
       showcase: {
-        voice: { title: "音声", body: "セッションに通話して、必要なことを話すだけ。エージェントが声で答えます。" },
-        sessions: { title: "セッション", body: "どのセッションも開いて進み具合を確認し、続きから再開できます。" },
-        results: { title: "結果", body: "依頼した作業が終わると、何が変わったかを通話で伝えます。" },
-        steer: { title: "指示", body: "セッションの途中で追加のメッセージを送り、方向を変えられます。" },
+        voice: { title: "音声", body: "通話を始めて、頼みたいことを話すだけ。エージェントが声で答えます。" },
+        sessions: { title: "セッション", body: "セッションを開いて進捗を確認し、その場で作業を再開できます。" },
+        results: { title: "結果", body: "依頼した作業が終わると、何が変わったかを通話で知らせてくれます。" },
       },
     },
     terminal: {
-      title: "OpenCode | オープンソースのコーディングエージェントのターミナルUI",
+      title: "OpenCode | オープンソースのコーディングエージェントをターミナルで",
       description:
-        "どのシェル、エディタ、リモートサーバーでも動く、OpenCodeの高速なターミナルUI。やりたいことを伝えれば、各編集を差分で確認し、コマンドを承認できます。",
+        "どのシェル、エディター、リモートサーバーでも動く、OpenCode の高速なターミナル UI。やりたいことを伝え、変更を差分で確認し、コマンドの実行を承認できます。",
       intro:
-        "どのシェル、エディタ、リモートサーバーでも動く高速なターミナルUI。やりたいことを普段の言葉で伝え、各編集が差分として反映される様子を確認し、どのコマンドを自動で実行するかを選べます。",
+        "どのシェル、エディター、リモートサーバーでも動く高速なターミナル UI。普段の言葉で依頼すると、編集のたびに差分を確認できます。どのコマンドを自動実行するかも選べます。",
       features: {
         "any-terminal": {
-          title: "全ターミナル対応",
-          body: "どのシェルでも、エディタのターミナルでも、リモートサーバーでも動きます。",
+          title: "ターミナルを選ばない",
+          body: "どのシェルでも、エディターのターミナルでも、リモートサーバーでも動きます。",
         },
         "diffs-in-the-timeline": {
           title: "タイムラインに差分",
@@ -102,7 +101,7 @@ export const content = {
           title: "後から再開",
           body: "-c で前回のセッションを、-s で任意のセッションを再開できます。",
         },
-        "one-off-runs": { title: "単発の実行", body: "opencode run でメッセージを1つ送り、返答を出力します。" },
+        "one-off-runs": { title: "単発で実行", body: "opencode run でメッセージを 1 件送り、返答を出力できます。" },
         "agents-and-commands": {
           title: "エージェントとコマンド",
           body: "shift+tab でエージェントを切り替え、ctrl+p ですべてのコマンドを開けます。",
@@ -111,8 +110,8 @@ export const content = {
           title: "自動承認",
           body: "--auto を付けて実行すると、拒否していないすべての操作を許可します。",
         },
-        "any-server": { title: "任意のサーバー", body: "--server でURLを指定してOpenCodeサーバーに接続できます。" },
-        "usage-stats": { title: "利用統計", body: "opencode stats で、共有できる利用統計を表示します。" },
+        "any-server": { title: "任意のサーバー", body: "--server で URL を指定して OpenCode サーバーに接続できます。" },
+        "usage-stats": { title: "使用量の統計", body: "opencode stats で、共有可能な使用量の統計を表示できます。" },
       },
       showcase: {
         "ask-in-plain-words": {
@@ -121,109 +120,109 @@ export const content = {
         },
         "approve-what-runs": {
           title: "実行内容を承認",
-          body: "編集は差分で表示され、コマンドはあなたの許可を待ちます。",
+          body: "変更は差分で確認でき、コマンドは承認してから実行されます。",
         },
         "make-it-yours": {
           title: "自分好みに",
-          body: "デフォルトからtokyonightまで、キー1つでテーマを切り替えられます。",
+          body: "デフォルトや tokyonight など、キー 1 つでテーマを切り替えられます。",
         },
-        mini: { title: "Mini", body: "opencode mini を実行すると、返答が自分のスクロールバックに出力されます。" },
+        mini: { title: "Mini", body: "opencode mini を実行すると、返答がターミナルのスクロールバックに出力されます。" },
       },
     },
     sdk: {
-      title: "OpenCode | スクリプト、CIジョブ、ツールのためのTypeScript SDK",
+      title: "OpenCode | スクリプト、CI ジョブ、ツール向けの TypeScript SDK",
       description:
-        "自分のスクリプト、CIジョブ、ツールからOpenCodeを操作できます。型付きのTypeScriptクライアントで、セッションの作成、プロンプトの送信、すべてのイベントのストリーミングを行えます。",
+        "スクリプト、CI ジョブ、独自のツールから OpenCode を操作できます。型付き TypeScript クライアントでセッションを作成し、プロンプトを送り、すべてのイベントをリアルタイムに受け取れます。",
       intro:
-        "自分のスクリプト、CIジョブ、ツールからOpenCodeを操作できます。SDKはあなたの設定とモデルでOpenCodeをプロセス内で実行し、型付きクライアントでセッションの作成、プロンプトの送信、すべてのイベントのストリーミングを行えます。",
+        "スクリプト、CI ジョブ、独自のツールから OpenCode を操作できます。SDK はお使いの設定とモデルで OpenCode をプロセス内で実行します。型付きクライアントでセッションを作成し、プロンプトを送り、すべてのイベントをストリーミングで受け取れます。",
       features: {
         "typescript-client": {
-          title: "TypeScriptクライアント",
+          title: "TypeScript クライアント",
           body: "型付きのリクエストとイベント。@opencode/client と同じ値を使います。",
         },
         "sessions-from-code": {
-          title: "コードでセッション",
+          title: "コードからセッションを作成",
           body: "どのスクリプトからでもセッションを作成し、プロンプトを送れます。",
         },
-        "any-model": { title: "任意のモデル", body: "OpenCodeの設定にあるモデルをそのまま使います。" },
+        "any-model": { title: "任意のモデル", body: "OpenCode の設定にあるモデルをそのまま使います。" },
         "npm-or-bun": {
-          title: "npmまたはbun",
+          title: "npm または Bun",
           body: "npm i @opencode/sdk または bun add @opencode/sdk でインストールできます。",
         },
         "in-process-host": {
           title: "インプロセスホスト",
-          body: "ネットワークを介さず、メモリ内でOpenCodeを実行します。",
+          body: "ネットワークを介さず、メモリ内で OpenCode を実行します。",
         },
         "your-plugins": {
           title: "自分のプラグイン",
           body: "インプロセスホストの作成時に、独自のプラグインを渡せます。",
         },
-        "promise-or-effect": { title: "PromiseかEffect", body: "同じ値を返すPromise APIとEffect API。" },
+        "promise-or-effect": { title: "Promise または Effect", body: "Promise API と Effect API は同じ値を返します。" },
         "cloudflare-workers": {
           title: "Cloudflare Workers",
-          body: "Workers上のCloudflare Durable Object内でOpenCodeを実行できます。",
+          body: "Workers 上の Cloudflare Durable Object 内で OpenCode を実行できます。",
         },
       },
       showcase: {
         "fix-ci-from-code": {
-          title: "コードでCIを修正",
-          body: "短いスクリプトで、失敗したテストをOpenCodeに直させて再実行します。",
+          title: "コードで CI を修正",
+          body: "短いスクリプトで、失敗したテストを OpenCode に修正させ、再実行できます。",
         },
         "follow-every-step": {
           title: "すべてのステップを追う",
-          body: "イベントをストリーミングして、エージェントが呼ぶツールを即座に確認。",
+          body: "イベントをストリーミングで受け取り、エージェントがどのツールを呼び出したかをリアルタイムで確認できます。",
         },
         "build-your-own-tools": {
           title: "独自のツールを作る",
-          body: "数行のコードで、ボット、ダッシュボード、ワークフローにOpenCodeを組み込めます。",
+          body: "数行のコードで、ボット、ダッシュボード、ワークフローに OpenCode を組み込めます。",
         },
         "in-your-process": {
           title: "プロセス内で実行",
-          body: "あなたの設定とモデルで、OpenCodeをプロセス内で実行します。",
+          body: "お使いの設定とモデルで、OpenCode をプロセス内で実行します。",
         },
       },
     },
     mini: {
-      title: "OpenCode | Mini、エージェントのための最小限のターミナルUI",
+      title: "OpenCode | Mini、エージェントのための最小限のターミナル UI",
       description:
-        "MiniはOpenCodeを最小限のターミナルインターフェースで実行します。返答はターミナル自体のスクロールバックに出力され、下にはプロンプトとステータス行だけが残ります。",
+        "Mini は、必要最小限のターミナル UI で OpenCode を実行します。返答はターミナルのスクロールバックに出力され、画面下部には入力欄とステータス行だけが残ります。",
       intro:
-        "OpenCodeのための最小限のターミナルインターフェース。opencode mini を実行すると、返答がターミナル自体のスクロールバックに直接出力されるので、ほかの出力と同じようにスクロール、検索、コピーできます。下部に残るのはプロンプトとステータス行だけです。",
+        "OpenCode のための必要最小限のターミナル UI。opencode mini を実行すると、返答はターミナルのスクロールバックに直接出力されます。通常の出力と同じようにスクロール、検索、コピーでき、画面下部には入力欄とステータス行だけが残ります。",
       features: {
         "your-scrollback": { title: "スクロールバック", body: "返答は通常のターミナル履歴になります。" },
         "one-prompt": {
-          title: "単一プロンプト",
-          body: "エージェント、モデル、コンテキスト、コストを1行のステータスに表示。",
+          title: "入力欄はひとつだけ",
+          body: "エージェント、モデル、コンテキスト、コストを 1 行で表示します。",
         },
-        permissions: { title: "権限", body: "プロンプト欄から編集やコマンドを許可できます。" },
+        permissions: { title: "権限", body: "入力欄から編集やコマンドの実行を許可できます。" },
         "how-much-shows": {
           title: "表示量を調整",
-          body: "思考とツール出力を、控えめ、デフォルト、すべてから選べます。",
+          body: "推論とツール出力の表示量を、控えめ、デフォルト、すべてから選べます。",
         },
         "pick-up-later": {
           title: "後から再開",
           body: "-c で前回のセッションを、-s で任意のセッションを再開できます。",
         },
-        "same-opencode": { title: "同じOpenCode", body: "ほかのアプリと同じサーバー、エージェント、モデル。" },
-        agents: { title: "エージェント", body: "プロンプトから直接エージェントを切り替えられます。" },
-        compact: { title: "圧縮", body: "/compact で長いセッションを縮められます。" },
+        "same-opencode": { title: "いつもの OpenCode", body: "ほかのアプリと同じサーバー、エージェント、モデルが使えます。" },
+        agents: { title: "エージェント", body: "入力欄から直接エージェントを切り替えられます。" },
+        compact: { title: "コンパクション", body: "/compact で長いセッションを圧縮できます。" },
       },
     },
   },
   extensionCard: {
     name: "拡張機能",
-    body: "VS CodeでOpenCodeを使えます。ZedなどのエディタではACP経由で使えます。",
+    body: "OpenCode を VS Code で。Zed などのエディターでも ACP 経由で使えます。",
     action: "インストール",
   },
   extensions: {
     browse: {
       name: "Browse",
       body: "エージェントが普段のブラウザを使えます。",
-      title: "OpenCode | Browse、コーディングエージェントが使う普段のブラウザ",
+      title: "OpenCode | Browse でいつものブラウザをコーディングエージェントに",
       description:
-        "Browseを使うと、OpenCodeやほかのMCPクライアントが普段のブラウザを使えます。エージェントはページを読み、クリックし、入力し、スクリーンショットを撮り、タブを録画します。ログインや2FAはあなたに任せます。",
+        "Browse を使えば、OpenCode などの MCP クライアントから普段のブラウザを操作できます。エージェントがページの読み取り、クリック、入力、スクリーンショット撮影、タブの録画を行い、サインインや 2FA が必要なときは操作を引き継げます。",
       intro:
-        "MCPサーバーとChromium拡張機能で、エージェントが普段のブラウザを使えるようにします。あなたのタブ、ログイン、拡張機能をそのまま使えます。エージェントはタブをバックグラウンドで開き、グループにまとめて邪魔にならないようにし、ページを読んだり、クリックしたり、入力したり、スクリーンショットを撮ったり、タブを録画したりします。ログイン、2FAの入力、支払いなどあなたの番になると、エージェントはタブをあなたに渡し、「Continue」をクリックすると作業を再開します。",
+        "MCP サーバーと Chromium 拡張機能を通じて、エージェントが普段のブラウザを、タブもサインイン状態も拡張機能もそのまま使えます。エージェントはタブをバックグラウンドで開いてグループにまとめるので、作業の邪魔になりません。ページを読み取り、クリックや入力を行い、スクリーンショットを撮ったり、タブを録画したりできます。サインインや 2FA、支払いが必要なときは自分でタブを操作し、「Continue」をクリックするとエージェントが作業を再開します。",
       features: {
         "your-real-browser": {
           title: "普段のブラウザ",
@@ -231,9 +230,9 @@ export const content = {
         },
         "out-of-your-way": {
           title: "邪魔にならない",
-          body: "エージェントのタブは、折りたたまれたグループでバックグラウンドに開きます。",
+          body: "エージェントのタブはバックグラウンドで開き、折りたたんだグループにまとまります。",
         },
-        handoffs: { title: "引き継ぎ", body: "ログインや2FAの手順は自分で行い、「Continue」をクリックします。" },
+        handoffs: { title: "操作を引き継ぐ", body: "サインインや 2FA は自分で行い、終わったら「Continue」をクリックします。" },
         "lend-a-tab": {
           title: "タブを貸す",
           body: "ツールバーのボタンをクリックして、開いているタブをエージェントに渡せます。",
@@ -242,31 +241,31 @@ export const content = {
           title: "録画と記録",
           body: "スクリーンショット、タブの録画、ネットワーク通信。",
         },
-        "any-mcp-client": { title: "全MCPクライアント", body: "OpenCode、Claude Code、Cursor、Codex、Zedなど多数。" },
+        "any-mcp-client": { title: "MCP クライアントを選ばない", body: "OpenCode、Claude Code、Cursor、Codex、Zed などに対応。" },
         "all-your-logins": {
-          title: "ログインはそのまま",
-          body: "エージェントは、すでにサインインしているサイトをそのまま使います。キーも設定も不要です。",
+          title: "サインイン状態をそのままに",
+          body: "エージェントはサインイン済みのサイトをそのまま使えます。キーも設定も不要です。",
         },
-        "allowed-sites": { title: "許可したサイト", body: "エージェントのタブを、指定したサイトだけに保ちます。" },
+        "allowed-sites": { title: "アクセス先の制限", body: "エージェントがタブで開けるサイトを指定できます。" },
       },
       install:
-        "まず [Chrome 拡張機能] をインストールしてください。残りの手順は拡張機能が案内します。CLI を直接インストールする場合は(通常は不要です)、次のいずれかを使ってください。",
+        "まず [Chrome 拡張機能] をインストールしてください。続きは拡張機能の案内に従ってください。CLI を直接インストールする場合（通常は不要）は、次のいずれかの方法を使います。",
     },
   },
   apps: {
     browse: {
       category: "エージェント向けブラウザ操作",
-      body: "ログインもタブもそのまま、いつものブラウザをエージェントが使えます。",
+      body: "サインイン状態もタブもそのまま。エージェントがいつものブラウザを使えます。",
     },
-    opentunnel: { category: "ローカルトンネル", body: "ローカルアプリに公開HTTPS URLを。" },
-    opentui: { category: "ライブラリ", body: "ターミナルUIのためのライブラリ。" },
-    hex: { category: "音声入力", body: "どのアプリでも使える、デバイス上の音声入力。" },
+    opentunnel: { category: "ローカルトンネル", body: "ローカルアプリに公開 HTTPS URL を。" },
+    opentui: { category: "ライブラリ", body: "ターミナル UI のためのライブラリ。" },
+    hex: { category: "音声入力", body: "どのアプリでも使える、端末内で完結する音声入力。" },
   },
   getStarted: {
     title: "はじめる",
-    lead: "いちばん簡単な始め方は、OpenCodeをダウンロードして無料モデルを使うことです。アカウントは不要です。もっと使いたいときは、お使いのサブスクリプションを持ち込むか、OpenCode Goを使えます。",
+    lead: "OpenCode をダウンロードして無料モデルを使うのが、いちばん簡単です。アカウントは不要。さらに多くのモデルを使うなら、お使いのサブスクリプションか OpenCode Go を利用できます。",
     phrases: {
-      "download-opencode": { text: "OpenCodeをダウンロード" },
+      "download-opencode": { text: "OpenCode をダウンロード" },
       "free-models": { text: "無料モデル" },
       "your-own-subscription": { text: "お使いのサブスクリプション" },
       "a-subscription-you-already-have": { text: "すでにお持ちのサブスクリプション" },
@@ -277,29 +276,29 @@ export const content = {
       download: { title: "ダウンロード", line: "デスクトップ、ターミナル、モバイル。" },
       "use-free-models": {
         title: "無料モデルを使う",
-        line: "OpenCodeには無料モデルが付属しています。アカウントは不要です。",
+        line: "OpenCode には、アカウントなしで使える無料モデルがあります。",
       },
       "add-more-models": {
         title: "モデルを追加",
-        line: "お使いのサブスクリプションを持ち込むか、月額$10からのOpenCode Goの厳選モデルを使えます。",
+        line: "お使いのサブスクリプションを利用するか、月額 $10 からの OpenCode Go で厳選モデルを使えます。",
       },
     },
     sentence:
-      "OpenCodeをダウンロードして無料モデルから始め、もっと使いたくなったら、お使いのサブスクリプションかOpenCode Goを使えます。",
+      "OpenCode をダウンロードして、まずは無料モデルから。さらに使いたいときは、お使いのサブスクリプションか OpenCode Go を利用できます。",
   },
   byos: {
-    title: "サブスクリプションを持ち込む",
+    title: "いつものサブスクリプションで",
     headline: "すでにお持ちのサブスクリプションを使えます。",
-    line: "ChatGPT PlusまたはPro、あるいはGitHub Copilotでログインできます。OpenCodeのサブスクリプションも使えます。",
+    line: "ChatGPT Plus または Pro、GitHub Copilot でサインインできます。OpenCode のサブスクリプションも使えます。",
     yours: { label: "お使いのサブスクリプション", items: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } } },
-    planLinks: ["OpenCodeのサブスクリプション", "OpenCode Go"],
-    ours: { label: "OpenCodeのプラン" },
+    planLinks: ["OpenCode のサブスクリプション", "OpenCode Go"],
+    ours: { label: "OpenCode のプラン" },
   },
   brand: {
-    hero: { copy: { text: "エージェント用ルール", copied: "コピーしました" } },
+    hero: { copy: { text: "エージェント用ルール", copied: "ルールをコピーしました" } },
     naming: {
       title: "表記",
-      body: "OpenCodeは、大文字のOと大文字のCを使って1語で書きます。Opencode、Open Code、OpenCode AI、Open-Codeとは書きません。",
+      body: "OpenCode は、O と C を大文字にして 1 語で書きます。Opencode、Open Code、OpenCode AI、Open-Code とは書きません。",
       code: "小文字の `opencode` は、`opencode-figma` や `@acme/opencode-plugin` のように、コードとパッケージ名でのみ使います。",
     },
     families: {
@@ -315,7 +314,7 @@ export const content = {
       },
       wordmark: {
         title: "ワードマーク",
-        body: "OpenCodeの字形で書いた正式名称。名前を書ききるスペースがある場所で使います。",
+        body: "OpenCode の正式名称を専用の字形で表したものです。名称をすべて表示できるスペースがある場所で使います。",
         assets: { light: { name: "ライト" }, dark: { name: "ダーク" } },
       },
       "simple-wordmark": {
@@ -412,18 +411,18 @@ export const content = {
     },
     integrations: {
       title: "連携",
-      body: "OpenCodeと連携するプラグイン、プロバイダー、ツールや、OpenCodeで作ったプロジェクトは、そのことを表示できます。バッジかパートナーロックアップを使い、プロジェクトがあなたのものだとわかる名前を付けてください。",
+      body: "OpenCode と連携するプラグイン、プロバイダー、ツールや、OpenCode を使って作ったプロジェクトは、OpenCode との関係を表示できます。バッジまたはパートナーロックアップを使い、独自のプロジェクトだとわかる名前を付けてください。",
       badges: {
-        body: "README、ドキュメント、Webサイトにバッジを置き、opencode.aiにリンクしてください。背景に合わせてライトかダークのファイルを選び（HTMLは自動で切り替わります）、色やテキストは変更しないでください。",
-        sizes: "どのスタイルも20、32、44px（Shieldsは20pxのみ）で、SVGと2倍サイズのPNGがあります。",
-        mono: "各ファイルには、テキストをOpenMonoにした版もあります。opencode-works-with-a-light-20-mono.svg のように拡張子の前に -mono を付けます。大文字のOpenMonoなら -mono-caps を付けます。",
+        body: "README、ドキュメント、Web サイトにバッジを掲載し、opencode.ai にリンクしてください。背景に合わせてライト版かダーク版を選びます（HTML 版は自動で切り替わります）。色やテキストは変更しないでください。",
+        sizes: "各スタイルに 20、32、44px のサイズがあり（Shields は 20px のみ）、SVG と 2 倍サイズの PNG を用意しています。",
+        mono: "各ファイルには、文字に OpenMono を使った版もあります。opencode-works-with-a-light-20-mono.svg のように拡張子の直前に -mono を付けると通常版、-mono-caps を付けると大文字版になります。",
         groups: {
           "works-with": {
             title: "Works with",
             alt: "Works with OpenCode",
-            body: "OpenCodeと一緒に動くプラグイン、プロバイダー、ツール向け。",
+            body: "OpenCode と連携するプラグイン、プロバイダー、ツール向け。",
           },
-          "built-with": { title: "Built with", alt: "Built with OpenCode", body: "OpenCodeで作ったプロジェクト向け。" },
+          "built-with": { title: "Built with", alt: "Built with OpenCode", body: "OpenCode で作ったプロジェクト向け。" },
         },
         styles: { a: { name: "フレーム" }, c: { name: "セル" }, f: { name: "ソリッド" }, g: { name: "Shields" } },
       },
@@ -434,7 +433,7 @@ export const content = {
       },
       naming: {
         title: "プロジェクトの名前",
-        body: "プロジェクトがあなたのものだとわかるように、自分の名前を先に置きます。",
+        body: "独自のプロジェクトだとわかるよう、プロジェクト名を先に記載してください。",
         rule: "`Linear for OpenCode` と書くか、パッケージ名を `opencode-linear` にします。`OpenCode Linear` や `Linear by OpenCode` とは書きません。",
       },
     },
@@ -445,68 +444,68 @@ export const content = {
     },
   },
   press: {
-    title: "OpenCode | 企業情報とブランド素材のプレスキット",
+    title: "OpenCode | プレスキット、企業情報とブランド素材",
     description:
-      "OpenCodeのプレスキットです。OpenCodeと開発元のAnomalyに関する情報、ダウンロードできるロゴとワードマーク、報道関係のお問い合わせ先をまとめています。",
-    hero: { title: "プレス", body: "OpenCodeとAnomalyについて書くための情報、ブランド素材、連絡先。" },
+      "OpenCode のプレスキットです。OpenCode と開発元の Anomaly に関する情報、ロゴとワードマークのダウンロード、報道関係のお問い合わせ先をまとめています。",
+    hero: { title: "プレス", body: "OpenCode と Anomaly の取材・執筆に役立つ企業情報、ブランド素材、お問い合わせ先。" },
     company: {
-      title: "Anomalyについて",
-      lead: "AnomalyはOpenCodeを開発している会社です。開発者向けのオープンソースツールを作っています。",
-      more: "ほかにもSSTやOpenTUIなどのプロジェクトがあり、すべて[GitHub](github)でオープンソースとして公開しています。",
+      title: "Anomaly について",
+      lead: "OpenCode を開発する Anomaly は、開発者向けのオープンソースツールを作っています。",
+      more: "SST や OpenTUI なども手がけ、すべて [GitHub](github) でオープンソースとして公開しています。",
       learnMore: "詳しくは[anoma.ly](site)をご覧ください。",
       projects: {
         opencode: {
           name: "OpenCode",
-          body: "オープンソースのコーディングエージェント。デスクトップ、ターミナル、モバイル向けのアプリとSDKがあります。MITライセンス、GitHubスター220,000以上。",
+          body: "オープンソースのコーディングエージェント。デスクトップ、ターミナル、モバイル向けアプリと SDK を提供。MIT ライセンスで、GitHub スターは 220,000 以上。",
         },
         sst: {
           name: "SST",
-          body: "自分のインフラ上でフルスタックアプリを構築するためのフレームワーク。MITライセンスで2020年から公開され、GitHubスターは26,000以上。",
+          body: "自前のインフラにフルスタックアプリを構築するためのフレームワーク。2020年から MIT ライセンスで公開。GitHub スターは 26,000 以上。",
         },
         opentui: {
           name: "OpenTUI",
-          body: "TypeScript、React、Solidでターミナル UIを作るためのライブラリで、コアはZigで書かれています。OpenCodeが本番環境で使っています。GitHubスターは13,000以上。",
+          body: "TypeScript、React、Solid でターミナル UI を作るためのライブラリ。コアは Zig 製で、OpenCode が本番環境で使用。GitHub スターは 13,000 以上。",
         },
         "models-dev": {
           name: "Models.dev",
-          body: "AIモデルの仕様、価格、機能をまとめたオープンソースのデータベースで、公開APIがあります。200以上のプロバイダーの8,900以上のモデルを掲載しています。",
+          body: "AI モデルの仕様、価格、機能をまとめたオープンソースのデータベース。公開 API を備え、200 以上のプロバイダーから 8,900 以上のモデルを掲載しています。",
         },
         hex: {
           name: "Hex",
-          body: "Mac、Windows、Linux向けの音声入力。Hexはデバイス上で文字起こしし、どのアプリにも貼り付けるので、音声が外部に出ることはありません。",
+          body: "Mac、Windows、Linux 向けの音声入力。Hex は端末内で文字起こしし、どのアプリにも貼り付けられます。音声が端末の外に出ることはありません。",
         },
         opentunnel: {
           name: "OpenTunnel",
-          body: "マシン上のアプリに公開HTTPS URLを付けるCLIとSDK。TLSはあなたのマシンで終端されるので、リレーが平文を見ることはありません。",
+          body: "手元のマシンで動くアプリに公開 HTTPS URL を付与する CLI と SDK。TLS は手元のマシンで終端するため、中継サーバーに平文は渡りません。",
         },
       },
     },
     about: {
-      title: "OpenCodeについて",
-      body: "OpenCodeと各製品の紹介文です。長文版と短文版があり、そのままコピーして使えます。",
+      title: "OpenCode について",
+      body: "そのまま使える OpenCode と各製品の紹介文です。長文版と短文版を用意しています。",
       boilerplate: {
-        long: "OpenCodeはオープンソースのコーディングエージェントです。デスクトップアプリ、ターミナルUI、モバイルアプリ、SDKとして提供され、Claude、GPT、Geminiなど、あらゆるプロバイダーのモデルで動作します。OpenCodeはMITライセンスで、Anomalyが開発しています。GitHubスターは220,000以上、コントリビューターは1,000人以上で、毎月2,200万人以上の開発者が利用しています。",
+        long: "OpenCode はオープンソースのコーディングエージェントです。デスクトップアプリ、ターミナル UI、モバイルアプリ、SDK を提供し、Claude、GPT、Gemini など、あらゆるプロバイダーのモデルで動作します。Anomaly が開発し、MIT ライセンスで公開しています。GitHub スターは 220,000 以上、コントリビューターは 1,000 人以上で、毎月 2,200 万人以上の開発者に利用されています。",
         short:
-          "OpenCodeはAnomalyが開発するオープンソースのコーディングエージェントで、デスクトップ、ターミナル、モバイル向けのアプリとSDKがあります。",
+          "OpenCode は Anomaly が開発するオープンソースのコーディングエージェントです。デスクトップ、ターミナル、モバイル向けのアプリと SDK を提供しています。",
       },
       products: {
         "opencode-console": {
           name: "OpenCode Console",
-          long: "OpenCode Consoleは、開発者やチームがOpenCodeやほかのコーディングエージェントで使うAIモデルへのアクセスを購入、管理するWebアプリです。フロンティアモデルとオープンウェイトモデルの従量課金制の推論（前払いクレジットからリクエストごとに課金）と、OpenCode Goのサブスクリプションを提供しています。チームは、Member、Admin、Ownerのロールを持つワークスペース、ワークスペース単位とユーザー単位の利用上限、Okta、Microsoft Entra ID、Google Workspaceによるシングルサインオン、SCIMを利用できます。Consoleは30以上のプロバイダーに対応しているため、チームはすでに持っているプロバイダーのアカウントを接続でき、Console自体の推論は任意です。URLはopencode.ai/consoleです。",
+          long: "OpenCode Console は、開発者やチームが OpenCode などのコーディングエージェントで使う AI モデルへのアクセスを購入・管理する Web アプリです。フロンティアモデルとオープンウェイトモデルの従量課金による推論に対応し、リクエストごとに前払いクレジットから課金します。OpenCode Go のサブスクリプションも提供しています。チームは、メンバー、管理者、オーナーのロールや、ワークスペースとユーザーごとの支出上限を設定でき、Okta、Microsoft Entra ID、Google Workspace によるシングルサインオンや SCIM を利用できます。Console は 30 以上のプロバイダーに対応しているため、お使いのプロバイダーのアカウントを接続できます。Console の推論を使う必要はありません。URL は opencode.ai/console です。",
           short:
-            "OpenCode Consoleは、従量課金制のAIモデルアクセス、OpenCode Goのサブスクリプション、予算やシングルサインオンなどのチーム管理機能を提供するAnomalyのWebアプリです。",
+            "OpenCode Console は Anomaly の Web アプリです。従量課金で使える AI モデル、OpenCode Go のサブスクリプション、予算やシングルサインオンなどのチーム管理機能を提供します。",
         },
         "opencode-go": {
           name: "OpenCode Go",
-          long: "OpenCode Goは、コーディングモデルを月額固定で使いたい開発者向けのサブスクリプションです。Goは月額$10、上限が高いGo Plusは月額$40、Go Teamsはメンバー1人あたり月額$20です。各プランには、エージェント型コーディング向けにテストした厳選モデルが含まれます。利用上限はモデルごとの月額のドル建てで、5時間ごとと週ごとに、月間上限の20%と50%の枠が順次回復します。サブスクライバーはクレジットを追加でき、従量課金の残高に切り替えることも、いつでも解約することもできます。GoはOpenCodeとほかのエージェントで使えます。URLはopencode.ai/console/goです。",
+          long: "OpenCode Go は、コーディングモデルを月額固定で使いたい開発者向けのサブスクリプションです。Go は月額 $10、利用枠の大きい Go Plus は月額 $40、Go Teams はメンバー 1 人あたり月額 $20 です。どのプランも、エージェント型コーディング向けに検証したモデルを厳選しています。モデルごとの月間利用上限を米ドルで定め、直近 5 時間と 1 週間の利用枠はそれぞれ月間上限の 20% と 50% です。契約者はクレジットをチャージして従量課金の残高から支払うことも、いつでも解約することもできます。Go は OpenCode でも、ほかのエージェントでも使えます。URL は opencode.ai/console/go です。",
           short:
-            "OpenCode Goは、厳選したコーディングモデルを月間の利用上限つきで使える、Anomalyの月額サブスクリプションです。月額$10からです。",
+            "OpenCode Go は、月間利用枠の範囲で厳選コーディングモデルを使える、Anomaly のサブスクリプションです。月額 $10 から利用できます。",
         },
         "opencode-data": {
           name: "OpenCode Data",
-          long: "OpenCode Dataは、開発者がOpenCodeでどのAIモデルを使っているか、その構成が時間とともにどう変わるかを示す公開ダッシュボードです。上位モデルのランキング、トークン使用量、セッションとトークンのコスト、キャッシュ率、市場シェア、国別の内訳を公開しています。数値は1時間ごとに集計され、日と週はUTCで区切られます。ユーザー数とセッション数は概算で、コストはOpenCodeのモデルカタログの定価を使っています。報道関係者は、ページに表示される更新時刻とともに、OpenCode Data（opencode.ai/data）として引用できます。",
+          long: "OpenCode Data は、OpenCode で使われている AI モデルと、その利用割合の推移がわかる公開ダッシュボードです。利用上位のモデル、トークン使用量、セッションとトークンの費用、キャッシュ率、市場シェア、国別の内訳を公開しています。集計は 1 時間ごとで、日と週の区切りは UTC に準じます。ユーザー数とセッション数は概算で、費用は OpenCode のモデルカタログに掲載された定価に基づきます。報道関係者は OpenCode Data（opencode.ai/data）を、ページの更新時刻とともに出典として記載できます。",
           short:
-            "OpenCode Dataは、opencode.ai/dataで公開しているダッシュボードです。OpenCodeでの実際の利用量に基づいてAIモデルをランク付けし、トークン、コスト、市場シェアを1時間ごとに更新しています。",
+            "OpenCode Data は opencode.ai/data で公開しているダッシュボードです。OpenCode での実際の使用量に基づき AI モデルをランク付けし、トークン使用量、費用、市場シェアを 1 時間ごとに更新しています。",
         },
       },
     },
@@ -532,14 +531,14 @@ export const content = {
     },
     news: {
       title: "最新リリース",
-      intro: "OpenCodeは頻繁にリリースしています。新機能を含む最新のリリースを紹介します。",
-      changelog: { text: "変更履歴の全文" },
-      feed: { text: "RSS" },
+      intro: "OpenCode は頻繁にアップデートしています。新機能が加わった最新のリリースはこちらです。",
+      changelog: { text: "すべての変更履歴" },
+      feed: { text: "RSS フィード" },
     },
     media: {
       title: "メディア",
-      intro: "実際の製品から収録した、各アプリの静止画と短い動画です。OpenCodeについて書く際にご利用いただけます。",
-      note: "すべてダークテーマで収録しています。静止画とポスターは最大1920 × 1080（縦向きは1080 × 1350）のJPGです。動画は音声なしのMP4です。",
+      intro: "各アプリの実際の画面を収録した静止画と短い動画です。OpenCode の記事にご利用いただけます。",
+      note: "すべてダークテーマで収録しています。静止画とポスターは最大 1920 × 1080（縦向きは 1080 × 1350）の JPG です。動画は音声なしの MP4 です。",
       products: {
         desktop: {
           name: "Desktop",
@@ -549,9 +548,9 @@ export const content = {
             "frame-2": { title: "Desktopの静止画2" },
             "frame-3": { title: "Desktopの静止画3" },
             "frame-4": { title: "Desktopの静止画4" },
-            "feature-1": { title: "タブでセッション管理" },
-            "feature-2": { title: "レビューとコメント" },
-            "feature-3": { title: "ブラウザで確認" },
+            "feature-1": { title: "エージェントを並行実行" },
+            "feature-2": { title: "ブラウザで確認" },
+            "feature-3": { title: "どのデバイスからでも" },
             "locked-portrait": { title: "Desktopの動画（縦）" },
           },
         },
@@ -563,8 +562,8 @@ export const content = {
             "frame-2": { title: "Mobileの静止画2" },
             "frame-3": { title: "Mobileの静止画3" },
             "feature-1": { title: "音声" },
-            "feature-2": { title: "承認" },
-            "feature-3": { title: "セッション" },
+            "feature-2": { title: "セッション" },
+            "feature-3": { title: "結果" },
             "locked-portrait": { title: "Mobileの動画（縦）" },
           },
         },
@@ -600,8 +599,8 @@ export const content = {
     },
     people: { title: "メンバー" },
     anomalyLogo: {
-      title: "Anomalyのロゴ",
-      body: "Anomalyのマークとワードマーク（黒と白）。PNGの幅は2048 pxです。",
+      title: "Anomaly のロゴ",
+      body: "Anomaly のマークとワードマーク（黒と白）。PNG の幅は 2048 px です。",
       assets: {
         "mark-black": { name: "マーク、黒" },
         "mark-white": { name: "マーク、白" },
@@ -621,11 +620,11 @@ export const content = {
     brand: {
       title: "ブランド",
       before:
-        "OpenCodeのロゴとワードマークを1つのZIPファイルでダウンロードできます。個別のファイル、バリエーション、使用ルールについては、",
+        "OpenCode のロゴとワードマークを ZIP ファイルで一括ダウンロードできます。個別のファイル、バリエーション、使用ルールについては、",
       link: { text: "ブランドページ" },
       after: "をご覧ください。",
       usage:
-        "これらのファイルは、OpenCodeについて書くために使えます。ファイルを変更したり、OpenCodeがあなたの活動を推奨しているかのように示したりしないでください。",
+        "OpenCode についての記事にご利用いただけます。ファイルを変更したり、OpenCode が活動を推奨していると受け取られる使い方をしたりしないでください。",
     },
     product: {
       title: "製品",
@@ -636,15 +635,15 @@ export const content = {
         },
         mobile: {
           name: "Mobile",
-          body: "最新のOpenCodeアプリ。セッションに通話してエージェントと話し、どこにいてもスマートフォンから変更を確認、承認できます。",
+          body: "OpenCode の最新アプリ。通話でエージェントと話し、どこからでもスマートフォンで変更を確認・承認できます。",
         },
         terminal: {
           name: "Terminal",
-          body: "どのシェル、エディタ、リモートサーバーでも動くターミナルUI。各編集を差分で確認し、どのコマンドを自動で実行するかを選べます。",
+          body: "どのシェル、エディター、リモートサーバーでも動くターミナル UI。編集ごとの差分を確認し、自動実行するコマンドを選べます。",
         },
         sdk: {
           name: "SDK",
-          body: "スクリプト、CIジョブ、独自ツールのための型付きTypeScriptクライアント。セッションを作成し、プロンプトを送り、すべてのイベントをストリーミングできます。",
+          body: "スクリプト、CI ジョブ、独自のツール向けの型付き TypeScript クライアント。セッションの作成、プロンプトの送信、すべてのイベントのストリーミングに対応します。",
         },
       },
     },
@@ -656,9 +655,9 @@ export const content = {
           body: "報道関係者とアナリストの方向け。メディアからのお問い合わせにのみ返信します。",
         },
         support: {
-          links: { "github-issues": { text: "GitHubのissue" }, "help-anoma-ly": { text: "help@anoma.ly" } },
+          links: { "github-issues": { text: "GitHub の Issue" }, "help-anoma-ly": { text: "help@anoma.ly" } },
           title: "サポート",
-          body: "OpenCodeについてのヘルプは、issueを作成するか、コミュニティで質問してください。アカウントや請求に関するご質問はメールでお送りください。",
+          body: "OpenCode の使い方でお困りの場合は、Issue を作成するか、コミュニティで質問してください。アカウントや請求に関するご質問はメールでお送りください。",
         },
         security: {
           links: {
@@ -666,7 +665,7 @@ export const content = {
             "security-anoma-ly": { text: "security@anoma.ly" },
           },
           title: "セキュリティ",
-          body: "脆弱性はGitHubから報告してください。6営業日以内に返信がない場合は、メールでご連絡ください。",
+          body: "脆弱性は GitHub から報告してください。6 営業日以内に返信がなければ、メールでご連絡ください。",
         },
       },
     },
@@ -694,56 +693,56 @@ export const content = {
   },
   productDownloads: {
     terminal: { commands: { curl: { name: "スクリプト" } } },
-    sdk: { more: { label: "SDKのドキュメントを読む" } },
+    sdk: { more: { label: "SDK のドキュメントを読む" } },
     mini: {
       commands: { curl: { name: "スクリプト" } },
-      lead: "MiniはOpenCode CLIに含まれています。次のいずれかでインストールし、opencode mini を実行してください。",
+      lead: "Mini は OpenCode CLI に含まれています。次のいずれかの方法でインストールし、opencode mini を実行してください。",
     },
   },
   pair: {
     title: "スマートフォンを接続",
-    cardTitle: "1つのコマンドでスマートフォンとペアリング",
+    cardTitle: "コマンド 1 つでスマートフォンとペアリング",
     intro:
-      "OpenCode Mobileは、コンピューター上のOpenCodeのリモコンです。セッションはコンピューターで動き続け、アプリはそれを表示して操作できるようにします。",
+      "OpenCode Mobile は、コンピューターで動く OpenCode を遠隔操作するアプリです。コンピューターで動き続けるセッションを、スマートフォンで確認しながら操作できます。",
     steps: {
       "get-the-app": {
         title: "アプリを入手",
-        body: "TestFlightからiPhoneにOpenCodeのベータ版をインストールします。Androidアプリは近日公開予定です。",
+        body: "iPhone では TestFlight から OpenCode のベータ版を、Android スマートフォンでは OpenCode アプリをインストールしてください。",
       },
       "run-this-on-your-computer": {
         title: "コンピューターで実行",
-        body: "1回限りのリンクとQRコードが表示されます。どちらも1回だけ使え、5分で期限が切れます。",
+        body: "1 回だけ使えるリンクと QR コードが表示されます。どちらも有効期限は 5 分です。",
       },
       "scan-the-code": {
         title: "コードを読み取る",
-        body: "アプリでQRコードを読み取るか、リンクを貼り付けます。コンピューターの最近のセッションがスマートフォンで開きます。",
+        body: "アプリで QR コードを読み取るか、リンクを貼り付けます。コンピューターの最近のセッションがスマートフォンで開きます。",
       },
     },
-    note: "--remote はOpenTunnelのアドレス経由で接続するので、どのネットワークからでも使えます。同じWi-Fiにいる場合は、opencode service set hostname 0.0.0.0 を1回実行してから、opencode pair を実行します。",
+    note: "--remote では OpenTunnel のアドレスを経由するため、どのネットワークからでも接続できます。同じ Wi-Fi に接続している場合は、opencode service set hostname 0.0.0.0 を 1 回実行してから、opencode pair を実行します。",
     facts: [
-      "--remote はOpenTunnelのアドレス経由で接続するので、ペアリングはどのネットワークからでも使えます。",
-      "リンクとコードは1回だけ使え、5分で期限が切れます。",
+      "--remote は OpenTunnel のアドレスを経由するため、どのネットワークからでもペアリングできます。",
+      "リンクとコードは 1 回だけ使えます。有効期限は 5 分です。",
       "エージェントはスマートフォンではなくコンピューターで動くので、コンピューターの電源は入れたままにしてください。",
-      "同じWi-Fiでは、opencode service set hostname 0.0.0.0 を1回実行してから、opencode pair を実行します。",
+      "同じ Wi-Fi に接続している場合は、opencode service set hostname 0.0.0.0 を 1 回実行してから、opencode pair を実行します。",
     ],
   },
   announcements: {
     "create-install-and-share-desktop-plugins": {
-      text: "デスクトッププラグインを作成、インストール、共有できます。",
-      link: "2.2の新機能を見る",
+      text: "デスクトップ用プラグインの作成、インストール、共有に対応。",
+      link: "2.2 の新機能を見る",
     },
     "desktop-terminals-now-survive-restarts": {
-      text: "Desktopのターミナルが再起動後も残るようになりました。",
-      link: "v2.2.4を見る",
+      text: "Desktop のターミナルは再起動してもそのまま。",
+      link: "v2.2.4 を見る",
     },
     "agents-can-now-generate-images": {
       text: "エージェントが画像を生成できるようになりました。",
-      link: "v2.2.1を見る",
+      link: "v2.2.1 を見る",
     },
     "steer-your-sessions-from-your-phone": {
       text: "スマートフォンからセッションを操作できます。",
-      link: "OpenCode Mobileを見る",
+      link: "OpenCode Mobile を見る",
     },
-    "a-refreshed-desktop-app": { text: "デスクトップアプリを刷新しました。", link: "2.2の新機能を見る" },
+    "a-refreshed-desktop-app": { text: "デスクトップアプリを刷新しました。", link: "2.2 の新機能を見る" },
   },
 } satisfies ContentOverlay
