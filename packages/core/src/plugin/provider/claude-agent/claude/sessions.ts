@@ -369,8 +369,6 @@ export function registry() {
     ) {
       const boundary = SyncDecision.boundary(request.prompt, source)
       if (!source || !boundary) return 0
-      // Validate catch-up input before creating a forked transcript on disk.
-      yield* attemptSync(() => CatchUp.content(request.prompt, boundary.start))
       const fork = yield* attempt(() =>
         input.io.fork(source.claudeSessionID, boundary.messageID, request.connection?.CLAUDE_CONFIG_DIR),
       )

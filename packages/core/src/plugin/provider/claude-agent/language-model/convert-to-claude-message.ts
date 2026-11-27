@@ -53,7 +53,9 @@ function file(part: LanguageModelV3FilePart): ContentBlock {
     if (part.data instanceof URL) return { type: "image", source: { type: "url", url: part.data.href } }
     return { type: "image", source: { type: "base64", media_type: type, data: base64(part.data) } }
   }
-  throw new Error(`Claude Code does not support ${type} attachments`)
+  // Throwing here would fail every later turn too, because the file stays in OpenCode's history.
+  const name = part.filename ? `${part.filename} (${type})` : type
+  return { type: "text", text: `[${name} was left out: Claude Code cannot read this file type.]` }
 }
 
 // Claude Code treats an image block in a user message as one the user just pasted: it saves a copy and adds an
