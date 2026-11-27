@@ -1,0 +1,412 @@
+---
+title: "키바인드"
+description: "cli.json에서 OpenCode CLI 키바인드를 커스터마이즈하고 각 명령어의 ID와 기본 바인딩을 확인하세요."
+---
+
+`cli.json`에서 바인딩을 커스터마이즈하세요.
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "command.palette.show": "ctrl+k",
+    "app.exit": ["ctrl+c", "ctrl+d"],
+    "app.debug": false
+  },
+  "leader": {
+    "timeout": 1500
+  }
+}
+```
+
+키 하나에는 문자열을 사용하세요.
+
+```json
+{
+  "keybinds": {
+    "command.palette.show": "ctrl+k"
+  }
+}
+```
+
+대안은 쉼표로 구분하세요.
+
+```json
+{
+  "keybinds": {
+    "app.exit": "ctrl+c,ctrl+d"
+  }
+}
+```
+
+바인딩은 `"none"`이나 `false`로 비활성화하세요.
+
+```json
+{
+  "keybinds": {
+    "app.debug": "none",
+    "help.show": false
+  }
+}
+```
+
+이벤트 동작에는 객체를 사용하세요.
+
+```json
+{
+  "keybinds": {
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "preventDefault": false
+    }
+  }
+}
+```
+
+`leader`의 기본값은 `ctrl+x`입니다. 다른 바인딩의 `<leader>`는 그 키를 가리킵니다.
+
+```json
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "model.list": "<leader>m"
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+알 수 없는 명령 ID는 무시됩니다.
+
+## 애플리케이션
+
+| ID                         | 기본값                   | 설명                         |
+| -------------------------- | ------------------------- | ----------------------------------- |
+| `leader`                   | `ctrl+x`                  | 키바인드 조합용 리더 키 |
+| `app.exit`                 | `ctrl+c,ctrl+d,<leader>q` | 애플리케이션 종료                |
+| `app.debug`                | `none`                    | 디버그 패널 전환                  |
+| `app.console`              | `none`                    | 콘솔 전환                      |
+| `app.scrap`                | `none`                    | 스크랩 화면 열기                   |
+| `app.toggle.animations`    | `none`                    | 애니메이션 전환                   |
+| `app.toggle.file_context`  | `none`                    | 파일 컨텍스트 전환                 |
+| `app.toggle.diffwrap`      | `none`                    | diff 줄바꿈 전환                |
+| `app.toggle.paste_summary` | `none`                    | 붙여넣기 요약 전환                |
+| `command.palette.show`     | `ctrl+p`                  | 사용 가능한 명령어 나열             |
+| `help.show`                | `none`                    | 도움말 대화 상자 열기                    |
+| `docs.open`                | `none`                    | 문서 열기                  |
+| `opencode.settings`        | `none`                    | 설정 열기                       |
+| `server.pair`              | `none`                    | 기기 페어링                         |
+| `service.restart`          | `none`                    | 서비스 다시 시작                     |
+| `location.reload`          | `none`                    | 구성 다시 로드                |
+
+## Mini
+
+`app.clear` 명령은 [`opencode mini`](/cli)에서만 동작합니다. `ctrl+l`을 누르면 화면을 지우고 프롬프트를 다시 그립니다. 스크롤백은 터미널에 남습니다.
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "app.clear": "ctrl+l"
+  }
+}
+```
+
+| ID          | 기본값  | 설명      |
+| ----------- | -------- | ---------------- |
+| `app.clear` | `ctrl+l` | 화면 지우기 |
+
+## Diff 뷰어
+
+`d`(`diff.switch_source`)를 눌러 **All**, **Committed**, **Uncommitted**, **Last turn**(세션 안)을 고르거나 **Base**를 선택해 비교 브랜치를 바꾸세요. 선택은 TUI를 종료할 때까지 기억됩니다. 초기 범위는 [`diffs.source` 설정(`cli.json`)](/cli/config#diffs)으로 지정하세요.
+
+스크롤, 페이징, 시작/끝 단축키는 항상 diff를 제어합니다. 키보드 포커스 전환은 없으며, 파일을 클릭해 열고 폴더를 클릭해 펼치거나 접고 마우스 휠로 파일 트리를 스크롤하세요.
+
+`n` / `p` 또는 `alt+down` / `alt+up`(macOS에서는 Option)으로 파일 사이를 이동하세요. diff 뷰어 안에서는 Alt 단축키가 세션 탭이 아니라 파일을 이동합니다.
+
+`m`을 누르면 파일을 리뷰 완료로 표시하고 패치 본문을 접습니다. 전체 파일 보기에서 `m`을 다시 누르면 표시를 해제하고 패치를 다시 엽니다. 단일 파일 보기에서는 리뷰 완료로 표시하면 자동으로 다음 파일로 넘어가지만 마지막 파일에서는 순환하지 않고 머뭅니다. 표시 해제는 절대 이동하지 않습니다.
+
+사이드바의 파일이나 diff 제목을 마우스 오른쪽 버튼으로 클릭하고 **Mark complete**(또는 **Mark incomplete**)를 선택하세요. 이는 `m`과 같은 리뷰 상태를 바꿉니다. 다른 파일을 그 메뉴에서 완료해도 그 파일이 선택되거나 현재 읽는 파일이 넘어가지 않습니다.
+
+`diff.help`의 Shift 조합은 `?`를 입력할 때 Shift 키 입력도 전달하는 터미널을 위한 것입니다.
+
+| ID                       | 기본값             | 설명                              |
+| ------------------------ | ------------------- | ---------------------------------------- |
+| `diff.open`              | `none`              | diff 뷰어 열기                         |
+| `diff.close`             | `escape,q`          | diff 뷰어 닫기                        |
+| `diff.down`              | `j,down`            | diff 뷰어 아래로 이동                    |
+| `diff.up`                | `k,up`              | diff 뷰어 위로 이동                    |
+| `diff.page.down`         | `pagedown,ctrl+f`   | diff 뷰어 한 페이지 아래로              |
+| `diff.page.up`           | `pageup,ctrl+b`     | diff 뷰어 한 페이지 위로                |
+| `diff.half_page.down`    | `ctrl+d`            | diff 뷰어 반 페이지 아래로 스크롤      |
+| `diff.half_page.up`      | `ctrl+u`            | diff 뷰어 반 페이지 위로 스크롤        |
+| `diff.first`             | `gg,home`           | diff 시작으로 이동                     |
+| `diff.last`              | `shift+g,end`       | diff 끝으로 이동                        |
+| `diff.next_hunk`         | `]`                 | 다음 diff 헝크로 이동                   |
+| `diff.previous_hunk`     | `[`                 | 이전 diff 헝크로 이동                   |
+| `diff.next_file`         | `n,alt+down`        | 다음 diff 파일로 이동                   |
+| `diff.previous_file`     | `p,alt+up`          | 이전 diff 파일로 이동                   |
+| `diff.toggle_file_tree`  | `b`                 | diff 뷰어 파일 트리 전환             |
+| `diff.single_patch`      | `s`                 | 단일 패치 보기 전환                 |
+| `diff.switch_source`     | `d`                 | diff 리뷰 범위 선택             |
+| `diff.toggle_view`       | `v`                 | diff 뷰어 분할/통합 보기 전환 |
+| `diff.toggle_fullscreen` | `f`                 | diff 뷰어 전체 화면 전환           |
+| `diff.mark_reviewed`     | `m`                 | 선택한 diff 파일 리뷰 표시 전환       |
+| `diff.help`              | `?,shift+?,shift+/` | 더 많은 diff 뷰어 단축키 표시          |
+
+폐기된 `diff.toggle`, `diff.expand`, `diff.expand_all`, `diff.collapse`, `diff.switch_focus` 구성 항목은 계속 허용되지만 더 이상 단축키를 등록하지 않습니다.
+
+## 모양과 탐색
+
+| ID                         | 기본값         | 설명                              |
+| -------------------------- | --------------- | ---------------------------------------- |
+| `prompt.editor`            | `<leader>e`     | 외부 편집기 열기                     |
+| `theme.switch`             | `none`          | 사용 가능한 테마 나열                    |
+| `theme.switch_mode`        | `none`          | 라이트/다크 테마 모드 전환 |
+| `theme.mode.lock`          | `none`          | 테마 모드 잠금/해제                |
+| `session.sidebar.toggle`   | `<leader>b`     | 사이드바 전환                           |
+| `pane.focus.left`          | `<leader>left`  | 세션 창에 포커스                       |
+| `pane.focus.right`         | `<leader>right` | 오른쪽 창에 포커스                         |
+| `terminal.select`          | `<leader>down`  | 터미널 선택                          |
+| `terminal.toggle`          | `<leader>t`     | 터미널 창 전환                     |
+| `terminal.close`           | `<leader>up`    | 터미널 창 닫기                      |
+| `session.toggle.scrollbar` | `none`          | 세션 스크롤바 전환                 |
+| `opencode.status`          | `<leader>s`     | 상태 보기                              |
+| `opencode.debug`           | `none`          | 디버그 정보 보기                          |
+
+## 세션
+
+| ID                                    | 기본값                 | 설명                              |
+| ------------------------------------- | ----------------------- | ---------------------------------------- |
+| `session.export`                      | `<leader>x`             | 세션을 편집기로 내보내기                 |
+| `session.copy`                        | `none`                  | 세션 대화 기록 복사                  |
+| `session.copy.id`                     | `none`                  | 세션 ID 복사                          |
+| `session.move`                        | `none`                  | 세션 이동                             |
+| `session.new`                         | `<leader>n`             | 새 세션 만들기                     |
+| `session.list`                        | `<leader>l`             | 모든 세션 나열                        |
+| `open.menu`                           | `ctrl+o`                | 최근 세션과 프로젝트 열기        |
+| `session.tab.next`                    | `ctrl+tab,alt+down`     | 다음 열린 세션 탭으로 전환          |
+| `session.tab.previous`                | `ctrl+shift+tab,alt+up` | 이전 열린 세션 탭으로 전환      |
+| `session.tab.history.back`            | `none`                  | 세션 탭 기록에서 뒤로           |
+| `session.tab.history.forward`         | `ctrl+i`                | 세션 탭 기록에서 앞으로        |
+| `session.tab.next_unread`             | `alt+shift+down`        | 다음 읽지 않은 세션 탭으로 전환        |
+| `session.tab.previous_unread`         | `alt+shift+up`          | 이전 읽지 않은 세션 탭으로 전환    |
+| `session.tab.close`                   | `<leader>w`             | 현재 세션 탭 닫기                |
+| `session.tab.reopen`                  | `ctrl+shift+t`          | 마지막으로 닫은 세션 탭 다시 열기           |
+| `session.timeline`                    | `<leader>g`             | 세션 타임라인 표시                    |
+| `session.fork`                        | `none`                  | 메시지에서 세션 포크                |
+| `session.rename`                      | `ctrl+r`                | 세션 이름 변경                           |
+| `session.delete`                      | `ctrl+d`                | 세션 삭제                           |
+| `session.interrupt`                   | `escape`                | 현재 세션 중단                |
+| `session.background`                  | `ctrl+b`                | 세션을 대기 상태로 만든 도구를 백그라운드에서 계속 실행        |
+| `session.compact`                     | `<leader>c`             | 세션 압축                      |
+| `session.aside`                       | `none`                  | 곁가지 질문                       |
+| `session.cd`                          | `none`                  | 작업 디렉터리 변경                 |
+| `session.queued_prompts`              | `<leader>q`             | 대기 중인 프롬프트 관리                    |
+| `queued_prompt.undo`                  | `ctrl+u`                | 대기 중인 프롬프트 실행 취소                       |
+| `queued_prompt.delete`                | `ctrl+d`                | 대기 중인 프롬프트 삭제                     |
+| `session.toggle.exploration_grouping` | `none`                  | 관련 도구 호출 묶기 전환        |
+| `session.verbosity.cycle`             | `none`                  | 대화 기록 상세 수준 순환               |
+| `session.child.first`                 | `down`                  | 서브에이전트 선택기 전환                   |
+| `session.child.next`                  | `right`                 | 다음 하위 세션으로 이동                 |
+| `session.child.previous`              | `left`                  | 이전 하위 세션으로 이동             |
+| `session.parent`                      | `up`                    | 상위 세션으로 이동                     |
+| `session.pin.toggle`                  | `ctrl+f`                | 세션 목록에서 세션 고정/해제 |
+| `session.quick_switch.1`              | `<leader>1`             | 빠른 슬롯 1의 세션으로 전환        |
+| `session.quick_switch.2`              | `<leader>2`             | 빠른 슬롯 2의 세션으로 전환        |
+| `session.quick_switch.3`              | `<leader>3`             | 빠른 슬롯 3의 세션으로 전환        |
+| `session.quick_switch.4`              | `<leader>4`             | 빠른 슬롯 4의 세션으로 전환        |
+| `session.quick_switch.5`              | `<leader>5`             | 빠른 슬롯 5의 세션으로 전환        |
+| `session.quick_switch.6`              | `<leader>6`             | 빠른 슬롯 6의 세션으로 전환        |
+| `session.quick_switch.7`              | `<leader>7`             | 빠른 슬롯 7의 세션으로 전환        |
+| `session.quick_switch.8`              | `<leader>8`             | 빠른 슬롯 8의 세션으로 전환        |
+| `session.quick_switch.9`              | `<leader>9`             | 빠른 슬롯 9의 세션으로 전환        |
+| `session.tab.select.1`                | `<leader>1,ctrl+1`      | 세션 탭 1로 전환                  |
+| `session.tab.select.2`                | `<leader>2,ctrl+2`      | 세션 탭 2로 전환                  |
+| `session.tab.select.3`                | `<leader>3,ctrl+3`      | 세션 탭 3로 전환                  |
+| `session.tab.select.4`                | `<leader>4,ctrl+4`      | 세션 탭 4로 전환                  |
+| `session.tab.select.5`                | `<leader>5,ctrl+5`      | 세션 탭 5로 전환                  |
+| `session.tab.select.6`                | `<leader>6,ctrl+6`      | 세션 탭 6로 전환                  |
+| `session.tab.select.7`                | `<leader>7,ctrl+7`      | 세션 탭 7로 전환                  |
+| `session.tab.select.8`                | `<leader>8,ctrl+8`      | 세션 탭 8로 전환                  |
+| `session.tab.select.9`                | `<leader>9,ctrl+9`      | 세션 탭 9로 전환                  |
+| `session.tab.select.10`               | `<leader>0,ctrl+0`      | 세션 탭 10으로 전환                 |
+
+## 모델과 에이전트
+
+| ID                             | 기본값     | 설명                          |
+| ------------------------------ | ----------- | ------------------------------------ |
+| `stash.delete`                 | `ctrl+d`    | 스태시 항목 삭제                   |
+| `model.dialog.provider`        | `ctrl+a`    | 모델 대화 상자에서 제공자 목록 열기 |
+| `model.dialog.favorite`        | `ctrl+f`    | 모델 즐겨찾기 상태 전환         |
+| `model.dialog.usage`           | `ctrl+u`    | 모델 대화 상자에서 사용 한도 열기  |
+| `model.list`                   | `<leader>m` | 사용 가능한 모델 나열                |
+| `model.cycle_recent`           | `f2`        | 다음 최근 사용 모델             |
+| `model.cycle_recent_reverse`   | `shift+f2`  | 이전 최근 사용 모델         |
+| `model.cycle_favorite`         | `none`      | 다음 즐겨찾기 모델                  |
+| `model.cycle_favorite_reverse` | `none`      | 이전 즐겨찾기 모델              |
+| `mcp.list`                     | `none`      | MCP 서버 나열                     |
+| `usage.show`                   | `none`      | 사용 한도 보기                    |
+| `provider.connect`             | `none`      | 통합 연결                  |
+| `agent.list`                   | `<leader>a` | 에이전트 나열                          |
+| `agent.cycle`                  | `shift+tab` | 다음 에이전트                           |
+| `agent.cycle.reverse`          | `none`      | 이전 에이전트                       |
+| `variant.cycle`                | `ctrl+t`    | 모델 변형 순환                 |
+| `variant.list`                 | `none`      | 모델 변형 나열                  |
+| `speed.cycle`                  | `none`      | 모델 속도 순환                   |
+| `speed.list`                   | `none`      | 모델 속도 나열                    |
+
+## 세션 탐색
+
+| ID                              | 기본값                | 설명                       |
+| ------------------------------- | ---------------------- | --------------------------------- |
+| `session.page.up`               | `pageup,ctrl+alt+b`    | 메시지를 한 페이지 위로 스크롤    |
+| `session.page.down`             | `pagedown,ctrl+alt+f`  | 메시지를 한 페이지 아래로 스크롤  |
+| `session.line.up`               | `ctrl+alt+y`           | 메시지를 한 줄 위로 스크롤    |
+| `session.line.down`             | `ctrl+alt+e`           | 메시지를 한 줄 아래로 스크롤  |
+| `session.half.page.up`          | `ctrl+alt+u`           | 메시지를 반 페이지 위로 스크롤   |
+| `session.half.page.down`        | `ctrl+alt+d`           | 메시지를 반 페이지 아래로 스크롤 |
+| `session.first`                 | `ctrl+g,home,alt+home` | 첫 메시지로 이동         |
+| `session.last`                  | `ctrl+alt+g,end`       | 마지막 메시지로 이동          |
+| `session.message.next`          | `none`                 | 다음 메시지로 이동          |
+| `session.message.previous`      | `none`                 | 이전 메시지로 이동      |
+| `session.message.user.next`     | `none`                 | 다음 사용자 메시지로 이동     |
+| `session.message.user.previous` | `none`                 | 이전 사용자 메시지로 이동 |
+| `session.messages_last_user`    | `alt+end`              | 마지막 사용자 메시지로 이동     |
+| `messages.copy`                 | `<leader>y`            | 메시지 복사                      |
+| `session.undo`                  | `<leader>u`            | 메시지 실행 취소                     |
+| `session.redo`                  | `<leader>r`            | 메시지 다시 실행                     |
+| `session.toggle.thinking`       | `none`                 | 사고 블록 표시 전환 |
+
+## 프롬프트 명령어
+
+| ID                            | 기본값          | 설명            |
+| ----------------------------- | ---------------- | ---------------------- |
+| `prompt.submit`               | `none`           | 프롬프트 제출          |
+| `prompt.queue`                | `<leader>return` | 프롬프트 대기열에 넣기           |
+| `prompt.editor_context.clear` | `none`           | 편집기 컨텍스트 지우기   |
+| `prompt.images.view`          | `<leader>i`      | 이미지 첨부 보기 |
+| `prompt.skills`               | `none`           | 스킬 선택기 열기    |
+| `prompt.stash`                | `none`           | 프롬프트 스태시           |
+| `prompt.stash.pop`            | `none`           | 스태시한 프롬프트 꺼내기     |
+| `prompt.stash.list`           | `none`           | 스태시한 프롬프트 나열   |
+
+## 입력 편집
+
+| ID                              | 기본값                                                                       | 설명                             |
+| ------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------- |
+| `prompt.clear`                  | `ctrl+c`                                                                      | 입력 필드 지우기                       |
+| `prompt.paste`                  | `{"key":"ctrl+v","preventDefault":false}` (`ctrl+v`; `preventDefault: false`) | 클립보드에서 붙여넣기                    |
+| `input.submit`                  | `return`                                                                      | 입력 제출                            |
+| `input.newline`                 | `shift+return,ctrl+return,alt+return,ctrl+j`                                  | 입력에 줄바꿈 삽입                 |
+| `input.move.left`               | `left,ctrl+b`                                                                 | 입력 커서를 왼쪽으로 이동               |
+| `input.move.right`              | `right,ctrl+f`                                                                | 입력 커서를 오른쪽으로 이동              |
+| `input.move.up`                 | `up`                                                                          | 입력 커서를 위로 이동                 |
+| `input.move.down`               | `down`                                                                        | 입력 커서를 아래로 이동               |
+| `input.select.left`             | `shift+left`                                                                  | 입력에서 왼쪽 선택                    |
+| `input.select.right`            | `shift+right`                                                                 | 입력에서 오른쪽 선택                   |
+| `input.select.up`               | `shift+up`                                                                    | 입력에서 위쪽 선택                      |
+| `input.select.down`             | `shift+down`                                                                  | 입력에서 아래쪽 선택                    |
+| `input.line.home`               | `ctrl+a`                                                                      | 입력 줄 시작으로 이동          |
+| `input.line.end`                | `ctrl+e`                                                                      | 입력 줄 끝으로 이동            |
+| `input.select.line.home`        | `ctrl+shift+a`                                                                | 입력 줄 시작까지 선택        |
+| `input.select.line.end`         | `ctrl+shift+e`                                                                | 입력 줄 끝까지 선택          |
+| `input.visual.line.home`        | `alt+a`                                                                       | 화면에 표시된 줄의 시작으로 이동   |
+| `input.visual.line.end`         | `alt+e`                                                                       | 화면에 표시된 줄의 끝으로 이동     |
+| `input.select.visual.line.home` | `alt+shift+a`                                                                 | 화면에 표시된 줄의 시작까지 선택 |
+| `input.select.visual.line.end`  | `alt+shift+e`                                                                 | 화면에 표시된 줄의 끝까지 선택   |
+| `input.buffer.home`             | `none`                                                                        | 입력 버퍼 시작으로 이동        |
+| `input.buffer.end`              | `none`                                                                        | 입력 버퍼 끝으로 이동          |
+| `input.select.buffer.home`      | `shift+home`                                                                  | 입력 버퍼 시작까지 선택      |
+| `input.select.buffer.end`       | `shift+end`                                                                   | 입력 버퍼 끝까지 선택        |
+| `input.delete.line`             | `ctrl+shift+d`                                                                | 입력 줄 삭제                    |
+| `input.delete.to.line.end`      | `ctrl+k`                                                                      | 입력 줄 끝까지 삭제          |
+| `input.delete.to.line.start`    | `ctrl+u`                                                                      | 입력 줄 시작까지 삭제        |
+| `input.backspace`               | `backspace,shift+backspace`                                                   | 입력에서 백스페이스                      |
+| `input.delete`                  | `ctrl+d,delete,shift+delete`                                                  | 입력에서 문자 삭제               |
+| `input.undo`                    | `ctrl+-,super+z`                                                              | 입력에서 실행 취소                           |
+| `input.redo`                    | `ctrl+.,super+shift+z`                                                        | 입력에서 다시 실행                           |
+| `input.word.forward`            | `alt+f,alt+right,ctrl+right`                                                  | 입력에서 단어 앞으로 이동              |
+| `input.word.backward`           | `alt+b,alt+left,ctrl+left`                                                    | 입력에서 단어 뒤로 이동             |
+| `input.select.word.forward`     | `alt+shift+f,alt+shift+right`                                                 | 입력에서 단어 앞쪽 선택            |
+| `input.select.word.backward`    | `alt+shift+b,alt+shift+left`                                                  | 입력에서 단어 뒤쪽 선택           |
+| `input.delete.word.forward`     | `alt+d,alt+delete,ctrl+delete`                                                | 입력에서 앞 단어 삭제            |
+| `input.delete.word.backward`    | `ctrl+w,ctrl+backspace,alt+backspace`                                         | 입력에서 뒤 단어 삭제           |
+| `input.select.all`              | `super+a`                                                                     | 입력 전체 선택                     |
+| `prompt.history.previous`       | `up`                                                                          | 이전 기록 항목                   |
+| `prompt.history.next`           | `down`                                                                        | 다음 기록 항목                       |
+
+## 입력창
+
+| ID                            | 기본값  | 설명          |
+| ----------------------------- | -------- | -------------------- |
+| `composer.subagent.up`        | `up`     | 이전 서브에이전트    |
+| `composer.subagent.down`      | `down`   | 다음 서브에이전트        |
+| `composer.subagent.select`    | `return` | 서브에이전트로 이동 |
+| `composer.subagent.interrupt` | `ctrl+d` | 서브에이전트 중단   |
+| `composer.shell.up`           | `up`     | 이전 셸       |
+| `composer.shell.down`         | `down`   | 다음 셸           |
+| `composer.shell.select`       | `return` | 셸 출력 보기    |
+| `composer.shell.kill`         | `ctrl+d` | 셸 명령 종료   |
+| `composer.terminal.up`        | `up,k`   | 이전 터미널    |
+| `composer.terminal.down`      | `down,j` | 다음 터미널        |
+| `composer.terminal.select`    | `return` | 터미널 선택      |
+
+**Shell** 탭에서 실행 중인 명령을 선택하고 **Enter**를 누르거나 클릭하면 캡처된 stdout과 stderr를 볼 수 있습니다. **↑/↓**, **Page Up/Down**, **Home**으로 스크롤하고 **End**로 새 출력을 따라가며 **Esc**로 명령을 멈추지 않고 돌아갑니다. 뷰어는 최근 출력을 보여 주고 종료 후에도 열린 상태로 남으며, 파일로 리디렉션된 출력은 포함하지 않습니다.
+
+## 대화 상자와 자동 완성
+
+| ID                             | 기본값       | 설명                         |
+| ------------------------------ | ------------- | ----------------------------------- |
+| `dialog.select.prev`           | `up,ctrl+p`   | 이전 대화 상자 항목으로 이동        |
+| `dialog.select.next`           | `down,ctrl+n` | 다음 대화 상자 항목으로 이동            |
+| `dialog.select.page_up`        | `pageup`      | 대화 상자에서 한 페이지 위로          |
+| `dialog.select.page_down`      | `pagedown`    | 대화 상자에서 한 페이지 아래로        |
+| `dialog.select.home`           | `home`        | 첫 대화 상자 항목으로 이동           |
+| `dialog.select.end`            | `end`         | 마지막 대화 상자 항목으로 이동            |
+| `dialog.select.submit`         | `return`      | 선택한 대화 상자 항목 제출         |
+| `dialog.prompt.submit`         | `return`      | 대화 상자 프롬프트 제출                |
+| `dialog.integration.rename`    | `ctrl+r`      | 통합 계정 이름 변경          |
+| `dialog.integration.delete`    | `ctrl+d`      | 통합 계정 삭제          |
+| `dialog.integration.copy`      | `tab`         | 인증 링크 복사             |
+| `dialog.worktree.generate`     | `tab`         | 워크트리 이름 생성              |
+| `dialog.move_session.new`      | `ctrl+a`      | 새 워크트리                        |
+| `dialog.move_session.move`     | `ctrl+m`      | 세션을 워크트리로 이동            |
+| `dialog.move_session.delete`   | `ctrl+d`      | 워크트리 삭제                     |
+| `dialog.move_session.refresh`  | `ctrl+r`      | 워크트리 새로 고침                   |
+| `prompt.autocomplete.prev`     | `up,ctrl+p`   | 이전 자동 완성 항목으로 이동  |
+| `prompt.autocomplete.next`     | `down,ctrl+n` | 다음 자동 완성 항목으로 이동      |
+| `prompt.autocomplete.hide`     | `escape`      | 자동 완성 숨기기                   |
+| `prompt.autocomplete.select`   | `return`      | 자동 완성 항목 선택            |
+| `prompt.autocomplete.complete` | `tab`         | 자동 완성 항목 완성         |
+| `permission.prompt.fullscreen` | `ctrl+f`      | 권한 프롬프트 전체 화면 전환 |
+| `plugins.toggle`               | `return`      | 플러그인 전환                       |
+| `dialog.mcp.toggle`            | `space`       | MCP 서버 전환                   |
+| `dialog.plugins.error`         | `space`       | 플러그인 오류 보기                   |
+| `dialog.plugins.update`        | `ctrl+u`      | 플러그인 대화 상자에서 플러그인 업데이트    |
+| `dialog.plugins.check`         | `ctrl+r`      | 플러그인 업데이트 확인            |
+
+## 터미널과 플러그인
+
+| ID                      | 기본값  | 설명                |
+| ----------------------- | -------- | -------------------------- |
+| `terminal.suspend`      | `ctrl+z` | 터미널 일시 중단           |
+| `terminal.title.toggle` | `none`   | 터미널 제목 전환      |
+| `plugins.list`          | `none`   | 플러그인 관리자 대화 상자 열기 |
+
+## Which-Key
+
+| ID                         | 기본값                     | 설명                      |
+| -------------------------- | --------------------------- | -------------------------------- |
+| `which-key.toggle`         | `ctrl+alt+k`                | which-key 패널 전환           |
+| `which-key.layout.toggle`  | `ctrl+alt+shift+k`          | which-key 레이아웃 전환          |
+| `which-key.pending.toggle` | `ctrl+alt+shift+p`          | which-key 대기 미리보기 전환 |
+| `which-key.group.previous` | `ctrl+alt+left,ctrl+alt+[`  | 이전 which-key 그룹         |
+| `which-key.group.next`     | `ctrl+alt+right,ctrl+alt+]` | 다음 which-key 그룹             |
+| `which-key.scroll.up`      | `ctrl+alt+up,ctrl+alt+p`    | which-key 위로 스크롤              |
+| `which-key.scroll.down`    | `ctrl+alt+down,ctrl+alt+n`  | which-key 아래로 스크롤            |
+| `which-key.page.up`        | `ctrl+alt+pageup`           | which-key 한 페이지 위로               |
+| `which-key.page.down`      | `ctrl+alt+pagedown`         | which-key 한 페이지 아래로             |
+| `which-key.home`           | `ctrl+alt+home`             | 첫 which-key 바인딩으로 이동  |
+| `which-key.end`            | `ctrl+alt+end`              | 마지막 which-key 바인딩으로 이동   |
+

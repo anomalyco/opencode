@@ -1,0 +1,297 @@
+---
+title: "권한"
+description: "allow, deny, ask 규칙을 순서대로 적용해 OpenCode 에이전트의 동작을 제어하세요. 규칙은 액션 및 경로나 명령어 같은 리소스와 일치하는지 확인합니다."
+---
+
+권한은 에이전트가 리소스에 대해 특정 작업을 수행할 수 있는지 제어합니다.
+
+## 구성
+
+흔한 설정은 셸 명령 실행 전에 확인하고, 일상적인 Git 조회는 허용하며, 푸시는 항상 차단하는 것입니다. 다음
+순서 있는 규칙을 `opencode.jsonc`에 추가하세요.
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+    { "action": "shell", "resource": "git diff *", "effect": "allow" },
+    { "action": "shell", "resource": "git push *", "effect": "deny" },
+  ],
+}
+```
+
+마지막으로 일치한 규칙이 우선하므로 구체적인 예외가 포괄 규칙 뒤에 옵니다.
+
+<Callout type="warning">
+  V1과 V2는 필드와 액션 이름이 다릅니다. V2에서는 `permissions`, `shell`, `subagent`를 사용합니다. V1의 `permission`, `bash`, `task`에 각각 대응합니다.
+</Callout>
+
+## 규칙
+
+각 규칙에는 세 개의 문자열 필드가 필요합니다.
+
+| 필드 | 의미 |
+| ---------- | -------------------------------------------------------------------------- |
+| `action`   | 도구 권한 액션                                                     |
+| `resource` | 경로, 명령, URL, 쿼리, 스킬 ID, 에이전트 ID처럼 사용되는 값 |
+| `effect`   | `allow`, `deny`, `ask`                                                   |
+
+```jsonc
+{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "*.env", "effect": "deny" },
+  ],
+}
+```
+
+| 효과  | 결과                              |
+| ------- | ----------------------------------- |
+| `allow` | 확인 없이 계속          |
+| `deny`  | 작업 차단                 |
+| `ask`   | 클라이언트의 결정을 기다림 |
+
+일치하는 규칙이 없으면 OpenCode는 `ask`를 사용합니다.
+
+## 일치
+
+액션과 리소스는 값 전체에 적용되는 단순 와일드카드를 사용합니다.
+
+| 패턴 | 일치                                      |
+| ------- | ------------------------------------------ |
+| `*`     | `/`를 포함한 0개 이상의 문자    |
+| `?`     | 정확히 한 문자                     |
+| 기타   | 해당 문자 그대로                     |
+
+```jsonc
+{
+  "permissions": [
+    { "action": "edit", "resource": "packages/docs/*.mdx", "effect": "allow" },
+  ],
+}
+```
+
+이 패턴은 정규화된 경로 전체와 일치합니다. 백슬래시는 슬래시로 정규화되고 Windows에서는 대소문자를 구분하지
+않습니다.
+
+` *`로 끝나는 셸 패턴은 인수 없는 명령과도 일치합니다.
+
+```jsonc
+{ "action": "shell", "resource": "git status *", "effect": "allow" }
+```
+
+`git status`와 `git status --short` 모두와 일치합니다.
+
+OpenCode는 규칙을 순서대로 결합하고 마지막 일치를 사용합니다. 우선순위가 낮은 구성이 먼저 로드되고, 전역 규칙이
+다음에 추가되며, 에이전트 규칙이 마지막에 추가됩니다.
+
+```jsonc
+{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "secrets/*", "effect": "deny" },
+  ],
+}
+```
+
+작업은 여러 파일을 건드리는 패치처럼 여러 리소스를 확인할 수 있습니다. 하나라도 `deny`면 작업이 거부되고, 아니면
+하나라도 `ask`면 확인하며, 그 외에는 허용됩니다.
+
+## 액션
+
+V2 액션 이름은 문자열이므로 플러그인이 액션을 더 정의할 수 있습니다. 내장 도구는 현재 다음 액션과 리소스를
+사용합니다.
+
+| 액션               | 리소스                                                                    |
+| -------------------- | --------------------------------------------------------------------------- |
+| `read`               | Location 기준의 상대 내부 경로 또는 정규화된 절대 외부 경로         |
+| `edit`               | `edit`, `write`, `patch`의 대상 경로                                |
+| `glob`               | 요청한 글롭 패턴                                                      |
+| `grep`               | 검색 경로가 아니라 요청한 정규식                           |
+| `shell`              | 스캐너가 만든 명령 문자열. 복합 명령은 여러 개를 만들 수 있음      |
+| `subagent`           | 대상 에이전트 ID                                                             |
+| `skill`              | 스킬 ID                                                                    |
+| `question`           | `*`                                                                         |
+| `webfetch`           | 요청한 URL                                                               |
+| `websearch`          | 검색 쿼리                                                                |
+| `generate_image` | 선택한 이미지 모델을 `providerID/modelID`로, 변형이 있으면 `#variant`를 붙임 |
+| `external_directory` | 표준 외부 디렉터리 경계. 보통 `/*`로 끝남              |
+| `<server>_<tool>`    | MCP 도구는 `*`. 두 이름의 지원되지 않는 문자는 `_`가 됨        |
+| `opencode_list_mcp_resources` | MCP 서버 이름                                                    |
+| `opencode_read_mcp_resource`  | `<server>:<uri>`                                                   |
+| `execute`            | `*`. deny면 Code Mode가 제거되고 그 도구들이 직접 나열되며, 중첩 도구는 자체 규칙을 적용함 |
+
+예를 들어 하나의 스킬만 허용하고 나머지 스킬은 모두 거부합니다.
+
+```jsonc
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "deny" },
+    { "action": "skill", "resource": "effect", "effect": "allow" },
+  ],
+}
+```
+
+`doom_loop`와 `lsp`는 현재 V2 Core 권한 액션이 아닙니다.
+
+## 디렉터리
+
+`external_directory`는 활성 Location과 그 비루트 프로젝트 워크트리 양쪽 밖의 경로를 `read`나 `edit` 규칙보다 먼저
+확인합니다. 기본 정책은 `external_directory`를 허용하므로 규칙을 추가하지 않으면 외부
+경로에 대해 확인을 요청하지 않습니다. 프로젝트 밖 접근 전에 항상 확인을 받으려면 다음과 같이 설정하세요.
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "external_directory", "resource": "*", "effect": "ask" },
+  ],
+}
+```
+
+뒤에 오는 더 좁은 규칙으로 특정 디렉터리를 허용하거나 거부할 수 있습니다.
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "external_directory", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "read", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "edit", "resource": "~/projects/reference/*", "effect": "deny" },
+  ],
+}
+```
+
+`read`, `edit`, `write`, `patch`가 사용하는 외부 경로에 적용됩니다. 셸은 `shell` 리소스를 확인하기 전에 외부
+작업 디렉터리와 스캐너가 추론한 디렉터리를 확인합니다.
+
+`external_directory`, `read`, `edit`에서는 구성 로드 시 앞의 `~`, `~/`, `$HOME`, `$HOME/`가 확장됩니다.
+
+```jsonc
+{ "action": "read", "resource": "$HOME/reference/*", "effect": "allow" }
+```
+
+셸 리소스에서는 명령어 텍스트를 그대로 사용하며 홈 디렉터리 경로를 치환하지 않습니다.
+
+<Callout type="warning">
+  `shell`은 호스트 사용자의 파일 시스템, 프로세스, 네트워크 권한으로 실행됩니다. OpenCode가 명령어 텍스트에서 모든 디렉터리를 찾아낼 수 있는 것은 아닙니다. 위험한 명령어를 모두 찾아내려는 패턴보다 꼭 필요한 명령어만 허용하는 목록을 사용하세요.
+</Callout>
+
+상대 변경 경로는 활성 Location을 벗어나면서도 프로젝트 워크트리 안에 있을 수 있습니다. 명시적 외부 경로는 일치
+전에 표준화되므로 신뢰하는 디렉터리 경계만 허용하세요.
+
+## 스캐너
+
+셸 권한 검사는 Bash, Zsh, POSIX `sh`, PowerShell 전반에 걸쳐 OpenCode의 내장 셸 스캐너를 사용합니다. 잘못된 구문이나 `eval` 같은 동적 평가처럼 안전하게 분석할 수 없는 명령도 있습니다. `shell` deny 규칙이 하나라도 적용되면 그런 명령은 스캐너 오류로 실패합니다. 하위 명령을 deny 규칙과 대조할 수 없기 때문입니다. 그렇지 않으면 전체 명령을 하나의 `shell` 리소스로, 그리고 `external_directory` `*`에 대해 승인을 받아야 합니다. 두 번째 승인은 모든 디렉터리를 허용하는 규칙이나 사용자만 부여할 수 있으며, 두 승인 모두 패턴으로 저장되지 않습니다.
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [
+    {
+      "permissions": [
+        { "action": "shell", "resource": "git status *", "effect": "allow" },
+        { "action": "shell", "resource": "rm *", "effect": "deny" },
+      ],
+    },
+  ],
+}
+```
+
+권한 규칙, 저장된 승인 패턴, 최선 노력 디렉터리 추론은 추출된 모든 하위 명령과 `cd` 대상에 적용됩니다. 알 수 없는 디렉터리에 대한 별도 승인 모드나 일괄 제한은 없습니다.
+
+## 기본값
+
+커스텀 에이전트를 포함한 모든 에이전트는 다음 순서 있는 기본 정책으로 시작합니다.
+
+```jsonc
+[
+  { "action": "*", "resource": "*", "effect": "allow" },
+  { "action": "read", "resource": "*.env", "effect": "ask" },
+  { "action": "read", "resource": "*.env.*", "effect": "ask" },
+  { "action": "read", "resource": "*.env.example", "effect": "allow" },
+]
+```
+
+기본 제공 에이전트는 다음 정책을 추가합니다.
+
+| 에이전트        | 추가 정책                                                              |
+| ------------- | ------------------------------------------------------------------------------ |
+| `build`      | 질문 허용                                                               |
+| `plan`       | 질문 허용. `~/.opencode/plan` 아래 파일을 제외한 편집 거부           |
+| `general`    | 질문과 서브에이전트 실행 거부                                       |
+| `explore`    | 셸, 읽기, 글롭, grep, 웹 가져오기, 웹 검색, 외부 디렉터리를 제외한 모든 것 거부. `.env` 읽기는 확인 |
+| `title`      | 모든 액션 거부                                                              |
+| `summary`    | 모든 액션 거부                                                              |
+| `compaction` | 기본 정책 유지                                                          |
+
+기본 규칙에는 `external_directory`에 대해 확인을 요청하는 규칙이 없으므로 Location과 워크트리 밖의 읽기와 편집은 확인 없이
+진행됩니다. [디렉터리](#directories)에 설명된 대로 `external_directory` `ask` 또는 `deny` 규칙을 추가하면
+확인을 되살리거나 외부 접근을 차단할 수 있습니다. 뒤에 오는 전역 및 에이전트 규칙이 이 기본값을 재정의합니다.
+
+## 에이전트
+
+공유 규칙은 최상위에, 더 좁은 규칙은 `agents.<id>.permissions` 아래에 두세요.
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+  ],
+  "agents": {
+    "reviewer": {
+      "description": "Review code without changing it",
+      "mode": "subagent",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+에이전트 규칙은 전역 규칙 뒤에 추가되며 전역 배열을 교체하지 않습니다. 커스텀 서브에이전트는 부모의 권한 일부가
+아니라 자체 권한을 사용합니다.
+
+## 승인
+
+규칙이 `ask`로 결정되면 클라이언트는 다음과 같이 응답할 수 있습니다.
+
+| 선택       | 응답      | 결과                                                               |
+| ------------ | ---------- | -------------------------------------------------------------------- |
+| 한 번 허용   | `once`     | 대기 중인 요청만 승인                                     |
+| 항상 허용 | `always`   | 승인하고 도구가 제안한 패턴을 프로젝트에 저장     |
+| 거부       | `reject`   | 해당 세션의 다른 모든 대기 중 권한 요청과 함께 거부 |
+
+예를 들어 `git status --short`에 **Allow always**를 선택하면 이후 `git status` 명령을 포괄하는 셸 접두사가
+저장될 수 있습니다.
+
+```text
+shell: git status * → allow
+```
+
+저장된 승인은 프로젝트 범위의 영구 `allow` 규칙입니다. 구성된 `deny`를 절대 재정의하지 않습니다. 저장할 패턴은
+도구가 제안합니다. 일부는 `*`를 제안하고, 셸은 명령 접두사를, 웹 가져오기는 URL의 사이트(예:
+`https://opencode.ai/*`)를, 스킬과 서브에이전트는 자신의 ID를 제안합니다. 포괄적인 승인을 검토하고 더 이상 필요
+없는 것은 제거하세요.
+
+클라이언트는 거부할 때 피드백을 첨부할 수 있습니다. 비대화형 클라이언트는 승인 요청을 처리하는 방법을 스스로
+결정해야 하며, 구성된 `deny` 규칙은 항상 적용됩니다.
+
+## 정책
+
+[정책](/policies)은 이 규칙과 저장된 승인이 실행된 뒤 권한 검사를 강제로 거부할 수 있습니다. `allow`나 `ask`를
+`deny`로 바꾸며 접근을 부여하지는 않습니다.
+
+```jsonc
+{
+  "policies": [{ "action": "tool.use", "resource": "shell:sudo *", "effect": "deny" }],
+}
+```
+
+전역 및 Console 관리 정책은 프로젝트 구성을 재정의하므로, 조직이 저장소에서 허용하는 명령을 차단할 수 있습니다.
+

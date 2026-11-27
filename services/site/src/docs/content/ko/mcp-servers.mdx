@@ -1,0 +1,568 @@
+---
+title: "MCP 서버"
+description: "opencode mcp add 또는 구성으로 OpenCode를 로컬 및 원격 Model Context Protocol 서버에 연결하세요. OAuth 로그인도 포함됩니다."
+---
+
+OpenCode는 [Model Context Protocol](https://modelcontextprotocol.io/) 서버에 연결해 도구, 프롬프트, 리소스, 지침 같은 기능을 제공합니다. MCP 도구는 모델 컨텍스트를 소비하므로 필요한 서버만 추가하세요.
+
+## 설정
+
+사용할 프로젝트에서 원격 서버를 추가한 다음 연결을 확인하세요.
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp
+opencode mcp list
+```
+
+이 명령은 서버를 프로젝트 [구성](/config)에 기록합니다. `--global`을 추가하면 모든 프로젝트에서 사용할 수 있습니다.
+
+```sh
+opencode mcp add context7 --global --url https://mcp.context7.com/mcp
+```
+
+원격 서버는 기본적으로 OAuth를 사용합니다. 목록에 `needs authentication`이 표시되면 OpenCode를 열고 `/mcps`를 실행해 서버를 선택한 뒤 로그인하세요. 연결된 서버는 에이전트가 바로 사용할 수 있습니다.
+
+```text
+✓ context7  connected
+```
+
+## 구성
+
+서버를 직접 구성하려면 `mcp.servers` 아래에 고유한 이름을 주세요. V2는 서버 이름을 `mcp` 바로 아래에 두지 않습니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "local",
+        "command": ["npx", "-y", "example-mcp-server"],
+      },
+    },
+  },
+}
+```
+
+서버는 자동으로 연결됩니다. 연결하지 않고 구성을 유지하려면 `disabled`를 사용하고 `enabled` 필드는 사용하지 마세요.
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "local",
+        "command": ["npx", "-y", "example-mcp-server"],
+        "disabled": true,
+      },
+    },
+  },
+}
+```
+
+우선순위가 높은 프로젝트 구성은 같은 이름의 서버 객체 전체를 교체합니다. 별도 연결이나 계정에는 다른 이름을 사용하고, 그렇지 않으면 재정의에서 필요한 필드를 모두 반복하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+      },
+    },
+  },
+}
+```
+
+## 로컬
+
+로컬 서버는 OpenCode가 MCP stdio 전송으로 시작하는 명령입니다. `--` 뒤에 명령을 두어 추가하세요.
+
+```sh
+opencode mcp add everything -- npx -y @modelcontextprotocol/server-everything
+```
+
+환경 변수는 `--env` 플래그를 반복해 전달하세요.
+
+```sh
+opencode mcp add everything --env LOG_LEVEL=info -- npx -y @modelcontextprotocol/server-everything
+```
+
+작업 디렉터리 같은 다른 프로세스 옵션에는 구성을 사용하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "everything": {
+        "type": "local",
+        "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+        "cwd": ".",
+        "environment": {
+          "LOG_LEVEL": "info",
+          "MCP_API_KEY": "{env:MCP_API_KEY}",
+        },
+      },
+    },
+  },
+}
+```
+
+| 필드 | 필수 | 설명 |
+| --- | --- | --- |
+| `type` | 예 | `"local"`이어야 합니다. |
+| `command` | 예 | 실행 파일과 그 인수. |
+| `cwd` | 아니요 | 프로세스 디렉터리. 상대 경로는 워크스페이스 기준이며 워크스페이스가 기본값입니다. |
+| `environment` | 아니요 | OpenCode가 상속한 프로세스 환경에 추가하는 문자열 변수. |
+| `disabled` | 아니요 | `true`이면 연결하지 않습니다. 기본값은 `false`입니다. |
+| `codemode` | 아니요 | `false`로 설정하면 Code Mode를 거치지 않고 도구를 직접 제공합니다. 기본값은 `true`입니다. |
+| `timeout` | 아니요 | 서버별 타임아웃 재정의. |
+| `protocol` | 아니요 | `auto`(기본), `legacy`, `2026-07-28`. [프로토콜 버전](#protocol-version)을 참고하세요. |
+| `pool` | 아니요 | 디렉터리 간에 연결 하나를 공유합니다. 기본값은 `false`입니다. [공유 연결](#shared-connections)을 참고하세요. |
+
+환경 치환에는 `{env:NAME}`을 사용하세요. `$NAME` 같은 셸 표현식은 JSON 문자열에서 확장되지 않습니다.
+
+```jsonc
+{
+  "environment": {
+    "MCP_API_KEY": "{env:MCP_API_KEY}",
+  },
+}
+```
+
+## 원격
+
+원격 서버는 MCP Streamable HTTP 전송을 사용하며 절대 URL이 필요합니다.
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp
+```
+
+요청 헤더는 `--header` 플래그를 반복해 전달하세요. 셸이 참조를 그대로 전달하도록 `{env:NAME}` 참조를 따옴표로 감싸세요.
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp --header 'CONTEXT7_API_KEY={env:CONTEXT7_API_KEY}'
+```
+
+다른 옵션에는 구성을 사용하세요. 시크릿은 파일이 아니라 환경 변수에 보관하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "oauth": false,
+        "headers": {
+          "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}",
+        },
+      },
+    },
+  },
+}
+```
+
+| 필드 | 필수 | 설명 |
+| --- | --- | --- |
+| `type` | 예 | `"remote"`여야 합니다. |
+| `url` | 예 | 절대 Streamable HTTP 엔드포인트. |
+| `headers` | 아니요 | 엔드포인트로 보내는 문자열 HTTP 헤더. |
+| `oauth` | 아니요 | OAuth 설정 또는 OAuth를 끄는 `false`. |
+| `disabled` | 아니요 | `true`이면 연결하지 않습니다. 기본값은 `false`입니다. |
+| `codemode` | 아니요 | `false`로 설정하면 Code Mode를 거치지 않고 도구를 직접 제공합니다. 기본값은 `true`입니다. |
+| `timeout` | 아니요 | 서버별 타임아웃 재정의. |
+| `protocol` | 아니요 | `auto`(기본), `legacy`, `2026-07-28`. [프로토콜 버전](#protocol-version)을 참고하세요. |
+| `pool` | 아니요 | 디렉터리 간에 연결 하나를 공유합니다. 기본값은 `false`입니다. [공유 연결](#shared-connections)을 참고하세요. |
+
+서버가 API 키나 다른 헤더 자격 증명만 사용할 때만 `oauth: false`를 사용하세요.
+
+```jsonc
+{
+  "type": "remote",
+  "url": "https://mcp.example.com/mcp",
+  "oauth": false,
+  "headers": { "Authorization": "Bearer {env:MCP_API_KEY}" },
+}
+```
+
+## OAuth
+
+원격 서버에는 `oauth`가 `false`가 아니면 OAuth가 활성화됩니다. OpenCode는 인증 서버를 찾고 PKCE로 로그인하며 토큰을 갱신합니다. 자격 증명은 프로젝트 구성 밖에 저장됩니다.
+
+대부분의 서버에는 URL만 필요합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "sentry": {
+        "type": "remote",
+        "url": "https://mcp.sentry.dev/mcp",
+      },
+    },
+  },
+}
+```
+
+서버가 인증을 요구하면 `/mcps`를 실행해 선택하고 브라우저에서 인증을 마치세요. CLI에서도 같은 흐름을 시작할 수 있습니다.
+
+```sh
+opencode mcp auth sentry
+```
+
+### 다른 머신의 브라우저
+
+OpenCode가 SSH, 컨테이너, 원격 서버에서 실행되면 로그인 후 브라우저가 OpenCode에 도달하지 못해 로드되지 않는 페이지가 표시됩니다. 주소 표시줄에서 그 페이지의 URL을 복사해 로그인 프롬프트에 붙여 넣으세요.
+
+```text
+http://127.0.0.1:52817/callback?code=...&state=...
+```
+
+프롬프트는 OpenCode가 브라우저를 기다리는 동안 `/mcps`, `opencode mcp auth`, 데스크톱 및 웹 앱의 로그인 대화 상자에 나타납니다.
+
+### 클라이언트 등록
+
+OpenCode는 해당되는 첫 번째 방법으로 인증 서버에 자신을 식별합니다.
+
+| 방법 | 사용 조건 |
+| --- | --- |
+| 사전 등록 클라이언트 | `oauth.client_id`가 구성된 경우. |
+| [클라이언트 ID 메타데이터 문서](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents)(CIMD) | 인증 서버가 CIMD와 공개 클라이언트를 지원하고 `oauth.redirect_uri`가 설정되지 않은 경우. |
+| [동적 클라이언트 등록](https://datatracker.ietf.org/doc/html/rfc7591)(DCR) | 위 두 경우에 해당하지 않을 때. OpenCode가 클라이언트를 등록하고 이후 로그인에서 재사용합니다. |
+
+인증 서버는 메타데이터로 CIMD를 선택합니다.
+
+```json
+{
+  "issuer": "https://auth.example.com",
+  "client_id_metadata_document_supported": true,
+  "token_endpoint_auth_methods_supported": ["none"]
+}
+```
+
+CIMD를 사용하면 OpenCode는 메타데이터 문서 URL을 `client_id`로 보내고 등록을 건너뜁니다.
+
+```text
+https://opencode.ai/oauth/opencode/client.json
+```
+
+이 문서는 포트 없는 다음 루프백 리디렉션을 허용합니다.
+
+- `http://127.0.0.1/callback`
+- `http://localhost/callback`
+- 이전 클라이언트용 `http://127.0.0.1/mcp/oauth/callback`
+
+[RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252#section-7.3)가 요구하는 대로 인증 서버는 이 리디렉션에 모든 루프백 포트를 허용하므로 CIMD와 함께 `callback_port`가 동작합니다. 사용자 지정 `redirect_uri`는 그렇지 않으므로 OpenCode는 DCR로 대체합니다.
+
+인증 서버가 CIMD도 DCR도 지원하지 않으면 사전 등록 클라이언트를 구성하세요.
+
+### 사전 등록 클라이언트
+
+제공자가 클라이언트 자격 증명을 주면 V2의 snake_case OAuth 필드를 사용하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "company-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "oauth": {
+          "client_id": "{env:MCP_CLIENT_ID}",
+          "client_secret": "{env:MCP_CLIENT_SECRET}",
+          "scope": "tools:read tools:execute",
+          "callback_port": 19876,
+          "redirect_uri": "http://127.0.0.1:19876/callback",
+        },
+      },
+    },
+  },
+}
+```
+
+| 필드 | 설명 |
+| --- | --- |
+| `client_id` | 사전 등록된 클라이언트 ID. CIMD와 DCR보다 우선합니다. |
+| `client_secret` | 기밀 클라이언트의 시크릿으로 토큰 요청 본문에 전송됩니다. 공개 클라이언트에서는 생략하세요. |
+| `scope` | 요청할 공백 구분 스코프. 서버가 인증되지 않은 요청을 거부할 때 밝히는 스코프가 기본값입니다. |
+| `callback_port` | `1`부터 `65535`까지의 로컬 콜백 포트. `redirect_uri` 포트, 그다음 사용 가능한 임시 포트가 기본값입니다. |
+| `redirect_uri` | 경로와 포트가 로컬 콜백 리스너에 도달하는 사전 등록 루프백 URI. 설정하면 CIMD가 비활성화됩니다. |
+| `auth_server_metadata_url` | 인증 서버의 OAuth 또는 OpenID Connect 메타데이터 문서 URL. MCP 서버가 인증 서버를 밝히는 보호 리소스 메타데이터를 게시하지 않을 때 설정하세요. |
+
+다시 로그인하거나 계정을 바꿔야 할 때는 저장된 OAuth 자격 증명을 제거하세요.
+
+```sh
+opencode mcp logout sentry
+```
+
+## 타임아웃
+
+타임아웃은 양의 정수 밀리초입니다. 기본값은 `mcp.timeout` 아래에 설정하며 서버의 `timeout` 객체가 일치하는 기본값을 재정의합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "timeout": {
+      "startup": 45000,
+      "catalog": 30000,
+      "execution": 600000,
+    },
+    "servers": {
+      "slow-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "timeout": {
+          "catalog": 60000,
+        },
+      },
+    },
+  },
+}
+```
+
+| 타임아웃 | 기본값 | 적용 대상 |
+| --- | --- | --- |
+| `startup` | 30초 | 전송 연결과 서버 초기화. |
+| `catalog` | 30초 | 도구, 프롬프트, 리소스, 리소스 템플릿 나열. |
+| `execution` | 12시간 | 도구 호출, 프롬프트 가져오기, 리소스 읽기. |
+
+## 프로토콜 버전
+
+OpenCode는 기본적으로 모든 서버에 2026-07-28 리비전을 확인하고 서버가 지원하지 않으면 클래식 MCP `initialize` 핸드셰이크로 대체합니다. 확인을 건너뛰려면 서버의 `protocol`을 `legacy`로 설정하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "older": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "protocol": "legacy",
+      },
+    },
+  },
+}
+```
+
+| 값 | 동작 |
+| --- | --- |
+| `auto` | 기본값. `server/discover`로 2026-07-28 리비전을 확인하고 서버가 지원하지 않으면 `legacy`로 대체합니다. 원격 서버가 확인에 HTTP 5xx 오류로 응답할 때도 마찬가지입니다. |
+| `legacy` | `initialize`를 보내고 2025-11-25까지의 프로토콜 리비전을 사용합니다. |
+| `2026-07-28` | 2026-07-28 리비전을 요구합니다. 이전 서버에서는 연결이 실패합니다. |
+
+이전 로컬 서버를 확인하면 짧게 유지되는 추가 프로세스가 생기고, 서버가 알 수 없는 요청을 무시하면 시작 타임아웃까지 기다릴 수 있습니다. 2026-07-28 리비전보다 이전임을 아는 서버에는 `legacy`를 설정하세요.
+
+## 공유 연결
+
+OpenCode 서버 하나가 여러 디렉터리를 열 수 있고 각 디렉터리는 자체적으로 모든 MCP 서버에 연결합니다. `pool`을 `true`로 설정하면 같은 서버 설정을 쓰는 디렉터리가 연결 하나와 도구 목록 하나를 공유합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "cloudflare": {
+        "type": "remote",
+        "url": "https://mcp.cloudflare.com/mcp",
+        "pool": true,
+      },
+    },
+  },
+}
+```
+
+- 2026-07-28 리비전의 연결만 공유됩니다. 이전 리비전으로 응답하는 서버나 `legacy`로 설정한 서버는 디렉터리마다 연결을 유지합니다.
+- 디렉터리는 연결을 바꾸는 모든 것이 일치할 때만 연결을 공유합니다. 원격 서버의 URL, 헤더, OAuth 설정과 로그인 계정, 로컬 서버의 명령, 작업 디렉터리, 환경입니다. 타임아웃과 `protocol`도 일치해야 합니다. 서버 이름은 같을 필요가 없지만 로그인은 이름별로 저장되므로 OAuth 서버는 같은 이름일 때만 공유됩니다.
+- 로컬 서버는 이 머신의 디렉터리 사이에서만 공유되며 워크스페이스의 디렉터리와는 공유되지 않습니다. 프로젝트 간 공유에는 고정 `cwd`(예: `"~"`)가 필요합니다. 없으면 각 프로젝트 폴더에서 실행되므로 프로젝트마다 별도의 연결을 사용하고 OpenCode는 경고를 기록합니다.
+- 공유 연결에는 루트가 없습니다. 도구가 입력을 요청하면 호출한 디렉터리에 요청이 나타납니다.
+- 연결을 사용하는 마지막 디렉터리가 닫히거나 서버 연결을 끊으면 연결이 즉시 닫힙니다.
+
+## 이름
+
+OpenCode는 도구 이름을 `<server>_<tool>`로 짓습니다. 문자, 숫자, `_`, `-`를 제외한 문자를 `_`로 바꿉니다.
+
+```text
+server: context 7
+tool:   resolve.library/id
+name:   context_7_resolve_library_id
+```
+
+MCP 프롬프트는 같은 정규화로 `<server>:<prompt>` 이름의 명령어가 됩니다. 예를 들어 다음과 같습니다.
+
+```text
+/context_7:find_docs
+```
+
+명령어 텍스트가 프롬프트의 인수를 순서대로 채웁니다. 공백으로 구분하고 공백이 들어 있는 값은 따옴표로 감싸세요.
+
+```text
+/context_7:find_docs react "server components"
+```
+
+정규화 후에도 고유한 짧은 서버 이름을 선택하세요. 기본 Code Mode에서는 도구가 정규화된 서버 이름으로 묶입니다.
+
+```text
+tools.context_7.resolve_library_id(...)
+```
+
+## 권한
+
+Code Mode가 기본입니다. 서버 도구를 제공자의 네이티브 도구 목록에 유지해야 하면 `codemode`를 `false`로 설정하세요.
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "codemode": false,
+      },
+    },
+  },
+}
+```
+
+서버 연결을 끊지 않고 도구를 숨기거나 거부하려면 권한 액션을 사용하세요. 정규화된 `<server>_<tool>` 이름과 일치시키세요.
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "context7_*",
+      "resource": "*",
+      "effect": "deny",
+    },
+  ],
+}
+```
+
+## 리소스
+
+에이전트는 두 내장 도구 `list_mcp_resources`와 `read_mcp_resource`로 MCP 리소스를 읽습니다. 다음 권한 액션으로 제어하세요.
+
+| 액션 | 리소스 |
+| --- | --- |
+| `opencode_list_mcp_resources` | 서버 이름. |
+| `opencode_read_mcp_resource` | `<server>:<uri>` |
+
+예를 들어 `docs` 서버의 모든 읽기를 허용합니다.
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "opencode_read_mcp_resource",
+      "resource": "docs:*",
+      "effect": "allow",
+    },
+  ],
+}
+```
+
+## 서버 지침
+
+서버가 초기화 중에 지침을 반환하면 OpenCode는 이를 시스템 프롬프트에 추가합니다.
+
+```text
+<mcp_instructions>
+  <server name="sentry">
+    Search for an existing issue before creating a new one.
+  </server>
+</mcp_instructions>
+```
+
+Code Mode를 사용하는 서버에는 에이전트가 서버 도구를 어디에서 찾을 수 있는지 알려 주는 줄을 추가합니다.
+
+에이전트의 권한이 서버 도구를 모두 거부하면 그 서버의 지침은 생략됩니다. `execute`를 거부하면 서버 도구가 직접 나열되고 Code Mode 줄 없이 지침이 유지됩니다.
+
+## 입력 요청
+
+서버는 MCP elicitation으로 호출 중에 입력을 요청할 수 있습니다. OpenCode는 요청을 양식으로, URL 요청이면 열 링크로 표시합니다.
+
+```text
+sentry is requesting input
+```
+
+양식을 닫으면 요청이 취소됩니다.
+
+## 컨텍스트
+
+세션을 대신해 만든 호출에서는 OpenCode가 세션 ID를 `CallToolRequest.params._meta["ai.opencode/sessionID"]`로 보냅니다. stdio와 Streamable HTTP를 통한 직접 도구와 Code Mode 모두에 적용됩니다.
+
+```json
+{
+  "method": "tools/call",
+  "params": {
+    "name": "lookup",
+    "arguments": { "query": "example" },
+    "_meta": { "ai.opencode/sessionID": "ses_..." }
+  }
+}
+```
+
+ID는 도구 인수가 아니라 요청 메타데이터이므로 모델이 보는 스키마에는 없습니다. 불투명한 상관 값으로 취급하세요.
+
+| 규칙 | 동작 |
+| --- | --- |
+| 식별 | MCP 전송 세션이 아니라 호출한 OpenCode 세션을 식별합니다. |
+| 존재 | 세션 컨텍스트가 없는 호출에는 없을 수 있습니다. |
+| 보안 | 인증이나 권한 부여에 단독으로 사용하지 마세요. |
+| 개인정보 | 원격 서버는 원시 ID를 받으며 이를 기록하거나 보관할 수 있습니다. |
+
+## 관리
+
+모든 프로젝트에서 서버와 현재 연결 상태를 나열합니다.
+
+```sh
+opencode mcp list
+```
+
+OpenCode에서 `/mcps`로 서버를 보고, 연결하고, 연결을 끊고, 인증하세요. CLI로 서버를 추가하고 OAuth 자격 증명을 관리하세요.
+
+```sh
+opencode mcp add sentry --url https://mcp.sentry.dev/mcp
+opencode mcp auth sentry
+opencode mcp logout sentry
+```
+
+이름 없이 `opencode mcp auth`를 실행하면 OAuth 지원 서버에서 선택할 수 있습니다.
+
+```sh
+opencode mcp auth
+```
+
+서버를 제거하려면 추가한 프로젝트 또는 전역 구성에서 해당 항목을 삭제하세요.
+
+```jsonc
+{
+  "mcp": {
+    "servers": {},
+  },
+}
+```
+
+`/mcps`에서 서버 연결을 끊어도 구성은 바뀌지 않습니다. OAuth 클라이언트 설정, 타임아웃, 작업 디렉터리, 서버를 연결 해제 상태로 유지하려면 구성을 직접 편집하세요.
+
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "sentry": {
+        "type": "remote",
+        "url": "https://mcp.sentry.dev/mcp",
+        "disabled": true,
+      },
+    },
+  },
+}
+```

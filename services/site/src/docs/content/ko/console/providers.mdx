@@ -1,0 +1,209 @@
+---
+title: "Console 제공자"
+description: "자체 모델 제공자 계정을 OpenCode Console 워크스페이스에 연결하고 멤버가 사용할 모델을 선택하세요."
+---
+
+Anthropic, OpenAI, AWS Bedrock처럼 이미 유료로 이용 중인 제공자 계정을 연결해 워크스페이스의 모든 멤버와 모델을
+공유하세요. Console이 자격 증명을 저장하고 자체 게이트웨이를 통해 제공자에 연결하므로 멤버는 제공자 키를 볼 필요 없이
+모델을 사용할 수 있습니다. 자체 도구에서도 [Providers API](/console/api/providers)를 통해 같은 게이트웨이를 사용할 수 있습니다.
+
+소유자와 관리자는 **Providers** 탭에서 제공자를 관리합니다. 멤버는 `/connect`를 실행한 뒤 OpenCode에서 활성화된
+모델을 사용할 수 있습니다.
+
+## 제공자 연결
+
+1. **Providers**를 열고 **Connect Provider**를 클릭하세요.
+2. 카탈로그에서 제공자를 고르고 API 키를 입력하세요.
+3. 필요하면 **Test connection**으로 연결을 확인하세요. 그런 다음 **Save**를 클릭하세요.
+
+카탈로그에는 Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, Groq, OpenRouter 등이 포함되어 있습니다. 카탈로그
+제공자는 모델이 미리 구성되어 있습니다.
+
+### 클라우드 제공자
+
+클라우드 제공자는 몇 가지 추가 정보가 필요합니다.
+
+| 제공자                | 세부 정보                             |
+| --------------------- | ------------------------------------- |
+| Azure                 | 리소스 이름과 API 키                  |
+| AWS Bedrock           | 리전과 API 키                         |
+| Google Vertex AI      | 리전과 서비스 계정 JSON               |
+| Cloudflare AI Gateway | 계정 ID, Gateway ID, API 토큰         |
+| Databricks            | 워크스페이스 URL과 토큰               |
+
+### 커스텀 제공자
+
+**Add Custom Provider**를 클릭해 다른 엔드포인트를 연결한 다음 **Add Model**로 모델을 추가하세요.
+
+| 필드       | 설명                                                                     |
+| ---------- | ------------------------------------------------------------------------ |
+| Base URL   | Console이 요청을 전달할 주소. 예: `https://api.deepseek.com/v1`.         |
+| Format     | Chat Completions, Responses API, Anthropic Compatible, Google Generative AI 중 하나. |
+| Auth mode  | Bearer, API key header, Custom header 중 하나.                           |
+| Credential | Console이 제공자에게 보내는 키.                                          |
+
+## 모델 선택
+
+제공자를 열면 모델이 표시됩니다. 활성화된 모델만 멤버가 사용할 수 있습니다.
+
+- **Enabled** 토글로 모델을 켜거나 끕니다.
+- **New models**를 켜면 제공자가 나중에 추가하는 모델도 활성화됩니다.
+
+## 모델 편집
+
+모델을 클릭해 편집합니다. 변경 사항은 패널을 닫을 때 저장됩니다.
+
+| 섹션          | 변경할 수 있는 항목                                             |
+| ------------- | --------------------------------------------------------------- |
+| General       | 표시 이름, API ID, 도구 지원, 입력 및 출력 유형                 |
+| Variants      | 자체 헤더나 본문을 가진 변형                                    |
+| Configuration | 기본 변형, 요청 헤더와 본문, 토큰 한도                          |
+| Cost Tiers    | 1M 토큰당 입력, 출력, 캐시 읽기, 캐시 쓰기 가격                 |
+
+### 커스텀 가격
+
+카탈로그 모델은 제공자의 정가로 시작합니다. OpenAI 계약 할인처럼 협상한 가격이 있다면 **Cost Tiers**에서 가격을
+재정의해 사용량 보고서와 [예산](/console/budgets)이 실제 결제 금액과 일치하게 하세요.
+
+| 필드            | 정가   | 내 가격 |
+| --------------- | ------ | ------- |
+| 입력 가격       | $2.50  | $2.00   |
+| 출력 가격       | $15.00 | $12.00  |
+| 캐시 읽기 가격  | $0.25  | $0.20   |
+
+변경한 가격은 제공자 페이지에서 강조 표시됩니다. 필드의 **Restore default value** 또는 모델의 **⋯ › Restore...**를
+사용하면 정가로 돌아갑니다.
+
+모델이 특정 컨텍스트 크기를 넘으면 더 많이 청구할 때(예: 200K 토큰 초과 프롬프트) **Context** 티어를 추가하세요.
+
+### 커스텀 모델
+
+카탈로그에 없는 모델은 **Add Model**을 클릭해 **Display name**과 **Model ID**로 추가하세요. 기존 모델의
+**⋯ › Duplicate...**를 사용하면 그 설정에서 시작할 수 있습니다.
+
+## OpenCode 모델
+
+**Models** 탭에서는 워크스페이스 크레딧으로 결제하는 Console 제공 [모델](/console/models)을 관리합니다. 제공자
+페이지와 비슷하게 동작합니다.
+
+- 개별 모델을 켜거나 끕니다.
+- **Free models**를 끄면 워크스페이스에서 무료 모델을 차단합니다.
+- **New models**를 켜면 새 Console 모델이 자동으로 활성화됩니다.
+
+**⋯ › Disable**에서 제공자 전체를 비활성화하면 자체 제공자만 사용합니다.
+
+## OpenCode에서 사용
+
+멤버는 `/connect`를 실행하고 워크스페이스를 선택합니다. 활성화된 각 제공자는 워크스페이스 이름 뒤에 제공자 이름이
+붙은 형태로 나타나고, `/models`에 해당 제공자의 활성화된 모델이 나열됩니다.
+
+```text
+Acme Inc. / Anthropic
+```
+
+**Settings › General**에서 **Managed providers only**를 켜면 모든 사람의 OpenCode를 워크스페이스 제공자로
+제한합니다.
+
+## ID 전송
+
+제공자가 직접 운영하는 게이트웨이라면 해당 페이지에서 **Send identity**를 켜세요. 그러면 Console이 그곳으로 보내는
+모든 모델 요청에 `x-opencode-actor` 헤더를 추가합니다. 헤더에는 요청을 보낸 멤버나 서비스 계정이 담기므로
+게이트웨이에서 보낸 사람별로 로그를 남기거나 요청을 제한할 수 있습니다.
+
+```text
+x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZCI6Ii4uLiJ9...
+```
+
+- 기본적으로 꺼져 있으며, 기본 URL을 변경하면 꺼집니다.
+- `https://api.openai.com/v1`처럼 공급자 자체 API를 그대로 사용하는 제공자에는 이 설정이 표시되지 않습니다.
+  공급자가 이 헤더를 무시하기 때문입니다.
+- Console은 클라이언트가 보낸 모든 `x-opencode-*` 헤더를 제거하므로, 게이트웨이가 받는 `x-opencode-actor`는
+  Console이 서명한 것 하나뿐입니다.
+- **Test connection**과 모델 목록 조회는 자격 증명만으로 `GET <base URL>/models`를 호출하므로, 그 경로에서는
+  헤더를 요구하지 마세요.
+
+### 토큰
+
+헤더는 Console이 요청마다 서명하는 JWT입니다.
+
+| 필드         | 값                                             |
+| ------------ | ----------------------------------------------- |
+| `alg`        | `ES256`                                         |
+| `typ`        | `opencode-actor+jwt`                            |
+| `iss`        | `https://opencode.ai/inference`                 |
+| `aud`        | 끝의 슬래시를 뺀 제공자 기본 URL                |
+| `iat`, `exp` | `exp`는 `iat` 120초 뒤                          |
+
+| 클레임               | 값                                                                     |
+| -------------------- | ---------------------------------------------------------------------- |
+| `sub`                | 멤버면 `user_id`, 그 외에는 `service_account_id`                       |
+| `workspace_id`       | 요청이 실행된 워크스페이스                                             |
+| `user_id`, `email`   | 요청을 보낸 멤버                                                       |
+| `service_account_id` | 요청을 보낸 서비스 계정(에이전트 포함)                                 |
+| `session_id`         | 클라이언트가 보낸 세션 ID                                              |
+| `request_id`         | 클라이언트가 `x-opencode-log-id` 응답 헤더로 돌려받는 ID               |
+
+멤버의 요청에는 다음과 같은 페이로드가 담깁니다.
+
+```json
+{
+  "iss": "https://opencode.ai/inference",
+  "aud": "https://llm.example.com/v1",
+  "sub": "user_...",
+  "workspace_id": "org_...",
+  "user_id": "user_...",
+  "email": "ada@example.com",
+  "session_id": "ses_...",
+  "request_id": "019a6e8f-24a0-7b12-9c3d-4e5f6a7b8c9d",
+  "iat": 1794500000,
+  "exp": 1794500120
+}
+```
+
+### 토큰 검증
+
+Console은 `https://opencode.ai/inference/.well-known/jwks.json`에 공개 키를 게시하며,
+`Cache-Control: public, max-age=300`으로 제공합니다. 서명, 발급자, 대상, 유형, 유효 기간을 확인한 다음
+워크스페이스를 확인하세요. 이 예제는 [jose](https://github.com/panva/jose)를 사용합니다.
+
+```ts
+import { createRemoteJWKSet, jwtVerify } from "jose"
+
+const keys = createRemoteJWKSet(new URL("https://opencode.ai/inference/.well-known/jwks.json"))
+
+export async function sender(request: Request) {
+  const token = request.headers.get("x-opencode-actor")
+  if (!token) throw new Error("Missing x-opencode-actor")
+  const { payload } = await jwtVerify(token, keys, {
+    issuer: "https://opencode.ai/inference",
+    audience: "https://llm.example.com/v1",
+    algorithms: ["ES256"],
+    typ: "opencode-actor+jwt",
+    maxTokenAge: "120s",
+    clockTolerance: "5s",
+  })
+  if (payload.workspace_id !== "org_...") throw new Error("Another workspace")
+  return payload
+}
+```
+
+`audience`는 Console에 저장된 제공자 기본 URL에서 끝의 슬래시를 뺀 값으로 설정하고, `org_...`는 Console URL에 있는
+워크스페이스 ID로 바꾸세요. Console은 새 서명 키로 서명하기 전에 키를 게시하므로, `kid`로 키를 조회하는 검증기는
+`createRemoteJWKSet`처럼 키 교체 중에도 계속 동작합니다.
+
+## 비활성화 또는 제거
+
+제공자의 **⋯** 메뉴를 엽니다.
+
+- **Disable**은 멤버에게서 제공자와 그 모델을 숨기되 설정은 유지합니다.
+- **Remove...**는 제공자와 모델을 삭제합니다. 대화 상자에 최근 사용한 사람이 표시되고
+  **Disable instead**를 제공합니다.
+
+키를 교체하려면 제공자 페이지에서 자격 증명을 클릭하고 새 키를 입력하세요.
+
+## 결제
+
+토큰 요금은 제공자가 청구하며 Console 크레딧에서는 차감되지 않습니다. Console은 각 요청과 모델 가격에 따른 비용을
+기록하므로 사용량 보고서와 [예산](/console/budgets)에는 반영됩니다.
+
+OpenCode 대신 자체 도구에서 제공자를 호출하려면 [Providers API](/console/api/providers)를 사용하세요.

@@ -1,0 +1,372 @@
+---
+title: "V1에서 플러그인 마이그레이션"
+description: "V1 플러그인의 도구와 훅을 V2 플러그인 API로 이식하세요."
+---
+
+플러그인 구성은 자동으로 정규화할 수 있지만 플러그인 구현 코드는 이식해야 합니다. V1 플러그인 함수는 도구와 훅을 담은
+하나의 객체를 반환합니다. V2 플러그인은 `id`와 `setup(ctx)`가 있는 정의를 기본 export하며, `setup`이 컨텍스트를
+통해 훅, 변환, 도구, 구독을 등록합니다.
+
+<Callout type="warning">
+  V1 플러그인 구현은 V2에서 실행되지 않습니다. 파일을 옮기거나 구성 항목 이름만 바꾸는 것으로는 부족합니다.
+</Callout>
+
+## 플러그인 구성 마이그레이션
+
+`plugin`을 `plugins`로 바꾸세요. 패키지와 옵션 튜플은 객체로 바꿉니다.
+
+```jsonc
+// V1
+{
+  "plugin": [
+    "opencode-example-plugin",
+    ["./plugin/local.ts", { "enabled": true }]
+  ]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+V2는 `.opencode/plugin/`과 `.opencode/plugins/` 모두에서 로컬 플러그인을 찾습니다. V2 파일에는
+`.opencode/plugins/`를 사용하세요. 구성된 로컬 경로는 디렉터리를 가리켜야 합니다. 위 예제에서는 이식한 구현을
+`./plugin/local/index.ts`로 옮기세요. 구성된 `./plugin/local.ts` 파일은 로그 경고와 함께 건너뜁니다. 플러그인을
+옮길 때 보조 모듈도 함께 두세요. 로컬 플러그인과 패키지 플러그인은 같은 구현 API를 사용합니다.
+
+## 진입점 교체
+
+패키지 import를 바꾸고 export한 플러그인 함수를 `Plugin.define`으로 교체하며 초기화를 `setup`으로 옮기세요.
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ExamplePlugin: Plugin = async ({ directory, project, client }) => {
+  await client.app.log({
+    body: { service: "example", level: "info", message: `Loaded for ${project.id}` },
+  })
+
+  return {
+    // V1 tools and hooks
+  }
+}
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("last-project", ctx.location.project.id)
+    console.log(`Loaded for ${ctx.location.directory}`)
+  },
+})
+```
+
+모든 V2 플러그인에는 안정적인 `id`가 필요합니다. 플러그인 저장소는 이 ID로 범위가 정해지며, 상태와 진단에서도
+플러그인을 식별합니다. 게시된 플러그인은 대상 OpenCode 릴리스와 호환되는 `@opencode/plugin` 버전에 의존해야
+합니다.
+
+## 컨텍스트 마이그레이션
+
+V2 컨텍스트는 OpenCode 클라이언트이자 플러그인 API입니다. 대부분의 작업은 별도 `client` 속성이 아니라 도메인별로
+묶여 있습니다.
+
+| V1                                      | V2                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------- |
+| `directory`                             | `ctx.location.directory`                                            |
+| `project`                               | `ctx.location.project`                                              |
+| `client`                                | `ctx.session`, `ctx.permission`, `ctx.agent` 같은 도메인 메서드 |
+| 플러그인 옵션 인수                      | `ctx.options`                                                       |
+| 반환한 `dispose()` 훅                   | `setup`이 반환하는 정리 함수                                        |
+| 반환한 `event` 훅                       | `ctx.event.subscribe()`                                             |
+| 반환한 구성, 모델, 도구 변경            | 도메인의 `transform(...)`                                           |
+| `$` Bun 셸 도우미                       | 플러그인이 사용하는 프로세스 API를 import해 관리                    |
+
+`ctx.location`은 이 플러그인 인스턴스가 로드된 위치를 설명합니다. 플러그인이 관찰할 수 있는 모든 세션 또는 이벤트의
+위치는 아닙니다. 구분이 중요할 때는 세션이나 이벤트 데이터를 읽으세요.
+
+컨텍스트는 표에 나열된 것보다 많은 도메인을 제공합니다. 카탈로그, 명령어, 통합, MCP 서버, 참조, 스킬, 저장소,
+VCS, 워크트리, 웹 검색 등입니다. [전체 플러그인 컨텍스트](/build/plugins/server#api)를 참고하세요.
+
+## `setup`에서 훅 등록
+
+V1은 문자열 키로 훅을 반환합니다. V2는 작업을 소유한 도메인에 각 훅을 등록합니다. 콜백은 별도 `input`과
+`output` 객체 대신 변경 가능한 이벤트 하나를 받습니다.
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const GuardPlugin: Plugin = async () => ({
+  "tool.execute.before": async (input, output) => {
+    if (input.tool === "read" && output.args.filePath.includes(".env")) {
+      throw new Error("Do not read .env files")
+    }
+  },
+  "shell.env": async (_input, output) => {
+    output.env.COMPANY_ENV = "development"
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.guard",
+  async setup(ctx) {
+    await ctx.tool.hook("execute.before", (event) => {
+      const input = event.input as { filePath?: string }
+      if (event.tool === "read" && input.filePath?.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    })
+
+    await ctx.shell.hook("create.before", (event) => {
+      event.env.COMPANY_ENV = "development"
+    })
+  },
+})
+```
+
+등록은 플러그인이 로드된 동안 유지되며 플러그인이 언로드되면 해제됩니다. 특정 훅이나 변환을 그 전에
+`registration.dispose()`로 제거해야 할 때만 반환된 등록 객체를 보관하세요.
+
+이 표로 각 V1 훅에 가장 가까운 V2 API를 찾으세요.
+
+| V1 훅                                | V2 API                                                       |
+| -------------------------------------- | ------------------------------------------------------------ |
+| `event`                                | `ctx.event.subscribe()`                                      |
+| `dispose`                              | `setup`이 반환하는 정리 함수                         |
+| `config`                               | 영향을 받는 도메인의 변환                           |
+| `tool` 맵                             | `ctx.tool.transform(...)`                                    |
+| `auth`                                 | `ctx.integration.transform(...)` 및 통합 API        |
+| `provider`                             | `ctx.provider.transform(...)` 및 `ctx.model.transform(...)` |
+| `chat.message`                         | `ctx.session.hook("prompt", ...)`                            |
+| `chat.params`                          | `ctx.session.hook("context", ...)`                           |
+| `chat.headers`                         | `ctx.session.hook("model.request", ...)` 또는 `"http.request"` |
+| `permission.ask`                       | `ctx.permission.hook("evaluate", ...)`                       |
+| `command.execute.before`               | 의도에 따라 명령어 변환 또는 프롬프트 훅   |
+| `tool.execute.before`                  | `ctx.tool.hook("execute.before", ...)`                       |
+| `tool.execute.after`                   | `ctx.tool.hook("execute.after", ...)`                        |
+| `shell.env`                            | `ctx.shell.hook("create.before", ...)`                       |
+| `tool.definition`                      | `ctx.tool.transform(...)`                                    |
+| `experimental.chat.system.transform`   | `ctx.session.hook("context", ...)` 및 `event.system` 편집   |
+| `experimental.chat.messages.transform` | `ctx.session.hook("context", ...)` 및 `event.messages` 편집 |
+| `experimental.session.compacting`      | `ctx.session.hook("compaction", ...)`                        |
+
+표는 마이그레이션에 사용할 API를 안내합니다. 단순히 이름만 바꾸면 되는 것은 아닙니다. 특히 V2 `prompt` 훅은 프롬프트가 영속적으로 저장되기 전에
+실행되고 `context`는 에이전트 모델 요청 직전에 실행됩니다. 변환이 모든 종류의 모델 요청에 적용되어야 하면
+`context`, `compaction`, `generate`, `title`을 각각 등록하세요.
+
+모든 실험적 V1 훅에 대응하는 직접적인 V2 훅은 없습니다. `experimental.compaction.autocontinue`,
+`experimental.provider.small_model`, `experimental.text.complete`를 사용하는 플러그인은 내부 수명 주기 가정을
+유지하기보다 V2 세션, 제공자, 모델, 이벤트 API에 맞춰 다시 평가하세요.
+
+`command.execute.before`도 일대일 전역 훅이 없습니다. 플러그인이 그 명령어를 소유하면 `ctx.command.transform`으로
+명령어를 등록하세요. 실제 의도가 명령어와 다른 프롬프트 소스가 제출한 프롬프트를 수정하는 것이라면 프롬프트 훅을
+사용하세요.
+
+## 요청 훅 마이그레이션
+
+V2는 프롬프트 접수, 모델이 보는 컨텍스트, 시맨틱 모델 옵션, 네이티브 HTTP를 분리합니다. 플러그인에 필요한 가장
+좁은 계층을 고르세요.
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const RequestPlugin: Plugin = async () => ({
+  "chat.params": async (_input, output) => {
+    output.temperature = 0.2
+    output.maxOutputTokens = 8_000
+  },
+  "chat.headers": async (_input, output) => {
+    output.headers["x-plugin"] = "review"
+  },
+  "experimental.chat.system.transform": async (_input, output) => {
+    output.system.push("Focus on correctness.")
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "review-request",
+  async setup(ctx) {
+    await ctx.session.hook("context", (event) => {
+      event.system.push({ type: "text", text: "Focus on correctness." })
+      event.options.temperature = 0.2
+      event.options.maxTokens = 8_000
+    })
+
+    await ctx.session.hook("model.request", (event) => {
+      event.headers["x-plugin"] = "review"
+    })
+  },
+})
+```
+
+제공자 프로토콜의 시맨틱 옵션은 `event.options`에 지정하세요. 모델 요청 헤더와 원시 요청 설정에는 `model.request`를 사용하세요.
+제공자와 주고받는 HTTP 요청이나 응답 자체가 필요할 때만 `http.request`나 `http.response`를 사용하세요. 제공자별 훅을 등록하려면
+`{ providerID: "..." }`를 `ctx.session.hook`의 세 번째 인수로 전달할 수 있습니다.
+
+## 커스텀 도구 마이그레이션
+
+V1은 `tool` 맵을 반환하며 이전 `tool()` 도우미로 만듭니다. V2는 동기식 `ctx.tool.transform` 편집기로 도구 정의를 등록합니다. 도구 스키마는 JSON Schema를 사용하고 실행은 구조화된 콘텐츠를 반환합니다.
+
+```ts title="V1"
+import { tool } from "@opencode-ai/plugin"
+
+export const ToolsPlugin = async () => ({
+  tool: {
+    greeting: tool({
+      description: "Create a greeting",
+      args: { name: tool.schema.string() },
+      async execute(args) {
+        return `Hello ${args.name}!`
+      },
+    }),
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "greeting",
+  async setup(ctx) {
+    await ctx.tool.transform((editor) => {
+      editor.add({
+        name: "greeting",
+        description: "Create a greeting",
+        input: {
+          type: "object",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+          additionalProperties: false,
+        },
+        async execute(input) {
+          return { content: `Hello ${(input as { name: string }).name}!` }
+        },
+      })
+    })
+  },
+})
+```
+
+변환은 재생 가능한 상태 편집입니다. 콜백은 동기식이고 가볍고 일회성 부수 효과가 없어야 합니다. 외부 데이터는 등록
+전에 로드하고 콜백에서 캡처하며, 데이터가 바뀌면 도메인의 `reload()` 메서드를 호출하세요. 뒤에 오는 플러그인
+변환은 이전 변경을 보고 이를 업데이트, 교체, 제거할 수 있습니다.
+
+같은 변환 방식이 V1 `config`와 `provider` 훅을 대체합니다. 다만 V2는 수정할 수 있는 전역 설정 객체를 제공하지 않습니다.
+변경은 이를 소유한 도메인에 등록하세요. `ctx.agent`, `ctx.provider`, `ctx.model`, `ctx.command`, `ctx.integration`,
+`ctx.mcp`, `ctx.reference`, `ctx.skill`, `ctx.tool`, `ctx.vcs`, `ctx.websearch`, `ctx.worktree`입니다. 인증 방식은
+통합에 속하며, 제공자 변환은 소스 정의와 제공자 설정을 추가하고 모델 변환은 활성 제공자의 모델 전체에 제한과
+재정의를 적용합니다.
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("anthropic", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+})
+
+await ctx.model.transform((editor) => {
+  editor.list("anthropic").forEach((model) => {
+    if (!model.capabilities.tools) editor.remove(model.providerID, model.id)
+  })
+})
+```
+
+## 이벤트와 정리 마이그레이션
+
+V1의 `event` 콜백은 공개 서버 이벤트 스트림에 대한 비동기 구독이 됩니다. `setup`이 반환하는 정리 함수에서
+중단하세요.
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "notifications",
+  setup(ctx) {
+    const controller = new AbortController()
+
+    void (async () => {
+      for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+        if (event.type === "session.idle") console.log("Session completed")
+      }
+    })()
+
+    return () => controller.abort()
+  },
+})
+```
+
+타이머, 하위 프로세스, 소켓 및 플러그인이 소유한 기타 리소스에는 정리 함수를 사용하세요. 훅과 변환 등록은
+플러그인 범위로 자동 정리됩니다.
+
+## 옵션과 영구 상태 마이그레이션
+
+옵션은 `ctx.options`에서 읽으세요. 상태가 플러그인에 속할 때 전역 파일을 만들지 말고 `ctx.storage`를 사용하세요.
+JSON 값은 영구적이며 플러그인 범위입니다.
+
+```ts
+const strict = ctx.options.strict === true
+await ctx.storage.set("settings", { strict })
+const settings = await ctx.storage.get("settings")
+```
+
+## 하나의 패키지에서 V1과 V2 지원
+
+패키지는 하나의 기본 export에서 두 구현을 일시적으로 제공할 수 있습니다. V1은 `server()`를 호출하고 V2는
+`setup()`을 호출합니다. API는 계속 별개이며 이 형태가 훅을 자동 변환하지는 않습니다.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default {
+  ...Plugin.define({
+    id: "example",
+    async setup(ctx) {
+      await ctx.tool.hook("execute.before", () => {
+        console.log("A tool is about to run")
+      })
+    },
+  }),
+  async server() {
+    return {
+      "tool.execute.before": async () => {
+        console.log("A tool is about to run")
+      },
+    }
+  },
+}
+```
+
+V1 객체 진입점은 OpenCode `1.18.29` 이상에서 지원됩니다. 더 오래된 V1 릴리스도 지원한다면 별도 패키지 버전이나
+진입점을 사용하고 지원한다고 밝힌 가장 오래된 릴리스를 테스트하세요. 지원 기간이 끝나면 V1 구현을 제거하세요.
+
+## 이식한 플러그인 검증
+
+각 플러그인에 대해 다음과 같이 확인하세요.
+
+1. 활성 플러그인 목록에 ID와 소스가 나타나는지 확인합니다.
+2. 등록한 모든 훅, 변환, 도구, 명령어, 이벤트 구독을 실행합니다.
+3. 플러그인을 다시 로드하거나 제거해 정리를 확인합니다.
+4. 깨끗한 프로젝트에서 플러그인 옵션과 영구 상태를 테스트합니다.
+5. 게시된 패키지는 워크스페이스에 링크된 복사본이 아니라 설치된 패키지를 테스트합니다.
+
+전체 Promise API는 [서버](/build/plugins/server)를, Effect 진입점은
+[Effect 플러그인](/build/plugins/effect)을, 커스텀 메서드와 이벤트는 [플러그인 RPC](/build/plugins/rpc)를, 터미널
+UI는 [TUI 플러그인](/build/plugins/cli)을 참고하세요.

@@ -1,0 +1,423 @@
+---
+title: "설정"
+description: "모든 OpenCode CLI 및 TUI 설정을 구성하세요."
+---
+
+CLI 설정은 터미널 클라이언트만 제어합니다. `opencode.json(c)`의 서버 및 프로젝트 설정과는 별개입니다.
+
+TUI에서 일반 설정을 바꾸려면 `Ctrl+P`를 누른 뒤 **Open settings**를 선택하세요.
+
+<img src={`${import.meta.env.BASE_URL}assets/cli/settings.png`} alt="OpenCode TUI settings dialog" />
+
+## 구성 파일
+
+OpenCode는 CLI 설정을 하나의 전역 파일에 저장합니다.
+
+```text
+~/.config/opencode/cli.json
+```
+
+`$XDG_CONFIG_HOME`이 설정되어 있으면 OpenCode는 다음을 사용합니다.
+
+```text
+$XDG_CONFIG_HOME/opencode/cli.json
+```
+
+프로젝트 로컬 CLI 설정 파일은 없습니다. 검증과 자동 완성을 위해 게시된 JSON 스키마를 추가하세요.
+
+```json title="cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json"
+}
+```
+
+OpenCode는 이 파일을 만들거나 마이그레이션할 때 `$schema`를 추가합니다. 유효한 변경 사항은 TUI를 실행 중이어도 자동으로 반영됩니다.
+
+알 수 없는 설정은 무시됩니다. 편집기가 잘못된 값을 표시하도록 `$schema`를 유지하세요.
+
+## 인라인 구성
+
+인라인 JSON에서 CLI 설정을 적용하려면 `OPENCODE_CLI_CONFIG_CONTENT`를 설정하세요.
+
+```sh
+OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"mode":"off"}}' opencode
+```
+
+OpenCode는 인라인 설정을 전역 `cli.json` 위에 병합합니다. 중첩 객체는 병합되지만 환경의 배열과 스칼라 값은 전역
+값을 대체합니다. 변수가 설정되어 있는 동안 인라인 설정이 우선합니다.
+
+## 모양
+테마를 고르고, 인터페이스 모션을 제어하고, 터미널 커서를 재정의하세요.
+
+```json title="cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  },
+  "animations": true,
+  "cursor": {
+    "style": "block",
+    "blinking": true
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Appearance settings" tabIndex={0}>
+
+| 설정              | 값                                      | 설명                                                              |
+| ----------------- | --------------------------------------- | ------------------------------------------------------------------------ |
+| `theme.name`      | 문자열                                  | 내장, 커스텀 또는 터미널에서 가져온 테마를 선택합니다.                   |
+| `theme.mode`      | `system`, `dark`, `light`               | 터미널 모양을 따르거나 테마를 한 색상 모드로 고정합니다.                |
+| `animations`      | 불리언                                  | 인터페이스 애니메이션을 활성화합니다.                                           |
+| `cursor.style`    | `block`, `underline`, `line`, `default` | 커서 모양을 설정합니다. `default`는 터미널의 커서 모양을 유지합니다.  |
+| `cursor.blinking` | 불리언                                  | 커서 깜박임을 제어합니다. 스타일이 `default`이면 효과가 없습니다. |
+
+</div>
+
+테마 선택과 생성은 [테마](/cli/theme)를 참고하세요.
+
+## 입력
+
+마우스 캡처, 스크롤, 편집기 컨텍스트, 붙여 넣기, 프롬프트 이미지 미리보기를 구성하세요.
+
+```json title="cli.json"
+{
+  "mouse": true,
+  "scroll": {
+    "speed": 3,
+    "acceleration": false
+  },
+  "prompt": {
+    "editor": true,
+    "paste": "compact",
+    "image_preview": false
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Input settings" tabIndex={0}>
+
+| 설정                       | 값                              | 설명                                                                 |
+| -------------------------- | ------------------------------- | --------------------------------------------------------------------------- |
+| `mouse`                    | 불리언                          | 터미널 마우스 캡처를 활성화합니다.                                             |
+| `scroll.speed`             | 숫자, 최소 `0.001`              | 스크롤 입력 한 번당 고정 거리를 설정합니다.                               |
+| `scroll.acceleration`      | 불리언                          | 반복 스크롤을 가속합니다. 활성화하면 speed보다 우선합니다. |
+| `prompt.editor`            | 불리언                          | 활성 편집기 파일이나 선택 영역을 프롬프트 컨텍스트로 포함합니다.             |
+| `prompt.paste`             | `compact` 또는 `full`           | 긴 텍스트를 붙여 넣으면 짧은 대체 표시나 전체 텍스트로 보여 줍니다.                  |
+| `prompt.image_preview`     | 불리언                          | 프롬프트 입력 위에 이미지 첨부 미리보기를 표시합니다.                     |
+
+</div>
+
+## 세션
+
+전체 화면 TUI 세션이 표시되는 방식과 새 세션이 시작되는 위치를 구성하세요.
+
+```json title="cli.json"
+{
+  "session": {
+    "sidebar": "auto",
+    "scrollbar": false,
+    "submit_scroll": "bottom",
+    "thinking": "hide",
+    "grouping": "auto",
+    "image_preview": false,
+    "tps": true,
+    "markdown": "rendered",
+    "new_location": "launch",
+    "permissions": "prompt"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Session settings" tabIndex={0}>
+
+| 설정                    | 값                          | 설명                                                                  |
+| ----------------------- | --------------------------- | ---------------------------------------------------------------------------- |
+| `session.sidebar`       | `auto` 또는 `hide`          | 공간이 있으면 사이드바를 표시하거나 항상 숨깁니다.                     |
+| `session.scrollbar`     | 불리언                      | 대화 기록 스크롤바를 표시합니다.                                              |
+| `session.submit_scroll` | `bottom` 또는 `keep`        | 프롬프트를 보낼 때 최신 메시지로 이동하거나 현재 위치를 유지합니다.  |
+| `session.thinking`      | `show` 또는 `hide`          | 기본적으로 모델 추론을 표시하거나 숨깁니다.                                   |
+| `session.grouping`      | `auto` 또는 `none`          | 관련 대화 기록 항목을 묶거나 각 항목을 따로 렌더링합니다.             |
+| `session.image_preview` | 불리언                      | 대화 기록에 사용자 첨부와 도구 결과 이미지를 표시합니다.              |
+| `session.tps`           | 불리언                      | 어시스턴트 하단에 초당 출력 토큰을 표시합니다.                         |
+| `session.markdown`      | `source` 또는 `rendered`    | Markdown 구문 표시를 보여 주거나 렌더링된 내용에서 숨깁니다.          |
+| `session.new_location`  | `launch` 또는 `inherit`     | TUI 실행 디렉터리에서 시작하거나 활성 세션 위치를 상속합니다.  |
+| `session.permissions`   | `prompt` 또는 `autoaccept`  | 권한 요청을 확인하거나 모든 요청을 자동 승인합니다.      |
+
+</div>
+
+## 탭
+
+계속 표시되는 세션 탭 영역을 설정하세요.
+
+```json title="cli.json"
+{
+  "tabs": {
+    "mode": "auto",
+    "scope": "cwd",
+    "layout": "horizontal",
+    "indicators": "status"
+  }
+}
+```
+
+이전 불리언 `tabs.enabled` 설정도 계속 지원됩니다. `true`는 `on`, `false`는 `off`입니다. OpenCode는 구성 파일을 다시 쓰지 않고 이를 읽습니다.
+
+<div class="docs-table-scroll" role="region" aria-label="Tab settings" tabIndex={0}>
+
+| 설정              | 값                          | 설명                                                                   |
+| ----------------- | --------------------------- | ----------------------------------------------------------------------------- |
+| `tabs.mode`       | `auto`, `on`, `off`         | 탭 표시 여부를 자동으로 결정하거나, 항상 표시하거나, 표시하지 않습니다. auto는 Herdr에서 탭을 숨깁니다.       |
+| `tabs.scope`      | `cwd` 또는 `global`         | 작업 디렉터리별로 탭을 분리하거나 전역으로 공유합니다.            |
+| `tabs.layout`     | `horizontal` 또는 `vertical` | 탭을 가로 스트립이나 세로 사이드바에 배치합니다.                      |
+| `tabs.indicators` | `status` 또는 `numbers`     | 상태 아이콘을 표시하거나 항상 탭 번호를 표시합니다.                               |
+
+</div>
+
+숫자 표시는 상태 색상과 배경 애니메이션을 유지합니다. Ctrl+숫자 단축키는 두 표시 모드 모두에서 탭을 전환합니다.
+
+## Diff
+
+초기 diff 범위와 표시 방식을 구성하세요.
+
+```json title="cli.json"
+{
+  "diffs": {
+    "source": "branch",
+    "wrap": "word",
+    "tree": true,
+    "single": false,
+    "view": "auto"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Diff settings" tabIndex={0}>
+
+| 설정           | 값                                          | 설명                                               |
+| -------------- | ------------------------------------------- | --------------------------------------------------------- |
+| `diffs.source` | `branch`, `committed`, `working`, `turn`    | 초기 리뷰 범위를 설정합니다.                            |
+| `diffs.wrap`   | `word` 또는 `none`                          | 긴 줄을 단어 경계에서 줄바꿈할지 결정합니다.       |
+| `diffs.tree`   | 불리언                                      | diff 파일 트리를 표시합니다.                                 |
+| `diffs.single` | 불리언                                      | 선택한 파일 패치만 표시합니다.                       |
+| `diffs.view`   | `auto`, `split`, `unified`                  | 레이아웃을 설정합니다. `auto`는 사용 가능한 너비에 따라 고릅니다. |
+
+</div>
+
+`branch`는 브랜치와 로컬 변경 전체(**All**)를, `committed`는 브랜치 커밋만, `working`은 스테이지된 변경, 스테이지되지
+않은 변경, 추적되지 않은 변경을 보여 줍니다. `turn`은 세션이 마지막 턴에서 변경한 파일(**Last turn**)을 보여 주며, 세션이 턴을 마치면 표시 내용이 갱신됩니다. `branch`가 대신 적용되는 경우는 세션 밖에서 `/diff`를 열었을 때입니다.
+
+`/diff`에서 `d`를 눌러 범위를 바꾸거나 **Base**에서 비교 브랜치를 고르세요. 이 화면 내 선택은 TUI를 종료할 때까지
+유지되며 `cli.json`을 바꾸지 않습니다.
+
+## 알림
+
+시스템 알림과 알림음를 각각 활성화하세요.
+
+```json title="cli.json"
+{
+  "attention": {
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "permission": "/home/me/sounds/permission.wav"
+    }
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Alert settings" tabIndex={0}>
+
+| 설정                     | 값                    | 설명                                                                                              |
+| ------------------------ | --------------------- | -------------------------------------------------------------------------------------------------------- |
+| `attention.notifications` | 불리언               | 보통 터미널에 포커스가 없을 때 시스템 알림을 표시합니다.                                  |
+| `attention.sound`        | 불리언                | 알림음를 재생합니다.                                                                                  |
+| `attention.volume`       | `0`에서 `1` 사이 숫자 | 소리 볼륨을 설정합니다.                                                                                       |
+| `attention.sound_pack`   | 문자열                | 활성 사운드 팩 ID를 선택합니다.                                                                        |
+| `attention.sounds`       | 객체                  | `default`, `question`, `permission`, `error`, `done`, `subagent_done`의 소리 파일을 재정의합니다.    |
+
+</div>
+
+잘못되었거나 읽을 수 없는 재정의는 해당 이벤트의 내장 소리로 대체됩니다.
+
+업데이트 후 TUI는 홈 화면에서 새 릴리스의 하이라이트를 한 번 보여 줍니다. 다시 보려면 `/highlights`를 실행하고,
+대화 상자를 끄려면 다음을 설정하세요.
+
+```json title="cli.json"
+{
+  "highlights": false
+}
+```
+
+## 터미널
+
+터미널 통합을 구성하세요.
+
+```json title="cli.json"
+{
+  "terminal": {
+    "title": true,
+    "copy": "select"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Terminal settings" tabIndex={0}>
+
+| 설정             | 값                   | 설명                                                                                              |
+| ---------------- | -------------------- | -------------------------------------------------------------------------------------------------------- |
+| `terminal.title` | 불리언               | 터미널 창 제목을 업데이트합니다.                                                                       |
+| `terminal.copy`  | `manual` 또는 `select` | 수동으로 복사하거나 선택 직후 복사합니다. 플랫폼 기본값은 Windows에서 `manual`, 그 외에서 `select`입니다. |
+
+</div>
+
+## Mini
+
+`mini` 그룹은 최소 대화형 인터페이스인 [`opencode mini`](/cli#mini)를 제어합니다.
+
+```json title="cli.json"
+{
+  "mini": {
+    "thinking": "show",
+    "tools": "hide",
+    "shell_output": "hide",
+    "turn_summary": "show",
+    "footer": "show",
+    "splash": "show",
+    "work_spinner": "block-soft-slide",
+    "mono": false,
+    "replay": true,
+    "replay_limit": 200
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Mini settings" tabIndex={0}>
+
+| 설정                | 값                             | 설명                                                                        |
+| ------------------- | ------------------------------ | ---------------------------------------------------------------------------------- |
+| `mini.thinking`     | `show` 또는 `hide`             | 모델 추론을 표시하거나 숨깁니다.                                                    |
+| `mini.tools`        | `show` 또는 `hide`             | 도구 호출과 그 앞의 어시스턴트 텍스트를 표시하거나 숨깁니다.               |
+| `mini.shell_output` | `show` 또는 `hide`             | 원시 셸 도구 출력을 표시하거나 숨깁니다.                                              |
+| `mini.turn_summary` | `show` 또는 `hide`             | 스크롤백에 에이전트, 모델, 소요 시간 요약을 표시하거나 숨깁니다.               |
+| `mini.footer`       | `show` 또는 `hide`             | 상시 활동, 모델, 사용량, 컨텍스트 세부 정보를 표시하거나 숨깁니다.             |
+| `mini.splash`       | `show` 또는 `hide`             | 시작 및 종료 스플래시 배너를 표시하거나 숨깁니다.                                      |
+| `mini.work_spinner` | 스피너 ID                      | 하단의 작업 애니메이션을 선택합니다.                                          |
+| `mini.mono`         | 불리언                          | 단색 ASCII 출력을 사용합니다.                                                      |
+| `mini.replay`       | 불리언                          | 재개와 터미널 크기 변경 시 세션 기록을 복원합니다.                            |
+| `mini.replay_limit` | 양의 정수                        | 재생을 최신 메시지로 제한합니다. 기본 한도는 `200`입니다.                  |
+
+</div>
+
+사용 가능한 스피너 ID:
+
+```text
+block-soft-slide  block-soft-sweep  block-low-comet  block-low-duet
+block-shuttle     block-bridge      block-squeeze    small-toggle
+square-toggle     grow-shrink       quadrant-orbit   crosshatch
+density-wave      seed
+```
+
+명령줄 `mini` 재생 플래그는 해당 실행에서 이 설정을 재정의합니다.
+
+## 키바인드
+
+명령 바인딩과 리더 키 타임아웃을 재정의하세요.
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app.exit": ["ctrl+c", "ctrl+d", "<leader>q"],
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "event": "press",
+      "preventDefault": false,
+      "fallthrough": false
+    },
+    "help.show": false
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Keybind settings" tabIndex={0}>
+
+| 설정                         | 값                            | 설명                                                          |
+| --------------------------- | ------------------------------- | -------------------------------------------------------------------- |
+| `keybinds.leader`           | 바인딩 값                        | 다른 바인딩에서 `<leader>`가 참조하는 키를 설정합니다.             |
+| `keybinds.<command>`        | 바인딩 값                        | 한 명령 ID의 바인딩을 재정의합니다.                            |
+| `keybinds.*.key`            | 키 문자열 또는 설명자            | 객체 바인딩의 키를 선택합니다.                               |
+| `keybinds.*.event`          | `press` 또는 `release`           | 객체 바인딩을 하나의 키 이벤트로 제한합니다.                           |
+| `keybinds.*.preventDefault` | 불리언                           | 터미널의 기본 키 동작을 막을지 제어합니다.  |
+| `keybinds.*.fallthrough`    | 불리언                           | 우선순위가 낮은 처리기가 같은 이벤트를 받게 합니다.            |
+| `leader.timeout`            | 양의 정수                         | 리더 키 이후 기다릴 밀리초를 설정합니다.             |
+
+</div>
+
+바인딩 값은 문자열, 대안 배열, 객체가 될 수 있습니다. 바인딩을 비활성화하려면 `"none"`이나 `false`를 사용하세요.
+허용되는 키 구문, 모든 명령 ID, 모든 기본 바인딩은 [키바인드](/cli/keybinds)를 참고하세요.
+
+## 플러그인
+
+터미널 전용 플러그인을 순서대로 로드합니다.
+
+```json title="cli.json"
+{
+  "plugins": [
+    "-opencode.notifications",
+    {
+      "package": "./plugins/status",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Plugin settings" tabIndex={0}>
+
+| 설정                 | 값              | 설명                                                     |
+| -------------------- | --------------- | --------------------------------------------------------------- |
+| `plugins`            | 배열            | 순서 있는 활성화 지시와 외부 플러그인을 선언합니다.    |
+| `plugins[].package`  | 문자열          | 패키지 이름, 로컬 경로, 파일 URL을 설정합니다.                    |
+| `plugins[].options`  | 객체            | 해당 플러그인에 플러그인별 옵션을 전달합니다.                   |
+
+</div>
+
+패키지 형식, 로컬 탐색, 와일드카드, 비활성화 지시는 [플러그인](/cli/plugins)을 참고하세요.
+
+## 디버그 및 실험
+
+진단을 활성화하거나 현재 사용 가능한 실험을 선택하세요.
+
+```json title="cli.json"
+{
+  "debug": {
+    "devtools": false,
+    "timing": false,
+    "turn_tokens": "verbose"
+  },
+  "experimental": {}
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Debug and experimental settings" tabIndex={0}>
+
+| 설정                | 값                              | 설명                                                                         |
+| ------------------- | ------------------------------- | ----------------------------------------------------------------------------------- |
+| `debug.devtools`    | 불리언                          | DevTools 디버그 바를 표시합니다.                                                       |
+| `debug.timing`      | 불리언                          | 디버그 바에 첫 렌더링까지 걸린 시간 진단을 표시합니다.                              |
+| `debug.turn_tokens` | 불리언 또는 `verbose`           | 턴별 토큰 사용량을 표시하며, `verbose`는 도구 호출 입력도 포함합니다.               |
+| `experimental`      | 기능 ID를 키로, 불리언을 값으로 쓰는 객체            | 예고 없이 바뀌거나 제거될 수 있는 실험을 활성화하거나 비활성화합니다.     |
+
+</div>
+
+TUI의 **Experiments** 대화 상자에 현재 나열된 기능 ID만 사용하세요. 알 수 없는 ID는 효과가 없습니다.
+

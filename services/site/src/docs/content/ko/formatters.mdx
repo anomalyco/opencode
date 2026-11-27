@@ -1,0 +1,197 @@
+---
+title: "포매터"
+description: "Prettier, Biome, gofmt, Ruff 같은 내장 포매터나 자체 명령으로 OpenCode가 파일을 편집한 뒤 서식을 지정하세요."
+---
+
+OpenCode는 `write`, `edit`, `patch` 도구로 파일을 변경한 뒤 서식을 지정할 수 있습니다. 포매터는 기본적으로
+비활성화되어 있으므로 구성에서 활성화하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+## 활성화
+
+`formatter`를 `true`로 설정하면 모든 내장 포매터가 활성화됩니다. OpenCode는 실행 파일과 프로젝트별 요구 사항이
+모두 갖춰진 내장 포매터만 실행합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+객체를 설정해도 내장 포매터가 활성화되며, 이를 재정의하거나 커스텀 포매터를 추가할 수 있습니다. 빈 객체는 상속된
+포매터 설정을 유지하고, `true`는 내장 포매터로 초기화합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {},
+}
+```
+
+## 내장 포매터
+
+OpenCode에는 다음 포매터 정의가 포함되어 있습니다. 대부분은 지정된 명령이 있어야 하며, 추가 감지 규칙이 있는
+정의는 아래에 나열되어 있습니다.
+
+| 포매터 | 확장자 | 요구 사항 |
+| --- | --- | --- |
+| `gofmt` | `.go` | `gofmt` 명령 |
+| `mix` | `.ex`, `.exs`, `.eex`, `.heex`, `.leex`, `.neex`, `.sface` | `mix` 명령 |
+| `oxfmt` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts` | `oxfmt` 의존성(`package.json`) |
+| `prettier` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts`, `.html`, `.htm`, `.css`, `.scss`, `.sass`, `.less`, `.vue`, `.svelte`, `.json`, `.jsonc`, `.yaml`, `.yml`, `.toml`, `.xml`, `.md`, `.mdx`, `.graphql`, `.gql` | `prettier` 의존성(`package.json`) |
+| `biome` | 위 `prettier`와 같은 확장자 | `biome.json` 또는 `biome.jsonc`와 설치된 `@biomejs/biome` 바이너리 |
+| `zig` | `.zig`, `.zon` | `zig` 명령 |
+| `clang-format` | `.c`, `.cc`, `.cpp`, `.cxx`, `.c++`, `.h`, `.hh`, `.hpp`, `.hxx`, `.h++`, `.ino`, `.C`, `.H` | `clang-format` 명령과 `.clang-format` |
+| `ktlint` | `.kt`, `.kts` | `ktlint` 명령 |
+| `ruff` | `.py`, `.pyi` | `ruff` 명령과 Ruff 구성 또는 의존성 선언 |
+| `air` | `.R` | R 포매터임을 밝히는 `air` 명령 |
+| `uv` | `.py`, `.pyi` | `uv` 명령(`uv format` 지원) |
+| `rubocop` | `.rb`, `.rake`, `.gemspec`, `.ru` | `rubocop` 명령 |
+| `standardrb` | `.rb`, `.rake`, `.gemspec`, `.ru` | `standardrb` 명령 |
+| `htmlbeautifier` | `.erb` | `htmlbeautifier` 명령 |
+| `dart` | `.dart` | `dart` 명령 |
+| `ocamlformat` | `.ml`, `.mli` | `ocamlformat` 명령과 `.ocamlformat` |
+| `terraform` | `.tf`, `.tfvars` | `terraform` 명령 |
+| `latexindent` | `.tex` | `latexindent` 명령 |
+| `gleam` | `.gleam` | `gleam` 명령 |
+| `shfmt` | `.sh`, `.bash` | `shfmt` 명령 |
+| `nixfmt` | `.nix` | `nixfmt` 명령 |
+| `rustfmt` | `.rs` | `rustfmt` 명령 |
+| `pint` | `.php` | `laravel/pint`(`composer.json`) |
+| `ormolu` | `.hs` | `ormolu` 명령 |
+| `cljfmt` | `.clj`, `.cljs`, `.cljc`, `.edn` | `cljfmt` 명령 |
+| `dfmt` | `.d` | `dfmt` 명령 |
+
+예를 들어 내장 포매터를 활성화하면 OpenCode가 해당 파일에 대해 프로젝트 로컬 Prettier 의존성을 찾아
+실행합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": true,
+}
+```
+
+## 커스터마이즈
+
+포매터 이름을 키로 하는 항목을 추가해 내장 포매터를 변경하거나 커스텀 포매터를 정의하세요. 커스텀 포매터는 실행하려면
+`command`와 `extensions`가 모두 필요합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "environment": {
+        "NODE_ENV": "development",
+      },
+      "extensions": [".js", ".ts"],
+    },
+    "deno-markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+| 필드 | 유형 | 동작 |
+| --- | --- | --- |
+| `disabled` | `boolean` | `true`이면 해당 포매터를 제거합니다. |
+| `command` | `string[]` | 내장 명령을 교체하거나 커스텀 명령을 정의합니다. |
+| `environment` | `Record<string, string>` | 상위 환경을 유지하면서 환경 변수를 추가합니다. |
+| `extensions` | `string[]` | 내장 확장자 목록을 교체하거나 커스텀 목록을 정의합니다. 앞의 점을 포함하세요. |
+
+모든 필드는 선택 사항입니다. 내장 항목은 생략된 값을 상속하지만, 명령이나 확장자가 없는 새 항목은 실행할 수
+없습니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "extensions": [".md", ".mdx"],
+    },
+  },
+}
+```
+
+## 명령
+
+`command`는 셸 명령 문자열이 아니라 인수 배열입니다. OpenCode는 `$FILE`을 파일의 절대 경로로 바꾸고 활성 프로젝트
+디렉터리에서 명령을 실행합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "custom": {
+      "command": ["custom-fmt", "--write", "$FILE"],
+      "extensions": [".custom"],
+    },
+  },
+}
+```
+
+## 일치
+
+OpenCode는 파일의 마지막 확장자를 `extensions`와 비교합니다. 대소문자를 구분하며, `.part.md` 같은 복합 항목은
+`notes.part.md`와 일치하지 않습니다. 이 파일의 마지막 확장자가 `.md`이기 때문입니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+여러 포매터가 일치하면 OpenCode는 등록된 순서대로 포매터를 실행하고 처음 성공한 시점에 멈춥니다. 내장 포매터의 순서는 고정되어 있고, 커스텀 포매터는 객체에 나열한 순서를 따릅니다. 하나가 실패로 종료되면 OpenCode는 실패를 기록하고 다음 일치 항목을
+시도합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "preferred": {
+      "command": ["preferred-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+    "fallback": {
+      "command": ["fallback-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+  },
+}
+```
+
+## 비활성화
+
+어떤 구성 파일도 `formatter`를 설정하지 않으면 서식 지정이 비활성화됩니다. 우선순위가 낮은 파일이 활성화한 서식
+지정을 끄려면 `false`로 설정하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false,
+}
+```
+
+다른 내장 포매터는 켜 둔 채 하나만 끄려면 해당 이름의 항목을 disabled로 표시하세요.
+
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "disabled": true,
+    },
+  },
+}
+```

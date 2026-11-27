@@ -1,0 +1,371 @@
+---
+title: "Go"
+description: "개인부터 팀까지, 세 가지 요금제로 오픈 코딩 모델을 안정적으로 이용하세요."
+---
+
+OpenCode Go를 구독하면 인기 오픈 코딩 모델을 안정적으로 이용할 수 있습니다. 월간 요금제는 세 가지입니다.
+
+| 요금제       | 가격                                    | 포함 사용량                                                                  |
+| ------------ | --------------------------------------- | ---------------------------------------------------------------------------- |
+| **Go**       | **월 $10**                              | 아래 모델에 더 낮은 비용으로 접근                                            |
+| **Go Plus**  | **월 $40**                              | 아래 모델 전반에 더 높은 사용 한도                                           |
+| **Go Teams** | **멤버당 월 $20**, 최소 2명             | 모든 멤버가 각자의 한도를 받고, 모든 모델에서 Go보다 월 $5 높음              |
+
+Go는 OpenCode의 다른 제공자와 똑같이 동작합니다. OpenCode Go를 구독하고 API 키를 받으면 됩니다. **완전히 선택
+사항**이며 OpenCode를 사용하는 데 필요하지 않습니다.
+
+이 서비스는 주로 국제 사용자를 위해 설계되었으며 안정적인 글로벌 접근을 제공합니다.
+
+## 작동 방식
+
+1. [OpenCode Console](https://opencode.ai/console)에 로그인해 Go, Go Plus, Go Teams 중 하나를 구독하세요. 결제 정보를 등록한 뒤 API 키를 복사하세요.
+2. TUI에서 `/connect`를 실행하고 **OpenCode Go**를 선택한 다음 API 키를 붙여 넣으세요.
+
+   ```text
+   /connect
+   ```
+
+3. `/models`를 실행해 Go에서 사용할 수 있는 모델을 선택하세요.
+
+   ```text
+   /models
+   ```
+
+<Callout>
+  Go와 Go Plus는 구독한 멤버와 워크스페이스의 API 키에 적용됩니다. 초대한 다른 멤버는 무료 모델이나 워크스페이스
+  잔액을 사용합니다. 두 요금제 모두 언제든 Go Teams로 업그레이드할 수 있으며, 해당 월에 사용하지 않은 한도는 크레딧으로
+  돌려받습니다. Go Teams는 워크스페이스의 모든 멤버에게 적용되며, 요금은 멤버당 월 $20입니다(최소 2명, 월 $40).
+  다음에 합류하는 멤버는 두 번째 시트를 사용하므로 추가 요금이 없습니다. 그 이후 구독 기간 도중에 합류하는 멤버에게는
+  $20이 청구되며 한 달치 사용 한도가 전부 제공됩니다. 서비스 계정에는 Go Teams가 적용되지 않습니다.
+</Callout>
+
+[현재 모델 목록](https://opencode.ai/console/go#models)을 확인하세요. 테스트하고 새 모델을 추가하면서 바뀔 수 있습니다.
+
+### 제한된 모델 활성화
+
+워크스페이스 개인정보 설정이 Go에도 적용됩니다. 기본적으로 요청 데이터로 학습하는 유료 엔드포인트는 차단되고,
+허용 리전은 **Europe & United States**입니다. 개인정보 설정을 저장하지 않은 워크스페이스는 중국에서 오는 요청에
+**Global**도 허용합니다.
+
+**Settings › Privacy**에서 소유자나 관리자가 다음을 활성화할 수 있습니다.
+
+- **DeepSeek V4.1 Flash 및 V4 Pro:** **Regions**에서 **Global**을 선택합니다.
+- **LongCat 2.5:** **Regions**에서 **Global**을 선택합니다.
+- **Muse Spark 1.3 Contributor 및 Muse Spark 1.2 Contributor:** **Allow paid endpoints that train on request data**를 켭니다.
+
+각 모델의 학습 및 보존 조건은 [개인정보](#privacy)를 참고하세요.
+
+## 크레딧으로 결제
+
+소유자와 관리자는 갱신과 업그레이드를 포함해 Go 요금을 워크스페이스 크레딧으로 결제할 수 있습니다. 구독할 때 또는
+나중에 **Manage subscription**에서 결제 수단으로 **Credit**을 선택하세요. 한도를 넘는 사용량을 결제하는
+[Extra Usage](#usage-beyond-limits)와는 별개입니다.
+
+- 전체 금액이 크레딧 잔액에서 차감됩니다. 잔액이 부족하면 먼저 충전할 수 있습니다.
+- 구독 기간이 끝나면 갱신 요금이 크레딧에서 차감됩니다. 크레딧이 부족해도 Go는 계속 이용할 수 있습니다. 구독 기간이
+  끝난 뒤 1일, 3일, 7일에 갱신을 다시 시도하며, 잔액이 충분해지는 즉시 다시 시도합니다. 마지막 재시도까지 실패하면
+  Go가 종료됩니다.
+- [청구서 결제](/console/billing#invoiced-billing)를 사용하는 워크스페이스는 크레딧으로 Go를 결제할 수 없습니다.
+- 크레딧으로 결제한 Go 요금을 환불하면 환불액이 크레딧 잔액에 반영되며 해당 구독 기간은 종료됩니다.
+
+## 어디에서 사용할 수 있나요?
+
+OpenCode Go는 [OpenCode](https://opencode.ai)와 비슷한 유형의 요청을 보내는 다른 코딩 에이전트를 위해
+설계되었습니다. 다른 사용자의 경험을 떨어뜨리는 남용이 있는지 트래픽을 모니터링합니다.
+
+클라이언트는 다음을 따라야 합니다.
+
+1. 코딩 에이전트의 일반적인 요청을 보내세요.
+2. 일반적인 SDK나 HTTP 라이브러리 이름 대신 `my-coding-agent/1.0`처럼 클라이언트를 식별할 수 있는 고유한 User-Agent 값을 보내세요.
+3. 라우팅과 프롬프트 캐싱을 최적화할 수 있도록 대화마다 고정된 세션 ID를 `x-opencode-session`에 담아 보내세요.
+
+[결정](#decision-models) 및 [임베딩](#embedding-models) 요청에는 `x-opencode-session`이 필요 없으므로 RAG 라이브러리,
+메모리 제공자, 스크립트 같은 어떤 클라이언트든 Go 키로 호출할 수 있습니다.
+
+Claude Code, Codex, Hermes, OpenClaw, Pi, Raycast에서 Go를 설정하려면 [Harnesses](/console/harnesses)를 참고하세요.
+
+### 검증된 클라이언트
+
+OpenCode 외에 다음 클라이언트가 OpenCode Go와 정상적으로 동작하는 것으로 검증되었습니다. 다만 앞으로도 계속
+동작한다고 보장하지는 않습니다.
+
+| 클라이언트        | 세션 지원                                                                                                                                                                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hermes**        | **v0.21.6 이상**으로 업데이트하세요. 이 버전은 OpenCode 주 요청과 보조 요청에 헤더를 보냅니다([PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864)).                                                                    |
+| **Claude Code**   | Go는 자체 세션 헤더를 인식합니다. 별도의 사용자 헤더 래퍼가 필요 없습니다.                                                                                                                                                                |
+| **Codex**         | Go는 자체 세션 헤더를 인식합니다. 일부 버전과 프록시 설정에서는 여전히 누락되므로, 요청을 전달할 때 세션 헤더를 보존하세요.                                                                                                                |
+| **ZCode**         | Go는 자체 세션 헤더를 인식합니다. [`x-opencode-session` 요청](https://github.com/zai-org/feedback/issues/492)은 아직 열려 있지만, 이제 그 특정 헤더를 보낼 필요는 없습니다.                                                                |
+| **Pi**            | 최신 빌드는 OpenCode용 세션 정보를 보냅니다. 오래된 설치를 업데이트하세요.                                                                                                                                                                  |
+| **jcode**         | **v0.81.6 이상**으로 업데이트하세요. [세션 헤더 수정](https://github.com/1jehuang/jcode/issues/1167)이 포함되어 있습니다.                                                                                                                  |
+| **OpenClaw**      | 최신 빌드는 Go 요청에 `x-opencode-session`을 보냅니다. 브라우저 로그인은 **2026.11.7 이상**이 필요합니다.                                                                                                                                   |
+| **Kilo Code CLI** | [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752)가 포함된 빌드에서 OpenCode 세션 헤더가 복원됩니다. 이 수정은 CLI에만 적용되며 VS Code 확장 프로그램에는 적용되지 않습니다. [이슈 #13723](https://github.com/Kilo-Org/kilocode/issues/13723)을 참고하세요. |
+
+### 알려진 문제 클라이언트
+
+조사한 버전에서 이 클라이언트들은 세션 지원이 없거나 불완전합니다. 링크한 리포트에서 수정과 우회 방법을 추적하고
+있습니다.
+
+| 클라이언트              | 상태 및 추적                                                                                                                                                                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **DeepSeek Harness**    | 일부 모델 경로에서는 세션 정보가 도착하지만 다른 경로에서는 누락됩니다. 자체 헤더는 인식하므로, 모든 어댑터에서 보내도록 하는 작업이 남아 있습니다. [토론 #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495).                    |
+| **GitHub Copilot Chat** | [VS Code 이슈 #334186](https://github.com/microsoft/vscode/issues/334186)에서 세션 헤더 자동 지원을 요청했습니다.                                                                                                                                     |
+| **Kimi Code**           | [이슈 #3506](https://github.com/MoonshotAI/kimi-code/issues/3506)의 세션 헤더 요청은 계획되지 않음으로 종료되었습니다.                                                                                                                                 |
+| **MiMo Code**           | [이슈 #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317)은 종료되었고 [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327)은 병합 없이 종료되었습니다.                                                                                |
+
+## 사용 한도
+
+Go의 모든 유료 모델에 하나의 사용 한도가 적용됩니다. Go Teams에서는 각 멤버가 모델 전체에 적용되는 별도의
+사용 한도를 받습니다.
+
+- **5시간 한도**는 월 사용 한도의 20%입니다. 한도를 처음 사용한 시점부터 5시간 동안 적용됩니다.
+- **주간 한도**는 월 사용 한도의 50%입니다. 월요일 00:00 UTC에 초기화됩니다.
+- **월 사용 한도**는 새 유료 구독 기간이 시작될 때 초기화됩니다.
+
+모델을 바꿔도 같은 한도에서 차감됩니다. 한도에 도달하면 무료 모델을 사용하거나
+[Extra Usage](#usage-beyond-limits)를 켜서 한도를 다시 사용할 수 있을 때까지 Console 크레딧으로 결제할 수 있습니다.
+
+각 모델의 [월 한도](https://opencode.ai/console/go#limits)는 한 달 동안 그 모델만 사용할 때 요금제가 어느 정도
+사용량이 포함되는지 보여 줍니다. 예를 들어 한도가 $15인 모델에서 $1.50을 사용하면 월 사용 한도의 10%가 차감됩니다.
+한도가 $60인 모델에서 $6을 사용한 경우도 마찬가지입니다. Go 응답의
+[`opencode.allowance`](/console/api/inference#cost)에서 각 요청으로 차감된 금액을 확인할 수 있습니다.
+
+[토큰 가격](https://opencode.ai/console/go#pricing)은 1M 토큰당이며 Go, Go Plus, Go Teams가 모두 같습니다.
+
+[결정](#decision-models) 및 [임베딩](#embedding-models) 모델에는 Go 할인이 적용되지 않아 정가로 제공됩니다. 월 한도는
+Go에서 $10, Go Plus에서 $40으로 각 요금제의 결제 금액과 같습니다. Go Teams의 월 한도는 다른 모델과 마찬가지로
+Go보다 $5 높은 $15입니다.
+
+**Beam Free:** 기간 한정으로 무료입니다. 앙골라, 벨라루스, 캄보디아, 중국(홍콩과 마카오 포함), 쿠바, 콩고 민주 공화국, 적도 기니, 이란, 이라크, 라오스, 리비아, 나이지리아, 북한, 러시아, 시리아, 투르크메니스탄, 우즈베키스탄, 베네수엘라, 우크라이나의 크림반도·도네츠크·루한스크 지역에서는 사용할 수 없습니다.
+
+**Gemini 4 Argon:** 50% 할인은 2026년 11월 30일까지 적용됩니다.
+
+**HungerG Free:** 기간 한정으로 무료입니다.
+
+### 예상 요청 수
+
+Console의 Go 페이지는 일반적인 Go 사용 패턴을 기준으로 각 모델의 [5시간당 요청 수를
+추정](https://opencode.ai/console/go#limits)합니다. 실제 사용량은 다를 수 있습니다.
+
+현재 사용량은 [Console](https://opencode.ai/console)이나 [사용량 엔드포인트](#usage)에서 확인할 수 있습니다.
+
+<Callout type="tip">사용 한도에 도달해도 무료 모델은 계속 사용할 수 있습니다.</Callout>
+
+사용 한도는 초기 사용과 피드백을 반영해 바뀔 수 있습니다.
+
+---
+
+### 한도를 넘는 사용량
+
+Console 잔액에 크레딧이 있다면 **Go** 페이지에서 **Extra Usage**를 켤 수 있습니다. 켜면 사용 한도에 도달한 뒤
+요청을 차단하는 대신 [종량제 잔액](/console/models#pricing)을 사용합니다.
+
+Go Teams는 **Extra Usage**가 켜진 상태로 시작하며, **Go** 페이지에서 끄거나 다시 켤 수 있습니다.
+
+### 일부 모델의 사용량이 더 낮은 이유
+
+Go에서는 포함되는 월 사용량이 모델마다 다릅니다.
+
+대부분의 모델은 대량 할인과 예약된 GPU 용량으로 이를 가능하게 하고, 그 절감분을 더 높은 월 사용량으로 사용자에게
+돌려드립니다.
+
+일부 모델은 새로 나왔거나 공개 가격이 이미 할인되어 있어, 할인을 협상하거나 더 낮은 비용으로 호스팅할 기회가
+없었습니다.
+
+이런 모델도 제공자에게 직접 결제할 때보다는 조금 더 사용할 수 있으며, 그래서 포함되는 월 사용량이 더 낮습니다.
+
+## 엔드포인트
+
+`https://opencode.ai/inference/go`의 API로 Go 모델에 접근할 수도 있습니다. 각 모델의 [ID, 경로, AI SDK
+패키지](https://opencode.ai/console/go#api)를 확인하세요. 각 모델은 자체 API와 함께 표시되지만 모든 텍스트
+모델은 Console이 변환하는 다른 API로도 동작합니다. 전체 목록은 [기본 URL](/console/harnesses#base-urls)을
+참고하세요.
+
+이 AI SDK 패키지는 Go를 직접 호출하는 애플리케이션을 위한 것입니다. OpenCode에서 Go를 사용하려면 `/connect`로
+연결하고 `opencode-go/<model-id>` 형식으로 [모델](/models)을 설정하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode-go/kimi-k3",
+}
+```
+
+### 모델
+
+모델 엔드포인트에서 사용 가능한 모델의 전체 목록과 메타데이터를 가져오세요.
+
+```bash
+curl https://opencode.ai/inference/go/v1/models
+```
+
+Go의 월 사용 한도를 포함해 응답의 모든 필드는 [모델 목록 API](/console/api/models)를 참고하세요.
+
+### 결정 모델
+
+결정 모델은 텍스트를 생성하는 대신 `state`에 대한 유형이 지정된 질문에 답합니다. [Console
+모델](/console/models#jev)과 같은 System One 요청을 Go 키로
+`https://opencode.ai/inference/go/systemone/v1/systemone`에 보내세요.
+
+```bash
+curl https://opencode.ai/inference/go/systemone/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.14",
+    "state": "My payments have failed for three days and I am losing sales.",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this request require urgent attention?"
+      }
+    }
+  }'
+```
+
+| 모델                                | 모델 ID             | 입력   | 출력 | 캐시 읽기   | 캐시 쓰기    |
+| ----------------------------------- | ------------------- | ------ | ------ | ----------- | ------------ |
+| Jev 1.14                            | jev-1.14            | $0.042 | 무료   | -           | -            |
+| Gemini Decision 1                   | gemini-decision-1   | $0.10  | 무료   | -           | -            |
+| GPT 6 Luna Decision (≤ 272K 토큰)   | gpt-6-luna-decision | $0.10  | 무료   | $0.01       | $0.125       |
+| GPT 6 Luna Decision (> 272K 토큰)   | gpt-6-luna-decision | $0.20  | 무료   | $0.02       | $0.25        |
+
+- 가격은 1M 토큰당입니다.
+- OpenAI의 Decisions 형식 요청은 `https://opencode.ai/inference/go/openai/v1/decisions`에서 동작합니다.
+- 질문 유형은 [Jev](/console/models#jev)를, `state`의 이미지, 오디오, 비디오, PDF는
+  [GPT 6 Luna Decision 및 Gemini Decision 1](/console/models#gpt-6-luna-decision-and-gemini-decision-1)을 참고하세요.
+
+### 임베딩 모델
+
+임베딩 모델은 텍스트를 벡터로 바꿉니다. Go 키로 OpenAI의 Embeddings API인
+`https://opencode.ai/inference/go/openai/v1/embeddings`에서 호출하세요.
+
+```bash
+curl https://opencode.ai/inference/go/openai/v1/embeddings \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "text-embedding-3-small",
+    "input": ["hello world", "goodbye"]
+  }'
+```
+
+| 모델                   | 모델 ID                | 입력  |
+| ---------------------- | ---------------------- | ----- |
+| text-embedding-3-small | text-embedding-3-small | $0.02 |
+| Qwen3 Embedding 8B     | qwen3-embedding-8b     | $0.01 |
+| Gemini Embedding 2     | gemini-embedding-2     | $0.20 |
+
+- 가격은 1M 입력 토큰당입니다.
+- 요청은 `dimensions`와 `encoding_format`도 받습니다. [임베딩 모델](/console/models#embedding-models)을 참고하세요.
+
+### 사용량
+
+[사용 한도](#usage-limits)를 얼마나 사용했는지 확인하세요. 예를 들어 자체 클라이언트에 표시할 수 있습니다.
+
+```bash
+curl https://opencode.ai/inference/go/v1/usage \
+  -H "Authorization: Bearer <token>"
+```
+
+Go에 사용하는 것과 같은 키를 사용하세요. Go와 Go Plus에서는 구독자의
+[개인 API 키](/console/api#personal-api-keys) 또는 [서비스 계정 키](/console/api#service-accounts)이고, Go
+Teams에서는 각 멤버의 개인 API 키를 사용할 수 있습니다.
+
+응답에는 사용 한도별 집계 항목이 있습니다. 5시간 한도는 `rolling`, 주간 한도는 `weekly`, 월간 한도는 `monthly`입니다.
+
+```json
+{
+  "usage": {
+    "rolling": { "status": "ok", "percent": 30, "resetsAt": "2026-11-21T15:00:00.000Z" },
+    "weekly": { "status": "rate-limited", "percent": 100, "resetsAt": "2026-11-23T00:00:00.000Z" },
+    "monthly": { "status": "ok", "percent": 50, "resetsAt": "2026-12-01T00:00:00.000Z" }
+  }
+}
+```
+
+| 필드       | 의미                                                                                                       |
+| ---------- | ----------------------------------------------------------------------------------------------------------- |
+| `status`   | `ok`, 또는 한도를 모두 사용하면 `rate-limited`.                                                            |
+| `percent`  | 한도를 얼마나 사용했는지 `0`에서 `100` 사이의 정수로 나타냅니다.                                          |
+| `resetsAt` | 한도가 초기화되는 시각을 ISO 8601로 나타냅니다. 5시간 창이 시작되기 전에는 `rolling`이 지금부터 5시간 뒤에 초기화됩니다. |
+
+유효한 키가 없는 요청은 HTTP `401`을 반환합니다. Go가 대상으로 하지 않는 키는 이유를 설명하는 메시지와 함께
+HTTP `403`을 반환합니다. 예를 들어 워크스페이스에 활성 Go 구독이 없는 경우입니다.
+
+```json
+{ "type": "error", "error": { "type": "EntitlementError", "message": "OpenCode Go subscription required." } }
+```
+
+## 개인정보
+
+각 모델이 [내 데이터로 학습하는지](https://opencode.ai/console/go#privacy) 확인하세요.
+
+| 모델                       | 데이터 보존 |
+| -------------------------- | ----------- |
+| Grok 4.7                   | 30일        |
+| GPT 6 Luna                 | 30일        |
+| GPT 5.6 Luna               | 30일        |
+| Claude Haiku 5.5           | 30일        |
+| Gemini 4 Argon             | 55일        |
+| GLM-5.3-Flash              | 0일         |
+| GLM-5.3                    | 0일         |
+| Kimi K3.1 Pro              | 0일         |
+| Kimi K3                    | 0일         |
+| Kimi K2.7 Code             | 0일         |
+| LongCat 2.5                | 0일         |
+| MiMo-V2.6-Pro              | 0일         |
+| MiMo-V2.6-Flash            | 0일         |
+| Qwen4 Max                  | 0일         |
+| Qwen3.8 Max                | 0일         |
+| Qwen3.8 Flash              | 0일         |
+| Qwen3.7 Plus               | 0일         |
+| MiniMax M3.1 Flash         | 0일         |
+| MiniMax M3                 | 0일         |
+| Muse Spark 1.3 Contributor | ZDR 아님    |
+| Muse Spark 1.2 Contributor | ZDR 아님    |
+| DeepSeek V4.1 Flash        | 0일\*       |
+| DeepSeek V4 Pro            | 0일\*       |
+| Hy4                        | 0일         |
+| Hy4 preview                | 0일         |
+| Hy3                        | 0일         |
+| Step 5 Preview             | 0일         |
+| Beam Free                  | 30일        |
+| Iceman Contributor Free    | ZDR 아님    |
+| Hy4 flash Free             | 0일         |
+
+- **Grok 4.7:** ZDR은 저장된 데이터에 의존하는 중요한 API 기능(상태 저장형 Responses API, Files and Collections, Batch API 포함)을 비활성화합니다. [자세히 알아보기](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
+- **GPT 6 Luna / GPT 5.6 Luna:** 모든 API 기능 사용에 대해 악용 모니터링 로그가 생성되며 최대 30일 동안 보관됩니다. [자세히 알아보기](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
+- **Claude Haiku 5.5:** 요청은 [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage)에 따라 30일 동안 보관됩니다.
+- **Gemini 4 Argon:** 요청은 [Google의 Gemini API 약관](https://ai.google.dev/gemini-api/terms)에 따라 남용 모니터링을 위해 최대 55일 동안 보관됩니다.
+- **Muse Spark 1.3 Contributor:** 향후 Meta 모델 학습에 사용자의 프롬프트와 생성 결과를 사용할 수 있도록 허용하는 대신 토큰 가격이 대폭 할인됩니다. Meta의 [지리적 사용 정책](https://ai.developer.meta.com/legal/geographic-use-policy)이 허용하는 리전에서만 사용할 수 있습니다. [자세히 알아보기](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
+- **Muse Spark 1.2 Contributor:** 향후 Meta 모델 학습에 사용자의 프롬프트와 생성 결과를 사용할 수 있도록 허용하는 대신 토큰 가격이 대폭 할인됩니다. Meta의 [지리적 사용 정책](https://ai.developer.meta.com/legal/geographic-use-policy)이 허용하는 리전에서만 사용할 수 있습니다. [자세히 알아보기](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
+- **Iceman Contributor Free:** 프롬프트와 생성 결과를 모델 개선에 사용할 수 있도록 허용하는 대신 기간 한정으로 무료입니다.
+- **HungerG Free:** 기간 한정으로 무료입니다. 데이터 학습 없음: 프롬프트와 생성 결과는 모델 학습에 사용되지 않습니다.
+- **LongCat 2.5:** 중국에서 호스팅됩니다. 워크스페이스 개인정보 설정에서 **Global** 리전이 필요합니다.
+- **DeepSeek:** ZDR 계약은 매월 갱신됩니다. 현재 계약은 2026년 12월 31일까지 유효합니다.
+
+## 배경
+
+오픈 모델은 정말 좋아졌습니다. 이제 코딩 작업에서 독점 모델에 가까운 성능을 냅니다. 많은 제공자가 경쟁력 있게 제공할 수 있어 보통 훨씬 저렴합니다.
+
+하지만 안정적이고 지연이 낮은 접근을 얻기는 어려울 수 있습니다. 제공자마다 품질과 가용성이 다릅니다.
+
+<Callout type="tip">OpenCode와 잘 동작하는 엄선된 모델과 제공자를 테스트했습니다.</Callout>
+
+이를 해결하기 위해 몇 가지를 했습니다.
+
+1. 엄선된 오픈 모델 그룹을 테스트하고 각 팀과 최적의 실행 방법을 논의했습니다.
+2. 몇몇 제공자와 협력해 이 모델들이 올바르게 제공되는지 확인했습니다.
+3. 모델과 제공자의 조합을 벤치마크해 자신 있게 추천할 수 있는 목록을 만들었습니다.
+
+Go, Go Plus, Go Teams 모두 이 모델에 접근할 수 있습니다. 사용량에 맞는 요금제를 고르거나, 팀 전체를 대상으로
+하려면 Go Teams를 선택하세요.
+
+## 목표
+
+OpenCode Go는 다음을 위해 만들었습니다.
+
+1. 저렴한 구독으로 더 많은 사람이 AI 코딩에 **접근**할 수 있게 합니다.
+2. 최고의 오픈 코딩 모델에 **안정적으로** 접근할 수 있게 합니다.
+3. 코딩 에이전트 사용을 위해 **테스트와 벤치마크**를 거친 모델을 엄선합니다.
+4. OpenCode에 다른 제공자도 함께 사용할 수 있게 해 **락인을 없앱니다**.

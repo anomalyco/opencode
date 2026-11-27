@@ -1,0 +1,1540 @@
+---
+title: "Effect 플러그인"
+description: "Effect 네이티브 플러그인 API로 서버 플러그인을 작성하세요."
+---
+
+`@opencode/plugin/effect`는 OpenCode 플러그인 API의 Effect 네이티브 버전입니다. 컨텍스트 작업은 Effect나 Stream을
+반환하고, 콜백은 Effect를 반환하며, 플러그인 수명은 `Scope`로 표현됩니다.
+
+OpenCode는 `effect`(export된 `effect/*` 하위 경로 포함)와 `@opencode/plugin`을 런타임에 제공하며,
+플러그인과 그 `node_modules` 의존성을 로드할 때 적용됩니다. 플러그인에 번들하지 말고 로컬 타입 검사와 테스트를 위해 피어/개발
+의존성으로 설치하세요.
+
+```sh
+bun add --peer @opencode/plugin effect@4.0.1
+```
+
+`.opencode/plugins/`에서 Effect 플러그인을 export하면 자동으로 로드됩니다.
+
+```ts title=".opencode/plugins/concise/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "example",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const storage = ctx.storage
+      yield* storage.set("loaded", true)
+    }),
+})
+```
+
+게시된 패키지와 `.opencode/plugins/` 밖의 플러그인 디렉터리는 다른 서버 플러그인과 같은 `plugins` 구성을 사용합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-effect-plugin",
+    "opencode-acme-effect-plugin@1.2.0",
+    "@acme/opencode-effect-plugin",
+    "./plugins/local-effect",
+    {
+      "package": "@acme/opencode-effect-plugin",
+      "options": { "agent": "reviewer", "strict": true },
+    },
+  ],
+}
+```
+
+활성화, 패키지 확인, 구성 우선순위는 [플러그인 구성](/plugins)을 참고하세요.
+
+```ts title="plugins/local-effect/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "local-effect",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      yield* Effect.logInfo("Effect plugin loaded", { version: ctx.app.version })
+    }),
+})
+```
+
+## 수명 주기
+
+`effect`는 플러그인이 로드될 때 실행됩니다. 플러그인이 다시 로드되거나 내려가면 scope가 닫혀 등록, 범위 지정
+파이버, 종료자가 함께 해제됩니다.
+
+```ts
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "lifecycle",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      yield* Effect.logInfo("loaded", { version: ctx.app.version })
+      yield* Effect.addFinalizer(() => Effect.logInfo("unloaded"))
+    }),
+})
+```
+
+백그라운드 작업에는 범위 지정 파이버를 사용하세요. 정리 시 플러그인 scope가 파이버를 중단합니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const storage = ctx.storage
+    yield* Effect.repeat(
+      storage.set("heartbeat", { time: Date.now() }),
+      { schedule: Schedule.spaced("1 minute") },
+    ).pipe(Effect.forkScoped)
+  }),
+```
+
+### 컨텍스트
+
+컨텍스트는 연결된 OpenCode 서버의 Effect 클라이언트와 플러그인 전용 변환, 훅, 저장소, 다시 로드, 옵션을 제공합니다. OpenCode의 비공개 Core 서비스는 제공하지 않습니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const plugins = ctx.plugin
+    const active = yield* plugins.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("active plugins", { count: active.data.length })
+  }),
+```
+
+플러그인 정의와 전체 컨텍스트는 다음과 같이 선언됩니다.
+
+```ts
+interface Context {
+  readonly app: App
+  readonly location: Location.Info
+  readonly options: PluginOptions
+  readonly agent: AgentDomain
+  readonly aisdk: AISDKDomain
+  readonly command: CommandDomain
+  readonly event: EventDomain
+  readonly experimental: {
+    readonly terminal: Pick<ExperimentalApi<unknown>["persistentPty"], "read">
+    readonly generate: GenerateApi<unknown>
+  }
+  readonly integration: IntegrationDomain
+  readonly mcp: MCPDomain
+  readonly model: ModelDomain
+  /** @deprecated Use `experimental.generate.text`. */
+  readonly generate: Pick<ExperimentalGenerateApi<unknown>, "text">
+  readonly permission: PermissionDomain
+  readonly plugin: Pick<PluginApi<unknown>, "list">
+  readonly provider: ProviderDomain
+  readonly reference: ReferenceDomain
+  readonly rpc: RpcDomain
+  readonly session: SessionDomain
+  readonly shell: ShellDomain
+  readonly skill: SkillDomain
+  readonly storage: StorageDomain
+  readonly tool: ToolDomain
+  readonly vcs: VcsDomain
+  readonly websearch: WebSearchDomain
+  readonly worktree: WorktreeDomain
+}
+
+interface Plugin<R = Scope.Scope> {
+  readonly id: string
+  readonly effect: (context: Context) => Effect.Effect<void, never, R>
+}
+```
+
+### 옵션
+
+`opencode.json(c)`의 객체 형식으로 옵션을 전달하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [
+    {
+      "package": "./plugins/company-effect",
+      "options": { "strict": true },
+    },
+  ],
+}
+```
+
+옵션은 `ctx.options`에서 읽으세요. 타입을 알 수 없는 값은 사용 전에 타입을 좁히세요.
+
+```ts title="plugins/company-effect/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "company",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const strict = ctx.options.strict === true
+      yield* Effect.logInfo("company plugin configured", { strict })
+    }),
+})
+```
+
+## 변환
+
+변환은 편집기를 통해 상태를 동기적으로 수정합니다. OpenCode는 도메인마다 등록 순서대로 변환을 적용합니다. 소스가 제공자와 불변 모델 정의를 먼저 추가한 뒤, 모델 변환이 활성 제공자의 모델 후보를 편집합니다. 등록을 yield하면 플러그인 Scope에 연결된 상태로 유지됩니다.
+
+```ts title="plugins/models-effect/index.ts"
+import { Model, Plugin, Provider } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "company.models",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const providerID = Provider.ID.make("acme")
+      const models = [{ ...Model.Info.default(providerID, Model.ID.make("reasoner")), name: "Acme Reasoner" }]
+      yield* ctx.provider.transform((editor) => {
+        editor.add({
+          info: {
+            ...Provider.Info.empty(providerID),
+            name: "Acme",
+            activation: "enabled",
+            package: "@opencode/ai/providers/openai-compatible",
+            settings: { baseURL: "http://127.0.0.1:8000/v1" },
+          },
+          models,
+        })
+      })
+    }),
+})
+```
+
+모델 변환은 활성 제공자 후보 전체에 정책을 적용할 수 있습니다.
+
+```ts title="plugins/model-budget-effect/index.ts"
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.model.transform((editor) => {
+      editor
+        .list()
+        .filter((model) => model.cost.some((tier) => tier.output > 20))
+        .forEach((model) => {
+          editor.remove(model.providerID, model.id)
+        })
+    })
+  }),
+```
+
+변환이 사용하는 외부 상태가 바뀌면 `reload`를 호출하세요. 여기서 `loadFromSource()`는 `{ info: Provider.Info, models: readonly Model.Info[] }` 항목을 반환하며, 제공자를 다시 로드하면 모델 결과 전체도 무효화됩니다.
+
+```ts title="plugins/models-effect/index.ts"
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const provider = ctx.provider
+    const source = { providers: yield* loadFromSource() }
+
+    yield* provider.transform((editor) => {
+      source.providers.forEach((provider) => editor.add(provider))
+    })
+
+    yield* Effect.repeat(
+      Effect.gen(function* () {
+        source.providers = yield* loadFromSource()
+        yield* provider.reload()
+      }),
+      { schedule: Schedule.spaced("1 minute") },
+    ).pipe(Effect.forkScoped)
+  }),
+```
+
+## API
+
+### 에이전트
+
+모든 에이전트를 읽거나 ID로 하나를 가져옵니다. 클라이언트 응답에는 확인된 위치와 스키마 데이터가 포함됩니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const agent = ctx.agent
+    const agents = yield* agent.list().pipe(Effect.orDie)
+    const build = yield* agent.get({ agentID: Agent.ID.make("build") }).pipe(Effect.orDie)
+    yield* Effect.logInfo("agents", { count: agents.data.length, build: build.data.name })
+  }),
+```
+
+에이전트를 변환하거나 다시 로드합니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const agent = ctx.agent
+    yield* agent.transform((editor) => {
+      editor.default("build")
+      editor.update("build", (item) => (item.description = "Builds features and fixes bugs"))
+      editor.remove("legacy")
+    })
+    yield* agent.reload()
+  }),
+```
+
+스키마: [`Agent.Info`](/api#schema-Agent.Info).
+
+```ts
+interface AgentEditor {
+  list(): readonly Types.DeepMutable<Agent.Info>[]
+  get(id: string): Types.DeepMutable<Agent.Info> | undefined
+  default(id: string | undefined): void
+  update(id: string, update: (agent: Types.DeepMutable<Agent.Info>) => void): void
+  remove(id: string): void
+}
+
+interface AgentDomain extends AgentApi<unknown> {
+  readonly transform: Transform<AgentEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### 제공자
+
+사용 가능한 제공자를 읽거나 ID로 한 제공자의 메타데이터를 검사합니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const provider = ctx.provider
+    const providers = yield* provider.list().pipe(Effect.orDie)
+    const anthropic = yield* provider.get({ providerID: Provider.ID.make("anthropic") }).pipe(Effect.orDie)
+    yield* Effect.logInfo("providers", {
+      providers: providers.data.length,
+      anthropic: anthropic.data.name,
+    })
+  }),
+```
+
+제공자 변환은 제공자 설정과 소스 정의를 편집합니다. 편집기에서 조회하면 비활성 제공자와 변경 불가능한 정의도 볼 수 있습니다. `models.update`는 소스 모델의 별도 복사본을 편집합니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.provider.transform((editor) => {
+      editor.update("anthropic", (provider) => {
+        provider.headers = { ...provider.headers, "x-company": "engineering" }
+      })
+      editor.models.update("anthropic", "claude-sonnet-5-5", (model) => (model.name = "Team Sonnet"))
+      editor.models.remove("anthropic", "legacy-model")
+      editor.remove("legacy-provider")
+    })
+  }),
+```
+
+`models.set`으로 소스 인벤토리를 교체한 다음 캡처한 정의가 바뀌면 다시 로드하세요.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const provider = ctx.provider
+    const source = { models: yield* loadModels() }
+    yield* provider.transform((editor) => editor.models.set("acme", source.models))
+    source.models = yield* loadModels()
+    yield* provider.reload()
+  }),
+```
+
+계정별로 모델을 검색할 때는 목록을 로드하는 데 사용한 연결을 `sourceConnection`으로 전달하세요. 다른 연결을 선택하면 플러그인이 새 목록을 게시할 때까지 OpenCode가 해당 제공자를 제외합니다.
+
+{/* prettier-ignore */}
+```ts
+const connection = yield* ctx.integration.connection.active("acme")
+if (!connection) return
+const inventory = yield* loadInventory(connection)
+yield* ctx.provider.transform((editor) => {
+  editor.add({ info: inventory.provider, models: inventory.models, sourceConnection: connection })
+})
+```
+
+스키마: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info).
+
+```ts
+interface ProviderRecord {
+  readonly provider: Provider.Info
+  readonly models: ReadonlyMap<string, Model.Info>
+  readonly sourceConnection?: ConnectionInfo
+}
+
+interface ProviderEditor {
+  list(): readonly ProviderRecord[]
+  get(providerID: string): ProviderRecord | undefined
+  add(input: { info: Provider.Info; models: readonly Model.Info[]; sourceConnection?: ConnectionInfo }): void
+  update(providerID: string, update: (provider: Types.DeepMutable<Provider.Info>) => void): void
+  remove(providerID: string): void
+  readonly models: {
+    set(providerID: string, models: readonly Model.Info[]): void
+    update(providerID: string, modelID: string, update: (model: Types.DeepMutable<Model.Info>) => void): void
+    remove(providerID: string, modelID: string): void
+  }
+}
+
+interface ProviderDomain extends ProviderApi<unknown> {
+  readonly transform: Transform<ProviderEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### 모델
+
+사용 가능한 모델과 기본 선택을 읽습니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const model = ctx.model
+    const models = yield* model.list().pipe(Effect.orDie)
+    const selected = yield* model.default().pipe(Effect.orDie)
+    yield* Effect.logInfo("models", { count: models.data.length, selected: selected.data?.name })
+  }),
+```
+
+모델 변환은 활성 제공자의 모델 후보 전체를 편집합니다. 비활성화된 후보도 모든 변환이 끝날 때까지 편집할 수 있습니다. `update`로 모델을 추가하려면 해당 제공자를 사용할 수 있어야 합니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.model.transform((editor) => {
+      editor.list("anthropic").forEach((model) => {
+        editor.update(model.providerID, model.id, (draft) => {
+          draft.enabled = draft.capabilities.tools
+        })
+      })
+      editor.default.set("anthropic", "claude-sonnet-5-5")
+      editor.remove("anthropic", "legacy-model")
+    })
+  }),
+```
+
+콜백은 원시 모델 재정의를 편집합니다. 제공자 기본값은 OpenCode가 결과를 확정할 때 한 번 병합되며, 변경되지 않은 읽기는 그 결과를 재사용합니다. `editor.provider`는 모델 변환 출력이 아니라 비활성 템플릿을 포함한 불변 소스 정의를 읽습니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const model = ctx.model
+    yield* model.transform((editor) => {
+      const source = editor.provider.get("anthropic")?.models.get("claude-sonnet-5-5")
+      if (!source) return
+      editor.update("anthropic", source.id, (draft) => {
+        draft.limit.context = Math.min(draft.limit.context, source.limit.context)
+      })
+    })
+    yield* model.reload()
+  }),
+```
+
+스키마: [`Model.Info`](/api#schema-Model.Info).
+
+```ts
+interface ModelEditor {
+  list(providerID?: string): readonly Types.DeepMutable<Model.Info>[]
+  get(providerID: string, modelID: string): Types.DeepMutable<Model.Info> | undefined
+  update(providerID: string, modelID: string, update: (model: Types.DeepMutable<Model.Info>) => void): void
+  remove(providerID: string, modelID: string): void
+  readonly default: {
+    get(): { providerID: string; modelID: string } | undefined
+    set(providerID: string, modelID: string): void
+  }
+  readonly provider: {
+    list(): readonly ProviderRecord[]
+    get(providerID: string): ProviderRecord | undefined
+  }
+}
+
+interface ModelDomain extends ModelApi<unknown> {
+  readonly transform: Transform<ModelEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### 명령어
+
+현재 위치에서 사용할 수 있는 명령어를 읽습니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const command = ctx.command
+    const commands = yield* command.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("commands", { names: commands.data.map((item) => item.name) })
+  }),
+```
+
+현재 명령어 변환은 추가 전용입니다. 실행기는 세션, 프롬프트 첨부, 전달 모드를 받습니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const command = ctx.command
+    const session = ctx.session
+    yield* command.transform((editor) => {
+      editor.add({
+        name: "security-review",
+        description: "Review changes for security issues",
+        execute: (input) =>
+          session.prompt({
+            ...input.prompt,
+            sessionID: input.sessionID,
+            text: `Review these changes for security issues.\n\n${input.prompt.text}`,
+            delivery: input.delivery,
+          }).pipe(Effect.asVoid),
+      })
+    })
+    yield* command.reload()
+  }),
+```
+
+스키마: [`Command.Info`](/api#schema-Command.Info),
+[`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery).
+
+```ts
+interface CommandInvocation {
+  readonly sessionID: Session.ID
+  readonly prompt: PromptInput.Prompt
+  readonly delivery: SessionInbox.Delivery
+}
+
+interface CommandDefinition {
+  readonly name: string
+  readonly description?: string
+  readonly execute: (input: CommandInvocation) => Effect.Effect<void, unknown>
+}
+
+interface CommandEditor {
+  add(definition: CommandDefinition): void
+}
+
+interface CommandDomain extends Pick<CommandApi<unknown>, "list"> {
+  readonly transform: Transform<CommandEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### 통합
+
+통합을 읽고 활성 자격 증명이 있으면 확인합니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const integration = ctx.integration
+    const integrations = yield* integration.list().pipe(Effect.orDie)
+    const github = yield* integration.get({ integrationID: Integration.ID.make("github") }).pipe(Effect.orDie)
+    const connection = yield* integration.connection.active("github")
+    const credential = connection ? yield* integration.connection.resolve(connection).pipe(Effect.orDie) : undefined
+    yield* Effect.logInfo("integration", {
+      count: integrations.data.length,
+      github: github.data.name,
+      credential: credential?.type,
+    })
+  }),
+```
+
+키로 연결하거나 연결된 API를 통해 OAuth 시도를 진행합니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const integration = ctx.integration
+    const token = yield* Config.Redacted("GITHUB_TOKEN").pipe(Effect.orDie)
+    yield* integration.connect
+      .key({ integrationID: Integration.ID.make("github"), key: Redacted.value(token) })
+      .pipe(Effect.orDie)
+
+    const attempt = yield* integration.oauth
+      .connect({
+        integrationID: Integration.ID.make("acme"),
+        methodID: Integration.MethodID.make("oauth"),
+      })
+      .pipe(Effect.orDie)
+    const status = yield* integration.oauth
+      .status({
+        integrationID: Integration.ID.make("acme"),
+        attemptID: attempt.data.attemptID,
+      })
+      .pipe(Effect.orDie)
+    yield* Effect.logInfo("OAuth status", { status: status.data })
+  }),
+```
+
+통합과 인증 방식을 변환합니다. OAuth 메서드 콜백은 Effect이며 Scope에 연결된 리소스를 획득할 수 있습니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const integration = ctx.integration
+    yield* integration.transform((editor) => {
+      editor.update("acme", (item) => (item.name = "Acme"))
+      editor.method.update({
+        integrationID: "acme",
+        method: { id: "device", type: "oauth", label: "Sign in with Acme" },
+        authorize: () =>
+          Effect.succeed({
+            mode: "code",
+            url: "https://acme.example/device",
+            instructions: "Enter the displayed code",
+            callback: (code) => exchangeCode(code),
+          }),
+      })
+    })
+    yield* integration.reload()
+  }),
+```
+
+스키마: [`Integration.Info`](/api#schema-Integration.Info), [`Integration.Method`](/api#schema-Integration.Method),
+[`Connection.Info`](/api#schema-Connection.Info), [`Form.Answer`](/api#schema-Form.Answer).
+
+```ts
+type IntegrationOAuthAuthorization = {
+  readonly url: string
+  readonly instructions: string
+  readonly expiresAt?: number
+} & (
+  | { readonly mode: "auto"; readonly callback: Effect.Effect<Credential.OAuth, unknown> }
+  | { readonly mode: "code"; readonly callback: (code: string) => Effect.Effect<Credential.OAuth, unknown> }
+)
+
+type IntegrationOAuthMethodRegistration = {
+  readonly integrationID: string
+  readonly method: IntegrationOAuthMethod
+  readonly authorize: (answer: Form.Answer) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
+  readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
+  readonly label?: (credential: Credential.OAuth) => string | undefined
+}
+
+interface IntegrationEditor {
+  list(): readonly IntegrationRef[]
+  get(id: string): IntegrationRef | undefined
+  update(id: string, update: (integration: IntegrationRef) => void): void
+  remove(id: string): void
+  readonly method: {
+    list(integrationID: string): readonly IntegrationMethod[]
+    update(input: IntegrationMethodRegistration): void
+    remove(integrationID: string, method: IntegrationMethod): void
+  }
+}
+
+interface IntegrationDomain extends Omit<IntegrationApi<unknown>, "wellknown"> {
+  readonly transform: Transform<IntegrationEditor>
+  readonly reload: () => Effect.Effect<void>
+  readonly connection: {
+    readonly active: (integrationID: string) => Effect.Effect<ConnectionInfo | undefined>
+    readonly resolve: (connection: ConnectionInfo) => Effect.Effect<Credential.Value | undefined, unknown>
+  }
+}
+```
+
+### MCP
+
+MCP 서버와 현재 연결 상태를 나열합니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
+    const servers = yield* mcp.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("MCP servers", { count: servers.data.length })
+  }),
+```
+
+플러그인은 변환으로만 MCP 서버를 관리합니다. 서버를 추가하거나 교체하려면 `editor.set`, 구성을 바꾸려면 `editor.update`, 제거하려면 `editor.remove`를 사용하세요. 구성은 `editor.list`와 `editor.get`으로 확인합니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
+    yield* mcp.transform((editor) => {
+      const servers = editor.list()
+      const docs = editor.get("docs")
+      editor.set("docs", { type: "remote", url: "https://mcp.example.com" })
+      editor.update("docs", (server) => (server.disabled = false))
+      editor.remove("legacy")
+    })
+  }),
+```
+
+변환에서 `disabled: true`를 설정하면 서버를 비활성화하고 연결을 끊으며, `disabled: false`는 활성화해 OpenCode가 연결하게 합니다. OpenCode는 변환된 구성으로 서버 수명 주기를 조정합니다.
+
+변환이 사용하는 외부 상태가 바뀌면 `reload()`를 호출해 변환을 다시 적용하고 서버를 조정하세요.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
+    yield* mcp.reload()
+  }),
+```
+
+스키마: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded),
+[`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded).
+
+```ts
+interface MCPEditor {
+  list(): readonly [string, Types.DeepMutable<Mcp.ServerConfig>][]
+  get(name: string): Types.DeepMutable<Mcp.ServerConfig> | undefined
+  set(name: string, config: Mcp.ServerConfig): void
+  update(name: string, update: (config: Types.DeepMutable<Mcp.ServerConfig>) => void): void
+  remove(name: string): void
+}
+
+interface MCPDomain extends Pick<McpApi<unknown>, "list"> {
+  readonly transform: Transform<MCPEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### 플러그인
+
+현재 위치에서 활성, 실패, 확인된 플러그인을 나열합니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const plugin = ctx.plugin
+    const plugins = yield* plugin.list().pipe(Effect.orDie)
+    yield* Effect.forEach(plugins.data, (item) => Effect.logInfo("plugin", item), { discard: true })
+  }),
+```
+
+활성 플러그인만 중요하면 Effect 파이프라인에서 스키마 값을 필터링하세요.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const plugin = ctx.plugin
+    const active = yield* plugin.list().pipe(
+      Effect.orDie,
+      Effect.map((result) => result.data.filter((item) => item.state.status === "active")),
+    )
+    yield* Effect.logInfo("active plugin count", { count: active.length })
+  }),
+```
+
+스키마: [`Plugin.Info`](/api#schema-Plugin.Info), [`Plugin.Source`](/api#schema-Plugin.Source).
+
+```ts
+interface PluginApi<E = never> {
+  readonly list: PluginListOperation<E>
+}
+
+interface Context {
+  readonly plugin: PluginApi<unknown>
+}
+```
+
+### 참조
+
+현재 위치에서 사용할 수 있는 참조를 읽습니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const reference = ctx.reference
+    const references = yield* reference.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("references", { count: references.data.length })
+  }),
+```
+
+로컬 및 Git 참조를 추가하거나 제거한 다음 외부 상태가 바뀌면 다시 로드하세요. `get(name)`은 현재 구성된 소스를 반환하며 이름이 없으면 `undefined`입니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const reference = ctx.reference
+    yield* reference.transform((editor) => {
+      editor.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
+      editor.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+      const handbook = editor.get("handbook")
+      editor.remove("legacy")
+    })
+    yield* reference.reload()
+  }),
+```
+
+스키마: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource`](/api#schema-Reference.LocalSource),
+[`Reference.GitSource`](/api#schema-Reference.GitSource).
+
+```ts
+interface ReferenceEditor {
+  add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
+  remove(name: string): void
+  list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+  get(name: string): ReferenceLocalSource | ReferenceGitSource | undefined
+}
+
+interface ReferenceDomain extends ReferenceApi<unknown> {
+  readonly transform: Transform<ReferenceEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### 세션
+
+세션을 만들거나 읽은 다음 이후 작업에 사용할 에이전트와 모델을 선택합니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    const created = yield* session.create({ title: "Review" }).pipe(Effect.orDie)
+    const current = yield* session.get({ sessionID: created.id }).pipe(Effect.orDie)
+    yield* session.switchAgent({ sessionID: current.id, agent: Agent.ID.make("build") }).pipe(Effect.orDie)
+    yield* session
+      .switchModel({
+        sessionID: current.id,
+        model: { providerID: Provider.ID.make("anthropic"), id: Model.ID.make("claude-sonnet-5-5") },
+      })
+      .pipe(Effect.orDie)
+  }),
+```
+
+프롬프트, 일시 생성 요청, 명령어, 합성 메시지를 보냅니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    const created = yield* session.create({ title: "Automation" }).pipe(Effect.orDie)
+    yield* session.prompt({ sessionID: created.id, text: "Review the current changes" }).pipe(Effect.orDie)
+    const summary = yield* session
+      .generate({ sessionID: created.id, prompt: "Summarize this project" })
+      .pipe(Effect.orDie)
+    yield* session.command({ sessionID: created.id, name: "review", text: "--staged" }).pipe(Effect.orDie)
+    yield* session
+      .synthetic({ sessionID: created.id, text: `Summary generated: ${summary.text}`, resume: false })
+      .pipe(Effect.orDie)
+  }),
+```
+
+세션을 페이지 단위로 나열합니다. 다음 페이지를 얻으려면 `cursor.next`를 `cursor`로 다시 전달하세요. 커서가 필터를 기억하므로 반복할 필요가 없습니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const page = yield* ctx.session.list({ directory: ctx.location.directory, limit: 20 }).pipe(Effect.orDie)
+    const next = page.cursor.next
+      ? yield* ctx.session.list({ cursor: page.cursor.next, limit: 20 }).pipe(Effect.orDie)
+      : undefined
+  }),
+```
+
+`remove`로 임시 세션을 제거합니다. 제거는 활성 실행을 중단하고 하위 세션을 재귀적으로 삭제합니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Temporary worker" }).pipe(Effect.orDie)
+    yield* ctx.session.remove({ sessionID: created.id }).pipe(Effect.orDie)
+  }),
+```
+
+`compact`로 압축을 요청합니다. 완료된 요약이 아니라 접수된 받은편지함 항목을 반환하며, 압축은 기본적으로 다음 단계 경계에서 실행됩니다. 대기열 순서를 유지하려면 `delivery: "queue"`를 전달하세요.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Review" }).pipe(Effect.orDie)
+    const compaction = yield* ctx.session.compact({ sessionID: created.id }).pipe(Effect.orDie)
+  }),
+```
+
+`instructions.entry`로 키가 있는 세션 지침 항목을 첨부, 나열, 제거합니다. 항목은 세션 지침에 `<context key="...">` 블록으로 렌더링되며, 업데이트나 제거는 메시지 턴을 대기열에 넣지 않고 다음 단계 경계에서 알려집니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Review" }).pipe(Effect.orDie)
+    yield* ctx.session.instructions.entry
+      .put({ sessionID: created.id, key: "deploy-target", value: "production" })
+      .pipe(Effect.orDie)
+    const entries = yield* ctx.session.instructions.entry.list({ sessionID: created.id }).pipe(Effect.orDie)
+    yield* ctx.session.instructions.entry.remove({ sessionID: created.id, key: "deploy-target" }).pipe(Effect.orDie)
+  }),
+```
+
+스키마: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
+[`Session.Inbox.User`](/api#schema-Session.Inbox.User),
+[`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic),
+[`InstructionEntry.Info`](/api#schema-InstructionEntry.Info).
+
+```ts
+type SessionDomain = Pick<
+  SessionApi<unknown>,
+  | "list"
+  | "create"
+  | "get"
+  | "remove"
+  | "switchAgent"
+  | "switchModel"
+  | "prompt"
+  | "generate"
+  | "command"
+  | "compact"
+  | "synthetic"
+  | "interrupt"
+  | "update"
+  | "move"
+  | "wait"
+  | "context"
+  | "instructions"
+>
+```
+
+### 스킬
+
+현재 위치의 스킬을 읽습니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const skill = ctx.skill
+    const skills = yield* skill.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("skills", { ids: skills.data.map((item) => item.id) })
+  }),
+```
+
+스킬을 변환하고 다시 로드합니다. 브랜드 값에는 다시 export된 Effect 스키마 생성자를 사용하세요. `get(id)`은 현재 편집기 항목을 반환하며 스킬이 없으면 `undefined`입니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const skill = ctx.skill
+    yield* skill.transform((editor) => {
+      editor.add(Skill.Info.make({
+        id: Skill.ID.make("review"),
+        name: Skill.Name.make("Review"),
+        description: "Review the current changes",
+        path: Skill.Info.fields.path.make("/workspace/.opencode/skills/review/SKILL.md"),
+        content: "Review the current changes for correctness and missing tests.",
+      }))
+      const review = editor.get("review")
+      editor.update("review", (item) => (item.autoinvoke = true))
+      editor.remove("legacy")
+    })
+    yield* skill.reload()
+  }),
+```
+
+스키마: [`Skill.Info`](/api#schema-Skill.Info).
+
+```ts
+interface SkillEditor {
+  list(): readonly Types.DeepMutable<Skill.Info>[]
+  get(id: string): Types.DeepMutable<Skill.Info> | undefined
+  add(skill: Skill.Info): void
+  update(id: string, update: (skill: Types.DeepMutable<Skill.Info>) => void): void
+  remove(id: string): void
+}
+
+interface SkillDomain extends SkillApi<unknown> {
+  readonly transform: Transform<SkillEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### 저장소
+
+플러그인 ID 범위의 영구 JSON 값을 저장, 읽기, 제거합니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const storage = ctx.storage
+    yield* storage.set("settings", { strict: true })
+    const settings = yield* storage.get("settings")
+    yield* Effect.logInfo("settings", { settings })
+    yield* storage.remove("settings")
+  }),
+```
+
+커서 페이지네이션으로 접두사별 키를 스캔합니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const storage = ctx.storage
+    const first = yield* storage.scan({ prefix: "cache/", limit: 100 })
+    const second = first.next
+      ? yield* storage.scan({ prefix: "cache/", after: first.next, limit: 100 })
+      : { entries: [] }
+    yield* Effect.logInfo("cache entries", { count: first.entries.length + second.entries.length })
+  }),
+```
+
+저장소는 Effect의 JSON 타입을 받고 Effect를 직접 반환합니다.
+
+```ts
+interface StorageDomain {
+  readonly get: (key: string) => Effect.Effect<Schema.Json | undefined>
+  readonly set: (key: string, value: Schema.Json) => Effect.Effect<void>
+  readonly remove: (key: string) => Effect.Effect<void>
+  readonly scan: (options: StorageScanOptions) => Effect.Effect<StorageScanResult>
+}
+```
+
+### 도구
+
+Effect `Schema`로 타입이 지정된 도구를 등록합니다. 실행기는 디코딩된 입력을 받고 타입이 지정된 출력, 표시 내용, 메타데이터를 담은 Effect를 반환합니다.
+
+편집기는 `add`, `update`, `remove`를 지원합니다. 변환 콜백은 동기식이므로 Effect나 Promise를 반환하면 안 됩니다. 외부 데이터는 등록이나 다시 로드 전에 로드하세요. OpenCode는 새 편집기에서 활성 변환을 등록 순서대로 재생하며, 같은 유효 도구 이름에 대해서는 나중의 유효한 등록이 이전 등록을 재정의합니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.transform((editor) => {
+      editor.namespace({
+        name: "acme",
+        description: "Customer account tools",
+      })
+      editor.add({
+        name: "greeting",
+        description: "Create a greeting",
+        input: Schema.Struct({ name: Schema.String }),
+        output: Schema.Struct({ greeting: Schema.String }),
+        options: { namespace: "acme", codemode: true },
+        execute: ({ name }, context) =>
+          Effect.gen(function* () {
+            yield* context.progress({ status: "greeting" })
+            return { output: { greeting: `Hello ${name}!` } }
+          }),
+      })
+    })
+  }),
+```
+
+콜백이 캡처한 소스 데이터가 바뀌면 `yield* ctx.tool.reload()`를 호출하세요. 다시 로드는 순서를 바꾸지 않고 활성 변환을 재생하며 플러그인 effect를 다시 실행하지 않습니다.
+
+Effect 도구는 Promise 도구와 같은 [자유 형식 입력 선언](/build/plugins/server#freeform-tool-input)을 받습니다. 모델이 그 형식을 알리지 않으면 도구는 일반 객체 입력을 유지합니다.
+
+도구에는 유효 이름이 담긴 `id`가 있으며 해당 ID가 없으면 `get()`이 `undefined`를 반환합니다. `update`와 `remove`는 네임스페이스를 포함한 유효 도구 이름(위의 `acme_greeting`)을 사용하세요. 네임스페이스의 점과 도구 이름의 지원되지 않는 문자는 `_`가 됩니다. 없는 이름은 무시되며, 도구 생성에는 완전한 정의와 함께 `add`가 필요합니다. 업데이트는 이름과 네임스페이스를 유지합니다. 중첩 값을 변경하지 말고 새 스키마나 옵션을 할당해 교체하세요. 잘못된 업데이트는 기록되고 이전 정의는 그대로 유지됩니다.
+
+{/* prettier-ignore */}
+```ts
+yield* ctx.tool.transform((editor) => {
+  editor.update("acme_greeting", (tool) => {
+    tool.description = "Greet the user by name"
+  })
+  editor.remove("acme_obsolete")
+})
+```
+
+업데이트와 제거는 추가와 함께 순서대로 재생되며 MCP 카탈로그 새로 고침 후에도 마찬가지입니다.
+
+`transform`은 범위 지정 등록을 반환합니다. `yield* registration.dispose`를 실행하면 그 변환을 제거하고 남은 변환으로 다시 만들어, 재정의했던 이전 정의가 드러납니다. 폐기는 멱등이며 플러그인 scope를 닫아도 등록이 폐기됩니다.
+
+각 모델 요청은 도구 스냅샷을 캡처합니다. 다시 로드와 등록 해제는 다음 스냅샷부터 적용되며 이미 요청이 캡처한 정의나 실행기에는 영향을 주지 않습니다. 실행기가 클로저로 변경 가능한 플러그인 데이터를 참조하면 이후 변경 사항도 반영됩니다. 값을 정의에 고정해야 한다면 변환 안에서 그 값을 캡처하세요.
+
+스키마: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
+[`Tool.FileContent`](/api#schema-Tool.FileContent).
+
+```ts
+interface ToolEditor {
+  list(): readonly (Tool.Info & { readonly id: string })[]
+  get(id: string): (Tool.Info & { readonly id: string }) | undefined
+  namespace(namespace: { name: string; description: string }): void
+  add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
+    tool: Tool.Info<Input, Output>,
+  ): void
+  update(id: string, update: (tool: Types.Mutable<Tool.Info>) => void): void
+  remove(id: string): void
+}
+
+interface ToolDomain {
+  readonly list: () => Effect.Effect<readonly (Tool.Info & { readonly id: string })[]>
+  readonly transform: Transform<ToolEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### VCS
+
+저장소 정보, 작업 사본 상태, 파일 diff를 읽습니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const vcs = ctx.vcs
+    const info = yield* vcs.get().pipe(Effect.orDie)
+    const branches = yield* vcs.branch.list({ search: "feature", limit: 10 }).pipe(Effect.orDie)
+    const changes = yield* vcs.status().pipe(Effect.orDie)
+    const diff = yield* vcs.diff({ mode: "working", context: 3 }).pipe(Effect.orDie)
+    yield* Effect.logInfo("vcs", { branch: info.data.branch.current, files: changes.data.length })
+  }),
+```
+
+범위 지정 변환으로 위치 범위의 제공자를 등록합니다. 감지된 저장소 유형과 일치하는 제공자가 자동으로 선택되며, 다른 제공자를 선택하려면 `editor.default.set`을 사용하세요.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const vcs = ctx.vcs
+    yield* vcs.transform((editor) => {
+      editor.add({
+        id: "custom",
+        name: "Custom VCS",
+        info: () => Effect.succeed({ branch: { current: "feature", default: "main" } }),
+        branches: (input) => readBranches(input),
+        status: (scope) => readStatus(scope.worktree),
+        diff: (input) => readDiff(input),
+      })
+      editor.default.set("custom")
+    })
+  }),
+```
+
+제공자 콜백은 현재 위치, 작업 사본 루트, 기준 프로젝트 루트, 선택 항목인 저장소 데이터의 보관 위치를 받습니다. diff 콜백은 선택한 모드, 요청한 컨텍스트, 출력 바이트 한도도 받습니다. 저장소를 찾을 때는 계속 OpenCode의 내장 Git 및 Mercurial 감지기를 사용합니다.
+
+제공자는 선택적으로 `init(scope)`를 구현해 `scope.worktree`에 저장소를 만들 수 있습니다. 초기화는 감지된 저장소 유형이 아니라 ID로 제공자를 선택합니다(기본은 Git). 위치에 아직 저장소가 없어도 `init`이 있는 제공자를 등록하세요. OpenCode는 호출 전에 디렉터리가 있고 저장소가 없는지 확인한 뒤 프로젝트를 다시 찾습니다. 새 저장소 형식은 이 콜백 외에 탐색 지원이 더 필요합니다.
+
+스키마: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
+[`FileDiff.Info`](/api#schema-FileDiff.Info).
+
+```ts
+interface VcsEditor {
+  add(definition: VcsDefinition): void
+  readonly default: {
+    get(): string | undefined
+    set(selection: string): void
+  }
+}
+
+interface VcsDomain extends Omit<VcsApi<unknown>, "init"> {
+  readonly transform: Transform<VcsEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+
+interface VcsDefinition {
+  readonly init?: (scope: VcsScope) => Effect.Effect<void, unknown>
+  // Existing info, branches, status, and diff callbacks are required.
+}
+```
+
+### 웹 검색
+
+제공자를 나열하거나 선택한 제공자로 쿼리를 실행합니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const websearch = ctx.websearch
+    const providers = yield* websearch.providers().pipe(Effect.orDie)
+    const results = yield* websearch
+      .query({ query: "OpenCode plugins", providerID: WebSearch.ID.make("internal") })
+      .pipe(Effect.orDie)
+    yield* Effect.logInfo("websearch", { providers: providers.data.length, results: results.data.results.length })
+  }),
+```
+
+Effect 실행기를 등록하고 기본 제공자를 선택합니다. 기본값을 `false`로 설정하면 웹 검색을 비활성화합니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const websearch = ctx.websearch
+    yield* websearch.transform((editor) => {
+      editor.add({
+        id: "internal",
+        name: "Internal search",
+        execute: ({ query }) => searchInternal(query),
+      })
+      editor.default.set("internal")
+    })
+    yield* websearch.reload()
+  }),
+```
+
+스키마: [`WebSearch.Provider`](/api#schema-WebSearch.Provider),
+[`WebSearch.Result`](/api#schema-WebSearch.Result).
+
+```ts
+interface WebSearchDefinition {
+  readonly id: string
+  readonly name: string
+  readonly execute: (input: WebSearch.ProviderInput) => Effect.Effect<readonly WebSearch.Result[], unknown>
+}
+
+interface WebSearchEditor {
+  add(definition: WebSearchDefinition): void
+  readonly default: {
+    get(): string | false | undefined
+    set(selection: string | false): void
+  }
+}
+
+interface WebSearchDomain extends WebsearchApi<unknown> {
+  readonly transform: Transform<WebSearchEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### 이벤트
+
+공개 서버 이벤트 구독은 Effect `Stream`입니다. 자동 중단을 위해 플러그인 scope에서 소비자를 포크하세요.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const event = ctx.event
+    yield* event.subscribe().pipe(
+      Stream.tap((item) => Effect.logDebug("OpenCode event", { type: item.type })),
+      Stream.runDrain,
+      Effect.forkScoped,
+    )
+  }),
+```
+
+필요한 이벤트 유형만 받으려면 `types`를 전달하세요. 스트림 타입이 그에 맞게 지정되므로 타입 가드가 필요 없습니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const event = ctx.event
+    yield* event.subscribe({ types: ["config.updated"] }).pipe(
+      Stream.runForEach(() => Effect.logInfo("configuration changed")),
+      Effect.forkScoped,
+    )
+  }),
+```
+
+스키마: [`V2EventEncoded`](/api#schema-V2EventEncoded).
+
+```ts
+type EventType = Exclude<OpenCodeEvent["type"], "server.connected">
+
+interface EventDomain {
+  readonly subscribe: <Type extends EventType = EventType>(input?: {
+    readonly types?: ReadonlyArray<Type>
+  }) => Stream.Stream<Extract<OpenCodeEvent, { type: Type }>, unknown>
+}
+```
+
+## 훅
+
+훅은 실시간 작업을 가로챕니다. 여러 플러그인이 같은 훅을 등록할 수 있으며, OpenCode는 플러그인 순서대로 실행해 뒤의 훅이 앞의 변경을 봅니다. 등록은 플러그인 scope 동안 활성 상태로 유지됩니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook("context", () => Effect.void)
+  }),
+```
+
+### 세션
+
+모델 디스패치 직전에 조립된 시스템 지침, 메시지, 도구를 수정합니다. `context`는 에이전트 루프에, `compaction`, `generate`, `title`은 그 보조 요청에 실행됩니다. `compaction`과 `title`은 모델 호출을 건너뛰는 `result`를 받습니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook("context", (event) =>
+      Effect.sync(() => {
+        event.system.push({ type: "text", text: "Keep the review focused on correctness." })
+        delete event.tools.write
+      }),
+    )
+    yield* session.hook("compaction", (event) =>
+      Effect.map(summarize(event.messages), (summary) => {
+        event.result = { summary }
+      }),
+    )
+  }),
+```
+
+`context`, `compaction`, `generate` 훅의 메시지는 저장된 메시지의 `metadata`를 읽기 전용으로 담습니다(예: `prompt` 훅이 설정한 값). 이는 모델로 전송되지 않습니다.
+
+OpenCode 지침을 담는 `system` 파트는 `metadata.experimental.instructions`에 각 소스를 `{ key, text }`로 나열합니다(예: `core/date`, `core/environment`). 따라서 훅이 소스를 구분할 수 있습니다. 목록은 복사본이므로 파트의 `text`를 편집해도 갱신되지 않습니다. 실험 기능이며 바뀔 수 있습니다.
+
+모델 요청 설정을 수정하고 선택적으로 훅을 한 제공자로 제한합니다. 이벤트는 아래 HTTP 훅과 같은 `kind`를 담습니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook(
+      "model.request",
+      (event) => Effect.sync(() => (event.headers["x-plugin"] = "review")),
+      { providerID: "anthropic" },
+    )
+  }),
+```
+
+네이티브 제공자 요청이나 응답을 수정합니다. 본문은 일회용 스트림이므로 읽기 전에 복제하거나 교체하세요. 두 훅은 세션이 보내는 모든 요청에 실행되며, `event.kind`는 요청을 보낸 흐름에 따라 `"primary"`, `"compaction"`, `"title"`, `"generate"`입니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook("http.request", (event) =>
+      Effect.sync(() => {
+        event.request.headers.set("x-session-id", event.sessionID)
+        if (event.kind === "title") event.request.headers.set("x-priority", "background")
+      }),
+    )
+    yield* session.hook("http.response", (event) =>
+      Effect.sync(() => {
+        event.response = new Response(event.response.body, {
+          status: event.response.status,
+          headers: { ...Object.fromEntries(event.response.headers), "x-plugin": "review" },
+        })
+      }),
+    )
+  }),
+```
+
+WebSocket으로 스트리밍하는 제공자는 세션마다 연결 하나를 재사용하므로 HTTP 훅으로 해당 트래픽을 확인할 수 없습니다. 실험 기능인 `experimental.ws.handshake` 훅은 모델 호출마다 연결을 선택하기 전에 한 번 실행되며, 연결의 `url`과 `headers`를 제공합니다. 둘 중 하나를 바꾸면 소켓이 다시 열립니다. WebSocket 라우트가 HTTP로 대체한 요청에는 HTTP 훅이 계속 실행됩니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook(
+      "experimental.ws.handshake",
+      (event) =>
+        Effect.gen(function* () {
+          event.headers.authorization = `Bearer ${yield* mintToken(event.url)}`
+          delete event.headers["api-key"]
+        }),
+      { providerID: "azure" },
+    )
+  }),
+```
+
+`experimental.ws.send`와 `experimental.ws.receive`는 프레임 자체를 제공합니다. `send`는 제공자 드라이버가 아웃바운드 프레임을 만든 뒤 실행되고, `receive`는 각 인바운드 프레임을 드라이버로 전달하기 전에 실행됩니다. 훅이 반환할 때 `frame`에 든 값이 그대로 전송되거나 드라이버에 전달됩니다. OpenCode는 이 값을 검증하지 않습니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook(
+      "experimental.ws.send",
+      (event) =>
+        Effect.sync(() => {
+          const body = JSON.parse(event.frame)
+          if (body.type === "response.create") body.metadata = { ...body.metadata, session: event.sessionID }
+          event.frame = JSON.stringify(body)
+        }),
+      { providerID: "openai" },
+    )
+  }),
+```
+
+제공자 요청이 실패했을 때 재시도 여부를 바꾸거나 대기 시간을 밀리초 단위로 지정합니다. 이 훅은 OpenCode가 실패를 분류하고 정책을 제안한 뒤, 재시도를 예약하기 전에 실행됩니다. OpenCode가 내부적으로 다음 시도를 실행하는 방식은 이 훅에서 제공하지 않습니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook("retry", (event) =>
+      Effect.sync(() => {
+        if (event.error.status === 429) {
+          event.decision = { retry: true, delay: 10_000 }
+          return
+        }
+        if (event.error.type === "provider.invalid-request" && event.attempt === 2) {
+          event.decision = { retry: true, delay: 0 }
+          return
+        }
+        if (event.attempt >= 3) event.decision = { retry: false }
+      }),
+    )
+  }),
+```
+
+초기 `decision`은 OpenCode 정책에 따라 정해집니다. 훅은 기본 정책상 재시도하지 않는 제공자 오류를 다시 시도하도록 바꾸거나, 제안된 재시도를 취소할 수 있습니다. 훅이 여러 개면 등록 순서대로 실행되며 이후 훅은 그 시점의 결정을 받습니다. 내장된 최대 시도 횟수는 넘을 수 없습니다. `attempt`는 실행 여부를 판단 중인 실제 요청의 시도 번호입니다. 최초 요청은 `1`, 첫 재시도는 `2`입니다. 유효하지 않은 대기 시간(`NaN`, 무한대, 음수)은 계산된 대기 시간으로 대체됩니다. 컨텍스트 한도를 넘었을 때는 같은 요청을 재시도하는 대신 대화를 압축하므로 별도로 처리합니다.
+
+#### 참조
+
+```ts
+interface SessionHooks {
+  readonly context: SessionContext
+  readonly compaction: SessionCompaction
+  readonly generate: SessionGenerate
+  readonly title: SessionTitle
+  readonly "model.request": SessionModelRequest
+  readonly "http.request": SessionHttpRequest
+  readonly "http.response": SessionHttpResponse
+  readonly "experimental.ws.handshake": SessionWebSocketHandshake
+  readonly "experimental.ws.send": SessionWebSocketSend
+  readonly "experimental.ws.receive": SessionWebSocketReceive
+  readonly retry: SessionRetry
+}
+
+type RetryDecision = { retry: false } | { retry: true; delay: number }
+
+interface SessionRetry {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly error: { type: string; message: string; status?: number }
+  readonly attempt: number
+  decision: RetryDecision
+}
+
+interface SessionHookDomain {
+  readonly hook: ModelHooks<SessionHooks>
+}
+```
+
+### 셸
+
+실행 전에 셸 명령, 작업 디렉터리, 타임아웃, 실행 파일, 환경 변수를 수정합니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const shell = ctx.shell
+    yield* shell.hook("create.before", (event) =>
+      Effect.sync(() => {
+        if (event.command === "npm") event.command = "bun"
+        event.timeout = Math.min(event.timeout, 60_000)
+        event.env.COMPANY_ENV = "development"
+      }),
+    )
+  }),
+```
+
+#### 참조
+
+```ts
+interface ShellCreateBefore {
+  command: string
+  cwd: string
+  timeout: number
+  shell: string
+  env: Record<string, string | undefined>
+}
+
+interface ShellHooks {
+  readonly "create.before": ShellCreateBefore
+}
+
+interface ShellHookDomain {
+  readonly hook: Hooks<ShellHooks>
+}
+```
+
+### 도구
+
+before 훅은 입력을 교체하거나 `Tool.Error`로 실패할 수 있습니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.hook("execute.before", (event) =>
+      event.tool === "write"
+        ? Effect.fail(new Tool.Error({ message: "Writes are disabled" }))
+        : Effect.logDebug("tool input", { tool: event.tool, input: event.input }),
+    )
+  }),
+```
+
+after 훅은 성공 결과와 실패를 검사하거나 교체할 수 있습니다.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.hook("execute.after", (event) => {
+      if (event.status === "error") return Effect.logWarning("tool failed", { message: event.error.message })
+      return Effect.sync(() => {
+        event.result = { ...event.result, metadata: { observed: true } }
+      })
+    })
+  }),
+```
+
+#### 참조
+
+```ts
+interface ToolHooks {
+  readonly "execute.before": ToolExecuteBefore
+  readonly "execute.after": ToolExecuteAfter
+}
+
+interface ToolFailures extends Record<keyof ToolHooks, unknown> {
+  readonly "execute.before": Tool.Error
+  readonly "execute.after": never
+}
+
+interface ToolHookDomain {
+  readonly hook: Hooks<ToolHooks, ToolFailures>
+}
+```
+
+공유 등록 타입은 어떤 작업에 플러그인 scope가 필요한지 보여 줍니다.
+
+```ts
+interface Registration {
+  readonly dispose: Effect.Effect<void>
+}
+
+type Hooks<Spec, Failures extends Record<keyof Spec, unknown> = Record<keyof Spec, never>> = <Name extends keyof Spec>(
+  name: Name,
+  callback: (input: Spec[Name]) => Effect.Effect<void, Failures[Name]>,
+) => Effect.Effect<Registration, never, Scope.Scope>
+
+type Transform<Input> = (callback: (input: Input) => void) => Effect.Effect<Registration, never, Scope.Scope>
+```
+
+## 게시
+
+패키지 플러그인은 로컬 Effect 플러그인과 같은 기본 export를 사용합니다. Effect 구현을 메인 진입점에서 export하고 `effect`를 `peerDependency`로 선언하세요. `devDependencies`에서는 `@opencode/plugin`이 사용하는 버전을 고정해 개발 설치가 복사본 하나만 갖게 하세요.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-effect-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "peerDependencies": {
+    "effect": "^4.0.1"
+  },
+  "devDependencies": {
+    "effect": "4.0.1"
+  }
+}
+```
+
+OpenCode는 `effect`, export된 `effect/*` 하위 경로, `@opencode/plugin`(플러그인 `node_modules`의 의존성 import 포함)의 import를 호스트 런타임 인스턴스로 리디렉션해 파이버, 로거, `Schema` 파서가 런타임 복사본 하나를 공유하게 합니다.
+
+- `effect`를 게시된 플러그인 아티팩트에 번들하지 마세요. 번들러로 빌드하면 `effect`와 `effect/*`를 외부로 표시하세요.
+- 플러그인과 그 `node_modules` 의존성은 항상 호스트 OpenCode 릴리스의 `effect` 인스턴스로 실행됩니다. 대상 OpenCode 릴리스와 호환되는 `effect` API와 모듈 경로를 사용하세요. 다른 `effect` 메이저(예: Effect 3)로 빌드된 의존성도 호스트의 `effect`를 받으며 지원되지 않습니다.
+- 공개 `effect` 하위 경로만 제공됩니다. Effect의 비공개 `internal` 모듈을 import하는 플러그인은 경로를 밝히는 오류와 함께 로드에 실패합니다.
+- 컴파일된 OpenCode 바이너리에는 Effect의 HTTP API 문서 페이지가 쓰는 Scalar 및 Swagger UI 자산이 없으므로, 플러그인에서 그 페이지를 제공하면 안내가 표시됩니다.
+
+패키지 진입점은 `Plugin.define`을 export하며 `effect` 함수가 있습니다.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "acme.published",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const storage = ctx.storage
+      yield* storage.set("installed", true)
+    }),
+})
+```
+
+대상 OpenCode 릴리스와 호환되는 버전을 사용하고 워크스페이스에 링크된 복사본이 아니라 설치된 패키지를 테스트하세요.
+
+
+```sh
+bun pm pack
+bun add ./opencode-acme-effect-plugin-1.0.0.tgz
+```

@@ -1,0 +1,93 @@
+---
+title: "OpenClaw"
+description: "OpenClaw에서 Console 및 Go 모델을 사용하세요."
+---
+
+[OpenClaw](https://openclaw.ai)에는 종량제와 Go용 OpenCode 제공자가 포함되어 있습니다. 유료 또는 Go 모델마다
+알맞은 API를 선택하고 모든 Go 요청에 세션 ID를 보냅니다. 무료 등급 채팅 모델은 OpenCode가 필요하며 OpenClaw에서는
+HTTP `403`을 반환합니다.
+
+<Callout>
+  [Console CLI](/console/harnesses#console-cli)를 쓰면 워크스페이스의 정책, MCP 서버, 스킬, 지침까지 포함해
+  명령 하나로 OpenClaw를 설정할 수 있습니다. `npx @opencode/console setup openclaw`를 실행한 뒤 `openclaw gateway
+  restart`를 실행하세요. 아래 단계는 직접 설정하는 방법입니다.
+</Callout>
+
+| 제공자        | 요금제        | 모델 접두사       |
+| ------------- | ------------- | ----------------- |
+| `opencode`    | 종량제        | `opencode/...`    |
+| `opencode-go` | Go            | `opencode-go/...` |
+
+Go 제공자는 OpenClaw에 포함되어 있습니다. 종량제 제공자는 플러그인이므로 `openclaw models list`에 표시되지 않으면
+설치하세요.
+
+```bash
+openclaw plugins install @openclaw/opencode-provider
+```
+
+## 로그인
+
+키를 붙여 넣는 대신 브라우저에서 로그인하세요. OpenClaw 2026.11.7 이상이 필요합니다.
+
+```bash
+openclaw models auth login --provider opencode-go --method oauth
+```
+
+OpenClaw가 출력한 링크를 열고 Console에서 코드를 확인한 뒤 [Go](/console/go)를 구독한 워크스페이스를 선택하세요.
+OpenClaw가 로그인 상태를 유지하고 인증 정보를 자동으로 갱신합니다.
+
+제공자별로 로그인해야 합니다. 종량제 모델도 쓰려면 `opencode`에도 로그인하세요.
+
+```bash
+openclaw models auth login --provider opencode --method oauth
+```
+
+`openclaw onboard` 중에, 채팅에서 `/login`으로, 또는 **Settings › Models › Add account**에서 **OpenCode Go (browser
+sign-in)**를 선택할 수도 있습니다.
+
+## API 키 사용
+
+두 제공자 모두 `OPENCODE_API_KEY`에서 같은 키를 읽습니다. [개인 API 키](/console/harnesses#get-an-api-key)를 만들어
+온보딩에 전달하세요.
+
+```bash
+openclaw onboard --opencode-go-api-key "$OPENCODE_API_KEY"
+```
+
+또는 `~/.openclaw/openclaw.json`에 설정하세요.
+
+```json5 title="~/.openclaw/openclaw.json"
+{
+  env: { vars: { OPENCODE_API_KEY: "oc_sk_..." } },
+  agents: { defaults: { model: { primary: "opencode-go/kimi-k3" } } },
+}
+```
+
+Go를 구독하지 않은 워크스페이스의 키로도 Go 모델 목록은 볼 수 있습니다. 다만 워크스페이스에서 구독하기 전에는
+해당 모델을 호출할 수 없습니다.
+
+## 모델
+
+[Console](/console/models#endpoints) 또는 [Go](/console/go#endpoints) 표의 ID를 사용해 `<provider>/<model-id>`
+형식으로 모델을 선택하세요. OpenClaw는 Console에서 모델 목록을 읽으므로 새 모델이 업데이트 없이 나타납니다.
+
+```bash
+openclaw models list --provider opencode-go
+```
+
+에이전트의 기본 모델을 설정하세요.
+
+```bash
+openclaw config set agents.defaults.model.primary "opencode-go/kimi-k3"
+```
+
+## Console MCP
+
+OAuth로 [Console MCP](/console/harnesses#console-mcp) 서버를 추가한 뒤 Gateway가 실행 중일 때 브라우저에서
+로그인하세요.
+
+
+```bash
+openclaw mcp set opencode-console '{"url":"https://opencode.ai/console/mcp","transport":"streamable-http","auth":"oauth"}'
+openclaw mcp login opencode-console
+```
