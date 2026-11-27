@@ -1,13 +1,16 @@
+import type { UsageLimitsGo } from "@opencode/client/promise"
 import { Badge } from "@opencode/ui/badge"
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
 import { For, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { ProviderAccount } from "@/settings/providers/accounts"
+import { GoMeter } from "@/usage/go-meter"
 
 /**
- * The OpenCode group's header in the model picker: the active Console account and its plan, and the menu that switches,
- * adds and manages accounts. Without a signed-in account to show, it names the workspace instead.
+ * The OpenCode group's header in the model picker: the active Console account and its plan, the menu that switches,
+ * adds and manages accounts, and the workspace's Go usage. Without a signed-in account to show, it names the workspace
+ * instead.
  */
 export function WorkspaceHeader(props: {
   /** The workspace's name, for a workspace whose account the integration does not list. */
@@ -16,16 +19,32 @@ export function WorkspaceHeader(props: {
   accounts: readonly ProviderAccount[]
   /** The workspace has Go. Go's team plans read the same, and other accounts' plans are unknown. */
   go: boolean
+  /** The workspace's Go allowance, one per member across every Go model. */
+  usage: UsageLimitsGo | undefined
   onActivate: (account: ProviderAccount) => void
   onAdd: () => void
   onManage: () => void
+  onViewUsage: () => void
 }) {
   const language = useLanguage()
   const provider = () => language.t("provider.connect.opencode.name")
   const active = () => props.accounts[0]
 
   return (
-    <span data-slot="model-dialog-header-line" class="flex min-w-0 items-center gap-1.5">
+    <span
+      data-slot="model-dialog-header-line"
+      class="flex min-w-0 items-center gap-1.5"
+      onFocusIn={(event) => {
+        // Later headers slide over this one as the list scrolls, so Tab scrolls its models back under it. Solid delivers
+        // focus inside the portalled menus here too, which must not scroll the list.
+        const target = event.target
+        if (!(target instanceof Element) || !event.currentTarget.contains(target) || !target.matches(":focus-visible"))
+          return
+        event.currentTarget.closest('[data-slot="search-list-header"]')?.nextElementSibling?.scrollIntoView({
+          block: "nearest",
+        })
+      }}
+    >
       <span class="shrink-0">{provider()}</span>
       <Show
         when={active()}
@@ -43,13 +62,6 @@ export function WorkspaceHeader(props: {
               type="button"
               data-slot="model-dialog-account"
               aria-label={language.t("dialog.model.account.title", { provider: provider(), account: current().label })}
-              onFocus={(event: FocusEvent & { currentTarget: HTMLButtonElement }) => {
-                // Later headers slide over this one as the list scrolls, so Tab scrolls its models back under it.
-                if (!event.currentTarget.matches(":focus-visible")) return
-                event.currentTarget
-                  .closest('[data-slot="search-list-header"]')
-                  ?.nextElementSibling?.scrollIntoView({ block: "nearest" })
-              }}
             >
               <span class="min-w-0 truncate">{current().label}</span>
               {/* 2px more room on each side than the trigger's gap. */}
@@ -92,6 +104,13 @@ export function WorkspaceHeader(props: {
               </Menu.Content>
             </Menu.Portal>
           </Menu>
+        )}
+      </Show>
+      <Show when={props.usage}>
+        {(usage) => (
+          <span class="ms-auto flex min-w-0 ps-2">
+            <GoMeter go={usage()} onViewAll={props.onViewUsage} />
+          </span>
         )}
       </Show>
     </span>

@@ -38,6 +38,7 @@ import { ExternalLink } from "@/runtime/platform/external-link"
 import { useData } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { createModelUsage, ModelUsageTag } from "@/usage/model"
+import { DialogUsage } from "@/usage/dialog"
 import {
   createDialogFlyoutState,
   createModelDrawerState,
@@ -626,6 +627,7 @@ function ChatgptPlanFooter() {
 export function DialogSelectModel(props: { provider?: string; model?: ModelState }) {
   const dialog = useDialog()
   const language = useLanguage()
+  const data = useData()
   const location = useWorkspaceLocation()
   const integrations = useIntegrations(() => location().directory)
   const accountActions = useProviderAccountActions(() => location().directory)
@@ -653,6 +655,9 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
   )
 
   const go = () => !!labels.group()?.providers.some((provider) => provider.id === "opencode-go")
+
+  // Loaded with the budgets above. Only a workspace the member subscribes to Go in has an allowance.
+  const goUsage = () => data.location.usage.limits(location().ref)?.go
 
   // `navigated`: the arrows have moved through the results since the query last changed.
   const [query, setQuery] = createStore({ search: "", navigated: false })
@@ -1029,8 +1034,9 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
   const searchButton = (target: EventTarget | null) =>
     target instanceof Element && !!scroller?.contains(target.closest('[data-slot="text-input-v2-trailing"]'))
 
-  const accountTrigger = (target: EventTarget | null): target is HTMLElement =>
-    target instanceof HTMLElement && target.matches('[data-slot="model-dialog-account"]')
+  const headerTrigger = (target: EventTarget | null): target is HTMLElement =>
+    target instanceof HTMLElement &&
+    target.matches('[data-slot="model-dialog-account"], [data-slot="go-meter-trigger"]')
 
   const inDialog = (target: EventTarget | null) =>
     target instanceof Node &&
@@ -1048,9 +1054,10 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
   createEventListener(document, "focusin", (event: FocusEvent) => {
     const target = event.target
 
-    // The account menu keeps focus it got from the keyboard. Closing after a click returns focus to it without the
-    // ring, and Kobalte focuses it once more right after, so the field takes focus back once both have run.
-    if (accountTrigger(target)) {
+    // The header's menus, the account switcher and the Go meter, keep focus they got from the keyboard. Closing after a
+    // click returns focus to the trigger without the ring, and Kobalte focuses it once more right after, so the field
+    // takes focus back once both have run.
+    if (headerTrigger(target)) {
       if (!target.matches(":focus-visible"))
         queueMicrotask(() => {
           if (document.activeElement === target) field()?.focus({ preventScroll: true })
@@ -1275,13 +1282,14 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
             key={(row) => row.id}
             section={(row) => row.section}
             header={(row) => (
-              <span data-slot="model-dialog-header-label" class="flex min-w-0 flex-col">
+              <span data-slot="model-dialog-header-label" class="flex min-w-0 flex-1 flex-col">
                 <Show when={row.workspace === "lead" && labels.group()}>
                   {(group) => (
                     <WorkspaceHeader
                       workspace={group().workspace}
                       accounts={accounts()}
                       go={go()}
+                      usage={goUsage()}
                       onActivate={(account) =>
                         void accountActions.activate({
                           integrationID: CONSOLE_INTEGRATION,
@@ -1291,6 +1299,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
                       }
                       onAdd={() => void connectOpenCode(false)}
                       onManage={() => void connectOpenCode(true)}
+                      onViewUsage={() => void dialog.show(() => <DialogUsage location={location().ref} />)}
                     />
                   )}
                 </Show>

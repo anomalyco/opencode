@@ -1,4 +1,4 @@
-import type { IntegrationInfo, PluginInfo } from "@opencode/client/promise"
+import type { IntegrationInfo, PluginInfo, UsageLimitsInfo } from "@opencode/client/promise"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import type { ParentProps } from "solid-js"
 import { LocalProvider } from "@/providers/models/selection"
@@ -499,6 +499,8 @@ type DialogStoryRuntimeOptions = {
   platform?: Platform
   /** Replaces fixture integrations with the same id. */
   integrations?: IntegrationInfo[]
+  /** The Console usage limits the location reports; signed out (`null`) by default. */
+  usageLimits?: UsageLimitsInfo | null
 }
 
 const REDIRECT_PASTE = ["openai", "gitlab", "snowflake-cortex"]
@@ -525,7 +527,10 @@ const storyPlugins: PluginInfo[] = [
   },
 ]
 
-export function createStoryFetch(overrides: IntegrationInfo[] = []): typeof fetch {
+export function createStoryFetch(
+  overrides: IntegrationInfo[] = [],
+  usageLimits: UsageLimitsInfo | null = null,
+): typeof fetch {
   const integrations = [
     ...overrides,
     ...fixtureIntegrations.filter((item) => !overrides.some((override) => override.id === item.id)),
@@ -706,7 +711,7 @@ export function createStoryFetch(overrides: IntegrationInfo[] = []): typeof fetc
     if (pathname.startsWith("/api/credential/")) return noContentResponse()
 
     if (pathname === "/api/experimental/usage/limits") {
-      return jsonResponse({ location, data: null })
+      return jsonResponse({ location, data: usageLimits })
     }
 
     if (pathname === "/api/agent") {
@@ -798,7 +803,7 @@ export function DialogStoryRuntime(props: ParentProps<DialogStoryRuntimeOptions>
     restart: async () => {},
     notify: async () => {},
     storage: createMemoryStorage(),
-    fetch: createStoryFetch(props.integrations),
+    fetch: createStoryFetch(props.integrations, props.usageLimits),
   }
 
   const client = new QueryClient({
