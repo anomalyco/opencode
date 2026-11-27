@@ -176,6 +176,7 @@ export const docsSections: DocsSection[] = [
           { title: "Claude Code", slug: "console/harnesses/claude-code" },
           { title: "Codex", slug: "console/harnesses/codex" },
           { title: "Hermes", slug: "console/harnesses/hermes" },
+          { title: "OpenClaw", slug: "console/harnesses/openclaw" },
           { title: "Pi", slug: "console/harnesses/pi" },
           { title: "Raycast", slug: "console/harnesses/raycast" },
         ],

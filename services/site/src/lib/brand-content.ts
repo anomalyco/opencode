@@ -304,7 +304,7 @@ export function brandContent(t: Translate) {
       badges: {
         body: "Put a badge in your README, docs or website and link it to opencode.ai. Pick the light or dark file for your background (the HTML switches by itself), and do not change the colors or the text.",
         sizes: "Every style comes in 20, 32 and 44px (Shields only in 20px), as SVG and as PNG at 2×.",
-        mono: "Each file also comes with OpenTUI Mono text. Add -mono before the extension, as in opencode-works-with-a-light-20-mono.svg, or -mono-caps for uppercase OpenTUI Mono.",
+        mono: "Each file also comes with OpenMono text. Add -mono before the extension, as in opencode-works-with-a-light-20-mono.svg, or -mono-caps for uppercase OpenMono.",
         groups: [
           {
             label: "works-with",
@@ -370,8 +370,8 @@ export function colorFormats(hex: string) {
   }
 }
 
-// Badge text in Inter ("sans"), OpenTUI Mono ("mono") or uppercase OpenTUI Mono ("mono caps"); the
-// OpenTUI Mono files end in "-mono" or "-mono-caps".
+// Badge text in Inter ("sans"), OpenMono ("mono") or uppercase OpenMono ("mono caps"); the
+// OpenMono files end in "-mono" or "-mono-caps".
 export type BadgeFont = "sans" | "mono" | "mono caps"
 const fontSuffix = (font: BadgeFont) => (font === "sans" ? "" : `-${font.replace(" ", "-")}`)
 
@@ -572,9 +572,10 @@ Use one grey scale. Each step has one job, the same in light and dark. Use no ot
 
 ### Type
 
-- Use OpenTUI Mono for headings, titles, navigation, labels and code, and Inter for body and reading text. Use no other fonts.
-- Set headings in OpenTUI Mono at regular weight (400). Do not use bold for headings.
-- Write labels and eyebrows in OpenTUI Mono, uppercase, at 12 to 14px, with a little letter spacing.
+- Use OpenMono for headings, titles, navigation, labels and code, and Inter for body and reading text. Use no other fonts.
+- Set headings in OpenMono at regular weight (400). Do not use bold for headings.
+- Write labels and eyebrows in OpenMono, uppercase, at 12 to 14px, with a little letter spacing.
+- Turn off OpenMono's code ligatures, with \`font-feature-settings: "calt" 0\` on the web, so text shows as typed.
 - Set body text in Inter at regular weight, 15 to 17px, with a line height of about 1.5. Keep lines to about 70 characters.
 - Nothing is smaller than 12px. On phones, text that carries meaning is at least 14px.
 

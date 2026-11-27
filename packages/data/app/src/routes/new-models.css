@@ -36,7 +36,7 @@
 }
 
 [data-page="stats"] [data-slot="breakout-card"]:focus-visible,
-[data-page="stats"] [data-slot="breakout-also"] a:focus-visible {
+[data-page="stats"] [data-slot="breakout-also"] button:focus-visible {
   outline: 2px solid var(--stats-accent);
   outline-offset: 2px;
 }
@@ -80,13 +80,22 @@
   line-height: 18px;
 }
 
-[data-page="stats"] [data-slot="breakout-share"] {
-  margin-top: 24px;
+[data-page="stats"] [data-slot="breakout-tokens"],
+[data-page="stats"] [data-slot="breakout-users"] {
   margin-left: -0.07em;
-  font-size: 92px;
   font-weight: 500;
   line-height: 1.05;
   letter-spacing: -0.04em;
+}
+
+[data-page="stats"] [data-slot="breakout-tokens"] {
+  margin-top: 24px;
+  font-size: 92px;
+}
+
+[data-page="stats"] [data-slot="breakout-users"] {
+  margin-top: 28px;
+  font-size: 48px;
 }
 
 [data-page="stats"] [data-slot="breakout-caption"] {
@@ -94,30 +103,6 @@
   color: var(--stats-muted);
   font-size: 14px;
   text-wrap: pretty;
-}
-
-[data-page="stats"] [data-slot="breakout-stats"] {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: auto;
-  padding-top: 28px;
-}
-
-[data-page="stats"] [data-slot="breakout-stats"] > span {
-  display: grid;
-}
-
-[data-page="stats"] [data-slot="breakout-stats"] b {
-  font-size: 20px;
-  font-weight: 500;
-  line-height: 1.3;
-}
-
-[data-page="stats"] [data-slot="breakout-stats"] small {
-  color: var(--stats-faint);
-  font-size: 11px;
-  line-height: 17px;
 }
 
 [data-page="stats"] [data-slot="breakout-chart"] {
@@ -212,14 +197,19 @@
   color: var(--stats-faint);
 }
 
-[data-page="stats"] [data-slot="breakout-also"] a {
+[data-page="stats"] [data-slot="breakout-also"] button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
   color: inherit;
   text-decoration: underline;
   text-decoration-color: var(--stats-line-strong);
   text-underline-offset: 3px;
 }
 
-[data-page="stats"] [data-slot="breakout-also"] a:hover {
+[data-page="stats"] [data-slot="breakout-also"] button:hover {
   color: var(--stats-text);
   text-decoration-color: currentColor;
 }
@@ -256,8 +246,13 @@
     padding: 22px 22px 0;
   }
 
-  [data-page="stats"] [data-slot="breakout-share"] {
+  [data-page="stats"] [data-slot="breakout-tokens"] {
     font-size: 72px;
+  }
+
+  [data-page="stats"] [data-slot="breakout-users"] {
+    margin-top: 20px;
+    font-size: 40px;
   }
 
   [data-page="stats"] [data-slot="breakout-chart"] {

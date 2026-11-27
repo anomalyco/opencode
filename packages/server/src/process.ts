@@ -1,6 +1,7 @@
 export * as ServerProcess from "./process"
 
 import { NodeHttpServer } from "@effect/platform-node"
+import { BrowserTunnelGateway } from "@opencode/core/experimental/browser-tunnel"
 import { Bus } from "@opencode/core/bus"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { Automation } from "@opencode/core/automation"
@@ -8,6 +9,7 @@ import { SessionSearchBuild } from "@opencode/core/session/search-build"
 import { InstallationEvent } from "@opencode/schema/installation-event"
 import { hasPtyConnectTicketURL } from "@opencode/protocol/groups/pty"
 import { hasPersistentPtyConnectTicketURL } from "@opencode/protocol/groups/persistent-pty"
+import { hasBrowserTunnelUpgrade } from "@opencode/protocol/groups/experimental/browser-tunnel"
 import { hasMcpClientTicketURL } from "@opencode/protocol/groups/mcp"
 import { isMachineLinkUpgrade } from "@opencode/protocol/groups/machine"
 import { isPairingConnectURL } from "@opencode/protocol/groups/server"
@@ -132,6 +134,12 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     yield* Effect.forkIn(Context.get(context, Automation.Service).run, applicationScope)
     // Likewise the one-time session search build, once a location has sqlite_fts on.
     yield* Effect.forkIn(Context.get(context, SessionSearchBuild.Service).run, applicationScope)
+    const boundAddress = bound.server.address()
+    if (boundAddress && typeof boundAddress !== "string") {
+      const gateway = Context.get(context, BrowserTunnelGateway.Service)
+      yield* gateway.addReservedLocalPort(boundAddress.port)
+      yield* Scope.addFinalizer(applicationScope, gateway.removeReservedLocalPort(boundAddress.port))
+    }
     yield* Ref.set(machinesFlag, yield* machinesEnabled.pipe(Effect.provide(context)))
     yield* Ref.set(application, Option.some(Context.get(context, HttpRouter.HttpRouter).asHttpEffect()))
     yield* status.ready
@@ -222,6 +230,7 @@ function dispatch(
         (!hasPtyConnectTicketURL(url) &&
           !hasPersistentPtyConnectTicketURL(url) &&
           !hasMcpClientTicketURL(url) &&
+          !hasBrowserTunnelUpgrade(request) &&
           // With machines off the link's path is an unknown route, and gets this 401 like one.
           !(isMachineLinkUpgrade(request) && (yield* machines)))) &&
       !(yield* authorizedRequest(request, auth))

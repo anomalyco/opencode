@@ -1,8 +1,5 @@
-import { describe, expect, mock, test } from "bun:test"
-
-// The catalog module defines a router query at import time, which throws outside a Solid server runtime.
-mock.module("@solidjs/router", () => ({ query: (fn: unknown) => fn }))
-const { buildModelCatalog } = await import("../src/routes/model-catalog")
+import { describe, expect, test } from "bun:test"
+import { buildModelCatalog } from "../src/routes/model-catalog"
 
 const listing = (overrides: Record<string, unknown> = {}) => ({
   id: "exo-free",

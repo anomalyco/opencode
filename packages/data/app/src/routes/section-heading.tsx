@@ -16,7 +16,7 @@ export function SectionHeading(props: {
             #
           </span>
           {props.title}
-          {props.description ? "." : ""}
+          {props.description && <span data-slot="heading-stop">.</span>}
         </a>
       </strong>
       {props.description && (

@@ -857,3 +857,86 @@ fn a_queued_toast_keeps_the_selection_and_a_resize_narrows_the_toast() {
     kit.app.resize(40, 12);
     assert_eq!(kit.app.render().text(), expected);
 }
+
+#[test]
+fn keeps_rows_mounted_while_the_filter_changes() {
+    let kit = kit(80, 30);
+    let options = vec![
+        SelectOption::new("alpha one", "alpha-one").category("A"),
+        SelectOption::new("alpha two", "alpha-two").category("A"),
+        SelectOption::new("beta one", "beta-one").category("B"),
+    ];
+    kit.dialogs.replace(
+        move |cx| {
+            let mut props = SelectProps::new("Pick", options.clone());
+            props.flat = true;
+            select::select(cx, props).0
+        },
+        None,
+        Default::default(),
+    );
+    let screen = kit.app.render().text();
+    assert!(screen.contains("beta one"), "{screen}");
+
+    // Each option's Text sits inside: inner row -> option_row (bar + inner) -> row.view -> scroll content.
+    let row_view = |needle: &str| {
+        let screen = kit.app.text();
+        let (y, line) = screen
+            .lines()
+            .enumerate()
+            .find(|(_, line)| line.contains(needle))
+            .unwrap_or_else(|| panic!("{needle:?} not on screen:\n{screen}"));
+        let x = line[..line.find(needle).unwrap()].chars().count() as u16;
+        let chain: Vec<AnyWidget> =
+            std::iter::successors(kit.app.app().widget_at(x, y as u16), |widget| widget.parent()).collect();
+        (chain[3].id(), chain[4].id())
+    };
+    let (alpha_one, list_id) = row_view("alpha one");
+    let (alpha_two, list_two) = row_view("alpha two");
+    let (_, list_beta) = row_view("beta one");
+    assert_eq!(list_id, list_two);
+    assert_eq!(list_id, list_beta);
+
+    kit.app.type_text("alpha");
+    let screen = kit.app.render().text();
+    assert!(screen.contains("alpha two") && !screen.contains("beta one"), "{screen}");
+    assert_eq!(row_view("alpha one"), (alpha_one, list_id));
+    assert_eq!(row_view("alpha two"), (alpha_two, list_id));
+
+    kit.app.type_text(" t");
+    let screen = kit.app.render().text();
+    assert!(!screen.contains("alpha one"), "{screen}");
+    assert_eq!(row_view("alpha two"), (alpha_two, list_id));
+
+    for _ in 0.."alpha t".len() {
+        kit.app.press("backspace");
+    }
+    let screen = kit.app.render().text();
+    assert!(screen.contains("beta one"), "{screen}");
+    // The row that stayed listed is kept when the list goes back to its groups.
+    assert_eq!(row_view("alpha two"), (alpha_two, list_id));
+}
+
+#[test]
+fn search_description_and_empty_search_footer_apply_only_while_flattened() {
+    let kit = kit(80, 20);
+    let mut option = SelectOption::new("Model One", "m1").category("Free");
+    option.search_description = Some("OpenCode".into());
+    option.search_footer = Some(String::new());
+    kit.dialogs.replace(
+        move |cx| {
+            let mut props = SelectProps::new("Models", vec![option.clone()]);
+            props.flat = true;
+            select::select(cx, props).0
+        },
+        None,
+        Default::default(),
+    );
+    let screen = kit.app.render().text();
+    assert!(screen.contains("Free") && screen.contains("Model One") && !screen.contains("OpenCode"), "{screen}");
+
+    kit.app.type_text("Model");
+    let screen = kit.app.render().text();
+    assert!(screen.contains("Model One OpenCode"), "{screen}");
+    assert!(!screen.contains("Free"), "empty search_footer must suppress category fallback:\n{screen}");
+}

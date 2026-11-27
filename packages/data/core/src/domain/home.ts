@@ -57,6 +57,8 @@ export type NewModelCandidate = {
   sessions: number
   peakUsers: number
   daily: NewModelDay[]
+  // Distinct users per ISO week, keyed by the week's Monday. Weeks are the widest grain with distinct counts.
+  weekly: { week: string; users: number }[]
 }
 export type ModelUsagePoint = {
   date: string
@@ -565,11 +567,15 @@ export function buildStatsHomeData(
       .filter((item) => item.rank !== null)
       .slice(0, RETENTION_MODEL_LIMIT),
     country: buildCountryStats(countryRows),
-    newModels: buildNewModelCandidates(normalized, latest),
+    newModels: buildNewModelCandidates(normalized, weekly, latest),
   }
 }
 
-function buildNewModelCandidates(rows: StatMetricRow[], latest: number): NewModelCandidate[] {
+function buildNewModelCandidates(
+  rows: StatMetricRow[],
+  weekRows: StatMetricRow[],
+  latest: number,
+): NewModelCandidate[] {
   const productRows = rowsForProduct(rows, SITE_PRODUCT, -Infinity, latest + DAY_MS).filter(
     (row) => row.totalTokens > 0,
   )
@@ -580,6 +586,7 @@ function buildNewModelCandidates(rows: StatMetricRow[], latest: number): NewMode
   const start = latest - (NEW_MODEL_WINDOW_DAYS - 1) * DAY_MS
   const days = Array.from({ length: NEW_MODEL_WINDOW_DAYS }, (_, index) => start + index * DAY_MS)
   const recentRows = productRows.filter((row) => row.periodStart >= start)
+  const recentWeekRows = rowsForProduct(weekRows, SITE_PRODUCT, start - 6 * DAY_MS, latest + DAY_MS)
   const tokensByDay = new Map(
     days.map((day) => [
       day,
@@ -617,6 +624,16 @@ function buildNewModelCandidates(rows: StatMetricRow[], latest: number): NewMode
         sessions: item.sessions,
         peakUsers: Math.max(0, ...daily.map((day) => day.users)),
         daily,
+        weekly: [...new Set(recentWeekRows.map((row) => row.periodStart))]
+          .toSorted((a, b) => a - b)
+          .map((week) => ({
+            week: periodKey(week),
+            users: combineRowsForModel(
+              item.model,
+              recentWeekRows.filter((row) => row.model === item.model && row.periodStart === week),
+            ).uniqueUsers,
+          }))
+          .filter((week) => week.users > 0),
       }
     })
     .toSorted((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model))
@@ -1311,28 +1328,31 @@ function formatDay(value: number) {
   return `${months[date.getUTCMonth()]} ${date.getUTCDate()}`
 }
 
+const knownProviders = new Map([
+  ["anthropic", "Anthropic"],
+  ["deepseek", "DeepSeek"],
+  ["google", "Google"],
+  ["minimax", "MiniMax"],
+  ["meta", "Meta"],
+  ["moonshot", "Moonshot"],
+  ["moonshotai", "Moonshot"],
+  ["nvidia", "NVIDIA"],
+  ["opencode", "opencode"],
+  ["openai", "OpenAI"],
+  ["qwen", "Qwen"],
+  ["tencent", "Tencent"],
+  ["thinkingmachines", "Thinking Machines"],
+  ["xai", "xAI"],
+  ["xiaomi", "Xiaomi"],
+  ["zhipu", "Zhipu"],
+  ["zhipuai", "Zhipu"],
+])
+
 function formatProvider(provider: string) {
-  const known: Record<string, string> = {
-    anthropic: "Anthropic",
-    deepseek: "DeepSeek",
-    google: "Google",
-    minimax: "MiniMax",
-    meta: "Meta",
-    moonshot: "Moonshot",
-    moonshotai: "Moonshot",
-    nvidia: "NVIDIA",
-    opencode: "opencode",
-    openai: "OpenAI",
-    qwen: "Qwen",
-    tencent: "Tencent",
-    thinkingmachines: "Thinking Machines",
-    xai: "xAI",
-    xiaomi: "Xiaomi",
-    zhipu: "Zhipu",
-    zhipuai: "Zhipu",
-  }
   const normalized = provider.toLowerCase().replace(/[^a-z0-9]/g, "")
-  return known[normalized] ?? provider.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+  return (
+    knownProviders.get(normalized) ?? provider.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+  )
 }
 
 function resolveModelName(modelParam: string, rows: StatMetricRow[], providerParam?: string) {
@@ -1379,15 +1399,16 @@ function modelKey(provider: string, model: string) {
   return `${provider}\u0000${model}`
 }
 
+const providerSlugAliases = new Map([
+  ["alibaba", "qwen"],
+  ["moonshotai", "moonshot"],
+  ["qwen", "qwen"],
+  ["zhipuai", "zhipu"],
+])
+
 function providerSlug(value: string) {
   const slug = modelSlug(value)
-  const aliases: Record<string, string> = {
-    alibaba: "qwen",
-    moonshotai: "moonshot",
-    qwen: "qwen",
-    zhipuai: "zhipu",
-  }
-  return aliases[slug] ?? slug
+  return providerSlugAliases.get(slug) ?? slug
 }
 
 function costPerMillion(costMicrocents: number, tokens: number) {

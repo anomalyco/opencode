@@ -9,7 +9,10 @@ import { AppProcess } from "@opencode/util/process"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Git } from "@opencode/core/git"
 import { Bus } from "@opencode/core/bus"
+import { Environment, makeFiles, makeMemoryDriver } from "@opencode/core/environment/index"
+import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { Location } from "@opencode/core/location"
+import { Workspace } from "@opencode/schema/workspace"
 import { AbsolutePath } from "@opencode/core/schema"
 import { State } from "@opencode/core/state"
 import { Vcs } from "@opencode/core/vcs"
@@ -31,26 +34,34 @@ const synthetic = testEffect(LayerNode.compile(LayerNode.group([Vcs.node, Bus.no
 
 const provide = (directory: string, input: { git?: boolean; worktree?: string } = {}) =>
   Effect.provide(
-    LayerNode.compile(LayerNode.group([Vcs.node, Bus.node, Location.node, AppProcess.node, FSUtil.node, Git.node]), {
-      replacements: [
-        Location.node.replace(
-          Layer.succeed(
-            Location.Service,
-            Location.Service.of(
-              location(
-                { directory: AbsolutePath.make(directory) },
-                {
-                  projectDirectory: input.worktree ? AbsolutePath.make(input.worktree) : undefined,
-                  ...(input.git
-                    ? { vcs: { type: "git", store: AbsolutePath.make(path.join(input.worktree ?? directory, ".git")) } }
-                    : {}),
-                },
+    LayerNode.compile(
+      LayerNode.group([Vcs.node, Bus.node, Environment.node, Location.node, AppProcess.node, FSUtil.node, Git.node]),
+      {
+        replacements: [
+          Location.node.replace(
+            Layer.succeed(
+              Location.Service,
+              Location.Service.of(
+                location(
+                  { directory: AbsolutePath.make(directory) },
+                  {
+                    projectDirectory: input.worktree ? AbsolutePath.make(input.worktree) : undefined,
+                    ...(input.git
+                      ? {
+                          vcs: {
+                            type: "git",
+                            store: AbsolutePath.make(path.join(input.worktree ?? directory, ".git")),
+                          },
+                        }
+                      : {}),
+                  },
+                ),
               ),
             ),
           ),
-        ),
-      ],
-    }),
+        ],
+      },
+    ),
   )
 
 const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
@@ -1392,5 +1403,81 @@ describe("Vcs", () => {
         expect(yield* vcs.base().pipe(Effect.flip)).toMatchObject({ message: "Choose a review base" })
       }),
     ),
+  )
+
+  it.effect("maps unavailable environment failures to unsupported on initialize and skips host VCS plugins", () =>
+    Effect.gen(function* () {
+      const vcs = yield* Vcs.Service
+      const context = host()
+      yield* VcsGitPlugin.Plugin.effect({
+        ...context,
+        vcs: { ...context.vcs, transform: vcs.transform, reload: vcs.reload },
+      })
+      expect(yield* vcs.info()).toEqual({ branch: {} })
+      expect(yield* vcs.base()).toBeNull()
+      expect(yield* vcs.branches()).toEqual([])
+      expect(yield* vcs.status()).toEqual([])
+      expect(yield* vcs.diff("working")).toEqual([])
+      expect(yield* vcs.initialize("git").pipe(Effect.flip)).toMatchObject({ kind: "unsupported" })
+    }).pipe(
+      Effect.provide(
+        LayerNode.compile(LayerNode.group([Vcs.node, Environment.node, Location.node, AppProcess.node]), {
+          replacements: [
+            Location.node.replace(
+              Layer.succeed(
+                Location.Service,
+                Location.Service.of(
+                  location(
+                    { directory: AbsolutePath.make("/remote/repo") },
+                    { vcs: { type: "git", store: AbsolutePath.make("/remote/repo/.git") } },
+                  ),
+                ),
+              ),
+            ),
+            Environment.node.replace(
+              Layer.succeed(Environment.Service, Environment.local(EnvironmentUnavailable.spawner)),
+            ),
+          ],
+        }),
+      ),
+    ),
+  )
+
+  it.effect("validates initialize directory and conflicts against remote workspace files", () =>
+    Effect.gen(function* () {
+      const memory = makeMemoryDriver()
+      const files = makeFiles(memory)
+      const workspaceID = Workspace.ID.make("wrk_vcs_remote")
+      const directory = AbsolutePath.make("/workspace/app")
+      const calls: string[] = []
+      const layer = LayerNode.compile(LayerNode.group([Vcs.node]), {
+        replacements: [
+          Location.node.replace(
+            Layer.succeed(Location.Service, Location.Service.of(location({ directory, workspaceID }))),
+          ),
+          Environment.node.replace(Layer.succeed(Environment.Service, Environment.workspace(workspaceID, memory))),
+        ],
+      })
+
+      yield* Effect.gen(function* () {
+        const vcs = yield* Vcs.Service
+        yield* vcs.transform((editor) => {
+          editor.add(
+            provider({
+              id: "remote-custom",
+              init: (input) => Effect.sync(() => void calls.push(input.worktree)),
+            }),
+          )
+        })
+        expect(yield* vcs.initialize("remote-custom").pipe(Effect.flip)).toMatchObject({ kind: "missing" })
+
+        yield* files.mkdir(directory)
+        yield* vcs.initialize("remote-custom")
+        expect(calls).toEqual([directory])
+
+        yield* files.mkdir("/workspace/.git")
+        expect(yield* vcs.initialize("remote-custom").pipe(Effect.flip)).toMatchObject({ kind: "conflict" })
+      }).pipe(Effect.provide(layer))
+    }),
   )
 })

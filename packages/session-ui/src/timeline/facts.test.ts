@@ -1,7 +1,7 @@
 import type { JsonValue } from "@opencode/client/promise"
 import { describe, expect, test } from "bun:test"
 import { storyTool } from "../storybook/current-session-scenarios"
-import { factsOf, sameFileFact, summarize, type FileFact } from "./facts"
+import { factsOf, placeFactOf, sameFileFact, summarize, type FileFact } from "./facts"
 import { categoryOf } from "./place"
 
 describe("timeline facts", () => {
@@ -52,6 +52,91 @@ describe("timeline facts", () => {
       skills: 1,
       thoughts: 1,
       modes: { explore: 3, edit: 2, run: 0, tool: 0 },
+    })
+  })
+
+  test("counts a script's steps in place of the script with scriptSteps", () => {
+    const step = (tool: string, input: Record<string, JsonValue>) => ({ tool, status: "completed", input })
+
+    const script = storyTool(
+      "x1",
+      "execute",
+      "completed",
+      {},
+      {
+        metadata: {
+          toolCalls: [
+            step("read", { path: "/repo/a.ts" }),
+            step("read", { path: "/repo/b.ts" }),
+            step("shell", { command: "ls" }),
+            step("edit", { path: "/repo/c.ts" }),
+            step("Bun", { method: "write", path: "/repo/c.ts" }),
+            step("Bun", { method: "file", path: "/repo/a.ts" }),
+            step("Bun", { method: "other", path: "/repo/d.ts" }),
+          ],
+          files: [{ file: "/repo/c.ts", additions: 1 }],
+        },
+      },
+    )
+
+    const facts = factsOf([script], true, true)
+
+    expect(facts.flatMap((fact) => (fact.kind === "call" ? [[fact.tool, fact.mode]] : []))).toEqual([
+      ["read", "explore"],
+      ["read", "explore"],
+      ["shell", "run"],
+      ["edit", "edit"],
+      ["edit", "edit"],
+      ["read", "explore"],
+    ])
+    expect(summarize(facts)).toMatchObject({
+      calls: 6,
+      reads: 2,
+      commands: 1,
+      files: ["/repo/c.ts"],
+      modes: { explore: 3, edit: 2, run: 1, tool: 0 },
+    })
+    expect(summarize(factsOf([script], true, false))).toMatchObject({
+      calls: 1,
+      reads: 0,
+      commands: 1,
+      files: ["/repo/c.ts"],
+      toolNames: [{ tool: "execute" }],
+    })
+
+    const direct = [
+      storyTool("r1", "read", "completed", { path: "/repo/a.ts" }),
+      storyTool("e1", "edit", "completed", { path: "/repo/c.ts" }),
+    ]
+
+    expect(factsOf(direct, true, true)).toEqual(factsOf(direct))
+  })
+
+  test("counts live Bun steps as recorded", () => {
+    const script = storyTool(
+      "x1",
+      "execute",
+      "completed",
+      {},
+      {
+        metadata: {
+          toolCalls: [
+            { tool: "read", status: "completed", input: { path: "/repo/a.ts" } },
+            { tool: "write", status: "completed", input: { path: "/repo/b.ts" } },
+            { tool: "glob", status: "completed", input: { pattern: "src/**/*.ts" } },
+          ],
+          files: [{ file: "/repo/b.ts" }],
+        },
+      },
+    )
+
+    expect(summarize(factsOf([script], true, true))).toMatchObject({
+      calls: 3,
+      reads: 1,
+      searches: 1,
+      commands: 0,
+      files: ["/repo/b.ts"],
+      modes: { explore: 2, edit: 1, run: 0, tool: 0 },
     })
   })
 
@@ -112,5 +197,19 @@ describe("timeline facts", () => {
     expect(before).not.toBe(after)
     expect(sameFileFact(before!, after!)).toBe(true)
     expect(sameFileFact(before!, scriptFiles("completed", { files: liveFiles })[0]!)).toBe(false)
+  })
+
+  test("a script's changes show and count only with full_codemode, and a direct edit's always do", () => {
+    const script = storyTool("s1", "execute", "completed", { code: "…" }, { metadata: { files: liveFiles } })
+    const edit = storyTool("e1", "edit", "completed", { path: "/repo/b.ts" })
+    const kinds = (facts: ReturnType<typeof factsOf>) => facts.map((fact) => fact.kind)
+
+    expect(kinds(factsOf([script, edit], true))).toEqual(["call", "file", "call", "file"])
+    expect(summarize(factsOf([script, edit], true)).files).toEqual(["/repo/a.ts", "/repo/b.ts"])
+    expect(placeFactOf(script, script.id, true).changes).toBe(1)
+
+    expect(kinds(factsOf([script, edit], false))).toEqual(["call", "call", "file"])
+    expect(summarize(factsOf([script, edit], false)).files).toEqual(["/repo/b.ts"])
+    expect(placeFactOf(script, script.id, false).changes).toBe(0)
   })
 })

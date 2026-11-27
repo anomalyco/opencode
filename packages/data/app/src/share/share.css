@@ -74,6 +74,23 @@
     background: var(--stats-layer-2);
   }
 
+  /* As tall as the toggle beside it: its 32px buttons on narrow screens, 38px on a touch screen, in the 2px padded
+     frame (routes/index.css). */
+  @media (max-width: 47.999rem) {
+    height: 38px;
+  }
+
+  @media (pointer: coarse) {
+    height: 44px;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+
+    &::after {
+      inset: 0;
+    }
+  }
+
   &:focus-visible {
     outline: 2px solid var(--stats-accent);
     outline-offset: 2px;
@@ -169,6 +186,10 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     }
   }
   /* grey-ok-end */
+
+  &:focus-visible {
+    outline: none;
+  }
 
   button {
     font: inherit;
@@ -682,7 +703,8 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
   }
 
   /* Rendering, the button cancels: its percentage gives way to Cancel under the pointer (once it has left and come
-     back, share.tsx) or keyboard focus. */
+     back, share.tsx) or keyboard focus. Only a pointer that hovers: a tap leaves :hover on the button, which would hide
+     the percentage for the whole render; a tap still cancels. */
   [data-slot="bar-button"][data-rendering] {
     position: relative;
     cursor: pointer;
@@ -695,13 +717,25 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
       opacity: 0;
     }
 
-    &:is([data-cancel]:hover, :focus-visible) {
+    &:focus-visible {
       [data-slot="button-cancel"] {
         opacity: 1;
       }
 
       [data-slot="button-label"] {
         opacity: 0;
+      }
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &[data-cancel]:hover {
+        [data-slot="button-cancel"] {
+          opacity: 1;
+        }
+
+        [data-slot="button-label"] {
+          opacity: 0;
+        }
       }
     }
   }
@@ -712,7 +746,7 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     display: contents;
   }
 
-  :is([data-slot="sheet-open"], [data-slot="sheet-head"], [data-slot="sheet-label"], [data-slot="sheet-backdrop"]) {
+  :is([data-slot="sheet-head"], [data-slot="sheet-label"], [data-slot="sheet-backdrop"]) {
     display: none;
   }
 
@@ -1250,29 +1284,24 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
       padding: 16px 16px 8px;
     }
 
-    /* On a phone the bar wraps onto as many rows as it needs, over the card. */
-    /* On a phone the bar holds Close, Settings, and Mute, Shuffle and Export, always to hand; the settings slide up in
-       a sheet from the bottom, every one a full row with its name, and slide back down when it's dismissed. */
+    /* On a phone the bar holds Close, then Mute, Shuffle, Customize and Save, as on wider screens; Customize slides
+       the settings up in a sheet from the bottom, every one a full row with its name. */
     [data-slot="editor-bar"] {
       flex-wrap: nowrap;
       padding: calc(8px + env(safe-area-inset-top, 0px)) 8px 8px;
-    }
 
-    [data-slot="sheet-open"] {
-      display: flex;
-      gap: 6px;
-      align-items: center;
-      height: 36px;
-      padding: 0 10px;
-      font-size: 13px;
-      color: var(--stats-text);
-      background: var(--stats-bg);
-      border: 1px solid var(--stats-line-strong);
-      border-radius: 0;
-
-      &[aria-expanded="true"] {
+      [data-variant="customize"][aria-expanded="true"] {
         background: var(--stats-layer-2);
       }
+
+      [data-slot="bar-end"] [data-variant="primary"] {
+        min-width: 72px;
+      }
+    }
+
+    /* No tooltips on a touch screen: they'd only show on focus, and at the top of the screen they'd be cut off. */
+    [data-tooltip]::after {
+      display: none;
     }
 
     /* Below the bar, so Mute, Shuffle and Export stay in reach with the sheet open. */
@@ -1378,7 +1407,18 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
         color: var(--stats-faint);
       }
 
-      /* Lists and the calendar open upwards in the sheet, over the rows above, as wide as their control. */
+      /* More room between each icon and its label, in the controls and their lists alike, so they line up. */
+      :is([data-slot="dropdown-trigger"], [data-slot="dropdown-item"]),
+      [data-component="dropdown"][data-id="music"] [data-slot="dropdown-item"] {
+        gap: 12px;
+      }
+
+      [data-component="dropdown"][data-id="size"] [data-slot="dropdown-item"] {
+        padding-inline-start: 9px;
+      }
+
+      /* Lists open upwards in the sheet, over the rows above, as wide as their control: past the row's name (72px and
+         the 12px gap) where the name is inside the dropdown, the music's being outside it. */
       [data-slot="dropdown-menu"] {
         top: auto;
         inset-inline-end: 0;
@@ -1392,12 +1432,25 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
         }
       }
 
+      > [data-component="dropdown"] [data-slot="dropdown-menu"] {
+        width: calc(100% - 84px);
+        min-width: 0;
+      }
+
+      /* The calendar is taller than the room above or below the date, so it rises from the foot of the sheet, across
+         its width: every day a 44px target. */
+      [data-slot="date-tool"] {
+        position: static;
+      }
+
       [data-component="share-calendar"] {
         top: auto;
         right: auto;
-        bottom: calc(100% + 6px);
+        bottom: calc(16px + env(safe-area-inset-bottom, 0px));
         left: auto;
-        inset-inline-end: 0;
+        inset-inline: 16px;
+        box-sizing: border-box;
+        width: auto;
         translate: none;
         animation-name: share-fade-in;
       }
@@ -1601,15 +1654,69 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
   }
 }
 
-@media (max-width: 760px) {
-  [data-page="stats"] dialog[data-component="share-editor"] [data-variant="customize"] {
-    display: none;
-  }
-}
-
 @keyframes share-reveal {
   from {
     opacity: 0;
     translate: 0 4px;
+  }
+}
+
+/* On a touch screen every control in the editor is a 44px target: the bar's buttons, the section arrows, the settings'
+   lists and the calendar, and the timeline's band reaches past its line. Controls answer the press, don't select their
+   labels on a long press, and fire without the double-tap wait. */
+@media (pointer: coarse) {
+  [data-page="stats"] dialog[data-component="share-editor"] {
+    button,
+    [data-slot="playback"] {
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    :is([data-slot="editor-bar"], [data-slot="editor-toolbar"]) [data-slot="icon-button"] {
+      width: 44px;
+      height: 44px;
+
+      &:active {
+        background: light-dark(rgb(0 0 0 / 0.07), rgb(255 255 255 / 0.1));
+      }
+    }
+
+    [data-slot="bar-button"] {
+      height: 44px;
+    }
+
+    /* The bar is 60px tall now, so the sheet's backdrop starts under it. */
+    [data-slot="sheet-backdrop"] {
+      inset: calc(60px + env(safe-area-inset-top, 0px)) 0 0;
+    }
+
+    [data-slot="dropdown-trigger"]:active {
+      background: var(--stats-layer-2);
+    }
+
+    [data-slot="dropdown-item"] {
+      min-height: 44px;
+    }
+
+    [data-slot="playback"]::before {
+      content: "";
+      position: absolute;
+      inset: -14px 0;
+    }
+
+    [data-slot="calendar-head"] button {
+      width: 44px;
+      height: 44px;
+    }
+
+    [data-slot="calendar-day"] {
+      height: 44px;
+    }
+
+    [data-slot="calendar-range"] {
+      height: 44px;
+    }
   }
 }

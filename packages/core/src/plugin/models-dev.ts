@@ -40,10 +40,9 @@ export const ModelsDevPlugin = define({
     const bus = yield* Bus.Service
     const config = yield* Config.Service
     const flags = yield* Flag.Service
-    const get = Effect.flatMap(config.entries(), (entries) => {
-      const resolved = flags.resolve(entries)
-      return modelsDev.get(resolved.recommended_api.enabled, resolved.model_speeds.enabled)
-    })
+    const get = Effect.flatMap(config.entries(), (entries) =>
+      modelsDev.get(flags.resolve(entries).recommended_api.enabled),
+    )
     // Filtering and definition indexes are shared across Locations. Only Model materialization
     // makes mutable copies, after provider configuration and access have been resolved.
     const loaded = { data: snapshots(yield* get) }

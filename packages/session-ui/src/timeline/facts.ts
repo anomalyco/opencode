@@ -120,13 +120,15 @@ const modes = new Map<string, FactMode>(
 
 /**
  * The facts in a list of parts, in order. Not cached: stores update a part in place as it streams, so its identity
- * says nothing about whether its facts changed. Callers read it inside a memo.
+ * says nothing about whether its facts changed. Callers read it inside a memo. Without `scriptDiffs` (the server's
+ * `full_codemode` flag off), a script's changes are not facts: they neither show nor count. With `scriptSteps`, a script
+ * counts as the calls it made rather than as itself.
  */
-export function factsOf(parts: readonly FactPart[]): Fact[] {
-  return parts.flatMap(partFacts)
+export function factsOf(parts: readonly FactPart[], scriptDiffs = true, scriptSteps = false): Fact[] {
+  return parts.flatMap((part) => partFacts(part, scriptDiffs, scriptSteps))
 }
 
-function partFacts(part: FactPart): Fact[] {
+function partFacts(part: FactPart, scriptDiffs: boolean, scriptSteps: boolean): Fact[] {
   const id = part.messageID ? `${part.messageID}:${part.id ?? ""}` : (part.id ?? "")
 
   if (part.type === "text") return [{ kind: "text", id }]
@@ -155,7 +157,7 @@ function partFacts(part: FactPart): Fact[] {
       },
     ]
 
-  return toolFacts(part, id)
+  return toolFacts(part, id, scriptDiffs, scriptSteps)
 }
 
 const decodeFile = Schema.decodeUnknownOption(
@@ -190,12 +192,15 @@ function reads(tool: Tool): Reads {
   }
 }
 
-/** What placing a call reads of it. Reads input and metadata only where they can move the call or open it. */
-export function placeFactOf(tool: Tool, id = tool.id): PlaceFact {
-  return placeFact(tool, id, reads(tool))
+/**
+ * What placing a call reads of it. Reads input and metadata only where they can move the call or open it. Without
+ * `scriptDiffs`, a script places no changes.
+ */
+export function placeFactOf(tool: Tool, id = tool.id, scriptDiffs = true): PlaceFact {
+  return placeFact(tool, id, reads(tool), scriptDiffs)
 }
 
-function placeFact(tool: Tool, id: string, read: Reads): PlaceFact {
+function placeFact(tool: Tool, id: string, read: Reads, scriptDiffs = true): PlaceFact {
   const name = toolName(tool.name)
   const state = tool.state
   const stopped = toolStopped(tool)
@@ -216,7 +221,7 @@ function placeFact(tool: Tool, id: string, read: Reads): PlaceFact {
       !readImagePath(read.input()) &&
       !currentToolHasLoadedFiles(tool),
     background: name === "subagent" || (name === "shell" && read.input().background === true),
-    changes: name === "execute" ? scriptChanges(tool, read).length : 0,
+    changes: name === "execute" && scriptDiffs ? scriptChanges(tool, read).length : 0,
   }
 }
 
@@ -253,9 +258,9 @@ export function launchOf(tool: Tool) {
   return placeFact(tool, tool.id, read).background ? launch(tool, toolName(tool.name), read) : undefined
 }
 
-function toolFacts(tool: Tool, id: string): Fact[] {
+function toolFacts(tool: Tool, id: string, scriptDiffs: boolean, scriptSteps = false): Fact[] {
   const read = reads(tool)
-  const fact = placeFact(tool, id, read)
+  const fact = placeFact(tool, id, read, scriptDiffs)
   const raw = read.input().path
   const path = Predicate.isString(raw) && raw ? raw : undefined
   const metadata = read.metadata()
@@ -276,9 +281,14 @@ function toolFacts(tool: Tool, id: string): Fact[] {
 
   if (Predicate.isNumber(metadata.matches)) call.matches = metadata.matches
 
+  if (fact.name === "execute" && !scriptDiffs) return [call]
+
+  const steps = fact.name === "execute" && scriptSteps ? stepFacts(metadata, id) : []
+
   if (fact.name === "execute")
     return [
-      call,
+      // A script with no steps to count yet, or none at all, counts as itself.
+      ...(steps.length ? steps : [call]),
       // One fact per change, in order: a script can change the same file more than once.
       ...scriptChanges(tool, read).map((file, index) => scriptFileFactOf(file, index, id, state.status)),
     ]
@@ -292,6 +302,53 @@ function toolFacts(tool: Tool, id: string): Fact[] {
   const files = changed.length ? changed : path ? [{ file: path }] : []
 
   return [call, ...files.map((file) => fileFact(file, id, state.status, "direct"))]
+}
+
+// The tool a script's `Bun` file call counts as: `Bun.write` edits a file and `Bun.file` reads one.
+const bunTools = new Map([
+  ["write", "edit"],
+  ["file", "read"],
+])
+
+// A script's steps, each counted as a direct call of its tool. Other `Bun` calls count nothing. A script can make
+// thousands of calls, so they are read as they are rather than decoded.
+function stepFacts(metadata: Schema.JsonObject, id: string): CallFact[] {
+  const calls = Array.isArray(metadata.toolCalls) ? metadata.toolCalls : []
+
+  return calls.flatMap((call, index) => {
+    if (!Predicate.isObject(call) || !Predicate.isString(call.tool)) return []
+
+    const status = call.status
+
+    if (status !== "running" && status !== "completed" && status !== "error") return []
+
+    const input = Predicate.isObject(call.input) ? call.input : {}
+    const bun = call.tool === "Bun" && Predicate.isString(input.method) ? bunTools.get(input.method) : undefined
+
+    if (call.tool === "Bun" && !bun) return []
+
+    const name = bun ?? toolName(call.tool)
+
+    const fact: CallFact = {
+      kind: "call",
+      id: `${id}:step:${index}`,
+      name,
+      tool: bun ?? call.tool,
+      mode: modes.get(name) ?? "tool",
+      status,
+      failed: status === "error",
+      stopped: false,
+      called: true,
+      groupedRead: name === "read",
+      // Code Mode's shell has no background.
+      background: false,
+      changes: 0,
+    }
+
+    if (Predicate.isString(input.path) && input.path) fact.path = input.path
+
+    return [fact]
+  })
 }
 
 function fileFact(
@@ -477,6 +534,11 @@ export function sameFileFact(previous: FileFact, next: FileFact) {
 }
 
 const scriptFilePart = /^(.*?):file:(\d+):/
+
+/** Whether a part id names a change a script made, which draws as part of the script's block. */
+export function isScriptFilePartID(partID: string) {
+  return scriptFilePart.test(partID)
+}
 
 /** The change a script made that a part id names, read from that one entry of the script's part in the message. */
 export function scriptFileFact(content: readonly Content[], messageID: string, partID: string) {

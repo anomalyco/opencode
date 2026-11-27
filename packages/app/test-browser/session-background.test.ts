@@ -351,19 +351,33 @@ describe("createSessionBackground", () => {
         ],
       })
 
+      const owned = (id: string) => ({ ...shell(id, id), metadata: { sessionID: "root", callID: "script-part" } })
+
       const background = createSessionBackground({
         sessionID: () => "root",
         messages: () => store.messages,
         sessions: () => [],
         status: () => "idle",
-        shells: () => [],
+        // The script's shells name its call. A shell that names none is the user's own.
+        shells: () => [owned("test"), owned("left"), { ...shell("serve", "serve"), time: { started: 1 } }],
         jobs: () => [
           { kind: "codemode", id: "cm_script", sessionID: "root", status: "running", time: { started: 11 } },
           { kind: "codemode", id: "cm_other", sessionID: "other", status: "running", time: { started: 11 } },
+          // A shell call that timed out left its command running, which gives the shell a job.
+          {
+            kind: "shell",
+            id: "left",
+            sessionID: "root",
+            status: "running",
+            time: { started: 0 },
+            shellID: "left",
+            command: "left",
+          },
         ],
       })
 
       expect(background.scripts()).toEqual([])
+      expect(background.tasks().map((task) => task.id)).toEqual(["left", "serve"])
 
       setStore("messages", [
         assistant("current", [tool("script-part", "execute", { jobID: "cm_script" }, { code: "await build()" })]),

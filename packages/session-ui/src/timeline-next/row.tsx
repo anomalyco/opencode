@@ -31,10 +31,19 @@ import { useData } from "../context"
 import { useSources } from "../context/sources"
 import { turnSources } from "../sources/sources"
 import { SessionReadToolGroup, SessionUserMessage } from "../message/current-message"
-import { FileChangeRuns, fileRuns, runDisclosureKey, ScriptChanges, taskAgentName } from "../tools/tool-renderer"
+import {
+  FileChangeRuns,
+  fileRuns,
+  runDisclosureKey,
+  ScriptChanges,
+  ScriptOutputProvider,
+  taskAgentName,
+  type ScriptOutputPlacement,
+} from "../tools/tool-renderer"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
 import type { TimelineDetail } from "../timeline/detail"
+import { scriptOutputLayout } from "../timeline/script-output"
 import { TimelineRow, type PartRef } from "../timeline/timeline-row"
 import { userMessageRuns, userRunSpring } from "../timeline/user-runs"
 import { IDLE_TURN_PHASE, sameRef, viewTurnPhase } from "../timeline/turn-phase-machine"
@@ -787,10 +796,22 @@ export function createNextTimelineRowRenderer(input: {
 
   // Each row's only space is the gap below it, which sets the row below apart. A message joining the user's message
   // above sits its run's 4 px below it instead, which its turn gap springs to.
+  const following = createMemo(() => {
+    const rows = input.projection.rows()
+
+    return new Map(rows.map((row, index) => [TimelineRow.key(row), rows[index + 1]] as const))
+  })
+
+  // Blocks stand a step further apart than a script stands from its own changes, which keep the small gap.
   const gap = (row: TimelineRow.TimelineRow) => {
     if (Predicate.isTagged(row, "TurnGap") && runs().get(row.userMessageID)?.above) return undefined
+    const value = gaps().get(TimelineRow.key(row))
+    const next = following().get(TimelineRow.key(row))
 
-    return gaps().get(TimelineRow.key(row))
+    if (value !== "s" || !Predicate.isTagged(row, "AssistantPart") || (next && TimelineRow.scriptChanges(next)))
+      return value
+
+    return "m"
   }
 
   const Frame = (props: { row: FramedTimelineRow; grow?: boolean; children: JSX.Element }) => (
@@ -1601,11 +1622,23 @@ export function createNextTimelineRowRenderer(input: {
     )
   }
 
+  // Where each script's Output row goes, from the rows: after its changes when they are drawn right after it.
+  const scriptOutput = createMemo(() =>
+    scriptOutputLayout(input.projection.rows(), input.projection.messageByID(), data.flag("full_codemode")),
+  )
+
+  const scriptPlacement: ScriptOutputPlacement = {
+    afterChanges: (partID) => scriptOutput().afterChanges.has(partID),
+    outputAfter: (fileID) => scriptOutput().outputAfter.get(fileID),
+  }
+
   function Row(props: { row: Accessor<TimelineRow.TimelineRow>; onSizeChange?: () => void }) {
     return (
-      <Show when={TimelineRow.key(props.row())} keyed>
-        {(_key) => render(props.row, props.onSizeChange)}
-      </Show>
+      <ScriptOutputProvider value={scriptPlacement}>
+        <Show when={TimelineRow.key(props.row())} keyed>
+          {(_key) => render(props.row, props.onSizeChange)}
+        </Show>
+      </ScriptOutputProvider>
     )
   }
 

@@ -6,9 +6,6 @@ import { buildOgWorker } from "../script/build-og-worker"
 import { parsePath } from "../src/lib/data-path"
 import type { OgCard } from "../src/og/card"
 
-// The catalog module behind the card builders defines a router query at import time, which throws outside a Solid
-// server runtime.
-mock.module("@solidjs/router", () => ({ query: (fn: unknown) => fn }))
 const { labOgCard, modelOgCard, ogImageAlt, ogImageUrl, ogVersion } = await import("../src/og/card-data")
 
 // The real in-process renderer, counted, and an in-memory stand-in for the Worker's edge cache, which local runs lack.
@@ -247,6 +244,22 @@ describe("og.png response", () => {
     }
     expect(cached.size).toBe(keys)
   })
+})
+
+describe("card text", () => {
+  // Satori draws a character no font file has as the same empty box. The Greek alpha and the arrow ⥈ are in the
+  // font's "rest" file, not the Latin one, so each must draw as itself: different from that box and from the other.
+  test("draws characters the Latin file lacks from the rest file", async () => {
+    const card = modelOgCard(inkling)!
+    const [alpha, arrow, missing] = await Promise.all(
+      ["\u03b1", "\u2948", "\ue000"].map(async (character) =>
+        Buffer.from(await resource.renderOgCard({ ...card, name: `Inkling ${character}` })).toString("base64"),
+      ),
+    )
+    expect(alpha).not.toBe(missing)
+    expect(arrow).not.toBe(missing)
+    expect(alpha).not.toBe(arrow)
+  }, 30_000)
 })
 
 describe("OG Worker build", () => {

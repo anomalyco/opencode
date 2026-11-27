@@ -7,6 +7,7 @@ use serde::{Serialize, Serializer};
 use crate::update::{self, Kind};
 
 pub const UPDATE_METHOD: &str = "opencode/session/child_update";
+pub const META_KEY: &str = "opencode/child-session";
 
 /// A child session; it serializes as its `opencode/child-session` meta.
 #[derive(Debug, Clone, PartialEq, Serialize)]

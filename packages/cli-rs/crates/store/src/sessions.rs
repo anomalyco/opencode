@@ -41,6 +41,20 @@ struct Slot {
     session: Option<Session>,
 }
 
+/// How much of a session's transcript is known to be a gapless prefix from its cursor.
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Anchor {
+    /// Never anchored (events alone built it, or evicted/deleted): a head read replaces it.
+    #[default]
+    None,
+    /// Anchored to the live stream: every item in the transcript (except pending/outbox inputs and rows created
+    /// during a head read) is contiguous from the cursor.
+    Live,
+    /// Only the first `n` items are contiguous from the cursor: a reconnect or an unknown-order head read opened
+    /// a potential gap after them, so later live rows sit past the gap until the next head read closes it.
+    Prefix(usize),
+}
+
 /// Everything the store holds of one session.
 #[derive(Default)]
 pub(crate) struct Session {
@@ -56,6 +70,8 @@ pub(crate) struct Session {
     pub(crate) transcript: Option<Transcript>,
     /// The cursor of the next older page, while older pages remain.
     pub(crate) cursor: Option<String>,
+    /// How much of `transcript` is anchored to `cursor`.
+    pub(crate) anchored: Anchor,
     /// An older-page load runs.
     pub(crate) loading: bool,
     /// Pending inbox items in admission order.
@@ -166,6 +182,22 @@ impl Life {
 }
 
 impl Session {
+    /// Marks a potential gap at the end of the current transcript: items already here stay anchored, while later
+    /// live events sit past the gap until the next head read closes it.
+    pub(crate) fn seal_anchor(&mut self) {
+        if self.anchored == Anchor::Live {
+            self.anchored = Anchor::Prefix(self.transcript.as_ref().map_or(0, |transcript| transcript.items().len()));
+        }
+    }
+
+    pub(crate) fn shrink_anchor(&mut self, removed_at: usize) {
+        if let Anchor::Prefix(n) = &mut self.anchored
+            && removed_at < *n
+        {
+            *n -= 1;
+        }
+    }
+
     /// True when the record holds nothing: the store then answers for the session as for one it never saw.
     fn is_vacant(&self) -> bool {
         let Session {
@@ -176,6 +208,7 @@ impl Session {
             family,
             transcript,
             cursor,
+            anchored,
             loading,
             pending,
             permissions,
@@ -198,6 +231,7 @@ impl Session {
             && family.is_empty()
             && transcript.is_none()
             && cursor.is_none()
+            && *anchored == Anchor::None
             && !loading
             && pending.is_empty()
             && permissions.is_none()
@@ -469,6 +503,7 @@ impl State {
         session.head_read = None;
         session.transcript = None;
         session.cursor = None;
+        session.anchored = Anchor::None;
         session.loading = false;
         session.pending = Vec::new();
         session.permissions = None;
@@ -498,6 +533,7 @@ impl State {
         session.message_load = None;
         session.head_read = None;
         session.cursor = None;
+        session.anchored = Anchor::None;
         session.loading = false;
         session.pending.retain(|item| self.outbox.contains(item.id()));
         session.pending.shrink_to_fit();
@@ -568,9 +604,10 @@ impl State {
         self.invalidate(Read::Session(id.as_str(), SessionRead::Info));
         // A new session starts empty, so live events are its source of truth. Separate pending and
         // message reads could both miss an input promoted between them and overwrite the events.
-        let reads = &mut self.sessions.get_or_insert(id).reads;
-        reads[SessionRead::Pending].complete();
-        reads[SessionRead::Messages].complete();
+        let session = self.sessions.get_or_insert(id);
+        session.reads[SessionRead::Pending].complete();
+        session.reads[SessionRead::Messages].complete();
+        session.anchored = Anchor::Live;
         effects.push(Effect::Session(id.clone()));
     }
 
@@ -791,6 +828,7 @@ impl State {
             for read in [SessionRead::Family, SessionRead::Pending, SessionRead::Messages] {
                 self.sessions[key].reads[read].complete();
             }
+            self.sessions[key].anchored = Anchor::Live;
         }
         let input = SessionCreateInput {
             id: Some(Some(id.clone())),

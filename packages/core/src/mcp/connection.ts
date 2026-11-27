@@ -13,10 +13,6 @@ export type Failure = Extract<Mcp.Status, { readonly status: "failed" | "needs_a
 /** A catalog the server can change: its tools, prompts, resources or skills. */
 export type Kind = "tools" | "prompts" | "resources" | "skills"
 
-// Unshared connections to one remote endpoint, from any number of Locations, take turns at their
-// handshake so the endpoint does not receive a startup burst.
-const endpointLoads = KeyedMutex.makeUnsafe<string>()
-
 /**
  * What a connection reports to its owner. Each runs inline, in order, so the owner can keep its own
  * state and publish in step with the connection.
@@ -64,6 +60,11 @@ export interface Input {
   readonly scope: Scope.Scope
   /** Serializes lifecycle work. Callbacks and recovery take it; `start` and `stop` expect the caller to hold it. */
   readonly lock: <A, E>(effect: Effect.Effect<A, E>) => Effect.Effect<A, E>
+  /**
+   * Unshared connections to one remote endpoint, from any number of Locations on the same host, take turns at
+   * their handshake so the endpoint does not receive a startup burst.
+   */
+  readonly endpointLoads: KeyedMutex.KeyedMutex<string>
   /** Runs callbacks from the live connection. */
   readonly callbacks: (effect: Effect.Effect<void>) => unknown
   /** Runs recovery that a background request triggered. */
@@ -212,7 +213,8 @@ export function make(input: Input): Connection {
         Effect.provideService(Environment.Service, input.environment),
         Effect.provideService(FetchHttpClient.Fetch, input.fetch),
         Scope.provide(scope),
-        (effect) => (config.type === "remote" && !input.shared ? endpointLoads.withLock(config.url)(effect) : effect),
+        (effect) =>
+          config.type === "remote" && !input.shared ? input.endpointLoads.withLock(config.url)(effect) : effect,
         Effect.exit,
       )
       if (Exit.isSuccess(result) && !result.value.tools) {
