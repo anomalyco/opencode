@@ -89,12 +89,6 @@ Pass environment variables with repeated `--env` flags:
 opencode mcp add everything --env LOG_LEVEL=info -- npx -y @modelcontextprotocol/server-everything
 ```
 
-For a local server that needs credentials, such as [QVeris](https://github.com/QVerisAI/qveris-agent-toolkit/tree/main/packages/mcp), set `QVERIS_API_KEY` in the environment that starts OpenCode. Quote the reference to keep the key itself out of the project config:
-
-```sh
-opencode mcp add qveris --env 'QVERIS_API_KEY={env:QVERIS_API_KEY}' -- npx -y @qverisai/mcp
-```
-
 Use configuration for other process options such as a working directory:
 
 ```jsonc title="opencode.jsonc"
@@ -219,6 +213,14 @@ If the server needs authentication, run `/mcps`, select it, and complete authori
 
 ```sh
 opencode mcp auth sentry
+```
+
+To connect to the [QVeris hosted MCP server](https://qveris.ai/docs/mcp-server), add its remote URL and sign in to QVeris in the browser:
+
+```sh
+opencode mcp add qveris --url https://mcp.qveris.ai/mcp
+opencode mcp auth qveris
+opencode mcp list
 ```
 
 ### Browser on another machine
