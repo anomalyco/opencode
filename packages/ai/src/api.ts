@@ -60,6 +60,8 @@ export type CompactOf<A> = A extends { readonly compact: infer Compact extends C
 export type Models<Caps> = Readonly<Record<string, Caps>> | ((modelID: string) => Caps | undefined)
 
 export interface Host<Caps> {
+  /** This API as this host serves it, for diagnostics: errors and compiled requests report it. Defaults to the API's id. */
+  readonly id?: string
   /** Overrides the provider's base URL for this API. */
   readonly baseURL?: string
   readonly query?: Record<string, string>
@@ -138,7 +140,7 @@ const build = <
   definition: Omit<Definition<Name, Caps, Compact, Body>, "extend" | "configure">,
 ): Definition<Name, Caps, Compact, Body> => ({
   ...definition,
-  configure: (host) => build({ ...definition, host: { ...definition.host, ...host } }),
+  configure: (host) => build({ ...definition, id: host.id ?? definition.id, host: { ...definition.host, ...host } }),
   extend: <NextName extends string = Name>(patch: Extend<NextName, Caps, Body>) =>
     build<NextName, Caps, Compact, Body>({
       ...definition,

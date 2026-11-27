@@ -17,11 +17,11 @@ export type Settings = ProviderPackage.Settings &
 // Vertex validates the body strictly and rejects prompt_cache_key, which Mistral's own API accepts.
 export const mistral = MistralChat.api
   .extend({
-    id: "google-vertex-mistral",
+    id: "mistral-chat",
     body: (request, base) => base(request).pipe(Effect.map((body) => Struct.omit(body, ["prompt_cache_key"]))),
     path: ({ request }) => `/${request.model.id}:streamRawPredict`,
   })
-  .configure({ metadataKey: "vertex" })
+  .configure({ id: "google-vertex-mistral", metadataKey: "vertex" })
 
 export const googleVertexMistral = Provider.make({
   ...GoogleVertexShared.shared,

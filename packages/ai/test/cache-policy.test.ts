@@ -216,7 +216,7 @@ describe("applyCachePolicy", () => {
         }),
       )
 
-      expect(prepared.api).toBe("anthropic-messages")
+      expect(prepared.api).toBe("anthropic-compatible-messages")
       expect(prepared.body).toMatchObject({
         system: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }] }],
@@ -237,7 +237,7 @@ describe("applyCachePolicy", () => {
     ["meta-messages", Meta.messagesModel("muse-spark-1.3", { apiKey: "test" })],
     ["minimax-messages", MiniMax.model("MiniMax-M3", { apiKey: "test" })],
     ["moonshot-messages", Moonshot.messagesModel("kimi-k3", { apiKey: "test" })],
-    ["zai-messages", ZAICodingPlan.messagesModel("glm-5.3", { apiKey: "test" })],
+    ["zai-coding-messages", ZAICodingPlan.messagesModel("glm-5.3", { apiKey: "test" })],
   ] as const
 
   messagesModels.forEach(([api, model]) =>

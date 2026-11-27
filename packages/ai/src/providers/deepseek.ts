@@ -13,7 +13,7 @@ export const deepseek = Provider.make({
   id: "deepseek",
   baseURL: "https://api.deepseek.com/v1",
   auth: Provider.apiKey("DEEPSEEK_API_KEY"),
-  apis: [OpenAIChat.api.configure({ capabilities: { output: { maxTokensField: "max_tokens" } } })],
+  apis: [OpenAIChat.api.configure({ id: "deepseek-chat", capabilities: { output: { maxTokensField: "max_tokens" } } })],
 })
 
 export const model = Provider.entrypoint<Settings, OpenAIProviderOptionsInput>(deepseek)

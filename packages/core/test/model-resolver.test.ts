@@ -140,7 +140,7 @@ describe("ModelResolver", () => {
         query: { "api-version": "2025-01-01-preview" },
       })
       expect(chat).toMatchObject({ id: "chat-deployment", provider: "azure" })
-      expect(chat.api.id).toBe("openai-chat")
+      expect(chat.api.id).toBe("azure-openai-chat")
       expect(deployment).toMatchObject({ id: "legacy-url-deployment", provider: "azure" })
       expect(deployment).toMatchObject({
         baseURL: "https://modern-resource.openai.azure.com/openai/deployments/legacy-url-deployment",
@@ -155,12 +155,12 @@ describe("ModelResolver", () => {
     Effect.gen(function* () {
       const routes = {
         "alibaba-coding-plan-cn": "alibaba-chat",
-        baseten: "openai-chat",
-        deepseek: "openai-chat",
-        "fireworks-ai": "openai-chat",
+        baseten: "baseten-chat",
+        deepseek: "deepseek-chat",
+        "fireworks-ai": "fireworks-chat",
         "moonshotai-cn": "moonshot-chat",
         zhipuai: "zai-chat",
-        "zhipuai-coding-plan": "zai-chat",
+        "zhipuai-coding-plan": "zai-coding-chat",
         cerebras: "openai-compatible-chat",
         deepinfra: "openai-compatible-chat",
         groq: "openai-compatible-chat",
@@ -219,9 +219,9 @@ describe("ModelResolver", () => {
         credential,
       )
 
-      expect(responses.api.id).toBe("open-responses")
+      expect(responses.api.id).toBe("bedrock-mantle-responses")
       expect(responses).toMatchObject({ baseURL: "https://bedrock-mantle.us-east-2.api.aws/v1" })
-      expect(chat.api.id).toBe("openai-chat")
+      expect(chat.api.id).toBe("bedrock-mantle-chat")
       expect(chat).toMatchObject({ baseURL: "https://bedrock-mantle.us-east-2.api.aws/v1" })
     }),
   )
@@ -239,7 +239,7 @@ describe("ModelResolver", () => {
         })
         const resolved = yield* ModelResolver.fromCatalogModel(catalog)
 
-        expect(resolved.api.id).toBe("open-responses")
+        expect(resolved.api.id).toBe("bedrock-mantle-responses")
         expect(resolved).toMatchObject({ baseURL: "https://bedrock-mantle.us-west-2.api.aws/openai/v1" })
         expect(catalog.settings?.baseURL).toBe("https://bedrock-mantle.us-west-2.api.aws/openai/v1")
       }),
@@ -1373,14 +1373,14 @@ describe("ModelResolver", () => {
       expect(google.options?.providerOptions).toEqual({ thinkingConfig: { thinkingBudget: 1_024 } })
       expect(openrouter.api.id).toBe("openrouter")
       expect(openrouter.options?.providerOptions).toEqual({ reasoning: { effort: "high" } })
-      expect(cerebras.api.id).toBe("openai-chat")
+      expect(cerebras.api.id).toBe("cerebras-chat")
       expect(cerebras.options?.providerOptions).toEqual({ reasoningEffort: "high" })
       expect(String(cerebras.provider)).toBe("test-provider")
-      expect(deepinfra.api.id).toBe("openai-chat")
+      expect(deepinfra.api.id).toBe("deepinfra-chat")
       expect(deepinfra.baseURL).toBe("https://deepinfra.example/provider-root/openai")
       expect(deepinfra.options?.providerOptions).toEqual({ reasoningEffort: "none" })
       expect(String(deepinfra.provider)).toBe("test-provider")
-      expect(togetherai.api.id).toBe("openai-chat")
+      expect(togetherai.api.id).toBe("togetherai-chat")
       expect(togetherai.options?.providerOptions).toEqual({ reasoningEffort: "high" })
       expect(String(togetherai.provider)).toBe("test-provider")
       expect(groq.api.id).toBe("groq-chat")
@@ -1403,7 +1403,7 @@ describe("ModelResolver", () => {
       expect(bedrock.api.id).toBe("bedrock-converse")
       expect(bedrock.options?.topP).toBe(0.8)
       expect(bedrock.options?.http?.body).toEqual({ serviceTier: { type: "priority" } })
-      expect(mantle.api.id).toBe("openai-chat")
+      expect(mantle.api.id).toBe("bedrock-mantle-chat")
       expect(mantle.options?.topP).toBe(0.6)
       expect(workers.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/account/ai/v1")
     }),

@@ -29,6 +29,7 @@ export const deepinfra = Provider.make({
   auth: Provider.apiKey("DEEPINFRA_API_KEY"),
   apis: [
     OpenAIChat.api.configure({
+      id: "deepinfra-chat",
       capabilities: {
         output: { maxTokensField: "max_tokens" },
         reasoning: { field: "reasoning_content" },

@@ -25,10 +25,10 @@ export type Settings<Options = OpenAIProviderOptionsInput> = SharedSettings<Opti
 
 export const chatCompletions = OpenAIChat.api
   .extend({
-    id: "digitalocean",
+    id: "digitalocean-chat",
     body: (request) => OpenAIChat.fromRequest(request, { cacheControl: cacheControl() }),
   })
-  .configure({ capabilities: { cache: { markers: true, promptCacheKey: true } } })
+  .configure({ id: "digitalocean", capabilities: { cache: { markers: true, promptCacheKey: true } } })
 
 export const digitalocean = Provider.make({ ...shared, apis: [chatCompletions, responses] })
 

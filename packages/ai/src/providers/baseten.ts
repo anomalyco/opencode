@@ -34,7 +34,7 @@ export const baseten = Provider.make({
   id,
   baseURL,
   auth: Provider.apiKey("BASETEN_API_KEY"),
-  apis: [OpenAIChat.api],
+  apis: [OpenAIChat.api.configure({ id: "baseten-chat" })],
 })
 
 // Baseten reads media only as parts in a user message inside `state.messages`, not in any of the System One

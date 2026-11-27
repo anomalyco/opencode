@@ -53,7 +53,7 @@ export type Settings = ProviderPackage.Settings &
 
 export const gemini = Gemini.api
   .extend({
-    id: "google-vertex-gemini",
+    id: "gemini",
     body: (request, base) =>
       base(request).pipe(
         Effect.map((body) => {
@@ -72,7 +72,7 @@ export const gemini = Gemini.api
     },
     headers: GoogleVertexShared.serviceTierHeader,
   })
-  .configure({ metadataKey: "vertex" })
+  .configure({ id: "google-vertex-gemini", metadataKey: "vertex" })
 
 // Tuned models live under `endpoints/{id}` outside `publishers/google`, so they resolve a different base URL.
 const vertex = (modelID: string) =>

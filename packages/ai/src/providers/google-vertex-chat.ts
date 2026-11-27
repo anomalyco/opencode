@@ -15,7 +15,7 @@ export type Settings = ProviderPackage.Settings &
 
 export const googleVertexChat = Provider.make({
   ...GoogleVertexShared.shared,
-  apis: [OpenAIChat.api.configure({ metadataKey: "vertex" })],
+  apis: [OpenAIChat.api.configure({ id: "google-vertex-chat", metadataKey: "vertex" })],
   settings: GoogleVertexShared.oauthSettings(
     "Chat",
     (project, location) =>

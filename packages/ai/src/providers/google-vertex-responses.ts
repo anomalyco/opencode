@@ -13,7 +13,9 @@ export type Settings = ProviderPackage.Settings &
     readonly project?: string
   }
 
-export const responses = OpenResponses.statelessApi.extend({ id: "google-vertex-responses" }).configure({ metadataKey: "vertex" })
+export const responses = OpenResponses.statelessApi
+  .extend({ id: "google-vertex-responses" })
+  .configure({ metadataKey: "vertex" })
 
 export const googleVertexResponses = Provider.make({
   ...GoogleVertexShared.shared,

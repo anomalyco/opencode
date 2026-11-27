@@ -6,7 +6,11 @@ import { authentication, endpoint, entrypoint, id } from "./shared.js"
 
 export type { Settings } from "./shared.js"
 
-export const chatCompletions = OpenAIChat.api.configure({ options, capabilities: { cache: { promptCacheKey: true } } })
+export const chatCompletions = OpenAIChat.api.configure({
+  id: "azure-openai-chat",
+  options,
+  capabilities: { cache: { promptCacheKey: true } },
+})
 
 export const model = entrypoint<OpenAIProviderOptionsInput>(
   Provider.make({ id, auth: authentication(), apis: [chatCompletions] }),

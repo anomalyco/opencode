@@ -640,8 +640,8 @@ describe("APIs built on the Anthropic Messages and Open Responses formats", () =
       "meta-responses",
       "openrouter-responses",
       "xai-responses",
+      "zai-coding-messages",
       "zai-coding-responses",
-      "zai-messages",
     ])
   })
 

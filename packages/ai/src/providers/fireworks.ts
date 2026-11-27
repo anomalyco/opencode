@@ -27,7 +27,7 @@ export const fireworks = Provider.make({
   id,
   baseURL,
   auth: Provider.apiKey("FIREWORKS_API_KEY"),
-  apis: [OpenAIChat.api.configure({ capabilities: { cache: { promptCacheKey: true } } })],
+  apis: [OpenAIChat.api.configure({ id: "fireworks-chat", capabilities: { cache: { promptCacheKey: true } } })],
 })
 
 export const media = (input: Config = {}) => {

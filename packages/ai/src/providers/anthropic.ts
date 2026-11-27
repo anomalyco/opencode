@@ -26,7 +26,10 @@ export const anthropic = Provider.make({
 
 const entrypoint = Provider.entrypoint<Settings, AnthropicMessages.ProviderOptionsInput, undefined>(anthropic)
 
-export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOptionsInput, undefined> = (modelID, settings = {}) => {
+export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOptionsInput, undefined> = (
+  modelID,
+  settings = {},
+) => {
   AnthropicCompatible.requireOneCredential(anthropic.id, settings, "Anthropic")
   return entrypoint(modelID, settings)
 }

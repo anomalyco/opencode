@@ -6,6 +6,7 @@ export type Settings = SharedSettings<ChatOptionsInput>
 
 /** Cohere's OpenAI-compatible Chat Completions API. */
 export const chatCompletions = OpenAIChat.api.configure({
+  id: "cohere-chat-completions",
   baseURL: compatibilityBaseURL,
   capabilities: {
     output: { maxTokensField: "max_tokens" },

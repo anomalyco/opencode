@@ -6,6 +6,7 @@ import { baseURL, region, settings, shared, type Settings } from "./shared.js"
 export type { Settings } from "./shared.js"
 
 export const responses = OpenResponses.statelessApi.configure({
+  id: "bedrock-mantle-responses",
   baseURL: baseURL(region),
   metadataKey: "mantle",
   options: (modelID) => ({ providerOptions: openAIDefaultOptions(modelID) }),

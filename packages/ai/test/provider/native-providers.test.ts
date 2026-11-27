@@ -79,13 +79,13 @@ describe("native OpenAI-compatible providers", () => {
       provider: "togetherai",
       baseURL: "https://api.together.xyz/v1",
       capabilities: { output: { maxTokensField: "max_tokens" }, tools: { strict: false } },
-      api: { id: "openai-chat", protocol: { id: "openai-chat" } },
+      api: { id: "togetherai-chat", protocol: { id: "openai-chat" } },
     })
     expect(cerebras).toMatchObject({
       provider: "cerebras",
       baseURL: "https://api.cerebras.ai/v1",
       capabilities: { output: { maxTokensField: "max_tokens" }, reasoning: { field: "reasoning" } },
-      api: { id: "openai-chat", protocol: { id: "openai-chat" } },
+      api: { id: "cerebras-chat", protocol: { id: "openai-chat" } },
     })
   })
 
@@ -98,7 +98,7 @@ describe("native OpenAI-compatible providers", () => {
           reasoningEffort: "high",
         }
         const selected = provider.model("test-model", settings)
-        expect(selected.api.id).toBe("openai-chat")
+        expect(selected.api.id).toBe(`${selected.provider}-chat`)
         expect(selected.api.protocol.id).toBe("openai-chat")
         expect(selected.baseURL).toBe(settings.baseURL)
         const input = {
@@ -124,7 +124,7 @@ describe("native OpenAI-compatible providers", () => {
       provider: "deepinfra",
       baseURL: "https://api.deepinfra.com/v1/openai",
       capabilities: { output: { maxTokensField: "max_tokens" }, reasoning: { field: "reasoning_content" } },
-      api: { id: "openai-chat", protocol: { id: "openai-chat" } },
+      api: { id: "deepinfra-chat", protocol: { id: "openai-chat" } },
     })
   })
 

@@ -55,7 +55,12 @@ export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOp
       message: "Anthropic-compatible providers require a baseURL",
     })
   return Provider.entrypoint<ProviderPackage.Settings, AnthropicMessages.ProviderOptionsInput, undefined>(
-    Provider.make({ id: provider ?? id, auth: shared.auth([]), apis: [shared.api], settings: shared.settings }),
+    Provider.make({
+      id: provider ?? id,
+      auth: shared.auth([]),
+      apis: [shared.api.configure({ id: "anthropic-compatible-messages" })],
+      settings: shared.settings,
+    }),
   )(modelID, settings)
 }
 

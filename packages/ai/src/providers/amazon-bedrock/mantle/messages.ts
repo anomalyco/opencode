@@ -6,6 +6,7 @@ import { baseURL, region, settings, shared, type MessagesSettings } from "./shar
 export type Settings = MessagesSettings
 
 export const messages = AnthropicMessages.api.configure({
+  id: "bedrock-mantle-messages",
   baseURL: baseURL(region, "/anthropic"),
   metadataKey: "mantle",
   // Mantle rejects mid-conversation `output_config` on Opus 5.0; support starts at 5.1+.
