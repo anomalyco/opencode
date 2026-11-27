@@ -8,12 +8,14 @@ import { docsAlternates, docsLocaleHref, docsSections } from "./navigation"
  * x-default). Fallback pages are left out: they canonicalise to the English page (route.ts,
  * DocsLayout.tsx). The V1 docs are noindex and have no sitemap.
  */
-export function renderSitemap(site: URL, translated: ReadonlyMap<string, readonly Locale[]> = new Map()) {
-  const slugs = [
-    ...new Set(
-      docsSections.flatMap((section) => section.groups.flatMap((group) => group.items.map((item) => item.slug))),
-    ),
-  ]
+export function renderSitemap(
+  site: URL,
+  translated: ReadonlyMap<string, readonly Locale[]> = new Map(),
+  pages: readonly string[] = docsSections.flatMap((section) =>
+    section.groups.flatMap((group) => group.items.map((item) => item.slug)),
+  ),
+) {
+  const slugs = [...new Set(pages)].toSorted()
   const urls = slugs.flatMap((slug) => {
     const alternates = docsAlternates(slug, translated)
     const links = [

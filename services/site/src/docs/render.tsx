@@ -127,7 +127,7 @@ function translatedLocales(slug: string) {
 export async function renderDocsSitemap(site: URL) {
   const translated = new Map<string, Locale[]>()
   for (const slug of docsSlugs.latest) translated.set(slug, await translatedLocales(slug))
-  return renderSitemap(site, translated)
+  return renderSitemap(site, translated, docsSlugs.latest)
 }
 
 /**
