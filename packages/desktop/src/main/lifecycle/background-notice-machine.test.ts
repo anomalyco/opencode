@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { initialState, transition, type Event, type State } from "./background-notice-machine"
+import { initialState, transition, type Command, type Event, type State } from "./background-notice-machine"
 
 const replay = (events: readonly Event[], from: State) =>
-  events.reduce(
+  events.reduce<{ state: State; holdsQuit: boolean; commands: Command[] }>(
     (result, event) => {
       const next = transition(result.state, event)
 
       return { state: next.state, holdsQuit: next.holdsQuit, commands: [...result.commands, ...next.commands] }
     },
-    { state: from, holdsQuit: false, commands: [] as unknown[] },
+    { state: from, holdsQuit: false, commands: [] },
   )
 
 describe("background service notice", () => {

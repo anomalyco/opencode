@@ -55,6 +55,7 @@ export const layer = Layer.effect(
       ),
       resume: Effect.void,
     })
+
     yield* Effect.addFinalizer(() => Effect.sync(remove))
 
     return Service.of({ connection: machine.connection, reconnect: machine.reconnect })

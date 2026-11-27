@@ -34,6 +34,7 @@ export function createBackgroundNotice(input: {
 
   const show = () => {
     const parent = input.parent()
+
     const options: Electron.MessageBoxOptions = {
       type: "info",
       message: nativeT("desktop.backgroundNotice.message"),
