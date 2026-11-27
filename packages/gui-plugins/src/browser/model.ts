@@ -864,12 +864,17 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     },
     command,
     tab,
-    /** Opens a blank tab for the user, whose pane then focuses the address field. */
-    open(session: SessionRef) {
+    /** Opens a tab for the user: on `url`, or blank, whose pane then focuses the address field. */
+    open(session: SessionRef, url?: string) {
       if (!available(session)) return
       // Opening the browser here takes it back from another window, which would otherwise answer the command.
       dispatch({ type: "session.wake", sessionKey: session.key, takes: true })
-      dispatch({ type: "session.command", sessionKey: session.key, action: { type: "tabs.open" }, focusAddress: true })
+      dispatch({
+        type: "session.command",
+        sessionKey: session.key,
+        action: url === undefined ? { type: "tabs.open" } : { type: "tabs.open", url },
+        focusAddress: url === undefined,
+      })
     },
     /** Whether the user just opened this blank tab; true once, for the pane that focuses its address. */
     opened(session: Session, tabID: Browser.TabID) {
