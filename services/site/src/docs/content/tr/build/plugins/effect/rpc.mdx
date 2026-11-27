@@ -44,7 +44,8 @@ JSON Schema ve Standard Schema da desteklenir.
 
 ### Girdi ve çıktı
 
-Yöntem argümanı için `input`, dönüş değeri için `output` kullanın. Değer yoksa ikisinden birini atlayın.
+Yöntemin argümanı için `input`, dönüş değeri için `output` kullanın. İkisi de zorunludur. Girdi veya çıktı yoksa ilgili
+şema için `Schema.Struct({})` kullanın. Girdi yoksa yöntemi `{}` ile çağırın, çıktı yoksa `{}` döndürün.
 
 ```ts
 search: {
@@ -65,7 +66,8 @@ errors: {
 
 ### Olaylar
 
-Olayları üst düzey `events` eşlemesine ekleyin. Olay verisi bir nesne olmalıdır.
+Olayları üst düzey `events` eşlemesine ekleyin. Olay verisi bir nesne olmalıdır. Eşleme zorunludur; RPC'nin olayı yoksa
+`events: {}` kullanın.
 
 ```ts
 events: {

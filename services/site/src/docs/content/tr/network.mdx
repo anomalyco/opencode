@@ -3,19 +3,19 @@ title: Ağ
 description: Proxy'leri, özel sertifika yetkililerini ve istemci sertifikalarını yapılandırın.
 ---
 
-Standart proxy değişkenlerini ayarlayın ve loopback adreslerini kapsam dışında bırakın. OpenCode, CLI ile arka plan hizmeti
-arasında yerel HTTP bağlantıları kullanır. Bu nedenle CLI ortamında proxy ayarlarsanız loopback adreslerini hariç tutmanız gerekir.
+Standart proxy değişkenlerini ayarlayın. OpenCode, CLI ile arka plan hizmeti arasında yerel HTTP bağlantıları kullanır.
+CLI, loopback adreslerine bağlanırken otomatik olarak proxy'yi atlar.
 
 ```bash
 export HTTP_PROXY=http://proxy.example.com:8080
 export HTTPS_PROXY=http://proxy.example.com:8080
-export NO_PROXY=localhost,127.0.0.1,::1
 
 opencode
 ```
 
-`HTTP_PROXY` HTTP hedeflerini, `HTTPS_PROXY` HTTPS hedeflerini yönetir. Proxy URL'si her iki değişkende de `http://`
-kullanabilir. `NO_PROXY`, doğrudan bağlanan ana bilgisayarların ve adreslerin virgülle ayrılmış listesidir.
+HTTP hedefleri için `HTTP_PROXY`, HTTPS hedefleri için `HTTPS_PROXY` kullanılır. Her iki değişkende de proxy URL'si
+`http://` ile başlayabilir. CLI, başlatıldığında hem `NO_PROXY` hem de `no_proxy` listesine `127.0.0.1`, `localhost`
+ve `::1` adreslerini ekler. Doğrudan bağlanılması gereken diğer ana makineleri `NO_PROXY` içinde virgülle ayırarak listeleyin.
 
 ## Hizmet
 
@@ -25,13 +25,13 @@ başlatmalarda da aynı ağ ayarlarını kullanması için değişkenleri yönet
 ```bash
 opencode service set env HTTP_PROXY http://proxy.example.com:8080
 opencode service set env HTTPS_PROXY http://proxy.example.com:8080
-opencode service set env NO_PROXY localhost,127.0.0.1,::1
+opencode service set env NO_PROXY llm.company.example
 opencode service start
 ```
 
-Yönetilen bir ortam değişkenini değiştirmek çalışan hizmeti durdurur. `service start` onu yeni ortamla yeniden başlatır.
-Kabuk bir proxy ayarlıyorsa `NO_PROXY` değişkenini CLI kabuğunda da tutun; çünkü yönetilen hizmet değişkenleri CLI sürecine
-değil sunucu sürecine uygulanır.
+Yönetilen bir ortam değişkenini değiştirdiğinizde çalışan hizmet durur. `service start` hizmeti yeni ortam değişkenleriyle başlatır.
+Yönetilen hizmetin değişkenleri CLI sürecine değil, sunucu sürecine uygulandığından CLI kabuğunda proxy değişkenlerini
+ayrıca ayarlayın. Loopback adresleri her iki tarafta da otomatik olarak proxy dışında tutulur.
 
 Kalıcı hale getirilmiş bir değişkeni `service unset env` ile kaldırın:
 
@@ -131,7 +131,6 @@ WebSocket yerine HTTP kullanır. webfetch gibi araçlar, uzak MCP sunucuları ve
 ```bash
 HTTP_PROXY=http://proxy.example.com:8080 \
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode --standalone
 ```
 
@@ -139,7 +138,6 @@ Aynı deseni ön planda çalışan bir sunucuya uygulayın:
 
 ```bash
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode serve
 ```
 

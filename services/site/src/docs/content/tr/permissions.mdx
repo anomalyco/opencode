@@ -119,10 +119,13 @@ kaynakları kullanır:
 | `websearch`          | Arama sorgusu                                                               |
 | `generate_image` | Ayarlanmışsa `#variant` ile birlikte, seçilen görsel modeli `providerID/modelID` olarak |
 | `external_directory` | Kurallı dış dizin sınırı, normalde `/*` ile biter                           |
-| `<server>_<tool>`    | Bir MCP aracı için `*`; her iki addaki desteklenmeyen karakterler `_` olur  |
+| `<server>_<tool>`    | Bir MCP aracı için `*`. Her iki adda da harfler, rakamlar, `_` ve `-` korunur; diğer karakterler `_` ile değiştirilir. |
 | `opencode_list_mcp_resources` | MCP sunucu adı                                                    |
 | `opencode_read_mcp_resource`  | `<server>:<uri>`                                                   |
 | `execute`            | `*`; bir deny Code Mode'u kaldırır ve araçlarını doğrudan listeler, iç içe araçlar ise kendi kurallarını uygular |
+
+MCP eylem adlarında kısa çizgiler korunur. Bu nedenle `mcp-atlassian` adlı bir sunucunun araçları `mcp-atlassian_*`
+deseniyle eşleşir, `mcp_atlassian_*` ile eşleşmez.
 
 Örneğin bir skill'e izin verin ve diğer tüm skill'leri reddedin:
 

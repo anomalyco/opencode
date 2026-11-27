@@ -68,8 +68,17 @@ destekler:
 
 ### Girdi ve çıktı
 
-Her yöntem, argümanı için bir `input`, dönüş değeri için bir `output` şeması tanımlayabilir. Yöntem bir değer kabul
-etmiyor veya döndürmüyorsa ikisinden birini atlayın.
+Her yöntem, argümanı için bir `input` şeması ve dönüş değeri için bir `output` şeması gerektirir. Girdi veya çıktı
+yoksa ilgili alan için boş bir nesne şeması kullanın. Girdi yoksa yöntemi `{}` ile çağırın, çıktı yoksa `{}` döndürün:
+
+```ts
+refresh: {
+  input: { type: "object", additionalProperties: false },
+  output: { type: "object", additionalProperties: false },
+}
+```
+
+`undefined` döndüren bir yöntem `rpc.invalid_output` hatası verir.
 
 ```ts
 search: {
@@ -109,7 +118,8 @@ errors: {
 
 ### Olaylar
 
-Olayları üst düzey `events` eşlemesine ekleyin. Her olayın, abonelere gönderilen veri için bir şeması vardır.
+Olayları üst düzey `events` eşlemesine ekleyin. Her olayın abonelere gönderdiği veri için bir şeması vardır. Eşleme
+zorunludur; RPC'nin olayı yoksa `events: {}` kullanın.
 
 Olay verisi bir nesne olmalıdır. Veri yoksa boş bir nesne şeması kullanın:
 

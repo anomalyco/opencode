@@ -35,6 +35,19 @@ OpenCode bu dosyayı oluşturduğunda veya taşıdığında `$schema` ekler. Ge�
 
 Bilinmeyen ayarlar yok sayılır. Düzenleyicinizin geçersiz değerleri işaretlemesi için `$schema` alanını koruyun.
 
+### Eski `tui.json` dosyası
+
+V1, terminal istemcisinin ayarlarını `tui.json` dosyasında saklardı. V2 bu dosyayı yalnızca bir kez, geçiş için okur;
+ayarlarını `cli.json` dosyasının altında ayrı bir yapılandırma katmanı olarak kullanmaz.
+
+- `cli.json` yoksa CLI, aynı dizindeki genel `tui.json` dosyasının desteklenen ayarlarını ve durum dizinindeki `kv.json`
+  dosyasına kaydedilmiş tercihleri kullanarak bu dosyayı oluşturur.
+- `cli.json` oluşturulduktan sonra `tui.json` yok sayılır. Sonradan yaptığınız değişiklikler etkili olmaz; dosyayı
+  tutabilir veya silebilirsiniz.
+- `cli.json` dosyasını silerseniz bir sonraki başlatmada geçiş yeniden yapılır.
+- Eski dosyalar değiştirilmez veya silinmez.
+- Yalnızca genel `tui.json` dosyası okunur. Projeye özel `tui.json` dosyaları ve `tui.jsonc` taşınmaz.
+
 ## Satır içi yapılandırma
 
 CLI ayarlarını satır içi JSON'dan uygulamak için `OPENCODE_CLI_CONFIG_CONTENT` ayarlayın:

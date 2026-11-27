@@ -1043,8 +1043,9 @@ kabul eder. Model o biçimi duyurmuyorsa araç normal nesne girdisini korur.
 
 Araçların etkin adlarını içeren bir `id` değeri vardır ve o kimlik yoksa `get()` `undefined` döndürür. `update` ve
 `remove` işlemlerini etkin araç adıyla, ad alanı dahil (yukarıdaki `acme_greeting`) kullanın. Ad alanlarındaki noktalar
-ve araç adlarındaki desteklenmeyen karakterler `_` olur. Eksik adlar yok sayılır; bir araç oluşturmak için eksiksiz bir
-tanımla `add` gerekir. Güncellemeler adı ve ad alanını korur. Yeni şemaları veya seçenekleri atayarak onları değiştirin,
+`_` ile değiştirilir. Araç adlarında harfler, rakamlar, `_` ve `-` dışındaki karakterler `_` ile değiştirilir.
+Var olmayan adlar yok sayılır; bir araç oluşturmak için `add` yöntemini eksiksiz bir tanımla çağırın.
+Güncellemeler adı ve ad alanını korur. Yeni şemaları veya seçenekleri atayarak onları değiştirin,
 iç içe değerleri değiştirmeyin. Geçersiz güncellemeler günlüğe yazılır ve önceki tanım bozulmadan kalır.
 
 {/* prettier-ignore */}

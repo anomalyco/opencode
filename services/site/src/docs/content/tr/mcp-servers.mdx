@@ -233,7 +233,7 @@ OpenCode kendisini yetkilendirme sunucusuna uygulanan ilk yöntemle tanıtır:
 | --- | --- |
 | Önceden kayıtlı istemci | `oauth.client_id` yapılandırılmıştır. |
 | [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents) (CIMD) | Yetkilendirme sunucusu CIMD ve genel istemcileri destekler ve `oauth.redirect_uri` ayarlanmamıştır. |
-| [Dinamik istemci kaydı](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | Yukarıdakilerin hiçbiri geçerli değildir. OpenCode bir istemci kaydeder ve sonraki oturum açmalarda onu yeniden kullanır. |
+| [Dinamik istemci kaydı](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | Yukarıdaki yöntemlerden hiçbiri geçerli değildir. OpenCode bir istemci kaydeder. Sonraki oturum açmalarda aynı istemciyi kullanır ve kaydettiği portu dinler. Port kullanımda ise yeniden kayıt yapar. |
 
 Bir yetkilendirme sunucusu CIMD'yi meta verileriyle etkinleştirir:
 
@@ -290,8 +290,8 @@ Bir sağlayıcı size istemci kimlik bilgileri verdiğinde V2'nin snake_case OAu
 | --- | --- |
 | `client_id` | Önceden kayıtlı istemci kimliği. CIMD ve DCR'nin önüne geçer. |
 | `client_secret` | Gizli istemci için sır; token isteği gövdesinde gönderilir. Genel istemcilerde bunu atlayın. |
-| `scope` | İstenecek boşlukla ayrılmış kapsamlar. Sunucu kimlik doğrulanmamış bir isteği reddettiğinde belirttiği kapsam varsayılandır. |
-| `callback_port` | `1` ile `65535` arasında yerel geri çağırma bağlantı noktası. Varsayılan olarak `redirect_uri` bağlantı noktası, sonra kullanılabilir bir geçici bağlantı noktası kullanılır. |
+| `scope` | İstenecek kapsamlar, boşlukla ayrılır. Sunucunun kimliği doğrulanmamış bir isteği reddederken belirttiği kapsam varsayılandır. OpenCode, token'ı yenilerken izin verilen kapsamı tekrar gönderir. |
+| `callback_port` | `1` ile `65535` arasında yerel geri çağırma portu. Bu alan ayarlanmazsa `redirect_uri` portu, o da yoksa önceki bir oturum açmada kaydedilen istemcinin portu kullanılır. Bunların hiçbiri yoksa boşta olan geçici bir port seçilir. |
 | `redirect_uri` | Yolu ve portu yerel geri çağırma dinleyicisine ulaşan, önceden kayıtlı loopback URI'si. Ayarlanması CIMD'yi kapatır. |
 | `auth_server_metadata_url` | Yetkilendirme sunucusunun OAuth veya OpenID Connect meta veri belgesinin URL'si. MCP sunucusu, yetkilendirme sunucusunu belirten korumalı kaynak meta verilerini yayımlamadığında ayarlayın. |
 

@@ -190,7 +190,7 @@ const agents = await ctx.agent.list()
 const build = await ctx.agent.get({ agentID: "build" })
 ```
 
-Agent'ları incelemek, güncellemek veya kaldırmak ya da varsayılan agent'ı seçmek için bir dönüşüm kaydedin.
+Agent'ları incelemek, oluşturmak, güncellemek veya kaldırmak ya da varsayılan agent'ı seçmek için bir dönüşüm kaydedin.
 
 ```ts
 await ctx.agent.transform((editor) => {
@@ -202,6 +202,19 @@ await ctx.agent.transform((editor) => {
     agent.description = "Builds features and fixes bugs"
   })
   editor.remove("legacy")
+})
+```
+
+Yeni bir agent kaydetmek için `editor.update` kullanın. Kimlik zaten varsa bu yöntem o agent'ı düzenler. Yoksa geri
+çağırma işlevini çalıştırmadan önce `Agent.Info.default(id)` ile bir agent oluşturur.
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
 })
 ```
 
@@ -1047,8 +1060,9 @@ await ctx.tool.reload()
 
 Düzenleyicide şu anda bulunan araçları incelemek için `list()` ve `get()` kullanın. Araçların etkin adlarını içeren bir
 `id` değeri vardır ve o kimlik yoksa `get()` `undefined` döndürür. `update` ve `remove` işlemlerini etkin araç adıyla,
-ad alanı dahil (yukarıdaki `acme_greeting`) kullanın. Ad alanlarındaki noktalar ve araç adlarındaki desteklenmeyen
-karakterler `_` olur. Eksik adlar yok sayılır; bir araç oluşturmak için eksiksiz bir tanımla `add` gerekir.
+ad alanı dahil (yukarıdaki `acme_greeting`) kullanın. Ad alanlarındaki noktalar `_` ile değiştirilir. Araç adlarında
+harfler, rakamlar, `_` ve `-` dışındaki karakterler `_` ile değiştirilir. Var olmayan adlar yok sayılır; bir araç
+oluşturmak için `add` yöntemini eksiksiz bir tanımla çağırın.
 Güncellemeler adı ve ad alanını korur. Yeni şemaları veya seçenekleri atayarak onları değiştirin, iç içe değerleri
 değiştirmeyin. Geçersiz güncellemeler günlüğe yazılır ve önceki tanım bozulmadan kalır.
 

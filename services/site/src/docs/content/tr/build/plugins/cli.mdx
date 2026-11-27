@@ -431,10 +431,11 @@ await context.ui.dialog.select({
 - Escape, `clear()` veya başka bir iletişim kutusu göstermek `undefined` çözer.
 - `ctrl+n` veya `ctrl+p` bağlamayın. İletişim kutusu bunları gezinme için ayırır ve kendi bağlamaları önceliklidir.
 
-Özel JSX iletişim kutuları boyutlarını ayarlayabilir ve kendilerini kapatabilir.
+Özel JSX iletişim kutuları kendi boyutlarını ayarlayabilir ve kendilerini kapatabilir. `set` yöntemini `show` yönteminden
+sonra çağırın. Bir iletişim kutusu açıldığında boyutu `medium` olarak sıfırlanır ve ortalanmaz. `medium`, `large` ve
+`xlarge` boyutları sırasıyla 60, 88 ve 116 sütun genişliğindedir.
 
 ```tsx
-context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.show(
   () => (
     <box>
@@ -443,6 +444,7 @@ context.ui.dialog.show(
   ),
   () => console.log("closed"),
 )
+context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.clear()
 ```
 
@@ -653,8 +655,8 @@ TUI eklentisini `./tui` üzerinden sunun; eklenti JSX render ediyorsa OpenTUI e�
     "@opencode/plugin": "latest"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.6.6",
-    "@opentui/solid": ">=0.6.6",
+    "@opentui/core": ">=0.8.0",
+    "@opentui/solid": ">=0.8.0",
     "solid-js": ">=1.9.0"
   }
 }

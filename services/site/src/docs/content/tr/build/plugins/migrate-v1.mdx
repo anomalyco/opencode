@@ -97,9 +97,34 @@ V2 bağlamı hem OpenCode istemcisi hem de eklenti API'si olarak kullanılır. �
 `ctx.location`, bu eklenti örneğinin yüklendiği konumu açıklar. Eklentinin gözlemleyebileceği her oturumun veya olayın
 konumu değildir. Bu ayrım önemli olduğunda oturum veya olay verisini okuyun.
 
-Bağlam, tablonun listelediğinden çok daha fazla alan sunar; kataloglar, komutlar, entegrasyonlar, MCP sunucuları,
-referanslar, skill'ler, depolama, VCS, worktree'ler ve web araması dahil. Bkz.
-[eksiksiz eklenti bağlamı](/build/plugins/server#api).
+Bağlam, tablodakilere ek olarak komutlar, entegrasyonlar, MCP sunucuları, referanslar, skill'ler, depolama, VCS,
+worktree'ler ve web araması gibi birçok alan sunar. Bkz. [Eklenti bağlamının tamamı](/build/plugins/server#api).
+
+### Katalog alanını taşıma
+
+Önceki eklenti derlemeleri, sağlayıcıları ve modelleri `ctx.catalog` üzerinden yayımlıyordu. OpenCode artık
+`ctx.provider` ve `ctx.model` alanlarını ayrı ayrı sunduğundan `ctx.catalog.transform` çağıran eklentiler yüklenmez.
+
+| Önceki katalog API'si | Güncel karşılığı |
+| --------------------------------------------- | ---------------------------------------------------------------------------- |
+| `ctx.catalog.transform(draft => …)`           | `ctx.provider.transform(editor => …)` ve `ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)`               | `ctx.provider` üzerinde `editor.update(id, fn)`                              |
+| `draft.model.update(providerID, modelID, fn)` | `ctx.model` üzerinde `editor.update(providerID, modelID, fn)`                 |
+| `ctx.catalog.reload()`                        | `ctx.provider.reload()` ve `ctx.model.reload()`                             |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+Düzenleyici API'lerinin tamamı için [Sağlayıcılar](/build/plugins/server#providers) ve
+[Modeller](/build/plugins/server#models) bölümlerine bakın.
 
 ## Kancaları `setup` içinde kaydetme
 

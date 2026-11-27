@@ -48,7 +48,7 @@ OpenCode şu konumlarda otomatik olarak arama yapar:
 | Proje                 | `.opencode/skills`                     |
 | Proje uyumluluğu      | `.claude/skills`, `.agents/skills`     |
 
-Proje kaynaklarında OpenCode geçerli dizinden proje köküne kadar arar ve her düzeydeki eşleşen dizinleri dahil eder.
+OpenCode, proje kaynaklarını geçerli dizinden dosya sistemi köküne kadar arar ve her düzeyde eşleşen dizinleri dahil eder.
 
 Her kaynak iki biçimden birini içerebilir:
 
@@ -177,7 +177,7 @@ Kaynaklar düşükten yükseğe öncelikle kaydedilir:
 2. `.claude/skills`, önce genel, sonra en uzak üst dizinden geçerli dizine doğru
 3. `.agents/skills`, önce genel, sonra en uzak üst dizinden geçerli dizine doğru
 4. `~/.config/opencode/skills`
-5. Proje `.opencode/skills`, proje kökünden geçerli dizine doğru
+5. Projeye ait `.opencode/skills` dizinleri, en üst dizinden geçerli dizine doğru
 6. Açık `skills` yapılandırma girdileri, yapılandırma önceliği ve dizi sırasına göre
 
 Daha önceki bir skill'i geçersiz kılmayı amaçlamıyorsanız yinelenen kimliklerden kaçının.

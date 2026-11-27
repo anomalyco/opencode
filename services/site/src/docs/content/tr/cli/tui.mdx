@@ -17,6 +17,21 @@ Explain how authentication works in this project
 Yeni satır için **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** veya **Ctrl+J** tuşlarına basın. OpenCode çalışırken **Enter**
 etkin oturumu yönlendirir; promptu sonrası için kuyruğa almak üzere **Ctrl+X** ardından **Enter** tuşlarına basın.
 
+## Projeler ve dizinler
+
+OpenCode'u hangi dizinde başlatırsanız dosyaları o dizinde arar ve kabuk komutlarını orada çalıştırır. Worktree'ler
+dahil, aynı Git deposundaki tüm dizinler tek bir projeye aittir. Sürüm denetimi altında olmayan bir dizin başlı başına
+bir projedir.
+
+Başka bir projede başlamak için dizin yolunu belirtin:
+
+```bash
+opencode ~/code/another-project
+```
+
+Son oturumları ve projeleri açmak için **Ctrl+O** tuşlarına basın. Bir projenin worktree'lerini listelemek için proje
+seçiliyken **Right** (sağ ok) tuşuna, listede yeni bir worktree oluşturmak için **Ctrl+N** tuşlarına basın.
+
 ## Bağlam
 
 Bir dosya aramak için `@` yazın, ardından dosyayı prompta eklemek için seçin. Sonuçları daraltmak için `@` sonrasında
@@ -78,8 +93,14 @@ Agent seçmek için **Ctrl+X** ardından **A** tuşlarına basın veya `/agents`
 
 ## Oturumlar
 
-Yeni bir oturum başlatmak için **Ctrl+X** ardından **N** tuşlarına basın. Var olan bir oturuma dönmek için **Ctrl+X**
-ardından **L** tuşlarına basın veya `/sessions` çalıştırın; **Ctrl+O** son oturumları ve projeleri birlikte açar.
+Her oturum kendi geçmişi ve dizini olan ayrı bir konuşmadır. Başka bir görev için `/new` komutunu çalıştırın ya da
+**Ctrl+X** ardından **N** tuşlarına basın. Önceki oturumlar erişilebilir kalır. Yeni oturumlar OpenCode'u başlattığınız
+dizinde açılır. [`session.new_location`](/cli/config#sessions) değerini `inherit` olarak ayarlarsanız geçerli oturumun
+dizininde açılır.
+
+Var olan bir oturuma dönmek için **Ctrl+X** ardından **L** tuşlarına basın veya `/sessions` komutunu çalıştırın. Bu
+listede **Ctrl+A**, geçerli dizindeki oturumlarla tüm projelerdeki oturumlar arasında geçiş yapar. **Ctrl+O** son
+oturumları ve projeleri birlikte açar.
 
 Sekmeler varsayılan olarak etkindir. Aralarında geçmek için **Ctrl+Tab** ve **Ctrl+Shift+Tab**, birini kapatmak için
 **Ctrl+X** ardından **W**, son kapatılan sekmeyi yeniden açmak için **Ctrl+Shift+T** kullanın.

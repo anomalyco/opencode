@@ -113,6 +113,36 @@ grep 'role=server' ~/.local/share/opencode/log/opencode.log
 grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
 ```
 
+## Telemetriyi dışa aktarma
+
+OpenCode, günlüklerini ve izlerini bir OpenTelemetry toplayıcısına veya HTTP üzerinden OTLP kabul eden bir APM
+arka ucuna gönderebilir. Toplayıcının base URL'sini yol eklemeden ayarlayın:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer example-token"
+export OTEL_RESOURCE_ATTRIBUTES="team=platform,host.name=dev-laptop"
+opencode
+```
+
+| Değişken | Davranış |
+| --- | --- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Base URL. Günlükler `<endpoint>/v1/logs`, izler `<endpoint>/v1/traces` adresine gönderilir. Değişken ayarlı değilse dışa aktarma kapalıdır. |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Her dışa aktarmada gönderilen, virgülle ayrılmış `key=value` başlıkları. Örneğin bir API anahtarı gönderebilirsiniz. |
+| `OTEL_RESOURCE_ATTRIBUTES` | Her kayda eklenen, virgülle ayrılmış ve URL kodlaması uygulanmış `key=value` öznitelikleri. Tek bir giriş bile hatalı biçimlendirilmişse özniteliklerin hiçbiri eklenmez. |
+
+Her kayıtta ayrıca `service.name` (`opencode`), `service.version`, `deployment.environment.name` (sürüm kanalı),
+`opencode.client` ve günlük dosyasındakiyle aynı çalıştırma kimliğini taşıyan `opencode.run` bulunur.
+
+Arka plan hizmeti ayrı bir süreçtir ve kabuğunuzdaki ortam değişkenlerini devralmaz. Model çağrılarının ve araç
+çalıştırmalarının izlenmesi için değişkenleri hizmette de ayarlayın:
+
+```bash
+opencode service set env OTEL_EXPORTER_OTLP_ENDPOINT http://localhost:4318
+opencode service set env OTEL_EXPORTER_OTLP_HEADERS "authorization=Bearer example-token"
+opencode service start
+```
+
 ## Heap anlık görüntüsü alma
 
 Çalışan arka plan sunucusunun bellek (heap) anlık görüntüsünü her platformda yazın:

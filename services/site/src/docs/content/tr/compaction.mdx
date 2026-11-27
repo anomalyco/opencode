@@ -100,6 +100,30 @@ Herhangi bir [OpenCode yapılandırma dosyasına](/config) `compaction` ekleyin:
 - `20000` gibi bir token sayısı da çalışır. Aynı sayı küçük bir pencerenin büyük, büyük bir pencerenin küçük bir payıdır.
 - Modelin penceresi kadar veya daha büyük bir token sayısı yok sayılır ve varsayılan uygulanır.
 
+### Pencere
+
+Pencerenin boyutunu modelin girdi limiti (`limit.input`) belirler. Modelin bağlam limiti (`limit.context`) daha düşükse
+o limit kullanılır. Modelde bu limitlerden yalnızca biri varsa pencerenin boyutu o limite eşittir. İkisi de yoksa
+otomatik sıkıştırma yapılmaz. Ancak sağlayıcı bir isteği fazla uzun olduğu için reddederse OpenCode bir kez sıkıştırma yapar.
+
+Yapılandırmada belirttiğiniz limitler yalnızca karşılık geldikleri alanın değerini değiştirir. Katalogda her iki limit de
+ayarlıysa yalnızca `limit.context` değerini artırmak, pencereyi katalogdaki girdi limitiyle sınırlı bırakır. Bu durumda
+`limit.input` değerini de ayarlayın:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "limit": { "context": 1050000, "input": 1000000 },
+        },
+      },
+    },
+  },
+}
+```
+
 ## Model
 
 Varsayılan olarak OpenCode özeti oturumun modelini kullanarak kendisi yazar. Özetler için başka bir model kullanmak üzere

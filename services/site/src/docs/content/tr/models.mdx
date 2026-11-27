@@ -243,8 +243,10 @@ model için OpenCode şunları varsayar:
 
 OpenCode `text`, `regex` ve `lark` biçimlerini tanır. models.dev'deki diğer biçim adları, model veya araçları düşürülmeden yok sayılır. Bir katalog modelinin önündeki proxy serbest biçimli araçları reddediyorsa o modelde `capabilities.freeform` değerini `[]` yapın.
 
-Bunlar algılanan yetenekler değil yedek varsayımlardır. Bilindiğinde doğru `capabilities` ve `limit` değerlerini ayarlayın;
-açık değerler yedeklerin yerini alır. Bir modeli kullanılabilir katalogdan gizlemek için `disabled: true` ekleyin:
+Bunlar tespit edilen yetenekler değil, değer belirtilmediğinde kullanılan varsayımlardır. Doğru `capabilities` ve `limit`
+değerlerini biliyorsanız ayarlayın; belirttiğiniz değerler varsayımların yerini alır. Otomatik sıkıştırma `limit.input`
+değerini kullanır ancak `limit.context` sınırını aşmaz. Bkz. [Pencere](/compaction#window).
+Bir modeli kullanılabilir modeller kataloğundan gizlemek için `disabled: true` ekleyin:
 
 ```jsonc title="opencode.jsonc"
 {

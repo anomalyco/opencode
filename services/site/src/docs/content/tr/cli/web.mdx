@@ -135,3 +135,28 @@ Diğer HTTP istemcileri Basic auth kullanır. Kullanıcı adı her zaman `openco
 ```bash
 $ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
 ```
+
+`opencode service set password` yalnızca yönetilen arka plan hizmeti için geçerlidir. `opencode serve`,
+`OPENCODE_PASSWORD` değişkenini okur. Değişken ayarlı değilse her başlatmada yeni bir parola üretir.
+
+### Docker
+
+Her sürümde `ghcr.io/anomalyco/opencode` adresinde sürüm etiketiyle bir imaj yayımlanır. İmajın giriş noktası
+`opencode` komutudur ve TUI'yi başlatır; sunucuyu çalıştırmak için `serve` argümanını verin. Sunucuyu `0.0.0.0`
+adresine bağlayın; varsayılan `127.0.0.1` adresine yalnızca kapsayıcının içinden erişilebilir.
+
+```bash
+$ docker run -d --name opencode -p 4096:4096 \
+    -e OPENCODE_PASSWORD="a-long-secret" \
+    -e ANTHROPIC_API_KEY \
+    -v opencode-data:/root/.local/share/opencode \
+    -v opencode-config:/root/.config/opencode \
+    -v "$PWD":/workspace -w /workspace \
+    ghcr.io/anomalyco/opencode:<version> serve --hostname 0.0.0.0 --port 4096
+```
+
+- Parolanın yeniden başlatmalar arasında değişmemesi için `OPENCODE_PASSWORD` değişkenini ayarlayın.
+- Veri dizinini (`/root/.local/share/opencode`) kapsayıcıya bağlayın. Bu dizin oturumlarınızın veritabanını barındırır.
+  Bağlamazsanız kapsayıcı silindiğinde oturumlarınız da kaybolur. Genel yapılandırmanızı korumak için yapılandırma
+  dizinini (`/root/.config/opencode`) de bağlayın.
+- Sunucunun hazır olup olmadığını `curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info` komutuyla kontrol edin.
