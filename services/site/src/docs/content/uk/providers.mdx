@@ -1,0 +1,688 @@
+---
+title: "Провайдери"
+description: "Підключіть OpenCode до провайдерів моделей, як-от OpenCode Go, ChatGPT, Amazon Bedrock, Google Vertex, GitHub Copilot та Ollama, або додайте власного провайдера."
+---
+
+OpenCode містить каталог провайдерів і моделей з [models.dev](https://models.dev). Для більшості провайдерів спершу
+підключіть обліковий запис, а потім виберіть модель.
+
+## Налаштування
+
+Запустіть `/connect`, виберіть провайдера й введіть його облікові дані. Потім запустіть `/models`, щоб вибрати одну з
+його моделей.
+
+```text
+/connect
+/models
+```
+
+## Go
+
+[OpenCode Go](/console/go) — це необов'язкова підписка на моделі для кодування, перевірені командою OpenCode. Оформіть
+підписку в [Console](https://opencode.ai/console), скопіюйте свій API-ключ, а потім підключіть його як **OpenCode Go**.
+
+```text
+/connect
+# Select OpenCode Go, then paste your API key.
+/models
+```
+
+Дивіться [посібник Go](/console/go), щоб дізнатися про ліміти використання, ендпоінти й подробиці щодо приватності.
+
+## ChatGPT
+
+Використовуйте тариф ChatGPT Plus або Pro замість API-ключа OpenAI. Підключіть **OpenAI**, а потім виберіть
+**Sign in with ChatGPT** або один із застарілих способів входу **Codex**. Використання зараховується до вашого тарифу,
+тому ці моделі показуються без вартості.
+
+```text
+/connect
+/models
+```
+
+### Обмеження контексту
+
+Типово OpenCode обмежує вікно контексту для цих входів нижче за реальну межу кожної моделі. Ці обмеження збігаються з
+типовими в Codex, тому використання тарифу відбувається приблизно з тією самою швидкістю, як в інших продуктах OpenAI.
+
+| Модель                | Ліміт вхідних даних |
+| --------------------- | ------------------- |
+| GPT-6.1 Sol і новіші  | 500,000             |
+| Старіші моделі        | 272,000             |
+
+Щоб відмовитися від цього, вимкніть плагін обмеження у своїй конфігурації. Префікс `-` вимикає вбудований плагін; усі
+інші плагіни лишаються ввімкненими.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["-opencode.provider.openai-context-caps"],
+}
+```
+
+## Власний провайдер
+
+Додайте провайдера, коли його API ще немає в каталозі. Цей приклад, сумісний з OpenAI, визначає облікові дані,
+runtime-пакет, ендпоінт і першу модель разом.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "name": "Acme",
+      "env": ["ACME_API_KEY"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.acme.example/v1",
+      },
+      "models": {
+        "qwen3-coder": {
+          "name": "Qwen 3 Coder",
+        },
+      },
+    },
+  },
+}
+```
+
+Ключі об'єкта `providers` — це ID провайдера, який використовується в посиланнях на моделі, наприклад
+`acme/qwen3-coder`.
+
+| Поле | Призначення |
+| --- | --- |
+| `name` | Відображувана назва. |
+| `env` | Упорядковані назви змінних середовища, які можуть надати облікові дані. |
+| `package` | Пакет середовища виконання провайдера. |
+| `canonical` | ID вбудованого провайдера, чиї типові налаштування каталогу успадковує цей провайдер. |
+| `compatibility` | Особливості API, спільні для всіх моделей цього провайдера. Дивіться [Сумісність](/models#compatibility). |
+| `settings` | Типізовані параметри OpenCode й параметри JSON, які OpenCode передає пакету середовища виконання. |
+| `headers` | HTTP-заголовки з рядковими значеннями, які додаються до запитів. |
+| `body` | Поля JSON, які OpenCode об'єднує з тілом запиту. |
+| `models` | Моделі, які треба додати або перевизначити. Ключі — ID моделей в OpenCode. |
+
+## Ендпоінт
+
+Перевизначте `settings.baseURL`, щоб спрямувати провайдера з каталогу через проксі або сумісний ендпоінт. Його наявний
+пакет, моделі й з'єднання при цьому зберігаються.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "baseURL": "https://llm-proxy.example.com/anthropic",
+      },
+    },
+  },
+}
+```
+
+`settings` залежить від пакета. Поле діє, лише коли вибраний пакет його підтримує.
+
+## Запити
+
+Використовуйте `headers` для додаткових HTTP-заголовків і `body` для JSON-полів, які слід додати до тіла кожного запиту.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+      "body": {
+        "metadata": {
+          "application": "opencode",
+        },
+      },
+    },
+  },
+}
+```
+
+Обидва поля можна також задати на моделі або варіанті, коли перевизначення потрібне лише для частини трафіку
+провайдера.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "headers": { "X-Model-Tier": "coding" },
+          "variants": [
+            {
+              "id": "batch",
+              "body": { "service_tier": "flex" },
+            },
+          ],
+        },
+      },
+    },
+  },
+}
+```
+
+## Тайм-аути
+
+HTTP-запити чекають до п'яти хвилин на заголовки відповіді й до п'ятнадцяти хвилин між частинами потокової відповіді.
+Установіть `settings.headerTimeout` або `settings.chunkTimeout` провайдера в кількість мілісекунд, щоб змінити ліміт,
+або в `false`, щоб вимкнути його. `settings.timeout` додатково обмежує весь запит від надсилання до завершення
+відповіді; типового значення він не має. Ці налаштування діють для всього провайдера, а не для окремої моделі чи
+варіанта. На транспорті WebSocket `chunkTimeout` натомість обмежує проміжок між кадрами й типово становить тридцять
+хвилин.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "headerTimeout": 600000,
+        "chunkTimeout": false,
+      },
+    },
+  },
+}
+```
+
+Запит, що перевищує будь-який із лімітів, завершується помилкою транспорту. OpenCode повторює запит, що вичерпав
+тайм-аут, до трьох разів, перш ніж здатися.
+
+## Кодування запитів
+
+`settings.encoding` стискає тіла HTTP-запитів за допомогою `"zstd"` або `"gzip"` чи надсилає звичайний JSON із
+`"none"`. Задайте його на провайдері, моделі або варіанті: перемагає найконкретніше значення. Увімкніть лише те
+кодування, яке ендпоінт декодує: більшість провайдерів і шлюзів відхиляють стиснені тіла. OpenAI типово використовує
+`"zstd"`, коли ви ввійшли через ChatGPT і не налаштували власний `baseURL`; API-ключі надсилають звичайний JSON.
+Повідомлення WebSocket це не зачіпає.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "encoding": "none" },
+    },
+  },
+}
+```
+
+## Пакети
+
+Поле `package` вибирає runtime, який спілкується з провайдером. Використовуйте сумісний runtime для API, що реалізують
+формат запитів OpenAI.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.acme.example/v1",
+      },
+      "models": {
+        "qwen3-coder": {},
+      },
+    },
+  },
+}
+```
+
+Варіанти нативних пакетів:
+
+- `@opencode/ai/providers/openai`
+- `@opencode/ai/providers/openai/chat`
+- `@opencode/ai/providers/openai/responses`
+- `@opencode/ai/providers/openai-compatible`
+- `@opencode/ai/providers/openai-compatible/responses`
+- `@opencode/ai/providers/anthropic`
+- `@opencode/ai/providers/anthropic-compatible`
+- `@opencode/ai/providers/google`
+- `@opencode/ai/providers/google-vertex`
+- `@opencode/ai/providers/google-vertex/gemini`
+- `@opencode/ai/providers/google-vertex/chat`
+- `@opencode/ai/providers/google-vertex/responses`
+- `@opencode/ai/providers/google-vertex/messages`
+- `@opencode/ai/providers/azure`
+- `@opencode/ai/providers/azure/chat`
+- `@opencode/ai/providers/azure/responses`
+- `@opencode/ai/providers/amazon-bedrock`
+- `@opencode/ai/providers/amazon-bedrock/mantle`
+- `@opencode/ai/providers/amazon-bedrock/mantle/chat`
+- `@opencode/ai/providers/amazon-bedrock/mantle/messages`
+- `@opencode/ai/providers/amazon-bedrock/mantle/responses`
+- `@opencode/ai/providers/openrouter`
+- `@opencode/ai/providers/xai`
+
+Ви також можете використати npm-пакет, як-от `@acme/opencode-provider`, або абсолютну URL-адресу `file://` для
+локального пакета.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "package": "@acme/opencode-provider",
+      "models": { "acme-coder": {} },
+    },
+  },
+}
+```
+
+## Моделі
+
+Додавайте або перевизначайте моделі в мапі `models` провайдера. Ключ мапи — це ID моделі, який використовує OpenCode;
+`modelID` змінює ID, що надсилається провайдеру.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/coding",
+  "providers": {
+    "openai": {
+      "models": {
+        "coding": {
+          "modelID": "gpt-6.1-sol",
+          "name": "GPT-6.1 Sol Coding",
+        },
+      },
+    },
+  },
+}
+```
+
+| Поле | Призначення |
+| --- | --- |
+| `modelID` | ID моделі або розгортання, що надсилається провайдеру. |
+| `name` | Відображувана назва. |
+| `family` | Родина моделей для групування споріднених моделей. |
+| `type` | Що створює модель: `chat`, `decision`, `image`, `video`, `realtime`, `embedding` або `transcription`. Типово `chat`; для сесій пропонуються лише чат-моделі. Realtime-моделі, що відповідають голосом, пропонуються для голосу, а з `disabled: true` — ні. |
+| `releaseDate` | Дата випуску у форматі `YYYY-MM-DD` або `YYYY-MM`. |
+| `package` | Перевизначення runtime для цієї моделі. Модель транскрипції вказує свій протокол транскрипції, наприклад `@opencode/ai/protocols/openai-transcription`; realtime-модель не приймає жодного, оскільки голосові сесії запускаються через її API. |
+| `settings` | Керуючі налаштування OpenCode на рівні моделі та JSON-налаштування, специфічні для пакета. |
+| `headers` | Додаткові заголовки запитів із рядковими значеннями. |
+| `body` | Додаткові поля тіла JSON-запиту. |
+| `capabilities` | Підтримка інструментів, прийняті типи вхідних і вихідних медіа, підтримка температури й керування міркуванням. |
+| `compatibility` | Особливості API цієї моделі, які перевизначають налаштування провайдера. Дивіться [Сумісність](/models#compatibility). |
+| `variants` | Іменовані варіанти з власними `settings`, `headers` і `body`. |
+| `cost` | Ціни за мільйон вхідних і вихідних токенів та, за наявності, ціни за мільйон токенів для кешування. |
+| `limit` | Ліміти токенів контексту, вхідних і вихідних даних. |
+| `disabled` | Прибирає модель із вибору, коли `true`. |
+
+Дивіться [Моделі](/models), щоб дізнатися про вибір, типові значення, можливості, ліміти, вартість і варіанти.
+
+## Azure
+
+Стандартний ендпоінт каталогу Azure потребує назви ресурсу на додачу до облікових даних. Задайте
+`settings.resourceName` один раз, потім підключіть API-ключ або скористайтеся сесією Microsoft Entra ID з Azure CLI, як
+описано в [Облікові записи провайдерів](/cli/providers).
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "azure": {
+      "settings": {
+        "resourceName": "my-models",
+      },
+    },
+  },
+}
+```
+
+Знайдіть **Resource name** у [Azure portal](https://portal.azure.com/) або [Microsoft Foundry](https://ai.azure.com/).
+Це також перша частина таких ендпоінтів, як `https://my-models.openai.azure.com/` і
+`https://my-models.services.ai.azure.com/`.
+
+```bash
+az cognitiveservices account list \
+  --query "[].{name:name,resourceGroup:resourceGroup}" \
+  --output table
+```
+
+Щоб використовувати Entra ID, встановіть [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli),
+увійдіть, а потім виберіть **Microsoft Entra ID (Azure CLI)** під час підключення Azure.
+
+```bash
+az login
+```
+
+Введіть назву ресурсу під час підключення, якщо її ще не надано конфігурацією або середовищем. Назва ресурсу, збережена
+з підключенням, має перевагу над конфігурацією; підключіться знову, щоб змінити її.
+
+Підключення через Azure CLI використовують обліковий запис, вибраний в Azure CLI. Для ресурсу в іншому тенанті або
+підписці виберіть обидва явно.
+
+```bash
+az login --tenant TENANT_ID
+az account set --subscription NAME_OR_ID
+```
+
+Замість конфігурації назву ресурсу серверу OpenCode надає `AZURE_RESOURCE_NAME`. Застаріла змінна
+`AZURE_COGNITIVE_SERVICES_RESOURCE_NAME` також працює.
+
+### Розгортання
+
+Azure надає модель лише через розгортання, тому OpenCode перелічує розгортання вашого ресурсу й показує їх замість
+усього каталогу Azure. Список завантажується у фоні після запуску, після підключення та після зміни облікового запису.
+Щоб побачити розгортання, додане пізніше, перезапустіть OpenCode або підключіться знову.
+
+- Доки список не завантажиться для підключення або якщо він не завантажиться, доступний увесь каталог.
+- Невдале перезавантаження для того самого підключення зберігає його останній повний перелік.
+- Зміна облікового запису ніколи не показує перелік попереднього облікового запису; новий обліковий запис починає з усього каталогу.
+- Розгортання успадковують ліміти, вартість і можливості своїх моделей із каталогу.
+
+Назви розгортань — це їхні ID моделей, у нижньому регістрі, оскільки Azure ігнорує регістр у назвах, наприклад
+`azure/gpt-production`. Розгортання, назване за своєю моделлю, як-от `gpt-6-luna`, зберігає ID з каталогу. Ці ID
+лишаються стабільними, коли інші розгортання додаються або вилучаються.
+
+OpenCode зіставляє розгортання з каталогом за моделлю, яку воно розгортає, або за назвою, коли Azure пише модель
+інакше, як `gpt-4` для GPT-4 Turbo. Розгортання, назване за іншою моделлю, як-от `gpt-6.1-sol`, що розгортає
+`gpt-6-luna`, показує назву, ліміти й вартість тієї моделі.
+
+З Azure CLI OpenCode перелічує розгортання через API керування Azure, якому потрібен доступ на читання до ресурсу.
+Якщо це не вдається, а також завжди з API-ключем, він використовує застарілий перелік розгортань ресурсу. Виявлення
+читає кожну сторінку, перш ніж опублікувати список. Власний `settings.baseURL` зберігає каталог.
+
+Налаштуйте розгортання явно, якщо його моделі немає в каталозі (наприклад, якщо модель донавчено) або якщо хочете самостійно
+зіставити ID моделі з розгортанням. OpenCode пише попередження з назвою таких розгортань. Явно налаштовані моделі
+зберігаються завжди.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "azure": {
+      "models": {
+        "gpt-6-luna": {
+          "modelID": "gpt-production",
+        },
+      },
+    },
+  },
+}
+```
+
+Вашій ідентичності потрібна одна з цих ролей:
+
+- **Cognitive Services OpenAI User** для моделей Azure OpenAI.
+- **Cognitive Services User** для інших моделей Foundry.
+
+Якщо запит використовує токен із неправильного тенанта, увійдіть знову з потрібним тенантом.
+
+```bash
+az login --tenant TENANT_ID
+```
+
+## Bedrock
+
+Amazon Bedrock використовує типовий ланцюжок облікових даних AWS. Іменований profile AWS — найпростіше надійне
+налаштування; OpenCode також розпізнає середовища з ключами доступу, web identity і облікові дані контейнерів.
+
+```bash
+aws configure sso --profile work
+aws sso login --profile work
+```
+
+Виберіть profile і регіон у налаштуваннях провайдера. Налаштований `profile`, `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`, файл
+токена web identity або URI облікових даних контейнера активує провайдера; сам регіон — ні.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "amazon-bedrock": {
+      "settings": {
+        "profile": "work",
+        "region": "us-west-2",
+      },
+    },
+  },
+}
+```
+
+Без явного регіону OpenCode використовує `AWS_REGION`, потім `AWS_DEFAULT_REGION`, потім `us-east-1`. Для приватного
+ендпоінта або ендпоінта VPC задайте `baseURL`, зберігаючи той самий profile і регіон.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "amazon-bedrock": {
+      "settings": {
+        "profile": "work",
+        "region": "us-west-2",
+        "baseURL": "https://bedrock-runtime.vpce.example.com",
+      },
+    },
+  },
+}
+```
+
+API-ключі Bedrock використовують `AWS_BEARER_TOKEN_BEDROCK`. Інші змінні AWS живлять SigV4 і не зберігаються як
+облікові записи API-ключів OpenCode.
+
+## Vertex
+
+Google Vertex використовує Application Default Credentials (ADC) і потребує проєкту, перш ніж його моделі стануть
+доступними. Створіть локальні ADC, а потім задайте проєкт і розташування в налаштуваннях провайдера.
+
+```bash
+gcloud auth application-default login
+```
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "google-vertex": {
+      "settings": {
+        "project": "my-project",
+        "location": "us-central1",
+      },
+    },
+  },
+}
+```
+
+OpenCode також визначає проєкт із `GOOGLE_VERTEX_PROJECT`, `GOOGLE_CLOUD_PROJECT`, `GCP_PROJECT` або `GCLOUD_PROJECT`,
+саме в такому порядку. Розташування він визначає з `GOOGLE_VERTEX_LOCATION`, `GOOGLE_CLOUD_LOCATION` або
+`VERTEX_LOCATION`, а типово використовує `us-central1`.
+
+```bash
+GOOGLE_CLOUD_PROJECT=my-project GOOGLE_VERTEX_LOCATION=europe-west4 opencode --standalone
+```
+
+Сервісні облікові записи працюють через той самий шлях ADC. Спрямуйте `GOOGLE_APPLICATION_CREDENTIALS` на JSON-файл
+сервісного облікового запису й усе одно надайте проєкт через налаштування або одну зі змінних проєкту вище.
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS=/secure/vertex.json \
+GOOGLE_CLOUD_PROJECT=my-project \
+opencode --standalone
+```
+
+Використовуйте єдиний ID провайдера `google-vertex` для моделей Gemini, Anthropic і сумісних з OpenAI моделей
+каталогу Vertex. Старий ID провайдера `google-vertex-anthropic` у V2 недоступний.
+
+## Copilot
+
+GitHub Copilot підтримує OAuth для пристрою замість ручного введення API-ключа. Підключіть **GitHub Copilot**, виберіть
+GitHub.com або GitHub Enterprise, завершіть потік для пристрою, а потім відкрийте `/models`.
+
+```text
+/connect
+# Select GitHub Copilot, then Login with GitHub Copilot.
+/models
+```
+
+Для GitHub Enterprise введіть URL-адресу розгортання або домен, коли буде запропоновано. OpenCode використовує
+ендпоінт API Copilot, який повертає GitHub, коли він доступний; інакше він виводить ендпоінт із домену підприємства.
+
+```text
+company.ghe.com
+```
+
+Підключеному обліковому запису потрібен доступ до Copilot Chat. Якщо GitHub повідомляє про відсутність права, оформіть
+Copilot Free або попросіть організацію призначити місце Copilot, а потім підключіться знову. OpenCode отримує поточний
+список моделей облікового запису після входу й щоразу, коли активний обліковий запис Copilot змінюється.
+
+## Ollama
+
+Запустіть Ollama і завантажте модель. OpenCode опитує `http://127.0.0.1:11434`, виявляє моделі завершення й додає їх до
+`/models` без підключення облікового запису.
+
+```bash
+ollama serve
+ollama pull qwen3:8b
+```
+
+Спрямуйте OpenCode на віддалений Ollama-сервер або сервер за проксі за допомогою `settings.baseURL`. Додайте `/v1`; з
+нього OpenCode виводить нативні шляхи виявлення `/api/tags` і `/api/show`. `apiKey` необов'язковий і надсилається як
+bearer-токен під час виявлення й у запитах до моделей.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "ollama": {
+      "settings": {
+        "baseURL": "https://ollama.example.com/v1",
+        "apiKey": "{env:OLLAMA_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+Виявлення періодично оновлюється й зберігає останній успішний перелік під час тимчасового збою. Моделі лише для
+ембедингів не з'являються, оскільки OpenCode додає лише моделі, чиї метадані Ollama містять можливість `completion`.
+
+## Середовища виконання
+
+LM Studio і vLLM також мають вбудоване локальне виявлення. Їхні типові ендпоінти —
+`http://127.0.0.1:1234/v1` і `http://127.0.0.1:8000/v1`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "lmstudio": {
+      "settings": { "baseURL": "http://gpu-host:1234/v1" },
+    },
+    "vllm": {
+      "settings": { "baseURL": "http://gpu-host:8000/v1" },
+    },
+  },
+}
+```
+
+LM Studio виявляє мовні моделі з `/api/v1/models`. vLLM перевіряє `/health` перед читанням `/v1/models`; його виявлення
+не вміє визначати підтримку інструментів, тому виявлені моделі vLLM починають із вимкненими інструментами. Для іншого
+runtime, сумісного з OpenAI, скористайтеся рецептом [власного провайдера](#custom) і явно перелічіть його моделі.
+
+## Шлюзи
+
+OpenRouter використовує свій нативний runtime і каталог. Надайте `OPENROUTER_API_KEY` серверу OpenCode або підключіть
+обліковий запис OpenRouter, а потім посилайтеся на моделі за повним ID моделі OpenRouter після префікса провайдера.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openrouter/anthropic/claude-sonnet-5.5",
+}
+```
+
+Зберігайте нативний пакет OpenRouter, коли перевизначаєте його ендпоінт або маршрутизуєте через сумісний з OpenRouter
+шлюз. Це зберігає поведінку запитів і міркувань OpenRouter.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openrouter": {
+      "settings": {
+        "baseURL": "https://openrouter-gateway.example.com/api/v1",
+      },
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+    },
+  },
+}
+```
+
+Для шлюзу, який надає сумісний з OpenAI API, але має власний перелік моделей, натомість визначте власного провайдера.
+Ключ конфігурації стає префіксом провайдера, а кожен ключ `models` — ID моделі, доступним для вибору.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "company/coder",
+  "providers": {
+    "company": {
+      "env": ["COMPANY_GATEWAY_KEY"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://gateway.example.com/v1",
+      },
+      "models": {
+        "coder": { "modelID": "upstream/coder-v2" },
+      },
+    },
+  },
+}
+```
+
+## Помилки
+
+Помилки провайдера й моделі зазвичай указують на етап, який не вдався. Перевірте середовище процесу сервера й точний ID
+моделі, перш ніж змінювати пакети.
+
+| Помилка або симптом | Що перевірити |
+| --- | --- |
+| `No model is available for session ...` | Зараз немає ввімкненої моделі, доступної для вибору. Завершіть налаштування для цього провайдера, а потім виберіть модель у `/models`. |
+| `Model unavailable: provider/model` | Провайдер неактивний, ID моделі відсутній або вимкнений, чи динамічне виявлення більше не повертає його. Для власних псевдонімів перевіряйте ключ мапи `models`, а не `modelID`. |
+| `Cannot initialize provider/model: NAME is required to resolve the provider endpoint` | У `baseURL` лишився заповнювач `${NAME}`. Задайте цю змінну на сервері OpenCode або замініть шаблон повним ендпоінтом. |
+| `Azure resource name is missing` | Задайте `providers.azure.settings.resourceName`, `AZURE_RESOURCE_NAME` або повний `settings.baseURL`. |
+| Vertex не з'являється | Задайте проєкт, який OpenCode може визначити, у налаштуваннях провайдера або підтримувану змінну проєкту. Самих ADC недостатньо, щоб активувати провайдера. |
+| Bedrock не з'являється | Надайте profile або інше підтримуване джерело з ланцюжка облікових даних AWS. Сам `AWS_REGION` лише вибирає регіон. |
+| Ollama не має моделей | Переконайтеся, що сервер надає `/api/tags` і `/api/show` за шляхом, виведеним із `baseURL`, і що `/api/show` повідомляє можливість `completion`. |
+| Copilot не має моделей | Переконайтеся, що активний обліковий запис OAuth має доступ до Copilot Chat. Невдала синхронізація моделей записується як `failed to sync GitHub Copilot models`. |
+
+V2 відхиляє вилучені ID провайдерів, пропонуючи пряму заміну. Використовуйте `azure/<model>` замість
+`azure-cognitive-services/<model>` і `google-vertex/<model>` замість `google-vertex-anthropic/<model>`.
+
+## WebSockets
+
+OpenAI, xAI і підтримувані моделі Azure Responses можуть тримати одне WebSocket-з'єднання відкритим на сесію. Послідовні
+кроки повторно використовують незмінний префікс запиту й надсилають лише вміст, доданий після попередньої відповіді, що
+зменшує обсяг вивантаження в довгих сесіях.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "transport": "http" },
+    },
+  },
+}
+```
+
+Поведінка WebSocket підпорядковується таким правилам:
+
+- Вбудовані провайдери вмикають підтримувані маршрути згідно зі своєю політикою.
+- `settings.transport: "websocket"` провайдера вмикає його; `"http"` вимикає.
+- `"websocket"` на маршруті без каналу WebSocket записує попередження й повертається до HTTP.
+- Ущільнення контексту провайдера OpenAI використовує те саме з'єднання.
+- xAI продовжує лише зі збережених відповідей. З його типовим `store: false` кожен крок надсилається повністю через
+  повторно використане з'єднання.
+- Закритий сокет перепідключається на наступному кроці. Якщо з'єднання не відкривається, сесія продовжується через HTTP.
+- Плагіни провайдера з хуками `http.request` або `http.response` лишаються на HTTP, щоб кожен запит залишався
+  спостережуваним.

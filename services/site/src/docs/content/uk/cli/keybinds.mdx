@@ -1,0 +1,413 @@
+---
+title: "Комбінації клавіш"
+description: "Налаштуйте комбінації клавіш OpenCode CLI у cli.json і знайдіть ID кожної команди та типову комбінацію."
+---
+
+Налаштуйте комбінації в `cli.json`:
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "command.palette.show": "ctrl+k",
+    "app.exit": ["ctrl+c", "ctrl+d"],
+    "app.debug": false
+  },
+  "leader": {
+    "timeout": 1500
+  }
+}
+```
+
+Використовуйте рядок для однієї клавіші:
+
+```json
+{
+  "keybinds": {
+    "command.palette.show": "ctrl+k"
+  }
+}
+```
+
+Розділяйте альтернативи комами:
+
+```json
+{
+  "keybinds": {
+    "app.exit": "ctrl+c,ctrl+d"
+  }
+}
+```
+
+Вимкніть комбінацію через `"none"` або `false`:
+
+```json
+{
+  "keybinds": {
+    "app.debug": "none",
+    "help.show": false
+  }
+}
+```
+
+Використовуйте об'єкт для поведінки події:
+
+```json
+{
+  "keybinds": {
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "preventDefault": false
+    }
+  }
+}
+```
+
+`leader` типово — `ctrl+x`. `<leader>` в іншій комбінації посилається на цю клавішу.
+
+```json
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "model.list": "<leader>m"
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+Невідомі ID команд ігноруються.
+
+## Застосунок
+
+| ID                         | Типово                    | Опис                                |
+| -------------------------- | ------------------------- | ----------------------------------- |
+| `leader`                   | `ctrl+x`                  | Клавіша leader для комбінацій клавіш |
+| `app.exit`                 | `ctrl+c,ctrl+d,<leader>q` | Вийти із застосунку                 |
+| `app.debug`                | `none`                    | Перемкнути панель налагодження      |
+| `app.console`              | `none`                    | Перемкнути консоль                  |
+| `app.scrap`                | `none`                    | Відкрити екран scrap                |
+| `app.toggle.animations`    | `none`                    | Перемкнути анімації                 |
+| `app.toggle.file_context`  | `none`                    | Перемкнути контекст файлів          |
+| `app.toggle.diffwrap`      | `none`                    | Перемкнути перенесення в diff       |
+| `app.toggle.paste_summary` | `none`                    | Перемкнути підсумок вставлення      |
+| `command.palette.show`     | `ctrl+p`                  | Показати список доступних команд    |
+| `help.show`                | `none`                    | Відкрити діалог довідки             |
+| `docs.open`                | `none`                    | Відкрити документацію               |
+| `opencode.settings`        | `none`                    | Відкрити налаштування               |
+| `server.pair`              | `none`                    | Сполучити пристрій                  |
+| `service.restart`          | `none`                    | Перезапустити сервіс                |
+| `location.reload`          | `none`                    | Перезавантажити конфігурацію        |
+
+## Mini
+
+Команда `app.clear` працює лише в [`opencode mini`](/cli). Натисніть `ctrl+l`, щоб очистити видиму частину екрана й знову показати промпт. Термінал зберігає історію прокрутки.
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "app.clear": "ctrl+l"
+  }
+}
+```
+
+| ID          | Типово   | Опис           |
+| ----------- | -------- | -------------- |
+| `app.clear` | `ctrl+l` | Очистити екран |
+
+## Переглядач Diff
+
+Натисніть `d` (`diff.switch_source`), щоб вибрати **All**, **Committed**, **Uncommitted** або **Last turn** (усередині сесії), або виберіть **Base**, щоб змінити гілку порівняння. Вибір зберігається до виходу з TUI. Задайте початковий обсяг через [`diffs.source` у `cli.json`](/cli/config#diffs).
+
+Комбінації для прокручування, посторінкової навігації та переходу на початок або в кінець завжди діють у переглядачі Diff. Фокус не можна перемкнути клавіатурою: клацніть файл, щоб відкрити його, або каталог, щоб розгорнути чи згорнути його. Дерево файлів прокручуйте колесом миші.
+
+Використовуйте `n` / `p` або `alt+down` / `alt+up` (Option у macOS), щоб переходити між файлами. У переглядачі Diff комбінації з Alt перемикають файли, а не вкладки сесій.
+
+Натисніть `m`, щоб позначити файл як переглянутий і згорнути його патч. У режимі перегляду всіх файлів натисніть `m` ще раз, щоб зняти позначку й знову розгорнути патч. У режимі перегляду одного файлу позначення відкриває наступний файл, але після останнього файлу не повертає до першого. Зняття позначки не відкриває іншого файлу.
+
+Клацніть файл правою кнопкою в бічній панелі або в його заголовку diff, щоб вибрати **Mark complete** (або **Mark incomplete**). Це змінює той самий стан перегляду, що й `m`. Позначення іншого файлу з його меню не вибирає його й не переходить від файлу, який ви зараз читаєте.
+
+Варіанти `diff.help` з Shift підтримують термінали, які повідомляють модифікатор Shift, коли ви натискаєте `?`.
+
+| ID                       | Типово              | Опис                                            |
+| ------------------------ | ------------------- | ----------------------------------------------- |
+| `diff.open`              | `none`              | Відкрити переглядач Diff |
+| `diff.close`             | `escape,q`          | Закрити переглядач Diff |
+| `diff.down`              | `j,down`            | Прокрутити зміни вниз |
+| `diff.up`                | `k,up`              | Прокрутити зміни вгору |
+| `diff.page.down`         | `pagedown,ctrl+f`   | Прокрутити зміни на сторінку вниз |
+| `diff.page.up`           | `pageup,ctrl+b`     | Прокрутити зміни на сторінку вгору |
+| `diff.half_page.down`    | `ctrl+d`            | Прокрутити зміни на пів сторінки вниз |
+| `diff.half_page.up`      | `ctrl+u`            | Прокрутити зміни на пів сторінки вгору |
+| `diff.first`             | `gg,home`           | Перейти до початку змін |
+| `diff.last`              | `shift+g,end`       | Перейти до кінця змін |
+| `diff.next_hunk`         | `]`                 | Перейти до наступного фрагмента змін |
+| `diff.previous_hunk`     | `[`                 | Перейти до попереднього фрагмента змін |
+| `diff.next_file`         | `n,alt+down`        | Перейти до наступного файлу зі змінами |
+| `diff.previous_file`     | `p,alt+up`          | Перейти до попереднього файлу зі змінами |
+| `diff.toggle_file_tree`  | `b`                 | Показати або сховати дерево файлів у Diff |
+| `diff.single_patch`      | `s`                 | Перемкнути подання одного патча                 |
+| `diff.switch_source`     | `d`                 | Вибрати, які зміни переглядати |
+| `diff.toggle_view`       | `v`                 | Перемкнути розділене чи об'єднане подання в Diff |
+| `diff.toggle_fullscreen` | `f`                 | Перемкнути повноекранний режим переглядача Diff |
+| `diff.mark_reviewed`     | `m`                 | Позначити вибраний файл як переглянутий або зняти позначку |
+| `diff.help`              | `?,shift+?,shift+/` | Показати більше комбінацій клавіш переглядача Diff |
+
+Застарілі записи конфігурації `diff.toggle`, `diff.expand`, `diff.expand_all`, `diff.collapse` і `diff.switch_focus` досі приймаються, але більше не реєструють скорочень.
+
+## Вигляд і навігація
+
+| ID                         | Типово          | Опис                                        |
+| -------------------------- | --------------- | ------------------------------------------- |
+| `prompt.editor`            | `<leader>e`     | Відкрити зовнішній редактор                 |
+| `theme.switch`             | `none`          | Показати список доступних тем               |
+| `theme.switch_mode`        | `none`          | Перемкнути світлий і темний режим теми      |
+| `theme.mode.lock`          | `none`          | Заблокувати або розблокувати режим теми     |
+| `session.sidebar.toggle`   | `<leader>b`     | Перемкнути бічну панель                     |
+| `pane.focus.left`          | `<leader>left`  | Сфокусувати панель сесій                    |
+| `pane.focus.right`         | `<leader>right` | Сфокусувати праву панель                    |
+| `terminal.select`          | `<leader>down`  | Вибрати термінал                            |
+| `terminal.toggle`          | `<leader>t`     | Перемкнути панель термінала                 |
+| `terminal.close`           | `<leader>up`    | Закрити панель термінала                    |
+| `session.toggle.scrollbar` | `none`          | Перемкнути смугу прокрутки сесії            |
+| `opencode.status`          | `<leader>s`     | Переглянути стан                            |
+| `opencode.debug`           | `none`          | Переглянути інформацію для налагодження     |
+
+## Сесії
+
+| ID                                    | Типово                  | Опис                                              |
+| ------------------------------------- | ----------------------- | ------------------------------------------------- |
+| `session.export`                      | `<leader>x`             | Експортувати сесію в редактор                     |
+| `session.copy`                        | `none`                  | Скопіювати розшифровку сесії                      |
+| `session.copy.id`                     | `none`                  | Скопіювати ID сесії                               |
+| `session.move`                        | `none`                  | Перемістити сесію                                 |
+| `session.new`                         | `<leader>n`             | Створити нову сесію                               |
+| `session.list`                        | `<leader>l`             | Показати всі сесії                                |
+| `open.menu`                           | `ctrl+o`                | Відкрити нещодавні сесії та проєкти               |
+| `session.tab.next`                    | `ctrl+tab,alt+down`     | Перейти до наступної відкритої вкладки сесії      |
+| `session.tab.previous`                | `ctrl+shift+tab,alt+up` | Перейти до попередньої відкритої вкладки сесії    |
+| `session.tab.history.back`            | `none`                  | Назад в історії вкладок сесії                     |
+| `session.tab.history.forward`         | `ctrl+i`                | Вперед в історії вкладок сесії                    |
+| `session.tab.next_unread`             | `alt+shift+down`        | Перейти до наступної непрочитаної вкладки сесії   |
+| `session.tab.previous_unread`         | `alt+shift+up`          | Перейти до попередньої непрочитаної вкладки сесії |
+| `session.tab.close`                   | `<leader>w`             | Закрити поточну вкладку сесії                     |
+| `session.tab.reopen`                  | `ctrl+shift+t`          | Знову відкрити останню закриту вкладку сесії      |
+| `session.timeline`                    | `<leader>g`             | Показати хронологію сесії                         |
+| `session.fork`                        | `none`                  | Відгалузити сесію від повідомлення                |
+| `session.rename`                      | `ctrl+r`                | Перейменувати сесію                               |
+| `session.delete`                      | `ctrl+d`                | Видалити сесію                                    |
+| `session.interrupt`                   | `escape`                | Перервати поточну сесію                           |
+| `session.background`                  | `ctrl+b`                | Перевести блокуючі інструменти сесії у фон        |
+| `session.compact`                     | `<leader>c`             | Стиснути сесію                                    |
+| `session.aside`                       | `none`                  | Задати побічне запитання                          |
+| `session.cd`                          | `none`                  | Змінити робочий каталог                           |
+| `session.queued_prompts`              | `<leader>q`             | Керувати промптами в черзі                        |
+| `queued_prompt.undo`                  | `ctrl+u`                | Скасувати промпт у черзі                          |
+| `queued_prompt.delete`                | `ctrl+d`                | Видалити промпт з черги                           |
+| `session.toggle.exploration_grouping` | `none`                  | Увімкнути або вимкнути групування пов'язаних викликів інструментів |
+| `session.verbosity.cycle`             | `none`                  | Перемикати докладність розшифровки                |
+| `session.child.first`                 | `down`                  | Перемкнути вибір субагента                        |
+| `session.child.next`                  | `right`                 | Перейти до наступної дочірньої сесії              |
+| `session.child.previous`              | `left`                  | Перейти до попередньої дочірньої сесії            |
+| `session.parent`                      | `up`                    | Перейти до батьківської сесії                     |
+| `session.pin.toggle`                  | `ctrl+f`                | Закріпити або відкріпити сесію в списку сесій     |
+| `session.quick_switch.1`              | `<leader>1`             | Перейти до сесії у швидкому слоті 1               |
+| `session.quick_switch.2`              | `<leader>2`             | Перейти до сесії у швидкому слоті 2               |
+| `session.quick_switch.3`              | `<leader>3`             | Перейти до сесії у швидкому слоті 3               |
+| `session.quick_switch.4`              | `<leader>4`             | Перейти до сесії у швидкому слоті 4               |
+| `session.quick_switch.5`              | `<leader>5`             | Перейти до сесії у швидкому слоті 5               |
+| `session.quick_switch.6`              | `<leader>6`             | Перейти до сесії у швидкому слоті 6               |
+| `session.quick_switch.7`              | `<leader>7`             | Перейти до сесії у швидкому слоті 7               |
+| `session.quick_switch.8`              | `<leader>8`             | Перейти до сесії у швидкому слоті 8               |
+| `session.quick_switch.9`              | `<leader>9`             | Перейти до сесії у швидкому слоті 9               |
+| `session.tab.select.1`                | `<leader>1,ctrl+1`      | Перейти до вкладки сесії 1                        |
+| `session.tab.select.2`                | `<leader>2,ctrl+2`      | Перейти до вкладки сесії 2                        |
+| `session.tab.select.3`                | `<leader>3,ctrl+3`      | Перейти до вкладки сесії 3                        |
+| `session.tab.select.4`                | `<leader>4,ctrl+4`      | Перейти до вкладки сесії 4                        |
+| `session.tab.select.5`                | `<leader>5,ctrl+5`      | Перейти до вкладки сесії 5                        |
+| `session.tab.select.6`                | `<leader>6,ctrl+6`      | Перейти до вкладки сесії 6                        |
+| `session.tab.select.7`                | `<leader>7,ctrl+7`      | Перейти до вкладки сесії 7                        |
+| `session.tab.select.8`                | `<leader>8,ctrl+8`      | Перейти до вкладки сесії 8                        |
+| `session.tab.select.9`                | `<leader>9,ctrl+9`      | Перейти до вкладки сесії 9                        |
+| `session.tab.select.10`               | `<leader>0,ctrl+0`      | Перейти до вкладки сесії 10                       |
+
+## Моделі та агенти
+
+| ID                             | Типово      | Опис                                         |
+| ------------------------------ | ----------- | -------------------------------------------- |
+| `stash.delete`                 | `ctrl+d`    | Видалити запис зі stash                      |
+| `model.dialog.provider`        | `ctrl+a`    | Відкрити список провайдерів із діалогу моделей |
+| `model.dialog.favorite`        | `ctrl+f`    | Перемкнути позначку обраної моделі           |
+| `model.dialog.usage`           | `ctrl+u`    | Відкрити ліміти використання з діалогу моделей |
+| `model.list`                   | `<leader>m` | Показати доступні моделі                     |
+| `model.cycle_recent`           | `f2`        | Наступна нещодавно використана модель        |
+| `model.cycle_recent_reverse`   | `shift+f2`  | Попередня нещодавно використана модель       |
+| `model.cycle_favorite`         | `none`      | Наступна обрана модель                       |
+| `model.cycle_favorite_reverse` | `none`      | Попередня обрана модель                      |
+| `mcp.list`                     | `none`      | Показати сервери MCP                         |
+| `usage.show`                   | `none`      | Переглянути ліміти використання              |
+| `provider.connect`             | `none`      | Підключити інтеграцію                        |
+| `agent.list`                   | `<leader>a` | Показати агентів                             |
+| `agent.cycle`                  | `shift+tab` | Наступний агент                              |
+| `agent.cycle.reverse`          | `none`      | Попередній агент                             |
+| `variant.cycle`                | `ctrl+t`    | Перемикати варіанти моделі                   |
+| `variant.list`                 | `none`      | Показати варіанти моделі                     |
+| `speed.cycle`                  | `none`      | Перемикати швидкості моделі                  |
+| `speed.list`                   | `none`      | Показати швидкості моделі                    |
+
+## Навігація сесією
+
+| ID                              | Типово                 | Опис                                       |
+| ------------------------------- | ---------------------- | ------------------------------------------ |
+| `session.page.up`               | `pageup,ctrl+alt+b`    | Прокрутити повідомлення вгору на сторінку   |
+| `session.page.down`             | `pagedown,ctrl+alt+f`  | Прокрутити повідомлення вниз на сторінку    |
+| `session.line.up`               | `ctrl+alt+y`           | Прокрутити повідомлення вгору на рядок      |
+| `session.line.down`             | `ctrl+alt+e`           | Прокрутити повідомлення вниз на рядок       |
+| `session.half.page.up`          | `ctrl+alt+u`           | Прокрутити повідомлення вгору на пів сторінки |
+| `session.half.page.down`        | `ctrl+alt+d`           | Прокрутити повідомлення вниз на пів сторінки |
+| `session.first`                 | `ctrl+g,home,alt+home` | Перейти до першого повідомлення             |
+| `session.last`                  | `ctrl+alt+g,end`       | Перейти до останнього повідомлення          |
+| `session.message.next`          | `none`                 | Перейти до наступного повідомлення          |
+| `session.message.previous`      | `none`                 | Перейти до попереднього повідомлення        |
+| `session.message.user.next`     | `none`                 | Перейти до наступного повідомлення користувача |
+| `session.message.user.previous` | `none`                 | Перейти до попереднього повідомлення користувача |
+| `session.messages_last_user`    | `alt+end`              | Перейти до останнього повідомлення користувача |
+| `messages.copy`                 | `<leader>y`            | Скопіювати повідомлення                     |
+| `session.undo`                  | `<leader>u`            | Скасувати повідомлення                      |
+| `session.redo`                  | `<leader>r`            | Повторити повідомлення                      |
+| `session.toggle.thinking`       | `none`                 | Перемкнути видимість блоків міркування      |
+
+## Команди промпту
+
+| ID                            | Типово           | Опис                          |
+| ----------------------------- | ---------------- | ----------------------------- |
+| `prompt.submit`               | `none`           | Надіслати промпт              |
+| `prompt.queue`                | `<leader>return` | Поставити промпт у чергу      |
+| `prompt.editor_context.clear` | `none`           | Очистити контекст редактора   |
+| `prompt.images.view`          | `<leader>i`      | Переглянути вкладення зображень |
+| `prompt.skills`               | `none`           | Відкрити вибір навичок        |
+| `prompt.stash`                | `none`           | Відкласти промпт              |
+| `prompt.stash.pop`            | `none`           | Витягнути відкладений промпт  |
+| `prompt.stash.list`           | `none`           | Показати відкладені промпти   |
+
+## Редагування введення
+
+| ID                              | Типово                                                                        | Опис                                        |
+| ------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------- |
+| `prompt.clear`                  | `ctrl+c`                                                                      | Очистити поле введення                      |
+| `prompt.paste`                  | `{"key":"ctrl+v","preventDefault":false}` (`ctrl+v`; `preventDefault: false`) | Вставити з буфера обміну                    |
+| `input.submit`                  | `return`                                                                      | Надіслати введення                          |
+| `input.newline`                 | `shift+return,ctrl+return,alt+return,ctrl+j`                                  | Вставити новий рядок у введення             |
+| `input.move.left`               | `left,ctrl+b`                                                                 | Пересунути курсор ліворуч у введенні        |
+| `input.move.right`              | `right,ctrl+f`                                                                | Пересунути курсор праворуч у введенні       |
+| `input.move.up`                 | `up`                                                                          | Пересунути курсор вгору у введенні          |
+| `input.move.down`               | `down`                                                                        | Пересунути курсор вниз у введенні           |
+| `input.select.left`             | `shift+left`                                                                  | Виділити ліворуч у введенні                 |
+| `input.select.right`            | `shift+right`                                                                 | Виділити праворуч у введенні                |
+| `input.select.up`               | `shift+up`                                                                    | Виділити вгору у введенні                   |
+| `input.select.down`             | `shift+down`                                                                  | Виділити вниз у введенні                    |
+| `input.line.home`               | `ctrl+a`                                                                      | Перейти до початку рядка у введенні         |
+| `input.line.end`                | `ctrl+e`                                                                      | Перейти до кінця рядка у введенні           |
+| `input.select.line.home`        | `ctrl+shift+a`                                                                | Виділити до початку рядка у введенні        |
+| `input.select.line.end`         | `ctrl+shift+e`                                                                | Виділити до кінця рядка у введенні          |
+| `input.visual.line.home`        | `alt+a`                                                                       | Перейти до початку візуального рядка у введенні |
+| `input.visual.line.end`         | `alt+e`                                                                       | Перейти до кінця візуального рядка у введенні |
+| `input.select.visual.line.home` | `alt+shift+a`                                                                 | Виділити до початку візуального рядка у введенні |
+| `input.select.visual.line.end`  | `alt+shift+e`                                                                 | Виділити до кінця візуального рядка у введенні |
+| `input.buffer.home`             | `none`                                                                        | Перейти до початку буфера у введенні        |
+| `input.buffer.end`              | `none`                                                                        | Перейти до кінця буфера у введенні          |
+| `input.select.buffer.home`      | `shift+home`                                                                  | Виділити до початку буфера у введенні       |
+| `input.select.buffer.end`       | `shift+end`                                                                   | Виділити до кінця буфера у введенні         |
+| `input.delete.line`             | `ctrl+shift+d`                                                                | Видалити рядок у введенні                   |
+| `input.delete.to.line.end`      | `ctrl+k`                                                                      | Видалити до кінця рядка у введенні          |
+| `input.delete.to.line.start`    | `ctrl+u`                                                                      | Видалити до початку рядка у введенні        |
+| `input.backspace`               | `backspace,shift+backspace`                                                   | Видалити символ назад у введенні            |
+| `input.delete`                  | `ctrl+d,delete,shift+delete`                                                  | Видалити символ у введенні                  |
+| `input.undo`                    | `ctrl+-,super+z`                                                              | Скасувати у введенні                        |
+| `input.redo`                    | `ctrl+.,super+shift+z`                                                        | Повторити у введенні                        |
+| `input.word.forward`            | `alt+f,alt+right,ctrl+right`                                                  | Пересунутися на слово вперед у введенні     |
+| `input.word.backward`           | `alt+b,alt+left,ctrl+left`                                                    | Пересунутися на слово назад у введенні      |
+| `input.select.word.forward`     | `alt+shift+f,alt+shift+right`                                                 | Виділити слово вперед у введенні            |
+| `input.select.word.backward`    | `alt+shift+b,alt+shift+left`                                                  | Виділити слово назад у введенні             |
+| `input.delete.word.forward`     | `alt+d,alt+delete,ctrl+delete`                                                | Видалити слово вперед у введенні            |
+| `input.delete.word.backward`    | `ctrl+w,ctrl+backspace,alt+backspace`                                         | Видалити слово назад у введенні             |
+| `input.select.all`              | `super+a`                                                                     | Виділити все у введенні                     |
+| `prompt.history.previous`       | `up`                                                                          | Попередній елемент історії                  |
+| `prompt.history.next`           | `down`                                                                        | Наступний елемент історії                   |
+
+## Поле введення
+
+| ID                            | Типово   | Опис                    |
+| ----------------------------- | -------- | ----------------------- |
+| `composer.subagent.up`        | `up`     | Попередній субагент     |
+| `composer.subagent.down`      | `down`   | Наступний субагент      |
+| `composer.subagent.select`    | `return` | Перейти до субагента    |
+| `composer.subagent.interrupt` | `ctrl+d` | Перервати субагента     |
+| `composer.shell.up`           | `up`     | Попередній shell        |
+| `composer.shell.down`         | `down`   | Наступний shell         |
+| `composer.shell.select`       | `return` | Переглянути вивід shell |
+| `composer.shell.kill`         | `ctrl+d` | Зупинити команду shell  |
+| `composer.terminal.up`        | `up,k`   | Попередній термінал     |
+| `composer.terminal.down`      | `down,j` | Наступний термінал      |
+| `composer.terminal.select`    | `return` | Вибрати термінал        |
+
+Виберіть запущену команду на вкладці **Shell** і натисніть **Enter** або клацніть її, щоб переглянути перехоплені stdout і stderr.
+Використовуйте **↑/↓**, **Page Up/Down** або **Home**, щоб прокручувати, **End**, щоб стежити за новим виводом, і **Esc**, щоб повернутися, не зупиняючи команду.
+Переглядач показує нещодавній вивід і залишається відкритим після завершення; вивід, спрямований у файл, не включається.
+
+## Діалоги й автодоповнення
+
+| ID                             | Типово        | Опис                                          |
+| ------------------------------ | ------------- | --------------------------------------------- |
+| `dialog.select.prev`           | `up,ctrl+p`   | Перейти до попереднього елемента діалогу      |
+| `dialog.select.next`           | `down,ctrl+n` | Перейти до наступного елемента діалогу        |
+| `dialog.select.page_up`        | `pageup`      | Переміститися на сторінку вгору в діалозі     |
+| `dialog.select.page_down`      | `pagedown`    | Переміститися на сторінку вниз у діалозі      |
+| `dialog.select.home`           | `home`        | Перейти до першого елемента діалогу           |
+| `dialog.select.end`            | `end`         | Перейти до останнього елемента діалогу        |
+| `dialog.select.submit`         | `return`      | Надіслати вибраний елемент діалогу            |
+| `dialog.prompt.submit`         | `return`      | Надіслати промпт діалогу                      |
+| `dialog.integration.rename`    | `ctrl+r`      | Перейменувати обліковий запис інтеграції      |
+| `dialog.integration.delete`    | `ctrl+d`      | Видалити обліковий запис інтеграції           |
+| `dialog.integration.copy`      | `tab`         | Скопіювати посилання авторизації              |
+| `dialog.worktree.generate`     | `tab`         | Згенерувати назву worktree                    |
+| `dialog.move_session.new`      | `ctrl+a`      | Новий worktree                                |
+| `dialog.move_session.move`     | `ctrl+m`      | Перемістити сесію в worktree                  |
+| `dialog.move_session.delete`   | `ctrl+d`      | Видалити worktree                             |
+| `dialog.move_session.refresh`  | `ctrl+r`      | Оновити worktree                              |
+| `prompt.autocomplete.prev`     | `up,ctrl+p`   | Перейти до попереднього елемента автодоповнення |
+| `prompt.autocomplete.next`     | `down,ctrl+n` | Перейти до наступного елемента автодоповнення |
+| `prompt.autocomplete.hide`     | `escape`      | Сховати автодоповнення                        |
+| `prompt.autocomplete.select`   | `return`      | Вибрати елемент автодоповнення                |
+| `prompt.autocomplete.complete` | `tab`         | Завершити елемент автодоповнення              |
+| `permission.prompt.fullscreen` | `ctrl+f`      | Перемкнути повноекранний режим запиту дозволу |
+| `plugins.toggle`               | `return`      | Перемкнути плагін                             |
+| `dialog.mcp.toggle`            | `space`       | Перемкнути сервер MCP                         |
+| `dialog.plugins.error`         | `space`       | Переглянути помилку плагіна                   |
+| `dialog.plugins.update`        | `ctrl+u`      | Оновити плагін із діалогу плагінів            |
+| `dialog.plugins.check`         | `ctrl+r`      | Перевірити оновлення плагінів                 |
+
+## Термінал і плагіни
+
+| ID                      | Типово   | Опис                             |
+| ----------------------- | -------- | -------------------------------- |
+| `terminal.suspend`      | `ctrl+z` | Призупинити термінал             |
+| `terminal.title.toggle` | `none`   | Перемкнути заголовок термінала   |
+| `plugins.list`          | `none`   | Відкрити діалог керування плагінами |
+
+## Which-Key
+
+| ID                         | Типово                      | Опис                                        |
+| -------------------------- | --------------------------- | ------------------------------------------- |
+| `which-key.toggle`         | `ctrl+alt+k`                | Перемкнути панель which-key                 |
+| `which-key.layout.toggle`  | `ctrl+alt+shift+k`          | Перемкнути розкладку which-key              |
+| `which-key.pending.toggle` | `ctrl+alt+shift+p`          | Перемкнути попередній перегляд очікуваних which-key |
+| `which-key.group.previous` | `ctrl+alt+left,ctrl+alt+[`  | Попередня група which-key                   |
+| `which-key.group.next`     | `ctrl+alt+right,ctrl+alt+]` | Наступна група which-key                    |
+| `which-key.scroll.up`      | `ctrl+alt+up,ctrl+alt+p`    | Прокрутити which-key вгору                  |
+| `which-key.scroll.down`    | `ctrl+alt+down,ctrl+alt+n`  | Прокрутити which-key вниз                   |
+| `which-key.page.up`        | `ctrl+alt+pageup`           | Прокрутити which-key на сторінку вгору      |
+| `which-key.page.down`      | `ctrl+alt+pagedown`         | Прокрутити which-key на сторінку вниз       |
+| `which-key.home`           | `ctrl+alt+home`             | Перейти до першої комбінації which-key      |
+| `which-key.end`            | `ctrl+alt+end`              | Перейти до останньої комбінації which-key    |
