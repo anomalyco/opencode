@@ -14,7 +14,7 @@ opencode
 Explain how authentication works in this project
 ```
 
-Trykk **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** eller **Ctrl+J** for en ny linje. Mens OpenCode arbeider, styrer **Enter** den aktive økten; trykk **Ctrl+X** og deretter **Enter** for å legge prompten i kø til senere.
+Trykk **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** eller **Ctrl+J** for en ny linje. Mens OpenCode jobber, kan du påvirke den aktive økten ved å sende prompten med **Enter**. Trykk **Ctrl+X** og deretter **Enter** for å legge prompten i kø til senere.
 
 ## Prosjekter og kataloger
 
@@ -32,7 +32,7 @@ worktrees. Trykk **Ctrl+N** i den listen for å opprette et nytt worktree.
 
 ## Kontekst
 
-Skriv `@` for å søke etter en fil, og velg den for å legge filen ved i prompten. Fortsett å skrive etter `@` for å begrense resultatene.
+Skriv `@` for å søke etter en fil, og velg filen du vil legge ved prompten. Fortsett å skrive etter `@` for å avgrense søket.
 
 ```text
 Review @src/auth.ts for error handling problems
@@ -64,11 +64,11 @@ Skriv `/` for å liste skråstrekkommandoer. Fortsett å skrive for å filtrere 
 
 Vanlige kommandoer er `/new`, `/sessions`, `/models`, `/agents`, `/undo`, `/redo` og `/editor`. Trykk **Ctrl+P** for å åpne kommandopaletten for alle handlinger som er tilgjengelige i gjeldende visning.
 
-Etter en oppdatering viser OpenCode én gang hva som er nytt i utgivelsen, på hjemmeskjermen. Kjør `/highlights` for å se det igjen, eller angi `"highlights": false` i [`cli.json`](/cli/config#alerts) for å hindre at det åpnes automatisk.
+Etter en oppdatering viser OpenCode nyhetene i utgivelsen én gang på startskjermen. Kjør `/highlights` for å se dem igjen, eller angi `"highlights": false` i [`cli.json`](/cli/config#alerts) for å slå av automatisk visning.
 
 ## Hurtigspørsmål
 
-Kjør `/btw <question>` for å stille et raskt spørsmål om samtalen så langt. Svaret bruker øktens kontekst og gjeldende modell, men legges ikke til i samtalen, så det påvirker ikke senere prompter. En `/btw`-indikator vises nederst i promptfeltet mens den kjører, og svaret åpnes i en dialog; trykk **C** for å kopiere det.
+Kjør `/btw <question>` for å stille et raskt spørsmål om samtalen så langt. OpenCode svarer med øktens kontekst og modellen du bruker, men legger ikke svaret til i samtalen. Det påvirker derfor ikke senere prompter. En `/btw`-indikator vises nederst i promptfeltet mens OpenCode jobber med svaret. Svaret vises i en dialogboks. Trykk **C** for å kopiere det.
 
 ```text
 /btw why did the test in step 2 fail?
@@ -99,7 +99,7 @@ Trykk **Ctrl+X** og deretter **U**, eller kjør `/undo`, for å tilbakestille de
 
 Trykk **Ctrl+X** og deretter **R**, eller kjør `/redo`, for å gjenopprette det tilbakestilte arbeidet. Sender du en ny prompt i stedet, godtas tilbakestillingen, og arbeidet fortsetter derfra.
 
-## Editor
+## Redigeringsprogram
 
 Angi `VISUAL` eller `EDITOR`, og trykk deretter **Ctrl+X** og **E**, eller kjør `/editor`, for å redigere gjeldende prompt i det valgte redigeringsprogrammet. Lagre og avslutt for å få teksten tilbake i composer, og trykk **Enter** for å sende den.
 
@@ -108,4 +108,4 @@ export EDITOR="nvim"
 opencode
 ```
 
-Ledertasten er **Ctrl+X** som standard. Se [Hurtigtaster](/cli/keybinds) for å endre disse snarveiene.
+Prefikstasten er **Ctrl+X** som standard. Se [Hurtigtaster](/cli/keybinds) for å endre disse snarveiene.

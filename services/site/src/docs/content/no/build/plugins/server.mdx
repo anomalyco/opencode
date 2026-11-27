@@ -37,9 +37,9 @@ export default Plugin.define({
 ### Kontekst
 
 Plugin-konteksten er i praksis en [OpenCode-serverklient](/build/client).
-Metodene for lesing og handling bruker samme inndata og svar som klienten. I tillegg har konteksten metoder som
-bare plugins kan bruke, for transforms, hooks under kjøring, innlasting på nytt, registreringer
-og pluginalternativer.
+Metodene for lesing og handling tar samme inndata og gir samme svar som klienten. Bare plugins har tilgang til
+metodene som brukes til å registrere transforms og hooks under kjøring, håndtere registreringer, laste inn data på nytt
+og lese pluginalternativer.
 
 ```ts
 setup(ctx) {
@@ -1390,7 +1390,8 @@ så senere hooks ser endringer gjort av tidligere hooks.
 
 ### Økter
 
-Økthooks fanger promptgodtakelse, modellkall, native HTTP og nye forsøk.
+Med økthooks kan du gripe inn når OpenCode tar imot prompter, kaller modeller, sender HTTP-forespørsler til leverandøren
+eller prøver på nytt.
 
 #### Forgreninger
 
@@ -1444,7 +1445,7 @@ Skriv prompt-hooks som tåler å bli kjørt på nytt. Det er ingen garanti for a
 
 #### Modellforespørsler
 
-Endre sammensatte systeminstruksjoner, meldinger, verktøy eller forespørselsalternativer rett før modelutsending. Hver
+Endre sammensatte systeminstruksjoner, meldinger, verktøy eller forespørselsalternativer rett før forespørselen sendes til modellen. Hver
 type forespørsel en økt sender, har sin egen hook, så en plugin kan behandle agentløkken og hjelpeforespørsler
 ulikt:
 
@@ -1542,10 +1543,10 @@ await ctx.session.hook(
 )
 ```
 
-#### Native HTTP
+#### Direkte HTTP-trafikk til leverandøren
 
-Endre native leverandørforespørsler eller -svar. Bodyene deres er engangsstrømmer; klon eller erstatt en body før du leser
-den.
+Endre HTTP-forespørslene til leverandøren eller svarene fra den. Innholdet i en forespørsel eller et svar er en strøm
+som bare kan leses én gang. Klon eller erstatt strømmen før du leser den.
 
 Begge hookene kjører for hver forespørsel en økt sender. `event.kind` sier hvilken flyt som sendte den: `"primary"` for agent-
 løkken, `"compaction"` for sjekkpunktsammendrag, `"title"` for tittelgenerering og `"generate"` for midlertidige
@@ -1565,13 +1566,13 @@ await ctx.session.hook("http.response", (event) => {
 })
 ```
 
-#### Native WebSocket (eksperimentelt)
+#### Direkte WebSocket-trafikk til leverandøren (eksperimentelt)
 
 Leverandører som strømmer over en WebSocket, åpner én tilkobling per økt og gjenbruker den på tvers av forespørsler, så
 `http.request` og `http.response` ser aldri den trafikken. `experimental.ws.handshake`-hooken kjører én gang per modell-
 kall før tilkoblingen velges. Den bærer samme `sessionID`, `agent`, `model` og `kind` som HTTP-
-hookene, pluss tilkoblingens `url` og `headers`. Endring av `url` eller `headers` endrer hvilken socket forespørselen bruker, så en
-rotert bearer-token åpner tilkoblingen på nytt.
+hookene, pluss tilkoblingens `url` og `headers`. Endrer du `url` eller `headers`, bruker forespørselen en annen
+tilkobling. Hvis du bytter ut et bearer-token, åpnes derfor tilkoblingen på nytt.
 
 HTTP-hooks kjører fortsatt for hver HTTP-forespørsel, inkludert forespørselen en WebSocket-rute faller tilbake til.
 
@@ -1586,13 +1587,13 @@ await ctx.session.hook(
 )
 ```
 
-`experimental.ws.send` og `experimental.ws.receive` eksponerer rammene selv, WebSocket-motstykket til
-redigering av en HTTP-forespørsels- eller -svarbody. `send` kjører etter at leverandørdriveren har bygget en utgående ramme og før den
-skrives; `receive` kjører på hver innkommende ramme før driveren observerer den. Begge bærer rammen som en streng og
-sender det `frame` inneholder når hooken returnerer.
+Med `experimental.ws.send` og `experimental.ws.receive` kan du endre selve WebSocket-rammene, på samme måte som du kan
+endre innholdet i en HTTP-forespørsel eller et HTTP-svar. `send` kjører etter at leverandørdriveren har bygd en utgående
+ramme, men før den skrives. `receive` kjører for hver innkommende ramme før driveren leser den. Begge hookene gir deg
+rammen som en streng og sender verdien som ligger i `frame` når hooken returnerer.
 
-OpenCode validerer ikke omskrevne rammer. Driveren sporer tilstand fra leverandørens svar, så en omskriving som
-endrer protokollbetydning, er pluginens ansvar, akkurat som en omskrevet HTTP-body er det.
+OpenCode validerer ikke omskrevne rammer. Driveren holder styr på tilstanden ut fra leverandørens svar. Hvis en endring
+gir rammen en annen betydning i protokollen, er det pluginens ansvar, akkurat som når den endrer innholdet i en HTTP-melding.
 
 ```ts
 await ctx.session.hook(

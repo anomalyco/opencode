@@ -1,6 +1,6 @@
 ---
 title: "Introduksjon"
-description: "Installer OpenCode, kodingsagenten med åpen kildekode, som CLI, desktop-app, webapp eller Docker-image, og koble til en modellleverandør."
+description: "Installer OpenCode, kodingsagenten med åpen kildekode, som CLI, desktop-app, nettapp eller Docker-image, og koble til en modellleverandør."
 ---
 
 OpenCode er en kodingsagent med åpen kildekode. Du kan bruke OpenCode i terminalen, som desktop-app eller som nettapp.
@@ -24,14 +24,14 @@ OpenCode er en kodingsagent med åpen kildekode. Du kan bruke OpenCode i termina
   ]}
 />
 
-npm-pakken bruker et postinstall-skript for å velge `opencode`-programfilen som er bygd for plattformen din. Bun- og pnpm-kommandoene
-tillater det påkrevde skriptet eksplisitt; Vite+ krever ikke noe ekstra flagg. mise-kommandoen krever mise 2026.10.9 eller nyere;
-eldre versjoner installerer OpenCode 1.
+npm-pakken bruker et postinstall-skript til å velge `opencode`-programfilen som er bygd for plattformen din. Kommandoene for Bun og pnpm
+har flagg som tillater at skriptet kjøres. Vite+ trenger ikke noe ekstra flagg. Du trenger mise 2026.10.9 eller nyere.
+Eldre versjoner av mise installerer OpenCode 1.
 
 Pakkebehandlere for Windows støttes ikke.
 
 
-Last ned en frittstående programfil for CLI-en på plattformen din.
+Last ned en frittstående CLI-programfil for plattformen din.
 
 - **macOS:** [Apple silicon](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-arm64.zip) · [Intel](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64.zip) · [Intel (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64-baseline.zip)
 - **Windows:** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-arm64.zip) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64.zip) · [x64 (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64-baseline.zip)
@@ -51,7 +51,7 @@ Last ned den nyeste OpenCode Desktop-versjonen for plattformen din.
 
 ## Web
 
-Få tilgang til OpenCode-webgrensesnittet med kommandoen `opencode pair`.
+Åpne nettgrensesnittet til OpenCode med kommandoen `opencode pair`.
 
 ```bash
 $ opencode pair
@@ -70,7 +70,7 @@ kjører serveren i en container.
 
 ## Koble til
 
-OpenCode har innebygd støtte for mange LLM-leverandører. Du kan koble til dem
+OpenCode har innebygd støtte for mange LLM-leverandører. Du kan koble til en leverandør
 direkte [i TUI-en](/cli/providers) med `/connect`.
 
 Se [Leverandører](/providers) for å konfigurere egendefinerte leverandører.
@@ -78,7 +78,7 @@ Se [Leverandører](/providers) for å konfigurere egendefinerte leverandører.
 Hvis du vil ha enkel tilgang til de beste kodingsmodellene, kan du prøve
 [OpenCode Console](/console).
 
-Du kan også prøve [OpenCode Go](/console/go), et abonnement på $10/måned
+Du kan også prøve [OpenCode Go](/console/go), et abonnement til $10/måned
 som gir deg tilgang til de beste kodingsmodellene.
 
 ---

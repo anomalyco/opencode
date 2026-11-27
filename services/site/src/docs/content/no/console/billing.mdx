@@ -3,8 +3,8 @@ title: "Fakturering"
 description: "Legg til kreditter, sett opp automatisk påfyll, administrer betalingsmåter og last ned fakturaer i OpenCode Console."
 ---
 
-Console er gratis uansett hvor stort teamet er. Det koster ikke noe per bruker. Du betaler bare for bruk, med forhåndsbetalte kreditter som dekker
-hele arbeidsområdet. Eiere og administratorer administrerer faktureringen i **Settings › Billing**.
+Console er gratis uansett hvor stort teamet er, uten avgift per bruker. Du betaler bare for bruken, med forhåndsbetalte kreditter
+som dekker hele arbeidsområdet. Eiere og administratorer styrer faktureringen i **Settings › Billing**.
 
 Bruk gjennom [dine egne leverandører](/console/providers) faktureres av leverandøren, ikke av Console.
 
@@ -22,8 +22,8 @@ Støttede betalingsmåter:
 - UPI
 - WeChat Pay
 
-Bruk **⋯ › Make default** for å velge betalingsmåten for automatiske trekk. Fjerner du en betalingsmåte, kan det stoppe
-automatisk påfyll og Go-fornyelser som bruker den.
+Bruk **⋯ › Make default** for å velge betalingsmåten for automatiske trekk. Hvis du fjerner en betalingsmåte, kan automatisk
+påfyll og Go-fornyelser som bruker den, stoppe.
 
 ## Legg til kreditter
 
@@ -39,11 +39,11 @@ saldoen.
 Med automatisk påfyll kjøper Console kreditter når saldoen blir lav.
 
 1. Under **Auto-recharge** klikker du **Add rule**.
-2. Angi saldoen som utløser et trekk, og beløpet som skal legges til.
+2. Angi hvor lav saldoen må være før påfyll, og hvor mye som skal fylles på.
 3. Klikk **Save**.
 
-Ved automatisk påfyll belastes standard betalingsmåte for beløpet med betalingsgebyret i tillegg. Hvis betalingen mislykkes, slås
-automatisk påfyll av til du setter det opp igjen.
+Ved automatisk påfyll trekkes beløpet og betalingsgebyret fra standard betalingsmåte. Hvis betalingen mislykkes,
+slås automatisk påfyll av til du setter det opp igjen.
 
 ## Sjekk saldoen
 
@@ -82,15 +82,15 @@ Amerikanske kunder kan laste ned [W-9-skjemaet til Anomaly Innovations Inc.](/as
 
 ## Betaling med faktura
 
-Har arbeidsområdet en kredittavtale, kan dere få en månedlig faktura i stedet for å kjøpe kreditter. Kontakt brukerstøtte for å sette opp dette.
+Har arbeidsområdet en kredittavtale, kan du få månedsfaktura i stedet for å kjøpe kreditter. Kontakt brukerstøtte for å sette opp dette.
 
-- Forbruket regnes mot kredittgrensen i stedet for å trekkes fra en forhåndsbetalt saldo.
-- Månedens faktura utstedes den 1. (UTC) og forfaller 14 dager senere.
+- Bruken teller mot kredittgrensen i stedet for å trekkes fra en forhåndsbetalt saldo.
+- Fakturaen utstedes den første i hver måned (UTC) og forfaller 14 dager senere.
 - Åpne fakturaer har en **Pay now**-knapp.
 - Forespørsler mislykkes med HTTP `402` når kredittgrensen er nådd eller en faktura er forfalt.
 
 ## Go
 
 [OpenCode Go](/console/go)-abonnementer bruker de samme betalingsmåtene og vises i den samme fakturalisten. Du kan
-også [betale for Go med kreditt](/console/go#pay-with-credit). Slå på **Extra Usage** på **Go**-siden for å betale fra
-kreditter når en Go-grense er nådd.
+også [betale for Go med kreditt](/console/go#pay-with-credit). Slå på **Extra Usage** på **Go**-siden for å betale med
+kreditter når du når en Go-grense.

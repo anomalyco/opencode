@@ -9,8 +9,9 @@ headings normally are. Use « » only when quoting prose; keep straight quotes i
 - Products: OpenCode, Zen, Go, Go Plus, Go Teams, OpenCode Models, OpenCode Console, Console, Desktop, Anomaly.
 - Provider, model, company, app, tool and package names.
 - Acronyms: MCP, LSP, SDK, CLI, API, TUI, JSON, ZDR, SSO, SCIM, OIDC, SAML, ACP, RPC, GUI, HTTP, URL, IDE, LLM, PTY.
-- `harness`, `skill`/`skills`, `token`/`tokens`, `prompt`, `endpoint`, `gateway`, `loopback`, `bundle`, `worktree`/`worktrees`,
-  `commit`, `branch`, `plugin`/`plugins`, `hook`, `Code Mode`, `composer`, `Diff`, `AGENTS.md`, `SKILL.md`.
+- `harness` (and `Harnesses` as the Console docs page name), `skill`/`skills`, `token`/`tokens`, `prompt`, `endpoint`,
+  `gateway`, `loopback`, `bundle`, `worktree`/`worktrees`, `commit`, `branch`, `plugin`/`plugins`, `hook`,
+  `transform`/`transforms` (plugin API), `Code Mode`, `composer`, `Diff`, `AGENTS.md`, `SKILL.md`.
 - Commands, flags, config keys and values, environment variables, paths, code, URLs.
 - Bold UI labels quoted from the product, such as **Settings › Billing**, **Add credits**, **Extra Usage**.
 - Plan names and dollar prices: `$10/måned`, `Go`, `Go Plus`, `Go Teams`, `Free`, `Enterprise`.
