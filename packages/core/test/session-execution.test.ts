@@ -226,7 +226,6 @@ describe("SessionExecution lifecycle", () => {
   it.effect("cleans up the background job when a deleted child is interrupted", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
-      const sessions = yield* Session.Service
       const parent = Session.ID.make("ses_deleted_child_parent")
       const child = Session.ID.make("ses_deleted_background_child")
       yield* seedSessions(database, [parent])
@@ -258,10 +257,13 @@ describe("SessionExecution lifecycle", () => {
       yield* Deferred.await(running)
       expect(yield* jobs.pendingBackground).toHaveLength(1)
 
-      yield* sessions.remove(child)
+      // The other server deletes the session before this process settles the job.
+      yield* database.db.delete(SessionTable).where(eq(SessionTable.id, child)).run().pipe(Effect.orDie)
+      expect(yield* jobs.pendingBackground).toHaveLength(1)
       expect(yield* execution.interrupt(child)).toBeTrue()
       yield* execution.awaitIdle(child)
 
+      expect(yield* jobs.get(child)).toBeUndefined()
       expect(yield* jobs.pendingBackground).toEqual([])
       expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
       expect(yield* execution.isActive(child)).toBe(false)
