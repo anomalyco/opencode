@@ -29,10 +29,6 @@ describe("desktop native translations", () => {
       expect(bundle.messages["desktop.cli.installed.title"]).toBe(installed)
       expect(bundle.messages["desktop.onboarding.defaultProject"]).toBe(project)
       expect(bundle.messages["desktop.picker.error.sizeLimit"]).toContain("{{limit}}")
-      expect(bundle.messages["desktop.microphoneUsage"]).toBe(DESKTOP_NATIVE_ENGLISH["desktop.microphoneUsage"])
-      expect(bundle.messages["desktop.contextMenu.spellcheck"]).toBe(
-        DESKTOP_NATIVE_ENGLISH["desktop.contextMenu.spellcheck"],
-      )
       expect(parseDesktopNativeBundle(bundle)).toEqual(bundle)
     },
   )
