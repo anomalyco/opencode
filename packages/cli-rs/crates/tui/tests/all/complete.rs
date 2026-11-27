@@ -503,6 +503,26 @@ fn an_open_cd_picker_shows_the_recents_a_write_merges_back() {
 }
 
 #[test]
+fn the_hidden_autocomplete_popup_mounts_no_option_rows() {
+    let setup = Setup::new();
+    setup.app.type_text("/theme");
+    setup.wait_for("Switch theme");
+    let marker = std::rc::Rc::new(());
+    support::mark_at(&setup.app, "Switch theme", 1, &marker);
+    assert!(std::rc::Rc::strong_count(&marker) > 1, "expected option rows to mount while visible");
+
+    setup.app.press("escape");
+    setup.wait_gone("Switch theme");
+    setup.app.render();
+    assert_eq!(std::rc::Rc::strong_count(&marker), 1, "hidden autocomplete popup still has mounted option rows");
+
+    setup.app.press("backspace");
+    setup.wait_for("Switch theme");
+    setup.app.press("return");
+    setup.wait_for("Search themes");
+}
+
+#[test]
 fn escape_hides_and_ctrl_c_dismisses_the_command() {
     let setup = Setup::new();
     setup.app.type_text("/xyz");

@@ -544,6 +544,10 @@ impl State {
             }
             tui.keymap.sync_mode();
         }
+        for child in self.list.children() {
+            child.detach();
+        }
+        self.options.borrow_mut().clear();
         self.popup.visible(false);
         self.request_redraw();
     }
