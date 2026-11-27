@@ -769,7 +769,7 @@ describe("V2 mini transport", () => {
       ui.commits
         .filter((commit) => commit.kind === "user" || commit.kind === "assistant" || commit.kind === "tool")
         .map((commit) => commit.text),
-    ).toEqual(["what happened", "Done."])
+    ).toEqual(["what happened", "Done.", ""])
     await transport.close()
   })
 
@@ -1074,7 +1074,7 @@ describe("V2 mini transport", () => {
     settled.resolve()
     await turn
 
-    expect(ui.commits.map((item) => item.text)).toEqual(["hello", "ans", "wer"])
+    expect(ui.commits.map((item) => item.text)).toEqual(["hello", "ans", "wer", ""])
     await transport.close()
   })
 
@@ -2151,8 +2151,10 @@ describe("V2 mini transport", () => {
 
     expect(ui.commits.filter((commit) => commit.messageID === "msg_assistant").map((commit) => commit.text)).toEqual([
       "partial",
+      "",
       " suffix",
       "partial",
+      "",
       " suffix",
       "entirely local",
     ])
@@ -2213,7 +2215,9 @@ describe("V2 mini transport", () => {
 
     expect(ui.commits.filter((commit) => commit.messageID === "msg_assistant").map((commit) => commit.text)).toEqual([
       "partial",
+      "",
       "partial",
+      "",
       " suffix",
     ])
     expect(live.map((commit) => commit.text)).toEqual(["partial suffix"])
@@ -2268,6 +2272,248 @@ describe("V2 mini transport", () => {
     expect(ui.commits.slice(-2).map((commit) => commit.text)).toEqual(["hello", "Thinking: thought"])
     await transport.close()
   })
+
+  test.each(["text", "reasoning"] as const)(
+    "resize completes historical %s while keeping the current message streaming",
+    async (type) => {
+      const events = feed()
+      events.push(connected())
+      const client = sdk({
+        streams: [events],
+        active: () => ({ ses_1: { type: "running" } }),
+        messages: {
+          ses_1: [
+            {
+              id: "msg_current",
+              type: "assistant",
+              agent: "build",
+              model: { providerID: "test", id: "model" },
+              content: [{ type, text: "still streaming" }],
+              time: { created: 4 },
+            },
+            {
+              id: "msg_completed",
+              type: "assistant",
+              agent: "build",
+              model: { providerID: "test", id: "model" },
+              content: [{ type, text: "completed history" }],
+              time: { created: 2, completed: 3 },
+            },
+          ],
+        },
+      })
+      const ui = footer()
+      const transport = await createSessionTransport({
+        sdk: client,
+        sessionID: "ses_1",
+        thinking: true,
+        replay: true,
+        replayLimit: 10,
+        footer: ui.api,
+      })
+      try {
+        const phases = () => ui.commits.map((commit) => ({ messageID: commit.messageID, phase: commit.phase }))
+        expect(phases()).toEqual([
+          { messageID: "msg_completed", phase: "progress" },
+          { messageID: "msg_completed", phase: "final" },
+          { messageID: "msg_current", phase: "progress" },
+        ])
+        await transport.replayOnResize({
+          localRows: () => [
+            {
+              commit: {
+                kind: type === "text" ? "assistant" : "reasoning",
+                source: type === "text" ? "assistant" : "reasoning",
+                messageID: "msg_local",
+                partID: `${type}:0`,
+                text: type === "text" ? "local history" : "Thinking: local history",
+                phase: "final",
+              },
+            },
+          ],
+          reset: async () => {
+            ui.commits.length = 0
+          },
+        })
+        expect(phases()).toEqual([
+          { messageID: "msg_completed", phase: "progress" },
+          { messageID: "msg_completed", phase: "final" },
+          { messageID: "msg_current", phase: "progress" },
+          { messageID: "msg_local", phase: "progress" },
+          { messageID: "msg_local", phase: "final" },
+        ])
+        expect(ui.commits.filter((commit) => commit.messageID === "msg_local").map((commit) => commit.text)).toEqual([
+          type === "text" ? "local history" : "Thinking: local history",
+          "",
+        ])
+      } finally {
+        await transport.close()
+      }
+    },
+  )
+
+  test.each(["overlap", "no overlap", "no overlap resumed", "no overlap finished", "no overlap idle", "exact limit"])(
+    "resize keeps the replay window and live output (%s)",
+    async (scenario) => {
+      const events = feed()
+      events.push(connected())
+      const noOverlap = scenario.startsWith("no overlap")
+      const stopped = scenario === "no overlap finished" || scenario === "no overlap idle"
+      let active = true
+      const messages = Array.from(
+        { length: scenario === "exact limit" ? 10 : 12 },
+        (_, index) =>
+          ({
+            id: `msg_${String(index).padStart(4, "0")}`,
+            type: "assistant",
+            agent: "build",
+            model: { providerID: "test", id: "model" },
+            content: [{ type: "text", text: `ANSWER_${index}` }],
+            time: { created: index * 2, completed: index * 2 + 1 },
+          }) satisfies SessionMessages[number],
+      )
+      const client = sdk({
+        streams: [events],
+        messages: { ses_1: messages },
+        active: (): Record<string, { type: "running" }> => (active ? { ses_1: { type: "running" } } : {}),
+      })
+      spyOn(client.message, "list").mockImplementation((request) =>
+        ok({
+          data: request.cursor
+            ? messages.slice(0, scenario === "exact limit" ? 0 : 1)
+            : messages
+                .slice(-10)
+                .toReversed()
+                .map((message) =>
+                  noOverlap
+                    ? {
+                        ...message,
+                        content: [
+                          canonicalToolPart("read", {
+                            status: "completed",
+                            input: {},
+                            content: [{ type: "text", text: "read output" }],
+                            metadata: {},
+                          }),
+                        ],
+                      }
+                    : message,
+                ),
+          // The real endpoint also returns a cursor on an exactly full final page.
+          cursor: request.cursor ? {} : { next: "older" },
+        }),
+      )
+      const ui = footer()
+      const started = defer<void>()
+      const transport = await createSessionTransport({
+        sdk: client,
+        sessionID: "ses_1",
+        thinking: false,
+        replay: true,
+        replayLimit: 10,
+        tools: false,
+        footer: ui.api,
+        trace: {
+          write(type) {
+            if (type === "recv.event") started.resolve()
+          },
+        },
+      })
+      const localRows = [
+        { commit: { kind: "system", source: "system", phase: "start", text: "LOCAL_NOTICE" } as const },
+        ...messages.slice(0, noOverlap ? 2 : messages.length).map((message) => ({
+          commit: {
+            kind: "assistant",
+            source: "assistant",
+            phase: "progress",
+            messageID: message.id,
+            partID: "text:0",
+            text: message.content[0].text,
+          } as const,
+        })),
+        {
+          commit: {
+            kind: "assistant",
+            source: "assistant",
+            phase: "progress",
+            messageID: "msg_live",
+            partID: "text:0",
+            text: "STREAMING",
+          } as const,
+        },
+      ]
+      try {
+        const ended = defer<void>()
+        const emit = ui.api.event.bind(ui.api)
+        spyOn(ui.api, "event").mockImplementation((event) => {
+          emit(event)
+          if (event.type !== "stream.patch") return
+          if (event.patch.usage) ended.resolve()
+        })
+        events.push(
+          scenario === "no overlap resumed"
+            ? {
+                id: "evt_live_delta",
+                type: "session.text.delta",
+                created: 30,
+                data: { sessionID: "ses_1", assistantMessageID: "msg_live", ordinal: 0, delta: "STREAMING" },
+              }
+            : {
+                id: "evt_live_started",
+                type: "session.step.started",
+                created: 30,
+                durable: durable("ses_1", 1),
+                data: {
+                  sessionID: "ses_1",
+                  assistantMessageID: "msg_live",
+                  started: 30,
+                  agent: "build",
+                  model: { providerID: "test", id: "model" },
+                },
+              },
+        )
+        await started.promise
+        if (scenario === "no overlap finished") {
+          events.push({
+            id: "evt_live_ended",
+            type: "session.step.ended",
+            created: 31,
+            durable: durable("ses_1", 2),
+            data: {
+              sessionID: "ses_1",
+              assistantMessageID: "msg_live",
+              finish: "stop",
+              cost: 0,
+              tokens: { input: 0, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+            },
+          })
+          await ended.promise
+        }
+        if (scenario === "no overlap idle") active = false
+        for (let resize = 0; resize < 2; resize++) {
+          await transport.replayOnResize({
+            localRows: () => localRows,
+            reset: async () => {
+              ui.commits.length = 0
+            },
+          })
+          const visible = ui.commits.filter((commit) => commit.text).map((commit) => commit.text)
+          expect(visible).toEqual([
+            ...(noOverlap ? [] : messages.slice(-10).map((message) => message.content[0].text)),
+            ...(scenario === "overlap" ? [] : ["LOCAL_NOTICE"]),
+            ...(stopped ? [] : ["STREAMING"]),
+          ])
+          if (!stopped) expect(ui.commits.at(-1)?.phase).toBe("progress")
+          expect(client.message.list).toHaveBeenLastCalledWith(
+            { sessionID: "ses_1", limit: 1, cursor: "older" },
+            { signal: expect.any(AbortSignal) },
+          )
+        }
+      } finally {
+        await transport.close()
+      }
+    },
+  )
 
   test("serializes and coalesces overlapping resize replays", async () => {
     const events = feed()
@@ -2549,9 +2795,13 @@ describe("V2 mini transport", () => {
 
     expect(ui.commits.map((item) => item.text)).toEqual([
       "Thinking: first thought",
+      "",
       "first answer",
+      "",
       "Thinking: second thought",
+      "",
       "second answer",
+      "",
     ])
     await transport.close()
   })

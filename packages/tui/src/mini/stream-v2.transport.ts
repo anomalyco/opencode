@@ -155,6 +155,7 @@ type State = {
   closed: boolean
   initial: boolean
   rootActive: boolean
+  activeMessageID?: string
   /** Bumped on every root execution lifecycle event; guards paints against stale acks. */
   executionEpoch: number
   buffered?: ReplayBuffer
@@ -557,6 +558,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   // interrupt ack so the flag and the paint cannot drift apart.
   const paintIdle = (status: string) => {
     state.rootActive = false
+    state.activeMessageID = undefined
     write([], { phase: "idle", status })
   }
 
@@ -843,6 +845,9 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
     if (message.type !== "assistant") return
     state.messageIDs.add(message.id)
+    // Completed history must flush its trailing row/block even when replaying
+    // during another active turn. Only the current message remains streaming.
+    const completed = message.time.completed !== undefined
     const hasTools = message.content.some((item) => item.type === "tool")
     if (hasTools) rememberToolMessage(message.id)
     let textOrdinal = 0
@@ -852,33 +857,33 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         const fragment = fragmentRef(message.id, "text", textOrdinal++)
         const visible = render && (showTools() || !hasTools)
         const update = state.fragments.project(fragment, item.text, visible)
-        if (visible && item.text.length > update.previous.length)
-          write([
-            {
-              kind: "assistant",
-              source: "assistant",
-              text: item.text.slice(update.previous.length),
-              phase: "progress",
-              messageID: message.id,
-              partID: fragment.partID,
-            },
-          ])
+        if (visible && item.text.length > update.previous.length) {
+          const commit = {
+            kind: "assistant",
+            source: "assistant",
+            text: item.text.slice(update.previous.length),
+            phase: "progress",
+            messageID: message.id,
+            partID: fragment.partID,
+          } as const
+          write(completed ? [commit, { ...commit, text: "", phase: "final" }] : [commit])
+        }
         continue
       }
       if (item.type === "reasoning") {
         const fragment = fragmentRef(message.id, "reasoning", reasoningOrdinal++)
         const update = state.fragments.project(fragment, item.text, render)
-        if (render && input.thinking && item.text.length > update.previous.length)
-          write([
-            {
-              kind: "reasoning",
-              source: "reasoning",
-              text: update.previous.length === 0 ? `Thinking: ${item.text}` : item.text.slice(update.previous.length),
-              phase: "progress",
-              messageID: message.id,
-              partID: fragment.partID,
-            },
-          ])
+        if (render && input.thinking && item.text.length > update.previous.length) {
+          const commit = {
+            kind: "reasoning",
+            source: "reasoning",
+            text: update.previous.length === 0 ? `Thinking: ${item.text}` : item.text.slice(update.previous.length),
+            phase: "progress",
+            messageID: message.id,
+            partID: fragment.partID,
+          } as const
+          write(completed ? [commit, { ...commit, text: "", phase: "final" }] : [commit])
+        }
         continue
       }
       renderTool(message.id, item, render)
@@ -899,13 +904,13 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
   }
 
-  const projectedMessages = async (client: OpenCodeClient, signal: AbortSignal) =>
-    (
-      await client.message.list(
-        { sessionID: input.sessionID, limit: input.replayLimit ?? 200, order: "desc" },
-        { signal },
-      )
-    ).data.toReversed()
+  const projectedMessages = async (client: OpenCodeClient, signal: AbortSignal) => {
+    const page = await client.message.list(
+      { sessionID: input.sessionID, limit: input.replayLimit ?? 200, order: "desc" },
+      { signal },
+    )
+    return { ...page, data: page.data.toReversed() }
+  }
 
   const waitForSession = async (initial: OpenCodeClient) => {
     let client = initial
@@ -927,7 +932,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
 
   const settleSession = async (initial: OpenCodeClient) => {
     const client = await waitForSession(initial)
-    for (const message of await projectedMessages(client, controller.signal)) renderMessage(message, true)
+    for (const message of (await projectedMessages(client, controller.signal)).data) renderMessage(message, true)
     paintIdle(blockerStatus(state.view))
     await input.footer.idle()
   }
@@ -996,7 +1001,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     syncPending()
     state.permissions = permissions
     pruneToolSources()
-    for (const message of projected) renderMessage(message, next.render)
+    for (const message of projected.data) renderMessage(message, next.render)
     state.permissions = await resolvePermissionSources(client, permissions, attempt)
     if (!current(attempt)) return
     pruneToolSources()
@@ -1005,10 +1010,14 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       ? globals.data.filter((form) => form.sessionID === "global").map((form) => globalForm(form, globals.location))
       : []
     state.rootActive = input.sessionID in active
+    state.activeMessageID = state.rootActive
+      ? (projected.data.findLast((message) => message.type === "assistant" && message.time.completed === undefined)
+          ?.id ?? state.activeMessageID)
+      : undefined
     syncBlockers()
     await subagents.hydrate({
       sdk: client,
-      messages: [...projected],
+      messages: [...projected.data],
       active,
       signal: attempt.signal,
       reconnect: next.reconnect,
@@ -1020,6 +1029,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     })
     if (!state.rootActive && !next.reconnect) await input.footer.idle()
     if (!current(attempt)) return
+    return projected
   }
 
   const apply = (attempt: Attempt, event: RunV2Event) => {
@@ -1052,6 +1062,15 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
     input.trace?.write("recv.event", event)
     subagents.main(client, event, attempt.signal)
+    // A resumed stream can arrive after its step.started event.
+    if (
+      !state.activeMessageID &&
+      (event.type === "session.text.delta" ||
+        event.type === "session.text.ended" ||
+        event.type === "session.reasoning.delta" ||
+        event.type === "session.reasoning.ended")
+    )
+      state.activeMessageID = event.data.assistantMessageID
     if (event.type === "session.renamed") {
       input.onSessionTitle?.(event.data.title)
       return
@@ -1090,6 +1109,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.step.started") {
+      state.activeMessageID = event.data.assistantMessageID
       state.stepModel = { providerID: event.data.model.providerID, modelID: event.data.model.id }
       write([], { phase: "running", status: "assistant responding" })
       return
@@ -1377,6 +1397,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.step.ended") {
+      if (state.activeMessageID === event.data.assistantMessageID) state.activeMessageID = undefined
       const total =
         event.data.tokens.input +
         event.data.tokens.output +
@@ -1399,6 +1420,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.step.failed") {
+      if (state.activeMessageID === event.data.assistantMessageID) state.activeMessageID = undefined
       state.stepModel = undefined
       if (!showTools()) flushQuietText(event.data.assistantMessageID)
       const rendered = state.errors.has(event.data.assistantMessageID)
@@ -1667,6 +1689,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     const replayBuffer = { attempt, events: buffered }
     let failure: unknown
     let reset = false
+    let replayRows = localRows
     state.buffered = replayBuffer
     try {
       await input.footer.idle()
@@ -1688,7 +1711,29 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       state.activeCompaction = undefined
       state.shellEnded.clear()
       state.errors.clear()
-      await hydrate(attempt, { render: true })
+      const projected = await hydrate(attempt, { render: true })
+      if (projected?.cursor.next && projected.data.length === (input.replayLimit ?? 200)) {
+        // Cursors also exist on the last non-empty page. Check for an older
+        // message before evicting cached history or local-only notices.
+        const older = await attempt.client.message.list(
+          { sessionID: input.sessionID, limit: 1, cursor: projected.cursor.next },
+          { signal: attempt.signal },
+        )
+        if (!current(attempt)) return false
+        if (older.data.length > 0) {
+          const replayIDs = new Set(projected.data.map((message) => message.id))
+          const start = localRows.findIndex((row) => !!row.commit.messageID && replayIDs.has(row.commit.messageID))
+          // Live replies retain progress commits after completion. Preserve
+          // only the active message, not everything with a streaming phase.
+          replayRows =
+            start >= 0
+              ? localRows.slice(start)
+              : localRows.filter(
+                  (row) =>
+                    !row.commit.messageID || (state.rootActive && row.commit.messageID === state.activeMessageID),
+                )
+        }
+      }
     } catch (error) {
       failure = error
     } finally {
@@ -1697,7 +1742,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     if (!current(attempt)) return false
     try {
       if (reset) {
-        for (const row of localRows) {
+        for (const row of replayRows) {
           if (row.commit.image && row.commit.messageID && row.commit.partID) {
             const key = streamPartKey(row.commit.messageID, row.commit.partID)
             if (state.imageIDs.has(key)) continue
@@ -1719,7 +1764,12 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             if (restored.type === "covered") continue
             if (restored.type === "append") {
               if (restored.suffix)
-                input.footer.append(restored.suffix === text ? row.commit : { ...row.commit, text: restored.suffix })
+                input.footer.append({
+                  ...row.commit,
+                  text: restored.suffix === text ? row.commit.text : restored.suffix,
+                  phase: "progress",
+                })
+              if (row.commit.phase === "final") input.footer.append({ ...row.commit, text: "" })
               continue
             }
           }
