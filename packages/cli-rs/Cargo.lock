@@ -1056,9 +1056,9 @@ checksum = "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1"
 
 [[package]]
 name = "opentui"
-version = "0.9.8"
+version = "0.9.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "363f97f2f257b5a532c22047f6b799beea3c9007383d117c81238539758fb865"
+checksum = "44a0fb0f8c8246ad017da6db97faf849bef85bf1b281bec08fa697d90674e0c4"
 dependencies = [
  "libc",
  "opentui-sys",
@@ -1074,9 +1074,9 @@ dependencies = [
 
 [[package]]
 name = "opentui-sys"
-version = "0.9.8"
+version = "0.9.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ff014dbc81ff31efba18c42463ac1a11b2abf3d039fcbbbcc769efa78c95011"
+checksum = "1ae1820d84f1cca457f0fad84053dfa763f7416a1893e2ffd22691c816043a48"
 
 [[package]]
 name = "parking_lot"

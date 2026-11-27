@@ -375,7 +375,7 @@ export const content = {
       badges: {
         body: "README, 문서, 웹사이트에 배지를 넣고 opencode.ai로 링크하세요. 배경에 맞춰 라이트 또는 다크 파일을 고르고(HTML은 자동으로 전환됩니다), 색상이나 텍스트는 바꾸지 마세요.",
         sizes: "모든 스타일은 20, 32, 44px(Shields는 20px만)로 제공되며, SVG와 2배 PNG 형식입니다.",
-        mono: "각 파일에는 OpenTUI Mono 텍스트 버전도 있습니다. opencode-works-with-a-light-20-mono.svg처럼 확장자 앞에 -mono를 붙이고, 대문자 OpenTUI Mono는 -mono-caps를 붙이세요.",
+        mono: "각 파일에는 OpenMono 텍스트 버전도 있습니다. opencode-works-with-a-light-20-mono.svg처럼 확장자 앞에 -mono를 붙이고, 대문자 OpenMono는 -mono-caps를 붙이세요.",
         groups: {
           "works-with": {
             title: "호환",

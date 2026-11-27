@@ -24,7 +24,8 @@ import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Loader } from "@opencode/ui/loader"
 import { displayName } from "@opencode/ui/project-avatar"
-import { useServers } from "@/runtime/server/registry"
+import type { SessionInfo } from "@opencode/client/promise"
+import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useLanguage } from "@/runtime/i18n/language"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
@@ -32,6 +33,7 @@ import type { LocalProject } from "@/shell/state/layout"
 import { sessionTabTitle } from "./tab-title"
 import { sessionLabel, sessionTitle } from "@/session/title"
 import { createSessionExporter } from "@/session/commands/export-session"
+import { SessionCopyMenu } from "@/session/session-copy-menu"
 import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { RenameDialog } from "./project-session-row"
 import { createSessionInbox, inboxArchived, inboxWaiting, type InboxEntry, type InboxStatus } from "./inbox-model"
@@ -66,8 +68,6 @@ export function SidebarInbox() {
   const layout = useLayout()
   const global = useGlobal()
   const pins = usePins()
-
-  const exporter = createSessionExporter()
 
   const [state, setState, , ready] = persisted(Persist.global("sidebar.inbox"), InboxState, {
     workingExpanded: true,
@@ -294,35 +294,22 @@ export function SidebarInbox() {
               archived={inboxArchived(entry())}
               pinned={pinned(entry())}
               actions={
-                <>
-                  <Menu.Item
-                    onSelect={() => (pinned(entry()) ? pins.unpin(pinRef(entry())) : pins.pin(pinRef(entry())))}
-                  >
-                    {language.t(pinned(entry()) ? "sidebar.recent.unpin" : "sidebar.recent.pin")}
-                  </Menu.Item>
-                  <Menu.Item
-                    onSelect={() => {
-                      const current = entry()
+                <InboxSessionMenuItems
+                  server={entry().server}
+                  session={entry().session}
+                  pinned={pinned(entry())}
+                  onRename={() => {
+                    const current = entry()
 
-                      void dialog.show(() => (
-                        <RenameDialog
-                          title={sessionLabel(current.session)}
-                          onRename={(title) => inbox.rename(current, title)}
-                        />
-                      ))
-                    }}
-                  >
-                    {language.t("common.rename")}
-                  </Menu.Item>
-                  <Menu.Item
-                    disabled={exporter.exporting({ server: entry().server, sessionID: entry().session.id })}
-                    onSelect={() => exporter.export({ server: entry().server, sessionID: entry().session.id })}
-                  >
-                    {language.t("common.export")}…
-                  </Menu.Item>
-                  <SessionReadMenuItem server={entry().server} session={entry().session} />
-                  <Menu.Separator />
-                </>
+                    void dialog.show(() => (
+                      <RenameDialog
+                        title={sessionLabel(current.session)}
+                        onRename={(title) => inbox.rename(current, title)}
+                      />
+                    ))
+                  }}
+                  onTogglePin={() => (pinned(entry()) ? pins.unpin(pinRef(entry())) : pins.pin(pinRef(entry())))}
+                />
               }
               onOpen={() => inbox.open(entry())}
               onArchive={() => void inbox.archive(entry())}
@@ -828,6 +815,36 @@ export function InboxDraftCard(props: {
   )
 }
 
+export function InboxSessionMenuItems(props: {
+  server: ServerConnection.Key
+  session: SessionInfo
+  pinned: boolean
+  onRename: () => void
+  onTogglePin: () => void
+}) {
+  const language = useLanguage()
+
+  const exporter = createSessionExporter()
+
+  return (
+    <>
+      <Menu.Item onSelect={props.onRename}>{language.t("common.rename")}</Menu.Item>
+      <Menu.Item onSelect={props.onTogglePin}>
+        {language.t(props.pinned ? "sidebar.recent.unpin" : "sidebar.recent.pin")}
+      </Menu.Item>
+      <SessionReadMenuItem server={props.server} session={props.session} />
+      <Menu.Separator />
+      <SessionCopyMenu server={props.server} session={props.session} />
+      <Menu.Item
+        disabled={exporter.exporting({ server: props.server, sessionID: props.session.id })}
+        onSelect={() => exporter.export({ server: props.server, sessionID: props.session.id })}
+      >
+        {language.t("common.export")}…
+      </Menu.Item>
+    </>
+  )
+}
+
 export function InboxSessionCard(props: {
   ref?: (element: HTMLButtonElement) => void
   project?: LocalProject
@@ -970,13 +987,13 @@ export function InboxSessionCard(props: {
       <Menu.Context.Portal>
         <Menu.Context.Content>
           {props.actions}
+          <Menu.Separator />
           <Show
             when={props.archived}
             fallback={<Menu.Item onSelect={props.onArchive}>{language.t("common.archive")}</Menu.Item>}
           >
             <Menu.Item onSelect={props.onUnarchive}>{language.t("sidebar.inbox.unarchive")}</Menu.Item>
           </Show>
-          <Menu.Separator />
           <Menu.Item onSelect={props.onDelete}>{language.t("common.delete")}…</Menu.Item>
         </Menu.Context.Content>
       </Menu.Context.Portal>

@@ -13,7 +13,7 @@ import { Schema } from "effect"
 import type { Embeds } from "@opencode/plugin/gui/main"
 import { captureCoordinator, captureScale, cropPixels, FULL_PAGE_DEADLINE_MS, jpegFits, pngFits, undrawable, undrawableMessage } from "./capture"
 import { createCdp, abortError, waitFor } from "./cdp"
-import { navigationDeadline } from "./navigation-deadline"
+import { navigationDeadline, navigationProgressDeadline, type NavigationOutcome } from "./navigation-deadline"
 import { attachChildren, releaseWorker } from "./child-targets"
 import { CodedError, missingArtifact, pageReports } from "./errors"
 import { createBrowserFiles } from "./files"
@@ -1306,13 +1306,17 @@ export function createBrowserPage(
 
   const begin = (signal = options.signal, keepAddress = false) => navigation.begin(AbortSignal.any([pageLifetime.signal, signal, options.signal]), keepAddress)
 
-  const load = async (url: string, retry = false, commandSignal = options.signal, keepAddress = true, deadlineMs?: number) => {
+  const load = async (url: string, retry = false, commandSignal = options.signal, keepAddress = true, deadlineMs?: number): Promise<NavigationOutcome> => {
     const visit = begin(commandSignal, keepAddress)
     const destination = url.startsWith("artifact:") ? options.artifacts?.load(url) : localFileURL(url) || url.startsWith("workspace:") ? await options.workspace?.load(url, () => notices.show({ reason: "browser.preview.restricted" }), retry ? contents.getURL() : undefined) : url
 
     if (!destination) return Promise.reject(new Error("Workspace preview is unavailable."))
+    let outcome: NavigationOutcome = "completed"
+    await visit(destination, async () => {
+      outcome = await loadDestination(destination, url, deadlineMs)
+    })
 
-    return visit(destination, () => loadDestination(destination, url, deadlineMs))
+    return outcome
   }
 
   const loadDestination = (destination: string, url: string, deadlineMs?: number) => {
@@ -1333,17 +1337,21 @@ export function createBrowserPage(
       if (!options.artifacts?.display(destination)) artifactHost = undefined
     }
 
-    contents.once("did-navigate", commit)
+    const stillLoading = () => !closed() && !contents.isDestroyed() && contents.isLoading()
+    const onStop = () => next.stop(stillLoading())
+    const onDestroyed = () => next.stop(false)
+
+    contents.on("did-navigate", commit)
     const next = replacementNavigation()
     contents.on("did-start-navigation", next.start)
     contents.on("did-navigate", next.commit)
-    contents.on("did-stop-loading", next.stop)
-    contents.once("destroyed", next.stop)
+    contents.on("did-stop-loading", onStop)
+    contents.once("destroyed", onDestroyed)
 
-    return navigationDeadline(contents.loadURL(destination).catch(async (error: Error) => {
+    return navigationProgressDeadline(contents.loadURL(destination).catch(async (error: Error) => {
       if (committedLoad(error, committed)) return
 
-      if (destinationOrigin(destination) && await next.after(error)) return
+      if (destinationOrigin(destination) && await next.after(error, stillLoading())) return
 
       if (options.previewFailure?.(destination)) throw new FileVerificationError()
 
@@ -1353,10 +1361,10 @@ export function createBrowserPage(
       if (!committed && "errno" in error && (error.errno === -2 || error.errno === -3))
         throw new CodedError("navigation_failed", "No page committed. The navigation was cancelled, failed, or became a download. Check the tab and its downloads before navigating again.")
       throw error
-    }), deadlineMs).finally(() => {
-      next.stop()
-      contents.off("destroyed", next.stop)
-      contents.off("did-stop-loading", next.stop)
+    }), () => committed, deadlineMs).finally(() => {
+      next.stop(false)
+      contents.off("destroyed", onDestroyed)
+      contents.off("did-stop-loading", onStop)
       contents.off("did-navigate", next.commit)
       contents.off("did-start-navigation", next.start)
       contents.off("did-navigate", commit)
@@ -1708,15 +1716,19 @@ export function createBrowserPage(
         const cancel = () => contents.stop()
         signal.addEventListener("abort", cancel, { once: true })
 
+        let outcome: NavigationOutcome = "completed"
+
         try {
-          await load(url, false, signal, origin === "user", options.navigationDeadlineMs)
+          outcome = await load(url, false, signal, origin === "user", options.navigationDeadlineMs)
         } finally {
           signal.removeEventListener("abort", cancel)
         }
 
-        // The load event comes just before Chromium says the tab stopped loading; report the tab after that. A frame that
-        // still loads after a moment is reported as loading, which it is.
-        await waitFor(() => !contents.isLoading(), signal, 2_000).catch(() => abortError(signal))
+        // The load event comes just before Chromium says the tab stopped loading; report the tab after that. When the
+        // document already committed and subresources are still loading at the deadline, return the committed tab with
+        // `loading: true` immediately so callers can use explicit `browser.wait` readiness checks.
+        if (outcome === "completed")
+          await waitFor(() => !contents.isLoading(), signal, 2_000).catch(() => abortError(signal))
 
         return result(state())
       }

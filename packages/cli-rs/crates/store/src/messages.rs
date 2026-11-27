@@ -7,8 +7,42 @@ use std::collections::HashSet;
 
 use crate::changes::Touched;
 use crate::core::{Delta, Effect, Head, Ticket};
-use crate::sessions::SessionKey;
+use crate::sessions::{Anchor, SessionKey};
 use crate::state::{Error, OVERLAY_LIMIT, State};
+
+/// Sizes of the older pages that a new read of the newest page may read to reach the loaded history
+/// (`bridgePageLimits`). They grow: a short gap costs one small page, and the longest gap closed costs three requests.
+pub(crate) const BRIDGE_PAGE_LIMITS: [i64; 3] = [20, 40, 140];
+
+/// What a head read fetched: the newest page with any bridging older pages (oldest last, as the server returns them),
+/// the cursor after the oldest fetched page, and refreshed copies of unsettled kept messages.
+pub(crate) struct HeadPages {
+    pub(crate) data: Vec<SessionMessageInfo>,
+    pub(crate) next: Option<String>,
+    pub(crate) refreshed: HashMap<String, SessionMessageInfo>,
+}
+
+/// A message that later events still change (`unsettled`). A client that missed those events holds it as it was.
+fn unsettled(message: &SessionMessageInfo) -> bool {
+    match message {
+        SessionMessageInfo::Assistant(assistant) => {
+            assistant.time.completed.is_none()
+                || assistant.content.iter().any(|part| {
+                    matches!(
+                        part,
+                        SessionMessageAssistantContentItem::Tool(SessionMessageAssistantTool {
+                            state: SessionMessageAssistantToolState::Streaming(_)
+                                | SessionMessageAssistantToolState::Running(_),
+                            ..
+                        })
+                    )
+                })
+        }
+        SessionMessageInfo::Shell(shell) => shell.status == SessionMessageShellStatus::Running,
+        SessionMessageInfo::Compaction(SessionMessageCompaction::Running(_)) => true,
+        _ => false,
+    }
+}
 
 /// A message's key in its transcript, never given to another message of it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -139,23 +173,25 @@ impl Transcript {
         }
     }
 
-    pub(crate) fn remove(&mut self, id: &str) -> Option<SessionMessageInfo> {
+    /// Removes `id` and returns its former position, if present.
+    pub(crate) fn remove(&mut self, id: &str) -> Option<usize> {
         let position = self.index.remove(id)?;
-        let item = self.items.remove(position);
+        self.items.remove(position);
         let key = self.keys.remove(position);
         self.positions[key.0 as usize] = u32::MAX;
         self.reindex(position);
-        Some(item)
+        Some(position)
     }
 
-    /// Moves the item to the end.
-    pub(crate) fn move_last(&mut self, id: &str) {
-        let Some(position) = self.index.get(id).copied() else { return };
+    /// Moves the item to the end and returns its former position, if present.
+    pub(crate) fn move_last(&mut self, id: &str) -> Option<usize> {
+        let position = self.index.get(id).copied()?;
         let item = self.items.remove(position);
         self.items.push(item);
         let key = self.keys.remove(position);
         self.keys.push(key);
         self.reindex(position);
+        Some(position)
     }
 
     /// Drops every item from `position` on.
@@ -378,39 +414,119 @@ impl State {
         }
     }
 
-    /// Publishes the head page of a transcript (models M2); true when the order of what overtook the read is unknown,
+    /// The head read `head`, while it is still the active read of its transcript window.
+    fn live_head(&self, head: &Head) -> Option<&HeadRead> {
+        let record = self.sessions.get(&head.session)?;
+        if record.incarnation != head.incarnation {
+            return None;
+        }
+        record.head_read.as_ref().filter(|read| read.ticket == head.read)
+    }
+
+    /// Loaded messages that are where the server placed them, oldest first: empty when the transcript is not
+    /// anchored or `read` overflowed, and excluding pending/outbox inputs (which sit where they were admitted until
+    /// delivered) and rows events created during `read` (which `publish_head` places by `durable.seq`).
+    fn history_for_head(&self, session: &SessionID, read: &HeadRead) -> Vec<&SessionMessageInfo> {
+        let Some(record) = self.sessions.get(session) else { return Vec::new() };
+        if read.overflowed {
+            return Vec::new();
+        }
+        let Some(transcript) = &record.transcript else { return Vec::new() };
+        let items = match record.anchored {
+            Anchor::None => return Vec::new(),
+            Anchor::Live => transcript.items(),
+            Anchor::Prefix(n) => &transcript.items()[..n.min(transcript.items().len())],
+        };
+        let pending: HashSet<&str> = self.inputs(session).into_iter().collect();
+        let created: HashSet<&str> = read.created.iter().map(|(id, _)| id.as_str()).collect();
+        items
+            .iter()
+            .filter(|item| {
+                let id = item.id();
+                !self.outbox.contains(id) && !pending.contains(id) && !created.contains(id)
+            })
+            .collect()
+    }
+
+    /// The oldest loaded history ID when `first` does not fall inside it (`apart`, history half), or `None` when
+    /// `head` ended, has no anchored history, or already meets it.
+    pub(crate) fn head_gap(&self, head: &Head, first: &str) -> Option<String> {
+        let read = self.live_head(head)?;
+        let history = self.history_for_head(&head.session, read);
+        let oldest = history.first()?.id();
+        (!history.iter().any(|item| item.id() == first)).then(|| oldest.to_owned())
+    }
+
+    /// Loaded messages older than `first` that are still running and must be read again while `head` is live.
+    pub(crate) fn head_unsettled(&self, head: &Head, first: &str) -> Vec<SessionMessageID> {
+        let Some(read) = self.live_head(head) else { return Vec::new() };
+        let history = self.history_for_head(&head.session, read);
+        let Some(at) = history.iter().position(|item| item.id() == first) else { return Vec::new() };
+        history[..at].iter().filter(|item| unsettled(item)).map(|item| SessionMessageID(item.id().to_owned())).collect()
+    }
+
+    /// Publishes the head pages of a transcript (models M2); true when the order of what overtook the read is unknown,
     /// so it must read again.
     ///
-    /// The page wins. A row an event created during the read that the page lacks is placed by its `durable.seq`
+    /// When the fetched pages start inside the loaded anchored history, the loaded messages before them stay (with
+    /// refreshed copies for any that were still running) along with their cursor; otherwise the fetched pages replace
+    /// the transcript. A row an event created during the read that the pages lack is placed by its `durable.seq`
     /// against a page row also created during the read: higher means newer than the page, so it is appended; lower
-    /// means older than the page, so it is dropped, and an older page brings it back. A row created before the read
-    /// and missing from the page is older too. Without such a page row (and with older rows on the server) the order
-    /// is unknown: the page is published alone and read again. Message IDs never decide the order. A page row created
-    /// during the read keeps its local copy; the durable edits that overtook the read then replay onto the rest. Each
-    /// sets a whole value, so a replay the page holds changes nothing.
-    fn publish_head(
-        &mut self,
-        session: &SessionID,
-        read: HeadRead,
-        page: Vec<SessionMessageInfo>,
-        next: Option<String>,
-    ) -> bool {
+    /// means older than the page, so it is dropped, and an older page brings it back. Without such a page row (and
+    /// with older rows on the server) the order is unknown: the transcript is published without it and read again.
+    /// Message IDs never decide the order. A page row created during the read keeps its local copy; the durable edits
+    /// that overtook the read then replay onto the rest. Each sets a whole value, so a replay the page holds changes
+    /// nothing.
+    fn publish_head(&mut self, session: &SessionID, read: HeadRead, pages: HeadPages) -> bool {
         let seq = |id: &str| read.created.iter().find(|(created, _)| created == id).map(|(_, seq)| *seq);
         // The stream saw the whole life of a row it created during the read, deltas included.
-        let fetched: Vec<_> = page
+        let mut seen_fetched = HashSet::new();
+        let mut fetched: Vec<_> = pages
+            .data
             .into_iter()
-            .rev()
+            .filter(|item| seen_fetched.insert(item.id().to_owned()))
             .map(|item| match seq(item.id()).and_then(|_| self.message(session, item.id())) {
                 Some(local) => local.clone(),
                 None => self.stored(item),
             })
             .collect();
+        fetched.reverse();
         let ids: HashSet<String> = fetched.iter().map(|item| item.id().to_owned()).collect();
+        // The pages the reader loaded stay when the fetched messages start inside them: the messages before that point
+        // cannot have been removed, since a revert removes from its boundary to the end.
+        let prefix: Option<Vec<SessionMessageInfo>> = fetched.first().and_then(|first| {
+            let history = self.history_for_head(session, &read);
+            let at = history.iter().position(|item| item.id() == first.id())?;
+            if history[..at].iter().any(|item| ids.contains(item.id())) {
+                return None;
+            }
+            Some(
+                history[..at]
+                    .iter()
+                    .map(|item| match pages.refreshed.get(item.id()) {
+                        Some(refreshed) => self.stored(refreshed.clone()),
+                        None => (*item).clone(),
+                    })
+                    .collect(),
+            )
+        });
+        // Kept pages keep the cursor to the page before them. When `fetched` starts at the first loaded message
+        // (`prefix` is empty) and the server reports no older pages, drop the old cursor too.
+        let next = match (&prefix, &pages.next) {
+            (Some(_), Some(_)) => self.sessions.get(session).and_then(|record| record.cursor.clone()),
+            (Some(kept), None) if !kept.is_empty() => {
+                self.sessions.get(session).and_then(|record| record.cursor.clone())
+            }
+            _ => pages.next,
+        };
+        let mut kept = ids.clone();
+        if let Some(prefix) = &prefix {
+            kept.extend(prefix.iter().map(|item| item.id().to_owned()));
+        }
         let anchor = fetched.iter().filter_map(|item| seq(item.id())).min();
-        let mut streamed: Vec<&(String, i64)> = read.created.iter().filter(|(id, _)| !ids.contains(id)).collect();
+        let mut streamed: Vec<&(String, i64)> = read.created.iter().filter(|(id, _)| !kept.contains(id)).collect();
         let unknown = read.overflowed || (next.is_some() && anchor.is_none() && !streamed.is_empty());
         streamed.sort_by_key(|(_, seq)| *seq);
-        let mut kept = ids.clone();
         let streamed: Vec<_> = streamed
             .into_iter()
             .filter(|(id, seq)| !unknown && (next.is_none() || Some(*seq) > anchor) && kept.insert(id.clone()))
@@ -435,7 +551,8 @@ impl State {
         // inbox.delivered event (and maybe its enqueued echo) while the event stream was down.
         let delivered: Vec<String> =
             admitted.iter().filter(|id| ids.contains(**id)).map(|id| (*id).to_owned()).collect();
-        let mut messages = fetched;
+        let mut messages = prefix.unwrap_or_default();
+        messages.extend(fetched);
         messages.extend(streamed);
         messages.extend(local);
         for id in &delivered {
@@ -444,6 +561,7 @@ impl State {
         }
         let key = self.sessions.entry(session);
         let record = &mut self.sessions[key];
+        record.anchored = if unknown { Anchor::Prefix(messages.len()) } else { Anchor::Live };
         let paged = record.cursor.is_some() == next.is_some();
         record.cursor = next;
         // Like TS `reconcile`: the same IDs in the same order only update the changed messages.
@@ -898,10 +1016,15 @@ impl State {
 
     /// `session.revert.committed`: drops messages at or after the boundary.
     pub(crate) fn revert_messages(&mut self, session: &SessionID, to: &SessionMessageID) {
-        let transcript = self.transcript_mut(session);
+        let key = self.sessions.entry(session);
+        let record = &mut self.sessions[key];
+        let transcript = record.transcript.get_or_insert_default();
         let Some(position) = transcript.items().iter().position(|item| item.id() >= to.as_str()) else { return };
         transcript.truncate(position);
-        self.touch(session, Touched::SHAPE);
+        if let Anchor::Prefix(n) = &mut record.anchored {
+            *n = (*n).min(position);
+        }
+        self.touch_key(key, Touched::SHAPE);
     }
 
     /// Applies a streaming delta: it appends to the part it names.
@@ -1092,18 +1215,17 @@ impl State {
     pub(crate) fn complete_messages(
         &mut self,
         head: Head,
-        result: Result<SessionMessagesResponse, Error>,
+        result: Result<HeadPages, Error>,
         effects: &mut Vec<Effect>,
     ) {
         let session = &head.session;
         let read = HeadRead::take(self, session, head.read);
-        let response = match result {
-            Ok(response) => response,
+        let pages = match result {
+            Ok(pages) => pages,
             Err(error) => return self.evict_missing(&error),
         };
         let Some(read) = read else { return };
-        let reread = self.incarnation(session) != head.incarnation
-            || self.publish_head(session, read, response.data, response.cursor.next.flatten());
+        let reread = self.incarnation(session) != head.incarnation || self.publish_head(session, read, pages);
         if reread {
             self.invalidate_key(head.ticket.key);
             effects.push(Effect::Messages(head.session));
@@ -1202,8 +1324,12 @@ impl State {
         let fetched: Vec<_> = fetched.into_iter().map(|item| self.stored(item)).collect();
         let record = self.sessions.get_or_insert(session);
         let transcript = record.transcript.get_or_insert_default();
-        let older = fetched.into_iter().rev().filter(|item| !transcript.contains(item.id())).collect();
+        let older: Vec<_> = fetched.into_iter().rev().filter(|item| !transcript.contains(item.id())).collect();
+        let added = older.len();
         transcript.prepend(older);
+        if let Anchor::Prefix(n) = &mut record.anchored {
+            *n += added;
+        }
         record.cursor = next;
         self.touch(session, Touched::SHAPE);
     }

@@ -178,7 +178,15 @@ export type SessionMessageToolStateRunning1 = {
   metadata: { [x: string]: JsonValue }
 }
 
-export type ModelType = "chat" | "decision" | "image" | "video" | (string & {})
+export type ModelType =
+  | "chat"
+  | "decision"
+  | "image"
+  | "video"
+  | "realtime"
+  | "embedding"
+  | "transcription"
+  | (string & {})
 
 export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
 
@@ -331,6 +339,14 @@ export type SessionStatus =
     }
   | { type: "busy" }
 
+export type SpaceName = string
+
+export type SpaceKey = string
+
+export type SpaceValue = string
+
+export type SpaceRevision = number
+
 export type PersistentPtyHandoff = { directory: string; instanceID: string; ticket: string; expiresAt: number }
 
 export type AutomationID = string
@@ -377,6 +393,10 @@ export type PushPlatform = "android" | "ios"
 export type PushLevel = "all" | "attention" | "none"
 
 export type PushRegistered = { publicKey: string }
+
+export type SpaceCursor = string
+
+export type SpaceEpoch = string
 
 export type ReferenceGitSource = { type: "git"; repository: string; branch?: string }
 
@@ -1033,6 +1053,8 @@ export type FormMultiselectField1 = {
 
 export type FormAnswer1 = { [x: string]: FormValue1 }
 
+export type SpaceEntry = { key: SpaceKey; value: SpaceValue }
+
 export type AutomationTriggerEvery = { type: "every"; every: AutomationDuration; tz?: string }
 
 export type ArtifactProvider = { id: string; name: string; capabilities: Array<ArtifactCapability>; default: boolean }
@@ -1100,7 +1122,7 @@ export type V2EventServerConnected = {
   metadata?: { [x: string]: any } | undefined
   location?: LocationPublicRef | undefined
   type: "server.connected"
-  data: {}
+  data: { stream?: string | undefined }
 }
 
 export type ReferenceSource = ReferenceLocalSource | ReferenceGitSource
@@ -2227,6 +2249,33 @@ export type ExperimentalMcpEvent = {
   }
 }
 
+export type ExperimentalSpaceResync = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "experimental.space.resync"
+  location?: LocationRef
+  data: { space: SpaceName }
+}
+
+export type ExperimentalSpaceUpdated = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "experimental.space.updated"
+  location?: LocationRef
+  data: { space: SpaceName; key: SpaceKey; value: SpaceValue; revision: SpaceRevision }
+}
+
+export type ExperimentalSpaceDeleted = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "experimental.space.deleted"
+  location?: LocationRef
+  data: { space: SpaceName; key: SpaceKey; revision: SpaceRevision }
+}
+
 export type SessionToolSuccess = {
   id: EventID
   created: number
@@ -2357,6 +2406,27 @@ export type FormReplied = {
   type: "form.replied"
   location?: LocationRef
   data: { id: FormID; sessionID: string; answer: FormAnswer1 }
+}
+
+export type SpaceSnapshot = {
+  type: "snapshot"
+  space: SpaceName
+  epoch: SpaceEpoch
+  revision: SpaceRevision
+  entries: Array<SpaceEntry>
+  cursor: SpaceCursor
+  next?: SpaceCursor
+}
+
+export type SpaceDelta = {
+  type: "delta"
+  space: SpaceName
+  epoch: SpaceEpoch
+  revision: SpaceRevision
+  entries: Array<SpaceEntry>
+  cursor: SpaceCursor
+  next?: SpaceCursor
+  deleted: Array<SpaceKey>
 }
 
 export type AutomationTrigger =
@@ -2703,8 +2773,8 @@ export type ConfigEntry =
           artifacts?: boolean
           console_watches?: boolean
           recommended_api?: boolean
-          model_speeds?: boolean
           full_codemode?: boolean
+          codemode_agents?: boolean
           machines?: boolean
           home_memory?: boolean
           project_overlay?: boolean
@@ -2712,6 +2782,7 @@ export type ConfigEntry =
           mcp_skills?: boolean
           compaction_jobs?: boolean
           sqlite_fts?: boolean
+          browser_stream_tunnel?: boolean
           video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
@@ -2817,6 +2888,8 @@ export type ExperimentalJobUpdated = {
 }
 
 export type FormFields1 = [FormField1, ...Array<FormField1>]
+
+export type SpacePage = SpaceSnapshot | SpaceDelta
 
 export type PushInfo = { settings: PushSettings; devices: Array<PushDevice>; sessions: { [x: string]: PushBell } }
 
@@ -3123,6 +3196,9 @@ export type V2Event =
   | McpStatusChanged
   | McpResourcesChanged
   | ExperimentalMcpEvent
+  | ExperimentalSpaceResync
+  | ExperimentalSpaceUpdated
+  | ExperimentalSpaceDeleted
   | V2EventRpc
   | V2EventServerConnected
 
@@ -4138,7 +4214,11 @@ export type MessageListOutput = SessionMessagesResponse
 
 export type ModelListInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
-  readonly types?: ReadonlyArray<"chat" | "decision" | "image" | "video" | (string & {})> | undefined
+  readonly types?:
+    | ReadonlyArray<
+        "chat" | "decision" | "image" | "video" | "realtime" | "embedding" | "transcription" | (string & {})
+      >
+    | undefined
 }
 
 export type ModelListOutput = { location: LocationPublicRef; data: Array<ModelInfo> }
@@ -4801,6 +4881,8 @@ export type ExperimentalBlobGetInput = { readonly id: string }
 
 export type ExperimentalBlobGetOutput = globalThis.Uint8Array
 
+export type ExperimentalBrowserTunnelOutput = boolean
+
 export type ExperimentalAutomationCreateInput = {
   readonly sessionID?: string | undefined
   readonly directory?: string | undefined
@@ -4993,6 +5075,33 @@ export type ExperimentalPushSettingsSetInput = { readonly paused: boolean; reado
 
 export type ExperimentalPushSettingsSetOutput = { data: PushSettings }["data"]
 
+export type ExperimentalSpaceWriteInput = {
+  readonly changes: ReadonlyArray<{ readonly space: string; readonly key: string; readonly value: string | null }>
+}
+
+export type ExperimentalSpaceWriteOutput = {
+  spaces: Array<{ space: SpaceName; revision: SpaceRevision; cursor: SpaceCursor }>
+}
+
+export type ExperimentalSpaceSyncInput = {
+  readonly spaces: ReadonlyArray<{ readonly space: string; readonly cursor?: string }>
+}
+
+export type ExperimentalSpaceSyncOutput = { pages: Array<SpacePage> }
+
+export type ExperimentalSpaceSubscribeInput = {
+  readonly stream: string
+  readonly spaces: ReadonlyArray<{ readonly space: string; readonly cursor: string }>
+}
+
+export type ExperimentalSpaceSubscribeOutput = void
+
+export type ExperimentalSpaceUnsubscribeInput = { readonly stream: string; readonly spaces: ReadonlyArray<string> }
+
+export type ExperimentalSpaceUnsubscribeOutput = void
+
+export type ExperimentalSpaceResetOutput = void
+
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
 export type ShellListOutput = { location: LocationPublicRef; data: Array<ShellInfo1> }
@@ -5135,6 +5244,10 @@ export type ExperimentalUsageLimitsInput = {
 }
 
 export type ExperimentalUsageLimitsOutput = { location: LocationPublicRef; data: UsageLimitsInfo | null }
+
+export type ExperimentalFlagGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+
+export type ExperimentalFlagGetOutput = { location: LocationPublicRef; data: { [x: string]: boolean } }
 
 export type ConfigGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 

@@ -25,7 +25,7 @@ const loading = `<!doctype html><title>Still loading</title><p>shown</p><img src
 // The pages the tabs open.
 function createPages() {
   return createServer((request, response) => {
-    if (request.url === "/never") return
+    if (request.url === "/never" || request.url?.startsWith("/hung")) return
 
     // The server drops the connection, so Chromium fails the load at once.
     if (request.url?.startsWith("/dropped")) return void request.socket.destroy()
@@ -173,9 +173,12 @@ void electron.app.whenReady().then(async () => {
   const { createSitePermissions } = await import("./site-permissions")
   const { createSystemMedia } = await import("./system-media")
   const pages = createPages()
+  // Dedicated loopback origin for the uncommitted /hung stall so it never shares Chromium's per-origin socket pool with /loading tabs.
+  const hungPages = createServer((_request, _response) => undefined)
   // The session's workspace, which holds `report.html`: a page that shows and takes over a second to finish loading.
   const api = createApi(process.env.ELECTRON_OPEN_ROOT ?? "")
   const origin = await listen(pages)
+  const hungOrigin = await listen(hungPages)
   const server = await listen(api.server)
   const win = new electron.BrowserWindow({ show: false, width: 800, height: 600 })
   const values = new Map<string, unknown>()
@@ -302,12 +305,19 @@ void electron.app.whenReady().then(async () => {
   }
 
   // The agent: its command, what the pane answered, and what the pane asked the window to show meanwhile.
-  const asked = async (action: Browser.Action, address: string) => {
+  const asked = async (action: Browser.Action, address: string, commits = true) => {
     const from = shown.length
+    const beforeIDs = new Set(last().map((item) => item.id))
     const outcome = await api.agent(action)
-    // The tab is at its address: a web page still loading there, as the test compares.
-    await until(() => !!tab(address) && (action.type === "preview" || !!tab(address)?.loading), 3_000)
-    const listed = tab(address)
+    // A committed page reaches its address; an uncommitted stall stays on its initial tab.
+    await until(
+      () =>
+        commits
+          ? !!tab(address) && (action.type === "preview" || !!tab(address)?.loading)
+          : last().some((item) => !beforeIDs.has(item.id)),
+      3_000,
+    )
+    const listed = commits ? tab(address) : last().find((item) => !beforeIDs.has(item.id))
 
     return {
       answer: outcome.type === "failure" ? outcome.message : outcome.type,
@@ -321,6 +331,7 @@ void electron.app.whenReady().then(async () => {
     front: await asked({ type: "tabs.open", url: `${origin}/loading?agent` }, "/loading?agent"),
     behind: await asked({ type: "tabs.open", url: `${origin}/loading?behind`, focus: false }, "/loading?behind"),
     preview: await asked({ type: "preview", path: "report.html" }, "/report.html"),
+    hung: await asked({ type: "tabs.open", url: `${hungOrigin}/hung?agent` }, "/hung?agent", false),
   }
 
   // The window registers again with the inventory it last took in, as when its session moves or its server signs in
@@ -345,6 +356,8 @@ void electron.app.whenReady().then(async () => {
   await pane.dispose()
   lifetime.abort()
   api.close()
+  hungPages.closeAllConnections()
+  hungPages.close()
   pages.closeAllConnections()
   pages.close()
   electron.app.quit()

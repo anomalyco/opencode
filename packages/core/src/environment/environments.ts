@@ -36,11 +36,9 @@ const layer = Layer.effect(
     const workspaces = yield* Workspace.Service
     const local = Environment.local(spawner)
 
-    const sandbox = Effect.fnUntraced(function* (id: Workspace.ID) {
-      // Workspace.connect builds a lazy per-operation driver without waking or provisioning here.
-      const driver = yield* workspaces.connect(id).pipe(Effect.orDie)
-      return Environment.workspace(id, driver)
-    })
+    // Workspace.connect builds a lazy per-operation driver without waking or provisioning here.
+    const sandbox = (id: Workspace.ID) =>
+      Effect.map(workspaces.connect(id), (driver) => Environment.workspace(id, driver))
 
     return Service.of({
       get: Effect.fn("Environments.get")(function* (id: Environment.ID) {

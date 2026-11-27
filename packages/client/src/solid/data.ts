@@ -46,6 +46,7 @@ import { Worktree } from "@opencode/schema/worktree"
 import { SessionID } from "@opencode/schema/session-id"
 import { SessionMessage } from "@opencode/schema/session-message"
 import {
+  ClientError,
   isFormAlreadySettledError,
   isFormNotFoundError,
   isMessageNotFoundError,
@@ -124,6 +125,8 @@ type LocationData = {
   // once the command exits or is deleted, so this only ever holds in-flight shells.
   shell?: Record<string, ShellWithLocation>
   skill?: SkillInfo[]
+  // Resolved feature flags the server reports for clients; a flag not listed is off.
+  flags?: Record<string, boolean>
 }
 
 type Store = {
@@ -855,6 +858,13 @@ export function createData(config: CreateDataInput) {
         )
         refresh(() => result.location.vcs.sync())
         refresh(() => result.project.sync())
+        Object.entries(store.location).forEach(([key, data]) => {
+          if (data.flags === undefined || dormantFlags.has(key)) return
+          const ref = JSON.parse(key) as [string, string | null]
+          const location = { directory: ref[0], workspaceID: ref[1] ?? undefined }
+          flags.invalidate(location)
+          refresh(() => flags.sync(location))
+        })
         Object.keys(store.jobTree).forEach((sessionID) => {
           result.job.invalidate(sessionID)
           refresh(() => result.job.sync(sessionID))
@@ -1263,8 +1273,7 @@ export function createData(config: CreateDataInput) {
             error: event.data.error,
             input: typeof tool.state.input === "string" ? {} : tool.state.input,
             metadata: event.data.metadata,
-            content:
-              omitFiles() && event.data.content ? omitFileData(event.data.content) : event.data.content,
+            content: omitFiles() && event.data.content ? omitFileData(event.data.content) : event.data.content,
           }
           tool.executed = event.data.executed || tool.executed === true
           if (event.data.native) tool.native = { ...tool.native, ...event.data.native }
@@ -1564,6 +1573,9 @@ export function createData(config: CreateDataInput) {
       }
       case "config.updated":
         refreshLocation("config", result.location.config, location)
+        // Only a running location reports config.updated, so refetching its flags boots nothing.
+        dormantFlags.delete(locationKey(location))
+        refreshLocation("flags", flags, location)
         if (hasLocation("websearch", location)) refresh(() => result.location.websearch.refresh(location))
         break
       case "websearch.updated":
@@ -1580,6 +1592,12 @@ export function createData(config: CreateDataInput) {
       }
       case "mcp.resources.changed":
         refreshLocation("mcpResource", result.location.mcp.resource, location)
+        break
+      // Fetching here would boot the location again, so a location that was evicted for being idle never stays
+      // down. Its flags keep their last value until the next sync of the location.
+      case "location.shutdown":
+        dormantFlags.add(locationKey(location))
+        flags.invalidate(location)
         break
     }
   }
@@ -1635,6 +1653,34 @@ export function createData(config: CreateDataInput) {
 
   const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
   const usageLimits = locationResource("usageLimits", (location) => api().experimental.usage.limits({ location }))
+  // Locations whose flags were invalidated by location.shutdown; reconnects skip them until something syncs them again.
+  const dormantFlags = new Set<string>()
+  const [canonicalDirectory, setCanonicalDirectory] = createStore<Record<string, string>>({})
+  const canonicalRef = (location: LocationRef) => {
+    const directory = canonicalDirectory[location.directory]
+    return directory ? { directory, workspaceID: location.workspaceID } : location
+  }
+  // A server older than the flag endpoint answers it with a 404 and no JSON body: every flag is off there.
+  const flagResource = locationResource("flags", (location) =>
+    api()
+      .experimental.flag.get({ location })
+      .catch((error) => {
+        if (!missingEndpoint(error)) throw error
+        return { location: { directory: location.directory }, data: {} }
+      }),
+  )
+  const flags = {
+    list: (ref?: LocationRef) => {
+      const location = ref ?? defaultLocation()
+      return flagResource.list(location) ?? flagResource.list(canonicalRef(location))
+    },
+    sync: (ref?: LocationRef) => {
+      const location = canonicalRef(ref ?? defaultLocation())
+      dormantFlags.delete(locationKey(location))
+      return flagResource.sync(location)
+    },
+    invalidate: (ref?: LocationRef) => flagResource.invalidate(canonicalRef(ref ?? defaultLocation())),
+  }
   const shells = locationResource("shell", async (location) => {
     const response = await api().shell.list({ location })
     const ref = { directory: response.location.directory }
@@ -2388,6 +2434,7 @@ export function createData(config: CreateDataInput) {
           const key = locationKey(location)
           if (!store.location[key]) setStore("location", key, {})
           setStore("location", key, "info", location)
+          if (location.directory !== current.directory) setCanonicalDirectory(current.directory, location.directory)
           if (!ref) {
             setDefaultLocation({ directory: location.directory })
           }
@@ -2397,6 +2444,7 @@ export function createData(config: CreateDataInput) {
         await result.location.syncInfo(ref)
         const location = ref ?? defaultLocation()
         await Promise.all([
+          flags.sync(location),
           result.location.vcs.sync(location),
           result.location.agent.sync(location),
           result.location.command.sync(location),
@@ -2425,10 +2473,15 @@ export function createData(config: CreateDataInput) {
         result.location.provider.invalidate(location)
         result.location.reference.invalidate(location)
         result.location.skill.invalidate(location)
+        flags.invalidate(location)
         result.shell.invalidate(location)
         result.session.form.invalidate("global", location)
       },
       vcs: { info: vcs.list, sync: vcs.sync, invalidate: vcs.invalidate },
+      flag(key: string, ref?: LocationRef) {
+        return flags.list(ref)?.[key] === true
+      },
+      flags: { list: flags.list, sync: flags.sync, invalidate: flags.invalidate },
       usage: { limits: usageLimits.list, sync: usageLimits.sync, invalidate: usageLimits.invalidate },
       agent: locationResource("agent", (location) => api().agent.list({ location })),
       command: locationResource("command", (location) => api().command.list({ location })),
@@ -2477,3 +2530,11 @@ export function createData(config: CreateDataInput) {
 }
 
 export type Data = ReturnType<typeof createData>
+
+// 404 is a declared status, so the client parses its body as a tagged error and fails on the old server's empty,
+// non-JSON body before it can report the status. Undeclared statuses such as 500 or 502 fail as UnexpectedStatus.
+function missingEndpoint(error: unknown) {
+  if (!(error instanceof ClientError)) return false
+  if (error.reason === "UnexpectedStatus") return (error.cause as { status?: number } | undefined)?.status === 404
+  return error.reason === "UnsupportedContentType"
+}

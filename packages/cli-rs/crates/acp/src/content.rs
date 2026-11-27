@@ -84,17 +84,17 @@ fn content_block_to_parts(block: &Value) -> Vec<PromptPart> {
                 let filepath = if cfg!(windows) { filepath.replace('\\', "/") } else { filepath };
                 return vec![PromptPart::text(format!("[{filepath}{suffix}]\n{body}"))];
             }
-            let Some(mime) = field("mimeType").filter(|mime| !mime.is_empty()) else { return Vec::new() };
+            let filename = filename_from_uri(Some(uri)).unwrap_or_else(|| "file".to_owned());
+            // ACP makes `mimeType` optional, so infer it from the name rather than dropping the bytes.
+            let mime = field("mimeType")
+                .filter(|mime| !mime.is_empty())
+                .unwrap_or_else(|| opencode_util::mime::from_filename(&filename));
             let url = if uri.starts_with("data:") {
                 uri.to_owned()
             } else {
                 format!("data:{mime};base64,{}", field("blob").unwrap_or("undefined"))
             };
-            vec![PromptPart::File {
-                url,
-                filename: Some(filename_from_uri(Some(uri)).unwrap_or_else(|| "file".to_owned())),
-                mime: mime.to_owned(),
-            }]
+            vec![PromptPart::File { url, filename: Some(filename), mime: mime.to_owned() }]
         }
         _ => Vec::new(),
     }
@@ -164,18 +164,20 @@ fn part_to_chunk(part: &ReplayPart) -> Option<Value> {
 fn resource_link_to_part(uri: &str, name: Option<&str>, mime: Option<&str>) -> PromptPart {
     let name = name.filter(|name| !name.is_empty());
     let mime = mime.unwrap_or("text/plain").to_owned();
-    if uri.starts_with("file://") {
+    let parsed = opencode_api::js::parse_url(uri).ok();
+    // `file:/path` and `file:///path` name the same file; the parsed URL spells both as the latter.
+    if parsed.as_ref().is_some_and(|parsed| parsed.scheme() == "file") || uri.starts_with("file://") {
+        let url = parsed.as_ref().map_or(uri, url::Url::as_str).to_owned();
         return PromptPart::File {
-            url: uri.to_owned(),
+            url,
             filename: Some(
                 name.map(str::to_owned).or_else(|| filename_from_uri(Some(uri))).unwrap_or_else(|| "file".to_owned()),
             ),
             mime,
         };
     }
-    if uri.starts_with("zed://")
-        && let Ok(parsed) = opencode_api::js::parse_url(uri)
-        && let Some(pathname) = query_param(&parsed, "path").filter(|path| !path.is_empty())
+    if let Some(parsed) = parsed.as_ref().filter(|parsed| parsed.scheme() == "zed")
+        && let Some(pathname) = query_param(parsed, "path").filter(|path| !path.is_empty())
     {
         let base = js_basename(&pathname);
         return PromptPart::File {
@@ -206,13 +208,37 @@ fn filename_from_uri(uri: Option<&str>) -> Option<String> {
     let uri = uri.filter(|uri| !uri.is_empty() && !uri.starts_with("data:"))?;
     let base = match opencode_api::js::parse_url(uri) {
         Ok(url) => {
-            let zed =
-                (url.scheme() == "zed").then(|| query_param(&url, "path")).flatten().filter(|path| !path.is_empty());
-            js_basename(&zed.unwrap_or_else(|| url.path().to_owned()))
+            // Zed's `path` query is already decoded; a URL path is not.
+            if url.scheme() == "zed"
+                && let Some(pathname) = query_param(&url, "path").filter(|path| !path.is_empty())
+            {
+                js_basename(&pathname)
+            } else {
+                decode_component(&js_basename(url.path()))
+            }
         }
         Err(_) => js_basename(uri),
     };
     (!base.is_empty()).then_some(base)
+}
+
+fn decode_component(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            if index + 2 >= bytes.len()
+                || !bytes[index + 1].is_ascii_hexdigit()
+                || !bytes[index + 2].is_ascii_hexdigit()
+            {
+                return value.to_owned();
+            }
+            index += 3;
+        } else {
+            index += 1;
+        }
+    }
+    percent_encoding::percent_decode_str(value).decode_utf8().map_or_else(|_| value.to_owned(), |s| s.into_owned())
 }
 
 /// Node's `path.basename`: the last segment, ignoring trailing separators.
@@ -289,6 +315,53 @@ mod tests {
         let block = json!({ "type": "resource", "resource": { "uri": "file:///C:/src/a.ts#L12", "text": "body" } });
         let label = if cfg!(windows) { "[C:/src/a.ts:12]\nbody" } else { "[/C:/src/a.ts:12]\nbody" };
         assert_eq!(prompt_content_to_parts(&[block]), vec![text(label)]);
+    }
+
+    #[test]
+    fn attaches_embedded_blob_without_mime_type_and_decodes_filenames() {
+        assert_eq!(
+            prompt_content_to_parts(&[
+                json!({ "type": "resource", "resource": { "uri": "mcp://context/report.pdf", "blob": "JVBERi0xLjQK" } }),
+                json!({ "type": "resource", "resource": { "uri": "mcp://context/blob", "blob": "AAAA" } }),
+            ]),
+            vec![
+                PromptPart::File {
+                    url: "data:application/pdf;base64,JVBERi0xLjQK".to_owned(),
+                    filename: Some("report.pdf".to_owned()),
+                    mime: "application/pdf".to_owned(),
+                },
+                PromptPart::File {
+                    url: "data:application/octet-stream;base64,AAAA".to_owned(),
+                    filename: Some("blob".to_owned()),
+                    mime: "application/octet-stream".to_owned(),
+                },
+            ]
+        );
+        for uri in ["file:/tmp/a.txt", "file:///tmp/a.txt"] {
+            assert_eq!(
+                prompt_content_to_parts(&[
+                    json!({ "type": "resource_link", "uri": uri, "name": "a.txt", "mimeType": "text/plain" }),
+                ]),
+                vec![PromptPart::File {
+                    url: "file:///tmp/a.txt".to_owned(),
+                    filename: Some("a.txt".to_owned()),
+                    mime: "text/plain".to_owned(),
+                }]
+            );
+        }
+        let parts = prompt_content_to_parts(&[
+            json!({ "type": "image", "data": "", "mimeType": "image/png", "uri": "file:///tmp/photo%201.png" }),
+            json!({ "type": "resource", "resource": { "uri": "file:///tmp/caf%C3%A9%20%231.bin", "mimeType": "application/octet-stream", "blob": "AAAA" } }),
+            json!({ "type": "image", "data": "", "mimeType": "image/png", "uri": "zed:///agent/file?path=%2Ftmp%2Fodd%2520name.png" }),
+        ]);
+        let names: Vec<Option<&str>> = parts
+            .iter()
+            .map(|part| match part {
+                PromptPart::File { filename, .. } => filename.as_deref(),
+                PromptPart::Text { .. } => None,
+            })
+            .collect();
+        assert_eq!(names, vec![Some("photo 1.png"), Some("café #1.bin"), Some("odd%20name.png")]);
     }
 
     #[test]

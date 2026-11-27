@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::sync::{Arc, LazyLock};
 
@@ -54,8 +55,8 @@ pub fn requested_schema(form: &Value, capabilities: &Capabilities) -> Option<Val
     if !ELICITED_KINDS.contains(&kind) {
         return None;
     }
-    let fields: Vec<&Value> = form.get("fields")?.as_array()?.iter().collect();
-    if fields.iter().any(|field| credential_like(field)) {
+    let fields: Vec<Cow<'_, Value>> = form.get("fields")?.as_array()?.iter().map(elicited).collect();
+    if fields.iter().any(|field| collects_secret(field)) {
         return None;
     }
     if fields.iter().any(|field| {
@@ -67,7 +68,7 @@ pub fn requested_schema(form: &Value, capabilities: &Capabilities) -> Option<Val
         return None;
     }
     let keys: HashSet<&str> = fields.iter().filter_map(|field| field.get("key")?.as_str()).collect();
-    let visible: Vec<&Value> = fields.into_iter().filter(|field| !flag(field, "hidden")).collect();
+    let visible: Vec<&Value> = fields.iter().map(Cow::as_ref).filter(|field| !flag(field, "hidden")).collect();
     if !visible.iter().all(|field| representable(field, &keys)) {
         return None;
     }
@@ -154,8 +155,9 @@ fn answer(form: &Value, response: &Value) -> Option<Value> {
     }
     let mut answer = Map::new();
     for field in form.get("fields")?.as_array()? {
+        let field = elicited(field);
         let Some(key) = field.get("key").and_then(Value::as_str) else { continue };
-        if let Some(value) = field_answer(field, content) {
+        if let Some(value) = field_answer(&field, content) {
             answer.insert(key.to_owned(), value);
         }
     }
@@ -195,6 +197,32 @@ fn field_answer(field: &Value, content: &Map<String, Value>) -> Option<Value> {
         }
         _ => json!([custom]),
     })
+}
+
+// A choice can't carry a secret, so a choice worded like one is still asked, without its typed answer.
+fn elicited(field: &Value) -> Cow<'_, Value> {
+    if !is_select(field) || !flag(field, "custom") || !credential_like(field) {
+        return Cow::Borrowed(field);
+    }
+    let mut copy = field.clone();
+    if let Some(object) = copy.as_object_mut() {
+        object.insert("custom".to_owned(), Value::Bool(false));
+    }
+    Cow::Owned(copy)
+}
+
+fn collects_secret(field: &Value) -> bool {
+    if kind_of(field) == "boolean" {
+        return false;
+    }
+    if is_select(field) && !flag(field, "custom") {
+        return false;
+    }
+    credential_like(field)
+}
+
+fn is_select(field: &Value) -> bool {
+    matches!(kind_of(field), "string" | "multiselect") && has_options(field)
 }
 
 fn credential_like(field: &Value) -> bool {

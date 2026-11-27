@@ -1,0 +1,63 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "E-Ink",
+  "id": "eink",
+  "light": {
+    "palette": {
+      "neutral": "#ebe9e2",
+      "ink": "#141413",
+      "primary": "#3b3b3e",
+      "accent": "#4d4d52",
+      "success": "#285238",
+      "warning": "#634c1e",
+      "error": "#732929",
+      "info": "#3b3b3e",
+      "interactive": "#3b3b3e",
+      "diffAdd": "#285238",
+      "diffDelete": "#732929"
+    },
+    "overrides": {
+      "text-weak": "#4f4f4b",
+      "syntax-comment": "#595955",
+      "syntax-keyword": "#141413",
+      "syntax-string": "#333331",
+      "syntax-primitive": "#212120",
+      "syntax-property": "#40403d",
+      "syntax-type": "#292927",
+      "syntax-constant": "#333331",
+      "syntax-operator": "#4a4a47",
+      "syntax-punctuation": "#52524e"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#171716",
+      "ink": "#e6e5e0",
+      "primary": "#a8a8ad",
+      "accent": "#c2c2c7",
+      "success": "#8ab89a",
+      "warning": "#c9b382",
+      "error": "#cf8a8a",
+      "info": "#a8a8ad",
+      "interactive": "#a8a8ad",
+      "diffAdd": "#8ab89a",
+      "diffDelete": "#cf8a8a"
+    },
+    "overrides": {
+      "text-weak": "#969590",
+      "syntax-comment": "#82817c",
+      "syntax-keyword": "#f2f1ed",
+      "syntax-string": "#bfbeb8",
+      "syntax-primitive": "#dcdbd6",
+      "syntax-property": "#b3b2ac",
+      "syntax-type": "#d4d3ce",
+      "syntax-constant": "#c7c6c0",
+      "syntax-operator": "#9e9d98",
+      "syntax-punctuation": "#969590"
+    },
+    "v2Overrides": {
+      "v2-background-bg-icon-button-contrast": "#d4d3ce",
+      "v2-icon-icon-inverse": "var(--v2-grey-1100)"
+    }
+  }
+}

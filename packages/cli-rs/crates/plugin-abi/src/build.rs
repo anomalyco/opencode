@@ -429,6 +429,7 @@ impl Panel {
             bare: false,
             close: None,
             height: None,
+            fit_screen: false,
         }
     }
 }
@@ -443,6 +444,7 @@ builder!(Panel [key, title, body] {
     bare!,
     close?: impl String,
     height?: u16,
+    fit_screen!,
 });
 
 impl PanelAction {

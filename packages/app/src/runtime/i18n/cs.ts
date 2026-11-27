@@ -683,7 +683,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, open source kódovací agent",
   "settings.about.trademark": "OpenCode je registrovaná ochranná známka společnosti Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Typová sada v Inter a IBM Plex Mono",
+  "settings.about.typeset": "Typová sada v Inter a OpenMono",
   "settings.about.tagline": "AI nemůže vytvořit skvělý software bez vás",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "Upravit projekt",

@@ -3,6 +3,7 @@ import { Match, Switch } from "solid-js"
 import { AssistantTextContent } from "../../message/message-content"
 import {
   currentToolError,
+  currentToolImages,
   currentToolInput,
   currentToolMetadata,
   currentToolOutput,
@@ -67,6 +68,7 @@ export function AssistantContent(props: {
             input={currentToolInput(tool())}
             metadata={currentToolMetadata(tool())}
             output={currentToolOutput(tool())}
+            images={currentToolImages(tool())}
             status={tool().state.status}
             error={currentToolError(tool())}
             stopped={toolStopped(tool())}

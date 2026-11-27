@@ -57,7 +57,8 @@ export const dict = {
   "home.promo.close": "Luk meddelelsen om Desktop-appen",
   "home.hero.title": "Open source-kodningsagenten",
   "home.hero.subtitle.a": "Start med gratis modeller, eller forbind en af over 200 udbydere.",
-  "home.hero.subtitle.b": "OpenCode kører på din maskine, og du kan bruge det fra din desktop, terminalen, din telefon eller din egen kode.",
+  "home.hero.subtitle.b":
+    "OpenCode kører på din maskine, og du kan bruge det fra din desktop, terminalen, din telefon eller din egen kode.",
   "home.install.ariaLabel": "Installationsmuligheder",
   "home.what.title": "Hvad er OpenCode?",
   "home.what.body": "OpenCode er en open source-kodningsagent.",
@@ -73,7 +74,8 @@ export const dict = {
   "home.what.anyEditor.body": "Tilgængelig som terminal-interface, desktop-app og IDE-udvidelse",
   "home.what.readDocs": "Læs docs",
   "home.growth.title": "Open source-kodningsagenten",
-  "home.growth.body": "Med over <strong>{{stars}}</strong> GitHub-stjerner, <strong>{{contributors}}</strong> bidragsydere og over <strong>{{commits}}</strong> commits bruges OpenCode af over <strong>{{monthlyUsers}}</strong> udviklere hver måned.",
+  "home.growth.body":
+    "Med over <strong>{{stars}}</strong> GitHub-stjerner, <strong>{{contributors}}</strong> bidragsydere og over <strong>{{commits}}</strong> commits bruges OpenCode af over <strong>{{monthlyUsers}}</strong> udviklere hver måned.",
   "home.growth.githubStars": "Stjerner på GitHub",
   "home.growth.contributors": "Bidragydere",
   "home.growth.monthlyDevs": "Udviklere om måneden",
@@ -82,13 +84,15 @@ export const dict = {
   "home.faq.a2.before": "Den nemmeste måde at komme i gang på er at læse",
   "home.faq.a2.link": "introen",
   "home.faq.q3": "Skal jeg have ekstra AI-abonnementer for at bruge OpenCode?",
-  "home.faq.a3.p1": "Ikke nødvendigvis. OpenCode har et sæt gratis modeller, som du kan bruge uden at oprette en konto.",
+  "home.faq.a3.p1":
+    "Ikke nødvendigvis. OpenCode har et sæt gratis modeller, som du kan bruge uden at oprette en konto.",
   "home.faq.a3.p4.beforeLocal": "Du kan endda forbinde dine [lokale modeller](local).",
   "home.faq.q4": "Kan jeg bruge mine eksisterende AI-abonnementer med OpenCode?",
   "home.faq.a4.p1": "Ja, du kan bruge dine abonnementer på ChatGPT Plus/Pro eller GitHub Copilot.",
   "home.faq.q5": "Kan jeg kun bruge OpenCode i terminalen?",
   "home.faq.q6": "Hvad koster OpenCode?",
-  "home.faq.a6": "OpenCode er 100% gratis at bruge. Det kommer også med et sæt gratis modeller. Der kan være ekstra omkostninger, hvis du forbinder en anden udbyder.",
+  "home.faq.a6":
+    "OpenCode er 100% gratis at bruge. Det kommer også med et sæt gratis modeller. Der kan være ekstra omkostninger, hvis du forbinder en anden udbyder.",
   "home.faq.q7": "Hvad med data og privatliv?",
   "home.faq.a7.p1": "Dine data gemmes kun, når du bruger vores gratis modeller.",
   "home.faq.a7.p2.beforeModels": "Læs mere om",
@@ -97,44 +101,54 @@ export const dict = {
   "home.faq.a8.p1": "Ja, OpenCode er fuldt open source. Kildekoden er offentlig på",
   "home.faq.a8.p2": "under",
   "home.faq.a8.mitLicense": "MIT-licensen",
-  "home.faq.a8.p3": ", hvilket betyder at alle kan bruge, ændre eller bidrage til udviklingen. Alle i communityet kan oprette issues, indsende pull requests og udvide funktionalitet.",
+  "home.faq.a8.p3":
+    ", hvilket betyder at alle kan bruge, ændre eller bidrage til udviklingen. Alle i communityet kan oprette issues, indsende pull requests og udvide funktionalitet.",
   "zen.title": "OpenCode Models | Et kurateret sæt af pålidelige, optimerede modeller til kodningsagenter",
   "zen.hero.title": "Pålidelige optimerede modeller til kodningsagenter",
-  "zen.hero.body": "OpenCode Models giver dig adgang til et kurateret sæt AI-modeller, som OpenCode har testet og benchmarked specifikt til kodningsagenter. Du behøver ikke bekymre dig om svingende performance og kvalitet: brug validerede modeller, der virker.",
+  "zen.hero.body":
+    "OpenCode Models giver dig adgang til et kurateret sæt AI-modeller, som OpenCode har testet og benchmarked specifikt til kodningsagenter. Du behøver ikke bekymre dig om svingende performance og kvalitet: brug validerede modeller, der virker.",
   "zen.faq.q1": "Hvad er OpenCode Models?",
-  "zen.faq.a1": "OpenCode Models er et kurateret sæt AI-modeller testet og benchmarked til kodningsagenter, skabt af teamet bag OpenCode.",
+  "zen.faq.a1":
+    "OpenCode Models er et kurateret sæt AI-modeller testet og benchmarked til kodningsagenter, skabt af teamet bag OpenCode.",
   "zen.faq.q2": "Hvad gør OpenCode Models mere præcis?",
-  "zen.faq.a2": "OpenCode Models tilbyder kun modeller, der er testet og benchmarked specifikt til kodningsagenter. Du ville ikke bruge en smørkniv til at skære steak; brug ikke dårlige modeller til kodning.",
+  "zen.faq.a2":
+    "OpenCode Models tilbyder kun modeller, der er testet og benchmarked specifikt til kodningsagenter. Du ville ikke bruge en smørkniv til at skære steak; brug ikke dårlige modeller til kodning.",
   "zen.faq.q3": "Er OpenCode Models billigere?",
-  "zen.faq.a3": "OpenCode Models er ikke for profit. OpenCode Models videregiver omkostningerne fra modeludbyderne til dig. Jo mere OpenCode Models bruges, desto mere kan OpenCode forhandle bedre priser og give dem videre til dig.",
+  "zen.faq.a3":
+    "OpenCode Models er ikke for profit. OpenCode Models videregiver omkostningerne fra modeludbyderne til dig. Jo mere OpenCode Models bruges, desto mere kan OpenCode forhandle bedre priser og give dem videre til dig.",
   "zen.faq.q4": "Hvad koster OpenCode Models?",
   "zen.faq.a4.p1.beforePricing": "OpenCode",
   "zen.faq.a4.p1.pricingLink": "opkræver per request",
   "zen.faq.a4.p1.afterPricing": "uden markups, så du betaler præcis det, som modeludbyderen opkræver.",
   "zen.faq.a4.p2.beforeAccount": "Din samlede pris afhænger af brug, og du kan sætte månedlige udgiftsgrænser i din",
   "zen.faq.a4.p2.accountLink": "konto",
-  "zen.faq.a4.p3": "For at dække omkostninger tilføjer OpenCode kun et lille betalingsgebyr på $1.23 per $20 saldo-opfyldning.",
+  "zen.faq.a4.p3":
+    "For at dække omkostninger tilføjer OpenCode kun et lille betalingsgebyr på $1.23 per $20 saldo-opfyldning.",
   "zen.faq.q5": "Hvad med data og privatliv?",
-  "zen.faq.a5.beforeExceptions": "Alle modeller i OpenCode Models hostes i USA og EU. Udbydere følger en zero-retention-policy og bruger ikke dine data til modeltræning, med de",
+  "zen.faq.a5.beforeExceptions":
+    "Alle modeller i OpenCode Models hostes i USA og EU. Udbydere følger en zero-retention-policy og bruger ikke dine data til modeltræning, med de",
   "zen.faq.a5.exceptionsLink": "følgende undtagelser",
   "zen.faq.q6": "Kan jeg sætte udgiftsgrænser?",
   "zen.faq.a6": "Ja, du kan sætte månedlige udgiftsgrænser i din konto.",
   "zen.faq.q7": "Kan jeg afmelde?",
   "zen.faq.a7": "Ja, du kan deaktivere betaling når som helst og bruge din resterende saldo.",
   "zen.faq.q8": "Kan jeg bruge OpenCode Models med andre kodningsagenter?",
-  "zen.faq.a8": "Selvom OpenCode Models fungerer godt med OpenCode, kan du bruge OpenCode Models med enhver agent. Følg opsætningsinstruktionerne i din foretrukne kodningsagent.",
+  "zen.faq.a8":
+    "Selvom OpenCode Models fungerer godt med OpenCode, kan du bruge OpenCode Models med enhver agent. Følg opsætningsinstruktionerne i din foretrukne kodningsagent.",
   "zen.cta.start": "Kom godt i gang med OpenCode Models",
   "zen.pricing.title": "Tilføj $20 Pay as you go-saldo",
   "zen.pricing.fee": "(+$1.23 kortbehandlingsgebyr)",
   "zen.pricing.body": "Brug med enhver agent. Indstil månedlige forbrugsgrænser. Annuller til enhver tid.",
   "zen.problem.title": "Hvilket problem løser OpenCode Models?",
-  "zen.problem.body": "Der er så mange modeller tilgængelige, men kun få fungerer godt med kodningsagenter. De fleste udbydere konfigurerer dem anderledes med forskellige resultater.",
+  "zen.problem.body":
+    "Der er så mange modeller tilgængelige, men kun få fungerer godt med kodningsagenter. De fleste udbydere konfigurerer dem anderledes med forskellige resultater.",
   "zen.problem.subtitle": "Vi løser dette for alle, ikke kun OpenCode-brugere.",
   "zen.problem.item1": "Test af udvalgte modeller og høring af deres teams",
   "zen.problem.item2": "Samarbejde med udbydere for at sikre, at de bliver leveret korrekt",
   "zen.problem.item3": "Benchmarking af alle model-udbyder kombinationer, vi anbefaler",
   "zen.how.title": "Hvordan OpenCode Models virker",
-  "zen.how.body": "Selvom vi foreslår, at du bruger OpenCode Models med OpenCode, kan du bruge OpenCode Models med enhver agent.",
+  "zen.how.body":
+    "Selvom vi foreslår, at du bruger OpenCode Models med OpenCode, kan du bruge OpenCode Models med enhver agent.",
   "zen.how.step1.title": "Tilmeld dig og tilføj saldo på $20",
   "zen.how.step1.beforeLink": "følg",
   "zen.how.step1.link": "opsætningsinstruktioner",
@@ -144,16 +158,20 @@ export const dict = {
   "zen.how.step3.title": "Auto-top op",
   "zen.how.step3.body": "aktivér valgfri automatisk opfyldning, og vælg din saldogrænse og opfyldningsbeløbet",
   "zen.privacy.title": "Dit privatliv er vigtigt for os",
-  "zen.privacy.beforeExceptions": "Alle modeller i OpenCode Models er hostet i USA og EU. Udbydere følger en nulopbevaringspolitik og bruger ikke dine data til modeltræning med",
+  "zen.privacy.beforeExceptions":
+    "Alle modeller i OpenCode Models er hostet i USA og EU. Udbydere følger en nulopbevaringspolitik og bruger ikke dine data til modeltræning med",
   "zen.privacy.exceptionsLink": "følgende undtagelser",
   "go.title": "OpenCode Go | Kodningsmodeller til lav pris for alle",
-  "go.meta.description": "Go koster $10/måned, med generøse brugsgrænser og pålidelig adgang til førende kodningsmodeller.",
+  "go.meta.description":
+    "Go koster $10/måned, med generøse brugsgrænser og pålidelig adgang til førende kodningsmodeller.",
   "go.hero.title": "Kodningsmodeller til lav pris for alle",
-  "go.hero.body": "Go bringer agentisk kodning til programmører over hele verden. Med generøse grænser og pålidelig adgang til de mest kapable open source-modeller, så du kan bygge med kraftfulde agenter uden at bekymre dig om omkostninger eller tilgængelighed.",
+  "go.hero.body":
+    "Go bringer agentisk kodning til programmører over hele verden. Med generøse grænser og pålidelig adgang til de mest kapable open source-modeller, så du kan bygge med kraftfulde agenter uden at bekymre dig om omkostninger eller tilgængelighed.",
   "go.cta.text": "Abonner på Go",
   "go.graph.usageLimits": "Forbrugsgrænser",
   "go.problem.title": "Hvilket problem løser Go?",
-  "go.problem.body": "Vi fokuserer på at bringe OpenCode-oplevelsen ud til så mange som muligt. OpenCode Go er et lavprisabonnement til $10/måned. Det giver generøse grænser og pålidelig adgang til de mest kapable open source-modeller.",
+  "go.problem.body":
+    "Vi fokuserer på at bringe OpenCode-oplevelsen ud til så mange som muligt. OpenCode Go er et lavprisabonnement til $10/måned. Det giver generøse grænser og pålidelig adgang til de mest kapable open source-modeller.",
   "go.problem.item1": "Lavpris abonnementspriser",
   "go.problem.item2": "Generøse grænser og pålidelig adgang",
   "go.problem.item3": "Bygget til så mange programmører som muligt",
@@ -169,11 +187,13 @@ export const dict = {
   "go.how.step3.title": "Start kodning",
   "go.how.step3.body": "med pålidelig adgang til open source-modeller",
   "go.faq.q1": "Hvad er OpenCode Go?",
-  "go.faq.a1": "Go er et lavprisabonnement, der giver dig pålidelig adgang til kapable open source-modeller til agentisk kodning.",
+  "go.faq.a1":
+    "Go er et lavprisabonnement, der giver dig pålidelig adgang til kapable open source-modeller til agentisk kodning.",
   "go.faq.q2": "Hvilke modeller inkluderer Go?",
   "go.faq.a2": "Go inkluderer modellerne nedenfor med generøse grænser og pålidelig adgang.",
   "go.faq.q3": "Er Go det samme som OpenCode Models?",
-  "go.faq.a3": "Nej. OpenCode Models er pay-as-you-go, mens Go koster $10/måned, med generøse grænser og pålidelig adgang til et kurateret modeludvalg.",
+  "go.faq.a3":
+    "Nej. OpenCode Models er pay-as-you-go, mens Go koster $10/måned, med generøse grænser og pålidelig adgang til et kurateret modeludvalg.",
   "go.faq.q4": "Hvad koster Go?",
   "go.faq.a4.p1.beforePricing": "Go koster",
   "go.faq.a4.p1.pricingLink": "$10/måned",
@@ -189,10 +209,13 @@ export const dict = {
   "go.faq.a5.retention0": "0 dage",
   "go.faq.a5.used": "Brugt",
   "go.faq.a5.notUsed": "Ikke brugt",
-  "go.faq.a5.grokRetention": "ZDR deaktiverer vigtige API-funktioner, der afhænger af lagrede data, herunder den tilstandsbevarende Responses API, Files and Collections og Batch API.",
-  "go.faq.a5.gptRetention": "Logfiler til overvågning af misbrug genereres ved al brug af API-funktioner og opbevares i op til 30 dage.",
+  "go.faq.a5.grokRetention":
+    "ZDR deaktiverer vigtige API-funktioner, der afhænger af lagrede data, herunder den tilstandsbevarende Responses API, Files and Collections og Batch API.",
+  "go.faq.a5.gptRetention":
+    "Logfiler til overvågning af misbrug genereres ved al brug af API-funktioner og opbevares i op til 30 dage.",
   "go.faq.a5.learnMore": "Læs mere",
-  "go.faq.a5.deepseekRetention": "ZDR-aftalen fornyes månedligt. Den nuværende aftale er gyldig til og med 30. november 2026.",
+  "go.faq.a5.deepseekRetention":
+    "ZDR-aftalen fornyes månedligt. Den nuværende aftale er gyldig til og med 31. december 2026.",
   "go.faq.q6": "Kan jeg tanke kredit op?",
   "go.faq.a6": "Hvis du har brug for mere forbrug, kan du tanke kredit op på din konto.",
   "go.faq.q7": "Kan jeg annullere?",
@@ -200,11 +223,14 @@ export const dict = {
   "go.faq.q8": "Kan jeg bruge Go med andre kodningsagenter?",
   "go.faq.a8": "Ja, du kan bruge Go med enhver agent. Følg opsætningsinstruktionerne i din foretrukne kodningsagent.",
   "go.faq.q9": "Hvad er forskellen på gratis modeller og Go?",
-  "go.faq.a9": "Gratis modeller inkluderer Big Pickle plus kampagnemodeller, der er tilgængelige på det pågældende tidspunkt. Go tilbyder et kurateret modeludvalg med højere forespørgselskvoter i rullende perioder: 20 % af den månedlige kvote pr. 5 timer, 50 % pr. uge og 100 % pr. måned. Modelspecifikke kvoter kan variere (det faktiske antal forespørgsler varierer efter model og brug).",
+  "go.faq.a9":
+    "Gratis modeller inkluderer Big Pickle plus kampagnemodeller, der er tilgængelige på det pågældende tidspunkt. Go tilbyder et kurateret modeludvalg med højere forespørgselskvoter i rullende perioder: 20 % af den månedlige kvote pr. 5 timer, 50 % pr. uge og 100 % pr. måned. Modelspecifikke kvoter kan variere (det faktiske antal forespørgsler varierer efter model og brug).",
   "workspace.nav.zen": "OpenCode Models",
-  "workspace.newUser.feature.lockin.body": "Brug OpenCode Models med en hvilken som helst kodningsagent, og fortsæt med at bruge andre udbydere med opencode, når du vil.",
+  "workspace.newUser.feature.lockin.body":
+    "Brug OpenCode Models med en hvilken som helst kodningsagent, og fortsæt med at bruge andre udbydere med opencode, når du vil.",
   "download.title": "OpenCode | Download til macOS, Windows, Linux og mobil",
-  "download.meta.description": "Download OpenCode til macOS, Windows og Linux, hent apps til iOS og Android, eller installer terminalappen med én kommando. Gratis og open source.",
+  "download.meta.description":
+    "Download OpenCode til macOS, Windows og Linux, hent apps til iOS og Android, eller installer terminalappen med én kommando. Gratis og open source.",
   "download.hero.title": "Download OpenCode Desktop",
   "download.hero.subtitle": "Tilgængelig i beta til macOS, Windows og Linux",
   "download.hero.button": "Download til {{os}}",
@@ -227,12 +253,14 @@ export const dict = {
   "enterprise.form.error.invalidEmailFormat": "Ugyldigt e-mailformat.",
   "enterprise.form.error.internalServer": "Intern serverfejl.",
   "brand.title": "OpenCode | Brandretningslinjer, logoer, ordmærker og farver",
-  "brand.meta.description": "OpenCodes brandretningslinjer. Download logoet og ordmærkerne i lyse og mørke versioner, se brandfarverne, og lær reglerne for at bruge dem.",
+  "brand.meta.description":
+    "OpenCodes brandretningslinjer. Download logoet og ordmærkerne i lyse og mørke versioner, se brandfarverne, og lær reglerne for at bruge dem.",
   "brand.heading": "Brandretningslinjer",
   "brand.subtitle": "Ressourcer og assets, der hjælper dig med at arbejde med OpenCode-brandet.",
   "brand.downloadAll": "Download alle assets",
   "changelog.title": "OpenCode | Changelog og versionsnoter for hver version",
-  "changelog.meta.description": "Versionsnoter for hver OpenCode-version med nye funktioner, forbedringer og rettelser i desktopappen, terminal-UI'et, mobilappen og SDK'et.",
+  "changelog.meta.description":
+    "Versionsnoter for hver OpenCode-version med nye funktioner, forbedringer og rettelser i desktopappen, terminal-UI'et, mobilappen og SDK'et.",
   "changelog.hero.title": "Changelog",
   "changelog.hero.subtitle": "Nye opdateringer og forbedringer til OpenCode",
   "nav.data": "Data",
@@ -240,7 +268,8 @@ export const dict = {
   "footer.feishu": "Feishu",
   "footer.wordmark.letters": "Bogstaverne i OpenCode-ordmærket",
   "footer.wordmark.roleLetter": "flytbart bogstav",
-  "footer.wordmark.instructions": "Træk et bogstav for at flytte det. Med tastaturet samler du et bogstav op med mellemrumstasten, flytter det med piletasterne og slipper det med mellemrumstasten. Med Alt og en piletast flytter du det med det samme.",
+  "footer.wordmark.instructions":
+    "Træk et bogstav for at flytte det. Med tastaturet samler du et bogstav op med mellemrumstasten, flytter det med piletasterne og slipper det med mellemrumstasten. Med Alt og en piletast flytter du det med det samme.",
   "footer.wordmark.option": "{{letter}}, position {{position}} af {{count}}",
   "footer.wordmark.picked": "{{letter}} samlet op på position {{position}}",
   "footer.wordmark.moved": "{{letter}} flyttet til position {{position}}",
@@ -248,11 +277,14 @@ export const dict = {
   "footer.wordmark.cancelled": "Annulleret. {{letter}} er tilbage på position {{position}}",
   "footer.wordmark.font": "Til typenørder",
   "footer.wordmark.fontLabel": "Til typenørder er der OpenCode-skrifttypen",
-  "legal.englishGoverns": "Hvis en oversættelse og den engelske version er forskellige, er den engelske version gældende.",
+  "legal.englishGoverns":
+    "Hvis en oversættelse og den engelske version er forskellige, er den engelske version gældende.",
   "common.contactUs": "Kontakt os",
   "home.faq.a3.providers": "OpenCode virker også med alle populære udbydere, bl.a. OpenAI, Anthropic og xAI.",
-  "home.faq.a3.models.after": "[OpenCode Models](models) giver dig adgang til populære kodningsmodeller, som vi har testet og benchmarket til kodningsagenter.",
-  "download.meta.descriptionAndroidSoon": "Download OpenCode til macOS, Windows og Linux, hent iOS-appen, eller installer terminalappen med én kommando. Android kommer snart.",
+  "home.faq.a3.models.after":
+    "[OpenCode Models](models) giver dig adgang til populære kodningsmodeller, som vi har testet og benchmarket til kodningsagenter.",
+  "download.meta.descriptionAndroidSoon":
+    "Download OpenCode til macOS, Windows og Linux, hent iOS-appen, eller installer terminalappen med én kommando. Android kommer snart.",
   "changelog.unavailable": "Changelog kunne ikke indlæses lige nu.",
   "changelog.viewReleases": "Se versioner på GitHub",
   "changelog.entry.title": "{{title}} | OpenCode-changelog",
@@ -318,6 +350,7 @@ export const dict = {
   "site.product.isNew": "{{name}} er ny. Opdateringerne vises her.",
   "site.extensions": "Udvidelser",
   "site.contents": "Indhold",
+  "docs.section.overview": "Oversigt",
   "docs.section.build": "Byg",
   "docs.lockup.sectionDocs": "{{section}}-docs",
   "docs.lockup.switchLabel": "{{name}}, skift docs",
@@ -353,10 +386,12 @@ export const dict = {
   "docs.callout.tip": "Tip",
   "docs.callout.caution": "Bemærk",
   "docs.callout.danger": "Fare",
-  "docs.v1.markdownNote": "Dette er dokumentationen til OpenCode V1. Den nyeste dokumentation, til OpenCode V2, findes på https://opencode.ai/docs/llms.txt.",
+  "docs.v1.markdownNote":
+    "Dette er dokumentationen til OpenCode V1. Den nyeste dokumentation, til OpenCode V2, findes på https://opencode.ai/docs/llms.txt.",
   "site.companions": "Fungerer godt sammen med OpenCode",
   "site.notFound.title": "Siden blev ikke fundet",
-  "site.arcade.alt": "En forladt spillehal om natten. Skærmen på én maskine lyser stadig og viser 404, og en polet ligger på gulvet foran den.",
+  "site.arcade.alt":
+    "En forladt spillehal om natten. Skærmen på én maskine lyser stadig og viser 404, og en polet ligger på gulvet foran den.",
   "site.arcade.token": "Spillepolet. Tryk på Enter for at sætte den i maskinen.",
   "site.arcade.credit": "Credit 1. Maskinen starter.",
   "site.arcade.pressStart": "Tryk på start.",
@@ -435,8 +470,10 @@ export const dict = {
   "home.companies.labelShort": "22M+ devs stoler på os",
   "home.providers.label": "Virker med",
   "home.tools.title": "Tag dine egne værktøjer med",
-  "home.tools.lead": "Forbind de tjenester, du allerede bruger, med [MCP-servere](mcp), byg videre på OpenCode med [plugins](plugins), og lær agenter dine arbejdsgange med [skills](skills).",
-  "home.what.lead": "OpenCode er en open source-kodningsagent. Brug den i desktopappen, i terminalen, på din telefon eller fra din egen kode med SDK'et. [Læs dokumentationen](docs).",
+  "home.tools.lead":
+    "Forbind de tjenester, du allerede bruger, med [MCP-servere](mcp), byg videre på OpenCode med [plugins](plugins), og lær agenter dine arbejdsgange med [skills](skills).",
+  "home.what.lead":
+    "OpenCode er en open source-kodningsagent. Brug den i desktopappen, i terminalen, på din telefon eller fra din egen kode med SDK'et. [Læs dokumentationen](docs).",
   "home.what.anyDevice.title": "Alle enheder",
   "home.what.anyDevice.body": "En desktopapp, en terminalbrugerflade, en mobilapp og et SDK til dine værktøjer",
   "home.what.plugins.title": "Plugins",
@@ -455,7 +492,8 @@ export const dict = {
   "home.what.undo.body": "Rul seneste ændringer i dine filer og samtalen tilbage med /undo",
   "home.openSource.title": "Åben kildekode",
   "home.tools.label": "Tjenester med MCP-servere",
-  "home.openSource.licence": "[MIT-licenseret](license). Bygget i det åbne af [Anomaly](anomaly) og [{{count}} bidragydere](contributors).",
+  "home.openSource.licence":
+    "[MIT-licenseret](license). Bygget i det åbne af [Anomaly](anomaly) og [{{count}} bidragydere](contributors).",
   "home.openSource.contributors": "OpenCode-bidragydere",
   "home.openSource.avatars": "Avatarer for OpenCode-bidragydere",
   "home.openSource.avatarCommits": "{{login}}s commits til OpenCode",
@@ -463,12 +501,15 @@ export const dict = {
   "home.byos.providersLabel": "Modeludbydere i OpenCodes abonnementer",
   "home.getStarted.freeModels": "Gratis modeller",
   "home.console.headline": "Alt, hvad du skal bruge for at arbejde med AI",
-  "home.console.body": "Inferens i høj kvalitet til frontier- og open weight-modeller, billige abonnementer med generøse grænser og de værktøjer, dit team skal bruge for at styre forbruget og samarbejde godt.",
+  "home.console.body":
+    "Inferens i høj kvalitet til frontier- og open weight-modeller, billige abonnementer med generøse grænser og de værktøjer, dit team skal bruge for at styre forbruget og samarbejde godt.",
   "home.console.cta": "Start gratis",
   "home.console.slimHeadline": "Console har alt, hvad du skal bruge for at arbejde med AI",
   "home.console.sales": "Tal med salg",
-  "home.faq.a1.body": "OpenCode er en open source-agent, der hjælper dig med at skrive og køre kode med enhver AI-model. Den findes som desktopapp, terminalbrugerflade, mobilapp og SDK.",
-  "home.faq.a5.body": "Nej. OpenCode findes også som [desktopapp](desktop) og [mobilapp](mobile), og med [SDK'et](sdk) kan du styre det fra din egen kode.",
+  "home.faq.a1.body":
+    "OpenCode er en open source-agent, der hjælper dig med at skrive og køre kode med enhver AI-model. Den findes som desktopapp, terminalbrugerflade, mobilapp og SDK.",
+  "home.faq.a5.body":
+    "Nej. OpenCode findes også som [desktopapp](desktop) og [mobilapp](mobile), og med [SDK'et](sdk) kan du styre det fra din egen kode.",
   "brand.ui.downloadLabel": "Download {{label}}",
   "brand.ui.downloadItem": "Download {{label}} af {{detail}}",
   "brand.ui.moreFormats": "Flere formater af {{detail}}",
@@ -485,8 +526,10 @@ export const dict = {
   "brand.ui.avatarAlt": "OpenCode-avatar, {{name}}",
   "brand.ui.lockupAlt": "OpenCode-logoet × {{partner}}-logoet, med 3 stregers afstand på hver side af ×.",
   "brand.ui.strokeAlt": "Én streg er tykkelsen af logoets kontur, en fjerdedel af dets bredde.",
-  "brand.ui.clearSpaceAlt": "Logoet med to stregers frirum på alle sider. Én streg er tykkelsen af logoets kontur, en fjerdedel af logoets bredde.",
-  "brand.ui.clearSpaceWordmarkAlt": "Ordmærket med to stregers frirum på alle sider. Én streg er tykkelsen af ordmærkets bogstaver, en syvendedel af dets højde.",
+  "brand.ui.clearSpaceAlt":
+    "Logoet med to stregers frirum på alle sider. Én streg er tykkelsen af logoets kontur, en fjerdedel af logoets bredde.",
+  "brand.ui.clearSpaceWordmarkAlt":
+    "Ordmærket med to stregers frirum på alle sider. Én streg er tykkelsen af ordmærkets bogstaver, en syvendedel af dets højde.",
   "press.ui.copy": "Kopier {{label}}",
   "press.ui.copyFor": "Kopier {{label}} for {{product}}",
   "press.ui.copyText": "Kopier tekst",
@@ -507,9 +550,12 @@ export const dict = {
   "changelog.media.next": "Næste slide",
   "changelog.releaseOnGithub": "{{tag}}[ version på GitHub](sr)",
   "product.title": "OpenCode | Desktop-, terminal- og mobilapps, SDK'et og mere",
-  "product.meta.description": "Alle OpenCode-produkter, fra desktop-, terminal- og mobilapps og SDK'et til udvidelser og mere open source fra Anomaly.",
-  "product.hero.subtitle": "Én agent, alle flader. Start en session på din desktop, styr den fra din telefon, fortsæt i terminalen, eller kør den fra din egen kode.",
-  "home.meta.description": "OpenCode er open source-kodningsagenten, der arbejder, hvor du gør. Forbind AI-modeller fra over 200 udbydere, bl.a. Claude, GPT og Gemini, eller start gratis.",
+  "product.meta.description":
+    "Alle OpenCode-produkter, fra desktop-, terminal- og mobilapps og SDK'et til udvidelser og mere open source fra Anomaly.",
+  "product.hero.subtitle":
+    "Én agent, alle flader. Start en session på din desktop, styr den fra din telefon, fortsæt i terminalen, eller kør den fra din egen kode.",
+  "home.meta.description":
+    "OpenCode er open source-kodningsagenten, der arbejder, hvor du gør. Forbind AI-modeller fra over 200 udbydere, bl.a. Claude, GPT og Gemini, eller start gratis.",
   "site.action.copyCommand": "Kopier[ {{method}}-kommandoen](sr)",
   "site.action.copiedCommand": "Kopieret[ ({{method}}-kommando)](sr)",
   "site.action.copyThisCommand": "Kopier[ kommandoen](sr)",
@@ -547,8 +593,10 @@ export const dict = {
   "site.settings": "Indstillinger",
   "home.providers.aria": "Modeludbydere",
   "home.providers.inline": "Brug [list](list) eller en af over 200 andre modeller.",
-  "home.providers.grid": "Over 200 udbydere via [models.dev](modelsdev) og lokale modeller. [Forbind en udbyder](providers)",
-  "home.getStarted.moreModels": "Vil du have flere modeller, så log ind med {{subs}}, eller brug [OpenCode Go](go) ($10/md.) eller [OpenCode Go Plus](goPlus) ($40/md.).",
+  "home.providers.grid":
+    "Over 200 udbydere via [models.dev](modelsdev) og lokale modeller. [Forbind en udbyder](providers)",
+  "home.getStarted.moreModels":
+    "Vil du have flere modeller, så log ind med {{subs}}, eller brug [OpenCode Go](go) ($10/md.) eller [OpenCode Go Plus](goPlus) ($40/md.).",
   "home.getStarted.free": "Gratis",
   "home.getStarted.mostPeople": "De fleste starter her",
   "home.getStarted.freeDetail": "{{model}} og andre gratis modeller",
@@ -584,7 +632,8 @@ export const dict = {
   "home.fork.agents.title": "Tilføj en agent eller et plugin",
   "home.fork.agents.body": "Definer agenter i Markdown, eller skriv [plugins](plugins) til OpenCodes events.",
   "home.fork.build.title": "Udgiv dit eget build",
-  "home.fork.build.body": "Den er MIT-licenseret, så du kan bygge CLI'en eller desktopappen og udgive den som din egen.",
+  "home.fork.build.body":
+    "Den er MIT-licenseret, så du kan bygge CLI'en eller desktopappen og udgive den som din egen.",
   "brand.ui.downloadAsset": "Download {{detail}}",
   "brand.ui.actionFor": "{{label}} af {{detail}}",
   "brand.ui.badgeName": "badget »{{group}}«, stil {{style}}, {{theme}}",
@@ -606,13 +655,15 @@ export const dict = {
   "site.action.forOsBeta": "Download til {{os}}, beta via Apple TestFlight",
   "site.action.storeBeta": "{{os}}, beta via Apple TestFlight",
   "go.referral.ended.label": "Advarsel",
-  "go.referral.ended": "Henvisningsprogrammet er afsluttet. Henvisningslinks giver ikke længere kredit til dig eller den, der delte dem.",
+  "go.referral.ended":
+    "Henvisningsprogrammet er afsluttet. Henvisningslinks giver ikke længere kredit til dig eller den, der delte dem.",
   "legal.status.operational": "Alle systemer er i drift",
   "legal.status.degraded": "Nedsat ydeevne",
   "legal.status.outage": "Driftsforstyrrelse",
   "legal.status.unknown": "Systemstatus",
   "zen.faq.q9": "Kan jeg få en refusion?",
-  "zen.faq.a9": "Du kan muligvis få en refusion, hvis opkrævningen blev foretaget inden for de seneste 14 dage, og du ikke har brugt kreditten fra dette køb. {{contact}} for at anmode om en refusion.",
+  "zen.faq.a9":
+    "Du kan muligvis få en refusion, hvis opkrævningen blev foretaget inden for de seneste 14 dage, og du ikke har brugt kreditten fra dette køb. {{contact}} for at anmode om en refusion.",
   "go.promo.hy4": "Hy4 er nu tilgængelig i Go.",
   "go.hero.tagline": "Brug med enhver agent. Tank op med kredit efter behov. Afmeld når som helst.",
   "go.plans.audience": "Go-abonnementer til",
@@ -650,9 +701,11 @@ export const dict = {
   "go.graph.limitedRegions": "begrænsede regioner",
   "go.graph.limitedTime": "begrænset periode",
   "go.faq.a5.notZdr": "Ikke ZDR",
-  "go.faq.a5.museRetention": "Kraftigt nedsatte tokenpriser til gengæld for tilladelse til at bruge dine prompts og modelsvar til at træne fremtidige Meta-modeller.",
+  "go.faq.a5.museRetention":
+    "Kraftigt nedsatte tokenpriser til gengæld for tilladelse til at bruge dine prompts og modelsvar til at træne fremtidige Meta-modeller.",
   "go.faq.q10": "Kan jeg få en refusion?",
-  "go.faq.a10": "Du kan muligvis få en refusion, hvis opkrævningen blev foretaget inden for de seneste 14 dage, og du ikke har brugt din Go-kvote i den pågældende faktureringsperiode. {{contact}} for at anmode om en refusion.",
+  "go.faq.a10":
+    "Du kan muligvis få en refusion, hvis opkrævningen blev foretaget inden for de seneste 14 dage, og du ikke har brugt din Go-kvote i den pågældende faktureringsperiode. {{contact}} for at anmode om en refusion.",
   "download.platform.windowsArm64": "Windows (ARM64)",
   "enterprise.form.inferenceSpend.label": "Hvad er jeres virksomheds nuværende månedlige forbrug på inferens (USD)?",
   "enterprise.form.inferenceSpend.placeholder": "Vælg et interval (valgfrit)",

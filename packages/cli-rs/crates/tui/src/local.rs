@@ -8,8 +8,8 @@ use std::sync::{Arc, mpsc};
 
 use opencode_api::client::Client;
 use opencode_api::generated::{
-    AgentInfo, AgentInfoMode, IntegrationInfo, LocationQueryInput, ModelInfo, ModelRef, ModelSpeed, ProviderInfo,
-    SessionInfo, UsageLimitsInfo,
+    AgentInfo, AgentInfoMode, IntegrationInfo, LocationQueryInput, ModelInfo, ModelInfoStatus, ModelRef, ModelSpeed,
+    ProviderInfo, SessionInfo, UsageLimitsInfo,
 };
 use opencode_local::model_pref::{self, Model, ModelPreferences, Preference};
 use opencode_local::storage::Storage;
@@ -102,6 +102,8 @@ pub struct Local {
     pub(crate) startup_agent: RefCell<Option<String>>,
     /// First model to try when falling back.
     pub(crate) startup_model: RefCell<Option<Model>>,
+    /// Indexed models for the current catalog `Arc`, rebuilt only when the catalog changes.
+    model_index: RefCell<Option<Rc<ModelIndex>>>,
     watch: RefCell<Option<Watch>>,
     pub(crate) layers: RefCell<Vec<Disposer>>,
     pub(crate) go_memory: RefCell<crate::dialogs::go_upsell::Seen>,
@@ -165,6 +167,7 @@ impl Local {
             warned: RefCell::default(),
             startup_agent: RefCell::default(),
             startup_model: RefCell::default(),
+            model_index: RefCell::default(),
             watch: RefCell::new(None),
             layers: RefCell::new(Vec::new()),
             go_memory: RefCell::default(),
@@ -392,8 +395,18 @@ impl Local {
         self.catalog(|data| f(data.and_then(|data| data.model.as_deref()).unwrap_or_default()))
     }
 
+    /// Indexed lookup into the current catalog's models, cached per catalog `Arc`.
+    pub(crate) fn model_index(&self) -> Option<Rc<ModelIndex>> {
+        let models = self.catalog(|data| data?.model.clone())?;
+        let mut slot = self.model_index.borrow_mut();
+        if slot.as_ref().is_none_or(|cached| !Arc::ptr_eq(&cached.models, &models)) {
+            *slot = Some(Rc::new(ModelIndex::new(models)));
+        }
+        slot.clone()
+    }
+
     pub fn model_info(&self, model: &Model) -> Option<ModelInfo> {
-        self.models(|models| models.iter().find(|item| is(item, model)).cloned())
+        self.model_index()?.get(&model.provider_id, &model.model_id).cloned()
     }
 
     /// Runs `f` on the providers (empty until loaded).
@@ -454,8 +467,12 @@ impl Local {
 
     pub fn connected(&self) -> bool {
         self.catalog(|data| {
-            data.and_then(|data| data.integration.as_ref())
-                .is_some_and(|list| list.iter().any(|item| !item.connections.is_empty()))
+            let Some(data) = data else { return false };
+            has_connected_provider(
+                data.integration.as_deref().unwrap_or(&[]),
+                data.provider.as_deref().unwrap_or(&[]),
+                data.model.as_deref().unwrap_or(&[]),
+            )
         })
     }
 
@@ -471,16 +488,26 @@ impl Local {
         self.unique(favorite)
     }
 
+    /// Whether `model` is currently favorited (matching any speed of the same standard model).
+    pub fn is_favorite(&self, model: &Model) -> bool {
+        let index = self.model_index();
+        let standard = |item: &Model| index.as_ref().map_or_else(|| item.clone(), |index| index.standard(item));
+        let target = standard(model);
+        self.state.borrow().preference.favorite.iter().any(|item| standard(item) == target)
+    }
+
     fn unique(&self, list: Vec<Model>) -> Vec<Model> {
         let mut seen = HashSet::new();
-        self.models(|models| {
-            list.iter().map(|item| standard_of(models, item)).filter(|item| seen.insert(item.key())).collect()
-        })
+        let index = self.model_index();
+        list.iter()
+            .map(|item| index.as_ref().map_or_else(|| item.clone(), |index| index.standard(item)))
+            .filter(|item| seen.insert(item.key()))
+            .collect()
     }
 
     /// `standardModel`: the model whose entry stands for `model` in a list of models.
     pub fn standard_model(&self, model: &Model) -> Model {
-        self.models(|models| standard_of(models, model))
+        self.model_index().map_or_else(|| model.clone(), |index| index.standard(model))
     }
 
     /// The current model at its standard speed.
@@ -503,7 +530,7 @@ impl Local {
     }
 
     fn is_valid(&self, model: &Model) -> bool {
-        self.models(|models| models.iter().any(|item| is(item, model)))
+        self.model_index().is_some_and(|index| index.contains(&model.provider_id, &model.model_id))
     }
 
     pub fn agents(&self) -> Vec<AgentInfo> {
@@ -617,10 +644,25 @@ impl Local {
     }
 
     fn preferred(&self, model: &Model) -> Selection {
+        // A model runs at the speed last used with it.
+        let speed = self.state.borrow().preference.speed.get(&model.key()).cloned();
+        let remembered = speed.and_then(|speed| {
+            self.speeds_of(model).into_iter().find(|item| speed_info(item).is_some_and(|item| item.id == speed))
+        });
+        let target =
+            remembered.map_or_else(|| model.clone(), |remembered| Model::new(&model.provider_id, remembered.id));
         let configured = self.agent().and_then(|agent| agent.model);
         let fallback = self.configured();
-        // A model's speeds share its variant.
-        let preferred = self.state.borrow().preference.variant.get(&self.standard_model(model).key()).cloned();
+        // A model's speeds share its variant. Preferences saved before then may name one of its speeds instead.
+        let standard = self.standard_model(model);
+        let candidates: Vec<Model> = [standard.clone(), target.clone()]
+            .into_iter()
+            .chain(self.speeds_of(&standard).into_iter().map(|item| Model::new(&item.provider_id.0, item.id)))
+            .collect();
+        let preferred = {
+            let state = self.state.borrow();
+            candidates.iter().find_map(|item| state.preference.variant.get(&item.key()).cloned())
+        };
         let variant = preferred
             .or_else(|| {
                 configured
@@ -629,14 +671,9 @@ impl Local {
             })
             .or_else(|| fallback.filter(|f| f.model == *model).and_then(|f| f.variant));
         let variant = model_pref::normalize_variant(variant.as_deref()).map(str::to_owned);
-        let info = self.model_info(model);
-        // A model runs at the speed last used with it.
-        let speed = self.state.borrow().preference.speed.get(&model.key()).cloned();
-        let remembered = speed.and_then(|speed| {
-            self.speeds_of(model).into_iter().find(|item| speed_info(item).is_some_and(|item| item.id == speed))
-        });
+        let info = self.model_info(&target);
         Selection {
-            model: remembered.map_or_else(|| model.clone(), |remembered| Model::new(&model.provider_id, remembered.id)),
+            model: target,
             variant: variant
                 .filter(|variant| info.is_some_and(|info| info.variants.iter().any(|item| item.id == *variant))),
         }
@@ -1012,6 +1049,48 @@ impl Local {
     }
 }
 
+/// Indexed model lookup keyed by the catalog `Arc` it came from, because the model picker looks up every model and
+/// catalogs such as OpenRouter's hold thousands.
+pub(crate) struct ModelIndex {
+    models: Arc<[ModelInfo]>,
+    by_provider: HashMap<String, HashMap<String, usize>>,
+}
+
+impl ModelIndex {
+    fn new(models: Arc<[ModelInfo]>) -> Self {
+        let mut by_provider: HashMap<String, HashMap<String, usize>> = HashMap::new();
+        for (index, model) in models.iter().enumerate() {
+            by_provider.entry(model.provider_id.0.clone()).or_default().entry(model.id.clone()).or_insert(index);
+        }
+        Self { models, by_provider }
+    }
+
+    pub(crate) fn models(&self) -> &[ModelInfo] {
+        &self.models
+    }
+
+    pub(crate) fn get(&self, provider_id: &str, model_id: &str) -> Option<&ModelInfo> {
+        let index = *self.by_provider.get(provider_id)?.get(model_id)?;
+        self.models.get(index)
+    }
+
+    pub(crate) fn contains(&self, provider_id: &str, model_id: &str) -> bool {
+        self.by_provider.get(provider_id).is_some_and(|models| models.contains_key(model_id))
+    }
+
+    pub(crate) fn is_speed(&self, info: &ModelInfo) -> bool {
+        speed_info(info).is_some_and(|speed| self.contains(&info.provider_id.0, &speed.base))
+    }
+
+    pub(crate) fn standard(&self, model: &Model) -> Model {
+        let base = self.get(&model.provider_id, &model.model_id).and_then(speed_info).map(|speed| speed.base);
+        match base {
+            Some(base) if self.contains(&model.provider_id, &base) => Model::new(&model.provider_id, base),
+            _ => model.clone(),
+        }
+    }
+}
+
 fn speed_info(info: &ModelInfo) -> Option<ModelSpeed> {
     info.experimental.as_ref()?.speed.clone()
 }
@@ -1048,4 +1127,92 @@ fn listed(data: Option<&LocationData>) -> impl Iterator<Item = &AgentInfo> + Clo
 
 pub(crate) fn is(info: &ModelInfo, model: &Model) -> bool {
     info.provider_id.0 == model.provider_id && info.id == model.model_id
+}
+
+/// Any stored or detected connection, or a listed provider with models beyond the keyless OpenCode catalog, such as
+/// one declared only in config. Matches `hasConnectedProvider` in `packages/tui/src/util/connected-provider.ts`.
+pub fn has_connected_provider(
+    integrations: &[IntegrationInfo],
+    providers: &[ProviderInfo],
+    models: &[ModelInfo],
+) -> bool {
+    if integrations.iter().any(|integration| !integration.connections.is_empty()) {
+        return true;
+    }
+    let providers: HashSet<&str> = providers.iter().map(|provider| provider.id.0.as_str()).collect();
+    models.iter().any(|model| {
+        model.provider_id.0 != "opencode"
+            && !matches!(model.status, ModelInfoStatus::Deprecated)
+            && providers.contains(model.provider_id.0.as_str())
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{Value, json};
+
+    fn integration(connections: Value) -> IntegrationInfo {
+        serde_json::from_value(json!({
+            "id": "provider", "name": "Provider", "methods": [], "connections": connections,
+        }))
+        .unwrap()
+    }
+
+    fn provider(id: &str) -> ProviderInfo {
+        serde_json::from_value(json!({
+            "id": id, "name": id, "activation": "enabled", "package": "openai-compatible",
+        }))
+        .unwrap()
+    }
+
+    fn model(provider_id: &str, status: &str) -> ModelInfo {
+        serde_json::from_value(json!({
+            "id": "m", "modelID": "m", "providerID": provider_id, "name": "M",
+            "capabilities": { "tools": true, "input": ["text"], "output": ["text"] },
+            "variants": [], "time": { "released": 0 }, "cost": [], "status": status, "enabled": true,
+            "limit": { "context": 128000, "output": 4096 },
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn has_connected_provider_matches_typescript() {
+        let opencode = model("opencode", "active");
+        let ollama = model("ollama", "active");
+        let deprecated = model("ollama", "deprecated");
+        let providers = vec![provider("opencode"), provider("ollama")];
+        let cases = [
+            ("nothing listed", vec![], vec![], vec![], false),
+            (
+                "only OpenCode's keyless models",
+                vec![integration(json!([]))],
+                providers.clone(),
+                vec![opencode.clone()],
+                false,
+            ),
+            (
+                "a stored credential",
+                vec![integration(json!([{
+                    "type": "credential", "method": "key", "id": "cred_1", "label": "Work",
+                }]))],
+                vec![],
+                vec![],
+                true,
+            ),
+            (
+                "a detected environment variable",
+                vec![integration(json!([{ "type": "env", "name": "OPENAI_API_KEY" }]))],
+                vec![],
+                vec![],
+                true,
+            ),
+            ("a provider declared only in config", vec![], providers.clone(), vec![opencode, ollama.clone()], true),
+            ("only deprecated models", vec![], providers, vec![deprecated], false),
+            ("models of a provider that is not listed", vec![], vec![provider("opencode")], vec![ollama], false),
+        ];
+        for (name, integrations, providers, models, expected) in cases {
+            assert_eq!(has_connected_provider(&integrations, &providers, &models), expected, "{name}");
+        }
+    }
 }

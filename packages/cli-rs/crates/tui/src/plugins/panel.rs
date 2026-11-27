@@ -34,18 +34,25 @@ struct Fit {
     scroll: ScrollBox,
     content: View,
     padding: u32,
+    fit_screen: bool,
 }
 
 impl Fit {
     fn apply(&self, app: &App) {
         let height: f32 = self.content.children().iter().map(|child| child.rect().height).sum();
-        self.scroll.height((height.ceil() as u32 + self.padding).clamp(1, max_rows(app)));
+        self.scroll.height((height.ceil() as u32 + self.padding).clamp(1, max_rows(app, self.fit_screen)));
         app.request_redraw();
     }
 }
 
-fn max_rows(app: &App) -> u32 {
-    (u32::from(app.size().1) * 6 / 10).max(8)
+/// The body's most rows on a screen of `app`'s height: 60% of it and at least 8 (TS `/btw`), or with `fit_screen`
+/// also no more than a dialog a quarter down leaves above the screen's bottom, and at least 3 (TS `GoalDialog`).
+fn max_rows(app: &App, fit_screen: bool) -> u32 {
+    let rows = u32::from(app.size().1);
+    match fit_screen {
+        true => (rows * 6 / 10).min(rows.saturating_sub(rows.div_ceil(4) + 8)).max(3),
+        false => (rows * 6 / 10).max(8),
+    }
 }
 
 type Owner = (String, u64);
@@ -966,6 +973,7 @@ impl Body {
     /// The frame in the build `cx`: the mount the first time, the same mount in the new theme after.
     fn build(self: &Rc<Self>, tui: &Rc<Tui>, cx: &Rc<DialogCx>) -> View {
         *self.cx.borrow_mut() = Some(cx.clone());
+        cx.configure_scroll(&self.scroll);
         self.draw_header();
         // Restore focus to the same body node after a theme rebuild.
         let frame = self.frame.id();
@@ -1088,8 +1096,8 @@ fn panel(tui: &Tui, owner: Owner, panel: abi::Panel) {
             let same = {
                 let shown = live.shown.borrow();
                 let footed = |panel: &abi::Panel| panel.height.is_none() || !panel.actions.is_empty();
-                (&shown.close, shown.height, shown.bare, shown.bleed, footed(&shown))
-                    == (&panel.close, panel.height, panel.bare, panel.bleed, footed(&panel))
+                (&shown.close, shown.height, shown.bare, shown.bleed, shown.fit_screen, footed(&shown))
+                    == (&panel.close, panel.height, panel.bare, panel.bleed, panel.fit_screen, footed(&panel))
             };
             if !same {
                 *live.shown.borrow_mut() = panel.clone();
@@ -1144,7 +1152,7 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, owner: Owner, panel: abi::Pa
         },
     );
     let set = |app: &App, height: u16| u32::from(height).min(u32::from(app.size().1).saturating_sub(6)).max(1);
-    let scroll = ScrollBox::new(app).scrollbars(false).height(panel.height.map_or(1, |height| set(app, height)));
+    let scroll = cx.scroll_box().scrollbars(false).height(panel.height.map_or(1, |height| set(app, height)));
     let content = View::new(app).shrink(0.0);
     // A bare panel supplies its own body sizing and scrolling.
     let fitted = !panel.bare;
@@ -1165,10 +1173,11 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, owner: Owner, panel: abi::Pa
         true => dialog::layout_view(cx, &header, &body, footed.then_some(&footer), DIALOG_INSET, 1),
         false => content.clone(),
     };
+    let fit_screen = panel.fit_screen;
     let step = |delta: f64, page: bool| {
         let (scroll, app) = (scroll.clone(), app.clone());
         move |_: Option<&str>, _: Option<&opentui::input::KeyEvent>| {
-            let rows = if page { f64::from(max_rows(&app)) } else { 1.0 };
+            let rows = if page { f64::from(max_rows(&app, fit_screen)) } else { 1.0 };
             scroll.scroll_by(0.0, delta * rows);
         }
     };
@@ -1193,6 +1202,7 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, owner: Owner, panel: abi::Pa
         scroll: scroll.clone(),
         content: content.clone(),
         padding: if panel.bleed { 2 } else { 0 },
+        fit_screen,
     })));
     // A terminal that only gets shorter resizes no body widget, so the box follows the screen too.
     let (screen, sized, height) = (fit.clone(), scroll.clone(), panel.height);

@@ -382,6 +382,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M2.5 14.5V7.5H13.5V14.5H2.5Z" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M5.5 7.5V4C5.5 2.61929 6.61929 1.5 8 1.5C9.38071 1.5 10.5 2.61929 10.5 4V7.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M7.5 10.5C7.5 10.2239 7.72386 10 8 10C8.27614 10 8.5 10.2239 8.5 10.5V12.5C8.5 12.7761 8.27614 13 8 13C7.72386 13 7.5 12.7761 7.5 12.5V10.5Z" fill="currentColor"/>`,
   },
+  clock: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M14.5 8C14.5 11.5899 11.5899 14.5 8 14.5C4.41015 14.5 1.5 11.5899 1.5 8C1.5 4.41015 4.41015 1.5 8 1.5C11.5899 1.5 14.5 4.41015 14.5 8Z" stroke="currentColor"/><path d="M8 4.5V8L10.5 9.75" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>`,
+  },
   globe: {
     viewBox: "0 0 16 16",
     body: `<path d="M14.5 8C14.5 11.5899 11.5899 14.5 8 14.5C4.41015 14.5 1.5 11.5899 1.5 8C1.5 4.41015 4.41015 1.5 8 1.5C11.5899 1.5 14.5 4.41015 14.5 8Z" stroke="currentColor"/><path d="M1.5 8H14.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M8 1.5C6.5 3 5.5 5.5 5.5 8C5.5 10.5 6.5 13 8 14.5C9.5 13 10.5 10.5 10.5 8C10.5 5.5 9.5 3 8 1.5Z" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,

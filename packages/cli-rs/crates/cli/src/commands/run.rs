@@ -13,8 +13,7 @@ use crate::args::{OutputFormat, RunArgs};
 
 #[path = "../run/files.rs"]
 mod files;
-#[path = "../run/mime.rs"]
-mod mime;
+
 #[path = "../run/prompt.rs"]
 mod prompt;
 #[path = "../run/ui.rs"]

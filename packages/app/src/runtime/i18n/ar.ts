@@ -724,7 +724,7 @@ export const dict = {
   "settings.about.website": "\u2068www.opencode.ai\u2069",
   "settings.about.description": "\u2068OpenCode\u2069، وكيل البرمجة مفتوح المصدر",
   "settings.about.trademark": "\u2068OpenCode\u2069 علامة تجارية مسجلة لشركة \u2068Anomaly Innovations, Inc.\u2069",
-  "settings.about.typeset": "منضّد بخطي \u2068Inter\u2069 و\u2068IBM Plex Mono\u2069",
+  "settings.about.typeset": "منضّد بخطي \u2068Inter\u2069 و\u2068OpenMono\u2069",
   "settings.about.tagline": "لا يستطيع الذكاء الاصطناعي بناء برمجيات رائعة من دونك",
   "settings.about.copyright": "© \u2068Anomaly Innovations, Inc.\u2069",
   "project.settings.title": "تحرير المشروع",

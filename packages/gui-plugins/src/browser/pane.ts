@@ -305,7 +305,7 @@ export function createBrowserPane(input: {
             if (shared) handle.network = createDirectNetwork(input.profile.session)
 
             if (!shared) {
-              handle.network = yield* createBrowserNetwork({ rpc, attachment, location: options.location, partition })
+              handle.network = yield* createBrowserNetwork({ server, rpc, attachment, location: options.location, partition })
 
               // Only when the user chose to share sign-ins with remote servers do they carry over, both ways, so a page
               // of a remote server is signed in where the profile is; otherwise `link` leaves the partition apart.
@@ -413,7 +413,11 @@ export function createBrowserPane(input: {
 
                   if (frame.kind === "foreign") return
 
-                  if (frame.kind === "attached") return dispatchBinding(binding, { type: "server.attached", fileRoots })
+                  if (frame.kind === "attached") {
+                    handle.network?.activate?.(frame.capabilities)
+
+                    return dispatchBinding(binding, { type: "server.attached", fileRoots })
+                  }
 
                   if (frame.kind === "incompatible") return dispatchBinding(binding, { type: "handshake.unsupported" })
 
@@ -443,19 +447,29 @@ export function createBrowserPane(input: {
               Effect.ignore,
             )
 
+            const attachWithRetry = Deferred.await(connected).pipe(
+              Effect.andThen(attach),
+              // A Location still loading its plugins has no browser RPC to call yet, so only one that lists its
+              // plugins and still refuses has no browser. An attachment the server accepted and then dropped stays
+              // dropped: the server evicted its idle Location, which another call would start again.
+              Effect.catchIf(
+                (error) => attachmentFailure(error) === "unavailable" && selectBinding(machine.state, binding)?.status === "connecting",
+                () => loaded.pipe(Effect.andThen(attach)),
+              ),
+              // Once a prewarmed binary WebSocket owns attachment liveness, a reverse-proxy idle timeout on the
+              // silent attach HTTP request does not end the live attachment: the WebSocket's outcome governs it.
+              Effect.catchCause((cause) =>
+                handle.network?.streamActive?.() && handle.network.streamEnded
+                  ? Effect.promise(() => handle.network!.streamEnded!)
+                  : Effect.failCause(cause),
+              ),
+            )
+
             return yield* Effect.raceAllFirst([
               receive,
               Stream.fromQueue(outbound).pipe(Stream.runForEach((send) => send)),
-              Deferred.await(connected).pipe(
-                Effect.andThen(attach),
-                // A Location still loading its plugins has no browser RPC to call yet, so only one that lists its
-                // plugins and still refuses has no browser. An attachment the server accepted and then dropped stays
-                // dropped: the server evicted its idle Location, which another call would start again.
-                Effect.catchIf(
-                  (error) => attachmentFailure(error) === "unavailable" && selectBinding(machine.state, binding)?.status === "connecting",
-                  () => loaded.pipe(Effect.andThen(attach)),
-                ),
-              ),
+              attachWithRetry,
+              ...(handle.network?.streamEnded ? [Effect.promise(() => handle.network!.streamEnded!)] : []),
             ])
           }).pipe(
             Effect.matchCause({
@@ -592,6 +606,12 @@ export function createBrowserPane(input: {
 
       if (reason) throw new Error(reason)
 
+      if (url !== undefined) {
+        const remote = handles.get(binding)
+
+        if (remote && !remote.shared) await remote.network?.grantPrivateTarget?.(normalizeURL(url, pagePolicy(binding)))
+      }
+
       if (command.type === "navigate") dispatchBinding(binding, { type: "tab.addressed", tabID: command.tabID })
 
       if ("tabID" in command && command.type !== "tabs.focus") page(binding, command.tabID)?.personCommand()
@@ -620,7 +640,11 @@ export function createBrowserPane(input: {
       const handle = handles.get(binding)
 
       if (!handle) throw new Error("browser.pane.unavailable")
+
+      if (!handle.shared) await handle.network?.grantPrivateTarget?.(normalizeURL(url, pagePolicy(binding)))
+
       const grant = handle.pluginTabs.reserve(owner)
+
       // Never adopt an existing file tab, even when this plugin opens the same URL as the user.
       await execute(binding, { action: { type: "tabs.open", url }, files: [] }, handle.abort.signal, "user", "new", undefined, grant.created)
       grant.settled()

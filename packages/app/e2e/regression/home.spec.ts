@@ -202,7 +202,14 @@ test("the session context menu renames, exports, and deletes a Home session", as
   const box = await target.boundingBox()
   await target.click({ button: "right", position: { x: 48, y: 12 } })
   await expect(page).toHaveURL("/")
-  await expect(page.getByRole("menuitem")).toHaveText(["Open", "Open in background", "Rename", "Export…", "Delete…"])
+  await expect(page.getByRole("menuitem")).toHaveText([
+    "Open",
+    "Open in background",
+    "Rename",
+    "Copy",
+    "Export…",
+    "Delete…",
+  ])
   const menu = await page.locator('[data-component="menu-v2-content"]').boundingBox()
   expect(Math.abs((menu?.x ?? 0) - (box?.x ?? 0) - 48)).toBeLessThan(4)
 

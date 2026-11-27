@@ -5,9 +5,11 @@ import { type UiI18n, useI18n } from "@opencode/ui/context/i18n"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { createMemo, For, Index, Match, Show, Switch } from "solid-js"
 import { BasicTool } from "../../components/basic-tool"
+import { useData } from "../../context"
 import {
   currentToolError,
   currentToolGroupedRead,
+  currentToolImages,
   currentToolInput,
   currentToolMetadata,
   currentToolOutput,
@@ -28,6 +30,7 @@ import { toolRule } from "../rules"
 import { sameFileFact, toolStopped } from "../../timeline/facts"
 import { activityLabel, activityText, usedLabel } from "./activity-label"
 import { FileGroup } from "./file-group"
+import { ToolResultImages } from "../../tools/tool-result-images"
 import { ThoughtRow } from "./thought"
 import { ToolDisplay } from "./tool-display"
 
@@ -64,13 +67,14 @@ export function ContextGroup(props: {
   onRevealShell?: (shellID: string) => void
 }) {
   const i18n = useI18n()
+  const data = useData()
   const reasoning = createMemo(() => props.parts.flatMap((part) => (part.type === "reasoning" ? [part] : [])))
   const thoughtsOnly = createMemo(() => reasoning().length > 0 && reasoning().length === props.parts.length)
   const events = createMemo(() => [...workEvents(props.parts).values()])
 
   const workOnly = createMemo(() => events().length > 0 && props.parts.every((part) => part.type === "event"))
 
-  const activity = createMemo(() => activityLabel(props.parts, i18n))
+  const activity = createMemo(() => activityLabel(props.parts, i18n, data.flag("full_codemode")))
 
   const label = createMemo(() => activityText(activity()) ?? usedLabel(props.parts, i18n))
 
@@ -286,7 +290,14 @@ export function ContextGroup(props: {
                                     </Show>
                                   }
                                 >
-                                  {(part) => <div data-slot="context-tool-group-item">{part.render()}</div>}
+                                  {(part) => (
+                                    <div
+                                      data-slot="context-tool-group-item"
+                                      data-script-change={part.file.via === "script" ? "" : undefined}
+                                    >
+                                      {part.render()}
+                                    </div>
+                                  )}
                                 </Show>
                               }
                             >
@@ -345,6 +356,10 @@ export function ContextGroup(props: {
               </Index>
             </div>
           </BasicTool>
+          <ToolResultImages
+            images={props.parts.flatMap((part) => (part.type === "tool" ? currentToolImages(part) : []))}
+            onContentRendered={props.onSizeChange}
+          />
         </div>
       </Show>
     </Show>
