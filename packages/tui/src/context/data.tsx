@@ -43,6 +43,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         ...data.location,
         async sync(ref?: LocationRef) {
           await data.location.syncInfo(ref)
+          // Read plugin inventory before models so a cold location mid-activation is detected
+          // rather than racing an early partial model list against a post-activation plugin list.
+          await data.location.plugin.sync(ref)
           await Promise.all([data.location.sync(ref), data.location.config.sync(ref)])
         },
       },

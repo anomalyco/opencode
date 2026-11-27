@@ -1203,7 +1203,7 @@ export function Prompt(props: PromptProps) {
     if (!agent) return false
     const selection = local.model.selection()
     if (!selection) {
-      void promptModelWarning()
+      if (local.model.catalogReady) void promptModelWarning()
       return false
     }
     const usesModel = !props.sessionID || store.mode !== "shell"

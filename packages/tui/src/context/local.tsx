@@ -43,6 +43,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const location = useLocation()
 
     const models = () => data.location.model.list(location.ref)
+    const configEntries = () => data.location.config.list(location.ref)
+    const pluginsReady = () => (data.location.plugin.list(location.ref)?.length ?? 0) > 0
     const providers = () => data.location.provider.list(location.ref)
 
     // Indexed because the model picker looks up every model, and catalogs such as OpenRouter's hold thousands.
@@ -205,9 +207,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       onCleanup(repository.subscribe(applyPreferences))
 
       const configuredModel = createMemo(() => {
-        const entry = data.location.config
-          .list(location.ref)
-          ?.findLast((entry) => entry.type === "document" && entry.info.model !== undefined)
+        const entry = configEntries()?.findLast((entry) => entry.type === "document" && entry.info.model !== undefined)
         const configured = entry?.type === "document" ? entry.info.model : undefined
         if (!configured) return
         return typeof configured === "string"
@@ -216,6 +216,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const fallbackModel = createMemo(() => {
+        if (!pluginsReady() || configEntries() === undefined) return undefined
+
         if (args.model) {
           const { providerID, modelID } = parse(args.model)
           if (isModelValid({ providerID, modelID })) {
@@ -437,7 +439,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return preferences.ready
         },
         get catalogReady() {
-          return models() !== undefined
+          return models() !== undefined && configEntries() !== undefined && pluginsReady()
         },
         /** The current model at its standard speed: the entry that stands for it in a list of models. */
         standard: createMemo(() => {
