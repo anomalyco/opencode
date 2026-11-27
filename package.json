@@ -176,6 +176,7 @@
     "@brendonovich/vite-plugin-opencode@0.1.3": "patches/@brendonovich%2Fvite-plugin-opencode@0.1.3.patch",
     "@modelcontextprotocol/client@2.4.0": "patches/@modelcontextprotocol%2Fclient@2.4.0.patch",
     "@kobalte/core@0.13.13": "patches/@kobalte%2Fcore@0.13.13.patch",
-    "bun-pty@0.4.11": "patches/bun-pty@0.4.11.patch"
+    "bun-pty@0.4.11": "patches/bun-pty@0.4.11.patch",
+    "@opentui/solid@0.9.9": "patches/@opentui%2Fsolid@0.9.9.patch"
   }
 }
