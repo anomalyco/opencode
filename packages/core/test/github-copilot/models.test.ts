@@ -93,6 +93,7 @@ test("defensively syncs advertised Copilot models", async () => {
       ...Model.Info.default(Provider.ID.githubCopilot, Model.ID.make("gpt-5")),
       modelID: Model.ID.make("gpt-5"),
       name: "GPT-5 local",
+      compatibility: { supportsEffortUpdates: true },
     })
     const stale = Model.Info.make({
       ...Model.Info.default(Provider.ID.githubCopilot, Model.ID.make("stale")),
@@ -102,6 +103,8 @@ test("defensively syncs advertised Copilot models", async () => {
     const model = models.get(Model.ID.make("gpt-5"))
 
     expect(model?.name).toBe("GPT-5 local")
+    // Copilot's list has no field for mid-conversation effort changes, so the models.dev model's flag is kept.
+    expect(model?.compatibility).toEqual({ supportsEffortUpdates: true })
     expect(model?.package).toBe("@opencode/ai/providers/openai-compatible-responses")
     expect(model?.settings).toEqual({ baseURL: server.url.origin })
     expect(model?.cost[0]).toMatchObject({ input: 0, output: 0, cache: { read: 0, write: 0 } })

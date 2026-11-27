@@ -7,6 +7,7 @@ import { AnthropicMessages } from "../src/protocols/anthropic-messages.js"
 import { OpenAIResponses } from "../src/protocols/openai-responses.js"
 import { Gemini } from "../src/protocols/gemini.js"
 import { AmazonBedrockMantle, GoogleVertexMessages, OpenAI } from "../src/providers.js"
+import { OpenAICompatibleResponses } from "../src/protocols/openai-compatible-responses.js"
 import { applyEffortUpdates } from "../src/effort-updates.js"
 import { it, testEffect } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
@@ -569,6 +570,43 @@ describe("OpenAI Responses effort updates", () => {
     Effect.gen(function* () {
       const result = yield* ai.compact(compactRequest, { mechanism: "endpoint" })
       expect(result.replacement.map((message) => message.content[0]?.type)).toEqual(["compaction"])
+    }),
+  )
+})
+
+describe("Open Responses effort updates", () => {
+  const compatible = (updates?: boolean) =>
+    OpenAICompatibleResponses.route
+      .with({
+        provider: "github-copilot",
+        endpoint: { baseURL: "https://api.githubcopilot.test" },
+        auth: Auth.bearer("test"),
+      })
+      .model({ id: "gpt-6.2-sol", capabilities: updates === undefined ? undefined : { reasoning: { updates } } })
+
+  it.effect("lowers markers to configuration_update items and freezes reasoning.effort for opted-in models", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({ model: compatible(true), messages: conversation, providerOptions: { reasoningEffort: "low" } }),
+      )
+
+      expect(prepared.body.reasoning).toEqual({ effort: "high" })
+      expect(prepared.body.input).toEqual([
+        { type: "message", role: "user", content: [{ type: "input_text", text: "Before." }] },
+        { type: "configuration_update", reasoning: { effort: "low" } },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "After." }] },
+      ])
+    }),
+  )
+
+  it.effect("strips markers unless the model opts in", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({ model: compatible(), messages: conversation, providerOptions: { reasoningEffort: "low" } }),
+      )
+
+      expect(updates(prepared.body)).toEqual([])
+      expect(prepared.body.reasoning).toEqual({ effort: "low" })
     }),
   )
 })
