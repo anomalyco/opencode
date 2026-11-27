@@ -72,7 +72,7 @@ Use `"random"` to choose an available provider automatically. Each session keeps
 
 ## Limits
 
-With random selection, a search that hits a rate limit, an exhausted quota or plan limit (HTTP 402, or Tavily's 432), or an error reported by the provider's search service is retried with another available provider. A rate-limited provider (HTTP 429) waits for its `Retry-After` period, or 60 seconds when the response does not include a valid period. Any other provider that failed this way is skipped until OpenCode restarts. If every provider fails, the search reports the last provider's error. A provider you chose directly never fails over.
+With random selection, a search that hits a rate limit, an exhausted quota or plan limit (HTTP 402, or Tavily's 432), or an error reported by the provider's search service is retried with another available provider. A rate-limited provider (HTTP 429) waits for its `Retry-After` period, or 60 seconds when the response does not include a valid period. Any other provider that failed this way is skipped for an hour. If every provider fails, the search reports the last provider's error. A provider you chose directly never fails over.
 
 ```text
 Exa returns HTTP 429

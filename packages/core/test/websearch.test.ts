@@ -336,7 +336,7 @@ describe("WebSearch", () => {
     { name: "HTTP 402", cause: () => TestWebSearch.httpError(402) },
     { name: "HTTP 432", cause: () => TestWebSearch.httpError(432) },
   ].forEach(({ name, cause }) => {
-    it.effect(`fails over on ${name} with random and stops using the provider`, () =>
+    it.effect(`fails over on ${name} with random and skips the provider for an hour`, () =>
       Effect.gen(function* () {
         const exa = yield* register("exa")
         const parallel = yield* register("parallel")
@@ -348,11 +348,13 @@ describe("WebSearch", () => {
         failed.failure.cause = cause()
         expect((yield* websearch.query({ query: "retry" })).providerID).toBe(replacement.providerID)
         failed.failure.cause = undefined
-        yield* TestClock.adjust("1 day")
+        yield* TestClock.adjust("59 minutes")
         replacement.failure.cause = cause()
         const error = yield* websearch.query({ query: "exhausted" }).pipe(Effect.flip)
         expect(error).toMatchObject({ providerID: replacement.providerID, cause: replacement.failure.cause })
         expect(failed.calls).toEqual([{ query: "first" }, { query: "retry" }])
+        yield* TestClock.adjust("1 minute")
+        expect((yield* websearch.query({ query: "recovered" })).providerID).toBe(failed.providerID)
       }),
     )
 
