@@ -34,7 +34,7 @@ export type DocsRender = {
   /** The latest docs' page language, and whether its content is translated (a fallback page shows English). */
   locale: Locale
   translated: boolean
-  /** The languages the page is translated into, for its hreflang links. */
+  /** The page's head languages: English and each current translation, itself included (render.tsx). */
   alternates: readonly Locale[]
   /** The current section in the page's language, with its pages' titles (render.tsx). */
   section: DocsSection

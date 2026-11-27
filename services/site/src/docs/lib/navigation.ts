@@ -243,10 +243,18 @@ export function docsPagefindHref(set: DocsSet, locale: Locale) {
   return `${docsLocaleBase(locale, set)}pagefind/pagefind.js`
 }
 
-/** The languages a page is available in: English always, plus the languages it has a translation in. */
+/**
+ * The languages a page is available in: English always, plus the languages it has a current
+ * translation in, in the site's order. A page's head and the sitemap both use this, so they list
+ * the same set (the page itself included).
+ */
+export function docsLanguageAlternates(translated: readonly Locale[]) {
+  return LOCALES.filter((locale) => locale === "en" || translated.includes(locale))
+}
+
+/** The languages a page is available in, by its translated languages. */
 export function docsAlternates(slug: string, translated: ReadonlyMap<string, readonly Locale[]>) {
-  const locales = translated.get(slug) ?? []
-  return LOCALES.filter((locale) => locale === "en" || locales.includes(locale))
+  return docsLanguageAlternates(translated.get(slug) ?? [])
 }
 
 /**

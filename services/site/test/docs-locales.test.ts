@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test"
+import { tag } from "~/lib/language"
 import { latestDocs } from "../src/docs/config"
 import {
   docsAlternates,
   docsCanonicalHref,
+  docsLanguageAlternates,
   docsLocaleHref,
   docsLocaleMarkdownHref,
   docsPagefindHref,
@@ -77,5 +79,22 @@ describe("docs sitemap", () => {
       { hreflang: "x-default", href: "https://opencode.ai/docs/config/" },
     ])
     expect(xml).toContain('xmlns:xhtml="http://www.w3.org/1999/xhtml"')
+  })
+
+  test("a page head lists the sitemap's alternates, including English and itself", () => {
+    // render.tsx passes docsLanguageAlternates(...) to DocsLayout, which adds x-default.
+    const head = (locales: Parameters<typeof docsLanguageAlternates>[0]) => [
+      ...docsLanguageAlternates(locales).map((locale) => tag(locale)),
+      "x-default",
+    ]
+    const sitemap = (path: string) => at(path)!.links.map((link) => link.hreflang)
+    // The translated page and its English page list the same set, en and zh-Hans, themselves included.
+    expect(head(["zh"])).toEqual(["en", "zh-Hans", "x-default"])
+    expect(head(["zh"])).toEqual(sitemap("/docs/instructions/"))
+    expect(head(["zh"])).toEqual(sitemap("/zh/docs/instructions/"))
+    // An English page without a translation lists itself and x-default.
+    expect(head([])).toEqual(sitemap("/docs/config/"))
+    // A non-English fallback canonicalises to English and lists English only, not its own locale.
+    expect(head([])).toEqual(["en", "x-default"])
   })
 })

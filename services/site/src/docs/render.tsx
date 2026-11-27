@@ -5,7 +5,7 @@ import { docsContent, docsTranslations } from "./content"
 import { DocsDocument, docsI18n } from "./document"
 import type { DocsAssets } from "./layouts/DocsLayout"
 import { currentTranslation } from "./lib/heading-structure"
-import { docsHref, docsLocaleHref, docsSectionTitles, getDocsSection } from "./lib/navigation"
+import { docsHref, docsLanguageAlternates, docsLocaleHref, docsSectionTitles, getDocsSection } from "./lib/navigation"
 import { renderSitemap } from "./lib/sitemap"
 import { latestHref, v1Href, v1Locales, v1Page, v1Section, v1Slug, type V1Locale } from "./lib/v1-navigation"
 
@@ -49,7 +49,12 @@ export async function renderDocsPage(set: DocsSet, slug: string, assets: DocsAss
           anchor: anchor(slug, await v1Ids()),
         }
       : undefined
-  const alternates = set.id === "latest" ? await translatedLocales(slug) : []
+  // The head lists the sitemap's languages: English and every current translation, the page
+  // itself included. A non-English fallback page is not listed for its language and canonicals to
+  // English, so its head lists English only.
+  const translations = set.id === "latest" ? await translatedLocales(slug) : []
+  const alternates =
+    set.id === "latest" ? (translated ? docsLanguageAlternates(translations) : (["en"] as Locale[])) : []
   const section = v1?.section ?? (await localizedSection(slug, locale))
   return renderToString(() => (
     <DocsDocument

@@ -67,7 +67,7 @@ export function DocsLayout(props: {
   /** The latest docs' page language, and whether its content is translated here (else English with a notice). */
   locale: Locale
   translated: boolean
-  /** The languages the page is translated into, for its hreflang links. */
+  /** The page's head languages, English and each current translation, itself included (render.tsx). */
   alternates: readonly Locale[]
   /** The current section in the page's language (render.tsx). */
   section: DocsSection
@@ -93,9 +93,9 @@ export function DocsLayout(props: {
   const docsBase = docsLocaleBase(locale, props.set)
   const canonical = new URL(docsCanonicalHref(props.currentSlug, props.set, locale, props.translated), config.baseUrl)
     .href
-  // A fallback page (English content in another language) lists only the English page: it is the
-  // same content, and its language versions live there (sitemap.ts).
-  const alternates = props.set.id === "latest" ? (props.translated ? props.alternates : (["en"] as Locale[])) : []
+  // render.tsx passes the sitemap's set: English and every current translation, itself included.
+  // A fallback page lists only English, as it canonicalises there (sitemap.ts).
+  const alternates = props.set.id === "latest" ? props.alternates : []
   const sectionHrefs = {
     Docs: docsLocaleHref("index", latestDocs, locale),
     CLI: docsLocaleHref("cli", latestDocs, locale),
