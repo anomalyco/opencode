@@ -1560,8 +1560,10 @@ fn option_row<T>(
     if current && option.gutter.is_none() {
         row.add(&Text::new(app, "▪").shrink(0.0).fg(theme.text.formfield.selected));
     }
+    // The gutter takes the current marker's cell, so it takes the marker's color too.
     if let Some(gutter) = &option.gutter {
-        row.add(&View::new(app).shrink(0.0).child(&gutter(app, text)));
+        let color = if current && !active { theme.text.formfield.selected } else { text };
+        row.add(&View::new(app).shrink(0.0).child(&gutter(app, color)));
     }
     let mut spans = match &option.title_spans {
         Some(spans) => spans.iter().map(|(part, color)| part.clone().fg(color.unwrap_or(text))).collect(),

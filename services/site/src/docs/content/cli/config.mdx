@@ -36,6 +36,18 @@ OpenCode adds `$schema` when it creates or migrates this file. Valid edits reloa
 
 Unknown settings are ignored. Keep `$schema` so your editor flags invalid values.
 
+### Legacy `tui.json`
+
+V1 kept terminal client settings in `tui.json`. V2 reads it once, as a migration source, and never layers it under
+`cli.json`:
+
+- When `cli.json` is missing, the CLI creates it from the supported settings in the global `tui.json` next to it and
+  from the saved preferences in `kv.json` in the state directory.
+- Once `cli.json` exists, `tui.json` is ignored. Later edits to it have no effect, and you can keep or delete it.
+- Deleting `cli.json` runs the migration again on the next start.
+- The legacy files are never changed or deleted.
+- Only the global `tui.json` is read. Project-local `tui.json` files and `tui.jsonc` are not migrated.
+
 ## Inline config
 
 Set `OPENCODE_CLI_CONFIG_CONTENT` to apply CLI settings from inline JSON:

@@ -16,7 +16,7 @@ import { RouteProvider } from "../../../src/context/route"
 import { TuiAppProvider } from "../../../src/context/runtime"
 import { SessionTabsProvider } from "../../../src/context/session-tabs"
 import { StorageProvider, useStorage } from "../../../src/context/storage"
-import { ThemeProvider } from "../../../src/context/theme"
+import { ThemeProvider, useTheme } from "../../../src/context/theme"
 import { DialogProvider, useDialog } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
 import { createApi, createEventStream, createFetch, directory, json, type FetchHandler } from "../../fixture/tui-client"
@@ -36,11 +36,19 @@ function session(id: string, title: string, updated: number) {
   }
 }
 
-async function renderSessionList(sessions: ReturnType<typeof session>[], handler?: FetchHandler) {
+async function renderSessionList(
+  sessions: ReturnType<typeof session>[],
+  handler?: FetchHandler,
+  options: { current?: string; running?: string[]; newDesigns?: boolean } = {},
+) {
   const events = createEventStream()
   const calls = createFetch(async (url, request) => {
     const handled = await handler?.(url, request)
     if (handled) return handled
+    if (url.pathname === "/api/session/active")
+      return json({ data: Object.fromEntries((options.running ?? []).map((id) => [id, {}])) })
+    const routed = sessions.find((session) => url.pathname === `/api/session/${session.id}`)
+    if (routed && request.method === "GET") return json({ data: routed })
     if (url.pathname !== "/api/session") return undefined
     const parentID = url.searchParams.get("parentID")
     if (parentID && parentID !== "null") return json({ data: [], cursor: {} })
@@ -49,11 +57,13 @@ async function renderSessionList(sessions: ReturnType<typeof session>[], handler
   const temporary = await tmpdir()
   let storage!: ReturnType<typeof useStorage>
   let local!: ReturnType<typeof useLocal>
+  let theme!: ReturnType<typeof useTheme>
 
   function Probe() {
     const dialog = useDialog()
     storage = useStorage()
     local = useLocal()
+    theme = useTheme()
     onMount(() => dialog.replace(() => <DialogSessionList />))
     return null
   }
@@ -64,10 +74,20 @@ async function renderSessionList(sessions: ReturnType<typeof session>[], handler
         <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
           <StorageProvider>
             <ArgsProvider>
-              <ConfigProvider config={createTuiResolvedConfig({ tabs: { mode: "off" } })}>
+              <ConfigProvider
+                config={createTuiResolvedConfig({
+                  tabs: { mode: "off" },
+                  animations: false,
+                  experimental: { "new-designs": options.newDesigns ?? false },
+                })}
+              >
                 <Keymap.Provider>
                   <ToastProvider>
-                    <RouteProvider>
+                    <RouteProvider
+                      initialRoute={
+                        options.current ? { type: "session", sessionID: options.current } : { type: "home" }
+                      }
+                    >
                       <ClientProvider api={createApi(calls.fetch)}>
                         <PermissionProvider>
                           <DataProvider directory={directory}>
@@ -102,6 +122,9 @@ async function renderSessionList(sessions: ReturnType<typeof session>[], handler
     app,
     get local() {
       return local
+    },
+    get theme() {
+      return theme
     },
     async [Symbol.asyncDispose]() {
       app.renderer.destroy()
@@ -152,4 +175,28 @@ test("rename after arming delete prefills the session title", async () => {
 
   setup.app.mockInput.pressEnter()
   expect(await renamed.promise).toMatchObject({ title: "Disposable session" })
+})
+
+test("a running current session keeps the current marker color on its spinner", async () => {
+  const now = Date.now()
+  await using setup = await renderSessionList(
+    ["C", "B", "A"].map((name, index) => session(`ses_${name}`, `session-${name}`, now - index * 1000)),
+    undefined,
+    { current: "ses_B", running: ["ses_A", "ses_B"], newDesigns: true },
+  )
+  await setup.app.waitForFrame((frame) => frame.split("\n").filter((line) => line.includes("⋯")).length === 2)
+  // The cursor opens on the top row, so the current row is drawn unselected.
+  await setup.app.waitForFrame((frame) =>
+    frame.split("\n").some((line) => line.includes("┃") && line.includes("session-C")),
+  )
+
+  const spinner = (title: string) =>
+    setup.app
+      .captureSpans()
+      .lines.find((line) => line.spans.some((span) => span.text.includes(title)))
+      ?.spans.find((span) => span.text.includes("⋯"))
+      ?.fg.toInts()
+  const selected = setup.theme.surface("dialog").text.formfield.selected.toInts()
+  expect(spinner("session-B")).toEqual(selected)
+  expect(spinner("session-A")).not.toEqual(selected)
 })

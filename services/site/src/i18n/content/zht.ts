@@ -517,6 +517,13 @@ export const content = {
         "wordmark-black": { name: "字標，黑色" },
         "wordmark-white": { name: "字標，白色" },
       },
+      avatars: {
+        body: "方形大頭貼，適用於 X、GitHub、Slack、LinkedIn 等個人檔案。標誌位於圓形範圍內，即使被裁成圓形也能完整顯示。PNG 寬 1024 px 和 400 px。",
+        items: {
+          "avatar-dark": { name: "大頭貼，深色" },
+          "avatar-light": { name: "大頭貼，淺色" },
+        },
+      },
       all: { text: "全部下載" },
     },
     coverage: { title: "媒體報導" },

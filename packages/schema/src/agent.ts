@@ -54,6 +54,8 @@ export const Info = Schema.Struct({
           hidden: false,
           permissions: [
             { action: "*", resource: "*", effect: "allow" },
+            // A skill with a version, such as one from an MCP server, is approved per version.
+            { action: "skill", resource: "*@sha256:*", effect: "ask" },
             { action: "read", resource: "*.env", effect: "ask" },
             { action: "read", resource: "*.env.*", effect: "ask" },
             { action: "read", resource: "*.env.example", effect: "allow" },

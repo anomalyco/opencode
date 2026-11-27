@@ -1138,6 +1138,19 @@ export function Prompt(props: PromptProps) {
     }
   })
 
+  // Down also toggles the subagent picker; keep it moving through a multi-line prompt when history doesn't claim it.
+  Keymap.createLayer(() => ({
+    priority: 1,
+    target: inputTarget,
+    enabled: () =>
+      inputTarget() !== undefined &&
+      !disabled() &&
+      !auto()?.visible &&
+      input !== undefined &&
+      input.scrollY + input.visualCursor.visualRow < input.editorView.getTotalVirtualLineCount() - 1,
+    bindings: ["input.move.down"],
+  }))
+
   let submitting = false
   async function submit(delivery: SessionInbox.Delivery = "steer") {
     if (disabled()) return false

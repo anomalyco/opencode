@@ -26,6 +26,8 @@ use crate::scrollback::{EntryKind, Phase, Source, ToolState};
 pub const GLOBAL: &str = "global";
 /// `--replay-limit`'s default: the newest messages a replay lists.
 pub const DEFAULT_REPLAY_LIMIT: u32 = 200;
+/// The most messages one `message.list` page returns.
+const MESSAGE_PAGE_LIMIT: u32 = 200;
 /// `LOCAL_REPLAY_ROW_LIMIT`: rows printed only locally (errors, prompts in flight) that a resize replays.
 pub const LOCAL_ROW_LIMIT: usize = 100;
 pub const RESIZE_DELAY: Duration = Duration::from_millis(250);
@@ -1623,7 +1625,43 @@ pub enum Incoming {
     Disconnected(String),
 }
 
-/// `projectedMessages`: the newest `limit` messages, oldest first.
+/// `projectedMessages`: the newest `limit` messages a transcript shows, oldest first. Bookkeeping rows (idle,
+/// switches, system) show nothing, so they do not count and the list pages past them.
+pub async fn projected(client: &Client, session: &str, limit: u32) -> Result<Vec<SessionMessageInfo>, String> {
+    let mut listed = Vec::new();
+    let mut cursor: Option<String> = None;
+    loop {
+        let size = (limit - listed.len() as u32).min(MESSAGE_PAGE_LIMIT);
+        let input = MessageListInput {
+            session_id: SessionID(session.to_owned()),
+            limit: Some(i64::from(size)),
+            order: cursor.is_none().then_some(MessageListInputOrder::Desc),
+            cursor,
+            ..Default::default()
+        };
+        let call = Client::message_list_call(&input).map_err(|error| error.to_string())?;
+        let list: Value = client.json(call).await.map_err(|error| error.to_string())?;
+        let data = list["data"].as_array().map(Vec::as_slice).unwrap_or_default();
+        listed.extend(data.iter().map(decode_message).filter(|message| {
+            matches!(
+                message,
+                SessionMessageInfo::User(_)
+                    | SessionMessageInfo::Assistant(_)
+                    | SessionMessageInfo::Compaction(_)
+                    | SessionMessageInfo::Skill(_)
+                    | SessionMessageInfo::Shell(_)
+            )
+        }));
+        let next = list["cursor"]["next"].as_str();
+        if listed.len() >= limit as usize || data.len() < size as usize || next.is_none() {
+            listed.reverse();
+            return Ok(listed);
+        }
+        cursor = next.map(str::to_owned);
+    }
+}
+
+/// The newest `limit` messages, oldest first.
 pub async fn messages(client: &Client, session: &str, limit: u32) -> Result<Vec<SessionMessageInfo>, String> {
     let input = MessageListInput {
         session_id: SessionID(session.to_owned()),
@@ -1675,7 +1713,7 @@ pub type Hydration = (Vec<SessionMessageInfo>, Vec<String>, Vec<SessionInboxUser
 /// and one asked after it arrives as an event that applies after the list (`hydrate`).
 pub async fn hydration(client: &Client, session: &str, directory: &str, limit: u32) -> Result<Hydration, String> {
     let (messages, active, inbox, requests) = futures_util::future::join4(
-        messages(client, session, limit),
+        projected(client, session, limit),
         active(client),
         inbox(client, session),
         crate::footers::requests(client, session, directory),
@@ -1871,6 +1909,52 @@ mod tests {
         assert_eq!(wait(&client, "ses_1", receiver).await, Ok(()));
         assert_eq!(memory.requests().len(), 1);
         drop(connected);
+    }
+
+    /// `--replay-limit` counts the messages a transcript shows, so a list pages past idle and switch rows.
+    #[tokio::test]
+    async fn a_replay_limit_skips_bookkeeping_rows() {
+        let page = |query: &[(&str, &str)], data: Value, next: &str| {
+            let query = query.iter().map(|(key, value)| (key.to_string(), vec![value.to_string()])).collect();
+            let body = json!({ "data": data, "cursor": { "next": next } });
+            opencode_api::memory::Route::json("GET", "/api/session/ses_1/message", 200, &body).with_query(query)
+        };
+        let memory = opencode_api::memory::Memory::new(vec![
+            page(
+                &[("limit", "2"), ("order", "desc")],
+                json!([
+                    { "id": "msg_idle", "type": "idle", "outcome": "succeeded", "time": { "created": 5 } },
+                    { "id": "msg_reply", "type": "assistant", "agent": "build",
+                      "model": { "id": "model", "providerID": "demo" },
+                      "content": [{ "type": "text", "text": "latest reply" }], "time": { "created": 4 } },
+                ]),
+                "c2",
+            ),
+            page(
+                &[("cursor", "c2"), ("limit", "1")],
+                json!([{ "id": "msg_model", "type": "model-switched",
+                         "model": { "id": "model", "providerID": "demo" }, "time": { "created": 3 } }]),
+                "c3",
+            ),
+            page(
+                &[("cursor", "c3"), ("limit", "1")],
+                json!([{ "id": "msg_prompt", "type": "user", "text": "latest prompt", "time": { "created": 2 } }]),
+                "c4",
+            ),
+        ]);
+        let client = Client::with_transport("http://test", Arc::new(memory.clone())).unwrap();
+        let listed = projected(&client, "ses_1", 2).await.unwrap();
+        let ids: Vec<_> = listed
+            .iter()
+            .map(|message| match message {
+                SessionMessageInfo::User(user) => user.id.as_str(),
+                SessionMessageInfo::Assistant(assistant) => assistant.id.as_str(),
+                _ => "other",
+            })
+            .collect();
+        assert_eq!(ids, ["msg_prompt", "msg_reply"]);
+        assert!(memory.requests().iter().all(|request| !request.unmatched));
+        assert_eq!(memory.requests().len(), 3);
     }
 
     fn texts(output: &Output) -> Vec<(EntryKind, String)> {
