@@ -1,9 +1,9 @@
 ---
 title: "成员"
-description: "邀请他人加入 OpenCode Console 团队，管理他们的角色，以及将他们移除。"
+description: "邀请他人加入 OpenCode Console 工作区，管理角色并移除成员。"
 ---
 
-所有者和管理员在 **Settings › Members** 中管理人员。打开某个成员，可以查看其用量和预算策略。
+所有者和管理员在 **Settings › Members** 中管理人员。打开成员详情，可以查看其用量和预算策略。
 
 ## 邀请成员
 
@@ -16,26 +16,26 @@ description: "邀请他人加入 OpenCode Console 团队，管理他们的角色
 邀请在 7 天后过期。所有人加入时的角色都是 **Member**，加入后可以再[修改角色](#change-a-role)。
 
 <Callout>
-  在 [OpenCode Go](/console/go) 和 Go Plus 上，你邀请的人会使用免费模型或团队余额。若要为每个人提供各自的 Go 限额，请升级到 Go Teams（每位成员每月 $20，至少 2 名成员）。第二名之后的每位成员从加入当月起每月收取 $20。
+  在使用 [OpenCode Go](/console/go) 和 Go Plus 时，你邀请的人会使用免费模型或工作区余额。若要让每个人都拥有自己的 Go 限额，请升级到 Go Teams（每位成员每月 $20，至少 2 名成员）。第二名之后的每位成员自加入起每月收费 $20。
 </Callout>
 
 成员也可以自动加入：
 
-- [SSO](/console/sso#automatic-membership)：已验证邮箱域名下的用户首次登录时会被自动添加。
+- [SSO](/console/sso#automatic-membership)：已验证邮箱域名下的用户首次登录时会自动加入。
 - [目录同步](/console/scim)：根据你在身份提供商中的分配情况添加或移除成员。
 
 ## 接受邀请
 
-受邀者必须使用接收邀请的电子邮件地址登录。接受邀请有两种方式：
+受邀者必须使用邀请发往的邮箱地址登录。接受邀请有两种方式：
 
 - 点击邀请邮件中的 **Join workspace**，然后登录或创建账号。
-- 登录 Console，打开团队菜单，在 **Pending invitations** 下点击 **Join**。
+- 登录 Console，打开工作区菜单，在 **Pending invitations** 下点击 **Join**。
 
 如果受邀者当前登录的是其他账号，Console 会提示他们 **Sign out and continue**，改用受邀的邮箱登录。
 
 ## 管理待处理的邀请
 
-待处理的邀请会显示在 Members 表格中，状态为 **Pending · Expires** 加上日期，或者 **Expired**。
+待处理的邀请会显示在成员表格中，状态为 **Pending · Expires** 加上日期，或者 **Expired**。
 
 | 操作     | 方法                                                                    |
 | -------- | ----------------------------------------------------------------------- |
@@ -46,16 +46,16 @@ description: "邀请他人加入 OpenCode Console 团队，管理他们的角色
 
 打开成员所在行的角色菜单，选择 **Member**、**Admin** 或 **Owner**。
 
-你只能授予不高于自己的角色，并且团队始终至少保留一个所有者。请参阅[角色](/console/workspaces#roles)。
+你只能授予不高于自己级别的角色，并且工作区始终至少保留一位所有者。请参阅[角色](/console/workspaces#roles)。
 
 ## 移除成员
 
 1. 在成员所在行中点击 **⋯ › Remove...**。
 2. 点击 **Remove member** 确认。
 
-访问权限会立即撤销，之后你仍可以再次邀请对方。对方过去的用量会保留在团队的报告中。
+访问权限会立即撤销，之后你仍可以再次邀请对方。对方过去的用量会保留在工作区的报告中。
 
-移除成员也会撤销其在团队中创建的 API 密钥，包括服务账号密钥。服务账号本身会保留，其他人创建的密钥继续有效。请参阅[撤销](/console/api#revocation)。
+移除成员也会撤销其在工作区中创建的 API 密钥，包括服务账号密钥。服务账号本身会保留，其他人创建的密钥继续有效。请参阅[撤销](/console/api#revocation)。
 
 ## 成员详情
 

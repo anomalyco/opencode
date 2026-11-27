@@ -15,7 +15,7 @@ request  [ system prompt ][ older conversation ............ ][ recent 15k ][ sum
 after    [ system prompt ][ summary of older + recent ][ recent 15k ][ pending work ]
 ```
 
-发送完整对话，可以让摘要请求在提供商支持时复用普通请求的提示词缓存。之后的压缩会基于自该检查点以来的对话更新已有摘要。
+发送完整对话，可以让摘要请求在提供商支持时复用普通请求的提示词缓存。之后的压缩会依据该检查点之后的对话来更新已有摘要。
 
 ## 开启
 
@@ -41,7 +41,7 @@ after    [ system prompt ][ summary of older + recent ][ recent 15k ][ pending w
 opencode api post /api/session/ses_example/compact --data '{}'
 ```
 
-`api` 命令会自动发现后台服务并完成身份验证。它的响应只确认请求已被接受，不会等待摘要生成。订阅 `session.compaction.*` 事件即可得知压缩何时完成。完整的操作说明请参阅 [API 参考](/api)。
+`api` 命令会自动发现后台服务并完成认证。它的响应只确认请求已被接受，不会等待摘要生成。订阅 `session.compaction.*` 事件即可得知压缩何时完成。完整的操作说明请参阅 [API 参考](/api)。
 
 | 规则 | 行为 |
 | --- | --- |
@@ -124,7 +124,7 @@ threshold                         the held summary is swapped in; everything sin
 | --- | --- |
 | 费用 | 摘要请求会复用提示词缓存。从未用到的摘要（例如会话在达到阈值前结束）仍会消耗 token。 |
 | 等待 | 如果压缩到期时摘要仍在生成，会话会等待其完成。 |
-| 回退 | 如果自保留摘要以来的对话增长到超过阈值的约 40%，或者对话开头发生了变化，压缩会照常生成摘要。 |
+| 回退 | 如果保留摘要之后的对话增长到超过阈值的约 40%，或者对话开头发生了变化，压缩会照常生成摘要。 |
 | 跳过 | 原生压缩不使用此机制。切换模型后，或间隔超过提示词缓存生命周期后，会从下一次响应开始。 |
 | 存储 | 保留的摘要存放在内存中，重启后丢失。 |
 

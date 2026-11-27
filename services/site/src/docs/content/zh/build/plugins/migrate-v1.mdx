@@ -1,9 +1,9 @@
 ---
-title: 从 V1 迁移插件
+title: "从 V1 迁移插件"
 description: "把 V1 插件的工具和钩子移植到 V2 插件 API。"
 ---
 
-插件配置可以自动规范化，但插件的实现代码必须手动移植。V1 插件函数返回一个包含工具和钩子的对象。V2 插件则默认导出一个包含 `id` 和 `setup(ctx)` 的定义，并在 `setup` 中通过上下文注册钩子、转换、工具和订阅。
+插件配置可以自动规范化，但插件的实现代码必须移植。V1 插件函数返回一个包含工具和钩子的对象。V2 插件则默认导出一个包含 `id` 和 `setup(ctx)` 的定义，并在 `setup` 中通过上下文注册钩子、转换、工具和订阅。
 
 <Callout type="warning">
   V1 插件实现无法在 V2 中运行。仅移动文件或重命名配置项是不够的。
@@ -72,20 +72,20 @@ export default Plugin.define({
 
 V2 的上下文既是一个 OpenCode 客户端，也是插件 API。大多数操作按领域分组，而不是集中在单独的 `client` 属性上。
 
-| V1                                      | V2                                                                  |
-| --------------------------------------- | ------------------------------------------------------------------- |
-| `directory`                             | `ctx.location.directory`                                            |
-| `project`                               | `ctx.location.project`                                              |
-| `client`                                | 各领域方法，例如 `ctx.session`、`ctx.permission`、`ctx.agent` |
-| 插件选项参数                 | `ctx.options`                                                       |
-| 返回的 `dispose()` 钩子               | `setup` 返回的清理函数                                |
-| 返回的 `event` 钩子                   | `ctx.event.subscribe()`                                             |
-| 返回的配置、模型或工具修改 | 对应领域的 `transform(...)`                                           |
-| Bun shell 辅助函数 `$`                    | 自行导入并管理插件所用的进程 API                  |
+| V1                         | V2                                                            |
+| -------------------------- | ------------------------------------------------------------- |
+| `directory`                | `ctx.location.directory`                                      |
+| `project`                  | `ctx.location.project`                                        |
+| `client`                   | 各领域方法，例如 `ctx.session`、`ctx.permission`、`ctx.agent` |
+| 插件选项参数               | `ctx.options`                                                 |
+| 返回的 `dispose()` 钩子    | `setup` 返回的清理函数                                        |
+| 返回的 `event` 钩子        | `ctx.event.subscribe()`                                       |
+| 返回的配置、模型或工具修改 | 对应领域的 `transform(...)`                                   |
+| Bun shell 辅助函数 `$`     | 自行导入并管理插件所用的进程 API                              |
 
-`ctx.location` 描述的是当前插件实例加载时所在的位置，而不是插件可能观察到的每个会话或事件所在的位置。如果需要区分这一点，请读取会话或事件自身的数据。
+`ctx.location` 描述的是该插件实例加载所在的 Location，而不是插件可能观察到的每个会话或事件所在的 Location。如果需要区分这一点，请读取会话或事件自身的数据。
 
-上下文暴露的领域远不止表中所列，还包括 catalog、命令、集成、MCP 服务器、引用、技能、存储、VCS、worktree 和网页搜索等。参见[插件的完整上下文](/build/plugins/server#api)。
+上下文提供的领域远不止表中所列，还包括 catalog、命令、集成、MCP 服务器、引用、技能、存储、VCS、worktree 和网页搜索等。参见[插件的完整上下文](/build/plugins/server#api)。
 
 ## 在 `setup` 中注册钩子
 
@@ -130,25 +130,25 @@ export default Plugin.define({
 
 下表列出了每个 V1 钩子在 V2 中最接近的 API：
 
-| V1 钩子                       | V2 API                                                       |
+| V1 钩子                                | V2 API                                                       |
 | -------------------------------------- | ------------------------------------------------------------ |
 | `event`                                | `ctx.event.subscribe()`                                      |
-| `dispose`                              | `setup` 返回的清理函数                         |
-| `config`                               | 在受影响的领域上注册转换                           |
-| `tool` 映射                             | `ctx.tool.transform(...)`                                    |
-| `auth`                                 | `ctx.integration.transform(...)` 及集成相关 API        |
-| `provider`                             | `ctx.provider.transform(...)` 和 `ctx.model.transform(...)` |
+| `dispose`                              | `setup` 返回的清理函数                                       |
+| `config`                               | 在受影响的领域上注册转换                                     |
+| `tool` 映射                            | `ctx.tool.transform(...)`                                    |
+| `auth`                                 | `ctx.integration.transform(...)` 及集成相关 API              |
+| `provider`                             | `ctx.provider.transform(...)` 和 `ctx.model.transform(...)`  |
 | `chat.message`                         | `ctx.session.hook("prompt", ...)`                            |
 | `chat.params`                          | `ctx.session.hook("context", ...)`                           |
 | `chat.headers`                         | `ctx.session.hook("model.request", ...)` 或 `"http.request"` |
 | `permission.ask`                       | `ctx.permission.hook("evaluate", ...)`                       |
-| `command.execute.before`               | 命令转换或 prompt 钩子，视具体意图而定   |
+| `command.execute.before`               | 命令转换或 prompt 钩子，视具体意图而定                       |
 | `tool.execute.before`                  | `ctx.tool.hook("execute.before", ...)`                       |
 | `tool.execute.after`                   | `ctx.tool.hook("execute.after", ...)`                        |
 | `shell.env`                            | `ctx.shell.hook("create.before", ...)`                       |
 | `tool.definition`                      | `ctx.tool.transform(...)`                                    |
-| `experimental.chat.system.transform`   | `ctx.session.hook("context", ...)`，并修改 `event.system`   |
-| `experimental.chat.messages.transform` | `ctx.session.hook("context", ...)`，并修改 `event.messages` |
+| `experimental.chat.system.transform`   | `ctx.session.hook("context", ...)`，并修改 `event.system`    |
+| `experimental.chat.messages.transform` | `ctx.session.hook("context", ...)`，并修改 `event.messages`  |
 | `experimental.session.compacting`      | `ctx.session.hook("compaction", ...)`                        |
 
 这些是迁移的目标位置，并不总是简单的重命名。特别要注意，V2 的 `prompt` 钩子在提示词被持久化接收之前运行，而 `context` 钩子在 agent 发起模型请求之前立即运行。如果某个转换需要作用于所有类型的模型请求，请分别注册 `context`、`compaction`、`generate` 和 `title`。
@@ -246,7 +246,7 @@ export default Plugin.define({
 
 转换是可重放的状态编辑。请保持回调同步、轻量，并且不产生一次性的副作用。在注册之前加载外部数据，在回调中捕获它，并在数据变化时调用该领域的 `reload()` 方法。后注册的插件转换能看到之前的修改，并可以更新、替换或移除它们。
 
-同样的转换模式也取代了 V1 的 `config` 和 `provider` 钩子，但 V2 不再提供一个可修改的全局配置对象。请在负责该修改的领域上注册：`ctx.agent`、`ctx.provider`、`ctx.model`、`ctx.command`、`ctx.integration`、`ctx.mcp`、`ctx.reference`、`ctx.skill`、`ctx.tool`、`ctx.vcs`、`ctx.websearch` 或 `ctx.worktree`。身份验证方法属于集成；提供商转换负责提供来源定义和提供商设置，而模型转换则对所有已启用提供商的完整模型集合应用限制和覆盖。
+同样的转换模式也取代了 V1 的 `config` 和 `provider` 钩子，但 V2 不再提供一个可修改的全局配置对象。请在负责该修改的领域上注册：`ctx.agent`、`ctx.provider`、`ctx.model`、`ctx.command`、`ctx.integration`、`ctx.mcp`、`ctx.reference`、`ctx.skill`、`ctx.tool`、`ctx.vcs`、`ctx.websearch` 或 `ctx.worktree`。认证方式属于集成；提供商转换负责提供来源定义和提供商设置，而模型转换则对所有已启用提供商的完整模型集合应用限制和覆盖。
 
 ```ts
 await ctx.provider.transform((editor) => {

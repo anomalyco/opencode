@@ -13,7 +13,7 @@ export NO_PROXY=localhost,127.0.0.1,::1
 opencode
 ```
 
-`HTTP_PROXY` 用于 HTTP 目标地址，`HTTPS_PROXY` 用于 HTTPS 目标地址。两个变量中的代理 URL 本身都可以使用 `http://`。`NO_PROXY` 是以逗号分隔的主机和地址列表，这些地址将直接连接。
+`HTTP_PROXY` 用于 HTTP 目标地址，`HTTPS_PROXY` 用于 HTTPS 目标地址。两个变量中的代理 URL 本身都可以使用 `http://`。`NO_PROXY` 是以逗号分隔的主机和地址列表，这些地址会直接连接。
 
 ## 后台服务
 
@@ -34,15 +34,15 @@ opencode service start
 opencode service unset env HTTPS_PROXY
 ```
 
-## 身份验证
+## 认证
 
-如果代理支持在 URL 中携带凭据，请在每个需要身份验证的代理 URL 中包含用户名和密码。用户名或密码中的 `@`、`:`、`/` 等字符需要进行百分号编码。
+如果代理支持在 URL 中携带凭据，请在每个需要认证的代理 URL 中包含用户名和密码。用户名或密码中的 `@`、`:`、`/` 等字符需要做百分号编码。
 
 ```bash
 export HTTPS_PROXY='http://user:p%40ssword@proxy.example.com:8080'
 ```
 
-对于后台服务，请持久化完整的 URL。该值存储在私有服务配置中，并会由 `opencode service get env` 显示出来，因此请勿分享该命令的输出。
+对于后台服务，请持久化完整的 URL。该值保存在私有服务配置中，`opencode service get env` 会把它显示出来，因此不要分享该命令的输出。
 
 ```bash
 opencode service set env HTTPS_PROXY 'http://user:p%40ssword@proxy.example.com:8080'
@@ -50,7 +50,7 @@ opencode service set env HTTPS_PROXY 'http://user:p%40ssword@proxy.example.com:8
 
 ## 证书
 
-如果代理或目标地址使用由私有证书颁发机构签发的证书，请将 `NODE_EXTRA_CA_CERTS` 设置为一个 PEM 文件。进程启动时，这些额外的证书颁发机构会被添加到运行时的信任存储中。
+如果代理或目标地址使用由私有证书颁发机构签发的证书，请将 `NODE_EXTRA_CA_CERTS` 设置为一个 PEM 文件。进程启动时，OpenCode 会把这些额外的证书颁发机构加入运行时的信任存储。
 
 ```bash
 export NODE_EXTRA_CA_CERTS=/etc/company/ca.pem
@@ -75,7 +75,7 @@ CERT_NOT_YET_VALID
 CERT_SIGNATURE_FAILURE
 ```
 
-可以通过以下两种方式之一解决：
+可以用以下两种方式之一解决：
 
 - 在杀毒软件设置中将 `opencode.ai` 和 `*.opencode.ai` 排除在 HTTPS 扫描之外。如果你直接连接提供商，也请添加提供商的 API 主机，例如 `api.anthropic.com`。
 - 将检查用的证书颁发机构导出为 PEM 文件，并按[证书](#certificates)一节所示，通过 `NODE_EXTRA_CA_CERTS` 信任它。

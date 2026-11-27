@@ -3,10 +3,10 @@ title: "Claude Code"
 description: "在 Claude Code 中使用 Console 和 Go 模型。"
 ---
 
-Claude Code 使用 Anthropic Messages API。用两个环境变量将它指向 Console，即可使用任何付费或 Go 模型，包括 GPT、Gemini 和开源模型。对于不接受 Anthropic Messages 的模型，Console 会转换请求。
+Claude Code 使用 Anthropic Messages API。用两个环境变量将它指向 Console，即可使用任何付费或 Go 模型，包括 GPT、Gemini 和开源模型。对不接受 Anthropic Messages 的模型，Console 会转换请求。
 
 <Callout>
-  [Console CLI](/console/harnesses#console-cli) 可以用一条命令设置好 Claude Code，包括团队的策略、MCP 服务器、技能和指令。运行 `npx @opencode/console setup claude-code`。以下步骤介绍如何手动设置。
+  [Console CLI](/console/harnesses#console-cli) 可以用一条命令设置好 Claude Code，包括工作区的策略、MCP 服务器、技能和指令。运行 `npx @opencode/console setup claude-code`。以下步骤介绍如何手动设置。
 </Callout>
 
 ```bash
@@ -41,7 +41,7 @@ Claude Code 会在基础 URL 后追加 `/v1/messages`，因此不要写这个路
 
 ## Go
 
-使用 Go 的基础 URL，以及来自已订阅 [Go](/console/go) 的团队的密钥。
+使用 Go 的基础 URL，以及订阅了 [Go](/console/go) 的工作区所提供的密钥。
 
 ```json title="~/.claude/settings.json"
 {

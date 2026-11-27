@@ -3,10 +3,10 @@ title: "Codex"
 description: "在 Codex 中使用 Console 和 Go 模型。"
 ---
 
-Codex 使用 OpenAI Responses API。将它指向 Console，即可使用任何付费或 Go 模型，包括 Claude、Gemini 和开源模型。对于不接受 Responses 的模型，Console 会转换请求。
+Codex 使用 OpenAI Responses API。将它指向 Console，即可使用任何付费或 Go 模型，包括 Claude、Gemini 和开源模型。对不接受 Responses 的模型，Console 会转换请求。
 
 <Callout>
-  [Console CLI](/console/harnesses#console-cli) 可以用一条命令设置好 Codex，包括团队的策略、MCP 服务器、技能和指令。运行 `npx @opencode/console setup codex`。以下步骤介绍如何手动设置。
+  [Console CLI](/console/harnesses#console-cli) 可以用一条命令设置好 Codex，包括工作区的策略、MCP 服务器、技能和指令。运行 `npx @opencode/console setup codex`。以下步骤介绍如何手动设置。
 </Callout>
 
 ## 配置
@@ -37,7 +37,7 @@ codex
 
 ## Go
 
-使用 Go 的基础 URL，以及来自已订阅 [Go](/console/go) 的团队的密钥。
+使用 Go 的基础 URL，以及订阅了 [Go](/console/go) 的工作区所提供的密钥。
 
 ```toml title="~/.codex/config.toml"
 model = "kimi-k3"
@@ -60,9 +60,9 @@ codex --model claude-sonnet-5-5
 
 Codex 不知道其自有目录之外模型的上下文窗口或推理设置。它会为这些模型使用通用默认值并输出警告，你可以忽略。
 
-## 配置文件
+## Profile
 
-使用 profile 同时保留按量付费和 Go。在 `~/.codex/config.toml` 中定义两个提供商，然后添加一个切换到 Go 的 profile 文件。
+使用 profile 同时保留按量付费和 Go 两套配置。在 `~/.codex/config.toml` 中定义两个提供商，然后添加一个切换到 Go 的 profile 文件。
 
 ```toml title="~/.codex/go.config.toml"
 model = "kimi-k3"
@@ -81,7 +81,7 @@ codex --profile go
 codex mcp add opencode-console --url https://opencode.ai/console/mcp
 ```
 
-如果登录没有自动开始，请自行运行。
+如果登录没有自动开始，请手动运行以下命令。
 
 ```bash
 codex mcp login opencode-console

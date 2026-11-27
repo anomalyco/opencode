@@ -1,9 +1,9 @@
 ---
 title: "Console 提供商"
-description: "将你自己的模型提供商账号接入 OpenCode Console 团队，并选择成员可以使用哪些模型。"
+description: "将你自己的模型提供商账号接入 OpenCode Console 工作区，并选择成员可以使用哪些模型。"
 ---
 
-你可以接入已经付费的提供商账号，例如 Anthropic、OpenAI 或 AWS Bedrock，并与团队中的所有人共享它们的模型。Console 负责保存凭据，并通过自己的网关提供各个提供商的服务，因此成员可以直接使用模型，而永远看不到提供商的密钥。你自己的工具也可以通过 [Providers API](/console/api/providers) 使用同一个网关。
+你可以接入已在付费使用的提供商账号，例如 Anthropic、OpenAI 或 AWS Bedrock，并与工作区中的所有人共享它们的模型。Console 保存凭据，并通过自己的网关提供各个提供商的服务，因此成员可以直接使用模型，而永远看不到提供商的密钥。你自己的工具也可以通过 [Providers API](/console/api/providers) 使用同一个网关。
 
 所有者和管理员在 **Providers** 标签页中管理提供商。成员在 OpenCode 中运行 `/connect` 后，即可使用已启用的模型。
 
@@ -25,7 +25,7 @@ description: "将你自己的模型提供商账号接入 OpenCode Console 团队
 | AWS Bedrock           | 区域和 API 密钥                       |
 | Google Vertex AI      | 区域和服务账号 JSON                   |
 | Cloudflare AI Gateway | 账号 ID、Gateway ID 和 API 令牌       |
-| Databricks            | 团队 URL 和令牌                     |
+| Databricks            | 工作区 URL 和令牌                     |
 
 ### 自定义提供商
 
@@ -43,7 +43,7 @@ description: "将你自己的模型提供商账号接入 OpenCode Console 团队
 打开一个提供商即可查看它的模型。只有已启用的模型才对成员可用。
 
 - 使用 **Enabled** 开关启用或停用某个模型。
-- 打开 **New models**，可以自动启用提供商以后新增的模型。
+- 开启 **New models**，可以自动启用提供商以后新增的模型。
 
 ## 编辑模型
 
@@ -58,7 +58,7 @@ description: "将你自己的模型提供商账号接入 OpenCode Console 团队
 
 ### 自定义价格
 
-目录中的模型默认使用提供商的标价。如果你有协商价格，例如 OpenAI 合同中的折扣，可以在 **Cost Tiers** 中覆盖价格，让用量报告和[预算](/console/budgets)与你实际支付的金额一致。
+目录中的模型默认使用提供商的标价。如果你有协议价格，例如 OpenAI 合同中的折扣，可以在 **Cost Tiers** 中改写价格，让用量报告和[预算](/console/budgets)与实际支付的金额一致。
 
 | 字段             | 标价       | 你的价格   |
 | ---------------- | ---------- | ---------- |
@@ -72,31 +72,31 @@ description: "将你自己的模型提供商账号接入 OpenCode Console 团队
 
 ### 自定义模型
 
-点击 **Add Model** 可以添加目录中没有的模型，需要填写 **Display name** 和 **Model ID**。也可以在现有模型上使用 **⋯ › Duplicate...**，以它的设置为基础进行修改。
+点击 **Add Model** 可以添加目录中没有的模型，需要填写 **Display name** 和 **Model ID**。也可以在现有模型上使用 **⋯ › Duplicate...**，以它的设置为基础修改。
 
 ## OpenCode 模型
 
-**Models** 标签页用于管理 Console 提供的[模型](/console/models)，这些模型从团队额度中扣费。它的用法和提供商页面一样：
+**Models** 标签页用于管理 Console 提供的[模型](/console/models)，这些模型由工作区额度支付。它的用法和提供商页面一样：
 
 - 单独启用或停用某个模型。
-- 关闭 **Free models**，可以在团队中禁用免费模型。
-- 打开 **New models**，可以自动启用新的 Console 模型。
+- 关闭 **Free models**，可以在工作区中禁用免费模型。
+- 开启 **New models**，可以自动启用新的 Console 模型。
 
 如果只想使用你自己的提供商，可以通过 **⋯ › Disable** 停用整个提供商。
 
 ## 在 OpenCode 中使用
 
-成员运行 `/connect` 并选择团队。每个已启用的提供商都会显示为“团队名称 / 提供商名称”的形式，`/models` 会列出它已启用的模型。
+成员运行 `/connect` 并选择工作区。每个已启用的提供商都会显示为“工作区名称 / 提供商名称”，`/models` 会列出它已启用的模型。
 
 ```text
 Acme Inc. / Anthropic
 ```
 
-在 **Settings › General** 中打开 **Managed providers only**，可以让所有人的 OpenCode 都只能使用团队的提供商。
+在 **Settings › General** 中开启 **Managed providers only** 后，所有人的 OpenCode 都只能使用工作区的提供商。
 
 ## 发送身份
 
-如果提供商是你自己运行的网关，请在其页面上打开 **Send identity**。Console 随后会在发往该网关的每个模型请求中添加一个 `x-opencode-actor` 请求头。该请求头指明请求背后的成员或服务账号，因此你的网关可以按发送者记录日志或限制请求。
+如果提供商是你自己运行的网关，请在其页面上开启 **Send identity**。Console 随后会在发往该网关的每个模型请求中添加一个 `x-opencode-actor` 请求头。该请求头指明请求背后的成员或服务账号，因此你的网关可以按发送者记录日志或限制请求。
 
 ```text
 x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZCI6Ii4uLiJ9...
@@ -105,7 +105,7 @@ x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZC
 - 默认关闭，更改基础 URL 也会将其关闭。
 - 仍指向厂商自身 API 的提供商（例如 `https://api.openai.com/v1`）不会显示该设置，因为厂商会忽略这个请求头。
 - Console 会移除客户端发送的任何 `x-opencode-*` 请求头，因此你的网关收到的唯一 `x-opencode-actor` 就是 Console 签名的那一个。
-- **Test connection** 和模型列表只会携带凭据调用 `GET <base URL>/models`，因此不要在该路由上要求此请求头。
+- **Test connection** 和模型列表只带凭据调用 `GET <base URL>/models`，不会发送该请求头，因此不要在这条路由上强制要求该请求头。
 
 ### 令牌
 
@@ -122,10 +122,10 @@ x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZC
 | 声明                | 值                                                                  |
 | -------------------- | ---------------------------------------------------------------------- |
 | `sub`                | 成员为 `user_id`，否则为 `service_account_id`                 |
-| `workspace_id`       | 请求所在的团队                                       |
+| `workspace_id`       | 请求所在的工作区                                       |
 | `user_id`、`email`   | 发送请求的成员                             |
 | `service_account_id` | 发送请求的服务账号（包括 agent）  |
-| `session_id`         | 客户端发送的会话 ID，如果有                              |
+| `session_id`         | 客户端随请求发送的会话 ID（若提供）                              |
 | `request_id`         | 客户端在 `x-opencode-log-id` 响应头中收到的 ID |
 
 成员请求携带的 payload 如下：
@@ -147,7 +147,7 @@ x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZC
 
 ### 验证令牌
 
-Console 在 `https://opencode.ai/inference/.well-known/jwks.json` 公布公钥，并带有 `Cache-Control: public, max-age=300`。请检查签名、签发者、受众、类型和有效期，然后检查团队。以下示例使用 [jose](https://github.com/panva/jose)。
+Console 在 `https://opencode.ai/inference/.well-known/jwks.json` 公布公钥，并通过 `Cache-Control: public, max-age=300` 提供。请检查签名、签发者、受众、类型和有效期，再检查工作区。以下示例使用 [jose](https://github.com/panva/jose)。
 
 ```ts
 import { createRemoteJWKSet, jwtVerify } from "jose"
@@ -170,7 +170,7 @@ export async function sender(request: Request) {
 }
 ```
 
-将 `audience` 设为 Console 中保存的提供商基础 URL（去掉末尾斜杠），并将 `org_...` 替换为 Console URL 中的团队 ID。Console 会在使用新签名密钥签名之前先公布它，因此像 `createRemoteJWKSet` 这样按 `kid` 查找密钥的验证方可以在密钥轮换期间继续工作。
+将 `audience` 设为 Console 中保存的提供商基础 URL（去掉末尾斜杠），并将 `org_...` 替换为 Console URL 中的工作区 ID。Console 会在使用新签名密钥签名之前先公布它，因此像 `createRemoteJWKSet` 这样按 `kid` 查找密钥的验证方可以在密钥轮换期间继续工作。
 
 ## 停用或移除
 

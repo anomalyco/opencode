@@ -9,7 +9,7 @@ description: "让 OpenCode 使用 Exa、Firecrawl、Parallel、Tavily、TinyFish
 Find the latest Bun release and summarize the changes.
 ```
 
-首次搜索时，OpenCode 会请你允许网页搜索并选择一个提供商。之后的会话会沿用你的选择。
+首次搜索时，OpenCode 会请你允许网页搜索并选择一个提供商，并记住你的选择供之后的会话使用。
 
 ## 提供商
 
@@ -33,7 +33,7 @@ $ TAVILY_API_KEY=your-key opencode
 
 连接 [Claude Agent](/claude-agent) 后，它也会提供一个 ID 为 `claude-agent` 的搜索提供商。它运行 Claude Code 的 WebSearch，因此搜索会计入你的 Claude 套餐，无需搜索 API 密钥。所有模型都可以使用它，而不只是 Claude。
 
-Claude Agent 永远不会被自动选中。请在 `opencode.jsonc` 中选择它：
+OpenCode 不会自动选中 Claude Agent。请在 `opencode.jsonc` 中选择它：
 
 ```jsonc title="opencode.jsonc"
 {
@@ -44,7 +44,7 @@ Claude Agent 永远不会被自动选中。请在 `opencode.jsonc` 中选择它�
 }
 ```
 
-WebSearch 返回的页面内容是加密的，因此每次搜索都必须由一个 Claude 模型来运行。Haiku 负责运行，它会先给出结果的简短摘要，然后是链接。搜索使用 Claude Agent 提供商的连接设置，以及你的对话最近使用的账号。
+WebSearch 返回的页面内容是加密的，因此每次搜索都必须由 Claude 模型执行。Haiku 负责执行，先给出结果的简短摘要，然后是链接。搜索使用 Claude Agent 提供商的连接设置，以及你的对话最近使用的账号。
 
 ## 选择提供商
 
@@ -84,7 +84,7 @@ Exa returns HTTP 429
 
 ## 权限
 
-网页搜索使用 `websearch` 权限操作，并以搜索查询作为资源。对于未被明确允许的搜索，会先询问你。
+网页搜索使用 `websearch` 权限操作，并以搜索查询作为资源。未被明确允许的搜索会先询问你。
 
 ```jsonc title="opencode.jsonc"
 {

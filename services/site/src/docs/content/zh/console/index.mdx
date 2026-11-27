@@ -1,26 +1,26 @@
 ---
 title: "Console 简介"
-description: "OpenCode Console 是一项可选服务，提供团队、模型推理、预算、策略和托管网页搜索。"
+description: "OpenCode Console 是一项可选服务，提供团队工作区、模型推理、预算、策略和托管网页搜索。"
 ---
 
 [OpenCode Console](https://opencode.ai/console) 是一项可选服务，无论你独自使用 OpenCode 还是与团队协作，它都能带来更多便利。
 
-- [团队](/console/workspaces)：与成员共享访问权限
+- [工作区](/console/workspaces)：与你的[团队](/console/members)共享访问权限
 - [推理](/console/models)：同时提供专有模型和开源模型
 - [提供商](/console/providers)：通过 Console 网关接入你自己的提供商账号
 - 用量跟踪和[预算](/console/budgets)控制
-- 部署团队范围的策略，统一控制 OpenCode 的行为
+- 部署团队范围的策略，控制 OpenCode 的行为
 - [网页搜索](/console/websearch)
-- [Harness](/console/harnesses)：在 Claude Code、Codex 和其他 agent 中使用 Console 模型
-- [OpenCode Go、Go Plus 和 Go Teams](/console/go)：每月 10 美元、40 美元和每位成员 20 美元的订阅，用于访问开源模型
+- [Harnesses](/console/harnesses)：在 Claude Code、Codex 和其他 agent 中使用 Console 模型
+- [OpenCode Go、Go Plus 和 Go Teams](/console/go)：每月 $10、$40 和每位成员 $20 的订阅，用于访问开源模型
 
 ## 快速开始
 
-使用 Console 不需要组建团队。每个账号都自带一个 **Personal** 团队，其中只有你一个成员。
+使用 Console 不需要组建团队。每个账号都自带一个 **Personal** 工作区，其中只有你一个成员。
 
 1. 登录 [Console](https://opencode.ai/console)。
 2. 订阅 [Go](/console/go)、充值[额度](/console/billing#add-credits)，或接入一个[提供商](/console/providers)。
-3. 在 OpenCode 中运行 `/connect` 并选择该团队。
+3. 在 OpenCode 中运行 `/connect` 并选择该工作区。
 4. （可选）[邀请](/console/members#invite-members)你的团队成员。
 
 ```text
@@ -29,4 +29,4 @@ description: "OpenCode Console 是一项可选服务，提供团队、模型推�
 
 ## 策略
 
-Policies 页面中的 Providers 和 Tools 规则会作用于连接到该团队的所有 OpenCode 客户端。这些规则以[策略](/policies#console)语句的形式下发，优先级高于成员的用户和项目配置，并在大约一分钟内生效。托管偏好设置和系统配置文件仍优先于团队配置；请参阅[优先级](/policies#precedence)。
+Policies 页面中的 Providers 和 Tools 规则会作用于连接到该工作区的所有 OpenCode 客户端。这些规则以[策略](/policies#console)语句下发，优先级高于成员的用户和项目配置，并在大约一分钟内生效。托管偏好设置和系统配置文件仍优先于工作区配置；请参阅[优先级](/policies#precedence)。

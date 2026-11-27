@@ -34,7 +34,7 @@ export default Plugin.define({
 
 ### 上下文
 
-插件上下文本质上是一个 [OpenCode 服务器客户端](/build/client)。它的读取和操作方法使用与客户端相同的输入和响应。它还添加了仅用于插件的方法，用于转换、运行时钩子、重新加载、注册和插件选项。
+插件上下文本质上是一个 [OpenCode 服务器客户端](/build/client)。它的读取和操作方法使用与客户端相同的输入和响应。它还添加了插件专用的方法，涵盖转换、运行时钩子、重新加载、注册和插件选项。
 
 ```ts
 setup(ctx) {
@@ -42,7 +42,7 @@ setup(ctx) {
 }
 ```
 
-`ctx.location` 描述该插件实例加载所在的 Location。它包含 `directory`、可选的 `workspaceID`，以及 `project` 元数据（`id`、`directory` 和 `canonical`）。Promise 和 Effect 插件都可以使用它。这是插件实例的位置，而不是它能访问的每个会话或收到的每个事件的位置。
+`ctx.location` 描述该插件实例加载所在的 Location。它包含 `directory`、可选的 `workspaceID`，以及 `project` 元数据（`id`、`directory` 和 `canonical`）。Promise 和 Effect 插件都可以使用它。这是该插件实例所在的 Location，而不是它能访问的每个会话或收到的每个事件所在的 Location。
 
 ```ts
 setup(ctx) {
@@ -83,7 +83,7 @@ export default Plugin.define({
 
 ## 转换
 
-转换是对 OpenCode 领域状态的同步修改，每个转换都会基于其领域中较早的注册。诸如 `ctx.model.list()` 这样的注册表读取会反映到目前为止的每次注册，包括插件设置期间；启动批处理只会合并更新通知，绝不会延迟读取返回的内容。资源状态 API 仍然报告正在运行的资源状态：注册了定义并不意味着其连接或其他资源工作已经完成。
+转换是对 OpenCode 领域状态的同步修改，每个转换都会基于其领域中较早的注册。诸如 `ctx.model.list()` 这样的注册表读取会反映到目前为止的每次注册，包括在插件 `setup` 期间；启动批处理只会合并更新通知，绝不会延迟读取返回的内容。资源状态 API 仍然报告正在运行的资源状态：注册了定义并不意味着其连接或其他资源工作已经完成。
 
 来源通过 `ctx.provider.transform` 贡献提供商和不可变的模型定义。
 
@@ -115,7 +115,7 @@ export default Plugin.define({
 
 任何注册、移除或 `reload()` 都会将注册表标记为已更改；下一次读取会按注册顺序把所有活动的转换重新应用到一个新值上，从而重建注册表。请让转换保持轻量且可重复。你已经读取的值不会被后续重建修改。
 
-在提供商转换和可用性解析完成后，OpenCode 会实例化活动提供商的模型，并按顺序重新应用每个模型转换。模型策略可以检查整个候选集合，包括刚刷新的来源。
+在提供商转换和可用性解析完成后，OpenCode 会生成活动提供商的模型，并按顺序重新应用每个模型转换。模型策略可以检查整个候选集合，包括刚刷新的来源。
 
 ```ts title="plugins/model-budget/index.ts"
 import { Plugin } from "@opencode/plugin"
@@ -228,7 +228,7 @@ const providers = await ctx.provider.list()
 const provider = await ctx.provider.get({ providerID: "anthropic" })
 ```
 
-提供商转换可以编辑提供商设置和来源定义。编辑器读取包括非活动提供商，并暴露不可变的定义；`models.update` 会编辑来源模型的归属副本。
+提供商转换可以编辑提供商设置和来源定义。编辑器读取包括非活动提供商，并提供不可变的定义；`models.update` 会编辑来源模型的自有副本。
 
 ```ts
 await ctx.provider.transform((editor) => {
@@ -255,7 +255,7 @@ source.models = await loadModels()
 await ctx.provider.reload()
 ```
 
-对于与账号相关的发现，请将加载清单时使用的连接作为 `sourceConnection` 传入。当选择了其他连接时，OpenCode 会排除该提供商，直到你的插件发布刷新后的清单。
+如需按账号进行发现，请将加载清单时使用的连接作为 `sourceConnection` 传入。当选择了其他连接时，OpenCode 会排除该提供商，直到你的插件发布刷新后的清单。
 
 ```ts
 const connection = await ctx.integration.connection.active("acme")
@@ -268,7 +268,7 @@ await ctx.provider.transform((editor) => {
 
 #### 参考
 
-Schemas：[`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info)
+Schemas：[`Provider.Info`](/api#schema-Provider.Info)、[`Model.Info`](/api#schema-Model.Info)
 
 ```ts
 interface ProviderDomain extends ProviderApi {
@@ -319,7 +319,7 @@ await ctx.model.transform((editor) => {
 })
 ```
 
-回调编辑原始模型覆盖值。OpenCode 在提交结果时会合并一次提供商默认值；未变化的读取会复用该结果。`editor.provider` 暴露不可变的来源定义（包括非活动模板），而不是模型转换的输出。
+回调编辑原始模型覆盖值。OpenCode 在提交结果时会合并一次提供商默认值；未变化的读取会复用该结果。`editor.provider` 提供不可变的来源定义（包括非活动模板），而不是模型转换的输出。
 
 ```ts
 await ctx.model.transform((editor) => {
@@ -392,9 +392,9 @@ await ctx.command.transform((editor) => {
 await ctx.command.reload()
 ```
 
-#### Reference
+#### 参考
 
-Schemas：[`Command.Info`](/api#schema-Command.Info),
+Schemas：[`Command.Info`](/api#schema-Command.Info)、
 [`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery)
 
 ```ts
@@ -458,7 +458,7 @@ const status = await ctx.integration.command.status({ integrationID: "acme", att
 await ctx.integration.command.cancel({ integrationID: "acme", attemptID: attempt.data.attemptID })
 ```
 
-注册一个转换来检查集成并管理其身份验证方式。
+注册一个转换来检查集成并管理其认证方式。
 
 ```ts
 await ctx.integration.transform((editor) => {
@@ -486,10 +486,10 @@ await ctx.integration.transform((editor) => {
 await ctx.integration.reload()
 ```
 
-#### Reference
+#### 参考
 
-Schemas：[`Integration.Info`](/api#schema-Integration.Info), [`Integration.Method`](/api#schema-Integration.Method),
-[`Connection.Info`](/api#schema-Connection.Info), [`Form.Answer`](/api#schema-Form.Answer)
+Schemas：[`Integration.Info`](/api#schema-Integration.Info)、[`Integration.Method`](/api#schema-Integration.Method)、
+[`Connection.Info`](/api#schema-Connection.Info)、[`Form.Answer`](/api#schema-Form.Answer)
 
 ```ts
 interface IntegrationContext {
@@ -547,7 +547,7 @@ interface IntegrationEditor {
 await ctx.credential.activate({ credentialID })
 ```
 
-#### Reference
+#### 参考
 
 ```ts
 interface CredentialContext {
@@ -585,9 +585,9 @@ await ctx.mcp.transform((editor) => {
 await ctx.mcp.reload()
 ```
 
-#### Reference
+#### 参考
 
-Schemas：[`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded),
+Schemas：[`Mcp.Server`](/api#schema-Mcp.Server)、[`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded)、
 [`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded)
 
 ```ts
@@ -614,9 +614,9 @@ interface MCPEditor {
 const plugins = await ctx.plugin.list()
 ```
 
-#### Reference
+#### 参考
 
-Schemas：[`Plugin.Info`](/api#schema-Plugin.Info), [`Plugin.Source`](/api#schema-Plugin.Source)
+Schemas：[`Plugin.Info`](/api#schema-Plugin.Info)、[`Plugin.Source`](/api#schema-Plugin.Source)
 
 ```ts
 interface PluginContext {
@@ -650,9 +650,9 @@ await ctx.reference.transform((editor) => {
 await ctx.reference.reload()
 ```
 
-#### Reference
+#### 参考
 
-Schemas：[`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource`](/api#schema-Reference.LocalSource),
+Schemas：[`Reference.Info`](/api#schema-Reference.Info)、[`Reference.LocalSource`](/api#schema-Reference.LocalSource)、
 [`Reference.GitSource`](/api#schema-Reference.GitSource)
 
 ```ts
@@ -695,7 +695,7 @@ const { answers } = await ctx.experimental.generate.decisions({
 
 ### 权限
 
-在执行操作前请求权限。`assert` 会评估会话的[权限规则](/permissions)（包括已保存的批准），并在规则结果为 `ask` 时询问用户。操作被允许后它才会完成。
+在执行操作前请求权限。`assert` 会评估会话的[权限规则](/permissions)（包括已保存的批准），并在规则结果为 `ask` 时询问用户。只有操作被允许后它才会返回。
 
 ```ts
 execute: async (input, context) => {
@@ -713,10 +713,10 @@ execute: async (input, context) => {
 
 - `action` 和 `resources` 会与规则匹配。任何 `deny` 都会阻止操作；否则任何 `ask` 都会询问。
 - `save` 列出用户选择始终允许时保存的模式。
-- `agent` 选择应用谁的规则，默认为会话的 agent。`source` 将提示附加到工具调用。
+- `agent` 选择应用谁的规则，默认为会话的 agent。`source` 会把权限提示关联到某次工具调用。
 - `metadata` 向权限提示和 `evaluate` 钩子传递额外细节。
 
-拒绝规则或带反馈的拒绝会以携带原因的 `Tool.Error` 拒绝，让模型看到原因并继续。普通拒绝会结束当前步骤。请让这些错误向上传播，而不是将其作为工具输出返回。
+命中 deny 规则，或带反馈地拒绝时，调用会以携带原因的 `Tool.Error` 拒绝，让模型看到原因并继续。普通拒绝会结束当前步骤。请让这些错误向上传播，而不是将其作为工具输出返回。
 
 检查或处理待处理的权限请求。
 
@@ -790,7 +790,7 @@ await ctx.session.remove({ sessionID })
 const compaction = await ctx.session.compact({ sessionID })
 ```
 
-使用 `instructions.entry` 附加、列出或移除带键的会话指令条目。条目会在会话指令中渲染为 `<context key="...">` 块，更新或移除会在下一个步骤边界通知，而不排队一个消息轮次。
+使用 `instructions.entry` 附加、列出或移除带键的会话指令条目。条目会在会话指令中渲染为 `<context key="...">` 块，更新或移除会在下一个步骤边界公布，不需要排入消息轮次。
 
 ```ts
 await ctx.session.instructions.entry.put({ sessionID, key: "deploy-target", value: "production" })
@@ -798,10 +798,10 @@ const entries = await ctx.session.instructions.entry.list({ sessionID })
 await ctx.session.instructions.entry.remove({ sessionID, key: "deploy-target" })
 ```
 
-#### Reference
+#### 参考
 
-Schemas：[`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
-[`Session.Inbox.User`](/api#schema-Session.Inbox.User), [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic),
+Schemas：[`Session.Info`](/api#schema-Session.Info)、[`Model.Ref`](/api#schema-Model.Ref)、
+[`Session.Inbox.User`](/api#schema-Session.Inbox.User)、[`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic)、
 [`InstructionEntry.Info`](/api#schema-InstructionEntry.Info)
 
 ```ts
@@ -870,7 +870,7 @@ await ctx.skill.transform((editor) => {
 await ctx.skill.reload()
 ```
 
-#### Reference
+#### 参考
 
 Schema：[`Skill.Info`](/api#schema-Skill.Info)
 
@@ -907,7 +907,7 @@ const page = await ctx.storage.scan({ prefix: "cache/", limit: 100 })
 const next = page.next
 ```
 
-#### Reference
+#### 参考
 
 ```ts
 interface StorageContext {
@@ -931,7 +931,7 @@ interface StorageScanResult {
 
 ### 工具
 
-在转换回调之外，读取所有转换之后当前已注册的工具。每个工具都有一个包含其有效名称的 `id`。
+读取所有转换完成之后当前已注册的工具，且必须在转换回调之外调用。每个工具都有一个包含其有效名称的 `id`。
 
 ```ts
 const tools = await ctx.tool.list()
@@ -988,11 +988,11 @@ editor.add({
 })
 ```
 
-如果所选模型的 API 在 models.dev 中列出 `regex`，模型可以直接写出 `OPS-42`。否则 Core **只会**省略 `freeform`：模型仍拥有 `ticket` 工具，并以 `{"id":"OPS-42"}` 调用它。格式列表缺失或为空表示不支持自由格式。无论哪种情况，执行器都会收到 `{ id }`。
+如果所选模型的 API 在 models.dev 中列出 `regex`，模型可以直接写出 `OPS-42`。否则 Core **只**省略 `freeform`：模型仍拥有 `ticket` 工具，并以 `{"id":"OPS-42"}` 调用它。格式列表缺失或为空表示不支持自由格式。无论哪种情况，执行器都会收到 `{ id }`。
 
 在 Code Mode（`codemode: true`）中，自由格式工具直接接收字符串，例如 `await tools.ticket("OPS-42")`。`await tools.ticket({ id: "OPS-42" })` 也可以。
 
-更改回调捕获的来源数据后，请调用 `reload()`。重新加载会按原顺序重新应用活动转换，不会重新运行插件设置。
+更改回调捕获的来源数据后，请调用 `reload()`。重新加载会按原顺序重新应用活动转换，不会重新运行插件的 `setup`。
 
 ```ts
 await ctx.tool.reload()
@@ -1019,9 +1019,9 @@ await registration.dispose()
 
 每个模型请求都会捕获一个稳定、可执行的工具快照。之后的转换、重新加载和销毁会影响未来的快照，而不会影响已经捕获的定义、Code Mode 命名空间描述或执行器。闭包引用可变插件数据的执行器仍会观察到该数据；如果某个值必须与该定义绑定，请在转换内部捕获它。
 
-#### Reference
+#### 参考
 
-Schemas：[`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
+Schemas：[`Tool.Content`](/api#schema-Tool.Content)、[`Tool.TextContent`](/api#schema-Tool.TextContent)、
 [`Tool.FileContent`](/api#schema-Tool.FileContent)
 
 ```ts
@@ -1072,9 +1072,9 @@ await ctx.vcs.transform((editor) => {
 
 提供商可以选择实现 `init(scope, { signal })`，在 `scope.worktree` 中创建仓库。初始化按 ID 选择提供商（默认为 Git），而不是按检测到的仓库类型。即使 Location 还没有仓库，也可以注册带 `init` 的提供商；OpenCode 会在调用前检查目录存在且没有仓库，然后重新发现项目。新的仓库格式仍需要此回调之外的发现支持。
 
-#### Reference
+#### 参考
 
-Schemas：[`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
+Schemas：[`Vcs.Info`](/api#schema-Vcs.Info)、[`Vcs.FileStatus`](/api#schema-Vcs.FileStatus)、
 [`FileDiff.Info`](/api#schema-FileDiff.Info)
 
 ```ts
@@ -1133,7 +1133,7 @@ export default Plugin.define({
 
 - 添加策略会自动选中它。最后注册的活动策略生效；无需策略选择配置。
 - 销毁其注册或卸载插件会恢复之前的实现，最终回退到内置的 Git 策略。
-- `reload()` 会在捕获的输入变化后重新应用转换，不会重新运行插件设置。
+- `reload()` 会在捕获的输入变化后重新应用转换，不会重新运行插件的 `setup`。
 - 创建失败不会改用 Git 重试。即使默认值变化，现有 worktree 也会保留其记录的归属。
 - 策略管理本地目录。远程工作区预配不属于此接口。
 
@@ -1151,7 +1151,7 @@ await ctx.worktree.remove({ projectID, directory: created.directory, force: fals
 
 创建操作会从项目保存的 `canonical` 目录加载配置和插件，并使用它们选定的策略。它接受可选的父级 `directory`、来源 `from`、起始 `branch` 和 `name`。来源默认为规范检出目录，`from` 覆盖必须属于该项目。选择来源不会更改配置根目录。提供的起始 ref 必须得到所选策略的支持；例如 Rift 的原生快照操作没有 ref 选择选项。
 
-创建和刷新会等待规范检出目录的插件激活。在该检出目录的插件设置期间发起的调用只能看到目前为止的注册，不会等待自身的激活。
+创建和刷新会等待规范检出目录的插件激活。在该检出目录的插件 `setup` 期间发起的调用只能看到目前为止的注册，不会等待自身的激活。
 
 移除操作会加载规范配置并激活其插件，然后使用 worktree 记录的策略，而不是当前选定的默认策略。记录的归属不可用会产生错误。worktree 的目标位置可以在别处：
 
@@ -1171,7 +1171,7 @@ await ctx.worktree.remove({
 await ctx.worktree.refresh({ projectID })
 ```
 
-#### Reference
+#### 参考
 
 实现会在命名和冲突处理后收到建议的目标位置。请从 `create` 返回实际目录；当后端要求自己的布局时，它可能不同。OpenCode 会解析返回的路径，并将其用于清单、启动命令和 API 结果。返回的目录必须存在。
 
@@ -1236,9 +1236,9 @@ await ctx.websearch.transform((editor) => editor.default.set(false))
 await ctx.websearch.reload()
 ```
 
-#### Reference
+#### 参考
 
-Schemas：[`WebSearch.Provider`](/api#schema-WebSearch.Provider), [`WebSearch.Result`](/api#schema-WebSearch.Result)
+Schemas：[`WebSearch.Provider`](/api#schema-WebSearch.Provider)、[`WebSearch.Result`](/api#schema-WebSearch.Result)
 
 ```ts
 interface WebSearchContext {
@@ -1271,7 +1271,7 @@ void (async () => {
 return () => controller.abort()
 ```
 
-#### Reference
+#### 参考
 
 Schema：[`V2EventEncoded`](/api#schema-V2EventEncoded)
 
@@ -1323,7 +1323,7 @@ await ctx.session.hook("prompt", (event) => {
 })
 ```
 
-该钩子会收到一个归属的可变草稿：
+该钩子会收到一份归它所有的可变草稿：
 
 - `prompt` 包含 `text`、`files`、`agents` 中的 agent 提及，以及选定的 `skills`。
 - `metadata` 包含应用定义的接收元数据。
@@ -1340,9 +1340,9 @@ await ctx.session.hook("prompt", (event) => {
 - 钩子在接收期间运行一次，而不是在每次模型调用前运行。
 - 无法按提供商限定作用域，因为模型解析发生在接收之后。
 
-修改会成为规范持久化的用户输入。如果准备工作失败或被中断，OpenCode 不会接收该提示词。
+修改后的内容会成为最终持久化的用户输入。如果准备工作失败或被中断，OpenCode 不会接收该提示词。
 
-请让提示词钩子可安全重试。它们不是恰好一次的副作用边界：
+请让提示词钩子可安全重试。它们不是精确一次的副作用边界：
 
 - 重试已待处理或已投递的 ID 会返回原始接收结果，不会重新运行钩子。
 - 并发提交可能多次运行钩子，但只有首次成功接收生效。
@@ -1456,7 +1456,7 @@ await ctx.session.hook("http.response", (event) => {
 
 #### 原生 WebSocket（实验性）
 
-通过 WebSocket 流式传输的提供商会为每个会话打开一个连接，并在请求之间复用它，因此 `http.request` 和 `http.response` 看不到该流量。`experimental.ws.handshake` 钩子会在每次模型调用时、选择连接之前运行一次。它携带与 HTTP 钩子相同的 `sessionID`、`agent`、`model` 和 `kind`，以及连接的 `url` 和 `headers`。更改 `url` 或 `headers` 会改变请求使用的 socket，因此轮换 bearer token 会重新打开连接。
+通过 WebSocket 流式传输的提供商会为每个会话打开一个连接，并在请求之间复用它，因此 `http.request` 和 `http.response` 看不到该流量。`experimental.ws.handshake` 钩子会在每次模型调用时、选择连接之前运行一次。它携带与 HTTP 钩子相同的 `sessionID`、`agent`、`model` 和 `kind`，以及连接的 `url` 和 `headers`。更改 `url` 或 `headers` 会改变请求使用的 socket，因此轮换 bearer 令牌会重新打开连接。
 
 HTTP 钩子仍会为每个 HTTP 请求运行，包括 WebSocket 路由回退到的请求。
 
@@ -1471,7 +1471,7 @@ await ctx.session.hook(
 )
 ```
 
-`experimental.ws.send` 和 `experimental.ws.receive` 暴露帧本身，相当于 WebSocket 版本的 HTTP 请求或响应体编辑。`send` 在提供商驱动构建出站帧之后、写入之前运行；`receive` 在每个入站帧被驱动观察到之前运行。两者都以字符串携带帧，并在钩子返回时发送 `frame` 中的内容。
+`experimental.ws.send` 和 `experimental.ws.receive` 会直接提供帧本身，相当于 WebSocket 版本的 HTTP 请求或响应体编辑。`send` 在提供商驱动构建出站帧之后、写入之前运行；`receive` 在每个入站帧被驱动观察到之前运行。两者都以字符串携带帧，并在钩子返回时发送 `frame` 中的内容。
 
 OpenCode 不会校验重写后的帧。驱动会根据提供商的回复跟踪状态，因此更改协议含义的重写由插件负责，重写 HTTP 请求体时也是如此。
 
@@ -1495,7 +1495,7 @@ await ctx.session.hook("experimental.ws.receive", (event) => {
 
 #### 重试策略
 
-覆盖提供商失败的重试决定，或以毫秒为单位替换其延迟。钩子在 OpenCode 对失败分类并提出策略之后、安排任何重试之前运行。它不会暴露 OpenCode 内部如何执行下一次尝试。
+覆盖提供商失败的重试决定，或以毫秒为单位替换其延迟。钩子在 OpenCode 对失败分类并提出策略之后、安排任何重试之前运行。它不会透露 OpenCode 内部如何执行下一次尝试。
 
 ```ts
 await ctx.session.hook("retry", (event) => {
@@ -1650,7 +1650,7 @@ await ctx.permission.hook("evaluate", async (event) => {
 - 钩子可以将 `effect` 改为 `allow`、`ask` 或 `deny`。
 - `message` 会出现在升级的权限请求中，或成为拒绝原因。
 
-#### Reference
+#### 参考
 
 ```ts
 interface PermissionEvaluation {
@@ -1676,7 +1676,7 @@ await ctx.shell.hook("create.before", (event) => {
 })
 ```
 
-#### Reference
+#### 参考
 
 ```ts
 interface ShellHookContext {
@@ -1711,7 +1711,7 @@ await ctx.tool.hook("execute.after", (event) => {
 })
 ```
 
-#### Reference
+#### 参考
 
 ```ts
 interface ToolHooks {

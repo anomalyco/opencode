@@ -1,9 +1,9 @@
 ---
 title: "目录同步"
-description: "从 Okta、Microsoft Entra ID 或任何 SCIM 2.0 身份提供商自动添加和移除团队成员。"
+description: "从 Okta、Microsoft Entra ID 或任何 SCIM 2.0 身份提供商自动添加和移除工作区成员。"
 ---
 
-目录同步（SCIM 2.0）会在你于身份提供商中分配用户时将其添加到团队，并在取消分配时撤销其访问权限。角色仍在 Console 中管理。
+目录同步（SCIM 2.0）会在你于身份提供商中分配用户时将其添加到工作区，并在取消分配时撤销其访问权限。角色仍在 Console 中管理。
 
 ```text
 https://opencode.ai/console/scim/v2
@@ -11,15 +11,15 @@ https://opencode.ai/console/scim/v2
 
 ## 开始之前
 
-- 为团队设置 [SSO](/console/sso)。
+- 为工作区设置 [SSO](/console/sso)。
 - [验证](/console/sso#verify-email-domains)成员登录时使用的所有邮箱域名。目录同步只会添加已验证域名下的用户；其他人请通过 [Members](/console/members) 邀请。
 
 ## 创建令牌
 
-只有团队所有者才能设置目录同步，或创建和撤销其令牌。
+只有工作区所有者才能设置目录同步，或创建和撤销其令牌。
 
 1. 打开 **Settings › Security**，在 **Directory sync** 下点击 **Set up**。
-2. 复制 **SCIM base URL** 和令牌。令牌只会显示一次，请将其保存在密钥管理工具中。
+2. 复制 **SCIM base URL** 和令牌。令牌只会显示一次，请将其保存在密钥管理服务中。
 
 身份提供商会在每个请求中发送该令牌。
 
@@ -32,20 +32,20 @@ Authorization: Bearer <token>
 ### Okta
 
 1. 添加 **SCIM 2.0 Test App (Header Auth)** 应用。
-2. 设置 base URL，并在 **API Token** 中输入 `Bearer ` 加上令牌。
+2. 设置基础 URL，并在 **API Token** 中输入 `Bearer ` 加上令牌。
 3. 启用 **Create Users**、**Update User Attributes** 和 **Deactivate Users**。保持 **Import Groups** 和密码同步处于关闭状态。
 
 ### Microsoft Entra ID
 
 1. 在你的企业应用中打开 **Provisioning**，将模式设为 **Automatic**。
-2. 将 base URL 填入 **Tenant URL**，将令牌填入 **Secret Token**。
+2. 将基础 URL 填入 **Tenant URL**，将令牌填入 **Secret Token**。
 3. 分配用户和组，然后开始预配。
 
 ### 其他提供商
 
-使用支持请求头令牌认证的 SCIM 2.0 应用，并将其指向 base URL。Console 支持 `/Users` 和 `/Groups` 端点。
+使用支持请求头令牌认证的 SCIM 2.0 应用，并将其指向基础 URL。Console 支持 `/Users` 和 `/Groups` 端点。
 
-建议先分配一名测试用户。收到第一个请求后，**Directory sync** 会显示 **Connected to your identity provider**。
+请先分配一名测试用户。收到第一个请求后，**Directory sync** 会显示 **Connected to your identity provider**。
 
 ## 同步内容
 
@@ -53,13 +53,13 @@ Authorization: Bearer <token>
 | ------------------- | ----------------------------------------------------------------- |
 | 分配用户            | 以 **Member** 身份添加。已有成员保留原有角色。                    |
 | 更新姓名            | 更新个人资料。                                                    |
-| 取消分配或停用      | 暂停访问权限，并显示为 **Deactivated**。其创建的 API 密钥会被撤销。 |
+| 取消分配或停用      | 访问权限被暂停，并显示为 **Deactivated**。其创建的 API 密钥会被撤销。 |
 | 重新分配            | 恢复访问权限。已撤销的密钥仍保持撤销状态。                        |
-| 删除                | 从团队中移除。其账号和其他团队不受影响。                      |
+| 删除                | 从工作区中移除。其账号和其他工作区不受影响。                      |
 
 - 目录同步不会更改角色和电子邮件地址。
-- 最后一个所有者无法被停用或删除。
-- 订阅了 [Go](/console/go) 的团队无法通过目录同步添加成员。
+- 最后一个所有者无法停用或删除。
+- 订阅了 [Go](/console/go) 的工作区无法通过目录同步添加成员。
 
 ## 组
 
@@ -73,7 +73,7 @@ Platform Admins  →  platform-admins
 
 ## 轮换令牌
 
-1. 点击 **New token**，并在身份提供商中配置新令牌。
+1. 点击 **New token**，并在身份提供商中安装新令牌。
 2. 等待新令牌显示最近使用时间。
 3. 撤销旧令牌。
 
@@ -81,4 +81,4 @@ Platform Admins  →  platform-admins
 
 ## SSO 与目录同步
 
-团队一旦签发过令牌，SSO 就不再[自动添加成员](/console/sso#automatic-membership)。即使之后撤销了令牌，成员资格仍由目录决定。
+工作区一旦签发过令牌，SSO 就不再[自动添加成员](/console/sso#automatic-membership)。即使之后撤销了令牌，成员资格仍由目录决定。

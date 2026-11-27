@@ -29,9 +29,9 @@ description: "在 opencode.json 中添加 npm 包或本地插件目录，并按 
 }
 ```
 
-相对路径相对于包含该条目的配置文件进行解析。
+相对路径以包含该条目的配置文件为基准解析。
 
-配置的本地路径必须指向目录，指向单个文件的路径会被跳过。OpenCode 如何在目录中查找各部分，请参阅[加载](/build/plugins#load)。
+配置的本地路径必须指向目录，指向单个文件的路径会被跳过。关于 OpenCode 如何在目录中查找插件的各个部分，请参阅[加载](/build/plugins#load)。
 
 各个适用配置文件中的插件数组会按优先级从低到高依次应用，而不是相互替换。
 
@@ -59,7 +59,7 @@ OpenCode 还会从每个被发现的 `.opencode/plugins/` 目录中加载直接�
 ~/.config/opencode/plugins/
 ```
 
-与项目根目录的 `opencode.json(c)` 同级的 `plugins/` 目录不会被自动发现；请显式配置其中的插件目录，或将它移到 `.opencode/` 下。
+与项目根目录的 `opencode.json(c)` 同级的 `plugins/` 目录不会被自动发现；请显式配置这些插件目录，或将它移到 `.opencode/` 下。
 
 ```jsonc title="opencode.jsonc"
 {
@@ -77,7 +77,7 @@ OpenCode 还会从每个被发现的 `.opencode/plugins/` 目录中加载直接�
 }
 ```
 
-如需关闭添加到新分叉中的提示，请将 `"-opencode.fork-notice"` 加入 `plugins`。
+如需关闭新建分叉时添加的提示，请将 `"-opencode.fork-notice"` 加入 `plugins`。
 
 有两个内置插件会忽略移除操作，以防仓库关闭[策略](/policies)的强制执行：`opencode.config.policy`，以及负责下发组织策略的 Console 连接 `opencode.provider.opencode`。
 
@@ -114,7 +114,7 @@ opencode plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
 
 ## 重新加载
 
-受监听的配置目录中发生变更时会自动重新加载。服务器启动时会立即加载已缓存的插件包，在后台安装缺失的包，并检查未锁定版本的 npm 和 Git 插件是否有更新。确切的 npm 版本和完整的 Git 提交哈希会保持锁定。未受监听的本地依赖发生变更时，可能仍需重启 OpenCode。
+被监视的配置目录中发生变更时会自动重新加载。服务器启动时会立即加载已缓存的插件包，在后台安装缺失的包，并检查未锁定版本的 npm 和 Git 插件是否有更新。确切的 npm 版本和完整的 Git 提交哈希会保持锁定。未被监视的本地依赖发生变更时，可能仍需重启 OpenCode。
 
 ```sh
 touch .opencode/plugins/concise/index.ts

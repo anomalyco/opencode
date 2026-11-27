@@ -6,7 +6,7 @@ description: "在 Pi 编程 agent 中使用 Console 和 Go 模型。"
 [Pi](https://pi.dev) 内置了按量付费和 Go 的 OpenCode 提供商。它会为每个付费或 Go 模型选择正确的 API。免费层级对话模型只能在 OpenCode 中使用，从 Pi 调用会返回 HTTP `403`。
 
 <Callout>
-  [Console CLI](/console/harnesses#console-cli) 可以用一条命令设置好 Pi，包括团队的策略、MCP 服务器、技能和指令。运行 `npx @opencode/console setup pi`。以下步骤介绍如何手动设置。
+  [Console CLI](/console/harnesses#console-cli) 可以用一条命令设置好 Pi，包括工作区的策略、MCP 服务器、技能和指令。运行 `npx @opencode/console setup pi`。以下步骤介绍如何手动设置。
 </Callout>
 
 | 提供商      | 套餐          |
@@ -31,7 +31,7 @@ pi --model opencode/claude-sonnet-5-5
 
 ## Go
 
-使用 `opencode-go` 提供商，以及来自已订阅 [Go](/console/go) 的团队的密钥。
+使用 `opencode-go` 提供商，以及订阅了 [Go](/console/go) 的工作区所提供的密钥。
 
 ```bash
 pi --model opencode-go/kimi-k3

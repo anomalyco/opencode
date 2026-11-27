@@ -93,7 +93,7 @@ effect: (ctx) =>
 
 ### 上下文
 
-上下文提供连接到当前 OpenCode 服务器的 Effect 客户端，以及插件专用的转换、钩子、存储、重新加载和选项。它不会暴露 OpenCode 私有的 Core 服务。
+上下文提供连接到当前 OpenCode 服务器的 Effect 客户端，以及插件专用的转换、钩子、存储、重新加载和选项。它不会公开 OpenCode 私有的 Core 服务。
 
 ```ts
 effect: (ctx) =>
@@ -248,7 +248,7 @@ effect: (ctx) =>
 
 ### Agent
 
-读取所有 agent，或按 ID 获取单个 agent。客户端响应包含解析后的位置和 schema 数据。
+读取所有 agent，或按 ID 获取单个 agent。客户端响应包含解析后的 Location 和 schema 数据。
 
 ```ts
 effect: (ctx) =>
@@ -338,7 +338,7 @@ effect: (ctx) =>
   }),
 ```
 
-如果模型清单与账号相关，请把加载清单时使用的连接作为 `sourceConnection` 传入。当用户选中其他连接时，OpenCode 会排除该提供商，直到你的插件发布刷新后的清单。
+如需按账号进行发现，请把加载清单时使用的连接作为 `sourceConnection` 传入。当用户选中其他连接时，OpenCode 会排除该提供商，直到你的插件发布刷新后的清单。
 
 {/* prettier-ignore */}
 ```ts
@@ -452,7 +452,7 @@ interface ModelDomain extends ModelApi<unknown> {
 
 ### 命令
 
-读取当前位置可用的命令。
+读取当前 Location 可用的命令。
 
 ```ts
 effect: (ctx) =>
@@ -559,7 +559,7 @@ effect: (ctx) =>
   }),
 ```
 
-转换集成及其身份验证方式。OAuth 方式的回调是 Effect，可以获取作用域内的资源。
+转换集成及其认证方式。OAuth 方式的回调是 Effect，可以获取作用域内的资源。
 
 ```ts
 effect: (ctx) =>
@@ -685,7 +685,7 @@ interface MCPDomain extends Pick<McpApi<unknown>, "list"> {
 
 ### 插件
 
-列出当前位置下已激活、加载失败和已解析的插件。
+列出当前 Location 下已激活、加载失败和已解析的插件。
 
 ```ts
 effect: (ctx) =>
@@ -704,7 +704,7 @@ effect: (ctx) =>
     const plugin = ctx.plugin
     const active = yield* plugin.list().pipe(
       Effect.orDie,
-      Effect.map((result) => result.data.filter((item) => item.status === "active")),
+      Effect.map((result) => result.data.filter((item) => item.state.status === "active")),
     )
     yield* Effect.logInfo("active plugin count", { count: active.length })
   }),
@@ -722,9 +722,9 @@ interface Context {
 }
 ```
 
-### 目录引用
+### 引用
 
-读取当前位置可用的目录引用。
+读取当前 Location 可用的引用。
 
 ```ts
 effect: (ctx) =>
@@ -735,7 +735,7 @@ effect: (ctx) =>
   }),
 ```
 
-添加或移除本地目录引用和 Git 目录引用，并在外部状态变化后重新加载。`get(name)` 返回当前配置的来源，名称不存在时返回 `undefined`。
+添加或移除本地引用和 Git 引用，并在外部状态变化后重新加载。`get(name)` 返回当前配置的来源，名称不存在时返回 `undefined`。
 
 ```ts
 effect: (ctx) =>
@@ -798,14 +798,26 @@ effect: (ctx) =>
     const summary = yield* session
       .generate({ sessionID: created.id, prompt: "Summarize this project" })
       .pipe(Effect.orDie)
-    yield* session.command({ sessionID: created.id, command: "review", arguments: "--staged" }).pipe(Effect.orDie)
+    yield* session.command({ sessionID: created.id, name: "review", text: "--staged" }).pipe(Effect.orDie)
     yield* session
       .synthetic({ sessionID: created.id, text: `Summary generated: ${summary.text}`, resume: false })
       .pipe(Effect.orDie)
   }),
 ```
 
-使用 `remove` 删除临时会话。删除操作会停止正在进行的执行，并递归删除子会话。
+分页列出会话。要获取下一页，请将 `cursor.next` 作为 `cursor` 传回。游标会记住你的筛选条件，因此无需重复传入。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const page = yield* ctx.session.list({ directory: ctx.location.directory, limit: 20 }).pipe(Effect.orDie)
+    const next = page.cursor.next
+      ? yield* ctx.session.list({ cursor: page.cursor.next, limit: 20 }).pipe(Effect.orDie)
+      : undefined
+  }),
+```
+
+使用 `remove` 删除临时会话。删除会停止正在执行的任务，并递归删除子会话。
 
 ```ts
 effect: (ctx) =>
@@ -815,7 +827,7 @@ effect: (ctx) =>
   }),
 ```
 
-使用 `compact` 请求上下文压缩。它返回的是已受理的收件箱条目，而不是压缩完成后的摘要；默认情况下，压缩会在下一个步骤边界运行。如果要保持队列顺序，请传入 `delivery: "queue"`。
+使用 `compact` 请求压缩。它返回已接收的收件箱条目，而不是已完成的摘要；默认情况下压缩会在下一个步骤边界运行。传入 `delivery: "queue"` 可以改为保持队列顺序。
 
 ```ts
 effect: (ctx) =>
@@ -825,11 +837,26 @@ effect: (ctx) =>
   }),
 ```
 
-Schema：[`Session.Info`](/api#schema-Session.Info)、[`Model.Ref`](/api#schema-Model.Ref)、[`Session.Inbox.User`](/api#schema-Session.Inbox.User)、[`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic)。
+使用 `instructions.entry` 附加、列出或移除带键的会话指令条目。条目会在会话指令中渲染为 `<context key="...">` 块，更新或移除会在下一个步骤边界公布，不需要排入消息轮次。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Review" }).pipe(Effect.orDie)
+    yield* ctx.session.instructions.entry
+      .put({ sessionID: created.id, key: "deploy-target", value: "production" })
+      .pipe(Effect.orDie)
+    const entries = yield* ctx.session.instructions.entry.list({ sessionID: created.id }).pipe(Effect.orDie)
+    yield* ctx.session.instructions.entry.remove({ sessionID: created.id, key: "deploy-target" }).pipe(Effect.orDie)
+  }),
+```
+
+Schemas：[`Session.Info`](/api#schema-Session.Info)、[`Model.Ref`](/api#schema-Model.Ref)、[`Session.Inbox.User`](/api#schema-Session.Inbox.User)、[`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic)、[`InstructionEntry.Info`](/api#schema-InstructionEntry.Info)。
 
 ```ts
 type SessionDomain = Pick<
   SessionApi<unknown>,
+  | "list"
   | "create"
   | "get"
   | "remove"
@@ -845,18 +872,19 @@ type SessionDomain = Pick<
   | "move"
   | "wait"
   | "context"
+  | "instructions"
 >
 ```
 
 ### 技能
 
-读取当前位置的技能。
+读取当前 Location 的技能。
 
 ```ts
 effect: (ctx) =>
   Effect.gen(function* () {
     const skill = ctx.skill
-    const skills = yield* skill.list()
+    const skills = yield* skill.list().pipe(Effect.orDie)
     yield* Effect.logInfo("skills", { ids: skills.data.map((item) => item.id) })
   }),
 ```
@@ -872,7 +900,7 @@ effect: (ctx) =>
         id: Skill.ID.make("review"),
         name: Skill.Name.make("Review"),
         description: "Review the current changes",
-        path: "/workspace/.opencode/skills/review/SKILL.md",
+        path: Skill.Info.fields.path.make("/workspace/.opencode/skills/review/SKILL.md"),
         content: "Review the current changes for correctness and missing tests.",
       }))
       const review = editor.get("review")
@@ -973,16 +1001,18 @@ effect: (ctx) =>
 
 修改回调所捕获的源数据后，调用 `yield* ctx.tool.reload()`。重新加载会按原有顺序重放活跃的转换，但不会重新运行插件的 effect。
 
-工具的 `id` 即其最终名称，该 ID 不存在时 `get()` 返回 `undefined`。调用 `update` 和 `remove` 时，请使用包含命名空间的最终工具名（上例中为 `acme_greeting`）。命名空间中的点号以及工具名中不支持的字符会被替换为 `_`。不存在的名称会被忽略；要创建工具，必须通过 `add` 提供完整定义。更新会保留名称和命名空间。要替换 schema 或选项，请直接赋予新值，不要修改嵌套的值。无效的更新会记录到日志，原有定义保持不变。
+Effect 工具接受与 Promise 工具相同的[自由格式输入声明](/build/plugins/server#freeform-tool-input)。如果模型未声明支持该格式，工具会保留常规的对象输入。
 
+工具的 `id` 包含其有效名称，该 ID 不存在时 `get()` 返回 `undefined`。调用 `update` 和 `remove` 时，请使用包含命名空间的有效工具名（上例中为 `acme_greeting`）。命名空间中的点号以及工具名中不支持的字符会被替换为 `_`。不存在的名称会被忽略；要创建工具，必须通过 `add` 提供完整定义。更新会保留名称和命名空间。要替换 schema 或选项，请直接赋予新值，不要修改嵌套的值。无效的更新会记录到日志，原有定义保持不变。
+
+{/* prettier-ignore */}
 ```ts
-yield *
-  ctx.tool.transform((editor) => {
-    editor.update("acme_greeting", (tool) => {
-      tool.description = "Greet the user by name"
-    })
-    editor.remove("acme_obsolete")
+yield* ctx.tool.transform((editor) => {
+  editor.update("acme_greeting", (tool) => {
+    tool.description = "Greet the user by name"
   })
+  editor.remove("acme_obsolete")
+})
 ```
 
 更新和移除会与添加操作一起按顺序重放，MCP 工具目录刷新之后也是如此。
@@ -1021,14 +1051,14 @@ effect: (ctx) =>
   Effect.gen(function* () {
     const vcs = ctx.vcs
     const info = yield* vcs.get().pipe(Effect.orDie)
-    const branches = yield* vcs.branches({ search: "feature", limit: 10 }).pipe(Effect.orDie)
+    const branches = yield* vcs.branch.list({ search: "feature", limit: 10 }).pipe(Effect.orDie)
     const changes = yield* vcs.status().pipe(Effect.orDie)
     const diff = yield* vcs.diff({ mode: "working", context: 3 }).pipe(Effect.orDie)
     yield* Effect.logInfo("vcs", { branch: info.data.branch.current, files: changes.data.length })
   }),
 ```
 
-通过作用域内的转换注册一个限定于当前位置的 VCS 提供程序。与检测到的仓库类型匹配的提供程序会被自动选中；如需选择其他提供程序，请使用 `editor.default.set`。
+通过作用域内的转换注册一个限定于当前 Location 的 VCS 提供商。与检测到的仓库类型匹配的提供商会自动选中；如需选择其他提供商，请使用 `editor.default.set`。
 
 ```ts
 effect: (ctx) =>
@@ -1048,9 +1078,9 @@ effect: (ctx) =>
   }),
 ```
 
-提供程序回调会收到当前位置、工作副本根目录、规范化的项目根目录，以及可选的仓库存储。差异回调还会收到所选模式、请求的上下文行数和输出字节预算。仓库发现仍然使用 OpenCode 内置的 Git 和 Mercurial 检测器。
+提供商回调会收到当前 Location、工作副本根目录、规范的项目根目录，以及可选的仓库存储。差异回调还会收到所选模式、请求的上下文行数和输出字节预算。仓库发现仍然使用 OpenCode 内置的 Git 和 Mercurial 检测器。
 
-提供程序可以选择实现 `init(scope)`，用于在 `scope.worktree` 中创建仓库。初始化时按 ID 选择提供程序（默认为 Git），而不是按检测到的仓库类型选择。即使当前位置还没有仓库，也可以注册带 `init` 的提供程序；OpenCode 会在调用前确认目录存在且尚无仓库，调用后再重新发现项目。新的仓库格式除了这个回调之外，仍需要仓库发现机制的支持。
+提供商可以选择实现 `init(scope)`，用于在 `scope.worktree` 中创建仓库。初始化时按 ID 选择提供商（默认为 Git），而不是按检测到的仓库类型选择。即使当前 Location 还没有仓库，也可以注册带 `init` 的提供商；OpenCode 会在调用前确认目录存在且尚无仓库，调用后再重新发现项目。新的仓库格式除了这个回调之外，仍需要仓库发现机制的支持。
 
 Schema：[`Vcs.Info`](/api#schema-Vcs.Info)、[`Vcs.FileStatus`](/api#schema-Vcs.FileStatus)、[`FileDiff.Info`](/api#schema-FileDiff.Info)。
 
@@ -1147,14 +1177,13 @@ effect: (ctx) =>
   }),
 ```
 
-使用 Stream 操作符筛选并处理特定类型的事件。
+传入 `types` 可以只接收需要的事件类型。Stream 的类型会相应收窄，因此无需类型守卫。
 
 ```ts
 effect: (ctx) =>
   Effect.gen(function* () {
     const event = ctx.event
-    yield* event.subscribe().pipe(
-      Stream.filter((item) => item.type === "config.updated"),
+    yield* event.subscribe({ types: ["config.updated"] }).pipe(
       Stream.runForEach(() => Effect.logInfo("configuration changed")),
       Effect.forkScoped,
     )
@@ -1164,14 +1193,13 @@ effect: (ctx) =>
 Schema：[`V2EventEncoded`](/api#schema-V2EventEncoded)。
 
 ```ts
-type EventSubscribeOutput = OpenCodeEvent
-type EventSubscribeOperation<E = never> = () => Stream.Stream<EventSubscribeOutput, E>
+type EventType = Exclude<OpenCodeEvent["type"], "server.connected">
 
-interface EventApi<E = never> {
-  readonly subscribe: EventSubscribeOperation<E>
+interface EventDomain {
+  readonly subscribe: <Type extends EventType = EventType>(input?: {
+    readonly types?: ReadonlyArray<Type>
+  }) => Stream.Stream<Extract<OpenCodeEvent, { type: Type }>, unknown>
 }
-
-interface EventDomain extends Pick<EventApi<unknown>, "subscribe"> {}
 ```
 
 ## 钩子
@@ -1188,7 +1216,7 @@ effect: (ctx) =>
 
 ### 会话
 
-在请求发送给模型之前，修改组装好的系统指令、消息或工具。`context` 在 agent 循环中运行；`compaction`、`generate` 和 `title` 则在对应的辅助请求中运行。`compaction` 和 `title` 接受 `result`，设置后会跳过模型调用。
+在模型分派前修改已组装的系统指令、消息或工具。`context` 在 agent 循环中运行；`compaction`、`generate` 和 `title` 则在对应的辅助请求中运行。`compaction` 和 `title` 接受 `result`，设置后会跳过模型调用。
 
 ```ts
 effect: (ctx) =>
@@ -1208,6 +1236,10 @@ effect: (ctx) =>
   }),
 ```
 
+`context`、`compaction` 和 `generate` 钩子中的消息会携带其存储消息的 `metadata`（只读，例如 `prompt` 钩子设置的内容）。它不会发送给模型。
+
+存放 OpenCode 指令的 `system` 部分还会在 `metadata.experimental.instructions` 中以 `{ key, text }` 列出每个来源，例如 `core/date` 或 `core/environment`，以便钩子区分来源。该列表是副本：编辑该部分的 `text` 不会更新它。这是实验性功能，可能会变化。
+
 修改模型请求设置，还可以把钩子限定于某个提供商。事件携带的 `kind` 与下文的 HTTP 钩子相同。
 
 ```ts
@@ -1222,7 +1254,7 @@ effect: (ctx) =>
   }),
 ```
 
-修改原生的提供商请求或响应。它们的 body 是只能读取一次的流，读取前请先克隆或替换 body。会话发出的每个请求都会触发这两个钩子；`event.kind` 取决于发出请求的流程，可能是 `"primary"`、`"compaction"`、`"title"` 或 `"generate"`。
+修改原生的提供商请求或响应。它们的请求体是一次性流；读取前请克隆或替换请求体。会话发出的每个请求都会触发这两个钩子；`event.kind` 取决于发出请求的流程，可能是 `"primary"`、`"compaction"`、`"title"` 或 `"generate"`。
 
 ```ts
 effect: (ctx) =>
@@ -1245,7 +1277,7 @@ effect: (ctx) =>
   }),
 ```
 
-通过 WebSocket 流式传输的提供商会在每个会话中复用同一个连接，因此 HTTP 钩子看不到这部分流量。实验性的 `experimental.ws.handshake` 钩子会在每次模型调用时、选定连接之前运行一次，并暴露连接的 `url` 和 `headers`；修改其中任何一项都会重新打开 socket。如果 WebSocket 路由回退为 HTTP 请求，HTTP 钩子仍会对这些请求运行。
+通过 WebSocket 流式传输的提供商会在每个会话中复用同一个连接，因此 HTTP 钩子看不到这部分流量。实验性的 `experimental.ws.handshake` 钩子会在每次模型调用时、选定连接之前运行一次，并提供连接的 `url` 和 `headers`；修改其中任何一项都会重新打开 socket。如果 WebSocket 路由回退为 HTTP 请求，HTTP 钩子仍会对这些请求运行。
 
 ```ts
 effect: (ctx) =>
@@ -1262,7 +1294,7 @@ effect: (ctx) =>
   }),
 ```
 
-`experimental.ws.send` 和 `experimental.ws.receive` 暴露帧本身：`send` 在提供商驱动程序构建出站帧之后运行，`receive` 在驱动程序处理每个入站帧之前运行。钩子返回时 `frame` 中的内容，就是实际发送出去或交给驱动程序的内容；OpenCode 不会校验它。
+`experimental.ws.send` 和 `experimental.ws.receive` 会直接提供帧本身：`send` 在提供商驱动程序构建出站帧之后运行，`receive` 在驱动程序处理每个入站帧之前运行。钩子返回时 `frame` 中的内容，就是实际发送出去或交给驱动程序的内容；OpenCode 不会校验它。
 
 ```ts
 effect: (ctx) =>
@@ -1280,7 +1312,7 @@ effect: (ctx) =>
   }),
 ```
 
-针对提供商故障覆盖重试决策，或替换以毫秒为单位的延迟。该钩子在 OpenCode 对故障分类并给出重试策略之后、安排任何重试之前运行。它不会暴露 OpenCode 内部如何执行下一次尝试。
+针对提供商故障覆盖重试决策，或替换以毫秒为单位的延迟。该钩子在 OpenCode 对故障分类并给出重试策略之后、安排任何重试之前运行。它不会透露 OpenCode 内部如何执行下一次尝试。
 
 ```ts
 effect: (ctx) =>
@@ -1440,7 +1472,7 @@ type Transform<Input> = (callback: (input: Input) => void) => Effect.Effect<Regi
 
 ## 发布
 
-以包形式发布的插件使用与本地 Effect 插件相同的默认导出。从主入口导出 Effect 实现，并将 `effect` 声明为 `peerDependency`。
+以包形式发布的插件使用与本地 Effect 插件相同的默认导出。从主入口导出 Effect 实现，并将 `effect` 声明为 `peerDependency`。在 `devDependencies` 中固定 `@opencode/plugin` 所用的版本，让开发环境只安装一份副本。
 
 ```json title="package.json"
 {
@@ -1454,7 +1486,10 @@ type Transform<Input> = (callback: (input: Input) => void) => Effect.Effect<Regi
     "@opencode/plugin": "latest"
   },
   "peerDependencies": {
-    "effect": "^4.0.0"
+    "effect": "^4.0.1"
+  },
+  "devDependencies": {
+    "effect": "4.0.1"
   }
 }
 ```

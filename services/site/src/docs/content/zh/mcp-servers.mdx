@@ -117,12 +117,12 @@ opencode mcp add everything --env LOG_LEVEL=info -- npx -y @modelcontextprotocol
 | `cwd` | 否 | 进程的工作目录。相对路径从工作区开始解析，默认值也是工作区。 |
 | `environment` | 否 | 添加到 OpenCode 所继承的进程环境中的字符串变量。 |
 | `disabled` | 否 | 为 `true` 时不建立连接。默认为 `false`。 |
-| `codemode` | 否 | 设为 `false` 时直接暴露工具，而不通过 Code Mode。默认为 `true`。 |
+| `codemode` | 否 | 设为 `false` 时直接提供工具，而不通过 Code Mode。默认为 `true`。 |
 | `timeout` | 否 | 针对单个服务器的超时覆盖设置。 |
 | `protocol` | 否 | `auto`（默认）、`legacy` 或 `2026-07-28`。请参阅[协议版本](#protocol-version)。 |
 | `pool` | 否 | 在多个目录之间共享一个连接。默认为 `false`。请参阅[共享连接](#shared-connections)。 |
 
-使用 `{env:NAME}` 进行环境变量替换。JSON 字符串中的 `$NAME` 这类 shell 表达式不会被展开：
+使用 `{env:NAME}` 替换环境变量。JSON 字符串中的 `$NAME` 这类 shell 表达式不会被展开：
 
 ```jsonc
 {
@@ -138,6 +138,12 @@ opencode mcp add everything --env LOG_LEVEL=info -- npx -y @modelcontextprotocol
 
 ```sh
 opencode mcp add context7 --url https://mcp.context7.com/mcp
+```
+
+使用重复的 `--header` 参数传入请求头。请给 `{env:NAME}` 引用加上引号，让 shell 按字面写入：
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp --header 'CONTEXT7_API_KEY={env:CONTEXT7_API_KEY}'
 ```
 
 如果服务器需要请求头或其他选项，请在配置中设置。密钥应存放在环境变量中，而不是写在文件里：
@@ -167,15 +173,10 @@ opencode mcp add context7 --url https://mcp.context7.com/mcp
 | `headers` | 否 | 发送到该端点的 HTTP 请求头（字符串）。 |
 | `oauth` | 否 | OAuth 设置，设为 `false` 可禁用 OAuth。 |
 | `disabled` | 否 | 为 `true` 时不建立连接。默认为 `false`。 |
-| `codemode` | 否 | 设为 `false` 时直接暴露工具，而不通过 Code Mode。默认为 `true`。 |
+| `codemode` | 否 | 设为 `false` 时直接提供工具，而不通过 Code Mode。默认为 `true`。 |
 | `timeout` | 否 | 针对单个服务器的超时覆盖设置。 |
 | `protocol` | 否 | `legacy`（默认）、`auto` 或 `2026-07-28`。请参阅[协议版本](#protocol-version)。 |
-
-使用重复的 `--header` 参数传入请求头。请给 `{env:NAME}` 引用加上引号，让 shell 按字面写入：
-
-```sh
-opencode mcp add context7 --url https://mcp.context7.com/mcp --header 'CONTEXT7_API_KEY={env:CONTEXT7_API_KEY}'
-```
+| `pool` | 否 | 在多个目录之间共享一个连接。默认为 `false`。请参阅[共享连接](#shared-connections)。 |
 
 只有当服务器仅使用 API 密钥或其他请求头凭据时，才应设置 `oauth: false`：
 
@@ -208,43 +209,11 @@ opencode mcp add context7 --url https://mcp.context7.com/mcp --header 'CONTEXT7_
 }
 ```
 
-如果服务器需要身份验证，请运行 `/mcps`，选择该服务器，然后在浏览器中完成授权。也可以通过 CLI 启动同样的流程：
+如果服务器需要认证，请运行 `/mcps`，选择该服务器，然后在浏览器中完成授权。也可以通过 CLI 启动同样的流程：
 
 ```sh
 opencode mcp auth sentry
 ```
-
-如果服务提供方给了你客户端凭据，请使用 V2 中 snake_case 风格的 OAuth 字段：
-
-```jsonc title="opencode.jsonc"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "servers": {
-      "company-tools": {
-        "type": "remote",
-        "url": "https://mcp.example.com/mcp",
-        "oauth": {
-          "client_id": "{env:MCP_CLIENT_ID}",
-          "client_secret": "{env:MCP_CLIENT_SECRET}",
-          "scope": "tools:read tools:execute",
-          "callback_port": 19876,
-          "redirect_uri": "http://127.0.0.1:19876/callback",
-        },
-      },
-    },
-  },
-}
-```
-
-| 字段 | 说明 |
-| --- | --- |
-| `client_id` | 预先注册的客户端 ID。优先于 CIMD 和 DCR。 |
-| `client_secret` | 机密客户端的密钥，在令牌请求体中发送。公共客户端请省略。 |
-| `scope` | 要请求的作用域，以空格分隔。默认为服务器在拒绝未认证请求时指定的作用域。 |
-| `callback_port` | 本地回调端口，范围为 `1` 到 `65535`。默认使用 `redirect_uri` 的端口，然后使用一个可用的临时端口。 |
-| `redirect_uri` | 预先注册的回环 URI，其路径和端口需要能到达本地回调监听器。设置后会禁用 CIMD。 |
-| `auth_server_metadata_url` | 授权服务器的 OAuth 或 OpenID Connect 元数据文档 URL。如果 MCP 服务器没有发布指明其授权服务器的受保护资源元数据，请设置此项。 |
 
 ### 浏览器在另一台机器上
 
@@ -284,11 +253,47 @@ https://opencode.ai/oauth/opencode/client.json
 
 该文档允许以下不带端口的回环重定向：
 
+- `http://127.0.0.1/callback`
+- `http://localhost/callback`
+- 较旧客户端使用的 `http://127.0.0.1/mcp/oauth/callback`
+
 授权服务器会按 [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252#section-7.3) 的要求接受这些重定向的任意回环端口，因此 `callback_port` 可与 CIMD 一起使用。自定义 `redirect_uri` 则不行，此时 OpenCode 会回退到 DCR。
 
 如果授权服务器既不支持 CIMD 也不支持 DCR，请配置一个预先注册的客户端。
 
 ### 预先注册的客户端
+
+如果服务提供方给了你客户端凭据，请使用 V2 中 snake_case 风格的 OAuth 字段：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "company-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "oauth": {
+          "client_id": "{env:MCP_CLIENT_ID}",
+          "client_secret": "{env:MCP_CLIENT_SECRET}",
+          "scope": "tools:read tools:execute",
+          "callback_port": 19876,
+          "redirect_uri": "http://127.0.0.1:19876/callback",
+        },
+      },
+    },
+  },
+}
+```
+
+| 字段 | 说明 |
+| --- | --- |
+| `client_id` | 预先注册的客户端 ID。优先于 CIMD 和 DCR。 |
+| `client_secret` | 机密客户端的密钥，在令牌请求体中发送。公共客户端请省略。 |
+| `scope` | 要请求的作用域，以空格分隔。默认为服务器在拒绝未认证请求时指定的作用域。 |
+| `callback_port` | 本地回调端口，范围为 `1` 到 `65535`。默认使用 `redirect_uri` 的端口，然后使用一个可用的临时端口。 |
+| `redirect_uri` | 预先注册的回环 URI，其路径和端口需要能到达本地回调监听器。设置后会禁用 CIMD。 |
+| `auth_server_metadata_url` | 授权服务器的 OAuth 或 OpenID Connect 元数据文档 URL。如果 MCP 服务器没有发布指明其授权服务器的受保护资源元数据，请设置此项。 |
 
 需要重新登录或切换账号时，可以删除已保存的 OAuth 凭据：
 
@@ -330,17 +335,17 @@ opencode mcp logout sentry
 
 ## 协议版本
 
-默认情况下，OpenCode 使用经典的 MCP `initialize` 握手连接所有服务器。如果服务器基于 2026-07-28 修订版构建，请为它设置 `protocol`：
+默认情况下，OpenCode 会探测每个服务器是否支持 2026-07-28 修订版；服务器不支持时，则回退到经典的 MCP `initialize` 握手。将服务器的 `protocol` 设为 `legacy` 可以跳过探测：
 
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
     "servers": {
-      "modern": {
+      "older": {
         "type": "remote",
         "url": "https://mcp.example.com/mcp",
-        "protocol": "auto",
+        "protocol": "legacy",
       },
     },
   },
@@ -357,7 +362,7 @@ opencode mcp logout sentry
 
 ## 共享连接
 
-一个 OpenCode 服务器可以打开多个目录，每个目录都会各自连接每个 MCP 服务器。将 `pool` 设为 `true`，可以让服务器设置相同的目录共享一个连接和一份工具列表：
+一个 OpenCode 服务器可以打开多个目录，每个目录都会各自连接每个 MCP 服务器。将 `pool` 设为 `true`，可以让服务器设置相同的目录共用一个连接和一份工具列表：
 
 ```jsonc title="opencode.jsonc"
 {
@@ -374,11 +379,11 @@ opencode mcp logout sentry
 }
 ```
 
-命令文本会按顺序填充提示词的参数。用空格分隔参数，并对包含空格的值加引号：
-
-```text
-/context_7:find_docs react "server components"
-```
+- 只有使用 2026-07-28 修订版的连接才会共享。如果服务器以较旧的修订版响应，或被设为 `legacy`，则每个目录都会各自保留一个连接。
+- 只有当所有会影响连接的因素都一致时，目录才会共享连接：远程服务器的 URL、请求头、OAuth 设置和登录账号，本地服务器的命令、工作目录和环境变量。超时和 `protocol` 也必须一致。服务器名称不必相同，但登录凭据按名称存储，因此 OAuth 服务器只有在名称相同时才会共享。
+- 本地服务器只在本机上的目录之间共享，不包括工作区中的目录。跨项目共享需要固定的 `cwd`，例如 `"~"`。没有固定 `cwd` 时，它会在每个项目的文件夹中运行，因此每个项目都有自己的连接，OpenCode 会记录一条警告。
+- 共享连接没有根目录。当工具请求输入时，请求会出现在发起调用的目录中。
+- 最后一个使用该连接的目录关闭连接或断开服务器后，连接会立即关闭。
 
 ## 命名规则
 
@@ -394,6 +399,12 @@ MCP 提示词会变成名为 `<server>:<prompt>` 的命令，并采用相同的�
 
 ```text
 /context_7:find_docs
+```
+
+命令文本会按顺序填充提示词的参数。用空格分隔参数，并对包含空格的值加引号：
+
+```text
+/context_7:find_docs react "server components"
 ```
 
 请选择简短、且规范化后仍然唯一的服务器名称。在默认的 Code Mode 下，工具按规范化后的服务器名称分组：
@@ -443,7 +454,7 @@ agent 通过两个内置工具读取 MCP 资源：`list_mcp_resources` 和 `read
 | `opencode_list_mcp_resources` | 服务器名称。 |
 | `opencode_read_mcp_resource` | `<server>:<uri>` |
 
-例如，允许从 `docs` 服务器进行任何读取：
+例如，允许从 `docs` 服务器读取任何资源：
 
 ```jsonc
 {
@@ -485,7 +496,7 @@ sentry is requesting input
 
 ## 上下文
 
-对于代表会话发起的调用，OpenCode 会在 `CallToolRequest.params._meta["ai.opencode/sessionID"]` 中发送会话 ID。这同时适用于直接暴露的工具和 Code Mode，无论使用 stdio 还是 Streamable HTTP 传输：
+对于代表会话发起的调用，OpenCode 会在 `CallToolRequest.params._meta["ai.opencode/sessionID"]` 中发送会话 ID。这同时适用于直接提供的工具和 Code Mode，无论使用 stdio 还是 Streamable HTTP 传输：
 
 ```json
 {
@@ -504,7 +515,7 @@ sentry is requesting input
 | --- | --- |
 | 身份 | 它标识发起调用的 OpenCode 会话，而不是 MCP 传输会话。 |
 | 存在性 | 没有会话上下文的调用可能不包含它。 |
-| 安全 | 不要单独用它进行身份验证或授权。 |
+| 安全 | 不要单独用它做认证或授权。 |
 | 隐私 | 远程服务器会收到原始 ID，并可能记录或保留它。 |
 
 ## 管理
@@ -515,12 +526,18 @@ sentry is requesting input
 opencode mcp list
 ```
 
-在 OpenCode 中使用 `/mcps` 查看、连接、断开服务器或进行身份验证。使用 CLI 添加服务器和管理 OAuth 凭据：
+在 OpenCode 中使用 `/mcps` 查看、连接、断开服务器或完成认证。使用 CLI 添加服务器和管理 OAuth 凭据：
 
 ```sh
 opencode mcp add sentry --url https://mcp.sentry.dev/mcp
 opencode mcp auth sentry
 opencode mcp logout sentry
+```
+
+不带名称运行 `opencode mcp auth`，可以从支持 OAuth 的服务器中选择一个：
+
+```sh
+opencode mcp auth
 ```
 
 如需移除服务器，请从添加它的项目配置或全局配置中删除对应条目：
@@ -533,7 +550,7 @@ opencode mcp logout sentry
 }
 ```
 
-OAuth 客户端设置、超时、工作目录或持久化的启用状态，需要直接编辑配置：
+在 `/mcps` 中断开服务器不会改动配置。OAuth 客户端设置、超时、工作目录，或让服务器保持断开状态，都需要直接编辑配置：
 
 ```jsonc
 {

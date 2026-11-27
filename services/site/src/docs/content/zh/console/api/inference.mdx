@@ -1,6 +1,6 @@
 ---
 title: "推理 API"
-description: "通过 Console 推理服务，使用同一个身份验证请求头调用兼容 OpenAI、Anthropic 和 Gemini 的模型。"
+description: "通过 Console 推理服务，使用一个认证请求头调用兼容 OpenAI、Anthropic 和 Gemini 的模型。"
 ---
 
 Console 推理服务在 `https://opencode.ai/inference` 下提供兼容 OpenAI、Anthropic 和 Gemini 的 API。请根据模型所属的 API 系列，向对应的端点发送 JSON `POST` 请求。
@@ -15,9 +15,9 @@ curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
   }'
 ```
 
-## 身份验证
+## 认证
 
-将 `<token>` 替换为在 [Console](https://opencode.ai/console) 中创建的[个人 API 密钥](/console/api#personal-api-keys)或[服务账号密钥](/console/api#service-accounts)。付费模型必须携带该请求头。免费层级对话模型只能在 OpenCode 内使用；其他客户端即使带有 API 密钥也会收到 HTTP `403`。其他客户端请使用付费模型或 [Go](/console/go) 订阅。
+将 `<token>` 替换为在 [Console](https://opencode.ai/console) 中创建的[个人 API 密钥](/console/api#personal-api-keys)或[服务账号密钥](/console/api#service-accounts)。调用付费模型必须带上该请求头。免费层级对话模型只能在 OpenCode 内使用；其他客户端即使带有 API 密钥也会收到 HTTP `403`。其他客户端请使用付费模型或 [Go](/console/go) 订阅。
 
 ```text
 Authorization: Bearer <token>
@@ -41,7 +41,7 @@ Authorization: Bearer <token>
 curl https://opencode.ai/inference/v1/models
 ```
 
-[模型列表 API](/console/api/models)说明了响应中的每个字段，以及包含你已连接提供商的 Console 列表。
+[模型列表 API](/console/api/models)说明了响应中的每个字段，以及包含你所连接提供商的 Console 模型列表。
 
 ### OpenAI Chat Completions
 
@@ -88,7 +88,7 @@ curl -X POST "https://opencode.ai/inference/anthropic/v1/messages" \
 
 ### Gemini
 
-Gemini 模型在路径中指定模型和方法。将 `:generateContent` 替换为 `:streamGenerateContent` 即可流式返回响应。
+Gemini 模型的模型名和方法都放在路径中。将 `:generateContent` 替换为 `:streamGenerateContent` 即可流式返回响应。
 
 ```bash
 curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-4-argon:generateContent" \
@@ -101,7 +101,7 @@ curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-4-argon:
 
 ### System One
 
-`jev-1.14`、`gemini-decision-1` 和 `gpt-6-luna-decision` 等决策模型会针对 `state` 回答带类型的问题，而不是生成文本。问题类型和媒体输入请参阅[决策模型](/console/models#jev)。
+`jev-1.14`、`gemini-decision-1` 和 `gpt-6-luna-decision` 等决策模型会针对 `state` 回答有类型定义的问题，而不是生成文本。问题类型和媒体输入请参阅[决策模型](/console/models#jev)。
 
 ```bash
 curl -X POST "https://opencode.ai/inference/systemone/v1/systemone" \
@@ -134,7 +134,7 @@ curl -X POST "https://opencode.ai/inference/openai/v1/embeddings" \
 
 ## 费用
 
-每个响应都会在 API 已返回的用量旁边报告该请求向你收取的费用：OpenAI 和 Anthropic 在 `usage` 中，Gemini 在 `usageMetadata` 中。流式响应会在携带最终用量的事件中报告：使用 `stream_options.include_usage` 的 Chat Completions 在最后的用量数据块中，Responses 在 `response.completed` 中，Messages 在 `message_delta` 中，Gemini 在最后一个数据块中。
+每个响应都会在 API 本身返回的用量之外，报告该请求向你收取的费用：OpenAI 和 Anthropic 在 `usage` 中，Gemini 在 `usageMetadata` 中。流式响应会在携带最终用量的事件中报告费用：使用 `stream_options.include_usage` 的 Chat Completions 在最后的用量数据块中，Responses 在 `response.completed` 中，Messages 在 `message_delta` 中，Gemini 在最后一个数据块中。
 
 ```json
 "usage": {
@@ -158,4 +158,4 @@ curl -X POST "https://opencode.ai/inference/openai/v1/embeddings" \
 | `opencode.allowance`      | 仅限 Go：该请求计入[用量限额](/console/go#usage-limits)的金额，以套餐每月限额的美元数表示。 |
 | `opencode.tokens`         | 向你计费的 token。`input` 不含缓存读取和写入；`output` 包含 `reasoning`。                      |
 
-图片生成会在响应以及流式响应中每张完成的图片上报告相同的字段，并附带到目前为止的费用。费用在响应结束时即已确定，早于余额或 Go 用量的更新。如果请求期间余额或 Go 限额耗尽，实际收取的金额可能少于报告值，但绝不会更多。
+图片生成会在响应上报告这些字段，流式响应中则会在每张完成的图片上报告，并附上截至目前产生的费用。费用在响应结束时即已确定，早于余额或 Go 用量的更新。如果请求期间余额或 Go 限额耗尽，实际收取的金额可能少于报告值，但绝不会更多。

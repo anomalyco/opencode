@@ -3,7 +3,7 @@ title: "CLI 命令"
 description: "opencode 命令行参考。"
 ---
 
-每个命令都支持 `--help`，用于查看完整的参数列表，例如 `opencode run --help`。部分依赖服务器的命令支持 `--standalone`（运行私有服务器）或 `--server <url>`（连接到指定服务器）；具体支持哪些参数，请查看该命令的帮助信息。
+每个命令都支持 `--help` 查看完整的参数列表，例如 `opencode run --help`。部分依赖服务器的命令支持 `--standalone`（运行私有服务器）或 `--server <url>`（连接到指定服务器）；具体支持哪些参数，请查看该命令的帮助信息。
 
 ## run
 
@@ -15,7 +15,7 @@ $ opencode run "Explain this repository"
 
 ### CI
 
-在 CI 中，请以 secret 的形式传入提供商 API 密钥，并使用独立模式，让私有服务器能够读取它。例如，下面这个 GitHub Actions 任务会审查检出的仓库：
+在 CI 中，把提供商 API 密钥作为 secret 传入，并使用 standalone 模式，让私有服务器收到这个密钥。例如，下面这个 GitHub Actions 任务会审查检出的仓库：
 
 ```yaml
 name: OpenCode review
@@ -144,7 +144,7 @@ $ opencode session delete ses_9c1b08
 $ opencode session export ses_4f2a1c
 ```
 
-导出时隐去对话记录和文件中的敏感数据。
+导出时隐去对话记录和文件数据中的敏感内容。
 
 ```bash
 $ opencode session export ses_4f2a1c --sanitize
@@ -188,19 +188,19 @@ $ opencode auth list --format json
 $ opencode auth login anthropic
 ```
 
-使用指定的身份验证方式登录。
+使用指定的认证方式登录。
 
 ```bash
 $ opencode auth login anthropic --method key
 ```
 
-登出已保存的账户。
+登出已保存的账号。
 
 ```bash
 $ opencode auth logout anthropic work
 ```
 
-切换某个集成的当前账户。
+切换某个集成的当前账号。
 
 ```bash
 $ opencode auth switch anthropic work
@@ -265,7 +265,7 @@ $ opencode mcp add everything --env LOG_LEVEL=debug -- npx -y @modelcontextproto
 $ opencode mcp add context7 --url https://mcp.context7.com/mcp --header CONTEXT7_API_KEY=secret
 ```
 
-向支持 OAuth 的远程服务器进行身份验证。
+对支持 OAuth 的远程服务器完成认证。
 
 ```bash
 $ opencode mcp auth sentry
@@ -379,7 +379,7 @@ $ opencode stats --help
 $ opencode serve
 ```
 
-在固定端口上绑定所有网络接口。
+绑定到所有网络接口，并使用固定端口。
 
 ```bash
 $ opencode serve --hostname 0.0.0.0 --port 4096
@@ -399,7 +399,7 @@ $ opencode serve --help
 
 ## pair
 
-打印一次性链接，并显示第一个链接的二维码，用于让浏览器或应用登录到服务器。链接 5 分钟后过期，且只能使用一次。
+打印一次性登录链接，以及第一个链接的二维码，浏览器或应用可通过它们登录服务器。链接 5 分钟后过期，且只能使用一次。
 
 ```bash
 $ opencode pair
@@ -411,13 +411,13 @@ $ opencode pair
 $ opencode pair --url https://dev.example.com
 ```
 
-通过 OpenTunnel 远程地址，从任何地方进行配对。这会将服务器暴露到互联网，因此首次开启远程访问时，命令会说明这一点并请你确认。请参阅[远程访问](/cli/web#remote-access)。
+通过 OpenTunnel 远程地址，可从任意位置配对。这会将服务器开放到互联网，因此首次开启远程访问时，命令会说明这一点并请你确认。请参阅[远程访问](/cli/web#remote-access)。
 
 ```bash
 $ opencode pair --remote
 ```
 
-跳过确认提示直接同意，例如在没有终端的脚本中。
+不弹出确认提示，直接同意，例如在没有终端的脚本中。
 
 ```bash
 $ opencode pair --remote --yes
@@ -533,7 +533,7 @@ $ opencode api --help
 
 ## acp
 
-通过 stdin 和 stdout 启动 Agent Client Protocol 服务器，用于编辑器集成。它会一直运行，直到客户端关闭连接。
+在 stdin 和 stdout 上启动 Agent Client Protocol 服务器，用于编辑器集成。它会一直运行，直到客户端关闭连接。
 
 ```bash
 $ opencode acp

@@ -1,6 +1,6 @@
 ---
 title: "TUI"
-description: "开始一个会话，了解终端界面中的日常工作流。"
+description: "开始一个会话，并使用终端界面中的日常工作流。"
 ---
 
 在项目目录中运行 OpenCode，输入你的需求，然后按 **Enter**。
@@ -14,7 +14,7 @@ opencode
 Explain how authentication works in this project
 ```
 
-按 **Shift+Enter**、**Ctrl+Enter**、**Alt+Enter** 或 **Ctrl+J** 换行。OpenCode 工作期间，按 **Enter** 会把提示词发给正在运行的会话，实时引导它（steer）；先按 **Ctrl+X** 再按 **Enter**，可以把提示词加入队列稍后发送。
+按 **Shift+Enter**、**Ctrl+Enter**、**Alt+Enter** 或 **Ctrl+J** 换行。OpenCode 工作期间，按 **Enter** 会引导当前会话（steer）；先按 **Ctrl+X** 再按 **Enter**，则把提示词加入队列稍后发送。
 
 ## 上下文
 
@@ -32,7 +32,7 @@ Explain @src/auth.ts#20-45
 
 ## Shell
 
-在空输入框的开头输入 `!` 进入 Shell 模式。输入命令后按 **Enter** 执行；如果不想执行，按 **Esc** 退出 Shell 模式。
+在空输入框的开头输入 `!` 进入 Shell 模式。输入命令后按 **Enter** 执行；按 **Esc** 则退出 Shell 模式，不执行命令。
 
 ```text
 !git status
@@ -52,7 +52,7 @@ Shell 命令在会话的工作目录中运行，输出会保留在会话中。
 
 更新之后，OpenCode 会在主屏幕上显示一次该版本的新功能。运行 `/highlights` 可以再次查看；如果不想让它自动弹出，可以在 [`cli.json`](/cli/config#alerts) 中设置 `"highlights": false`。
 
-## 旁支提问
+## 顺便提问
 
 运行 `/btw <question>` 可以就目前的对话快速提一个问题。回答会使用会话的上下文和当前模型，但不会加入对话，因此不会影响后续的提示词。运行期间，输入框底部会显示 `/btw` 标识，回答会在对话框中打开；按 **C** 可以复制。
 
@@ -68,9 +68,9 @@ Shell 命令在会话的工作目录中运行，输出会保留在会话中。
 
 ## 会话
 
-先按 **Ctrl+X** 再按 **N** 新建会话。先按 **Ctrl+X** 再按 **L**，或运行 `/sessions`，可以回到已有会话；**Ctrl+O** 会同时列出最近的会话和项目。
+先按 **Ctrl+X** 再按 **N** 新建会话。先按 **Ctrl+X** 再按 **L**，或运行 `/sessions`，可以回到已有会话；**Ctrl+O** 会打开最近会话和项目的合并列表。
 
-标签页默认启用。使用 **Ctrl+Tab** 和 **Ctrl+Shift+Tab** 在标签页之间切换，先按 **Ctrl+X** 再按 **W** 关闭标签页，按 **Ctrl+Shift+T** 重新打开最近关闭的标签页。
+标签页默认启用。用 **Ctrl+Tab** 和 **Ctrl+Shift+Tab** 在标签页间切换，先按 **Ctrl+X** 再按 **W** 关闭当前标签页，按 **Ctrl+Shift+T** 重新打开最近关闭的标签页。
 
 ## 历史记录
 

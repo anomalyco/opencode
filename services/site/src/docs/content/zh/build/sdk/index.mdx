@@ -15,7 +15,7 @@ bun add @opencode/sdk
 
 ## 创建宿主
 
-`OpenCode.create()` 返回一个显式拥有所有权的宿主。使用 `await using` 释放其路由器、Location 服务、fiber 和作用域内的插件注册：
+`OpenCode.create()` 返回一个由你显式持有所有权的宿主。使用 `await using` 释放其路由器、Location 服务、fiber 和作用域内的插件注册：
 
 ```ts
 import { OpenCode } from "@opencode/sdk"
@@ -33,11 +33,11 @@ await opencode.sessions.prompt({
 
 当无法使用显式资源管理时，请显式调用 `await opencode.close()`。
 
-嵌入式宿主使用与 `@opencode/client` 相同的 Promise 值、声明的错误、请求选项和 `AsyncIterable` 流。它暴露完整的生成客户端，并为会话和事件分组添加便捷别名 `sessions` 和 `events`。
+嵌入式宿主使用与 `@opencode/client` 相同的 Promise 值、声明的错误、请求选项和 `AsyncIterable` 流。它对外提供完整的生成客户端，并为会话和事件分组添加便捷别名 `sessions` 和 `events`。
 
 ## Worktree
 
-Worktree 操作需要 `projectID`。创建和刷新会从项目保存的规范检出目录加载配置和插件。列出只读取已保存的清单；移除会激活规范插件并使用记录的策略，该策略不可用时则失败。
+Worktree 操作需要 `projectID`。创建和刷新会从项目保存的规范检出目录加载配置和插件。列表只读取已保存的清单；移除会激活规范插件并使用记录的策略，该策略不可用时则失败。
 
 ```ts
 const projectID = session.projectID

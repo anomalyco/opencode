@@ -39,7 +39,7 @@ Markdown agent 可以保存在全局目录中供所有项目使用，也可以�
 .opencode/agents/<name>.md
 ```
 
-OpenCode 会从当前目录向上直到项目根目录查找项目中的 `.opencode` 目录。嵌套路径会成为 agent ID 的一部分：
+OpenCode 会从当前目录逐级向上到项目根目录，查找项目中的 `.opencode` 目录。嵌套路径会成为 agent ID 的一部分：
 
 ```text
 .opencode/agents/team/reviewer.md  →  team/reviewer
@@ -60,7 +60,7 @@ mode: subagent
 Explain the relevant code with short examples. Do not edit files.
 ```
 
-V1 的 frontmatter 字段已弃用。仍在使用这些字段的文件会如何读取，请参阅[agent 文件](/migrate-v1#agent-files)。
+V1 的 frontmatter 字段已弃用。仍在使用这些字段的文件将如何解析，请参阅[agent 文件](/migrate-v1#agent-files)。
 
 ### JSONC
 
@@ -137,7 +137,7 @@ OpenCode 内置了以下可见 agent：
 
 | Agent | 模式 | 用途 |
 | --- | --- | --- |
-| **Build** (`build`) | `primary` | 默认的编程 agent。默认允许使用所有工具和访问工作区以外的内容；读取敏感的环境变量文件时会请求批准。 |
+| **Build** (`build`) | `primary` | 默认的编程 agent。默认允许使用所有工具，也允许访问工作区之外的内容；读取敏感的环境变量文件时会请求批准。 |
 | **Plan** (`plan`) | `primary` | 负责探索和规划，不会编辑普通的项目文件。在你要求时，它可以写入 OpenCode 计划文件，shell 命令仍受权限控制。 |
 | **General** (`general`) | `subagent` | 拥有广泛的工具访问权限，负责调研和多步骤任务，但不能再启动其他 subagent。 |
 | **Explore** (`explore`) | `subagent` | 搜索并阅读代码或网页资料，不会编辑文件。 |
@@ -183,7 +183,7 @@ agent 定义按配置顺序合并。后出现的标量值会替换先前的值�
 
 ### 描述
 
-`description` 用于说明 agent 的用途。请为 subagent 添加此字段，因为模型在决定启动哪个 agent 时，OpenCode 会把它展示给模型：
+`description` 用于说明 agent 的用途。请为 subagent 添加此字段，因为 OpenCode 会把它展示给负责选择启动哪个 agent 的模型：
 
 ```yaml
 description: Reviews database migrations for safety
@@ -236,7 +236,7 @@ JSON 配置也接受展开形式：
 }
 ```
 
-项目指令、技能、目录引用以及其他指令来源仍会照常添加。在 Markdown agent 中，请把这段文字写在文档正文里，而不是写在 frontmatter 的 `system` 字段中。
+项目指令、技能、引用以及其他指令来源仍会照常添加。在 Markdown agent 中，请把这段文字写在文档正文里，而不是写在 frontmatter 的 `system` 字段中。
 
 ### 权限
 
@@ -267,7 +267,7 @@ JSON 配置也接受展开形式：
 | --- | --- |
 | `shell` | Shell 命令 |
 | `edit` | 编辑、写入和补丁工具 |
-| `subagent` | subagent |
+| `subagent` | 子 agent |
 | `read`, `glob`, `grep` | 本地查找工具 |
 | `webfetch`, `websearch` | 网络工具 |
 | `skill` | 技能加载 |
@@ -288,7 +288,7 @@ Shell 资源仍是原始的命令文本，不会展开这些值。
 steps: 8
 ```
 
-在最后一步，OpenCode 会移除所有工具，并要求模型用文字进行总结。新的用户输入会重置步数额度。
+在最后一步，OpenCode 会移除所有工具，并要求模型用文字总结。新的用户输入会重置步数额度。
 
 ### 隐藏
 

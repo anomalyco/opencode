@@ -57,7 +57,7 @@ file:///home/me/project/src/server.ts?start=20&end=60
 | PNG、JPEG、GIF 或 WebP | 图片媒体 | `diagram.png` |
 | PDF | 文档媒体 | `report.pdf` |
 
-PDF 需要支持 PDF 输入的模型。如果模型不支持某种附件的类型，OpenCode 会在原位置发送一段简短说明。
+PDF 需要支持 PDF 输入的模型。如果模型不支持某类附件，OpenCode 会在原位置发送一段简短说明。
 
 SVG 会被视为文本。AVIF、BMP、音频、视频以及其他二进制提示词附件不会包含在模型请求中。请先将不受支持的二进制文件转换为文本或受支持的图片格式；例如，先将 BMP 图片转换为 PNG 再附加。
 
@@ -90,7 +90,7 @@ OpenCode 会在接收提示词之前读取每个附件。无效的 URL、不可�
 | `max_height` | `2000` | 最大高度（像素），必须为正整数。 |
 | `max_base64_bytes` | `5242880` | Base64 编码后图片的最大字节数，必须为正整数。 |
 
-例如，以下配置会直接拒绝宽度超过 1200 像素的图片，而不是调整其大小：
+例如，以下配置会直接拒绝宽度超过 1200 像素的图片，而不是调整大小：
 
 ```jsonc title="opencode.jsonc"
 {

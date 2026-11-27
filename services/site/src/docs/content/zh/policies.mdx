@@ -94,7 +94,7 @@ description: "允许或拒绝 OpenCode 对指定资源执行操作，托管策�
 
 ## 工具
 
-`tool.use` 语句会强制拒绝某次[权限](/permissions)检查。资源格式为 `<action>:<value>`，会与工具检查的每个资源进行匹配。
+`tool.use` 语句会强制拒绝某次[权限](/permissions)检查。资源格式为 `<action>:<value>`，会与工具检查的每个资源匹配。
 
 ```jsonc
 {
@@ -136,9 +136,9 @@ description: "允许或拒绝 OpenCode 对指定资源执行操作，托管策�
 
 `integration.connect` 控制 `/connect` 列出哪些集成，以及哪些集成可以连接。资源是集成 ID。
 
-`integration.use` 控制某个集成提供的一切：它的提供商和模型、网页搜索，以及 Console 团队或 well-known 来源下发的 MCP 服务器和配置。资源格式为 `<integration>#<account>`，其中 account 是所连接的组织或账号 ID，例如 `opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1`。没有已连接账号时，就是集成 ID 本身：未登录的免费层级是 `opencode`，`ANTHROPIC_API_KEY` 环境变量是 `anthropic`，`opencode.json` 中的提供商则是其提供商 ID。
+`integration.use` 控制某个集成提供的一切：它的提供商和模型、网页搜索，以及 Console 工作区或 well-known 来源下发的 MCP 服务器和配置。资源格式为 `<integration>#<account>`，其中 account 是所连接的组织或账号 ID，例如 `opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1`。没有已连接账号时，就是集成 ID 本身：未登录的免费层级是 `opencode`，`ANTHROPIC_API_KEY` 环境变量是 `anthropic`，`opencode.json` 中的提供商则是其提供商 ID。
 
-以下 MDM 策略只允许使用一个 Console 团队，其他一律不允许。更多示例请参阅[企业版](/enterprise)：
+以下 MDM 策略只允许使用一个 Console 工作区，其他一律不允许。更多示例请参阅[企业版](/enterprise)：
 
 ```jsonc
 {
@@ -151,7 +151,7 @@ description: "允许或拒绝 OpenCode 对指定资源执行操作，托管策�
 }
 ```
 
-`/connect` 只会提供 Console，以便成员登录。免费层级、个人 Console 账号、其他组织、环境变量 API 密钥以及 `opencode.json` 中的提供商都不可用。该团队的提供商、MCP 服务器和网页搜索仍可使用，在 Console 中更改它们无需新的 MDM 配置文件。
+`/connect` 只会提供 Console，以便成员登录。免费层级、个人 Console 账号、其他组织、环境变量 API 密钥以及 `opencode.json` 中的提供商都不可用。该工作区的提供商、MCP 服务器和网页搜索仍可使用，在 Console 中更改它们无需新的 MDM 配置文件。
 
 只有托管策略才能不提供某个集成下发的 MCP 服务器和配置；该集成自身的策略在两种情况下都继续生效。
 
@@ -214,7 +214,7 @@ description: "允许或拒绝 OpenCode 对指定资源执行操作，托管策�
 }
 ```
 
-即使在没有 API 密钥时也能工作（例如 Exa 和 TinyFish），被拒绝的提供商也会被移除。当所有提供商都被拒绝时，将不再提供 `websearch` 工具。2.2.6 之前的客户端会忽略 `websearch.use`。
+即使某个提供商在没有 API 密钥时也能工作（例如 Exa 和 TinyFish），被拒绝后也会被移除。当所有提供商都被拒绝时，将不再提供 `websearch` 工具。2.2.6 之前的客户端会忽略 `websearch.use`。
 
 ## 优先级
 
@@ -224,7 +224,7 @@ description: "允许或拒绝 OpenCode 对指定资源执行操作，托管策�
 | ----------- | -------------------------------------------------------------------------------------------------------------- |
 | 1（最高） | macOS 托管偏好设置（`/Library/Managed Preferences/ai.opencode.managed.plist`） |
 | 2 | 系统级 `opencode.json(c)`（`/Library/Application Support/opencode`、`/etc/opencode`、`%ProgramData%\opencode`） |
-| 3 | 已连接的 OpenCode Console 团队 |
+| 3 | 已连接的 OpenCode Console 工作区 |
 | 4 | 全局 `~/.config/opencode/opencode.json(c)` |
 | 5 | 直接放置的 `opencode.json(c)`；外层目录优先于内层目录 |
 | 6（最低） | `.opencode/opencode.json(c)`；外层目录优先于内层目录 |
@@ -247,7 +247,7 @@ description: "允许或拒绝 OpenCode 对指定资源执行操作，托管策�
 
 ## Console
 
-[OpenCode Console](/console) 上的团队会将其 Providers 和 Tools 策略编译为工作区配置中的普通 `policies` 语句。OpenCode 会像合并配置文件一样合并该配置，其优先级仅次于托管偏好设置和系统文件，因此组织的 `deny` 无法被仓库或用户的 `allow` 解除，而组织的 `allow` 可以解除权威级别较低的 `deny`。托管偏好设置和系统文件仍会覆盖该团队配置。
+[OpenCode Console](/console) 上的工作区会将其 Providers 和 Tools 策略编译为工作区配置中的普通 `policies` 语句。OpenCode 会像合并配置文件一样合并该配置，其优先级仅次于托管偏好设置和系统文件，因此组织的 `deny` 无法被仓库或用户的 `allow` 解除，而组织的 `allow` 可以解除权威级别较低的 `deny`。托管偏好设置和系统文件仍会覆盖该工作区配置。
 
 由这些语句导致的拒绝会注明工作区名称：
 
@@ -267,5 +267,5 @@ Blocked by Acme's policy
 Console 插件和策略插件无法在 `plugins` 中禁用；请参阅[插件控制](/plugins#control)。
 
 <Callout type="note">
-  策略不会配置端点或凭据，也无法让不可用的提供商变得可用。策略同样不会对插件代码进行沙箱隔离：被拒绝的提供商只会在常规的提供商和模型调用路径上被阻止。
+  策略不会配置端点或凭据，也无法让不可用的提供商变得可用。策略也不会把插件代码放进沙箱：被拒绝的提供商只会在常规的提供商和模型调用路径上被阻止。
 </Callout>

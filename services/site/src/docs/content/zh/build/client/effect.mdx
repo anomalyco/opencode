@@ -35,7 +35,7 @@ const session = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpCli
 
 ## 请求头与请求选项
 
-在传入的 `HttpClient` 上配置默认请求头。原生操作通过常规的 Effect 中断来取消。RPC 方法还支持针对单次调用设置位置、请求头和 signal 选项。
+在传入的 `HttpClient` 上配置默认请求头。原生操作通过常规的 Effect 中断来取消。RPC 方法还支持按调用传入 location、header 和 signal 选项。
 
 {/* prettier-ignore */}
 ```ts
@@ -101,7 +101,7 @@ RPC 事件是带类型的 Stream，而不是回调式的 `on` 监听器。它们
 bun add @effect/platform-node@4.0.1
 ```
 
-为 `Service.ensure()` 确保运行的服务创建一个经过身份验证的客户端。
+为 `Service.ensure()` 返回的服务创建一个带认证的客户端。
 
 ```ts
 import { NodeFileSystem } from "@effect/platform-node"

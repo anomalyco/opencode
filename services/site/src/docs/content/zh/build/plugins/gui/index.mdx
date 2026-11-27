@@ -88,16 +88,16 @@ export default Plugin.define({
 })
 ```
 
-由于两个进程执行同一个文件，每个进程都会为另一个进程的模块提供惰性占位符：
+由于两个进程执行同一个文件，每个进程都会为另一个进程的模块提供无操作占位符：
 
-- **在窗口中，** `electron` 和 Node 内置模块是惰性占位符。
-- **在主进程中，** Solid 和仅用于窗口的模块是惰性占位符。
+- **在窗口中，** `electron` 和 Node 内置模块是无操作占位符。
+- **在主进程中，** Solid 和仅用于窗口的模块是无操作占位符。
 
 占位符接受模块作用域中的任何属性读取、调用或构造，例如 Solid 提升的模板或打包器提升的 `require` 调用。请将每个进程的代码放在各自的 setup 中：在错误进程中运行的代码会得到占位符，而不是可用的值。
 
 两个进程中的 `Plugin.define` 和契约辅助函数都来自同一个 SDK。在主进程中，`@opencode/plugin/gui` 解析为主 SDK，它导出相同的 `Plugin`、`Store`、`Ipc`、`Contract` 和 `Registry`。一个定义同时服务两个进程。它仅用于窗口的导出（例如 `Command`、`bindPlugin` 和 `createKeyed`）在主进程中为 `undefined`，因此只能在 `setup` 中使用。
 
-## 构建包
+## 构建 bundle
 
 `./gui-experimental` 必须是一个预构建的 CommonJS 文件。请使用 `@opencode/plugin/gui/vite` 中的 Vite 预设构建它：
 
@@ -134,7 +134,7 @@ export default defineConfig({ plugins: [gui({ entry: "src/desktop.tsx", outFile:
 ```
 
 - `entry` 是默认导出 `Plugin.define` 的文件，默认为 `src/gui.tsx`。
-- `outFile` 是 `./gui-experimental` 导出指向的包，默认为 `dist/gui-experimental.cjs`。
+- `outFile` 是 `./gui-experimental` 导出指向的 bundle，默认为 `dist/gui-experimental.cjs`。
 
 #### 参考
 
@@ -149,7 +149,7 @@ interface GuiOptions {
 
 ### 依赖
 
-将构建工具添加为 devDependencies。应用在运行时提供 `@opencode/plugin/gui`，因此包只需要从 `@opencode/plugin` 依赖中获取其类型。
+将构建工具添加为 devDependencies。应用在运行时提供 `@opencode/plugin/gui`，因此 bundle 只需要从 `@opencode/plugin` 依赖中获取其类型。
 
 ```bash
 bun add -d vite vite-plugin-solid solid-js
@@ -163,7 +163,7 @@ bun add -d electron @types/node
 
 ### 共享模块
 
-每个进程都会向包提供这些模块。引用两个进程都不提供的模块会导致插件的 GUI 加载失败。
+每个进程都会向 bundle 提供这些模块。引用两个进程都不提供的模块会导致插件的 GUI 加载失败。
 
 ```ts
 import { Schema } from "effect" // Both processes
@@ -233,7 +233,7 @@ export const definition = Plugin.define({
 - `i18n` 按语言环境保存文案。请内联编写每种语言；缺少的键会用英文填充。使用 `ctx.t(key, params)` 和 `ctx.plural(key, count)` 读取。在窗口中，`ctx.t` 还会读取应用的共享键，例如 `common.*`。在 `main` 中，缺少的键会返回键名本身。
 - 定义 `setup`、`main` 或两者。两者都没有的 GUI 无法加载。
 - 没有 setup 时，`Plugin.define` 会将声明作为 `Plugin.Declarations` 返回，其他文件中的 setup 可以据此获得类型。`Plugin.Definition` 是完整定义的类型。
-- 插件不声明它提供或使用的契约，而是在运行时提供和读取它们；请参阅[契约和令牌](#contracts-and-tokens)。
+- 插件不声明它提供或使用的契约，而是在运行时提供和读取它们；请参阅[契约和 token](#contracts-and-tokens)。
 
 #### 参考
 
@@ -257,7 +257,7 @@ type Cleanup = () => void | Promise<void>
 
 ### 拆分到多个文件
 
-小型 GUI 插件可以放在 `src/gui.tsx` 中。较大的插件请在 `definition.ts` 中声明，把共享令牌放在 `contract.ts` 中，将每个 setup 写在单独的文件中，然后在 `src/gui.tsx` 中组合它们。
+小型 GUI 插件可以放在 `src/gui.tsx` 中。较大的插件请在 `definition.ts` 中声明，把共享 token 放在 `contract.ts` 中，将每个 setup 写在单独的文件中，然后在 `src/gui.tsx` 中组合它们。
 
 ```text
 src/
@@ -276,7 +276,7 @@ src/
 
 窗口启动时会执行整个 `./gui-experimental` 文件，因此请让模块作用域和 `setup` 保持轻量。在那里注册贡献，把耗时的操作放在组件、`createKeyed` 或 `createLatest` 中。
 
-对于较大的插件，请先声明插件，根据声明为每个 setup 提供类型，然后用它们定义插件。
+对于较大的插件，请先声明插件，根据声明为每个 setup 标注类型，然后用它们定义插件。
 
 ```ts title="src/gui/definition.ts"
 import { Schema } from "effect"
@@ -314,9 +314,9 @@ import { setup } from "./gui/window"
 export default Plugin.define({ ...definition, setup, main })
 ```
 
-- `Plugin.Setup<typeof definition>` 是窗口 setup 的类型。它会根据声明的 stores 为 `ctx.stores` 提供类型，根据声明的 icons 为 `ctx.icons` 提供类型。
+- `Plugin.Setup<typeof definition>` 是窗口 setup 的类型。它会根据声明的 stores 为 `ctx.stores` 标注类型，根据声明的 icons 为 `ctx.icons` 标注类型。
 - `Plugin.MainSetup` 是主 setup 的类型，`Plugin.Cleanup` 是任一 setup 可能返回的清理函数的类型。
-- 从 `@opencode/plugin/gui` 导入注册表、令牌和辅助函数，例如 `Command`、`SettingsPage`、`Panel`、`Slot`、`Contract`、`Ipc`、`Registry`、`Store`、`createKeyed`、`usePlugin` 和 `bindPlugin`。
+- 从 `@opencode/plugin/gui` 导入注册表、token 和辅助函数，例如 `Command`、`SettingsPage`、`Panel`、`Slot`、`Contract`、`Ipc`、`Registry`、`Store`、`createKeyed`、`usePlugin` 和 `bindPlugin`。
 - 从 `@opencode/plugin/gui/main` 导入仅用于主进程的注册表，例如 `MenubarItem`。
 
 ## 共享上下文
@@ -387,15 +387,15 @@ interface App {
 }
 ```
 
-## 契约和令牌
+## 契约和 token
 
-令牌让 GUI 插件可以跨进程通信，也可以彼此通信，而无需导入对方的运行时代码。请将所有令牌放在 `contract.ts` 中。令牌只包含其种类和 id，以及 `Ipc` 的 schema，因此其他插件可以在不包含你的运行时代码的情况下导入它。
+token 让 GUI 插件可以跨进程通信，也可以彼此通信，而无需导入对方的运行时代码。请将所有 token 放在 `contract.ts` 中。token 只包含其种类和 id，以及 `Ipc` 的 schema，因此其他插件可以在不包含你的运行时代码的情况下导入它。
 
-- `ctx.provide(token, impl)` 提供你自己的令牌：来自窗口 setup 的 `Contract`，或来自 `main` 的 `Ipc`。
+- `ctx.provide(token, impl)` 提供你自己的 token：来自窗口 setup 的 `Contract`，或来自 `main` 的 `Ipc`。
 - `ctx.use(token)` 跟随另一个插件提供的契约或 `Ipc`。它返回一个 [`Live`](#live-dependencies-and-failure-handling) 访问器。
 - `ctx.main(ipc)` 返回你自己 `main` 提供的 `Ipc` 的客户端。
 
-插件只能提供 id 等于自身 id 或以自身 id 开头的令牌，格式为 `<id>.<name>`。对于其他任何 id，`ctx.provide` 都会抛出错误；对于 id 不属于你的 `Ipc`，`ctx.main` 也会抛出错误。本页示例使用插件 id `acme`，因此它们的令牌 id 以 `acme.` 开头。
+插件只能提供 id 等于自身 id 或以自身 id 开头的 token，格式为 `<id>.<name>`。对于其他任何 id，`ctx.provide` 都会抛出错误；对于 id 不属于你的 `Ipc`，`ctx.main` 也会抛出错误。本页示例使用插件 id `acme`，因此它们的 token id 以 `acme.` 开头。
 
 ```ts
 Contract.define<AcmeBadge, "acme.badge">("acme.badge") // Plugin acme can provide it.
@@ -404,7 +404,7 @@ Contract.define<AcmeBadge, "badge">("badge") // ctx.provide throws in plugin acm
 
 ### 契约
 
-当一个插件的窗口 setup 向其他插件的窗口 setup 暴露 API 或 Solid 组件时，请使用 `Contract.define`。
+当一个插件的窗口 setup 向其他插件的窗口 setup 公开 API 或 Solid 组件时，请使用 `Contract.define`。
 
 ```ts title="src/gui/contract.ts"
 import type { JSX } from "solid-js"
@@ -445,7 +445,7 @@ export default Plugin.define({
 
 ### 使用其他插件的契约
 
-从你的包中导出 `contract.ts`，例如导出为 `./contract`，以便其他插件导入其令牌。另一个插件通过 `ctx.use(token)` 跟随该契约。访问器的值会随提供者的启动、停止和重启而变化，因此请在使用处读取它。
+从你的包中导出 `contract.ts`，例如导出为 `./contract`，以便其他插件导入其 token。另一个插件通过 `ctx.use(token)` 跟随该契约。访问器的值会随提供者的启动、停止和重启而变化，因此请在使用处读取它。
 
 ```tsx title="src/gui.tsx"
 import { Plugin, Slot } from "@opencode/plugin/gui"
@@ -466,7 +466,7 @@ export default Plugin.define({
 })
 ```
 
-- 对于同一个令牌，`ctx.use` 每次调用都会返回同一个访问器。
+- 对于同一个 token，`ctx.use` 每次调用都会返回同一个访问器。
 - 提供者关闭时，使用者仍可继续工作。请参阅[实时依赖和失败处理](#live-dependencies-and-failure-handling)。
 
 ### 主进程与窗口之间的 IPC
@@ -512,10 +512,10 @@ export const Exporter = Registry.define<Exporter>("acme.exporter")
 ```
 
 ```tsx
-// 另一个插件贡献一个条目。
+// Another plugin contributes an item.
 ctx.add(Exporter, () => ({ id: "gist", title: ctx.t("exporter.gist"), run: (text) => upload(text) }))
 
-// 所有者列出所有贡献。它是响应式的：请在渲染或 memo 中读取。
+// The owner lists every contribution. Reactive: read it in render or in a memo.
 const exporters = () => ctx.list(Exporter)
 ```
 
@@ -636,7 +636,7 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
 ### 存储的图标名称
 
-图标名称是字符串 `<plugin id>:<name>`，因此宿主会像存储自带图标名称一样存储它。[编辑器备注或引用](#attach-to-the-composer)会将其与草稿和已发送消息一起保留，[关闭的标签页](#reopen-closed-tabs)会将其与会话布局一起保留。
+图标名称是字符串 `<plugin id>:<name>`，因此宿主会像存储自带图标名称一样存储它。[输入框备注或引用](#attach-to-the-composer)会将其与草稿和已发送消息一起保留，[关闭的标签页](#reopen-closed-tabs)会将其与会话布局一起保留。
 
 ```ts
 ctx.screen.current()?.composer.attach({
@@ -675,7 +675,7 @@ interface SetupContext<D> extends Context {
 
 ## 注册表
 
-将注册表令牌和条目传给 `ctx.add`，即可向窗口外壳贡献内容。当条目跟随语言等响应式状态时，请将其作为函数 `() => item | undefined` 传入。当它读取的内容变化时，宿主会再次运行该函数。返回 `undefined` 可以撤回条目，直到该函数再次返回条目。
+将注册表 token 和条目传给 `ctx.add`，即可向窗口外壳贡献内容。当条目跟随语言等响应式状态时，请将其作为函数 `() => item | undefined` 传入。当它读取的内容变化时，宿主会再次运行该函数。返回 `undefined` 可以撤回条目，直到该函数再次返回条目。
 
 ```ts
 ctx.add(Command, () => ({ id: "open", title: ctx.t("command.open"), run: () => open() }))
@@ -689,7 +689,7 @@ ctx.add(Command, () => ({ id: "open", title: ctx.t("command.open"), run: () => o
 
 ### 命令
 
-`Command` 会向命令面板、**Settings > Shortcuts** 以及可选的编辑器 `/` 菜单添加一个操作。宿主会以 `<plugin id>.<command id>` 的形式发布该命令。
+`Command` 会向命令面板、**Settings > Shortcuts** 以及可选的输入框 `/` 菜单添加一个操作。宿主会以 `<plugin id>.<command id>` 的形式发布该命令。
 
 ```ts
 import { Command } from "@opencode/plugin/gui"
@@ -715,7 +715,7 @@ ctx.add(
 )
 ```
 
-- `title` 是面板标签，`description` 是其第二行，`group` 是其分类，均为翻译后的文本。
+- `title` 是命令面板中的标签，`description` 是其第二行，`group` 是其分类，均为翻译后的文本。
 - `keywords` 保存面板匹配的额外词语，以空格分隔。
 - `section` 是 **Settings > Shortcuts** 中的分区，默认为 `general`。
 - `bind` 是默认快捷键，例如 `mod+shift+t`。用户可以更改。
@@ -726,7 +726,7 @@ ctx.add(
 - `scope` 是一个 CSS 选择器，键盘焦点必须位于其中，绑定才会生效。设置 `editable` 后，文本字段获得焦点时绑定也会触发。
 - 要从自己的代码运行命令，请使用 `ctx.commands.run`；请参阅[运行命令](#run-commands)。
 
-通过快捷键触发时，`run` 可以返回 `false` 来拒绝该按键。事件随后会 continue 传给其目标，就像该命令没有快捷键一样。以下命令在用户于空提示词中按 Enter 时继续会话，其他 Enter 则留给提示词：
+通过快捷键触发时，`run` 可以返回 `false` 来拒绝该按键。事件随后会继续传给其目标，就像该命令没有快捷键一样。以下命令在用户于空提示词中按 Enter 时继续会话，其他 Enter 则留给提示词：
 
 ```ts
 ctx.add(Command, () => ({
@@ -810,7 +810,7 @@ ctx.add(Panel, {
 
 面板的回调：
 
-- `list` 返回要显示的标签页。`input.open` 保存在会话中存储的该插件标签页 id。它是响应式的。
+- `list` 返回要显示的标签页。`input.open` 是该插件存储在会话中的标签页 id。它是响应式的。
 - `render` 渲染标签页的内容一次。
 - `focus` 在选中标签页时运行。对于区域挂载时的选择，`restored` 为 `true`。
 - `enter` 在用户通过开关在标签页上打开侧边区域且标签页已显示时运行。请将键盘焦点移到标签页自己的目标，例如文本字段。如果焦点仍在区域之外，宿主会聚焦该区域。
@@ -827,7 +827,7 @@ ctx.add(Panel, {
 
 #### 面板宽度
 
-默认情况下，侧边区域中的每个标签页都共享对话的宽度。当面板需要比审查或浏览器更少或更多的空间时，请设置 `width`。传入 CSS 像素，或 `"narrow"` 表示区域最窄的宽度。
+默认情况下，侧边区域中的每个标签页都共享对话的宽度。当面板需要比审查面板或浏览器面板更少或更多的空间时，请设置 `width`。传入 CSS 像素，或 `"narrow"` 表示区域最窄的宽度。
 
 ```ts
 ctx.add(Panel, {
@@ -856,7 +856,7 @@ ctx.add(Panel, {
 - `missing` 会给标签页加删除线，例如文件已不存在时。
 - `hidden` 让恢复的标签页保持列出和可选但不绘制，直到其内容已知。
 - `file` 是标签页显示的工作区路径，会作为会话的打开文件之一列出。
-- `tabbable` 将标签页面板放入 Tab 顺序，适用于没有可聚焦元素的内容。
+- `tabbable` 将标签页面板放入 Tab 键顺序，适用于没有可聚焦元素的内容。
 
 #### 参考
 
@@ -1031,11 +1031,11 @@ ctx.add(Slot, {
 
 - `window.bottom` 是窗口底部、通知上方的全宽条带。
 - `session.header` 是会话时间线的标题行。缓存的时间线在隐藏时保持挂载，此时 `active` 为 `false`。
-- `session.location.menu` 在项目菜单的位置详情之后添加条目。
+- `session.location.menu` 在项目菜单的 Location 详情之后添加条目。
 - `session.panel.end` 在侧边区域标签栏的末端放置操作。
 - `order` 对同一插槽中的条目排序。
 
-`session.location.menu` 会收到 `shown`，项目菜单打开时为 `true`。请仅在它为 `true` 时订阅位置数据：
+`session.location.menu` 会收到 `shown`，项目菜单打开时为 `true`。请仅在它为 `true` 时订阅 Location 数据：
 
 ```tsx
 ctx.add(Slot, {
@@ -1170,11 +1170,11 @@ interface TitlebarItem {
 }
 ```
 
-### 编辑器 pill
+### Composer pill
 
-`ComposerPill` 在会话编辑器上方的行中添加一个 pill，位于应用的背景工作和待办 pill 旁边。它适合显示属于用户当前会话的状态，例如其分支的拉取请求。pill 浮动在时间线之上，因此出现或消失都不会改变编辑器的大小。该行会跟随用户的背景活动对齐方式，且不会在 subagent 的会话中显示。
+`ComposerPill` 在会话输入框上方的行中添加一个 pill，位于应用的背景工作和待办 pill 旁边。它适合显示属于用户当前会话的状态，例如其分支的拉取请求。pill 浮动在时间线之上，因此出现或消失都不会改变输入框的大小。该行会跟随用户的背景活动对齐方式，且不会在 subagent 的会话中显示。
 
-`show` 返回某个会话的 pill，返回 `undefined` 表示在那里不显示。宿主会为每个挂载的编辑器运行它，并在它读取的内容变化时再次运行。以下插件通过其服务器部分的 [RPC](/build/plugins/rpc) 列出每个会话目录中打开的拉取请求，并将它们显示为一个 pill：
+`show` 返回某个会话的 pill，返回 `undefined` 表示在那里不显示。宿主会为每个挂载的 composer 运行它，并在它读取的内容变化时再次运行。以下插件通过其服务器部分的 [RPC](/build/plugins/rpc) 列出每个会话目录中打开的拉取请求，并将它们显示为一个 pill：
 
 ```tsx
 import { createStore } from "solid-js/store"
@@ -1304,13 +1304,13 @@ ctx.add(CodeBlock, {
 
 #### 适用范围
 
-| 界面                                                        | 代码块内容 |
-| -------------------------------------------------------------- | ------------------ |
-| 时间线：助手文本和工具输出                       | 是                |
-| 会话屏幕上的侧边面板，例如 Markdown 预览   | 是                |
-| 在会话屏幕上渲染的 `ctx.ui.Markdown`               | 是                |
-| `ctx.ui.Code`，以及你自己的 `CodeBlock` 渲染中的 Markdown | 否                 |
-| 设置页面、对话框等屏幕之外的界面      | 否                 |
+| 界面                                                      | 代码块内容 |
+| --------------------------------------------------------- | ---------- |
+| 时间线：助手文本和工具输出                                | 是         |
+| 会话屏幕上的侧边面板，例如 Markdown 预览                  | 是         |
+| 在会话屏幕上渲染的 `ctx.ui.Markdown`                      | 是         |
+| `ctx.ui.Code`，以及你自己的 `CodeBlock` 渲染中的 Markdown | 否         |
+| 设置页面、对话框等屏幕之外的界面                          | 否         |
 
 #### 布局和性能
 
@@ -1367,7 +1367,7 @@ interface CodeBlockProps {
 
 ### 链接处理器
 
-`LinkHandler` 会打开用户在消息或编辑器芯片中点击的本地文件或自定义链接。`match` 返回 true 的处理器中 `priority` 最高者会打开该链接。
+`LinkHandler` 会打开用户在消息或输入框芯片中点击的本地文件或自定义链接。`match` 返回 true 的处理器中 `priority` 最高者会打开该链接。
 
 ```ts
 import { LinkHandler } from "@opencode/plugin/gui"
@@ -1432,7 +1432,7 @@ ctx.add(
 - 启动会等待每个来源变为 `ready`。就绪来源的条目就是其完整清单。
 - `order` 按升序排列来源。
 - 每个条目的键为 `<plugin id>:<id>`。`label` 是其 `name` 旁的短徽标。
-- `auth` 表示服务器等待用户登录，`incompatible` 表示它运行的版本不为此应用所支持。
+- `auth` 表示服务器等待用户登录，`incompatible` 表示它运行的版本该应用不支持。
 - `listed: false` 使条目不出现在应用的服务器列表中。Settings 仍会显示它。
 - 服务器 `ready` 后，`http` 是端点。
 - `reconnect` 会重新解析断开的端点，`connect` 会准备尚未就绪的服务器，`remove` 会在条目移除前运行。
@@ -1554,7 +1554,7 @@ ctx.add(Command, () => ({
 }))
 ```
 
-以下各节介绍每个 API。`ctx.options`、`ctx.client` 和 `ctx.app` 是[共享上下文](#shared-context)，`ctx.provide`、`ctx.use` 和 `ctx.main` 用于[契约和令牌](#contracts-and-tokens)，`ctx.stores` 保存插件[声明](#define-the-gui-plugin)的存储，`ctx.icons` 保存它声明的[图标](#icons)名称。
+以下各节介绍每个 API。`ctx.options`、`ctx.client` 和 `ctx.app` 是[共享上下文](#shared-context)，`ctx.provide`、`ctx.use` 和 `ctx.main` 用于[契约和 token](#contracts-and-tokens)，`ctx.stores` 保存插件[声明](#define-the-gui-plugin)的存储，`ctx.icons` 保存它声明的[图标](#icons)名称。
 
 #### 参考
 
@@ -1686,14 +1686,14 @@ const file = ctx.screen.current()?.file
 if (session && file) void file.sync("README.md")
 ```
 
-- `key` 是 `<server id>\n<session id>`，在不同服务器间唯一。请按它为主键保存会话状态。
+- `key` 是 `<server id>\n<session id>`，在不同服务器间唯一。按会话保存状态时，请以它为键。
 - `tab` 是拥有该会话的外壳标签页键。服务器仍在创建会话时 `pending` 为 `true`。
 - `directory` 是会话的工作区目录，当它是项目根目录时 `local` 为 `true`。
 - `listedProject` 是会话所属的侧边栏项目。
 - 每次路由到该会话时，`visit` 都是一个新对象。
 - `background` 列出会话正在运行的 subagent 和 shell 命令。
-- `ctx.sessions.list()` 返回打开的标签页中的会话。
-- 屏幕的 `file` 读取工作区的文件，`comment` 保存下一条提示词的行评论。`composer` 是下一条提示词：其文本、附加部分和模型；请参阅[附加到编辑器](#attach-to-the-composer)。
+- `ctx.sessions.list()` 返回已打开的外壳标签页中的会话。
+- 屏幕的 `file` 读取工作区的文件，`comment` 保存下一条提示词的行评论。`composer` 是下一条提示词：其文本、附加部分和模型；请参阅[附加到 composer](#attach-to-the-composer)。
 - `file.sync(path)` 加载文件并请求服务器监听其变化。文件的标签页关闭时调用 `file.unwatch(path)`。
 
 #### 参考
@@ -1776,7 +1776,7 @@ interface Comments {
 }
 ```
 
-### 附加到编辑器
+### 附加到 composer
 
 在事件处理器或命令中使用 `ctx.screen.current()?.composer`，可以将文件、备注或引用附加到用户的下一条提示词。
 
@@ -1800,7 +1800,7 @@ composer?.attach({
 - `detach(commentID)` 移除已附加的部分。
 - 备注的 `live` 会在备注仍留在当前应用进程期间替换其 `subject` 和 `href`，用于只有该进程能解析的引用，例如页面元素。存储的草稿会丢弃它，回退或分叉恢复的已发送消息也会丢弃它。
 
-引用是用户从你的插件显示的内容（例如日志输出）中引用的文本，可以附带评论。它的渲染方式与会话时间线中的引用相同，位于来源的图标和标签下。请先检查 `quotable()`：在 subagent 的会话中（没有编辑器），以及编辑器运行 shell 命令期间，它为 `false`。
+引用是用户从你的插件显示的内容（例如日志输出）中引用的文本，可以附带评论。它的渲染方式与会话时间线中的引用相同，位于来源的图标和标签下。请先检查 `quotable()`：在 subagent 的会话中（没有输入框），以及输入框运行 shell 命令期间，它为 `false`。
 
 ```ts
 const composer = ctx.screen.current()?.composer
@@ -1820,7 +1820,7 @@ if (composer?.quotable()) {
 
 - `source.subject` 向模型说明来源，例如 `the terminal`。它不会被本地化。
 - 省略 `comment` 可以让用户从芯片中添加评论。
-- `focus(commentID)` 打开已附加引用的评论编辑器。编辑器未显示时（例如在显示面板的窄屏上），编辑器会在编辑器显示后打开。
+- `focus(commentID)` 打开已附加引用的评论编辑器。输入框未显示时（例如在显示面板的窄屏上），评论编辑器会在输入框显示后打开。
 - 模型会读到 `The user quoted the following from <subject>:`，然后是每行以 `> ` 为前缀的文本，最后是评论（如果有）。
 
 #### 参考
@@ -1866,10 +1866,10 @@ const composer = ctx.screen.current()?.composer
 const empty = !composer?.text().trim()
 ```
 
-- `text()` 是纯文本形式的提示词：提及会以其 `@` 文本呈现，附件和附加部分会被省略。在 shell 模式下，它是 shell 命令。在会话草稿加载前，以及在 subagent 的会话中（没有编辑器），它为 `""`。它是响应式的。
+- `text()` 是纯文本形式的提示词：提及会以其 `@` 文本呈现，附件和附加部分会被省略。在 shell 模式下，它是 shell 命令。在会话草稿加载前，以及在 subagent 的会话中（没有输入框），它为 `""`。它是响应式的。
 - 键盘焦点在提示词中时 `focused()` 为 `true`。它不是响应式的，因此请在执行操作处读取，例如命令的 `run` 中。
 
-`insert(text)` 会将文本输入提示词，供用户查看并发送。编辑器上的任何操作都不会发送提示词。
+`insert(text)` 会将文本输入提示词，供用户查看并发送。composer 上的任何操作都不会发送提示词。
 
 ```ts
 const composer = ctx.screen.current()?.composer
@@ -1878,12 +1878,12 @@ composer?.insert(`Explain ${path}`)
 composer?.focus()
 ```
 
-- `insert` 会在用户最后停留在提示词中的光标处添加文本，否则在末尾添加，并将光标移到其后。它不会替换选中的文本。
+- `insert` 会在用户上次停留在提示词中的光标位置插入文本，否则追加到末尾，并将光标移到其后。它不会替换选中的文本。
 - 文本不会被解析：`@path` 仍是文本，而不是提及。
 - `setText(text)` 替换提示词的文本，包括提及。附件和附加部分保持不变。`setText("")` 清空文本。
 - 两者都不会移动键盘焦点。调用 `focus()` 将其移到提示词。
 - 在会话存储的草稿加载之前进行的写入（`insert`、`setText`、`attach`、`update` 或 `detach`）会等待它。随后按调用顺序应用到调用时路由的会话。它永远不会替换存储的草稿。
-- 在 subagent 的会话中（没有编辑器），这些写入不会产生效果。
+- 在 subagent 的会话中（没有输入框），这些写入不会产生效果。
 
 ### 选择模型
 
@@ -1997,7 +1997,7 @@ const ok = await ctx.dialogs.confirm({ title: ctx.t("end.title"), confirm: ctx.t
 - 每个对话框的打开方式与 `open` 相同，并随请求它的所有者关闭，否则随你的插件关闭。
 - 取消、按 Escape、点击外部、被替换的对话框或所有者结束，都会使 `confirm` 解析为 `false`，并使 `prompt` 和 `select` 解析为 `undefined`。
 
-`alert` 用一个按钮告知用户必须确认的内容。无论对话框如何关闭，它都会在关闭后完成：
+`alert` 用一个按钮告知用户必须确认的内容。无论对话框以何种方式关闭，它都会在关闭后返回：
 
 ```ts
 await ctx.dialogs.alert({ title: ctx.t("export.done"), description: path })
@@ -2104,7 +2104,7 @@ ctx.add(Panel, {
 
 - `Icon`、`Button` 和 `IconButton` 接受任意 `IconName`，与 SDK 的每个 `icon` 字段相同：应用自带的图标，或来自 `ctx.icons` 的[你自己的图标](#icons)。`IconButton` 的 `label` 是其无障碍名称；用 `Tooltip` 包装它可以在悬停时显示。
 - 按钮上的 `busy` 会将其图标替换为加载指示器，并禁用它，直到再次为 `false`。
-- 对于所有不是 AI 正在工作的加载状态（例如窗格、搜索或正在加载的连接），请使用 `Loader`。
+- 对于并非 AI 工作状态的加载，请使用 `Loader`，例如窗格、搜索或正在加载的连接。
 - `Menu` 打开一个 `items` 列表：操作、`{ type: "separator" }` 和 `{ type: "group", label, items }`。
 - `Switch` 和 `TextInput` 不保存状态：请将 `onChange` 或 `onInput` 的值传回 `checked` 或 `value`。
 - `Keybind` 以芯片形式显示按键，例如 `ctx.keybinds.keybind(command)`。
@@ -2402,7 +2402,7 @@ interface UiSettingsRowProps {
 }
 ```
 
-### 通知
+### Toast
 
 `ctx.toast.show` 在窗口角落显示一条短消息，并返回一个句柄，其 `dismiss()` 会关闭它。
 
@@ -2410,13 +2410,13 @@ interface UiSettingsRowProps {
 ctx.toast.show({ variant: "success", title: ctx.t("invite.copied") })
 ```
 
-- `variant` 为 `"default"`、`"success"`、`"error"` 或 `"loading"`。除非设置了 `icon`，`success` 通知会显示对勾图标。
-- `duration` 是通知显示的时长，以毫秒为单位，默认为 5 秒。
-- `persistent: true` 会让通知保持到用户或 `dismiss()` 关闭它，并忽略 `duration`。
-- 与仍在显示的通知相同的通知会替换它，而不是叠加一个副本。
-- 插件停止时，其通知会关闭，因此没有按钮会比它运行的代码活得更久。通知不会随显示它的组件或 `createKeyed` 运行结束而关闭。
+- `variant` 为 `"default"`、`"success"`、`"error"` 或 `"loading"`。除非设置了 `icon`，`success` toast 会显示对勾图标。
+- `duration` 是 toast 显示的时长，以毫秒为单位，默认为 5 秒。
+- `persistent: true` 会让 toast 保持到用户或 `dismiss()` 关闭它，并忽略 `duration`。
+- 内容与仍在显示的 toast 相同的，会替换那一个，而不是叠加一个副本。
+- 插件停止时，其 toast 会关闭，因此没有按钮会比它运行的代码活得更久。toast 不会随显示它的组件或 `createKeyed` 运行结束而关闭。
 
-在工作运行时显示 `loading` 通知，并在工作结束时关闭它：
+在工作运行时显示 `loading` toast，并在工作结束时关闭它：
 
 ```ts
 const saving = ctx.toast.show({ variant: "loading", title: ctx.t("saving"), persistent: true })
@@ -2424,7 +2424,7 @@ await save()
 saving.dismiss()
 ```
 
-`actions` 添加按钮。点击会运行操作并关闭通知：
+`actions` 添加按钮。点击会运行操作并关闭 toast：
 
 ```ts
 ctx.toast.show({
@@ -2483,7 +2483,7 @@ if (session) {
 - `sound: false` 永远不会播放声音。
 - 点击通知会将应用带到前台，并在提供了 `session` 时打开它。
 - 每个应用窗口都会运行你自己的一份插件。请传入事件的 `id`（例如运行的 id），让第一个发送它的窗口负责通知和播放声音。没有 `id` 时，每次调用都会通知。
-- 应用界面前挂载之前，`notify` 会等待它。
+- 应用界面挂载之前，`notify` 会等待它。
 
 `notify` 永远不会拒绝。它会解析其执行结果：应用请求系统显示通知时 `notification` 为 `true`，声音开始播放时 `sound` 为 `true`。
 
@@ -2519,7 +2519,7 @@ interface NotifyResult {
 
 ### 用量数据
 
-会话的 token、费用和套餐数据位于服务器的数据中，与应用为标题栏读取“28k · $0.28”的是同一个响应式存储。请从那里读取，而不是从 opencode 的数据库读取。
+会话的 token、费用和套餐数据位于服务器的数据中，与应用在标题栏读取“28k · $0.28”所用的响应式存储相同。请从那里读取，而不是从 opencode 的数据库读取。
 
 ```ts
 import { lastAssistantWithUsage } from "@opencode/client/solid"
@@ -2725,7 +2725,7 @@ interface Workspaces {
 - **`Store.global`** 为应用保存一个值。它在 `setup` 运行前加载，因此 `ctx.stores.name.value` 永远不会是 `undefined`。
 - **`Store.session`** 为每个会话保存一个值。它在会话挂载时加载；在此之前 `ctx.stores.name(session).value` 为 `undefined`。
 
-声明的存储用于窗口。`main` 使用 `ctx.storage.store` 打开其状态，该调用是同步读取的；请参阅[主进程上下文](#main-context)。
+声明的存储用于窗口。`main` 使用 `ctx.storage.store` 打开其状态，它会同步读取；请参阅[主进程上下文](#main-context)。
 
 使用 `update(draft => …)` 就地修改值（不得返回值），或用 `set(next)` 替换它：
 
@@ -2931,7 +2931,7 @@ interface DrawerView {
 }
 ```
 
-## App contracts
+## 应用契约
 
 应用向每个插件提供这些契约。使用 `ctx.use(token)` 跟随它们，并像处理其他插件契约一样处理其非 `active` 状态。例如，`Browser` 在 Web 上为 `inactive`。
 
@@ -3021,8 +3021,8 @@ const count = () => {
 - `active(session)` 是审查面板显示的文件。
 - `details(session)` 是会话目录的未提交更改，与审查模式无关。
 - `focus(session, path)` 在审查面板中显示文件，`open(session)` 显示所有更改。
-- `watch(screen, source)` 在视图显示更改期间保持其加载，并在视图切换会话时继续。请从面板或插槽输入传入所属屏幕。它返回一个停止监听的函数；请参阅 [createKeyed](#createkeyed)。
-- `tree` 监听是持久的更改列表：打开侧边区域会刷新它。`details` 监听会加载 `details(session)`。
+- `watch(screen, source)` 让视图在显示更改期间持续加载，并跨越视图的会话切换。请从面板或插槽输入传入所属屏幕。它返回一个停止监听的函数；请参阅 [createKeyed](#createkeyed)。
+- 以 `tree` 为源的监听会得到持久的更改列表：打开侧边区域会刷新它。以 `details` 为源的监听会加载 `details(session)`。
 
 #### 参考
 
@@ -3110,7 +3110,7 @@ export default Plugin.define({
 })
 ```
 
-在窗口中，`electron` 是惰性占位符，因此在共享的 `./gui-experimental` 文件中导入它是安全的。请参阅[一个文件，两个进程](#one-file-two-processes)。
+在窗口中，`electron` 是无操作占位符，因此在共享的 `./gui-experimental` 文件中导入它是安全的。请参阅[一个文件，两个进程](#one-file-two-processes)。
 
 ## 主进程上下文
 
@@ -3301,7 +3301,7 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
 - `main` 启动期间调用会等待。`main` 无法回答时会拒绝：在 Web 上、插件的 `main` 关闭或失败期间，或方法抛出错误时。请在用户需要反馈的地方捕获拒绝。
 - `state()` 和 `on()` 在重启后继续跟随 `main`。监听器随当前所有者结束，否则随插件结束。
-- 对于同一个令牌，`ctx.main` 每次调用都返回同一个客户端。
+- 对于同一个 token，`ctx.main` 每次调用都返回同一个客户端。
 
 使用 `client.state()` 读取此窗口的 `state`。第一个快照到达前它为 `undefined`，每次 `main` 调用 `changed` 时更新。
 
@@ -3407,14 +3407,14 @@ export const main: Plugin.MainSetup = (ctx) => {
 
 - `"open"` 只为之后打开的窗口触发，因此请先附加到 `ctx.windows.list()`。
 - 窗口将嵌入的 `id` 传给 `ctx.embeds.View` 和 `ctx.embeds.capture`。
-- `show(visible)` 是页面的可见性一侧：只有当窗口布局它且 `show(true)` 持续时，视图才显示。
+- `show(visible)` 是页面侧的可见性开关：只有当窗口布局它且 `show(true)` 持续时，视图才显示。
 - `on("visible", handler)` 在视图上屏或离屏时运行，包括窗口在其位置绘制静态图时。
 - `capture()` 返回页面的静态图，隐藏时返回 `undefined`。
 - `dispose()` 会从窗口移除视图，但不会关闭其页面；使用完毕后请调用 `view.webContents.close()`。插件移除时宿主也会销毁嵌入。
 - 在窗口中，`View` 用嵌入填充其容器。宿主会同步视图的边界、缩放、圆角和对话框遮挡，并在窗口隐藏或对话框打开时隐藏它。
 - `frozen` 用静态图代替实时视图，使 DOM 内容可以浮在其上。`radius` 设置底部圆角，`background` 是圆角处显示的颜色。
 - `page` 是嵌入显示的内容，例如其 URL。面板移动期间，宿主会在其位置绘制嵌入的静态图，并丢弃在 `page` 为其他值时拍摄的静态图。
-- 窗口的 `capture(id)` 返回 JPEG 静态图，嵌入隐藏时以及始终在 Web 上时返回 `undefined`。
+- 窗口的 `capture(id)` 返回 JPEG 静态图；嵌入隐藏时返回 `undefined`，在 Web 上则始终返回 `undefined`。
 
 #### 参考
 
@@ -3450,7 +3450,7 @@ interface EmbedProps {
 
 ## 实时依赖和失败处理
 
-`ctx.use(token)` 返回响应式 `Live<T>` 的访问器：提供令牌的插件的状态。提供者关闭时你的插件仍会运行，因此请处理非 `active` 的状态。任何控件都不应失效，任何加载指示器都不应永远运行。
+`ctx.use(token)` 返回响应式 `Live<T>` 的访问器：提供 token 的插件的状态。提供者关闭时你的插件仍会运行，因此请处理非 `active` 的状态。任何控件都不应失效，任何加载指示器都不应永远运行。
 
 ```ts
 import { Browser } from "@opencode/plugin/gui/browser"

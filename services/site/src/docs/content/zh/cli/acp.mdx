@@ -18,7 +18,7 @@ description: "通过 Agent Client Protocol 客户端使用 OpenCode。"
 
 其他 ACP 客户端使用相同的命令和 `acp` 参数，但配置文件和字段名称可能不同。如果图形界面客户端找不到 `opencode`，请将 `command` 设置为 `which opencode` 输出的绝对路径。
 
-## 身份验证
+## 认证
 
 OpenCode 会使用已有的提供商凭据。启动 ACP 客户端之前，请先在终端中登录：
 
@@ -26,9 +26,9 @@ OpenCode 会使用已有的提供商凭据。启动 ACP 客户端之前，请先
 opencode auth login
 ```
 
-OpenCode 只提供一种身份验证方式：`opencode-login`。默认情况下，它是 agent 身份验证方式（agent auth method）。`authenticate` 请求只接受这一种方式，并且不会收集凭据。如果提示词因提供商需要身份验证而失败，OpenCode 会返回 ACP 的 `auth_required` 错误。
+OpenCode 只提供一种认证方式：`opencode-login`。默认情况下，它是 agent 认证方式（agent auth method）。`authenticate` 请求只接受这一种方式，并且不会收集凭据。如果提示词因提供商需要认证而失败，OpenCode 会返回 ACP 的 `auth_required` 错误。
 
-如果客户端将 `clientCapabilities.auth.terminal` 设置为 `true`，该身份验证方式就是终端身份验证方式（terminal auth method）：
+如果客户端将 `clientCapabilities.auth.terminal` 设置为 `true`，该认证方式就是终端认证方式（terminal auth method）：
 
 ```json
 {
@@ -40,9 +40,9 @@ OpenCode 只提供一种身份验证方式：`opencode-login`。默认情况下�
 }
 ```
 
-客户端不得将此方式发送给 `authenticate`，而应在启动 OpenCode 的命令后加上 `--login`（例如 `opencode acp --login`），并在终端中运行。OpenCode 会执行 `opencode auth login` 登录流程，然后退出。退出状态为 0 表示登录成功，之后客户端重新连接并再次发送 `initialize`。
+客户端不得将此方式发送给 `authenticate`，而应在启动 OpenCode 的命令中加上 `--login`（例如 `opencode acp --login`），并在终端中运行。OpenCode 会执行 `opencode auth login` 登录流程，然后退出。退出状态为 0 表示登录成功，之后客户端重新连接并再次发送 `initialize`。
 
-如果客户端将 `clientCapabilities._meta["terminal-auth"]` 设置为 `true`，身份验证方式中会包含登录命令：
+如果客户端将 `clientCapabilities._meta["terminal-auth"]` 设置为 `true`，认证方式中会包含登录命令：
 
 ```json
 {
@@ -57,7 +57,7 @@ OpenCode 只提供一种身份验证方式：`opencode-login`。默认情况下�
 
 `opencode acp` 会在 stdin 上等待 ACP 消息，所以直接在终端中运行时看起来像是卡住了。请改为从 ACP 客户端启动它。
 
-如果客户端报告进程已退出或输出了无效的协议内容，请在客户端参数中的 `acp` 之前加上 `--print-logs`。这样 OpenCode 会将 ACP 日志和私有服务器日志写入 stderr，而 stdout 只承载 ACP 消息。
+如果客户端报告进程已退出或输出了无效的协议内容，请在客户端参数中的 `acp` 之前加上 `--print-logs`。这样 OpenCode 会将 ACP 日志和私有服务器日志写入 stderr，而 stdout 只输出 ACP 消息。
 
 ```bash
 opencode --print-logs acp
@@ -97,18 +97,18 @@ OpenCode 会读取以下客户端能力：
 
 | 能力 | 效果 |
 | --- | --- |
-| `auth.terminal` 设置为 `true` | 身份验证方式为[终端身份验证方式](#authentication)。 |
+| `auth.terminal` 设置为 `true` | 认证方式为[终端认证方式](#authentication)。 |
 | `elicitation.form` | OpenCode 以表单形式提出[问题](#questions)。 |
 | `session.compaction` | OpenCode 通过 ACP 的更新报告[上下文压缩](#compaction)。 |
-| `_meta["terminal-auth"]` 设置为 `true` | 身份验证方式包含[登录命令](#authentication)。 |
+| `_meta["terminal-auth"]` 设置为 `true` | 认证方式包含[登录命令](#authentication)。 |
 
 ### 会话
 
 客户端在创建会话时设置工作目录。OpenCode 会使用该目录的配置，包括其中的模型、agent、命令、技能、指令、插件和 MCP 服务器。
 
-- `cwd` 必须是绝对路径。对于相对路径的 `cwd`，OpenCode 会返回 invalid params 错误。
+- `cwd` 必须是绝对路径；OpenCode 会拒绝相对路径的 `cwd`，并返回 invalid params 错误。
 - `session/load` 会重放已保存的消息，`session/resume` 和 `session/fork` 则不会。
-- 加载、恢复或分叉会话时，客户端必须将该会话的目录作为 `cwd` 传入，也可以传入同一项目的另一个目录，例如会话迁入 worktree 之前所在的主检出目录。对于其他任何 `cwd`，OpenCode 都会返回 invalid params 错误，其 `data.directory` 为该会话的目录。
+- 加载、恢复或分叉会话时，客户端必须将该会话的目录作为 `cwd` 传入，也可以传入同一项目的另一个目录，例如会话迁入 worktree 后，该项目的主检出目录。对于其他任何 `cwd`，OpenCode 都会返回 invalid params 错误，其 `data.directory` 为该会话的目录。
 - `session/list` 每页最多返回 100 个会话，支持 `cwd` 过滤条件和 `cursor`。每个 subagent 会话都带有 `_meta["opencode/child-session"]`，其中包含其 `id`、`parentID` 和 `title`。
 - OpenCode 重命名会话时（例如生成标题后），会发送带有新 `title` 的 `session_info_update`。
 - `session/close` 会中断进行中的工作，并将会话与 ACP 进程分离。OpenCode 会保留已保存的会话。
@@ -129,9 +129,9 @@ OpenCode 会读取以下客户端能力：
 ```
 
 - 每一项都必须是绝对路径，且不能包含 `*` 或 `?`。
-- OpenCode 会放行每个根目录内的外部目录访问。读取、编辑和 shell 权限规则仍然适用。
+- OpenCode 会为每个根目录放行外部目录访问。读取、编辑和 shell 权限规则仍然适用。
 - 按照 [additional directories RFD](https://agentclientprotocol.com/rfds/additional-directories) 的规定，每次请求中的列表都会替换会话之前的列表。
-- OpenCode 将这些授权存储在会话上，因此其他 OpenCode 客户端使用该会话时同样生效。OpenCode 创建子会话时，子会话会复制这些授权。
+- OpenCode 将这些授权保存在会话中，因此其他 OpenCode 客户端使用该会话时同样生效。OpenCode 创建子会话时，子会话会复制这些授权。
 
 `session/list` 会在 `additionalDirectories` 中返回每个会话存储的列表。
 
@@ -162,10 +162,10 @@ OpenCode 会读取以下客户端能力：
 | `text` | 发送给模型。 |
 | 受众仅为 `assistant` 的 `text` | 作为独立上下文发送给模型，不放在用户消息中。 |
 | 受众仅为 `user` 的 `text` | 不纳入模型输入。 |
-| 带有 `data` 的 `image` | 作为附件附加到提示词。 |
+| 带有 `data` 的 `image` | 作为附件添加到提示词。 |
 | 只有 `uri` 的 `image` | 按资源链接处理。 |
 | 带有 `text` 的 `resource` | 将文本内联在资源路径或 URI 之后。 |
-| 带有 `blob` 的 `resource` | 作为附件附加。没有 `mimeType` 时，根据 URI 的文件名推断。 |
+| 带有 `blob` 的 `resource` | 作为附件添加。没有 `mimeType` 时，根据 URI 的文件名推断。 |
 | 指向 `file:` URI 的 `resource_link` | 附加该文件。如果文件不存在或无法读取，则改为发送 Markdown 链接。 |
 | 指向带 `path` 查询参数的 `zed://` URI 的 `resource_link` | 附加 `path` 处的文件。 |
 | 指向其他 URI 的 `resource_link` | 发送 Markdown 链接，例如 `[spec](https://example.com/spec.md)`。 |
@@ -189,11 +189,11 @@ OpenCode 会读取以下客户端能力：
 
 如果提示词以 `/` 加某个可用命令的名称开头，OpenCode 会运行该命令，并将其余文本作为参数。如果以 `/` 加某个技能的 ID 开头，OpenCode 会附加该技能后发送提示词。以 `/` 开头的其他文本会作为普通提示词发送。`/compact` 会执行[上下文压缩](/compaction)。ID 与某个命令相同的技能不会列出。
 
-如果命令失败，提示词会以该命令自己的消息失败，例如其用法说明，并将 `data.service` 设为 `command`。
+如果命令失败，提示词会带着该命令自己的消息（例如用法说明）一起失败，`data.service` 为 `command`。
 
 ### MCP 服务器
 
-客户端可以在 `session/new`、`session/load`、`session/resume` 和 `session/fork` 中传入 stdio 和 HTTP MCP 服务器。OpenCode 会在 `opencode acp` 进程的生命周期内将它们添加到会话所在的目录，因此该目录中的其他会话也能使用它们。如果 OpenCode 卸载了空闲目录，它会在该会话的下一个提示词之前再次添加这些服务器。OpenCode 会透传 HTTP 请求头，不使用 OAuth。OpenCode 不会声明支持基于 SSE 的 MCP，也不支持基于 ACP 的 MCP。
+客户端可以在 `session/new`、`session/load`、`session/resume` 和 `session/fork` 中传入 stdio 和 HTTP MCP 服务器。OpenCode 会在 `opencode acp` 进程的生命周期内将它们添加到会话所在的目录，因此该目录中的其他会话也能使用它们。如果 OpenCode 卸载了空闲目录，它会在该会话的下一个提示词之前再次添加这些服务器。OpenCode 会透传 HTTP 请求头，并且对这些服务器不使用 OAuth。OpenCode 不会声明支持基于 SSE 的 MCP，也不支持基于 ACP 的 MCP。
 
 | 情况 | 行为 |
 | -------------------------------- | ------------------------------------------------------------------ |
@@ -236,7 +236,7 @@ OpenCode 会读取以下客户端能力：
 }
 ```
 
-- OpenCode 绝不会发送可能收集密钥的表单。措辞类似收集密钥的选择题，例如“应该使用哪个 API token？”，仍会发送，但不会包含用户输入的答案。
+- OpenCode 绝不会发送可能收集密钥的表单。即使某个选择题的措辞看起来像在收集密钥（例如“应该使用哪个 API token？”），OpenCode 仍会发送，但不会包含用户输入的答案。
 - 如果某个字段除了选项之外还接受手动输入的答案，schema 会额外添加一个可选的 `<key>_custom` 字符串属性。对于单选，非空的自定义答案会替换所选选项；对于多选，OpenCode 会将其添加到所选选项中。
 - 如果用户拒绝或取消表单，OpenCode 会取消该问题。
 

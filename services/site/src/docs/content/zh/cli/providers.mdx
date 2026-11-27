@@ -1,6 +1,6 @@
 ---
 title: "CLI 提供商"
-description: "在 CLI 和 TUI 中连接提供商账户并管理凭据。"
+description: "在 CLI 和 TUI 中连接提供商账号并管理凭据。"
 ---
 
 在 TUI 中连接提供商，然后选择它的一个模型：
@@ -10,22 +10,22 @@ description: "在 CLI 和 TUI 中连接提供商账户并管理凭据。"
 /models
 ```
 
-`/connect` 会列出当前服务器和项目中可用的集成。选择一个提供商；如果它提供多种身份验证方式，再选择其中一种，然后按提示操作即可。
+`/connect` 会列出当前服务器和项目中可用的集成。选择一个提供商，如果它提供多种认证方式就选一种，然后按提示操作。
 
 ## TUI
 
-TUI 支持 API 密钥、OAuth 和提供商身份验证命令。OAuth 会打开一个授权 URL，或显示一个需要输入的验证码；按 `o` 打开该 URL，按 `c` 复制授权信息。
+TUI 支持 API 密钥、OAuth 和提供商认证命令。OAuth 会打开一个授权 URL，或显示一个需要输入的代码；按 `o` 打开该 URL，按 `c` 复制授权信息。
 
 ```text
 /connect
 # Select OpenAI, then Codex device code (legacy).
 ```
 
-再次运行 `/connect` 可以添加其他账户。选择一个已连接的提供商会打开它的账户列表，你可以在其中激活、重命名或删除已保存的账户。
+再次运行 `/connect` 可以添加其他账号。选择一个已连接的提供商会打开它的账号列表，你可以在其中激活、重命名或删除已保存的账号。
 
 ## CLI
 
-使用 `auth login` 可以在不打开 TUI 的情况下使用相同的提供商登录方式。不带提供商参数时，该命令会打开一个交互式的提供商选择器。
+`auth login` 提供相同的提供商登录方式，无需打开 TUI。不带提供商参数时，该命令会打开一个交互式的提供商选择器。
 
 ```bash
 opencode auth login
@@ -45,35 +45,35 @@ opencode auth login openai
 
 输入 API 密钥和填写提供商表单都需要交互式终端。要求你粘贴授权码的 OAuth 方式同样需要交互式终端。
 
-## 身份验证方式
+## 认证方式
 
 OpenCode 通过四种集成方式获取提供商凭据：
 
 | 方式 | 行为 |
 | --- | --- |
-| API 密钥 | 提示输入密钥，并将其保存为提供商账户。 |
-| OAuth | 提供浏览器 URL、设备码或授权码输入提示，然后保存 token，并在支持时自动刷新。 |
-| 命令 | 运行提供商提供的身份验证命令，并将其标准输出保存为密钥。 |
+| API 密钥 | 提示输入密钥，并将其保存为提供商账号。 |
+| OAuth | 提供浏览器 URL、设备码或授权码输入提示，然后保存令牌，并在支持时自动刷新。 |
+| 命令 | 运行提供商提供的认证命令，并将其标准输出保存为密钥。 |
 | 环境变量 | 从服务器进程中读取受支持的变量，但不保存。 |
 
-提供商可以为 API 密钥和 OAuth 方式添加表单，用于收集必要信息，例如 Azure 资源名称或 GitHub Enterprise 域名。CLI 和 TUI 会在开始身份验证前显示这些表单。
+提供商可以为 API 密钥和 OAuth 方式添加表单，用于收集必要信息，例如 Azure 资源名称或 GitHub Enterprise 域名。CLI 和 TUI 会在开始认证前显示这些表单。
 
 ## 环境变量
 
-在执行模型请求的服务器进程上设置提供商支持的环境变量。对于一次性的私有服务器，在以独立模式启动时传入即可。
+在执行模型请求的服务器进程上设置提供商支持的环境变量。一次性的私有服务器，以 standalone 模式启动时传入即可。
 
 ```bash
 ANTHROPIC_API_KEY=sk-ant-... opencode --standalone
 ```
 
-对于共享的后台服务器，将变量添加到它的托管环境中。这会停止正在运行的服务；下一条 OpenCode 命令会使用新值启动它。
+共享的后台服务器则要把变量加到它的托管环境中。这会停止正在运行的服务；下一条 OpenCode 命令会使用新值启动它。
 
 ```bash
 opencode service set env ANTHROPIC_API_KEY sk-ant-...
 opencode auth list
 ```
 
-环境变量连接会以 `environment` 类型出现在 `auth list` 中。它们不是账户：`auth logout` 无法移除它们，要断开连接，需要取消设置该变量。对于同一集成，已保存的账户优先于环境变量连接。
+环境变量连接会以 `environment` 类型出现在 `auth list` 中。它们不是账号：`auth logout` 无法移除它们，要断开连接，清除该变量即可。同一集成下，已保存的账号优先于环境变量连接。
 
 ```bash
 opencode auth list
@@ -83,7 +83,7 @@ opencode service unset env ANTHROPIC_API_KEY
 部分提供商还会使用其原生的环境凭据链，而不是 API 密钥变量：
 
 - Amazon Bedrock 支持 AWS 默认凭据链，包括配置文件（profile）、访问密钥环境变量、Web 身份和容器凭据，也支持 `AWS_BEARER_TOKEN_BEDROCK`。
-- Google Vertex 使用应用默认凭据（Application Default Credentials）以及一个可解析的项目。例如，使用 `gcloud auth application-default login` 进行身份验证，并设置 `GOOGLE_CLOUD_PROJECT`。
+- Google Vertex 使用应用默认凭据（Application Default Credentials）以及一个可解析的项目。例如，先用 `gcloud auth application-default login` 完成认证，再设置 `GOOGLE_CLOUD_PROJECT`。
 - 安装了 `az` 时，Azure 会提供 **Microsoft Entra ID (Azure CLI)** 连接方式。先运行 `az login`，然后在 `/connect` 或 `auth login azure` 中选择该方式。
 
 ```bash
@@ -93,31 +93,31 @@ GOOGLE_CLOUD_PROJECT=my-project opencode
 
 各提供商的具体配置和服务器端配置，请参阅[提供商](/providers)。
 
-## 账户
+## 账号
 
-每次通过 API 密钥、OAuth 或命令成功登录，都会创建一个已保存的账户。最新的账户会成为当前账户；你可以通过标签或凭据 ID 切换当前账户。
+每次通过 API 密钥、OAuth 或命令成功登录，都会创建一个已保存的账号。最新的账号会成为当前账号；你可以通过标签或凭据 ID 切换当前账号。
 
 ```bash
 opencode auth list
 opencode auth switch anthropic work
 ```
 
-使用 `auth logout` 删除已保存的账户。省略参数时，这两个命令都会打开选择器。
+使用 `auth logout` 删除已保存的账号。省略参数时，这两个命令都会打开选择器。
 
 ```bash
 opencode auth logout anthropic work
 ```
 
-在 TUI 中，`/connect` 同样提供对已保存账户的添加、激活、重命名和删除操作。
+在 TUI 中，`/connect` 同样提供对已保存账号的添加、激活、重命名和删除操作。
 
 ## 存储
 
-已保存的 API 密钥和 OAuth token 存放在服务器的 SQLite 数据库中。对于本地服务器，可以用以下命令打印数据库路径：
+已保存的 API 密钥和 OAuth 令牌存放在服务器的 SQLite 数据库中。本地服务器可以用以下命令打印数据库路径：
 
 ```bash
 opencode debug paths db
 ```
 
-正式版通常的路径是 `~/.local/share/opencode/opencode.db`；`XDG_DATA_HOME`、发布渠道和 `OPENCODE_DB` 都可能改变该路径。不要通过编辑数据库来管理凭据，请使用 `/connect` 或 `auth` 命令。
+正式版通常的路径是 `~/.local/share/opencode/opencode.db`；`XDG_DATA_HOME`、发布通道和 `OPENCODE_DB` 都可能改变该路径。不要通过编辑数据库来管理凭据，请使用 `/connect` 或 `auth` 命令。
 
 V2 在数据库迁移期间，会从 OpenCode 数据目录中的旧版 `auth.json` 导入受支持的凭据。新增和更新的凭据都存储在 SQLite 中，不会写回该文件。

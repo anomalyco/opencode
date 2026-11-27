@@ -46,7 +46,7 @@ OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"mode":"off"}}' opencode
 OpenCode 会将内联设置合并到全局 `cli.json` 之上。嵌套对象会合并，而环境变量中的数组和标量值会直接替换全局值。只要设置了该变量，内联设置就始终优先。
 
 ## 外观
-选择主题、控制界面动效，并覆盖终端光标样式：
+选择主题、控制界面动效，并覆盖终端光标设置：
 
 ```json title="cli.json"
 {
@@ -101,7 +101,7 @@ OpenCode 会将内联设置合并到全局 `cli.json` 之上。嵌套对象会�
 | -------------------------- | ------------------------------- | --------------------------------------------------------------------------- |
 | `mouse`                    | 布尔值                         | 启用终端鼠标捕获。                                             |
 | `scroll.speed`             | 数字，至少为 `0.001`        | 设置每次滚动输入的固定滚动距离。                               |
-| `scroll.acceleration`      | 布尔值                         | 连续滚动时加速。启用后优先于滚动速度设置。 |
+| `scroll.acceleration`      | 布尔值                         | 连续滚动时加速。启用后会优先于滚动速度设置。 |
 | `prompt.editor`            | 布尔值                         | 将编辑器中当前打开的文件或选中内容作为提示词上下文。             |
 | `prompt.paste`             | `compact` 或 `full`             | 将大段粘贴内容显示为紧凑的占位符或完整文本。                  |
 | `prompt.image_preview`     | 布尔值                         | 在输入框上方显示图片附件预览。                     |
@@ -167,7 +167,7 @@ OpenCode 会将内联设置合并到全局 `cli.json` 之上。嵌套对象会�
 
 | 设置项 | 取值 | 说明 |
 | ----------------- | --------------------------- | ----------------------------------------------------------------------------- |
-| `tabs.mode`       | `auto`、`on` 或 `off`      | 自动、始终或从不使用标签页。`auto` 模式下在 Herdr 中会隐藏标签页。       |
+| `tabs.mode`       | `auto`、`on` 或 `off`      | 自动、始终或从不使用标签页。自动模式在 Herdr 中会隐藏标签页。       |
 | `tabs.scope`      | `cwd` 或 `global`           | 每个工作目录使用独立的标签页，或在全局共享。            |
 | `tabs.layout`     | `horizontal` 或 `vertical`  | 将标签页放在水平标签栏或垂直侧边栏中。                      |
 | `tabs.indicators` | `status` 或 `numbers`       | 显示状态图标，或始终显示标签页编号。                               |
@@ -176,9 +176,9 @@ OpenCode 会将内联设置合并到全局 `cli.json` 之上。嵌套对象会�
 
 编号指示器同样保留状态颜色和背景动画。无论使用哪种指示器模式，都可以用 Ctrl+数字快捷键切换标签页。
 
-## 差异
+## Diff
 
-配置差异视图的初始范围和展示方式：
+配置 Diff 视图的初始范围和展示方式：
 
 ```json title="cli.json"
 {
@@ -192,19 +192,19 @@ OpenCode 会将内联设置合并到全局 `cli.json` 之上。嵌套对象会�
 }
 ```
 
-<div class="docs-table-scroll" role="region" aria-label="差异设置" tabIndex={0}>
+<div class="docs-table-scroll" role="region" aria-label="Diff 设置" tabIndex={0}>
 
 | 设置项 | 取值 | 说明 |
 | -------------- | ------------------------------------------- | --------------------------------------------------------- |
-| `diffs.source` | `branch`、`committed`、`working` 或 `turn` | 设置初始的审查范围。                            |
+| `diffs.source` | `branch`、`committed`、`working` 或 `turn` | 设置初始的审阅范围。                            |
 | `diffs.wrap`   | `word` 或 `none`                            | 长行按单词换行，或不换行。       |
-| `diffs.tree`   | 布尔值                                     | 显示差异文件树。                                 |
+| `diffs.tree`   | 布尔值                                     | 显示 Diff 文件树。                                 |
 | `diffs.single` | 布尔值                                     | 只显示选中文件的补丁。                       |
 | `diffs.view`   | `auto`、`split` 或 `unified`               | 设置布局。`auto` 会根据可用宽度自动选择。 |
 
 </div>
 
-`branch` 显示 **All**，即分支上的所有提交和本地更改；`committed` 只显示分支上的提交；`working` 显示已暂存、未暂存和未跟踪的更改。`turn` 显示 **Last turn**，即会话在最近一轮中修改过的文件；每当会话完成一轮时都会刷新，如果 `/diff` 不是从会话中打开的，则回退为 `branch`。
+`branch` 显示 **All**，即分支和本地的全部更改；`committed` 只显示分支上的提交；`working` 显示已暂存、未暂存和未跟踪的更改。`turn` 显示 **Last turn**，即会话在最近一轮中修改过的文件；每当会话完成一轮时都会刷新，如果 `/diff` 不是从会话中打开的，则回退为 `branch`。
 
 在 `/diff` 中，按 `d` 可以切换范围，或在 **Base** 中选择要对比的分支。这些在视图内做出的选择会一直保留到 TUI 退出，且不会修改 `cli.json`。
 
@@ -230,7 +230,7 @@ OpenCode 会将内联设置合并到全局 `cli.json` 之上。嵌套对象会�
 
 | 设置项 | 取值 | 说明 |
 | ------------------------ | ---------------------- | -------------------------------------------------------------------------------------------------------- |
-| `attention.notifications` | 布尔值               | 显示系统通知，通常在终端未获得焦点时触发。                                  |
+| `attention.notifications` | 布尔值               | 显示系统通知，通常在终端未获得焦点时。                                  |
 | `attention.sound`        | 布尔值                | 播放提示音。                                                                                  |
 | `attention.volume`       | `0` 到 `1` 之间的数字 | 设置提示音音量。                                                                                       |
 | `attention.sound_pack`   | 字符串                 | 选择当前使用的音效包 ID。                                                                        |
@@ -298,9 +298,9 @@ OpenCode 会将内联设置合并到全局 `cli.json` 之上。嵌套对象会�
 | `mini.thinking`     | `show` 或 `hide`               | 显示或隐藏模型的推理过程。                                                    |
 | `mini.tools`        | `show` 或 `hide`               | 显示或隐藏工具调用及其之前的助手文本。               |
 | `mini.shell_output` | `show` 或 `hide`               | 显示或隐藏 Shell 工具的原始输出。                                              |
-| `mini.turn_summary` | `show` 或 `hide`               | 在回滚历史中显示或隐藏 agent、模型和耗时摘要。               |
+| `mini.turn_summary` | `show` 或 `hide`               | 在滚动历史中显示或隐藏 agent、模型和耗时摘要。               |
 | `mini.footer`       | `show` 或 `hide`               | 显示或隐藏常驻的活动、模型、用量和上下文信息。             |
-| `mini.splash`       | `show` 或 `hide`               | 显示或隐藏进入和退出时的启动横幅。                                      |
+| `mini.splash`       | `show` 或 `hide`               | 显示或隐藏进入和退出时显示的横幅。                                      |
 | `mini.work_spinner` | spinner ID                     | 选择底部栏中的工作动画。                                          |
 | `mini.mono`         | 布尔值                        | 使用单色 ASCII 输出。                                                      |
 | `mini.replay`       | 布尔值                        | 恢复会话或调整终端尺寸时重新显示会话历史。                            |
@@ -410,7 +410,7 @@ density-wave      seed
 | `debug.devtools`    | 布尔值                         | 显示 DevTools 调试栏。                                                       |
 | `debug.timing`      | 布尔值                         | 在调试栏中显示首次绘制耗时诊断。                              |
 | `debug.turn_tokens` | 布尔值或 `verbose`            | 显示每一轮的 token 用量；`verbose` 还会包含工具调用的输入。               |
-| `experimental`      | 功能 ID 到布尔值的映射对象 | 启用或禁用实验性功能，这些功能可能随时变更或移除，恕不另行通知。     |
+| `experimental`      | 功能 ID 到布尔值的映射对象 | 启用或禁用实验性功能，这些功能可能随时变更或移除，且不会另行通知。     |
 
 </div>
 

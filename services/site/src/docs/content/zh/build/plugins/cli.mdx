@@ -3,7 +3,7 @@ title: "构建 TUI 插件"
 description: "为终端界面构建 OpenCode 插件的 TUI 部分，使用 @opencode/plugin/tui。"
 ---
 
-TUI 插件可以为终端界面扩展命令、路由、插槽、Markdown 渲染器、通知和本地状态。TUI 插件是[插件包](/build/plugins)的 `./tui` 部分，通常与[服务器部分](/build/plugins/server)放在一起。
+TUI 插件可以通过命令、路由、插槽、Markdown 渲染器、通知和本地状态来扩展终端界面。TUI 插件是[插件包](/build/plugins)的 `./tui` 部分，通常与[服务器部分](/build/plugins/server)放在一起。
 
 ```ts title="src/tui.tsx"
 import { Plugin } from "@opencode/plugin/tui"
@@ -20,7 +20,7 @@ export default Plugin.define({
 
 ## 上下文
 
-`setup` 接收的上下文包括配置、应用元数据、当前位置、OpenCode 客户端、缓存数据、主题 token、OpenTUI 渲染器，以及下文介绍的各类 UI API。
+`setup` 接收的上下文包括配置、应用元数据、当前 Location、OpenCode 客户端、缓存数据、主题 token、OpenTUI 渲染器，以及下文介绍的各类 UI API。
 
 ```ts
 setup(context) {
@@ -34,7 +34,7 @@ setup(context) {
 }
 ```
 
-对于插件自身持有的资源，返回一个清理函数来释放它们。
+返回一个清理函数，用于释放插件自身持有的资源。
 
 ```ts
 setup(context) {
@@ -106,7 +106,7 @@ const requests = context.data.session.permission.list(sessionID) ?? []
 context.data.session.permission.invalidate(sessionID)
 ```
 
-表单可以在指定位置列出、刷新、回复或取消。
+表单可以在某个 Location 上列出、刷新、回复或取消。
 
 ```ts
 import type { SessionFormCancelInput, SessionFormReplyInput } from "@opencode/client"
@@ -136,7 +136,7 @@ const saved = context.data.project.permission.list(projectID) ?? []
 context.data.project.permission.invalidate(projectID)
 ```
 
-shell 数据支持按位置限定的列出、查找、同步和失效操作。
+shell 数据支持按 Location 限定的列出、查找、同步和失效操作。
 
 ```ts
 await context.data.shell.sync(context.location)
@@ -145,9 +145,9 @@ const shell = context.data.shell.get(shellID)
 context.data.shell.invalidate(context.location)
 ```
 
-## 位置数据
+## Location 数据
 
-位置状态提供默认位置以及刷新控制。
+Location 状态提供默认 Location 以及刷新控制。
 
 ```ts
 const location = context.data.location.default()
@@ -155,7 +155,7 @@ await context.data.location.sync(location)
 context.data.location.invalidate(location)
 ```
 
-版本控制状态提供某个位置上的仓库信息。
+版本控制状态提供某个 Location 上的仓库信息。
 
 ```ts
 await context.data.location.vcs.sync(context.location)
@@ -164,7 +164,7 @@ const branch = vcs?.branch.current
 context.data.location.vcs.invalidate(context.location)
 ```
 
-agent、命令、集成、模型、提供商、目录引用、技能和 MCP 数据都提供相同的 `list`、`sync` 和 `invalidate` 方法。
+agent、命令、集成、模型、提供商、引用、技能和 MCP 数据都提供相同的 `list`、`sync` 和 `invalidate` 方法。
 
 ```ts
 const location = context.location
@@ -262,7 +262,7 @@ return unregister
 
 ## 命令与按键映射
 
-在响应式的按键映射层（keymap layer）中注册命令面板命令、斜杠命令和键盘命令。
+在响应式的按键映射层（keymap layer）中注册命令面板、斜杠和键盘命令。
 
 ```ts
 context.keymap.layer(() => ({
@@ -285,7 +285,7 @@ context.keymap.layer(() => ({
 }))
 ```
 
-可以在 `setup` 中调用 `layer`（包括在 `await` 之后），也可以在组件中调用。出现以下任一情况时，该层会被移除：
+可以在 `setup` 中调用 `layer`（包括在 `await` 之后），也可以在组件中调用。出现以下任一情况时，该层即被移除：
 
 - 插件被禁用、重新加载，或 setup 失败。
 - 创建该层的组件或响应式计算（例如插槽、路由或对话框）被销毁。
@@ -348,9 +348,9 @@ updateState((draft) => {
 })
 ```
 
-## 对话框与通知提示
+## 对话框与 Toast
 
-基于 Promise 的对话框可用于提示、确认、文本输入和选择。
+基于 Promise 的对话框可用于警告、确认、文本输入和选择。
 
 ```ts
 await context.ui.dialog.alert({ title: "Acme", message: "Ready" })
@@ -423,7 +423,7 @@ context.ui.dialog.show(
 context.ui.dialog.clear()
 ```
 
-通知提示（toast）支持标题、消息内容、样式变体和显示时长。
+Toast 支持标题、消息内容、样式变体和显示时长。
 
 ```ts
 context.ui.toast.show({
@@ -523,7 +523,7 @@ context.ui.slot({ append: "home.footer.status", render: () => <text>SYNCED</text
 
 ### 会话面板
 
-向 `session.panel` 注册一个内容贡献，然后通过命令打开面板。宿主负责尺寸、焦点和全屏展示；插件负责面板内容。选中的名称会作为 `panel.name` 传给每个贡献，由各贡献自行决定是否渲染。
+向 `session.panel` 注册一个贡献项，然后通过命令打开面板。宿主负责尺寸、焦点和全屏展示；插件负责面板内容。选中的名称会作为 `panel.name` 传给每个贡献项，由各贡献项自行决定是否渲染。
 
 ```tsx
 import { Show } from "solid-js"
@@ -560,9 +560,9 @@ context.ui.slot({
 
 - 在会话之外打开面板会返回 `false`。
 - 它就是一个普通插槽：五种放置方式以及现有的替换顺序规则同样适用。
-- 对于可以独立选择的贡献，请使用 `append`，这样它们可以共存。`replace` 仍然会接管整个插槽。
+- 对于可以独立选择的贡献项，请使用 `append`，这样它们可以共存。`replace` 仍然会接管整个插槽。
 - 名称只是共享的选择值，并不会被注册占用。请使用带插件前缀的名称（例如 `acme.review`）来避免冲突。如果打开的名称没有匹配的渲染器，插槽会保持为空。
-- 切换展示方式时，已挂载的贡献会保留。关闭面板会销毁它们；禁用插件时，其贡献会通过常规的插槽清理流程移除。
+- 切换展示方式时，已挂载的贡献项会保留。关闭面板会销毁它们；禁用插件时，其贡献项会通过常规的插槽清理流程移除。
 - 只有当面板占有输入时，其中的键盘层和输入模式才会生效。
 
 插槽会接收响应式的 `name`、`sessionID`、`width`、`presentation` 和 `focused` 属性，以及 `focus`、`close` 和 `toggleFullscreen` 操作。在较窄的终端中，宿主始终保持全屏；在空间足以容纳侧边面板之前，`toggleFullscreen` 不起作用。

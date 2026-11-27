@@ -3,33 +3,33 @@ title: "Console 网页搜索"
 description: "通过 Console 为 OpenCode 提供托管网页搜索。"
 ---
 
-Console 为已连接的 OpenCode 用户提供托管网页搜索。团队所有者或管理员只需为团队启用一次，成员无需另外配置搜索提供商的密钥。
+Console 为已连接的 OpenCode 用户提供托管网页搜索。工作区所有者或管理员只需为工作区启用一次，成员无需另外配置搜索提供商的密钥。
 
-每次成功搜索收费 **$0.01**，计入团队余额和成员支出限额。
+每次成功搜索收费 **$0.01**，计入工作区余额和成员支出限额。
 
 ## 启用
 
-1. 以团队所有者或管理员身份登录 [Console](https://opencode.ai/console)。
+1. 以工作区所有者或管理员身份登录 [Console](https://opencode.ai/console)。
 2. 打开 **Integrations**，在 **Hosted Web Search** 上点击 **Set up**。
 3. 点击 **Enable**。
 
-之后，每位成员使用 `/connect` 将 OpenCode 连接到该团队。
+之后，每位成员使用 `/connect` 将 OpenCode 连接到该工作区。
 
 ```text
 /connect
 ```
 
-团队配置会将 **OpenCode Web Search** 设为默认提供商。成员无需设置 `websearch.provider`，也无需添加提供商 API 密钥。自行设置 `websearch.provider` 的成员会保留自己的选择。
+工作区配置会将 **OpenCode Web Search** 设为默认提供商。成员无需设置 `websearch.provider`，也无需添加提供商 API 密钥。自行设置 `websearch.provider` 的成员会保留自己的选择。
 
 ## 搜索
 
-在提示词中向 OpenCode 询问最新信息即可。搜索在 OpenCode 中执行，而不是在 Console 的交互页面中进行。
+在提示词中向 OpenCode 询问最新信息即可。搜索在 OpenCode 中执行，而不是在 Console 的交互页面上运行。
 
 ```text
 Find the latest Bun release and summarize the changes with source links.
 ```
 
-托管提供商会搜索公开网络，最多返回八条结果。OpenCode 根据这些结果回答问题并引用来源。
+托管提供商会搜索公开互联网，最多返回 8 条结果。OpenCode 根据这些结果回答问题并引用来源。
 
 如需配置权限或禁用该工具，请参阅[网页搜索指南](/websearch)。
 
@@ -37,7 +37,7 @@ Find the latest Bun release and summarize the changes with source links.
 
 搜索返回有效的结果集后，Console 才会收取 **$0.01**。失败或被限流的搜索不收费。
 
-在 **Activity › Usage**、**Activity › Overview**、成员活动、发票和 CSV 导出中，网页搜索与模型用量分开显示。适用的全消费预算策略会包含网页搜索费用。
+在 **Activity › Usage**、**Activity › Overview**、成员活动、发票和 CSV 导出中，网页搜索与模型用量分开显示。覆盖全部支出的预算策略会包含网页搜索费用。
 
 ## 隐私
 

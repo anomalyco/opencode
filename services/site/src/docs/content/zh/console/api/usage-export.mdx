@@ -1,9 +1,9 @@
 ---
 title: "用量导出 API"
-description: "以 CSV 下载团队的每日用量，包含每天、每个人、每个提供商和每个模型的请求数、token 和费用。"
+description: "以 CSV 下载工作区的每日用量，包含每天、每个人、每个提供商和每个模型的请求数、token 和费用。"
 ---
 
-`GET https://opencode.ai/console/api/v2/usage/export` 以 CSV 返回团队的用量，每行对应一个 UTC 日期、成员或服务账号、提供商和模型。它与 **Activity › Usage** 中 **Export usage** 按钮下载的文件相同。
+`GET https://opencode.ai/console/api/v2/usage/export` 以 CSV 返回工作区的用量，每行对应一个 UTC 日期、成员或服务账号、提供商和模型。它与 **Activity › Usage** 中 **Export usage** 按钮下载的文件相同。
 
 ```bash
 curl --fail-with-body "https://opencode.ai/console/api/v2/usage/export?range=30d" \
@@ -11,9 +11,9 @@ curl --fail-with-body "https://opencode.ai/console/api/v2/usage/export?range=30d
   --output usage-30d.csv
 ```
 
-## 身份验证
+## 认证
 
-将 [API 密钥](/console/api#api-keys)作为 bearer token 发送。密钥会导出其创建时所在的团队。
+将 [API 密钥](/console/api#api-keys)作为 bearer 令牌发送。密钥会导出其创建时所在的工作区。
 
 ```text
 Authorization: Bearer oc_sk_...
@@ -26,7 +26,7 @@ Permissions: Restricted
 Usage:       Read
 ```
 
-定时导出请使用[服务账号密钥](/console/api#service-accounts)，或所有者或管理员的[个人 API 密钥](/console/api#personal-api-keys)。成员无法读取团队用量，因此他们的密钥会返回 `403`。
+定时导出请使用[服务账号密钥](/console/api#service-accounts)，或者所有者、管理员的[个人 API 密钥](/console/api#personal-api-keys)。成员无法读取工作区用量，因此他们的密钥会返回 `403`。
 
 ## 请求
 
@@ -44,11 +44,11 @@ curl --fail-with-body "https://opencode.ai/console/api/v2/usage/export?range=7d&
   --header "Authorization: Bearer oc_sk_..."
 ```
 
-不在该团队中的 ID 只会返回标题行。
+不在该工作区中的 ID 只会返回表头行。
 
 ## 响应
 
-请求成功时返回 `200` 和 `Content-Type: text/csv; charset=utf-8`。第一行是标题，随后是数据行，最新的日期在前。
+请求成功时返回 `200` 和 `Content-Type: text/csv; charset=utf-8`。第一行是表头，随后是数据行，最新的日期在前。
 
 ```csv
 day,user_type,user_id,user_name,provider,model,requests,input_tokens,output_tokens,cache_read_tokens,cache_write_5m_tokens,cache_write_1h_tokens,cost_micro_cents,cost_usd
@@ -83,15 +83,15 @@ day,user_type,user_id,user_name,provider,model,requests,input_tokens,output_toke
 
 ### 包含的内容
 
-- 团队成员和服务账号发出的每个模型请求。
-- 对免费模型的请求，以及成员通过自己的 Claude Code、Codex 或 OpenCode 订阅发出的请求，都会以零费用计入其 token。
+- 工作区成员和服务账号发出的每个模型请求。
+- 对免费模型的请求，以及成员通过自己的 Claude Code、Codex 或 OpenCode 订阅发出的请求，也会计入，其 token 按零费用计算。
 - 不包含[网页搜索](/console/websearch)和其他托管服务。
 - 汇总数据可能比新请求晚大约一分钟。
 
 ## 限制
 
 - 每次导出最多覆盖 90 天。要保留更长的历史，请按计划保存文件。
-- 请求计入 Console API 每账号每分钟 300 次的限制，并与其其他端点共享。个人 API 密钥计入拥有它的成员。
+- 请求计入 Console API 每账号每分钟 300 次的限制，并与其其他端点共享。个人 API 密钥的请求计入拥有该密钥的成员。
 
 ## 错误
 

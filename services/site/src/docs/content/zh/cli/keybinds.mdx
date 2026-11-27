@@ -1,5 +1,6 @@
 ---
 title: "快捷键"
+description: "在 cli.json 中自定义 OpenCode CLI 的快捷键，并查阅每个命令的 ID 和默认绑定。"
 ---
 
 在 `cli.json` 中自定义快捷键：
@@ -89,7 +90,7 @@ title: "快捷键"
 | `app.scrap` | `none` | 打开草稿屏幕 |
 | `app.toggle.animations` | `none` | 切换动画 |
 | `app.toggle.file_context` | `none` | 切换文件上下文 |
-| `app.toggle.diffwrap` | `none` | 切换 diff 自动换行 |
+| `app.toggle.diffwrap` | `none` | 切换 Diff 自动换行 |
 | `app.toggle.paste_summary` | `none` | 切换粘贴摘要 |
 | `command.palette.show` | `ctrl+p` | 列出可用命令 |
 | `help.show` | `none` | 打开帮助对话框 |
@@ -101,7 +102,7 @@ title: "快捷键"
 
 ## Mini
 
-`app.clear` 命令仅在 [`opencode mini`](/cli) 中可用。按 `ctrl+l` 可清除当前可见的屏幕内容并重新绘制输入框。终端会保留回滚历史。
+`app.clear` 命令仅在 [`opencode mini`](/cli) 中可用。按 `ctrl+l` 可清除当前可见的屏幕内容并重新绘制输入框。终端会保留滚动历史。
 
 ```json title="cli.json"
 {
@@ -117,43 +118,43 @@ title: "快捷键"
 
 ## Diff 查看器
 
-按 `d`（`diff.switch_source`）可以选择 **All**、**Committed**、**Uncommitted** 或 **Last turn**（仅在会话中可用），也可以选择 **Base** 来更改对比分支。所选项会一直保留到 TUI 退出。初始范围可通过 [`cli.json` 中的 `diffs.source`](/cli/config#diffs) 设置。
+按 `d`（`diff.switch_source`）可以选择 **All**、**Committed**、**Uncommitted** 或 **Last turn**（在会话内），也可以选择 **Base** 来更改对比分支。所做选择会一直保留到 TUI 退出。初始范围可通过 [`cli.json` 中的 `diffs.source`](/cli/config#diffs) 设置。
 
-滚动、翻页以及跳到开头/结尾的快捷键始终作用于 diff。查看器没有键盘焦点切换：点击文件即可打开，点击文件夹可展开或折叠，使用鼠标滚轮滚动文件树。
+滚动、翻页以及跳到开头/结尾的快捷键始终作用于 Diff。查看器没有键盘焦点切换：点击文件即可打开，点击文件夹可展开或折叠，使用鼠标滚轮滚动文件树。
 
-使用 `n` / `p` 或 `alt+down` / `alt+up`（macOS 上为 Option 键）在文件之间切换。在 diff 查看器中，这些 Alt 快捷键用于切换文件，而不是切换会话标签页。
+使用 `n` / `p` 或 `alt+down` / `alt+up`（macOS 上为 Option 键）在文件之间移动。在 Diff 查看器中，这些 Alt 快捷键用于在文件间跳转，而不是切换会话标签页。
 
 按 `m` 可将文件标记为已审阅，并折叠其补丁内容。在全部文件视图中，再次按 `m` 可取消标记并重新展开补丁。在单文件视图中，标记为已审阅后会自动跳到下一个文件，但到达最后一个文件时会停留，不会回到开头。取消标记永远不会跳转。
 
-在侧边栏中右键点击某个文件或其 diff 标题，可以选择 **Mark complete**（或 **Mark incomplete**）。这与 `m` 修改的是同一个已审阅状态。通过菜单将另一个文件标记为完成时，不会选中该文件，也不会让当前正在阅读的文件跳转。
+在侧边栏中右键点击某个文件或其 Diff 标题，可以选择 **Mark complete**（或 **Mark incomplete**）。这与 `m` 修改的是同一个已审阅状态。通过菜单将另一个文件标记为完成时，不会选中该文件，也不会让当前正在阅读的文件跳转。
 
 `diff.help` 中带 Shift 的备选按键，是为按下 `?` 时会报告 Shift 修饰键的终端准备的。
 
 | ID | 默认值 | 说明 |
 | --- | --- | --- |
-| `diff.open` | `none` | 打开 diff 查看器 |
-| `diff.close` | `escape,q` | 关闭 diff 查看器 |
-| `diff.down` | `j,down` | 在 diff 查看器中向下移动 |
-| `diff.up` | `k,up` | 在 diff 查看器中向上移动 |
-| `diff.page.down` | `pagedown,ctrl+f` | 在 diff 查看器中向下翻页 |
-| `diff.page.up` | `pageup,ctrl+b` | 在 diff 查看器中向上翻页 |
-| `diff.half_page.down` | `ctrl+d` | 在 diff 查看器中向下滚动半页 |
-| `diff.half_page.up` | `ctrl+u` | 在 diff 查看器中向上滚动半页 |
-| `diff.first` | `gg,home` | 跳到 diff 开头 |
-| `diff.last` | `shift+g,end` | 跳到 diff 结尾 |
-| `diff.next_hunk` | `]` | 跳到下一个 diff 块 |
-| `diff.previous_hunk` | `[` | 跳到上一个 diff 块 |
-| `diff.next_file` | `n,alt+down` | 跳到下一个 diff 文件 |
-| `diff.previous_file` | `p,alt+up` | 跳到上一个 diff 文件 |
-| `diff.toggle_file_tree` | `b` | 切换 diff 查看器文件树 |
+| `diff.open` | `none` | 打开 Diff 查看器 |
+| `diff.close` | `escape,q` | 关闭 Diff 查看器 |
+| `diff.down` | `j,down` | 在 Diff 查看器中向下移动 |
+| `diff.up` | `k,up` | 在 Diff 查看器中向上移动 |
+| `diff.page.down` | `pagedown,ctrl+f` | 在 Diff 查看器中向下翻页 |
+| `diff.page.up` | `pageup,ctrl+b` | 在 Diff 查看器中向上翻页 |
+| `diff.half_page.down` | `ctrl+d` | 在 Diff 查看器中向下滚动半页 |
+| `diff.half_page.up` | `ctrl+u` | 在 Diff 查看器中向上滚动半页 |
+| `diff.first` | `gg,home` | 跳到 Diff 开头 |
+| `diff.last` | `shift+g,end` | 跳到 Diff 结尾 |
+| `diff.next_hunk` | `]` | 跳到下一个 Diff 块 |
+| `diff.previous_hunk` | `[` | 跳到上一个 Diff 块 |
+| `diff.next_file` | `n,alt+down` | 跳到下一个 Diff 文件 |
+| `diff.previous_file` | `p,alt+up` | 跳到上一个 Diff 文件 |
+| `diff.toggle_file_tree` | `b` | 切换 Diff 查看器文件树 |
 | `diff.single_patch` | `s` | 切换单补丁视图 |
-| `diff.toggle_fullscreen` | `f` | 切换 diff 查看器的全屏显示 |
-| `diff.switch_source` | `d` | 选择 diff 审阅范围 |
-| `diff.toggle_view` | `v` | 在 diff 查看器的分栏视图和统一视图之间切换 |
-| `diff.mark_reviewed` | `m` | 切换所选 diff 文件的已审阅状态 |
-| `diff.help` | `?,shift+?,shift+/` | 显示更多 diff 查看器快捷键 |
+| `diff.switch_source` | `d` | 选择 Diff 审阅范围 |
+| `diff.toggle_view` | `v` | 在 Diff 查看器的分栏视图和统一视图之间切换 |
+| `diff.toggle_fullscreen` | `f` | 切换 Diff 查看器的全屏显示 |
+| `diff.mark_reviewed` | `m` | 切换所选 Diff 文件的已审阅状态 |
+| `diff.help` | `?,shift+?,shift+/` | 显示更多 Diff 查看器快捷键 |
 
-已停用的 `diff.toggle`、`diff.expand`、`diff.expand_all`、`diff.collapse` 和 `diff.switch_focus` 配置项仍然可以使用，但不再注册任何快捷键。
+已停用的 `diff.toggle`、`diff.expand`、`diff.expand_all`、`diff.collapse` 和 `diff.switch_focus` 配置项仍然会被接受，但不再注册任何快捷键。
 
 ## 外观与导航
 
@@ -164,7 +165,11 @@ title: "快捷键"
 | `theme.switch_mode` | `none` | 在浅色和深色主题模式之间切换 |
 | `theme.mode.lock` | `none` | 锁定或解锁主题模式 |
 | `session.sidebar.toggle` | `<leader>b` | 切换侧边栏 |
+| `pane.focus.left` | `<leader>left` | 聚焦会话面板 |
+| `pane.focus.right` | `<leader>right` | 聚焦右侧面板 |
+| `terminal.select` | `<leader>down` | 选择终端 |
 | `terminal.toggle` | `<leader>t` | 切换终端面板 |
+| `terminal.close` | `<leader>up` | 关闭终端面板 |
 | `session.toggle.scrollbar` | `none` | 切换会话滚动条 |
 | `opencode.status` | `<leader>s` | 查看状态 |
 | `opencode.debug` | `none` | 查看调试信息 |
@@ -174,7 +179,7 @@ title: "快捷键"
 | ID | 默认值 | 说明 |
 | --- | --- | --- |
 | `session.export` | `<leader>x` | 将会话导出到编辑器 |
-| `session.copy` | `none` | 复制会话记录 |
+| `session.copy` | `none` | 复制对话记录 |
 | `session.copy.id` | `none` | 复制会话 ID |
 | `session.move` | `none` | 移动会话 |
 | `session.new` | `<leader>n` | 新建会话 |
@@ -195,7 +200,7 @@ title: "快捷键"
 | `session.interrupt` | `escape` | 中断当前会话 |
 | `session.background` | `ctrl+b` | 将阻塞会话的工具转到后台运行 |
 | `session.compact` | `<leader>c` | 压缩会话 |
-| `session.aside` | `none` | 提一个旁支问题 |
+| `session.aside` | `none` | 顺带提一个问题 |
 | `session.cd` | `none` | 更改工作目录 |
 | `session.queued_prompts` | `<leader>q` | 管理排队的提示词 |
 | `queued_prompt.undo` | `ctrl+u` | 撤回排队的提示词 |
@@ -298,22 +303,22 @@ title: "快捷键"
 | `input.move.right` | `right,ctrl+f` | 在输入框中将光标右移 |
 | `input.move.up` | `up` | 在输入框中将光标上移 |
 | `input.move.down` | `down` | 在输入框中将光标下移 |
-| `input.select.left` | `shift+left` | 在输入框中向左选择 |
-| `input.select.right` | `shift+right` | 在输入框中向右选择 |
-| `input.select.up` | `shift+up` | 在输入框中向上选择 |
-| `input.select.down` | `shift+down` | 在输入框中向下选择 |
+| `input.select.left` | `shift+left` | 在输入框中向左扩展选择 |
+| `input.select.right` | `shift+right` | 在输入框中向右扩展选择 |
+| `input.select.up` | `shift+up` | 在输入框中向上扩展选择 |
+| `input.select.down` | `shift+down` | 在输入框中向下扩展选择 |
 | `input.line.home` | `ctrl+a` | 在输入框中移到行首 |
 | `input.line.end` | `ctrl+e` | 在输入框中移到行尾 |
-| `input.select.line.home` | `ctrl+shift+a` | 在输入框中选择到行首 |
-| `input.select.line.end` | `ctrl+shift+e` | 在输入框中选择到行尾 |
+| `input.select.line.home` | `ctrl+shift+a` | 在输入框中选中至行首 |
+| `input.select.line.end` | `ctrl+shift+e` | 在输入框中选中至行尾 |
 | `input.visual.line.home` | `alt+a` | 在输入框中移到视觉行首 |
 | `input.visual.line.end` | `alt+e` | 在输入框中移到视觉行尾 |
-| `input.select.visual.line.home` | `alt+shift+a` | 在输入框中选择到视觉行首 |
-| `input.select.visual.line.end` | `alt+shift+e` | 在输入框中选择到视觉行尾 |
+| `input.select.visual.line.home` | `alt+shift+a` | 在输入框中选中至视觉行首 |
+| `input.select.visual.line.end` | `alt+shift+e` | 在输入框中选中至视觉行尾 |
 | `input.buffer.home` | `none` | 在输入框中移到缓冲区开头 |
 | `input.buffer.end` | `none` | 在输入框中移到缓冲区末尾 |
-| `input.select.buffer.home` | `shift+home` | 在输入框中选择到缓冲区开头 |
-| `input.select.buffer.end` | `shift+end` | 在输入框中选择到缓冲区末尾 |
+| `input.select.buffer.home` | `shift+home` | 在输入框中选中至缓冲区开头 |
+| `input.select.buffer.end` | `shift+end` | 在输入框中选中至缓冲区末尾 |
 | `input.delete.line` | `ctrl+shift+d` | 在输入框中删除整行 |
 | `input.delete.to.line.end` | `ctrl+k` | 在输入框中删除到行尾 |
 | `input.delete.to.line.start` | `ctrl+u` | 在输入框中删除到行首 |
@@ -321,23 +326,23 @@ title: "快捷键"
 | `input.delete` | `ctrl+d,delete,shift+delete` | 在输入框中删除字符 |
 | `input.undo` | `ctrl+-,super+z` | 在输入框中撤销 |
 | `input.redo` | `ctrl+.,super+shift+z` | 在输入框中重做 |
-| `input.word.forward` | `alt+f,alt+right,ctrl+right` | 在输入框中向后移动一个单词 |
-| `input.word.backward` | `alt+b,alt+left,ctrl+left` | 在输入框中向前移动一个单词 |
-| `input.select.word.forward` | `alt+shift+f,alt+shift+right` | 在输入框中向后选择一个单词 |
-| `input.select.word.backward` | `alt+shift+b,alt+shift+left` | 在输入框中向前选择一个单词 |
-| `input.delete.word.forward` | `alt+d,alt+delete,ctrl+delete` | 在输入框中向后删除一个单词 |
-| `input.delete.word.backward` | `ctrl+w,ctrl+backspace,alt+backspace` | 在输入框中向前删除一个单词 |
+| `input.word.forward` | `alt+f,alt+right,ctrl+right` | 在输入框中移到下一个单词 |
+| `input.word.backward` | `alt+b,alt+left,ctrl+left` | 在输入框中移到上一个单词 |
+| `input.select.word.forward` | `alt+shift+f,alt+shift+right` | 在输入框中选中下一个单词 |
+| `input.select.word.backward` | `alt+shift+b,alt+shift+left` | 在输入框中选中上一个单词 |
+| `input.delete.word.forward` | `alt+d,alt+delete,ctrl+delete` | 在输入框中删除下一个单词 |
+| `input.delete.word.backward` | `ctrl+w,ctrl+backspace,alt+backspace` | 在输入框中删除上一个单词 |
 | `input.select.all` | `super+a` | 在输入框中全选 |
 | `prompt.history.previous` | `up` | 上一条历史记录 |
 | `prompt.history.next` | `down` | 下一条历史记录 |
 
-## 编辑区
+## 输入框
 
 | ID | 默认值 | 说明 |
 | --- | --- | --- |
 | `composer.subagent.up` | `up` | 上一个 subagent |
 | `composer.subagent.down` | `down` | 下一个 subagent |
-| `composer.subagent.select` | `return` | 前往 subagent |
+| `composer.subagent.select` | `return` | 跳转到 subagent |
 | `composer.subagent.interrupt` | `ctrl+d` | 中断 subagent |
 | `composer.shell.up` | `up` | 上一个 shell |
 | `composer.shell.down` | `down` | 下一个 shell |
@@ -373,7 +378,7 @@ title: "快捷键"
 | `prompt.autocomplete.next` | `down,ctrl+n` | 移到下一个自动补全条目 |
 | `prompt.autocomplete.hide` | `escape` | 隐藏自动补全 |
 | `prompt.autocomplete.select` | `return` | 选择自动补全条目 |
-| `prompt.autocomplete.complete` | `tab` | 补全自动补全条目 |
+| `prompt.autocomplete.complete` | `tab` | 采用自动补全条目 |
 | `permission.prompt.fullscreen` | `ctrl+f` | 切换权限提示的全屏显示 |
 | `plugins.toggle` | `return` | 切换插件 |
 | `dialog.mcp.toggle` | `space` | 切换 MCP 服务器 |

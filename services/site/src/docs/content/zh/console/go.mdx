@@ -9,7 +9,7 @@ OpenCode Go 让你稳定地使用热门的开源编程模型，提供三种按�
 | ------------ | -------------------------------------- | -------------------------------------------------------------------------- |
 | **Go**       | **$10/月**                          | 以更低成本使用下列模型                                      |
 | **Go Plus**  | **$40/月**                          | 下列模型的用量上限更高                                |
-| **Go Teams** | **$20/成员/月**，至少 2 名成员 | 每位成员拥有自己的限额，每个模型都比 Go 每月高 $5 |
+| **Go Teams** | **$20/成员/月**，至少 2 名成员 | 每位成员拥有自己的限额，每个模型的每月额度都比 Go 高 $5 |
 
 Go 在 OpenCode 中的用法和其他提供商一样：订阅 OpenCode Go 后获取 API 密钥即可。它**完全是可选的**，不订阅也能正常使用 OpenCode。
 
@@ -31,35 +31,35 @@ Go 在 OpenCode 中的用法和其他提供商一样：订阅 OpenCode Go 后获
    ```
 
 <Callout>
-  Go 和 Go Plus 覆盖订阅的成员以及团队的 API 密钥。你邀请的其他成员会使用免费模型或团队余额。两者都可以随时升级到 Go Teams，当月未使用的额度会折算为余额。Go Teams 覆盖团队中的每位成员，每位成员每月 $20，至少 2 名成员（每月 $40）。第二个席位免费覆盖下一位加入的成员；此后，在周期中途加入的成员会被收取 $20，并获得完整的每月额度。服务账号不在 Go Teams 的覆盖范围内。
+  Go 和 Go Plus 覆盖订阅者本人以及工作区的 API 密钥。你邀请的其他成员会使用免费模型或工作区余额。两者都可以随时升级到 Go Teams，当月未使用的部分额度会予以抵扣。Go Teams 覆盖工作区中的每位成员，每位成员每月 $20，至少 2 名成员（每月 $40）。第二个席位无需额外付费，覆盖下一位加入的成员；此后，在周期中途加入的成员会被收取 $20，并获得完整的每月额度。服务账号不在 Go Teams 的覆盖范围内。
 </Callout>
 
 请参阅[当前的模型列表](https://opencode.ai/console/go#models)。随着我们测试和添加新模型，列表可能会变化。
 
 ### 启用受限模型
 
-团队隐私设置同样适用于 Go。默认情况下，会使用请求数据训练的付费端点会被阻止，允许的地区为 **Europe & United States**。未保存隐私设置的团队还会允许来自中国的请求使用 **Global**。
+工作区隐私设置同样适用于 Go。默认情况下，会阻止用请求数据训练的付费端点，允许的地区为 **Europe & United States**。未保存隐私设置的工作区还会允许来自中国的请求使用 **Global**。
 
 在 **Settings › Privacy** 中，所有者或管理员可以启用：
 
 - **DeepSeek V4.1 Flash 和 V4 Pro：** 在 **Regions** 下选择 **Global**。
 - **LongCat 2.5：** 在 **Regions** 下选择 **Global**。
-- **Muse Spark 1.3 Contributor 和 Muse Spark 1.2 Contributor：** 打开 **Allow paid endpoints that train on request data**。
+- **Muse Spark 1.3 Contributor 和 Muse Spark 1.2 Contributor：** 开启 **Allow paid endpoints that train on request data**。
 
 每个模型的训练和数据保留条款请参阅[隐私](#privacy)。
 
 ## 用额度支付
 
-所有者和管理员可以使用团队额度支付 Go，包括续费和升级。订阅时选择 **Credit** 作为付款方式，也可以之后在 **Manage subscription** 中选择。这与[额外用量](#usage-beyond-limits)不同，后者用于支付超出限额的用量。
+所有者和管理员可以使用工作区额度支付 Go，包括续费和升级。订阅时选择 **Credit** 作为付款方式，也可以之后在 **Manage subscription** 中选择。这与[额外用量](#usage-beyond-limits)不同，后者用于支付超出限额的用量。
 
 - 全部费用从额度余额中扣除。余额不足时，可以先充值额度。
-- 周期结束时，续费会从额度中扣除费用。如果额度不足，Go 会保持有效，并在周期结束后第 1、3、7 天重试续费；额度补足后会立即再次重试。如果最后一次重试失败，Go 会结束。
-- 使用[按账单结算](/console/billing#invoiced-billing)的团队无法用额度支付 Go。
+- 周期结束时，续费会从额度余额中扣款。如果额度不足，Go 会保持有效，并在周期结束后第 1、3、7 天重试续费；额度补足后会立即再次重试。如果最后一次重试失败，Go 会结束。
+- 使用[按发票结算](/console/billing#invoiced-billing)的工作区无法用额度支付 Go。
 - 用额度支付的 Go 费用退款后会退回额度，并结束该 Go 周期。
 
 ## 可以在哪里使用？
 
-OpenCode Go 面向 [OpenCode](https://opencode.ai) 以及会产生类似请求的其他编程 agent 而设计。我们会监控损害其他用户体验的滥用流量。
+OpenCode Go 专为 [OpenCode](https://opencode.ai) 以及会产生类似请求的其他编程 agent 而设计。我们会监控损害其他用户体验的滥用流量。
 
 你的客户端应当：
 
@@ -69,7 +69,7 @@ OpenCode Go 面向 [OpenCode](https://opencode.ai) 以及会产生类似请求�
 
 [决策](#decision-models)和[嵌入](#embedding-models)请求不需要 `x-opencode-session`，因此任何客户端（例如 RAG 库、记忆服务或脚本）都可以使用你的 Go 密钥调用它们。
 
-在 Claude Code、Codex、Hermes、OpenClaw、Pi 和 Raycast 中设置 Go，请参阅 [Harness](/console/harnesses)。
+在 Claude Code、Codex、Hermes、OpenClaw、Pi 和 Raycast 中设置 Go，请参阅 [Harnesses](/console/harnesses)。
 
 ### 已验证的客户端
 
@@ -101,18 +101,18 @@ OpenCode Go 面向 [OpenCode](https://opencode.ai) 以及会产生类似请求�
 
 你在 Go 上使用的付费模型共享同一份额度。在 Go Teams 中，每位成员在所有模型上拥有自己的额度。
 
-- **5 小时限额**为每月额度的 20%。窗口从你首次使用额度时开始，持续五小时。
+- **5 小时限额**为每月额度的 20%。窗口从你首次使用额度时开始，持续 5 小时。
 - **每周限额**为每月额度的 50%。它会在每周一 00:00 UTC 重置。
 - **每月额度**会在新的付费周期开始时重置。
 
-切换模型会从同一份额度中扣除。达到限额后，你可以使用免费模型，或打开[额外用量](#usage-beyond-limits)，在额度恢复之前使用 Console 额度。
+切换模型会从同一份额度中扣除。达到限额后，你可以使用免费模型，或开启[额外用量](#usage-beyond-limits)，在额度恢复之前使用 Console 额度。
 
-每个模型的[每月限额](https://opencode.ai/console/go#limits)显示了如果你整月只使用该模型，套餐能覆盖多少用量。
+每个模型的[每月限额](https://opencode.ai/console/go#limits)显示了套餐能覆盖多少用量，前提是你整月只使用该模型。
 例如，在限额为 $15 的模型上使用 $1.50，会占用每月额度的 10%；在限额为 $60 的模型上使用 $6 也是如此。Go 的响应会在 [`opencode.allowance`](/console/api/inference#cost) 中报告每个请求计入了多少。
 
 [Token 价格](https://opencode.ai/console/go#pricing)按每 1M token 计算，Go、Go Plus 和 Go Teams 相同。
 
-[决策](#decision-models)和[嵌入](#embedding-models)模型按标价计费，没有 Go 折扣：它们的每月限额与你的付费金额一致，Go 为 $10，Go Plus 为 $40。Go Teams 为 $15，与所有模型一样比 Go 高 $5。
+[决策](#decision-models)和[嵌入](#embedding-models)模型按标价计费，没有 Go 折扣：它们的每月限额与你的付费金额一致，Go 为 $10，Go Plus 为 $40。Go Teams 为 $15，和所有模型一样比 Go 高 $5。
 
 **Beam Free：** 限时免费。不在以下国家或地区提供：安哥拉、白俄罗斯、柬埔寨、中国（包括香港和澳门）、古巴、刚果民主共和国、赤道几内亚、伊朗、伊拉克、老挝、利比亚、尼日利亚、朝鲜、俄罗斯、叙利亚、土库曼斯坦、乌兹别克斯坦、委内瑞拉，以及乌克兰的克里米亚、顿涅茨克和卢甘斯克地区。
 
@@ -122,7 +122,7 @@ OpenCode Go 面向 [OpenCode](https://opencode.ai) 以及会产生类似请求�
 
 ### 估算请求数
 
-Console 的 Go 页面会[估算每 5 小时的请求数](https://opencode.ai/console/go#limits)，针对每个模型，基于典型的 Go 使用模式。实际用量会有所不同。
+Console 的 Go 页面会针对每个模型[估算每 5 小时的请求数](https://opencode.ai/console/go#limits)，依据是典型的 Go 使用模式。实际用量会有所不同。
 
 你可以在 [Console](https://opencode.ai/console) 中，或通过[用量端点](#usage)跟踪当前用量。
 
@@ -134,7 +134,7 @@ Console 的 Go 页面会[估算每 5 小时的请求数](https://opencode.ai/con
 
 ### 超出限额的用量
 
-如果你的 Console 余额中还有额度，可以在 **Go** 页面上打开 **Extra Usage**。启用后，Go 会在你达到用量限额后回退到[按量付费余额](/console/models#pricing)，而不是阻止请求。
+如果你的 Console 余额中还有额度，可以在 **Go** 页面上开启 **Extra Usage**。启用后，Go 会在你达到用量限额后回退到[按量付费余额](/console/models#pricing)，而不是阻止请求。
 
 Go Teams 默认开启 **Extra Usage**，你可以在 **Go** 页面上关闭或重新开启。
 
@@ -142,15 +142,15 @@ Go Teams 默认开启 **Extra Usage**，你可以在 **Go** 页面上关闭或�
 
 在 Go 中，包含的每月用量因模型而异。
 
-对于大多数模型，我们通过批量折扣和预留的 GPU 容量来做到这一点，然后把节省下来的成本以更高每月用量的形式回馈给你。
+对大多数模型，我们靠批量折扣和预留的 GPU 容量做到这一点，再把节省下来的成本以更高的每月用量回馈给你。
 
-对于某些模型，我们还没有机会谈下折扣或以更低成本托管，原因可能是模型较新，或者其公开定价已经打过折。
+有些模型，我们还没有机会谈下折扣或以更低成本托管，原因可能是模型较新，或者其公开定价已经打过折。
 
-对于这些模型，你获得的用量仍比直接向模型提供商付费略多一些；因此它们包含的每月用量较低。
+对这些模型，你获得的用量仍比直接向模型提供商付费略多一些；这也是它们包含的每月用量较低的原因。
 
 ## 端点
 
-你也可以通过 `https://opencode.ai/inference/go` 上的 API 访问 Go 模型。每个模型的 [ID、路径和 AI SDK 包](https://opencode.ai/console/go#api)请见 Console。每个模型都以其原生 API 列出，但所有文本模型也能通过 Console 转换的其他 API 使用。完整列表请参阅[基础 URL](/console/harnesses#base-urls)。
+你也可以通过 `https://opencode.ai/inference/go` 上的 API 访问 Go 模型。每个模型的 [ID、路径和 AI SDK 包](https://opencode.ai/console/go#api)见 Console 的 Go 页面。每个模型都以其原生 API 列出，但所有文本模型也能通过 Console 转换的其他 API 使用。完整列表请参阅[基础 URL](/console/harnesses#base-urls)。
 
 这些 AI SDK 包适用于直接调用 Go 的应用。要在 OpenCode 中使用 Go，请通过 `/connect` 连接，并使用 `opencode-go/<model-id>` 格式设置[模型](/models)：
 
@@ -173,7 +173,7 @@ curl https://opencode.ai/inference/go/v1/models
 
 ### 决策模型
 
-决策模型针对 `state` 回答带类型的问题，而不是生成文本。请使用 Go 密钥，把与 [Console 模型](/console/models#jev)相同的 System One 请求发送到 `https://opencode.ai/inference/go/systemone/v1/systemone`：
+决策模型针对 `state` 回答有类型定义的问题，而不是生成文本。请使用 Go 密钥，把与 [Console 模型](/console/models#jev)相同的 System One 请求发送到 `https://opencode.ai/inference/go/systemone/v1/systemone`：
 
 ```bash
 curl https://opencode.ai/inference/go/systemone/v1/systemone \
@@ -193,8 +193,8 @@ curl https://opencode.ai/inference/go/systemone/v1/systemone \
 
 | 模型                               | 模型 ID            | 输入  | 输出 | 缓存读取 | 缓存写入 |
 | ----------------------------------- | ------------------- | ------ | ------ | ----------- | ------------ |
-| Jev 1.14                            | jev-1.14            | $0.042 | Free   | -           | -            |
-| Gemini Decision 1                   | gemini-decision-1   | $0.10  | Free   | -           | -            |
+| Jev 1.14                            | jev-1.14            | $0.042 | 免费   | -           | -            |
+| Gemini Decision 1                   | gemini-decision-1   | $0.10  | 免费   | -           | -            |
 | GPT 6 Luna Decision (≤ 272K tokens) | gpt-6-luna-decision | $0.10  | 免费   | $0.01       | $0.125       |
 | GPT 6 Luna Decision (> 272K tokens) | gpt-6-luna-decision | $0.20  | 免费   | $0.02       | $0.25        |
 
@@ -252,9 +252,9 @@ curl https://opencode.ai/inference/go/v1/usage \
 | ---------- | ---------------------------------------------------------------------------------------------------------- |
 | `status`   | `ok`，或限额用尽后的 `rate-limited`。                                                         |
 | `percent`  | 已使用限额的比例，为 `0` 到 `100` 的整数。                                        |
-| `resetsAt` | 限额重置的时间，ISO 8601 格式。在 5 小时窗口开始前，`rolling` 会在从现在起五小时后重置。 |
+| `resetsAt` | 限额重置的时间，ISO 8601 格式。在 5 小时窗口开始前，`rolling` 会在从现在起 5 小时后重置。 |
 
-没有有效密钥的请求会返回 HTTP `401`。Go 不覆盖的密钥会返回 HTTP `403`，并附带说明原因的提示，例如团队没有生效中的 Go 订阅。
+没有有效密钥的请求会返回 HTTP `401`。Go 不覆盖的密钥会返回 HTTP `403`，并附带说明原因的提示，例如工作区没有生效中的 Go 订阅。
 
 ```json
 { "type": "error", "error": { "type": "EntitlementError", "message": "OpenCode Go subscription required." } }
@@ -305,7 +305,7 @@ curl https://opencode.ai/inference/go/v1/usage \
 - **Muse Spark 1.2 Contributor：** 大幅折扣的 token 价格，以换取使用你的提示词和补全内容来训练未来的 Meta 模型。仅在 Meta [地理使用政策](https://ai.developer.meta.com/legal/geographic-use-policy)允许的地区提供。[了解更多](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)。
 - **Iceman Contributor Free：** 限时免费，以换取使用你的提示词和补全内容来改进模型。
 - **HungerG Free：** 限时免费。不用于训练：你的提示词和补全内容不会用于训练模型。
-- **LongCat 2.5：** 托管在中国。需要在团队隐私设置中启用 **Global** 地区。
+- **LongCat 2.5：** 托管在中国。需要在工作区隐私设置中启用 **Global** 地区。
 - **DeepSeek：** ZDR 协议每月续签。当前协议有效期至 2026 年 12 月 31 日。
 
 ## 背景
@@ -319,8 +319,8 @@ curl https://opencode.ai/inference/go/v1/usage \
 为了解决这个问题，我们做了几件事：
 
 1. 我们测试了一组精选的开源模型，并与各模型团队交流了最佳运行方式。
-2. 我们与几家提供商合作，确保这些模型被正确提供。
-3. 我们对模型与提供商的组合进行基准测试，整理出一份我们愿意推荐的列表。
+2. 我们与几家提供商合作，确保这些模型能够正确提供服务。
+3. 我们对模型与提供商的组合做基准测试，整理出一份我们愿意推荐的列表。
 
 Go、Go Plus 和 Go Teams 都可以使用这些模型；请根据你的使用量选择合适的套餐，或选择 Go Teams 覆盖整个团队。
 
@@ -329,6 +329,6 @@ Go、Go Plus 和 Go Teams 都可以使用这些模型；请根据你的使用量
 我们创建 OpenCode Go 的目标是：
 
 1. 通过低成本订阅，让更多人**用得起** AI 编程。
-2. **稳定**访问最好的开源编程模型。
+2. 提供对最好的开源编程模型的**稳定**访问。
 3. 精选经过**测试和基准评估**、适合编程 agent 使用的模型。
-4. **没有锁定**：你同样可以在 OpenCode 中使用任何其他提供商。
+4. **不锁定**：你同样可以在 OpenCode 中使用任何其他提供商。

@@ -22,7 +22,7 @@ opencode ~/code/my-project
 - [Alacritty](https://alacritty.org)
 - [Kitty](https://sw.kovidgoyal.net/kitty/)
 
-终端支持真彩色（Truecolor）时，主题颜色最为准确；不支持的终端会使用可用调色板中的近似颜色。
+支持真彩色的终端能最准确地呈现主题色彩；不支持真彩色的终端则使用可用调色板中的近似颜色。
 
 ## 自动化
 
@@ -46,7 +46,7 @@ opencode mini
 
 默认情况下，OpenCode 会为你的用户账号发现或启动一个共享的后台服务器。每个本地 OpenCode 客户端都会连接到该服务器，由它负责会话、配置、集成、权限和工具执行。
 
-使用 `--standalone` 运行私有服务器，或使用 `--server` 连接指定的服务器 URL：
+用 `--standalone` 改用私有服务器运行，或用 `--server` 连接指定的服务器 URL：
 
 ```bash
 opencode --standalone
@@ -73,7 +73,7 @@ opencode debug paths db
 sqlite3 "$(opencode debug paths db)"
 ```
 
-可选的选择器接受 `db`、`home`、`data`、`config`、`cache`、`state`、`tmp`、`bin`、`log` 或 `repos`，只输出路径和一个换行。数据库路径会遵循发布通道和 `OPENCODE_DB`；相对的数据库覆盖路径会在数据目录下解析，`:memory:` 则按原样输出。该命令不会启动服务器或打开数据库。
+可选的选择器接受 `db`、`home`、`data`、`config`、`cache`、`state`、`tmp`、`bin`、`log` 或 `repos`，只打印路径和一个换行符。数据库路径取决于发布通道和 `OPENCODE_DB`；以相对路径覆盖数据库时，路径会在数据目录下解析，`:memory:` 则按原样输出。该命令不会启动服务器或打开数据库。
 
 省略选择器会显示带标签的所有路径：
 
@@ -89,7 +89,7 @@ opencode debug paths
 opencode uninstall --dry-run
 ```
 
-运行 `opencode uninstall` 确认移除。OpenCode 会先停止已注册的后台服务和持久终端，然后移除由各 OpenCode 版本和通道共享的全局缓存目录。会话数据、配置和状态永远不会被移除。
+运行 `opencode uninstall` 确认移除。OpenCode 会先停止已注册的后台服务和持久终端，然后移除由各 OpenCode 版本和发布通道共享的全局缓存目录。会话数据、配置和状态永远不会被移除。
 
-- `--force`（`-f`）会跳过确认；适用于非交互式移除。
+- `--force`（`-f`）会跳过确认；用于非交互式移除。
 - 包管理器安装会使用检测到的包管理器。Curl 安装会输出最终命令，供你手动移除可执行文件。

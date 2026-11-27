@@ -1,9 +1,9 @@
 ---
 title: "提供商 API"
-description: "使用 Console 密钥，通过 Console 网关调用接入团队的提供商。"
+description: "使用 Console 密钥，通过 Console 网关调用接入工作区的提供商。"
 ---
 
-接入团队的每个[提供商](/console/providers)都会通过 Console 网关，以各自独立的 URL 提供服务。OpenCode 在 `/connect` 之后会自动使用它；你也可以直接调用该 URL，在自己的工具中使用相同的提供商。Console 会在转发请求前添加提供商凭据，因此提供商密钥永远不会离开团队。
+接入工作区的每个[提供商](/console/providers)都会通过 Console 网关，以各自独立的 URL 提供服务。OpenCode 在 `/connect` 之后会自动使用它；你也可以直接调用该 URL，在自己的工具中使用相同的提供商。Console 会在转发请求前添加提供商凭据，因此提供商密钥永远不会离开工作区。
 
 ```bash
 curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
@@ -23,7 +23,7 @@ curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
 https://opencode.ai/inference/custom/<connection_id>
 ```
 
-## 身份验证
+## 认证
 
 将 `<token>` 替换为在 Console 中创建的[服务账号密钥](/console/api#service-accounts)。Console 会在转发前将其替换为该连接的凭据。
 

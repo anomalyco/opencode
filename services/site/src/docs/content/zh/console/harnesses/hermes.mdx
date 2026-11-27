@@ -6,7 +6,7 @@ description: "在 Hermes Agent 中使用 Console 和 Go 模型。"
 [Hermes Agent](https://hermes-agent.nousresearch.com) 内置了按量付费和 Go 的 OpenCode 提供商。它会为每个付费或 Go 模型选择正确的 API。免费层级对话模型只能在 OpenCode 中使用，从 Hermes 调用会返回 HTTP `403`。
 
 <Callout>
-  [Console CLI](/console/harnesses#console-cli) 可以用一条命令设置好 Hermes，包括团队的策略、MCP 服务器、技能和指令。运行 `npx @opencode/console setup hermes`。以下步骤介绍如何手动设置。
+  [Console CLI](/console/harnesses#console-cli) 可以用一条命令设置好 Hermes，包括工作区的策略、MCP 服务器、技能和指令。运行 `npx @opencode/console setup hermes`。以下步骤介绍如何手动设置。
 </Callout>
 
 | 提供商       | 套餐          | 密钥变量           |
@@ -16,7 +16,7 @@ description: "在 Hermes Agent 中使用 Console 和 Go 模型。"
 
 ## 配置
 
-运行模型设置，按量付费选择 **OpenCode Zen**，Go 选择 **OpenCode Go**。
+运行模型设置命令，按量付费选择 **OpenCode Zen**，Go 选择 **OpenCode Go**。
 
 ```bash
 hermes model

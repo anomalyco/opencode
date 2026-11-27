@@ -1,11 +1,11 @@
 ---
 title: "Console 模型"
-description: "经过精选的编程模型、按量付费价格，以及通过 OpenCode Console 访问 API。"
+description: "经过精选的编程模型、按量付费价格，以及通过 OpenCode Console 提供的 API 访问。"
 ---
 
 OpenCode Console 提供一份经过 OpenCode 团队测试和验证的模型列表。登录、充值额度并获取 API 密钥，即可在 OpenCode 或其他编程 agent 中使用这些模型。
 
-Console 在 OpenCode 中的用法与其他提供商相同。它**完全是可选的**，你也可以改用任何其他提供商。需要包含用量的订阅，请参阅 [OpenCode Go](/console/go)。
+Console 在 OpenCode 中的用法与其他提供商相同。它**完全是可选的**，你也可以改用任何其他提供商。如果想要包含用量的订阅，请参阅 [OpenCode Go](/console/go)。
 
 ## 工作原理
 
@@ -22,7 +22,7 @@ Console 在 OpenCode 中的用法与其他提供商相同。它**完全是可选
    /models
    ```
 
-费用按请求收取，你可以随时为账号充值额度。
+费用按请求收取，你还可以为账号充值额度。
 
 ## 端点
 
@@ -160,13 +160,13 @@ Console 在 OpenCode 中的用法与其他提供商相同。它**完全是可选
 curl https://opencode.ai/inference/v1/models
 ```
 
-响应中的每个字段，以及包含团队已连接提供商的 Console 列表，请参阅[模型列表 API](/console/api/models)。
+关于响应中的每个字段，以及包含工作区已连接提供商的 Console 模型列表，请参阅[模型列表 API](/console/api/models)。
 
 ### Jev
 
-Jev 是 TypeSafe AI 的 System One 模型，用于快速做出结构化决策。它不生成文本，而是根据带类型的问题评估 `state`，返回代码可以直接使用的值和概率。它支持是/否（`noul`）、多选（`choice`）和基于评分标准（`score`）的问题。
+Jev 是 TypeSafe AI 的 System One 模型，用于快速做出结构化决策。它不生成文本，而是根据有类型定义的问题评估 `state`，返回代码可以直接使用的值和概率。它支持是/否（`noul`）、多选（`choice`）和基于评分标准（`score`）的问题。
 
-使用 OpenCode Console API 密钥和 `https://opencode.ai/inference/systemone/v1/systemone` 端点。以下示例检查一个支持请求是否紧急：
+使用 OpenCode Console API 密钥调用 `https://opencode.ai/inference/systemone/v1/systemone` 端点。以下示例检查一个支持请求是否紧急：
 
 ```bash
 curl https://opencode.ai/inference/systemone/v1/systemone \
@@ -216,7 +216,7 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
 
 ### GPT 6 Luna Decision 与 Gemini Decision 1
 
-`gpt-6-luna-decision` 和 `gemini-decision-1` 在同一端点上接受与 Jev 相同的 System One 请求。请在 `state` 中以聊天风格的 part（`image_url`、`input_audio`、`video_url`、`file`）传入图片、音频、视频和 PDF。GPT 6 Luna Decision 接受文本和图片；Gemini Decision 1 还接受音频、视频和 PDF。
+`gpt-6-luna-decision` 和 `gemini-decision-1` 在同一端点上接受与 Jev 相同的 System One 请求。请在 `state` 中以聊天消息 part 的形式传入图片、音频、视频和 PDF（`image_url`、`input_audio`、`video_url`、`file`）。GPT 6 Luna Decision 接受文本和图片；Gemini Decision 1 还接受音频、视频和 PDF。
 
 ```bash
 curl https://opencode.ai/inference/systemone/v1/systemone \
@@ -249,11 +249,11 @@ curl https://opencode.ai/inference/openai/v1/images/generations \
   }'
 ```
 
-Google 使用其原生的 `contents` 和 `generationConfig`，xAI 使用其原生选项，例如 `resolution` 和 `quality`。OpenAI Images 和 xAI Images 还支持在 `/images/edits` 进行编辑。
+Google 使用其原生的 `contents` 和 `generationConfig`，xAI 使用其原生选项，例如 `resolution` 和 `quality`。OpenAI Images 和 xAI Images 还支持通过 `/images/edits` 编辑图片。
 
 ### 嵌入模型
 
-`text-embedding-3-small`、`qwen3-embedding-8b` 以及上表中的其他嵌入模型会把文本转换为向量。OpenCode 不会用它们进行对话，因此它们永远不会出现在 `/models` 中，免费层级也不包含它们。[Go](/console/go#embedding-models) 包含其中的一部分。请使用 Console 密钥在 OpenAI 的 Embeddings API 上调用它们。
+`text-embedding-3-small`、`qwen3-embedding-8b` 以及上表中的其他嵌入模型会把文本转换为向量。OpenCode 不会用它们做对话，因此它们永远不会出现在 `/models` 中，免费层级也不包含它们。[Go](/console/go#embedding-models) 包含其中的一部分。请使用 Console 密钥在 OpenAI 的 Embeddings API 上调用它们。
 
 ```bash
 curl https://opencode.ai/inference/openai/v1/embeddings \
@@ -266,9 +266,9 @@ curl https://opencode.ai/inference/openai/v1/embeddings \
 ```
 
 - `input` 接受字符串或字符串数组。`data` 会按相同顺序为每个输入返回一个向量。
-- 在支持该功能的模型上，`dimensions` 会缩短向量，例如 `text-embedding-3-small`。
+- 在支持该功能的模型（例如 `text-embedding-3-small`）上，`dimensions` 可以缩短向量。
 - `encoding_format: "base64"` 会返回 base64 编码的向量，而不是浮点数。
-- 每个输入都必须适合模型的上下文窗口。
+- 每个输入都必须能放入模型的上下文窗口。
 - 响应会像其他推理请求一样报告 `usage.cost`。请参阅[费用](/console/api/inference#cost)。
 
 不同模型的向量无法比较，因此请使用同一个模型嵌入文档和查询。[已连接的提供商](/console/api/providers#endpoints)会在 `/embeddings` 上提供其自己的嵌入模型。
@@ -292,12 +292,12 @@ Console 采用按量付费。以下价格均为**每 1M token**，图片模型�
 | MiMo-V2.6-Flash Free                | 免费            | 免费              | 免费               | -            |
 | Nemotron 3.5 Lightning Free         | 免费            | 免费              | 免费               | -            |
 | Nemotron 3.5 Super VL Free          | 免费            | 免费              | 免费               | -            |
-| Jev 1.13 Free                       | Free            | Free              | -                  | -            |
-| Jev 1.14                            | $0.042          | Free              | -                  | -            |
-| Jev 1.13                            | $0.042          | Free              | -                  | -            |
-| Gemini Decision 1                   | $0.10           | Free              | -                  | -            |
-| GPT 6 Luna Decision (≤ 272K tokens) | $0.10           | Free              | $0.01              | $0.125       |
-| GPT 6 Luna Decision (> 272K tokens) | $0.20           | Free              | $0.02              | $0.25        |
+| Jev 1.13 Free                       | 免费            | 免费              | -                  | -            |
+| Jev 1.14                            | $0.042          | 免费              | -                  | -            |
+| Jev 1.13                            | $0.042          | 免费              | -                  | -            |
+| Gemini Decision 1                   | $0.10           | 免费              | -                  | -            |
+| GPT 6 Luna Decision (≤ 272K tokens) | $0.10           | 免费              | $0.01              | $0.125       |
+| GPT 6 Luna Decision (> 272K tokens) | $0.20           | 免费              | $0.02              | $0.25        |
 | MiniMax M3                          | $0.30           | $1.20             | $0.06              | -            |
 | MiniMax M2.7                        | $0.30           | $1.20             | $0.06              | -            |
 | MiniMax M2.5                        | $0.30           | $1.20             | $0.06              | -            |
@@ -407,9 +407,9 @@ Console 采用按量付费。以下价格均为**每 1M token**，图片模型�
 
 | 模型                  | 价格                                | 说明                                                                                        |
 | ---------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------- |
-| GPT Image 2.5 Sunburst | $1.00 / image                        | 另加每 1M 输入/输出 token $8 / $30，以及每 1M 缓存输入 token $2。               |
-| Nano Banana 2.1        | $1.50 / $7.50 / $30.00 per 1M tokens | 输入 / 文本输出 / 图片输出。约每 1K 图片 $0.034，2K $0.050，4K $0.113。 |
-| Grok Imagine Image 2.0 | $0.04 / image                        | 每张输入图片 $0.01；质量和分辨率可能使输出价格升至 $0.05–$0.08。     |
+| GPT Image 2.5 Sunburst | $1.00 / 张                        | 另加每 1M 输入/输出 token $8 / $30，以及每 1M 缓存输入 token $2。               |
+| Nano Banana 2.1        | $1.50 / $7.50 / $30.00 每 1M token | 输入 / 文本输出 / 图片输出。约每 1K 图片 $0.034，每 2K 图片 $0.050，每 4K 图片 $0.113。 |
+| Grok Imagine Image 2.0 | $0.04 / 张                        | 每张输入图片 $0.01；质量和分辨率可能使输出价格升至 $0.05–$0.08。     |
 
 ### 嵌入价格
 
@@ -432,18 +432,18 @@ Console 采用按量付费。以下价格均为**每 1M token**，图片模型�
 
 ### 免费模型
 
-- DeepSeek V4.1 Flash Free 在 OpenCode 上限时免费。其提供商遵循零留存政策，不使用你的数据训练模型。
-- MiMo-V2.6-Flash Free 在 OpenCode 上限时提供。团队会利用这段时间收集反馈。
-- Nemotron 3.5 Lightning Free 在 OpenCode 上限时提供。团队会利用这段时间收集反馈并改进模型。
-- Nemotron 3.5 Super VL Free 在 OpenCode 上限时提供。团队会利用这段时间收集反馈并改进模型。
-- Big Pickle 是一款隐身模型，在 OpenCode 上限时免费。团队会利用这段时间收集反馈并改进模型。
-- Tidepool Alpha Free 是一款隐身模型，在 OpenCode 上限时免费。团队会利用这段时间收集反馈并改进模型。
-- Seaglass Alpha Free 是一款隐身模型，在 OpenCode 上限时免费。团队会利用这段时间收集反馈并改进模型。
-- Iceman Free 是一款隐身模型，在 OpenCode 上限时免费。团队会利用这段时间收集反馈并改进模型。
-- Beam Free 在 OpenCode 上限时免费。其提供商不会使用你的数据训练模型，并出于安全原因保留 30 天。该模型不在以下国家或地区提供：安哥拉、白俄罗斯、柬埔寨、中国（包括香港和澳门）、古巴、刚果民主共和国、赤道几内亚、伊朗、伊拉克、老挝、利比亚、尼日利亚、朝鲜、俄罗斯、叙利亚、土库曼斯坦、乌兹别克斯坦、委内瑞拉，以及乌克兰的克里米亚、顿涅茨克和卢甘斯克地区。
-- Flint 40B Free 在 OpenCode 上限时免费。团队会利用这段时间收集反馈并改进模型。
-- Hy4 flash Free 在 OpenCode 上限时免费。其提供商遵循零留存政策，不使用你的数据训练模型。
-- Jev 1.13 Free 在 OpenCode 上限时提供。
+- DeepSeek V4.1 Flash Free 限时在 OpenCode 上免费。其提供商遵循零留存政策，不使用你的数据训练模型。
+- MiMo-V2.6-Flash Free 限时在 OpenCode 上提供。团队会利用这段时间收集反馈。
+- Nemotron 3.5 Lightning Free 限时在 OpenCode 上提供。团队会利用这段时间收集反馈并改进模型。
+- Nemotron 3.5 Super VL Free 限时在 OpenCode 上提供。团队会利用这段时间收集反馈并改进模型。
+- Big Pickle 是一款隐身模型，限时在 OpenCode 上免费。团队会利用这段时间收集反馈并改进模型。
+- Tidepool Alpha Free 是一款隐身模型，限时在 OpenCode 上免费。团队会利用这段时间收集反馈并改进模型。
+- Seaglass Alpha Free 是一款隐身模型，限时在 OpenCode 上免费。团队会利用这段时间收集反馈并改进模型。
+- Iceman Free 是一款隐身模型，限时在 OpenCode 上免费。团队会利用这段时间收集反馈并改进模型。
+- Beam Free 限时在 OpenCode 上免费。其提供商不会使用你的数据训练模型，并出于安全原因保留 30 天。该模型不在以下国家或地区提供：安哥拉、白俄罗斯、柬埔寨、中国（包括香港和澳门）、古巴、刚果民主共和国、赤道几内亚、伊朗、伊拉克、老挝、利比亚、尼日利亚、朝鲜、俄罗斯、叙利亚、土库曼斯坦、乌兹别克斯坦、委内瑞拉，以及乌克兰的克里米亚、顿涅茨克和卢甘斯克地区。
+- Flint 40B Free 限时在 OpenCode 上免费。团队会利用这段时间收集反馈并改进模型。
+- Hy4 flash Free 限时在 OpenCode 上免费。其提供商遵循零留存政策，不使用你的数据训练模型。
+- Jev 1.13 Free 限时在 OpenCode 上提供。
 
 要在 OpenCode 中隐藏免费模型，请设置 `OPENCODE_DISABLE_FREE_MODELS=1`。请参阅[免费模型](/models#free-models)。
 
@@ -451,7 +451,7 @@ Console 采用按量付费。以下价格均为**每 1M token**，图片模型�
 
 ### 自动充值与预算
 
-[自动充值](/console/billing#auto-recharge)会在余额不足时购买额度，[预算](/console/budgets)会限制团队和每位成员的每月支出。
+[自动充值](/console/billing#auto-recharge)会在余额不足时购买额度，[预算](/console/budgets)会限制工作区和每位成员的每月支出。
 
 ### 已弃用的模型
 
@@ -484,7 +484,7 @@ Console 采用按量付费。以下价格均为**每 1M token**，图片模型�
 
 ## 隐私
 
-我们的所有模型都托管在美国和欧盟。我们的提供商遵循零留存政策，不使用你的数据训练模型，以下例外除外：
+我们的所有模型都托管在美国和欧盟。我们的提供商遵循零留存政策，不使用你的数据训练模型，以下情况除外：
 
 - Big Pickle：在免费期间，收集的数据可能会用于改进模型。
 - Tidepool Alpha Free：在免费期间，收集的数据会被保留并用于改进模型。
@@ -502,21 +502,21 @@ Console 采用按量付费。以下价格均为**每 1M token**，图片模型�
 
 订阅模型的隐私说明请参阅 [Go 隐私](/console/go#privacy)。
 
-## 团队使用
+## 面向团队
 
-你可以通过[团队](/console/workspaces)与团队共享 Console 模型。所有者和管理员可以[邀请成员](/console/members)、在 **Models** 标签页中选择启用哪些模型、设置[预算](/console/budgets)，以及接入[自己的提供商](/console/providers)。
+你可以在[工作区](/console/workspaces)中与团队共享 Console 模型。所有者和管理员可以[邀请成员](/console/members)、在 **Models** 标签页中选择启用哪些模型、设置[预算](/console/budgets)，以及接入[自有提供商](/console/providers)。
 
 ## 背景
 
-可用的模型很多，但真正适合作为编程 agent 的只有少数几个。不同提供商在配置、性能和质量上也各不相同，因此通过 OpenRouter 这类网关访问的模型，表现可能与直接访问不同。
+可用的模型很多，但真正适合作为编程 agent 的只有少数几个。不同提供商在配置、性能和质量上也各不相同，因此通过 OpenRouter 这类网关访问的模型，表现可能有所不同。
 
 <Callout type="tip">我们测试了一组与 OpenCode 配合良好的精选模型和提供商。</Callout>
 
 为了建立这份目录，我们：
 
 1. 测试了一组精选模型，并与各模型团队交流了最佳运行方式。
-2. 与提供商合作，确保模型被正确提供。
-3. 对每个模型/提供商组合进行基准测试，整理出一份我们愿意推荐的列表。
+2. 与提供商合作，确保模型能够正确提供服务。
+3. 对每个模型/提供商组合做基准测试，整理出一份我们愿意推荐的列表。
 
 Console 是一个 AI 网关，让你可以使用这些模型。
 
@@ -524,7 +524,7 @@ Console 是一个 AI 网关，让你可以使用这些模型。
 
 我们构建 Console 的目标是：
 
-1. 为编程 agent**基准测试**最好的模型和提供商。
+1. 为编程 agent **基准测试**出最好的模型和提供商。
 2. 提供**最高质量**的选项，不降低性能，也不路由到更便宜的提供商。
 3. 按成本价销售，把**降价**回馈给你，只加收覆盖支付手续费的部分。
-4. **没有锁定**：可以在任何编程 agent 中使用 Console，也可以在 OpenCode 中使用其他提供商。
+4. **不锁定**：可以在任何编程 agent 中使用 Console，也可以在 OpenCode 中使用其他提供商。

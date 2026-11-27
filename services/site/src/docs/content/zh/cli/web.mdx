@@ -3,7 +3,7 @@ title: "Web"
 description: "在浏览器中运行 OpenCode。"
 ---
 
-OpenCode 内置一个 Web 界面，由驱动 TUI 的同一个服务器提供。它默认可用，并受密码保护。
+OpenCode 内置一个 Web 界面，由支撑 TUI 的同一个服务器提供。它默认可用，并受密码保护。
 
 ## 访问
 
@@ -17,7 +17,7 @@ $ opencode pair
   █▀▀▀▀▀█ ...
 ```
 
-在浏览器中打开链接后，浏览器会通过会话 Cookie 完成登录并加载 Web 界面。用 OpenCode 应用扫描二维码，或将链接粘贴到应用的服务器地址栏中，也能以同样的方式连接应用。登录会话有效期为 30 天；修改服务器密码会让所有会话退出登录。
+在浏览器中打开链接，即可通过会话 Cookie 登录并加载 Web 界面。用 OpenCode 应用扫描二维码，或将链接粘贴到应用的服务器地址栏中，也能以同样的方式连接应用。登录状态有效期为 30 天；修改服务器密码会让所有会话退出登录。
 
 ### 通过 SSH 访问
 
@@ -45,7 +45,7 @@ http://127.0.0.1:49374
 
 ### 远程访问
 
-如果想从任何地方连接，可以通过 [OpenTunnel](https://github.com/anomalyco/opentunnel) 远程地址进行配对：
+如果想从任何地方连接，可以通过 [OpenTunnel](https://github.com/anomalyco/opentunnel) 远程地址配对：
 
 ```bash
 $ opencode pair --remote
@@ -62,7 +62,7 @@ $ opencode pair --remote
 │  ● Yes / ○ No
 ```
 
-在非交互式终端中，除非传入 `--yes` 表示同意，否则命令会失败。同意一次之后，后续运行将不再询问，即使之后用 `opencode service set remote false` 关闭了远程访问也是如此。
+在非交互式终端中，除非传入 `--yes` 表示同意，否则命令会失败。同意一次之后，后续运行不再询问，即使后来用 `opencode service set remote false` 关闭了远程访问。
 
 ## 配置
 
@@ -105,7 +105,7 @@ server password <password>
 
 - 在共享、常驻或远程主机上运行 OpenCode，然后通过 `opencode --server <url>` 连接客户端。
 - 为单个进程控制主机名、端口和 CORS 来源。
-- 在 systemd、Docker 等进程管理器下运行，或在其他要求前台进程的环境中运行。
+- 在 systemd、Docker 等进程管理工具下运行，或在其他要求前台进程的环境中运行。
 - 使用专用服务器，而不是共享的后台服务。
 
 使用 `--server` 将客户端连接到该服务器：
@@ -114,7 +114,7 @@ server password <password>
 $ opencode --server http://127.0.0.1:4096
 ```
 
-### 身份验证
+### 认证
 
 设置 `OPENCODE_PASSWORD` 可以使用固定密码而非自动生成的密码。同一个变量也会为 `opencode --server` 提供密码。
 

@@ -1,9 +1,9 @@
 ---
-title: "Harness"
+title: "Harnesses"
 description: "在其他编程 agent 和 AI 应用中使用 Console 和 Go 模型。"
 ---
 
-Console 可以配合 OpenCode 以外的编程 agent 使用。用 API 密钥让 harness 指向 Console 网关，即可使用任何付费或 Go 模型，用量会像其他请求一样计入你的团队。
+Console 可以配合 OpenCode 以外的编程 agent 使用。用 API 密钥让 harness 指向 Console 网关，即可使用任何付费或 Go 模型，用量会像其他请求一样计入你的工作区。
 
 | Harness                                       | 按量付费 | Go        | MCP |
 | --------------------------------------------- | ------------- | --------- | --- |
@@ -18,7 +18,7 @@ Console 可以配合 OpenCode 以外的编程 agent 使用。用 API 密钥让 h
 
 ## Console CLI
 
-[Console CLI](https://github.com/anomalyco/opencode-console-cli) 可以用一条命令把 harness 连接到你的团队。它需要 Node.js 22 或更高版本。
+[Console CLI](https://github.com/anomalyco/opencode-console-cli) 可以用一条命令把 harness 连接到你的工作区。它需要 Node.js 22 或更高版本。
 
 | Harness          | 命令                                        |
 | ---------------- | ---------------------------------------------- |
@@ -29,15 +29,15 @@ Console 可以配合 OpenCode 以外的编程 agent 使用。用 API 密钥让 h
 | Pi               | `npx @opencode/console setup pi`               |
 | DeepSeek Harness | `npx @opencode/console setup deepseek-harness` |
 
-浏览器会打开 Console，你可以在其中批准登录并选择团队。随后 harness 会获得
+浏览器会打开 Console，你可以在其中批准登录并选择工作区。随后 harness 会获得
 
-- 团队的模型，通过 Console 提供
-- 团队的策略，在每次工具调用前检查
-- 团队的 MCP 服务器、技能和指令
+- 工作区的模型，通过 Console 提供
+- 工作区的策略，在每次工具调用前检查
+- 工作区的 MCP 服务器、技能和指令
 
-CLI 会让 harness 与团队保持同步，并自动更新自身。
+CLI 会让 harness 与工作区保持同步，并自动更新自身。
 
-要保留 harness 自己的登录和模型（例如 Claude 或 ChatGPT 订阅），请添加 `--keep-provider`。该 harness 仍会获得团队的策略、MCP 服务器、技能和指令。它适用于 Claude Code、Codex、Hermes 和 OpenClaw。
+要保留 harness 自己的登录和模型（例如 Claude 或 ChatGPT 订阅），请添加 `--keep-provider`。该 harness 仍会获得工作区的策略、MCP 服务器、技能和指令。它适用于 Claude Code、Codex、Hermes 和 OpenClaw。
 
 ```bash
 npx @opencode/console setup codex --keep-provider
@@ -47,20 +47,20 @@ npx @opencode/console setup codex --keep-provider
 
 ## 获取 API 密钥
 
-Harness 使用 Console API 密钥进行身份验证。最快的方式是使用[个人 API 密钥](/console/api#personal-api-keys)，它以你的身份调用模型。
+Harness 使用 Console API 密钥认证。最快的方式是使用[个人 API 密钥](/console/api#personal-api-keys)，它以你的身份调用模型。
 
 1. 在 [Console](https://opencode.ai/console) 的账号菜单中打开 **Account**。
 2. 在 **Personal API keys** 下点击 **Add API key**。
-3. 选择团队，为密钥命名，然后点击 **Create**。
+3. 选择工作区，为密钥命名，然后点击 **Create**。
 4. 复制密钥。它只显示一次。
 
 ```text
 oc_sk_1a2b3c4d5e6f_...
 ```
 
-用量会计入你的[成员预算](/console/budgets#member-budgets)。按量付费请使用有额度的团队中的密钥，Go 则使用已订阅 [Go](/console/go) 的团队中的密钥。
+用量会计入你的[成员预算](/console/budgets#member-budgets)。按量付费要用已充值额度的工作区中的密钥，Go 则要用已订阅 [Go](/console/go) 的工作区中的密钥。
 
-对于共享机器或 CI，所有者和管理员可以改为创建[服务账号](/console/api#service-accounts)密钥，这样用量就不会绑定到某个人。
+共享机器或 CI 场景下，所有者和管理员可以改为创建[服务账号](/console/api#service-accounts)密钥，这样用量就不会绑定到某个人。
 
 ## 基础 URL
 
@@ -71,7 +71,7 @@ oc_sk_1a2b3c4d5e6f_...
 | 按量付费 | `https://opencode.ai/inference`    |
 | Go            | `https://opencode.ai/inference/go` |
 
-在后面追加你的 harness 所用 API 的路径。每个 API 都提供所有付费和 Go 文本模型：当模型支持该 API 时，Console 会把请求发送到模型自己的端点，否则会进行转换。
+在后面追加你的 harness 所用 API 的路径。每个 API 都提供所有付费和 Go 文本模型：当模型原生支持该 API 时，Console 会把请求发到模型自己的端点，否则会做转换。
 
 | API                     | 路径                                            |
 | ----------------------- | ----------------------------------------------- |
@@ -96,10 +96,10 @@ Console 还能识别 Claude Code、Codex、Hermes 和 Pi 发送的原生会话�
 
 ## Console MCP
 
-支持 MCP 的 harness 可以通过 Console MCP 服务器管理你的团队。它使用 OAuth 和动态客户端注册，因此你可以在浏览器中登录，而无需粘贴密钥。
+支持 MCP 的 harness 可以通过 Console MCP 服务器管理你的工作区。它使用 OAuth 和动态客户端注册，因此你可以在浏览器中登录，而无需粘贴密钥。
 
 ```text
 https://opencode.ai/console/mcp
 ```
 
-每个 harness 页面都会展示如何添加它。当你的团队启用它时，OpenCode 会自动以 `opencode_console` 添加该服务器，并在首次使用时要求你从浏览器登录。
+每个 harness 页面都会展示如何添加它。当你的工作区启用它时，OpenCode 会自动以 `opencode_console` 添加该服务器，并在首次使用时要求你从浏览器登录。

@@ -46,7 +46,7 @@ agent 和命令也可以选择各自的模型。请参阅[agent](/agents)和[命
 }
 ```
 
-如果配置的模型已启用且其提供商可用，它就会成为模型目录的默认模型。否则，OpenCode 会回退到最新的可用受支持模型。
+如果配置的模型已启用且其提供商可用，它就会成为模型目录的默认模型。否则，OpenCode 会回退到最新的受支持可用模型。
 
 - 会话中已选择的模型优先于配置的默认模型。
 - 切换会话的模型不会改写配置文件。
@@ -227,7 +227,7 @@ OpenCode 先应用提供商的值，再应用模型的值，最后应用所选�
 - 上下文上限为 200,000 token，输出上限为 32,000 token。
 - 未指定输入上限。
 
-OpenCode 识别 `text`、`regex` 和 `lark`。models.dev 中的其他格式名称会被忽略，但不会因此丢弃模型或其工具。如果目录模型前面的代理拒绝自由格式工具，请在该模型上将 `capabilities.freeform` 设为 `[]`。
+OpenCode 识别 `text`、`regex` 和 `lark`。models.dev 中的其他格式名称会被忽略，但不会因此丢弃模型或其工具。如果位于目录模型前面的代理拒绝自由格式工具，请在该模型上将 `capabilities.freeform` 设为 `[]`。
 
 这些只是回退假设，并非检测到的能力。如果知道准确的值，请设置 `capabilities` 和 `limit`；显式设置的值会替换回退值。添加 `disabled: true` 可以将模型从可用目录中隐藏：
 
@@ -265,7 +265,7 @@ OpenCode 识别 `text`、`regex` 和 `lark`。models.dev 中的其他格式名�
 }
 ```
 
-OpenCode 能识别 `reasoning`、`reasoning_content` 和 `reasoning_text`，也接受其他提供商特定的字符串。它会从该字段读取流式推理内容，并在把之前的助手消息发回模型时还原该字段。
+OpenCode 能识别 `reasoning`、`reasoning_content` 和 `reasoning_text`，也接受其他提供商特定的字符串。它会从该字段读取流式推理内容，并在把之前的助手消息发回模型时还原该字段。相关的 `requireReasoning` 字段请参阅[兼容性](#compatibility)。
 
 ## 提示词缓存
 
@@ -311,6 +311,18 @@ OpenCode 默认不发送缓存生命周期，因此各提供商会使用自己�
 }
 ```
 
+`ttl` 接受数字加单位的形式：`ms`、`s`、`m`、`h` 或 `d`，例如 `"5m"`、`"1h"` 或 `"24h"`。OpenCode 会按原样发送，因此请使用提供商接受的值：
+
+| API | 有效期的位置 |
+| --- | --- |
+| Anthropic Messages | 每个缓存标记上的 `cache_control.ttl`。Anthropic 接受 `"5m"` 和 `"1h"`。 |
+| Bedrock Converse | 每个 `cachePoint` 上的 `ttl`。只缓存五分钟的旧版 Claude 模型会忽略 `"1h"`。 |
+| OpenAI Chat 和 Responses | `"24h"` 会发送到 `prompt_cache_retention`，其他值会发送到 `prompt_cache_options.ttl`。 |
+
+Gemini 这类无需标记即自动缓存的提供商会忽略它。有效期越长，写入费用通常越高：Anthropic 对一小时的缓存写入收取输入价格的两倍，五分钟的则收取 1.25 倍。
+
+[预热](/warming)可以利用该有效期，通过 `interval: "auto"` 安排请求时间。
+
 ## 兼容性
 
 `compatibility` 描述模型所通过 API 的请求和响应特性，例如哪个字段携带推理内容，或者端点是否接受 `prompt_cache_key`。每个模型只通过一个 API 提供服务，字段仅在该 API 读取它时生效，其他字段会被忽略。
@@ -345,7 +357,7 @@ OpenCode 默认不发送缓存生命周期，因此各提供商会使用自己�
 | `supportsThinkingBlockBinding` | 请求 API 丢弃早期上下文已变化的思考块，而不是拒绝请求。 | Anthropic Messages、Bedrock Converse | `true` 或 `false`。未设置时会检测 Claude 5.1 及更高版本。 |
 | `supportsEffortUpdates` | 将推理强度变化作为逐条消息更新发送，从而保留提示词缓存。否则推理强度会作用于整个请求。 | Anthropic Messages、OpenAI Responses | `true` 或 `false`。未设置时会检测 Claude Opus 5、Claude 5.1 及更高版本，以及 GPT-6 及更高版本。 |
 | `supportsSystemUpdates` | 将对话中途添加的系统消息作为原生系统消息发送。否则它们会被包装成下一条用户消息中的文本。 | Anthropic Messages | `true` 或 `false`。未设置时会检测 Claude Opus 4.8 和 Claude 5 及更高版本。 |
-| `mediaInput` | 决策请求中图片和其他媒体的位置。 | System One | `assets`（从 state 引用图片）、`state`（内联在 state 中）或 `root`（顶层的 `images`、`audio` 和 `videos` 列表）。未设置时使用提供程序的默认值。 |
+| `mediaInput` | 决策请求中图片和其他媒体的位置。 | System One | `assets`（从 state 引用图片）、`state`（内联在 state 中）或 `root`（顶层的 `images`、`audio` 和 `videos` 列表）。未设置时使用提供商的默认值。 |
 
 ## 本地模型
 
@@ -385,12 +397,12 @@ OpenCode 会在后台刷新模型列表，并从 Ollama 读取上下文、视觉
 }
 ```
 
-- 如果端点不需要 Bearer 身份验证，请省略 `apiKey`。
+- 如果端点不需要 Bearer 认证，请省略 `apiKey`。
 - 使用 `"plugins": ["-opencode.provider.ollama"]` 可禁用自动发现。
 
-### LMStudio
+### LM Studio
 
-当未启用身份验证的 LM Studio 服务器运行在 `http://127.0.0.1:1234` 时，使用 `lmstudio` 提供商 ID 选择已发现的模型：
+当未启用认证的 LM Studio 服务器运行在 `http://127.0.0.1:1234` 时，使用 `lmstudio` 提供商 ID 选择已发现的模型：
 
 ```jsonc title="opencode.jsonc"
 {
@@ -416,7 +428,7 @@ OpenCode 会在后台刷新模型列表，并从 LM Studio 读取上下文、视
 }
 ```
 
-- 如果 LM Studio 未启用身份验证，请省略 `apiKey`。
+- 如果 LM Studio 未启用认证，请省略 `apiKey`。
 - 使用 `"plugins": ["-opencode.provider.lmstudio"]` 可禁用自动发现。
 
 ### vLLM
@@ -434,7 +446,7 @@ OpenCode 会检查 `/health`，在后台刷新 `/v1/models`，将上报的 `max_
 
 已发现的模型会声明支持文本输入和输出，但不声明支持视觉或工具。vLLM 需要通过 `--enable-auto-tool-choice` 和 `--tool-call-parser` 等服务器参数启用工具调用，而模型发现不会上报这些参数。
 
-如果使用其他端点或需要身份验证的服务器，请设置其 OpenAI 兼容 URL：
+如果使用其他端点或需要认证的服务器，请设置其 OpenAI 兼容 URL：
 
 ```jsonc title="opencode.jsonc"
 {
@@ -449,7 +461,7 @@ OpenCode 会检查 `/health`，在后台刷新 `/v1/models`，将上报的 `max_
 }
 ```
 
-- 如果未启用身份验证，请省略 `apiKey`。
+- 如果未启用认证，请省略 `apiKey`。
 - 使用 `"plugins": ["-opencode.provider.vllm"]` 可禁用自动发现。
 - 支持带路径前缀的代理。例如，`https://example.com/vllm/v1` 会检查 `/vllm/health`，并从 `/vllm/v1/models` 发现模型。
 
@@ -496,7 +508,7 @@ OpenCode 会检查 `/health`，在后台刷新 `/v1/models`，将上报的 `max_
 ```text
 openai/gpt-6.1-sol
 openai/gpt-6.1-sol#high
-openrouter/anthropic/claude-sonnet-4.5#high
+openrouter/anthropic/claude-sonnet-5.5#high
 ```
 
 | 部分 | 规则 |
@@ -512,7 +524,7 @@ openrouter/anthropic/claude-sonnet-4.5#high
 {
   "model": {
     "providerID": "openrouter",
-    "model": "anthropic/claude-sonnet-4.5",
+    "model": "anthropic/claude-sonnet-5.5",
   },
 }
 ```
@@ -533,4 +545,4 @@ openrouter/anthropic/claude-sonnet-4.5#high
 - 虽然根级选择的结构接受变体，但 V2 的目录默认模型不会保留它。请改为在会话、单次运行、agent 或命令中选择变体。
 - 模型选项因提供商而异，其他提供商包可能会忽略或拒绝它们。
 - 目录数据、凭据和配置都限定在各自的位置范围内。在一个项目中可用的模型，在另一个项目中可能不可用。
-- 配置文件通常会自动重新加载。已经在进行中的模型请求会继续使用它开始时的设置。
+- 配置文件通常会自动重新加载。已经开始的模型请求会继续使用它开始时的设置。

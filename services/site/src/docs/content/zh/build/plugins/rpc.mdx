@@ -1,9 +1,9 @@
 ---
 title: "插件 RPC"
-description: "把插件的自定义方法和事件暴露给其他插件和客户端。"
+description: "把插件的自定义方法和事件提供给其他插件和客户端。"
 ---
 
-插件可以暴露在服务器上运行的自定义方法和事件，供其他插件或客户端调用。
+插件可以对外提供运行在服务器上的自定义方法和事件，供其他插件或客户端调用。
 
 ## 定义
 
@@ -58,7 +58,7 @@ export const Acme = Rpc.define({
 
 RPC 定义描述了方法的输入和输出、事件以及错误的数据结构。它支持两种 schema 格式：
 
-- JSON Schema：简单，无需任何依赖。
+- JSON Schema，简单且无需任何依赖。
 - 任何符合 Standard Schema 规范的校验库：
   - Zod
   - Valibot
@@ -150,7 +150,7 @@ export default Plugin.define({
 
 处理函数的第二个参数包含用于取消操作的 `signal`，以及用于返回已声明错误的 `context.error(...)`。你可以直接返回这个错误，也可以将其抛出。
 
-一个插件可以注册多个 RPC。释放（dispose）注册对象即可移除对应的 RPC。
+一个插件可以注册多个 RPC。释放注册对象即可移除对应的 RPC。
 
 ## 调用
 
@@ -239,4 +239,4 @@ for await (const event of acme.events.subscribe("updated")) {
 - 每个事件都包含 `data` 和 `location`。
 - 插件卸载时会关闭它的所有订阅。
 
-外部客户端会收到来自所有位置的事件，因此必要时请检查 `event.location`。此外，服务器端插件仍需完成配置并处于运行状态。
+外部客户端会收到来自所有 Location 的事件，因此必要时请检查 `event.location`。服务器端插件仍需完成配置并处于运行状态。

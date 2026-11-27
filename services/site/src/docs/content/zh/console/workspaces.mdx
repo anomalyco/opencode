@@ -1,39 +1,39 @@
 ---
 title: "基础"
-description: "创建、切换和删除 OpenCode Console 团队，并了解成员角色。"
+description: "创建、切换、重命名和删除 OpenCode Console 工作区，并了解成员角色。"
 ---
 
-团队承载着 [Console](https://opencode.ai/console) 中的一切：成员、额度、预算、提供商、策略和服务账号。用量和计费都按团队统计。
+一个工作区包含 [Console](https://opencode.ai/console) 中的一切：成员、额度、预算、提供商、策略和服务账号。用量和计费都按工作区统计。
 
-团队可以只有一名成员。你可以独自使用额度、[自己的提供商](/console/providers)、预算和 [Go](/console/go)，等到需要时再[邀请成员](/console/members)。
+工作区可以只有一名成员。你完全可以一个人使用额度、[自有提供商](/console/providers)、预算和 [Go](/console/go)，需要时再[邀请成员](/console/members)。
 
-## 你的第一个团队
+## 你的第一个工作区
 
-注册时，Console 会创建一个名为 **Personal** 的团队，你是它的所有者，也是唯一的成员。如果你是通过邀请注册的，则会直接加入发出邀请的团队，不会创建 Personal 团队。
+注册时，Console 会创建一个名为 **Personal** 的工作区，你是它的所有者，也是唯一的成员。如果你是通过邀请注册的，则会加入发出邀请的工作区，不会创建 Personal 工作区。
 
-## 创建团队
+## 创建工作区
 
-1. 打开顶部栏中的团队菜单。
+1. 打开顶部栏中的工作区菜单。
 2. 点击 **Create Workspace**。
 3. 输入 **Workspace name**，然后点击 **Create**。
 
-你会成为新团队的所有者。
+你会成为新工作区的所有者。
 
-## 切换团队
+## 切换工作区
 
-在团队菜单中选择另一个团队即可。Console 会让你停留在同一个页面，因此在 `/acme/settings/members` 上切换时，会打开另一个团队的 Members 页面。
+从工作区菜单中选择另一个工作区即可。Console 会让你停留在同一个页面，因此在 `/acme/settings/members` 上切换时，会打开另一个工作区的 Members 页面。
 
 待处理的邀请显示在同一菜单的顶部。请参阅[成员](/console/members#accept-an-invitation)。
 
 ## 连接 OpenCode
 
-在 OpenCode 中运行 `/connect`，然后在浏览器中选择团队。之后 OpenCode 就会使用该团队的模型、策略和预算。
+在 OpenCode 中运行 `/connect`，然后在浏览器中选择工作区。之后 OpenCode 就会使用该工作区的模型、策略和预算。
 
 ```text
 /connect
 ```
 
-再次运行 `/connect` 可以将 OpenCode 切换到另一个团队。团队[策略](/policies#console)会替换为新团队的策略，断开连接时则会被清除。
+再次运行 `/connect` 可以将 OpenCode 切换到另一个工作区。工作区的[策略](/policies#console)会替换为新工作区的策略，断开连接时则会被清除。
 
 ## 角色
 
@@ -42,14 +42,14 @@ description: "创建、切换和删除 OpenCode Console 团队，并了解成员
 | 角色   | 权限                                                                                   |
 | ------ | -------------------------------------------------------------------------------------- |
 | Member | 使用 OpenCode，查看自己的用量、日志和预算。                                            |
-| Admin  | 拥有 Member 的所有权限，还可以管理成员、计费、预算、提供商、策略、服务账号和设置。     |
-| Owner  | 拥有 Admin 的所有权限，还可以管理 SSO 和目录同步、授予 Owner 角色以及删除团队。       |
+| Admin  | 拥有 Member 的所有权限，还可以管理成员、账单、预算、提供商、策略、服务账号和设置。     |
+| Owner  | 拥有 Admin 的所有权限，还可以管理 SSO 和目录同步、授予 Owner 角色以及删除工作区。       |
 
-成员可以在 **Activity** 中查看自己的用量和日志，以及成员可见时的排行榜。团队订阅了 [Go Teams](/console/go) 时，成员还会看到 **Go**，其中显示自己的限额。成员可以从账号菜单打开 **Account**。
+成员可以在 **Activity** 中查看自己的用量和日志，以及对成员可见的排行榜。工作区订阅了 [Go Teams](/console/go) 时，成员还会看到 **Go**，其中显示自己的限额。成员可以从账号菜单打开 **Account**。
 
 ### 角色规则
 
-- 一个团队可以有多个所有者，并且始终至少保留一个。
+- 一个工作区可以有多个所有者，并且始终至少保留一个。
 - 你不能分配高于自己的角色，因此只有所有者才能将他人设为所有者。
 - 你不能修改自己的角色。
 
@@ -58,9 +58,9 @@ description: "创建、切换和删除 OpenCode Console 团队，并了解成员
 1. 以所有者身份打开 **Settings › Members**，将新所有者的角色设为 **Owner**。
 2. 请新所有者将你的角色改为 **Admin** 或 **Member**。
 
-## 删除团队
+## 删除工作区
 
-只有所有者才能删除团队，并且前提是他们至少还属于另一个团队。
+只有所有者才能删除工作区，且必须至少还属于另一个工作区。
 
 1. 打开 **Settings › General**，点击 **Delete workspace**。
 2. 勾选所有确认项。
@@ -74,12 +74,12 @@ description: "创建、切换和删除 OpenCode Console 团队，并了解成员
 - 生效中的 Go 订阅终止。
 - 剩余的额度余额作废。
 
-<Callout type="warning">付款处理期间无法删除团队，请几分钟后再试。</Callout>
+<Callout type="warning">付款处理期间无法删除工作区，请几分钟后再试。</Callout>
 
-## 离开团队
+## 离开工作区
 
 1. 从账号菜单打开 **Account**。
-2. 在 **Connected workspaces** 下，点击团队旁边的 **Leave**。
+2. 在 **Connected workspaces** 下，点击工作区旁边的 **Leave**。
 3. 通过 **Leave workspace** 确认。
 
-最后一名所有者不能离开；请先将另一位成员设为所有者。在启用了 SSO 或目录同步的团队中，成员身份由身份提供商管理，因此你无法从 Console 离开。离开后如需重新加入，请申请新的邀请。
+最后一名所有者不能离开；请先将另一位成员设为所有者。在启用了 SSO 或目录同步的工作区中，成员身份由身份提供商管理，因此你无法从 Console 离开。离开后如需重新加入，请申请新的邀请。

@@ -75,7 +75,7 @@ export default Plugin.define({
 
 - 一个条目会加载所有部分。TUI 会加载其服务器所加载插件的 TUI 部分，OpenCode Desktop 则会加载全局 `opencode.json(c)` 中插件的 GUI 部分。
 - 只有 TUI 部分的包应放在 [`cli.json`](/cli/plugins) 中。
-- 带有 `package.json` `name` 和 `exports` 的本地插件目录会通过它们加载各部分，与已发布的包相同。没有这些字段时，使用其根目录下的文件名：`server`（否则为 `index`）、`tui` 和 `rpc`，扩展名为 `.ts`、`.tsx` 或 `.js`，以及 `gui-experimental.cjs`（或 `.js`）。
+- 本地插件目录如果在 `package.json` 中声明了 `name` 和 `exports`，就会通过这些字段加载各个部分，与已发布的包相同。没有这些字段时，使用其根目录下的文件名：`server`（否则为 `index`）、`tui` 和 `rpc`，扩展名为 `.ts`、`.tsx` 或 `.js`，以及 `gui-experimental.cjs`（或 `.js`）。
 - 更多加载和配置选项请参阅[配置插件](/plugins)。
 
 ## 发布
@@ -86,8 +86,8 @@ export default Plugin.define({
 npm publish
 ```
 
-- 当其他插件和客户端需要在不加载你的实现的情况下导入 [RPC 契约](/build/plugins/rpc)时，请导出 `./rpc`。
-- 发布前先构建 GUI 包，并通过 `files` 包含它。请参阅[构建包](/build/plugins/gui#build-the-bundle)。
+- 如果希望其他插件和客户端在导入你的 [RPC 契约](/build/plugins/rpc)时不加载你的实现，请导出 `./rpc`。
+- 发布前先构建 GUI bundle，并通过 `files` 包含它。请参阅[构建 bundle](/build/plugins/gui#build-the-bundle)。
 - 使用与你目标 OpenCode 版本兼容的版本，并测试安装后的包，而不只是工作区中链接的副本。采用更新的 API 契约时，请发布兼容的插件更新。
 
 <CardGroup cols={2}>
@@ -101,6 +101,6 @@ npm publish
     为 OpenCode Desktop 添加面板、命令、设置页面和原生集成。
   </Card>
   <Card title="RPC" href="/build/plugins/rpc">
-    把服务器部分的带类型方法和事件暴露给其他部分和客户端。
+    向其他部分和客户端提供服务器部分中带类型的方法和事件。
   </Card>
 </CardGroup>

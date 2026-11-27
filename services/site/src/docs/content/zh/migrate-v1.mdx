@@ -142,7 +142,7 @@ V2 中待办默认关闭。要开启，请使用实验性开关。它可能在�
   "agents": {
     "reviewer": {
       "system": "Review for correctness and missing tests.",
-      "model": "anthropic/claude-sonnet-4-5#high",
+      "model": "anthropic/claude-sonnet-5-5#high",
       "disabled": false,
       "permissions": [
         { "action": "edit", "resource": "*", "effect": "deny" }
@@ -152,7 +152,28 @@ V2 中待办默认关闭。要开启，请使用实验性开关。它可能在�
 }
 ```
 
-`prompt` 改为 `system`，`disable` 改为 `disabled`，单独的 `variant` 则通过 `#` 拼接到模型引用之后。`temperature`、`top_p` 以及提供商特定的 `options` 移到 `request.body` 下。`maxSteps` 改为 `steps`。旧 `mode` 映射中的条目会成为主 agent。
+`prompt` 改为 `system`，`disable` 改为 `disabled`，单独的 `variant` 则通过 `#` 拼接到模型引用之后。`maxSteps` 改为 `steps`。旧 `mode` 映射中的条目会成为主 agent。
+
+agent 的 [`request.body`](/agents#request) 会被保留，但不会发送给模型，因此 V1 的 `temperature`、`top_p` 和 `options` 在那里不起作用。请改为在模型变体上设置它们。DeepSeek 只在关闭思考时才会应用 `temperature`，因此下面的变体也会关闭思考：
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "opencode": {
+      "models": {
+        "deepseek-v4.1-flash": {
+          "variants": [{ "id": "review", "body": { "thinking": { "type": "disabled" }, "temperature": 0.2 } }],
+        },
+      },
+    },
+  },
+  "agents": {
+    "reviewer": { "model": "opencode/deepseek-v4.1-flash#review" },
+  },
+}
+```
+
+`body` 用于提供商的 JSON 字段，`settings` 用于提供商包的选项。请参阅[模型选项](/models#options)。
 
 ### 快照
 
@@ -239,6 +260,8 @@ V2 将保留上下文的 token 预算归入 `keep` 下，并为预留量取了�
 }
 ```
 
+V1 的 token 数量会原样沿用。V2 也接受按模型窗口百分比设置的值，例如 `"buffer": "15%"`，这样可以适配窗口大小不同的模型。
+
 `auto` 名称不变。V2 没有原生的 `tail_turns` 或 `prune` 字段，这两个旧字段都会被忽略并产生警告。V2 改为按 token 预算保留最近的上下文。请参阅[上下文压缩](/compaction)。
 
 ### 技能
@@ -284,7 +307,7 @@ V1 将额外的技能路径和 URL 分开配置，V2 则把两者合并为一个
   "commands": {
     "review": {
       "template": "Review the current changes.",
-      "model": "anthropic/claude-sonnet-4-5#high",
+      "model": "anthropic/claude-sonnet-5-5#high",
       "subagent": true
     }
   }
@@ -293,7 +316,7 @@ V1 将额外的技能路径和 URL 分开配置，V2 则把两者合并为一个
 
 `template`、`description` 和 `agent` 名称不变。旧的 `subtask` 仍然可用；委派出去的命令现在会自动在后台运行，并把结果汇报给父会话。现有的 Markdown 命令定义仍然受支持。请参阅[命令](/commands)。
 
-### 目录引用
+### 引用
 
 将已弃用的单数形式 `reference` 映射重命名为 `references`：
 
@@ -305,7 +328,7 @@ V1 将额外的技能路径和 URL 分开配置，V2 则把两者合并为一个
 { "references": { "docs": "../docs" } }
 ```
 
-V1 已经支持 `references`，如果文件中用的就是它，则无需修改。目录引用条目的结构保持不变。请参阅[目录引用](/references)。
+V1 已经支持 `references`，如果文件中用的就是它，则无需修改。引用条目的结构保持不变。请参阅[引用](/references)。
 
 ### 提供商
 
@@ -433,9 +456,9 @@ V1 `mode/` 或 `modes/` 目录下的文件表示主 agent。将这类文件移�
 - 在 JSON 配置中出现的 `prompt` 要重命名为 `system`；文件正文不需要 `system` 字段。
 - 将 `disable` 重命名为 `disabled`，将 `permission` 重命名为 `permissions`。
 - 将 `model` 和 `variant` 合并为 `provider/model#variant`。
-- 将 `temperature`、`top_p` 和提供商特定的选项移到 `request.body` 下。
+- 如[上文](#agents-and-modes)所示，在模型变体上设置采样和提供商选项。
 
-V2 会自动转换旧的 agent frontmatter，因此这些修改都是可选的。请参阅[agent](/agents)。
+V2 会自动转换旧的 agent frontmatter，因此这些修改都是可选的。每个文件只按一种格式读取：只要文件使用了 `permissions`、`request`、`system` 或 `disabled` 中的任意一个字段，就会按 V2 读取，其中的 V1 字段（例如 `name`、`tools`、`permission` 或 `temperature`）会被忽略，并在日志中给出警告。其他使用 V1 字段的文件会按 V1 读取。转换某个文件时，请一次性转换其全部 frontmatter，不要混用两种格式。请参阅[agent](/agents)。
 
 ### 命令文件
 
@@ -474,7 +497,7 @@ V2 会从 `.opencode/skill/` 和 `.opencode/skills/` 两个目录中发现技能
 
 现有的 `AGENTS.md` 文件保持原位即可。V2 会发现全局的 `~/.config/opencode/AGENTS.md`，以及从当前目录向上直到主目录的各级 `AGENTS.md` 文件。对于不在主目录下的项目，查找会在项目根目录停止。
 
-如果 V1 配置依赖 `CLAUDE.md` 作为回退，请把其中的指导内容移到相应的 `AGENTS.md` 中。V2 目前只会发现 `AGENTS.md`；由于 V1 中 API 以外的行为都应保持兼容，也请附上受影响项目的详细信息，提交一个兼容性问题。请参阅[指令](/instructions)。
+V2 保留了 V1 的 `CLAUDE.md` 回退：目录中没有 `AGENTS.md` 时会使用其中的 `CLAUDE.md`，缺少全局 `AGENTS.md` 时则由 `~/.claude/CLAUDE.md` 代替。`OPENCODE_DISABLE_CLAUDE_CODE` 会跳过所有 `CLAUDE.md`，`OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` 同样如此；而在 V1 中，后者只跳过 `~/.claude/CLAUDE.md`。V1 一旦在目录树中找到某个文件名就会停止查找，V2 则按目录选择，因此根目录的 `AGENTS.md` 不再会遮蔽嵌套目录中的 `CLAUDE.md`。请参阅[指令](/instructions)。
 
 ## 终端客户端配置
 
@@ -501,14 +524,14 @@ V2 用一个全局终端客户端配置文件取代了 V1 中分层的 `tui.json
   "plugins": [
     "opencode-example-plugin",
     {
-      "package": "./plugin/local.ts",
+      "package": "./plugin/local",
       "options": { "enabled": true }
     }
   ]
 }
 ```
 
-V2 会从 `.opencode/plugin/` 和 `.opencode/plugins/` 两个目录中发现本地插件；V2 插件文件请放在 `.opencode/plugins/` 中。
+V2 会从 `.opencode/plugin/` 和 `.opencode/plugins/` 两个目录中发现本地插件；V2 插件文件请放在 `.opencode/plugins/` 中。配置的本地路径必须指向目录，因此请把移植后的插件放到 `./plugin/local/index.ts`。
 
 <Callout type="warning">
   V1 的插件实现无法在 V2 中运行。仅移动文件或重命名配置项是不够的。
@@ -522,7 +545,7 @@ OpenCode 2 改进了服务器 API，使其更加易用，并提供了一套全�
 
 请使用 `@opencode/client` 包访问已发布的 V2 API。其端点、请求类型和响应请参阅自动生成的 [API 参考](/api)。
 
-### 服务器身份验证
+### 服务器认证
 
 V2 服务器仍然使用 HTTP Basic 认证，但有以下变化：
 

@@ -1,16 +1,16 @@
 ---
 title: "SSO"
-description: "通过 OIDC 或 SAML，使用你的身份提供商登录 OpenCode Console 团队。"
+description: "通过 OIDC 或 SAML，使用你的身份提供商登录 OpenCode Console 工作区。"
 ---
 
-单点登录（SSO）会让团队成员在登录时跳转到你公司的身份提供商。所有者可以在 **Settings › Security** 中进行设置，所有团队都包含此功能。
+单点登录（SSO）会让工作区成员在登录时跳转到你公司的身份提供商。所有者可以在 **Settings › Security** 中设置，所有工作区都包含此功能。
 
 | 协议           | 身份提供商                                                                             |
 | -------------- | -------------------------------------------------------------------------------------- |
 | OpenID Connect | Google Workspace、Microsoft Entra ID、Okta、Auth0、Ping Identity 或任何 OIDC 提供商   |
 | SAML 2.0       | Google Workspace、Microsoft Entra ID、Okta 或任何 SAML 提供商                          |
 
-每个团队只能有一个 SSO 连接。
+每个工作区有一个 SSO 连接。
 
 ## 设置 OIDC
 
@@ -23,7 +23,7 @@ description: "通过 OIDC 或 SAML，使用你的身份提供商登录 OpenCode 
 https://opencode.ai/console/auth/sso/ssoconn_.../callback
 ```
 
-保存时，Console 会检查颁发者（issuer）是否可以访问。连接保存后，SSO 立即生效。
+保存时，Console 会检查颁发者是否可访问。连接保存后，SSO 立即生效。
 
 ## 设置 SAML
 
@@ -37,7 +37,7 @@ ACS URL:       https://opencode.ai/console/auth/sso/ssoconn_.../callback
 SP Entity ID:  https://opencode.ai/console/auth/sso/ssoconn_.../metadata
 ```
 
-身份提供商必须对响应或断言进行签名，并通过 `email` 属性或 NameID 发送用户的电子邮件地址。
+身份提供商必须为响应或断言签名，并通过 `email` 属性或 NameID 发送用户的电子邮件地址。
 
 ## 验证邮箱域名
 
@@ -49,27 +49,27 @@ Type:   TXT
 Value:  oc-verify=...
 ```
 
-记录发布后，点击 **Verify Domain**。DNS 更改可能需要一段时间才能生效。每个域名只能属于一个团队。
+记录发布后，点击 **Verify Domain**。DNS 更改可能需要一段时间才能生效。每个域名只能属于一个工作区。
 
 ## 强制使用 SSO
 
-团队启用 SSO 后，管理员和成员必须通过 SSO 登录才能打开该团队，Console 会自动将他们重定向到身份提供商。使用 `/connect` 连接 OpenCode 时也遵循同样的规则。
+工作区启用 SSO 后，管理员和成员必须通过 SSO 登录才能打开该工作区，Console 会自动将他们重定向到身份提供商。使用 `/connect` 连接 OpenCode 时也遵循同样的规则。
 
-所有者也可以不通过 SSO 登录，这样即使身份提供商配置有误，也不会导致无法进入团队设置。
+所有者也可以不通过 SSO 登录，这样即使身份提供商配置有误，也不会导致无法进入工作区设置。
 
 ## 自动加入
 
-已验证域名下的用户首次通过 SSO 登录时，会以 **Member** 身份加入团队。以下情况不会自动添加：
+已验证域名下的用户首次通过 SSO 登录时，会以 **Member** 身份加入工作区。以下情况不会自动添加：
 
 - 用户有待处理的邀请。此时会改用该邀请。
-- 团队使用[目录同步](/console/scim)，由目录同步决定成员资格。
-- 团队订阅了 [Go](/console/go)。
+- 工作区使用[目录同步](/console/scim)，由目录同步决定成员资格。
+- 工作区订阅了 [Go](/console/go)。
 
-对于启用了 SSO 的团队，受邀者打开邀请链接时会被转到你的身份提供商。
+启用了 SSO 的工作区中，受邀者打开邀请链接时会被转到你的身份提供商。
 
 ## 现有账号
 
-如果某人已经有使用相同邮箱的 Console 账号，其需要在 SSO 流程中再次登录，并通过 **Link account** 确认。邀请不会跳过这一步。在已验证的团队域名下，通过 SCIM 预配的账号仍可自动关联。
+如果某人已经有使用相同邮箱的 Console 账号，其需要在 SSO 流程中再次登录，并通过 **Link account** 确认。邀请不会跳过这一步。在已验证域名的工作区中，通过 SCIM 预配的账号仍可自动关联。
 
 ## 编辑或删除
 

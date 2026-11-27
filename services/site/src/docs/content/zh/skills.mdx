@@ -1,9 +1,9 @@
 ---
 title: 技能
-description: "编写 SKILL.md 文件，为 OpenCode agent 提供某项任务的可复用指令，只在需要时加载。"
+description: "编写 SKILL.md 文件，为 OpenCode agent 提供可复用的任务指令，只在需要时加载。"
 ---
 
-技能可以为 agent 提供针对特定任务、可复用的指令。在 `.opencode/skills/<skill-id>` 中放一个 `SKILL.md` 文件，并在 `description` 中说明何时使用它。
+技能可以为 agent 提供针对特定任务的可复用指令。在 `.opencode/skills/<skill-id>` 中放一个 `SKILL.md` 文件，并在 `description` 中说明何时使用它。
 
 ```markdown title=".opencode/skills/git-release/SKILL.md"
 ---
@@ -19,7 +19,7 @@ description: Prepare release notes, version bumps, and GitHub releases
 4. Run `scripts/changelog.ts` only after the user approves the version.
 ```
 
-当这个技能与当前任务相关时，OpenCode 会向 agent 推荐它。agent 随后可以通过 `skill` 工具加载其中的指令，而不必把所有技能都塞进每一条提示词。
+当这个技能与当前任务相关时，OpenCode 会向 agent 推荐它。agent 随后可以通过 `skill` 工具加载其中的指令，而不必把每个技能都写进每条提示词。
 
 ## 创建
 
@@ -63,7 +63,7 @@ skills/
 - 文件名恰好为 `SKILL.md` 的文件可以嵌套在分组目录中，例如 `skills/git-release/SKILL.md` 或 `skills/teams/release/SKILL.md`。
 - 包含 `SKILL.md` 的目录就是一个技能，OpenCode 不会在其中继续查找更多技能。
 - 隐藏的文件和目录以及 `node_modules` 会被跳过。
-- 搜索会在来源根目录下六层目录处停止。
+- 搜索最多深入到来源根目录下的六层目录。
 
 ## 来源
 
@@ -90,7 +90,7 @@ skills/
 
 所有被发现的配置文件都会贡献各自的条目。多个 `skills` 数组会合并，而不是相互替换。
 
-已连接的 [OpenCode Console](/console) 团队也可以共享技能。
+已连接的 [OpenCode Console](/console) 工作区也可以共享技能。
 
 ## 技能目录
 
@@ -112,7 +112,7 @@ HTTP 技能目录是一个带有 `index.json` 文件的基础 URL：
 
 | 规则 | 要求 |
 | ---- | ----------- |
-| 路径 | 必须安全、为相对路径且同源 |
+| 路径 | 必须安全、为相对路径，且同源 |
 | 入口文件 | 包含 `SKILL.md` 或 `<name>.md`，例如 `git-release.md` |
 | 更新 | 文件变更时递增 `version`，以便 OpenCode 刷新缓存 |
 
@@ -160,7 +160,7 @@ ID 需要精确匹配，并且区分大小写。为了让技能便于移植，�
 ^[a-z0-9]+(-[a-z0-9]+)*$
 ```
 
-V2 目前不会强制要求这个格式、1–64 个字符的长度建议、`name` 与目录名一致，也不限制描述的最大长度。
+V2 目前不会强制要求这一格式，也不会强制 1–64 个字符的建议长度、`name` 与目录名一致，或描述的最大长度。
 
 ## 优先级
 
@@ -186,7 +186,7 @@ V2 目前不会强制要求这个格式、1–64 个字符的长度建议、`nam
 
 在每个模型步骤中，OpenCode 会列出有权限使用、带有描述且未将 `opencode/autoinvoke` 设为 `false` 的技能。列表只包含 ID、名称和描述，不包含完整的 Markdown 正文。
 
-模型通过使用技能的确切 ID 调用 `skill` 工具来加载技能：
+模型用确切 ID 调用 `skill` 工具来加载技能：
 
 ```json title="skill tool input"
 {

@@ -1,6 +1,6 @@
 ---
 title: "Claude Agent"
-description: "通过在本机运行 Claude Code 的 Claude Agent，在 OpenCode 中使用 Claude 套餐或 Claude Code 登录。"
+description: "用 Claude Agent 在 OpenCode 中接入 Claude 套餐或 Claude Code 登录；它会在你的机器上运行 Claude Code。"
 noindex: true
 ---
 
@@ -10,7 +10,7 @@ noindex: true
 claude auth login
 ```
 
-然后连接 **Claude Agent** 并选择一个模型。模型列表来自 Claude Code。推理强度级别是变体，例如 `claude-agent/opus#high`。
+然后连接 **Claude Agent** 并选择一个模型。模型列表来自 Claude Code。推理强度以变体形式表示，例如 `claude-agent/opus#high`。
 
 ```text
 /connect
@@ -18,7 +18,7 @@ claude auth login
 /models
 ```
 
-你也可以在 CLI 中通过 `auth login claude-agent` 连接。
+你也可以在 CLI 中运行 `auth login claude-agent` 来连接。
 
 OpenCode 会在你的 `PATH` 中查找 `claude`。要使用另一份副本，请在服务器上设置 `OPENCODE_CLAUDE_PATH`。
 
@@ -33,7 +33,7 @@ Claude Code 调用模型，其他所有事情都由 OpenCode 完成。
 - Claude 会获得 Claude Code 的系统提示词，以及你的 agent 提示词、`AGENTS.md` 文件、技能和 MCP 指令。
 - Claude 使用 OpenCode 的工具和权限，而不是 Claude Code 的内置工具。
 - 不会加载你的 Claude Code 设置、`CLAUDE.md` 文件、钩子、MCP 服务器、技能和记忆。
-- OpenCode 负责压缩和 subagent。
+- 压缩和 subagent 由 OpenCode 负责。
 - 你可以在同一个会话中在 Claude Agent 和其他模型之间切换。
 
 ## 费用
@@ -142,7 +142,7 @@ CLAUDE_CONFIG_DIR="$HOME/.claude-1" claude auth login
 
 ## 网页搜索
 
-Claude Agent 还可以使用 Claude Code 的 WebSearch 来提供 OpenCode 的网页搜索，因此搜索会计入你的 Claude 套餐，而无需搜索 API 密钥。所有模型都可以使用它。请在 `opencode.jsonc` 中选择它：
+Claude Agent 还可以用 Claude Code 的 WebSearch 为 OpenCode 提供网页搜索，因此搜索会计入你的 Claude 套餐，而无需搜索 API 密钥。所有模型都可以使用它。请在 `opencode.jsonc` 中选择它：
 
 ```jsonc title="opencode.jsonc"
 {

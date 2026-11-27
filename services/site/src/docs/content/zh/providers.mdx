@@ -16,7 +16,7 @@ OpenCode 内置了来自 [models.dev](https://models.dev) 的提供商和模型�
 
 ## Go
 
-[OpenCode Go](/console/go) 是一项可选订阅，提供经 OpenCode 团队测试的编程模型。在[控制台](https://opencode.ai/console)中订阅并复制 API 密钥，然后以 **OpenCode Go** 的身份连接。
+[OpenCode Go](/console/go) 是一项可选订阅，提供经 OpenCode 团队测试的编程模型。在 [Console](https://opencode.ai/console) 中订阅并复制 API 密钥，然后以 **OpenCode Go** 的身份连接。
 
 ```text
 /connect
@@ -93,7 +93,7 @@ OpenCode 内置了来自 [models.dev](https://models.dev) 的提供商和模型�
 
 ## 端点
 
-覆盖 `settings.baseURL`，即可让目录中的提供商通过 agent 或兼容端点发送请求。它原有的包、模型和连接仍然适用。
+覆盖 `settings.baseURL`，即可让目录中的提供商经由代理或兼容端点发送请求。它原有的包、模型和连接仍然适用。
 
 ```jsonc title="opencode.jsonc"
 {
@@ -345,7 +345,7 @@ Azure 只能通过部署来提供模型，因此 OpenCode 会列出你资源中�
 
 部署名称就是它们的模型 ID，并统一为小写，因为 Azure 的名称不区分大小写，例如 `azure/gpt-production`。以模型命名的部署（例如 `gpt-6-luna`）会保留目录中的 ID。添加或删除其他部署时，这些 ID 保持不变。
 
-OpenCode 根据部署所部署的模型将其与目录匹配；如果 Azure 对模型的写法不同，则按部署名称匹配，例如 GPT-4 Turbo 写作 `gpt-4`。如果部署以另一个模型命名，例如名为 `gpt-6.1-sol` 的部署实际部署的是 `gpt-6-luna`，则会显示实际模型的名称、上限和费用。
+OpenCode 会按部署所用的模型与目录匹配；如果 Azure 对模型的写法不同，则按部署名称匹配，例如 GPT-4 Turbo 写作 `gpt-4`。如果部署以另一个模型命名，例如名为 `gpt-6.1-sol` 的部署实际部署的是 `gpt-6-luna`，则会显示实际模型的名称、上限和费用。
 
 使用 Azure CLI 时，OpenCode 会通过 Azure 管理 API 列出部署，这需要对资源具有读取权限。如果失败，或者使用的是 API 密钥，则会改用该资源的旧版部署清单。发现过程会读取所有分页后才发布列表。配置了自定义 `settings.baseURL` 时会保留目录。
 
@@ -486,7 +486,7 @@ ollama serve
 ollama pull qwen3:8b
 ```
 
-使用 `settings.baseURL` 可以让 OpenCode 指向远程或经过 agent 的 Ollama 服务器。地址中需要包含 `/v1`，OpenCode 会据此推导出原生的 `/api/tags` 和 `/api/show` 发现路径。`apiKey` 是可选的，会作为 bearer token 随发现请求和模型请求一起发送。
+使用 `settings.baseURL` 可以让 OpenCode 指向远程或经过代理的 Ollama 服务器。地址中需要包含 `/v1`，OpenCode 会据此推导出原生的 `/api/tags` 和 `/api/show` 发现路径。`apiKey` 是可选的，会作为 bearer 令牌随发现请求和模型请求一起发送。
 
 ```jsonc title="opencode.jsonc"
 {
