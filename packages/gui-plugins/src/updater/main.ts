@@ -1,8 +1,11 @@
+import { existsSync } from "node:fs"
+import { join } from "node:path"
 import { dialog } from "electron"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { builtinMainContext } from "@opencode/plugin/gui/builtin"
 import { MenubarItem, type Plugin } from "@opencode/plugin/gui/main"
 import { Updater } from "@opencode/plugin/gui/updater"
+import { UpdaterPreferences } from "./contract"
 import { logContext } from "./log"
 import { make } from "./machine"
 
@@ -10,11 +13,15 @@ const setup: Plugin.MainSetup = async (ctx) => {
   const builtin = builtinMainContext(ctx)
   const build = ctx.app
   const lifecycle = builtin.lifecycle
-  const enabled = build.packaged
+  // electron-updater reads its feed from app-update.yml. Distro packages that update the app themselves (such as the
+  // AUR's opencode-desktop-bin) delete it, and every check would then fail.
+  const enabled = build.packaged && existsSync(join(process.resourcesPath, "app-update.yml"))
   // Holds no resources, so it needs no cleanup.
   const context = logContext(ctx.log.write)
   const runPromise = Effect.runPromiseWith(context)
   const runFork = Effect.runForkWith(context)
+
+  if (build.packaged && !enabled) runFork(Effect.logInfo("auto updater disabled, app-update.yml is missing"))
 
   // The update main staged for the next start; stored before in the updater's settings file.
   const ready = builtin.storage.store("ready", {
@@ -23,15 +30,44 @@ const setup: Plugin.MainSetup = async (ctx) => {
     from: { settings: "ready", file: "opencode.updater" },
   })
 
-  // electron-updater loads only in packaged builds, after the first window is up.
+  // Opt-in preference: install a downloaded update automatically when the app quits.
+  const installOnQuit = ctx.storage.store("installOnQuit", {
+    schema: Schema.Boolean,
+    initial: false,
+  })
+
+  const publishPreferences = { changed: () => {} }
+
+  // electron-updater loads only in packaged builds with a feed, after the first window is up.
   const platform = enabled
-    ? await import("./platform").then((module) => runPromise(module.make(build.channel)))
+    ? await import("./platform").then((module) =>
+        runPromise(
+          module.make(build.channel, {
+            installOnQuit: installOnQuit.value,
+            onQuitPendingChanged: () => publishPreferences.changed(),
+          }),
+        ),
+      )
     : undefined
 
   if (ctx.signal.aborted) return
   const scope = Scope.makeUnsafe()
   ctx.onCleanup(() => runPromise(Scope.close(scope, Exit.void)))
   const publish = { changed: () => {} }
+
+  const preferences = ctx.provide(UpdaterPreferences, {
+    state: () => ({
+      installOnQuit: installOnQuit.value,
+      pendingQuitInstall: platform?.isPendingQuitInstall() ?? false,
+    }),
+    setInstallOnQuit: (value) => {
+      installOnQuit.set(value)
+      platform?.setInstallOnQuit(value)
+      preferences.changed()
+    },
+  })
+
+  publishPreferences.changed = () => preferences.changed()
 
   const updater = await runPromise(
     make({
@@ -100,7 +136,11 @@ const setup: Plugin.MainSetup = async (ctx) => {
       }),
     )
 
-    if (response.response === 0) yield* updater.install
+    // A failed install returns the updater to ready, so the user can retry from the menu.
+    if (response.response === 0)
+      yield* updater.install.pipe(
+        Effect.catch((error) => Effect.logWarning("update install failed", { message: error.message })),
+      )
   })
 
   ctx.add(

@@ -1,17 +1,20 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionRequest } from "@opencode/plugin/effect/session"
-import { Deferred, Effect, Option, Schema, Semaphore, Stream } from "effect"
+import { Deferred, Effect, Exit, Option, Schema, Semaphore } from "effect"
 import type { Server } from "node:http"
 import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
-import { Bus } from "../../bus.js"
 import { Integration } from "../../integration.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
+import { OauthRedirect } from "../../oauth/redirect.js"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
 import { configuredSettings } from "./configured.js"
+import { storedCredential } from "./credential-settings.js"
+import { OpenAISubscriptionModels } from "./openai-subscription-models.js"
+import { ProviderRefresh } from "./refresh.js"
 
 const clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const issuer = "https://auth.openai.com"
@@ -23,8 +26,11 @@ const pollingSafetyMargin = 3000
 const codexBaseURL = "https://chatgpt.com/backend-api/codex"
 const browserMethodID = Integration.MethodID.make("chatgpt-browser")
 const headlessMethodID = Integration.MethodID.make("chatgpt-headless")
-// Codex rejects gpt-5.5 and older models, including gpt-5.3-codex-spark, for ChatGPT accounts.
+// Used when the catalog has no Codex list: Codex rejects gpt-5.5 and older models, including gpt-5.3-codex-spark,
+// for ChatGPT accounts.
 const codexDisallowed = new Set(["gpt-5.6"])
+// The image models the Codex client generates and edits with on the Codex login.
+const codexImageModels = new Set(["gpt-image-2"])
 
 type Pkce = {
   verifier: string
@@ -73,7 +79,7 @@ const browser = (app: App.Info) =>
           const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
           const value = url.searchParams.get("code")
           if (error) {
-            Effect.runFork(Deferred.fail(code, new Error(error)))
+            Deferred.doneUnsafe(code, Exit.fail(new Error(error)))
             response
               .writeHead(400, { "Content-Type": "text/html" })
               .end(OauthCallbackPage.error(error, { provider: "ChatGPT" }))
@@ -81,13 +87,13 @@ const browser = (app: App.Info) =>
           }
           if (!value || url.searchParams.get("state") !== state) {
             const message = value ? "Invalid OAuth state" : "Missing authorization code"
-            Effect.runFork(Deferred.fail(code, new Error(message)))
+            Deferred.doneUnsafe(code, Exit.fail(new Error(message)))
             response
               .writeHead(400, { "Content-Type": "text/html" })
               .end(OauthCallbackPage.error(message, { provider: "ChatGPT" }))
             return
           }
-          Effect.runFork(Deferred.succeed(code, value))
+          Deferred.doneUnsafe(code, Exit.succeed(value))
           response
             .writeHead(200, { "Content-Type": "text/html" })
             .end(OauthCallbackPage.success({ provider: "ChatGPT" }))
@@ -103,6 +109,7 @@ const browser = (app: App.Info) =>
             Effect.flatMap((value) => exchange(value, redirect, pkce, app)),
             Effect.map((tokens) => credential(browserMethodID, tokens)),
           ),
+          submit: OauthRedirect.submit({ state, callback: code, received: (value) => value }),
         }
       }),
     refresh: (value) => refresh(browserMethodID, value, app),
@@ -232,20 +239,21 @@ const headless = (app: App.Info) =>
 export const OpenAIPlugin = define({
   id: "opencode.provider.openai",
   effect: Effect.fn(function* (ctx) {
-    const bus = yield* Bus.Service
     const loading = Semaphore.makeUnsafe(1)
     let chatgpt: Credential.OAuth | undefined
 
     const load = Effect.fn("OpenAIPlugin.load")(function* () {
-      const connection = yield* ctx.integration.connection.active("openai")
-      const credential = connection
-        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-        : undefined
+      const { credential } = yield* storedCredential(ctx, "openai")
+      const previous = chatgpt
       chatgpt =
         credential?.type === "oauth" &&
         (credential.methodID === browserMethodID || credential.methodID === headlessMethodID)
           ? credential
           : undefined
+      return (
+        (previous === undefined) !== (chatgpt === undefined) ||
+        previous?.metadata?.accountID !== chatgpt?.metadata?.accountID
+      )
     })
 
     yield* ctx.integration.transform((editor) => {
@@ -253,6 +261,8 @@ export const OpenAIPlugin = define({
       editor.method.update(headless(ctx.app))
     })
     yield* load()
+    // Temporary: the Codex list from models.dev, see openai-subscription-models.ts.
+    const plan = yield* OpenAISubscriptionModels.track("openai-codex", ctx.provider.reload())
     // Config applies after provider plugins, so read it here: a custom baseURL may not decode zstd.
     const configured = yield* configuredSettings(Provider.ID.openai)
     yield* ctx.provider.transform((providers) => {
@@ -280,11 +290,21 @@ export const OpenAIPlugin = define({
         // subscription covers usage, so hide the rest and zero the cost.
         models.update(model.providerID, model.id, (draft) => {
           if (!chatgpt) return
+          if (plan.current) {
+            if (plan.current.has(draft.id)) draft.cost = []
+            else draft.enabled = false
+            return
+          }
           if (Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(draft.body?.reasoning)) {
             draft.enabled = false
             return
           }
           const apiID = draft.modelID ?? draft.id
+          if (draft.type === "image") {
+            if (codexImageModels.has(apiID)) draft.cost = []
+            else draft.enabled = false
+            return
+          }
           const match = apiID.match(/^gpt-(\d+)(?:\.(\d+))?/)
           const major = Number(match?.[1])
           const minor = Number(match?.[2] ?? 0)
@@ -319,11 +339,9 @@ export const OpenAIPlugin = define({
       })
     for (const name of ["context", "compaction"] as const)
       yield* ctx.session.hook(name, omitOutputLimit, { providerID: Provider.ID.openai })
-    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.provider.reload())))
-    yield* bus.subscribe(Credential.Event.Switched).pipe(
-      Stream.filter((event) => event.data.integrationID === Integration.ID.make("openai")),
-      Stream.runForEach(refresh),
-      Effect.forkScoped({ startImmediately: true }),
+    yield* ProviderRefresh.onSwitch(
+      "openai",
+      loading.withPermit(ProviderRefresh.reloadIfChanged(load(), ctx.provider.reload())),
     )
   }),
 } satisfies PluginInternal.InternalPlugin)

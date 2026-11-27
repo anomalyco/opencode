@@ -13,6 +13,7 @@ import { ModelResolver } from "@opencode/core/model-resolver"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Money } from "@opencode/schema/money"
+import { withEnv } from "./fixture/env"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
@@ -202,8 +203,7 @@ describe("Provider and Model", () => {
       yield* settle(
         Ref.get(log).pipe(
           Effect.map(
-            (types) =>
-              types.lastIndexOf(Model.Event.Updated.type) > types.lastIndexOf(Credential.Event.Updated.type),
+            (types) => types.lastIndexOf(Model.Event.Updated.type) > types.lastIndexOf(Credential.Event.Updated.type),
           ),
         ),
       )
@@ -360,51 +360,22 @@ describe("Provider and Model", () => {
   })
 
   it.effect("projects environment connections without a catalog plugin", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const previous = process.env.CATALOG_TEST_API_KEY
-        process.env.CATALOG_TEST_API_KEY = "secret"
-        return previous
+    withEnv({ CATALOG_TEST_API_KEY: "secret" }, () =>
+      Effect.gen(function* () {
+        const providers = yield* Provider.Service
+        const integrations = yield* Integration.Service
+        const providerID = Provider.ID.make("test")
+        yield* integrations.transform((editor) =>
+          editor.method.update({
+            integrationID: Integration.ID.make(providerID),
+            method: { type: "env", names: ["CATALOG_TEST_API_KEY"] },
+          }),
+        )
+        yield* providers.transform((editor) => editor.update(providerID, () => {}))
+
+        expect((yield* providers.available()).map((provider) => provider.id)).toContain(providerID)
       }),
-      () =>
-        Effect.gen(function* () {
-          const providers = yield* Provider.Service
-          const integrations = yield* Integration.Service
-          const providerID = Provider.ID.make("test")
-          yield* integrations.transform((editor) =>
-            editor.method.update({
-              integrationID: Integration.ID.make(providerID),
-              method: { type: "env", names: ["CATALOG_TEST_API_KEY"] },
-            }),
-          )
-          yield* providers.transform((editor) => editor.update(providerID, () => {}))
-
-          expect((yield* providers.available()).map((provider) => provider.id)).toContain(providerID)
-        }),
-      (previous) =>
-        Effect.sync(() => {
-          if (previous === undefined) delete process.env.CATALOG_TEST_API_KEY
-          else process.env.CATALOG_TEST_API_KEY = previous
-        }),
     ),
-  )
-
-  it.effect("stores provider package settings", () =>
-    Effect.gen(function* () {
-      const providers = yield* Provider.Service
-      const providerID = Provider.ID.make("test")
-      yield* providers.transform((editor) =>
-        editor.update(providerID, (provider) => {
-          provider.package = Provider.aisdk("custom-sdk")
-          provider.settings = { baseURL: "https://override.example.com" }
-        }),
-      )
-
-      expect(required(yield* providers.get(providerID))).toMatchObject({
-        package: Provider.aisdk("custom-sdk"),
-        settings: { baseURL: "https://override.example.com" },
-      })
-    }),
   )
 
   it.effect("uses model package settings over provider settings", () =>

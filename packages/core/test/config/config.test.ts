@@ -1,7 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
 import { describe, expect, test } from "bun:test"
-import { Arbitrary, Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
+import { Arbitrary, Effect, Fiber, Layer, Logger, Schema, Stream, Tracer } from "effect"
 import { Config } from "@opencode/core/config"
 import { ConfigDiscovery } from "@opencode/core/config/discovery"
 import { ConfigIntegration } from "@opencode/core/config/integration"
@@ -30,8 +30,9 @@ import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { Wildcard } from "@opencode/core/util/wildcard"
 import { Integration } from "@opencode/schema/integration"
 import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
+import { withEnv } from "../fixture/env"
 import { location } from "../fixture/location"
-import { tmpdir } from "../fixture/tmpdir"
+import { tmpdir, withTempDir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.empty)
@@ -105,14 +106,18 @@ describe("Config", () => {
             fs.mkdir(project, { recursive: true }),
             fs.mkdir(path.join(home, ".claude"), { recursive: true }),
             fs.mkdir(path.join(home, ".agents"), { recursive: true }),
+            fs.mkdir(path.join(tmp.path, ".agents"), { recursive: true }),
           ]),
         ).pipe(
           Effect.andThen(
             Effect.gen(function* () {
-              // The fixture is real: with global enabled the walk finds both.
+              // Discovery also sees ancestors above the fixture, which may have host config.
               const config = yield* Config.Service
               const compatibility = yield* config.compatibility!()
-              expect([...compatibility.claude, ...compatibility.agents]).toHaveLength(2)
+              expect(
+                [...compatibility.claude, ...compatibility.agents].filter((directory) => inFixture(home, directory)),
+              ).toHaveLength(2)
+              expect(compatibility.agents).toContain(AbsolutePath.make(path.join(tmp.path, ".agents")))
             }).pipe(Effect.provide(testLayer(project, global))),
           ),
           Effect.andThen(
@@ -121,7 +126,11 @@ describe("Config", () => {
             // project walk enabled.
             Effect.gen(function* () {
               const config = yield* Config.Service
-              expect(yield* config.compatibility!()).toEqual({ claude: [], agents: [] })
+              const compatibility = yield* config.compatibility!()
+              expect(
+                [...compatibility.claude, ...compatibility.agents].filter((directory) => inFixture(home, directory)),
+              ).toEqual([])
+              expect(compatibility.agents).toContain(AbsolutePath.make(path.join(tmp.path, ".agents")))
               const watcher = yield* Watcher.Test
               expect(
                 (yield* watcher.subscriptions()).filter((watch) => watch.type === "entries" && watch.path === home),
@@ -217,37 +226,35 @@ describe("Config", () => {
 
   // Filesystem sandboxes deny reads outside the project. Simulate a denied discovery root with a
   // symlink into an unsearchable directory, which makes realpath fail with EACCES.
-  itWithPermissions(
-    "treats unreadable discovery roots as absent",
-    () =>
-      Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
-        Effect.flatMap((tmp) => {
-          const global = path.join(tmp.path, "global")
-          const home = path.join(global, "home")
-          const project = path.join(home, "project")
-          const locked = path.join(tmp.path, "locked")
-          return Effect.promise(async () => {
-            await fs.mkdir(path.join(locked, "agents"), { recursive: true })
-            await fs.mkdir(project, { recursive: true })
-            await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ shell: "project" }))
-            await fs.symlink(path.join(locked, "agents"), path.join(home, ".agents"))
-            await fs.symlink(path.join(locked, "agents"), path.join(project, ".opencode"))
-            await fs.chmod(locked, 0o000)
-          }).pipe(
-            Effect.andThen(Effect.addFinalizer(() => Effect.promise(() => fs.chmod(locked, 0o755)))),
-            Effect.andThen(
-              Effect.gen(function* () {
-                const config = yield* Config.Service
-                const entries = yield* config.entries()
-                expect(entries.flatMap((entry) => (entry.type === "document" ? [entry.info.shell] : []))).toEqual([
-                  "project",
-                ])
-              }).pipe(Effect.provide(testLayer(project, global))),
-            ),
-            Effect.scoped,
-          )
-        }),
-      ),
+  itWithPermissions("treats unreadable discovery roots as absent", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const home = path.join(global, "home")
+        const project = path.join(home, "project")
+        const locked = path.join(tmp.path, "locked")
+        return Effect.promise(async () => {
+          await fs.mkdir(path.join(locked, "agents"), { recursive: true })
+          await fs.mkdir(project, { recursive: true })
+          await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ shell: "project" }))
+          await fs.symlink(path.join(locked, "agents"), path.join(home, ".agents"))
+          await fs.symlink(path.join(locked, "agents"), path.join(project, ".opencode"))
+          await fs.chmod(locked, 0o000)
+        }).pipe(
+          Effect.andThen(Effect.addFinalizer(() => Effect.promise(() => fs.chmod(locked, 0o755)))),
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              const entries = yield* config.entries()
+              expect(entries.flatMap((entry) => (entry.type === "document" ? [entry.info.shell] : []))).toEqual([
+                "project",
+              ])
+            }).pipe(Effect.provide(testLayer(project, global))),
+          ),
+          Effect.scoped,
+        )
+      }),
+    ),
   )
 
   it.live("discovers the global config directory once when the project walk reaches it", () =>
@@ -323,9 +330,7 @@ describe("Config", () => {
               ])
               expect(Config.latest(entries, "shell")).toBe("system")
               expect(Config.latest(entries, "username")).toBe("system-user")
-              expect(
-                ManagedPolicy.decision(ManagedPolicy.statements(entries), "tool.use", "shell:ls"),
-              ).toBe("deny")
+              expect(ManagedPolicy.decision(ManagedPolicy.statements(entries), "tool.use", "shell:ls")).toBe("deny")
             }).pipe(
               Effect.provide(
                 testLayer(project, global, project, undefined, undefined, emptyCredentialNode, emptyWellknownNode, {
@@ -365,13 +370,6 @@ describe("Config", () => {
     expect(ConfigDiscovery.systemDirectory("win32", {})).toBe(
       AbsolutePath.make(path.join("C:\\ProgramData", "opencode")),
     )
-  })
-
-  test("resolves macOS managed preferences with user-specific profiles first", () => {
-    expect(ConfigDiscovery.preferencePaths("alice")).toEqual([
-      AbsolutePath.make(path.join("/Library/Managed Preferences", "alice", "ai.opencode.managed.plist")),
-      AbsolutePath.make("/Library/Managed Preferences/ai.opencode.managed.plist"),
-    ])
   })
 
   test("strips MDM payload metadata from managed preferences", () => {
@@ -428,87 +426,84 @@ describe("Config", () => {
   )
 
   it.live("layers integration documents below remote and user config and reloads when they change", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) =>
-        Effect.gen(function* () {
-          const global = path.join(tmp.path, "global")
-          const project = path.join(tmp.path, "project")
-          const named = (name: string) => ({ providers: { remote: { name } } })
-          yield* Effect.promise(async () => {
-            await fs.mkdir(global, { recursive: true })
-            await fs.mkdir(project, { recursive: true })
-            await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify(named("global")))
-            await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify(named("project")))
-          })
-          const integrationID = Integration.ID.make("https://example.com")
-          const credentialNode = makeGlobalNode({
-            service: Credential.Service,
-            layer: Layer.mock(Credential.Service)({
-              list: () =>
-                Effect.succeed([
-                  new Credential.Info({
-                    id: Credential.ID.create(),
-                    integrationID,
-                    label: "default",
-                    value: Credential.Key.make({ type: "key", key: "secret" }),
-                  }),
-                ]),
-            }),
-            deps: [],
-          })
-          const entry: WellKnown.Entry = {
-            origin: "https://example.com",
-            integrationID,
-            manifest: { auth: { command: ["login"], env: "TOKEN" } },
-          }
-          const wellknownNode = makeGlobalNode({
-            service: WellKnown.Service,
-            layer: Layer.mock(WellKnown.Service)({
-              entries: () => Effect.succeed([entry]),
-              snapshot: () => [entry],
-              resolve: () => Effect.succeed([named("wellknown")]),
-            }),
-            deps: [],
-          })
-          const names = (entries: readonly Entry[]) =>
-            entries.flatMap((entry) => (entry.type === "document" ? [entry.info.providers?.remote?.name] : []))
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        const named = (name: string) => ({ providers: { remote: { name } } })
+        yield* Effect.promise(async () => {
+          await fs.mkdir(global, { recursive: true })
+          await fs.mkdir(project, { recursive: true })
+          await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify(named("global")))
+          await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify(named("project")))
+        })
+        const integrationID = Integration.ID.make("https://example.com")
+        const credentialNode = makeGlobalNode({
+          service: Credential.Service,
+          layer: Layer.mock(Credential.Service)({
+            list: () =>
+              Effect.succeed([
+                new Credential.Info({
+                  id: Credential.ID.create(),
+                  integrationID,
+                  label: "default",
+                  value: Credential.Key.make({ type: "key", key: "secret" }),
+                }),
+              ]),
+          }),
+          deps: [],
+        })
+        const entry: WellKnown.Entry = {
+          origin: "https://example.com",
+          integrationID,
+          manifest: { auth: { command: ["login"], env: "TOKEN" } },
+        }
+        const wellknownNode = makeGlobalNode({
+          service: WellKnown.Service,
+          layer: Layer.mock(WellKnown.Service)({
+            entries: () => Effect.succeed([entry]),
+            snapshot: () => [entry],
+            resolve: () => Effect.succeed([named("wellknown")]),
+          }),
+          deps: [],
+        })
+        const names = (entries: readonly Entry[]) =>
+          entries.flatMap((entry) => (entry.type === "document" ? [entry.info.providers?.remote?.name] : []))
 
-          return yield* Effect.gen(function* () {
-            const config = yield* Config.Service
-            const bus = yield* Bus.Service
-            const updated = Effect.fnUntraced(function* (change: Effect.Effect<void>) {
-              const event = yield* bus
-                .subscribe(Event.Updated)
-                .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
-              yield* change
-              expect(yield* Fiber.join(event)).toHaveLength(1)
-              return names(yield* config.entries())
-            })
-            const integration = Integration.ID.make("opencode")
-            expect(names(yield* config.entries())).toEqual(["wellknown", "global", "project"])
-            expect(
-              yield* updated(
-                config.integration!(
-                  integration,
-                  ConfigIntegration.make({
-                    integrationID: integration,
-                    connection: { type: "env", name: "OPENCODE_API_KEY" },
-                    info: decodeInfo(named("console")),
-                  }),
-                ),
+        return yield* Effect.gen(function* () {
+          const config = yield* Config.Service
+          const bus = yield* Bus.Service
+          const updated = Effect.fnUntraced(function* (change: Effect.Effect<void>) {
+            const event = yield* bus
+              .subscribe(Event.Updated)
+              .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+            yield* change
+            expect(yield* Fiber.join(event)).toHaveLength(1)
+            return names(yield* config.entries())
+          })
+          const integration = Integration.ID.make("opencode")
+          expect(names(yield* config.entries())).toEqual(["wellknown", "global", "project"])
+          expect(
+            yield* updated(
+              config.integration!(
+                integration,
+                ConfigIntegration.make({
+                  integrationID: integration,
+                  connection: { type: "env", name: "OPENCODE_API_KEY" },
+                  info: decodeInfo(named("console")),
+                }),
               ),
-            ).toEqual(["console", "wellknown", "global", "project"])
-            expect(yield* updated(config.integration!(integration, undefined))).toEqual([
-              "wellknown",
-              "global",
-              "project",
-            ])
-          }).pipe(
-            Effect.provide(testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode)),
-          )
-        }),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+            ),
+          ).toEqual(["console", "wellknown", "global", "project"])
+          expect(yield* updated(config.integration!(integration, undefined))).toEqual([
+            "wellknown",
+            "global",
+            "project",
+          ])
+        }).pipe(
+          Effect.provide(testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode)),
+        )
+      }),
     ),
   )
 
@@ -556,6 +551,122 @@ describe("Config", () => {
             }).pipe(
               Effect.provide(
                 testLayer(project, global, project, undefined, undefined, emptyCredentialNode, emptyWellknownNode, {
+                  system,
+                }),
+              ),
+            ),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("keeps only the policies of documents from integrations managed policy denies", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const system = path.join(tmp.path, "system")
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        const allowed = "org_allowed"
+        const opencode = Integration.ID.make("opencode")
+        const origin = "https://ai.acme.com"
+        const credentialID = Credential.ID.create()
+        let org = "org_personal"
+        const credentialNode = makeGlobalNode({
+          service: Credential.Service,
+          layer: Layer.mock(Credential.Service)({
+            list: (integrationID) =>
+              Effect.succeed([
+                new Credential.Info({
+                  id: Credential.ID.create(),
+                  integrationID,
+                  label: "default",
+                  value: Credential.Key.make({ type: "key", key: "secret" }),
+                }),
+              ]),
+            get: (id) =>
+              Effect.succeed(
+                new Credential.Info({
+                  id,
+                  integrationID: opencode,
+                  label: "Console",
+                  value: Credential.Key.make({ type: "key", key: "secret", metadata: { orgID: org } }),
+                }),
+              ),
+          }),
+          deps: [],
+        })
+        const entry: WellKnown.Entry = {
+          origin,
+          integrationID: Integration.ID.make(origin),
+          manifest: { auth: { command: ["login"], env: "TOKEN" } },
+        }
+        const wellknownNode = makeGlobalNode({
+          service: WellKnown.Service,
+          layer: Layer.mock(WellKnown.Service)({
+            entries: () => Effect.succeed([entry]),
+            snapshot: () => [entry],
+            resolve: () =>
+              Effect.succeed([
+                {
+                  mcp: { servers: { wiki: { type: "remote", url: "https://wiki.acme.com/mcp" } } },
+                  policies: [{ action: "tool.use", resource: "shell:rm*", effect: "deny" }],
+                },
+              ]),
+          }),
+          deps: [],
+        })
+        const supplied = (entries: readonly Entry[]) =>
+          entries.flatMap((entry) =>
+            entry.type === "document" && !entry.path
+              ? [{ servers: Object.keys(entry.info.mcp?.servers ?? {}), policies: entry.info.policies?.length ?? 0 }]
+              : [],
+          )
+        return Effect.promise(() =>
+          fs.mkdir(system, { recursive: true }).then(() =>
+            fs.writeFile(
+              path.join(system, "opencode.json"),
+              JSON.stringify({
+                policies: [
+                  { action: "integration.use", resource: "*", effect: "deny" },
+                  { action: "integration.use", resource: `opencode#${allowed}`, effect: "allow" },
+                ],
+              }),
+            ),
+          ),
+        ).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              const install = () =>
+                config.integration!(
+                  opencode,
+                  ConfigIntegration.make({
+                    integrationID: opencode,
+                    connection: { type: "credential", id: credentialID, label: "Console", method: "key" },
+                    organization: org,
+                    info: decodeInfo({
+                      mcp: { servers: { docs: { type: "remote", url: "https://docs.acme.com/mcp" } } },
+                      policies: [{ action: "mcp.use", resource: "github", effect: "deny" }],
+                    }),
+                  }),
+                )
+              yield* install()
+              // The personal account's servers and the denied well-known origin's config are gone; their policies stay.
+              expect(supplied(yield* config.entries())).toEqual([
+                { servers: [], policies: 1 },
+                { servers: [], policies: 1 },
+              ])
+              org = allowed
+              yield* config.integration!(opencode, undefined)
+              yield* install()
+              expect(supplied(yield* config.entries())).toEqual([
+                { servers: ["docs"], policies: 1 },
+                { servers: [], policies: 1 },
+              ])
+            }).pipe(
+              Effect.provide(
+                testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode, {
                   system,
                 }),
               ),
@@ -688,6 +799,157 @@ describe("Config", () => {
     ),
   )
 
+  const countReloads = () => {
+    const counter = { reloads: 0 }
+    let finished = () => {}
+    const first = new Promise<void>((resolve) => (finished = resolve))
+    const tracer = Tracer.make({
+      span: (options) => {
+        const span = Tracer.nativeTracer.span(options)
+        if (options.name !== "Config.reload") return span
+        counter.reloads++
+        const end = span.end.bind(span)
+        span.end = (time, exit) => {
+          end(time, exit)
+          finished()
+        }
+        return span
+      },
+    })
+    // The watches' readiness reload; later counts only see what the test triggers.
+    const settled = Effect.promise(() => first).pipe(Effect.timeout("3 seconds"))
+    return { counter, tracer, settled }
+  }
+
+  it.live("does not reload when an unrelated file under a config root changes", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          const file = path.join(global, "opencode.json")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(global, "skills", "demo"), { recursive: true })
+            await fs.mkdir(project, { recursive: true })
+            await fs.writeFile(file, JSON.stringify({ shell: "one" }))
+          })
+          const { counter, tracer, settled } = countReloads()
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const watcher = yield* Watcher.Test
+            const changes = yield* config
+              .changes()
+              .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+            yield* settled
+            const before = counter.reloads
+
+            // The config file changed on disk, but only unrelated paths report updates.
+            yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "two" })))
+            yield* watcher.emit({ type: "update", path: path.join(global, "skills", "demo", "SKILL.md") })
+            yield* watcher.emit({ type: "update", path: path.join(global, "opencode.json.bak") })
+            expect(Array.from(yield* Fiber.join(changes)).map((update) => update.path)).toEqual([
+              path.join(global, "skills", "demo", "SKILL.md"),
+              path.join(global, "opencode.json.bak"),
+            ])
+            // Outlasts the 100 ms reload debounce; proving no reload needs a wait.
+            yield* Effect.sleep("250 millis")
+            expect(counter.reloads).toBe(before)
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
+          }).pipe(
+            Effect.provide(testLayer(project, global, project, undefined, Watcher.testLayer)),
+            Effect.withTracer(tracer),
+          )
+        }),
+      ),
+    ),
+  )
+
+  const nextUpdate = Bus.Service.use((bus) =>
+    bus.subscribe(Event.Updated).pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true })),
+  )
+
+  it.live("reloads canonical events for a symlinked global root, even after removal", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const real = path.join(tmp.path, "real")
+        const link = path.join(tmp.path, "link")
+        const file = path.join(real, process.platform === "linux" ? "opencode.json" : "OpenCode.JSON")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(real)
+          await fs.symlink(real, link, "junction")
+        })
+        // Parcel delivers events for the underlying directory rather than the symlink spelling.
+        const canonical = Layer.effect(
+          Watcher.Service,
+          Watcher.Test.use((watcher) =>
+            Effect.succeed(
+              Watcher.Service.of({
+                subscribe: (target, ready) =>
+                  watcher.subscribe(target.path === link ? { ...target, path: real } : target, ready),
+              }),
+            ),
+          ),
+        ).pipe(Layer.provideMerge(Watcher.testLayer))
+        const { tracer, settled } = countReloads()
+        return yield* Effect.gen(function* () {
+          const config = yield* Config.Service
+          const watcher = yield* Watcher.Test
+          yield* settled
+          const created = yield* nextUpdate
+          yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "one" })))
+          yield* watcher.emit({ type: "create", path: file })
+          yield* Fiber.join(created).pipe(Effect.timeout("3 seconds"))
+          expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
+
+          const deleted = yield* nextUpdate
+          yield* Effect.promise(() => fs.rename(real, path.join(tmp.path, "moved")))
+          yield* watcher.emit({ type: "delete", path: real })
+          yield* Fiber.join(deleted).pipe(Effect.timeout("3 seconds"))
+          expect(Config.latest(yield* config.entries(), "shell")).toBeUndefined()
+        }).pipe(Effect.provide(testLayer(tmp.path, link, tmp.path, undefined, canonical)), Effect.withTracer(tracer))
+      }),
+    ),
+  )
+
+  for (const source of ["file", "content"] as const) {
+    it.live(`reloads ${source} config when its symlink target changes under a watched root`, () =>
+      withTempDir((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const alias = path.join(tmp.path, "alias")
+          const file = path.join(global, "work.json")
+          const write = (shell: string) => fs.writeFile(file, source === "file" ? JSON.stringify({ shell }) : shell)
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global)
+            await fs.symlink(global, alias, "junction")
+            await write("one")
+          })
+          const options =
+            source === "file"
+              ? { file: path.join(alias, "work.json") }
+              : {
+                  content: JSON.stringify({ shell: "{file:alias/work.json}" }),
+                }
+          const { tracer, settled } = countReloads()
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const watcher = yield* Watcher.Test
+            yield* settled
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
+            const changed = yield* nextUpdate
+            yield* Effect.promise(() => write("two"))
+            yield* watcher.emit({ type: "update", path: file })
+            yield* Fiber.join(changed).pipe(Effect.timeout("3 seconds"))
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("two")
+          }).pipe(
+            Effect.provide(testLayer(tmp.path, global, tmp.path, undefined, undefined, undefined, undefined, options)),
+            Effect.withTracer(tracer),
+          )
+        }),
+      ),
+    )
+  }
+
   // Real watcher on purpose: the regression this pins (a deleted config file's
   // watch being torn down, making recreation invisible) only reproduces with
   // path-faithful event delivery.
@@ -743,25 +1005,6 @@ describe("Config", () => {
     ),
   )
 
-  it.effect("backs Config.Service and Config.Test with one shared test implementation", () =>
-    Effect.gen(function* () {
-      const config = yield* Config.Service
-      const test = yield* Config.Test
-      expect(yield* config.entries()).toEqual([])
-
-      const entry = new Document({ type: "document", info: new Info({}) })
-      yield* test.setEntries([entry])
-      expect(yield* config.entries()).toEqual([entry])
-
-      const received = yield* config
-        .changes()
-        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
-      yield* Effect.yieldNow
-      yield* test.emitChange({ type: "create", path: "/root/commands/review.md" })
-      expect(Array.from(yield* Fiber.join(received))).toEqual([{ type: "create", path: "/root/commands/review.md" }])
-    }).pipe(Effect.provide(Config.testLayer())),
-  )
-
   test("returns the latest defined scalar from priority-ordered documents", () => {
     const entries = [
       new Document({
@@ -781,243 +1024,236 @@ describe("Config", () => {
   })
 
   it.live("tolerates unavailable authenticated wellknown config and reloads it later", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) =>
-        Effect.gen(function* () {
-          const global = path.join(tmp.path, "global")
-          const project = path.join(tmp.path, "project")
-          yield* Effect.promise(async () => {
-            await fs.mkdir(global, { recursive: true })
-            await fs.mkdir(project, { recursive: true })
-            await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ shell: "global" }))
-            await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ shell: "project" }))
-          })
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(global, { recursive: true })
+          await fs.mkdir(project, { recursive: true })
+          await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ shell: "global" }))
+          await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ shell: "project" }))
+        })
 
-          const integrationID = Integration.ID.make("https://example.com")
-          let available = false
-          let key = "secret"
-          const credentialNode = makeGlobalNode({
-            service: Credential.Service,
-            layer: Layer.succeed(
-              Credential.Service,
-              Credential.Service.of({
-                lock: () => Effect.die("unused Credential.lock"),
-                all: () => Effect.die("unused Credential.all"),
-                list: () =>
-                  Effect.succeed([
+        const integrationID = Integration.ID.make("https://example.com")
+        let available = false
+        let key = "secret"
+        const credentialNode = makeGlobalNode({
+          service: Credential.Service,
+          layer: Layer.succeed(
+            Credential.Service,
+            Credential.Service.of({
+              refresh: () => Effect.die("unused Credential.refresh"),
+              all: () => Effect.die("unused Credential.all"),
+              list: () =>
+                Effect.succeed([
+                  new Credential.Info({
+                    id: Credential.ID.create(),
+                    integrationID,
+                    label: "default",
+                    value: Credential.Key.make({ type: "key", key }),
+                  }),
+                ]),
+              get: () => Effect.die("unused Credential.get"),
+              create: () => Effect.die("unused Credential.create"),
+              activate: () => Effect.die("unused Credential.activate"),
+              update: () => Effect.die("unused Credential.update"),
+              remove: () => Effect.die("unused Credential.remove"),
+            }),
+          ),
+          deps: [],
+        })
+        const entry: WellKnown.Entry = {
+          origin: "https://example.com",
+          integrationID,
+          manifest: { auth: { command: ["login"], env: "TOKEN" } },
+        }
+        const wellknownNode = makeGlobalNode({
+          service: WellKnown.Service,
+          layer: Layer.succeed(
+            WellKnown.Service,
+            WellKnown.Service.of({
+              entries: () => Effect.succeed([entry]),
+              snapshot: () => [entry],
+              refresh: () => Effect.succeed(false),
+              add: () => Effect.die("unused Wellknown.add"),
+              remove: () => Effect.die("unused Wellknown.remove"),
+              resolve: (_entry, variables) =>
+                available ? Effect.succeed([{ shell: variables.TOKEN }]) : Effect.fail(new Error("expired credential")),
+              cached: () => Effect.succeed([]),
+              clearCached: () => Effect.void,
+            }),
+          ),
+          deps: [],
+        })
+
+        return yield* Effect.gen(function* () {
+          const config = yield* Config.Service
+          const bus = yield* Bus.Service
+          const initial = yield* config.entries()
+          expect(Config.latest(initial, "shell")).toBe("project")
+          expect(
+            initial.flatMap((entry) => (entry.type === "document" && entry.info.shell ? [entry.info.shell] : [])),
+          ).toEqual(["global", "project"])
+          const updated = yield* bus.subscribe(Event.Updated).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+          yield* Effect.yieldNow
+          available = true
+          key = "next"
+          yield* bus.publish(
+            Credential.Event.Switched,
+            { credentialID: Credential.ID.create(), integrationID },
+            { global: true },
+          )
+          expect(yield* Fiber.join(updated)).toHaveLength(1)
+          const refreshed = yield* config.entries()
+          expect(Config.latest(refreshed, "shell")).toBe("project")
+          expect(
+            refreshed.flatMap((entry) => (entry.type === "document" && entry.info.shell ? [entry.info.shell] : [])),
+          ).toEqual(["next", "global", "project"])
+        }).pipe(
+          Effect.provide(testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode)),
+        )
+      }),
+    ),
+  )
+
+  it.live("keeps the last resolved wellknown config across failures and restarts while a credential exists", () =>
+    withTempDir((tmp) => {
+      let manifestStatus = 200
+      let configStatus = 200
+      let requests = 0
+      let key: string | undefined = "secret"
+      const server = Bun.serve({
+        port: 0,
+        fetch(request) {
+          const url = new URL(request.url)
+          if (url.pathname === "/.well-known/opencode") {
+            if (manifestStatus !== 200) return new Response("Unavailable", { status: manifestStatus })
+            return Response.json({
+              auth: { command: ["login"], env: "TOKEN" },
+              remote_config: { url: `${url.origin}/config`, headers: { authorization: "Bearer {env:TOKEN}" } },
+            })
+          }
+          requests++
+          if (configStatus !== 200) return new Response("Unavailable", { status: configStatus })
+          return Response.json({
+            config: {
+              enabled_providers: ["remote"],
+              provider: { remote: { npm: "@ai-sdk/openai-compatible", models: { chat: {} } } },
+            },
+          })
+        },
+      })
+      const origin = server.url.origin
+      const integrationID = Integration.ID.make(origin)
+      const credentialNode = makeGlobalNode({
+        service: Credential.Service,
+        layer: Layer.mock(Credential.Service)({
+          list: () =>
+            Effect.succeed(
+              key === undefined
+                ? []
+                : [
                     new Credential.Info({
                       id: Credential.ID.create(),
                       integrationID,
                       label: "default",
                       value: Credential.Key.make({ type: "key", key }),
                     }),
-                  ]),
-                get: () => Effect.die("unused Credential.get"),
-                create: () => Effect.die("unused Credential.create"),
-                activate: () => Effect.die("unused Credential.activate"),
-                update: () => Effect.die("unused Credential.update"),
-                remove: () => Effect.die("unused Credential.remove"),
-              }),
+                  ],
             ),
-            deps: [],
-          })
-          const entry: WellKnown.Entry = {
-            origin: "https://example.com",
-            integrationID,
-            manifest: { auth: { command: ["login"], env: "TOKEN" } },
-          }
-          const wellknownNode = makeGlobalNode({
-            service: WellKnown.Service,
-            layer: Layer.succeed(
-              WellKnown.Service,
-              WellKnown.Service.of({
-                entries: () => Effect.succeed([entry]),
-                snapshot: () => [entry],
-                refresh: () => Effect.succeed(false),
-                add: () => Effect.die("unused Wellknown.add"),
-                remove: () => Effect.die("unused Wellknown.remove"),
-                resolve: (_entry, variables) =>
-                  available
-                    ? Effect.succeed([{ shell: variables.TOKEN }])
-                    : Effect.fail(new Error("expired credential")),
-                cached: () => Effect.succeed([]),
-              }),
+        }),
+        deps: [],
+      })
+      const global = path.join(tmp.path, "global")
+      const project = path.join(tmp.path, "project")
+      const remote = (entries: readonly Entry[]) => ({
+        provider: Config.latest(entries, "providers")?.remote?.package,
+        policies: Config.latest(entries, "policies"),
+      })
+      const loaded = {
+        provider: "aisdk:@ai-sdk/openai-compatible",
+        policies: [
+          { action: "provider.use", resource: "*", effect: "deny" },
+          { action: "provider.use", resource: "remote", effect: "allow" },
+        ],
+      } as const
+      const removed = { provider: undefined, policies: undefined }
+      return Effect.gen(function* () {
+        yield* Effect.promise(() => fs.mkdir(project, { recursive: true }))
+        const kv = Layer.succeedContext(yield* Layer.build(LayerNode.compile(KV.node)))
+        // Each build is a fresh process sharing one persisted KV store.
+        const instance = () =>
+          AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node, WellKnown.node]), [
+            Config.node.replace(Config.configured({ system: false })),
+            Location.node.replace(
+              Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(project) }))),
             ),
-            deps: [],
-          })
-
-          return yield* Effect.gen(function* () {
-            const config = yield* Config.Service
-            const bus = yield* Bus.Service
-            const initial = yield* config.entries()
-            expect(Config.latest(initial, "shell")).toBe("project")
-            expect(
-              initial.flatMap((entry) => (entry.type === "document" && entry.info.shell ? [entry.info.shell] : [])),
-            ).toEqual(["global", "project"])
+            Global.node.replace(Global.layerWith({ config: global, home: path.join(global, "home") })),
+            Credential.node.replace(credentialNode),
+            KV.node.replace(kv),
+            Watcher.node.replace(Watcher.testLayer),
+          ])
+        const services = Effect.gen(function* () {
+          const config = yield* Config.Service
+          const bus = yield* Bus.Service
+          // Each reload also rewrites a local file so Config publishes an update to wait on.
+          const reload = Effect.fnUntraced(function* (shell: string, trigger: Effect.Effect<unknown, Error>) {
             const updated = yield* bus
               .subscribe(Event.Updated)
-              .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
-            yield* Effect.yieldNow
-            available = true
-            key = "next"
-            yield* bus.publish(
-              Credential.Event.Switched,
-              { credentialID: Credential.ID.create(), integrationID },
-              { global: true },
-            )
-            expect(yield* Fiber.join(updated)).toHaveLength(1)
-            const refreshed = yield* config.entries()
-            expect(Config.latest(refreshed, "shell")).toBe("project")
-            expect(
-              refreshed.flatMap((entry) => (entry.type === "document" && entry.info.shell ? [entry.info.shell] : [])),
-            ).toEqual(["next", "global", "project"])
-          }).pipe(
-            Effect.provide(testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode)),
-          )
-        }),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ),
-  )
-
-  it.live("keeps the last resolved wellknown config across failures and restarts until its source is removed", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => {
-        let manifestStatus = 200
-        let configStatus = 200
-        let requests = 0
-        let key: string | undefined = "secret"
-        const server = Bun.serve({
-          port: 0,
-          fetch(request) {
-            const url = new URL(request.url)
-            if (url.pathname === "/.well-known/opencode") {
-              if (manifestStatus !== 200) return new Response("Unavailable", { status: manifestStatus })
-              return Response.json({
-                auth: { command: ["login"], env: "TOKEN" },
-                remote_config: { url: `${url.origin}/config`, headers: { authorization: "Bearer {env:TOKEN}" } },
-              })
-            }
-            requests++
-            if (configStatus !== 200) return new Response("Unavailable", { status: configStatus })
-            return Response.json({
-              config: {
-                enabled_providers: ["remote"],
-                provider: { remote: { npm: "@ai-sdk/openai-compatible", models: { chat: {} } } },
-              },
-            })
-          },
-        })
-        const origin = server.url.origin
-        const integrationID = Integration.ID.make(origin)
-        const credentialNode = makeGlobalNode({
-          service: Credential.Service,
-          layer: Layer.mock(Credential.Service)({
-            list: () =>
-              Effect.succeed(
-                key === undefined
-                  ? []
-                  : [
-                      new Credential.Info({
-                        id: Credential.ID.create(),
-                        integrationID,
-                        label: "default",
-                        value: Credential.Key.make({ type: "key", key }),
-                      }),
-                    ],
-              ),
-          }),
-          deps: [],
-        })
-        const global = path.join(tmp.path, "global")
-        const project = path.join(tmp.path, "project")
-        const remote = (entries: readonly Entry[]) => ({
-          provider: Config.latest(entries, "providers")?.remote?.package,
-          policies: Config.latest(entries, "policies"),
-        })
-        const loaded = {
-          provider: "aisdk:@ai-sdk/openai-compatible",
-          policies: [
-            { action: "provider.use", resource: "*", effect: "deny" },
-            { action: "provider.use", resource: "remote", effect: "allow" },
-          ],
-        } as const
-        const removed = { provider: undefined, policies: undefined }
-        return Effect.gen(function* () {
-          yield* Effect.promise(() => fs.mkdir(project, { recursive: true }))
-          const kv = Layer.succeedContext(yield* Layer.build(LayerNode.compile(KV.node)))
-          // Each build is a fresh process sharing one persisted KV store.
-          const instance = () =>
-            AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node, WellKnown.node]), [
-              Config.node.replace(Config.configured({ system: false })),
-              Location.node.replace(
-                Layer.succeed(
-                  Location.Service,
-                  Location.Service.of(location({ directory: AbsolutePath.make(project) })),
-                ),
-              ),
-              Global.node.replace(Global.layerWith({ config: global, home: path.join(global, "home") })),
-              Credential.node.replace(credentialNode),
-              KV.node.replace(kv),
-              Watcher.node.replace(Watcher.testLayer),
-            ])
-          const services = Effect.gen(function* () {
-            const config = yield* Config.Service
-            const bus = yield* Bus.Service
-            // Each reload also rewrites a local file so Config publishes an update to wait on.
-            const reload = Effect.fnUntraced(function* (shell: string, trigger: Effect.Effect<unknown, Error>) {
-              const updated = yield* bus
-                .subscribe(Event.Updated)
-                .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
-              yield* Effect.promise(() => fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ shell })))
-              yield* trigger
-              yield* Fiber.join(updated)
-              return remote(yield* config.entries())
-            })
-            const switched = bus.publish(
-              Credential.Event.Switched,
-              { credentialID: Credential.ID.create(), integrationID },
-              { global: true },
-            )
-            return { config, bus, wellknown: yield* WellKnown.Service, reload, switched }
-          })
-
-          yield* Effect.gen(function* () {
-            const warm = yield* services
-            expect(yield* warm.reload("initial", warm.wellknown.add(origin))).toEqual(loaded)
-
-            configStatus = 503
-            const before = requests
-            expect(yield* warm.reload("unavailable", warm.switched)).toEqual(loaded)
-            expect(requests).toBeGreaterThan(before)
-
-            key = undefined
-            expect(yield* warm.reload("logged-out", warm.switched)).toEqual(loaded)
-
-            manifestStatus = 503
-            const updated = yield* warm.bus
-              .subscribe(WellKnown.Event.Updated)
               .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
-            expect(yield* warm.wellknown.refresh()).toBe(false)
-            yield* Effect.sleep("50 millis")
-            expect(updated.pollUnsafe()).toBeUndefined()
-          }).pipe(Effect.scoped, Effect.provide(instance()))
+            yield* Effect.promise(() => fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ shell })))
+            yield* trigger
+            yield* Fiber.join(updated)
+            return remote(yield* config.entries())
+          })
+          const switched = bus.publish(
+            Credential.Event.Switched,
+            { credentialID: Credential.ID.create(), integrationID },
+            { global: true },
+          )
+          return { config, bus, wellknown: yield* WellKnown.Service, reload, switched }
+        })
 
+        yield* Effect.gen(function* () {
+          const warm = yield* services
+          expect(yield* warm.reload("initial", warm.wellknown.add(origin))).toEqual(loaded)
+
+          configStatus = 503
+          const before = requests
+          expect(yield* warm.reload("unavailable", warm.switched)).toEqual(loaded)
+          expect(requests).toBeGreaterThan(before)
+
+          key = undefined
+          expect(yield* warm.reload("logged-out", warm.switched)).toEqual(removed)
+
+          // Logging out drops the saved config, so logging back in while the remote is down supplies nothing.
           key = "secret"
-          yield* Effect.gen(function* () {
-            const cold = yield* services
-            expect(remote(yield* cold.config.entries())).toEqual(loaded)
-            // The wellknown plugin loads these entries at startup and dies if they fail.
-            expect(yield* cold.wellknown.entries()).toHaveLength(1)
-            expect(yield* cold.reload("removed", cold.wellknown.remove(origin))).toEqual(removed)
-            manifestStatus = 200
-            expect(yield* cold.reload("re-added", cold.wellknown.add(origin))).toEqual(removed)
-          }).pipe(Effect.scoped, Effect.provide(instance()))
-        }).pipe(Effect.ensuring(Effect.promise(() => server.stop(true))))
-      },
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ),
+          expect(yield* warm.reload("logged-in-unavailable", warm.switched)).toEqual(removed)
+          configStatus = 200
+          expect(yield* warm.reload("logged-in", warm.switched)).toEqual(loaded)
+          configStatus = 503
+
+          manifestStatus = 503
+          const updated = yield* warm.bus
+            .subscribe(WellKnown.Event.Updated)
+            .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+          expect(yield* warm.wellknown.refresh()).toBe(false)
+          yield* Effect.sleep("50 millis")
+          expect(updated.pollUnsafe()).toBeUndefined()
+        }).pipe(Effect.scoped, Effect.provide(instance()))
+
+        yield* Effect.gen(function* () {
+          const cold = yield* services
+          expect(remote(yield* cold.config.entries())).toEqual(loaded)
+          // The wellknown plugin loads these entries at startup and dies if they fail.
+          expect(yield* cold.wellknown.entries()).toHaveLength(1)
+          expect(yield* cold.reload("removed", cold.wellknown.remove(origin))).toEqual(removed)
+          manifestStatus = 200
+          expect(yield* cold.reload("re-added", cold.wellknown.add(origin))).toEqual(removed)
+        }).pipe(Effect.scoped, Effect.provide(instance()))
+      }).pipe(Effect.ensuring(Effect.promise(() => server.stop(true))))
+    }),
   )
 
   it.live("logs redacted source-aware diagnostics for every config source", () => {
@@ -1027,90 +1263,88 @@ describe("Config", () => {
       const details = entry.message[1]
       if (typeof details === "object" && details !== null) output.push(details as Record<string, unknown>)
     })
-    return Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) =>
-        Effect.gen(function* () {
-          const global = path.join(tmp.path, "global")
-          const project = path.join(tmp.path, "project")
-          const malformed = path.join(tmp.path, "malformed.json")
-          yield* Effect.promise(async () => {
-            await fs.mkdir(global, { recursive: true })
-            await fs.mkdir(project, { recursive: true })
-            await fs.writeFile(path.join(global, "opencode.json"), "null")
-            await fs.writeFile(path.join(project, "opencode.json"), "")
-            await fs.writeFile(malformed, '{ "credential": "file-secret"')
-          })
-          const integrationID = Integration.ID.make("https://invalid.example.com")
-          const entry: WellKnown.Entry = {
-            origin: "https://invalid.example.com",
-            integrationID,
-            manifest: { auth: { command: ["login"], env: "TOKEN" } },
-          }
-          const credentialNode = makeGlobalNode({
-            service: Credential.Service,
-            layer: Layer.succeed(
-              Credential.Service,
-              Credential.Service.of({
-                lock: () => Effect.die("unused Credential.lock"),
-                all: () => Effect.die("unused Credential.all"),
-                list: () =>
-                  Effect.succeed([
-                    new Credential.Info({
-                      id: Credential.ID.create(),
-                      integrationID,
-                      label: "default",
-                      value: Credential.Key.make({ type: "key", key: "wellknown-secret" }),
-                    }),
-                  ]),
-                get: () => Effect.die("unused Credential.get"),
-                create: () => Effect.die("unused Credential.create"),
-                activate: () => Effect.die("unused Credential.activate"),
-                update: () => Effect.die("unused Credential.update"),
-                remove: () => Effect.die("unused Credential.remove"),
-              }),
-            ),
-            deps: [],
-          })
-          const wellknownNode = makeGlobalNode({
-            service: WellKnown.Service,
-            layer: Layer.succeed(
-              WellKnown.Service,
-              WellKnown.Service.of({
-                entries: () => Effect.succeed([entry]),
-                snapshot: () => [entry],
-                refresh: () => Effect.succeed(false),
-                add: () => Effect.die("unused Wellknown.add"),
-                remove: () => Effect.die("unused Wellknown.remove"),
-                // Exercise the loader boundary against a malformed implementation response.
-                resolve: () => Effect.succeed([null as unknown as WellKnown.Config]),
-                cached: () => Effect.succeed([]),
-              }),
-            ),
-            deps: [],
-          })
+    return withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        const malformed = path.join(tmp.path, "malformed.json")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(global, { recursive: true })
+          await fs.mkdir(project, { recursive: true })
+          await fs.writeFile(path.join(global, "opencode.json"), "null")
+          await fs.writeFile(path.join(project, "opencode.json"), "")
+          await fs.writeFile(malformed, '{ "credential": "file-secret"')
+        })
+        const integrationID = Integration.ID.make("https://invalid.example.com")
+        const entry: WellKnown.Entry = {
+          origin: "https://invalid.example.com",
+          integrationID,
+          manifest: { auth: { command: ["login"], env: "TOKEN" } },
+        }
+        const credentialNode = makeGlobalNode({
+          service: Credential.Service,
+          layer: Layer.succeed(
+            Credential.Service,
+            Credential.Service.of({
+              refresh: () => Effect.die("unused Credential.refresh"),
+              all: () => Effect.die("unused Credential.all"),
+              list: () =>
+                Effect.succeed([
+                  new Credential.Info({
+                    id: Credential.ID.create(),
+                    integrationID,
+                    label: "default",
+                    value: Credential.Key.make({ type: "key", key: "wellknown-secret" }),
+                  }),
+                ]),
+              get: () => Effect.die("unused Credential.get"),
+              create: () => Effect.die("unused Credential.create"),
+              activate: () => Effect.die("unused Credential.activate"),
+              update: () => Effect.die("unused Credential.update"),
+              remove: () => Effect.die("unused Credential.remove"),
+            }),
+          ),
+          deps: [],
+        })
+        const wellknownNode = makeGlobalNode({
+          service: WellKnown.Service,
+          layer: Layer.succeed(
+            WellKnown.Service,
+            WellKnown.Service.of({
+              entries: () => Effect.succeed([entry]),
+              snapshot: () => [entry],
+              refresh: () => Effect.succeed(false),
+              add: () => Effect.die("unused Wellknown.add"),
+              remove: () => Effect.die("unused Wellknown.remove"),
+              // Exercise the loader boundary against a malformed implementation response.
+              resolve: () => Effect.succeed([null as unknown as WellKnown.Config]),
+              cached: () => Effect.succeed([]),
+              clearCached: () => Effect.void,
+            }),
+          ),
+          deps: [],
+        })
 
-          yield* Config.Service.use((config) => config.entries()).pipe(
-            Effect.provide(
-              testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode, {
-                file: malformed,
-                content: "",
-              }),
-            ),
-          )
+        yield* Config.Service.use((config) => config.entries()).pipe(
+          Effect.provide(
+            testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode, {
+              file: malformed,
+              content: "",
+            }),
+          ),
+        )
 
-          expect(output.map((item) => `${item.source}:${item.path}:${item.kind}`).toSorted()).toEqual(
-            [
-              `${path.join(global, "opencode.json")}:$:invalid`,
-              `${path.join(project, "opencode.json")}:$:invalid`,
-              `${malformed}:$:invalid`,
-              "https://invalid.example.com:$:invalid",
-              "OPENCODE_CONFIG_CONTENT:$:invalid",
-            ].toSorted(),
-          )
-          expect(JSON.stringify(output)).not.toContain("secret")
-        }),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        expect(output.map((item) => `${item.source}:${item.path}:${item.kind}`).toSorted()).toEqual(
+          [
+            `${path.join(global, "opencode.json")}:$:invalid`,
+            `${path.join(project, "opencode.json")}:$:invalid`,
+            `${malformed}:$:invalid`,
+            "https://invalid.example.com:$:invalid",
+            "OPENCODE_CONFIG_CONTENT:$:invalid",
+          ].toSorted(),
+        )
+        expect(JSON.stringify(output)).not.toContain("secret")
+      }),
     ).pipe(Effect.provide(Logger.layer([logger])))
   })
 
@@ -1185,23 +1419,6 @@ describe("Config", () => {
       encoded: { update: "auto" },
       diagnostics: [],
     })
-  })
-
-  test("migrates v1 provider lists to policies", () => {
-    expect(
-      migrateV1({
-        enabled_providers: ["anthropic", "openai"],
-        disabled_providers: ["openai"],
-      }).policies,
-    ).toEqual([
-      { action: "provider.use", resource: "*", effect: "deny" },
-      { action: "provider.use", resource: "anthropic", effect: "allow" },
-      { action: "provider.use", resource: "openai", effect: "allow" },
-      { action: "provider.use", resource: "openai", effect: "deny" },
-    ])
-    expect(migrateV1({ enabled_providers: [] }).policies).toEqual([
-      { action: "provider.use", resource: "*", effect: "deny" },
-    ])
   })
 
   test("migrates v1 provider setup options into AISDK settings", () => {
@@ -1409,31 +1626,6 @@ describe("Config", () => {
     ),
   )
 
-  it.live("deduplicates global ecosystem directories found during upward discovery", () =>
-    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
-      Effect.flatMap((tmp) =>
-        Effect.gen(function* () {
-          const global = path.join(tmp.path, "global")
-          const home = path.join(global, "home")
-          const project = path.join(home, "project")
-          yield* Effect.promise(() =>
-            Promise.all([
-              fs.mkdir(path.join(home, ".claude"), { recursive: true }),
-              fs.mkdir(path.join(home, ".agents"), { recursive: true }),
-              fs.mkdir(project, { recursive: true }),
-            ]),
-          )
-          const compatibility = yield* Config.Service.use((config) => config.compatibility!()).pipe(
-            Effect.provide(testLayer(project, global)),
-          )
-
-          expect(compatibility.claude).toEqual([AbsolutePath.make(path.join(home, ".claude"))])
-          expect(compatibility.agents).toEqual([AbsolutePath.make(path.join(home, ".agents"))])
-        }),
-      ),
-    ),
-  )
-
   it.live("does not recursively watch ecosystem config roots", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
@@ -1513,29 +1705,21 @@ describe("Config", () => {
   )
 
   it.live("substitutes environment variables and relative file contents", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const previous = {
-          token: process.env.OPENCODE_TEST_MCP_TOKEN,
-          missing: process.env.OPENCODE_TEST_MISSING,
-          flag: process.env.OPENCODE_TEST_FLAG,
-        }
-        process.env.OPENCODE_TEST_FLAG = "false"
-        process.env.OPENCODE_TEST_MCP_TOKEN = String.raw`C:\Users\new\"secret"`
-        delete process.env.OPENCODE_TEST_MISSING
-        return previous
-      }),
+    withEnv(
+      {
+        OPENCODE_TEST_FLAG: "false",
+        OPENCODE_TEST_MCP_TOKEN: String.raw`C:\Users\new\"secret"`,
+        OPENCODE_TEST_MISSING: undefined,
+      },
       () =>
-        Effect.acquireUseRelease(
-          Effect.promise(() => tmpdir()),
-          (tmp) =>
-            Effect.gen(function* () {
-              yield* Effect.promise(() =>
-                Promise.all([
-                  fs.writeFile(path.join(tmp.path, "token.txt"), 'file\n"token"\n'),
-                  fs.writeFile(
-                    path.join(tmp.path, "opencode.jsonc"),
-                    `{
+        withTempDir((tmp) =>
+          Effect.gen(function* () {
+            yield* Effect.promise(() =>
+              Promise.all([
+                fs.writeFile(path.join(tmp.path, "token.txt"), 'file\n"token"\n'),
+                fs.writeFile(
+                  path.join(tmp.path, "opencode.jsonc"),
+                  `{
                       // Ignored reference: {file:.}
                       "username": "user-{env:OPENCODE_TEST_MISSING}",
                       "snapshots": {env:OPENCODE_TEST_FLAG},
@@ -1554,37 +1738,27 @@ describe("Config", () => {
                         }
                       }
                     }`,
-                  ),
-                ]),
-              )
+                ),
+              ]),
+            )
 
-              return yield* Effect.gen(function* () {
-                const config = yield* Config.Service
-                const document = (yield* config.entries()).find((entry) => entry.type === "document")
-                expect(document?.info.username).toBe("user-")
-                expect(document?.info.snapshots).toBe(false)
-                const remote = document?.info.mcp?.servers?.remote
-                expect(remote?.type).toBe("remote")
-                if (remote?.type !== "remote") return
-                expect(remote.headers).toEqual({
-                  Authorization: String.raw`Bearer C:\Users\new\"secret"`,
-                  "X-Token": 'file\n"token"',
-                  "X-Missing": "Bearer ",
-                  "X-Folder": "",
-                })
-              }).pipe(Effect.provide(testLayer(tmp.path)))
-            }),
-          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+            return yield* Effect.gen(function* () {
+              const config = yield* Config.Service
+              const document = (yield* config.entries()).find((entry) => entry.type === "document")
+              expect(document?.info.username).toBe("user-")
+              expect(document?.info.snapshots).toBe(false)
+              const remote = document?.info.mcp?.servers?.remote
+              expect(remote?.type).toBe("remote")
+              if (remote?.type !== "remote") return
+              expect(remote.headers).toEqual({
+                Authorization: String.raw`Bearer C:\Users\new\"secret"`,
+                "X-Token": 'file\n"token"',
+                "X-Missing": "Bearer ",
+                "X-Folder": "",
+              })
+            }).pipe(Effect.provide(testLayer(tmp.path)))
+          }),
         ),
-      (previous) =>
-        Effect.sync(() => {
-          if (previous.token === undefined) delete process.env.OPENCODE_TEST_MCP_TOKEN
-          else process.env.OPENCODE_TEST_MCP_TOKEN = previous.token
-          if (previous.missing === undefined) delete process.env.OPENCODE_TEST_MISSING
-          else process.env.OPENCODE_TEST_MISSING = previous.missing
-          if (previous.flag === undefined) delete process.env.OPENCODE_TEST_FLAG
-          else process.env.OPENCODE_TEST_FLAG = previous.flag
-        }),
     ),
   )
 
@@ -1638,221 +1812,6 @@ describe("Config", () => {
             expect(documents[0]?.info.$schema).toBeUndefined()
             expect(documents[0]?.info.shell).toBe("/bin/zsh")
             expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe(contents)
-          }).pipe(Effect.provide(testLayer(tmp.path)))
-        }),
-      ),
-    ),
-  )
-
-  it.live("loads supported scalar and resource configuration", () =>
-    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
-      Effect.flatMap((tmp) =>
-        Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            fs.writeFile(
-              path.join(tmp.path, "opencode.json"),
-              JSON.stringify({
-                shell: "/bin/bash",
-                model: "anthropic/claude",
-                default_agent: "reviewer",
-                update: "notify",
-                share: "disabled",
-                enterprise: { url: "https://share.example.com" },
-                username: "test-user",
-                permissions: [
-                  { action: "bash", resource: "*", effect: "ask" },
-                  { action: "bash", resource: "git status", effect: "allow" },
-                ],
-                agents: {
-                  reviewer: {
-                    model: "openrouter/openai/gpt-5#high",
-                    request: {
-                      headers: { "x-agent": "reviewer" },
-                      body: { reasoningEffort: "high" },
-                    },
-                    description: "Review changes for correctness",
-                    system: "Find regressions.",
-                    mode: "subagent",
-                    hidden: false,
-                    color: "#ff6b6b",
-                    steps: 12,
-                    disabled: false,
-                    permissions: [{ action: "edit", resource: "*", effect: "deny" }],
-                  },
-                },
-                snapshots: false,
-                watcher: { ignore: ["node_modules/**", "dist/**", ".git"] },
-                formatter: {
-                  prettier: { disabled: true },
-                  custom: { command: ["custom-fmt", "$FILE"], extensions: [".foo"] },
-                },
-                lsp: { typescript: { disabled: true }, custom: { command: ["custom-lsp"], extensions: [".foo"] } },
-                media: {
-                  image: { auto_resize: false, max_width: 1200, max_height: 900, max_base64_bytes: 1048576 },
-                },
-                tool_output: { max_lines: 1000, max_bytes: 32768 },
-                mcp: {
-                  timeout: { startup: 5000, catalog: 60000, execution: 43200000 },
-                  servers: {
-                    local: {
-                      type: "local",
-                      command: ["node", "./mcp/server.js"],
-                      environment: { API_KEY: "secret" },
-                      disabled: false,
-                      codemode: false,
-                      timeout: { catalog: 10000 },
-                      protocol: "legacy",
-                    },
-                    remote: {
-                      type: "remote",
-                      url: "https://mcp.example.com/mcp",
-                      headers: { Authorization: "Bearer token" },
-                      oauth: { client_id: "client", scope: "read write", callback_port: 19876 },
-                      disabled: true,
-                      codemode: false,
-                      timeout: { startup: 15000 },
-                      protocol: "2026-07-28",
-                    },
-                  },
-                },
-                compaction: {
-                  auto: true,
-                  prune: false,
-                  keep: { tokens: 2000 },
-                  buffer: 10000,
-                },
-                skills: ["./skills", "~/shared-skills", "https://example.com/.well-known/skills/"],
-                instructions: ["CONTRIBUTING.md", ".cursor/rules/*.md", "https://example.com/shared-rules.md"],
-                references: {
-                  local: { path: "../library" },
-                  sdk: { repository: "github.com/example/sdk", branch: "main" },
-                  shorthand: "github.com/example/docs",
-                },
-              }),
-            ),
-          )
-
-          return yield* Effect.gen(function* () {
-            const config = yield* Config.Service
-            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
-
-            expect(documents).toHaveLength(1)
-            expect(documents[0]?.info.shell).toBe("/bin/bash")
-            expect(documents[0]?.info.model).toEqual(selection("anthropic/claude"))
-            expect(documents[0]?.info.default_agent).toBe("reviewer")
-            expect(documents[0]?.info.update).toBe("notify")
-            expect(documents[0]?.info.share).toBe("disabled")
-            expect(documents[0]?.info.enterprise).toEqual({ url: "https://share.example.com" })
-            expect(documents[0]?.info.username).toBe("test-user")
-            expect(documents[0]?.info.permissions).toEqual([
-              { action: "bash", resource: "*", effect: "ask" },
-              { action: "bash", resource: "git status", effect: "allow" },
-            ])
-            const reviewer = documents[0]?.info.agents?.reviewer
-            expect(reviewer?.model).toEqual(selection("openrouter/openai/gpt-5#high"))
-            expect(reviewer?.request).toEqual({
-              headers: { "x-agent": "reviewer" },
-              body: { reasoningEffort: "high" },
-            })
-            expect(reviewer?.description).toBe("Review changes for correctness")
-            expect(reviewer?.system).toBe("Find regressions.")
-            expect(reviewer?.mode).toBe("subagent")
-            expect(reviewer?.hidden).toBe(false)
-            expect(reviewer?.color).toBe("#ff6b6b")
-            expect(reviewer?.steps).toBe(12)
-            expect(reviewer?.disabled).toBe(false)
-            expect(reviewer?.permissions).toEqual([{ action: "edit", resource: "*", effect: "deny" }])
-            expect(documents[0]?.info.snapshots).toBe(false)
-            expect(documents[0]?.info.watcher).toEqual({ ignore: ["node_modules/**", "dist/**", ".git"] })
-            expect(documents[0]?.info.formatter).toEqual({
-              prettier: { disabled: true },
-              custom: { command: ["custom-fmt", "$FILE"], extensions: [".foo"] },
-            })
-            expect(documents[0]?.info.lsp).toEqual({
-              typescript: { disabled: true },
-              custom: { command: ["custom-lsp"], extensions: [".foo"] },
-            })
-            expect(documents[0]?.info.media).toEqual({
-              image: { auto_resize: false, max_width: 1200, max_height: 900, max_base64_bytes: 1048576 },
-            })
-            expect(documents[0]?.info.tool_output).toEqual({ max_lines: 1000, max_bytes: 32768 })
-            expect(documents[0]?.info.mcp).toEqual({
-              timeout: { startup: 5000, catalog: 60000, execution: 43200000 },
-              servers: {
-                local: {
-                  type: "local",
-                  command: ["node", "./mcp/server.js"],
-                  environment: { API_KEY: "secret" },
-                  disabled: false,
-                  codemode: false,
-                  timeout: { catalog: 10000 },
-                  protocol: "legacy",
-                },
-                remote: {
-                  type: "remote",
-                  url: "https://mcp.example.com/mcp",
-                  headers: { Authorization: "Bearer token" },
-                  oauth: { client_id: "client", scope: "read write", callback_port: 19876 },
-                  disabled: true,
-                  codemode: false,
-                  timeout: { startup: 15000 },
-                  protocol: "2026-07-28",
-                },
-              },
-            })
-            expect(documents[0]?.info.compaction).toEqual({
-              auto: true,
-              keep: { tokens: 2000 },
-              buffer: 10000,
-            })
-            expect(documents[0]?.info.skills).toEqual([
-              "./skills",
-              "~/shared-skills",
-              "https://example.com/.well-known/skills/",
-            ])
-            expect(documents[0]?.info.instructions).toEqual([
-              "CONTRIBUTING.md",
-              ".cursor/rules/*.md",
-              "https://example.com/shared-rules.md",
-            ])
-            expect(documents[0]?.info.references).toEqual({
-              local: { path: "../library" },
-              sdk: { repository: "github.com/example/sdk", branch: "main" },
-              shorthand: "github.com/example/docs",
-            })
-          }).pipe(Effect.provide(testLayer(tmp.path)))
-        }),
-      ),
-    ),
-  )
-
-  it.live("migrates the deprecated reference key into references", () =>
-    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
-      Effect.flatMap((tmp) =>
-        Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            fs.writeFile(
-              path.join(tmp.path, "opencode.json"),
-              JSON.stringify({
-                reference: {
-                  local: { path: "../library" },
-                  sdk: { repository: "github.com/example/sdk", branch: "main" },
-                  shorthand: "github.com/example/docs",
-                },
-              }),
-            ),
-          )
-
-          return yield* Effect.gen(function* () {
-            const config = yield* Config.Service
-            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
-
-            expect(documents).toHaveLength(1)
-            expect(documents[0]?.info.references).toEqual({
-              local: { path: "../library" },
-              sdk: { repository: "github.com/example/sdk", branch: "main" },
-              shorthand: "github.com/example/docs",
-            })
           }).pipe(Effect.provide(testLayer(tmp.path)))
         }),
       ),

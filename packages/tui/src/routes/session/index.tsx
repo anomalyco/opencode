@@ -16,32 +16,28 @@ import path from "node:path"
 import { EOL, tmpdir } from "node:os"
 import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
-import { createStore } from "solid-js/store"
+import { createStore, reconcile } from "solid-js/store"
 import { useData } from "../../context/data"
 import { SplitBorder } from "../../ui/border"
-import { useTuiTerminalEnvironment } from "../../context/runtime"
+import { useSessionLinks } from "../../ui/session-link"
+import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
 import { useTheme, useThemes } from "../../context/theme"
-import {
-  BoxRenderable,
-  ScrollBoxRenderable,
-  addDefaultParsers,
-  TextAttributes,
-  RGBA,
-  MouseEvent,
-  type Renderable,
-} from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA, MouseEvent } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
-import type {
-  SessionMessageInfo,
-  SessionMessageAssistant,
-  SessionMessageAssistantReasoning,
-  SessionMessageAssistantText,
-  SessionMessageAssistantTool,
-  SessionMessageUser,
-  SessionInfo,
-  ModelInfo,
+import {
+  mediaHashFromUri,
+  type PromptAttachment,
+  type SessionMessageInfo,
+  type SessionMessageAssistant,
+  type SessionMessageAssistantReasoning,
+  type SessionMessageAssistantText,
+  type SessionMessageAssistantTool,
+  type SessionMessageUser,
+  type SessionInfo,
+  type ModelInfo,
+  type PermissionRequest,
 } from "@opencode/client"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
@@ -62,10 +58,12 @@ import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useClient } from "../../context/client"
 import { useEditorContext } from "../../context/editor"
 import { useDialog } from "../../ui/dialog"
+import { clickedLink } from "../../ui/link"
 import { DialogSelect } from "../../ui/dialog-select"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { TodoItem } from "../../component/todo-item"
 import { DialogImagePreview } from "../../component/dialog-image-preview"
+import { createMediaSource } from "../../component/media-source"
 import { statusLabel } from "../../component/dialog-workspace-file-changes"
 import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
@@ -74,14 +72,16 @@ import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { UsageLimitNotice, useLimitNotice, useUsageAlerts } from "../../component/usage"
 import { useStorage } from "../../context/storage"
 import { Composer } from "./composer"
+import { busyCounts, busyTab } from "./composer/tabs"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
 import { useToast } from "../../ui/toast"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
-import { projectedPromptInput } from "../../prompt/codec"
-import { appendPrompt } from "../../prompt/history"
+import { usePromptRestore } from "../../prompt/restore"
+import { appendToSessionPrompt } from "../../component/prompt/draft-stash"
+import type { ProjectedPrompt } from "../../prompt/codec"
 import { deduplicateVisibleImages } from "../../prompt/attachment"
 import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
@@ -89,7 +89,7 @@ import { PermissionPrompt } from "./permission"
 import { FormPrompt } from "./form"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { DialogExportResult } from "../../ui/dialog-export-result"
-import { useConfig, useNewDesigns } from "../../config"
+import { useConfig, useNewDesigns, useSessionFindExperiment } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
@@ -116,6 +116,7 @@ import { stringWidth } from "../../util/string-width"
 import { useArgs } from "../../context/args"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { SessionTurn } from "@opencode/util/session-turn"
+import { TextBoundary } from "@opencode/util/text-boundary"
 import { useSessionTabs, type ScrollAnchor } from "../../context/session-tabs"
 import { createSingleFlight } from "../../util/single-flight"
 import { createDelayedPresence } from "../../util/delayed-presence"
@@ -130,6 +131,8 @@ import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
 import { containsAnchor, createTimelineAnchors, groupID } from "./anchors"
 import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
+import { findMatches, findParts, findPattern, sameFindMatch, type FindMatch } from "./find"
+import { FindBar, FindText, useFindHighlight } from "./find-view"
 export { InlineToolRow } from "./message-parts"
 export { toolDisplay } from "./message-parts"
 
@@ -157,6 +160,7 @@ export function Session(props: {
 }) {
   const epilogue = useEpilogue()
   const clipboard = useClipboard()
+  const paths = useTuiPaths()
   const writeExport = async (file: string, content: string) => {
     await mkdir(path.dirname(file), { recursive: true })
     await writeFile(file, content)
@@ -202,12 +206,16 @@ export function Session(props: {
     return data.session.family(route.sessionID).filter((id) => id !== route.sessionID)
   })
   const permissions = createMemo(() => {
-    if (session()?.parentID) return []
     return [route.sessionID, ...descendantSessionIDs()].flatMap(
       (sessionID) => data.session.permission.list(sessionID) ?? [],
     )
   })
   const promptedPermissions = createMemo(() => (local.permission.mode === "autoaccept" ? [] : permissions()))
+  // The shown request stays until it is answered, so a newer one can't take its place under the cursor.
+  const promptedPermission = createMemo((previous?: PermissionRequest) => {
+    const requests = promptedPermissions()
+    return requests.find((request) => request.id === previous?.id) ?? requests[0]
+  })
   const forms = createMemo(() => {
     const global = data.session.form.list("global", location()) ?? []
     if (session()?.parentID) return global
@@ -224,10 +232,14 @@ export function Session(props: {
       item.delivery === "queue" ? [{ id: item.id, text: item.payload.text, payload: item.payload }] : [],
     ),
   )
+  const openingTab = () => busyTab(busyCounts({ data, sessionID: route.sessionID, location: location() }))
   const [composer, setComposer] = createStore({
     open: false,
     tab: undefined as string | undefined,
   })
+  const composerVisible = createMemo(
+    () => promptedPermissions().length === 0 && (composer.open || (!!session()?.parentID && forms().length === 0)),
+  )
   props.onTerminalPicker?.(() => setComposer({ open: true, tab: "terminals" }))
   onCleanup(() => props.onTerminalPicker?.(undefined))
   createEffect(() => {
@@ -260,6 +272,7 @@ export function Session(props: {
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const toast = useToast()
+  const restorePrompt = usePromptRestore()
   const client = useClient()
   const autoApproved = new Set<string>()
   createEffect(() => {
@@ -286,6 +299,8 @@ export function Session(props: {
     (id) => {
       if (id === sessionID) setRowsSynced(true)
     },
+    // A scroll-triggered history load joins this boundary load instead of publishing its own page.
+    () => pinAbove(),
   )
   const boundaries = createMemo(() => messageBoundaryIDs(rows, messages()))
   const anchors = createTimelineAnchors()
@@ -351,6 +366,7 @@ export function Session(props: {
         return
       }
       editor.reconnect(info.location.directory)
+      void data.job.sync(data.session.root(sessionID)).catch(() => undefined)
       setSynced(true)
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
@@ -381,7 +397,7 @@ export function Session(props: {
     firstJump()?.()
     if (!scroll || scroll.isDestroyed) return
     scroll.verticalScrollBar.off("change", updateAwayFromBottom)
-    scroll.content.off("resize", holdAnchor)
+    scroll.content.off("resize", contentResized)
     saveScrollAnchor(true)
   })
   const [prompt, setPrompt] = createSignal<PromptRef>()
@@ -393,24 +409,21 @@ export function Session(props: {
     r.set(route.prompt)
   }
 
-  /** Runs after layout has settled (two frames), unless the transcript was torn down. */
+  /** Runs after the next frame's layout and before it paints, unless the transcript was torn down. */
   const afterLayout = (continuation: () => void) => {
-    renderer.requestAnimationFrame(() => {
-      renderer.requestAnimationFrame(() => {
-        if (!scroll || scroll.isDestroyed) return
-        continuation()
-      })
+    if (!scroll || scroll.isDestroyed) return
+    scroll.afterLayout(() => {
+      if (!scroll.isDestroyed) continuation()
     })
   }
 
-  // Keeps a toggled disclosure's header on its viewport row. The content resize fires inside the
-  // layout pass, before rows take their screen positions, so the correction lands in the same frame.
-  // Renderable positions are still stale at that point; read the computed layout instead.
-  let held: { node: Renderable; top: number } | undefined
-  const layoutTop = (node: Renderable): number =>
-    node === scroll.content || !node.parent ? 0 : node.getComputedLayout().top + layoutTop(node.parent)
-  const holdAnchor = () => {
-    if (held && !held.node.isDestroyed) scroll.scrollTo(layoutTop(held.node) - held.top)
+  // Pin an existing row before publication. Total height also counts streamed output below the
+  // reader, which must not move their viewport when it arrives alongside the older rows.
+  const pinAbove = () => {
+    if (!scroll || scroll.isDestroyed) return
+    if (scroll.stickyScroll && scroll.scrollTop >= scroll.scrollHeight - scroll.viewport.height) return
+    const node = scroll.getChildren().find((node) => node.height > 0 && node.y + node.height > scroll.viewport.y)
+    if (node) afterLayout(scroll.anchor(node))
   }
 
   // Tail-first transcript mounting: only the newest rows mount when the session opens. Older rows
@@ -435,16 +448,18 @@ export function Session(props: {
     sessionID: () => route.sessionID,
     more: (id) => data.session.message.more(id),
     loadMore: async (id) => {
-      await data.session.message.loadMore(id)
+      const beforePublish = () => {
+        if (route.sessionID === id) pinAbove()
+      }
+      await data.session.message.loadMore(id, { beforePublish })
       await completeGroupBoundary({
         rows,
         messages: () => data.session.message.list(id).length,
         more: () => data.session.message.more(id),
-        loadMore: () => data.session.message.loadMore(id),
+        loadMore: () => data.session.message.loadMore(id, { beforePublish }),
         active: () => route.sessionID === id,
       })
     },
-    height: () => scroll.scrollHeight,
     afterLayout,
     active: (id) => route.sessionID === id && Boolean(scroll && !scroll.isDestroyed),
     scrollBy: (amount) => {
@@ -458,11 +473,11 @@ export function Session(props: {
     if (revealingOlderRows || !scroll || scroll.isDestroyed || scroll.scrollTop > scroll.viewport.height) return false
     if (current === 0) return prependHistory(scrollBy)
     revealingOlderRows = true
-    const before = scroll.scrollHeight
     scroll.stickyScroll = false
+    pinAbove()
     setHiddenRows(rowsBefore(weights(), current, TRANSCRIPT_BACKFILL_CHUNK))
     afterLayout(() => {
-      scroll.scrollBy(scroll.scrollHeight - before + scrollBy)
+      scroll.scrollBy(scrollBy)
       scroll.stickyScroll = !navigationMessage()
       revealingOlderRows = false
     })
@@ -520,6 +535,11 @@ export function Session(props: {
       return true
     if (visibleEnd() < rows.length) return true
     return scroll.scrollTop < Math.max(0, scroll.scrollHeight - scroll.viewport.height)
+  }
+  // Content that shrinks under a reader at the top, like a collapsed group, scrolls nothing, so no scroll event
+  // clears "Jump to latest".
+  function contentResized() {
+    if (awayFromBottom()) updateAwayFromBottom()
   }
   function updateAwayFromBottom() {
     const preserveWindow = revealingOlderRows || revealingNewerRows || !!ensureAllRowsPending || !!firstJump()
@@ -633,39 +653,49 @@ export function Session(props: {
     "go-upsell",
     { initial: {} },
   )
-  const handledFreeLimits = new Set<string>()
+  const handledLimits = new Set<string>()
   useUsageAlerts(() => route.sessionID)
   let sessionDisposed = false
   onCleanup(() => {
     sessionDisposed = true
   })
-  // Restore the prompt when the free allowance stops it, and offer OpenCode Go on the first hit in a day.
+  // Restore the prompt when the free allowance or an OpenCode Go limit stops it, and offer OpenCode Go on the first free
+  // allowance hit in a day.
   onCleanup(
-    data.on("session.step.failed", (event) => {
-      if (event.data.sessionID !== route.sessionID || event.data.error.type !== "provider.free-limit") return
-      if (handledFreeLimits.has(event.data.assistantMessageID)) return
-      handledFreeLimits.add(event.data.assistantMessageID)
-      const current = prompt()
-      const wasEmpty = Boolean(
-        current &&
-          !current.current.text.trim() &&
-          !current.current.files?.length &&
-          !current.current.agents?.length &&
-          !current.current.skills?.length &&
-          !current.current.pasted.length,
-      )
-      if (!wasEmpty || !current) return
+    data.on("session.step.failed", async (event) => {
+      const type = event.data.error.type
+      if (event.data.sessionID !== route.sessionID) return
+      if (type !== "provider.free-limit" && type !== "provider.go-limit") return
+      if (handledLimits.has(event.data.assistantMessageID)) return
+      handledLimits.add(event.data.assistantMessageID)
+      const empty = (ref: PromptRef | undefined): ref is PromptRef =>
+        !!ref &&
+        !ref.current.text.trim() &&
+        !ref.current.files?.length &&
+        !ref.current.agents?.length &&
+        !ref.current.skills?.length &&
+        !ref.current.pasted.length
+      if (!empty(prompt())) return
       const list = messages()
       const end = list.findIndex((item) => item.id === event.data.assistantMessageID)
-      for (let i = end - 1; i >= 0; i--) {
+      let recalled: SessionMessageUser | undefined
+      for (let i = end - 1; i >= 0 && !recalled; i--) {
         const item = list[i]
         if (!item || item.type === "shell" || item.type === "idle") break
-        if (item.type === "user" && !data.session.input.has(route.sessionID, item.id)) {
-          current.set({ ...projectedPromptInput(item), pasted: [] })
-          break
-        }
+        if (item.type === "user" && !data.session.input.has(route.sessionID, item.id)) recalled = item
       }
-      if (dialog.stack.length > 0) return
+      const restored = recalled
+        ? await restorePrompt(recalled).catch((error) => {
+            toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
+            return null
+          })
+        : undefined
+      // Media refs load before the prompt comes back; typing or a shell command meanwhile keeps it and skips the offer.
+      if (restored === null || sessionDisposed || route.sessionID !== event.data.sessionID) return
+      const current = prompt()
+      if (!empty(current) || current.mode !== "normal") return
+      if (restored) current.set(restored)
+      if (type === "provider.go-limit" || dialog.stack.length > 0) return
       if (goUpsell.dontShow || goUpsellMemory.dontShow) return
       const now = Date.now()
       const seen = Math.max(goUpsell.lastSeenAt ?? 0, goUpsellMemory.lastSeenAt ?? 0)
@@ -744,25 +774,33 @@ export function Session(props: {
     }),
   )
   const runPendingAction = createSingleFlight<string>()
-  const mutatePending = async (action: PendingAction, inboxID: string, failureLabel?: string) => {
-    const result = await runPendingAction(inboxID, async () => {
-      const request =
-        action === "steer"
-          ? client.api.session.inbox.update({ sessionID: route.sessionID, inboxID, delivery: "steer" })
-          : action === "queue"
-            ? client.api.session.inbox.update({ sessionID: route.sessionID, inboxID, delivery: "queue" })
-            : client.api.session.inbox.cancel({ sessionID: route.sessionID, inboxID })
-      const error = await request.then(
-        () => undefined,
-        (error) => error,
-      )
-      if (!error) return true
-      const label = failureLabel ?? (action === "cancel" ? "delete" : action)
-      toast.show({ title: `Failed to ${label} pending prompt`, message: errorMessage(error), variant: "error" })
-      return false
-    })
-    return result ?? false
+  // Uses the captured sessionID: after an await, route.sessionID may already name another tab, or none.
+  const requestPending = async (action: PendingAction, inboxID: string, failureLabel?: string) => {
+    const request =
+      action === "steer"
+        ? client.api.session.inbox.update({ sessionID, inboxID, delivery: "steer" })
+        : action === "queue"
+          ? client.api.session.inbox.update({ sessionID, inboxID, delivery: "queue" })
+          : client.api.session.inbox.cancel({ sessionID, inboxID })
+    const error = await request.then(
+      () => undefined,
+      (error) => error,
+    )
+    if (!error) return true
+    const label = failureLabel ?? (action === "cancel" ? "delete" : action)
+    toast.show({ title: `Failed to ${label} pending prompt`, message: errorMessage(error), variant: "error" })
+    return false
   }
+  const mutatePending = async (action: PendingAction, inboxID: string) =>
+    (await runPendingAction(inboxID, () => requestPending(action, inboxID))) ?? false
+  // The cancel releases blobs nothing else references, so media refs load into the draft first. Resolves with the
+  // composer it wrote to, if any, once the prompt is back; undefined if the cancel failed or was already running.
+  const undoPending = (inboxID: string, message: ProjectedPrompt, failureLabel?: string) =>
+    runPendingAction(inboxID, async () => {
+      const restored = await restorePrompt(message)
+      if (!(await requestPending("cancel", inboxID, failureLabel))) return
+      return { composer: appendToSessionPrompt(sessionID, restored, renderer.widthMethod) }
+    })
   const openQueuedPrompts = () =>
     dialog.replace(() => (
       <DialogSelect
@@ -801,19 +839,19 @@ export function Session(props: {
                 toast.show({ message: "Leave shell mode before undoing a queued prompt", variant: "error" })
                 return
               }
-              void mutatePending("cancel", queued.id, "undo").then((undone) => {
-                if (!undone) return
-                target.setMode("normal")
-                target.set(
-                  appendPrompt(
-                    target.current,
-                    { ...projectedPromptInput(queued.payload), pasted: [] },
-                    renderer.widthMethod,
-                  ),
+              void undoPending(queued.id, queued.payload, "undo")
+                .then((undone) => {
+                  if (!undone || sessionDisposed) return
+                  dialog.clear()
+                  undone.composer?.focus()
+                })
+                .catch((error) =>
+                  toast.show({
+                    title: "Failed to undo pending prompt",
+                    message: errorMessage(error),
+                    variant: "error",
+                  }),
                 )
-                dialog.clear()
-                target.focus()
-              })
             },
           },
         ]}
@@ -870,6 +908,109 @@ export function Session(props: {
       const message = data.session.message.get(route.sessionID, messageID)
       alignMessage(messageID, Math.max(0, y - (message?.type === "assistant" ? 1 : 0)))
     })
+
+  // Find, like the web app's: plain case-insensitive text over the loaded prompts and assistant
+  // text. A new query selects the first match; a selected match that goes away falls back to it.
+  const findEnabled = useSessionFindExperiment()
+  const [findOpen, setFindOpen] = createSignal(false)
+  const [findFocus, setFindFocus] = createSignal(0)
+  const [findQuery, setFindQuery] = createSignal("")
+  const [findSelected, setFindSelected] = createSignal<FindMatch>()
+  const findActivePattern = createMemo(() => (findOpen() ? findPattern(findQuery()) : undefined), undefined, {
+    equals: (previous, next) => previous?.source === next?.source,
+  })
+  // How many matches each rendered part shows, which can differ from its source.
+  const [findShown, setFindShown] = createStore<Record<string, { source: string; text: string; count: number }>>({})
+  const findList = createMemo(() => {
+    const pattern = findActivePattern()
+    if (!pattern) return []
+    return findMatches(
+      findParts(rows, (messageID) => data.session.message.get(route.sessionID, messageID)),
+      pattern,
+      (part) => {
+        const shown = findShown[`${part.messageID}:${part.partID}`]
+        return shown?.source === pattern.source && shown.text === part.text ? shown.count : undefined
+      },
+    )
+  })
+  const findIndex = createMemo(() => Math.max(0, findList().findIndex((match) => sameFindMatch(match, findSelected()))))
+  const findCurrent = () => findList()[findIndex()]
+  // The match a reveal is waiting for, and where a part last rendered the current match.
+  let findSeek: FindMatch | undefined
+  let findSpot: { match: FindMatch; pattern: RegExp; row: () => number | undefined } | undefined
+
+  // Every row mounts, so each part counts what it shows, even when no source has a match.
+  const revealFind = (match: FindMatch | undefined) => {
+    findSeek = match
+    if (findActivePattern()) ensureAllRows(() => match && locateFind(match))
+  }
+  const locateFind = (match: FindMatch) => {
+    if (findSeek !== match || !scroll || scroll.isDestroyed) return
+    const spot = findSpot
+    const row =
+      spot && sameFindMatch(spot.match, match) && spot.pattern === findActivePattern() ? spot.row() : undefined
+    if (row !== undefined) {
+      findSeek = undefined
+      centerFind(match.messageID, row)
+      return
+    }
+    // Until the match's block paints and reports its row, bring the part on screen.
+    const anchor = anchors.get({ type: "part", ref: { messageID: match.messageID, partID: match.partID } })
+    if (!anchor) return
+    const viewport = scroll.viewport
+    if (anchor.node.y + anchor.node.height > viewport.y && anchor.node.y < viewport.y + viewport.height) return
+    centerFind(match.messageID, anchor.node.y)
+  }
+  const centerFind = (messageID: string, y: number) => {
+    const slack = scroll.getRenderable(NAVIGATION_SLACK_ID)?.height ?? 0
+    const top = scroll.scrollTop + y - scroll.viewport.y - Math.floor(scroll.viewport.height / 2)
+    alignMessage(messageID, Math.max(0, Math.min(top, scroll.scrollHeight - slack - scroll.viewport.height)))
+  }
+  const searchFind = (value: string) => {
+    const previous = findActivePattern()
+    batch(() => {
+      setFindQuery(value)
+      // Whitespace or case changes keep the current match.
+      if (findActivePattern() === previous) return
+      setFindSelected(undefined)
+      revealFind(findCurrent())
+    })
+  }
+  const moveFind = (delta: 1 | -1) => {
+    const list = findList()
+    if (list.length === 0) return
+    const next = list[(findIndex() + delta + list.length) % list.length]
+    batch(() => {
+      setFindSelected(next)
+      revealFind(next)
+    })
+  }
+  // Parts recount once they render, which can change the current match without a key press.
+  createEffect(
+    on(
+      findCurrent,
+      (match, previous) => {
+        if (!sameFindMatch(match, previous) && !sameFindMatch(match, findSeek)) revealFind(match)
+      },
+      { defer: true },
+    ),
+  )
+  // The prompt refocuses itself once it is visible again.
+  const closeFind = () => {
+    findSeek = undefined
+    batch(() => {
+      setFindOpen(false)
+      setFindQuery("")
+      setFindSelected(undefined)
+      setFindShown(reconcile({}))
+    })
+  }
+  // Find lives in the prompt's place, so a permission, form or composer that replaces the prompt closes it.
+  createEffect(
+    on(prompt, (ref) => {
+      if (!ref && findOpen()) closeFind()
+    }),
+  )
 
   function toBottom() {
     clearMessageNavigation()
@@ -1050,13 +1191,21 @@ export function Session(props: {
       group: "Session",
       slash: { name: "timeline" },
       run: () => {
-        dialog.replace(() => (
-          <DialogTimeline
-            sessionID={route.sessionID}
-            onMove={jumpToMessage}
-            setPrompt={(value) => promptRef.current?.set(value)}
-          />
-        ))
+        dialog.replace(() => <DialogTimeline sessionID={route.sessionID} onMove={jumpToMessage} />)
+      },
+    },
+    {
+      title: "Find in session",
+      id: "session.find",
+      group: "Session",
+      enabled: findEnabled() && !!prompt(),
+      slash: { name: "find" },
+      run: () => {
+        dialog.clear()
+        batch(() => {
+          setFindOpen(true)
+          setFindFocus((count) => count + 1)
+        })
       },
     },
     {
@@ -1114,21 +1263,16 @@ export function Session(props: {
           dialog.clear()
           return
         }
-        const sessionID = route.sessionID
-        const target = prompt()
-        void (async () => {
-          if (pendingDeliveries().has(message.id)) {
-            if (!(await mutatePending("cancel", message.id))) return
-          } else {
-            await client.api.session.interrupt({ sessionID })
-            await client.api.session.wait({ sessionID })
-            await client.api.session.revert.stage({ sessionID, messageID: message.id })
-          }
-          target?.set({
-            ...projectedPromptInput(message),
-            pasted: [],
-          })
-        })().catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
+        const undo = pendingDeliveries().has(message.id)
+          ? undoPending(message.id, message)
+          : (async () => {
+              const restored = await restorePrompt(message)
+              await client.api.session.interrupt({ sessionID })
+              await client.api.experimental.session.wait({ sessionID })
+              await client.api.session.revert.stage({ sessionID, messageID: message.id })
+              appendToSessionPrompt(sessionID, restored, renderer.widthMethod)
+            })()
+        void undo.catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
         dialog.clear()
       },
     },
@@ -1321,7 +1465,7 @@ export function Session(props: {
         try {
           const sessionData = session()
           if (!sessionData) return
-          const transcript = await client.api.session.export({ sessionID: sessionData.id })
+          const transcript = await client.api.experimental.session.export({ sessionID: sessionData.id })
           const content = formatSessionTranscript(transcript.info, transcript.messages, true)
           await clipboard.write(content)
           toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
@@ -1347,7 +1491,7 @@ export function Session(props: {
 
           if (options === null) return
 
-          const transcript = await client.api.session.export({
+          const transcript = await client.api.experimental.session.export({
             sessionID: sessionData.id,
             sanitize: options.format === "json" ? options.sanitize : undefined,
           })
@@ -1364,7 +1508,7 @@ export function Session(props: {
           }
 
           const filepath = path.join(
-            tmpdir(),
+            options.location === "temp" ? tmpdir() : paths.cwd,
             `session-${crypto.randomUUID()}.${options.format === "markdown" ? "md" : "json"}`,
           )
           await writeExport(filepath, content)
@@ -1389,9 +1533,10 @@ export function Session(props: {
       title: "Toggle subagent picker",
       id: "session.child.first",
       group: "Session",
-      run: () => {
-        if (composer.open || session()?.parentID) setComposer("open", false)
-        else setComposer({ open: true, tab: "subagents" })
+      run: (tab?: string) => {
+        if (tab === "shell" || tab === "subagents" || tab === "scripts") setComposer({ open: true, tab })
+        else if (composer.open || session()?.parentID) setComposer("open", false)
+        else setComposer({ open: true, tab: openingTab() })
         dialog.clear()
       },
     },
@@ -1439,6 +1584,7 @@ export function Session(props: {
   }))
 
   Keymap.createLayer(() => ({
+    mode: "composer",
     enabled: () => renderer.currentFocusedEditor === null,
     bindings: baseAndUnfocusedCommands.map((command) => command.id),
   }))
@@ -1471,13 +1617,8 @@ export function Session(props: {
           // A group that ends the transcript would open off screen while the reader follows the bottom.
           const last = rows.findLast((row) => row.type !== "assistant-footer" && row.type !== "turn-usage")
           const ending = last?.type === "group" && groupID(last, 0) === id
-          if (anchor && !(ending && !isAwayFromBottom())) {
-            const hold = { node: anchor, top: layoutTop(anchor) - scroll.scrollTop }
-            held = hold
-            afterLayout(() => {
-              if (held === hold) held = undefined
-            })
-          }
+          // Keeps the toggled disclosure's header on its viewport row through the next layout.
+          if (anchor && !(ending && !isAwayFromBottom())) afterLayout(scroll.anchor(anchor))
           sessionTabs.setGroupExpanded(sessionID, id, expanded)
           afterLayout(saveScrollAnchor)
         },
@@ -1503,6 +1644,23 @@ export function Session(props: {
         config,
         mutatePending,
         pendingDelivery: (inboxID) => pendingDeliveries().get(inboxID),
+        find: {
+          pattern: findActivePattern,
+          current: findCurrent,
+          counted: (part, pattern, count) => {
+            const key = `${part.messageID}:${part.partID}`
+            const shown = findShown[key]
+            if (shown?.source === pattern.source && shown.text === part.text && shown.count === count) return
+            setFindShown(key, { source: pattern.source, text: part.text, count })
+          },
+          located: (match, row) => {
+            const pattern = findActivePattern()
+            if (!pattern) return
+            findSpot = { match, pattern, row }
+            const seek = findSeek
+            if (seek && sameFindMatch(seek, match)) afterLayout(() => locateFind(seek))
+          },
+        },
       }}
     >
       <box flexDirection="row" flexGrow={1} minHeight={0}>
@@ -1520,7 +1678,7 @@ export function Session(props: {
                   scroll = r
                   props.scrollRef?.(r)
                   scroll.verticalScrollBar.on("change", updateAwayFromBottom)
-                  scroll.content.on("resize", holdAnchor)
+                  scroll.content.on("resize", contentResized)
                 }}
                 viewportOptions={{
                   paddingRight: showScrollbar() ? 1 : 0,
@@ -1535,6 +1693,8 @@ export function Session(props: {
                 }}
                 stickyScroll={!navigationMessage() && !navigationSlack()}
                 stickyStart="bottom"
+                // Rows never grow or shrink, so a change to one row lays out only that row.
+                contentOptions={{ layoutMode: "list" }}
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
                 onMouseScroll={(event) => {
@@ -1592,7 +1752,7 @@ export function Session(props: {
               <Slot path="session.composer.top" input={{ sessionID: route.sessionID }} />
               <Composer
                 sessionID={route.sessionID}
-                open={composer.open || (!!session()?.parentID && forms().length === 0)}
+                open={composerVisible()}
                 defaultTab={composer.tab ?? (session()?.parentID ? "subagents" : undefined)}
                 onClose={() => {
                   const parent = session()?.parentID
@@ -1606,11 +1766,11 @@ export function Session(props: {
                 visibleTerminalID={props.visibleTerminalID}
               />
               <Switch>
-                <Match when={composer.open || (!!session()?.parentID && forms().length === 0)}>{null}</Match>
+                <Match when={composerVisible()}>{null}</Match>
                 <Match when={promptedPermissions().length > 0}>
-                  <Show when={promptedPermissions()[0]?.id} keyed>
+                  <Show when={promptedPermission()?.id} keyed>
                     {(_) => {
-                      const request = promptedPermissions()[0]
+                      const request = promptedPermission()
                       return request ? (
                         <PermissionPrompt request={request} directory={session()?.location.directory} />
                       ) : null
@@ -1638,12 +1798,24 @@ export function Session(props: {
                   />
                 </Match>
                 <Match when={!disabled()}>
+                  <Show when={findOpen()}>
+                    <FindBar
+                      query={findQuery()}
+                      index={findIndex()}
+                      count={findList().length}
+                      focus={findFocus()}
+                      onInput={searchFind}
+                      onMove={moveFind}
+                      onClose={closeFind}
+                    />
+                  </Show>
+                  {/* Hidden rather than unmounted, so the draft, cursor and undo history survive Find. */}
                   <Prompt
-                    visible={true}
+                    visible={!findOpen()}
                     ref={bind}
                     muted={props.promptMuted}
                     onSubmit={() => {
-                      toBottom()
+                      if (config.session?.submit_scroll !== "keep") toBottom()
                     }}
                     onEmptySubmit={async () => {
                       const next = queuedPrompts()[0]
@@ -1899,8 +2071,7 @@ function BackgroundToolHint(props: { messages: SessionMessageInfo[] }) {
     )
     const part = current?.content.find((part): part is SessionMessageAssistantTool => {
       if (part.type !== "tool" || part.state.status !== "running") return false
-      const name = canonicalToolName(part.name)
-      return name === "shell" || name === "subagent"
+      return canonicalToolName(part.name) === "shell"
     })
     if (!current || !part) return
     return { key: `${current.id}:${part.id}`, started: part.time.ran ?? part.time.created }
@@ -1985,6 +2156,7 @@ function SessionPartView(props: {
           <Match when={item().type === "text"}>
             <TextPart
               part={item() as SessionMessageAssistantText}
+              partID={props.partRef.partID}
               message={message() as SessionMessageAssistant}
               last={false}
             />
@@ -2103,16 +2275,23 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const [hover, setHover] = createSignal(false)
   const metadata = () => (props.message.type === "synthetic" ? props.message.metadata : undefined)
   const source = () => stringValue(metadata()?.source)
-  const completion = () => source() === "subagent" || source() === "shell"
+  const completion = () => source() === "subagent" || source() === "shell" || source() === "codemode"
   const childID = () => (source() === "subagent" ? stringValue(metadata()?.childID) : undefined)
   const state = () => stringValue(metadata()?.state)
-  const actor = () => (source() === "shell" ? "Shell" : Locale.titlecase(stringValue(metadata()?.agent) ?? "Subagent"))
+  const actor = () => {
+    if (source() === "shell") return "Shell"
+    if (source() === "codemode") return "Script"
+    return Locale.titlecase(stringValue(metadata()?.agent) ?? "Subagent")
+  }
   const text = () => {
     if (props.message.type === "system") return props.message.description ?? "Instructions updated"
     if (props.message.type === "synthetic") return props.message.description ?? ""
     return ""
   }
-  const description = () => (source() === "shell" ? text().replace(/\s+/g, " ").trim() : text())
+  const description = () => {
+    if (source() === "codemode") return stringValue(metadata()?.jobID) ?? ""
+    return source() === "shell" ? text().replace(/\s+/g, " ").trim() : text()
+  }
   const status = () => {
     if (state() === "completed") return "finished"
     if (state() === "error") return "failed"
@@ -2130,7 +2309,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
     <Show
       when={completion()}
       fallback={
-        <InlineToolRow icon="◈" color={theme.text.muted} pending="Notice" complete={true}>
+        <InlineToolRow icon={source() === "goal" ? "◎" : "◈"} color={theme.text.muted} pending="Notice" complete={true}>
           {text()}
         </InlineToolRow>
       }
@@ -2173,6 +2352,8 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
   const text = () =>
     props.message.status === "failed" ? (cancelled() ? "" : props.message.error.message) : props.message.summary
   const content = createMemo(() => text().trim())
+  const links = useSessionLinks()
+  const find = useFindHighlight(() => ({ messageID: props.message.id, partID: "message", text: content() }))
   const color = () => (status() === "failed" && !cancelled() ? theme.text.feedback.error.base : theme.text.muted)
   // Usage of the compaction request itself; the resulting context size only shows on the next assistant step.
   const usage = () => {
@@ -2215,12 +2396,15 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
       <Show when={content()}>
         <box paddingTop={1} paddingLeft={3}>
           <markdown
+            ref={(renderable) => {
+              links(renderable)
+              find(renderable)
+            }}
             syntaxStyle={syntax()}
-            renderNode={plugins.markdown()}
-            streaming={true}
-            internalBlockMode="top-level"
+            renderBlock={plugins.markdown()}
+            streaming={status() === "running"}
             content={content()}
-            tableOptions={{ style: "grid", cellPaddingX: 1 }}
+            tableOptions={{ style: "grid", cellPaddingX: 1, borderColor: theme.border.base }}
             conceal={ctx.markdownMode() === "rendered"}
             fg={theme.markdown.text}
             bg={theme.background.base}
@@ -2286,6 +2470,7 @@ function RevertMessage(props: {
         paddingTop={1}
         paddingBottom={1}
         paddingLeft={2}
+        paddingRight={2}
         backgroundColor={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
       >
         <text fg={theme.text.muted}>
@@ -2302,7 +2487,7 @@ function RevertMessage(props: {
                     maxWidth={Math.max(
                       2,
                       ctx.width -
-                        5 -
+                        7 -
                         (file.additions > 0 ? stringWidth(`+${file.additions}`) + 1 : 0) -
                         (file.deletions > 0 ? stringWidth(`-${file.deletions}`) + 1 : 0),
                     )}
@@ -2351,11 +2536,14 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const newDesigns = useNewDesigns()
   const data = useData()
   const local = useLocal()
-  const files = createMemo(() => deduplicateVisibleImages(props.message.files ?? []))
+  // Opted-in reads leave stored files as `media:` refs, a PromptAttachment variant the generated message type omits.
+  const files = createMemo(() => deduplicateVisibleImages<PromptAttachment>(props.message.files ?? []))
   const skills = createMemo(() => props.message.skills ?? [])
   const images = createMemo(() =>
     files().flatMap((file) =>
-      file.mime.startsWith("image/") ? [{ uri: `data:${file.mime};base64,${file.data}` }] : [],
+      file.mime.startsWith("image/")
+        ? [{ uri: "uri" in file ? file.uri : `data:${file.mime};base64,${file.data}` }]
+        : [],
     ),
   )
   const themes = useThemes()
@@ -2366,7 +2554,6 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const delivery = createMemo(() => ctx.pendingDelivery(props.message.id))
   const dialog = useDialog()
   const renderer = useRenderer()
-  const promptRef = usePromptRef()
 
   const updatePendingSteer = async (action: "queue" | "cancel") => {
     if (await ctx.mutatePending(action, props.message.id)) dialog.clear()
@@ -2388,8 +2575,10 @@ function UserMessage(props: { message: SessionMessageUser }) {
           onMouseOut={() => {
             setHover(false)
           }}
-          onMouseUp={() => {
+          onMouseUp={(event) => {
             if (renderer.getSelection()?.getSelectedText()) return
+            // The app opens the clicked link.
+            if (clickedLink(renderer, event)) return
             if (delivery() === "steer") {
               dialog.replace(() => (
                 <DialogSelect
@@ -2408,21 +2597,19 @@ function UserMessage(props: { message: SessionMessageUser }) {
             }
             // The dialog outlives this row, whose props go stale when a resync drops the message.
             const messageID = props.message.id
-            dialog.replace(() => (
-              <DialogMessage
-                messageID={messageID}
-                sessionID={ctx.sessionID}
-                setPrompt={(value) => promptRef.current?.set(value)}
-              />
-            ))
+            dialog.replace(() => <DialogMessage messageID={messageID} sessionID={ctx.sessionID} />)
           }}
           paddingTop={1}
           paddingBottom={1}
           paddingLeft={2}
+          paddingRight={2}
           backgroundColor={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
           flexShrink={0}
         >
-          <text fg={theme.text.base}>{props.message.text}</text>
+          <FindText
+            part={{ messageID: props.message.id, partID: "message", text: props.message.text }}
+            fg={theme.text.base}
+          />
           <Show when={skills().length}>
             <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
               <For each={skills()}>
@@ -2497,7 +2684,7 @@ function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOp
         paddingTop={1}
         paddingBottom={1}
         paddingLeft={2}
-        paddingRight={1}
+        paddingRight={2}
         backgroundColor={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
         flexDirection="row"
       >
@@ -2672,7 +2859,7 @@ function SessionImages(props: { images: readonly { uri: string }[]; paddingLeft?
       >
         <For each={visible()}>
           {(image, index) => {
-            const [failed, setFailed] = createSignal(false)
+            const media = createMediaSource(() => image.uri)
             return (
               <box
                 width={height() * 2}
@@ -2687,14 +2874,14 @@ function SessionImages(props: { images: readonly { uri: string }[]; paddingLeft?
                   dialog.replace(() => <DialogImagePreview images={images()} initial={index()} />)
                 }}
               >
-                <Show when={!failed()} fallback={<text>No preview</text>}>
+                <Show when={!media.failed()} fallback={<text>No preview</text>}>
                   <image
-                    source={image.uri}
+                    source={media.source()}
                     fit="cover"
                     protocol="auto"
                     width="100%"
                     height="100%"
-                    onError={() => setFailed(true)}
+                    onError={media.onError}
                   />
                 </Show>
               </box>
@@ -2715,7 +2902,10 @@ function SessionImages(props: { images: readonly { uri: string }[]; paddingLeft?
 
 function inlineToolImages(part: SessionMessageAssistantTool) {
   return toolDisplayContent(part.state).flatMap((content) =>
-    content.type === "file" && content.mime.startsWith("image/") && content.uri.startsWith("data:image/")
+    content.type === "file" &&
+    content.mime.startsWith("image/") &&
+    // An emptied `data:` URI is a payload the store dropped while previews were off.
+    ((content.uri.startsWith("data:image/") && !content.uri.endsWith(",")) || mediaHashFromUri(content.uri))
       ? [{ uri: content.uri }]
       : [],
   )
@@ -2907,6 +3097,7 @@ function BlockTool(props: BlockToolProps) {
       paddingTop={1}
       paddingBottom={1}
       paddingLeft={2}
+      paddingRight={2}
       gap={1}
       backgroundColor={hover() ? theme.decrease(background()) : background()}
       customBorderChars={SplitBorder.customBorderChars}
@@ -2960,7 +3151,7 @@ function BlockTool(props: BlockToolProps) {
             </Show>
             <FilePath
               value={path().value}
-              maxWidth={Math.max(2, ctx.width - 4 - stringWidth(path().label) - (props.spinner ? 2 : 0))}
+              maxWidth={Math.max(2, ctx.width - 6 - stringWidth(path().label) - (props.spinner ? 2 : 0))}
               fg={permission() ? theme.text.feedback.warning.base : (props.headerColor ?? theme.text.muted)}
             />
           </box>
@@ -2977,6 +3168,7 @@ function BlockTool(props: BlockToolProps) {
 const SHELL_DISPLAY_LIMIT = 1024 * 1024
 
 function Shell(props: ToolProps) {
+  const stopped = createMemo(() => stoppedShell(props.part, props.metadata))
   return (
     <ShellDisplay
       part={props.part}
@@ -2985,9 +3177,20 @@ function Shell(props: ToolProps) {
       workdir={stringValue(props.input.workdir)}
       status={props.part.state.status}
       background={props.part.state.status === "completed" && props.metadata.status === "running"}
-      output={stringValue(props.metadata.shellID) ? undefined : props.output}
+      output={stopped()?.output ?? (stringValue(props.metadata.shellID) ? undefined : props.output)}
+      error={stopped()?.notice}
     />
   )
+}
+
+// A call the user stopped fails with its output followed by a notice, which its metadata names. Its output shows like
+// a finished call's and only the notice as the error. A plugin that rewrote the error gets it shown as is.
+function stoppedShell(part: SessionMessageAssistantTool, metadata: Record<string, unknown>) {
+  if (part.state.status !== "error" || metadata.interrupted !== true) return
+  const notice = stringValue(metadata.notice)
+  const message = part.state.error.message
+  if (!notice || !message.endsWith(notice)) return
+  return { output: message.slice(0, -notice.length).replace(/\n+$/, ""), notice }
 }
 
 function ShellDisplay(props: {
@@ -3046,7 +3249,7 @@ function ShellDisplay(props: {
           const next = stripAnsi(output + response.data.output)
           if (next.length <= SHELL_DISPLAY_LIMIT) return next
           setOutputTruncated(true)
-          return next.slice(-SHELL_DISPLAY_LIMIT)
+          return TextBoundary.tail(next, SHELL_DISPLAY_LIMIT)
         })
       if (response.data.cursor <= cursor) break
       cursor = response.data.cursor
@@ -3087,7 +3290,7 @@ function ShellDisplay(props: {
     return stripAnsi(props.output?.trim() ?? "")
   })
   const maxLines = 10
-  const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6 - (isRunning() ? 2 : 0)))
+  const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 8 - (isRunning() ? 2 : 0)))
   const prefix = createMemo(() => (workdir() && workdir() !== "." ? `cd ${workdir()} && ` : ""))
   const input = createMemo(() => (props.command ? `${isRunning() ? "" : "$ "}${prefix()}${props.command}` : ""))
   const collapsed = createMemo(() => collapseShellOutput(input(), output(), maxLines, maxChars()))
@@ -3227,7 +3430,7 @@ function Read(props: ToolProps) {
       <For each={loaded()}>
         {(filepath) => (
           <box paddingLeft={3}>
-            <text paddingLeft={3} fg={theme.text.muted}>
+            <text fg={theme.text.muted}>
               ↳ Loaded {pathFormatter.format(filepath)}
             </text>
           </box>
@@ -3286,7 +3489,13 @@ function WebSearch(props: ToolProps) {
 function Subagent(props: ToolProps) {
   const { navigate } = useRoute()
   const data = useData()
-  const sessionID = createMemo(() => stringValue(props.metadata.sessionID) ?? stringValue(props.metadata.sessionId))
+  const sessionID = createMemo(
+    () =>
+      stringValue(props.metadata.sessionID) ??
+      stringValue(props.metadata.sessionId) ??
+      // A failed continuation may name an unrelated session, such as the parent itself.
+      (props.part.state.status === "error" ? undefined : stringValue(props.input.sessionID)),
+  )
   const description = createMemo(() => stringValue(props.input.description))
   const continuation = createMemo(() => Boolean(stringValue(props.input.sessionID)))
   const model = createMemo(() => subagentModelLabel(stringValue(props.input.model), data.location.model.list()))
@@ -3297,8 +3506,8 @@ function Subagent(props: ToolProps) {
 
   return (
     <InlineTool
-      icon={continuation() ? "↳" : isRunning() ? "│" : props.part.state.status === "completed" ? "✓" : "│"}
-      spinner={!continuation() && isRunning()}
+      icon={isRunning() ? "│" : continuation() ? "↳" : props.part.state.status === "completed" ? "✓" : "│"}
+      spinner={isRunning()}
       running={isRunning()}
       complete={description()}
       pending="Delegating…"
@@ -3307,11 +3516,6 @@ function Subagent(props: ToolProps) {
         const id = sessionID()
         if (id) navigate({ type: "session", sessionID: id })
       }}
-      status={
-        isBackgroundSubagent(props.metadata, props.part.state.status) ? (
-          <StatusBadge>Background</StatusBadge>
-        ) : undefined
-      }
     >
       {`${continuation() ? "Continue subagent" : `${Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General")} Subagent`} — ${description() ?? "Subagent"}${model() ? ` · ${model()}` : ""}`}
     </InlineTool>
@@ -3329,13 +3533,6 @@ export function subagentModelLabel(
   const modelID = separator === -1 ? reference : reference.slice(separator + 1)
   const name = models?.find((item) => item.providerID === providerID && item.id === modelID)?.name
   return `${name ?? reference}${variant ? ` (${variant})` : ""}`
-}
-
-export function isBackgroundSubagent(
-  metadata: Record<string, unknown>,
-  status: SessionMessageAssistantTool["state"]["status"],
-) {
-  return status === "completed" && metadata.status === "running"
 }
 
 export { executeCallSummary }
@@ -3399,6 +3596,8 @@ function Execute(props: ToolProps) {
   const dialog = useDialog()
   const isLoading = createMemo(() => props.part.state.status === "streaming" || props.part.state.status === "running")
   const calls = createMemo(() => executeCalls(props.metadata.toolCalls))
+  // One block per change a script made, in order; a change past the size cap or to a binary file has no patch.
+  const files = createMemo(() => parseScriptChanges(props.metadata.files))
   const output = createMemo(() => stripAnsi(props.output?.trim() ?? ""))
   const hasRuntimeError = createMemo(() => props.metadata.error === true || props.part.state.status === "error")
   const outputPreview = createMemo(() => collapseToolOutput(output(), 4, 4 * Math.max(20, ctx.width - 6)).output)
@@ -3428,12 +3627,17 @@ function Execute(props: ToolProps) {
         <box paddingLeft={3}>
           <For each={outputPreview().split("\n")}>
             {(line, index) => (
-              <text paddingLeft={3} fg={theme.text.feedback.error.base}>
+              <text fg={theme.text.feedback.error.base}>
                 {index() === 0 ? "↳ " : "  "}
                 {line}
               </text>
             )}
           </For>
+        </box>
+      </Show>
+      <Show when={files().length > 0}>
+        <box marginTop={1}>
+          <PatchedFiles files={files()} />
         </box>
       </Show>
     </>
@@ -3462,7 +3666,7 @@ function Edit(props: ToolProps) {
       <Match when={file()}>
         {(item) => (
           <BlockTool path={{ label: "← Edit", value: pathFormatter.format(path()) }} part={props.part}>
-            <box paddingLeft={1}>
+            <box paddingLeft={1} paddingRight={1}>
               <PatchDiff
                 diff={item().patch}
                 hunkFg={theme.diff.text.hunkHeader}
@@ -3507,7 +3711,6 @@ function Edit(props: ToolProps) {
 function ApplyPatch(props: ToolProps) {
   const ctx = use()
   const theme = useTheme()
-  const { currentSyntax: syntax } = useThemes()
   const pathFormatter = usePathFormatter()
   const files = createMemo(() => parseApplyPatchFiles(props.metadata.files))
   const targets = createMemo(() => {
@@ -3525,60 +3728,10 @@ function ApplyPatch(props: ToolProps) {
       return type && resource ? [{ type, resource }] : []
     })
   })
-  const view = createMemo(() => {
-    if (ctx.config.diffs?.view === "unified") return "unified"
-    if (ctx.config.diffs?.view === "split") return "split"
-    return ctx.width > 120 ? "split" : "unified"
-  })
-
   return (
     <Switch>
       <Match when={files().length > 0}>
-        <box flexDirection="column" gap={1}>
-          <For each={files()}>
-            {(file) => (
-              <BlockTool
-                path={{
-                  label: file.type === "add" ? "# Created" : file.type === "delete" ? "# Deleted" : "← Patched",
-                  value: pathFormatter.format(file.relativePath),
-                }}
-                part={props.part}
-              >
-                <Show
-                  when={file.type !== "delete"}
-                  fallback={
-                    <text fg={theme.diff.text.removed}>
-                      -{file.deletions} line{file.deletions !== 1 ? "s" : ""}
-                    </text>
-                  }
-                >
-                  <box paddingLeft={1}>
-                    <PatchDiff
-                      diff={file.patch}
-                      hunkFg={theme.diff.text.hunkHeader}
-                      view={view()}
-                      filetype={filetype(file.relativePath)}
-                      syntaxStyle={syntax()}
-                      showLineNumbers={true}
-                      width="100%"
-                      wrapMode={ctx.diffWrapMode()}
-                      fg={theme.text.base}
-                      addedBg={theme.diff.background.added}
-                      removedBg={theme.diff.background.removed}
-                      contextBg={theme.diff.background.context}
-                      addedSignColor={theme.diff.highlight.added}
-                      removedSignColor={theme.diff.highlight.removed}
-                      lineNumberFg={theme.diff.lineNumber.text}
-                      lineNumberBg={theme.diff.background.context}
-                      addedLineNumberBg={theme.diff.lineNumber.background.added}
-                      removedLineNumberBg={theme.diff.lineNumber.background.removed}
-                    />
-                  </box>
-                </Show>
-              </BlockTool>
-            )}
-          </For>
-        </box>
+        <PatchedFiles files={files()} part={props.part} />
       </Match>
       <Match when={applied().length > 0}>
         <box flexDirection="column" gap={1}>
@@ -3593,7 +3746,7 @@ function ApplyPatch(props: ToolProps) {
               >
                 <FilePath
                   value={file.resource}
-                  maxWidth={Math.max(2, ctx.width - 3)}
+                  maxWidth={Math.max(2, ctx.width - 5)}
                   fg={file.type === "delete" ? theme.diff.text.removed : theme.text.muted}
                 />
               </BlockTool>
@@ -3759,6 +3912,121 @@ function formatSessionTranscript(
     return [`## Assistant\n\n${content.join("\n\n")}`]
   })
   return `# ${withTimestampedFallback(session)}\n\n**Session ID:** ${session.id}\n**Created:** ${new Date(session.time.created).toLocaleString()}\n**Updated:** ${new Date(session.time.updated).toLocaleString()}\n\n---\n\n${body.join("\n\n---\n\n")}\n`
+}
+
+// Files a patch, or a Code Mode script, changed: one block per change with its diff, or its counts when the diff is
+// missing (a deleted file, or a script's change past the size cap). A change without counts shows only its path.
+// Blocks are kept by position, so a running script's stay put as its changes arrive.
+// A script's error and permission request stay on its own row, so its changes take no part.
+function PatchedFiles(props: { files: ReturnType<typeof parseScriptChanges>; part?: ToolProps["part"] }) {
+  const ctx = use()
+  const theme = useTheme()
+  const { currentSyntax: syntax } = useThemes()
+  const pathFormatter = usePathFormatter()
+  const view = createMemo(() => {
+    if (ctx.config.diffs?.view === "unified") return "unified"
+    if (ctx.config.diffs?.view === "split") return "split"
+    return ctx.width > 120 ? "split" : "unified"
+  })
+
+  return (
+    <box flexDirection="column" gap={1}>
+      <Index each={props.files}>
+        {(file) => (
+          <BlockTool
+            path={{
+              label: file().type === "add" ? "# Created" : file().type === "delete" ? "# Deleted" : "← Patched",
+              value: pathFormatter.format(file().relativePath),
+            }}
+            part={props.part}
+          >
+            <Show
+              when={file().type !== "delete" && file().patch.includes("@@")}
+              fallback={
+                <Show when={changeCounts(file())}>
+                  {(counts) => (
+                    <text>
+                      <Show when={counts().additions}>
+                        {(text) => <span style={{ fg: theme.diff.text.added }}>{text()}</span>}
+                      </Show>
+                      <Show when={counts().additions && counts().deletions}> </Show>
+                      <Show when={counts().deletions}>
+                        {(text) => <span style={{ fg: theme.diff.text.removed }}>{text()}</span>}
+                      </Show>
+                      {counts().unit}
+                    </text>
+                  )}
+                </Show>
+              }
+            >
+              <box paddingLeft={1} paddingRight={1}>
+                <PatchDiff
+                  diff={file().patch}
+                  hunkFg={theme.diff.text.hunkHeader}
+                  view={view()}
+                  filetype={filetype(file().relativePath)}
+                  syntaxStyle={syntax()}
+                  showLineNumbers={true}
+                  width="100%"
+                  wrapMode={ctx.diffWrapMode()}
+                  fg={theme.text.base}
+                  addedBg={theme.diff.background.added}
+                  removedBg={theme.diff.background.removed}
+                  contextBg={theme.diff.background.context}
+                  addedSignColor={theme.diff.highlight.added}
+                  removedSignColor={theme.diff.highlight.removed}
+                  lineNumberFg={theme.diff.lineNumber.text}
+                  lineNumberBg={theme.diff.background.context}
+                  addedLineNumberBg={theme.diff.lineNumber.background.added}
+                  removedLineNumberBg={theme.diff.lineNumber.background.removed}
+                />
+              </box>
+            </Show>
+          </BlockTool>
+        )}
+      </Index>
+    </box>
+  )
+}
+
+/**
+ * The line counts a change shows without its diff: "+2 lines", "-40 lines", "+5 -1 lines". Nothing where they are
+ * unknown or zero, so a change without counts shows only its path.
+ */
+export function changeCounts(file: { additions?: number; deletions?: number }) {
+  const additions = file.additions ?? 0
+  const deletions = file.deletions ?? 0
+  if (additions === 0 && deletions === 0) return undefined
+  return {
+    additions: additions > 0 ? `+${additions}` : "",
+    deletions: deletions > 0 ? `-${deletions}` : "",
+    unit: additions + deletions === 1 ? " line" : " lines",
+  }
+}
+
+// A script's changes, like a patch's files, but a change may have no patch and, where nothing could be derived
+// without reading the file, no counts.
+export function parseScriptChanges(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    const file = recordValue(item)
+    const status = stringValue(file?.status)
+    const type =
+      status === "added" ? "add" : status === "deleted" ? "delete" : status === "modified" ? "update" : undefined
+    const relativePath = stringValue(file?.file)
+    if (!file || !type || !relativePath) return []
+    return [
+      {
+        type,
+        relativePath,
+        filePath: relativePath,
+        patch: stringValue(file.patch) ?? "",
+        additions: finiteNumber(file.additions),
+        deletions: finiteNumber(file.deletions),
+        movePath: undefined as string | undefined,
+      },
+    ]
+  })
 }
 
 export function parseApplyPatchFiles(value: unknown) {

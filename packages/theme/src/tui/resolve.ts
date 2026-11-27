@@ -76,17 +76,24 @@ function resolveExpandedTheme(definition: ThemeDefinition): ResolvedTheme {
     ...resolveView(tokens, hue, categorical, hueSteps),
     surface: (name) => views[name],
   })
-  views.dialog = definition["@dialog"] ? view(contextualize(base, definition["@dialog"])) : view(base)
+  const dialog = definition["@dialog"]
+  const dialogTokens = dialog ? contextualize(base, tokens(dialog)) : base
+  views.dialog = view(dialogTokens)
+  // The footer override layers on the dialog surface, so footers keep every dialog token they don't override.
+  const footer = dialog?.["@footer"]
+  views["dialog.footer"] = footer ? view(contextualize(dialogTokens, footer)) : views.dialog
   return view(base)
 }
 
-function tokens(definition: ThemeDefinition): ThemeTokensDefinition {
+function tokens(definition: ThemeTokensDefinition): ThemeTokensDefinition {
   return {
     text: definition.text,
     background: definition.background,
     border: definition.border,
     scrollbar: definition.scrollbar,
     diff: definition.diff,
+    // Optional: an unset key must stay absent, since the resolver rejects undefined values.
+    ...(definition.find ? { find: definition.find } : {}),
     syntax: definition.syntax,
     markdown: definition.markdown,
   }
@@ -138,6 +145,8 @@ function resolveView(
 ): ResolvedThemeTokens {
   const source: Record<string, unknown> = { hue, ...definition }
   const resolved = createResolver(source)(source, "theme") as ResolvedThemeTokens
+  // Themes may leave any find color unset.
+  const find: { text?: { current?: RGBA }; background?: { match?: RGBA; current?: RGBA } } | undefined = resolved.find
   return {
     ...resolved,
     hue,
@@ -151,6 +160,14 @@ function resolveView(
       ...resolved.background,
       action: statefulActions(resolved.background.action),
       formfield: statefulColor(resolved.background.formfield),
+    },
+    // Other matches sit on the highest raised surface; the current match looks like a focused action.
+    find: {
+      text: { current: find?.text?.current ?? resolved.text.action.primary.focused },
+      background: {
+        match: find?.background?.match ?? resolved.background.raised.max,
+        current: find?.background?.current ?? resolved.background.action.primary.focused,
+      },
     },
     ...hueSteps,
   }

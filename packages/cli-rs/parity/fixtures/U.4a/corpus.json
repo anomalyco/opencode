@@ -1,0 +1,6 @@
+{
+  "prose": "# Session notes\n\nThe **runner** keeps *one* step per call. See [the plan](https://opencode.ai/docs) and `Session.prompt`.\n\n## Steps\n\n- Read the inbox\n- Stream the reply\n  - nested detail\n- Finish\n\n1. First\n2. Second\n\n### Done\n\nPlain closing line.\n",
+  "fences": "Two fences:\n\n```ts\nconst answer: number = 42\nexport function greet(name: string) {\n  return `hi ${name}`\n}\n```\n\n```js\n// a comment\nlet items = [1, 2, 3].map((x) => x * 2)\n```\n\nAfter the code.\n",
+  "code": "import { Session } from \"./session\"\n\n// Starts one step.\nexport async function run(id: string) {\n  const session = await Session.get(id)\n  return session.steps.length > 0\n}\n",
+  "diff": "Index: src/math.ts\n===================================================================\n--- src/math.ts\n+++ src/math.ts\n@@ -1,4 +1,4 @@\n export function add(a: number, b: number) {\n-  return a - b\n+  return a + b\n }\n \n@@ -10,3 +10,4 @@\n export function half(x: number) {\n   return x / 2\n+  // unreachable\n }\n"
+}

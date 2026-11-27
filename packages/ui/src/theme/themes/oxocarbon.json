@@ -1,0 +1,55 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Oxocarbon",
+  "id": "oxocarbon",
+  "light": {
+    "palette": {
+      "neutral": "#ffffff",
+      "ink": "#161616",
+      "primary": "#0f62fe",
+      "accent": "#673ab7",
+      "success": "#198038",
+      "warning": "#9f5400",
+      "error": "#c81e6b",
+      "info": "#007d79",
+      "interactive": "#0f62fe",
+      "diffAdd": "#198038",
+      "diffDelete": "#c81e6b"
+    },
+    "overrides": {
+      "text-weak": "#525252",
+      "syntax-comment": "#5e6973",
+      "syntax-keyword": "#0f62fe",
+      "syntax-string": "#673ab7",
+      "syntax-primitive": "#c81e6b",
+      "syntax-property": "#007571",
+      "syntax-type": "#198038",
+      "syntax-constant": "#994f00"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#161616",
+      "ink": "#f2f4f8",
+      "primary": "#33b1ff",
+      "accent": "#be95ff",
+      "success": "#42be65",
+      "warning": "#f1c21b",
+      "error": "#ee5396",
+      "info": "#3ddbd9",
+      "interactive": "#33b1ff",
+      "diffAdd": "#42be65",
+      "diffDelete": "#ee5396"
+    },
+    "overrides": {
+      "text-weak": "#9ea4b0",
+      "syntax-comment": "#7f8899",
+      "syntax-keyword": "#78a9ff",
+      "syntax-string": "#be95ff",
+      "syntax-primitive": "#3ddbd9",
+      "syntax-property": "#82cfff",
+      "syntax-type": "#ff7eb6",
+      "syntax-constant": "#42be65"
+    }
+  }
+}

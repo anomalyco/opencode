@@ -4,6 +4,11 @@
   min-height: 0;
 }
 
+/* Only results scroll inside the search; with the nav list below it, the list absorbs a short sidebar. */
+.settings-search[data-empty="true"] {
+  flex-shrink: 0;
+}
+
 .settings-search[data-empty="true"] [data-slot="text-input-v2-icon-button"] {
   visibility: hidden;
 }
@@ -17,6 +22,11 @@
   [data-slot="text-input-v2-icon-button"][data-variant="clear"]:is(:hover, :active, :focus-visible):not(:disabled) {
   background: transparent;
   color: var(--v2-icon-icon-base);
+}
+
+/* The tabs below inset their icons 6px. The other 2px goes after the icon, so the text still lines up with theirs. */
+.settings-search [data-slot="text-input-v2-leading-icon"] {
+  padding-inline: 6px 2px;
 }
 
 .settings-search [data-component="text-input-v2"] {

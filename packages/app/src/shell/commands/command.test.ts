@@ -5,11 +5,10 @@ import {
   addCommandRegistration,
   commandPaletteOptions,
   CommandCatalog,
-  commandKeymap,
   formatKeybind,
+  formatKeybindParts,
   matchKeybind,
   parseKeybind,
-  resolveKeybindOption,
   type CommandOption,
 } from "./command"
 
@@ -62,35 +61,6 @@ test("command registrations shadow keyed owners, restore the previous owner, and
   expect(unkeyed.map((entry) => entry.options)).toEqual([two, one])
 })
 
-test.each([true, false])("resolveKeybindOption prefers a contextual command only in its context: %p", (inside) => {
-  const fallback = { id: "tab.close", title: "Close tab" }
-  const contextual = { id: "terminal.close", title: "Close terminal", when: () => inside }
-
-  expect(resolveKeybindOption([fallback, contextual], new KeyboardEvent("keydown"))).toBe(
-    inside ? contextual : fallback,
-  )
-})
-
-test("commandKeymap puts a user's binding before a default on the same keys", () => {
-  const rename = { id: "session.rename", title: "Rename session", keybind: "ctrl+r" }
-  const focus = { id: "input.focus", title: "Focus input", keybind: "ctrl+r" }
-  const event = new KeyboardEvent("keydown", { key: "r", ctrlKey: true })
-  const keymap = (custom: string[]) => commandKeymap([rename, focus], (id) => custom.includes(id)).get("r:1")
-
-  expect(resolveKeybindOption(keymap([]), event)).toBe(rename)
-  expect(resolveKeybindOption(keymap(["input.focus"]), event)).toBe(focus)
-  expect(commandKeymap([{ ...rename, disabled: true }], () => false).size).toBe(0)
-})
-
-test.each([true, false])("resolveKeybindOption leaves the key to a skipping command's target: %p", (inside) => {
-  const rename = { id: "session.rename", title: "Rename session", skip: () => inside }
-  const focus = { id: "input.focus", title: "Focus input" }
-  const event = new KeyboardEvent("keydown")
-
-  expect(resolveKeybindOption([rename], event)).toBe(inside ? undefined : rename)
-  expect(resolveKeybindOption([rename, focus], event)).toBe(inside ? focus : rename)
-})
-
 describe("command keybinds", () => {
   test("parseKeybind handles aliases, multiple combos, and disabled bindings", () => {
     const keybinds = parseKeybind("control+option+k, mod+shift+comma")
@@ -120,6 +90,11 @@ describe("command keybinds", () => {
     { config: "mod+shift+[", event: { key: "Х", code: "BracketLeft", ctrlKey: true, shiftKey: true }, match: true },
     // macOS Option turns L into ¬; the physical key still matches.
     { config: "meta+alt+l", event: { key: "¬", code: "KeyL", metaKey: true, altKey: true }, match: true },
+    // macOS Option turns . into ≥; preserve ASCII layout mappings.
+    { config: "meta+alt+.", event: { key: "≥", code: "Period", metaKey: true, altKey: true }, match: true },
+    { config: "mod+alt+.", event: { key: ".", code: "Period", ctrlKey: true, altKey: true }, match: true },
+    { config: "mod+alt+.", event: { key: "ю", code: "Period", ctrlKey: true, altKey: true }, match: true },
+    { config: "mod+alt+.", event: { key: "v", code: "Period", ctrlKey: true, altKey: true }, match: false },
   ])("matchKeybind $config with $event.key is $match", (row) => {
     expect(matchKeybind(parseKeybind(row.config), new KeyboardEvent("keydown", row.event))).toBe(row.match)
   })
@@ -134,5 +109,10 @@ describe("command keybinds", () => {
     expect(formatKeybind("none")).toBe("")
     expect(formatKeybind("mod+k,mod+p")).toContain("K")
     expect(formatKeybind("mod+k,mod+p")).not.toContain("P")
+  })
+
+  test("formatKeybind shows a chord stroke by stroke", () => {
+    expect(formatKeybind("g i")).toBe("G I")
+    expect(formatKeybindParts("g s")).toEqual(["G", "S"])
   })
 })

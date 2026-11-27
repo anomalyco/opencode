@@ -1,7 +1,8 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test"
 import { createRoot, getOwner, onCleanup } from "solid-js"
 import { createTabMemory } from "./memory"
 import {
+  latestClosedTime,
   listClosedTabs,
   nextTabAfterClose,
   pushClosedTab,
@@ -9,7 +10,15 @@ import {
   takeClosedTab,
   type ClosedTab,
 } from "./closed"
-import { findSessionTab, sessionIDHasOpenTab, tabHref, tabKey, type SessionTab, type Tab } from "./tabs"
+import {
+  findSessionTab,
+  sessionIDHasOpenTab,
+  tabHref,
+  tabKey,
+  tabMatchesRoute,
+  type SessionTab,
+  type Tab,
+} from "./tabs"
 import { Schema } from "effect"
 import { TabStorage } from "./schema"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -130,6 +139,22 @@ test("finds open root and routed session tabs", () => {
   expect(sessionIDHasOpenTab(tabs, ServerConnection.Key.make("other"), "root")).toBe(false)
 })
 
+test("a tab owns the route that shows it, including its child session, whichever tab was remembered", () => {
+  const tab = { ...sessionTab("root"), routeSessionId: "child" }
+  const draft: Tab = { type: "draft", draftID: "draft", server, directory: "/project" }
+
+  expect(tabMatchesRoute(tab, { type: "session", server, sessionId: "root" })).toBe(true)
+  expect(tabMatchesRoute(tab, { type: "session", server, sessionId: "child" })).toBe(true)
+  expect(tabMatchesRoute(tab, { type: "session", server, sessionId: "other" })).toBe(false)
+  expect(tabMatchesRoute(tab, { type: "session", server: ServerConnection.Key.make("other"), sessionId: "root" })).toBe(
+    false,
+  )
+  expect(tabMatchesRoute(draft, { type: "draft", draftID: "draft" })).toBe(true)
+  expect(tabMatchesRoute(draft, { type: "draft", draftID: "other" })).toBe(false)
+  expect(tabMatchesRoute(tab, { type: "home" })).toBe(false)
+  expect(tabMatchesRoute(tab, { type: "settings" })).toBe(false)
+})
+
 describe("tab memory", () => {
   test("keeps state until its tab is removed", () => {
     createRoot((dispose) => {
@@ -156,7 +181,11 @@ describe("tab memory", () => {
 })
 
 describe("closed tab stack", () => {
-  test("records session tabs with their index", () => {
+  afterEach(() => setSystemTime())
+
+  test("records session tabs with their index and close time", () => {
+    setSystemTime(1_000)
+
     const stack = pushClosedTab([], sessionTab("a"), 2, {
       title: "Alpha",
       directory: "/project",
@@ -164,8 +193,23 @@ describe("closed tab stack", () => {
     })
 
     expect(stack).toEqual([
-      { tab: sessionTab("a"), index: 2, info: { title: "Alpha", directory: "/project", prompted: true } },
+      {
+        tab: sessionTab("a"),
+        index: 2,
+        info: { title: "Alpha", directory: "/project", prompted: true },
+        closed: 1_000,
+      },
     ])
+  })
+
+  test("reports when the tab a reopen would take closed, counting untimed closes as oldest", () => {
+    setSystemTime(2_000)
+
+    const stack = pushClosedTab([{ tab: sessionTab("a"), index: 0 }], sessionTab("b"), 1)
+
+    expect(latestClosedTime(stack, [])).toBe(2_000)
+    expect(latestClosedTime(stack, [sessionTab("b")])).toBe(0)
+    expect(latestClosedTime(stack, [sessionTab("a"), sessionTab("b")])).toBeUndefined()
   })
 
   test("ignores draft tabs", () => {
@@ -186,6 +230,8 @@ describe("closed tab stack", () => {
   })
 
   test("keeps only the newest close record for a session", () => {
+    setSystemTime(3_000)
+
     const stack = pushClosedTab(
       pushClosedTab([], sessionTab("a"), 1, { title: "Old", directory: "/old", prompted: true }),
       sessionTab("a"),
@@ -194,7 +240,7 @@ describe("closed tab stack", () => {
     )
 
     expect(stack).toEqual([
-      { tab: sessionTab("a"), index: 3, info: { title: "New", directory: "/new", prompted: true } },
+      { tab: sessionTab("a"), index: 3, info: { title: "New", directory: "/new", prompted: true }, closed: 3_000 },
     ])
   })
 

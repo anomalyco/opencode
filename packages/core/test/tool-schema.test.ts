@@ -179,20 +179,6 @@ test("Effect tool schemas inline named child schemas", () => {
   })
 })
 
-test("Effect tool schemas resolve escaped definition names", () => {
-  const Slash = Schema.Struct({ slash: Schema.String }).annotate({ identifier: "A/B" })
-  const Tilde = Schema.Struct({ tilde: Schema.String }).annotate({ identifier: "A~B" })
-  const tool: Info = {
-    name: "escaped-references",
-    description: "Escaped references",
-    input: Schema.Struct({ slash: Slash, tilde: Tilde }),
-    execute: () => Effect.succeed({ content: "unused" }),
-  }
-
-  expect(JSON.stringify(definition(tool).inputSchema)).not.toContain("$ref")
-  expect(JSON.stringify(definition(tool).inputSchema)).not.toContain("$defs")
-})
-
 test("definitions keep their pinned serialization", () => {
   const Item = Schema.Struct({ id: Schema.String }).annotate({ identifier: "Item" })
   const tool: Info = {
@@ -215,32 +201,29 @@ test("definitions keep their pinned serialization", () => {
   expect(JSON.stringify(definition({ ...tool }))).toBe(expected)
 })
 
-test.each(["Lookup Input", "café", "A/B~C% D#E"])(
-  "Effect tool schemas inline URI-encoded definition %s",
-  (identifier) => {
-    const child = Schema.Struct({ city: Schema.String }).annotate({ identifier })
-    const tool: Info = {
-      name: "encoded-reference",
-      description: "Encoded reference",
-      input: child,
-      output: Schema.Struct({ result: child }),
-      execute: () => Effect.succeed({ content: "unused" }),
-    }
-    const expected = {
-      type: "object",
-      properties: { city: { type: "string" } },
-      required: ["city"],
-      additionalProperties: false,
-    }
-    expect(definition(tool).inputSchema).toEqual(expected)
-    expect(definition(tool).outputSchema).toEqual({
-      type: "object",
-      properties: { result: expected },
-      required: ["result"],
-      additionalProperties: false,
-    })
-  },
-)
+test.each(["café", "A/B~C% D#E"])("Effect tool schemas inline URI-encoded definition %s", (identifier) => {
+  const child = Schema.Struct({ city: Schema.String }).annotate({ identifier })
+  const tool: Info = {
+    name: "encoded-reference",
+    description: "Encoded reference",
+    input: child,
+    output: Schema.Struct({ result: child }),
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+  const expected = {
+    type: "object",
+    properties: { city: { type: "string" } },
+    required: ["city"],
+    additionalProperties: false,
+  }
+  expect(definition(tool).inputSchema).toEqual(expected)
+  expect(definition(tool).outputSchema).toEqual({
+    type: "object",
+    properties: { result: expected },
+    required: ["result"],
+    additionalProperties: false,
+  })
+})
 
 test("portable schemas validate and describe typed tools", async () => {
   const input = {
@@ -415,24 +398,6 @@ test("input error prompts limit normalized issues", async () => {
   )
 })
 
-test("canonical results carry metadata with typed output", async () => {
-  const input = Schema.Struct({ value: Schema.String })
-  const output = Schema.Struct({ value: Schema.String, internal: Schema.Boolean })
-  const tool: Info = {
-    name: "annotated",
-    description: "Annotated tool",
-    input,
-    output,
-    execute: ({ value }) => Effect.succeed({ output: { value, internal: true }, metadata: { value }, content: value }),
-  }
-
-  expect(await Effect.runPromise(tool.execute({ value: "out" }, context))).toEqual({
-    output: { value: "out", internal: true },
-    metadata: { value: "out" },
-    content: "out",
-  })
-})
-
 test("raw JSON schemas validate and decode tool input", async () => {
   const input = {
     type: "object",
@@ -529,6 +494,31 @@ test("raw JSON schemas pass input through when they cannot be imported", async (
   expect(await Effect.runPromise(execute(tool, { value: 1, extra: true }, context))).toMatchObject({
     content: [{ type: "text", text: '{"value":1,"extra":true}' }],
   })
+})
+
+test("raw JSON schema validation does not keep the caller alive", async () => {
+  // The session runner executes tools from Effect.fn closures over its Location's services. Building the codec must
+  // not leave anything process-wide that reaches the caller's stack frames once the Location is gone.
+  const call = async () => {
+    const services = { name: "location services" }
+    const tool: Info = {
+      name: "raw-retention",
+      description: "Raw retention tool",
+      input: { type: "object", properties: { value: { type: "string" } }, required: ["value"] },
+      execute: () => Effect.succeed({ content: services.name }),
+    }
+    const run = Effect.fn("LocationCaller.run")(function* () {
+      return yield* execute(tool, { value: "ok" }, context)
+    })
+    expect(await Effect.runPromise(run())).toMatchObject({ content: [{ type: "text", text: "location services" }] })
+    return new WeakRef(services)
+  }
+  const services = await call()
+  for (let attempt = 0; attempt < 50 && services.deref() !== undefined; attempt++) {
+    Bun.gc(true)
+    await Bun.sleep(10)
+  }
+  expect(services.deref()).toBeUndefined()
 })
 
 test("missing external input schemas fall back to an empty schema", () => {

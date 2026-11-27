@@ -1,12 +1,3 @@
-[data-component="assistant-message"] {
-  content-visibility: auto;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-}
-
 [data-component="user-message"] {
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base);
@@ -58,8 +49,8 @@
 
     &[data-type="image"] {
       position: relative;
-      width: 58px;
-      height: 46px;
+      height: 88px;
+      aspect-ratio: 3 / 2;
       border: none;
 
       /* inset box-shadows do not paint over <img> content, so the hairline is an overlay */
@@ -168,16 +159,6 @@
     color: var(--v2-icon-icon-muted);
   }
 
-  [data-slot="user-message-pending"] {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: none;
-    width: 14px;
-    height: 16px;
-    color: var(--v2-icon-icon-faint);
-  }
-
   [data-slot="user-message-text"] {
     display: inline-block;
     white-space: pre-wrap;
@@ -217,25 +198,88 @@
       text-decoration-color: color-mix(in oklch, currentColor 40%, transparent);
       text-underline-offset: 2px;
       cursor: pointer;
+      /* Focus scrolls a link in a folded message clear of the 40px fade. */
+      scroll-margin-block-end: 40px;
 
       &:hover {
         text-decoration-color: currentColor;
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--v2-border-border-focus);
+        outline-offset: 2px;
+        border-radius: 2px;
       }
     }
 
     max-width: 100%;
   }
 
+  /* A folded message is laid out whole and clipped, so copy, select-all and assistive tech still get all of it. Its
+     last lines fade out (a mask, not a crop) into the toggle. Opening and closing are instant. The inline padding,
+     taken back by the margin, is room for a link's focus ring at the start and end of a line. */
+  [data-slot="user-message-fold"] {
+    overflow: hidden;
+    padding-inline: 5px;
+    margin-inline: -5px;
+
+    /* unicode-bidi isn't inherited, and each paragraph of mixed LTR and RTL text takes its own direction. */
+    > div {
+      unicode-bidi: plaintext;
+    }
+
+    &[data-folded] {
+      mask-image: linear-gradient(to bottom, #000 calc(100% - 40px), transparent);
+    }
+  }
+
+  [data-slot="user-message-fold-toggle"] {
+    display: flex;
+    width: fit-content;
+    align-items: center;
+    gap: 2px;
+    height: 24px;
+    margin-top: 2px;
+    padding: 0;
+    border: none;
+    background: none;
+    white-space: nowrap;
+    user-select: none;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: var(--line-height-compact);
+    font-weight: 530;
+    color: var(--v2-text-text-muted);
+
+    [data-slot="icon-svg"] {
+      color: var(--v2-icon-icon-muted);
+    }
+
+    &[aria-expanded="true"] [data-slot="icon-svg"] {
+      transform: rotate(180deg);
+    }
+
+    &:hover {
+      color: var(--v2-text-text-base);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--v2-border-border-focus);
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+  }
+
   [data-slot="user-message-copy-wrapper"] {
     height: calc(20px * var(--user-run-meta, 1));
-    margin-top: calc(4px * var(--user-run-meta, 1));
+    margin-top: calc(8px * var(--user-run-meta, 1));
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 8px;
     width: 100%;
 
-    /* Hover actions show and hide at once, without a fade. */
+    /* The meta line shows and hides at once, together with the chevron. */
     @media (hover: hover) {
       opacity: 0;
       pointer-events: none;
@@ -274,16 +318,14 @@
     overflow: hidden;
     text-overflow: ellipsis;
 
-    /* The variant reads as a qualifier of the model before it, so it is dimmer and never the part that truncates. */
+    /* The variant reads as a qualifier of the model before it, so it is never the part that truncates. */
     &[data-variant] {
       flex: none;
-      opacity: 0.66;
     }
   }
 
   [data-slot="user-message-meta-separator"] {
     flex: none;
-    opacity: 0.66;
   }
 
   [data-slot="user-message-meta-wrap"],
@@ -291,7 +333,7 @@
     font-family: var(--v2-font-family-sans);
     font-size: 12px;
     font-weight: 440;
-    line-height: var(--line-height-compact);
+    line-height: 18px;
     letter-spacing: 0.05px;
     color: var(--v2-text-text-faint);
     cursor: default;
@@ -320,14 +362,6 @@
       opacity: 0;
       pointer-events: none;
     }
-  }
-
-  [data-slot="user-message-actions"] {
-    --user-message-transition-gap: 6px;
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    gap: 6px;
   }
 
   [data-slot="user-message-transition"] {
@@ -376,27 +410,79 @@
     }
   }
 
-  &:hover [data-slot="user-message-copy-wrapper"],
-  &:focus-within [data-slot="user-message-copy-wrapper"],
-  [data-slot="user-message-copy-wrapper"]:has([data-expanded]),
-  &:hover [data-slot="user-message-meta-tail"],
-  &:focus-within [data-slot="user-message-meta-tail"] {
+  /* A closed menu hands focus back without a ring, so only keyboard focus keeps the meta line shown. */
+  &:has([data-slot="user-message-body"]:hover) [data-slot="user-message-copy-wrapper"],
+  &:not(:has([data-slot="user-message-body"])):hover [data-slot="user-message-copy-wrapper"],
+  /* A footer holding its own buttons, as the /btw panel's does, stays reachable anywhere over the message. */
+  &:has([data-slot="user-message-copy-wrapper"] button):hover [data-slot="user-message-copy-wrapper"],
+  &:has(:focus-visible) [data-slot="user-message-copy-wrapper"],
+  [data-slot="user-message-copy-wrapper"]:has([data-expanded], [data-closing]),
+  &:has([data-slot="user-message-body"]:hover) [data-slot="user-message-meta-tail"],
+  &:has([data-slot="user-message-copy-wrapper"] button):hover [data-slot="user-message-meta-tail"],
+  &:has(:focus-visible) [data-slot="user-message-meta-tail"] {
     opacity: 1;
     pointer-events: auto;
   }
 
-  /* A pending steer keeps its Pending label and actions in view. */
+  /* A run's last message carries the whole run's agent and model, so hovering anywhere in the run shows it. */
+  &[data-run-hovered] [data-slot="user-message-copy-wrapper"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* A pending steer keeps its Pending label in view. */
   &[data-pending] [data-slot="user-message-copy-wrapper"] {
     opacity: 1;
     pointer-events: auto;
+  }
+
+  /* Its agent and model show on hover, like any other message's meta line. */
+  @media (hover: hover) {
+    &[data-pending] {
+      [data-slot="user-message-meta-label"],
+      [data-slot="user-message-pending-separator"] {
+        opacity: 0;
+      }
+    }
+
+    &[data-pending]:has([data-slot="user-message-body"]:hover),
+    &[data-pending]:not(:has([data-slot="user-message-body"])):hover,
+    &[data-pending]:has(:focus-visible),
+    &[data-pending][data-run-hovered] {
+      [data-slot="user-message-meta-label"],
+      [data-slot="user-message-pending-separator"] {
+        opacity: 1;
+      }
+    }
   }
 
   [data-slot="user-message-copy-wrapper"] > * {
     opacity: var(--user-run-meta, 1);
   }
 
-  /* The last message of a run carries the meta line; the others fold theirs away and offer their actions beside
-     the bubble. */
+  /* The bubbles of a run and the gaps between them are one hover zone: each body reaches across the 4px gap to its
+     neighbor, so the pointer never falls between them. */
+  [data-slot="user-message-body"] {
+    position: relative;
+  }
+
+  &[data-run-above] [data-slot="user-message-body"]::before,
+  &[data-run-folded] [data-slot="user-message-body"]::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    height: 4px;
+  }
+
+  &[data-run-above] [data-slot="user-message-body"]::before {
+    bottom: 100%;
+  }
+
+  &[data-run-folded] [data-slot="user-message-body"]::after {
+    top: 100%;
+  }
+
+  /* The last message of a run carries the meta line; the others fold theirs away. */
   &[data-run-folded] {
     [data-slot="user-message-body"] {
       position: relative;
@@ -412,13 +498,27 @@
     visibility: hidden;
   }
 
-  [data-slot="user-message-run-actions"] {
+  /* Every bubble offers its actions from a chevron pinned to its top trailing corner, centered on the first line.
+     The bubble color fades in behind it so text under the corner never competes with the control. */
+  [data-slot="user-message-text"] {
+    --user-message-bubble: var(--v2-background-bg-layer-02);
+    position: relative;
+  }
+
+  /* Inset from the trailing edge by the same distance as from the top. */
+  [data-slot="user-message-menu"] {
+    --user-message-menu-inset: calc(8px + (1lh - 20px) / 2);
     position: absolute;
-    /* Centered on the bubble's last line. */
-    bottom: calc(8px + (1lh - 20px) / 2);
-    inset-inline-end: calc(100% + 4px);
+    top: var(--user-message-menu-inset);
+    inset-inline-end: var(--user-message-menu-inset);
     display: flex;
-    align-items: center;
+    padding-inline-start: 16px;
+    background: linear-gradient(to left, var(--user-message-bubble) calc(100% - 16px), transparent);
+    border-radius: 4px;
+
+    &:dir(rtl) {
+      background: linear-gradient(to right, var(--user-message-bubble) calc(100% - 16px), transparent);
+    }
 
     @media (hover: hover) {
       opacity: 0;
@@ -426,9 +526,35 @@
     }
   }
 
-  &:hover [data-slot="user-message-run-actions"],
-  &:focus-within [data-slot="user-message-run-actions"],
-  [data-slot="user-message-run-actions"]:has([data-expanded]) {
+  /* Without hover the chevron always shows, so the first line keeps room for it instead of fading text under it. The
+     float also widens a short bubble, so a one-word prompt stays readable. 20px spans the 20px button, less the 12px
+     text padding it overlaps, plus a 4px gap at the 8px inset. */
+  @media not (hover: hover) {
+    [data-slot="user-message-text"]:has(> [data-slot="user-message-menu"])::before {
+      content: "";
+      float: inline-end;
+      width: 20px;
+      height: 1lh;
+    }
+
+    [data-slot="user-message-text"] > [data-slot="user-message-menu"] {
+      padding: 0;
+      background: none;
+    }
+  }
+
+  [data-slot="user-message-copy-wrapper"] [data-slot="user-message-menu"] {
+    position: static;
+    padding: 0;
+    background: none;
+  }
+
+  /* Only the bubble itself shows its chevron; a message without one shows it in its footer on hover. A closed menu hands
+     focus back without a ring, so only keyboard focus keeps the chevron shown. */
+  [data-slot="user-message-text"]:hover [data-slot="user-message-menu"],
+  &:not(:has([data-slot="user-message-text"])):hover [data-slot="user-message-menu"],
+  &:has(:focus-visible) [data-slot="user-message-menu"],
+  [data-slot="user-message-menu"]:has([data-expanded], [data-closing]) {
     opacity: 1;
     pointer-events: auto;
   }
@@ -452,22 +578,26 @@
 
   [data-slot="text-part-copy-wrapper"] {
     height: 20px;
-    margin-top: 4px;
+    margin-top: 8px;
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 8px;
-
-    /* Hover actions show and hide at once, without a fade. */
-    @media (hover: hover) {
-      opacity: 0;
-      pointer-events: none;
-    }
+    gap: 4px;
 
     [data-component="tooltip-v2-trigger"] {
       display: inline-flex;
       flex: none;
       width: fit-content;
+    }
+
+    [data-component="icon-button-v2"] [data-slot="icon-svg"] {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* Pulls the glyph toward the reply's text edge. */
+    [data-component="tooltip-v2-trigger"]:first-child {
+      margin-inline-start: -2px;
     }
   }
 
@@ -481,7 +611,7 @@
     font-family: var(--v2-font-family-sans);
     font-size: 12px;
     font-weight: 440;
-    line-height: var(--line-height-compact);
+    line-height: 18px;
     letter-spacing: 0.05px;
     color: var(--v2-text-text-faint);
     cursor: default;
@@ -495,29 +625,43 @@
 
     &[data-variant] {
       flex: none;
-      opacity: 0.66;
+    }
+  }
+
+  [data-slot="text-part-meta-speed"] {
+    display: none;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+  }
+
+  @media (hover: hover) {
+    [data-slot="text-part-meta-speed"] {
+      display: inline-flex;
     }
   }
 
   [data-slot="text-part-meta-separator"] {
     flex: none;
-    opacity: 0.66;
   }
 
   [data-slot="text-part-copy-wrapper"][data-interrupted] {
     width: 100%;
     justify-content: flex-end;
-    gap: 8px;
   }
 
   :root[data-motion="reduce"] & [data-slot="text-part-copy-wrapper"] {
     transition: none;
   }
 
-  &:hover [data-slot="text-part-copy-wrapper"],
-  &:focus-within [data-slot="text-part-copy-wrapper"] {
-    opacity: 1;
-    pointer-events: auto;
+  @media (hover: hover) {
+    &:not(:hover, :focus-within) {
+      [data-slot="text-part-copy-wrapper"]:not([data-keep-copy-visible]),
+      [data-slot="text-part-copy-wrapper"][data-keep-copy-visible] [data-slot="text-part-meta"] {
+        opacity: 0;
+        pointer-events: none;
+      }
+    }
   }
 }
 
@@ -568,6 +712,12 @@
   [data-component="reasoning-part"] [data-component="markdown"] :not(pre) > code {
     opacity: 0.6;
   }
+}
+
+/* Tool output regions take focus so the keyboard can scroll them, and draw no ring. */
+[data-component="tool-output"]:focus-visible,
+[data-slot="bash-scroll"]:focus-visible {
+  outline: none;
 }
 
 [data-component="tool-output"] {
@@ -624,6 +774,68 @@
     max-width: 100%;
     height: auto;
     border-radius: 4px;
+  }
+}
+
+[data-component="tool-result-images"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+[data-slot="tool-result-image"] {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88px;
+  aspect-ratio: 3 / 2;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--v2-background-bg-layer-02);
+  color: var(--icon-weak);
+  cursor: zoom-in;
+
+  /* inset box-shadows do not paint over <img> content, so the hairline is an overlay */
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
+    pointer-events: none;
+    transition: box-shadow 0.15s ease;
+  }
+
+  &:hover::after {
+    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-strong);
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+
+  &[data-retry] {
+    cursor: pointer;
+  }
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  [data-slot="icon-svg"] {
+    width: 20px;
+    height: 20px;
+  }
+
+  @media (forced-colors: active) {
+    border: 1px solid CanvasText;
   }
 }
 
@@ -726,9 +938,27 @@
       margin: 4px;
     }
 
+    /* The ghost button is transparent, so paint the section's background behind it. It fades out to the left, top
+       and bottom so text at its edges softens instead of being cut, and runs to the card edge on the right. It is
+       solid only across the button's height and never takes pointer events, so there is no gutter and the lines
+       below keep the full width. The top stops at the section edge, so it never covers the border above the output. */
+    [data-slot="bash-copy"]::before {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      inset: -4px -4px -8px -24px;
+      background: var(--bash-section-background);
+      mask-image:
+        linear-gradient(to right, transparent, #000 24px),
+        linear-gradient(transparent, #000 8px, #000 calc(100% - 8px), transparent);
+      mask-composite: intersect;
+      pointer-events: none;
+    }
+
     [data-slot="bash-result"] {
+      --bash-section-background: var(--v2-background-bg-layer-01);
       border-block-start: 0.5px solid var(--v2-border-border-base);
-      background: var(--v2-background-bg-layer-01);
+      background: var(--bash-section-background);
       color: var(--v2-text-text-muted);
     }
 
@@ -738,6 +968,7 @@
     }
 
     [data-slot="bash-command"] {
+      --bash-section-background: var(--v2-background-bg-base);
       color: var(--v2-text-text-base);
     }
   }
@@ -798,6 +1029,47 @@
   justify-content: center;
 }
 
+[data-component="file-counts"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--v2-text-text-base);
+
+  [data-slot="file-counts-name"] {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-slot="file-counts-directory"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-component="diff-changes"] {
+    flex-shrink: 0;
+  }
+
+  [data-component="diff-changes"] [data-empty] {
+    display: none;
+  }
+}
+
+/* A script's changes are each their own card, set apart by the gap between a turn's items, so two changes to one file
+   read as two. The New timeline spaces them its own way. */
+[data-script-change="patch"] + [data-script-change="patch"] {
+  margin-top: 12px;
+}
+
+/* A script's Output row, after its last change when its changes are drawn right after it, keeps the block's tight gap. */
+[data-script-changes] > [data-script-output] {
+  margin-top: 8px;
+}
+
 [data-component="execute-tool-calls"] {
   display: flex;
   flex-direction: column;
@@ -852,8 +1124,29 @@
     }
 
     &:focus-visible {
-      outline: 1px solid var(--v2-text-text-accent);
+      outline: 2px solid var(--v2-border-border-focus);
       outline-offset: 2px;
+      border-radius: 4px;
+    }
+  }
+
+  /* Lines up with the calls' names, past their markers. */
+  [data-slot="execute-tool-call-more"] {
+    all: unset;
+    width: fit-content;
+    margin-inline-start: 20px;
+    cursor: pointer;
+    color: var(--v2-text-text-faint);
+    user-select: none;
+
+    &:hover {
+      color: var(--v2-text-text-base);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--v2-border-border-focus);
+      outline-offset: 2px;
+      border-radius: 4px;
     }
   }
 
@@ -917,6 +1210,32 @@
   }
 }
 
+/* The flat layout (`full_codemode`): steps line up with the title, with no markers before them, and read as steps in
+   the face of the timeline's titles while what they ran on stays code. Output is muted, as the title is. */
+[data-component="execute-tool-calls"][data-execute-layout="flat"] {
+  [data-slot="execute-tool-call-name"] {
+    font-family: var(--v2-font-family-sans);
+    font-weight: 440;
+    letter-spacing: -0.04px;
+  }
+
+  [data-slot="execute-tool-call"][data-kind="output"] [data-slot="execute-tool-call-name"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="execute-tool-call-more"],
+  [data-slot="execute-tool-output"],
+  [data-slot="execute-tool-error"] {
+    margin-inline-start: 0;
+    padding-inline-start: 0;
+  }
+}
+
+/* A script's title labels the steps under it, so it is muted as the timeline's other labels are. */
+[data-component="collapsible"] [data-slot="basic-tool-tool-title"][data-execute-title] {
+  color: var(--v2-text-text-muted);
+}
+
 [data-slot="execute-tool-call-marker"] [data-slot="icon-svg"] {
   color: inherit;
 }
@@ -926,24 +1245,6 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-
-  [data-slot="execute-details-status"] {
-    padding: 0 6px;
-    border-radius: 4px;
-    font-size: 12px;
-    line-height: var(--line-height-base);
-    color: var(--v2-text-text-muted);
-    background: var(--v2-background-bg-layer-02);
-  }
-
-  [data-slot="execute-details-status"][data-status="error"] {
-    color: var(--v2-state-fg-danger);
-  }
-
-  [data-slot="execute-details-meta"] {
-    font-size: 12px;
-    color: var(--v2-text-text-faint);
-  }
 }
 
 [data-component="execute-details"] {
@@ -952,6 +1253,8 @@
   gap: 16px;
   width: 100%;
   min-width: 0;
+  /* Code and output share the dialog's height and scroll in their own boxes, so the bottom padding always shows. */
+  min-height: 0;
   padding: 0 16px 16px;
 
   [data-slot="execute-details-section"] {
@@ -959,6 +1262,7 @@
     flex-direction: column;
     gap: 6px;
     min-width: 0;
+    min-height: 0;
   }
 
   [data-slot="execute-details-section-header"] {
@@ -978,11 +1282,6 @@
     color: var(--v2-text-text-muted);
   }
 
-  [data-slot="execute-details-section-meta"] {
-    font-size: 12px;
-    color: var(--v2-text-text-faint);
-  }
-
   [data-slot="execute-details-source"] {
     max-height: 360px;
     overflow: auto;
@@ -999,16 +1298,8 @@
     }
   }
 
-  [data-slot="execute-details-error"] {
-    margin: 0;
-    padding: 12px 14px;
-    font-family: var(--v2-font-family-code);
-    font-size: 13px;
-    line-height: var(--line-height-base);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    color: var(--v2-state-fg-danger);
-    background: var(--v2-background-bg-layer-01);
+  [data-tone="danger"] {
+    --opencode-diffs-fg: var(--v2-state-fg-danger);
   }
 }
 
@@ -1065,8 +1356,9 @@
   }
 
   &:focus-visible {
-    outline: 1px solid var(--v2-text-text-accent);
+    outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
+    border-radius: 4px;
   }
 }
 
@@ -1167,6 +1459,19 @@
     /* Nested sticky file headers stop below the open group header. */
     > [data-slot="collapsible-content"] {
       --sticky-accordion-top: calc(var(--context-group-sticky-top) + 28px + var(--tool-content-gap));
+      position: relative;
+      margin-inline-start: 12px;
+      padding-inline-start: 12px;
+
+      &::before {
+        content: "";
+        position: absolute;
+        inset-inline-start: -0.25px;
+        inset-block: 6px;
+        width: 0.5px;
+        background-color: var(--v2-border-border-base);
+        pointer-events: none;
+      }
     }
   }
 }
@@ -1180,6 +1485,11 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+
+  /* An opened group spaces its items as the timeline spaces blocks; a script's changes stay by the script. */
+  > [data-slot="context-tool-group-item"] + [data-slot="context-tool-group-item"]:not([data-script-change]) {
+    margin-top: 8px;
+  }
 
   [data-slot="context-tool-group-item"] {
     min-width: 0;
@@ -1309,7 +1619,8 @@
   scroll-margin-top: var(--sticky-accordion-top, 0px);
 }
 
-[data-component="dock-prompt"] {
+[data-component="dock-prompt"][data-kind="permission"],
+[data-component="dock-prompt"][data-variant="experimental"] {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -1365,9 +1676,9 @@
 
   [data-slot="permission-header-title"] {
     font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-size: 13px;
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
+    line-height: var(--line-height-base);
     color: var(--v2-text-text-base);
     min-width: 0;
   }
@@ -1382,11 +1693,38 @@
 
   [data-slot="permission-hint"] {
     font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-size: 13px;
     font-weight: var(--font-weight-regular);
-    line-height: var(--line-height-large);
+    line-height: var(--line-height-base);
     color: var(--v2-text-text-muted);
     padding: 0;
+  }
+
+  [data-slot="permission-action"] {
+    font-family: var(--v2-font-family-code);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-base);
+    letter-spacing: -0.04px;
+    color: var(--v2-text-text-base);
+  }
+
+  [data-slot="permission-input"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 8px;
+    max-height: 160px;
+    overflow-y: auto;
+
+    code {
+      font-family: var(--v2-font-family-code);
+      font-size: 13px;
+      font-weight: 440;
+      letter-spacing: -0.04px;
+      line-height: var(--line-height-base);
+      white-space: pre-wrap;
+    }
   }
 
   [data-slot="permission-patterns"] {
@@ -1708,48 +2046,190 @@
     color: var(--v2-text-text-base);
   }
 
-  [data-slot="user-message-comments"] {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-    width: min(320px, 82%);
-    margin-left: auto;
-
-    &[data-bounded] {
-      width: 318px;
-      max-width: 100%;
-      margin-top: 8px;
-    }
-
-    [data-component="tooltip-v2-trigger"] {
-      width: 100%;
-    }
-
-    [data-component="button-v2"] {
-      font-family: var(--v2-font-family-sans, "Inter", sans-serif);
-      font-weight: 530;
-      font-variation-settings:
-        "wght" 530,
-        "slnt" 0;
-    }
-  }
-
-  [data-slot="user-message-attachments"] + [data-slot="user-message-body"],
-  [data-slot="user-message-attachments"] + [data-slot="user-message-comments"] {
+  [data-slot="user-message-attachments"] + [data-slot="user-message-body"] {
     margin-top: 8px;
   }
 
-  [data-slot="user-message-text"][data-comments] {
-    width: 342px;
-    padding-bottom: 12px;
+  [data-slot="user-message-quotes"] {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    white-space: normal;
+  }
+
+  [data-slot="user-message-text"] > [data-slot="user-message-quotes"]:not(:first-child),
+  [data-slot="user-message-fold"] > div > [data-slot="user-message-quotes"]:not(:first-child) {
+    margin-top: 8px;
+  }
+
+  [data-slot="user-message-quote-group"] {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  [data-slot="user-message-quote"] {
+    margin: 0;
+    padding-inline-start: 8px;
+    border-inline-start: 2px solid var(--v2-border-border-strong);
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="user-message-quote-text"],
+  [data-slot="user-message-quote-comment"] {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    unicode-bidi: plaintext;
+
+    /* Each paragraph reads in its own direction but lines up with the bubble, so an English quote in a Hebrew message
+       starts at the bar. */
+    &:dir(ltr) {
+      text-align: left;
+    }
+
+    &:dir(rtl) {
+      text-align: right;
+    }
+  }
+
+  [data-slot="user-message-quote-text"] {
+    &:not([data-open]) {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
+      overflow: hidden;
+    }
+
+    &[data-expandable] {
+      cursor: pointer;
+      border-radius: 4px;
+    }
+
+    &[data-expandable]:hover,
+    &[data-expandable]:focus-visible {
+      color: var(--v2-text-text-base);
+    }
+  }
+
+  /* Inter centers capitals on the line, so lowercase reads about 1px low against the bar. A one-line quote's bar runs
+     1px past the line, which puts the text half a pixel above its middle, between the two. Wrapped quotes already sit
+     evenly between the bar's ends. */
+  [data-slot="user-message-quote"][data-single-line] {
+    padding-bottom: 1px;
+  }
+
+  /* A source's icon leads the quote like a file's. It sits inline, so wrapped lines return to the bar. */
+  [data-slot="user-message-quote-icon"] {
+    display: inline-flex;
+    vertical-align: -2px;
+    margin-inline-end: 6px;
+    color: var(--v2-icon-icon-muted);
+
+    [data-slot="icon-svg"] {
+      width: 14px;
+      height: 14px;
+    }
+  }
+
+  [data-slot="user-message-quote-reference"] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+
+    [data-component="file-icon"],
+    [data-slot="icon-svg"] {
+      width: 14px;
+      height: 14px;
+      flex: none;
+    }
+  }
+
+  [data-slot="user-message-quote-reference-label"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-slot="user-message-quote-reference-detail"] {
+    flex: none;
+    color: var(--v2-text-text-faint);
   }
 }
 
 /* Only delivery animates. A steer can render once before its admission marks it pending, and must not fade from the
    delivered color. */
 :root body [data-component="user-message"][data-pending] [data-slot="user-message-text"] {
+  --user-message-bubble: var(--v2-background-bg-layer-01);
   background: var(--v2-background-bg-layer-01);
   color: var(--v2-text-text-muted);
   transition: none;
+}
+
+:root body [data-component="user-message"][data-pending] [data-slot="user-message-quote"] {
+  border-color: var(--v2-border-border-base);
+  color: var(--v2-text-text-faint);
+}
+
+/* In the current timeline, as in the New timeline, a block is as tall as its text, so the gaps between blocks are the
+   gaps that show and every pair of blocks stands the same 16px apart. A row's 28px click area stays: 6px of padding
+   above and below, taken back by margins of the same size. An open row keeps its header's room above its content. */
+[data-timeline-row="AssistantPart"]:not([data-timeline="next"]) {
+  [data-component="collapsible"] > [data-slot="collapsible-trigger"] {
+    box-sizing: border-box;
+    height: calc(var(--line-height-compact) + 12px);
+    padding-block: 6px;
+    margin-block: -6px;
+  }
+
+  [data-component="collapsible"] > [data-slot="collapsible-trigger"]:is([aria-expanded="true"], [data-locked]) {
+    margin-bottom: 0;
+  }
+
+  /* An open group's header stands as far above its first item as blocks stand apart. */
+  [data-component="collapsed-tool-group"]
+    > [data-component="collapsible"]
+    > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+    height: calc(var(--line-height-compact) + 22px);
+    padding-bottom: 16px;
+  }
+
+  /* Nested sticky file headers stop below that taller header. */
+  [data-component="collapsed-tool-group"] > [data-component="collapsible"] > [data-slot="collapsible-content"] {
+    --sticky-accordion-top: calc(var(--context-group-sticky-top) + var(--line-height-compact) + 22px);
+  }
+
+  [data-component="context-tool-group-list"] [data-slot="context-tool-group-item"] {
+    min-height: var(--line-height-compact);
+  }
+
+  /* A row's action stays centred on its click area, which reaches 6px above the row, without making the row taller. */
+  [data-component="collapsible"] > [data-slot="basic-tool-action"] {
+    margin-top: -4px;
+  }
+
+  /* The flat layout (`full_codemode`): a script's title's text sits above its first call's text as far as one call's
+     text sits above the next, as in the New timeline. */
+  [data-component="collapsible"].tool-collapsible:has(
+      > [data-slot="collapsible-content"] > [data-component="execute-tool-calls"][data-execute-layout="flat"]
+    ) {
+    row-gap: 0;
+
+    > [data-slot="collapsible-trigger"][data-locked] {
+      --execute-title-gap: calc(6px + (var(--line-height-base) - var(--line-height-compact)) / 2);
+      padding-bottom: var(--execute-title-gap);
+      height: calc(var(--line-height-compact) + 6px + var(--execute-title-gap));
+
+      [data-slot="basic-tool-tool-info"] {
+        line-height: var(--line-height-compact);
+      }
+    }
+
+    /* The title's row holds the gap below its text, so the View code button sits at its top, centred on the text. */
+    > [data-slot="basic-tool-action"] {
+      align-self: flex-start;
+    }
+  }
 }

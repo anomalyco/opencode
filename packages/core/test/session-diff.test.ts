@@ -30,7 +30,7 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionProjector.node, Session.node, LocationServiceMap.node]),
+    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionInbox.node, Session.node, LocationServiceMap.node]),
     [Global.node.replace(tempGlobalLayer), SessionExecution.node.replace(SessionExecution.noopLayer), offlineModels],
   ),
 )

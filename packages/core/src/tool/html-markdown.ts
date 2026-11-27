@@ -129,7 +129,7 @@ export function convertHTMLToMarkdown(html: string) {
     if (last && last !== "\n" && last !== " ") append(" ")
     pendingSpace = false
   }
-  const inline = (value: string, open = false) => {
+  const inline = (value: string, open = false, content = false) => {
     if (open) flushSpace()
     prefixQuote()
     if (pendingIndent) {
@@ -140,11 +140,11 @@ export function convertHTMLToMarkdown(html: string) {
       append("[")
       linkOpen = true
     }
-    append(value)
+    append(value, content)
   }
   const block = () => {
     if (activeLink && linkOpen) {
-      append(`](${destination(activeLink.href)}${title(activeLink.title)})`)
+      closeLink(activeLink)
       linkOpen = false
     }
     pendingSpace = false
@@ -171,22 +171,15 @@ export function convertHTMLToMarkdown(html: string) {
         pendingSpace = true
         continue
       }
-      flushSpace()
-      prefixQuote()
-      if (pendingIndent) {
-        append(pendingIndent)
-        pendingIndent = ""
-      }
-      if (activeLink && !linkOpen) {
-        append("[")
-        linkOpen = true
-      }
-      const escaped = part
-        .replace(/([\\`*_[\]<>|])/g, "\\$1")
-        .replace(/~/g, "\\~")
-        .replace(/^([#+-])/, "\\$1")
-        .replace(/^(\d+)\./, "$1\\.")
-      append(escaped, true)
+      inline(
+        part
+          .replace(/([\\`*_[\]<>|])/g, "\\$1")
+          .replace(/~/g, "\\~")
+          .replace(/^([#+-])/, "\\$1")
+          .replace(/^(\d+)\./, "$1\\."),
+        true,
+        true,
+      )
     }
   }
   const destination = (value: string) => value.replace(/([\\()])/g, "\\$1").replace(/[\t\n\r ]+/g, "%20")
@@ -197,6 +190,7 @@ export function convertHTMLToMarkdown(html: string) {
           .trim()
           .replace(/([\\"])/g, "\\$1")}"`
       : ""
+  const closeLink = (link: NonNullable<Frame["link"]>) => append(`](${destination(link.href)}${title(link.title)})`)
   const inlineMarker = (name: string) => {
     if (name === "strong" || name === "b") return "**"
     if (name === "em" || name === "i") return "*"
@@ -350,7 +344,7 @@ export function convertHTMLToMarkdown(html: string) {
           )
           if (parent) {
             finishCode(activeCode)
-            if (linkOpen) append(`](${destination(activeLink.href)}${title(activeLink.title)})`)
+            if (linkOpen) closeLink(activeLink)
             activeCode = parent.resumedCode
             parent.link = undefined
             parent.linkCode = undefined
@@ -372,7 +366,7 @@ export function convertHTMLToMarkdown(html: string) {
           return
         }
         if (activeLink) {
-          if (linkOpen) append(`](${destination(activeLink.href)}${title(activeLink.title)})`)
+          if (linkOpen) closeLink(activeLink)
           const parent = stack.findLast((candidate) => candidate.link === activeLink)
           if (parent) parent.link = undefined
           activeLink = undefined
@@ -487,7 +481,7 @@ export function convertHTMLToMarkdown(html: string) {
         }
         activeCode = undefined
         finishCode(frame.linkCode)
-        if (frame.link && linkOpen) append(`](${destination(frame.link.href)}${title(frame.link.title)})`)
+        if (frame.link && linkOpen) closeLink(frame.link)
         activeLink = undefined
         linkOpen = false
         activeCode = frame.resumedCode
@@ -530,8 +524,7 @@ export function convertHTMLToMarkdown(html: string) {
       if (name === "a") {
         if (frame.link && (activeLink === frame.link || !activeLink)) {
           activeLink = frame.link
-          if (linkOpen || (last && last !== "\n"))
-            append(`](${destination(frame.link.href)}${title(frame.link.title)})`)
+          if (linkOpen || (last && last !== "\n")) closeLink(frame.link)
           linkOpen = false
           activeLink = undefined
         }

@@ -51,6 +51,10 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
     expect(Effect.isEffect(resolved.service.restart())).toBe(true)
     expect(await runPromise(resolved.service.reconnect())).toEqual(resolved.endpoint)
 
+    const existing = await runPromise(ServerConnection.resolve({ autostart: false }))
+    expect(existing.endpoint.url).toBe(server.url.toString())
+    expect(existing.service).toBeDefined()
+
     const explicit = await runPromise(ServerConnection.resolve({ server: server.url.toString() }))
     expect(explicit.endpoint.url).toBe(server.url.toString())
     expect(explicit.service).toBeUndefined()

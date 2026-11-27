@@ -1,13 +1,18 @@
 export * as PromptInput from "./prompt-input.js"
 
 import { Schema } from "effect"
-import { AgentAttachment, PromptMention } from "./prompt.js"
+import { AgentAttachment, FileSource, PromptMention } from "./prompt.js"
 import { optional } from "./schema.js"
 import { Skill } from "./skill.js"
 
 export interface FileAttachment extends Schema.Schema.Type<typeof FileAttachment> {}
 export const FileAttachment = Schema.Struct({
-  uri: Schema.String,
+  uri: Schema.String.annotate({
+    description:
+      "A file: URL on the server (a file, a directory, or ?start=N&end=M for lines of a text file), a data: URL, or a media: ref from a message. Up to 20 MB.",
+  }),
+  // Source metadata does not require reopening the original file.
+  source: FileSource.pipe(optional),
   name: Schema.String.pipe(optional),
   description: Schema.String.pipe(optional),
   mention: PromptMention.pipe(optional),

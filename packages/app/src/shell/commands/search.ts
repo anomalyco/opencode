@@ -1,19 +1,14 @@
-import { abort } from "@opencode/util/abort"
-import { createMemo, createResource, onCleanup } from "solid-js"
+import { createComputed, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { uniqueCommandPaletteEntries, type CommandPaletteEntry } from "./palette"
-
-type SourceResult = {
-  query: string
-  items: CommandPaletteEntry[]
-  failed: boolean
-}
-
-type SourceState = {
-  abort?: AbortController
-  seen: CommandPaletteEntry[]
-}
-
-const emptyResult: SourceResult = { query: "", items: [], failed: false }
+import {
+  createPaletteSearchState,
+  selectPaletteSearchFailed,
+  selectPaletteSearchLoading,
+  selectPaletteSearchSources,
+  transitionPaletteSearch,
+  type PaletteSearchEffect,
+  type PaletteSearchEvent,
+} from "./search-machine"
 
 export function matchesCommandPaletteEntry(entry: CommandPaletteEntry, query: string) {
   const value = query.trim().toLowerCase()
@@ -28,9 +23,9 @@ export function matchesCommandPaletteEntry(entry: CommandPaletteEntry, query: st
   )
 }
 
-const typeOrder = { session: 0, command: 1, setting: 2, file: 3 }
+const typeOrder = { command: 0, session: 1, setting: 2, file: 3 }
 
-/** Search results: sessions lead, those open as tabs first and then the newest, then commands, settings and files. */
+/** Search results: commands lead, then sessions (those open as tabs first, then the newest), settings and files. */
 export function rankCommandPaletteEntries(
   entries: CommandPaletteEntry[],
   open: (entry: CommandPaletteEntry) => boolean,
@@ -53,55 +48,72 @@ export function createCommandPaletteSearch(props: {
 }) {
   const query = createMemo(() => props.query().trim())
   const local = createMemo(() => props.items(query()))
+  const [searchState, setSearchState] = createSignal(createPaletteSearchState(props.sources.length))
+  const inflight = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
 
-  const sources = props.sources.map((load) => {
-    const state: SourceState = { seen: [] }
-    onCleanup(() => abort(state.abort))
+  const dispatch = (event: PaletteSearchEvent) =>
+    untrack(() => {
+      const previous = searchState()
+      const next = transitionPaletteSearch(previous, event)
 
-    const [result] = createResource<SourceResult, string>(
-      query,
-      async (query, info) => {
-        abort(state.abort)
-        const current = new AbortController()
-        state.abort = current
-        const previous = info.value ?? emptyResult
+      if (next.state !== previous) setSearchState(next.state)
+      next.effects.forEach(run)
+    })
 
-        return load(query, current.signal).then(
-          (items) => {
-            if (current.signal.aborted) return previous
+  function run(effect: PaletteSearchEffect) {
+    if (effect.type === "source.abort") {
+      const current = inflight.get(effect.attempt)
+      clearTimeout(current?.timer)
+      current?.controller.abort()
+      inflight.delete(effect.attempt)
 
-            if (query && items.length > 0) {
-              state.seen = uniqueCommandPaletteEntries([...items, ...state.seen])
-            }
+      return
+    }
 
-            return { query, items, failed: false }
-          },
-          () => (current.signal.aborted ? previous : { query, items: [], failed: true }),
-        )
-      },
-      // Remote searches must not suspend the dialog's local results on first render.
-      { initialValue: emptyResult },
+    const attempt = effect.attempt
+    const index = effect.index
+    const controller = new AbortController()
+
+    inflight.set(attempt, {
+      controller,
+      timer: setTimeout(() => dispatch({ type: "source.timed-out", index, attempt }), effect.timeoutMs),
+    })
+
+    const settle = (event: PaletteSearchEvent) => {
+      clearTimeout(inflight.get(attempt)?.timer)
+      inflight.delete(attempt)
+
+      // An aborted attempt was superseded or timed out, and the machine already left it.
+      if (!controller.signal.aborted) dispatch(event)
+    }
+
+    void Promise.try(() => props.sources[index]!(effect.query, controller.signal)).then(
+      (items) => settle({ type: "source.resolved", index, attempt, items }),
+      () => settle({ type: "source.failed", index, attempt }),
     )
+  }
 
-    return { result, state }
+  // A computed, not an effect: the first search starts on creation, and a new query aborts the previous search at once.
+  createComputed(() => {
+    const current = query()
+    dispatch({ type: "query.changed", query: current })
   })
 
-  const loading = () => sources.some((source) => source.result.loading)
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   const items = createMemo<CommandPaletteEntry[]>(() => {
     const current = query()
 
     const entries = uniqueCommandPaletteEntries([
       ...local(),
-      ...sources.flatMap((source) => {
-        const result =
-          source.result.state === "ready" || source.result.state === "refreshing" ? source.result.latest : emptyResult
+      ...selectPaletteSearchSources(searchState()).flatMap((source) => {
+        const result = source.settled
 
         if (result.query === current) return result.items
 
         if (!current) return []
 
-        const matched = uniqueCommandPaletteEntries([...result.items, ...source.state.seen]).filter((item) =>
+        const matched = uniqueCommandPaletteEntries([...result.items, ...source.seen]).filter((item) =>
           matchesCommandPaletteEntry(item, current),
         )
 
@@ -118,13 +130,7 @@ export function createCommandPaletteSearch(props: {
 
   return {
     items,
-    loading,
-    failed: () =>
-      sources.some((source) => {
-        const result =
-          source.result.state === "ready" || source.result.state === "refreshing" ? source.result.latest : emptyResult
-
-        return result.query === query() && result.failed
-      }),
+    loading: () => selectPaletteSearchLoading(searchState()),
+    failed: () => selectPaletteSearchFailed(searchState()),
   }
 }

@@ -5,7 +5,6 @@ export default {
   "usage.usage": "प्रयोग",
   "usage.cost": "लागत",
   "usage.view": "सन्दर्भ प्रयोग हेर्नुहोस्",
-  "systemPrompt.title": "प्रणाली प्रम्प्ट",
   "rawMessages.title": "कच्चा सन्देशहरू",
   "export.session": "निर्यात सत्र",
   "stats.session": "सत्र",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "सत्र {{filename}} मा सुरक्षित गरियो",
   "export.failed.title": "सत्र निर्यात गर्न असफल भयो",
   "export.failed.description": "सत्र निर्यात गर्दा त्रुटि भयो",
+  "usage.toggle": "सत्र सन्दर्भ टगल गर्नुहोस्",
 }

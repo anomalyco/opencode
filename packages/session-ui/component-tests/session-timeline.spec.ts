@@ -8,16 +8,20 @@ story("spaces an error between a shell result and expanded updates", async ({ mo
   const shellBox = (await shell.boundingBox())!
   const errorBox = (await error.boundingBox())!
   const updatesBox = (await updates.boundingBox())!
+  // The row's line of text: its 28px click area reaches 6px above and below it.
+  const updatesLine = (await updates.locator('[data-component="tool-trigger"]').first().boundingBox())!
   expect(errorBox.y - (shellBox.y + shellBox.height)).toBe(24)
-  expect(updatesBox.y - (errorBox.y + errorBox.height)).toBe(8)
+  // Blocks stand 16px apart, measured from one block's text to the next; a script's own changes keep 8px under it.
+  expect(updatesLine.y - (errorBox.y + errorBox.height)).toBe(16)
   expect(updatesBox.x).toBe(errorBox.x)
   await updates.click()
   const notice = timeline.locator('[data-slot="session-timeline-notice"]')
   await expect(notice).toContainText("Instructions updated")
   const expandedBox = (await updates.boundingBox())!
   expect((await notice.boundingBox())!.y - (expandedBox.y + expandedBox.height)).toBe(0)
-  expect((await notice.boundingBox())!.x - expandedBox.x).toBe(12)
-  expect(expandedBox.height).toBe(28)
+  expect((await notice.boundingBox())!.x - expandedBox.x).toBe(24)
+  // The open header's click area: 6px above its line, the line, then the 16px gap to its first item.
+  expect(expandedBox.height).toBe(38)
 })
 
 for (const streaming of [false, true]) {
@@ -84,6 +88,15 @@ story("centers the error icon on the first line of short and wrapped errors", as
   geometry.forEach((card) => expect(card.offset).toBeCloseTo(0, 0))
 })
 
+story("links URLs in an error without splitting them at a colon", async ({ mount }) => {
+  const timeline = await mount("current-session-error-card--linked-error")
+  const card = timeline.locator('[data-kind="session-error-card"]')
+  const url = "http://localhost:11434/api"
+
+  await expect(card.getByRole("link", { name: url, exact: true })).toHaveAttribute("href", url)
+  await expect(card.locator("strong")).toHaveCount(0)
+})
+
 // Moved from packages/app/e2e/regression/session-timeline-context-state.spec.ts
 story("preserves a collapsed context group through count and status updates", async ({ mount }) => {
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "exploration" } })
@@ -94,6 +107,24 @@ story("preserves a collapsed context group through count and status updates", as
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
   await timeline.getByRole("button", { name: "Complete glob" }).click()
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
+})
+
+// A failed turn diff load used to look like one still loading, with no way to retry until the row remounted.
+story("offers a retry for a turn diff that failed to load", async ({ mount }) => {
+  const timeline = await mount("current-session-file-changes--turn-change-summary-failed")
+  const summary = timeline.locator('[data-slot="session-turn-diffs"]')
+  const counts = summary.locator('[data-component="diff-changes"]')
+
+  await expect(summary).toContainText("2 Changed files")
+  await expect(summary).toContainText("Diff unavailable")
+  await expect(counts).toHaveCount(0)
+
+  const retry = summary.getByRole("button", { name: "Retry", exact: true })
+  await retry.click()
+  // The header totals the turn; each file row then shows its own counts.
+  await expect(counts.first()).toHaveText("+2-1")
+  await expect(summary).not.toContainText("Diff unavailable")
+  await expect(retry).toHaveCount(0)
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-file-projection.spec.ts
@@ -110,9 +141,9 @@ story("renders a completed write through the production file component", async (
 story("keeps patch file disclosures independent", async ({ mount }) => {
   const timeline = await mount("current-session-file-changes--changing-files", { args: { scenario: "patch" } })
   const wrapper = timeline.locator('[data-timeline-part-id="prt_nested_patch"]')
-  const modified = wrapper.locator('[data-scope="apply-patch"] [data-type="update"] button')
-  const added = wrapper.locator('[data-scope="apply-patch"] [data-type="add"] button')
-  const deleted = wrapper.locator('[data-scope="apply-patch"] [data-type="delete"] button')
+  const modified = wrapper.locator('[data-scope="apply-patch"] [data-type="update"] [data-slot="accordion-trigger"]')
+  const added = wrapper.locator('[data-scope="apply-patch"] [data-type="add"] [data-slot="accordion-trigger"]')
+  const deleted = wrapper.locator('[data-scope="apply-patch"] [data-type="delete"] [data-slot="accordion-trigger"]')
   await expect(wrapper.locator('[data-scope="apply-patch"] [aria-expanded="false"]')).toHaveCount(3)
   await deleted.click()
   await expect(deleted).toHaveAttribute("aria-expanded", "true")

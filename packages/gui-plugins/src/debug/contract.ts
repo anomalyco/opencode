@@ -10,7 +10,7 @@ export const HeapSnapshots = Ipc.define({
   methods: {
     /**
      * Writes heap snapshots of the desktop's own server, every app window and the main process into a new folder,
-     * with a `manifest.json` written last. One capture runs at a time; a second call waits for the first. A snapshot
+     * with a `manifest.json` written last. One capture runs at a time; a call while one runs gets that capture's result. A snapshot
      * that fails is recorded in the manifest and the others are still written.
      */
     write: {

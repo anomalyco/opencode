@@ -153,6 +153,34 @@ it("shows a state at once when synced, also from inside a batch", () => {
   expect(frames.size).toBe(0)
 })
 
+it("animates a later close after a sync that no open change followed", async () => {
+  const panel = setup(true)
+
+  panel.motion.sync(false)
+  await Promise.resolve()
+  panel.setOpen(false)
+  frame()
+  expect(panel.painted.width).toBeGreaterThan(0)
+  expect(panel.present()).toBe(true)
+  settle()
+  expect(panel.painted.width).toBe(0)
+})
+
+it("runs settled work queued in the batch that opens the panel once the flight lands", () => {
+  const panel = setup(false)
+  const widths: number[] = []
+
+  batch(() => {
+    panel.setOpen(true)
+    panel.motion.whenSettled(() => widths.push(panel.painted.width))
+  })
+  expect(widths).toEqual([])
+  frame()
+  expect(widths).toEqual([])
+  settle()
+  expect(widths).toEqual([200])
+})
+
 it("runs settled work once the flight lands, dropping work queued before a turnaround", () => {
   const panel = setup(false)
   const ran: string[] = []

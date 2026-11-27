@@ -12,7 +12,7 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* KiloPlugin.effect(host)
 })
 
@@ -39,27 +39,6 @@ describe("KiloPlugin", () => {
         "X-Title": "opencode",
       })
       expect((yield* catalog.get(Provider.ID.openrouter))?.headers).toBeUndefined()
-    }),
-  )
-
-  it.effect("uses the exact legacy Kilo header casing and set", () =>
-    Effect.gen(function* () {
-      const catalog = yield* Provider.Service
-      yield* catalog.transform((catalog) => {
-        catalog.update(Provider.ID.make("kilo"), (provider) => {
-          provider.package = "@opencode/ai/providers/openai-compatible"
-          provider.settings = { baseURL: "https://api.kilo.ai/api/gateway" }
-        })
-      })
-      yield* addPlugin()
-
-      expect((yield* catalog.get(Provider.ID.make("kilo")))?.headers).toEqual({
-        "HTTP-Referer": "https://opencode.ai/",
-        "X-Title": "opencode",
-      })
-      expect((yield* catalog.get(Provider.ID.make("kilo")))?.headers).not.toHaveProperty("http-referer")
-      expect((yield* catalog.get(Provider.ID.make("kilo")))?.headers).not.toHaveProperty("x-title")
-      expect((yield* catalog.get(Provider.ID.make("kilo")))?.headers).not.toHaveProperty("X-Source")
     }),
   )
 

@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} έληξε μετά από {{timeout}}ms",
   "error.failedPort": "Αποτυχία λήψης θύρας",
   "menu.remove": "Αφαίρεση",
+  "error.busy": "Το {{distro}} είναι απασχολημένο με άλλη εργασία. Δοκιμάστε ξανά όταν ολοκληρωθεί.",
 }

@@ -2,7 +2,8 @@ import { Effect, Stream } from "effect"
 import { ChildProcess } from "effect/process"
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import { collectStream } from "@opencode/util/process"
-import { Failed, NotFound, WrongKind, type FileInfo, type FileType, type FilesImpl } from "./files.js"
+import type { Driver } from "./driver.js"
+import { Failed, NotFound, WrongKind, type FileInfo, type Files, type FileType, type FilesImpl } from "./files.js"
 
 /**
  * Files derived from spawning processes: one process per intent, "$1" is
@@ -144,6 +145,8 @@ export const execDefaults = (spawner: ChildProcessSpawner["Service"]): FilesImpl
     move: (from, to) =>
       run(from, moveScript, [to]).pipe(Effect.flatMap((result) => classifyPlain(from, result, () => undefined))),
     mkdir: (path) => run(path, `mkdir -p -- "$1"`).pipe(Effect.flatMap((result) => complete(path, result))),
+    append: (path, bytes) =>
+      run(path, `cat >> "$1"`, [], bytes).pipe(Effect.flatMap((result) => complete(path, result))),
   }
 }
 
@@ -188,5 +191,23 @@ const parseList = (bytes: Uint8Array) => {
     type: parseType(fields[index * 2]),
   }))
 }
+
+/** Drivers with a native channel for every operation skip building the process-backed fallbacks. */
+export const makeFiles = (driver: Driver): Files =>
+  isComplete(driver.overrides) ? driver.overrides : { ...execDefaults(driver.spawner), ...driver.overrides }
+
+const methods = Object.values({
+  read: "read",
+  write: "write",
+  stat: "stat",
+  list: "list",
+  remove: "remove",
+  move: "move",
+  mkdir: "mkdir",
+  append: "append",
+} satisfies { readonly [Method in keyof FilesImpl]: Method })
+
+const isComplete = (overrides: Partial<FilesImpl> | undefined): overrides is FilesImpl =>
+  overrides !== undefined && methods.every((method) => overrides[method] !== undefined)
 
 export * as EnvironmentExecDefaults from "./exec-defaults.js"

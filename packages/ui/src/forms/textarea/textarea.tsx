@@ -4,14 +4,16 @@ import "./textarea.css"
 export interface TextareaProps extends ComponentProps<"textarea"> {
   /** Error styling for the field and value text. */
   invalid?: boolean
+  surface?: "base" | "layer-1"
 }
 
 export function Textarea(props: TextareaProps) {
-  const [local, textareaProps] = splitProps(props, ["class", "classList", "invalid", "disabled", "rows"])
+  const [local, textareaProps] = splitProps(props, ["class", "classList", "invalid", "disabled", "rows", "surface"])
 
   return (
     <div
       data-component="textarea-v2"
+      data-surface={local.surface ?? "base"}
       data-disabled={local.disabled ? "" : undefined}
       data-invalid={local.invalid ? "" : undefined}
       classList={{

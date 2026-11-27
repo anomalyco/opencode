@@ -1,6 +1,8 @@
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import type { IpcClient } from "@opencode/plugin/gui"
-import type { BrowserPane, PaneEvent } from "./ipc"
+import type { ExperimentalBrowserTab } from "@opencode/plugin/gui/browser"
+import { uuid } from "@opencode/util/uuid"
+import type { BrowserPane, FindAction, PaneEvent, PromptAnswer, Viewport } from "./ipc"
 
 type Client = IpcClient<(typeof BrowserPane)["spec"]>
 
@@ -12,285 +14,79 @@ export type ShortcutEvent = Extract<PaneEvent, { type: "shortcut" }>
 
 export type Zoom = "in" | "out" | "reset"
 
-export type Connection = ReturnType<typeof createConnection>
-
 export type Registration = {
+  readonly binding: string
   /** Creates a restored tab's page, which then reports its embed. */
   load(tabID: Browser.TabID): void
   command(command: Browser.Action): Promise<void>
+  createTab(owner: string, url: string, onScreen: () => boolean): Promise<ExperimentalBrowserTab>
+  closeTab(owner: string, id: ExperimentalBrowserTab): Promise<boolean>
   inspect(tabID: Browser.TabID, enabled: boolean): void
   highlight(tabID: Browser.TabID, ref?: Browser.Ref): void
   zoom(tabID: Browser.TabID, zoom: Zoom): void
+  find(tabID: Browser.TabID, action: FindAction): Promise<void>
+  notice(tabID: Browser.TabID, token: string, dismiss: boolean, copy?: boolean): Promise<void>
+  reviewLink(url: string): Promise<Browser.TabID>
+  answer(tabID: Browser.TabID, id: number, answer: PromptAnswer): Promise<void>
+  setViewport(tabID: Browser.TabID, viewport: Viewport): Promise<void>
   site(tabID: Browser.TabID): Promise<{ cookies: number }>
   clearSite(tabID: Browser.TabID): Promise<void>
+  clearCache(tabID: Browser.TabID, address: string): Promise<void>
+  reveal(tabID: Browser.TabID): Promise<void>
+  openPage(tabID: Browser.TabID, expected: string): Promise<void>
   close(): void
 }
 
-type ConnectionState = {
-  registration?: Registration
-  browser: Browser.State | null
-  /** Host embed per tab page of the current registration. */
-  embeds: Readonly<Record<string, string>>
-  suspended: boolean
-  error?: string
-}
-
-// Owns native registration, retry, and suspended tab metadata independently of the mounted session route, and
-// mirrors the desktop's tabs into the session's strip.
-export function createConnection(input: {
-  client: () => Client | undefined
+// One binding of a session's pane with main. It holds no lifecycle state: the model's machine decides what each
+// answer means. Nothing reaches the callbacks once the binding is closed.
+export function openBinding(input: {
+  client: Client
   listen: (binding: string, listener: (event: PaneEvent) => void) => () => void
-  target: () => { server: string; session: string }
-  /**
-   * `mirror` applies the current tabs to the strip; call it right after storing the state, in the same batch, or
-   * later once the strip can be written. A mirror that never runs leaves the strip's tabs as they are. `native` is true
-   * for an inventory the desktop reported, false for a change made here, such as a new embed or a suspension.
-   */
-  change: (state: ConnectionState, mirror: () => void, native: boolean) => void
-  /** The session's strip: the browser tab IDs it stores, and quietly adding or removing one. */
-  strip: {
-    stored: () => readonly string[]
-    open: (tabID: Browser.TabID) => void
-    close: (tabID: string) => void
-  }
-  focus: (tabID: Browser.TabID) => void
-  preview: (path: string) => void
-  inspect: (event: InspectEvent) => void
-  /** A page's icon or zoom changed. */
-  page: (event: PageEvent) => void
-  /** A focused page handed a browser or shell shortcut to the window. */
-  shortcut: (event: ShortcutEvent) => void
-  /** The user put keyboard focus in a page. */
-  focused: () => void
-}) {
-  const state: ConnectionState = { browser: null, embeds: {}, suspended: false }
-  let disposed = false
-  let blocked = false
-  let attempts = 0
-  let retry: ReturnType<typeof setTimeout> | undefined
-  // A registration was wanted while the pane's Ipc was gone; it registers once the Ipc is back.
-  let lost = false
-  // Tab IDs of the last inventory the strip received, to tell new tabs from ones the user just closed.
-  let known: readonly Browser.TabID[] | undefined
-  // A native inventory the strip has not received yet; the next mirror that runs prunes with it.
-  let pruning = false
-
-  // Mirrors the tabs into the strip, applied after the state so closing a strip tab already finds the desktop's answer.
-  // Only tabs new since the last mirrored inventory are added, so a tab the user just closed is not reopened before
-  // the desktop confirms. Only a native inventory removes: it closes every stored tab it lacks, so the desktop decides
-  // which tabs exist, while suspended, unavailable, and restoring states keep the tabs they will restore.
-  const mirror = () => {
-    const previous = new Set<string>(known ?? [])
-    const ids = state.browser?.tabs.map((tab) => tab.id)
-    const prune = pruning
-    known = ids
-    pruning = false
-
-    if (!ids) return
-
-    if (prune) {
-      const listed = new Set<string>(ids)
-      input.strip
-        .stored()
-        .filter((tabID) => !listed.has(tabID))
-        .forEach((tabID) => input.strip.close(tabID))
-    }
-
-    ids.forEach((tabID) => {
-      if (!previous.has(tabID)) input.strip.open(tabID)
-    })
-  }
-
-  const publish = (native = false) => {
-    pruning ||= native
-    input.change({ ...state }, mirror, native)
-  }
-
-  // The pane itself is unreachable while its main entry restarts or is not active, and main drops every
-  // binding without reporting it. Keep the tabs, like an idle eviction, and register again when it returns.
-  const suspend = (registration: Registration) => {
-    if (disposed || state.registration !== registration) return
-    lost = true
-    registration.close()
-    state.registration = undefined
-    state.embeds = {}
-    state.suspended = true
-    state.error = undefined
-    publish()
-  }
-
-  // Main closed the binding, or never took it (an SSH server's endpoint is missing while it reconnects).
-  // Keep the tabs and register again with backoff; commands sent through it already failed and are not replayed.
-  const reopen = (registration: Registration) => {
-    if (disposed || state.registration !== registration) return
-    registration.close()
-    state.registration = undefined
-    state.embeds = {}
-    state.suspended = false
-    state.error = undefined
-    publish()
-    retry = setTimeout(register, Math.min(30_000, 1_000 * 2 ** attempts++))
-  }
-
-  const register = () => {
-    if (disposed || blocked || state.registration) return
-    const current = input.client()
-
-    if (!current) {
-      lost = true
-
-      return
-    }
-
-    lost = false
-    clearTimeout(retry)
-
-    const registration: Registration = open(
-      current,
-      input.listen,
-      state.browser ? { ...input.target(), restore: state.browser } : input.target(),
-      (event) => {
-        if (disposed || state.registration !== registration) return
-
-        if (event.type === "focus") return input.focus(event.tabID)
-
-        if (event.type === "preview") return input.preview(event.path)
-
-        if (event.type === "inspect") return input.inspect(event)
-
-        if (event.type === "page") return input.page(event)
-
-        if (event.type === "shortcut") return input.shortcut(event)
-
-        if (event.type === "focused") return input.focused()
-
-        if (event.type === "embed") {
-          state.embeds = { ...state.embeds, [event.tabID]: event.embed }
-
-          return publish()
-        }
-
-        if (event.error === "browser.pane.unsupported" || event.error === "browser.pane.replaced") {
-          blocked = true
-          registration.close()
-          state.registration = undefined
-          state.embeds = {}
-          state.browser = null
-          state.error = event.error
-          publish()
-
-          return
-        }
-
-        if (event.error === "browser.pane.registration.closed") return reopen(registration)
-
-        if (event.error === "browser.pane.suspended") {
-          registration.close()
-          state.registration = undefined
-          state.embeds = {}
-          state.suspended = true
-
-          if (event.state) state.browser = event.state
-          state.error = undefined
-          publish()
-
-          // Idle eviction has no retry timer. A user or Session execution wakes it on demand.
-          return
-        }
-
-        if (event.state) attempts = 0
-        state.browser = event.state
-        state.error = event.error
-        publish(true)
-      },
-      (error) => {
-        if (unavailable(error)) return suspend(registration)
-
-        // Main closed a binding it took; its closed-state event decides, whichever of the two arrives first.
-        if (error instanceof Error && error.message === "browser.pane.registration.closed") return
-        reopen(registration)
-      },
-    )
-
-    state.registration = registration
-    state.embeds = {}
-    state.suspended = false
-    state.error = undefined
-    publish()
-  }
-
-  return {
-    wake: register,
-    /** Follows the pane's Ipc going away and coming back. */
-    refresh() {
-      if (!input.client()) {
-        if (state.registration) suspend(state.registration)
-
-        return
-      }
-
-      if (lost) register()
-    },
-    command(command: Browser.Action) {
-      register()
-      const registration = state.registration
-
-      if (!registration) {
-        const error = new Error("browser.pane.unavailable")
-
-        return Promise.reject(input.client() ? error : Object.assign(error, { code: "unavailable" }))
-      }
-
-      return registration.command(command).catch((cause: unknown) => {
-        if (unavailable(cause)) suspend(registration)
-        throw cause
-      })
-    },
-    inspect(tabID: Browser.TabID, enabled: boolean) {
-      state.registration?.inspect(tabID, enabled)
-    },
-    highlight(tabID: Browser.TabID, ref?: Browser.Ref) {
-      state.registration?.highlight(tabID, ref)
-    },
-    zoom(tabID: Browser.TabID, zoom: Zoom) {
-      state.registration?.zoom(tabID, zoom)
-    },
-    /** The page's site data; undefined while no registration can answer. */
-    site: (tabID: Browser.TabID) => state.registration?.site(tabID),
-    clearSite: (tabID: Browser.TabID) => state.registration?.clearSite(tabID),
-    dispose() {
-      disposed = true
-      clearTimeout(retry)
-      state.registration?.close()
-      state.registration = undefined
-    },
-  }
-}
-
-function open(
-  client: Client,
-  listen: (binding: string, listener: (event: PaneEvent) => void) => () => void,
-  target: { server: string; session: string; restore?: Browser.State },
-  listener: (event: PaneEvent) => void,
-  failed: (cause: unknown) => void,
-): Registration {
-  const binding = crypto.randomUUID()
+  target: { server: string; session: string; restore?: Browser.State }
+  /** Main took the binding. */
+  accepted: () => void
+  /** Main refused or closed the binding, or the Ipc could not answer. */
+  failed: (cause: unknown) => void
+  listener: (event: PaneEvent) => void
+}): Registration {
+  const client = input.client
+  const binding = uuid()
   const status = { closed: false }
 
-  const stop = listen(binding, (event) => {
-    if (!status.closed) listener(event)
+  const stop = input.listen(binding, (event) => {
+    if (!status.closed) input.listener(event)
   })
 
-  const ready = client.register({ binding, ...target })
-  // Other failures reach the owner through the closed-state event; keep the bare promise handled.
-  void ready.catch(failed)
+  const ready = client.register({ binding, ...input.target })
+  void ready.then(
+    () => {
+      if (!status.closed) input.accepted()
+    },
+    (cause: unknown) => {
+      if (!status.closed) input.failed(cause)
+    },
+  )
 
   return {
+    binding,
     load(tabID) {
       if (status.closed) return
       void ready.then(() => client.load({ binding, tabID })).catch(() => undefined)
     },
     command: (command) => ready.then(() => client.command({ binding, command })),
+    closeTab: (owner, id) => ready.then(() => client.closeTab({ binding, owner, id })),
+    async createTab(owner, url, onScreen) {
+      if (!onScreen()) throw new Error("browser.pane.notOnScreen")
+      await ready
+
+      if (status.closed || !onScreen()) throw new Error("browser.pane.notOnScreen")
+
+      return client.createTab({ binding, owner, url })
+    },
+    find: (tabID, action) => ready.then(() => client.find({ binding, tabID, action })),
+    notice: (tabID, token, dismiss, copy) => ready.then(() => client.notice({ binding, tabID, token, dismiss, copy })),
+    reviewLink: (url) => ready.then(() => client.reviewLink({ binding, url })),
+    answer: (tabID, id, answer) => ready.then(() => client.answer({ binding, tabID, id, answer })),
     inspect(tabID, enabled) {
       if (status.closed) return
       void ready.then(() => client.inspect({ binding, tabID, enabled })).catch(() => undefined)
@@ -305,8 +101,12 @@ function open(
       if (status.closed) return
       void ready.then(() => client.zoom({ binding, tabID, zoom })).catch(() => undefined)
     },
+    setViewport: (tabID, viewport) => ready.then(() => client.setViewport({ binding, tabID, viewport })),
     site: (tabID) => ready.then(() => client.site({ binding, tabID })),
     clearSite: (tabID) => ready.then(() => client.clearSite({ binding, tabID })),
+    clearCache: (tabID, address) => ready.then(() => client.clearCache({ binding, tabID, address })),
+    reveal: (tabID) => ready.then(() => client.reveal({ binding, tabID })),
+    openPage: (tabID, expected) => ready.then(() => client.openPage({ binding, tabID, expected })),
     close() {
       if (status.closed) return
       status.closed = true

@@ -3,6 +3,7 @@ import { createClientConnection, createPersistentPtyClient } from "@opencode/cli
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { onCleanup } from "solid-js"
 import { createSimpleContext } from "./helper"
+import { createMediaCache } from "../util/media"
 import { useLog } from "./log"
 
 type ManagedService = {
@@ -12,7 +13,11 @@ type ManagedService = {
 
 type ClientEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
 
-export const { use: useClient, provider: ClientProvider } = createSimpleContext({
+export const {
+  use: useClient,
+  provider: ClientProvider,
+  context: ClientContext,
+} = createSimpleContext({
   name: "Client",
   init: (props: { api: OpenCodeClient; url?: string; headers?: Record<string, string>; service?: ManagedService }) => {
     const log = useLog({ component: "client" })
@@ -22,6 +27,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
     let url = props.url
     let headers = props.headers
     let persistentPty = url ? createPersistentPtyClient(api, { url }) : undefined
+    const media = createMediaCache(() => api)
 
     const connection = createClientConnection(api, {
       reconnect: service
@@ -63,6 +69,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
         listen: events.listen,
       },
       connection,
+      media,
       restart: service?.restart,
     }
   },

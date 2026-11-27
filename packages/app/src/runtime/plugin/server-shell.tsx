@@ -93,12 +93,12 @@ export function PluginServerEndpoints() {
     createEffect(() => {
       const endpoints = servers.list.flatMap((conn) => {
         // Main knows the built-in server first-hand; a contributed server has no endpoint until it is ready.
-        if (conn.type === "sidecar" || (conn.type === "plugin" && conn.state !== "ready")) return []
-        const password = conn.http.password
+        const http = ServerConnection.http(conn)
 
-        const endpoint = { id: ServerConnection.key(conn), url: conn.http.url }
+        if (conn.type === "sidecar" || !http) return []
+        const endpoint = { id: ServerConnection.key(conn), url: http.url }
 
-        return [password ? { ...endpoint, password } : endpoint]
+        return [http.password ? { ...endpoint, password: http.password } : endpoint]
       })
 
       const value = JSON.stringify(endpoints)

@@ -55,6 +55,11 @@ export type IntegrationOAuthAuthorization = {
   | {
       readonly mode: "auto"
       readonly callback: Effect.Effect<Credential.OAuth, unknown>
+      /**
+       * Accepts the redirect URL a user pasted when the browser could not reach this machine, and settles `callback`
+       * with it. Check the URL's `state` as the browser path does; a failure rejects only this paste.
+       */
+      readonly submit?: (redirect: string) => Effect.Effect<void, unknown>
     }
   | {
       readonly mode: "code"
@@ -66,6 +71,8 @@ export type IntegrationOAuthMethodRegistration = {
   readonly method: IntegrationOAuthMethod
   readonly authorize: (answer: Form.Answer) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
+  /** Signs the credential out remotely before it is removed. A failure is logged and the credential is still removed. */
+  readonly revoke?: (credential: Credential.OAuth) => Effect.Effect<void, unknown>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }
 export type IntegrationMethodRegistration =

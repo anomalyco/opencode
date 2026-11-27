@@ -1,5 +1,6 @@
 import { Layer } from "effect"
 import { DecisionClient } from "./decision-client.js"
+import { EmbeddingClient } from "./embedding-client.js"
 import { ImageClient } from "./image-client.js"
 import { LLMClient } from "./route/client.js"
 import { RequestExecutor } from "./route/executor.js"
@@ -16,6 +17,7 @@ export const layerWith = <E, R>(executor: Layer.Layer<RequestExecutor.Service, E
     SpeechClient.layer,
     TranscriptionClient.layer,
     DecisionClient.layer,
+    EmbeddingClient.layer,
   ).pipe(Layer.provideMerge(executor))
 
 /** Every modality client plus the executor over `RequestExecutor.fetchLayer`: the one layer most programs need. */

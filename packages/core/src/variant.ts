@@ -24,15 +24,17 @@ export function supports(reasoning: ConfigProvider.Reasoning): readonly Support[
 type Variants = Model.Info["variants"]
 type Overlay = Omit<Variants[number], "id">
 
-type Protocol = (model: Model.Info, support: Support) => Variants
+type Protocol = (model: Model.Info, support: Support, supports?: readonly Support[]) => Variants
 
 export function resolve(model: Model.Info, supports: readonly Support[] = [{ type: "effort" }]): Variants {
   const protocol = model.package === undefined ? undefined : PROTOCOLS[model.package]
   if (!protocol) return []
-  const toggle = supports.some((support) => support.type === "toggle") ? protocol(model, { type: "toggle" }) : []
+  const toggle = supports.some((support) => support.type === "toggle")
+    ? protocol(model, { type: "toggle" }, supports)
+    : []
   const effort = supports.find((support) => support.type === "effort")
   const budget = supports.find((support) => support.type === "budget_tokens")
-  const main = effort ? protocol(model, effort) : budget ? protocol(model, budget) : toggle
+  const main = effort ? protocol(model, effort, supports) : budget ? protocol(model, budget, supports) : toggle
   const variants = [...toggle.filter((variant) => variant.id === "none"), ...main]
   return variants.filter((variant, index) => variants.findIndex((other) => other.id === variant.id) === index)
 }
@@ -117,7 +119,13 @@ const openResponses: Protocol = (_, support) => {
   return efforts(support.values ?? EFFORTS, responsesEffort)
 }
 
-const googleInteractions: Protocol = (_, support) => {
+const googleInteractions: Protocol = (_, support, supports) => {
+  // Budget models such as Gemini 2.5 do not accept "minimal" as an off switch.
+  if (support.type === "toggle" && supports?.every((support) => support.type === "toggle"))
+    return toggle(
+      { settings: { thinkingLevel: "minimal" } },
+      { settings: { thinkingLevel: "high", thinkingSummaries: "auto" } },
+    )
   if (support.type !== "effort") return []
   return efforts(support.values ?? EFFORTS, (effort) => ({
     settings: { thinkingLevel: effort, thinkingSummaries: "auto" },
@@ -621,6 +629,9 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/openai-compatible-responses": openResponses,
   "@opencode/ai/providers/google-vertex/responses": openResponses,
   "@opencode/ai/providers/xai": openResponses,
+  "@opencode/ai/providers/digitalocean/responses": openResponses,
+  "@opencode/ai/providers/openrouter/responses": openResponses,
+  "@opencode/ai/providers/venice/responses": openResponses,
 
   "@opencode/ai/providers/openai-compatible": openaiCompatible,
   "@opencode/ai/providers/openai/chat": openaiChat,
@@ -654,6 +665,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/anthropic": anthropicMessages,
   "@opencode/ai/providers/anthropic-compatible": anthropicMessages,
   "@opencode/ai/providers/amazon-bedrock/mantle/messages": anthropicMessages,
+  "@opencode/ai/providers/azure/messages": anthropicMessages,
   "@opencode/ai/providers/google-vertex/messages": anthropicMessages,
   "@opencode/ai/providers/google-vertex-messages": anthropicMessages,
   "@opencode/ai/providers/alibaba/messages": alibabaMessages,

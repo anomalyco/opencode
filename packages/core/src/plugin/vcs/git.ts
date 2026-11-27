@@ -10,6 +10,7 @@ import { ChildProcess } from "effect/process"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Base, BranchList, FileStatus, Info, Mode } from "@opencode/schema/vcs"
 import { AppProcess } from "@opencode/util/process"
+import { Environment } from "../../environment/index.js"
 import { Location } from "../../location.js"
 import type { Adapter, BranchOptions, DiffOptions, Untracked } from "../../vcs.js"
 import { DiffError } from "../../vcs.js"
@@ -27,6 +28,8 @@ import type { Patch } from "../../vcs/patch.js"
 export const Plugin = define({
   id: "opencode.vcs.git",
   effect: Effect.fn("VcsGitPlugin")(function* (ctx) {
+    const environment = yield* Environment.Service
+    if (!environment.local) return
     const location = yield* Location.Service
     // Markerless locations need this definition to initialize their first repository.
     if (location.vcs && location.vcs.type !== "git") return
@@ -165,16 +168,14 @@ interface Ctx {
 
 type GitOps = ReturnType<typeof makeGit>
 
+// Unlike the snapshot repository, this is the user's checkout: line endings and symlinks follow its own config, as
+// `git status` does, or every CRLF checkout and symlink placeholder reads as changed.
 const cfg = [
   "--no-optional-locks",
-  "-c",
-  "core.autocrlf=false",
   "-c",
   "core.fsmonitor=false",
   "-c",
   "core.longpaths=true",
-  "-c",
-  "core.symlinks=true",
   "-c",
   "core.quotepath=false",
 ] as const
@@ -196,18 +197,13 @@ const numstat = (text: string) =>
     if (a === -1 || b === -1) return []
     const file = item.slice(b + 1)
     if (!file) return []
-    const adds = item.slice(0, a)
-    const dels = item.slice(a + 1, b)
-    const additions = adds === "-" ? 0 : Number.parseInt(adds || "0", 10)
-    const deletions = dels === "-" ? 0 : Number.parseInt(dels || "0", 10)
-    return [
-      {
-        file,
-        additions: Number.isFinite(additions) ? additions : 0,
-        deletions: Number.isFinite(deletions) ? deletions : 0,
-      } satisfies Stat,
-    ]
+    return [{ file, additions: count(item.slice(0, a)), deletions: count(item.slice(a + 1, b)) } satisfies Stat]
   })
+
+const count = (value: string) => {
+  const parsed = value === "-" ? 0 : Number.parseInt(value || "0", 10)
+  return Number.isFinite(parsed) ? parsed : 0
+}
 
 function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   const run = Effect.fnUntraced(
@@ -265,19 +261,27 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   const branches = Effect.fn("VcsGit.branches")(function* (cwd: string, options?: BranchOptions) {
     const search = options?.search?.trim().toLowerCase()
     // `refname:short` collapses `refs/remotes/<remote>/HEAD` to the bare remote name, so strip the namespace
-    // instead. Search and limit apply here because ref globs cannot cross `/` and `--count` precedes the filter.
+    // and exclude symbolic refs via `%(symref)` instead of filtering `/HEAD` suffixes. Search and limit apply
+    // here because ref globs cannot cross `/` and `--count` precedes the filter.
     return (yield* lines(
       [
         "for-each-ref",
         "--sort=refname",
         "--sort=-committerdate",
-        "--format=%(refname:lstrip=2)",
+        "--format=%(refname:lstrip=2)%00%(symref)",
         "refs/heads",
         "refs/remotes",
       ],
       { cwd },
     ))
-      .filter((item) => !item.endsWith("/HEAD") && (!search || item.toLowerCase().includes(search)))
+      .flatMap((line) => {
+        const sep = line.indexOf("\0")
+        if (sep === -1) return []
+        const name = line.slice(0, sep)
+        if (!name || line.slice(sep + 1)) return []
+        if (search && !name.toLowerCase().includes(search)) return []
+        return [name]
+      })
       .slice(0, options?.limit) satisfies BranchList
   })
 
@@ -413,40 +417,40 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     )
   })
 
-  const patch = Effect.fn("VcsGit.patch")(function* (cwd: string, ref: string, file: string, options?: PatchOptions) {
+  const diffPatch = Effect.fnUntraced(function* (
+    cwd: string,
+    args: string[],
+    options: PatchOptions | undefined,
+    mode: { dropTruncated: boolean; noIndex?: boolean },
+  ) {
     const result = yield* run(
       [
         "diff",
+        ...(mode.noIndex ? ["--no-index"] : []),
         "--patch",
         "--no-ext-diff",
         "--no-renames",
         `--unified=${options?.context ?? 3}`,
-        ref,
-        ...(options?.target ? [options.target] : []),
-        "--",
-        file,
+        ...args,
       ],
       { cwd, maxOutputBytes: options?.maxOutputBytes },
     )
-    return { text: result.truncated ? "" : result.text(), truncated: result.truncated } satisfies Patch
+    return {
+      text: mode.dropTruncated && result.truncated ? "" : result.text(),
+      truncated: result.truncated,
+    } satisfies Patch
+  })
+
+  const patch = Effect.fn("VcsGit.patch")(function* (cwd: string, ref: string, file: string, options?: PatchOptions) {
+    return yield* diffPatch(cwd, [ref, ...(options?.target ? [options.target] : []), "--", file], options, {
+      dropTruncated: true,
+    })
   })
 
   const patchAll = Effect.fn("VcsGit.patchAll")(function* (cwd: string, ref: string, options?: PatchOptions) {
-    const result = yield* run(
-      [
-        "diff",
-        "--patch",
-        "--no-ext-diff",
-        "--no-renames",
-        `--unified=${options?.context ?? 3}`,
-        ref,
-        ...(options?.target ? [options.target] : []),
-        "--",
-        ".",
-      ],
-      { cwd, maxOutputBytes: options?.maxOutputBytes },
-    )
-    return { text: result.text(), truncated: result.truncated } satisfies Patch
+    return yield* diffPatch(cwd, [ref, ...(options?.target ? [options.target] : []), "--", "."], options, {
+      dropTruncated: false,
+    })
   })
 
   const patchUntracked = Effect.fn("VcsGit.patchUntracked")(function* (
@@ -456,21 +460,7 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   ) {
     // A folder entry has no patch of its own.
     if (file.endsWith("/")) return { text: "", truncated: false } satisfies Patch
-    const result = yield* run(
-      [
-        "diff",
-        "--no-index",
-        "--patch",
-        "--no-ext-diff",
-        "--no-renames",
-        `--unified=${options?.context ?? 3}`,
-        "--",
-        "/dev/null",
-        file,
-      ],
-      { cwd, maxOutputBytes: options?.maxOutputBytes },
-    )
-    return { text: result.truncated ? "" : result.text(), truncated: result.truncated } satisfies Patch
+    return yield* diffPatch(cwd, ["--", "/dev/null", file], options, { dropTruncated: true, noIndex: true })
   })
 
   const statUntracked = Effect.fn("VcsGit.statUntracked")(function* (cwd: string, file: string) {
@@ -484,13 +474,7 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     const parts = result.text().split("\t")
     if (parts.length < 2) return
 
-    const additions = parts[0] === "-" ? 0 : Number.parseInt(parts[0] || "0", 10)
-    const deletions = parts[1] === "-" ? 0 : Number.parseInt(parts[1] || "0", 10)
-    return {
-      file,
-      additions: Number.isFinite(additions) ? additions : 0,
-      deletions: Number.isFinite(deletions) ? deletions : 0,
-    } satisfies Stat
+    return { file, additions: count(parts[0]), deletions: count(parts[1]) } satisfies Stat
   })
 
   // Paths are literal so names containing pathspec magic such as `*` or `[` match only themselves.
@@ -517,11 +501,7 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   })
 
   const worktreePatch = Effect.fn("VcsGit.worktreePatch")(function* (cwd: string, options?: PatchOptions) {
-    const result = yield* run(
-      ["diff", "--patch", "--no-ext-diff", "--no-renames", `--unified=${options?.context ?? 3}`],
-      { cwd, maxOutputBytes: options?.maxOutputBytes },
-    )
-    return { text: result.text(), truncated: result.truncated } satisfies Patch
+    return yield* diffPatch(cwd, [], options, { dropTruncated: false })
   })
 
   return {

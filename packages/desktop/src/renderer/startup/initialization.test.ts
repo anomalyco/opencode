@@ -1,28 +1,18 @@
 import { describe, expect, test } from "bun:test"
-import { createSidecarResolver, initializationData } from "./initialization"
-
-function failure(error: unknown) {
-  try {
-    initializationData(Object.assign(() => undefined, { error }))
-  } catch (caught) {
-    return caught
-  }
-}
+import { createSidecarResolver, localServerStartupError } from "./initialization"
 
 describe("desktop renderer initialization", () => {
-  test("throws the original initialization error, marked as a local server startup, before rendering", () => {
+  test("keeps the original initialization error, marked as a local server startup", () => {
     const error = new Error("Cannot migrate session_message projections")
-    expect(failure(error)).toBe(error)
+    expect(localServerStartupError(error)).toBe(error)
     expect(error).toHaveProperty("localServerStartup", true)
     // The RPC error text reaches the error screen unchanged.
     expect(error.message).toBe("Cannot migrate session_message projections")
     // A falsy error is still an error.
-    const empty = failure("")
+    const empty = localServerStartupError("")
     expect(empty).toBeInstanceOf(Error)
     expect(empty).toHaveProperty("message", "")
     expect(empty).toHaveProperty("localServerStartup", true)
-    const sidecar = { url: "http://127.0.0.1:1234" }
-    expect(initializationData(Object.assign(() => sidecar, { error: undefined }))).toBe(sidecar)
   })
 
   test("refreshes the managed sidecar endpoint", async () => {
@@ -53,13 +43,20 @@ describe("desktop renderer initialization", () => {
     expect(updates).toEqual([])
   })
 
-  test("does not publish a sidecar resolved after cancellation", async () => {
+  test("does not publish a sidecar resolved after cancellation, and cancels the wait in main", async () => {
     const sidecar = { url: "http://127.0.0.1:4321" }
     const pending = Promise.withResolvers<typeof sidecar>()
     const updates: (typeof sidecar)[] = []
+    const signals: (AbortSignal | undefined)[] = []
 
     const resolve = createSidecarResolver({
-      api: { reconnectService: () => pending.promise },
+      api: {
+        reconnectService: (signal) => {
+          signals.push(signal)
+
+          return pending.promise
+        },
+      },
       current: () => undefined,
       update: (next) => updates.push(next),
     })
@@ -71,5 +68,6 @@ describe("desktop renderer initialization", () => {
 
     await expect(result).rejects.toBe(abort.signal.reason)
     expect(updates).toEqual([])
+    expect(signals).toEqual([abort.signal])
   })
 })

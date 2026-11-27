@@ -9,8 +9,11 @@ export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", { succe
 
 export const AppReconnectService = Rpc.make("AppReconnectService", { success: ServerReadyData })
 
-export const AppConsumeInitialDeepLinks = Rpc.make("AppConsumeInitialDeepLinks", {
-  success: Schema.Array(Schema.String),
+// The renderer listens for DeepLinksOpened before it reports ready, and acknowledges each delivery once handled.
+export const AppReadyDeepLinks = Rpc.make("AppReadyDeepLinks")
+
+export const AppAcknowledgeDeepLinks = Rpc.make("AppAcknowledgeDeepLinks", {
+  payload: { attempt: Schema.Number },
 })
 
 export const AppIsFirstLaunchOnboardingPending = Rpc.make("AppIsFirstLaunchOnboardingPending", {
@@ -54,6 +57,24 @@ export const AppRecordFatalRendererError = Rpc.make("AppRecordFatalRendererError
   },
 })
 
+export const AppGetSpellcheckEnabled = Rpc.make("AppGetSpellcheckEnabled", { success: Schema.Boolean })
+
+export const AppSetSpellcheckEnabled = Rpc.make("AppSetSpellcheckEnabled", {
+  payload: { enabled: Schema.Boolean },
+})
+
+export const AppGetSmoothScrollingEnabled = Rpc.make("AppGetSmoothScrollingEnabled", { success: Schema.Boolean })
+
+export const AppSetSmoothScrollingEnabled = Rpc.make("AppSetSmoothScrollingEnabled", {
+  payload: { enabled: Schema.Boolean },
+})
+
+export const AppGetKeepServiceRunning = Rpc.make("AppGetKeepServiceRunning", { success: Schema.Boolean })
+
+export const AppSetKeepServiceRunning = Rpc.make("AppSetKeepServiceRunning", {
+  payload: { enabled: Schema.Boolean },
+})
+
 export const AppSetNativeTranslations = Rpc.make("AppSetNativeTranslations", {
   payload: { value: Schema.Unknown },
 })
@@ -63,7 +84,8 @@ export const AppRelaunch = Rpc.make("AppRelaunch")
 export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
   AppReconnectService,
-  AppConsumeInitialDeepLinks,
+  AppReadyDeepLinks,
+  AppAcknowledgeDeepLinks,
   AppIsFirstLaunchOnboardingPending,
   AppFinishFirstLaunchOnboarding,
   AppCheckAppExists,
@@ -71,6 +93,12 @@ export const AppRpcs = RpcGroup.make(
   AppSetBackgroundColor,
   AppExportDebugLogs,
   AppSetForceFocus,
+  AppGetSpellcheckEnabled,
+  AppSetSpellcheckEnabled,
+  AppGetSmoothScrollingEnabled,
+  AppSetSmoothScrollingEnabled,
+  AppGetKeepServiceRunning,
+  AppSetKeepServiceRunning,
   AppRecordFatalRendererError,
   AppSetNativeTranslations,
   AppRelaunch,

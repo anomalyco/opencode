@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { LLM, LLMClient, LLMRequest, Message } from "@opencode/ai/effect"
+import { ai, LLMClient, Message } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 import { RequestExecutor, WebSocketTransport } from "@opencode/ai/route"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
@@ -83,15 +83,13 @@ for (const recovery of ["reconnect", "http-fallback", "ambiguous-send"] as const
         yield* Effect.gen(function* () {
           const channels = yield* SessionModelTransport.Service
           const options = { webSocket: channels.bind(Session.ID.make(`ses_compaction_${recovery}`)) }
-          const first = LLM.request({
+          const first = ai.request({
             model: OpenAI.configure({ apiKey: "fixture", baseURL: server.url.toString() }).responses("fixture"),
             prompt: "first",
             providerOptions: { contextManagement: [{ type: "compaction", compactThreshold: 100000 }] },
           })
           const compacted = yield* LLMClient.generate(first, options)
-          const second = LLMRequest.update(first, {
-            messages: [...first.messages, compacted.message, Message.user("second")],
-          })
+          const second = { ...first, messages: [...first.messages, compacted.message, Message.user("second")] }
           yield* LLMClient.generate(second, options)
           expect(sockets).toHaveLength(1)
           expect(websocket[1]?.body).toMatchObject({
@@ -99,7 +97,7 @@ for (const recovery of ["reconnect", "http-fallback", "ambiguous-send"] as const
             previous_response_id: "resp_1",
             input: [{ role: "user", content: [{ type: "input_text", text: "second" }] }],
           })
-          const third = LLMRequest.update(second, { messages: [...second.messages, Message.user("third")] })
+          const third = { ...second, messages: [...second.messages, Message.user("third")] }
           if (recovery === "ambiguous-send") {
             const error = yield* LLMClient.generate(third, options).pipe(Effect.flip)
             expect(error.reason).toMatchObject({ _tag: "Transport", delivery: "ambiguous" })

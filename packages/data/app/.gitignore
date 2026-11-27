@@ -1,0 +1,18 @@
+dist
+.wrangler
+.output
+.og-worker
+.vercel
+.netlify
+app.config.timestamp_*.js
+
+# Environment
+.env
+.env*.local
+
+# dependencies
+/node_modules
+
+# System Files
+.DS_Store
+Thumbs.db

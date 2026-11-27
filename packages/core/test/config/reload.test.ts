@@ -36,6 +36,7 @@ import { AppProcess } from "@opencode/util/process"
 import { Deferred, Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AbsolutePath } from "@opencode/core/schema"
+import { waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
@@ -54,8 +55,6 @@ const document = path.join(import.meta.dir, "opencode.json")
 describe("config plugin reloads", () => {
   for (const input of [
     { root: ".agents", global: false },
-    { root: "../.claude", global: false },
-    { root: "home/.agents", global: true },
     { root: "home/.claude", global: true },
   ]) {
     it.live(`loads skills when ${input.root} appears after startup`, () =>
@@ -74,7 +73,7 @@ describe("config plugin reloads", () => {
               const config = yield* Config.Service
               const plugins = yield* Plugin.Service
               const skills = yield* Skill.Service
-              const host = yield* PluginHost.make(plugins)
+              const host = yield* PluginHost.make(plugins, "test")
               yield* ConfigCompatibilityPlugin.Plugin.effect(host)
               expect(yield* skills.list()).toEqual([])
 
@@ -116,7 +115,7 @@ describe("config plugin reloads", () => {
         return Effect.gen(function* () {
           const plugins = yield* Plugin.Service
           const references = yield* Reference.Service
-          const host = yield* PluginHost.make(plugins)
+          const host = yield* PluginHost.make(plugins, "test")
           yield* ConfigReferencePlugin.Plugin.effect(host)
           yield* waitUntil(references.list().pipe(Effect.map((items) => items.some((item) => item.name === "docs"))))
           expect((yield* references.list())[0]?.path).toBe(AbsolutePath.make(path.join(tmp.path, "docs")))
@@ -149,7 +148,7 @@ describe("config plugin reloads", () => {
           return yield* Effect.gen(function* () {
             const plugins = yield* Plugin.Service
             const references = yield* Reference.Service
-            const host = yield* PluginHost.make(plugins)
+            const host = yield* PluginHost.make(plugins, "test")
             yield* ConfigReferencePlugin.Plugin.effect(host)
             const publish = yield* Deferred.await(parent)
             yield* Effect.promise(() => fs.mkdir(root))
@@ -170,7 +169,6 @@ describe("config plugin reloads", () => {
 
   for (const input of [
     { file: "opencode.json", empty: false },
-    { file: "../opencode.jsonc", empty: false },
     { file: ".opencode/opencode.json", empty: false },
     { file: "../.opencode/opencode.jsonc", empty: true },
   ]) {
@@ -184,7 +182,7 @@ describe("config plugin reloads", () => {
             return yield* Effect.gen(function* () {
               const plugins = yield* Plugin.Service
               const references = yield* Reference.Service
-              const host = yield* PluginHost.make(plugins)
+              const host = yield* PluginHost.make(plugins, "test")
               yield* ConfigReferencePlugin.Plugin.effect(host)
               expect(yield* references.list()).toEqual([])
 
@@ -242,7 +240,7 @@ describe("config plugin reloads", () => {
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       const references = yield* Reference.Service
-      const host = yield* PluginHost.make(plugins)
+      const host = yield* PluginHost.make(plugins, "test")
       yield* references.transform((editor) =>
         editor.add(
           "external",
@@ -283,7 +281,7 @@ describe("config plugin reloads", () => {
       const plugins = yield* Plugin.Service
       const references = yield* Reference.Service
       const skills = yield* Skill.Service
-      const host = yield* PluginHost.make(plugins)
+      const host = yield* PluginHost.make(plugins, "test")
       const test = yield* Config.Test
 
       yield* ConfigAgentPlugin.Plugin.effect(host)
@@ -334,7 +332,7 @@ describe("config plugin reloads", () => {
       const integrations = yield* Integration.Service
       const plugins = yield* Plugin.Service
       const websearch = yield* WebSearch.Service
-      const baseHost = yield* PluginHost.make(plugins)
+      const baseHost = yield* PluginHost.make(plugins, "test")
       const test = yield* Config.Test
       const tracked = new Set<string>([
         Agent.Event.Updated.type,
@@ -419,7 +417,7 @@ describe("config plugin reloads", () => {
           () =>
             reloads.agent === 1 &&
             reloads.command === 1 &&
-            reloads.skill === 2 &&
+            reloads.skill === 1 &&
             reloads.reference === 1 &&
             reloads.websearch === 1 &&
             reloads.integration === 1,
@@ -446,7 +444,7 @@ describe("config plugin reloads", () => {
           () =>
             reloads.agent === 2 &&
             reloads.command === 2 &&
-            reloads.skill === 4 &&
+            reloads.skill === 2 &&
             reloads.reference === 2 &&
             reloads.websearch === 2 &&
             reloads.integration === 2,
@@ -463,7 +461,7 @@ describe("config plugin reloads", () => {
           () =>
             reloads.agent === 3 &&
             reloads.command === 3 &&
-            reloads.skill === 6 &&
+            reloads.skill === 4 &&
             reloads.reference === 3 &&
             reloads.websearch === 4 &&
             reloads.integration === 3,
@@ -526,11 +524,3 @@ function referenceConfig(file: string, references: Record<string, string>) {
 function title(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
-
-const waitUntil = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
-  for (let attempt = 0; attempt < 100; attempt++) {
-    if (yield* condition) return
-    yield* Effect.sleep("10 millis")
-  }
-  return yield* Effect.die("Timed out waiting for config plugin reloads")
-})

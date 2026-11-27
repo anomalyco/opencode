@@ -1,24 +1,30 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Duration, Effect, Layer, LayerMap, Stream } from "effect"
+import { Clock, Deferred, Duration, Effect, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
+import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { define } from "@opencode/plugin/effect/plugin"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
+import { Npm } from "@opencode/util/npm"
+import { AISDK } from "@opencode/core/aisdk"
 import { Command } from "@opencode/core/command"
 import { ConfigPluginSource } from "@opencode/core/config/plugin/source"
 import { Instance } from "@opencode/core/instance"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { Location } from "@opencode/core/location"
+import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
+import { Provider } from "@opencode/core/provider"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
+import { PluginUpdate } from "@opencode/core/plugin/update"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Database } from "../../src/database/database"
 import { Bus } from "../../src/bus"
 import { tempGlobalLayer } from "../fixture/global"
 import { offlineModels } from "../fixture/models"
 import { tmpdirScoped } from "../fixture/tmpdir"
-import { advance } from "../lib/clock"
+import { advance, drain } from "../lib/clock"
 import { testEffect } from "../lib/effect"
 
 const id = Plugin.ID.make("account-prompts")
@@ -45,10 +51,14 @@ const sourceLayer = Layer.succeed(
   }),
 )
 
+// Package checks report `available` after `delay`, and packages in `stays` don't follow updates; updates are recorded
+// instead of installed.
+const packages = { available: false, delay: Duration.zero, checks: 0, stays: [] as string[], updated: [] as string[] }
+
 const instances = Layer.effect(
   LocationServiceMap.Service,
   Effect.gen(function* () {
-    const map = yield* LayerMap.make(
+    const map = yield* LocationServiceMap.make(
       (ref: Location.Ref) =>
         Instance.layer(ref, { discovery: false, plugins: [greeter("instance-greet")], replacements: bindings }),
       { idleTimeToLive: Duration.infinity },
@@ -57,6 +67,43 @@ const instances = Layer.effect(
       Global.node.replace(tempGlobalLayer),
       offlineModels,
       ConfigPluginSource.node.replace(sourceLayer),
+      Npm.node.replace(
+        Layer.succeed(
+          Npm.Service,
+          Npm.Service.of({
+            add: (pkg) =>
+              Effect.fail(
+                new Npm.InstallFailedError({
+                  add: [pkg],
+                  dir: "",
+                  cause: new Error(`Unexpected Npm.add(${pkg})`),
+                }),
+              ),
+            resolve: (name) => Effect.succeed({ directory: "", name }),
+            check: () =>
+              Effect.sleep(packages.delay).pipe(
+                Effect.andThen(Effect.sync(() => packages.checks++)),
+                Effect.as(packages.available),
+              ),
+            update: (pkg) =>
+              packages.available
+                ? Effect.sync(() => {
+                    packages.updated.push(pkg)
+                    return { directory: "", name: pkg }
+                  })
+                : Effect.fail(
+                    new Npm.InstallFailedError({
+                      add: [pkg],
+                      dir: "",
+                      cause: new Error(`Unexpected Npm.update(${pkg})`),
+                    }),
+                  ),
+            follows: (pkg) => Effect.succeed(!packages.stays.includes(pkg)),
+            reject: () => Effect.succeed(false),
+            which: () => Effect.undefined,
+          }),
+        ),
+      ),
       LocationServiceMap.node.replace(Layer.succeed(LocationServiceMap.Service, map)),
       Instance.node.replace(
         Layer.succeed(Instance.Service, {
@@ -158,6 +205,93 @@ describe("PluginSupervisor", () => {
         Effect.scoped,
         Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
       )
+    }),
+  )
+
+  it.effect("updates only packages that follow updates, once per check interval", () =>
+    Effect.gen(function* () {
+      const follows = ["latest-plugin@latest", "ranged-plugin@^1.0.0", "github:acme/branch-plugin#dev"]
+      packages.stays = ["plain-plugin", "next-plugin@next", "github:acme/default-plugin"]
+      source.operations = [...follows, ...packages.stays].map((target) => ({
+        type: "add" as const,
+        target,
+        options: {},
+      }))
+      packages.available = true
+      packages.updated = []
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        yield* Plugin.Service
+        yield* advance(() => packages.updated.length >= follows.length)
+        // Each update reloads and checks again; the newer version is still reported but isn't installed twice.
+        yield* drain
+        expect(packages.updated.toSorted()).toEqual(follows.toSorted())
+        // The next interval's scheduled check installs again.
+        yield* TestClock.adjust(PluginUpdate.interval)
+        yield* advance(() => packages.updated.length >= follows.length * 2)
+        yield* drain
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        Effect.ensuring(
+          Effect.sync(() => {
+            source.operations = []
+            packages.available = false
+            packages.stays = []
+          }),
+        ),
+      )
+      expect(packages.updated.toSorted()).toEqual([...follows, ...follows].toSorted())
+    }),
+  )
+
+  it.effect("checks and updates once per interval, 24 hours after a slow startup", () =>
+    Effect.gen(function* () {
+      source.operations = [{ type: "add", target: "latest-plugin@latest", options: {} }]
+      packages.available = true
+      // Checks take a while, so the first ones finish well after startup.
+      packages.delay = Duration.seconds(10)
+      packages.checks = 0
+      packages.updated = []
+      source.activations = 0
+      const sdk = yield* SdkPlugins.Service
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      const started = yield* Clock.currentTimeMillis
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* advance(() => packages.updated.length === 1)
+        // The update reloads and checks again; the newer version is still reported but isn't installed twice.
+        yield* drain
+        yield* plugins.awaitActivation
+        expect(packages.updated).toEqual(["latest-plugin@latest"])
+        // Other reloads in the same interval reuse the checks.
+        const checks = packages.checks
+        const activations = source.activations
+        yield* sdk.register(greeter("interval-greet", "interval"))
+        yield* advance(() => source.activations > activations)
+        yield* drain
+        yield* plugins.awaitActivation
+        expect(packages.checks).toBe(checks)
+        expect(packages.updated).toHaveLength(1)
+        // The scheduled check exactly one interval after startup checks and installs again.
+        yield* TestClock.adjust(started + PluginUpdate.interval - (yield* Clock.currentTimeMillis))
+        yield* advance(() => packages.updated.length === 2)
+        yield* drain
+        expect(packages.checks).toBeGreaterThan(checks)
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        Effect.ensuring(
+          Effect.sync(() => {
+            source.operations = []
+            packages.available = false
+            packages.delay = Duration.zero
+          }),
+        ),
+      )
+      expect(packages.updated).toEqual(["latest-plugin@latest", "latest-plugin@latest"])
     }),
   )
 
@@ -296,6 +430,56 @@ describe("PluginSupervisor", () => {
         }).pipe(Effect.provide(locations.get(ref)))
         expect(command).toBeDefined()
       }
+    }),
+  )
+
+  it.effect("runs SDK plugin aisdk.sdk hooks before the dynamic npm fallback", () =>
+    Effect.gen(function* () {
+      const sdk = yield* SdkPlugins.Service
+      const providerID = Provider.ID.make("cloudflare")
+      const fakeLanguageModel: LanguageModelV3 = {
+        specificationVersion: "v3",
+        provider: "cloudflare",
+        modelId: "workers-ai",
+        supportedUrls: {},
+        doGenerate: () => Promise.reject(new Error("unused")),
+        doStream: () => Promise.reject(new Error("unused")),
+      }
+      yield* sdk.register(
+        define({
+          id: "cloudflare.aisdk",
+          effect: (ctx) =>
+            ctx.aisdk
+              .hook(
+                "sdk",
+                (evt) => {
+                  if (evt.package !== "agents/models/opencode") return Effect.void
+                  evt.sdk = { languageModel: () => fakeLanguageModel }
+                  return Effect.void
+                },
+                { providerID },
+              )
+              .pipe(Effect.asVoid),
+        }),
+      )
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      const language = yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        const aisdk = yield* AISDK.Service
+        yield* plugins.awaitActivation
+        return yield* aisdk.language(
+          Model.Info.make({
+            ...Model.Info.default(providerID, Model.ID.make("workers-ai")),
+            modelID: Model.ID.make("workers-ai"),
+            package: "aisdk:agents/models/opencode",
+          }),
+        )
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+      expect(language).toBe(fakeLanguageModel)
     }),
   )
 })

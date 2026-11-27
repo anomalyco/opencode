@@ -5,6 +5,18 @@ import { testEffect } from "../../lib/effect"
 
 class Value extends Context.Service<Value, { readonly value: string }>()("test/LayerNodeValue") {}
 class Greeting extends Context.Service<Greeting, { readonly value: string }>()("test/LayerNodeGreeting") {}
+class Actions extends Context.Service<
+  Actions,
+  {
+    readonly label: string
+    readonly run: (name: string) => Effect.Effect<string>
+    readonly unused: () => Effect.Effect<void>
+  }
+>()("test/LayerNodeActions") {}
+const FnService = Context.Service<{
+  readonly ping: () => Effect.Effect<string>
+  readonly pong: () => Effect.Effect<string>
+}>("test/LayerNodeFnService")
 class Left extends Context.Service<Left, { readonly value: string }>()("test/LayerNodeLeft") {}
 class Right extends Context.Service<Right, { readonly value: string }>()("test/LayerNodeRight") {}
 class Memo extends Context.Service<Memo, Layer.MemoMap>()("test/LayerNodeMemo") {}
@@ -31,6 +43,46 @@ describe("layer node", () => {
       const greeting = LayerNode.make({ service: Greeting, layer: greetingLayer, deps: [value] })
       const result = yield* Greeting.pipe(Effect.provide(LayerNode.compile(LayerNode.group([greeting]))))
       expect(result.value).toBe("hello production")
+    }),
+  )
+
+  test("exposes the service a node was declared for", () => {
+    const named = make({ name: "named", layer: valueLayer, deps: [] })
+    expect(value.service).toBe(Value)
+    expect(LayerNode.unbound(FnService, tags.values.app).service).toBe(FnService)
+    expect(named.service).toBeUndefined()
+  })
+
+  it.effect("mocks single-service and unbound nodes with partial implementations", () =>
+    Effect.gen(function* () {
+      const actions = make({
+        service: Actions,
+        layer: Layer.succeed(Actions, {
+          label: "prod",
+          run: (name) => Effect.succeed(`prod:${name}`),
+          unused: () => Effect.void,
+        }),
+        deps: [],
+      })
+      const fnNode = LayerNode.unbound(FnService, tags.values.app)
+      const layer = LayerNode.compile(LayerNode.group([actions, fnNode]), {
+        replacements: [
+          actions.mock({ label: "test", run: (name) => Effect.succeed(`mock:${name}`) }),
+          fnNode.mock({ ping: () => Effect.succeed("pong") }),
+        ],
+      })
+      const result = yield* Effect.gen(function* () {
+        const svc = yield* Actions
+        const fn = yield* FnService
+        const unimplemented = yield* Effect.exit(svc.unused())
+        return {
+          label: svc.label,
+          ran: yield* svc.run("ok"),
+          ping: yield* fn.ping(),
+          unimplemented: unimplemented._tag,
+        }
+      }).pipe(Effect.provide(layer))
+      expect(result).toEqual({ label: "test", ran: "mock:ok", ping: "pong", unimplemented: "Failure" })
     }),
   )
 

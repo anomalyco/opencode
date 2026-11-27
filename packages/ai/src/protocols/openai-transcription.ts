@@ -10,7 +10,7 @@ import {
   TranscriptionSegmentEvent,
   TranscriptionTextDeltaEvent,
   type TranscriptionEvent,
-  type TranscriptionRequestFor,
+  type TranscriptionRequest,
   type TranscriptionSegment,
 } from "../transcription.js"
 import { mediaTypeExtension } from "../utils/media-type.js"
@@ -41,7 +41,7 @@ export type OpenAITranscriptionOptions = {
   readonly temperature?: number
 } & Record<string, unknown>
 
-export type Request = TranscriptionRequestFor<OpenAITranscriptionOptions>
+export type Request = TranscriptionRequest<TranscriptionModel<OpenAITranscriptionOptions>>
 
 // ---------------------------------------------------------------------------
 // 3. Streaming event schema

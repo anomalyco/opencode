@@ -1,3 +1,5 @@
+import { canHoldProjectRoute, type SettingsServerAvailability } from "./servers/machine"
+
 export type SettingsRootTab =
   | "general"
   | "appearance"
@@ -118,7 +120,7 @@ export function settingsViewUrl(view: SettingsView) {
   return search ? `/settings?${search}` : "/settings"
 }
 
-type RedirectServer = { key: string; connected: boolean; starting: boolean }
+type RedirectServer = { key: string; availability: SettingsServerAvailability["status"] }
 
 /** Where a view must go when the server it names is gone, or a project's server is unavailable. */
 export function settingsViewRedirect(input: {
@@ -136,8 +138,8 @@ export function settingsViewRedirect(input: {
 
   if (!server) return { type: "root", tab: "projects" }
 
-  // A starting WSL or SSH server connects shortly; only an unavailable one leaves the project page.
-  if (!server.connected && !server.starting) return { type: "root", tab: "projects", server: server.key }
+  // A signed-out or unreachable server has no project to show; its Projects page shows why and offers a retry.
+  if (!canHoldProjectRoute(server.availability)) return { type: "root", tab: "projects", server: server.key }
 }
 
 export function isRootTab(value: string): value is SettingsRootTab {

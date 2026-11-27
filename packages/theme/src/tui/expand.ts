@@ -1,5 +1,6 @@
 import type {
   BackgroundDefinition,
+  DialogTokensDefinition,
   ModeDefinition,
   StatefulColorDefinition,
   TextDefinition,
@@ -11,7 +12,14 @@ export function expandTheme<Definition extends ModeDefinition>(definition: Defin
   return {
     ...definition,
     ...expandTokens(definition),
-    ...(definition["@dialog"] ? { "@dialog": expandTokens(definition["@dialog"]) } : {}),
+    ...(definition["@dialog"] ? { "@dialog": expandDialog(definition["@dialog"]) } : {}),
+  }
+}
+
+function expandDialog(definition: DialogTokensDefinition): DialogTokensDefinition {
+  return {
+    ...expandTokens(definition),
+    ...(definition["@footer"] ? { "@footer": expandTokens(definition["@footer"]) } : {}),
   }
 }
 
@@ -42,6 +50,8 @@ function expandText(definition: TextDefinition | undefined): TextDefinition | un
     ...definition,
     muted: definition.muted ?? (definition.base ? "$text.base" : undefined),
     faint: definition.faint ?? (definition.muted || definition.base ? "$text.muted" : undefined),
+    // Selected text reads like the focused row of a list unless the theme picks its own colors.
+    selection: definition.selection ?? (definition.base ? "$text.action.primary.$focused" : undefined),
     action: expandActions(definition.action, "text.action"),
     formfield: expandFormfield(definition.formfield, "text.formfield"),
     feedback: definition.feedback
@@ -64,6 +74,7 @@ function expandBackground(definition: BackgroundDefinition | undefined): Backgro
   if (!definition) return
   return {
     ...definition,
+    selection: definition.selection ?? (definition.base ? "$background.action.primary.$focused" : undefined),
     action: expandActions(definition.action, "background.action"),
     formfield: expandFormfield(definition.formfield, "background.formfield"),
   }

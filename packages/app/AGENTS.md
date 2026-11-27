@@ -1,7 +1,7 @@
 ## Priorities
 
 - Prioritise, in this order: stability, simplicity, performance.
-- Before changing session or timeline code, record a production benchmark baseline and compare it after the change.
+- Before changing session or timeline code, benchmark it against `origin/dev` with strobe (`packages/app/perf/README.md`): `strobe bench packages/app/perf/<area>.bench.ts --base origin/dev --head .`.
 
 ## Debugging
 
@@ -15,9 +15,35 @@
 - App (from `packages/app`): `bun dev -- --port 4444`
 - Open `http://localhost:4444` to verify UI changes (it targets the backend at `http://localhost:4096`).
 
+## Insecure Origins (HTTP LAN)
+
+The Web UI is served over plain HTTP on non-localhost LAN and Tailscale origins (`isSecureContext === false`). This rule applies across `app`, `ui`, `session-ui` and `gui-plugins` window code.
+
+- Never call `crypto.randomUUID()` directly in renderer or browser code; it is `[SecureContext]`-only and throws `TypeError: crypto.randomUUID is not a function` on plain HTTP origins. Always use `uuid()` from `@opencode/util/uuid`.
+- Guard any other `[SecureContext]`-only Web API (`crypto.subtle`, `navigator.clipboard`, `navigator.serviceWorker`) with a non-secure fallback.
+
 ## SolidJS
 
 - Always prefer `createStore` over multiple `createSignal` calls
+
+## State Machines
+
+This section is the single source for lifecycle state across `app`, `ui`, `session-ui`, `gui-plugins` and `desktop`. Anything that moves through phases (loading, submitting, connecting, retrying, dragging, revealing, quitting) is an explicit state machine. Precedents: `src/composer/machine.ts`, `src/session/requests/auto-approve-machine.ts`, `packages/desktop/src/main/deep-links/machine.ts`, `packages/gui-plugins/src/terminal/machine.ts`, `packages/ui/src/hooks/list-machine.ts`.
+
+- Model the lifecycle as one discriminated union (`type` or `status` tag) in its own module next to the feature (`machine.ts`, or `<feature>-machine.ts` when the folder already has one). It is the single source of truth: no booleans, nullable "in-flight" fields, `WeakSet`s, generation counters or closure variables beside it that also encode the phase. Data that exists only in a phase lives inside that phase's variant.
+- Write one pure `transition(state, event)` over a closed event union that returns the next state, or `{ state, effects }`. No I/O, timers, signals, `await` or `Date.now()` inside it. An event that does not apply to the current state returns the same state object, so it is visible in the code and writes no signal.
+- Keep only phases the user can observe. Merge phases nothing distinguishes, and model a variation as a field, not a new variant (for example a `gesture` field instead of one variant per input device). Fewer, real variants beat a faithful copy of every step.
+- Derive the UI with pure selectors or a `view(state)`: disabled, busy, spinner, error text, which panel or tab shows. Components read selectors; they never branch on side flags or re-check the phase themselves. In the main process, every consumer (quit handlers, menus, IPC) branches only on selectors of the machine.
+- Run async work in a thin driver at the edge. The driver turns effects into calls, dispatches the results back as events, and owns timers and abort controllers. Tie its cleanup to the owner's lifetime (`onCleanup`, `ctx.onCleanup`), and dispatch a `disposed` event rather than keeping a disposed flag.
+- Reject stale results inside the machine. Carry an attempt id in the state variant and in each result event, and ignore a result whose id is not current. A machine that only moves forward can match on the phase instead; each timeout event names its phase.
+- Claim work synchronously. Leave `idle` in the same event that starts the work, before the first `await` (image resolution, a request, a dynamic import). A guard checked before an `await` and set after it lets a second Enter, click or retry through.
+- Every async path ends in a state. A failure, timeout or cancel is a transition, never a log line or a silent `return`. Give a request that can hang a bounded fallback (a reveal timeout, a phase timeout) so the UI cannot stay hidden, disabled or "Loading" forever.
+- A result that arrives late can still have side effects. When the user went back but the server already saved the change (a key, a credential), keep the state and emit only the refresh effect. When a timeout cuts a batch short, report the real outcome of the parts that finished and time out only the rest.
+- Serialize operations that touch the same data through one queue in the machine (`active` plus `pending`), including actions that look independent (steer, remove, reorder, undo). A side path that skips the queue can resurrect what another operation removed.
+- On an identity change (another session, server, window or credential), move to a new target with a new attempt instead of carrying the previous target's error, controller or result forward.
+- On hot paths (scroll, pointer, resize, streaming), keep the machine allocation-free: return the same object when nothing changes, reuse event objects, and keep frozen singleton states. Benchmark with strobe as the Priorities section requires. Shared or frozen singleton states are safe only in signals and plain variables. Solid store writes (`setStore(path, obj)`, `reconcile`) merge into the object already in the store, so state written into a store never shares an object between two entries or with a module constant: replace it whole (`produce` replacement, or a signal), or build fresh objects with a factory (`createFileTreeState()`), and test through the real store with two entries.
+- Test the pure transition. Replay the bug's event sequence as a regression that fails on the old logic, then cover stale attempts and every exit (success, failure, timeout, cancel, dispose). Build events the way production builds them (through the real decoder, without fields the wire never carries), or the test passes on routes production never takes. These tests need no DOM, timers or mocks.
+- Name new driver inputs so they cannot collide with existing ones (`appState`, not a second `state`), and wire Solid reads of machine state into `<Match>` and `<Show>` with keyed matches or memos so a branch never reads a value another branch already narrowed.
 
 ## Suspense
 
@@ -53,10 +79,11 @@ Users choose three fonts in Settings > Appearance. Every surface uses one of the
 | Code font     | Shell commands, code, paths shown as code, diffs, logs, tool input | `var(--font-family-mono)`, `var(--v2-font-family-code)`, `font-mono`, or a `<code>` / `<pre>` element |
 | Terminal font | Terminal output only                                               | `appearance.font("mono")` from the GUI plugin SDK                                                     |
 
-- Never write a literal family (`Inter`, `"IBM Plex Mono"`, `monospace`, `Menlo`, `system-ui`) in production CSS, classes, inline styles, canvas `font` strings or widget options. A literal ignores the user's setting.
-- Never add an `@font-face`, font file, or font package outside `packages/app/src/index.css`. That file is the only place the app ships faces: Inter (variable), IBM Plex Mono Text (weights below 600), Bold (600 and up) and Text Italic, and JetBrainsMono Nerd Font Mono Regular and Bold. If a design needs a face that is not shipped, add it there and say why in the PR.
+- Never write a literal family (`Inter`, `"OpenMono"`, `monospace`, `Menlo`, `system-ui`) in production CSS, classes, inline styles, canvas `font` strings or widget options. A literal ignores the user's setting.
+- Never add an `@font-face`, font file, or font package outside `packages/app/src/index.css`. That file is the only place the app ships faces: Inter (variable), and OpenMono Regular (weights below 600), Bold (600 and up) and Italic for both code and the terminal. If a design needs a face that is not shipped, add it there and say why in the PR.
+- The OpenMono files in `src/assets/fonts` are made from the app build of OpenMono Nerd: no ligatures and every character one cell wide. Each style has a `-latin` file, which loads with the app, and a `-cyrillic` and a `-rest` file, which `unicode-range` loads when a character of theirs is drawn. The nine text files and their `unicode-range` values are the same as the websites' (`services/site/script/openmono.py`); change both scripts together. All styles share `OpenMono-icons.woff2` (the Nerd Fonts icons), whose rules come last in `src/index.css`. They are in `src`, not `public`, so that each URL has a content hash: the web server caches font files for a year. Do not replace them with the files from the OpenMono release, which have ligatures. Rebuild them with `uvx --from 'fonttools[woff]==4.60.1' python script/openmono.py <app-nerd build folder>` from `packages/app`. It writes nothing unless the build is complete, its icons are the same in every style, every character is in the `unicode-range` of its own rule in `src/index.css`, and its copyright lines are in the third-party notices.
 - Show shell commands with the timeline shell metrics: code font, `13px`, weight `440`, `-0.04px` letter spacing. Do not invent another size for the same content.
-- Prefer weight tokens (`font-medium`, `var(--font-weight-medium)`) over literal weights. Mono at `600` or more renders IBM Plex Mono Bold, so reserve it for real emphasis.
+- Prefer weight tokens (`font-medium`, `var(--font-weight-medium)`) over literal weights. Mono at `600` or more renders OpenMono Bold, so reserve it for real emphasis.
 - Do not read font settings directly. `src/settings/model.tsx` writes them to the CSS variables above, and the plugin host passes the terminal font through `appearance.font`.
 
 ## Loading Indicators
@@ -67,17 +94,100 @@ This section is the single source for loading indicators across `app`, `ui`, `se
 - Every other loading state uses `Loader` (`@opencode/ui/loader`): page, pane and file loads, browser reload, search, connecting, authenticating, sending, installing. Use a purpose-built indicator only when the state has one, such as the titlebar update ring.
 - Choose the indicator at each call site. Never restyle a shared indicator (`Loader`, `ActivityRing`, `Spinner`) to look like another one; that silently changes every caller.
 
+## Floating surfaces over native pages
+
+A native page view, such as the browser pane's, paints above every DOM element, so `src/runtime/plugin/embeds.tsx` hides it while floating app UI overlaps it.
+
+- Mark the painted box of a floating surface with `data-floating-overlay` for its whole visible lifetime, including its exit animation. Mark the surface, not a full-window transparent portal wrapper.
+- Popper positioners, `aria-modal` dialogs, open `<dialog>` elements and open popovers count without the marker. Tooltips never cover the page.
+- A positioned surface that takes pointer input and is portalled to `document.body` after the app root also counts without the marker. It is a fallback: mark new surfaces.
+
 ## Scrolling
 
 This section is the single source for scroll containers across `app`, `ui`, `session-ui`, `gui-plugins` and `desktop`.
 
-- Scroll with a plain element: `overflow-y-auto` (or `overflow-x-auto`, `overflow-auto`) plus `min-h-0` or a max height. `packages/ui/src/styles/scrollbar.css` gives every native scrollbar the shared thumb. Do not add `ScrollView` to fix how a scrollbar looks.
-- Mark each scroll container with `data-scrollable`. Nested-scroll handling (the timeline, Home, `createAutoScroll`) uses it to let the inner container scroll first.
+- Pages, panels and documents scroll with a plain element: `overflow-y-auto` (or `overflow-x-auto`, `overflow-auto`) plus `min-h-0` or a max height. `packages/ui/src/styles/scrollbar.css` gives every native scrollbar the shared thumb. Do not add `ScrollView` to fix how a scrollbar looks.
+- Menus, popovers, dropdowns and the result lists in pickers and dialogs scroll with `MenuScroll` (`@opencode/ui/menu-scroll`). A native scrollbar there takes 8px, more than the rows' 4-6px inset, so the end inset grows whenever the list overflows. `MenuScroll` hides the native scrollbar on pointer devices and draws the shared thumb over the rows; touch devices and high-contrast modes keep the native one.
+  - Put the list's padding on the viewport (`viewportClass`), not on the menu surface, so rows scroll to the edge under the thumb.
+  - Use `viewportRef` for scroll-into-view and keyboard reveal. Style a grid of rows through `[data-slot="menu-scroll-content"]`, the element that holds them.
+- Mark each scroll container with `data-scrollable`. Nested-scroll handling (the timeline, Home, `createAutoScroll`) uses it to let the inner container scroll first. `MenuScroll` marks its viewport itself.
 - Use one element when it both sizes and scrolls. Add an outer wrapper only for something that must stay put while the content scrolls, such as `::before` and `::after` edge fades: the wrapper is `relative flex flex-col min-h-0` and owns the fades, and the inner element is `min-h-0 flex-1 overflow-y-auto`.
-- A native scrollbar takes 8px from layout while the content overflows. Where text would visibly rewrap at that moment (the composer, settings search), add `scrollbar-gutter: stable` and subtract `var(--scrollbar-size, 0px)` from the end padding.
+- A native scrollbar takes 8px from layout while the content overflows. Where text would visibly rewrap at that moment (the composer, text fields), add `scrollbar-gutter: stable` and subtract `var(--scrollbar-size, 0px)` from the end padding. Do not do this in a menu or list; use `MenuScroll`.
 - A ref runs before the element's children render and before it is in the document. Restore a scroll position from `onMount` or a frame later, not in the ref.
-- `ScrollView` (`@opencode/ui/scroll-view`) is only for the session timeline and Home, which draw the thumb in an external track (`thumbContainer`) and, in the timeline, correct it for virtualized rows. Use it again only for one of those needs.
+- `ScrollView` (`@opencode/ui/scroll-view`) is only for the session timeline and Home, which draw the thumb in an external track (`thumbContainer`) and, in the timeline, correct it for virtualized rows. Use it again only for one of those needs, and not for menus.
 - Never set `scrollbar-width: thin`, `scrollbar-width: auto` or `scrollbar-color`. Chromium then ignores the shared style and draws the native Windows scrollbar. Hide a scrollbar only with `no-scrollbar` or `scrollbar-width: none`.
+
+## Timeline stability
+
+This section is the single source for what may move or restyle the session timeline. It applies to every component and stylesheet that renders in or around the timeline, across `app`, `ui`, `session-ui` and `gui-plugins`. Each rule comes from a regression that shipped.
+
+### Transcript size
+
+- A session keeps every history page the reader loads, so a pass over the whole transcript costs more with each page. A history page that lands shifts every index of the message list, and each memo that reads the list runs again and reads every message through the store.
+- Read a message's parts through a memo for that message (`mapArray` over the messages with a `createMemo` inside, as `messageParts` in `packages/session-ui/src/timeline/projection.ts` and `createSessionBackground` do), and fold over the memos. A page that lands, or a tool that updates, then reads that page or that message.
+- Do not read the transcript for something that cannot show: the todo pill reads it only while a turn runs and todos are on.
+- Still whole-transcript: `Timeline.constructSessionMessageRows` and its indexes. It was 24 of 68 ms of script when a page landed with 30 pages loaded.
+
+### Scroll position
+
+- The timeline moves when the reader scrolls it or asks to go somewhere (a jump, a search hit, a link). Nothing else scrolls it: not focus, not an update, not a row that mounts.
+- `element.focus()` scrolls its element into view. When code moves focus inside a scroll container, pass `{ preventScroll: true }` unless the reader must see that control next: keyboard navigation to it, or the item that takes the place of a removed one.
+- A virtualized row unmounts when it scrolls out of range, and a control that holds focus goes with it. Chromium then leaves focus on `<body>`, and the focus rescue (`packages/ui/src/context/focus-rescue.tsx`) handles the row as a deleted item: it focuses a control in another row, and the browser scrolls the timeline there. After a click on one tool header, the timeline jumped 13 times in 8 wheel bursts.
+- A virtualized list therefore gives focus to its own viewport, without scrolling, before a row that holds focus unmounts. `VirtualRow`'s `onCleanup` in `src/session/timeline/virtualizer.tsx` does this. Keep it when you change how rows mount, and do the same in a new virtualized list.
+- Keeper: "a focused control that scrolls out of the mounted rows leaves the timeline where it was scrolled" in `e2e/regression/session-timeline-accessibility.spec.ts`.
+- To check by hand: click a tool header, a link and a notice in the timeline, then scroll up and down with the wheel. The timeline must follow the wheel.
+
+### Scroll writes
+
+- A native scroll write (`scrollTo`, `scrollTop =`) forces a layout when anything is dirty. TanStack corrects the scroll position once for each row it resizes above the view, so a batch of measured rows forced one layout for each row.
+- `scrollToFn` in `src/session/timeline/virtualizer.tsx` holds the corrections made while a batch of sizes is applied and writes the last one once. Keep scroll writes for size changes on that path, and call `flushHeldScroll` before code inside the batch reads the native offset.
+- Keeper: "corrects the scroll position once for each batch of rows an older page measures" in `e2e/regression/timeline-history.spec.ts`.
+
+### Scroll events
+
+- A scroll event must read before it writes. A style write followed by a read of `scrollTop`, `scrollHeight` or a rect, in the same event, makes the browser recalculate style (and lay out, when the write changed a size) inside the event.
+- `ScrollView` (`packages/ui/src/components/scroll-view.tsx`) therefore reads the thumb's geometry first (`readThumb`), forwards the event to the timeline, and writes the thumb in the next animation frame (`applyThumb`). Keep that order when you add work to a scroll handler.
+- Keeper: "handles a scroll event without a forced style or layout pass" in `e2e/regression/timeline-geometry.spec.ts`, for both timelines. It counts the passes in a Chrome trace; the old order forced one in every scroll event.
+
+### Rows that load above the reader
+
+- Older history loads above rows the reader is looking at. The virtualizer keeps the first row in view where it was, so the rows stay still only if no mounted row changes when the row before it arrives.
+- Never give a row space, a divider or a label above its content that depends on the row before it. That row grows on top when its predecessor loads, and everything in view moves down: 16 to 32px on every page of the New timeline while its rows took their gap on top.
+- The row directly above holds the space between two rows, below its own content. A row that starts a turn gets a row of its own for it, the turn gap, which arrives and leaves with the turn. `timelineGaps` in `packages/session-ui/src/timeline-next/spacing.ts` decides this for the New timeline.
+- Keeper: "keeps the New timeline's rows fixed while older pages land in a turn and above a prompt" in `e2e/regression/timeline-history.spec.ts`.
+- To check by hand: scroll to the top of the loaded history with the network throttled, and watch the first rows while the older page lands.
+
+### Stuck headers
+
+- An open group's header sticks under the session title. Collapsing the group from there scrolls the timeline first, by how far the header is stuck, so the header stays under the pointer.
+- Measure that distance from where the header rests, not from the group's top. A header with a margin rests that margin away from the top: the New timeline's rests 6px above it, and the header moved up 6px on every collapse.
+- Keeper: "collapsing a group from its stuck header leaves the header where it was" in `e2e/regression/patch-sticky-header.spec.ts`.
+
+### Transcript reads
+
+- The reader keeps their place only while the rows in view stay in the transcript. `session.message.sync` (`packages/client/src/solid/data.ts`) reads the newest page again on every reconnect of the event stream, and when a turn ends with a tool still running. It once replaced the transcript with that page: a reader further back than the page jumped 3,400 to 8,100 px, and the older pages were gone.
+- A new read of the newest page keeps the loaded messages before it and their cursor. When the page does not reach the loaded messages, it reads older pages until they meet; after a long absence it gives up and keeps the newest messages only.
+- Never join a page to messages it does not adjoin. A transcript that skips messages is worse than a lost place, and nothing shows the reader that messages are missing. `loadMore` drops an older page when a newer read replaced the transcript the page continued.
+- A message counts as loaded history only where the server put it. The row of a waiting input sits where the input was admitted until its delivery moves it, so it cannot tell where a page meets the history.
+- Keepers: "reading the newest page again keeps the loaded history" and the cases after it in `packages/client/test/solid-data.test.ts`, and "a reconnect of the event stream keeps a reader in older history where they were" in `e2e/regression/timeline-history.spec.ts`.
+- To check by hand: scroll several screens back in a long session, then run `window.dispatchEvent(new Event("online"))` in DevTools. The app drops the event stream and reads the transcript again. The rows in view must not move.
+
+### `:has()` selectors
+
+- Chromium rechecks an element's `:has()` when focus moves, an attribute changes, or an element is added or removed near it. In and around the timeline, that happens many times a second during a scroll.
+- When the selector ends at the `:has()` element (`x:has(…)`, `x:has(…)::after`), a recheck restyles that element only.
+- When the selector continues (`x:has(…) y`, `x:has(…) ~ y`), a recheck restyles nearly every element inside `x`. Other rules decide how many: once any rule in the app ends in `[data-slot=…]` after a `:has()`, a recheck restyles every element inside `x` that has a `data-slot` attribute, whatever its value. Such rules exist, and almost every element has a `data-slot`.
+- On an element that contains the timeline, a list, a panel or a page, end the selector at the `:has()` element. To style another element, set a `data-` attribute on that element from code.
+- On a small component (a row, a tab, a card, a menu), the selector may continue after `:has()`. A recheck costs the size of that component.
+- Never select on `style` inside `:has()`. Every inline style write then rechecks the `:has()` of the element's ancestors, and the virtualizer writes inline styles while the reader scrolls. Set a `data-` attribute when the element is built, and select on that.
+- To check: record a Chrome trace of the `devtools.timeline` category while you scroll through history that has not been visited, click in the timeline and press a scroll key. Read `elementCount` on each `UpdateLayoutTree` event; DevTools shows it as Recalculate Style, Elements Affected. A pass that affects about as many elements as the timeline contains is this regression.
+
+### Work on every transcript change
+
+- The transcript changes with each message, tool update and history page. A memo that reads it and returns a new array or object (`visibleUserMessages()`, the revert view, the list of running tasks) notifies its readers every time, whether or not their result changes.
+- Code outside the timeline that needs one fact about the transcript reads it through a memo of that fact, such as a boolean or an id. The session command list (`src/session/commands/use-session-commands.tsx`) does this. When it read the transcript directly, every history page rebuilt all commands, registered every keybind again and rebuilt the review toggle in the session header, whose fit forces a layout.
+- A control that shows a keybind reads `command.keybind()` or `command.keybindParts()`, which change only when a keybind does. Do not read `command.options` for a label.
+- Keeper: "the header keeps its controls while the transcript changes" in `e2e/regression/session-header.spec.ts`.
 
 ## Localization
 

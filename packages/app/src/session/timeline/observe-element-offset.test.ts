@@ -69,6 +69,59 @@ test("reports a divergent native offset once and ignores equal offsets and unrel
   }
 })
 
+test.each([
+  [
+    "in a later batch",
+    (main: Node, wrap: ChildNode, viewport: Node, mutations: ReturnType<typeof controlledMutations>) => {
+      const staging = viewport.ownerDocument!.createElement("div")
+      mutations.batch(() => {
+        wrap.remove()
+        staging.append(viewport)
+      })
+      mutations.batch(() => main.appendChild(staging))
+    },
+  ],
+  [
+    "in the same batch",
+    (main: Node, wrap: ChildNode, viewport: Node, mutations: ReturnType<typeof controlledMutations>) =>
+      mutations.batch(() => {
+        wrap.remove()
+        main.appendChild(viewport)
+      }),
+  ],
+])("restores a view reparented after its ancestor was removed %s", async (_name, move) => {
+  const frame = openFrame()
+  const targetWindow = frame.targetWindow
+  const mutations = controlledMutations(targetWindow)
+  const main = targetWindow.document.createElement("main")
+  const wrap = targetWindow.document.createElement("div")
+  const viewport = targetWindow.document.createElement("div")
+  wrap.append(viewport)
+  main.append(wrap)
+  targetWindow.document.body.append(main)
+
+  const instance = attachedVirtualizer(viewport, { scrollOffset: 79_400, isScrollingResetDelay: 0 })
+  const connections: boolean[] = []
+
+  const cleanup = observeElementOffsetReconnectAware(
+    instance,
+    (offset) => {
+      instance.scrollOffset = offset
+    },
+    () => connections.push(viewport.isConnected),
+  )
+
+  try {
+    move(main, wrap, viewport, mutations)
+    await frames(2, targetWindow)
+    expect(connections).toEqual([true])
+    expect(instance.scrollOffset).toBe(0)
+  } finally {
+    cleanup()
+    frame.close()
+  }
+})
+
 test("keeps checking until stale reset-delay callbacks can no longer win", async () => {
   const frame = openFrame()
   const targetWindow = frame.targetWindow
@@ -223,6 +276,10 @@ function controlledMutations(targetWindow: Window & typeof globalThis) {
   Object.defineProperty(targetWindow, "MutationObserver", { value: ControlledMutationObserver })
 
   return {
+    batch(change: () => void) {
+      change()
+      flush()
+    },
     append(parent: Node, node: Node) {
       parent.appendChild(node)
       flush()

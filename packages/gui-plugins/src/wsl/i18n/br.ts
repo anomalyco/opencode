@@ -54,4 +54,5 @@ export default {
   "error.commandTimeout": "O tempo limite de {{command}} {{args}} foi excedido após {{timeout}}ms",
   "error.failedPort": "Falha ao obter a porta",
   "menu.remove": "Remover",
+  "error.busy": "{{distro}} está ocupado com outra tarefa. Tente novamente quando ela terminar.",
 }

@@ -1,6 +1,11 @@
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { PtyTicket } from "@opencode/core/pty/ticket"
-import { ForbiddenError, PtyNotFoundError, ServiceUnavailableError } from "@opencode/protocol/errors"
+import {
+  ForbiddenError,
+  InvalidRequestError,
+  PtyNotFoundError,
+  ServiceUnavailableError,
+} from "@opencode/protocol/errors"
 import {
   PTY_CONNECT_TICKET_QUERY,
   PTY_CONNECT_TOKEN_HEADER,
@@ -12,7 +17,15 @@ import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
+import { makeArtifact } from "./artifact"
+import { makeBlobGet } from "./blob"
+import { makeBrowserTunnel } from "./experimental/browser-tunnel"
+import { makeAutomation } from "./automation"
+import { makeJob } from "./job"
+import { makeMachine, makeMachineLink } from "./machine"
 import { makeMediaGet } from "./media"
+import { makePush } from "./push"
+import { makeSpace } from "./space"
 import { type Outbound, runPtySocket } from "./pty-socket"
 
 export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experimental", (handlers) =>
@@ -20,10 +33,54 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const tickets = yield* PtyTicket.Service
     const cors = yield* CorsConfig
     const pty = yield* PersistentPty.Service
+    const artifact = yield* makeArtifact
+    const job = yield* makeJob
+    const space = yield* makeSpace
     const mediaGet = yield* makeMediaGet
+    const blobGet = yield* makeBlobGet
+    const automation = yield* makeAutomation
+    const machine = yield* makeMachine
+    const machineLink = yield* makeMachineLink
+    const browserTunnel = yield* makeBrowserTunnel
+    const push = yield* makePush
 
     return handlers
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
+      .handleRaw("blob.get", (ctx) => blobGet(ctx.params.id, ctx.request))
+      .handleRaw("browser.tunnel", (ctx) => browserTunnel(ctx.request))
+      .handle("job.list", (ctx) => job.list(ctx.query))
+      .handle("job.cancel", (ctx) => job.cancel(ctx.params.id))
+      .handleRaw("machine.link", (ctx) => machineLink(ctx.request))
+      .handle("machine.list", () => machine.list())
+      .handle("machine.add", (ctx) => machine.add(ctx.payload))
+      .handle("machine.remove", (ctx) => machine.remove(ctx.params.name))
+      .handle("push.get", () => push.get())
+      .handle("push.device.register", (ctx) => push.register(ctx.params.deviceID, ctx.payload))
+      .handle("push.device.remove", (ctx) => push.remove(ctx.params.deviceID))
+      .handle("push.device.update", (ctx) => push.update(ctx.params.deviceID, ctx.payload))
+      .handle("push.device.session.set", (ctx) => push.setDeviceBell(ctx.params.deviceID, ctx.params.sessionID, ctx.payload))
+      .handle("push.device.session.remove", (ctx) => push.removeDeviceBell(ctx.params.deviceID, ctx.params.sessionID))
+      .handle("push.session.set", (ctx) => push.setSessionBell(ctx.params.sessionID, ctx.payload))
+      .handle("push.session.remove", (ctx) => push.removeSessionBell(ctx.params.sessionID))
+      .handle("push.settings.set", (ctx) => push.setSettings(ctx.payload))
+      .handle("space.write", (ctx) => space.write(ctx.payload.changes))
+      .handle("space.sync", (ctx) => space.sync(ctx.payload.spaces))
+      .handle("space.subscribe", (ctx) => space.subscribe(ctx.payload))
+      .handle("space.unsubscribe", (ctx) => space.unsubscribe(ctx.payload))
+      .handle("space.reset", () => space.reset())
+      .handle("artifacts.providers", (ctx) => artifact.providers(ctx.query, ctx.request))
+      .handle("artifacts.list", (ctx) => artifact.list(ctx.query, ctx.request))
+      .handle("artifacts.create", (ctx) => artifact.create(ctx.query, ctx.payload, ctx.request))
+      .handle("artifacts.get", (ctx) => artifact.get(ctx.params.artifactID, ctx.query, ctx.request))
+      .handle("artifacts.update", (ctx) => artifact.update(ctx.params.artifactID, ctx.query, ctx.payload, ctx.request))
+      .handle("artifacts.delete", (ctx) => artifact.remove(ctx.params.artifactID, ctx.query, ctx.request))
+      .handleRaw("artifacts.view", (ctx) => artifact.view(ctx.params.artifactID, ctx.query, ctx.request))
+      .handle("automation.create", (ctx) => automation.create(ctx.payload))
+      .handle("automation.list", (ctx) => automation.list(ctx.query))
+      .handle("automation.get", (ctx) => automation.get(ctx.params.automationID))
+      .handle("automation.pause", (ctx) => automation.pause(ctx.params.automationID))
+      .handle("automation.resume", (ctx) => automation.resume(ctx.params.automationID))
+      .handle("automation.delete", (ctx) => automation.remove(ctx.params.automationID))
       .handle(
         "persistentPty.read",
         Effect.fn(function* (ctx) {
@@ -50,7 +107,13 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
                 cols: ctx.payload.size?.cols,
                 rows: ctx.payload.size?.rows,
               })
-              .pipe(Effect.catchTag("PersistentPty.UnavailableError", unavailable)),
+              .pipe(
+                Effect.catchTags({
+                  "PersistentPty.InvalidCwdError": (error) =>
+                    new InvalidRequestError({ message: error.message, kind: "invalid_cwd", field: "cwd" }),
+                  "PersistentPty.UnavailableError": unavailable,
+                }),
+              ),
           }
         }),
       )
@@ -76,10 +139,12 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
       .handle(
         "persistentPty.update",
         Effect.fn(function* (ctx) {
-          yield* pty
-            .resize(ctx.params.ptyID, ctx.payload.size.cols, ctx.payload.size.rows, ctx.payload.attachmentID)
-            .pipe(mapTerminalError)
-          return { data: yield* pty.get(ctx.params.ptyID).pipe(mapTerminalError) }
+          if (ctx.payload.size)
+            yield* pty
+              .resize(ctx.params.ptyID, ctx.payload.size.cols, ctx.payload.size.rows, ctx.payload.attachmentID)
+              .pipe(mapTerminalError)
+          if (ctx.payload.title === undefined) return { data: yield* pty.get(ctx.params.ptyID).pipe(mapTerminalError) }
+          return { data: yield* pty.rename(ctx.params.ptyID, ctx.payload.title).pipe(mapTerminalError) }
         }),
       )
       .handle(
@@ -218,11 +283,13 @@ const mapUnavailable = <A>(effect: Effect.Effect<A, PersistentPty.UnavailableErr
 const mapTerminalError = <A>(effect: Effect.Effect<A, PersistentPty.NotFoundError | PersistentPty.UnavailableError>) =>
   effect.pipe(
     Effect.catchTags({
-      "PersistentPty.NotFoundError": (error) =>
-        new PtyNotFoundError({ ptyID: error.ptyID, message: `PTY session not found: ${error.ptyID}` }),
+      "PersistentPty.NotFoundError": notFound,
       "PersistentPty.UnavailableError": unavailable,
     }),
   )
+
+const notFound = (error: PersistentPty.NotFoundError) =>
+  new PtyNotFoundError({ ptyID: error.ptyID, message: `PTY session not found: ${error.ptyID}` })
 
 const unavailable = (error: PersistentPty.UnavailableError) =>
   new ServiceUnavailableError({ message: error.message, service: "opencode-pty" })

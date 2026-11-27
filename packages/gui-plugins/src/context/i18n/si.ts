@@ -5,7 +5,6 @@ export default {
   "usage.usage": "භාවිතය",
   "usage.cost": "පිරිවැය",
   "usage.view": "සන්දර්භය භාවිතය බලන්න",
-  "systemPrompt.title": "පද්ධති ප්‍රොම්ප්ට්",
   "rawMessages.title": "අමු පණිවිඩ",
   "export.session": "අපනයන සැසිය",
   "stats.session": "සැසිය",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "සැසිය {{filename}} වෙත සුරකින ලදී",
   "export.failed.title": "සැසිය අපනයනය කිරීමට අසමත් විය",
   "export.failed.description": "සැසිය නිර්යාත කිරීමේදී දෝෂයක් ඇති විය",
+  "usage.toggle": "සැසි සන්දර්භය ටොගල් කරන්න",
 }

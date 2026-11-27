@@ -392,6 +392,9 @@ const catalogEvents = new Set([
   "reference.updated",
 ])
 
+// Bookkeeping rows (idle, switches, system) render nothing, so they don't count toward the replay limit.
+const replayedTypes = new Set<SessionMessageInfo["type"]>(["user", "assistant", "compaction", "skill", "shell"])
+
 // session.shell resolves after the command settled server-side; the matching
 // live shell.ended event usually lands within the same tick, but hold the turn
 // briefly so the output commit renders inside it.
@@ -899,19 +902,29 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
   }
 
-  const projectedMessages = async (client: OpenCodeClient, signal: AbortSignal) =>
-    (
-      await client.message.list(
-        { sessionID: input.sessionID, limit: input.replayLimit ?? 200, order: "desc" },
+  const projectedMessages = async (client: OpenCodeClient, signal: AbortSignal) => {
+    const limit = input.replayLimit ?? 200
+    const listed: SessionMessageInfo[] = []
+    let cursor: string | undefined
+    while (true) {
+      const size = Math.min(limit - listed.length, 200)
+      const page = await client.message.list(
+        cursor
+          ? { sessionID: input.sessionID, limit: size, cursor }
+          : { sessionID: input.sessionID, limit: size, order: "desc" },
         { signal },
       )
-    ).data.toReversed()
+      listed.push(...page.data.filter((message) => replayedTypes.has(message.type)))
+      if (listed.length >= limit || page.data.length < size || !page.cursor.next) return listed.toReversed()
+      cursor = page.cursor.next
+    }
+  }
 
   const waitForSession = async (initial: OpenCodeClient) => {
     let client = initial
     while (true) {
       try {
-        await client.session.wait({ sessionID: input.sessionID }, { signal: controller.signal })
+        await client.experimental.session.wait({ sessionID: input.sessionID }, { signal: controller.signal })
         return client
       } catch (error) {
         // session.wait is a long poll that only answers once the session settles, so a dropped

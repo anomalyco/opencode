@@ -1,37 +1,108 @@
 import { randomUUID } from "node:crypto"
-import { ByteSize, Effect, FileSystem } from "effect"
+import { ByteSize, Effect, Exit, FileSystem } from "effect"
 import { nativeT } from "../native/translations"
+import {
+  createPickedFileState,
+  transitionPickedFiles,
+  type PickedFileCommand,
+  type PickedFileEvent,
+  type PickedRejectReason,
+} from "./attachment-picker-machine"
 
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
+/**
+ * The files each renderer picked and may read. `watch` follows a renderer while it holds an open dialog or a selection,
+ * and calls `clear` once that renderer reloads or closes; it returns a function that stops following.
+ */
 export function createPickedFileAuthorizations(
   read: (path: string, maxBytes: number) => Effect.Effect<ArrayBuffer, unknown>,
+  watch?: (sender: number, clear: () => void) => () => void,
 ) {
-  const selections = new Map<string, { sender: number; paths: Set<string>; remaining: number }>()
+  let state = createPickedFileState()
+  const watchers = new Map<number, () => void>()
+
+  // Returns the command that answers the event, if any.
+  const dispatch = (event: PickedFileEvent) => {
+    const next = transitionPickedFiles(state, event)
+    state = next.state
+    next.commands.forEach((command) => {
+      if (command.type === "watch-sender" && watch)
+        watchers.set(
+          command.sender,
+          watch(command.sender, () => dispatch({ type: "sender.cleared", sender: command.sender })),
+        )
+
+      if (command.type !== "unwatch-sender") return
+      watchers.get(command.sender)?.()
+      watchers.delete(command.sender)
+    })
+
+    return next.commands.find((command) => command.type !== "watch-sender" && command.type !== "unwatch-sender")
+  }
 
   return {
-    add(sender: number, paths: string[]) {
-      const token = randomUUID()
-      selections.set(token, { sender, paths: new Set(paths), remaining: MAX_ATTACHMENT_BYTES })
+    /** Starts a native file dialog for `sender`; returns its id, or undefined once disposed. */
+    open(sender: number) {
+      const reply = dispatch({ type: "picker.opened", sender })
 
-      return token
+      return reply?.type === "picker-opened" ? reply.picker : undefined
+    },
+    /** Grants the dialog's files; undefined when its renderer reloaded or closed while the dialog was open. */
+    grant(picker: number, paths: readonly string[]) {
+      const reply = dispatch({
+        type: "selection.granted",
+        picker,
+        token: randomUUID(),
+        paths,
+        budget: MAX_ATTACHMENT_BYTES,
+      })
+
+      return reply?.type === "granted" ? reply.token : undefined
+    },
+    /** Ends a dialog that granted nothing. */
+    close(picker: number) {
+      dispatch({ type: "picker.closed", picker })
     },
     read: Effect.fn("DesktopFiles.readPickedFile")(function* (sender: number, token: string, path: string) {
-      const selection = selections.get(token)
+      const claim = dispatch({ type: "read.requested", sender, token, path })
 
-      if (selection?.sender !== sender || !selection.paths.delete(path))
-        throw new Error(nativeT("desktop.picker.error.notSelected"))
-      const bytes = yield* read(path, selection.remaining)
-      selection.remaining -= bytes.byteLength
+      if (claim?.type !== "read") throw rejection(claim)
 
-      if (selection.paths.size === 0) selections.delete(token)
+      const exit = yield* read(path, claim.maxBytes).pipe(
+        Effect.onInterrupt(() =>
+          Effect.sync(() => dispatch({ type: "read.cancelled", attempt: claim.attempt, token, path })),
+        ),
+        Effect.exit,
+      )
 
-      return bytes
+      const settled = dispatch(
+        Exit.isSuccess(exit)
+          ? { type: "read.succeeded", attempt: claim.attempt, token, path, bytes: exit.value }
+          : { type: "read.failed", attempt: claim.attempt, token, path },
+      )
+
+      if (settled?.type === "resolve" || (settled?.type === "reject" && settled.reason === "read-failed"))
+        return yield* exit
+
+      throw rejection(settled)
     }),
     release(sender: number, token: string) {
-      if (selections.get(token)?.sender === sender) selections.delete(token)
+      dispatch({ type: "selection.released", sender, token })
+    },
+    dispose() {
+      dispatch({ type: "disposed" })
     },
   }
+}
+
+function rejection(reply: PickedFileCommand | undefined) {
+  const reason: PickedRejectReason = reply?.type === "reject" ? reply.reason : "not-selected"
+
+  if (reason === "size-limit")
+    return new Error(nativeT("desktop.picker.error.sizeLimit", { limit: MAX_ATTACHMENT_BYTES / 1024 / 1024 }))
+
+  return new Error(nativeT("desktop.picker.error.notSelected"))
 }
 
 export function assertAttachmentBudget(files: { size: number }[]) {

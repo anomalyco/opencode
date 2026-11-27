@@ -1,13 +1,15 @@
 export * as SessionBlob from "./blob.js"
 
 import { createHash } from "node:crypto"
-import { and, eq, exists, gte, inArray, notExists, notInArray, type SQL, sql } from "drizzle-orm"
-import { Effect, Option, Schema } from "effect"
+import { and, eq, exists, gte, inArray, notExists, type SQL, sql } from "drizzle-orm"
+import { Cause, Context, Effect, Option, Schema } from "effect"
 import { map } from "effect/Array"
 import type { Attachment, FileAttachment } from "@opencode/schema/prompt"
 import type { Tool } from "@opencode/schema/tool"
-import { Config } from "../config.js"
+import { DatabaseBatch } from "../database/batch.js"
 import type { Database } from "../database/database.js"
+import { Flag } from "../flag.js"
+import type { Instance } from "../instance/service.js"
 import type { SessionMessage } from "./message.js"
 import type { SessionSchema } from "./schema.js"
 import { BlobRefTable, BlobTable, SessionInboxTable, SessionMessageTable } from "./sql.js"
@@ -28,12 +30,18 @@ const toolItems = (part: Part): ReadonlyArray<Tool.Content> =>
     ? (part.state.content ?? [])
     : []
 
-function collect(data: MessageRow["data"] | InboxRow["payload"], hashes: Set<string>) {
+/** A stored row, one `session_part` row, or the `session_part` rows of one assistant message. */
+type Refs = MessageRow["data"] | InboxRow["payload"] | Part | { readonly content: ReadonlyArray<Part> }
+
+function collect(data: Refs, hashes: Set<string>) {
   if ("files" in data)
     for (const file of data.files ?? []) if (isFileRef(file)) hashes.add(SessionStored.refHash(file.uri))
-  if ("content" in data)
+  // A corrupt row's non-array content is left for decoding to reject.
+  if ("content" in data && Array.isArray(data.content))
     for (const part of data.content)
       for (const item of toolItems(part)) if (isToolFileRef(item)) hashes.add(SessionStored.refHash(item.uri))
+  if ("type" in data && data.type === "tool")
+    for (const item of toolItems(data)) if (isToolFileRef(item)) hashes.add(SessionStored.refHash(item.uri))
 }
 
 /** A ref whose blob is gone reads as this text, so clients and the model never see a bare ref. */
@@ -96,13 +104,12 @@ function rewriteInbox(row: InboxRow, file: (file: SessionStored.File) => Session
 }
 
 const load = Effect.fnUntraced(function* (db: DatabaseService, hashes: ReadonlySet<string>) {
-  const all = [...hashes]
   const blobs = new Map<string, string>()
-  for (let offset = 0; offset < all.length; offset += 500) {
+  for (const batch of DatabaseBatch.batches([...hashes], 1)) {
     const found = yield* db
       .select({ hash: BlobTable.hash, data: BlobTable.data })
       .from(BlobTable)
-      .where(inArray(BlobTable.hash, all.slice(offset, offset + 500)))
+      .where(inArray(BlobTable.hash, batch))
       .all()
       .pipe(Effect.orDie)
     for (const blob of found) blobs.set(blob.hash, view(blob.data).toString("base64"))
@@ -165,14 +172,13 @@ export const keepInboxRefs = Effect.fnUntraced(function* (db: DatabaseService, r
 
 const loadMeta = Effect.fnUntraced(function* (db: DatabaseService, hashes: ReadonlySet<string>) {
   const meta = new Map<string, Meta>()
-  const all = [...hashes]
-  for (let offset = 0; offset < all.length; offset += 500) {
+  for (const batch of DatabaseBatch.batches([...hashes], 1)) {
     const found = yield* db
       .select({ hash: BlobTable.hash, bytes: BlobTable.bytes, width: BlobTable.width, height: BlobTable.height })
       .from(BlobTable)
       .where(
         and(
-          inArray(BlobTable.hash, all.slice(offset, offset + 500)),
+          inArray(BlobTable.hash, batch),
           exists(
             db
               .select({ one: sql`1` })
@@ -251,12 +257,34 @@ export interface Owner {
 type Pending = Map<string, typeof BlobTable.$inferInsert>
 type AssistantPart = SessionMessage.Assistant["content"][number]
 
-/** Reads `experimental.media_blob` from the Config in scope on every call; without one, it is off. */
+/** Reads the `media_blob` flag from the Flag.Service in scope on every call; without one, it is off. */
 export const enabled = Effect.gen(function* () {
-  const config = yield* Effect.serviceOption(Config.Service)
-  if (Option.isNone(config)) return false
-  return Config.latest(yield* config.value.entries(), "experimental")?.media_blob === true
+  const flag = yield* Effect.serviceOption(Flag.Service)
+  if (Option.isNone(flag)) return false
+  return yield* flag.value.enabled("media_blob")
 })
+
+/**
+ * {@link Flag.enabled} for `media_blob` as `session`'s location configures it, where its media is written. Off when
+ * that location can't boot or load its config, which surfaces as defects too, so a broken location never fails the caller.
+ */
+export const enabledFor = (instances: Instance.Interface, session: SessionSchema.Info): Effect.Effect<boolean> =>
+  Flag.enabled("media_blob").pipe(
+    instances.provide(session),
+    Effect.catchCause((cause) =>
+      Cause.hasInterrupts(cause)
+        ? Effect.failCause(Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)))
+        : Effect.logWarning("could not resolve experimental.media_blob; keeping media inline", { cause }).pipe(
+            Effect.as(false),
+          ),
+    ),
+  )
+
+/**
+ * Whether a fork's projection stores the child's copied media as blobs. `Session.fork` sets it from the parent's
+ * location; the projection ignores the caller's own config, and a replayed fork without it copies media inline.
+ */
+export const ForkMedia = Context.Reference<boolean>("@opencode/SessionBlob/ForkMedia", { defaultValue: () => false })
 
 const DATA_URI = /^data:[^,]*;base64,(.*)$/s
 
@@ -285,14 +313,13 @@ function toolPartRefs(pending: Pending, part: AssistantPart): AssistantPart {
   return { ...part, state: { ...part.state, content: map(content, (item) => toolRef(pending, item)) } }
 }
 
-const save = Effect.fnUntraced(function* (db: DatabaseService, pending: Pending) {
-  if (pending.size === 0) return
-  yield* db
-    .insert(BlobTable)
-    .values([...pending.values()])
-    .onConflictDoNothing()
-    .run()
-    .pipe(Effect.orDie)
+/** Inserts blobs, keeping any that already exist. */
+export const save = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  blobs: ReadonlyArray<typeof BlobTable.$inferInsert>,
+) {
+  for (const batch of DatabaseBatch.insertBatches(BlobTable, blobs))
+    yield* db.insert(BlobTable).values(batch).onConflictDoNothing().run().pipe(Effect.orDie)
 })
 
 /** {@link externalize} for a user message or pending inbox user payload. */
@@ -303,7 +330,7 @@ export const externalizePayload = Effect.fnUntraced(function* <
   const pending: Pending = new Map()
   const files = input.files.map((file) => fileRef(pending, file))
   if (pending.size === 0) return input
-  yield* save(db, pending)
+  yield* save(db, [...pending.values()])
   return { ...input, files }
 })
 
@@ -320,11 +347,21 @@ export const externalize = Effect.fnUntraced(function* (
   const pending: Pending = new Map()
   const content = message.content.map((part) => toolPartRefs(pending, part))
   if (pending.size === 0) return message
-  yield* save(db, pending)
+  yield* save(db, [...pending.values()])
   return { ...message, content }
 })
 
-const hashesOf = (data: MessageRow["data"] | InboxRow["payload"]) => {
+/** {@link externalize} for one assistant part. Returns the same part when nothing moved. */
+export const externalizePart = Effect.fnUntraced(function* (db: DatabaseService, part: AssistantPart) {
+  if (!(yield* enabled)) return part
+  const pending: Pending = new Map()
+  const stored = toolPartRefs(pending, part)
+  if (pending.size === 0) return part
+  yield* save(db, [...pending.values()])
+  return stored
+})
+
+const hashesOf = (data: Refs) => {
   const hashes = new Set<string>()
   collect(data, hashes)
   return hashes
@@ -341,53 +378,90 @@ function storedPartRefs(pending: Pending, part: Part): Part {
  * Moves a stored row's inline media into blobs whatever the flag says, for offline backfills. Returns the row to
  * store (the same object when nothing moved), the blobs to insert, and every hash the row then names.
  */
-export function split(data: MessageRow["data"] | InboxRow["payload"]) {
+export function split<T extends MessageRow["data"] | InboxRow["payload"] | Part>(data: T) {
   const pending: Pending = new Map()
-  const stored =
+  const stored = (
     "files" in data && data.files?.some((file) => !isFileRef(file))
       ? { ...data, files: data.files.map((file) => fileRef(pending, file)) }
       : "content" in data
         ? { ...data, content: data.content.map((part) => storedPartRefs(pending, part)) }
-        : data
+        : "type" in data && data.type === "tool"
+          ? storedPartRefs(pending, data)
+          : data
+  ) as T
   const result = pending.size > 0 ? stored : data
   return { data: result, moved: pending.size > 0, blobs: [...pending.values()], hashes: hashesOf(result) }
 }
 
+/**
+ * {@link split} for a message row copied into another session by a fork: saves the moved blobs and returns the row
+ * to store. Callers check {@link ForkMedia} and record the copy's refs.
+ */
+export const externalizeRow = Effect.fnUntraced(function* (db: DatabaseService, data: MessageRow["data"]) {
+  const result = split(data)
+  if (!result.moved) return data
+  yield* save(db, result.blobs)
+  return result.data
+})
+
 /** Records that `owner` references each blob its stored row names, so release keeps them until it lets go. */
-export const recordRefs = Effect.fnUntraced(function* (
+export const recordRefs = Effect.fnUntraced(function* (db: DatabaseService, owner: Owner, data: Refs) {
+  yield* recordHashes(db, owner, hashesOf(data))
+})
+
+/**
+ * {@link recordRefs} for the given hashes only, such as the blobs an import took out of its own inline data, so
+ * refs it carried in can't keep or expose blobs it never held.
+ */
+export const recordHashes = Effect.fnUntraced(function* (
   db: DatabaseService,
   owner: Owner,
-  data: MessageRow["data"] | InboxRow["payload"],
+  hashes: ReadonlySet<string>,
 ) {
-  const hashes = hashesOf(data)
-  if (hashes.size === 0) return
   // A ref whose blob is already gone keeps nothing alive; reads render it as unavailable.
-  const found = yield* db
-    .select({ hash: BlobTable.hash })
-    .from(BlobTable)
-    .where(inArray(BlobTable.hash, [...hashes]))
-    .all()
-    .pipe(Effect.orDie)
-  if (found.length === 0) return
-  yield* db
-    .insert(BlobRefTable)
-    .values(
-      found.map(({ hash }) => ({ session_id: owner.sessionID, message_id: owner.messageID, hash, seq: owner.seq })),
+  const found: Array<{ hash: string }> = []
+  for (const batch of DatabaseBatch.batches([...hashes], 1))
+    found.push(
+      ...(yield* db
+        .select({ hash: BlobTable.hash })
+        .from(BlobTable)
+        .where(inArray(BlobTable.hash, batch))
+        .all()
+        .pipe(Effect.orDie)),
     )
-    .onConflictDoUpdate({
-      target: [BlobRefTable.session_id, BlobRefTable.message_id, BlobRefTable.hash],
-      set: { seq: owner.seq },
-    })
-    .run()
-    .pipe(Effect.orDie)
+  const refs = found.map(({ hash }) => ({
+    session_id: owner.sessionID,
+    message_id: owner.messageID,
+    hash,
+    seq: owner.seq,
+  }))
+  // The conflict update binds `seq` once more.
+  for (const batch of DatabaseBatch.insertBatches(BlobRefTable, refs, 1))
+    yield* db
+      .insert(BlobRefTable)
+      .values(batch)
+      .onConflictDoUpdate({
+        target: [BlobRefTable.session_id, BlobRefTable.message_id, BlobRefTable.hash],
+        set: { seq: owner.seq },
+      })
+      .run()
+      .pipe(Effect.orDie)
 })
 
 /** Records the refs a rewritten message names and releases the ones it no longer does. */
-export const syncRefs = Effect.fnUntraced(function* (db: DatabaseService, owner: Owner, data: MessageRow["data"]) {
+export const syncRefs = Effect.fnUntraced(function* (db: DatabaseService, owner: Owner, data: Refs) {
   yield* recordRefs(db, owner, data)
-  const present = [...hashesOf(data)]
+  const present = hashesOf(data)
   const own = [eq(BlobRefTable.session_id, owner.sessionID), eq(BlobRefTable.message_id, owner.messageID)] as const
-  yield* present.length === 0 ? release(db, ...own) : release(db, ...own, notInArray(BlobRefTable.hash, present))
+  if (present.size === 0) return yield* release(db, ...own)
+  const stale = (yield* db
+    .select({ hash: BlobRefTable.hash })
+    .from(BlobRefTable)
+    .where(and(...own))
+    .all()
+    .pipe(Effect.orDie)).flatMap((ref) => (present.has(ref.hash) ? [] : [ref.hash]))
+  for (const batch of DatabaseBatch.batches(stale, 1, own.length))
+    yield* release(db, ...own, inArray(BlobRefTable.hash, batch))
 })
 
 /** Deletes the matching refs, then every blob among theirs that no ref names anymore. */
@@ -398,13 +472,12 @@ const release = Effect.fnUntraced(function* (db: DatabaseService, ...where: read
     .returning({ hash: BlobRefTable.hash })
     .all()
     .pipe(Effect.orDie)
-  const hashes = [...new Set(released.map((ref) => ref.hash))]
-  for (let offset = 0; offset < hashes.length; offset += 500)
+  for (const batch of DatabaseBatch.batches([...new Set(released.map((ref) => ref.hash))], 1))
     yield* db
       .delete(BlobTable)
       .where(
         and(
-          inArray(BlobTable.hash, hashes.slice(offset, offset + 500)),
+          inArray(BlobTable.hash, batch),
           notExists(
             db
               .select({ one: sql`1` })

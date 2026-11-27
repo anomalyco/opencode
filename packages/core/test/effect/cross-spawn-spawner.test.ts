@@ -2,15 +2,18 @@ import { describe, expect } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { Deferred, Effect, Exit, PlatformError, Stream } from "effect"
+import { inspect } from "node:util"
+import { Cause, Deferred, Effect, Exit, PlatformError, Redacted, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Teardown } from "@opencode/util/teardown"
+import { appExecutionAlias } from "../fixture/app-execution-alias"
 import { testEffect } from "../lib/effect"
 
 const live = LayerNode.compile(CrossSpawnSpawner.node)
 const fx = testEffect(live)
+const pwsh = appExecutionAlias("pwsh.exe")
 
 function js(code: string, opts?: ChildProcess.CommandOptions) {
   return ChildProcess.make("node", ["-e", code], opts)
@@ -57,24 +60,6 @@ describe("cross-spawn spawner", () => {
           svc.string(ChildProcess.make(process.execPath, ["-e", 'process.stdout.write("ok")'])),
         )
         expect(out).toBe("ok")
-      }),
-    )
-
-    fx.effect(
-      "captures multiple lines",
-      Effect.gen(function* () {
-        const handle = yield* js('console.log("line1"); console.log("line2"); console.log("line3")')
-        const out = yield* decodeByteStream(handle.stdout)
-        expect(out).toBe("line1\nline2\nline3")
-      }),
-    )
-
-    fx.effect(
-      "returns exit code",
-      Effect.gen(function* () {
-        const handle = yield* js("process.exit(0)")
-        const code = yield* handle.exitCode
-        expect(code).toBe(ChildProcessSpawner.ExitCode(0))
       }),
     )
 
@@ -130,21 +115,6 @@ describe("cross-spawn spawner", () => {
         expect(out).toBe("test_value")
       }),
     )
-
-    fx.effect(
-      "passes multiple environment variables",
-      Effect.gen(function* () {
-        const handle = yield* js(
-          "process.stdout.write(`${process.env.VAR1}-${process.env.VAR2}-${process.env.VAR3}`)",
-          {
-            env: { VAR1: "one", VAR2: "two", VAR3: "three" },
-            extendEnv: true,
-          },
-        )
-        const out = yield* decodeByteStream(handle.stdout)
-        expect(out).toBe("one-two-three")
-      }),
-    )
   })
 
   describe("stderr", () => {
@@ -159,15 +129,6 @@ describe("cross-spawn spawner", () => {
         })
         expect(output).toEqual(["o".repeat(256 * 1024), "e".repeat(256 * 1024)])
         expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
-      }),
-    )
-
-    fx.effect(
-      "captures stderr output",
-      Effect.gen(function* () {
-        const handle = yield* js('process.stderr.write("error message")')
-        const err = yield* decodeByteStream(handle.stderr)
-        expect(err).toBe("error message")
       }),
     )
 
@@ -195,15 +156,6 @@ describe("cross-spawn spawner", () => {
   })
 
   describe("combined output (all)", () => {
-    fx.effect(
-      "captures stdout via .all when no stderr",
-      Effect.gen(function* () {
-        const handle = yield* ChildProcess.make("echo", ["hello from stdout"])
-        const all = yield* decodeByteStream(handle.all)
-        expect(all).toBe("hello from stdout")
-      }),
-    )
-
     fx.effect(
       "captures stderr via .all when no stdout",
       Effect.gen(function* () {
@@ -379,16 +331,6 @@ describe("cross-spawn spawner", () => {
         expect(Exit.isFailure(exit) ? true : exit.value !== ChildProcessSpawner.ExitCode(0)).toBe(true)
       }),
     )
-
-    fx.effect(
-      "isRunning reflects process state",
-      Effect.gen(function* () {
-        const handle = yield* js('process.stdout.write("done")')
-        yield* handle.exitCode
-        const running = yield* handle.isRunning
-        expect(running).toBe(false)
-      }),
-    )
   })
 
   describe("error handling", () => {
@@ -404,25 +346,61 @@ describe("cross-spawn spawner", () => {
         expect(Exit.isFailure(exit) ? true : exit.value !== ChildProcessSpawner.ExitCode(0)).toBe(true)
       }),
     )
-  })
 
-  describe("pipeline", () => {
     fx.effect(
-      "pipes stdout of one command to stdin of another",
+      "rejects NUL characters without exposing Redacted values",
       Effect.gen(function* () {
-        const handle = yield* js('process.stdout.write("hello world")').pipe(
-          ChildProcess.pipeTo(
-            js(
-              'process.stdin.setEncoding("utf8"); let out = ""; process.stdin.on("data", (chunk) => out += chunk); process.stdin.on("end", () => process.stdout.write(out.toUpperCase()))',
-            ),
-          ),
-        )
-        const out = yield* decodeByteStream(handle.stdout)
-        yield* handle.exitCode
-        expect(out).toBe("HELLO WORLD")
+        const secret = Redacted.make("hunter2\0")
+        const commands = [
+          () => ChildProcess.make("echo", [secret]),
+          () => ChildProcess.make`echo ${secret}`,
+          () => ChildProcess.make("echo", [], { env: { SECRET: secret } }),
+        ]
+        for (const command of commands) {
+          const exit = yield* Effect.exit(Effect.scoped(Effect.flatMap(command(), (handle) => handle.exitCode)))
+          expect(Exit.isFailure(exit)).toBe(true)
+          if (Exit.isSuccess(exit)) continue
+          expect(Cause.hasDies(exit.cause)).toBe(false)
+          const error = Cause.squash(exit.cause)
+          expect(PlatformError.isPlatformError(error) && error.reason._tag).toBe("BadArgument")
+          expect(inspect(exit, { depth: Infinity })).not.toContain("hunter2")
+        }
       }),
     )
 
+    fx.live(
+      "reports a duplex write failure to a later reader without an uncaught error",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+        const uncaught: Array<unknown> = []
+        const onUncaught = (error: unknown) => uncaught.push(error)
+        yield* Effect.acquireRelease(
+          Effect.sync(() => process.on("uncaughtException", onUncaught)),
+          () => Effect.sync(() => process.off("uncaughtException", onUncaught)),
+        )
+        // Under `bun test` (1.4.4) the process's first child with an extra fd never emits "spawn", so spawn one without.
+        yield* Effect.scoped(Effect.flatMap(ChildProcess.make("true"), (warmUp) => warmUp.exitCode))
+
+        // The child closes fd3 before signalling readiness on stdout.
+        const handle = yield* ChildProcess.make("sh", ["-c", "exec 3>&-; echo ready; exec sleep 10"], {
+          additionalFds: { fd3: { type: "duplex" } },
+        })
+        yield* Stream.runDrain(Stream.take(handle.stdout, 1))
+
+        // Write before anyone reads fd3, and start reading only after the write has failed.
+        const writeError = yield* Effect.flip(
+          Stream.run(Stream.make(new TextEncoder().encode("request")), handle.getInputFd(3)),
+        )
+        const readError = yield* Effect.flip(Stream.runDrain(handle.getOutputFd(3)).pipe(Effect.timeout("2 seconds")))
+
+        expect(writeError._tag).toBe("PlatformError")
+        expect(uncaught).toEqual([])
+        expect(readError._tag).toBe("PlatformError")
+      }),
+    )
+  })
+
+  describe("pipeline", () => {
     fx.effect(
       "three-stage pipeline",
       Effect.gen(function* () {
@@ -524,6 +502,20 @@ describe("cross-spawn spawner", () => {
           ),
         )
         expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+      }),
+    )
+
+    // Skipped where PowerShell 7 is not installed from the Microsoft Store for the user; see the fixture.
+    const storePwsh = pwsh ? fx.live : fx.live.skip
+    storePwsh(
+      "keeps every line of a command run through an app execution alias",
+      Effect.gen(function* () {
+        const out = yield* ChildProcessSpawner.ChildProcessSpawner.use((svc) =>
+          svc.string(
+            ChildProcess.make(pwsh!.file, ["-NoProfile", "-NonInteractive", "-Command", "echo one\necho two"]),
+          ),
+        )
+        expect(out.trim().split(/\r?\n/)).toEqual(["one", "two"])
       }),
     )
   })

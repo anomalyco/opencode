@@ -1,13 +1,15 @@
 export * as PluginInternal from "./internal.js"
 
-import { LLMClient } from "@opencode/ai/effect"
 import type { Plugin } from "@opencode/plugin/effect/plugin"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { httpClient } from "@opencode/util/effect/app-node-platform"
+import type { Generation } from "./service.js"
+import { httpClient, httpFetch } from "@opencode/util/effect/app-node-platform"
 import { AppProcess } from "@opencode/util/process"
 import { Context, Effect, Scope } from "effect"
-import { HttpClient } from "effect/http"
 import { Agent } from "../agent.js"
+import { App } from "../app.js"
+import { Artifact } from "../artifact.js"
+import { BlobStore } from "../blob-store.js"
 import { Model } from "../model.js"
 import { Provider } from "../provider.js"
 import { Command } from "../command.js"
@@ -26,19 +28,24 @@ import { ConfigProviderPlugin } from "../config/plugin/provider.js"
 import { ConfigPolicyPlugin } from "../config/plugin/policy.js"
 import { ConfigReferencePlugin } from "../config/plugin/reference.js"
 import { ConfigShellPlugin } from "../config/plugin/shell.js"
+import { ConfigSessionSearchPlugin } from "../config/plugin/session-search.js"
 import { ConfigSnapshotPlugin } from "../config/plugin/snapshot.js"
 import { ConfigSkillPlugin } from "../config/plugin/skill.js"
 import { ConfigCompatibilityPlugin } from "../config/plugin/compatibility.js"
 import { ConfigToolOutputPlugin } from "../config/plugin/tool-output.js"
 import { ConfigWebSearchPlugin } from "../config/plugin/websearch.js"
 import { ConfigWorktreePlugin } from "../config/plugin/worktree.js"
+import { VideoGeneration } from "../video-generation.js"
 import { Worktree } from "../worktree.js"
 import { WorktreeStrategies } from "../worktree/strategies.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
 import { FileMutation } from "../file-mutation.js"
+import { FileWrite } from "../file-write.js"
+import { Flag } from "../flag.js"
 import { Formatter } from "../formatter.js"
+import { Generate } from "../generate.js"
 import { Form } from "../form.js"
 import { FileSystem } from "../filesystem.js"
 import { LocationWatcherPolicy } from "../filesystem/location-watcher-policy.js"
@@ -50,6 +57,7 @@ import { Integration } from "../integration.js"
 import { Job } from "../job.js"
 import { KV } from "../kv.js"
 import { Location } from "../location.js"
+import { Machines } from "../machine/machines.js"
 import { ModelsDev } from "../models-dev.js"
 import { Mcp } from "../mcp/index.js"
 import { Npm } from "@opencode/util/npm"
@@ -57,10 +65,14 @@ import { Permission } from "../permission.js"
 import { Reference } from "../reference.js"
 import { WebSearch } from "../websearch.js"
 import { Ripgrep } from "../ripgrep.js"
+import { Automation } from "../automation.js"
 import { Session } from "../session.js"
 import { SessionCompaction } from "../session/compaction.js"
 import { SessionInstructions } from "../session/instructions.js"
+import { SessionSearch } from "../session/search.js"
+import { SessionSearchBuild } from "../session/search-build.js"
 import { SubagentJob } from "../session/subagent-job.js"
+import { SharedCache } from "../shared-cache.js"
 import { Shell } from "../shell.js"
 import { ShellSelect } from "../shell/select.js"
 import { Snapshot } from "../snapshot.js"
@@ -71,14 +83,24 @@ import { PatchTool } from "../tool/plugin/patch.js"
 import { EditTool } from "../tool/plugin/edit.js"
 import { GlobTool } from "../tool/plugin/glob.js"
 import { GrepTool } from "../tool/plugin/grep.js"
+import { ImageGenerateTool } from "../tool/plugin/image-generate.js"
+import { VideoGenerateTool } from "../tool/plugin/video-generate.js"
+import { CdTool } from "../tool/plugin/cd.js"
+import { MachineTools } from "../tool/plugin/machine.js"
+import { McpEventTools } from "../tool/plugin/mcp-events.js"
 import { McpResourceTools } from "../tool/plugin/mcp-resource.js"
 import { OpenCodeTools } from "../tool/plugin/opencode.js"
 import { QuestionTool } from "../tool/plugin/question.js"
-import { ReadToolFileSystem } from "../tool/read-filesystem.js"
 import { ReadTool } from "../tool/plugin/read.js"
+import { ArtifactTools } from "../tool/plugin/artifact.js"
+import { AutomationTools } from "../tool/plugin/automation.js"
+import { SessionInterruptTool } from "../tool/plugin/session-interrupt.js"
+import { SessionSearchTools } from "../tool/plugin/session-search.js"
 import { ShellTool } from "../tool/plugin/shell.js"
 import { SkillTool } from "../tool/plugin/skill.js"
 import { SubagentTool } from "../tool/plugin/subagent.js"
+import { CodeModeAgentsPlugin } from "../tool/plugin/codemode-agents.js"
+import { CodeModeAgents } from "../codemode/agents.js"
 import { TodoTool } from "../tool/plugin/todo.js"
 import { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
@@ -88,15 +110,22 @@ import { WellKnown } from "../wellknown.js"
 import { WriteTool } from "../tool/plugin/write.js"
 import { AgentPlugin } from "./agent.js"
 import BrowserPlugin from "@opencode/plugin-browser"
+import { BrowserTunnelHost } from "@opencode/plugin-browser/experimental/tunnel-host"
+import { BrowserTunnelGateway } from "../experimental/browser-tunnel.js"
 import { CommandPlugin } from "./command.js"
 import { IdentityPlugin } from "./identity.js"
+import { ForkNoticePlugin } from "./fork-notice.js"
+import { HomeMemoryPlugin } from "./home-memory.js"
 import { PlanPlugin } from "./plan.js"
+import { GoalPlugin } from "./goal.js"
 import { ModelsDevPlugin } from "./models-dev.js"
 import { McpCodeModeDefaultsPlugin } from "./mcp-codemode-defaults.js"
 import { ProviderPlugins } from "./provider.js"
+import { DynamicProviderPlugin } from "./provider/dynamic.js"
 import { OpencodePlugin } from "./provider/opencode.js"
 import { WebSearchPlugins } from "./websearch/index.js"
 import { SkillPlugin } from "./skill.js"
+import { McpSkillPlugin } from "./mcp-skill.js"
 import { VcsHgPlugin } from "./vcs/hg.js"
 import { ToolInputRepairPlugin } from "./tool-input-repair.js"
 import { OptimizePlugin } from "./optimize.js"
@@ -105,62 +134,15 @@ import { VerbosityPlugin } from "./verbosity.js"
 import { WarmingPlugin } from "./warming.js"
 import { WellKnownPlugin } from "../wellknown/plugin.js"
 
-const services = [
-  Agent.Service,
-  AppProcess.Service,
-  Provider.Service,
-  Model.Service,
-  Command.Service,
-  Config.Service,
-  Credential.Service,
-  Bus.Service,
-  Environment.Service,
-  FileAccess.Service,
-  FileMutation.Service,
-  Formatter.Service,
-  LocationWatcherPolicy.Service,
-  FileSystem.Service,
-  FSUtil.Service,
-  Global.Service,
-  HttpClient.HttpClient,
-  Image.Service,
-  InstructionDiscovery.Service,
-  Integration.Service,
-  Job.Service,
-  KV.Service,
-  LLMClient.Service,
-  Location.Service,
-  ModelsDev.Service,
-  Mcp.Service,
-  Npm.Service,
-  Permission.Service,
-  Form.Service,
-  ReadToolFileSystem.Service,
-  Reference.Service,
-  WebSearch.Service,
-  Ripgrep.Service,
-  Session.Service,
-  SessionCompaction.Service,
-  SessionInstructions.Service,
-  SubagentJob.Service,
-  Shell.Service,
-  ShellSelect.Service,
-  Snapshot.Service,
-  Skill.Service,
-  SkillDiscovery.Service,
-  Tool.Service,
-  ToolOutput.Service,
-  Watcher.Service,
-  WellKnown.Service,
-  Worktree.Service,
-  WorktreeStrategies.Service,
-] as const
-
-export type Requirements = Context.Service.Identifier<(typeof services)[number]>
-
-export const requirements = LayerNode.group([
+const nodes = [
   Agent.node,
+  // Activation clears the ambient context, so built-ins see the configured build channel only through this.
+  App.node,
+  Artifact.node,
   AppProcess.node,
+  BrowserTunnelGateway.node,
+  BlobStore.node,
+  CodeModeAgents.node,
   Provider.node,
   Model.node,
   Command.node,
@@ -170,12 +152,16 @@ export const requirements = LayerNode.group([
   Environment.node,
   FileAccess.node,
   FileMutation.node,
+  FileWrite.node,
+  Flag.node,
   Formatter.node,
+  Generate.node,
   LocationWatcherPolicy.node,
   FileSystem.node,
   FSUtil.node,
   Global.node,
   httpClient,
+  httpFetch,
   Image.node,
   InstructionDiscovery.node,
   Integration.node,
@@ -183,19 +169,23 @@ export const requirements = LayerNode.group([
   KV.node,
   llmClient,
   Location.node,
+  Machines.node,
   ModelsDev.node,
   Mcp.node,
   Npm.node,
   Permission.node,
   Form.node,
-  ReadToolFileSystem.node,
   Reference.node,
   WebSearch.node,
   Ripgrep.node,
+  Automation.node,
   Session.node,
   SessionCompaction.node,
   SessionInstructions.node,
+  SessionSearch.node,
+  SessionSearchBuild.node,
   SubagentJob.node,
+  SharedCache.node,
   Shell.node,
   ShellSelect.node,
   Snapshot.node,
@@ -205,9 +195,15 @@ export const requirements = LayerNode.group([
   ToolOutput.node,
   Watcher.node,
   WellKnown.node,
+  VideoGeneration.node,
   Worktree.node,
   WorktreeStrategies.node,
-])
+] as const
+
+// Built-in plugins see exactly these nodes' services, each declared with its `service` so it can be picked.
+export const requirements = LayerNode.group(nodes)
+
+export type Requirements = LayerNode.Output<typeof requirements>
 
 export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
@@ -219,28 +215,40 @@ const pre = [
   WellKnownPlugin.Plugin,
   VcsGitPlugin.Plugin,
   AgentPlugin.Plugin,
+  ForkNoticePlugin.Plugin,
+  HomeMemoryPlugin.Plugin,
   PlanPlugin.Plugin,
   CommandPlugin.Plugin,
+  GoalPlugin.Plugin,
   SkillPlugin.Plugin,
   VcsHgPlugin.Plugin,
   ModelsDevPlugin,
   ...ProviderPlugins,
   ...WebSearchPlugins,
   PatchTool.Plugin,
-  // Render model prompts after the patch plugin selects the available editing tools.
   ...OptimizePlugin.Plugins,
   VerbosityPlugin.Plugin,
   IdentityPlugin.Plugin,
   EditTool.Plugin,
   GlobTool.Plugin,
   GrepTool.Plugin,
+  ImageGenerateTool.Plugin,
+  VideoGenerateTool.Plugin,
   OpenCodeTools.Plugin,
+  McpEventTools.Plugin,
   McpResourceTools.Plugin,
   QuestionTool.Plugin,
   ReadTool.Plugin,
+  ArtifactTools.Plugin,
+  AutomationTools.Plugin,
+  CdTool.Plugin,
+  MachineTools.Plugin,
+  SessionInterruptTool.Plugin,
+  SessionSearchTools.Plugin,
   ShellTool.Plugin,
   SkillTool.Plugin,
   SubagentTool.Plugin,
+  CodeModeAgentsPlugin.Plugin,
   TodoTool.Plugin,
   WebFetchTool.Plugin,
   WebSearchTool.Plugin,
@@ -259,11 +267,15 @@ const post = [
   ConfigImagePlugin.Plugin,
   ConfigLocationWatcherPlugin.Plugin,
   ConfigShellPlugin.Plugin,
+  ConfigSessionSearchPlugin.Plugin,
   ConfigSnapshotPlugin.Plugin,
   ConfigToolOutputPlugin.Plugin,
   ConfigCompatibilityPlugin.Plugin,
   ConfigSkillPlugin.Plugin,
+  McpSkillPlugin.Plugin,
   ConfigProviderPlugin.Plugin,
+  // Run the dynamic npm SDK loader after SDK, instance, and external plugins register their `sdk` hooks.
+  DynamicProviderPlugin,
   ConfigWebSearchPlugin.Plugin,
   ConfigPolicyPlugin.Plugin,
 ] as const satisfies readonly InternalPlugin[]
@@ -274,13 +286,24 @@ export const guarded: ReadonlySet<string> = new Set([OpencodePlugin.id, ConfigPo
 
 export const list = Effect.fn("PluginInternal.list")(function* () {
   // Capture only services; activation supplies the child Scope and batching context.
-  const context = Context.pick(...services)(yield* Effect.context<Requirements>())
+  const context = Context.pick(...nodes.map((node) => node.service))(yield* Effect.context<Requirements>())
+  const gateway = Context.get(context, BrowserTunnelGateway.Service)
+  const flags = Context.get(context, Flag.Service)
+  const browserContext = Context.add(
+    context,
+    BrowserTunnelHost.Reference,
+    gateway.hostForLocation(flags.enabled("browser_stream_tunnel")),
+  )
   const resolve = (plugins: readonly InternalPlugin[]) =>
     plugins.map(
-      (plugin): Plugin => ({
-        id: plugin.id,
-        effect: (host) => plugin.effect(host).pipe(Effect.provide(context)),
-      }),
+      (plugin) =>
+        ({
+          id: plugin.id,
+          effect: (host) =>
+            plugin.effect(host).pipe(Effect.provide(plugin.id === BrowserPlugin.id ? browserContext : context)),
+          revision: "internal",
+          source: { type: "builtin" },
+        }) satisfies Generation,
     )
   return {
     pre: resolve(pre),

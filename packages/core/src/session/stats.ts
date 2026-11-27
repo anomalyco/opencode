@@ -11,8 +11,9 @@ import { SessionEvent } from "@opencode/schema/session-event"
 import { ToolMode } from "@opencode/schema/session-stats"
 import { TokenUsage } from "@opencode/schema/token-usage"
 import { Database } from "../database/database.js"
+import { DatabaseBatch } from "../database/batch.js"
 import { EventTable } from "../event/sql.js"
-import { SessionMessageTable, SessionTable } from "./sql.js"
+import { SessionMessageTable, SessionPartTable, SessionTable } from "./sql.js"
 
 type Input = {
   readonly from?: number
@@ -193,6 +194,17 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
             .get<ToolSummaryRow>(
               sql`
             WITH calls AS MATERIALIZED (
+              SELECT json_extract(part.data, '$.state.status') AS status
+              FROM ${SessionPartTable} AS part
+              JOIN ${SessionMessageTable} AS message ON message.id = part.message_id
+              JOIN ${SessionTable} AS session ON session.id = message.session_id
+              WHERE message.type = 'assistant'
+                AND message.time_created >= ${range.from}
+                AND message.time_created < ${range.to}
+                AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
+                AND part.type = 'tool'
+                ${project}
+              UNION ALL
               SELECT json_extract(content.value, '$.state.status') AS status
               FROM ${SessionMessageTable} AS message
               JOIN ${SessionTable} AS session ON session.id = message.session_id,
@@ -201,6 +213,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
                 AND message.time_created >= ${range.from}
                 AND message.time_created < ${range.to}
                 AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
+                AND json_array_length(message.data, '$.content') > 0
                 AND json_extract(content.value, '$.type') = 'tool'
                 ${project}
             )
@@ -229,6 +242,24 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
           .all<ToolRow>(
             sql`
           SELECT
+            json_extract(part.data, '$.name') AS name,
+            json_extract(part.data, '$.state.status') AS status,
+            CASE
+              WHEN json_extract(part.data, '$.time.completed') IS NULL THEN NULL
+              ELSE json_extract(part.data, '$.time.completed')
+                - coalesce(json_extract(part.data, '$.time.ran'), json_extract(part.data, '$.time.created'))
+            END AS duration
+          FROM ${SessionPartTable} AS part
+          JOIN ${SessionMessageTable} AS message ON message.id = part.message_id
+          JOIN ${SessionTable} AS session ON session.id = message.session_id
+          WHERE message.type = 'assistant'
+            AND message.time_created >= ${range.from}
+            AND message.time_created < ${range.to}
+            AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
+            AND part.type = 'tool'
+            ${project}
+          UNION ALL
+          SELECT
             json_extract(content.value, '$.name') AS name,
             json_extract(content.value, '$.state.status') AS status,
             CASE
@@ -243,6 +274,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
             AND message.time_created >= ${range.from}
             AND message.time_created < ${range.to}
             AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
+            AND json_array_length(message.data, '$.content') > 0
             AND json_extract(content.value, '$.type') = 'tool'
             ${project}
         `,
@@ -281,7 +313,11 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
     .all()
     .pipe(Effect.orDie)
   const events = (yield* Effect.forEach(
-    batches(ids.map((row) => row.id)),
+    DatabaseBatch.batches(
+      ids.map((row) => row.id),
+      1,
+      3,
+    ),
     (batch) =>
       db
         .select({ data: EventTable.data })
@@ -351,10 +387,6 @@ function windows(from: number, to: number) {
     from: from + index * Window,
     to: Math.min(to, from + (index + 1) * Window),
   }))
-}
-
-function batches(ids: string[]) {
-  return Array.from({ length: Math.ceil(ids.length / 500) }, (_, index) => ids.slice(index * 500, (index + 1) * 500))
 }
 
 function rowTokens(row: MessageRow): Tokens {

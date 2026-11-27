@@ -2,31 +2,32 @@ import { Effect, Stream } from "effect"
 import { LLMClient } from "../../src/route.js"
 import {
   LLMEvent,
-  LLMRequest,
+  type LLMRequest,
   Message,
-  type ContentPart,
+  type AssistantMessage,
   type ProviderMetadata,
   type ToolCallPart,
   ToolResultPart,
   type Usage,
 } from "../../src/schema/index.js"
-import { type Tools, toDefinitions } from "../../src/tool.js"
+import { type Tool, toDefinitions } from "../../src/tool.js"
 import { ToolRuntime } from "../../src/tool-runtime.js"
 
-interface RunOptions<T extends Tools> {
+interface RunOptions {
   readonly request: LLMRequest
-  readonly tools: T
+  readonly tools: ReadonlyArray<Tool>
   readonly maxSteps?: number
 }
 
 /** Test-owned continuation loop. Production callers must own durable history. */
-export const runTools = <T extends Tools>(options: RunOptions<T>) =>
+export const runTools = (options: RunOptions) =>
   Stream.unwrap(
     Effect.gen(function* () {
-      const names = new Set(Object.keys(options.tools))
-      let request = LLMRequest.update(options.request, {
+      const names = new Set(options.tools.map((tool) => tool.name))
+      let request = {
+        ...options.request,
         tools: [...options.request.tools.filter((tool) => !names.has(tool.name)), ...toDefinitions(options.tools)],
-      })
+      }
       let usage: Usage | undefined
       const events: LLMEvent[] = []
 
@@ -53,7 +54,8 @@ export const runTools = <T extends Tools>(options: RunOptions<T>) =>
           return Stream.fromIterable(events)
         }
 
-        request = LLMRequest.update(request, {
+        request = {
+          ...request,
           messages: [
             ...request.messages,
             Message.assistant(state.assistantContent),
@@ -66,7 +68,7 @@ export const runTools = <T extends Tools>(options: RunOptions<T>) =>
               }),
             ),
           ],
-        })
+        }
       }
 
       return Stream.fromIterable(events)
@@ -80,7 +82,7 @@ const indexStep = (event: LLMEvent, index: number): LLMEvent => {
 }
 
 const stepState = (events: ReadonlyArray<LLMEvent>) => {
-  const assistantContent: ContentPart[] = []
+  const assistantContent: Array<AssistantMessage["content"][number]> = []
   const toolCalls: ToolCallPart[] = []
   let reason: Extract<LLMEvent, { type: "finish" }>["reason"] = { normalized: "unknown" }
   let usage: Usage | undefined
@@ -114,7 +116,7 @@ const stepState = (events: ReadonlyArray<LLMEvent>) => {
 }
 
 const appendText = (
-  content: ContentPart[],
+  content: Array<AssistantMessage["content"][number]>,
   type: "text" | "reasoning",
   text: string,
   providerMetadata?: ProviderMetadata,

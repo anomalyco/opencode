@@ -1,4 +1,4 @@
-import { createEffect, on, onCleanup } from "solid-js"
+import { createEffect, onCleanup } from "solid-js"
 import type { QuoteSource, createComposerQuoteSource } from "@/composer/quote-source"
 import { createQuoteBackground } from "./quote-background"
 
@@ -69,43 +69,23 @@ export function captureQuoteSource(ranges: Range[]): QuoteSource {
 
 export function createTimelineQuoteHighlight(input: {
   root: () => HTMLElement | undefined
-  visible: () => HTMLElement | undefined
   source: () => ReturnType<typeof createComposerQuoteSource>
   enabled: () => boolean
-  reveal: (id: string, partID: string) => void
-  unpin: () => void
 }) {
-  let pending: { key: string; source: ReturnType<typeof createComposerQuoteSource> } | undefined
-
-  const reveal = () => {
-    const root = input.root()
-    const source = input.source()
-    const first = pending && pending.source === source && source.state.sources[pending.key]?.[0]
-
-    if (!first || !root || !input.enabled()) return
-    const range = resolveQuoteRange(root, first, new Map())
-    const rect = range && [...range.getClientRects()].find((rect) => rect.width > 0 && rect.height > 0)
-
-    if (!rect) return
-    pending = undefined
-    const viewport = input.visible()?.getBoundingClientRect() ?? root.getBoundingClientRect()
-    const sticky = root.querySelector<HTMLElement>("[data-session-title]")
-    const top = viewport.top + (sticky?.offsetHeight ?? 0)
-
-    if (rect.top >= top && rect.bottom <= viewport.bottom) return
-    input.unpin()
-    root.scrollBy({ top: rect.top - top - (viewport.bottom - top) / 2, behavior: "instant" })
-  }
-
   createEffect(() => {
     const root = input.root()
     const source = input.source()
-    const pieces = source.state.pending ? source.state.sources[source.state.pending] : undefined
+    const key = source.state.pending
+    const pieces = key ? source.state.sources[key] : undefined
 
-    if (!root || !input.enabled() || !pieces?.length || typeof Highlight === "undefined" || !CSS.highlights) return
-    const base = new Highlight()
-    base.priority = -2
-    CSS.highlights.set(BASE, base)
+    if (!root || !input.enabled() || !key || !pieces?.length) return
+    const base = typeof Highlight !== "undefined" && CSS.highlights ? new Highlight() : undefined
+
+    if (base) {
+      base.priority = -2
+      CSS.highlights.set(BASE, base)
+    }
+
     let frame: number | undefined
     const background = createQuoteBackground()
     const observed = new Set<Element>()
@@ -119,7 +99,7 @@ export function createTimelineQuoteHighlight(input: {
     }
 
     const apply = () => {
-      base.clear()
+      base?.clear()
       observer.disconnect()
       const shadows = new Set<ShadowRoot>()
       const containers = new Map<Element, ReturnType<typeof textNodes>>()
@@ -132,15 +112,17 @@ export function createTimelineQuoteHighlight(input: {
         })
 
         if (!range) return
-        base.add(range)
+
+        base?.add(range)
         ranges.push(range)
       })
       background.update(ranges)
-      reveal()
       observer.observe(root, { childList: true, subtree: true, characterData: true })
       observer.observe(document.documentElement, { attributes: true, attributeFilter: ["style", "class", "dir"] })
       shadows.forEach((shadow) => observer.observe(shadow, { childList: true, subtree: true, characterData: true }))
+
       const targets = new Set<Element>([root, ...containers.keys()])
+
       observed.forEach((element) => {
         if (targets.has(element)) return
         resize.unobserve(element)
@@ -156,40 +138,21 @@ export function createTimelineQuoteHighlight(input: {
     const observer = new MutationObserver(schedule)
     const resize = new ResizeObserver(schedule)
     document.fonts.addEventListener("loadingdone", schedule)
+    window.addEventListener("resize", schedule)
 
     apply()
     onCleanup(() => {
       observer.disconnect()
       resize.disconnect()
       document.fonts.removeEventListener("loadingdone", schedule)
+      window.removeEventListener("resize", schedule)
 
       if (frame !== undefined) cancelAnimationFrame(frame)
       background.clear()
-      CSS.highlights.delete(BASE)
+
+      if (base) CSS.highlights.delete(BASE)
     })
   })
-
-  createEffect(
-    on(
-      () => [input.source(), input.source().state.reveal?.sequence] as const,
-      ([current], previous) => {
-        const source = input.source()
-        const key = source.state.reveal?.key
-        const first = key && source.state.sources[key]?.[0]
-        const root = input.root()
-
-        pending = undefined
-
-        if (current !== previous?.[0] || !first || !root || !input.enabled()) return
-        pending = { key, source }
-        reveal()
-
-        if (!pending) return
-        input.unpin()
-        input.reveal(first.revealID, first.partID)
-      },
-    ),
-  )
 }
 
 function resolveQuoteRange(

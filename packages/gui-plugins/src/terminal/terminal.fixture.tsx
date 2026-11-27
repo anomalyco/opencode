@@ -1,72 +1,71 @@
+import { OpenCode } from "@opencode/client/promise"
 import { ThemeProvider } from "@opencode/ui/theme/context"
 import { createSignal } from "solid-js"
 import { render } from "solid-js/web"
-import type { Context, ServerRef } from "@opencode/plugin/gui"
 import { PluginContext } from "@opencode/plugin/gui/host"
+import type { Context, ServerRef } from "@opencode/plugin/gui"
+import en from "./i18n/en"
+import type { TerminalModel } from "./model"
 import { Terminal } from "./terminal"
 
 /**
- * Mounts the real terminal beside a focused composer field, as the side panel does when the user opens a terminal while
- * typing. The PTY connection never resolves, so only the mount and focus lifecycle runs.
+ * One terminal pane attached to `ptyID` on the server at `url`, with the real ghostty-web and connection. Mounted by
+ * `packages/app/component-tests/terminal.spec.ts`, which serves the server with the e2e persistent PTY mock.
  */
-export function mountTerminalFocus(input: { autoFocus: boolean }) {
+export function mountTerminal(input: { url: string; ptyID: string }) {
   const host = document.createElement("div")
-  host.dataset.testid = "terminal-focus-fixture"
-  host.style.cssText = "display:flex;flex-direction:column;gap:8px;width:640px;height:360px"
+  host.dataset.testid = "terminal-fixture"
+  host.style.cssText = "position: fixed; inset: 40px auto auto 40px; width: 640px; height: 320px; z-index: 1000"
   document.body.append(host)
 
-  const composer = document.createElement("textarea")
-  composer.setAttribute("aria-label", "Composer")
-  host.append(composer)
-  composer.focus()
+  const [failures, setFailures] = createSignal(0)
+  const strings: Record<string, string> = en
 
-  const surface = document.createElement("div")
-  surface.style.cssText = "position:relative;flex:1"
-  host.append(surface)
-
-  // As the panel's focus request does, consuming the request turns autoFocus off.
-  const [requested, setRequested] = createSignal(input.autoFocus)
-
-  // SAFETY: the terminal reads only these plugin members while it mounts and focuses.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
-  const plugin = {
-    t: (key: string) => key,
+  const fake = {
     appearance: { font: () => "monospace" },
     keybinds: { matches: () => false },
     system: { openExternal() {} },
-  } as unknown as Context
+    desktop: undefined,
+    t: (key: string) => strings[key] ?? key,
+  }
 
-  // SAFETY: the terminal reads only these server members; the PTY token never resolves, so it never connects.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
   const server = {
-    id: "fixture",
-    name: "fixture",
-    url: "http://127.0.0.1:1",
-    client: { pty: { connect: { token: () => new Promise(() => {}) } } },
-  } as unknown as ServerRef
+    id: input.url,
+    name: input.url,
+    url: input.url,
+    client: OpenCode.make({ baseUrl: input.url }),
+    local: true,
+    builtin: false,
+    compatible: true,
+    connected: true,
+  }
 
-  const dispose = render(
+  const ghostty: TerminalModel["ghostty"] = () =>
+    import("ghostty-web").then(async (mod) => ({ mod, ghostty: await mod.Ghostty.load() }))
+
+  // SAFETY: the terminal pane reads only the plugin members implemented above.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const plugin = fake as unknown as Context
+  // SAFETY: the terminal pane reads only the server's client and url, implemented above.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const ref = server as unknown as ServerRef
+
+  return render(
     () => (
       <ThemeProvider>
         <PluginContext.Provider value={plugin}>
-          <Terminal
-            pty={{ id: "pty_fixture", title: "Terminal", titleNumber: 1 }}
-            server={server}
-            directory="/fixture"
-            ghostty={() =>
-              import("ghostty-web").then(async (mod) => ({ mod, ghostty: await mod.Ghostty.load() }))
-            }
-            autoFocus={requested()}
-            onAutoFocus={() => setRequested(false)}
-          />
+          <div data-failures={failures()} style={{ position: "relative", width: "100%", height: "100%" }}>
+            <Terminal
+              ptyID={input.ptyID}
+              server={ref}
+              ghostty={ghostty}
+              autoFocus
+              onFailure={() => setFailures((value) => value + 1)}
+            />
+          </div>
         </PluginContext.Provider>
       </ThemeProvider>
     ),
-    surface,
+    host,
   )
-
-  return () => {
-    dispose()
-    host.remove()
-  }
 }

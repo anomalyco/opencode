@@ -1,5 +1,7 @@
 import { Schema, type Effect } from "effect"
 import type { AIError, LanguageModelSanitizerCompatibility, LLMEvent, LLMRequest, ProtocolID } from "../schema/index.js"
+import { flattenRequest } from "../protocols/shared.js"
+import type { ToolUpdateEncoding } from "../tool-updates.js"
 
 /**
  * The semantic API contract of one model server family.
@@ -43,6 +45,10 @@ export interface Protocol<Body, Frame, Event, State> {
   readonly stream: ProtocolStream<Frame, Event, State>
   /** Whether `body.from` lowers `Message.effort(...)` markers; wrappers around another `body.from` must forward it. */
   readonly supportsEffortUpdates?: (request: LLMRequest) => boolean
+  /** Tool changes `body.from` can send in place of `Message.tools(...)` markers; wrappers around another `body.from` must forward it. */
+  readonly toolUpdates?: ToolUpdateEncoding
+  /** Whether `body.from` sends tool namespaces natively; otherwise `make` hands it flattened requests. Wrappers around another `body.from` must forward it. */
+  readonly namespaces?: boolean
   /** Tool schema sanitizer for every model on this protocol unless the model's compatibility sets one; wrappers around another `body.from` must forward it. */
   readonly sanitizer?: LanguageModelSanitizerCompatibility
 }
@@ -81,7 +87,10 @@ export interface ProtocolStream<Frame, Event, State> {
  */
 export const make = <Body, Frame, Event, State>(
   input: Protocol<Body, Frame, Event, State>,
-): Protocol<Body, Frame, Event, State> => input
+): Protocol<Body, Frame, Event, State> =>
+  input.namespaces
+    ? input
+    : { ...input, body: { ...input.body, from: (request) => input.body.from(flattenRequest(request)) } }
 
 export const jsonEvent = <const S extends Schema.Top>(schema: S) => Schema.fromJsonString(schema)
 

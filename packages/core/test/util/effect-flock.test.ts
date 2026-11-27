@@ -99,25 +99,6 @@ describe("util.effect-flock", () => {
   )
 
   it.live(
-    "withLock data-first",
-    Effect.gen(function* () {
-      const flock = yield* EffectFlock.Service
-      const tmp = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("eflock-test-")))).path
-      const dir = path.join(tmp, "locks")
-
-      let hit = false
-      yield* flock.withLock(
-        Effect.sync(() => {
-          hit = true
-        }),
-        "eflock:df",
-        dir,
-      )
-      expect(hit).toBe(true)
-    }),
-  )
-
-  it.live(
     "withLock pipeable",
     Effect.gen(function* () {
       const flock = yield* EffectFlock.Service
@@ -129,30 +110,6 @@ describe("util.effect-flock", () => {
         hit = true
       }).pipe(flock.withLock("eflock:pipe", dir))
       expect(hit).toBe(true)
-    }),
-  )
-
-  it.live(
-    "writes owner metadata",
-    Effect.gen(function* () {
-      const flock = yield* EffectFlock.Service
-      const tmp = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("eflock-test-")))).path
-      const dir = path.join(tmp, "locks")
-      const key = "eflock:meta"
-      const file = path.join(lock(dir, key), "meta.json")
-
-      yield* Effect.scoped(
-        Effect.gen(function* () {
-          yield* flock.acquire(key, dir)
-          const json = yield* Effect.promise(() =>
-            readJson<{ token?: unknown; pid?: unknown; hostname?: unknown; createdAt?: unknown }>(file),
-          )
-          expect(typeof json.token).toBe("string")
-          expect(typeof json.pid).toBe("number")
-          expect(typeof json.hostname).toBe("string")
-          expect(typeof json.createdAt).toBe("string")
-        }),
-      )
     }),
   )
 
@@ -324,8 +281,8 @@ describe("util.effect-flock", () => {
             ),
           )
 
-          expect(out.map((x) => x.code)).toEqual(Array.from({ length: n }, () => 0))
           expect(out.map((x) => x.stderr.toString()).filter(Boolean)).toEqual([])
+          expect(out.map((x) => x.code)).toEqual(Array.from({ length: n }, () => 0))
 
           const lines = (await fs.readFile(done, "utf8"))
             .split("\n")

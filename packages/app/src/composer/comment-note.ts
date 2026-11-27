@@ -1,7 +1,7 @@
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { Option, Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
-import { uuid } from "@/runtime/persistence/uuid"
+import { uuid } from "@opencode/util/uuid"
 import { FileSelection } from "@/workspaces/files/types"
 import { durableNote, LegacyBrowserNote, NoteComment, QuoteComment, type ContextItem } from "./schema"
 
@@ -57,19 +57,18 @@ export function formatAttachmentReference(input: PromptAttachmentReference) {
 
 /** A note reads with its live subject while it stays in the app process that attached it. */
 export function formatNoteComment(input: NoteComment) {
+  if (!input.comment.trim()) return `The user referenced ${input.live?.subject ?? input.subject}.`
+
   return `The user made the following comment regarding ${input.live?.subject ?? input.subject}: ${input.comment}`
 }
 
 /** Each quoted line is prefixed, so quoted text cannot end the quote early and read as the user's own words. */
 export function formatQuoteComment(input: QuoteComment) {
-  const quote = `The user quoted the following from ${input.source?.subject ?? "earlier in the conversation"}:\n${input.text
-    .split("\n")
-    .map((line) => `> ${line}`)
-    .join("\n")}`
-
-  if (!input.comment) return quote
-
-  return `${quote}\n\nThe user made the following comment regarding this quote: ${input.comment}`
+  return [
+    ...(input.source ? [`From ${input.source.subject}:`] : []),
+    ...input.text.split("\n").map((line) => (line ? `> ${line}` : ">")),
+    ...(input.comment ? ["", input.comment] : []),
+  ].join("\n")
 }
 
 /** Restores a sent comment to the composer, for example after a revert or fork. */

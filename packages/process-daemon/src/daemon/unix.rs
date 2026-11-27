@@ -10,7 +10,7 @@ use fs2::FileExt;
 use sha2::{Digest, Sha256};
 
 use super::{LOCK_FILE, Registration, read_registration, registration_path};
-use crate::protocol::PROTOCOL_VERSION;
+use crate::protocol::{PROTOCOL_VERSION, features};
 use crate::transport::Listener;
 
 pub(super) struct Runtime {
@@ -48,6 +48,7 @@ impl Runtime {
             protocol: PROTOCOL_VERSION,
             socket: socket.path.clone(),
             token: random_id(),
+            features: features(),
         };
         write_registration(&directory, &registration)?;
         let sweeper = {
@@ -364,6 +365,7 @@ mod tests {
             protocol: PROTOCOL_VERSION,
             socket: socket.clone(),
             token: random_id(),
+            features: features(),
         };
         write_registration(&abandoned, &registration).unwrap();
 

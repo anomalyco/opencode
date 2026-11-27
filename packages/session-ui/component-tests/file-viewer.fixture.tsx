@@ -20,15 +20,28 @@ const [commented, setCommented] = createSignal<SelectedLineRange[]>([])
 
 let first: Element | null = null
 
+const ends: (SelectedLineRange | null)[] = []
+
+const comments: SelectedLineRange[] = []
+
 export const controls = {
   setOverflow,
   setSelected,
   setCommented,
+  /** Every range `onLineSelectionEnd` reported, in order. */
+  ends: () => ends.map((range) => (range ? { start: range.start, end: range.end } : null)),
+  /** Every range the Add comment toolbar reported, in order. */
+  comments: () => comments.map((range) => ({ start: range.start, end: range.end })),
   append: (line: string) => setContents((value) => value + line),
   // Keep the first Pierre host so a later check can tell an in-place update from a rebuild.
   keepHost: () => (first = document.querySelector("[data-testid='file-viewer-fixture'] diffs-container")),
   sameHost: () =>
     first !== null && first === document.querySelector("[data-testid='file-viewer-fixture'] diffs-container"),
+  clearDiff: () => {},
+  /** The inline min-height the viewer pins on its container while a draw replaces rows. */
+  pinnedHeight: () =>
+    document.querySelector<HTMLElement>("[data-testid='file-viewer-fixture'] div:has(> diffs-container)")?.style
+      .minHeight,
 }
 
 function host() {
@@ -52,6 +65,26 @@ export function mountTextViewer(lines: number) {
         enableLineSelection
         selectedLines={selected()}
         commentedLines={commented()}
+        onLineSelectionEnd={(range) => ends.push(range)}
+        onCommentSelection={(range) => comments.push(range)}
+      />
+    ),
+    host(),
+  )
+}
+
+/** A plain diff of `lines` lines; `controls.clearDiff()` then makes both sides identical, which draws no rows. */
+export function mountChangingDiff(lines: number) {
+  const [after, setAfter] = createSignal(source(lines, 1))
+  controls.clearDiff = () => setAfter(source(lines))
+  render(
+    () => (
+      <File
+        mode="diff"
+        fileDiff={
+          normalize({ file: "a.ts", before: source(lines), after: after(), additions: 0, deletions: 0 }).fileDiff
+        }
+        diffStyle="unified"
       />
     ),
     host(),

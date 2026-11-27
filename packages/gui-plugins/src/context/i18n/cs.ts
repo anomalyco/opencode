@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Využití",
   "usage.cost": "náklady",
   "usage.view": "Zobrazit kontextové použití",
-  "systemPrompt.title": "Systémový prompt",
   "rawMessages.title": "Syrové zprávy",
   "export.session": "Export relace",
   "stats.session": "Relace",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Relace byla uložena do {{filename}}",
   "export.failed.title": "Export relace se nezdařil",
   "export.failed.description": "Při exportu relace došlo k chybě",
+  "usage.toggle": "Přepnout kontext relace",
 }

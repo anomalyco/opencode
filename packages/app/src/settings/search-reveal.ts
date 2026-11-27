@@ -1,27 +1,18 @@
-import type { SettingsView } from "./surface"
+import { settingsScroller } from "./scroller"
+import type { SettingsView } from "./route"
 
-/** Reveal one explicit search activation, including targets mounted by an asynchronous scoped page. */
-export function revealSettingsSearch(root: HTMLElement, view: SettingsView) {
-  const state = { disposed: false, row: undefined as HTMLElement | undefined, tabIndex: null as string | null }
-
-  const restore = () => {
-    const row = state.row
-
-    if (!row) return
-    row.removeAttribute("data-search-target")
-
-    if (state.tabIndex === null) row.removeAttribute("tabindex")
-
-    if (state.tabIndex !== null) row.setAttribute("tabindex", state.tabIndex)
-    state.row = undefined
-  }
-
-  const finish = (event: AnimationEvent) => {
-    if (event.target === state.row && event.animationName === "settings-search-reveal") restore()
-  }
+/**
+ * Finds a search activation's target, including one a scoped page mounts late, and highlights its row. Returns the
+ * cleanup that stops looking and removes the highlight; the search machine decides when to call it.
+ */
+export function startSettingsSearchReveal(
+  root: HTMLElement,
+  view: SettingsView,
+  callbacks: { onHighlighted: () => void; onCompleted: () => void },
+) {
+  const abort = new AbortController()
 
   const reveal = () => {
-    if (state.disposed) return true
     const panel = root.querySelector<HTMLElement>(".settings-panel:not([hidden])")
 
     const control = panel?.querySelector<HTMLElement>(
@@ -33,12 +24,25 @@ export function revealSettingsSearch(root: HTMLElement, view: SettingsView) {
     const row =
       control.closest<HTMLElement>('[data-component="settings-row"], [data-component="settings-list"] > *') ?? control
 
-    if (!view.target) panel.scrollTop = 0
+    if (!view.target) settingsScroller(panel).scrollTop = 0
 
     if (view.target) row.scrollIntoView({ block: "center", inline: "nearest" })
-    state.row = row
-    state.tabIndex = row.getAttribute("tabindex")
+    const tabIndex = row.getAttribute("tabindex")
     row.setAttribute("data-search-target", view.target ? "row" : "header")
+    abort.signal.addEventListener("abort", () => {
+      row.removeAttribute("data-search-target")
+
+      if (tabIndex === null) row.removeAttribute("tabindex")
+
+      if (tabIndex !== null) row.setAttribute("tabindex", tabIndex)
+    })
+    root.addEventListener(
+      "animationend",
+      (event) => {
+        if (event.target === row && event.animationName === "settings-search-reveal") callbacks.onCompleted()
+      },
+      { signal: abort.signal },
+    )
     // Selecting another result can reuse the same header before the browser paints the removal.
     row.getAnimations({ subtree: true }).forEach((animation) => {
       if (!(animation instanceof CSSAnimation) || animation.animationName !== "settings-search-reveal") return
@@ -53,6 +57,8 @@ export function revealSettingsSearch(root: HTMLElement, view: SettingsView) {
       focus.focus({ preventScroll: true })
     }
 
+    callbacks.onHighlighted()
+
     return true
   }
 
@@ -60,16 +66,11 @@ export function revealSettingsSearch(root: HTMLElement, view: SettingsView) {
     if (reveal()) observer.disconnect()
   })
 
-  root.addEventListener("animationend", finish)
+  abort.signal.addEventListener("abort", () => observer.disconnect())
   queueMicrotask(() => {
-    if (!reveal())
-      observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "class"] })
+    if (abort.signal.aborted || reveal()) return
+    observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "class"] })
   })
 
-  return () => {
-    state.disposed = true
-    observer.disconnect()
-    root.removeEventListener("animationend", finish)
-    restore()
-  }
+  return () => abort.abort()
 }

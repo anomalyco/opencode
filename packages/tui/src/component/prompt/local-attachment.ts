@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 
@@ -61,14 +60,13 @@ export async function resolvePastedAttachments(text: string, platform: string) {
   })
 }
 
-// A local server reads the file itself so the model sees its path. The pasted bytes are the
-// fallback for remote servers and for files deleted before submit, like screenshot drags.
+// Keep the captured bytes: a local server may not have the terminal's access to the source file.
 export function promptFilesForServer<T extends { uri: string; path?: string }>(
   files: readonly T[] | undefined,
   localServer: boolean,
 ) {
   return files?.map(({ path: file, ...rest }) =>
-    file && localServer && existsSync(file) ? { ...rest, uri: pathToFileURL(file).href } : rest,
+    file && localServer ? { ...rest, source: { type: "uri" as const, uri: pathToFileURL(file).href } } : rest,
   )
 }
 

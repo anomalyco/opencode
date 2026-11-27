@@ -17,12 +17,12 @@
     },
     "overrides": {
       "syntax-comment": "#8e4be3",
-      "syntax-keyword": "#c45f00",
-      "syntax-string": "#2f8b32",
-      "syntax-primitive": "#a13bd6",
-      "syntax-property": "#008fb8",
-      "syntax-type": "#9d7a00",
-      "syntax-constant": "#e04d7a"
+      "syntax-keyword": "#ad5300",
+      "syntax-string": "#1e7d24",
+      "syntax-primitive": "#9f39d4",
+      "syntax-property": "#007598",
+      "syntax-type": "#876800",
+      "syntax-constant": "#c53264"
     }
   },
   "dark": {

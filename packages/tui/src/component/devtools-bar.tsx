@@ -162,7 +162,7 @@ export function DevToolsBar() {
     const events = await (sessionID
       ? (async () => {
           const events: { readonly created: number }[] = []
-          for await (const event of client.api.session.log({ sessionID, follow: false })) {
+          for await (const event of client.api.experimental.session.log({ sessionID, follow: false })) {
             if (event.type !== "log.synced") events.push(event)
           }
           // Durable events stay in aggregate order even when their wall-clock timestamps differ.

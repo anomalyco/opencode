@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import en from "../../src/runtime/i18n/en"
 import { clientSettings } from "../../src/settings/search-catalog"
-import { NO_PROVIDER, REMOTE_SERVER, project, type SeedInput } from "../utils/app"
+import { NO_PROVIDER, REMOTE_SERVER, holdRoute, project, type SeedInput } from "../utils/app"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { openSettings } from "../utils/workspace"
 
@@ -311,8 +311,12 @@ test("section search takes typed input, clears in place, and escapes in steps", 
 })
 
 for (const count of [0, 7, 8]) {
-  test(`Projects search appears from 8 projects (${count} projects)`, async ({ page }) => {
-    const view = await open(page, { count })
+  test(`Projects search appears from 8 added projects (${count} projects)`, async ({ page }) => {
+    const view = await open(page, {
+      count,
+      seed: { usedProjects: { local: Array.from({ length: count }, (_, index) => `proj_search_${index}`) } },
+    })
+
     await view.settings.getByRole("tab", { name: "Projects", exact: true }).click()
     const search = view.settings.getByRole("searchbox", { name: "Search projects", exact: true })
     const projects = view.settings.getByRole("button", { name: /^OpenCode / })
@@ -387,6 +391,83 @@ test("project results keep the query, selection, and scroll position on return",
   await expect(view.search).toBeFocused()
   await expect(target).toHaveAttribute("aria-selected", "true")
   await expect.poll(() => view.viewport.evaluate((list) => list.scrollTop)).toBe(scroll)
+})
+
+test("a page reached through an opened result keeps its own way back", async ({ page }) => {
+  const view = await open(page)
+  await view.search.fill("Projects")
+  await view.results.getByRole("option", { name: "Projects, This computer", exact: true }).click()
+  await expect(view.settings.getByRole("heading", { name: "Projects", exact: true })).toBeVisible()
+  await view.settings.getByRole("button", { name: "OpenCode", exact: true }).click()
+  await expect(view.settings.getByRole("heading", { name: "OpenCode", exact: true })).toBeVisible()
+  await expect(view.settings.getByRole("button", { name: "Back to projects", exact: true })).toBeVisible()
+  // Escape leaves the project for its own parent, not for the page the search started on.
+  await page.keyboard.press("Escape")
+  await expect(view.settings.getByRole("heading", { name: "Projects", exact: true })).toBeVisible()
+  await expect(view.search).toHaveValue("Projects")
+
+  // A Command Palette jump reveals its setting without a way back to a search.
+  const key = await page.evaluate(() =>
+    /Mac|iPhone|iPad|iPod/.test(navigator.platform) ? "Meta+Shift+P" : "Control+Shift+P",
+  )
+
+  await page.keyboard.press(key)
+  const palette = page.getByRole("dialog")
+  await palette.getByRole("combobox").fill("OpenCode name")
+  await palette.getByRole("option", { name: /^Project name/ }).click()
+  await expect(view.settings.getByRole("textbox", { name: "Project name", exact: true })).toHaveValue("OpenCode")
+  await expect(view.settings.locator('[data-search-target="row"]')).toContainText("Project name")
+  await expect(view.settings.getByRole("button", { name: "Back to projects", exact: true })).toBeVisible()
+})
+
+test("project edits queued behind a save reach their project in order across jumps away and back", async ({ page }) => {
+  const view = await open(page, { count: 2 })
+  await view.search.fill("OpenCode 00 name")
+  await view.results.getByRole("option").click()
+  const name = view.settings.getByRole("textbox", { name: "Project name", exact: true })
+  await expect(name).toHaveValue("OpenCode 00")
+  const hold = await holdRoute(page, /\/api\/project\/proj_search_\d+(\?|$)/, { method: "PATCH" })
+
+  await name.fill("Renamed")
+  await name.blur()
+  await hold.arrived
+  const startup = view.settings.getByRole("textbox", { name: "Worktree startup script", exact: true })
+  await startup.fill("bun dev")
+  await startup.blur()
+
+  const key = await page.evaluate(() =>
+    /Mac|iPhone|iPad|iPod/.test(navigator.platform) ? "Meta+Shift+P" : "Control+Shift+P",
+  )
+
+  const jump = async (query: string, value: string) => {
+    await page.keyboard.press(key)
+    const palette = page.getByRole("dialog")
+    await palette.getByRole("combobox").fill(query)
+    await palette.getByRole("option", { name: /^Project name/ }).click()
+    await expect(name).toHaveValue(value)
+  }
+
+  const sent = (projectID: string) =>
+    hold.requests
+      .filter((request) => new URL(request.url()).pathname === `/api/project/${projectID}`)
+      .map((request) => request.postDataJSON())
+
+  await jump("OpenCode 01 name", "OpenCode 01")
+
+  // Another project's save does not wait behind the first project's held one.
+  await name.fill("Bravo")
+  await name.blur()
+  await expect.poll(() => sent("proj_search_1")).toEqual([{ name: "Bravo" }])
+
+  // Back on the first project before its queued edit went out, a new save must not overtake it.
+  await jump("OpenCode 00 name", "OpenCode 00")
+  await startup.fill("bun start")
+  await startup.blur()
+  hold.release()
+
+  await expect
+    .poll(() => sent("proj_search_0"))
+    .toEqual([{ name: "Renamed" }, { commands: { start: "bun dev" } }, { commands: { start: "bun start" } }])
 })
 
 test("IME confirmation does not activate a search result", async ({ page }) => {

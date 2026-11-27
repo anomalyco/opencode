@@ -181,6 +181,15 @@ export class SkillNotFoundError extends Schema.TaggedError<SkillNotFoundError>()
   { httpApiStatus: 404 },
 ) {}
 
+export class SkillLoadError extends Schema.TaggedError<SkillLoadError>()(
+  "SkillLoadError",
+  {
+    skill: Skill.ID,
+    message: Schema.String,
+  },
+  { httpApiStatus: 502 },
+) {}
+
 export class McpServerNotFoundError extends Schema.TaggedError<McpServerNotFoundError>()(
   "McpServerNotFoundError",
   {
@@ -274,6 +283,15 @@ export class PtyNotFoundError extends Schema.TaggedError<PtyNotFoundError>()(
   { httpApiStatus: 404 },
 ) {}
 
+export class PtyFeatureUnsupportedError extends Schema.TaggedError<PtyFeatureUnsupportedError>()(
+  "PtyFeatureUnsupportedError",
+  {
+    feature: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 501 },
+) {}
+
 export class ShellNotFoundError extends Schema.TaggedError<ShellNotFoundError>()(
   "ShellNotFoundError",
   {
@@ -323,4 +341,58 @@ export class ProviderRequestError extends Schema.TaggedError<ProviderRequestErro
     retryAfterMs: Schema.optional(Schema.Int),
   },
   { httpApiStatus: 502 },
+) {}
+
+export class AutomationNotFoundError extends Schema.TaggedError<AutomationNotFoundError>()(
+  "AutomationNotFoundError",
+  {
+    automationID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class VideoNotFoundError extends Schema.TaggedError<VideoNotFoundError>()(
+  "VideoNotFoundError",
+  {
+    videoID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class BlobNotFoundError extends Schema.TaggedError<BlobNotFoundError>()(
+  "BlobNotFoundError",
+  {
+    blobID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class ArtifactNotFoundError extends Schema.TaggedError<ArtifactNotFoundError>()(
+  "ArtifactNotFoundError",
+  {
+    artifactID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class MachineNotFoundError extends Schema.TaggedError<MachineNotFoundError>()(
+  "MachineNotFoundError",
+  {
+    machine: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class PushDeviceNotFoundError extends Schema.TaggedError<PushDeviceNotFoundError>()(
+  "PushDeviceNotFoundError",
+  {
+    deviceID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
 ) {}

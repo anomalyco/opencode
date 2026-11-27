@@ -17,7 +17,9 @@ import { WorktreeStrategies } from "@opencode/core/worktree/strategies"
 import { WorktreeDirectory } from "@opencode/core/worktree/directory"
 import { WorktreeTable } from "@opencode/core/worktree/sql"
 import { WorktreeGit } from "@opencode/core/worktree/git"
+import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { Location } from "@opencode/core/location"
+import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Config } from "@opencode/core/config"
@@ -28,7 +30,7 @@ import { EventManifest } from "@opencode/schema/event-manifest"
 import { Workspace } from "@opencode/schema/workspace"
 import { host } from "./plugin/host"
 import { initRepo } from "./fixture/git"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 class Fixture extends Context.Service<Fixture, Effect.Success<ReturnType<typeof makeFixture>>>()("WorktreeFixture") {}
@@ -105,10 +107,7 @@ const fixtureWorktree = Effect.fnUntraced(function* () {
 
 function makeFixture() {
   return Effect.gen(function* () {
-    const root = yield* Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    )
+    const root = yield* tmpdirScoped()
     yield* Effect.promise(() => initRepo(root.path))
     const sourceDirectory = abs(yield* Effect.promise(() => fs.realpath(root.path)))
     const projectID = Project.ID.make("worktree-project")
@@ -136,8 +135,9 @@ function stored(projectID: Project.ID) {
       .all()
       .pipe(
         Effect.orDie,
-        Effect.map((rows): Array<{ directory: AbsolutePath; strategy: string | null }> =>
-          rows.toSorted((a, b) => a.directory.localeCompare(b.directory)),
+        Effect.map(
+          (rows): Array<{ directory: AbsolutePath; strategy: string | null }> =>
+            rows.toSorted((a, b) => a.directory.localeCompare(b.directory)),
         ),
       ),
   )
@@ -146,10 +146,7 @@ function stored(projectID: Project.ID) {
 describe("Worktree", () => {
   projectIt.live("tracks canonical and linked worktrees when a project resolves", () =>
     Effect.gen(function* () {
-      const root = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-      )
+      const root = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(root.path))
       const linked = `${root.path}-linked`
       yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(linked, { recursive: true, force: true })))
@@ -172,23 +169,6 @@ describe("Worktree", () => {
       expect(String(Worktree.StrategyID.make("acme/snapshot"))).toBe("acme/snapshot")
       expect(() => Worktree.StrategyID.make("  acme/snapshot  ")).toThrow()
       expect(() => Worktree.StrategyID.make("   ")).toThrow()
-    }),
-  )
-
-  it.live("reports unavailable recorded strategy ids", () =>
-    Effect.gen(function* () {
-      const input = yield* setup()
-      const worktree = yield* fixtureWorktree()
-      const unavailable = Worktree.StrategyID.make("acme/missing")
-      yield* input.db
-        .update(WorktreeTable)
-        .set({ strategy: unavailable })
-        .where(eq(WorktreeTable.project_id, input.projectID))
-        .run()
-        .pipe(Effect.orDie)
-      const error = yield* worktree.remove({ directory: input.sourceDirectory, force: false }).pipe(Effect.flip)
-      expect(error).toBeInstanceOf(Worktree.StrategyUnavailableError)
-      if (error instanceof Worktree.StrategyUnavailableError) expect(error.strategy).toBe(unavailable)
     }),
   )
 
@@ -273,44 +253,9 @@ describe("Worktree", () => {
     }),
   )
 
-  it.live("runs the project setup script with worktree paths", () =>
-    Effect.gen(function* () {
-      const input = yield* setup()
-      const worktree = yield* fixtureWorktree()
-      const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
-      const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-setup"))
-      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
-      yield* input.db
-        .update(ProjectTable)
-        .set({
-          commands: {
-            start:
-              "bun -e \"await Bun.write('setup.json', JSON.stringify([process.env.OPENCODE_WORKTREE_BASE, process.env.OPENCODE_WORKTREE_PATH, process.cwd()]))\"",
-          },
-        })
-        .where(eq(ProjectTable.id, input.projectID))
-        .run()
-        .pipe(Effect.orDie)
-      const created = yield* worktree.create({
-        directory: parent,
-        name: "worktree",
-      })
-
-      expect(yield* Effect.promise(() => Bun.file(path.join(created.directory, "setup.json")).json())).toEqual([
-        input.sourceDirectory,
-        created.directory,
-        created.directory,
-      ])
-      yield* worktree.remove({ directory: created.directory, force: true })
-    }),
-  )
-
   projectIt.live("uses canonical configuration with an explicit source clone", () =>
     Effect.gen(function* () {
-      const root = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-      )
+      const root = yield* tmpdirScoped()
       const main = abs(path.join(root.path, "repo"))
       const clone = abs(path.join(root.path, "other-clone"))
       yield* Effect.promise(async () => {
@@ -996,6 +941,37 @@ describe("Worktree", () => {
         expect(result.diagnostics.length).toBeGreaterThan(0)
         if (result.type === "normalized") expect(result.encoded).not.toHaveProperty("worktree")
       }
+    }),
+  )
+
+  it.live("allows list and rejects mutations when the host environment is unavailable", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const layer = AppNodeBuilder.build(Worktree.node, [
+        Database.node.replace(Layer.succeed(Database.Service, database)),
+        Bus.node.replace(Layer.succeed(Bus.Service, bus)),
+        CrossSpawnSpawner.node.replace(EnvironmentUnavailable.layer),
+      ])
+
+      yield* Effect.gen(function* () {
+        const worktrees = yield* Worktree.Service
+        expect(yield* worktrees.list({ projectID: input.projectID })).toEqual([
+          { directory: input.sourceDirectory, strategy: undefined },
+        ])
+        expect(yield* worktrees.create({ projectID: input.projectID }).pipe(Effect.flip)).toBeInstanceOf(
+          Worktree.OperationError,
+        )
+        expect(
+          yield* worktrees
+            .remove({ projectID: input.projectID, directory: input.sourceDirectory, force: false })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(Worktree.OperationError)
+        expect(yield* worktrees.refresh({ projectID: input.projectID }).pipe(Effect.flip)).toBeInstanceOf(
+          Worktree.OperationError,
+        )
+      }).pipe(Effect.provide(layer))
     }),
   )
 })

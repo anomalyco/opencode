@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { LLM, LLMRequest, Message } from "@opencode/ai/effect"
+import { ai, Message } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { configure } from "@opencode/ai/providers/openai"
 import { SessionModelTransport } from "../src/session/model-transport"
@@ -78,7 +78,7 @@ const fixture = (mode: "success" | "invalid" | "fallback") =>
       http,
       opens: () => server.state.opens,
       disconnect: () => disconnect?.(),
-      request: LLM.request({
+      request: ai.request({
         model: configure({
           apiKey: "fixture",
           baseURL: server.url.replace(/^ws/, "http").replace(/responses$/, ""),
@@ -97,10 +97,8 @@ it.live("trigger reuses the append baseline and clears it before the next genera
     const transport = yield* SessionModelTransport.Service
     const webSocket = transport.bind(sessionID)
     const first = yield* LLMClient.generate(server.request, { webSocket })
-    const compacted = yield* LLMClient.compact(
-      LLMRequest.update(server.request, {
-        messages: [...server.request.messages, first.message],
-      }),
+    const compacted = yield* ai.compact(
+      { ...server.request, messages: [...server.request.messages, first.message] },
       { mechanism: "trigger", webSocket },
     )
     expect(server.requests[1]).toMatchObject({
@@ -111,7 +109,7 @@ it.live("trigger reuses the append baseline and clears it before the next genera
     expect(compacted.usage).toMatchObject({ inputTokens: 100, outputTokens: 10 })
     expect(compacted.checkpoint.encrypted).toBe("opaque")
     const messages = [Message.assistant(compacted.checkpoint), Message.user("Continue")]
-    yield* LLMClient.generate(LLMRequest.update(server.request, { messages }), { webSocket })
+    yield* LLMClient.generate({ ...server.request, messages }, { webSocket })
     expect(server.requests[2]?.previous_response_id).toBeUndefined()
     expect(server.requests[2]?.input).toMatchObject([
       { type: "compaction", encrypted_content: "opaque" },
@@ -135,8 +133,8 @@ it.live("invalid trigger output does not retry or commit a continuation checkpoi
     const transport = yield* SessionModelTransport.Service
     const webSocket = transport.bind(sessionID)
     const first = yield* LLMClient.generate(server.request, { webSocket })
-    const input = LLMRequest.update(server.request, { messages: [...server.request.messages, first.message] })
-    const error = yield* LLMClient.compact(input, { mechanism: "trigger", webSocket }).pipe(Effect.flip)
+    const input = { ...server.request, messages: [...server.request.messages, first.message] }
+    const error = yield* ai.compact(input, { mechanism: "trigger", webSocket }).pipe(Effect.flip)
     expect(error.reason._tag).toBe("InvalidProviderOutput")
     expect(server.requests).toHaveLength(2)
     expect(server.http).toHaveLength(0)
@@ -155,10 +153,8 @@ it.live("trigger recovers over SSE with complete input after the old socket clos
     server.disconnect()
     // Let the real close event reach the connector before the next send.
     yield* Effect.sleep("20 millis")
-    const result = yield* LLMClient.compact(
-      LLMRequest.update(server.request, {
-        messages: [...server.request.messages, first.message],
-      }),
+    const result = yield* ai.compact(
+      { ...server.request, messages: [...server.request.messages, first.message] },
       { mechanism: "trigger", webSocket },
     )
     expect(result.responseID).toBe("resp_http")

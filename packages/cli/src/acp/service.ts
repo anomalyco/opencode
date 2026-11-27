@@ -1,4 +1,5 @@
 import type { OpenCodeClient } from "@opencode/client/effect"
+import { Project } from "@opencode/schema/project"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -36,6 +37,7 @@ import type {
 import { OPENCODE_VERSION } from "../version"
 import { ACPCapabilities, type Capabilities } from "./capabilities"
 import type { ACPCatalog } from "./catalog"
+import { ACPChild } from "./child"
 import { ACPClient } from "./client"
 import { configOptions, resolveChange } from "./config-option"
 import type { ACPConnection } from "./connection"
@@ -62,6 +64,7 @@ export interface Interface {
   ) => Effect.Effect<SetSessionConfigOptionResponse, ACPError.Failure>
   readonly setSessionMode: (input: SetSessionModeRequest) => Effect.Effect<SetSessionModeResponse, ACPError.Failure>
   readonly prompt: (input: PromptRequest, signal: AbortSignal) => Effect.Effect<PromptResponse, ACPError.Failure>
+  readonly steer: (input: ACPTurn.SteeringRequest) => Effect.Effect<ACPTurn.SteeringResponse, ACPError.Failure>
   readonly cancel: (input: CancelNotification) => Effect.Effect<void>
 }
 
@@ -97,10 +100,31 @@ export function make(input: {
   const getSession = Effect.fnUntraced(function* (sessionId: string, cwd: string) {
     const sessionID = yield* ACPClient.decodeSessionID(sessionId)
     const session = yield* input.client.session.get({ sessionID }).pipe(Effect.catch(ACPClient.classify))
-    if (FSUtil.resolve(cwd) !== FSUtil.resolve(session.location.directory))
-      return yield* new ACPError.SessionDirectoryMismatchError({ sessionId, cwd })
-    return session
+    if (FSUtil.resolve(cwd) === FSUtil.resolve(session.location.directory)) return session
+    // A session moved into a worktree keeps the client's original cwd, which names the same project.
+    const location = yield* input.client.location
+      .get({ location: { directory: AbsolutePath.make(cwd) } })
+      .pipe(Effect.catch(ACPClient.classify))
+    if (location.project.id !== Project.ID.global && location.project.id === session.projectID) return session
+    return yield* new ACPError.SessionDirectoryMismatchError({
+      sessionId,
+      cwd,
+      directory: session.location.directory,
+    })
   })
+
+  // Clients often open a session and close it without prompting; closing removes those instead of keeping an empty session.
+  const unprompted = new Set<string>()
+  const discardUnprompted = Effect.fnUntraced(
+    function* (sessionId: string) {
+      if (!unprompted.delete(sessionId)) return
+      const sessionID = yield* ACPClient.decodeSessionID(sessionId)
+      // Another client of the same server may have used it.
+      const messages = yield* input.client.message.list({ sessionID, limit: 1 })
+      if (messages.data.length === 0) yield* input.client.session.remove({ sessionID })
+    },
+    Effect.catch((error) => Effect.logWarning("ACP could not remove an unused session", error)),
+  )
 
   return {
     initialize: Effect.fnUntraced(function* (params) {
@@ -126,6 +150,7 @@ export function make(input: {
           _meta: { [ACPCapabilities.ChildSessionUpdates]: true },
         },
         authMethods: [authMethod],
+        _meta: { steering: { supported: true } },
         agentInfo: { name: "OpenCode", version: OPENCODE_VERSION },
       }
     }),
@@ -143,6 +168,7 @@ export function make(input: {
         .create({ location: { directory: AbsolutePath.make(params.cwd) }, ...ACPDirectories.grant(directories) })
         .pipe(Effect.catch(ACPClient.classify))
       const attachment = yield* input.sessions.attach(created, params.cwd, mcpServers)
+      unprompted.add(attachment.attached.id)
       return { sessionId: attachment.attached.id, configOptions: attachment.configOptions }
     }),
     loadSession: Effect.fnUntraced(function* (params) {
@@ -185,12 +211,24 @@ export function make(input: {
               time: { created: DateTime.toEpochMillis(session.time.created) },
             }),
             updatedAt: DateTime.formatIso(session.time.updated),
+            ...(session.parentID
+              ? {
+                  _meta: {
+                    [ACPChild.MetaKey]: {
+                      id: session.id,
+                      parentID: session.parentID,
+                      ...(session.title ? { title: session.title } : {}),
+                    },
+                  },
+                }
+              : {}),
           }
         }),
         ...(page.cursor.next ? { nextCursor: page.cursor.next } : {}),
       }
     }),
     deleteSession: Effect.fnUntraced(function* (params) {
+      unprompted.delete(params.sessionId)
       yield* input.turn.cancel({ sessionId: params.sessionId })
       yield* ACPClient.decodeSessionID(params.sessionId).pipe(
         Effect.flatMap((sessionID) => input.client.session.remove({ sessionID })),
@@ -211,6 +249,7 @@ export function make(input: {
     closeSession: Effect.fnUntraced(function* (params) {
       yield* input.turn.close(params.sessionId)
       yield* input.sessions.detach(params.sessionId)
+      yield* discardUnprompted(params.sessionId)
       return {}
     }),
     forkSession: Effect.fnUntraced(function* (params) {
@@ -235,7 +274,12 @@ export function make(input: {
       yield* withReload(attached, select(attached, "mode", params.modeId))
       return {}
     }),
-    prompt: input.turn.prompt,
+    prompt: (params, signal) =>
+      Effect.suspend(() => {
+        unprompted.delete(params.sessionId)
+        return input.turn.prompt(params, signal)
+      }),
+    steer: input.turn.steer,
     cancel: input.turn.cancel,
   }
 }

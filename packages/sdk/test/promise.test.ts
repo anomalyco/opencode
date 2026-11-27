@@ -18,7 +18,7 @@ test("Promise host uses the embedded router", async () => {
     const session = await opencode.sessions.create({ location })
     const selected = await opencode.sessions.get({ sessionID: session.id })
     const page = await opencode.sessions.list({ directory: directory.path })
-    const events = Array.fromAsync(opencode.sessions.log({ sessionID: session.id }))
+    const events = Array.fromAsync(opencode.experimental.session.log({ sessionID: session.id }))
 
     expect(selected.id).toBe(session.id)
     expect(page.data.some((item) => item.id === session.id)).toBe(true)
@@ -57,9 +57,10 @@ test("closing cancels active Promise event streams", async () => {
   const opencode = await OpenCode.create({ config: { directory: config, project: false, content: "{}" } })
   const events = opencode.events.subscribe()[Symbol.asyncIterator]()
   expect(await events.next()).toMatchObject({ value: { type: "server.connected" }, done: false })
-  const pending = events.next()
+  // Closing rejects the read before close resolves, so the handler has to be attached first.
+  const pending = events.next().catch((error: unknown) => error)
 
   await opencode.close()
-  const error = await pending.catch((error: unknown) => error)
+  const error = await pending
   expect(error).toMatchObject({ name: "ClientError", reason: "Transport" })
 })

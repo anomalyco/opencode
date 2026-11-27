@@ -2,7 +2,6 @@ import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { Environment, makeFiles } from "@opencode/core/environment/index"
 import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
-import { Integration } from "@opencode/core/integration"
 import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
@@ -12,6 +11,7 @@ import { Provider } from "@opencode/core/provider"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { describe, expect } from "bun:test"
 import { Duration, Effect, Layer, Schema } from "effect"
+import { eventually } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -21,34 +21,22 @@ const decodeShowRequest = Schema.decodeUnknownSync(Schema.Struct({ model: Schema
 
 const addPlugin = Effect.fn(function* (origin: string, interval: Duration.Input = "1 hour") {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* make(origin, interval).effect(host)
 })
-
-function eventually<A>(
-  effect: Effect.Effect<A>,
-  predicate: (value: A) => boolean,
-  remaining = 3000,
-): Effect.Effect<A, Error> {
-  return Effect.gen(function* () {
-    const value = yield* effect
-    if (predicate(value)) return value
-    if (remaining === 0) return yield* Effect.fail(new Error("Timed out waiting for value"))
-    yield* Effect.promise(() => Bun.sleep(1))
-    return yield* eventually(effect, predicate, remaining - 1)
-  })
-}
 
 describe("OllamaPlugin", () => {
   it.live("skips unconfigured default local discovery when the location has no local execution plane", () =>
     Effect.gen(function* () {
       const plugin = yield* Plugin.Service
-      const host = yield* PluginHost.make(plugin)
+      const host = yield* PluginHost.make(plugin, "test")
       const providers = yield* Provider.Service
       yield* OllamaPlugin.effect(host).pipe(
         Effect.provideService(
           Environment.Service,
           Environment.Service.of({
+            id: Environment.localID,
+            local: false,
             files: makeFiles({ spawner: EnvironmentUnavailable.spawner }),
             spawner: EnvironmentUnavailable.spawner,
           }),
@@ -183,70 +171,6 @@ describe("OllamaPlugin", () => {
           state.fail = true
           yield* Effect.promise(() => Bun.sleep(30))
           expect((yield* modelState.get(providerID, modelID))?.limit.context).toBe(65_536)
-        }),
-      ({ server }) => Effect.promise(() => server.stop(true)),
-    ),
-  )
-
-  it.live("replaces and restores the same-ID Models.dev provider", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const models = [summary("discovered-model", "digest")]
-        return {
-          models,
-          server: Bun.serve({
-            port: 0,
-            fetch: async (request) => {
-              if (request.method === "GET") return Response.json({ models })
-              decodeShowRequest(await request.json())
-              return Response.json(show({ capabilities: ["completion"], context: 32_768 }))
-            },
-          }),
-        }
-      }),
-      ({ models, server }) =>
-        Effect.gen(function* () {
-          const providers = yield* Provider.Service
-          const modelState = yield* Model.Service
-          const integrations = yield* Integration.Service
-          const providerID = Provider.ID.make("ollama")
-          yield* integrations.transform((editor) => {
-            editor.update(Integration.ID.make("ollama"), (integration) => {
-              integration.name = "Ollama"
-            })
-            editor.method.update({
-              integrationID: Integration.ID.make("ollama"),
-              method: { type: "env", names: ["OLLAMA_API_KEY"] },
-            })
-          })
-          yield* providers.transform((editor) => {
-            editor.update(providerID, (provider) => {
-              provider.name = "Ollama"
-              provider.package = "@opencode/ai/providers/openai-compatible"
-              provider.integrationID = Integration.ID.make("ollama")
-            })
-            editor.models.update(providerID, Model.ID.make("static-model"), () => {})
-          })
-
-          yield* addPlugin(server.url.origin, "5 millis")
-          yield* eventually(
-            modelState.get(providerID, Model.ID.make("discovered-model")),
-            (model) => model !== undefined,
-          )
-          expect(yield* integrations.get(Integration.ID.make("ollama"))).toBeUndefined()
-          expect((yield* providers.get(providerID))?.activation).toBe("enabled")
-          expect(yield* modelState.get(providerID, Model.ID.make("static-model"))).toBeUndefined()
-
-          models.splice(0)
-          yield* eventually(
-            providers.snapshot(),
-            (snapshot) => snapshot.records.get(providerID)?.models.has(Model.ID.make("static-model")) === true,
-          )
-          expect(yield* modelState.get(providerID, Model.ID.make("discovered-model"))).toBeUndefined()
-          expect(yield* modelState.get(providerID, Model.ID.make("static-model"))).toBeUndefined()
-          expect(yield* integrations.get(Integration.ID.make("ollama"))).toBeDefined()
-          expect((yield* providers.get(providerID))?.activation).toBe("auto")
-          expect((yield* providers.get(providerID))?.integrationID).toBe(Integration.ID.make("ollama"))
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),

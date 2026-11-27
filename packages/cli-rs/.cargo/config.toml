@@ -1,0 +1,17 @@
+# The host's native OpenTUI library for the pinned release (`v` and the `version` of `opentui` in Cargo.toml), relative to this
+# package. script/opentui-native.ts fills it from the release zip, checked against its sha256 table, and
+# `bun run cargo` runs that first. The directory is keyed by the tag, git-ignored, and inside the worktree, so a
+# worktree on another pin keeps its own. A cargo run without the package script (an editor's) that finds it empty
+# fails in opentui-sys, which prints OPENTUI_LIB_HINT as its advice. Values set in the shell win (CI, cross-target
+# builds).
+[env]
+OPENTUI_LIB_DIR = { value = ".opentui/v0.9.9/host", relative = true, force = false }
+OPENTUI_LIB_HINT = { value = "run `bun run opentui:native` in packages/cli-rs, or build through `bun run cargo`, which runs it first", force = false }
+# Luau's C++ (the luau feature) with line tables only, as Rust gets from `debug = "line-tables-only"`: cargo's DEBUG
+# makes cc-rs pass full `-g`, and luau0-src appends these flags after it. In a cold -j3 release build (luau-dx) Luau's
+# unit took 51 s instead of 64 s, and its objects 14 MB instead of 47 MB. MSVC's cl.exe does not know the flag and
+# warns that it ignores it.
+LUAU_CXXFLAGS = { value = "-g1", force = false }
+
+# The musl targets have no rustflags: they link statically, with Rust's default crt-static, and Zig (cargo zigbuild)
+# links musl statically by default too, so the executable has no dynamic loader.

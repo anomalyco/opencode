@@ -125,7 +125,7 @@ const setup = Effect.fnUntraced(function* (options?: {
   const services = Layer.mergeAll(
     Layer.succeed(PluginHooks.Service, hooks),
     Layer.mock(Image.Service, {}),
-    options?.shell ?? Layer.mock(Shell.Service, {}),
+    options?.shell ?? Layer.mock(Shell.Service, { handoffPrepared: () => false }),
   )
   const servicesFor = (ref: Location.Ref) => {
     locations.push(ref)
@@ -135,6 +135,7 @@ const setup = Effect.fnUntraced(function* (options?: {
       options?.skills?.(ref) ??
         Layer.mock(Skill.Service, {
           get: (id) => Effect.succeed(id === skillInfo.id ? skillInfo : undefined),
+          instructions: () => Effect.succeed(skillInfo.content),
         }),
       options?.snapshot?.(ref) ?? Layer.mock(Snapshot.Service, {}),
       Layer.mock(Plugin.Service, {
@@ -358,7 +359,10 @@ describe("Session-owned handles", () => {
     Effect.gen(function* () {
       const fixture = yield* setup({
         skills: (ref) =>
-          Layer.mock(Skill.Service, { get: () => Effect.succeed({ ...skillInfo, content: ref.directory }) }),
+          Layer.mock(Skill.Service, {
+            get: () => Effect.succeed(skillInfo),
+            instructions: () => Effect.succeed(ref.directory),
+          }),
       })
       const handle = fixture.sessions.forSession(sessionID)
       const { skill } = handle
@@ -508,6 +512,7 @@ describe("Session-owned handles", () => {
       })
       const fixture = yield* setup({
         shell: Layer.mock(Shell.Service, {
+          handoffPrepared: () => false,
           create: (input) =>
             Effect.sync(() => {
               expect(input).toEqual({

@@ -25,20 +25,15 @@ interface CheckpointValue {
  */
 export type Shape = (request: Readonly<Record<string, unknown>>) => Readonly<Record<string, unknown>> | undefined
 
-export interface BaseDriver extends WebSocketChannelDriver {
-  readonly observeEvent?: (
-    create: ChannelCreate,
-    frame: string,
-    event: OpenResponses.Event,
-  ) => Effect.Effect<ChannelObservation, AIError>
-}
-
 export interface DriverInput {
   readonly id: string
   readonly name: string
   readonly request: Readonly<Record<string, unknown>>
-  readonly message: string
-  readonly base: BaseDriver
+  readonly base: (
+    create: ChannelCreate,
+    frame: string,
+    event: OpenResponses.Event,
+  ) => Effect.Effect<ChannelObservation, AIError>
   readonly continuation?: Shape
 }
 
@@ -92,6 +87,8 @@ const comparable = (value: unknown) => {
       name: value.name,
       arguments: json(value.arguments),
     }
+  if (value.type === "custom_tool_call")
+    return { type: value.type, call_id: value.call_id, name: value.name, input: value.input }
   if (value.type === "reasoning")
     return {
       type: value.type,
@@ -170,9 +167,7 @@ export const driver = (input: DriverInput): WebSocketChannelDriver => {
             ProviderShared.eventError(input.id, `Invalid ${input.name} WebSocket event`, frame, cause),
           ),
         )
-        const observation = yield* input.base.observeEvent
-          ? input.base.observeEvent(create, frame, event)
-          : input.base.observe(create, frame)
+        const observation = yield* input.base(create, frame, event)
         if (event.type === "response.output_item.done" && event.item) output.push(event.item)
         if (observation.type === "provider-failure") {
           const rejection = code(event)

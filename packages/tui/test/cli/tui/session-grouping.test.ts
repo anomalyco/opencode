@@ -5,9 +5,9 @@ test("a pending tool does not hide a later tool reusing its call ID in another m
   const rows: SessionRow[] = []
   const blocked = { messageID: "assistant-a", partID: "call-reused" }
   const later = { messageID: "assistant-b", partID: "call-reused" }
-  append(rows, blocked, { type: "tool", name: "read" })
+  append(rows, blocked, { type: "tool", name: "read" }, rows.length, "medium")
   partitionPending(rows, new Set([blocked.partID]))
-  append(rows, later, { type: "tool", name: "read" })
+  append(rows, later, { type: "tool", name: "read" }, rows.length, "medium")
 
   const group = rows[0]
   if (group.type !== "group" || group.kind !== "exploration") throw new Error("Expected exploration group")

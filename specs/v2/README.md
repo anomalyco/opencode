@@ -23,13 +23,15 @@ Generated clients follow the assembled public `HttpApi`. GitHub issues own activ
 | ----------------------- | --------------------------------------------------------------------------------------- |
 | [Session](./session.md) | Explain prompt admission, execution, instructions, compaction, and recovery boundaries. |
 | [Tools](./tools.md)     | Explain tool construction, registration, execution, and outcome laws.                   |
+| [Push](./push.md)       | Describe the push notification message a phone client receives and how it replies.      |
 
 ## Decision Records
 
-| Document                                       | Status                   | Job                                                                                                       |
-| ---------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------- |
-| [Event stream](./event-stream-architecture.md) | Accepted and implemented | Record why public events use one encoded feed with independent queues.                                    |
-| [Provider policy](./provider-policy.md)        | Accepted and implemented | Allow or deny provider use and permission checks, with Console-managed statements having final authority. |
+| Document                                            | Status                   | Job                                                                                                       |
+| --------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------- |
+| [Event stream](./event-stream-architecture.md)      | Accepted and implemented | Record why public events use one encoded feed with independent queues.                                    |
+| [Provider policy](./provider-policy.md)             | Accepted and implemented | Allow or deny provider use and permission checks, with Console-managed statements having final authority. |
+| [Claude Agent provider](./claude-agent-provider.md) | Draft                    | Record the design decisions behind the Claude Agent provider.                                             |
 
 ## Historical Context
 

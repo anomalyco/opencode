@@ -7,7 +7,7 @@ import {
   TranscriptionModel,
   TranscriptionSegmentEvent,
   TranscriptionTextDeltaEvent,
-  type TranscriptionRequestFor,
+  type TranscriptionRequest,
   type TranscriptionSegment,
   type TranscriptionWord,
   type TranscriptionEvent,
@@ -33,7 +33,7 @@ export type GoogleTranscriptionOptions = {
   }
 } & Record<string, unknown>
 
-export type Request = TranscriptionRequestFor<GoogleTranscriptionOptions>
+export type Request = TranscriptionRequest<TranscriptionModel<GoogleTranscriptionOptions>>
 
 // ---------------------------------------------------------------------------
 // 3. Streaming event schema

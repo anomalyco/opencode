@@ -78,7 +78,7 @@ export function PanelTrigger(props: {
       <IconButton
         size="small"
         variant="ghost-muted"
-        class={reveal ? "hover-reveal relative z-10 group-hover:opacity-100" : undefined}
+        class={reveal ? "hover-reveal relative z-10 group-hover:opacity-100 focus-visible:opacity-100" : undefined}
         classList={reveal ? { "opacity-100": props.active } : undefined}
         onPointerDown={(event) => {
           event.preventDefault()
@@ -89,7 +89,7 @@ export function PanelTrigger(props: {
           event.stopPropagation()
           props.onClose(props.value)
         }}
-        icon={<Icon name="xmark-small" />}
+        icon={<Icon name="close" />}
         aria-label={language.t("common.closeTab")}
       />,
     )
@@ -97,16 +97,18 @@ export function PanelTrigger(props: {
   const compactClose = () =>
     tooltip(<Tabs.CloseButton onClick={() => props.onClose(props.value)} aria-label={language.t("common.closeTab")} />)
 
-  // The close button `closable` asks for; a plain one by default.
-  const close = () => {
-    const closable = props.tab.closable
+  const closable = createMemo(() => props.tab.closable)
 
-    if (closable === false) return undefined
+  // Memoized by `closable` mode so a refreshed RegionEntry never recreates the button mid-click.
+  const close = createMemo(() => {
+    const mode = closable()
 
-    if (closable === "compact") return compactClose()
+    if (mode === false) return undefined
 
-    return closeButton(closable === "hover")
-  }
+    if (mode === "compact") return compactClose()
+
+    return closeButton(mode === "hover")
+  })
 
   return (
     <div
@@ -122,7 +124,7 @@ export function PanelTrigger(props: {
     >
       <Switch
         fallback={
-          <div class="relative">
+          <div class="relative min-w-0">
             <Tabs.Trigger
               value={props.value}
               id={props.tab.dom?.tab}

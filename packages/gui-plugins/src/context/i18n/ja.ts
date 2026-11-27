@@ -5,7 +5,6 @@ export default {
   "usage.usage": "使用量",
   "usage.cost": "コスト",
   "usage.view": "コンテキスト使用量を表示",
-  "systemPrompt.title": "システムプロンプト",
   "rawMessages.title": "生のメッセージ",
   "export.session": "セッションをエクスポート",
   "stats.session": "セッション",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "セッションを {{filename}} に保存しました",
   "export.failed.title": "セッションのエクスポートに失敗しました",
   "export.failed.description": "セッションのエクスポート中にエラーが発生しました",
+  "usage.toggle": "セッションのコンテキストを切り替え",
 }

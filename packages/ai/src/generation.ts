@@ -1,16 +1,21 @@
 import { Clock, Duration, Effect, Schedule, Schema, Stream } from "effect"
 import { AIError, TimeoutError } from "./schema/errors.js"
 
-export const Status = Schema.Literals(["queued", "running", "completed", "failed", "cancelled", "expired"])
+export const Status = Schema.Literals(["running", "completed", "error"])
 export type Status = Schema.Schema.Type<typeof Status>
+
+/** Why a generation ended in `error`. */
+export const Reason = Schema.Literals(["failed", "cancelled", "expired"])
+export type Reason = Schema.Schema.Type<typeof Reason>
 
 /** Provider-neutral view of one generation observation. */
 export interface Snapshot {
   readonly id: string
   readonly status: Status
+  /** Set when `status` is `error`. */
+  readonly reason?: Reason
   /** Normalized 0..1 when the provider reports progress. */
   readonly progress?: number
-  readonly position?: number
 }
 
 /**
@@ -32,14 +37,8 @@ export interface AwaitOptions {
   readonly poll?: Poll
 }
 
-export const DEFAULT_POLL_INTERVAL = Duration.seconds(5)
-export const DEFAULT_POLL_TIMEOUT = Duration.minutes(10)
-
-export const QueuedEvent = Schema.Struct({
-  type: Schema.tag("generation-queued"),
-  id: Schema.String,
-  position: Schema.optional(Schema.Number),
-}).annotate({ identifier: "Generation.Event.Queued" })
+const DEFAULT_POLL_INTERVAL = Duration.seconds(5)
+const DEFAULT_POLL_TIMEOUT = Duration.minutes(10)
 
 export const ProgressEvent = Schema.Struct({
   type: Schema.tag("generation-progress"),
@@ -47,19 +46,24 @@ export const ProgressEvent = Schema.Struct({
   progress: Schema.optional(Schema.Number),
 }).annotate({ identifier: "Generation.Event.Progress" })
 
-export type Observation = Schema.Schema.Type<typeof QueuedEvent> | Schema.Schema.Type<typeof ProgressEvent>
+export type Observation = Schema.Schema.Type<typeof ProgressEvent>
 
-export type Event = Observation | { readonly type: "generation-finished"; readonly id: string; readonly status: Status }
+export type Event =
+  | Observation
+  | {
+      readonly type: "generation-finished"
+      readonly id: string
+      readonly status: Status
+      readonly reason?: Reason
+    }
 
-const TERMINAL: ReadonlySet<Status> = new Set(["completed", "failed", "cancelled", "expired"])
-
-export const isTerminal = (status: Status) => TERMINAL.has(status)
+export const isTerminal = (status: Status) => status !== "running"
 
 export class Generation<Response> {
   readonly id: string
   readonly status: Status
+  readonly reason?: Reason
   readonly progress?: number
-  readonly position?: number
 
   constructor(
     readonly route: Route<Response>,
@@ -69,16 +73,16 @@ export class Generation<Response> {
   ) {
     this.id = snapshot.id
     this.status = snapshot.status
+    this.reason = snapshot.reason
     this.progress = snapshot.progress
-    this.position = snapshot.position
   }
 
   get snapshot(): Snapshot {
     return {
       id: this.id,
       status: this.status,
+      reason: this.reason,
       progress: this.progress,
-      position: this.position,
     }
   }
 
@@ -139,8 +143,7 @@ export class Generation<Response> {
   }
 
   private event(): Event {
-    if (this.terminal) return { type: "generation-finished", id: this.id, status: this.status }
-    if (this.status === "queued") return { type: "generation-queued", id: this.id, position: this.position }
+    if (this.terminal) return { type: "generation-finished", id: this.id, status: this.status, reason: this.reason }
     return { type: "generation-progress", id: this.id, progress: this.progress }
   }
 

@@ -4,12 +4,13 @@ import { describe, expect } from "bun:test"
 import { Cause, Effect, Exit, Layer, Option, PlatformError, Stream } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Environment, makeMemoryDriver } from "@opencode/core/environment/index"
 import { FileSystem } from "@opencode/core/filesystem"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Workspace } from "@opencode/core/workspace"
 import { location } from "./fixture/location"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
 const provide = (directory: string, workspaceID?: Workspace.ID) =>
@@ -27,10 +28,7 @@ const provide = (directory: string, workspaceID?: Workspace.ID) =>
   )
 
 const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
-  Effect.acquireRelease(
-    Effect.promise(() => tmpdir()),
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(Effect.flatMap((tmp) => f(tmp.path)))
+  tmpdirScoped().pipe(Effect.flatMap((tmp) => f(tmp.path)))
 
 describe("FileSystem", () => {
   it.live("reads text and binary files", () =>
@@ -72,8 +70,7 @@ describe("FileSystem", () => {
     withTmp((directory) =>
       Effect.gen(function* () {
         // The directory exists only inside the workspace, so boot must not
-        // require it to exist on the host. Operations still access the host
-        // filesystem per call (#44568); only boot canonicalization is skipped.
+        // require it to exist on the host.
         const missing = path.join(directory, "workspace-only")
         const workspace = yield* FileSystem.Service.pipe(
           provide(missing, Workspace.ID.make("wrk_filesystem")),
@@ -242,5 +239,94 @@ describe("FileSystem", () => {
         }).pipe(provide(current))
       }),
     ),
+  )
+
+  it.effect(
+    "reads, paginates chunks, lists, writes, and enforces lexical confinement over remote Environment.files",
+    () =>
+      Effect.gen(function* () {
+        const memory = makeMemoryDriver()
+        const env = Environment.workspace(Workspace.ID.make("wrk_remote_fs"), memory)
+        yield* env.files.write("/workspace/src/hello.txt", new TextEncoder().encode("hello remote"))
+        yield* env.files.write("/outside.txt", new TextEncoder().encode("secret"))
+        yield* memory.symlink("../outside.txt", "/workspace/link.txt")
+        // 5 MiB payload exercises multi-chunk pagination (> 4 MiB REMOTE_CHUNK_BYTES).
+        const big = new Uint8Array(5 * 1024 * 1024)
+        big.fill(42)
+        big[0] = 7
+        big[big.length - 1] = 99
+        yield* env.files.write("/workspace/big.bin", big)
+
+        const layer = LayerNode.compile(FileSystem.node, {
+          replacements: [
+            Location.node.replace(
+              Layer.succeed(
+                Location.Service,
+                Location.Service.of(
+                  location({
+                    directory: AbsolutePath.make("/workspace"),
+                    workspaceID: Workspace.ID.make("wrk_remote_fs"),
+                  }),
+                ),
+              ),
+            ),
+            Environment.node.replace(Layer.succeed(Environment.Service, env)),
+          ],
+        })
+
+        yield* Effect.gen(function* () {
+          const service = yield* FileSystem.Service
+
+          // Read whole file, ranged slice, offset-to-EOF, zero-byte read, and past-EOF read
+          const file = yield* service.read({ path: RelativePath.make("src/hello.txt") })
+          expect(file.mime).toBe("text/plain")
+          expect(file.size).toBe(12)
+          expect(Option.isSome(file.mtime)).toBe(true)
+          expect(new TextDecoder().decode(yield* Stream.mkUint8Array(file.stream()))).toBe("hello remote")
+          expect(new TextDecoder().decode(yield* Stream.mkUint8Array(file.stream({ offset: 6, bytesToRead: 6 })))).toBe(
+            "remote",
+          )
+          expect(new TextDecoder().decode(yield* Stream.mkUint8Array(file.stream({ offset: 6 })))).toBe("remote")
+          expect(yield* Stream.mkUint8Array(file.stream({ bytesToRead: 0 }))).toEqual(new Uint8Array(0))
+          expect(yield* Stream.mkUint8Array(file.stream({ offset: 99 }))).toEqual(new Uint8Array(0))
+
+          // Multi-chunk pagination streams >4 MiB files intact without hitting a single-read cap
+          const bigFile = yield* service.read({ path: RelativePath.make("big.bin") })
+          const bigBytes = yield* Stream.mkUint8Array(bigFile.stream())
+          expect(bigBytes.length).toBe(big.length)
+          expect([bigBytes[0], bigBytes[bigBytes.length - 1]]).toEqual([7, 99])
+
+          // Remote reads enforce lexical confinement (symlinks follow inside the sandbox boundary)
+          const linked = yield* service.read({ path: RelativePath.make("link.txt") })
+          expect(new TextDecoder().decode(yield* Stream.mkUint8Array(linked.stream()))).toBe("secret")
+
+          // Lexical escape, NUL byte, missing file, and reading a directory all fail with NotFoundError
+          for (const bad of ["../outside.txt", "src/\u0000.txt", "missing.txt", "src"]) {
+            expect(yield* Effect.flip(service.read({ path: RelativePath.make(bad) }))).toBeInstanceOf(
+              FileSystem.NotFoundError,
+            )
+          }
+
+          // Write creates parent directories and reads back via POSIX paths
+          const written = yield* service.write({ path: "notes/out.md", data: new TextEncoder().encode("# Hi") })
+          expect(written.path).toBe(AbsolutePath.make("/workspace/notes/out.md"))
+          const readBack = yield* service.read({ path: RelativePath.make("notes/out.md") })
+          expect(new TextDecoder().decode(yield* Stream.mkUint8Array(readBack.stream()))).toBe("# Hi")
+
+          // List uses POSIX separators on remote workspaces regardless of host OS, including parent navigation
+          const entries = yield* service.list()
+          expect(entries.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
+            { path: RelativePath.make("notes/"), type: "directory" },
+            { path: RelativePath.make("src/"), type: "directory" },
+            { path: RelativePath.make("big.bin"), type: "file" },
+          ])
+          const parentEntries = yield* service.list({ path: ".." })
+          expect(parentEntries.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
+            { path: RelativePath.make("./"), type: "directory" },
+            { path: RelativePath.make("../outside.txt"), type: "file" },
+          ])
+          expect(yield* Effect.flip(service.list({ path: "src/hello.txt" }))).toBeInstanceOf(FileSystem.NotFoundError)
+        }).pipe(Effect.provide(layer))
+      }),
   )
 })

@@ -1,19 +1,22 @@
 import { describe, expect } from "bun:test"
 import { Agent } from "@opencode/core/agent"
-import type { Permission } from "@opencode/core/permission"
+import { Permission } from "@opencode/core/permission"
+import { Flag } from "@opencode/core/flag"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Image } from "@opencode/core/image"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { State } from "@opencode/core/state"
+import { CodeModeJob } from "@opencode/core/codemode/job"
 import { Tool } from "@opencode/core/tool"
 import type { Info } from "@opencode/schema/tool"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { codeModeListings, executeTool, toolDefinitions } from "./lib/tool"
+import { codeModeListings, executeTool, toolDefinitions, toolNodeReplacements } from "./lib/tool"
 import { Deferred, Effect, Exit, Fiber, Layer, Logger, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
 import { z } from "zod"
 import { testEffect } from "./lib/effect"
+import { codeModeServices } from "./fixture/codemode"
 
 const imageStore = Layer.mock(Image.Service, {
   normalize: (resource, content) => {
@@ -38,9 +41,11 @@ const imageStore = Layer.mock(Image.Service, {
   },
 })
 const registryLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, PluginHooks.node]), [
+  ...toolNodeReplacements(),
   Image.node.replace(imageStore),
 ])
-const it = testEffect(registryLayer)
+const it = testEffect(registryLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, undefined))))
+const codeModeIt = testEffect(registryLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, "full_codemode"))))
 const identity = {
   agent: Agent.ID.make("build"),
   messageID: SessionMessage.ID.make("msg_registry"),
@@ -72,6 +77,35 @@ const transform = (service: Tool.Interface, tools: Readonly<Record<string, Info>
   service.transform((editor) =>
     Object.entries(tools).forEach(([name, tool]) => editor.add({ ...tool, name, options: options ?? tool.options })),
   )
+
+describe("Code Mode path and Bun", () => {
+  const types = Effect.gen(function* () {
+    const tools = yield* Tool.Service
+    const snapshot = yield* tools.snapshot(undefined, { services: codeModeServices("/session/dir") })
+    const result = yield* snapshot.execute({
+      ...call("execute"),
+      call: {
+        type: "tool-call",
+        id: "call-globals",
+        name: "execute",
+        input: { code: `return [typeof path, typeof Bun]` },
+      },
+    })
+    return JSON.parse(result.output.output)
+  })
+
+  it.effect("are not available without full_codemode", () =>
+    Effect.gen(function* () {
+      expect(yield* types).toEqual(["undefined", "undefined"])
+    }),
+  )
+
+  codeModeIt.effect("are available with full_codemode", () =>
+    Effect.gen(function* () {
+      expect(yield* types).toEqual(["object", "object"])
+    }),
+  )
+})
 
 describe("Tool", () => {
   it.effect("reads the current editor tools by effective name", () =>
@@ -519,7 +553,7 @@ describe("Tool", () => {
         },
       })
       expect(callable.output).toMatchObject({
-        output: expect.stringContaining('"text": "sales"'),
+        output: expect.stringContaining('"text":"sales"'),
         toolCalls: [
           { tool: "registry.search", status: "completed" },
           { tool: "registry.search.sales", status: "completed" },
@@ -588,7 +622,50 @@ describe("Tool", () => {
           },
         },
       })
-      expect(result.output).toMatchObject({ output: expect.stringContaining('"text": "sales"') })
+      expect(result.output).toMatchObject({ output: expect.stringContaining('"text":"sales"') })
+    }),
+  )
+
+  it.effect("runs a call to a Code Mode tool's path or registry ID as a Code Mode call", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { echo: make(), "kebab-echo": make() }, { namespace: "acme.tools" })
+      yield* transform(service, {
+        fails: { ...make(), execute: () => Effect.fail(new Tool.Error({ message: "boom" })) },
+      })
+      const snapshot = yield* service.snapshot()
+      for (const name of ["acme.tools.echo", "acme_tools_echo", "acme.tools.kebab-echo"]) {
+        const result = yield* snapshot.execute(call(name))
+        expect(result.output).toEqual({ text: name })
+      }
+      expect((yield* snapshot.execute(call("fails")).pipe(Effect.flip)).message).toContain("boom")
+      // In a session drain it can move to the background, like an execute program, without execute's options.
+      const handoffs: Array<CodeModeJob.Options | undefined> = []
+      const handed = yield* snapshot
+        .execute(call("acme.tools.echo"))
+        .pipe(
+          Effect.provideService(CodeModeJob.Current, (context, run, options) =>
+            Effect.sync(() => handoffs.push(options)).pipe(Effect.andThen(run(context))),
+          ),
+        )
+      expect(handed.output).toEqual({ text: "acme.tools.echo" })
+      expect(handoffs).toEqual([undefined])
+      // Not without execute, and not for a tool this request doesn't offer.
+      const withoutExecute = new Map(
+        snapshot.definitions.flatMap((definition) =>
+          definition.name === "execute" ? [] : [[definition.name, definition] as const],
+        ),
+      )
+      expect(
+        (yield* snapshot.execute({ ...call("acme.tools.echo"), definitions: withoutExecute }).pipe(Effect.flip))
+          .message,
+      ).toContain('No tool named "acme.tools.echo"')
+      const denied = yield* service.snapshot(
+        Permission.Policy.fromRules([{ action: "acme_tools_echo", resource: "*", effect: "deny" }]),
+      )
+      expect((yield* denied.execute(call("acme.tools.echo")).pipe(Effect.flip)).message).toContain(
+        'No tool named "acme.tools.echo"',
+      )
     }),
   )
 
@@ -607,6 +684,7 @@ describe("Tool", () => {
           execute: () => Effect.succeed({ content: "ok" }),
           options: { codemode: false },
         } as unknown as Info)
+        editor.add({ ...make(), name: "boolean_input", input: true, options: { codemode: false } } as unknown as Info)
         editor.add({ ...make(), name: "codemode" })
       })
 
@@ -617,6 +695,14 @@ describe("Tool", () => {
             name: "phone_type",
             namespace: undefined,
             error: expect.stringContaining('Expected string\n  at ["description"]'),
+          },
+        ],
+        [
+          "Skipping invalid tool registration",
+          {
+            name: "boolean_input",
+            namespace: undefined,
+            error: "Invalid tool definition boolean_input: input must be a schema",
           },
         ],
       ])
@@ -686,10 +772,14 @@ describe("Tool", () => {
           input: undefined,
         } as unknown as Info),
       )
+      yield* service.transform((editor) =>
+        editor.add({ ...make(), name: "direct", input: null, options: { codemode: false } } as unknown as Info),
+      )
 
       const snapshot = yield* service.snapshot()
-      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["direct", "execute"])
       expect(codeModeListings(snapshot.codeModeCatalog!)[0]?.line).toContain("tools.echo")
+      expect((yield* snapshot.execute(call("direct"))).output).toEqual({ text: "direct" })
     }),
   )
 
@@ -701,9 +791,251 @@ describe("Tool", () => {
       expect(available.definitions.map((tool) => tool.name)).toEqual(["execute"])
       expect(available.codeModeCatalog?.tools).toEqual([])
 
-      const denied = yield* service.snapshot([{ action: "execute", resource: "*", effect: "deny" }])
+      const denied = yield* service.snapshot(
+        Permission.Policy.fromRules([{ action: "execute", resource: "*", effect: "deny" }]),
+      )
       expect(denied.definitions).toEqual([])
       expect(denied.codeModeCatalog).toBeUndefined()
+    }),
+  )
+
+  it.effect(
+    "places tools with options.codemode overrides in Code Mode by default, honors direct policy demotion, and resolves pinned",
+    () =>
+      Effect.gen(function* () {
+        type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
+
+        const service = yield* Tool.Service
+        const hooks = yield* PluginHooks.Service
+        const hooked: Array<{ phase: string; tool: string; codemode: boolean; override: boolean }> = []
+        yield* hooks.register("tool", "execute.before", (event) =>
+          Effect.sync(() => {
+            hooked.push({
+              phase: "before",
+              tool: event.tool,
+              codemode: event.codemode,
+              override: typeof event.info?.options?.codemode === "object",
+            })
+          }),
+        )
+        yield* hooks.register("tool", "execute.after", (event) =>
+          Effect.sync(() => {
+            hooked.push({
+              phase: "after",
+              tool: event.tool,
+              codemode: event.codemode,
+              override: typeof event.info?.options?.codemode === "object",
+            })
+          }),
+        )
+        const directInput = Schema.Struct({ command: Schema.String, background: Schema.optionalKey(Schema.Boolean) })
+        const codemodeInput = Schema.Struct({ command: Schema.String })
+        const codemodeOutput = Schema.Struct({ summary: Schema.String })
+        yield* service.transform((editor) => {
+          editor.add({
+            name: "shell",
+            description: "Direct shell",
+            input: directInput,
+            output: Schema.String,
+            options: {
+              codemode: {
+                pinned: true,
+                description: "Code Mode shell",
+                input: codemodeInput,
+                output: codemodeOutput,
+              },
+            },
+            execute: (input, context) => {
+              const _inputExact: Equal<
+                typeof input,
+                { readonly command: string; readonly background?: boolean } | { readonly command: string }
+              > = true
+              const background = "background" in input ? input.background : undefined
+              const _backgroundOptional: Equal<typeof background, boolean | undefined> = true
+              void _inputExact
+              void _backgroundOptional
+              const summary = `${input.command}:${"background" in input ? String(input.background) : "omitted"}:${String(Boolean(context.codemode))}`
+              return Effect.succeed({ output: context.codemode ? { summary } : summary })
+            },
+          })
+          editor.add({
+            name: "glob",
+            description: "Find files",
+            input: Schema.Struct({ pattern: Schema.String }),
+            output: Schema.String,
+            options: { codemode: false },
+            execute: (input) => {
+              const _unchanged: Equal<typeof input, { readonly pattern: string }> = true
+              void _unchanged
+              return Effect.succeed({ output: input.pattern })
+            },
+          })
+          editor.add({ ...make(), name: "mcp_search" })
+          editor.add({ ...make(), name: "legacy_pin", options: { pinned: true } })
+          editor.add({ ...make(), name: "unpinned_override", options: { codemode: { pinned: false }, pinned: true } })
+        })
+
+        const listed = (yield* service.list()).find((tool) => tool.id === "shell")
+        expect(listed?.description).toBe("Direct shell")
+        expect(typeof listed?.options?.codemode).toBe("object")
+
+        // An override object places the tool in Code Mode by default; codemode: false stays direct.
+        const defaultSnap = yield* service.snapshot()
+        expect(defaultSnap.definitions.map((tool) => tool.name)).toEqual(["glob", "execute"])
+        const listings = codeModeListings(defaultSnap.codeModeCatalog!)
+        expect(listings.map((tool) => tool.path)).toEqual(["legacy_pin", "mcp_search", "shell", "unpinned_override"])
+        const shellListing = listings.find((tool) => tool.path === "shell")!
+        expect(shellListing.line).toContain("Code Mode shell")
+        expect(shellListing.line).not.toContain("background")
+        expect(defaultSnap.codeModeCatalog?.tools.find((tool) => tool.name === "shell")).toMatchObject({ pinned: true })
+        expect(defaultSnap.codeModeCatalog?.tools.find((tool) => tool.name === "legacy_pin")).toMatchObject({
+          pinned: true,
+        })
+        expect(defaultSnap.codeModeCatalog?.tools.find((tool) => tool.name === "unpinned_override")).toMatchObject({
+          pinned: false,
+        })
+
+        // Decodes and encodes Code Mode calls with the Code Mode override schemas and passes context.codemode = true.
+        const executed = yield* defaultSnap.execute({
+          ...call("execute"),
+          call: {
+            type: "tool-call",
+            id: "call-cm-shell",
+            name: "execute",
+            input: { code: 'return await tools.shell({ command: "ls", background: true })' },
+          },
+        })
+        expect(executed.output).toMatchObject({ output: JSON.stringify({ summary: "ls:omitted:true" }) })
+        expect(
+          yield* service.check({
+            code: 'return await tools.shell({ command: "build", background: true })',
+            tools: ["shell"],
+            bindings: {},
+            policy: Permission.Policy.empty,
+            limits: {},
+            context: { sessionID, ...identity, progress: () => Effect.void },
+          }),
+        ).toMatchObject({ ok: true, value: { summary: "build:omitted:true" } })
+        expect(
+          yield* service.check({
+            code: 'return await tools.glob({ pattern: "*" })',
+            tools: ["glob"],
+            bindings: {},
+            policy: Permission.Policy.empty,
+            limits: {},
+            context: { sessionID, ...identity, progress: () => Effect.void },
+          }),
+        ).toMatchObject({ ok: false, error: { kind: "UnknownTool" } })
+
+        // Policy `direct` keeps a Code Mode tool on the direct list with its direct description and schemas.
+        const demotePolicy = { hidden: new Set(["glob"]), direct: new Set(["shell"]) }
+        const demoted = yield* service.snapshot(undefined, { tools: demotePolicy })
+        expect(demoted.definitions.map((tool) => tool.name)).toEqual(["shell", "execute"])
+        expect(demoted.definitions.find((tool) => tool.name === "shell")?.description).toBe("Direct shell")
+        expect(demoted.definitions.find((tool) => tool.name === "shell")?.inputSchema.properties).toHaveProperty(
+          "background",
+        )
+        expect(
+          (yield* demoted.execute({
+            ...call("shell"),
+            call: {
+              type: "tool-call",
+              id: "call-direct-shell",
+              name: "shell",
+              input: { command: "ls", background: true },
+            },
+          })).output,
+        ).toBe("ls:true:false")
+
+        // When execute is denied, Code Mode tools fall back to their direct form while hidden tools stay hidden.
+        const denied = yield* service.snapshot(
+          Permission.Policy.fromRules([{ action: "execute", resource: "*", effect: "deny" }]),
+          {
+            tools: { hidden: new Set(["glob"]) },
+          },
+        )
+        expect(denied.codeModeCatalog).toBeUndefined()
+        expect(denied.definitions.map((tool) => tool.name)).toEqual([
+          "legacy_pin",
+          "mcp_search",
+          "shell",
+          "unpinned_override",
+        ])
+        expect(denied.definitions.find((tool) => tool.name === "shell")?.description).toBe("Direct shell")
+        expect(denied.definitions.find((tool) => tool.name === "shell")?.inputSchema.properties).toHaveProperty(
+          "background",
+        )
+
+        // Plugin edits to tool.description only change the direct form; options.codemode stays intact.
+        yield* service.transform((editor) => {
+          expect(editor.get("shell")?.description).toBe("Direct shell")
+          editor.update("shell", (tool) => {
+            tool.description = "Edited direct shell"
+          })
+        })
+        expect(
+          (yield* service.snapshot(undefined, { tools: demotePolicy })).definitions.find(
+            (tool) => tool.name === "shell",
+          )?.description,
+        ).toBe("Edited direct shell")
+        expect(
+          codeModeListings((yield* service.snapshot()).codeModeCatalog!).find((tool) => tool.path === "shell")?.line,
+        ).toContain("Code Mode shell")
+
+        expect(hooked).toEqual([
+          { phase: "before", tool: "execute", codemode: false, override: false },
+          { phase: "before", tool: "shell", codemode: true, override: true },
+          { phase: "after", tool: "shell", codemode: true, override: true },
+          { phase: "after", tool: "execute", codemode: false, override: false },
+          { phase: "before", tool: "shell", codemode: true, override: true },
+          { phase: "after", tool: "shell", codemode: true, override: true },
+          { phase: "before", tool: "shell", codemode: false, override: true },
+          { phase: "after", tool: "shell", codemode: false, override: true },
+        ])
+      }),
+  )
+
+  it.effect("caches the 5 most recently used Code Mode catalogs and invalidates on registry changes", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, {
+        t1: make(),
+        t2: make(),
+        t3: make(),
+        t4: make(),
+        t5: make(),
+        t6: make(),
+      })
+      const deny = (action: string) => Permission.Policy.fromRules([{ action, resource: "*", effect: "deny" }])
+
+      const s1 = yield* service.snapshot(deny("t1"))
+      const s2 = yield* service.snapshot(deny("t2"))
+      const s3 = yield* service.snapshot(deny("t3"))
+      const s4 = yield* service.snapshot(deny("t4"))
+      const s5 = yield* service.snapshot(deny("t5"))
+
+      // Touch s1 so s2 becomes least recently used, then insert a 6th distinct tool set.
+      expect((yield* service.snapshot(deny("t1"))).codeModeCatalog).toBe(s1.codeModeCatalog)
+      const s6 = yield* service.snapshot(deny("t6"))
+
+      expect((yield* service.snapshot(deny("t1"))).codeModeCatalog).toBe(s1.codeModeCatalog)
+      expect((yield* service.snapshot(deny("t3"))).codeModeCatalog).toBe(s3.codeModeCatalog)
+      expect((yield* service.snapshot(deny("t4"))).codeModeCatalog).toBe(s4.codeModeCatalog)
+      expect((yield* service.snapshot(deny("t5"))).codeModeCatalog).toBe(s5.codeModeCatalog)
+      expect((yield* service.snapshot(deny("t6"))).codeModeCatalog).toBe(s6.codeModeCatalog)
+      expect((yield* service.snapshot(deny("t2"))).codeModeCatalog).not.toBe(s2.codeModeCatalog)
+
+      // Invalidates inside State.batch before notify runs, as well as on reload.
+      const beforeBatch = yield* service.snapshot(deny("t1"))
+      yield* State.batch(
+        Effect.gen(function* () {
+          yield* transform(service, { extra: make() })
+          expect((yield* service.snapshot(deny("t1"))).codeModeCatalog).not.toBe(beforeBatch.codeModeCatalog)
+        }),
+      )
+      const afterBatch = yield* service.snapshot(deny("t1"))
+      yield* service.reload()
+      expect((yield* service.snapshot(deny("t1"))).codeModeCatalog).not.toBe(afterBatch.codeModeCatalog)
     }),
   )
 
@@ -712,19 +1044,36 @@ describe("Tool", () => {
       const service = yield* Tool.Service
       yield* transform(service, { lookup: make() }, { namespace: "mcp" })
       yield* transform(service, { bash: make() }, { codemode: false })
-      const denyExecute: Permission.Ruleset = [{ action: "execute", resource: "*", effect: "deny" }]
+      const denyExecute = Permission.Policy.fromRules([{ action: "execute", resource: "*", effect: "deny" }])
 
       const snapshot = yield* service.snapshot(denyExecute)
       expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["bash", "mcp_lookup"])
       expect(snapshot.codeModeCatalog).toBeUndefined()
       expect((yield* snapshot.execute(call("mcp_lookup"))).output).toEqual({ text: "mcp_lookup" })
 
-      const hidden = yield* service.snapshot([
-        ...denyExecute,
-        { action: "mcp_lookup", resource: "*", effect: "deny" },
-      ])
+      const hidden = yield* service.snapshot(
+        Permission.Policy.override(denyExecute, [{ action: "mcp_lookup", resource: "*", effect: "deny" }]),
+      )
       expect(hidden.definitions.map((tool) => tool.name)).toEqual(["bash"])
       expect(yield* hidden.execute(call("mcp_lookup")).pipe(Effect.flip)).toBeInstanceOf(Tool.Error)
+    }),
+  )
+
+  it.effect("denies a nested-namespace tool by its flattened name in Code Mode and as a direct tool", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { move: make(), rename: make() }, { namespace: "opencode.session" })
+      const deny = Permission.Policy.fromRules([{ action: "opencode_session_move", resource: "*", effect: "deny" }])
+
+      const codeMode = yield* service.snapshot(deny)
+      const paths = codeModeListings(codeMode.codeModeCatalog!).map((entry) => entry.path)
+      expect(paths).toContain("opencode.session.rename")
+      expect(paths).not.toContain("opencode.session.move")
+
+      const direct = yield* service.snapshot(
+        Permission.Policy.override(deny, [{ action: "execute", resource: "*", effect: "deny" }]),
+      )
+      expect(direct.definitions.map((tool) => tool.name)).toEqual(["opencode_session_rename"])
     }),
   )
 
@@ -754,6 +1103,12 @@ describe("Tool", () => {
           { action: "*", resource: "*", effect: "deny" },
         ]),
       ).toEqual([])
+      expect(
+        yield* names([
+          { action: "question", resource: "*", effect: "deny" },
+          { action: "question", resource: "private", effect: "deny" },
+        ]),
+      ).toEqual(["bash", "edit", "write", "execute"])
       expect(yield* names([{ action: "edit", resource: "*", effect: "deny" }])).toEqual(["bash", "question", "execute"])
     }),
   )
@@ -768,17 +1123,6 @@ describe("Tool", () => {
       expect(
         (yield* toolDefinitions(service, [{ action: "edit", resource: "*", effect: "deny" }])).map((tool) => tool.name),
       ).toEqual(["first", "execute"])
-    }),
-  )
-
-  it.effect("removes a scoped registration", () =>
-    Effect.gen(function* () {
-      const service = yield* Tool.Service
-      const scope = yield* Scope.make()
-      yield* transform(service, { echo: make() }, { codemode: false }).pipe(Scope.provide(scope))
-      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["echo", "execute"])
-      yield* Scope.close(scope, Exit.void)
-      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["execute"])
     }),
   )
 
@@ -867,16 +1211,6 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("exposes execution only through a snapshot", () =>
-    Effect.gen(function* () {
-      const service = yield* Tool.Service
-      expect("definitions" in service).toBe(false)
-      expect("execute" in service).toBe(false)
-      expect("settle" in service).toBe(false)
-      expect(typeof service.snapshot).toBe("function")
-    }),
-  )
-
   it.effect("passes complete call identity to tool execution", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
@@ -950,6 +1284,113 @@ describe("Tool", () => {
       }),
     )
   })
+
+  it.effect("a hook can rename a call inside a Code Mode program to another of its tools", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const hooks = yield* PluginHooks.Service
+      yield* transform(service, { echo: make(), constant: constant("renamed") })
+      yield* transform(service, { direct: constant("direct") }, { codemode: false })
+      const seen: string[] = []
+      yield* hooks.register("tool", "execute.before", (event) =>
+        Effect.sync(() => {
+          if (event.tool !== "echo") return
+          event.tool = Schema.is(Schema.Struct({ text: Schema.String }))(event.input) ? event.input.text : event.tool
+        }),
+      )
+      yield* hooks.register("tool", "execute.after", (event) => Effect.sync(() => void seen.push(event.tool)))
+      const snapshot = yield* service.snapshot()
+      const program = (code: string) =>
+        snapshot.execute({
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "call-program", name: "execute", input: { code } },
+        })
+
+      expect((yield* program('return await tools.echo({ text: "constant" })')).output).toMatchObject({
+        output: JSON.stringify({ text: "renamed" }),
+      })
+      expect(seen).toContain("constant")
+      // A program can only reach its own tools, however the call is renamed.
+      for (const name of ["direct", "missing"])
+        expect(
+          (yield* program(`try { await tools.echo({ text: "${name}" }) } catch (e) { return e.message }`)).output,
+        ).toMatchObject({ output: `Tool is not available for this request: ${name}` })
+
+      const check = (tools: string[]) =>
+        service.check({
+          code: 'return await tools.echo({ text: "constant" })',
+          tools,
+          bindings: {},
+          policy: Permission.Policy.empty,
+          limits: {},
+          context: { sessionID, ...identity, progress: () => Effect.void },
+        })
+      expect(yield* check(["echo"])).toMatchObject({ ok: false })
+      expect(yield* check(["echo", "constant"])).toMatchObject({ ok: true, value: { text: "renamed" } })
+    }),
+  )
+
+  it.effect("a call renamed inside a Code Mode program returns the renamed tool's structured output", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const hooks = yield* PluginHooks.Service
+      const plain: Info = {
+        name: "plain",
+        description: "Return text",
+        input: Schema.Struct({ text: Schema.String }),
+        execute: () => Effect.succeed({ content: "plain" }),
+      }
+      yield* transform(service, { plain, constant: constant("structured") })
+      yield* hooks.register("tool", "execute.before", (event) =>
+        Effect.sync(() => {
+          if (event.tool === "plain") event.tool = "constant"
+        }),
+      )
+      const snapshot = yield* service.snapshot()
+      const result = yield* snapshot.execute({
+        sessionID,
+        ...identity,
+        call: {
+          type: "tool-call",
+          id: "call-program",
+          name: "execute",
+          input: { code: 'return await tools.plain({ text: "x" })' },
+        },
+      })
+      expect(result.output).toMatchObject({ output: JSON.stringify({ text: "structured" }) })
+    }),
+  )
+
+  it.effect("hooks see one ID per call inside a Code Mode program", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const hooks = yield* PluginHooks.Service
+      yield* transform(service, { echo: make() })
+      const before: string[] = []
+      const after: string[] = []
+      yield* hooks.register("tool", "execute.before", (event) =>
+        Effect.sync(() => void (event.tool === "echo" && before.push(event.id))),
+      )
+      yield* hooks.register("tool", "execute.after", (event) =>
+        Effect.sync(() => void (event.tool === "echo" && after.push(event.id))),
+      )
+      const snapshot = yield* service.snapshot()
+      yield* snapshot.execute({
+        sessionID,
+        ...identity,
+        call: {
+          type: "tool-call",
+          id: "call-program",
+          name: "execute",
+          input: { code: 'await Promise.all([tools.echo({ text: "a" }), tools.echo({ text: "b" })])' },
+        },
+      })
+      expect(new Set(before).size).toBe(2)
+      expect(before).not.toContain("call-program")
+      expect(after.toSorted()).toEqual(before.toSorted())
+    }),
+  )
 
   it.effect("normalizes image tool output once and drops unresizable images", () =>
     Effect.gen(function* () {
@@ -1165,19 +1606,6 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("reveals the previous registration after an overlay closes", () =>
-    Effect.gen(function* () {
-      const service = yield* Tool.Service
-      yield* transform(service, { echo: constant("base") }, { codemode: false })
-      const overlay = yield* Scope.make()
-      yield* transform(service, { echo: constant("overlay") }, { codemode: false }).pipe(Scope.provide(overlay))
-
-      expect((yield* executeTool(service, call("echo"))).content).toEqual([{ type: "text", text: "overlay" }])
-      yield* Scope.close(overlay, Exit.void)
-      expect((yield* executeTool(service, call("echo"))).content).toEqual([{ type: "text", text: "base" }])
-    }),
-  )
-
   it.effect("executes and reports progress for codemode tools advertised in a model request", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
@@ -1225,12 +1653,10 @@ describe("Tool", () => {
       })
 
       expect(execution).toMatchObject({ content: [{ type: "text" }] })
+      expect(execution.metadata?.toolCalls).toEqual([{ tool: "echo", status: "completed", input: { text: "request" } }])
       expect(executed).toEqual(["old:request"])
-      expect(progress).toEqual([
-        { toolCalls: [{ tool: "echo", status: "running", input: { text: "request" } }] },
-        { stage: "old" },
-        { toolCalls: [{ tool: "echo", status: "completed", input: { text: "request" } }] },
-      ])
+      // The inner tool's own progress would replace the call rows, so it is not published.
+      expect(progress).toEqual([{ toolCalls: [{ tool: "echo", status: "running", input: { text: "request" } }] }])
     }),
   )
 })

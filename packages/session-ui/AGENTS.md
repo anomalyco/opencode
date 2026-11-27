@@ -8,6 +8,14 @@
 - Do not translate from model knowledge alone. Verify terminology and grammar with Unicode CLDR locale/plural data, Microsoft Localization Style Guides and terminology, Apple localization/style guidance and localized platform UI, Mozilla localization style guides, Mozilla Pontoon, and the Firefox localization corpus at `github.com/mozilla-l10n/firefox-l10n`.
 - Also use the relevant language authority or official dictionary for the locale (for example RAE/Fundéu, FranceTerme, Duden, TDK, Kotus/Kielitoimiston sanakirja, Språkrådet/Bokmålsordboka, Rada Języka Polskiego/PWN, the Russian and Arabic language academies, the Ukrainian Orthography, Taiwan MOE dictionaries, or the Royal Society of Thailand). Treat the English dictionary as the semantic source of truth and preserve placeholders, code identifiers, product names, and keyboard labels.
 
+## State
+
+- Lifecycles follow the State Machines section of `packages/app/AGENTS.md`: one union, a pure `transition`, buttons and panels derived from selectors, and every action settling its attempt whether the host call returns, rejects or throws. Precedent: `src/message/action-machine.ts`.
+
+## Timeline stability
+
+- Everything here renders in timeline rows. Follow the Timeline stability section of `packages/app/AGENTS.md`: a `:has()` selector on anything that can contain rows ends at the `:has()` element, `:has()` never selects on `style`, and code that moves focus in a row passes `preventScroll: true` unless the reader must see that control next.
+
 ## Typography
 
 - Use `--line-height-compact` (`16px`) for `13px` transcript, tool, notice, and truncation text. Use `--line-height-base` (`20px`) for body text.

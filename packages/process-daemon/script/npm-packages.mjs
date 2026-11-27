@@ -26,7 +26,7 @@ await mkdir(output, { recursive: true })
 
 for (const target of targets) {
   const suffix = [target.platform, target.arch, target.suffix].filter(Boolean).join("-")
-  const name = `@opencode-ai/pty-${suffix}`
+  const name = `@opencode/pty-${suffix}`
   const directory = path.join(output, `opencode-pty-${suffix}`)
   const archive = path.join(dist, `opencode-pty-${manifest.version}-${target.target}.tar.gz`)
   const binary = target.platform === "win32" ? "opencode-pty.exe" : "opencode-pty"

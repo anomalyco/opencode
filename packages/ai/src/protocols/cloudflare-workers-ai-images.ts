@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
+import { ImageModel, ImageResponse, type ImageRequest } from "../image.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import type { MediaRoute } from "../route/media.js"
@@ -36,7 +36,7 @@ export type CloudflareWorkersAIImageOptions = {
   readonly negative_prompt?: string
 } & Record<string, unknown>
 
-export type Request = ImageRequestFor<CloudflareWorkersAIImageOptions>
+export type Request = ImageRequest<ImageModel<CloudflareWorkersAIImageOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Response schema

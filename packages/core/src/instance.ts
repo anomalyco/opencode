@@ -1,13 +1,18 @@
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "./agent.js"
+import { App } from "./app.js"
+import { Artifact } from "./artifact.js"
 import { AISDK } from "./aisdk.js"
 import { Model } from "./model.js"
 import { Provider } from "./provider.js"
 import { Command } from "./command.js"
 import { Config } from "./config.js"
+import { Flag } from "./flag.js"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Node } from "@opencode/util/effect/app-node"
 import { FileMutation } from "./file-mutation.js"
+import { FileWrite } from "./file-write.js"
+import { Environments } from "./environment/environments.js"
 import { Environment } from "./environment/index.js"
 import { Formatter } from "./formatter.js"
 import { FileSystem } from "./filesystem.js"
@@ -49,7 +54,6 @@ import { InstructionDiscovery } from "./instruction-discovery.js"
 import { InstructionBuiltIns } from "./instructions/builtins.js"
 import { SessionInstructions } from "./session/instructions.js"
 import { McpTool } from "./tool/mcp.js"
-import { ReadToolFileSystem } from "./tool/read-filesystem.js"
 import { Tool } from "./tool.js"
 import { ToolOutput } from "./tool-output.js"
 import { Vcs } from "./vcs.js"
@@ -58,11 +62,15 @@ export * as Instance from "./instance.js"
 export { Service, node, type Interface } from "./instance/service.js"
 
 const nodes = [
+  App.node,
   Location.node,
   LocationLifecycle.node,
   Environment.node,
+  Environments.node,
   Config.node,
+  Flag.node,
   Agent.node,
+  Artifact.node,
   Command.node,
   Reference.node,
   Rpc.node,
@@ -87,6 +95,7 @@ const nodes = [
   InstructionDiscovery.node,
   FileAccess.node,
   FileMutation.node,
+  FileWrite.node,
   Formatter.node,
   Mcp.node,
   Permission.node,
@@ -99,7 +108,6 @@ const nodes = [
   Generate.node,
   Voice.node,
   UsageLimits.node,
-  ReadToolFileSystem.node,
   McpTool.node,
   SessionInstructions.node,
   SessionRunnerModel.node,
@@ -131,7 +139,19 @@ export interface Options {
   // AGENTS.md instructions — that is session-time context, not boot-time
   // population.
   readonly discovery?: boolean
+  // Child replacements for this instance (or all replacements when `host` is omitted). With `host`, global
+  // replacements are rejected because the host already built them into `host.context`.
   readonly replacements?: LayerNode.Replacements
+  // Global services and inherited replacements the host built once for all of its instances (see `globals`).
+  // Without it, the instance builds its globals through the enclosing memo map.
+  readonly host?: LayerNode.Host
+}
+
+/** The global nodes instances read from `hostContext`, which a host builds with its `replacements`. */
+export function globals(replacements: LayerNode.Replacements = []) {
+  return LayerNode.group(
+    LayerNode.tagged(LayerNode.group([graph, ...Location.dependencies]), Node.tags.values.global, replacements),
+  )
 }
 
 // Vanilla neutralizes the discovery inputs; the plugin list stays untouched.
@@ -158,7 +178,11 @@ export function layer(ref: Location.Ref, options: Options = {}): Layer.Layer<Ser
     InstancePlugins.node.replace(InstancePlugins.bound(options.plugins ?? [])),
   ]
 
-  return LayerNode.compile(graph, { replacements, shared: Node.tags.values.global }).pipe(
+  return (
+    options.host
+      ? LayerNode.compileChild(graph, { host: options.host, replacements })
+      : LayerNode.compile(graph, { replacements, shared: Node.tags.values.global })
+  ).pipe(
     // A missing directory is expected; other instance boot failures remain defects.
     Layer.catchCause(
       (cause): Layer.Layer<Services, Error> =>
