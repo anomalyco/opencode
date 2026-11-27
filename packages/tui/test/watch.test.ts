@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { fileWatchDirs, safeWatch } from "../src/util/watch"
+import { fileWatchDirs, safeWatch, watchFile } from "../src/util/watch"
 
 test("watches the target directory of a symlinked file", async () => {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "tui-watch-")))
@@ -41,3 +41,45 @@ test("watches only the file directory when the file is not a symlink or is missi
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test("follows a symlink that is created or repointed while watching", async () => {
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "tui-watch-")))
+  try {
+    const link = path.join(root, "config", "cli.json")
+    const first = path.join(root, "one", "cli.json")
+    const second = path.join(root, "two", "cli.json")
+    await Bun.write(link, "{}")
+    await Bun.write(first, "{}")
+    await Bun.write(second, "{}")
+
+    let calls = 0
+    const watcher = watchFile(link, () => calls++)
+    expect(watcher.dirs()).toEqual([path.dirname(link)])
+
+    // Replace the regular file with a symlink, as a dotfiles manager would.
+    await rm(link)
+    await symlink(first, link)
+    await waitFor(() => watcher.dirs().includes(path.dirname(first)))
+
+    // Repoint the link to a different directory.
+    await rm(link)
+    await symlink(second, link)
+    await waitFor(() => watcher.dirs().includes(path.dirname(second)))
+    expect(watcher.dirs()).not.toContain(path.dirname(first))
+
+    const before = calls
+    await Bun.sleep(100); await writeFile(second, "{\"a\":1}")
+    await waitFor(() => calls > before)
+    watcher.close()
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+async function waitFor(check: () => boolean) {
+  for (let i = 0; i < 100; i++) {
+    if (check()) return
+    await Bun.sleep(20)
+  }
+  throw new Error("condition not met")
+}
