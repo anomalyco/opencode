@@ -1,0 +1,213 @@
+//! Simulation handshake and JSON-RPC requests over WebSocket.
+
+use crate::keys::{Direction, KeyModifiers, Mouse};
+use serde::Deserialize;
+use serde::de::DeserializeOwned;
+use serde_json::{Value, json};
+
+/// Capabilities are advertised in protocol order. opencode-drive requires `ui.focus` and `ui.click`, so they are
+/// offered, but with no renderable numbers they always fail; `ui.state` lists no elements.
+pub const CAPABILITIES: &[&str] = &[
+    "ui.type",
+    "ui.press",
+    "ui.enter",
+    "ui.arrow",
+    "ui.focus",
+    "ui.click",
+    "ui.mouse",
+    "ui.resize",
+    "ui.matches",
+    "ui.state",
+    "ui.capture",
+    "ui.recording.finish",
+];
+
+/// One decoded request. `id` is `None` for a notification, which gets a response only when it fails.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Envelope {
+    pub id: Option<Value>,
+    pub request: Request,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Request {
+    Handshake(HandshakeParams),
+    Type {
+        text: String,
+    },
+    Press {
+        key: String,
+        modifiers: KeyModifiers,
+    },
+    Enter,
+    Arrow(Direction),
+    Mouse(Mouse),
+    Resize {
+        cols: f64,
+        rows: f64,
+    },
+    Matches {
+        text: String,
+    },
+    Capture,
+    State,
+    FinishRecording,
+    /// A request of the protocol this endpoint does not implement.
+    Unsupported(&'static str),
+}
+
+/// Decodes a request, or says why it is not one. TS answers a request it cannot decode with a failure whose `id` is
+/// null.
+pub fn decode(input: &str) -> Result<Envelope, String> {
+    let value: Value = serde_json::from_str(input).map_err(|error| format!("invalid JSON: {error}"))?;
+    let object = value.as_object().ok_or("expected a JSON-RPC request object")?;
+    if object.get("jsonrpc") != Some(&json!("2.0")) {
+        return Err("jsonrpc: expected \"2.0\"".into());
+    }
+    let id = object.get("id").cloned();
+    if id.as_ref().is_some_and(|id| !(id.is_string() || id.is_number() || id.is_null())) {
+        return Err("id: expected a string, a number, or null".into());
+    }
+    let method = object.get("method").and_then(Value::as_str).ok_or("method: expected a string")?;
+    let params = object.get("params");
+    let request = match method {
+        "simulation.handshake" => Request::Handshake(params_of(method, params)?),
+        "ui.type" => Request::Type { text: params_of::<Text>(method, params)?.text },
+        "ui.matches" => Request::Matches { text: params_of::<Text>(method, params)?.text },
+        "ui.press" => {
+            let press: Press = params_of(method, params)?;
+            Request::Press { key: press.key, modifiers: press.modifiers.unwrap_or_default() }
+        }
+        "ui.arrow" => Request::Arrow(params_of::<Arrow>(method, params)?.direction),
+        "ui.mouse" => Request::Mouse(params_of(method, params)?),
+        "ui.resize" => {
+            let resize: Resize = params_of(method, params)?;
+            Request::Resize { cols: resize.cols, rows: resize.rows }
+        }
+        "ui.enter" => Request::Enter,
+        "ui.capture" => Request::Capture,
+        "ui.focus" | "ui.click" => {
+            params_of::<Value>(method, params)?;
+            Request::Unsupported(if method == "ui.focus" { "ui.focus" } else { "ui.click" })
+        }
+        "ui.state" => Request::State,
+        "ui.snapshot" => Request::Unsupported("ui.snapshot"),
+        "ui.recording.finish" => Request::FinishRecording,
+        other => return Err(format!("method: unknown simulation UI method {other:?}")),
+    };
+    Ok(Envelope { id, request })
+}
+
+fn params_of<T: DeserializeOwned>(method: &str, params: Option<&Value>) -> Result<T, String> {
+    let params =
+        params.filter(|params| params.is_object()).ok_or_else(|| format!("{method}: params: expected an object"))?;
+    serde_json::from_value(params.clone()).map_err(|error| format!("{method}: params: {error}"))
+}
+
+#[derive(Deserialize)]
+struct Text {
+    text: String,
+}
+
+#[derive(Deserialize)]
+struct Press {
+    key: String,
+    modifiers: Option<KeyModifiers>,
+}
+
+#[derive(Deserialize)]
+struct Arrow {
+    direction: Direction,
+}
+
+#[derive(Deserialize)]
+struct Resize {
+    cols: f64,
+    rows: f64,
+}
+
+/// The message for a request this endpoint does not implement.
+pub fn unsupported(method: &str) -> String {
+    format!("{method} is not supported by the Rust TUI: it has no renderable numbers; use ui.mouse with coordinates")
+}
+
+/// `JsonRpc.success`: nothing for a notification.
+pub fn success(id: Option<Value>, result: Value) -> Option<Value> {
+    id.map(|id| json!({ "jsonrpc": "2.0", "id": id, "result": result }))
+}
+
+/// `JsonRpc.failure`, with the server's error code.
+pub fn failure(id: Option<Value>, message: &str) -> Value {
+    json!({ "jsonrpc": "2.0", "id": id.unwrap_or(Value::Null), "error": { "code": -32000, "message": message } })
+}
+
+/// `Handshake.Params`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HandshakeParams {
+    pub client: Identity,
+    pub expected_role: Role,
+    pub offered_versions: Vec<u64>,
+    pub required_capabilities: Vec<String>,
+    pub optional_capabilities: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct Identity {
+    pub name: String,
+    pub version: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    Ui,
+    Backend,
+}
+
+/// `Handshake.dispatch` for the `ui` role, after the checks `Handshake.Params` makes while decoding. An empty
+/// `version` reports `unknown`, as `SimulationServer.start` defaults it: the schema takes no empty string.
+pub fn handshake(params: &HandshakeParams, version: &str) -> Result<Value, String> {
+    check(params)?;
+    if params.expected_role != Role::Ui {
+        return Err("Expected simulation endpoint role backend, received ui".into());
+    }
+    if !params.offered_versions.contains(&1) {
+        return Err("No mutually supported simulation protocol version".into());
+    }
+    let missing: Vec<&str> = params
+        .required_capabilities
+        .iter()
+        .map(String::as_str)
+        .filter(|capability| !CAPABILITIES.contains(capability))
+        .collect();
+    if !missing.is_empty() {
+        return Err(format!("Simulation endpoint is missing required capabilities: {}", missing.join(", ")));
+    }
+    Ok(json!({
+        "protocolVersion": 1,
+        "role": "ui",
+        "server": { "name": "opencode", "version": if version.is_empty() { "unknown" } else { version } },
+        "capabilities": CAPABILITIES,
+    }))
+}
+
+fn check(params: &HandshakeParams) -> Result<(), String> {
+    let unique = |items: &[String]| items.iter().enumerate().all(|(index, item)| !items[..index].contains(item));
+    if params.client.name.is_empty() || params.client.version.is_empty() {
+        return Err("simulation.handshake: params.client: expected a non-empty name and version".into());
+    }
+    let versions = &params.offered_versions;
+    if versions.is_empty()
+        || versions.contains(&0)
+        || versions.iter().enumerate().any(|(index, version)| versions[..index].contains(version))
+    {
+        return Err("simulation.handshake: params.offeredVersions: expected unique positive integers".into());
+    }
+    for capabilities in [&params.required_capabilities, &params.optional_capabilities] {
+        if capabilities.iter().any(String::is_empty) || !unique(capabilities) {
+            return Err("simulation.handshake: params: expected unique non-empty capabilities".into());
+        }
+    }
+    Ok(())
+}

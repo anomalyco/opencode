@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/@hona/strobe/schema/strobe.v1.json",
+  "build": {
+    // A pinned GitHub snapshot (perf/github-snapshot.json, when present) and a token GitHub refuses
+    // keep every build's star counts and release list the same, so base and head render one page.
+    "command": "bun install --frozen-lockfile && (test ! -f perf/github-snapshot.json || cp perf/github-snapshot.json src/lib/github-snapshot.json) && bun script/build.ts --mode production",
+    "cwd": "services/site",
+    "output": "services/site/.cloudflare/output",
+    "env": { "GITHUB_TOKEN": "strobe-pinned-snapshot" },
+  },
+  "serve": {
+    "command": "bun perf/serve.ts --port {port}",
+    "cwd": "services/site",
+    "ready": "http://127.0.0.1:{port}/",
+  },
+  "harness": ["services/site/perf", "services/site/vite.config.ts"],
+}

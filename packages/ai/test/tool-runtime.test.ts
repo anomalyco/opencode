@@ -1,16 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Content } from "@opencode/schema/tool"
 import { Effect, Schema, Stream } from "effect"
-import {
-  ai,
-  GenerationOptions,
-  LLMEvent,
-  LLMResponse,
-  toDefinitions,
-  ToolCallPart,
-  ToolChoice,
-  ToolOutput,
-} from "../src/effect.js"
+import { ai, LLMEvent, LLMResponse, toDefinitions, ToolCallPart, ToolChoice, ToolOutput } from "../src/effect.js"
 import { Auth, LLMClient } from "../src/route.js"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
@@ -118,7 +109,7 @@ describe("LLMClient tools", () => {
       yield* TestToolRuntime.runTools({
         request: {
           ...baseRequest,
-          generation: GenerationOptions.make({ maxTokens: 50 }),
+          maxTokens: 50,
           toolChoice: ToolChoice.make("auto"),
         },
         tools: [get_weather],

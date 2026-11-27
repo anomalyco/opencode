@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "ඊළඟ",
   "releaseNotes.action.hideFuture": "මේවා ඉස්සරහට පෙන්නන්න එපා",
   "releaseNotes.media.alt": "පෙරදසුන නිකුත් කරන්න",
+  "action.reload": "යාවත්කාලීන කිරීමට නැවත පූරණය කරන්න",
+  "action.reloading": "නැවත පූරණය කරමින්…",
+  "web.ready.title": "යාවත්කාලීනය සූදානම්",
+  "web.ready.message": "OpenCode හි නව අනුවාදයක් සූදානම්. සෑම විවෘත කවුළුවකම එය භාවිතා කිරීමට නැවත පූරණය කරන්න.",
+  "web.reload": "නැවත පූරණය කරන්න",
+  "web.reset.title": "සේවාදායකයෙන් නැවත පූරණය කරන්න",
+  "web.reset.description": "යෙදුමේ සුරැකි පිටපත ඉවත් කර සේවාදායකයේ වත්මන් අනුවාදය පූරණය කරන්න",
+  "web.reset.action": "සේවාදායකයෙන් නැවත පූරණය කරන්න",
 }

@@ -5,6 +5,7 @@ import { Cause, Duration, Effect, Fiber, Option, Queue, Result, Scope, Stream } 
 import { ChildProcess } from "effect/process"
 import type { ChildProcessHandle } from "effect/process/ChildProcessSpawner"
 import { Environment } from "../environment/index.js"
+import { FileAccess } from "../file-access.js"
 
 /** Mirrors StdioClientTransport: wait this long for a graceful exit after stdin closes. */
 const CLOSE_GRACE = Duration.seconds(2)
@@ -35,6 +36,14 @@ export interface Options {
 }
 
 /**
+ * Resolves a local server's configured `cwd` against the workspace directory, expanding `~` to the
+ * opencode host's home. Environments do not expose their own home, so a workspace-backed location
+ * gets the host's home too.
+ */
+export const resolveCwd = (directory: string, cwd: string | undefined) =>
+  cwd ? FileAccess.resolvePath(directory, cwd) : directory
+
+/**
  * MCP stdio transport that spawns its server through the location's `Environment` instead of the
  * SDK's host-bound `StdioClientTransport`, so a workspace-backed location runs its MCP servers
  * wherever the rest of its execution happens.
@@ -45,6 +54,8 @@ export interface Options {
 export const make = Effect.fnUntraced(function* (options: Options) {
   const environment = yield* Environment.Service
   const scope = yield* Effect.scope
+  // SDK transport methods run outside any fiber; keep the caller's logger, log level, and clock.
+  const runPromise = Effect.runPromiseWith(yield* Effect.context())
   // Outgoing frames are queued rather than written to `handle.stdin` directly: the sink closes the
   // stream it is run with, and stdin must stay open across the whole session.
   const outgoing = yield* Queue.bounded<string, Cause.Done>(OUTGOING_CAPACITY)
@@ -64,7 +75,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
   }, Effect.ignore())
 
   const close = () =>
-    (closing ??= Effect.runPromise(
+    (closing ??= runPromise(
       Effect.gen(function* () {
         state.phase = "closed"
         pending = []
@@ -78,11 +89,18 @@ export const make = Effect.fnUntraced(function* (options: Options) {
       }).pipe(Effect.ensuring(Queue.shutdown(outgoing))),
     ))
 
-  const transport: Transport = {
+  // `pid` and `stderr` match the SDK's StdioClientTransport accessors. The SDK detects stdio by their
+  // presence, and only for stdio does it treat an unanswered server/discover probe as a legacy server.
+  // stderr is drained into the debug log, so no stream is handed out.
+  const transport: Transport & { readonly pid: number | null; readonly stderr: null } = {
+    get pid() {
+      return state.handle?.pid ?? null
+    },
+    stderr: null,
     start: () => {
       if (state.phase !== "ready") return Promise.reject(new Error("Stdio transport already started"))
       state.phase = "starting"
-      startup = Effect.runPromise(
+      startup = runPromise(
         Effect.gen(function* () {
           const handle = yield* environment.spawner.spawn(
             ChildProcess.make(options.command, [...options.args], {
@@ -109,7 +127,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
     send: (message: JSONRPCMessage) =>
       state.phase !== "open"
         ? Promise.reject(new Error("Not connected"))
-        : Effect.runPromise(
+        : runPromise(
             Queue.offer(outgoing, serializeMessage(message)).pipe(
               Effect.flatMap((offered) => (offered ? Effect.void : Effect.fail(new Error("Not connected")))),
             ),

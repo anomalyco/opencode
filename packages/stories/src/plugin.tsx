@@ -1,6 +1,7 @@
 import { createResource, onCleanup, type JSX } from "solid-js"
-import type { Entry } from "@opencode/plugin/gui/host"
+import { pluginIconName, type Entry } from "@opencode/plugin/gui/host"
 import { pluralCategory } from "@opencode/ui/context/i18n"
+import { registerIcons } from "@opencode/ui/icons/registry"
 import { useTheme } from "@opencode/ui/theme/context"
 import { toaster } from "@opencode/ui/toast"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -64,9 +65,17 @@ function createStoryContext(id: string, definition: Entry) {
   const unavailable = (name: string) => () => {
     throw new Error(`${name} is unavailable in plugin stories`)
   }
+  // The plugin's declared icons draw under the names the host gives them.
+  const icons = Object.entries(definition.icons ?? {}).map(([name, source]) => ({
+    name,
+    id: pluginIconName(id, name),
+    source,
+  }))
+  onCleanup(registerIcons(Object.fromEntries(icons.map((icon) => [icon.id, icon.source]))))
   const context = {
     id,
     signal: controller.signal,
+    icons: Object.fromEntries(icons.map((icon) => [icon.name, icon.id])),
     add: unavailable("ctx.add"),
     list: () => [],
     provide: unavailable("ctx.provide"),

@@ -2,7 +2,7 @@ import type { SessionMessageInfo } from "@opencode/client/promise"
 import { fixture } from "./session-fixture"
 
 // Two long sessions (source, target) of 200 exchanges each, ending in formatted markdown answers.
-export const exchanges = 200
+const exchanges = 200
 
 export const messages: Record<string, SessionMessageInfo[]> = Object.fromEntries(
   [fixture.sourceID, fixture.targetID].map((sessionID) => [
@@ -111,7 +111,7 @@ ORDER BY latest DESC;
 
 \`\`\`bash
 bun typecheck
-bunx playwright test --config e2e/performance/playwright.config.ts
+strobe bench packages/app/perf/tabs.bench.ts --head .
 git diff --check # ${sessionID}-${index}
 \`\`\`
 

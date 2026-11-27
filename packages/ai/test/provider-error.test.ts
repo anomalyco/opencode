@@ -21,11 +21,26 @@ describe("provider error classification", () => {
       "Prompt exceeds max length",
       "The input is too long for the selected model.",
       "This text request is too large for the model's configured input limit.",
+      "[400003] Input tokens exceed the model context limit.",
+      "The number of input tokens exceeds the model's context limit.",
       // LiteLLM's own check, before it calls the model.
       "litellm.ContextWindowExceededError: litellm.BadRequestError: litellm._pre_call_checks: Context Window exceeded for given call. No models have context window large enough for this call.",
     ]
 
     expect(messages.every(isContextOverflow)).toBe(true)
+  })
+
+  test("classifies Tencent's 400003 passed through OpenCode Go as context overflow", () => {
+    const go = {
+      error: {
+        type: "server_error",
+        message: "Upstream request failed: [400003] Input tokens exceed the model context limit.",
+      },
+    }
+
+    expect(
+      classifyProviderFailure({ message: go.error.message, status: 400, rawBody: JSON.stringify(go) }),
+    ).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
   })
 
   test("classifies Anthropic request_too_large as recoverable overflow", () => {
@@ -205,6 +220,20 @@ describe("provider error classification", () => {
     ).toEqual(["ContentPolicy", "ContentPolicy", "ContentPolicy"])
   })
 
+  test("classifies OpenAI cyber policy refusals before and during a stream", () => {
+    const message =
+      "This content was flagged for possible cybersecurity risk. If this seems wrong, try rephrasing your request."
+    const http = { error: { message, type: "invalid_request_error", param: null, code: "cyber_policy" } }
+    const frame = { type: "error", sequence_number: 1, code: "cyber_policy", message, param: null }
+
+    expect(
+      [
+        classifyProviderFailure({ message, status: 400, rawBody: JSON.stringify(http) }),
+        classifyProviderFailure({ message: `cyber_policy: ${message}`, rawBody: JSON.stringify(frame) }),
+      ].map((failure) => failure._tag),
+    ).toEqual(["ContentPolicy", "ContentPolicy"])
+  })
+
   test("classifies Alibaba Model Studio data inspection failures", () => {
     const alibaba = {
       request_id: "1537ecc9-6873-93f7-9865-6fe4eb1d7851",
@@ -259,6 +288,19 @@ describe("provider error classification", () => {
     expect(
       classifyProviderFailure({ message: zen.error.message, status: 400, rawBody: JSON.stringify(zen) })._tag,
     ).toBe("ContentPolicy")
+  })
+
+  test("classifies Gemini terms-of-use refusals as policy rejections, not authentication failures", () => {
+    const message = "Request rejected in accordance with our terms of use and policies."
+    const gemini = { error: { code: 403, message, status: "PERMISSION_DENIED" } }
+    const zen = { error: { type: "server_error", message: `Upstream request failed: [403] ${message}` } }
+
+    expect(
+      [gemini, zen].map(
+        (body) =>
+          classifyProviderFailure({ message: body.error.message, status: 403, rawBody: JSON.stringify(body) })._tag,
+      ),
+    ).toEqual(["ContentPolicy", "ContentPolicy"])
   })
 
   test("keeps invalid_prompt schema validation failures as invalid requests", () => {
@@ -447,17 +489,23 @@ describe("provider error classification", () => {
     expect(isContextOverflow("Too many tokens")).toBe(true)
   })
 
-  test("classifies 429 token throttles as retryable rate limits, not context overflow", () => {
+  test("classifies 429 throttles as retryable rate limits, not context overflow", () => {
     const bodies = [
       // Cerebras, captured live
       '{"message":"Tokens per minute limit exceeded - too many tokens processed.","type":"too_many_tokens_error","param":"quota","code":"token_quota_exceeded"}',
       '{"message":"Token limit reached: too many tokens per minute for this model."}',
+      '{"error":{"message":"User 10s request rate limit exhausted (3 of 3).","type":"rate_limit_exceeded","code":null}}',
     ]
     for (const body of bodies) {
       const error = new AIError({
-        reason: classifyProviderFailure({ message: providerErrorMessage(body), status: 429, rawBody: body }),
+        reason: classifyProviderFailure({
+          message: providerErrorMessage(body),
+          status: 429,
+          rawBody: body,
+          retryAfterMs: 4000,
+        }),
       })
-      expect(error.reason._tag).toBe("RateLimit")
+      expect(error.reason).toMatchObject({ _tag: "RateLimit", retryAfterMs: 4000 })
       expect(isRetryable(error)).toBe(true)
     }
   })
@@ -755,6 +803,24 @@ describe("AIError getters", () => {
     expect(invalidRequest.reason._tag).toBe("InvalidRequest")
     expect([rateLimit.isRetryable, invalidRequest.isRetryable, transport.isRetryable]).toEqual([true, false, true])
     expect([rateLimit, invalidRequest, transport].map(isRetryable)).toEqual([true, false, true])
+  })
+
+  test("retryHint applies to failed responses, not streams that drop after a successful one", () => {
+    const failure = (status: number, hint: string) =>
+      new AIError({
+        reason: new TransportError({
+          message: "Connection lost while reading the response: ECONNRESET",
+          transport: "http",
+          operation: "read",
+          code: "ECONNRESET",
+          http: new HttpContext({ url: "https://api.test/v1", status, headers: { "x-should-retry": hint } }),
+        }),
+      })
+
+    expect([failure(500, "false").retryHint, failure(500, "true").retryHint]).toEqual([false, true])
+    expect([failure(200, "false").retryHint, failure(200, "true").retryHint]).toEqual([undefined, undefined])
+    expect(failure(500, "false").isRetryable).toBe(false)
+    expect(failure(200, "false").isRetryable).toBe(true)
   })
 
   test("retryAfterMs", () => {

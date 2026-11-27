@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
 import { afterAll, expect, test } from "bun:test"
-import { onMount, Show } from "solid-js"
+import { createSignal, onMount, Show } from "solid-js"
 import { ConfigProvider } from "../../../src/config"
 import type { TuiKeybind } from "../../../src/config/keybind"
 import { ClientProvider } from "../../../src/context/client"
@@ -36,6 +36,7 @@ async function renderComposer(
   defaultTab: "subagents" | "shell",
   keybinds: Partial<TuiKeybind.Keybinds>,
   focusedTextarea = false,
+  open = () => true,
 ) {
   const events = createEventStream()
   const interrupted: string[] = []
@@ -43,6 +44,7 @@ async function renderComposer(
   const viewed: string[] = []
   const ready = Promise.withResolvers<void>()
   let closed = 0
+  let listReads = 0
   let dispatch!: ReturnType<typeof Keymap.use>["dispatch"]
   let route!: ReturnType<typeof useRoute>
   const calls = createFetch((url, request) => {
@@ -78,6 +80,11 @@ async function renderComposer(
 
   function Content() {
     const data = useData()
+    const list = data.session.list
+    data.session.list = () => {
+      listReads++
+      return list()
+    }
     route = useRoute()
     dispatch = Keymap.use().dispatch
     onMount(() => {
@@ -97,7 +104,7 @@ async function renderComposer(
         {/* Mirrors the app, which keys the session route by sessionID and remounts it on navigation. */}
         <Show when={route.data.type === "session" ? route.data.sessionID : undefined} keyed>
           {(sessionID) => (
-            <Composer sessionID={sessionID} open={true} defaultTab={defaultTab} onClose={() => closed++} />
+            <Composer sessionID={sessionID} open={open()} defaultTab={defaultTab} onClose={() => closed++} />
           )}
         </Show>
       </>
@@ -154,6 +161,7 @@ async function renderComposer(
     route: () => route.data,
     dispatch: (command: string) => dispatch(command),
     closed: () => closed,
+    listReads: () => listReads,
   }
 }
 
@@ -209,6 +217,28 @@ test("the inactive subagent filter only changes with its toggle", async () => {
   }
 })
 
+test("a closed composer does not list subagents", async () => {
+  const [open, setOpen] = createSignal(false)
+  const composer = await renderComposer("subagents", {}, false, open)
+  try {
+    expect(composer.listReads()).toBe(0)
+
+    setOpen(true)
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).toContain("First")
+    expect(composer.listReads()).toBeGreaterThan(0)
+
+    setOpen(false)
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).not.toContain("First")
+    setOpen(true)
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).toContain("First")
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
 test("disabled shell bindings have no component fallbacks", async () => {
   const composer = await renderComposer("shell", {
     "composer.shell.up": "none",
@@ -230,6 +260,29 @@ test("disabled shell bindings have no component fallbacks", async () => {
     composer.dispatch("composer.shell.kill")
     await wait(() => composer.removed.length === 1)
     expect(composer.removed).toEqual(["sh-a"])
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
+test("composer tabs switch by mouse and keyboard", async () => {
+  const composer = await renderComposer("subagents", {})
+  try {
+    const lines = composer.app.captureCharFrame().split("\n")
+    const row = lines.findIndex((line) => line.includes("Subagents") && line.includes("Shell"))
+    await composer.app.mockMouse.click(lines[row].indexOf("Shell"), row)
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).toContain("bun test")
+    expect(composer.app.captureCharFrame()).not.toContain("First")
+
+    await composer.app.mockMouse.click(lines[row].indexOf("Subagents"), row)
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).toContain("First")
+    expect(composer.app.captureCharFrame()).not.toContain("bun test")
+
+    composer.app.mockInput.pressArrow("right")
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).toContain("bun test")
   } finally {
     composer.app.renderer.destroy()
   }

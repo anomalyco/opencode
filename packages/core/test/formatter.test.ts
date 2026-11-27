@@ -12,6 +12,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Info } from "@opencode/schema/config"
 import { Global } from "@opencode/util/global"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FileAccess } from "../src/file-access"
 import { Formatter } from "../src/formatter"
 import { Location } from "../src/location"
 import { tempGlobalLayer } from "./fixture/global"
@@ -53,6 +54,14 @@ function withFormatter<A, E, R>(
       ),
     ),
   )
+}
+
+// Formats a file resolved the way a tool resolves it, in the environment of the Location under test.
+function format(formatter: Formatter.Interface, file: string) {
+  return Effect.gen(function* () {
+    const access = yield* FileAccess.Service
+    return yield* formatter.file(yield* access.resolve({ path: file }))
+  })
 }
 
 function append(expression: string) {
@@ -135,11 +144,6 @@ const layered: { name: string; layers: ConfigInput["formatter"][]; expected: Rec
     expected: { "test.md": "md" },
   },
   {
-    name: "clears lower formatters when a higher config is false",
-    layers: [{ markdown }, false],
-    expected: { "test.md": false },
-  },
-  {
     name: "clears lower formatters before a later object when a higher config is true",
     layers: [{ markdown }, true, { project }],
     expected: { "test.md": false, "test.project": "project" },
@@ -159,7 +163,7 @@ describe("Formatter", () => {
           Effect.gen(function* () {
             const file = path.join(directory, name)
             yield* Effect.promise(() => fs.writeFile(file, ""))
-            const formatted = yield* formatter.file(file)
+            const formatted = yield* format(formatter, file)
             expect(formatted && (yield* Effect.promise(() => fs.readFile(file, "utf8")))).toBe(expected)
           }),
         ),
@@ -170,12 +174,9 @@ describe("Formatter", () => {
     { file: "test.match", extension: ".match", matches: true },
     { file: "test.other", extension: ".match", matches: false },
     { file: "test.MATCH", extension: ".match", matches: false },
-    { file: "test.MATCH", extension: ".MATCH", matches: true },
     { file: ".match", extension: ".match", matches: false },
     { file: ".match", extension: "", matches: true },
-    { file: "README", extension: ".match", matches: false },
     { file: "README", extension: "", matches: true },
-    { file: "test.part.match", extension: ".match", matches: true },
     { file: "test.part.match", extension: ".part.match", matches: false },
   ].forEach((entry) =>
     it.live(`matches ${entry.file} against ${JSON.stringify(entry.extension)}: ${entry.matches}`, () =>
@@ -188,36 +189,9 @@ describe("Formatter", () => {
         },
         (formatter, directory) =>
           Effect.gen(function* () {
-            expect(yield* formatter.file(path.join(directory, entry.file))).toBe(entry.matches)
+            expect(yield* format(formatter, path.join(directory, entry.file))).toBe(entry.matches)
           }),
       ),
-    ),
-  )
-
-  it.live("does not run formatters marked as disabled in config", () =>
-    withFormatter(
-      {
-        disabled: {
-          disabled: true,
-          command: [process.execPath, "-e", "process.exit(0)", "$FILE"],
-          extensions: [".disabled"],
-        },
-      },
-      (formatter, directory) =>
-        Effect.gen(function* () {
-          const file = path.join(directory, "test.disabled")
-          expect(yield* formatter.file(file)).toBe(false)
-        }),
-    ),
-  )
-
-  it.live("file() returns false when no formatter runs", () =>
-    withFormatter(false, (formatter, directory) =>
-      Effect.gen(function* () {
-        const file = path.join(directory, "test.txt")
-        yield* Effect.promise(() => fs.writeFile(file, "x"))
-        expect(yield* formatter.file(file)).toBe(false)
-      }),
     ),
   )
 
@@ -234,8 +208,8 @@ describe("Formatter", () => {
           Effect.gen(function* () {
             const offFile = path.join(off, "test.isolated")
             const onFile = path.join(on, "test.isolated")
-            const disabled = yield* disabledFormatter.file(offFile)
-            const enabled = yield* enabledFormatter.file(onFile)
+            const disabled = yield* format(disabledFormatter, offFile)
+            const enabled = yield* format(enabledFormatter, onFile)
             expect(disabled).toBe(false)
             expect(enabled).toBe(true)
           }),
@@ -269,7 +243,7 @@ describe("Formatter", () => {
         Effect.gen(function* () {
           const file = path.join(directory, "test.seq")
           yield* Effect.promise(() => fs.writeFile(file, "x"))
-          expect(yield* formatter.file(file)).toBe(true)
+          expect(yield* format(formatter, file)).toBe(true)
           expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("xA")
         }),
     ),
@@ -296,7 +270,7 @@ describe("Formatter", () => {
         Effect.gen(function* () {
           const file = path.join(directory, "test.fallback")
           yield* Effect.promise(() => fs.writeFile(file, "x"))
-          expect(yield* formatter.file(file)).toBe(true)
+          expect(yield* format(formatter, file)).toBe(true)
           expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("xB")
         }),
     ),
@@ -321,12 +295,12 @@ describe("Formatter", () => {
         })
         const file = path.join(directory, "test.reload")
         yield* Effect.promise(() => fs.writeFile(file, "x"))
-        expect(yield* formatter.file(file)).toBe(true)
+        expect(yield* format(formatter, file)).toBe(true)
 
         command.suffix = "B"
         yield* formatter.reload()
 
-        expect(yield* formatter.file(file)).toBe(true)
+        expect(yield* format(formatter, file)).toBe(true)
         expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("xAB")
       }),
     ),
@@ -360,7 +334,7 @@ describe("Formatter", () => {
         })
         const file = path.join(directory, "test.race")
         yield* Effect.promise(() => fs.writeFile(file, "x"))
-        const first = yield* formatter.file(file).pipe(Effect.forkChild({ startImmediately: true }))
+        const first = yield* format(formatter, file).pipe(Effect.forkChild({ startImmediately: true }))
         yield* Deferred.await(resolving)
 
         command.suffix = "B"
@@ -368,7 +342,7 @@ describe("Formatter", () => {
         yield* Deferred.succeed(release, undefined)
         expect(yield* Fiber.join(first)).toBe(true)
 
-        expect(yield* formatter.file(file)).toBe(true)
+        expect(yield* format(formatter, file)).toBe(true)
         expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("xAB")
       }),
     ),

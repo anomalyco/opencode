@@ -10,8 +10,10 @@ import { Effect, Schema, Stream } from "effect"
 import { Agent } from "../agent.js"
 import { Artifact } from "../artifact.js"
 import { AISDK } from "../aisdk.js"
+import { Automation } from "../automation.js"
 import { Command } from "../command.js"
 import { Credential } from "../credential.js"
+import { Environment } from "../environment/index.js"
 import { Bus } from "../bus.js"
 import { Integration } from "../integration.js"
 import { IntegrationConnection } from "../integration/connection.js"
@@ -51,9 +53,10 @@ const isRpcEvent = (event: Event.Payload): event is RpcEvent => isRpcType(event.
 const isPublicEvent = (event: Event.Payload): event is EventManifest.ServerEvent | RpcEvent =>
   EventManifest.isServer(event) || isRpcEvent(event)
 export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interface, "list">, pluginID: string) {
-  const app = yield* App.Metadata
+  const app = yield* App.Service
   const agents = yield* Agent.Service
   const artifacts = yield* Artifact.Service
+  const automations = yield* Automation.Service
   const aisdk = yield* AISDK.Service
   const providers = yield* Provider.Service
   const models = yield* Model.Service
@@ -62,6 +65,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
   const integration = yield* Integration.Service
   const kv = yield* KV.Service
   const mcp = yield* Mcp.Service
+  const environment = yield* Environment.Service
   const location = yield* Location.Service
   const reference = yield* Reference.Service
   const rpc = yield* Rpc.Service
@@ -79,7 +83,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
   const locations = yield* LocationServiceMap.Service
   const worktrees = yield* Worktree.Service
   const worktreeStrategies = yield* WorktreeStrategies.Service
-  const currentWorktreeStrategies = location.workspaceID ? undefined : worktreeStrategies
+  const currentWorktreeStrategies = environment.local ? worktreeStrategies : undefined
   const locationInfo = (current: Location.Interface = location) =>
     new Location.Info({
       directory: current.directory,
@@ -316,6 +320,18 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
               },
             })
           }),
+      },
+      automation: {
+        // A plugin has no UI listener to answer an interactive ask, so asks settle unattended, as they do over HTTP.
+        // A JavaScript plugin can pass any shape, so validate it against the type-side schema before storing it.
+        create: (input) =>
+          Schema.decodeUnknownEffect(Schema.toType(Automation.CreateInput))(input).pipe(
+            Effect.mapError((error) => new Automation.InvalidError({ reason: error.message })),
+            Effect.flatMap((decoded) => automations.create(decoded)),
+            Effect.provideService(Permission.Unattended, []),
+          ),
+        list: (input) => automations.list(input),
+        delete: (input) => automations.remove(input.automationID),
       },
     },
     generate: {
@@ -588,7 +604,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
       switchAgent: sessions.switchAgent,
       switchModel: sessions.switchModel,
       prompt: sessions.prompt,
-      generate: (input) => sessions.generate(input).pipe(Effect.map((text) => ({ text }))),
+      generate: sessions.generate,
       command: (input) => sessions.command({ ...input, command: input.name }),
       compact: sessions.compact,
       update: Effect.fn(function* (input) {
@@ -598,6 +614,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
           yield* sessions.setMetadata({ sessionID: input.sessionID, metadata: input.metadata })
         if (input.permissions !== undefined)
           yield* sessions.setPermissions({ sessionID: input.sessionID, permissions: input.permissions })
+        if (input.archived !== undefined)
+          yield* (input.archived ? sessions.archive : sessions.unarchive)(input.sessionID)
       }),
       move: sessions.move,
       synthetic: sessions.synthetic,
@@ -635,6 +653,7 @@ export const requirements = LayerNode.group([
   Agent.node,
   Artifact.node,
   AISDK.node,
+  Automation.node,
   Provider.node,
   Model.node,
   Command.node,
@@ -642,6 +661,7 @@ export const requirements = LayerNode.group([
   Integration.node,
   KV.node,
   Mcp.node,
+  Environment.node,
   Location.node,
   Reference.node,
   Rpc.node,
@@ -711,6 +731,7 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
           }),
         ),
       ...(refresh ? { refresh: (value: Credential.OAuth) => refresh(value).pipe(Effect.map(credential)) } : {}),
+      ...(input.revoke ? { revoke: input.revoke } : {}),
       ...(input.label ? { label: input.label } : {}),
     }
   }

@@ -1,0 +1,292 @@
+/* The docs lockup word after the site's logo ("DOCS"), set like the Data and Console header lockups
+   (packages/nav-menus): OpenMono Bold 15px caps, 12px after the logo's box and cap-centred on it. */
+[data-site] [data-component="docs-lockup"] {
+  --lockup-logo: var(--logo-box, calc(var(--logo-height) * 4 / 5));
+
+  position: absolute;
+  top: var(--top);
+  inset-inline-start: calc(var(--edge) + var(--lockup-logo) + 12px - 6px);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  height: var(--logo-height);
+
+  [data-slot="word"] {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    height: 100%;
+    padding: 0 6px var(--nav-name-pad, 0.65px);
+    font: 700 var(--nav-name-size, 15px) / 1 var(--font-mono);
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--text-strong);
+    transition: background-color 120ms ease;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: calc(50% - 16px) 0;
+    }
+
+    @media (max-width: 60rem), (pointer: coarse) {
+      &::before {
+        inset: calc(50% - 22px) 0;
+      }
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--nav-name-hover, var(--bg-weaker));
+        color: var(--text-strong);
+      }
+    }
+
+    &:active {
+      background: var(--nav-name-hover, var(--bg-weaker));
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: 2px;
+    }
+  }
+}
+
+[data-site]:not([data-logo="icon"]) [data-component="docs-lockup"] {
+  --lockup-logo: calc(var(--logo-height) * 234 / 42);
+}
+
+/* ───────────── Flat docs header sub-links ─────────────
+   Desktop: a fixed header band across the logo row, borderless at rest with a hairline appearing
+   once the page scrolls (data-scrolled, src/docs/client.ts). The five section links start on the
+   article column's edge; V1 sits quietly before the GitHub mark. */
+[data-site][data-layout="docs"] {
+  --docs-header-height: calc(2 * var(--top) + var(--logo-height) + 1px);
+  --docs-strip-height: 2.75rem;
+}
+
+@media (min-width: 60.0625rem) {
+  [data-site][data-layout="docs"] [data-component="docs-sections"] {
+    position: fixed;
+    top: var(--banner-offset, 0px);
+    inset-inline: 0;
+    z-index: 1;
+    height: var(--docs-header-height);
+    background: var(--bg);
+    border-bottom: 1px solid transparent;
+    transition: border-color 150ms ease;
+
+    [data-slot="inner"] {
+      display: flex;
+      align-items: center;
+      height: 100%;
+      padding-inline-start: calc(var(--page-offset) + var(--sidebar-width) + var(--gutter));
+      padding-inline-end: calc(var(--page-offset) + var(--github-clear));
+      font: 400 var(--mono-size) / 1 var(--font-mono);
+    }
+
+    [data-slot="links"] {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      min-width: 0;
+    }
+
+    [data-slot="links"] a {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      height: 2rem;
+      color: var(--text-weak);
+      white-space: nowrap;
+      transition: color 140ms ease;
+
+      &::after {
+        content: "";
+        position: absolute;
+        inset-inline: 0;
+        bottom: 0;
+        height: 2px;
+        background: var(--text-strong);
+        transform: scaleX(0);
+        transform-origin: left;
+        transition: transform 160ms var(--ease-out);
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--text-strong);
+        }
+      }
+
+      &[aria-current="page"] {
+        color: var(--text-strong);
+        -webkit-text-stroke: var(--title-stroke);
+
+        &::after {
+          transform: scaleX(1);
+        }
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: 2px;
+      }
+    }
+
+    [data-slot="v1"] {
+      display: inline-flex;
+      align-items: center;
+      height: var(--logo-height);
+      margin-inline-start: auto;
+      padding: 0 6px;
+      font: 400 var(--fs-meta) / 1 var(--font-mono);
+      color: var(--text-muted);
+      white-space: nowrap;
+      transition:
+        color 140ms ease,
+        background-color 140ms ease;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--text-strong);
+          background: var(--bg-weaker);
+        }
+      }
+
+      &[aria-current="page"] {
+        color: var(--text-strong);
+        background: var(--bg-weaker);
+        -webkit-text-stroke: var(--title-stroke);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: 2px;
+      }
+    }
+
+    /* Hairline between V1 and the GitHub mark. */
+    [data-slot="divider"] {
+      order: 1;
+      flex-shrink: 0;
+      width: 1px;
+      height: 0.875rem;
+      margin-inline-start: 0.75rem;
+      background: var(--border-strong);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+
+      [data-slot="links"] a::after {
+        transition: none;
+      }
+    }
+  }
+
+  [data-site][data-layout="docs"][data-scrolled] [data-component="docs-sections"] {
+    border-bottom-color: var(--border);
+  }
+}
+
+/* Phones and tablets: DOCS sits fixed beside the top bar's 24 × 30 mark, and the section links form
+   a sticky 44px horizontal strip directly beneath the top bar. */
+@media (max-width: 60rem) {
+  [data-site] [data-component="docs-lockup"] {
+    --lockup-text: calc(var(--edge) + env(safe-area-inset-left, 0px) + 24px + 12px);
+    --lockup-face: var(--logo-mark-h, 30px);
+    position: fixed;
+    top: calc(
+      var(--banner-offset, 0px) + env(safe-area-inset-top, 0px) + (var(--topbar-height) - 30px) / 2 +
+        round(calc((30px - var(--lockup-face)) / 2), 1px)
+    );
+    inset-inline-start: calc(var(--lockup-text) - 6px);
+    z-index: 12;
+    height: var(--lockup-face);
+  }
+
+  [data-site]:not([data-logo="icon"]) [data-component="docs-lockup"] {
+    --lockup-face: 30px;
+    --lockup-text: calc(var(--edge) + env(safe-area-inset-left, 0px) + 30px * 234 / 42 + 12px);
+  }
+
+  [data-site] [data-component="docs-lockup"][data-host="sidebar"] {
+    display: none;
+  }
+
+  [data-site][data-layout="docs"] [data-component="docs-sections"] {
+    position: sticky;
+    top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px));
+    z-index: 10;
+    height: var(--docs-strip-height);
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+
+    [data-slot="inner"] {
+      display: flex;
+      align-items: stretch;
+      gap: 1rem;
+      height: 100%;
+      padding-inline: calc(var(--edge) + env(safe-area-inset-left, 0px))
+        calc(var(--edge) + env(safe-area-inset-right, 0px));
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      scrollbar-width: none;
+      font: 400 var(--fs-small) / 1 var(--font-mono);
+    }
+
+    [data-slot="links"] {
+      display: flex;
+      align-items: stretch;
+      gap: 1rem;
+      flex-shrink: 0;
+    }
+
+    [data-slot="links"] li {
+      display: flex;
+    }
+
+    a {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      flex-shrink: 0;
+      color: var(--text-weak);
+      white-space: nowrap;
+
+      &[aria-current="page"] {
+        color: var(--text-strong);
+        -webkit-text-stroke: var(--title-stroke);
+
+        &::after {
+          content: "";
+          position: absolute;
+          inset-inline: 0;
+          bottom: -1px;
+          height: 2px;
+          background: var(--text-strong);
+        }
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: -2px;
+      }
+    }
+
+    [data-slot="divider"] {
+      align-self: center;
+      flex-shrink: 0;
+      width: 1px;
+      height: 0.875rem;
+      background: var(--border-strong);
+    }
+
+    [data-slot="v1"] {
+      color: var(--text-muted);
+    }
+  }
+}

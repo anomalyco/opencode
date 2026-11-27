@@ -1,3 +1,15 @@
+/* Updated on viewport scroll; non-inherited so changing the bottom fade does not restyle every row inside it. */
+@property --search-list-fade-bottom {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --search-list-edge {
+  syntax: "*";
+  inherits: false;
+}
+
 [data-component="search-list"] {
   /* Sticky headers and the top fade paint this, so rows scroll under an opaque band. */
   --search-list-surface: var(--v2-background-bg-base);
@@ -16,7 +28,6 @@
       height: 36px;
       padding-inline-end: 12px;
       border-radius: 6px;
-      outline: 0;
       background: color-mix(in srgb, var(--v2-background-bg-layer-02) 60%, transparent);
       box-shadow: none;
       transition:
@@ -27,6 +38,12 @@
     [data-component="text-input-v2"]:where(:hover, :focus-within):not([data-disabled], [data-invalid]) {
       background: var(--v2-background-bg-layer-02);
       box-shadow: none;
+    }
+
+    @media (forced-colors: none) {
+      [data-component="text-input-v2"] {
+        outline: 0;
+      }
     }
 
     [data-slot="text-input-v2-value"] {
@@ -56,11 +73,14 @@
     }
   }
 
+  [data-slot="search-list-body"] > [data-component="menu-scroll"] {
+    flex: 1;
+  }
+
   /* Arrow keys scroll the active row clear of the sticky header. Rows fade out past the bottom edge while more follow. */
   [data-slot="search-list-scroll"] {
     min-height: 0;
     flex: 1;
-    overflow-y: auto;
     --search-list-edge: linear-gradient(
       to bottom,
       #000 calc(100% - 24px),
@@ -209,6 +229,7 @@
       box-shadow: var(--v2-elevation-floating);
     }
 
+    [data-slot="search-list-body"] > [data-component="menu-scroll"],
     [data-slot="search-list-scroll"] {
       flex: 0 1 auto;
     }

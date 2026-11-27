@@ -125,6 +125,7 @@ export const layer = Layer.effectDiscard(
     const modules = yield* PluginModule.make()
     const bus = yield* Bus.Service
     const updates = yield* PluginUpdate.Service
+    const npm = yield* Npm.Service
     const internal = yield* PluginInternal.list()
     let release: Effect.Effect<void> | undefined = yield* registry.hold()
     yield* Effect.addFinalizer(() => release ?? Effect.void)
@@ -135,6 +136,10 @@ export const layer = Layer.effectDiscard(
     let running = new Map<string, Plugin.Generation>()
     let outdated = new Set<string>()
     const updating = new Set<string>()
+    // The check interval in which each outdated plugin was last considered for updating on its own. Once per interval,
+    // so an update that doesn't take, or a new version that fails to load, isn't retried on every reload.
+    const attempted = new Map<string, number>()
+    let cycle = 0
     let generation = 0
     let observed = 0
 
@@ -167,6 +172,26 @@ export const layer = Layer.effectDiscard(
         : immediate
       if (resolved !== immediate) yield* apply(resolved)
       running = resolved.packages
+      // A newer version that fails to load leaves the running one in place. Stop using the newer one on disk too, so a
+      // restart loads the version that works.
+      yield* Effect.forEach(
+        resolved.failures,
+        (failure) =>
+          Effect.gen(function* () {
+            if (failure.source.type !== "package") return
+            const target = failure.source.target
+            const kept = resolved.packages.get(target)?.source
+            if (kept?.type !== "package" || !kept.version) return
+            const installed = (yield* npm.resolve(target)).version
+            if (!installed || installed === kept.version) return
+            if (!(yield* npm.reject(target, installed))) return
+            yield* Effect.logWarning("kept the running plugin version after the new one failed to load", {
+              target,
+              version: kept.version,
+            })
+          }).pipe(Effect.catchCause((cause) => Effect.logWarning("failed to reject plugin version", { cause }))),
+        { discard: true },
+      )
       const targets = new Set(
         [...resolved.plugins, ...resolved.failures].flatMap((plugin) =>
           plugin.source?.type === "package" ? [plugin.source.target] : [],
@@ -178,13 +203,28 @@ export const layer = Layer.effectDiscard(
         (target) => updates.check(target).pipe(Effect.map((available) => [target, available] as const)),
         { concurrency: "unbounded" },
       ).pipe(
-        Effect.flatMap((checked) => {
-          if (current !== generation) return Effect.void
-          const next = new Set(checked.flatMap(([target, available]) => (available ? [target] : [])))
-          if (next.size === outdated.size && [...next].every((target) => outdated.has(target))) return Effect.void
-          outdated = next
-          return apply(resolved)
-        }),
+        Effect.flatMap((checked) =>
+          Effect.gen(function* () {
+            if (current !== generation) return
+            // Only plugins that name what to follow (`@latest`, a range or a Git branch) update on their own; the
+            // update reloads them.
+            yield* Effect.forEach(
+              checked.filter(([target, available]) => available && attempted.get(target) !== cycle),
+              ([target]) =>
+                // Recorded first: the update itself triggers reloads, which check again while it runs.
+                Effect.sync(() => attempted.set(target, cycle)).pipe(
+                  Effect.andThen(npm.follows(target)),
+                  Effect.flatMap((follows) => (follows ? updates.update(target) : Effect.void)),
+                  Effect.catchCause((cause) => Effect.logWarning("failed to update plugin", { target, cause })),
+                ),
+              { concurrency: "unbounded", discard: true },
+            )
+            const next = new Set(checked.flatMap(([target, available]) => (available ? [target] : [])))
+            if (next.size === outdated.size && [...next].every((target) => outdated.has(target))) return
+            outdated = next
+            yield* apply(resolved)
+          }),
+        ),
         Effect.forkScoped({ startImmediately: true }),
       )
     })
@@ -204,7 +244,7 @@ export const layer = Layer.effectDiscard(
       )
     yield* watch(sources.changes())
     yield* watch(modules.changes())
-    yield* watch(Stream.fromEffectRepeat(Effect.sleep("24 hours")))
+    yield* watch(updates.intervals().pipe(Stream.tap((next) => Effect.sync(() => (cycle = next)))))
     yield* watch(bus.subscribe([Event.Updated, SdkPlugins.Updated]))
     yield* watch(
       updates.changes().pipe(

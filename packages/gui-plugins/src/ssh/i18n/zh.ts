@@ -32,4 +32,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "添加服务器",
   "menu.delete": "删除",
+  "error.unavailable": "SSH 不可用",
 }

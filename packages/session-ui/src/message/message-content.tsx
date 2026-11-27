@@ -4,22 +4,28 @@ import {
   createSignal,
   For,
   Index,
+  Match,
   on,
   onCleanup,
   onMount,
   Show,
+  Switch,
   untrack,
   type ComponentProps,
   type JSX,
 } from "solid-js"
-import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { useData } from "../context"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Markdown } from "../components/markdown"
 import { linkSegments } from "../components/link-segments"
-import { sessionReferenceText, setupSessionLinks } from "../components/markdown-session-links"
+import { LinkedText } from "../components/linked-text"
+import {
+  sessionReferenceClipboardText,
+  sessionReferenceText,
+  setupSessionLinks,
+} from "../components/markdown-session-links"
 import { useMarkdown } from "../context/markdown"
 import { useSources } from "../context/sources"
 import { SourcesChip } from "../sources/sources-chip"
@@ -27,16 +33,16 @@ import type { TurnSources } from "../sources/sources"
 import { ImagePreview } from "@opencode/ui/image-preview"
 import { getFilename } from "@opencode/util/path"
 import { AttachmentCard } from "./attachment-card"
-import { CommentCard, commentCardTarget, quoteTooltip } from "./comment-card"
+import { UserMessageQuotes } from "./user-message-quotes"
 import { TimelineSeparator } from "../components/timeline-separator"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { Icon } from "@opencode/ui/icon"
-import { Button } from "@opencode/ui/button"
 import { TextReveal } from "@opencode/ui/text-reveal"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { BasicTool } from "../components/basic-tool"
+import { createDisclosure } from "../components/disclosure"
 import { reasoningHeading } from "../timeline/projection"
 import { Card } from "@opencode/ui/card"
 import { springStyle } from "@opencode/ui/motion/solid"
@@ -51,34 +57,35 @@ import type {
 } from "@opencode/client/promise"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { agentLabel } from "./agent-label"
-import { attached, imageAttachmentPlaceholderStyle, typeLabel } from "../components/message-file"
-
-export async function writeClipboard(text: string): Promise<boolean> {
-  const written = await navigator.clipboard?.writeText(text).then(
-    () => true,
-    () => false,
-  )
-
-  if (written) return true
-  // The textarea sits beside the focused element so a focus trap, such as an open menu's, keeps its selection.
-  const active = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
-  const host = active && active !== document.body ? (active.parentElement ?? document.body) : document.body
-  const textarea = document.createElement("textarea")
-  textarea.value = text
-  textarea.setAttribute("readonly", "")
-  textarea.setAttribute("aria-hidden", "true")
-  textarea.tabIndex = -1
-  textarea.style.position = "fixed"
-  textarea.style.opacity = "0"
-  textarea.style.pointerEvents = "none"
-  host.appendChild(textarea)
-  textarea.select()
-  const copied = document.execCommand("copy")
-  textarea.remove()
-  active?.focus({ preventScroll: true })
-
-  return copied
-}
+import { isInterruptedError } from "../timeline/turn-phase-machine"
+import { attached, typeLabel } from "../components/message-file"
+import { resolveAttachmentMediaTarget } from "./attachment-media-machine"
+import { createAttachmentMedia } from "./attachment-media"
+import {
+  createCompactionEntranceState,
+  DISPOSED_COMPACTION_ENTRANCE_EVENT,
+  GRACE_ELAPSED_EVENT,
+  selectCompactionEnter,
+  transitionCompactionEntrance,
+  type CompactionEntranceEffect,
+  type CompactionEntranceEvent,
+} from "./compaction-entrance-machine"
+import {
+  createMessageActionState,
+  transitionMessageAction,
+  viewMessageActions,
+  type MessageAction,
+  type MessageActionCapabilities,
+  type MessageActionEvent,
+} from "./action-machine"
+import {
+  createPacedTextState,
+  DISPOSED_PACED_TEXT_EVENT,
+  TEXT_RENDER_PACE_MS,
+  transitionPacedText,
+  type PacedTextEvent,
+} from "./paced-text-machine"
+import { createCopyFeedback, writeClipboard } from "../components/copy"
 
 type MetaItem = { label: string; variant?: boolean }
 
@@ -86,15 +93,12 @@ type MetaItem = { label: string; variant?: boolean }
 function modelItems(data: ReturnType<typeof useData>, model: SessionMessageAssistant["model"]): MetaItem[] {
   const name = data.store.provider?.all?.get(model.providerID)?.models?.[model.id]?.name ?? model.id
 
+  // A prompt held for its Location's catalog names no model yet.
+  if (!name) return []
+
   if (!model.variant || model.variant === "default") return [{ label: name }]
 
   return [{ label: name }, { label: model.variant[0]?.toUpperCase() + model.variant.slice(1), variant: true }]
-}
-
-function sameModel(a: SessionMessageAssistant["model"], b: SessionMessageAssistant["model"]) {
-  return (
-    a.providerID === b.providerID && a.id === b.id && (a.variant ?? "default") === (b.variant ?? "default")
-  )
 }
 
 function MetaItems(props: { items: MetaItem[]; slot: "user-message" | "text-part" }) {
@@ -122,17 +126,15 @@ function MetaItems(props: { items: MetaItem[]; slot: "user-message" | "text-part
 
 function MessageActionButton(
   props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
-    icon: "check" | "copy" | "reset" | "fork" | "arrow-down-to-line" | "outline-trash"
+    copied: boolean
     label: JSX.Element
     size?: "small" | "normal"
   },
 ) {
-  const icon = () => (props.icon === "copy" ? "outline-copy" : props.icon)
-
   return (
-    <Tooltip appearance="compact" value={props.label} placement="top" gutter={4}>
+    <Tooltip appearance="compact" value={props.label} placement="top" gutter={4} forceOpen={props.copied || undefined}>
       <IconButton
-        icon={<Icon name={icon()} size="small" />}
+        icon={<Icon name={props.copied ? "check" : "copy"} />}
         size={props.size ?? "normal"}
         variant="ghost-muted"
         disabled={props.disabled}
@@ -157,113 +159,52 @@ function UserMessageTransition(props: { active: boolean; children: JSX.Element }
   )
 }
 
-const TEXT_RENDER_PACE_MS = 24
-
-const TEXT_RENDER_IMMEDIATE = 512
-
-const TEXT_RENDER_SNAP = /[\s.,!?;:)\]]/
-
-function step(size: number) {
-  if (size <= 12) return 2
-
-  if (size <= 48) return 4
-
-  if (size <= 96) return 8
-
-  return Math.min(256, Math.ceil(size / 4))
-}
-
-function next(text: string, start: number) {
-  const end = Math.min(text.length, start + step(text.length - start))
-  const max = Math.min(text.length, end + 8)
-
-  for (let i = end; i < max; i++) {
-    if (TEXT_RENDER_SNAP.test(text[i] ?? "")) return i + 1
-  }
-
-  return end
-}
-
+// Token streaming dispatches here on every delta: the driver reuses one sync and one tick event, and the machine
+// returns the same state when a delta changes nothing.
 function createPacedValue(getValue: () => string, live?: () => boolean) {
-  const [value, setValue] = createSignal(getValue())
-  let shown = getValue()
-  let timeout: ReturnType<typeof setTimeout> | undefined
+  let state = createPacedTextState(untrack(getValue))
+  const [value, setValue] = createSignal(untrack(getValue))
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const syncEvent = { type: "sync" as const, text: "", live: false }
+  const tickEvent = { type: "tick" as const, attempt: 0 }
 
-  const clear = () => {
-    if (!timeout) return
-    clearTimeout(timeout)
-    timeout = undefined
+  const tick = () => {
+    timer = undefined
+    dispatch(tickEvent)
   }
 
-  const sync = (text: string) => {
-    shown = text
-    setValue(text)
-  }
+  const dispatch = (event: PacedTextEvent) => {
+    const previous = state
+    state = transitionPacedText(previous, event)
 
-  const run = () => {
-    timeout = undefined
-    const text = getValue()
+    if (state === previous) return
 
-    if (!live?.()) {
-      sync(text)
-
-      return
+    if (state.status !== "pacing") {
+      clearTimeout(timer)
+      timer = undefined
     }
 
-    if (!text.startsWith(shown) || text.length <= shown.length) {
-      sync(text)
+    if (state.status === "disposed" || previous.status === "disposed") return
 
-      return
-    }
+    if (state.shown !== previous.shown) setValue(state.shown)
 
-    if (text.length - shown.length <= TEXT_RENDER_IMMEDIATE) {
-      sync(text)
-
-      return
-    }
-
-    const end = next(text, shown.length)
-    sync(text.slice(0, end))
-
-    if (end < text.length) timeout = setTimeout(run, TEXT_RENDER_PACE_MS)
+    if (state.status !== "pacing" || (previous.status === "pacing" && previous.attempt === state.attempt)) return
+    tickEvent.attempt = state.attempt
+    timer = setTimeout(tick, TEXT_RENDER_PACE_MS)
   }
 
   createEffect(() => {
-    const text = getValue()
-
-    if (!live?.()) {
-      clear()
-      sync(text)
-
-      return
-    }
-
-    if (!text.startsWith(shown) || text.length < shown.length) {
-      clear()
-      sync(text)
-
-      return
-    }
-
-    if (text.length - shown.length <= TEXT_RENDER_IMMEDIATE) {
-      clear()
-      sync(text)
-
-      return
-    }
-
-    if (text.length === shown.length || timeout) return
-    timeout = setTimeout(run, TEXT_RENDER_PACE_MS)
+    syncEvent.text = getValue()
+    syncEvent.live = live?.() ?? false
+    dispatch(syncEvent)
   })
 
-  onCleanup(() => {
-    clear()
-  })
+  onCleanup(() => dispatch(DISPOSED_PACED_TEXT_EVENT))
 
   return value
 }
 
-function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boolean }) {
+export function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boolean }) {
   const value = createPacedValue(
     () => props.text,
     () => props.streaming,
@@ -276,46 +217,25 @@ function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boole
   )
 }
 
-function UserMessageComments(props: { comments: SessionUserComment[]; bounded: boolean }) {
-  const i18n = useI18n()
-  const [state, setState] = createStore({ expanded: false })
-  const comments = createMemo(() => (props.bounded && !state.expanded ? props.comments.slice(0, 5) : props.comments))
-
-  return (
-    <div data-slot="user-message-comments" data-bounded={props.bounded ? "true" : undefined}>
-      <For each={comments()}>
-        {(comment) => (
-          <CommentCard
-            comment={comment.comment ?? ""}
-            target={commentCardTarget(comment)}
-            title={comment.type === "quote" ? quoteTooltip(comment) : comment.comment || undefined}
-            tooltip
-            wide
-          />
-        )}
-      </For>
-      <Show when={props.bounded && props.comments.length > 5 && !state.expanded}>
-        <Button size="small" variant="ghost-muted" onClick={() => setState("expanded", true)}>
-          {i18n.t("ui.common.showMore")}
-        </Button>
-      </Show>
-    </div>
-  )
-}
-
 export function CurrentUserMessageDisplay(props: {
   sessionID: string
   message: SessionMessageUser
   text: string
   agent: string
   model: SessionMessageAssistant["model"]
-  /** The agent and model the previous prompt chose; a waiting steer names only what it changes. */
-  previousSelection?: { agent: string; model: SessionMessageAssistant["model"] }
   actions?: SessionUserActions
   comments?: SessionUserComment[]
   references?: SessionUserAttachmentReference[]
   voice?: boolean
   run?: UserRun
+  /** The newest delivered prompt, whose revert undoes the last turn. */
+  latest?: boolean
+  /** Whether run changes snap now, while a message arrives, rather than spring. Omitted, folding always snaps. */
+  runSnaps?: () => boolean
+  /** The pointer is somewhere in this message's run, so its last bubble shows the run's meta line. */
+  runHovered?: boolean
+  /** An open menu keeps its run's meta line in view while the pointer is on the menu. */
+  onMenuOpenChange?: (open: boolean) => void
   /** Folds a long message to its first lines with a Read more toggle. Omitted, the message always shows in full. */
   fold?: boolean
   /** Whether a folded message is open. The timeline owns it so it survives row recycling. */
@@ -326,23 +246,19 @@ export function CurrentUserMessageDisplay(props: {
   const dialog = useDialog()
   const i18n = useI18n()
 
-  const [state, setState] = createStore({
-    reverting: false,
-    forking: false,
-    updating: false,
-    expanded: false,
+  const fold = createDisclosure({
+    open: () => props.expanded,
+    onOpenChange: (expanded) => props.onExpandedChange?.(expanded),
   })
 
-  const expanded = () => props.expanded ?? state.expanded
-
-  const setExpanded = (value: boolean) => {
-    if (props.onExpandedChange) return props.onExpandedChange(value)
-    setState("expanded", value)
-  }
+  const expanded = fold.open
+  const setExpanded = fold.setOpen
 
   const status = createMemo(() => props.actions?.pending?.status(props.message.id))
-  const pending = createMemo(() => status() !== undefined && status() !== "queued")
-  const waiting = createMemo(() => status() === "steering" || status() === "stranded")
+  // A prompt still `sending` has no server row yet, so nothing can move, delete, revert or fork it.
+  const sending = createMemo(() => status() === "sending")
+  const pending = createMemo(() => status() !== undefined && status() !== "queued" && !sending())
+  const waiting = createMemo(() => status() === "steering" || status() === "stranded" || sending())
   // SAFETY: opted-in reads leave stored files as `media:` refs, a PromptAttachment variant the generated message type does not list.
   const files = createMemo(() => (props.message.files ?? []) as PromptAttachment[])
   const attachments = createMemo(() => files().filter(attached))
@@ -350,12 +266,9 @@ export function CurrentUserMessageDisplay(props: {
   const inlineFiles = createMemo(() => files().filter((file) => !!file.mention))
   const agents = createMemo(() => props.message.agents ?? [])
   const comments = createMemo(() => props.comments ?? [])
-
-  const sent = createMemo(() =>
-    new Intl.DateTimeFormat(i18n.locale(), { dateStyle: "medium", timeStyle: "short" }).format(
-      props.message.time.created,
-    ),
-  )
+  // Quotes give a message without text a bubble of its own.
+  const bubble = createMemo(() => !!props.text || comments().length > 0)
+  const copyText = () => (props.voice ? props.text : props.message.text)
 
   // Mobile shows the current agent and model in the composer and switch notices, so repeating them per message is noise.
   const mobile = createMediaQuery("(max-width: 767px)")
@@ -366,32 +279,41 @@ export function CurrentUserMessageDisplay(props: {
     return agent ? [{ label: agent }] : []
   })
 
-  // A waiting steer joins the running turn, so its agent and model only say something when it changes them.
-  const changedLabels = createMemo<MetaItem[]>(() => {
-    const previous = props.previousSelection
+  // The menu names the day relatively: Today and Yesterday, then the date this year, then the date with its year.
+  // A plain function, not a memo, so each menu open compares against the current day.
+  const sent = () => {
+    const created = new Date(props.message.time.created)
+    const now = new Date()
+    const midnight = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+    const days = Math.round((midnight(now) - midnight(created)) / 86_400_000)
+    const time = new Intl.DateTimeFormat(i18n.locale(), { timeStyle: "short" }).format(created)
 
-    if (!previous) return [...agentItems(), ...modelItems(data, props.model)]
+    if (days === 0 || days === 1) {
+      const day = new Intl.RelativeTimeFormat(i18n.locale(), { numeric: "auto" }).format(-days, "day")
 
-    return [
-      ...(previous.agent === props.agent ? [] : agentItems()),
-      ...(sameModel(previous.model, props.model) ? [] : modelItems(data, props.model)),
-    ]
-  })
+      return `${day[0]?.toLocaleUpperCase(i18n.locale())}${day.slice(1)}, ${time}`
+    }
 
-  const metaLabels = createMemo(() => {
-    if (mobile()) return []
+    if (created.getFullYear() === now.getFullYear())
+      return new Intl.DateTimeFormat(i18n.locale(), {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(created)
 
-    if (waiting()) return changedLabels()
+    return new Intl.DateTimeFormat(i18n.locale(), { dateStyle: "medium", timeStyle: "short" }).format(created)
+  }
 
-    return [...agentItems(), ...modelItems(data, props.model)]
-  })
+  // A waiting steer reads agent · model · Pending; mobile shows the agent and model in the composer instead.
+  const metaLabels = createMemo(() => (mobile() ? [] : [...agentItems(), ...modelItems(data, props.model)]))
 
-  // In a run, only the last message keeps the meta line; the others offer their actions beside the bubble.
+  // In a run, only the last message keeps the meta line; every bubble offers its actions from its own chevron.
   // Bubble corners tighten where two bubbles meet, as in the iOS app's grouped corners.
-  const folded = createMemo(() => !!props.run?.below && !!props.text)
+  const folded = createMemo(() => !!props.run?.below && bubble())
 
   const meetsAbove = createMemo(
-    () => !!props.run?.above && !!props.text && attachments().length === 0 && references().length === 0,
+    () => !!props.run?.above && bubble() && attachments().length === 0 && references().length === 0,
   )
 
   const runPose = () => ({
@@ -413,8 +335,9 @@ export function CurrentUserMessageDisplay(props: {
       el.style.setProperty("--user-run-bottom", `${value.bottom}`)
       el.toggleAttribute("data-run-meta-hidden", value.meta === 0)
     },
-    // Folding a meta line away is instant; the next message's line takes its place as that message grows in.
-    { ...userRunSpring, snap: folded },
+    // Folding a meta line away is instant while the next message grows in to take its place; otherwise it springs in step
+    // with the line that replaces it.
+    { ...userRunSpring, snap: () => folded() && (props.runSnaps?.() ?? true) },
   )
 
   // Delivery drops the Pending footer at once rather than fading it like the hover reveal.
@@ -431,119 +354,122 @@ export function CurrentUserMessageDisplay(props: {
     ),
   )
 
-  const revert = async () => {
-    if (!props.actions?.revert || state.reverting) return
-    setState("reverting", true)
+  const [action, setAction] = createSignal(createMessageActionState())
 
-    try {
-      await props.actions.revert({ sessionID: props.sessionID, messageID: props.message.id })
-    } finally {
-      setState("reverting", false)
-    }
+  const capabilities = createMemo<MessageActionCapabilities>(() => ({
+    pending: pending(),
+    canPending: !!props.actions?.pending,
+    canRevert: !!props.actions?.revert,
+    canFork: !!props.actions?.fork,
+  }))
+
+  const actionView = createMemo(() => viewMessageActions(action(), capabilities()))
+
+  const runAction = (kind: MessageAction) => {
+    const input = { sessionID: props.sessionID, messageID: props.message.id }
+
+    if (kind === "queue") return props.actions?.pending?.queue(input)
+
+    if (kind === "remove") return props.actions?.pending?.remove(input)
+
+    if (kind === "revert") return props.actions?.revert?.(input)
+
+    return props.actions?.fork?.(input)
   }
 
-  const fork = async () => {
-    if (!props.actions?.fork || state.forking) return
-    setState("forking", true)
-
-    try {
-      await props.actions.fork({ sessionID: props.sessionID, messageID: props.message.id })
-    } finally {
-      setState("forking", false)
-    }
+  const dispatch = (event: MessageActionEvent) => {
+    const next = transitionMessageAction(action(), event)
+    setAction(next.state)
+    next.effects.forEach((effect) => {
+      // The executor turns a synchronous throw into a rejection, so every outcome settles the attempt.
+      void new Promise<void>((resolve) => resolve(runAction(effect.action))).then(
+        () => dispatch({ type: "succeeded", attempt: effect.attempt }),
+        () => dispatch({ type: "failed", attempt: effect.attempt }),
+      )
+    })
   }
 
-  const updatePending = async (action: "queue" | "remove") => {
-    const actions = props.actions?.pending
+  const request = (kind: MessageAction) => dispatch({ type: "requested", action: kind, capabilities: capabilities() })
 
-    if (!actions || state.updating) return
-    setState("updating", true)
-    await actions[action]({ sessionID: props.sessionID, messageID: props.message.id })
-    setState("updating", false)
-  }
+  onCleanup(() => dispatch({ type: "disposed" }))
 
-  const renderActions = () => (
-    <span data-slot="user-message-actions">
-      <Show when={props.actions?.pending}>
-        <UserMessageTransition active={pending()}>
-          <MessageActionButton
-            icon="arrow-down-to-line"
-            size="small"
-            label={i18n.t("ui.message.moveToQueue")}
-            disabled={state.updating}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={(event) => {
-              event.stopPropagation()
-              void updatePending("queue")
-            }}
-            aria-label={i18n.t("ui.message.moveToQueue")}
-          />
-          <MessageActionButton
-            icon="outline-trash"
-            size="small"
-            label={i18n.t("ui.message.deletePending")}
-            disabled={state.updating}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={(event) => {
-              event.stopPropagation()
-              void updatePending("remove")
-            }}
-            aria-label={i18n.t("ui.message.deletePending")}
-          />
-        </UserMessageTransition>
-      </Show>
-      <Show when={props.actions?.revert}>
-        <UserMessageTransition active={!pending()}>
-          <MessageActionButton
-            icon="reset"
-            size="small"
-            label={i18n.t("ui.message.revertMessage")}
-            disabled={state.reverting}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={(event) => {
-              event.stopPropagation()
-              void revert()
-            }}
-            aria-label={i18n.t("ui.message.revertMessage")}
-          />
-        </UserMessageTransition>
-      </Show>
-      <Menu gutter={4} placement="bottom-end">
-        <Tooltip appearance="compact" value={i18n.t("ui.message.moreActions")} placement="top" gutter={4}>
+  const renderMenu = () => (
+    <Show when={!sending()}>
+      <span data-slot="user-message-menu">
+        <Menu gutter={4} placement="top-end" onOpenChange={(open) => props.onMenuOpenChange?.(open)}>
+          {/* The chevron explains itself, so it carries only an accessible name, no tooltip. */}
           <Menu.Trigger
             as={IconButton}
-            icon={<Icon name="outline-dots" size="small" />}
+            icon={<Icon name="chevron-down" />}
             size="small"
             variant="ghost-muted"
             onMouseDown={(event: MouseEvent) => event.preventDefault()}
             onClick={(event: MouseEvent) => event.stopPropagation()}
             aria-label={i18n.t("ui.message.moreActions")}
           />
-        </Tooltip>
-        <Menu.Portal>
-          <Menu.Content>
-            <Menu.Group>
-              <Menu.GroupLabel>
-                <time dateTime={new Date(props.message.time.created).toISOString()}>{sent()}</time>
-              </Menu.GroupLabel>
-            </Menu.Group>
-            <Menu.Separator />
-            <Menu.Item disabled={!props.actions?.fork || pending() || state.forking} onSelect={() => void fork()}>
-              {i18n.t("ui.message.forkMessage")}
-            </Menu.Item>
-            <Menu.Item disabled={!props.text} onSelect={() => void writeClipboard(props.text)}>
-              {i18n.t("ui.message.copyMessage")}
-            </Menu.Item>
-            {/* Like the iOS app, a Voice message also offers the full prompt the session received. */}
-            <Show when={props.voice}>
-              <Menu.Item onSelect={() => void writeClipboard(props.message.text)}>
-                {i18n.t("ui.message.copyFullMessage")}
+          <Menu.Portal>
+            <Menu.Content>
+              <Menu.Group>
+                <Menu.GroupLabel>
+                  <Show when={!waiting()} fallback={i18n.t("ui.message.pending")}>
+                    <time dateTime={new Date(props.message.time.created).toISOString()}>{sent()}</time>
+                  </Show>
+                </Menu.GroupLabel>
+              </Menu.Group>
+              <Menu.Separator />
+              <Show when={pending() && props.actions?.pending}>
+                <Menu.Item disabled={actionView().disabled.queue} onSelect={() => request("queue")}>
+                  <Icon name="bullet-list" />
+                  {i18n.t("ui.message.moveToQueue")}
+                </Menu.Item>
+              </Show>
+              <Menu.Item disabled={!copyText()} onSelect={() => void writeClipboard(copyText())}>
+                <Icon name="copy" />
+
+                {i18n.t("ui.message.copyMessage")}
               </Menu.Item>
-            </Show>
-          </Menu.Content>
-        </Menu.Portal>
-      </Menu>
-    </span>
+              {/* Like the iOS app, a Voice message also offers the full prompt the session received. */}
+              <Show when={props.voice}>
+                <Menu.Item onSelect={() => void writeClipboard(props.message.text)}>
+                  <Icon name="copy" />
+                  {i18n.t("ui.message.copyFullMessage")}
+                </Menu.Item>
+              </Show>
+              {/* A pending steer has no history to fork from yet. */}
+              <Show when={!pending()}>
+                <Menu.Item disabled={actionView().disabled.fork} onSelect={() => request("fork")}>
+                  <Icon name="fork" />
+                  {i18n.t("ui.message.forkMessage")}
+                </Menu.Item>
+              </Show>
+              {/* A pending steer is withdrawn rather than reverted; a sent message reverts only where the host allows it. */}
+              <Show
+                when={pending() && props.actions?.pending}
+                fallback={
+                  <Show when={props.actions?.revert}>
+                    <Menu.Separator />
+                    <Menu.Item disabled={actionView().disabled.revert} onSelect={() => request("revert")}>
+                      <Icon name="reset" />
+                      {props.latest ? i18n.t("ui.message.undoMessage") : i18n.t("ui.message.revertMessage")}
+                    </Menu.Item>
+                  </Show>
+                }
+              >
+                <Menu.Separator />
+                <Menu.Item
+                  data-variant="critical"
+                  disabled={actionView().disabled.remove}
+                  onSelect={() => request("remove")}
+                >
+                  <Icon name="trash" />
+                  {i18n.t("ui.message.deletePending")}
+                </Menu.Item>
+              </Show>
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu>
+      </span>
+    </Show>
   )
 
   const renderAttachments = () => (
@@ -558,54 +484,11 @@ export function CurrentUserMessageDisplay(props: {
         </For>
         <Index each={attachments()}>
           {(file) => {
-            const directUrl = () => {
-              const current = file()
-              const source = current.source
+            const mediaTarget = createMemo(() =>
+              resolveAttachmentMediaTarget(file(), { peekMedia: data.peekMedia, hasReader: !!data.readMedia }),
+            )
 
-              if (source?.type === "uri") return source.uri
-
-              if ("data" in current && current.data !== undefined) {
-                return `data:${current.mime};base64,${current.data}`
-              }
-
-              if ("uri" in current && current.uri) return data.peekMedia?.(current.uri, current.mime)
-
-              return undefined
-            }
-
-            const [resolvedUrl, setResolvedUrl] = createSignal<string | undefined>(directUrl())
-
-            createEffect(() => {
-              const current = file()
-              const direct = directUrl()
-
-              if (direct !== undefined) {
-                setResolvedUrl(direct)
-
-                return
-              }
-
-              const uri = "uri" in current ? current.uri : undefined
-
-              if (!uri || !data.readMedia) {
-                setResolvedUrl(uri)
-
-                return
-              }
-
-              const controller = new AbortController()
-              onCleanup(() => controller.abort())
-              void data
-                .readMedia(uri, current.mime, controller.signal)
-                .then((loaded) => {
-                  if (!controller.signal.aborted) setResolvedUrl(loaded)
-                })
-                .catch(() => {
-                  if (!controller.signal.aborted) setResolvedUrl(undefined)
-                })
-            })
-
-            const url = () => directUrl() ?? resolvedUrl()
+            const media = createAttachmentMedia(mediaTarget)
             const name = () => file().name ?? i18n.t("ui.message.attachment.alt")
             const image = () => file().mime.startsWith("image/")
 
@@ -621,13 +504,6 @@ export function CurrentUserMessageDisplay(props: {
               return "height" in current ? current.height : undefined
             }
 
-            const placeholderStyle = () =>
-              imageAttachmentPlaceholderStyle({
-                width: width(),
-                height: height(),
-                loaded: Boolean(url()),
-              })
-
             return (
               <Show
                 when={!image()}
@@ -635,29 +511,43 @@ export function CurrentUserMessageDisplay(props: {
                   <div
                     data-slot="user-message-attachment"
                     data-type="image"
-                    data-clickable={url() ? "true" : undefined}
-                    data-placeholder={url() ? undefined : "true"}
+                    data-clickable={media.view().clickable ? "true" : undefined}
+                    data-placeholder={media.view().placeholder ? "true" : undefined}
                     data-width={width()}
                     data-height={height()}
-                    style={placeholderStyle()}
                     onClick={(event) => {
-                      const src = url()
+                      const src = media.view().src
                       const origin = event.currentTarget
 
-                      if (src) dialog.show(() => <ImagePreview src={src} alt={name()} origin={origin} />)
+                      if (src) return dialog.show(() => <ImagePreview src={src} alt={name()} origin={origin} />)
+
+                      if (media.view().canRetry) media.retry()
                     }}
                   >
-                    <Show when={url()}>
-                      {(src) => (
-                        <img
-                          data-slot="user-message-attachment-image"
-                          src={src()}
-                          width={width()}
-                          height={height()}
-                          alt={name()}
-                        />
-                      )}
-                    </Show>
+                    <Switch>
+                      <Match when={media.view().src}>
+                        {(src) => (
+                          <img
+                            data-slot="user-message-attachment-image"
+                            src={src()}
+                            width={width()}
+                            height={height()}
+                            alt={name()}
+                          />
+                        )}
+                      </Match>
+                      <Match when={media.view().status === "failed"}>
+                        <div
+                          data-slot="user-message-attachment-icon"
+                          role="img"
+                          aria-label={i18n.t("ui.fileMedia.state.error", {
+                            kind: i18n.t("ui.fileMedia.kind.image"),
+                          })}
+                        >
+                          <Icon name="outline-photo" size="small" />
+                        </div>
+                      </Match>
+                    </Switch>
                   </div>
                 }
               >
@@ -677,12 +567,26 @@ export function CurrentUserMessageDisplay(props: {
     </Show>
   )
 
+  // Inline quotes follow the text inside the fold, so Collapse long messages folds the whole bubble.
+  const renderBody = () => (
+    <>
+      <Show when={props.text}>
+        <CurrentHighlightedText text={props.text} files={inlineFiles()} agents={agents()} />
+      </Show>
+      <Show when={comments().length > 0}>
+        <UserMessageQuotes comments={comments()} />
+      </Show>
+    </>
+  )
+
   return (
     <div
       ref={root}
       data-component="user-message"
       data-pending={waiting() ? "true" : undefined}
       data-run-folded={folded() ? "" : undefined}
+      data-run-above={meetsAbove() ? "" : undefined}
+      data-run-hovered={props.runHovered ? "" : undefined}
       data-run-meta-hidden={restingPose.meta === 0 ? "" : undefined}
       style={{
         "--user-run-meta": `${restingPose.meta}`,
@@ -692,14 +596,7 @@ export function CurrentUserMessageDisplay(props: {
       data-timeline-part-id={props.text ? `${props.message.id}:text:0` : undefined}
     >
       {renderAttachments()}
-      <Show
-        when={props.text}
-        fallback={
-          <Show when={comments().length > 0}>
-            <UserMessageComments comments={comments()} bounded={false} />
-          </Show>
-        }
-      >
+      <Show when={bubble()}>
         <div data-slot="user-message-body" data-voice={props.voice ? "true" : undefined}>
           <Show when={props.voice}>
             <div data-slot="user-message-voice" role="img" aria-label={i18n.t("ui.message.voice")}>
@@ -708,50 +605,47 @@ export function CurrentUserMessageDisplay(props: {
               </Tooltip>
             </div>
           </Show>
-          <div data-slot="user-message-text" dir="auto" data-comments={comments().length > 0 ? "true" : undefined}>
-            <Show
-              when={props.fold}
-              fallback={<CurrentHighlightedText text={props.text} files={inlineFiles()} agents={agents()} />}
-            >
+          <div
+            data-slot="user-message-text"
+            dir="auto"
+            onCopy={copySessionReferences}
+          >
+            <Show when={props.fold} fallback={renderBody()}>
               <UserMessageFold
                 id={`${props.message.id}-text`}
                 text={props.text}
                 expanded={expanded()}
                 onExpandedChange={setExpanded}
               >
-                <CurrentHighlightedText text={props.text} files={inlineFiles()} agents={agents()} />
+                {renderBody()}
               </UserMessageFold>
             </Show>
-            <Show when={comments().length > 0}>
-              <UserMessageComments comments={comments()} bounded />
-            </Show>
+            {renderMenu()}
           </div>
-          <Show when={folded()}>
-            <div data-slot="user-message-run-actions">{renderActions()}</div>
-          </Show>
         </div>
       </Show>
       {/* Like the TUI, a pending steer of only attachments still offers its actions. */}
-      <Show when={props.text || comments().length > 0 || pending()}>
+      <Show when={bubble() || pending()}>
         <div data-slot="user-message-copy-wrapper">
           <span data-slot="user-message-meta-wrap">
             <span data-slot="user-message-meta">
-              <UserMessageTransition active={waiting()}>
-                <span data-slot="user-message-pending">{i18n.t("ui.message.pending")}</span>
-                <Show when={metaLabels().length > 0}>
-                  <span data-slot="user-message-meta-separator" aria-hidden="true">
-                    {"\u00B7"}
-                  </span>
-                </Show>
-              </UserMessageTransition>
               <Show when={metaLabels().length > 0}>
                 <span data-slot="user-message-meta-label">
                   <MetaItems items={metaLabels()} slot="user-message" />
                 </span>
               </Show>
+              {/* Pending closes the line and stays in view; the agent and model before it show on hover. */}
+              <UserMessageTransition active={waiting()}>
+                <Show when={metaLabels().length > 0}>
+                  <span data-slot="user-message-pending-separator" aria-hidden="true">
+                    {"\u00B7"}
+                  </span>
+                </Show>
+                <span data-slot="user-message-pending">{i18n.t("ui.message.pending")}</span>
+              </UserMessageTransition>
             </span>
           </span>
-          {renderActions()}
+          <Show when={!bubble()}>{renderMenu()}</Show>
         </div>
       </Show>
     </div>
@@ -787,7 +681,8 @@ function UserMessageFold(props: {
   }
 
   onMount(() => {
-    measure()
+    // The bubble gets its wrapping width after the surrounding view mounts.
+    queueMicrotask(measure)
     const observer = new ResizeObserver(measure)
     observer.observe(content!)
     onCleanup(() => observer.disconnect())
@@ -828,7 +723,7 @@ function UserMessageFold(props: {
           onClick={flip}
         >
           <span>{props.expanded ? i18n.t("ui.message.showLess") : i18n.t("ui.message.readMore")}</span>
-          <Icon name="chevron-down" size="small" />
+          <Icon name="chevron-down" />
         </button>
       </Show>
     </>
@@ -915,11 +810,31 @@ function CurrentHighlightedText(props: { text: string; files: PromptAttachment[]
 
 type HighlightSegment = { text: string; type?: "file" | "agent" | "link" }
 
+function copySessionReferences(event: ClipboardEvent & { currentTarget: HTMLDivElement }) {
+  const selection = window.getSelection()
+
+  if (event.defaultPrevented || !event.clipboardData || !selection || selection.isCollapsed) return
+  const ranges = Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index))
+
+  if (!ranges.every((range) => event.currentTarget.contains(range.commonAncestorContainer))) return
+  const text = sessionReferenceClipboardText(event.currentTarget, ranges)
+
+  if (text === undefined) return
+  event.preventDefault()
+  event.clipboardData.setData("text/plain", text)
+}
+
 function SessionReferenceText(props: { text: string }) {
   const markdown = useMarkdown()
   const root = document.createElement("span")
   createEffect(() => root.replaceChildren(sessionReferenceText(props.text, (id) => markdown?.sessionTitle?.(id))))
-  onCleanup(setupSessionLinks(root, () => markdown?.openSession))
+  onCleanup(
+    setupSessionLinks(
+      root,
+      () => markdown?.openSession,
+      () => markdown?.sessionMenu,
+    ),
+  )
 
   return root
 }
@@ -945,7 +860,6 @@ function CompactionDivider(props: { label: string }) {
 
 export function SessionCompactionMessage(props: { message: SessionMessageCompaction; error: string }) {
   const i18n = useI18n()
-  const data = useData()
   const summary = () => (props.message.status === "failed" ? "" : props.message.summary)
 
   const error = () => {
@@ -992,7 +906,7 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
 
   return (
     <Show
-      when={!data.backgroundCompaction || props.message.reason === "manual" || props.message.status === "failed"}
+      when={props.message.reason === "manual" || props.message.status === "failed"}
       fallback={
         <QuietCompaction
           id={props.message.id}
@@ -1034,7 +948,7 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
         </Show>
         <Show when={error()}>
           <Card variant="error" class="error-card">
-            {error()}
+            <LinkedText text={error()} />
           </Card>
         </Show>
       </div>
@@ -1049,25 +963,36 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
 function QuietCompaction(props: { id: string; created: number; running: boolean; summary: string; usage: string }) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
-  // A new one waits out the grace (400 ms, matched in session-compaction.css) before showing Compacting; one that
-  // ends inside it, as a precomputed summary does, only fades in as Compacted. One already running or finished when
-  // the history loads shows without an entrance.
-  const mounted = performance.now()
-  const age = Date.now() - props.created
+  // A new one waits out the grace before showing Compacting; one that ends inside it, as a precomputed summary does,
+  // only fades in as Compacted. One already running or finished when the history loads shows without an entrance.
+  const initial = createCompactionEntranceState({ ageMs: Date.now() - props.created, running: props.running })
+  const [entrance, setEntrance] = createSignal(initial.state)
+  const enter = createMemo(() => selectCompactionEnter(entrance()))
+  let graceTimer: ReturnType<typeof setTimeout> | undefined
 
-  const [enter, setEnter] = createSignal(
-    props.running ? (age < 400 ? "grace" : undefined) : age < 1_000 ? "now" : undefined,
-  )
+  const runEntrance = (effect: CompactionEntranceEffect) => {
+    clearTimeout(graceTimer)
+    graceTimer = undefined
+
+    if (effect.type === "schedule-grace")
+      graceTimer = setTimeout(() => dispatchEntrance(GRACE_ELAPSED_EVENT), effect.delayMs)
+  }
+
+  const dispatchEntrance = (event: CompactionEntranceEvent) => {
+    const result = transitionCompactionEntrance(untrack(entrance), event)
+    setEntrance(result.state)
+    result.effects.forEach(runEntrance)
+  }
+
+  initial.effects.forEach(runEntrance)
+  createEffect(() => dispatchEntrance({ type: "running.changed", running: props.running }))
+  onCleanup(() => dispatchEntrance(DISPOSED_COMPACTION_ENTRANCE_EVENT))
 
   const expandable = () => !props.running && !!props.summary.trim()
 
   const label = createMemo(() =>
     splitEnding(i18n.t("ui.messagePart.compaction.running"), i18n.t("ui.messagePart.compaction.done")),
   )
-
-  createEffect(() => {
-    if (!props.running && enter() === "grace" && performance.now() - mounted < 400) setEnter("now")
-  })
 
   return (
     <div data-component="session-compaction-message" data-quiet="" data-enter={enter()}>
@@ -1089,7 +1014,7 @@ function QuietCompaction(props: { id: string; created: number; running: boolean;
           </span>
           <span
             data-slot="session-compaction-label"
-            class="relative flex shrink-0 whitespace-nowrap text-[13px] font-[440] leading-text-compact tracking-[-0.04px]"
+            class="relative flex shrink-0 whitespace-pre text-[13px] font-[440] leading-text-compact tracking-[-0.04px]"
           >
             <span>{label().stem}</span>
             <span data-slot="session-compaction-ending" class="grid justify-items-start">
@@ -1122,10 +1047,14 @@ function QuietCompaction(props: { id: string; created: number; running: boolean;
   )
 }
 
-/** Splits Compacting and Compacted at their shared stem, so only the ending changes when the compaction ends. */
+/**
+ * Splits Compacting and Compacted at their shared stem, so only the ending changes when the compaction ends. It splits
+ * between whole characters as they are read, so a vowel sign stays with its consonant.
+ */
 function splitEnding(running: string, done: string) {
-  const chars = [...running]
-  const others = [...done]
+  const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+  const chars = Array.from(graphemes.segment(running), (part) => part.segment)
+  const others = Array.from(graphemes.segment(done), (part) => part.segment)
   const at = chars.findIndex((char, index) => char !== others[index])
   const stem = chars.slice(0, at === -1 ? chars.length : at).join("")
 
@@ -1137,7 +1066,9 @@ export function AssistantTextContent(props: {
   text: string
   message: SessionMessageAssistant
   showCopy: boolean
+  keepCopyVisible?: boolean
   turnDurationMs?: number | null
+  turnTokensPerSecond?: number
   /** The finished turn's web searches and fetches, shown as a chip in its footer. */
   sources?: TurnSources
   onOpenSources?: () => void
@@ -1151,11 +1082,7 @@ export function AssistantTextContent(props: {
   onMount(() => (rendered = true))
   const sources = () => (props.showCopy && sourcesHost?.enabled ? props.sources : undefined)
 
-  const interrupted = () => {
-    const type = props.message.error?.type.toLowerCase()
-
-    return !!type && (type.includes("abort") || type.includes("interrupt"))
-  }
+  const interrupted = () => isInterruptedError(props.message.error)
 
   const labels = createMemo<MetaItem[]>(() => {
     const agent = agentLabel(props.message.agent, data.agents)
@@ -1196,13 +1123,18 @@ export function AssistantTextContent(props: {
     ),
   ])
 
-  const [copied, setCopied] = createSignal(false)
+  const speed = createMemo(() => {
+    if (props.turnTokensPerSecond === undefined) return undefined
 
-  const copy = async () => {
-    if (!(await writeClipboard(props.text))) return
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+    return i18n.t("ui.message.tokensPerSecond", {
+      value: new Intl.NumberFormat(i18n.locale(), {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }).format(props.turnTokensPerSecond),
+    })
+  })
+
+  const copy = createCopyFeedback()
 
   return (
     <Show when={props.text}>
@@ -1229,18 +1161,30 @@ export function AssistantTextContent(props: {
 
   function copyFooter() {
     return (
-      <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
+      <div
+        data-slot="text-part-copy-wrapper"
+        data-keep-copy-visible={props.keepCopyVisible ? "" : undefined}
+        data-interrupted={interrupted() ? "" : undefined}
+      >
         <MessageActionButton
-          icon={copied() ? "check" : "copy"}
+          copied={copy.copied()}
           size="small"
-          label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+          label={copy.copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
           onMouseDown={(event) => event.preventDefault()}
-          onClick={copy}
-          aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+          onClick={() => copy.copy(props.text)}
+          aria-label={copy.copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
         />
         <Show when={meta().length > 0}>
           <span data-slot="text-part-meta">
             <MetaItems items={meta()} slot="text-part" />
+            <Show when={speed()}>
+              {(label) => (
+                <span data-slot="text-part-meta-speed">
+                  <span aria-hidden="true">{"\u00B7"}</span>
+                  <span dir="auto">{label()}</span>
+                </span>
+              )}
+            </Show>
           </span>
         </Show>
       </div>
@@ -1251,6 +1195,8 @@ export function AssistantTextContent(props: {
 export function AssistantReasoningContent(props: {
   id: string
   content: SessionMessageAssistantReasoning
+  /** Finished thoughts that follow this one with nothing between, shown and timed with it. */
+  more?: { id: string; content: SessionMessageAssistantReasoning }[]
   streaming: boolean
   defaultOpen?: boolean
   open?: boolean
@@ -1258,15 +1204,19 @@ export function AssistantReasoningContent(props: {
   onContentRendered?: () => void
 }) {
   const i18n = useI18n()
-  const [state, setState] = createStore<{ open?: boolean }>({})
-  const open = () => props.open ?? state.open ?? props.defaultOpen ?? false
   const heading = createMemo(() => (props.streaming ? reasoningHeading(props.content.text) : ""))
 
-  const duration = createMemo(() => {
-    const time = props.content.time
+  const parts = createMemo(() => [{ id: props.id, content: props.content }, ...(props.more ?? [])])
 
-    if (time?.completed === undefined) return undefined
-    const total = Math.max(0, Math.round((time.completed - time.created) / 1000))
+  const duration = createMemo(() => {
+    const times = parts().flatMap((part) => {
+      const time = part.content.time
+
+      return time?.completed === undefined ? [] : [Math.max(0, time.completed - time.created)]
+    })
+
+    if (times.length < parts().length) return undefined
+    const total = Math.round(times.reduce((sum, time) => sum + time, 0) / 1000)
     const numfmt = new Intl.NumberFormat(i18n.locale())
 
     if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt.format(total) })
@@ -1278,21 +1228,31 @@ export function AssistantReasoningContent(props: {
   })
 
   return (
-    <div data-component="reasoning-part" data-timeline-part-id={props.id}>
+    <div
+      data-component="reasoning-part"
+      data-timeline-part-id={props.more?.length ? undefined : props.id}
+      data-timeline-part-ids={
+        props.more?.length
+          ? parts()
+              .map((part) => part.id)
+              .join(",")
+          : undefined
+      }
+    >
       <BasicTool
         icon="mcp"
         status={props.streaming ? "running" : "completed"}
         compact
         hasContent
         allowOpenWhilePending
-        hideDetails={!props.content.text.trim()}
-        open={open()}
+        hideDetails={parts().every((part) => !part.content.text.trim())}
+        open={props.open}
+        defaultOpen={props.defaultOpen}
         onOpenChange={(value) => {
-          setState("open", value)
           props.onOpenChange?.(value)
           props.onContentRendered?.()
         }}
-        trigger={
+        trigger={(open) => (
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
@@ -1315,9 +1275,24 @@ export function AssistantReasoningContent(props: {
               </Show>
             </div>
           </div>
-        }
+        )}
       >
-        <PacedMarkdown text={props.content.text} cacheKey={props.id} streaming={props.streaming} />
+        <Show
+          when={props.more?.length}
+          fallback={<PacedMarkdown text={props.content.text} cacheKey={props.id} streaming={props.streaming} />}
+        >
+          <div data-slot="reasoning-part-run">
+            <Index each={parts()}>
+              {(part) => (
+                <Show when={part().content.text.trim()}>
+                  <div data-timeline-part-id={part().id}>
+                    <PacedMarkdown text={part().content.text} cacheKey={part().id} streaming={false} />
+                  </div>
+                </Show>
+              )}
+            </Index>
+          </div>
+        </Show>
       </BasicTool>
     </div>
   )

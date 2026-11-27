@@ -15,7 +15,7 @@ export default {
   trust: "Довіряти та підключитися",
   continue: "Продовжити",
   update: "Оновити й перепідключитися",
-  project: "Відкрити проект на {{host}}",
+  project: "Відкрити проєкт на {{host}}",
   "stage.incompatible": "Потрібне оновлення сервера",
   "error.input": "Введіть хост або SSH-команду. Віддалені команди й непідтримувані опції SSH не дозволені.",
   "error.connection": "Не вдалося встановити SSH-з'єднання. Перевірте мережу та налаштування SSH.",
@@ -36,4 +36,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Додати сервер",
   "menu.delete": "Видалити",
+  "error.unavailable": "SSH недоступний",
 }

@@ -39,4 +39,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "სერვერის დამატება",
   "menu.delete": "წაშლა",
+  "error.unavailable": "SSH მიუწვდომელია",
 }

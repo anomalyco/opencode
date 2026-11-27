@@ -39,7 +39,7 @@ describe("Bedrock Converse options recorded", () => {
             }),
             prompt: "How many primes are below 60? Reply with the number only.",
             cache: "none",
-            generation: { maxTokens: 4_000 },
+            maxTokens: 4_000,
           }),
         )
 
@@ -61,7 +61,7 @@ describe("Bedrock Converse options recorded", () => {
           }),
           prompt: "What is 17*23? Reply with the number only.",
           cache: "none",
-          generation: { maxTokens: 1_000 },
+          maxTokens: 1_000,
         }),
       )
 
@@ -79,7 +79,7 @@ describe("Bedrock Converse options recorded", () => {
           model: bedrock("us.amazon.nova-2-lite-v1:0", { effort: "low" }),
           prompt: "What is 17*23? Reply with the number only.",
           cache: "none",
-          generation: { maxTokens: 1_000 },
+          maxTokens: 1_000,
         }),
       )
 
@@ -108,7 +108,7 @@ describe("Bedrock Converse options recorded", () => {
           }),
           prompt: "What is 17*23?",
           cache: "none",
-          generation: { maxTokens: 200 },
+          maxTokens: 200,
         }),
       )
 

@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { ai, LLMEvent, toDefinitions } from "../../src/effect.js"
+import { ai, LanguageModel, LLMEvent, toDefinitions } from "../../src/effect.js"
 import { DigitalOcean, OpenRouter, Venice } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { tool } from "../../src/tool.js"
@@ -49,7 +49,7 @@ for (const item of [
   recorded.effect.with("streams text", { tags: ["text", "usage"] }, () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        ai.request({ model: item.model, prompt: "Reply exactly: OK", generation: { maxTokens: 64 } }),
+        ai.request({ model: item.model, prompt: "Reply exactly: OK", maxTokens: 64 }),
       )
       expect(response.text.trim()).toMatch(/^OK\.?$/)
       expect(response.events.some(LLMEvent.is.textDelta)).toBe(true)
@@ -76,11 +76,11 @@ for (const item of [
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: item.model,
+          model: LanguageModel.update(item.model, { capabilities: { tools: { freeform: ["text"] } } }),
           prompt: "Use the run tool to execute exactly this code: print(1)",
           tools: run,
           toolChoice: "required",
-          generation: { maxTokens: 256 },
+          maxTokens: 256,
         }),
       )
       expect(response.toolCalls).toMatchObject([{ name: "run", input: { code: expect.stringContaining("print(1)") } }])

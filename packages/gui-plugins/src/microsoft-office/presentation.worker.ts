@@ -10,6 +10,13 @@ import {
 } from "@betteroffice/pptx"
 import { slideFonts } from "./slide-fonts"
 import {
+  UNRASTERIZED_VECTOR,
+  transitionVectorRaster,
+  vectorBitmap,
+  vectorNeedsRaster,
+  type VectorRasterState,
+} from "./slide-paint-machine"
+import {
   maxImageSide,
   type SlideMethods,
   type SlidePainted,
@@ -48,11 +55,11 @@ type Size = { readonly width: number; readonly height: number }
 
 /**
  * A picture as the painter draws it: a bitmap, an SVG that the window rasterizes (a worker has no SVG decoder) with
- * the bitmap it last returned, or nothing when the browser cannot decode it.
+ * what it last returned, or nothing when the browser cannot decode it.
  */
 type Picture =
   | { readonly kind: "bitmap"; readonly bitmap: ImageBitmap }
-  | { readonly kind: "vector"; readonly blob: Blob; bitmap: ImageBitmap | undefined; failed: boolean }
+  | { readonly kind: "vector"; readonly blob: Blob; raster: VectorRasterState }
   | { readonly kind: "missing" }
 
 type Deck = ReturnType<typeof createDeck>
@@ -136,7 +143,7 @@ function createDeck(handle: PresentationHandle, layout: (index: number) => Promi
     const blob = presentationImageBlob(handle.mediaBytes(asset))
 
     // SVG decodes through an image element, which a worker lacks.
-    if (needsElementDecode(blob)) return { kind: "vector", blob, bitmap: undefined, failed: false }
+    if (needsElementDecode(blob)) return { kind: "vector", blob, raster: UNRASTERIZED_VECTOR }
 
     const source = await createImageBitmap(blob).catch(() => undefined)
 
@@ -201,13 +208,13 @@ function createDeck(handle: PresentationHandle, layout: (index: number) => Promi
           return found.bitmap
         }
 
-        if (found.kind === "missing" || found.failed) return null
+        if (found.kind === "missing") return null
 
         const need = needs.get(asset)
 
-        if (!covers(found.bitmap, need)) wanted.set(asset, { asset, blob: found.blob, size: need })
+        if (vectorNeedsRaster(found.raster, need)) wanted.set(asset, { asset, blob: found.blob, size: need })
 
-        return found.bitmap ?? null
+        return vectorBitmap(found.raster)
       }
 
       const options = { resolveImage, maxShadowPixels: canvas.width * canvas.height * shadowPixelsPerPixel }
@@ -259,7 +266,7 @@ function createDeck(handle: PresentationHandle, layout: (index: number) => Promi
 
     /**
      * Keeps the window's rasterized SVG pictures in place of coarser ones. A finer one that a paint at a larger scale
-     * returned stays, and so does any one when the window could not rasterize the picture again.
+     * returned stays; a size the window could not rasterize is not asked for again, while any other size is.
      */
     vectors: (bitmaps: readonly VectorBitmap[]) =>
       Promise.all(
@@ -268,11 +275,14 @@ function createDeck(handle: PresentationHandle, layout: (index: number) => Promi
 
           if (found.kind !== "vector") return entry.bitmap?.close()
 
-          if (found.bitmap && (!entry.bitmap || covers(found.bitmap, entry.bitmap))) return entry.bitmap?.close()
+          const next = transitionVectorRaster(found.raster, {
+            type: "raster.settled",
+            size: entry.size,
+            bitmap: entry.bitmap,
+          })
 
-          found.bitmap?.close()
-          found.bitmap = entry.bitmap
-          found.failed = !entry.bitmap
+          found.raster = next.state
+          next.effects.forEach((effect) => effect.bitmap.close())
         }),
       ).then(() => undefined),
   }
@@ -317,15 +327,6 @@ function vectorSizes(primitives: readonly SlidePrimitive[], scale: number) {
 
 function pixelBytes(bitmap: ImageBitmap) {
   return bitmap.width * bitmap.height * 4
-}
-
-/** Whether a rasterized SVG picture is as fine as `need`; undefined needs the picture's own size, rasterized once. */
-function covers(bitmap: ImageBitmap | undefined, need: Size | undefined) {
-  if (!bitmap) return false
-
-  if (!need) return true
-
-  return bitmap.width >= need.width && bitmap.height >= need.height
 }
 
 /** A crop fraction as the painter reads it. */

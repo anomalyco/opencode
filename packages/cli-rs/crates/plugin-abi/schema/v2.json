@@ -1,0 +1,7043 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "opencode plugin ABI 2.0",
+  "description": "Generated from opencode_plugin_abi by `examples/schema.rs`; do not edit. Normative for every binding: a plugin registers a Manifest; the host's `call` sends a Request and the plugin's sends a HostRequest, each answered as `x-messages` says by the request's type; a view answers a ViewReply whose tree is a Node, and a draw a DrawList. A field the schema leaves out of `required` may be left out; a reader ignores a field it does not know. A later 2.x minor only adds optional fields, request types and node kinds. The HTTP API's types are references into its OpenAPI document, `packages/protocol/openapi.json`, relative to this file.",
+  "x-abi": {
+    "major": 2,
+    "minor": 0,
+    "features": ["image-bounds", "focus-input", "fence-node"]
+  },
+  "x-messages": {
+    "call": {
+      "render-fence": {
+        "$ref": "#/$defs/Fenced"
+      },
+      "render": {
+        "$ref": "#/$defs/Render"
+      },
+      "render-route": {
+        "$ref": "#/$defs/Render"
+      },
+      "view": {
+        "$ref": "#/$defs/ViewReply"
+      },
+      "claim": {
+        "$ref": "#/$defs/ClaimReply"
+      },
+      "draw": {
+        "$ref": "#/$defs/DrawList"
+      },
+      "layout": {
+        "$ref": "#/$defs/LayoutReply"
+      },
+      "input": {
+        "$ref": "#/$defs/Handled"
+      },
+      "command": {
+        "enum": [null, "pass"]
+      },
+      "search": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "*": {
+        "type": "null"
+      }
+    },
+    "host": {
+      "storage-get": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "color": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Rgba"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "session": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Session"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "sessions": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Session"
+        }
+      },
+      "family": {
+        "$ref": "#/$defs/Family"
+      },
+      "pending": {
+        "type": "array",
+        "items": {
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Inbox.Info"
+        }
+      },
+      "messages": {
+        "type": "array",
+        "items": {
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.Info"
+        }
+      },
+      "message": {
+        "anyOf": [
+          {
+            "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.Info"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "models": {
+        "anyOf": [
+          {
+            "type": "array",
+            "items": {
+              "$ref": "../../../../protocol/openapi.json#/components/schemas/Model.Info"
+            }
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "model": {
+        "anyOf": [
+          {
+            "$ref": "../../../../protocol/openapi.json#/components/schemas/Model.Ref"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "limits": {
+        "anyOf": [
+          {
+            "$ref": "../../../../protocol/openapi.json#/components/schemas/UsageLimits.Info"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "providers": {
+        "anyOf": [
+          {
+            "type": "array",
+            "items": {
+              "$ref": "../../../../protocol/openapi.json#/components/schemas/Provider.Info"
+            }
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "info": {
+        "$ref": "#/$defs/Info"
+      },
+      "mcp-servers": {
+        "anyOf": [
+          {
+            "type": "array",
+            "items": {
+              "$ref": "../../../../protocol/openapi.json#/components/schemas/Mcp.Server"
+            }
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "integrations": {
+        "anyOf": [
+          {
+            "type": "array",
+            "items": {
+              "$ref": "../../../../protocol/openapi.json#/components/schemas/Integration.Info"
+            }
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "vcs": {
+        "anyOf": [
+          {
+            "$ref": "../../../../protocol/openapi.json#/components/schemas/Vcs.Info"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "route": {
+        "$ref": "#/$defs/Route"
+      },
+      "scroll-state": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ScrollState"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "anchors": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/AnchorAt"
+        }
+      },
+      "top-anchor": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/AnchorAt"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "transcript": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/TranscriptView"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "interactive": {
+        "type": "boolean"
+      },
+      "shortcut": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "dialog-open": {
+        "type": "boolean"
+      },
+      "composer": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Composer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "checkpoint": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 18446744073709551615
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "variants": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "set-variant": {
+        "type": "boolean"
+      },
+      "tabs-enabled": {
+        "type": "boolean"
+      },
+      "tabs": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Tab"
+        }
+      },
+      "tab": {
+        "type": "boolean"
+      },
+      "keymap-pending": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/KeymapPending"
+        }
+      },
+      "keymap-active": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/KeymapActive"
+        }
+      },
+      "keymap-commands": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/KeymapCommand"
+        }
+      },
+      "shortcuts": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "selection": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "theme": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "themes": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "set-theme": {
+        "type": "boolean"
+      },
+      "rect": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/NodeRect"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "focused": {
+        "$ref": "#/$defs/Focused"
+      },
+      "input-mode": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "plugins": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/PluginEntry"
+        }
+      },
+      "setting": {
+        "anyOf": [
+          {},
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "image-size": {
+        "anyOf": [
+          {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "image-bounds": {
+        "$ref": "#/$defs/ImageBounds"
+      },
+      "utc-offset": {
+        "type": "integer",
+        "minimum": -2147483648,
+        "maximum": 2147483647
+      },
+      "measure": {
+        "$ref": "#/$defs/Measure"
+      },
+      "fetch": {
+        "$ref": "#/$defs/RequestId"
+      },
+      "foreground": {
+        "$ref": "#/$defs/RequestId"
+      },
+      "*": {
+        "type": "null"
+      }
+    }
+  },
+  "$defs": {
+    "Node": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "row": {
+              "type": "boolean"
+            },
+            "gap": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "padding": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                }
+              ],
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "justify": {
+              "$ref": "#/$defs/Justify"
+            },
+            "align": {
+              "$ref": "#/$defs/Align"
+            },
+            "bg": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "on_click": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Click"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Node"
+              }
+            },
+            "border": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Border"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "padding_sides": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Edges"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "wrap": {
+              "type": "boolean"
+            },
+            "overflow": {
+              "$ref": "#/$defs/Overflow"
+            },
+            "sticky": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Edge"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "anchor": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Anchor"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "split": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Split"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "box"
+            },
+            "visible": {
+              "type": "boolean"
+            },
+            "focusable": {
+              "type": "boolean"
+            },
+            "pointer": {
+              "type": "boolean"
+            },
+            "hover": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "hover_events": {
+              "type": "boolean"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "spans": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Span"
+              }
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "fg": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "wrap": {
+              "$ref": "#/$defs/Wrap"
+            },
+            "truncate": {
+              "type": "boolean"
+            },
+            "selectable": {
+              "type": "boolean"
+            },
+            "hover_fg": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "on_click": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Click"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "hover_events": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "text"
+            }
+          },
+          "required": ["type", "spans"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "const": "slot"
+            }
+          },
+          "required": ["type", "path"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "$ref": "#/$defs/Source"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "markdown"
+            }
+          },
+          "required": ["type", "source"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "spinner"
+            }
+          },
+          "required": ["type", "label"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "height": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "follow": {
+              "type": "boolean"
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Node"
+              }
+            },
+            "notify_top": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "user_scroll": {
+              "type": "boolean"
+            },
+            "scrollbar": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "scroll"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/Source"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "view": {
+              "$ref": "#/$defs/DiffView"
+            },
+            "filetype": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "hunks": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "wrap": {
+              "$ref": "#/$defs/Wrap"
+            },
+            "padding": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "type": {
+              "const": "diff"
+            }
+          },
+          "required": ["type", "content"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "value": {
+              "type": "string"
+            },
+            "placeholder": {
+              "type": "string"
+            },
+            "lines": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "seen": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 18446744073709551615
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "input"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "row": {
+              "type": "boolean"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ListItem"
+              }
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "notify_top": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "user_scroll": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "list"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/Source"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "filetype": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "numbers": {
+              "type": "boolean"
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "type": {
+              "const": "code"
+            }
+          },
+          "required": ["type", "content"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/Source"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "fit": {
+              "$ref": "#/$defs/Fit"
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "type": {
+              "const": "image"
+            }
+          },
+          "required": ["type", "content"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "type": {
+              "const": "keep"
+            }
+          },
+          "required": ["type", "key"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "animate": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "canvas"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "bg": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "type": {
+              "const": "fence"
+            }
+          },
+          "required": ["type"]
+        }
+      ],
+      "description": "A node of a surface's tree."
+    },
+    "ListItem": {
+      "type": "object",
+      "properties": {
+        "node": {
+          "$ref": "#/$defs/Node"
+        },
+        "estimate": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        }
+      },
+      "required": ["node"],
+      "description": "An item of a list: a node with an id, and the rows assumed until it is laid out."
+    },
+    "Edge": {
+      "type": "string",
+      "enum": ["top", "bottom"]
+    },
+    "Fit": {
+      "type": "string",
+      "enum": ["contain", "cover", "fill"]
+    },
+    "Anchor": {
+      "type": "object",
+      "properties": {
+        "group": {
+          "type": "string"
+        },
+        "variant": {
+          "type": "string"
+        }
+      },
+      "required": ["group"],
+      "description": "One of a named group of a scroll's anchors."
+    },
+    "Split": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "min": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        }
+      },
+      "required": ["at"],
+      "description": "A row whose first child the user resizes."
+    },
+    "Source": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": ["text"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/ContentRef"
+            }
+          },
+          "required": ["content"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "part-output": {
+              "$ref": "#/$defs/PartRef"
+            }
+          },
+          "required": ["part-output"],
+          "additionalProperties": false
+        }
+      ],
+      "description": "What a text-bearing node shows."
+    },
+    "ContentRef": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615,
+      "description": "Content a view gave the host (`View::content`)."
+    },
+    "PartRef": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "type": "string"
+        },
+        "part": {
+          "type": "string"
+        }
+      },
+      "required": ["session", "part"],
+      "description": "A tool call of a session, whose output a node shows."
+    },
+    "DiffView": {
+      "type": "string",
+      "enum": ["unified", "split"]
+    },
+    "SurfaceInput": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "palette": {
+          "$ref": "#/$defs/Palette"
+        },
+        "full": {
+          "type": "boolean"
+        },
+        "panel": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PanelInput"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "changed": {
+          "$ref": "#/$defs/Changed"
+        },
+        "slot": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SlotInput"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["width", "height", "palette"],
+      "description": "What a surface's view gets besides the plugin's own state."
+    },
+    "SlotInput": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "prompt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PromptInput"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        }
+      },
+      "required": [],
+      "description": "What a slot passes to what renders in it."
+    },
+    "PromptInput": {
+      "type": "object",
+      "properties": {
+        "shell": {
+          "type": "boolean"
+        },
+        "show_details": {
+          "type": "boolean"
+        }
+      },
+      "required": ["shell", "show_details"],
+      "description": "The prompt's mode, and whether its details show."
+    },
+    "Changed": {
+      "type": "object",
+      "properties": {
+        "all": {
+          "type": "boolean"
+        },
+        "sessions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "lists": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "locations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LocationRef"
+          }
+        },
+        "local": {
+          "type": "boolean"
+        },
+        "size": {
+          "type": "boolean"
+        },
+        "woken": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "description": "What changed since a render's or a surface's last view."
+    },
+    "LocationRef": {
+      "type": "object",
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "workspace": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["directory"],
+      "description": "A location: a directory, and a workspace in it."
+    },
+    "PanelInput": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "fullscreen": {
+          "type": "boolean"
+        },
+        "focused": {
+          "type": "boolean"
+        },
+        "forced": {
+          "type": "boolean"
+        }
+      },
+      "required": ["width", "fullscreen", "focused"],
+      "description": "How a panel surface shows."
+    },
+    "Frame": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "cause": {
+          "$ref": "#/$defs/Cause"
+        },
+        "dt": {
+          "$ref": "#/$defs/Duration"
+        }
+      },
+      "required": ["width", "height", "cause", "dt"],
+      "description": "The frame a canvas draws for: its size in cells, why, and the animation's time."
+    },
+    "Cause": {
+      "type": "string",
+      "enum": ["first", "resized", "version", "animate"]
+    },
+    "Duration": {
+      "type": "object",
+      "properties": {
+        "secs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "nanos": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999999999
+        }
+      },
+      "required": ["secs", "nanos"],
+      "description": "A span of time in whole seconds and nanoseconds, as serde writes `std::time::Duration`, which refuses a field it does not know.",
+      "additionalProperties": false
+    },
+    "Palette": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/Mode"
+        },
+        "colors": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Rgba"
+          }
+        }
+      },
+      "required": ["mode", "colors"],
+      "description": "Every token of the page theme, by its path."
+    },
+    "Mode": {
+      "type": "string",
+      "enum": ["dark", "light"]
+    },
+    "MountId": {
+      "type": "object",
+      "properties": {
+        "surface": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": ["surface", "key", "generation"],
+      "description": "One mount of a surface; a new generation each time."
+    },
+    "Span": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "fg": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Color"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bg": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Color"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "type": "boolean"
+        },
+        "dim": {
+          "type": "boolean"
+        },
+        "strikethrough": {
+          "type": "boolean"
+        },
+        "link": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["text"],
+      "description": "Styled text."
+    },
+    "Color": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Rgba"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "A theme token path (`text.muted`), a scale step (`interactive.500`), `#rrggbb`, or an Rgba."
+    },
+    "Rgba": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{8}$",
+      "description": "`#rrggbbaa`; the host writes lowercase."
+    },
+    "Layout": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Width"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "grow": {
+          "type": "boolean"
+        },
+        "shrink": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "min_width": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Width"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_width": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Width"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "height": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Width"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "min_height": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Width"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_height": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Width"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "margin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Edges"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "absolute": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Absolute"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "description": "How a node takes space in its parent's row or column."
+    },
+    "Absolute": {
+      "type": "object",
+      "properties": {
+        "top": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": -32768,
+              "maximum": 32767
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "right": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": -32768,
+              "maximum": 32767
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bottom": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": -32768,
+              "maximum": 32767
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "left": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": -32768,
+              "maximum": 32767
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "z": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        }
+      },
+      "required": [],
+      "description": "Where an absolute node sits: cells from its parent's edges, and its paint order."
+    },
+    "Width": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "cells": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            }
+          },
+          "required": ["cells"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "percent": {
+              "type": "number"
+            }
+          },
+          "required": ["percent"],
+          "additionalProperties": false
+        }
+      ],
+      "description": "A size in cells or in percent of the parent."
+    },
+    "Edges": {
+      "type": "object",
+      "properties": {
+        "top": {
+          "type": "integer",
+          "minimum": -32768,
+          "maximum": 32767
+        },
+        "right": {
+          "type": "integer",
+          "minimum": -32768,
+          "maximum": 32767
+        },
+        "bottom": {
+          "type": "integer",
+          "minimum": -32768,
+          "maximum": 32767
+        },
+        "left": {
+          "type": "integer",
+          "minimum": -32768,
+          "maximum": 32767
+        }
+      },
+      "required": [],
+      "description": "Cells at each edge."
+    },
+    "Border": {
+      "type": "object",
+      "properties": {
+        "sides": {
+          "$ref": "#/$defs/Sides"
+        },
+        "style": {
+          "$ref": "#/$defs/BorderStyle"
+        },
+        "color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Color"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title_align": {
+          "$ref": "#/$defs/TitleAlign"
+        },
+        "bottom_title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bottom_title_align": {
+          "$ref": "#/$defs/TitleAlign"
+        }
+      },
+      "required": [],
+      "description": "A border on a box's edge."
+    },
+    "Sides": {
+      "type": "object",
+      "properties": {
+        "top": {
+          "type": "boolean"
+        },
+        "right": {
+          "type": "boolean"
+        },
+        "bottom": {
+          "type": "boolean"
+        },
+        "left": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "description": "The sides a border draws; all of them when left out."
+    },
+    "BorderStyle": {
+      "type": "string",
+      "enum": ["single", "double", "rounded", "heavy"]
+    },
+    "TitleAlign": {
+      "type": "string",
+      "enum": ["left", "center", "right"]
+    },
+    "Overflow": {
+      "type": "string",
+      "enum": ["visible", "hidden"]
+    },
+    "Justify": {
+      "type": "string",
+      "enum": ["start", "end", "center", "space-between", "space-around"]
+    },
+    "Align": {
+      "type": "string",
+      "enum": ["stretch", "start", "center", "end"]
+    },
+    "Wrap": {
+      "type": "string",
+      "enum": ["word", "char", "none"]
+    },
+    "Click": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "on": {
+          "$ref": "#/$defs/Press"
+        }
+      },
+      "required": ["action", "on"],
+      "description": "What a click on a node runs."
+    },
+    "Press": {
+      "type": "string",
+      "enum": ["down", "up"]
+    },
+    "Action": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "input": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "command"
+            }
+          },
+          "required": ["type", "name"]
+        }
+      ],
+      "description": "What a click asks the host to do."
+    },
+    "ScrollAlign": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "start"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "keep"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "inset": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "type": {
+              "const": "nearest"
+            }
+          },
+          "required": ["type"]
+        }
+      ],
+      "description": "Where a node goes when a `to` verb brings it into view."
+    },
+    "Scroll": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "node": {
+              "type": "string"
+            },
+            "align": {
+              "$ref": "#/$defs/ScrollAlign"
+            },
+            "type": {
+              "const": "to"
+            }
+          },
+          "required": ["type", "node"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "offset": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            },
+            "type": {
+              "const": "offset"
+            }
+          },
+          "required": ["type", "offset"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "rows": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            },
+            "type": {
+              "const": "by"
+            }
+          },
+          "required": ["type", "rows"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "percent": {
+              "type": "integer",
+              "minimum": -32768,
+              "maximum": 32767
+            },
+            "type": {
+              "const": "page"
+            }
+          },
+          "required": ["type", "percent"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "edge": {
+              "$ref": "#/$defs/Edge"
+            },
+            "type": {
+              "const": "edge"
+            }
+          },
+          "required": ["type", "edge"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "string"
+            },
+            "by": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            },
+            "inset": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "type": {
+              "const": "step"
+            }
+          },
+          "required": ["type", "group", "by"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "forget"
+            }
+          },
+          "required": ["type"]
+        }
+      ],
+      "description": "A scroll verb, an effect of a handler; the host clamps it to the content."
+    },
+    "Target": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "node"
+            }
+          },
+          "required": ["type", "surface", "id"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "transcript"
+            }
+          },
+          "required": ["type"]
+        }
+      ],
+      "description": "What a verb or a read names: a scroll of the plugin's surface, or the transcript."
+    },
+    "ScrollState": {
+      "type": "object",
+      "properties": {
+        "offset": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "viewport": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "extent": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        }
+      },
+      "required": ["offset", "viewport", "extent"],
+      "description": "Where a scroll is, in rows."
+    },
+    "AnchorAt": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "row": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "variant": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "owner", "row"],
+      "description": "An anchor and its row in its scroll's content."
+    },
+    "ScrollEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "scroll": {
+              "type": "string"
+            },
+            "anchor": {
+              "$ref": "#/$defs/AnchorAt"
+            },
+            "type": {
+              "const": "landed"
+            }
+          },
+          "required": ["type", "scroll", "anchor"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "scroll": {
+              "type": "string"
+            },
+            "type": {
+              "const": "user-scroll"
+            }
+          },
+          "required": ["type", "scroll"]
+        }
+      ],
+      "description": "What the host tells a surface about its scrolls."
+    },
+    "Notify": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "node"
+            }
+          },
+          "required": ["type", "id"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "scroll"
+            }
+          },
+          "required": ["type", "id"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "scroll": {
+              "type": "string"
+            },
+            "group": {
+              "type": "string"
+            },
+            "type": {
+              "const": "group"
+            }
+          },
+          "required": ["type", "scroll", "group"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "transcript"
+            }
+          },
+          "required": ["type"]
+        }
+      ],
+      "description": "What a surface asks its `layout` call to be told about."
+    },
+    "Rect": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "y": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "width": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "height": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        }
+      },
+      "required": ["x", "y", "width", "height"],
+      "description": "A rect in the surface's own cells."
+    },
+    "Top": {
+      "type": "object",
+      "properties": {
+        "scroll": {
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        },
+        "anchor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AnchorAt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["scroll", "group", "anchor"],
+      "description": "The top anchor of a group in a scroll."
+    },
+    "Geometry": {
+      "type": "object",
+      "properties": {
+        "rects": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/Rect"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "scrolls": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/ScrollState"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/AnchorAt"
+                }
+              }
+            ],
+            "minItems": 3,
+            "maxItems": 3
+          }
+        },
+        "tops": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Top"
+          }
+        },
+        "moved_only": {
+          "type": "boolean"
+        },
+        "reached": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "transcript": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TranscriptView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mount": {
+          "$ref": "#/$defs/MountId"
+        }
+      },
+      "required": ["rects", "scrolls", "groups", "tops", "moved_only", "reached", "transcript"],
+      "description": "What a `layout` call gets: this frame's geometry of what the surface named."
+    },
+    "Paint": {
+      "type": "object",
+      "properties": {
+        "node": {
+          "type": "string"
+        },
+        "bg": {
+          "$ref": "#/$defs/Color"
+        }
+      },
+      "required": ["node", "bg"],
+      "description": "A box's background `layout` sets."
+    },
+    "LayoutReply": {
+      "type": "object",
+      "properties": {
+        "paints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Paint"
+          }
+        },
+        "again": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "description": "What a `layout` call returns."
+    },
+    "TranscriptView": {
+      "type": "object",
+      "properties": {
+        "offset": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "viewport": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "extent": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "above": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TranscriptRow"
+          }
+        }
+      },
+      "required": ["offset", "viewport", "extent", "revision", "above", "rows"],
+      "description": "The session transcript's scroll, as the host publishes it."
+    },
+    "TranscriptRow": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "row": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "height": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "part": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["kind", "message", "row", "height"],
+      "description": "A mounted row of the transcript."
+    },
+    "Manifest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Command"
+          }
+        },
+        "fences": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "slots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SlotClaim"
+          }
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "storage": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "wake": {
+          "type": "boolean"
+        },
+        "route_mounts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fence_gone": {
+          "type": "boolean"
+        },
+        "cancelled": {
+          "type": "boolean"
+        },
+        "deltas": {
+          "type": "boolean"
+        },
+        "plugins": {
+          "type": "boolean"
+        },
+        "surfaces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SurfaceClaim"
+          }
+        },
+        "claims": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ClaimEntry"
+          }
+        },
+        "messages": {
+          "type": "boolean"
+        },
+        "layers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Layer"
+          }
+        },
+        "searches": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["id", "commands", "fences", "slots", "routes", "storage"],
+      "description": "Everything the plugin registered in its setup."
+    },
+    "Command": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "palette": {
+          "type": "boolean"
+        },
+        "group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "slash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "keybind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "arguments": {
+          "type": "boolean"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": ["name", "title", "palette"],
+      "description": "A command: in the palette, as a slash command, and on a keybind."
+    },
+    "Scope": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": ["global", "base"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "route": {
+              "type": "string"
+            }
+          },
+          "required": ["route"],
+          "additionalProperties": false
+        }
+      ],
+      "description": "Where a command holds: everywhere, on one of the plugin's routes, or in the host's base mode."
+    },
+    "SlotClaim": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/SlotKind"
+        },
+        "path": {
+          "type": "string"
+        },
+        "mount": {
+          "type": "boolean"
+        },
+        "size": {
+          "type": "boolean"
+        }
+      },
+      "required": ["kind", "path"],
+      "description": "A slot claim, which a `render` draws."
+    },
+    "SlotKind": {
+      "type": "string",
+      "enum": ["prepend", "append", "before", "after", "replace"]
+    },
+    "SurfaceClaim": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "place": {
+          "$ref": "#/$defs/SurfacePlace"
+        },
+        "palette": {
+          "type": "boolean"
+        },
+        "draw": {
+          "type": "boolean"
+        },
+        "notify": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Notify"
+          }
+        },
+        "layout": {
+          "type": "boolean"
+        },
+        "handler": {
+          "type": "boolean"
+        },
+        "layers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Layer"
+          }
+        },
+        "mounts": {
+          "type": "boolean"
+        }
+      },
+      "required": ["name", "place"],
+      "description": "A surface of contract 2.0, without its view."
+    },
+    "SurfacePlace": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "const": "route"
+            }
+          },
+          "required": ["type", "name"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "$ref": "#/$defs/SlotKind"
+            },
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "const": "slot"
+            }
+          },
+          "required": ["type", "kind", "path"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "const": "panel"
+            }
+          },
+          "required": ["type", "name"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "const": "overlay"
+            }
+          },
+          "required": ["type", "name"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "const": "dialog"
+            }
+          },
+          "required": ["type", "name"]
+        }
+      ],
+      "description": "Where a surface shows."
+    },
+    "Layer": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/LayerScope"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "keys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "any": {
+          "type": "boolean"
+        },
+        "paste": {
+          "type": "boolean"
+        }
+      },
+      "required": ["scope"],
+      "description": "Keys a plugin takes while its scope holds."
+    },
+    "LayerScope": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": ["surface", "composer", "global"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "node": {
+              "type": "string"
+            }
+          },
+          "required": ["node"],
+          "additionalProperties": false
+        }
+      ],
+      "description": "Where a layer holds."
+    },
+    "Bind": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hold": {
+          "type": "boolean"
+        },
+        "command": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["key", "name"],
+      "description": "One key of a layer."
+    },
+    "ClaimEntry": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/ClaimTarget"
+        },
+        "palette": {
+          "type": "boolean"
+        }
+      },
+      "required": ["target"],
+      "description": "A renderer claim, without its view."
+    },
+    "ClaimTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "const": "tool"
+            }
+          },
+          "required": ["type", "name"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "const": "fence"
+            }
+          },
+          "required": ["type", "name"]
+        }
+      ],
+      "description": "What a claim draws."
+    },
+    "Request": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "input": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "command"
+            }
+          },
+          "required": ["type", "name"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "claim": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "input": {
+              "$ref": "#/$defs/SlotInput"
+            },
+            "changed": {
+              "$ref": "#/$defs/Changed"
+            },
+            "type": {
+              "const": "render"
+            }
+          },
+          "required": ["type", "claim", "input", "changed"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "handler": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "event": {
+              "$ref": "../../../../protocol/openapi.json#/components/schemas/V2Event"
+            },
+            "type": {
+              "const": "event"
+            }
+          },
+          "required": ["type", "handler", "event"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "changed": {
+              "$ref": "#/$defs/Changed"
+            },
+            "type": {
+              "const": "render-route"
+            }
+          },
+          "required": ["type", "name", "changed"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/RequestId"
+            },
+            "result": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "Ok": {}
+                  },
+                  "required": ["Ok"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "Err": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["Err"],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "type": {
+              "const": "reply"
+            }
+          },
+          "required": ["type", "id", "result"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "claim": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "input": {
+              "$ref": "#/$defs/SlotInput"
+            },
+            "mounted": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "mount"
+            }
+          },
+          "required": ["type", "claim", "input", "mounted"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "wake"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "mounted": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "route-mount"
+            }
+          },
+          "required": ["type", "name", "mounted"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "type": {
+              "const": "fence-gone"
+            }
+          },
+          "required": ["type", "key"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/RequestId"
+            },
+            "type": {
+              "const": "cancelled"
+            }
+          },
+          "required": ["type", "id"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "events": {
+              "type": "array",
+              "items": {
+                "$ref": "../../../../protocol/openapi.json#/components/schemas/V2Event"
+              }
+            },
+            "type": {
+              "const": "deltas"
+            }
+          },
+          "required": ["type", "events"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "mount": {
+              "$ref": "#/$defs/MountId"
+            },
+            "input": {
+              "$ref": "#/$defs/SurfaceInput"
+            },
+            "next": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "type": {
+              "const": "view"
+            }
+          },
+          "required": ["type", "surface", "mount", "input", "next"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "mount": {
+              "$ref": "#/$defs/MountId"
+            },
+            "canvas": {
+              "type": "string"
+            },
+            "frame": {
+              "$ref": "#/$defs/Frame"
+            },
+            "type": {
+              "const": "draw"
+            }
+          },
+          "required": ["type", "surface", "mount", "canvas", "frame"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "claim": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "mount": {
+              "$ref": "#/$defs/MountId"
+            },
+            "input": {
+              "$ref": "#/$defs/SurfaceInput"
+            },
+            "part": {
+              "$ref": "#/$defs/ClaimPart"
+            },
+            "next": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "type": {
+              "const": "claim"
+            }
+          },
+          "required": ["type", "claim", "mount", "input", "part", "next"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mount": {
+              "$ref": "#/$defs/MountId"
+            },
+            "type": {
+              "const": "unmount"
+            }
+          },
+          "required": ["type", "mount"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "type": {
+              "const": "message"
+            }
+          },
+          "required": ["type", "message"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "geometry": {
+              "$ref": "#/$defs/Geometry"
+            },
+            "type": {
+              "const": "layout"
+            }
+          },
+          "required": ["type", "surface", "geometry"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "to": {
+              "$ref": "#/$defs/InputTo"
+            },
+            "event": {
+              "$ref": "#/$defs/InputEvent"
+            },
+            "type": {
+              "const": "input"
+            }
+          },
+          "required": ["type", "to", "event"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "query": {
+              "type": "string"
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SelectOption"
+              }
+            },
+            "type": {
+              "const": "search"
+            }
+          },
+          "required": ["type", "name", "query", "options"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "plugins"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/RenderFence"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "render-fence"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        }
+      ],
+      "description": "A request the host sends a plugin's `call`."
+    },
+    "RenderFence": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Fence"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "index": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 18446744073709551615
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": []
+        }
+      ],
+      "description": "A fence, with the index of its render."
+    },
+    "Fence": {
+      "type": "object",
+      "properties": {
+        "language": {
+          "type": "string"
+        },
+        "info": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "streaming": {
+          "type": "boolean"
+        },
+        "closed": {
+          "type": "boolean"
+        },
+        "key": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        }
+      },
+      "required": ["language", "info", "code", "streaming", "closed", "key"],
+      "description": "A Markdown code fence."
+    },
+    "InputTo": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "mount": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MountId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "surface"
+            }
+          },
+          "required": ["type", "surface"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "layer": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "type": {
+              "const": "layer"
+            }
+          },
+          "required": ["type", "layer"]
+        }
+      ],
+      "description": "Whose handler an input request calls."
+    },
+    "InputEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "const": "paste"
+            }
+          },
+          "required": ["type", "text"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "node": {
+              "type": "string"
+            },
+            "inside": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "hover"
+            }
+          },
+          "required": ["type", "node", "inside"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string"
+            },
+            "type": {
+              "const": "closed"
+            }
+          },
+          "required": ["type", "surface"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "$ref": "#/$defs/ScrollEvent"
+            },
+            "type": {
+              "const": "scroll"
+            }
+          },
+          "required": ["type", "event"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "node": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "seq": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "type": {
+              "const": "change"
+            }
+          },
+          "required": ["type", "node", "text"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "node": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "const": "submit"
+            }
+          },
+          "required": ["type", "node", "text"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mount": {
+              "$ref": "#/$defs/MountId"
+            },
+            "mounted": {
+              "type": "boolean"
+            },
+            "slot": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SlotInput"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "mount"
+            }
+          },
+          "required": ["type", "mount", "mounted"]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Key"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "key"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Pointer"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "pointer"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        }
+      ],
+      "description": "An event the host routes to a handler."
+    },
+    "Key": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "bind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["key"],
+      "description": "A key."
+    },
+    "Pointer": {
+      "type": "object",
+      "properties": {
+        "node": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/PointerKind"
+        },
+        "x": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "y": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "screen_x": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "screen_y": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "button": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Button"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "from": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Dragged"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["node", "kind", "x", "y", "screen_x", "screen_y"],
+      "description": "A pointer event on a node."
+    },
+    "PointerKind": {
+      "type": "string",
+      "enum": ["down", "up", "drag", "wheel-up", "wheel-down", "drop"]
+    },
+    "Button": {
+      "type": "string",
+      "enum": ["left", "middle", "right"]
+    },
+    "Dragged": {
+      "type": "object",
+      "properties": {
+        "surface": {
+          "type": "string"
+        },
+        "node": {
+          "type": "string"
+        }
+      },
+      "required": ["surface", "node"],
+      "description": "Where a dropped drag started."
+    },
+    "ClaimPart": {
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ToolPart"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "tool"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FencePart"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "fence"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        }
+      ],
+      "description": "A claimed part as it is now."
+    },
+    "ToolPart": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/ToolState"
+        },
+        "permission": {
+          "type": "boolean"
+        },
+        "tool": {
+          "$ref": "#/$defs/ClaimTool"
+        }
+      },
+      "required": ["session", "message", "state", "permission", "tool"],
+      "description": "A tool call in an assistant message."
+    },
+    "ToolState": {
+      "type": "string",
+      "enum": ["pending", "running", "completed", "error"]
+    },
+    "ClaimTool": {
+      "description": "A tool call as a claim's view gets it: the HTTP API's assistant tool part without what the call returned, which its `part-output` source names.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.Assistant.Tool/properties/type"
+        },
+        "id": {
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.Assistant.Tool/properties/id"
+        },
+        "name": {
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.Assistant.Tool/properties/name"
+        },
+        "executed": {
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.Assistant.Tool/properties/executed"
+        },
+        "native": {
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.Assistant.Tool/properties/native"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.ToolState.Streaming"
+            },
+            {
+              "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.ToolState.Running"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": ["completed"]
+                },
+                "input": {
+                  "type": "object"
+                },
+                "content": {
+                  "type": "array",
+                  "maxItems": 0
+                },
+                "metadata": {
+                  "type": "object"
+                }
+              },
+              "required": ["status", "input", "content"],
+              "additionalProperties": false
+            },
+            {
+              "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.ToolState.Error"
+            }
+          ]
+        },
+        "time": {
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.Assistant.Tool/properties/time"
+        }
+      },
+      "required": ["type", "id", "name", "state", "time"],
+      "additionalProperties": false
+    },
+    "FencePart": {
+      "type": "object",
+      "properties": {
+        "language": {
+          "type": "string"
+        },
+        "info": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "streaming": {
+          "type": "boolean"
+        },
+        "closed": {
+          "type": "boolean"
+        }
+      },
+      "required": ["language", "info", "code", "streaming", "closed"],
+      "description": "A fenced code block the transcript shows."
+    },
+    "SelectOption": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "footer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "category": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "disabled": {
+          "type": "boolean"
+        },
+        "footer_color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Color"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gutter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Gutter"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Action"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "toggle": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "search_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["title", "value"],
+      "description": "A row of a select."
+    },
+    "Gutter": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": ["spinner"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "span": {
+              "$ref": "#/$defs/Span"
+            }
+          },
+          "required": ["span"],
+          "additionalProperties": false
+        }
+      ],
+      "description": "What a row shows before its title."
+    },
+    "HostRequest": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "level": {
+              "$ref": "#/$defs/Level"
+            },
+            "message": {
+              "type": "string"
+            },
+            "type": {
+              "const": "log"
+            }
+          },
+          "required": ["type", "level", "message"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "variant": {
+              "$ref": "#/$defs/Variant"
+            },
+            "message": {
+              "type": "string"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "session": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "toast"
+            }
+          },
+          "required": ["type", "variant", "message"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "type": {
+              "const": "storage-get"
+            }
+          },
+          "required": ["type", "key"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            },
+            "type": {
+              "const": "storage-set"
+            }
+          },
+          "required": ["type", "key", "value"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "const": "open-route"
+            }
+          },
+          "required": ["type", "name"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "type": {
+              "const": "storage-key"
+            }
+          },
+          "required": ["type", "key"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "token": {
+              "type": "string"
+            },
+            "type": {
+              "const": "color"
+            }
+          },
+          "required": ["type", "token"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "session"
+            }
+          },
+          "required": ["type", "id"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "family"
+            }
+          },
+          "required": ["type", "id"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "messages"
+            }
+          },
+          "required": ["type", "id"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "type": {
+              "const": "message"
+            }
+          },
+          "required": ["type", "session", "message"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "location": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/LocationRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "models"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "model"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "limits"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "location": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/LocationRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "providers"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "info"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "location": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/LocationRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "mcp-servers"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "location": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/LocationRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "integrations"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "location": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/LocationRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "vcs"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "route"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "input": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "dispatch"
+            }
+          },
+          "required": ["type", "name"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "route": {
+              "$ref": "#/$defs/Route"
+            },
+            "type": {
+              "const": "navigate"
+            }
+          },
+          "required": ["type", "route"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "dialog": {
+              "$ref": "#/$defs/Dialog"
+            },
+            "type": {
+              "const": "dialog"
+            }
+          },
+          "required": ["type", "dialog"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "then": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Action"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "copy"
+            }
+          },
+          "required": ["type", "text"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "interactive"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "const": "shortcut"
+            }
+          },
+          "required": ["type", "name"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "type": {
+              "const": "dialog-open"
+            }
+          },
+          "required": ["type", "key"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "fields": {
+              "type": "object"
+            },
+            "type": {
+              "const": "storage-merge"
+            }
+          },
+          "required": ["type", "key", "fields"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "composer"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "edit": {
+              "$ref": "#/$defs/ComposerEdit"
+            },
+            "type": {
+              "const": "composer-edit"
+            }
+          },
+          "required": ["type", "edit"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "checkpoint"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mark": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "type": {
+              "const": "rollback"
+            }
+          },
+          "required": ["type", "mark"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "variants"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "variant": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "set-variant"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "type": {
+              "const": "set-model"
+            }
+          },
+          "required": ["type", "provider", "model"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "tabs-enabled"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "tabs"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "edit": {
+              "$ref": "#/$defs/TabEdit"
+            },
+            "type": {
+              "const": "tab"
+            }
+          },
+          "required": ["type", "edit"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "keymap-pending"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "keymap-active"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "keymap-commands"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "const": "shortcuts"
+            }
+          },
+          "required": ["type", "name"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "selection"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "clear-selection"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "type": {
+              "const": "timer"
+            }
+          },
+          "required": ["type", "ms"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/RequestId"
+            },
+            "type": {
+              "const": "cancel-timer"
+            }
+          },
+          "required": ["type", "id"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "owner"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "owner": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 18446744073709551615
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "set-owner"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "type": {
+              "const": "title"
+            }
+          },
+          "required": ["type", "title"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "theme"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "themes"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "plugins"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "const": "setting"
+            }
+          },
+          "required": ["type", "name"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "bytes": {
+              "type": "string"
+            },
+            "type": {
+              "const": "image-size"
+            }
+          },
+          "required": ["type", "bytes"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "image-bounds"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "integer",
+              "minimum": -9223372036854775808,
+              "maximum": 9223372036854775807
+            },
+            "type": {
+              "const": "utc-offset"
+            }
+          },
+          "required": ["type", "at"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "const": "measure"
+            }
+          },
+          "required": ["type", "text"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "value": {},
+            "type": {
+              "const": "set-setting"
+            }
+          },
+          "required": ["type", "name", "value"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "const": "set-theme"
+            }
+          },
+          "required": ["type", "name"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "theme": {},
+            "type": {
+              "const": "install-theme"
+            }
+          },
+          "required": ["type", "name", "theme"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "$ref": "#/$defs/Target"
+            },
+            "verb": {
+              "$ref": "#/$defs/Scroll"
+            },
+            "type": {
+              "const": "scroll"
+            }
+          },
+          "required": ["type", "target", "verb"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "$ref": "#/$defs/Target"
+            },
+            "type": {
+              "const": "scroll-state"
+            }
+          },
+          "required": ["type", "target"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "$ref": "#/$defs/Target"
+            },
+            "group": {
+              "type": "string"
+            },
+            "type": {
+              "const": "anchors"
+            }
+          },
+          "required": ["type", "target", "group"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "$ref": "#/$defs/Target"
+            },
+            "group": {
+              "type": "string"
+            },
+            "inset": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "type": {
+              "const": "top-anchor"
+            }
+          },
+          "required": ["type", "target", "group"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "transcript"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string"
+            },
+            "type": {
+              "const": "close-panel"
+            }
+          },
+          "required": ["type", "surface"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string"
+            },
+            "type": {
+              "const": "close-overlay"
+            }
+          },
+          "required": ["type", "surface"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "set-enabled"
+            }
+          },
+          "required": ["type", "name", "enabled"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "node": {
+              "type": "string"
+            },
+            "type": {
+              "const": "focus"
+            }
+          },
+          "required": ["type", "node"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "blur"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "set-mode"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "release-keys"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "node": {
+              "type": "string"
+            },
+            "type": {
+              "const": "rect"
+            }
+          },
+          "required": ["type", "node"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "focused"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "input-mode"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "sessions"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "pending"
+            }
+          },
+          "required": ["type", "id"]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Attention"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "attention"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Fetch"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "fetch"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Foreground"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "foreground"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/OpenPanel"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "open-panel"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Overlay"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "overlay"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        }
+      ],
+      "description": "A request a plugin sends the host table's `call`."
+    },
+    "Level": {
+      "type": "string",
+      "enum": ["debug", "info", "warn", "error"]
+    },
+    "Variant": {
+      "type": "string",
+      "enum": ["info", "success", "warning", "error"]
+    },
+    "Toast": {
+      "type": "object",
+      "properties": {
+        "variant": {
+          "$ref": "#/$defs/Variant"
+        },
+        "message": {
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "session": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["variant", "message"],
+      "description": "A toast."
+    },
+    "Attention": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "notify": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/When"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sound": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sound"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["message"],
+      "description": "A notification and a sound."
+    },
+    "When": {
+      "type": "string",
+      "enum": ["always", "focused", "blurred"]
+    },
+    "Sound": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/SoundName"
+        },
+        "when": {
+          "$ref": "#/$defs/When"
+        },
+        "volume": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["name", "when"],
+      "description": "A sound."
+    },
+    "SoundName": {
+      "type": "string",
+      "enum": ["default", "question", "permission", "error", "done", "subagent_done"]
+    },
+    "Route": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "home"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "session"
+            }
+          },
+          "required": ["type", "id"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "const": "plugin"
+            }
+          },
+          "required": ["type", "id", "name"]
+        }
+      ],
+      "description": "A route of the TUI."
+    },
+    "Fetch": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "query": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "body": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bytes": {
+          "type": "boolean"
+        }
+      },
+      "required": ["method", "path"],
+      "description": "A request of the HTTP API, which a `reply` request answers."
+    },
+    "Dialog": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "action": {
+              "$ref": "#/$defs/Action"
+            },
+            "placeholder": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "prompt"
+            }
+          },
+          "required": ["type", "title", "action"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "type": {
+              "const": "close"
+            }
+          },
+          "required": ["type", "key"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "dialog": {
+              "$ref": "#/$defs/Dialog"
+            },
+            "dismissed": {
+              "$ref": "#/$defs/Action"
+            },
+            "type": {
+              "const": "dismissable"
+            }
+          },
+          "required": ["type", "dialog", "dismissed"]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Panel"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "panel"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Select"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "select"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Confirm"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "confirm"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Alert"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "alert"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ErrorDetails"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "error-details"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Images"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "images"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/DialogSurface"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "surface"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        }
+      ],
+      "description": "A dialog the host shows."
+    },
+    "DialogSurface": {
+      "type": "object",
+      "properties": {
+        "surface": {
+          "type": "string"
+        },
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PanelSize"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "centered": {
+          "type": "boolean"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["surface"],
+      "description": "A dialog whose body is a new mount of the plugin's dialog surface."
+    },
+    "Select": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SelectOption"
+          }
+        },
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "placeholder": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "current": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SelectAction"
+          }
+        },
+        "binds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PanelBind"
+          }
+        },
+        "search": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PanelSize"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "focus": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "query": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Action"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "query_delay": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "filterless": {
+          "type": "boolean"
+        },
+        "empty": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "note": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "centered": {
+          "type": "boolean"
+        }
+      },
+      "required": ["title", "options", "action"],
+      "description": "A select dialog."
+    },
+    "SelectAction": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hidden": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "primary": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rowless": {
+          "type": "boolean"
+        },
+        "command": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "disabled": {
+          "type": "boolean"
+        },
+        "hidden_all": {
+          "type": "boolean"
+        }
+      },
+      "required": ["title", "action"],
+      "description": "A footer action of a select."
+    },
+    "Panel": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "title": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Span"
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/RenderNode"
+        },
+        "size": {
+          "$ref": "#/$defs/PanelSize"
+        },
+        "subtitle": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PanelAction"
+          }
+        },
+        "binds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PanelBind"
+          }
+        },
+        "bleed": {
+          "type": "boolean"
+        },
+        "centered": {
+          "type": "boolean"
+        },
+        "bare": {
+          "type": "boolean"
+        },
+        "close": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "height": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fit_screen": {
+          "type": "boolean"
+        }
+      },
+      "required": ["key", "title", "body"],
+      "description": "A panel dialog, whose body is a `RenderNode`."
+    },
+    "PanelSize": {
+      "type": "string",
+      "enum": ["medium", "large", "xlarge"]
+    },
+    "PanelAction": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Color"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "close": {
+          "type": "boolean"
+        }
+      },
+      "required": ["title", "action"],
+      "description": "A footer action of a panel."
+    },
+    "PanelBind": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "action": {
+          "$ref": "#/$defs/Action"
+        }
+      },
+      "required": ["key", "title", "action"],
+      "description": "A key of a panel."
+    },
+    "Confirm": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "label": {
+          "$ref": "#/$defs/ConfirmLabel"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PanelSize"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "centered": {
+          "type": "boolean"
+        }
+      },
+      "required": ["title", "message", "action"],
+      "description": "A question with two answers."
+    },
+    "ConfirmLabel": {
+      "type": "object",
+      "properties": {
+        "confirm": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cancel": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "description": "The labels of a confirm's answers."
+    },
+    "Alert": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Action"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PanelSize"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "centered": {
+          "type": "boolean"
+        }
+      },
+      "required": ["title", "message"],
+      "description": "A notice."
+    },
+    "ErrorDetails": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "context": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "back": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Action"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reference": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "plugin": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["title", "error"],
+      "description": "The host's view of an error."
+    },
+    "Images": {
+      "type": "object",
+      "properties": {
+        "images": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Image"
+          }
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": ["images"],
+      "description": "Images to look through."
+    },
+    "Image": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["data"],
+      "description": "An image, in base64."
+    },
+    "ComposerEdit": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "const": "set"
+            }
+          },
+          "required": ["type", "text"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "const": "insert"
+            }
+          },
+          "required": ["type", "text"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "submit"
+            }
+          },
+          "required": ["type"]
+        }
+      ],
+      "description": "An edit of the composer."
+    },
+    "TabEdit": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            },
+            "type": {
+              "const": "open"
+            }
+          },
+          "required": ["type", "session"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            },
+            "type": {
+              "const": "focus"
+            }
+          },
+          "required": ["type", "session"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "type": {
+              "const": "move"
+            }
+          },
+          "required": ["type", "session", "index"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "session": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "close"
+            }
+          },
+          "required": ["type"]
+        }
+      ],
+      "description": "An edit of the session tabs."
+    },
+    "Foreground": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cwd": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["command"],
+      "description": "A program the host runs in the foreground."
+    },
+    "OpenPanel": {
+      "type": "object",
+      "properties": {
+        "surface": {
+          "type": "string"
+        },
+        "session": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fullscreen": {
+          "type": "boolean"
+        }
+      },
+      "required": ["surface"],
+      "description": "Opens a panel surface."
+    },
+    "Overlay": {
+      "type": "object",
+      "properties": {
+        "surface": {
+          "type": "string"
+        },
+        "anchor": {
+          "$ref": "#/$defs/OverlayAnchor"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        }
+      },
+      "required": ["surface", "anchor", "width", "height"],
+      "description": "Opens an overlay surface."
+    },
+    "OverlayAnchor": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "point": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                "y": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                }
+              },
+              "required": ["x", "y"]
+            }
+          },
+          "required": ["point"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "node": {
+              "type": "object",
+              "properties": {
+                "node": {
+                  "type": "string"
+                }
+              },
+              "required": ["node"]
+            }
+          },
+          "required": ["node"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "edge": {
+              "$ref": "#/$defs/ScreenEdge"
+            }
+          },
+          "required": ["edge"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "object",
+              "properties": {
+                "surface": {
+                  "type": "string"
+                },
+                "edge": {
+                  "$ref": "#/$defs/ScreenEdge"
+                }
+              },
+              "required": ["surface", "edge"]
+            }
+          },
+          "required": ["surface"],
+          "additionalProperties": false
+        }
+      ],
+      "description": "Where an overlay's top left corner goes."
+    },
+    "ScreenEdge": {
+      "type": "string",
+      "enum": ["top", "bottom", "left", "right"]
+    },
+    "ViewReply": {
+      "type": "object",
+      "properties": {
+        "node": {
+          "$ref": "#/$defs/Node"
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "$ref": "#/$defs/ContentRef"
+              },
+              {
+                "$ref": "#/$defs/Blob"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "released": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContentRef"
+          }
+        },
+        "memo": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": ["node"],
+      "description": "What a `view` request answers."
+    },
+    "ClaimReply": {
+      "type": "object",
+      "properties": {
+        "node": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Node"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "$ref": "#/$defs/ContentRef"
+              },
+              {
+                "$ref": "#/$defs/Blob"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "released": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContentRef"
+          }
+        },
+        "memo": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": [],
+      "description": "What a `claim` request answers; a null node leaves the part to the host."
+    },
+    "Blob": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "base64": {
+              "type": "string"
+            }
+          },
+          "required": ["base64"],
+          "additionalProperties": false
+        }
+      ],
+      "description": "Content: text when it is UTF-8, else base64."
+    },
+    "RequestId": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 18446744073709551615,
+      "description": "What a `fetch` or a `foreground` the host takes answers, which its one reply names; never 0, which names no request. One the host does not take, as when its queue of effects is full, answers an error, and no reply comes."
+    },
+    "Handled": {
+      "type": "string",
+      "enum": ["consume", "pass"]
+    },
+    "Fenced": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "code"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "keep"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "lines": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Line"
+              }
+            },
+            "fg": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "drag": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "lines"
+            }
+          },
+          "required": ["type", "lines"]
+        }
+      ],
+      "description": "What a `render-fence` request answers."
+    },
+    "Line": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Span"
+      },
+      "description": "A line of styled text."
+    },
+    "Render": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "keep"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "hide"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "node": {
+              "$ref": "#/$defs/RenderNode"
+            },
+            "type": {
+              "const": "show"
+            }
+          },
+          "required": ["type", "node"]
+        }
+      ],
+      "description": "What a `render` and a `render-route` request answer."
+    },
+    "RenderNode": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "row": {
+              "type": "boolean"
+            },
+            "gap": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "padding": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                }
+              ],
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "justify": {
+              "$ref": "#/$defs/Justify"
+            },
+            "align": {
+              "$ref": "#/$defs/Align"
+            },
+            "bg": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "on_click": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Click"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/RenderNode"
+              }
+            },
+            "border": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Border"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "padding_sides": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Edges"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "wrap": {
+              "type": "boolean"
+            },
+            "overflow": {
+              "$ref": "#/$defs/Overflow"
+            },
+            "type": {
+              "const": "box"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "spans": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Span"
+              }
+            },
+            "fg": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "wrap": {
+              "$ref": "#/$defs/Wrap"
+            },
+            "truncate": {
+              "type": "boolean"
+            },
+            "selectable": {
+              "type": "boolean"
+            },
+            "hover_fg": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "on_click": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Click"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "text"
+            }
+          },
+          "required": ["type", "spans"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "const": "slot"
+            }
+          },
+          "required": ["type", "path"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "const": "markdown"
+            }
+          },
+          "required": ["type", "text"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "type": {
+              "const": "spinner"
+            }
+          },
+          "required": ["type", "label"]
+        }
+      ],
+      "description": "The node tree a render and a dialog body draw."
+    },
+    "NodeRect": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "y": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        }
+      },
+      "required": ["x", "y", "width", "height"],
+      "description": "A node's place on the screen."
+    },
+    "Focused": {
+      "type": "object",
+      "properties": {
+        "surface": {
+          "type": "boolean"
+        },
+        "node": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["surface"],
+      "description": "Where the focus is, for the call's mount."
+    },
+    "PluginEntry": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "origin": {
+          "$ref": "#/$defs/PluginOrigin"
+        },
+        "status": {
+          "$ref": "#/$defs/PluginStatus"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "slow": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["key", "id", "origin", "status"],
+      "description": "A TUI plugin, as the host lists it."
+    },
+    "PluginOrigin": {
+      "type": "string",
+      "enum": ["builtin", "added", "configured", "external"]
+    },
+    "PluginStatus": {
+      "type": "string",
+      "enum": ["active", "inactive", "skipped", "failed", "pending", "declined"]
+    },
+    "Composer": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "cursor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "focused": {
+          "type": "boolean"
+        }
+      },
+      "required": ["text", "cursor", "focused"],
+      "description": "The composer on screen."
+    },
+    "Tab": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "busy": {
+          "type": "boolean"
+        },
+        "attention": {
+          "type": "boolean"
+        },
+        "unread": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Unread"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["session_id"],
+      "description": "A session tab."
+    },
+    "Unread": {
+      "type": "string",
+      "enum": ["activity", "error"]
+    },
+    "KeymapPending": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "token": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["key"],
+      "description": "A key of a sequence in progress."
+    },
+    "KeymapActive": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "continues": {
+          "type": "boolean"
+        }
+      },
+      "required": ["key"],
+      "description": "A key the sequence in progress may continue with."
+    },
+    "KeymapCommand": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "palette": {
+          "type": "boolean"
+        },
+        "slash": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeymapSlash"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "suggested": {
+          "type": "boolean"
+        }
+      },
+      "required": ["id", "enabled"],
+      "description": "A command of the keymap."
+    },
+    "KeymapSlash": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "arguments": {
+          "type": "boolean"
+        }
+      },
+      "required": ["name"],
+      "description": "A command's slash form."
+    },
+    "Session": {
+      "type": "object",
+      "properties": {
+        "info": {
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Info"
+        },
+        "status": {
+          "$ref": "#/$defs/SessionStatus"
+        }
+      },
+      "required": ["info", "status"],
+      "description": "A session and its status."
+    },
+    "SessionStatus": {
+      "type": "string",
+      "enum": ["idle", "running"]
+    },
+    "Family": {
+      "type": "object",
+      "properties": {
+        "members": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Member"
+          }
+        },
+        "cost": {
+          "type": "number"
+        },
+        "shells": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "scripts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": ["members", "cost"],
+      "description": "A session's family: its subagent sessions."
+    },
+    "Member": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/SessionStatus"
+        },
+        "updated": {
+          "type": "number"
+        },
+        "parent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "jobs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": ["id", "status", "updated"],
+      "description": "A session of a family."
+    },
+    "Info": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "size": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "location": {
+          "$ref": "#/$defs/LocationRef"
+        },
+        "failed_plugins": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "locale": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["version", "size", "location"],
+      "description": "The host's version, size and location."
+    },
+    "Measure": {
+      "type": "object",
+      "properties": {
+        "cells": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "graphemes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        }
+      },
+      "required": ["cells", "graphemes"],
+      "description": "A text as the host's text layout counts it: its cells in a row, and its graphemes."
+    },
+    "ImageBounds": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "side": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": ["bytes", "side"],
+      "description": "The bounds of the images a host with `image-bounds` decodes."
+    },
+    "DrawList": {
+      "description": "What a `draw` request answers: bytes, not JSON, and none to keep the list the host holds. A version byte (1), then records: an operation byte, the payload's length as a little-endian u32, and the payload. Every integer is little-endian; coordinates are cells from the canvas's top left corner. A color is r, g, b, a bytes. A style is 10 bytes: flags (1 a foreground, 2 a background), attributes (bold 1, dim 2, italic 4, underline 8, inverse 16, strikethrough 32), then the foreground and the background colors, each written whether it is set or not. A border is 0 single, 1 double, 2 rounded, 3 heavy. A reader skips a record of an operation it does not know, which is how a later 2.x adds one; a list the host cannot read fails the plugin, and one over a limit shows a placeholder.",
+      "contentMediaType": "application/octet-stream",
+      "x-version": 1,
+      "x-limits": {
+        "bytes": 1048576,
+        "operations": 65536,
+        "text-bytes": 65536,
+        "clips": 32
+      },
+      "x-records": [
+        {
+          "op": 1,
+          "name": "fill",
+          "payload": "x: i16, y: i16, width: u16, height: u16, color"
+        },
+        {
+          "op": 2,
+          "name": "text",
+          "payload": "x: i16, y: i16, style, then the text in UTF-8"
+        },
+        {
+          "op": 3,
+          "name": "cell",
+          "payload": "x: i16, y: i16, style, char: u32"
+        },
+        {
+          "op": 4,
+          "name": "cells",
+          "payload": "x: i16, y: i16, width: u16, then each cell's style and char: u32, in rows of width"
+        },
+        {
+          "op": 5,
+          "name": "rect",
+          "payload": "x: i16, y: i16, width: u16, height: u16, border: u8, color, background (alpha 0: none)"
+        },
+        {
+          "op": 6,
+          "name": "clip",
+          "payload": "x: i16, y: i16, width: u16, height: u16: drawing until its pop is cut to it"
+        },
+        {
+          "op": 7,
+          "name": "pop",
+          "payload": "nothing"
+        }
+      ]
+    }
+  }
+}

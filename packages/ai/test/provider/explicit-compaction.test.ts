@@ -32,7 +32,10 @@ testEffect(
       if (new URL(request.url).pathname.endsWith("/compact")) {
         expect(JSON.parse(text)).toEqual({
           model: "overlaid",
-          input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] }],
+          input: [
+            { type: "message", role: "developer", content: "system instructions" },
+            { type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] },
+          ],
           instructions: "request instructions",
           previous_response_id: "resp_previous",
         })
@@ -61,7 +64,7 @@ testEffect(
         headers.push(String(request.model.id))
         return { "x-deployment": "fixture", "x-override": "route" }
       },
-      defaults: {
+      options: {
         headers: { "x-default": "configured", "x-override": "configured" },
         providerOptions: { store: false },
         http: { body: { instructions: "default instructions" } },
@@ -71,8 +74,8 @@ testEffect(
       model: route.model({ id: "fixture" }),
       prompt: "hello",
       system: "system instructions",
+      headers: { "x-override": "request" },
       http: {
-        headers: { "x-override": "request" },
         query: { trace: "request" },
         body: {
           model: "overlaid",
@@ -112,8 +115,7 @@ for (const model of [
         expect(new URL(request.url).pathname).toEndWith("/responses/compact")
         expect(JSON.parse(text)).toEqual({
           model: "fixture",
-          input: [item],
-          instructions: "Keep the context",
+          input: [{ type: "message", role: "developer", content: "Keep the context" }, item],
           include: ["reasoning.encrypted_content"],
         })
         return respond(JSON.stringify({ object: "response.compaction", output: [checkpoint] }))
@@ -293,7 +295,7 @@ for (const overlay of [undefined, { service_tier: "priority", prompt_cache_key: 
           include: ["reasoning.encrypted_content"],
           parallelToolCalls: false,
         },
-        generation: { maxTokens: 100 },
+        maxTokens: 100,
         tools: [{ name: "lookup", description: "Lookup", inputSchema: {} }],
         http: {
           body: {
@@ -422,15 +424,21 @@ for (const model of [
         if (new URL(request.url).pathname.endsWith("/responses/compact")) {
           expect(body).toEqual({
             model: model.id,
-            input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "original" }] }],
-            instructions: "system",
+            input: [
+              { type: "message", role: "developer", content: "system" },
+              { type: "message", role: "user", content: [{ type: "input_text", text: "original" }] },
+            ],
             include: ["reasoning.encrypted_content"],
             ...(model.id === "gpt-5.3-codex" ? { reasoning: { effort: "medium", summary: "auto" } } : {}),
           })
           return respond(
             JSON.stringify({
               object: "response.compaction",
-              output,
+              // `/compact` echoes the leading developer message; the replay leads with its own instead.
+              output: [
+                { type: "message", role: "developer", content: [{ type: "input_text", text: "system" }] },
+                ...output,
+              ],
               usage: { input_tokens: 1000, output_tokens: 10, total_tokens: 1010 },
             }),
             { headers: { "content-type": "application/json" } },
@@ -438,6 +446,7 @@ for (const model of [
         }
         expect(new URL(request.url).pathname.endsWith("/responses")).toBe(true)
         expect(body.input).toEqual([
+          { type: "message", role: "developer", content: "system" },
           ...output,
           { type: "message", role: "user", content: [{ type: "input_text", text: "continue" }] },
         ])

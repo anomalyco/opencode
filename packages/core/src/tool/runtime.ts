@@ -12,24 +12,35 @@ const formatEffectIssues = SchemaIssue.makeFormatterStandardSchemaV1()
 // through them the `Effect.fn` closures over its Location's services, so evicted Locations stayed alive.
 const jsonSchemas = new WeakMap<object, Schema.Codec<unknown> | undefined>()
 
-const codecFor = (schema: JsonSchema.JsonSchema) => {
+export const codecFor = (schema: JsonSchema.JsonSchema) => {
   if (jsonSchemas.has(schema)) return jsonSchemas.get(schema)
   const codec = Result.try(() => jsonSchema(schema)).pipe(Result.getOrUndefined)
   jsonSchemas.set(schema, codec)
   return codec
 }
 
-export const definition = (tool: Tool.Info<any, any>): ToolDefinition => ({
-  type: "tool",
-  name: effectiveName(tool),
-  description: tool.description,
-  inputSchema: inputJsonSchema(tool.input),
-  ...(tool.output === undefined ? {} : { outputSchema: outputJsonSchema(tool.output) }),
-})
+const codemodeOverrides = (tool: Tool.Info<any, any>, codemode: boolean) =>
+  codemode && typeof tool.options?.codemode === "object" && tool.options.codemode !== null
+    ? tool.options.codemode
+    : undefined
+
+export const definition = (tool: Tool.Info<any, any>, codemode = false): ToolDefinition => {
+  const overrides = codemodeOverrides(tool, codemode)
+  const output = overrides?.output ?? tool.output
+  return {
+    type: "tool",
+    name: effectiveName(tool),
+    description: overrides?.description ?? tool.description,
+    inputSchema: inputJsonSchema(overrides?.input ?? tool.input),
+    ...(tool.freeform && { freeform: tool.freeform }),
+    ...(output === undefined ? {} : { outputSchema: outputJsonSchema(output) }),
+  }
+}
 
 export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool.Context) =>
   Effect.gen(function* () {
-    const decoded = yield* decodeInput(tool, input)
+    const overrides = codemodeOverrides(tool, context.codemode === true)
+    const decoded = yield* decodeInput(tool, overrides?.input ?? tool.input, input)
     // Tool implementations declare `Tool.Error` but plugins can fail with anything at
     // runtime. A foreign typed failure would slip past every `catchTag("Tool.Error")`
     // downstream and leave its call permanently unsettled, so the declared contract is
@@ -44,8 +55,9 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
             }),
       ),
     )
-    if (tool.output === undefined) {
-      if ("output" in result) return yield* Effect.die("Tool result declared output without an output schema")
+    const outputSchema = overrides?.output ?? tool.output
+    if (outputSchema === undefined) {
+      if ("output" in result) return yield* Effect.die(new Error("Tool result declared output without an output schema"))
       return {
         output: undefined,
         content: normalizeContent(result.content),
@@ -53,7 +65,7 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
       }
     }
     if (!("output" in result)) return yield* new Tool.Error({ message: "Tool did not return its declared output" })
-    const output = yield* encodeOutput(tool.output, result.output)
+    const output = yield* encodeOutput(outputSchema, result.output)
     return {
       output,
       content: normalizeContent(result.content, output),
@@ -61,9 +73,9 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
     }
   })
 
-const decodeInput = (tool: Tool.Info<any, any>, value: unknown) =>
+const decodeInput = (tool: Pick<Tool.Info, "name" | "options">, schema: Tool.ValueSchema<any>, value: unknown) =>
   Effect.gen(function* () {
-    const result = yield* validateInput(tool.input, value)
+    const result = yield* validateInput(schema, value)
     if (result.issues)
       return yield* new Tool.Error({ message: formatInputIssues(effectiveName(tool), result.issues, value) })
     return result.value
@@ -134,7 +146,7 @@ const encodeOutput = (schema: Tool.ValueSchema<any>, value: unknown) => {
 }
 
 const isStandardSchema = (schema: Tool.ValueSchema<any>): schema is StandardSchemaV1<any, any> =>
-  typeof schema === "object" && schema !== null && "~standard" in schema
+  (typeof schema === "object" || typeof schema === "function") && schema !== null && "~standard" in schema
 
 const isStandardJSONSchema = (
   schema: StandardSchemaV1<any, any>,
@@ -154,16 +166,28 @@ const validateStandard = (
     }),
   )
 
+// Tool lists are rebuilt on every config change in every Location, so convert each schema once.
+const inputJsonSchemas = new WeakMap<object, JsonSchema.JsonSchema>()
+const outputJsonSchemas = new WeakMap<object, JsonSchema.JsonSchema>()
+
+const cached = (cache: WeakMap<object, JsonSchema.JsonSchema>, schema: object, make: () => JsonSchema.JsonSchema) => {
+  const hit = cache.get(schema)
+  if (hit) return hit
+  const value = make()
+  cache.set(schema, value)
+  return value
+}
+
 const inputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
   if (schema === undefined || schema === null) return {}
-  if (isStandardSchema(schema)) return standardJsonSchema(schema, "input")
+  if (isStandardSchema(schema)) return cached(inputJsonSchemas, schema, () => standardJsonSchema(schema, "input"))
   if (!Schema.isSchema(schema)) return schema
-  return emptyInputJsonSchema(schema) ?? toJsonSchema(schema)
+  return cached(inputJsonSchemas, schema, () => emptyInputJsonSchema(schema) ?? toJsonSchema(schema))
 }
 
 const outputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
-  if (isStandardSchema(schema)) return standardJsonSchema(schema, "output")
-  return Schema.isSchema(schema) ? toJsonSchema(schema) : schema
+  if (isStandardSchema(schema)) return cached(outputJsonSchemas, schema, () => standardJsonSchema(schema, "output"))
+  return Schema.isSchema(schema) ? cached(outputJsonSchemas, schema, () => toJsonSchema(schema)) : schema
 }
 
 const standardJsonSchema = (schema: StandardSchemaV1<any, any>, io: "input" | "output"): JsonSchema.JsonSchema => {
@@ -291,6 +315,8 @@ export const effectiveName = (tool: Pick<Tool.Info, "name" | "options">) =>
   tool.options?.namespace === undefined
     ? normalizedName(tool)
     : `${tool.options.namespace.replaceAll(".", "_")}_${normalizedName(tool)}`
+
+export const defaultCodeMode = (tool: Pick<Tool.Info, "options">) => tool.options?.codemode !== false
 
 /** For `Effect.mapError`: keep a `ToolFailure` as is, wrap anything else with `message`. */
 export const toolFailure = (message: string) => (error: unknown) =>

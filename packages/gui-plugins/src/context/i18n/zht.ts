@@ -5,7 +5,6 @@ export default {
   "usage.usage": "使用量",
   "usage.cost": "成本",
   "usage.view": "檢視上下文用量",
-  "systemPrompt.title": "系統提示詞",
   "rawMessages.title": "原始訊息",
   "export.session": "匯出工作階段",
   "stats.session": "工作階段",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "已將工作階段儲存至 {{filename}}",
   "export.failed.title": "匯出工作階段失敗",
   "export.failed.description": "匯出工作階段時發生錯誤",
+  "usage.toggle": "切換工作階段上下文",
 }

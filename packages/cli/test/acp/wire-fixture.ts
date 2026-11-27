@@ -25,8 +25,10 @@ import { Form } from "@opencode/schema/form"
 import type { Location } from "@opencode/schema/location"
 import type { Model } from "@opencode/schema/model"
 import type { Plugin } from "@opencode/schema/plugin"
+import type { Provider } from "@opencode/schema/provider"
 import type { Session } from "@opencode/schema/session"
 import type { SessionMessage } from "@opencode/schema/session-message"
+import type { Skill } from "@opencode/schema/skill"
 import type { TokenUsage } from "@opencode/schema/token-usage"
 import type { BunRequest } from "bun"
 import { createTwoFilesPatch } from "diff"
@@ -43,6 +45,8 @@ type LocationRef = typeof Location.PublicRef.Encoded
 type ModelInfo = typeof Model.Info.Encoded
 type ModelRef = typeof Model.Ref.Encoded
 type PluginInfo = typeof Plugin.Info.Encoded
+type ProviderInfo = typeof Provider.Info.Encoded
+type SkillInfo = typeof Skill.Info.Encoded
 type SessionInfo = typeof Session.Info.Encoded
 type SessionMessageInfo = typeof SessionMessage.Info.Encoded
 type TokenUsageInfo = typeof TokenUsage.Info.Encoded
@@ -63,7 +67,14 @@ type ServerRequest = {
 
 const Files = Schema.Array(Schema.Struct({ uri: Schema.String, name: Schema.optional(Schema.String) }))
 const Delivery = Schema.optional(Schema.String)
-const PromptBody = Schema.Struct({ id: Schema.String, text: Schema.String, files: Files, delivery: Delivery })
+const PromptBody = Schema.Struct({
+  id: Schema.String,
+  text: Schema.String,
+  files: Files,
+  skills: Schema.optional(Schema.Array(Schema.Struct({ id: Schema.String }))),
+  delivery: Delivery,
+  resume: Schema.optional(Schema.Boolean),
+})
 const CommandBody = Schema.Struct({ name: Schema.String, text: Schema.String, files: Files, delivery: Delivery })
 const CompactBody = Schema.Struct({ id: Schema.String })
 const SyntheticBody = Schema.Struct({
@@ -158,7 +169,10 @@ type Catalog = {
   models: ModelInfo[]
   agents: AgentInfo[]
   commands: CommandInfo[]
+  skills: SkillInfo[]
+  providers: ProviderInfo[]
   plugins: PluginInfo[]
+  projectID: string
 }
 
 export type InitializeOptions = {
@@ -228,11 +242,14 @@ export function makeSession(
     readonly model?: ModelRef
     readonly cost?: number
     readonly time?: SessionInfo["time"]
+    readonly parentID?: string
+    readonly projectID?: string
   } = {},
 ): SessionInfo {
   return {
     id,
-    projectID: "global",
+    ...(input.parentID ? { parentID: input.parentID } : {}),
+    projectID: input.projectID ?? "global",
     ...(input.agent ? { agent: input.agent } : {}),
     ...(input.model ? { model: input.model } : {}),
     cost: input.cost ?? 0,
@@ -380,6 +397,31 @@ export function toolFailed(
   })
 }
 
+/** The calls of a shell the model ran in the background. */
+export function backgroundShell(sessionID: string, shellID: string) {
+  return [
+    toolStarted(sessionID, `call_${shellID}`, "shell"),
+    toolCalled(sessionID, `call_${shellID}`, { command: "build", background: true }),
+    toolSucceeded(sessionID, `call_${shellID}`, { shellID, status: "running" }, "backgrounded"),
+  ]
+}
+
+/** A finished shell's notice. A background job's carries its job ID; a user's shell command's has none. */
+export function shellNotice(sessionID: string, inboxID: string, shellID: string, options = { job: true }) {
+  return durableEvent("session.inbox.enqueued", {
+    sessionID,
+    inboxID,
+    item: {
+      type: "synthetic",
+      payload: {
+        text: `<shell id="${shellID}" state="completed">`,
+        metadata: { source: "shell", shellID, ...(options.job ? { jobID: shellID } : {}) },
+      },
+      delivery: "steer",
+    },
+  })
+}
+
 export function permissionAsked(
   sessionID: string,
   id: string,
@@ -499,6 +541,12 @@ export async function startWire(options: WireOptions = {}) {
       return until(() => counts.handled >= target, "client handlers for every agent message (is one missing?)")
     })
 
+  const requestExt = (method: string, params: unknown): Promise<unknown> =>
+    connection.agent.request(method, params).finally(() => {
+      const target = counts.sent
+      return until(() => counts.handled >= target, "client handlers for every agent message (is one missing?)")
+    })
+
   const initialize = (capabilities: InitializeOptions = {}) =>
     request("initialize", {
       protocolVersion: 1,
@@ -522,6 +570,7 @@ export async function startWire(options: WireOptions = {}) {
     elicitations,
     logs,
     request,
+    requestExt,
     until,
     initialize,
     notify: <Method extends AgentNotificationMethod>(method: Method, params: AgentNotificationParamsByMethod[Method]) =>
@@ -572,6 +621,9 @@ function startServer(options: WireOptions, changed: () => void) {
     models: [testModel, secondModel],
     agents: [buildAgent, planAgent],
     commands: [reviewCommand],
+    skills: [],
+    providers: [{ id: "test", name: "Test Provider", activation: "auto", package: "" }],
+    projectID: "global",
     plugins: [
       {
         id: "opencode.models.dev",
@@ -599,6 +651,7 @@ function startServer(options: WireOptions, changed: () => void) {
       return submissions.filter((item): item is PromptSubmission => item.kind === "prompt")
     },
     selections,
+    active: new Set<string>(),
     interrupts,
     replies,
     cancelledForms,
@@ -719,10 +772,19 @@ function startServer(options: WireOptions, changed: () => void) {
       "/api/agent": { GET: catalogRoute(() => catalog.agents) },
       "/api/command": { GET: catalogRoute(() => catalog.commands) },
       "/api/plugin": { GET: catalogRoute(() => catalog.plugins) },
+      "/api/skill": { GET: catalogRoute(() => catalog.skills) },
+      "/api/provider": { GET: catalogRoute(() => catalog.providers) },
+      "/api/location": {
+        GET: route((_req, query) => {
+          const directory = query["location[directory]"] ?? "/workspace"
+          return Response.json({ directory, project: { id: catalog.projectID, directory, canonical: directory } })
+        }),
+      },
       "/api/session": {
         GET: route((_req, query) => {
           const sessions = [...fake.sessions.values()]
             .filter((session) => !query.directory || session.location.directory === query.directory)
+            .filter((session) => query.parentID === undefined || session.parentID === query.parentID)
             .toSorted((a, b) => b.time.updated - a.time.updated)
           return Response.json(page(sessions, query, 100))
         }),
@@ -734,6 +796,11 @@ function startServer(options: WireOptions, changed: () => void) {
               ...(input.metadata ? { metadata: input.metadata } : {}),
             }),
           }),
+        ),
+      },
+      "/api/session/active": {
+        GET: route(() =>
+          Response.json({ data: Object.fromEntries([...fake.active].map((id) => [id, { type: "running" }])) }),
         ),
       },
       "/api/session/:sessionID": {

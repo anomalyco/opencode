@@ -149,25 +149,6 @@ const GeminiThinkingConfig = Schema.Struct({
   thinkingLevel: Schema.optional(GeminiThinkingLevel),
 })
 
-const GeminiSafetySetting = Schema.Struct({
-  category: knownString<
-    | "HARM_CATEGORY_UNSPECIFIED"
-    | "HARM_CATEGORY_HATE_SPEECH"
-    | "HARM_CATEGORY_DANGEROUS_CONTENT"
-    | "HARM_CATEGORY_HARASSMENT"
-    | "HARM_CATEGORY_SEXUALLY_EXPLICIT"
-    | "HARM_CATEGORY_CIVIC_INTEGRITY"
-  >(),
-  threshold: knownString<
-    | "HARM_BLOCK_THRESHOLD_UNSPECIFIED"
-    | "BLOCK_LOW_AND_ABOVE"
-    | "BLOCK_MEDIUM_AND_ABOVE"
-    | "BLOCK_ONLY_HIGH"
-    | "BLOCK_NONE"
-    | "OFF"
-  >(),
-})
-
 // =============================================================================
 // Provider Options
 // =============================================================================
@@ -180,7 +161,7 @@ const GeminiThinkingConfigInput = Schema.Struct({
 })
 const Options = Schema.Struct({
   cachedContent: lenient(Schema.String),
-  safetySettings: lenient(Schema.Array(GeminiSafetySetting)),
+  safetySettings: lenient(Schema.Array(GeminiGenerateContent.SafetySetting)),
   serviceTier: lenient(knownString<"standard" | "flex" | "priority">()),
   thinkingConfig: lenient(GeminiThinkingConfigInput),
 })
@@ -202,7 +183,7 @@ const GeminiBodyFields = {
   cachedContent: Schema.optional(Schema.String),
   contents: Schema.Array(GeminiContent),
   labels: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  safetySettings: optionalArray(GeminiSafetySetting),
+  safetySettings: optionalArray(GeminiGenerateContent.SafetySetting),
   serviceTier: Schema.optional(Schema.String),
   systemInstruction: Schema.optional(GeminiSystemInstruction),
   tools: optionalArray(GeminiTool),
@@ -217,6 +198,7 @@ const GeminiUsage = Schema.Struct({
   cachedContentTokenCount: optionalNull(Schema.Number),
   thoughtsTokenCount: optionalNull(Schema.Number),
   promptTokenCount: optionalNull(Schema.Number),
+  toolUsePromptTokenCount: optionalNull(Schema.Number),
   candidatesTokenCount: optionalNull(Schema.Number),
   totalTokenCount: optionalNull(Schema.Number),
   ...ProviderShared.ReportedBilling.fields,
@@ -340,8 +322,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
     if (message.role === "user") {
       const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
       for (const part of message.content) {
-        if (!ProviderShared.supportsContent(part, ["text", "media"]))
-          return yield* ProviderShared.unsupportedContent("Gemini", "user", ["text", "media"])
         parts.push(yield* lowerContentPart(part))
       }
       contents.push({ role: "user", parts })
@@ -395,8 +375,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
 
     const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
     for (const part of message.content) {
-      if (!ProviderShared.supportsContent(part, ["tool-result"]))
-        return yield* ProviderShared.unsupportedContent("Gemini", "tool", ["tool-result"])
       if (part.result.type !== "content") {
         parts.push({
           functionResponse: {
@@ -445,19 +423,18 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
 })
 
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
-  const flattened = ProviderShared.flattenToolRequest(request)
-  const hasTools = flattened.tools.length > 0
-  const generation = request.generation
+  const definitions = ProviderShared.flattenTools(request.tools)
+  const hasTools = definitions.length > 0
   const options = yield* decodeOptions(request.providerOptions ?? {})
   const generationConfig = {
-    maxOutputTokens: generation?.maxTokens,
-    temperature: generation?.temperature,
-    topP: generation?.topP,
-    topK: generation?.topK,
-    frequencyPenalty: generation?.frequencyPenalty,
-    presencePenalty: generation?.presencePenalty,
-    seed: generation?.seed,
-    stopSequences: generation?.stop,
+    maxOutputTokens: request.maxTokens,
+    temperature: request.temperature,
+    topP: request.topP,
+    topK: request.topK,
+    frequencyPenalty: request.frequencyPenalty,
+    presencePenalty: request.presencePenalty,
+    seed: request.seed,
+    stopSequences: request.stop,
     // Gemini accepts a budget above `maxOutputTokens`, but thinking then leaves the answer empty.
     thinkingConfig:
       options.thinkingConfig === undefined
@@ -470,7 +447,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
                 ? undefined
                 : ProviderShared.fitThinkingBudget(
                     options.thinkingConfig.thinkingBudget,
-                    generation?.maxTokens,
+                    request.maxTokens,
                     MIN_THINKING_BUDGET,
                   ),
           },
@@ -478,7 +455,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
 
   return {
     cachedContent: options.cachedContent,
-    contents: yield* lowerMessages(flattened.request),
+    contents: yield* lowerMessages(request),
     safetySettings: options.safetySettings,
     serviceTier: options.serviceTier,
     systemInstruction:
@@ -486,7 +463,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     tools: hasTools
       ? [
           {
-            functionDeclarations: flattened.tools.map(lowerTool),
+            functionDeclarations: definitions.map(lowerTool),
           },
         ]
       : undefined,
@@ -500,8 +477,8 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
 // =============================================================================
 // Stream Parsing
 // =============================================================================
-// Gemini reports `promptTokenCount` (inclusive total) with a
-// `cachedContentTokenCount` subset. `candidatesTokenCount` is *exclusive*
+// Gemini reports `promptTokenCount` with a `cachedContentTokenCount` subset;
+// `toolUsePromptTokenCount` is additional billed input. `candidatesTokenCount` is *exclusive*
 // of `thoughtsTokenCount` — visible-only, not a total — so we sum the two
 // to produce the inclusive `outputTokens` the rest of the contract expects.
 const mapUsage = (
@@ -512,7 +489,10 @@ const mapUsage = (
   if (!usage) return undefined
   // Explicit provider nulls decode as `null`; normalize to `undefined` so the
   // token arithmetic below treats them like absent counts.
-  const promptTokens = usage.promptTokenCount ?? undefined
+  const promptTokens = ProviderShared.sumTokens(
+    usage.promptTokenCount ?? undefined,
+    usage.toolUsePromptTokenCount ?? undefined,
+  )
   const cached = usage.cachedContentTokenCount ?? undefined
   const thoughts = usage.thoughtsTokenCount ?? undefined
   const visible = usage.candidatesTokenCount ?? undefined
@@ -534,15 +514,15 @@ const mapUsage = (
   })
 }
 
-// Each continued request re-bills the output so far as input. Reporting the first request's input with all output keeps
-// input plus output equal to the response's final context size, under-reporting billed input; the summed billed counts
-// remain in provider metadata.
+// Continued requests retain the first request's input instead of summing re-billed prompts.
+// Complete billed counts, including tool-use prompts from later requests, remain in provider metadata.
 const mapContinuedUsage = (requests: ReadonlyArray<GeminiUsage>, metadataKey: string) => {
   const sum = (field: keyof GeminiUsage) =>
     ProviderShared.sumTokens(...requests.map((usage) => usage[field] ?? undefined))
   return mapUsage(
     {
       promptTokenCount: requests[0].promptTokenCount,
+      toolUsePromptTokenCount: requests[0].toolUsePromptTokenCount,
       cachedContentTokenCount: requests[0].cachedContentTokenCount,
       candidatesTokenCount: sum("candidatesTokenCount"),
       thoughtsTokenCount: sum("thoughtsTokenCount"),
@@ -552,6 +532,7 @@ const mapContinuedUsage = (requests: ReadonlyArray<GeminiUsage>, metadataKey: st
     metadataKey,
     {
       promptTokenCount: sum("promptTokenCount"),
+      toolUsePromptTokenCount: sum("toolUsePromptTokenCount"),
       cachedContentTokenCount: sum("cachedContentTokenCount"),
       candidatesTokenCount: sum("candidatesTokenCount"),
       thoughtsTokenCount: sum("thoughtsTokenCount"),

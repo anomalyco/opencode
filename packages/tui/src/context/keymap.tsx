@@ -142,6 +142,10 @@ function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
         name: "leader",
         timeoutMs: config.leader?.timeout ?? ("leader_timeout" in config ? config.leader_timeout : undefined) ?? 2000,
       }),
+      // A leader sequence with no reachable command must not type its last key into the focused input.
+      keymap.intercept("key:after", (context) => {
+        if (context.reason === "sequence-miss" && context.sequence[0]?.tokenName === "leader") context.consume()
+      }),
     )
   }
   onCleanup(() => {
@@ -174,8 +178,8 @@ export interface Keymap {
   readonly mode: {
     /** Returns the active mode. */
     current(): string
-    /** Pushes a mode until the returned cleanup is called. */
-    push(mode: string): () => void
+    /** Pushes a mode until the returned cleanup is called. The mode only claims input while `active` is true. */
+    push(mode: string, active?: Accessor<boolean>): () => void
   }
   /** Registers a low-level keymap interceptor. */
   intercept: OpenTuiKeymap["intercept"]
@@ -194,7 +198,10 @@ function use(): Keymap {
     },
     mode: {
       current: value.mode.current,
-      push: (mode) => value.mode.push(mode, resolveInteractivity(enabled)),
+      push: (mode, active) => {
+        const interactive = resolveInteractivity(enabled)
+        return value.mode.push(mode, active ? () => interactive() && active() : interactive)
+      },
     },
     intercept: value.keymap.intercept.bind(value.keymap),
     isLeader,

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
-import { holdRoute } from "../utils/app"
+import { SERVER, holdRoute } from "../utils/app"
+import { installSseTransport } from "../utils/sse-transport"
 import { terminalScreen, terminalText } from "../utils/terminal"
 import { openSession } from "../utils/workspace"
 
@@ -41,6 +42,56 @@ test("restores a terminal from the server's snapshot after a reload", async ({ p
   ])
 })
 
+test("draws terminal characters whose font files arrive after the first paint", async ({ page }) => {
+  // The Nerd Fonts icons and the characters outside Latin and Cyrillic are font files of their own, which load when
+  // a terminal first draws one of their characters.
+  const icons = await holdRoute(page, /OpenMono-icons[^/]*\.woff2/)
+  const rest = await holdRoute(page, /OpenMono-Regular-rest[^/]*\.woff2/)
+
+  // A folder icon and a Greek letter (λ, in the "rest" file) on the first row, with the cursor, whose row the terminal
+  // redraws by itself, on the last one.
+  const { persistentPty } = await openSession(page, {
+    name: "Terminals",
+    persistentPty: {
+      initial: [{ id: "pty_icons", sessionID: SESSION, title: "Build", output: "ls \uf07b \u03bb\x1b[999;1H" }],
+    },
+  })
+
+  await openSide(page)
+  await showTerminal(page, "Build", "pty_icons")
+  await Promise.all([icons.arrived, rest.arrived])
+
+  // What the first cells of a row show: undefined while they are blank, else a checksum of their pixels.
+  const row = (index: number) =>
+    terminalScreen(page, "pty_icons")
+      .locator("canvas")
+      .evaluate(
+        (canvas: HTMLCanvasElement, input) => {
+          const height = Math.round(canvas.height / input.rows)
+          const pixels = canvas.getContext("2d")!.getImageData(0, input.index * height, 80, height).data
+
+          if (pixels.every((value, index) => value === pixels[index % 4])) return
+
+          return pixels.reduce((sum, value) => (sum * 31 + value) >>> 0, 0)
+        },
+        { index, rows: persistentPty.terminals[0]!.size.rows },
+      )
+
+  await expect.poll(() => row(0)).toBeDefined()
+  const fallback = await row(0)
+  icons.release()
+  rest.release()
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+
+  // The same text on the third row, first drawn with the files loaded, is what the first row must now show.
+  persistentPty.output("pty_icons", "\x1b[3;1Hls \uf07b \u03bb\x1b[999;1H")
+  await expect.poll(() => row(2)).toBeDefined()
+  const loaded = await row(2)
+  expect(loaded).not.toBe(fallback)
+
+  await expect.poll(() => row(0)).toBe(loaded)
+})
+
 test("after a reload, the close shortcut closes the restored terminal", async ({ page }) => {
   // Elsewhere Ctrl+W reaches the shell, so the terminal hands only macOS's Cmd+W to the app.
   await page.addInitScript(() => Object.defineProperty(navigator, "platform", { get: () => "MacIntel" }))
@@ -57,6 +108,8 @@ test("after a reload, the close shortcut closes the restored terminal", async ({
 
   await openSide(page)
   await showTerminal(page, "Shell", "pty_shell")
+  // Focus comes before the connection; a reload during its connect-token request would leave nothing connected.
+  await expect.poll(() => persistentPty.sockets.map((socket) => socket.id)).toEqual(["pty_shell"])
 
   // The restored tab is selected before the server lists the session's terminals.
   const list = await holdRoute(page, /\/api\/experimental\/session\/ses_terminals\/terminal(\?|$)/, { method: "GET" })
@@ -147,6 +200,70 @@ test("the New terminal shortcut creates the next numbered terminal", async ({ pa
   await expect(terminalScreen(page, persistentPty.created[0]!.id).locator("textarea")).toBeFocused()
 })
 
+// Closing the palette returns focus to the composer while the terminal is still being created.
+test("New terminal from the command palette opens the terminal focused", async ({ page }) => {
+  const { persistentPty, editor } = await openSession(page, { name: "Terminals", persistentPty: {} })
+
+  await editor.click()
+  await page.keyboard.press("Control+Shift+P")
+  const palette = page.getByRole("dialog")
+  const input = palette.getByRole("combobox")
+  await expect(input).toBeFocused()
+  await input.fill("New terminal")
+  await expect(palette.getByRole("option", { name: /^New terminal/ })).toHaveAttribute("aria-selected", "true")
+  await input.press("Enter")
+
+  await expect(side(page).getByRole("tab", { name: "Terminal 1", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  )
+  await expect(terminalScreen(page, persistentPty.created[0]!.id).locator("textarea")).toBeFocused()
+})
+
+test("a click into the composer while a new terminal is created keeps the focus there", async ({ page }) => {
+  const { persistentPty, editor } = await openSession(page, { name: "Terminals", persistentPty: {} })
+
+  const create = await holdRoute(page, /\/api\/experimental\/session\/ses_terminals\/terminal(\?|$)/, {
+    method: "POST",
+  })
+
+  await editor.click()
+  await page.keyboard.press("Control+Alt+T")
+  await create.arrived
+  await editor.click()
+  create.release()
+
+  await expect(side(page).getByRole("tab", { name: "Terminal 1", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  )
+  await expect.poll(() => persistentPty.sockets.length).toBe(1)
+  await expect(editor).toBeFocused()
+})
+
+// Both presses used to send a create, so two tabs both titled "Terminal 1" opened.
+test("pressing New terminal again while one is created creates one terminal", async ({ page }) => {
+  const { persistentPty, editor } = await openSession(page, { name: "Terminals", persistentPty: {} })
+
+  const create = await holdRoute(page, /\/api\/experimental\/session\/ses_terminals\/terminal(\?|$)/, {
+    method: "POST",
+  })
+
+  await editor.click()
+  await page.keyboard.press("Control+Alt+T")
+  await create.arrived
+  await page.keyboard.press("Control+Alt+T")
+  create.release()
+
+  await expect(side(page).getByRole("tab", { name: "Terminal 1", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  )
+  await expect(terminalScreen(page, persistentPty.created[0]!.id).locator("textarea")).toBeFocused()
+  expect(create.requests).toHaveLength(1)
+  expect(persistentPty.created.map((info) => info.title)).toEqual(["Terminal 1"])
+})
+
 test("another client's control ends at a click, which resizes the terminal to the pane", async ({ page }) => {
   const { persistentPty } = await openSession(page, {
     name: "Terminals",
@@ -217,6 +334,66 @@ test("a dropped connection says the terminal disconnected and keeps its tab", as
   expect(await terminalText(page, screen)).toBe("still-here")
 })
 
+test("a terminal list that fails says why, and Try again lists the terminals", async ({ page }) => {
+  const { persistentPty } = await openSession(page, {
+    name: "Terminals",
+    persistentPty: { initial: [{ id: "pty_build", sessionID: SESSION, title: "Build", output: "still-here\r\n" }] },
+  })
+
+  await openSide(page)
+  await side(page).getByRole("tab", { name: "Build", exact: true }).click()
+  const screen = terminalScreen(page, "pty_build")
+  await expect.poll(() => terminalText(page, screen)).toBe("still-here")
+
+  // The restored session's list fails with an error other than the daemon's 503.
+  persistentPty.listFails = true
+  await page.reload()
+
+  const failure = side(page).getByRole("alert")
+  await expect(failure.getByText("Couldn't load terminals", { exact: true })).toBeVisible()
+  await expect(failure.getByText("UnexpectedStatus: 500", { exact: true })).toBeVisible()
+  // Without the list the restored tab has no title yet, but it shows and stays selected.
+  await expect(side(page).getByRole("tab", { name: "Terminal", exact: true })).toHaveAttribute("aria-selected", "true")
+
+  persistentPty.listFails = false
+  await failure.getByRole("button", { name: "Try again", exact: true }).click()
+
+  await expect(side(page).getByRole("tab", { name: "Build", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect.poll(() => terminalText(page, screen)).toBe("still-here")
+  await expect(side(page).getByText("Couldn't load terminals", { exact: true })).toHaveCount(0)
+})
+
+// A list the server accepted and never answered used to leave "Loading terminal." on screen with no way to retry.
+test("a terminal list the server never answers says so, and Try again lists the terminals", async ({ page }) => {
+  await openSession(page, {
+    name: "Terminals",
+    persistentPty: { initial: [{ id: "pty_build", sessionID: SESSION, title: "Build", output: "still-here\r\n" }] },
+  })
+
+  await openSide(page)
+  await side(page).getByRole("tab", { name: "Build", exact: true }).click()
+  const screen = terminalScreen(page, "pty_build")
+  await expect.poll(() => terminalText(page, screen)).toBe("still-here")
+
+  const list = await holdRoute(page, /\/api\/experimental\/session\/ses_terminals\/terminal(\?|$)/, { method: "GET" })
+  await page.clock.install()
+  await page.reload()
+  await list.arrived
+  await expect(side(page).getByText("Loading terminal…", { exact: true })).toBeVisible()
+  // The request budget, `TERMINAL_REQUEST_TIMEOUT_MS`.
+  await page.clock.fastForward(15_000)
+
+  const failure = side(page).getByRole("alert")
+  await expect(failure.getByText("Couldn't load terminals", { exact: true })).toBeVisible()
+  await expect(failure.getByText("The server took too long to answer", { exact: true })).toBeVisible()
+
+  list.release()
+  await failure.getByRole("button", { name: "Try again", exact: true }).click()
+
+  await expect(side(page).getByRole("tab", { name: "Build", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect.poll(() => terminalText(page, screen)).toBe("still-here")
+})
+
 test("after a server restart, showing the terminal again restores it from a new snapshot", async ({ page }) => {
   const output = "before-restart\r\n"
 
@@ -237,10 +414,41 @@ test("after a server restart, showing the terminal again restores it from a new 
 
   // Showing the tab again takes a new snapshot and reconnects.
   await side(page).getByRole("button", { name: "Add tab", exact: true }).click()
-  await expect(side(page).getByRole("tab", { name: "New tab", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(side(page).getByRole("tab", { name: "Build", exact: true })).toHaveAttribute("aria-selected", "false")
   await side(page).getByRole("tab", { name: "Build", exact: true }).click()
   await expect.poll(() => terminalText(page, screen)).toBe("before-restart\nafter-restart")
   await expect(side(page).getByText("Terminal disconnected", { exact: true })).toHaveCount(0)
+  expect(persistentPty.sockets.map((socket) => socket.cursor)).toEqual([
+    Buffer.byteLength(output),
+    Buffer.byteLength(output + "after-restart\r\n"),
+  ])
+})
+
+test("once a restarted server reconnects, the shown terminal restores itself from a new snapshot", async ({ page }) => {
+  const output = "before-restart\r\n"
+  const transport = await installSseTransport(page, { server: SERVER, retry: 20 })
+
+  const { persistentPty } = await openSession(page, {
+    name: "Terminals",
+    persistentPty: { initial: [{ id: "pty_handoff", sessionID: SESSION, title: "Build", output }] },
+  })
+
+  await openSide(page)
+  await side(page).getByRole("tab", { name: "Build", exact: true }).click()
+  const screen = terminalScreen(page, "pty_handoff")
+  await expect.poll(() => terminalText(page, screen)).toBe("before-restart")
+
+  // The terminal socket closes first; the event stream drops and reconnects to the restarted server after it.
+  await persistentPty.restart()
+  await expect(side(page).getByText("Terminal disconnected", { exact: true })).toBeVisible()
+  persistentPty.output("pty_handoff", "after-restart\r\n")
+  const connection = await transport.waitForConnection()
+  await transport.disconnect()
+  await transport.waitForConnection({ after: connection.id })
+
+  await expect.poll(() => terminalText(page, screen)).toBe("before-restart\nafter-restart")
+  await expect(side(page).getByText("Terminal disconnected", { exact: true })).toHaveCount(0)
+  await expect(side(page).getByRole("tab", { name: "Build", exact: true })).toHaveAttribute("aria-selected", "true")
   expect(persistentPty.sockets.map((socket) => socket.cursor)).toEqual([
     Buffer.byteLength(output),
     Buffer.byteLength(output + "after-restart\r\n"),
@@ -271,11 +479,21 @@ test("selected terminal output quotes into the composer", async ({ page }) => {
   await side(page).getByRole("tab", { name: "Build", exact: true }).click()
   const screen = terminalScreen(page, "pty_quote")
   await expect.poll(() => terminalText(page, screen)).toBe("quote-me")
+  const toolbar = page.getByRole("toolbar", { name: "Quote selection", exact: true })
+  await expect(toolbar).toBeVisible()
 
-  await page
-    .getByRole("toolbar", { name: "Quote selection", exact: true })
-    .getByRole("button", { name: "Quote" })
-    .click()
+  // A right click opens a context menu without a pointerup; it neither closes the toolbar nor blocks later reads.
+  await page.locator("body").dispatchEvent("pointerdown", { button: 2 })
+  await page.locator("body").dispatchEvent("contextmenu")
+  await expect(toolbar).toBeVisible()
+
+  // A cancelled touch ends without a pointerup too; the selection it left in place gets its toolbar back.
+  await page.locator("body").dispatchEvent("pointerdown", { button: 0 })
+  await expect(toolbar).toHaveCount(0)
+  await page.locator("body").dispatchEvent("pointercancel")
+  await expect(toolbar).toBeVisible()
+
+  await toolbar.getByRole("button", { name: "Quote" }).click()
   await expect(page.locator('[data-component="composer"]').getByText("quote-me")).toBeVisible()
 })
 

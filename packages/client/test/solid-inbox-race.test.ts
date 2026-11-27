@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { afterEach, expect, jest, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
 import { OpenCode, type OpenCodeEvent, type SessionInboxItem } from "../src/promise"
@@ -133,6 +133,76 @@ test("hydration preserves submission order across optimistic admissions", async 
   }
 })
 
+test("a sequenced request leaves only once the prompt made before it has settled, and a failed one does not block the next", async () => {
+  const prepared = Promise.withResolvers<void>()
+  const paths: string[] = []
+  const setup = fixture((request) => {
+    paths.push(new URL(request.url).pathname.split("/").at(-1) ?? "")
+    return Promise.resolve(Response.json({ data: { id: "msg_admitted" } }))
+  })
+  try {
+    // The prompt still prepares, as it does while a plugin readies the session for it.
+    const first = setup.data.session.prompt({ sessionID: item.sessionID, id: "msg_first", text: "First", prepare: () => prepared.promise })
+    const failing = setup.data.session.sequence(item.sessionID, () => Promise.reject(new Error("command failed")))
+    const last = setup.data.session.sequence(item.sessionID, async () => void paths.push("shell"))
+    const failed = failing.catch((error: Error) => error.message)
+    await Bun.sleep(0)
+    expect(paths).toEqual([])
+
+    prepared.resolve()
+    await Promise.all([first, failed, last])
+    expect(paths).toEqual(["prompt", "shell"])
+    expect(await failed).toBe("command failed")
+  } finally {
+    prepared.resolve()
+    setup.dispose()
+  }
+})
+
+afterEach(() => void jest.useRealTimers())
+
+test("a sequenced request that stays open holds the next send until it has reached the server, not until it ends", async () => {
+  jest.useFakeTimers()
+  const prepared = Promise.withResolvers<void>()
+  const paths: string[] = []
+  const setup = fixture((request) => {
+    paths.push(new URL(request.url).pathname.split("/").at(-1) ?? "")
+    return Promise.resolve(Response.json({ data: { id: "msg_admitted" } }))
+  })
+  // A shell command's request: the server answers it when the command's process exits.
+  const exited = Promise.withResolvers<void>()
+  const flush = async () => {
+    for (const _ of Array.from({ length: 20 })) await Promise.resolve()
+  }
+  try {
+    const shell = setup.data.session.sequence(
+      item.sessionID,
+      () => (paths.push("shell"), exited.promise),
+      () => prepared.promise,
+    )
+    const prompt = setup.data.session.prompt({ sessionID: item.sessionID, id: "msg_after", text: "After" })
+    // What the shell command waits for before it leaves does not let the prompt overtake it, however long it takes.
+    jest.advanceTimersByTime(60_000)
+    await flush()
+    expect(paths).toEqual([])
+
+    prepared.resolve()
+    await flush()
+    expect(paths).toEqual(["shell"])
+    // The command still runs. The prompt leaves once the command's request has had its moment to arrive.
+    jest.advanceTimersToNextTimer()
+    await prompt
+    expect(paths).toEqual(["shell", "prompt"])
+
+    exited.resolve()
+    await shell
+  } finally {
+    prepared.resolve()
+    exited.resolve()
+    setup.dispose()
+  }
+})
+
 test("hydration coalesces a concurrent optimistic compaction even if its POST fails", async () => {
   const response = Promise.withResolvers<Response>()
   const admission = Promise.withResolvers<Response>()
@@ -157,6 +227,47 @@ test("hydration coalesces a concurrent optimistic compaction even if its POST fa
   } finally {
     response.resolve(Response.json({ data: [] }))
     admission.resolve(new Response(null, { status: 204 }))
+    setup.dispose()
+  }
+})
+
+const transcript = {
+  data: [{ id: item.id, type: "user", text: "Check the remote preview", time: { created: 2 } }],
+  cursor: {},
+}
+
+test("a transcript read clears a prompt whose delivery event was missed", async () => {
+  const setup = fixture(async (request) =>
+    new URL(request.url).pathname.endsWith("/message") ? Response.json(transcript) : Response.json({ data: [] }),
+  )
+  try {
+    setup.emit(enqueued)
+    expect(setup.data.session.input.has(item.sessionID, item.id)).toBe(true)
+    await setup.data.session.message.sync(item.sessionID)
+    expect(setup.data.session.input.has(item.sessionID, item.id)).toBe(false)
+    expect(setup.data.session.message.get(item.sessionID, item.id)?.time.created).toBe(2)
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("a transcript read clears an accepted prompt whose events were all missed", async () => {
+  const setup = fixture(async (request) => {
+    if (request.method === "POST") return Response.json({ data: { id: item.id } })
+    if (new URL(request.url).pathname.endsWith("/message")) return Response.json(transcript)
+    return Response.json({ data: [] })
+  })
+  try {
+    await setup.data.session.prompt({ sessionID: item.sessionID, id: item.id, text: item.payload.text })
+    // An inbox read cannot see a prompt the server already delivered, so it keeps the outbox row.
+    await setup.data.session.pending.sync(item.sessionID)
+    expect(setup.data.session.input.has(item.sessionID, item.id)).toBe(true)
+    await setup.data.session.message.sync(item.sessionID)
+    expect(setup.data.session.input.has(item.sessionID, item.id)).toBe(false)
+    // Later inbox reads no longer resurrect it from the outbox.
+    await setup.data.session.pending.sync(item.sessionID)
+    expect(setup.data.session.input.has(item.sessionID, item.id)).toBe(false)
+  } finally {
     setup.dispose()
   }
 })

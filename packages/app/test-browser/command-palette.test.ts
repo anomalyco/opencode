@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test"
 import type { Project } from "@/runtime/server/types"
 import type { SessionInfo } from "@opencode/client/promise"
 import { createRoot } from "solid-js"
-import { createCommandPaletteCommandEntry, createServerSessionEntries } from "@/shell/commands/palette"
+import {
+  createCommandPaletteCommandEntry,
+  createServerSessionEntries,
+  type CommandPaletteEntry,
+} from "@/shell/commands/palette"
 import { matchesCommandPaletteEntry } from "@/shell/commands/dialog"
 import { ServerConnection } from "@/runtime/server/registry"
 import { getProjectAvatarSource } from "@opencode/ui/project-avatar"
@@ -92,6 +96,40 @@ describe("command palette sessions", () => {
     })
   })
 
+  test("with includeArchived, typed searches list archived sessions marked archived and recent rows skip them", async () => {
+    const archived = {
+      ...session,
+      id: "archived-session",
+      title: "Palette archived",
+      time: { ...session.time, archived: 3 },
+    }
+
+    const [typed, recent] = await new Promise<[CommandPaletteEntry[], CommandPaletteEntry[]]>((resolve, reject) => {
+      createRoot((dispose) => {
+        const sessions = createServerSessionEntries({
+          server: ServerConnection.Key.make("selected-server"),
+          includeArchived: true,
+          projects: () => [project],
+          load: async () => ({ data: [session, archived] }),
+          get: async () => session,
+          untitled: () => "Untitled",
+          category: () => "Sessions",
+          recentCategory: () => "Recent sessions",
+        })
+
+        sessions("palette")
+          .then((entries) => resolve([entries, sessions.items("")]), reject)
+          .finally(dispose)
+      })
+    })
+
+    expect(typed.map((entry) => [entry.sessionID, entry.archived])).toEqual([
+      [session.id, undefined],
+      [archived.id, 3],
+    ])
+    expect(recent.map((entry) => entry.sessionID)).toEqual([session.id])
+  })
+
   test("loads an exact session when the query looks like an ID", async () => {
     const exact = { ...session, id: "ses_12345678901234567890123456", title: "Exact session" }
     const gets: string[] = []
@@ -120,6 +158,45 @@ describe("command palette sessions", () => {
 
     expect(gets).toEqual([exact.id])
     expect(result).toMatchObject([{ sessionID: exact.id, title: exact.title }])
+  })
+
+  test("the caller's abort cancels a search while it waits and while it fetches", async () => {
+    const signals: AbortSignal[] = []
+    const fetched = Promise.withResolvers<void>()
+
+    await createRoot(async (dispose) => {
+      try {
+        const sessions = createServerSessionEntries({
+          server: ServerConnection.Key.make("selected-server"),
+          projects: () => [project],
+          load: (_text, signal) => {
+            signals.push(signal)
+            fetched.resolve()
+
+            return new Promise(() => {})
+          },
+          get: async () => session,
+          untitled: () => "Untitled",
+          category: () => "Sessions",
+          recentCategory: () => "Recent sessions",
+        })
+
+        const waiting = new AbortController()
+        const first = sessions.search("palette", waiting.signal)
+        waiting.abort()
+        expect(await first).toEqual([])
+
+        const fetching = new AbortController()
+        const second = sessions.search("palette", fetching.signal)
+        await fetched.promise
+        fetching.abort()
+        expect(await second).toEqual([])
+        expect(signals).toHaveLength(1)
+        expect(signals[0]?.aborted).toBe(true)
+      } finally {
+        dispose()
+      }
+    })
   })
 
   test("matches known and loaded sessions synchronously while remote search is pending", async () => {

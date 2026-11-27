@@ -44,10 +44,12 @@ for file in "${files[@]}"; do
 done
 for name in $expected; do cut -f1 "$list" | grep -qxF -- "$name" || die "Missing package $name"; done
 
-# The CLI wrappers resolve their platform packages, so they publish last.
-order=$(mktemp)
-{ grep -vP '^@opencode/cli(-node)?\t' "$list" || true; grep -P '^@opencode/cli(-node)?\t' "$list"; } > "$order"
-cat "$order"
+# The CLI wrappers resolve their platform packages from postinstall, so they publish last.
+packages=$(mktemp)
+wrappers=$(mktemp)
+grep -vP '^@opencode/cli(-node)?\t' "$list" > "$packages" || true
+grep -P '^@opencode/cli(-node)?\t' "$list" > "$wrappers" || true
+cat "$packages" "$wrappers"
 
 # A clean directory and config, so nothing from an artifact can redirect the registry.
 printf 'registry=https://registry.npmjs.org/\n' > "$RUNNER_TEMP/npmrc"
@@ -55,10 +57,33 @@ export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/npmrc"
 cd "$(mktemp -d)"
 flags=(--tag "$OPENCODE_NPM_TAG" --access public --ignore-scripts)
 if dry_run; then flags+=(--dry-run); else flags+=(--provenance); fi
-while IFS=$'\t' read -r name file; do
-  if ! dry_run && npm view "$name@$OPENCODE_VERSION" version > /dev/null 2>&1; then
-    echo "already published $name@$OPENCODE_VERSION"
-    continue
-  fi
-  npm publish "$file" "${flags[@]}"
-done < "$order"
+
+publish() {
+  while IFS=$'\t' read -r name file; do
+    if ! dry_run && npm view "$name@$OPENCODE_VERSION" version > /dev/null 2>&1; then
+      echo "already published $name@$OPENCODE_VERSION"
+      continue
+    fi
+    npm publish "$file" "${flags[@]}"
+  done < "$1"
+}
+
+# npm publish returns while the registry is still processing the version: a large platform tarball can take ten
+# minutes to become available, and versions appear out of publish order. A wrapper published in that window makes
+# its postinstall fail with ETARGET, and rolling the dist-tag back does not repair an install that already failed,
+# so wait for every other package to resolve at this version before publishing the wrappers.
+wait_for_registry() {
+  if dry_run; then return; fi
+  while IFS= read -r name; do
+    for attempt in $(seq 1 180); do
+      if npm view --prefer-online "$name@$OPENCODE_VERSION" version > /dev/null 2>&1; then break; fi
+      if [ "$attempt" = 180 ]; then die "$name@$OPENCODE_VERSION did not appear in the registry"; fi
+      echo "waiting for $name@$OPENCODE_VERSION"
+      sleep 10
+    done
+  done < <(cut -f1 "$1")
+}
+
+publish "$packages"
+wait_for_registry "$packages"
+publish "$wrappers"

@@ -1,14 +1,4 @@
-import {
-  For,
-  Show,
-  createEffect,
-  createMemo,
-  createSignal,
-  on,
-  onCleanup,
-  type Accessor,
-  type JSX,
-} from "solid-js"
+import { For, Show, createEffect, createMemo, createRenderEffect, createSignal, onCleanup, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createEventListener } from "@solid-primitives/event-listener"
@@ -40,7 +30,8 @@ import { RegionContent, type Region, type RegionPane } from "./panels"
 import { PluginSlot } from "./render"
 import { createTabStripScroll } from "./tab-strip-scroll"
 import { closedTabsModifier, type ClosedSideTab } from "./closed-tabs"
-import { ClosedTabsSection, NewTabButton } from "./closed-tabs-view"
+import { ClosedTabsSection, createDeferredMenu, NewTabButton } from "./closed-tabs-view"
+import { selectDeferredMenuOpen } from "./deferred-menu-machine"
 import type { PaneDrag } from "./pane-drag"
 
 const PANE_HEIGHT_MIN = 120
@@ -53,7 +44,15 @@ export function SideRegion(props: {
   sidebar: PanelSidebar
   present?: boolean
   size: Sizing
+  /**
+   * The width the contents keep, the side region's open width, which a close keeps as the far end of its travel. Set
+   * on the content box alone: an inherited custom property on an ancestor restyled every element in the region, the
+   * review's diffs included, on every frame of a resize drag.
+   */
+  contentWidth: Accessor<string>
   drag: PaneDrag
+  /** The session's review toggle, at the end of the first pane's strip. */
+  toggle?: JSX.Element
 }) {
   const layout = useLayout()
   const language = useLanguage()
@@ -66,21 +65,19 @@ export function SideRegion(props: {
   const contentMounted = createMemo<boolean>((mounted) => mounted || tabsVisible(), false)
   const panelWidth = createMemo(() => (tabsVisible() ? "auto" : "0px"))
 
-  // Opening the side region with no tabs shows a new tab view, once per opening and session. Keyed by the session, not
-  // the item, whose object changes with every routed session.
-  const starting = createMemo(() =>
-    tabsOpen() && layout.ready() && props.region.empty() ? props.view.key : undefined,
-  )
+  // Opening the side region with no tabs shows a new tab view, once per opening and session (`new-tab-machine.ts`).
+  createRenderEffect(() => props.region.syncSideOpen(tabsOpen() && layout.ready()))
+  onCleanup(() => props.region.syncSideOpen(false))
 
-  createEffect(on(starting, (key) => key && props.region.openNewTab("side")))
-
-  // The split pane shows while it holds tabs; when the side pane has none, the split pane takes the whole height.
+  // The split pane shows while it holds tabs; when the side pane has none, New tabs included, the split pane takes the
+  // whole height.
   const panes = createMemo(() => {
     const split = props.region.pane("split").keys().length > 0
 
     if (!split) return ["side"] as const
 
-    if (props.region.pane("side").keys().length === 0) return ["split"] as const
+    if (props.region.pane("side").keys().length === 0 && props.region.newTabs("side").length === 0)
+      return ["split"] as const
 
     return ["side", "split"] as const
   })
@@ -107,6 +104,7 @@ export function SideRegion(props: {
       <aside
         ref={setRoot}
         id="review-panel"
+        data-focus-scope
         tabIndex={-1}
         aria-label={language.t("session.panel.reviewAndFiles")}
         aria-hidden={!tabsOpen()}
@@ -122,7 +120,7 @@ export function SideRegion(props: {
           <div
             data-slot="session-review-content"
             class="h-full flex shrink-0 contain-strict"
-            style={{ width: "var(--panel-hold-width, var(--session-side-content-width, 100%))" }}
+            style={{ width: `var(--panel-hold-width, ${props.contentWidth()})` }}
           >
             <div
               ref={stack}
@@ -141,7 +139,7 @@ export function SideRegion(props: {
                     style={index() > 0 ? { height: `${lowerHeight()}px` } : undefined}
                   >
                     <Show when={index() > 0}>
-                      <div onPointerDown={() => props.size.start()}>
+                      <div onPointerDown={(event) => props.size.start(event)}>
                         <ResizeHandle
                           direction="vertical"
                           edge="start"
@@ -168,6 +166,7 @@ export function SideRegion(props: {
                       animate={() => !props.size.active()}
                       placeholder={index() === 0}
                       actions={index() === 0}
+                      toggle={index() === 0 ? props.toggle : undefined}
                       drag={props.drag}
                     />
                   </div>
@@ -200,24 +199,22 @@ export function PaneTabs(props: {
   actions?: boolean
   /** Controls after the strip, e.g. the bottom pane's hide button. */
   end?: JSX.Element
+  toggle?: JSX.Element
 }) {
   const language = useLanguage()
   const { tabs } = useSessionLayout()
   const menu = createSessionPanelMenuEntries()
-  const primary = createMemo(() => menu().find((entry) => entry.item.primary)?.item)
+  const primary = createMemo(() => menu().find((entry) => entry.item.primary))
   const launchers = createMemo(() => menu().filter((entry) => !entry.item.primary && !entry.item.opened))
 
-  // The next tab this pane's "+" menu opens lands in this pane.
-  const target = () => tabs().target(props.pane.id)
+  // The next tab of the chosen entry's plugin lands in this pane. Menu entries and tabs are both keyed `${plugin}:…`.
+  const target = (key: string) => tabs().target(props.pane.id, key.slice(0, key.indexOf(":")))
 
   const closed = {
     get entries() {
       return props.region.recent()
     },
-    onReopen: (key: string) => {
-      target()
-      props.region.reopen(key)
-    },
+    onReopen: (key: string) => props.region.reopen(key, props.pane.id),
   }
 
   const modifier = closedTabsModifier()
@@ -234,8 +231,50 @@ export function PaneTabs(props: {
     }),
   )
 
+  const after = createMemo(() => {
+    const keys = props.pane.keys()
+    const index = keys.indexOf(tabMenu.key)
+
+    if (index === -1) return []
+
+    return keys.slice(index + 1).filter((key) => closable().includes(key))
+  })
+
   // Without a new tab item, "+" opens a host-owned new tab view listing the launchers, as ⌘T does inside the region.
   const current = createMemo(() => props.region.shownNewTab(props.pane.id))
+
+  // The control a plugin draws in the New tab view to take the keyboard, such as the browser's address field.
+  const [newTabField, setNewTabField] = createSignal<{ focus(): void }>()
+
+  // A New tab the person asked for gives the keyboard to that control once it renders and the region stops moving: a
+  // region that slides open takes no focus until it lands. Without such a control, focus stays.
+  createEffect(() => {
+    const field = newTabField()
+
+    if (!field || current() === undefined || !props.region.newTabFocus(props.pane.id)) return
+    props.region.settled(() => {
+      if (newTabField() !== field || !props.region.newTabFocus(props.pane.id)) return
+      field.focus()
+      props.region.newTabFocused()
+    })
+  })
+
+  // What the New tab view's plugin slots get: a tab a plugin opens from there lands in this pane.
+  const newTab = {
+    get session() {
+      return props.view
+    },
+    get screen() {
+      return props.screen
+    },
+    target: (plugin: string) => tabs().target(props.pane.id, plugin),
+    autofocus(control: { focus(): void }) {
+      setNewTabField(() => control)
+
+      return () => setNewTabField((field) => (field === control ? undefined : field))
+    },
+  }
+
   const add = () => props.region.openNewTab(props.pane.id)
 
   let selectionEvent: Event | undefined
@@ -243,23 +282,20 @@ export function PaneTabs(props: {
   return (
     <Tabs
       data-pane-content={props.pane.id}
-      value={current()?.id ?? props.pane.active() ?? "empty"}
+      value={current() ?? props.pane.active() ?? "empty"}
       onChange={(value) => {
-        if (props.region.newTabs(props.pane.id).some((entry) => entry.id === value))
-          return props.region.selectNewTab(props.pane.id, value)
-
-        // Kobalte selects the first tab while triggers register, including while the "+" menu's click is still
-        // dispatching. Persist input events on a tab only; the region owns fallback selection.
+        // Kobalte selects the first tab while triggers register, including while the "+" click is still dispatching.
+        // Only input on a tab selects one; the region owns fallback selection.
         if (
-          selectionEvent &&
-          selectionEvent.eventPhase !== Event.NONE &&
-          selectionEvent.target instanceof Element &&
-          selectionEvent.target.closest('[role="tab"]')
-        ) {
-          // Select first: dismissing the only New tab with nothing selected lets Kobalte pick the first tab meanwhile.
-          props.region.select(value)
-          props.region.newTabs(props.pane.id).forEach((entry) => props.region.dismissNewTab(entry.id))
-        }
+          !selectionEvent ||
+          selectionEvent.eventPhase === Event.NONE ||
+          !(selectionEvent.target instanceof Element) ||
+          !selectionEvent.target.closest('[role="tab"]')
+        )
+          return
+
+        if (props.region.newTabs(props.pane.id).includes(value)) return props.region.selectNewTab(props.pane.id, value)
+        props.region.select(value)
       }}
     >
       <div class="session-review-v2-tabs-bar sticky top-0 shrink-0 flex items-center">
@@ -267,6 +303,10 @@ export function PaneTabs(props: {
           data-pane-strip={props.pane.id}
           ref={(el: HTMLDivElement) => {
             createEventListener(el, ["pointerdown", "click", "keydown"], (event) => (selectionEvent = event), {
+              capture: true,
+            })
+            // Kobalte moves Tab to the strip's last tabbable, which skips "+"; the browser's own order is right.
+            createEventListener(el, "keydown", (event) => event.key === "Tab" && event.stopPropagation(), {
               capture: true,
             })
             onCleanup(createTabStripScroll({ el, lead: props.pane.lead }))
@@ -304,11 +344,11 @@ export function PaneTabs(props: {
             )}
           </For>
           <For each={props.region.newTabs(props.pane.id)}>
-            {(entry) => (
+            {(id) => (
               <Tabs.Trigger
-                value={entry.id}
+                value={id}
                 class="group"
-                onMiddleClick={() => props.region.dismissNewTab(entry.id)}
+                onMiddleClick={() => props.region.dismissNewTab(id)}
                 closeButton={
                   <IconButton
                     size="small"
@@ -320,9 +360,9 @@ export function PaneTabs(props: {
                     onClick={(event) => {
                       event.preventDefault()
                       event.stopPropagation()
-                      props.region.dismissNewTab(entry.id)
+                      props.region.dismissNewTab(id)
                     }}
-                    icon={<Icon name="xmark-small" />}
+                    icon={<Icon name="close" />}
                     aria-label={language.t("common.closeTab")}
                   />
                 }
@@ -334,7 +374,7 @@ export function PaneTabs(props: {
           </For>
           <div class="h-full shrink-0 sticky end-0 z-10 flex items-center justify-center bg-v2-background-bg-base">
             <Show
-              when={primary() ?? (launchers().length === 0 && menu().length === 1 ? menu()[0]?.item : undefined)}
+              when={primary() ?? (launchers().length === 0 && menu().length === 1 ? menu()[0] : undefined)}
               fallback={
                 <Show
                   when={launchers().length > 0}
@@ -370,7 +410,7 @@ export function PaneTabs(props: {
                 </Show>
               }
             >
-              {(item) => <AddButton item={item()} onChoose={target} />}
+              {(entry) => <AddButton item={entry().item} onChoose={() => target(entry().key)} />}
             </Show>
           </div>
         </Tabs.List>
@@ -397,6 +437,9 @@ export function PaneTabs(props: {
               >
                 {language.t("session.tab.closeOthers")}
               </Menu.Item>
+              <Menu.Item disabled={after().length === 0} onSelect={() => after().forEach(props.region.close)}>
+                {language.t(language.direction() === "rtl" ? "common.closeTabsToLeft" : "common.closeTabsToRight")}
+              </Menu.Item>
             </Menu.Content>
           </Menu.Portal>
         </Menu>
@@ -421,15 +464,21 @@ export function PaneTabs(props: {
           </Show>
           {props.end}
           <Show when={props.actions && props.present()}>
-            <div class="size-7 shrink-0" aria-hidden />
+            <div class="size-7 shrink-0">{props.toggle}</div>
           </Show>
         </div>
       </div>
 
       <Show when={current()}>
-        {(entry) => (
-          <Tabs.Content value={entry().id} class="flex flex-col h-full overflow-hidden contain-strict">
-            <Launchers items={launchers()} onChoose={target} closed={closed} />
+        {(id) => (
+          <Tabs.Content value={id()} class="flex flex-col h-full overflow-hidden contain-strict">
+            <Launchers
+              items={launchers()}
+              onChoose={target}
+              closed={closed}
+              top={<PluginSlot at="session.panel.new" input={newTab} />}
+              list={<PluginSlot at="session.panel.new.list" input={newTab} />}
+            />
           </Tabs.Content>
         )}
       </Show>
@@ -498,19 +547,28 @@ function AddButton(props: { item: SessionPanelMenuItem; onChoose: () => void }):
   )
 }
 
-function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: () => void }): JSX.Element {
+function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: (key: string) => void }): JSX.Element {
   const language = useLanguage()
   const command = useCommand()
   const keys = createMemo(() => props.items.map((entry) => entry.key), [], { equals: same })
   const byKey = createMemo(() => new Map(props.items.map((entry) => [entry.key, entry.item])))
-  // A chosen item runs once the closing menu has returned focus to "+", and the tab strip has passed it on to the
-  // selected tab. Releasing that focus first lets the item move it where its tab needs it, e.g. into a new terminal,
-  // without the strip taking it back for the tab it remembers.
-  let chosen: SessionPanelMenuItem | undefined
+
+  const menu = createDeferredMenu<SessionPanelMenuEntry>({
+    onChoose: (entry) => {
+      props.onChoose(entry.key)
+      entry.item.run()    },
+  })
 
   return (
     <Tooltip value={language.t("session.tab.add")} placement="bottom" class="flex items-center">
-      <Menu appearance="standard" modal={false} placement="bottom-start" gutter={4}>
+      <Menu
+        appearance="standard"
+        modal={false}
+        placement="bottom-start"
+        gutter={4}
+        open={selectDeferredMenuOpen(menu.state())}
+        onOpenChange={(open) => menu.dispatch({ type: "open.change", open, available: true, defaultIntent: "menu" })}
+      >
         <Menu.Trigger
           as={IconButton}
           icon={<Icon name="plus" />}
@@ -522,19 +580,7 @@ function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: () 
           onPointerDown={(event: PointerEvent) => event.preventDefault()}
         />
         <Menu.Portal>
-          <Menu.Content
-            onCloseAutoFocus={() => {
-              const item = chosen
-
-              if (!item) return
-              chosen = undefined
-              setTimeout(() => {
-                if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
-                props.onChoose()
-                item.run()
-              })
-            }}
-          >
+          <Menu.Content onCloseAutoFocus={() => menu.dispatch({ type: "close.autofocus" })}>
             <For each={keys()}>
               {(key) => (
                 <Show when={byKey().get(key)}>
@@ -548,7 +594,7 @@ function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: () 
                     return (
                       <Menu.Item
                         class="!gap-6"
-                        onSelect={() => (chosen = item())}
+                        onSelect={() => menu.dispatch({ type: "select", choice: { key, item: item() } })}
                         shortcut={
                           <Show when={keybind().length > 0}>
                             <Keybind keys={keybind()} variant="neutral" />
@@ -556,7 +602,7 @@ function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: () 
                         }
                       >
                         <div class="flex items-center gap-2">
-                          <Show when={item().icon}>{(icon) => <Icon name={icon()} size="small" />}</Show>
+                          <Show when={item().icon}>{(icon) => <Icon name={icon()} />}</Show>
                           <span>{item().title}</span>
                         </div>
                       </Menu.Item>
@@ -572,26 +618,37 @@ function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: () 
   )
 }
 
-/** The + menu items as rows, then the session's recently closed tabs, in the new tab view. */
+/**
+ * The new tab view: what plugins draw across its top, the + menu items as rows, what plugins list under them, then the
+ * session's recently closed tabs.
+ */
 function Launchers(props: {
   items: readonly SessionPanelMenuEntry[]
-  onChoose: () => void
+  onChoose: (key: string) => void
   closed: { entries: readonly ClosedSideTab[]; onReopen: (key: string) => void }
+  top: JSX.Element
+  list: JSX.Element
 }): JSX.Element {
   const keys = createMemo(() => props.items.map((entry) => entry.key), [], { equals: same })
   const byKey = createMemo(() => new Map(props.items.map((entry) => [entry.key, entry.item])))
 
   return (
-    <div class="flex-1 min-h-0 overflow-y-auto px-6">
-      <div class="mx-auto flex max-w-[560px] flex-col gap-3 pt-12 pb-10">
-        <For each={keys()}>
-          {(key) => (
-            <Show when={byKey().get(key)}>{(item) => <LauncherRow item={item()} onChoose={props.onChoose} />}</Show>
-          )}
-        </For>
-        <ClosedTabsSection entries={props.closed.entries} onReopen={props.closed.onReopen} />
+    <>
+      {props.top}
+      <div data-scrollable class="flex-1 min-h-0 overflow-y-auto px-6">
+        <div class="mx-auto flex max-w-[560px] flex-col gap-3 pt-12 pb-10">
+          <For each={keys()}>
+            {(key) => (
+              <Show when={byKey().get(key)}>
+                {(item) => <LauncherRow item={item()} onChoose={() => props.onChoose(key)} />}
+              </Show>
+            )}
+          </For>
+          {props.list}
+          <ClosedTabsSection entries={props.closed.entries} onReopen={props.closed.onReopen} />
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -611,7 +668,7 @@ function LauncherRow(props: { item: SessionPanelMenuItem; onChoose: () => void }
     >
       <span class="flex min-w-0 items-center gap-2 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px]">
         <Show when={props.item.icon}>
-          {(icon) => <Icon name={icon()} size="small" class="text-v2-icon-icon-muted" />}
+          {(icon) => <Icon name={icon()} class="text-v2-icon-icon-muted" />}
         </Show>
         <span class="shrink-0 text-v2-text-text-base">{props.item.title}</span>
         <Show when={props.item.description}>

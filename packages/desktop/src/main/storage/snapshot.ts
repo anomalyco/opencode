@@ -1,4 +1,4 @@
-import { app, ipcMain } from "electron"
+import { app, ipcMain, type WebContents } from "electron"
 import { WindowSnapshotChannel, type WindowSnapshot } from "../../shared/ipc-transport"
 import { isRendererUrl } from "../windows/scheme"
 import { readWindowSnapshot } from "./window-snapshot"
@@ -14,6 +14,18 @@ export function setStorageSnapshotProvider(next: Provider) {
   provider = next
 }
 
+// Hears about a snapshot just before it is read, so the window holds the changes made after it
+// until its document can receive them.
+let observer: ((sender: WebContents) => void) | undefined
+
+export function setStorageSnapshotObserver(next: (sender: WebContents) => void) {
+  observer = next
+
+  return () => {
+    if (observer === next) observer = undefined
+  }
+}
+
 export function registerStorageSnapshotHandler() {
   // SAFETY: Electron delivers untrusted IPC arguments; accept only an array whose every element is a string here.
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- see SAFETY above
@@ -23,6 +35,8 @@ export function registerStorageSnapshotHandler() {
     // SAFETY: this dependency-free boundary check establishes the complete array-of-strings contract.
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- see SAFETY above
     if (!Array.isArray(names) || !names.every((name) => typeof name === "string")) return { storage: {} }
+
+    observer?.(event.sender)
 
     return provider(names)
   })

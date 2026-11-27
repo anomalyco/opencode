@@ -7,6 +7,8 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Environment } from "@opencode/core/environment/index"
 import { FileMutation } from "@opencode/core/file-mutation"
 import { FileWrite } from "@opencode/core/file-write"
+import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Formatter } from "@opencode/core/formatter"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
@@ -26,7 +28,16 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const editToolNode = makeLocationNode({
   name: "test/edit-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(EditTool.Plugin)),
-  deps: [Tool.node, FileWrite.node, FileMutation.node, Environment.node, Location.node, Permission.node],
+  deps: [
+    Tool.node,
+    FileWrite.node,
+    FileMutation.node,
+    Environment.node,
+    Location.node,
+    Permission.node,
+    Config.node,
+    Flag.node,
+  ],
 })
 
 const sessionID = Session.ID.make("ses_edit_tool_test")
@@ -67,7 +78,7 @@ const makeEditFixture = () => {
   })
 
   const formatter = Layer.mock(Formatter.Service, {
-    file: (target) => fixture.formatFile(target),
+    file: (target) => fixture.formatFile(target.absolute),
   })
 
   return Object.assign(fixture, { permission, formatter })
@@ -103,6 +114,7 @@ const withTool = <A, E, R>(
         Location.node.replace(activeLocation),
         Formatter.node.replace(fixture.formatter),
         Permission.node.replace(fixture.permission),
+        Config.node.replace(Config.testLayer()),
       ]),
     ),
   )
@@ -114,7 +126,7 @@ const call = (input: typeof EditTool.Input.Type, id = "call-edit") => ({
   call: { type: "tool-call" as const, id, name: "edit", input },
 })
 
-const it = testEffect(Layer.empty)
+const it = testEffect(Layer.succeed(Flag.Overrides, undefined))
 
 describe("EditTool", () => {
   it.live("registers and replaces relative exact text through FileMutation once", () =>
@@ -125,7 +137,10 @@ describe("EditTool", () => {
         Effect.andThen(
           withTool(tmp.path, edit, (registry) =>
             Effect.gen(function* () {
-              expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["edit", "execute"])
+              expect(yield* toolDefinitions(registry)).toMatchObject([
+                { name: "edit", outputSchema: { type: "string" } },
+                { name: "execute" },
+              ])
               expect(
                 (yield* toolDefinitions(registry, [{ action: "edit", resource: "*", effect: "deny" }])).map(
                   (tool) => tool.name,
@@ -143,12 +158,8 @@ describe("EditTool", () => {
                   text: "Edited hello.txt (1 replacement)",
                 },
               ])
-              // Compact UI metadata carries the file diffs the TUI renders.
+              expect(settled.output).toBe("Edited hello.txt (1 replacement)")
               expect(settled.metadata).toMatchObject({
-                files: [{ file: "hello.txt", status: "modified", additions: 1, deletions: 1 }],
-              })
-              expect(settled.output).toEqual({
-                replacements: 1,
                 files: [
                   {
                     file: "hello.txt",
@@ -201,7 +212,6 @@ describe("EditTool", () => {
               )
               expect(settled.status).toBe("completed")
               if (settled.status !== "completed") return
-              expect(settled.output.files[0]?.patch).toContain("-before\n+AFTER")
               expect(settled.metadata?.files?.[0]?.patch).toContain("-before\n+AFTER")
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("AFTER\n")
             }),
@@ -524,7 +534,7 @@ describe("EditTool", () => {
           Effect.gen(function* () {
             expect(settled.status).toBe("completed")
             if (settled.status !== "completed") return
-            expect(settled.output).toMatchObject({ replacements: 3 })
+            expect(settled.output).toBe("Edited all.txt (3 replacements)")
             expect(settled.content).toEqual([{ type: "text", text: "Edited all.txt (3 replacements)" }])
             expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after after after")
             expect(edit.writes).toHaveLength(1)
@@ -601,7 +611,7 @@ describe("EditTool", () => {
                 registry,
                 call({ path: "overlap.txt", oldString: "a\na", newString: "x", replaceAll: true }),
               )
-              expect(replaced).toMatchObject({ status: "completed", output: { replacements: 1 } })
+              expect(replaced).toMatchObject({ status: "completed", output: "Edited overlap.txt (1 replacement)" })
               yield* executeTool(registry, call({ path: "windows.txt", oldString: "a\nb", newString: "x" }))
             }),
           ),
@@ -634,6 +644,32 @@ describe("EditTool", () => {
         ),
         Effect.andThen(() => Effect.promise(() => fs.readFile(target, "utf8"))),
         Effect.tap((content) => Effect.sync(() => expect(content).toBe("\uFEFFafter\r\nrest\r\n"))),
+      )
+    }),
+  )
+
+  it.live("refuses to rewrite a file that is not valid UTF-8", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "Invoice.java")
+      // "// José" in Latin-1, far from the edited line.
+      const bytes = Buffer.concat([Buffer.from("// Jos\xe9\n", "latin1"), Buffer.from("int MAX = 10;\n")])
+      return Effect.promise(() => fs.writeFile(target, bytes)).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            executeTool(registry, call({ path: "Invoice.java", oldString: "MAX = 10", newString: "MAX = 25" })),
+          ),
+        ),
+        Effect.tap((settled) =>
+          Effect.promise(async () => {
+            expect(settled).toMatchObject({
+              status: "error",
+              error: { message: expect.stringContaining("Unable to edit Invoice.java: file is not valid UTF-8.") },
+            })
+            expect(edit.writes).toEqual([])
+            expect(await fs.readFile(target)).toEqual(bytes)
+          }),
+        ),
       )
     }),
   )
@@ -739,7 +775,7 @@ describe("EditTool", () => {
             Effect.gen(function* () {
               expect(
                 yield* executeTool(registry, call({ path: "strip.sh", oldString: "\r", newString: "", replaceAll: true })),
-              ).toMatchObject({ status: "completed", output: { replacements: 2 } })
+              ).toMatchObject({ status: "completed", output: "Edited strip.sh (2 replacements)" })
               expect(
                 yield* executeTool(registry, call({ path: "whole.sh", oldString: "x\r\ny\r\n", newString: "x\ny\n" })),
               ).toMatchObject({ status: "completed" })
@@ -841,7 +877,7 @@ describe("EditTool", () => {
         ),
         Effect.andThen((result) =>
           Effect.gen(function* () {
-            expect(result).toMatchObject({ status: "completed", output: { replacements: 1 } })
+            expect(result).toMatchObject({ status: "completed", output: "Edited concurrent.txt (1 replacement)" })
             expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
             expect(edit.writes).toEqual([target])
           }),

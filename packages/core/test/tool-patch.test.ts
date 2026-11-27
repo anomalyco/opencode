@@ -1,22 +1,21 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Layer, Schema } from "effect"
+import { Effect, Exit, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Environment } from "@opencode/core/environment/index"
+import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Formatter } from "@opencode/core/formatter"
 import { FileMutation } from "@opencode/core/file-mutation"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
-import { Model } from "@opencode/core/model"
 import { Permission } from "@opencode/core/permission"
-import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { PatchTool } from "@opencode/core/tool/plugin/patch"
-import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { transformEnvironmentFiles } from "./fixture/environment"
 import { location } from "./fixture/location"
 import { tmpdir, withTempDir } from "./fixture/tmpdir"
@@ -25,20 +24,9 @@ import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 
-const sessionHooks = new Map<string, (event: SessionHooks["context"]) => Effect.Effect<void>>()
 const patchToolNode = makeLocationNode({
   name: "test/patch-tool-plugin",
-  layer: Layer.effectDiscard(
-    registerToolPlugin(PatchTool.Plugin, {
-      session: {
-        hook: (name, callback) =>
-          Effect.sync(() => {
-            sessionHooks.set(name, callback as (event: SessionHooks["context"]) => Effect.Effect<void>)
-            return { dispose: Effect.void }
-          }),
-      },
-    }),
-  ),
+  layer: Layer.effectDiscard(registerToolPlugin(PatchTool.Plugin)),
   deps: [
     Tool.node,
     FileAccess.node,
@@ -47,6 +35,8 @@ const patchToolNode = makeLocationNode({
     Formatter.node,
     Location.node,
     Permission.node,
+    Config.node,
+    Flag.node,
   ],
 })
 
@@ -83,7 +73,7 @@ const permission = permissionLayer({
 })
 
 const formatter = Layer.mock(Formatter.Service, {
-  file: (target) => formatFile(target),
+  file: (target) => formatFile(target.absolute),
 })
 
 const reset = () => {
@@ -137,6 +127,7 @@ const withTool = <A, E, R>(
         Location.node.replace(activeLocation),
         Formatter.node.replace(formatter),
         Permission.node.replace(permission),
+        Config.node.replace(Config.testLayer()),
       ]),
     ),
   )
@@ -155,7 +146,7 @@ const exists = (target: string) =>
       () => false,
     ),
   )
-const it = testEffect(Layer.empty)
+const it = testEffect(Layer.succeed(Flag.Overrides, undefined))
 const withTempTool = <A, E, R>(body: (directory: string, registry: Tool.Interface) => Effect.Effect<A, E, R>) =>
   withTempDir((tmp) => {
     reset()
@@ -163,34 +154,6 @@ const withTempTool = <A, E, R>(body: (directory: string, registry: Tool.Interfac
   })
 
 describe("PatchTool", () => {
-  it.live("selects the same edit tools for compaction and generate requests as the agent loop", () =>
-    withTempTool(() =>
-      Effect.gen(function* () {
-        const event = (id: string): SessionHooks["context"] => ({
-          sessionID,
-          agent: toolIdentity.agent,
-          model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make(id) }),
-          system: [],
-          messages: [],
-          tools: Object.fromEntries(
-            ["patch", "edit", "write", "read"].map((name) => [name, { description: name, input: { type: "object" } }]),
-          ),
-          options: {},
-        })
-        for (const name of ["context", "compaction", "generate"]) {
-          const hook = sessionHooks.get(name)
-          expect(hook).toBeDefined()
-          const claude = event("claude-sonnet-4")
-          yield* hook!(claude)
-          expect(Object.keys(claude.tools)).toEqual(["edit", "write", "read"])
-          const gpt = event("gpt-5")
-          yield* hook!(gpt)
-          expect(Object.keys(gpt.tools)).toEqual(["patch", "read"])
-        }
-      }),
-    ),
-  )
-
   it.live("registers and sequentially applies add, update, and delete hunks", () =>
     withTempDir((tmp) => {
       reset()
@@ -202,7 +165,13 @@ describe("PatchTool", () => {
         Effect.andThen(
           withTool(tmp.path, (registry) =>
             Effect.gen(function* () {
-              expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["patch", "execute"])
+              const definitions = yield* toolDefinitions(registry)
+              expect(definitions.map((tool) => tool.name)).toEqual(["patch", "execute"])
+              expect(definitions[0]?.outputSchema).toEqual({ type: "object", additionalProperties: false })
+              expect(definitions[0]?.freeform).toEqual({
+                type: "lark",
+                grammar: expect.stringContaining('"*** Begin Patch"'),
+              })
               const settled = yield* executeTool(
                 registry,
                 call(
@@ -219,12 +188,8 @@ describe("PatchTool", () => {
               ])
               const modelText = settled.content?.[0]?.type === "text" ? settled.content[0].text : ""
               if (process.platform === "win32") expect(modelText).not.toContain("\\")
-              expect(settled.output).toMatchObject({
-                applied: [
-                  { type: "add", resource: "nested/new.txt" },
-                  { type: "update", resource: "update.txt" },
-                  { type: "delete", resource: "remove.txt" },
-                ],
+              expect(settled.output).toStrictEqual({})
+              expect(settled.metadata).toMatchObject({
                 files: [
                   {
                     file: "nested/new.txt",
@@ -291,6 +256,20 @@ describe("PatchTool", () => {
     ),
   )
 
+  it.live("writes a final empty + line of an added file", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const settled = yield* executeTool(
+          registry,
+          call("*** Begin Patch\n*** Add File: notes.md\n+# Title\n+\n*** Add File: blank.txt\n+\n*** End Patch"),
+        )
+        expect(settled.status).toBe("completed")
+        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "notes.md"), "utf8"))).toBe("# Title\n\n")
+        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "blank.txt"), "utf8"))).toBe("\n")
+      }),
+    ),
+  )
+
   it.live("counts deleted lines with and without a trailing newline", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
@@ -306,7 +285,7 @@ describe("PatchTool", () => {
         )
         expect(settled.status).toBe("completed")
         if (settled.status !== "completed") return
-        expect(settled.output.files).toMatchObject([
+        expect(settled.metadata?.files).toMatchObject([
           { file: "trailing.txt", additions: 0, deletions: 1 },
           { file: "unterminated.txt", additions: 0, deletions: 1 },
         ])
@@ -366,7 +345,6 @@ describe("PatchTool", () => {
         )
         expect(settled.status).toBe("completed")
         if (settled.status !== "completed") return
-        expect(settled.output.files[0]?.patch).toContain("+FORMATTED")
         expect(settled.metadata?.files?.[0]?.patch).toContain("+FORMATTED")
         expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("FORMATTED\n")
       })
@@ -456,6 +434,77 @@ describe("PatchTool", () => {
     ),
   )
 
+  it.live("refuses to rewrite a file that is not valid UTF-8 and applies none of the patch", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const utf8 = path.join(directory, "a.txt")
+        const latin1 = path.join(directory, "Invoice.java")
+        const doomed = path.join(directory, "Old.java")
+        // "// José" in Latin-1, far from the patched line.
+        const bytes = Buffer.concat([Buffer.from("// Jos\xe9\n", "latin1"), Buffer.from("int MAX = 10;\n")])
+        yield* Effect.promise(() =>
+          Promise.all([fs.writeFile(utf8, "before\n"), fs.writeFile(latin1, bytes), fs.writeFile(doomed, bytes)]),
+        )
+        expect(
+          yield* executeTool(
+            registry,
+            call(
+              "*** Begin Patch\n*** Update File: a.txt\n@@\n-before\n+after\n*** Update File: Invoice.java\n@@\n-int MAX = 10;\n+int MAX = 25;\n*** End Patch",
+            ),
+          ),
+        ).toMatchObject({
+          status: "error",
+          error: {
+            message: expect.stringContaining(
+              `patch verification failed: Failed to read file to update ${latin1}: file is not valid UTF-8.`,
+            ),
+          },
+        })
+        expect(yield* Effect.promise(() => fs.readFile(utf8, "utf8"))).toBe("before\n")
+        expect(yield* Effect.promise(() => fs.readFile(latin1))).toEqual(bytes)
+        // Deleting does not rewrite the bytes, so it stays allowed.
+        expect(
+          yield* executeTool(registry, call("*** Begin Patch\n*** Delete File: Old.java\n*** End Patch", "call-delete")),
+        ).toMatchObject({ status: "completed" })
+        expect(yield* exists(doomed)).toBe(false)
+      }),
+    ),
+  )
+
+  it.live("renames a file when the move only changes its case", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "same.txt"), "before\n"))
+        expect(
+          yield* executeTool(
+            registry,
+            call("*** Begin Patch\n*** Update File: same.txt\n*** Move to: Same.txt\n@@\n-before\n+after\n*** End Patch"),
+          ),
+        ).toMatchObject({ status: "completed" })
+        expect(yield* Effect.promise(() => fs.readdir(directory))).toEqual(["Same.txt"])
+        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "Same.txt"), "utf8"))).toBe("after\n")
+      }),
+    ),
+  )
+
+  it.live("moves into a directory whose name differs only in case", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await fs.mkdir(path.join(directory, "Foo"))
+          await fs.writeFile(path.join(directory, "Foo", "a.txt"), "before\n")
+        })
+        expect(
+          yield* executeTool(
+            registry,
+            call("*** Begin Patch\n*** Update File: Foo/a.txt\n*** Move to: foo/a.txt\n@@\n-before\n+after\n*** End Patch"),
+          ),
+        ).toMatchObject({ status: "completed" })
+        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "foo", "a.txt"), "utf8"))).toBe("after\n")
+      }),
+    ),
+  )
+
   it.live("moves a symlink without deleting its target", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
@@ -478,7 +527,7 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("includes move file info in output and metadata", () =>
+  it.live("includes move file info in metadata", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
         const source = path.join(directory, "old", "name.txt")
@@ -492,8 +541,7 @@ describe("PatchTool", () => {
         )
         expect(settled.status).toBe("completed")
         if (settled.status !== "completed") return
-        expect(settled.output).toMatchObject({
-          applied: [{ type: "update", resource: "renamed/dir/name.txt" }],
+        expect(settled.metadata).toMatchObject({
           files: [
             {
               file: "renamed/dir/name.txt",
@@ -502,28 +550,6 @@ describe("PatchTool", () => {
             },
           ],
         })
-      }),
-    ),
-  )
-
-  it.live("includes the move destination in edit permission resources", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const source = path.join(directory, "old", "name.txt")
-        yield* Effect.promise(() => fs.mkdir(path.dirname(source), { recursive: true }))
-        yield* Effect.promise(() => fs.writeFile(source, "old content\n"))
-        yield* executeTool(
-          registry,
-          call(
-            "*** Begin Patch\n*** Update File: old/name.txt\n*** Move to: renamed/dir/name.txt\n@@\n-old content\n+new content\n*** End Patch",
-          ),
-        )
-        expect(assertions).toMatchObject([
-          {
-            action: "edit",
-            resources: ["old/name.txt", "renamed/dir/name.txt"],
-          },
-        ])
       }),
     ),
   )
@@ -549,7 +575,7 @@ describe("PatchTool", () => {
                 )
                 expect(settled).toMatchObject({
                   status: "completed",
-                  output: { applied: [{ resource: "moved.txt" }] },
+                  metadata: { files: [{ file: "moved.txt" }] },
                 })
                 expect(assertions).toMatchObject([{ action: "edit", resources: ["old.txt", "moved.txt"] }])
               }),
@@ -652,37 +678,6 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("rejects an invalid hunk header", () =>
-    withTempTool((_directory, registry) =>
-      Effect.gen(function* () {
-        expect(yield* executeTool(registry, call("*** Begin Patch\n*** Frobnicate File: foo\n*** End Patch"))).toEqual({
-          status: "error",
-          error: {
-            type: "tool.execution",
-            message:
-              "patch verification failed: Invalid hunk at line 2: '*** Frobnicate File: foo' is not a valid hunk header. Valid hunk headers: '*** Add File: {path}', '*** Delete File: {path}', '*** Update File: {path}'",
-          },
-        })
-      }),
-    ),
-  )
-
-  it.live("applies successive update operations to one file", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "successive.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "a\nb\n"))
-        yield* executeTool(
-          registry,
-          call(
-            "*** Begin Patch\n*** Update File: successive.txt\n@@\n-a\n+A\n*** Update File: successive.txt\n@@\n-b\n+B\n*** End Patch",
-          ),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("A\nB\n")
-      }),
-    ),
-  )
-
   it.live("preserves files across self-moves and multi-hunk moves in one patch", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
@@ -742,10 +737,11 @@ describe("PatchTool", () => {
         )
         expect(settled.status).toBe("completed")
         if (settled.status !== "completed") return
-        const output = Schema.decodeUnknownSync(PatchTool.Output)(settled.output)
-        expect(output.files[0]?.patch).not.toContain(bom)
-        expect(output.files[0]?.patch).not.toContain("-using System;")
-        expect(output.files[0]?.patch).not.toContain("+using System;")
+        const patch = settled.metadata?.files?.[0]?.patch
+        expect(patch).toContain("+class Next {}")
+        expect(patch).not.toContain(bom)
+        expect(patch).not.toContain("-using System;")
+        expect(patch).not.toContain("+using System;")
         expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(
           `${bom}using System;\n\nclass Test {}\nclass Next {}\n`,
         )
@@ -1105,7 +1101,7 @@ describe("PatchTool", () => {
                 )
                 expect(settled).toMatchObject({
                   status: "completed",
-                  output: { applied: [{ resource: destination.replaceAll("\\", "/") }] },
+                  metadata: { files: [{ file: destination.replaceAll("\\", "/") }] },
                 })
                 expect(assertions).toMatchObject([
                   {

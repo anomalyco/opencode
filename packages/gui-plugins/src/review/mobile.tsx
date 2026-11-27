@@ -6,13 +6,6 @@ import type Review from "./index"
 import type { ReviewModel } from "./model"
 import { ReviewEmpty, ReviewTitle } from "./parts"
 
-type ScrollState = {
-  scroll?: HTMLDivElement
-  restoreFrame?: number
-  userInteracted: boolean
-  restored?: { x: number; y: number }
-}
-
 /** The narrow-screen review: every changed file as one scrollable list. */
 export default function SessionMobileReview(props: { review: ReviewModel; session: MountedSession }) {
   const ctx = usePlugin<typeof Review>()
@@ -21,7 +14,7 @@ export default function SessionMobileReview(props: { review: ReviewModel; sessio
 
   return (
     <div class="relative h-full overflow-hidden">
-      <Show when={!props.review.deferRender()}>
+      <Show when={props.review.mobileReady()}>
         <SessionReviewTab
           review={props.review}
           session={props.session}
@@ -39,108 +32,38 @@ function SessionReviewTab(props: {
   overflow: "wrap" | "scroll"
   onViewFile: (file: string) => void
 }) {
-  const ctx = usePlugin()
-  const layout = ctx.layout
   const review = props.review
-  const state: ScrollState = { userInteracted: false }
 
-  const handleInteraction = () => {
-    state.userInteracted = true
-
-    if (state.restoreFrame !== undefined) {
-      cancelAnimationFrame(state.restoreFrame)
-      state.restoreFrame = undefined
-    }
-  }
-
-  const doRestore = () => {
-    state.restoreFrame = undefined
-    const el = state.scroll
-
-    if (!el || !layout.ready() || state.userInteracted) return
-
-    if (el.clientHeight === 0 || el.clientWidth === 0) return
-
-    const s = layout.scroll.get(props.session, "review")
-
-    if (!s || (s.x === 0 && s.y === 0)) return
-
-    const maxY = Math.max(0, el.scrollHeight - el.clientHeight)
-    const maxX = Math.max(0, el.scrollWidth - el.clientWidth)
-
-    const targetY = Math.min(s.y, maxY)
-    const targetX = Math.min(s.x, maxX)
-
-    if (el.scrollTop === targetY && el.scrollLeft === targetX) return
-
-    if (el.scrollTop !== targetY) el.scrollTop = targetY
-
-    if (el.scrollLeft !== targetX) el.scrollLeft = targetX
-    state.restored = { x: el.scrollLeft, y: el.scrollTop }
-  }
-
-  const queueRestore = () => {
-    if (state.userInteracted || state.restoreFrame !== undefined) return
-    state.restoreFrame = requestAnimationFrame(doRestore)
-  }
-
-  const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
-    const el = event.currentTarget
-    const prev = state.restored
-
-    if (prev && el.scrollTop === prev.y && el.scrollLeft === prev.x) {
-      state.restored = undefined
-
-      return
-    }
-
-    state.restored = undefined
-    handleInteraction()
-
-    if (!layout.ready()) return
-
-    if (el.clientHeight === 0 || el.clientWidth === 0) return
-
-    layout.scroll.set(props.session, "review", {
-      x: el.scrollLeft,
-      y: el.scrollTop,
-    })
-  }
-
-  // Restores the stored scroll once the layout loads, and again when the list or its wrapping changes.
+  // Restores the stored scroll again when the list or its wrapping changes; the machine waits for the layout.
   createKeyed(
-    () => {
-      const count = review.diffs().length
-      const overflow = props.overflow
-
-      return layout.ready() ? { count, overflow } : undefined
-    },
-    () => queueRestore(),
+    () => ({ count: review.diffs().length, overflow: props.overflow }),
+    () => review.requestRestore(),
+    { equals: (previous, next) => previous.count === next.count && previous.overflow === next.overflow },
   )
 
-  onCleanup(() => {
-    if (state.restoreFrame !== undefined) cancelAnimationFrame(state.restoreFrame)
-    review.setScroll(undefined)
-  })
+  onCleanup(() => review.setScroll(undefined))
 
   return (
     <SessionReview
       title={<ReviewTitle review={review} />}
       empty={<ReviewEmpty review={review} loadingClass="px-2 py-2 text-text-weak" />}
       scrollRef={(el) => {
-        state.scroll = el
-        makeEventListener(el, "wheel", handleInteraction, { passive: true, capture: true })
-        makeEventListener(el, "mousewheel", handleInteraction, { passive: true, capture: true })
-        makeEventListener(el, "pointerdown", handleInteraction, { passive: true, capture: true })
-        makeEventListener(el, "touchstart", handleInteraction, { passive: true, capture: true })
-        makeEventListener(el, "keydown", handleInteraction, { capture: true })
+        // Input, not the scroll events a restore, a layout change or a focused file's scrolling fires, hands the
+        // list to the user.
+        makeEventListener(el, "wheel", review.interacted, { passive: true, capture: true })
+        makeEventListener(el, "mousewheel", review.interacted, { passive: true, capture: true })
+        makeEventListener(el, "pointerdown", review.interacted, { passive: true, capture: true })
+        makeEventListener(el, "touchstart", review.interacted, { passive: true, capture: true })
+        makeEventListener(el, "keydown", review.interacted, { capture: true })
         review.setScroll(el)
-        queueRestore()
       }}
-      onScroll={handleScroll}
-      onDiffRendered={queueRestore}
+      onScroll={(event) => review.saveScroll(props.session, event.currentTarget)}
+      onDiffRendered={review.requestRestore}
       open={review.open()}
-      onOpenChange={review.setOpen}
+      onOpenChange={(open) => {
+        review.interacted()
+        review.setOpen(open)
+      }}
       classes={{
         root: "[&_[data-slot=session-review-list]]:pb-0 [&_[data-slot=accordion-trigger]]:!rounded-none [&_[data-slot=accordion-trigger]]:!border-x-0 [&_[data-slot=accordion-item]:first-child_[data-slot=accordion-trigger]]:!border-t-0 [&_[data-slot=accordion-item]:last-child:not([data-expanded])_[data-slot=accordion-trigger]]:!border-b-0 [&_[data-slot=accordion-item]:last-child_[data-slot=accordion-content]]:!border-b-0 [&_[data-slot=accordion-item]:last-child_[data-slot=session-review-diff-placeholder]]:!border-b-0 [&_[data-slot=accordion-content]]:!rounded-none [&_[data-slot=accordion-content]]:!border-x-0 [&_[data-slot=session-review-diff-placeholder]]:!rounded-none [&_[data-slot=session-review-diff-placeholder]]:!border-x-0",
         header:

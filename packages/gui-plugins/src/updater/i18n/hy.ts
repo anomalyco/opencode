@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "Հաջորդ",
   "releaseNotes.action.hideFuture": "Չցուցադրել դրանք ապագայում",
   "releaseNotes.media.alt": "Թողարկման նախադիտում",
+  "action.reload": "Վերբեռնել՝ թարմացնելու համար",
+  "action.reloading": "Վերբեռնվում է…",
+  "web.ready.title": "Թարմացումը պատրաստ է",
+  "web.ready.message":
+    "OpenCode-ի նոր տարբերակը պատրաստ է։ Վերբեռնեք՝ այն բոլոր բաց պատուհաններում օգտագործելու համար։",
+  "web.reload": "Վերբեռնել",
+  "web.reset.title": "Վերբեռնել սերվերից",
+  "web.reset.description": "Մաքրել հավելվածի պահված պատճենը և բեռնել սերվերի ընթացիկ տարբերակը",
+  "web.reset.action": "Վերբեռնել սերվերից",
 }

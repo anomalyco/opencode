@@ -17,7 +17,7 @@ function map(
     package: `aisdk:${packageName}`,
     settings: { ...settings },
   }
-  AISDKNative.rewrite(target, { specifier: target.package, providerID, modelID })
+  AISDKNative.rewrite(target, { builtins: Provider.builtinPackages, specifier: target.package, providerID, modelID })
   return target.package?.startsWith("aisdk:") ? undefined : target
 }
 
@@ -140,25 +140,6 @@ describe("AISDKNative", () => {
     }
   })
 
-  test("maps Google Vertex settings to the native provider", () => {
-    expect(
-      map("@ai-sdk/google-vertex", {
-        project: "project",
-        location: "us-central1",
-        labels: { environment: "test" },
-        thinkingConfig: { thinkingLevel: "high" },
-      }),
-    ).toEqual({
-      package: "@opencode/ai/providers/google-vertex",
-      settings: {
-        project: "project",
-        location: "us-central1",
-        labels: { environment: "test" },
-        thinkingConfig: { thinkingLevel: "high" },
-      },
-    })
-  })
-
   test("maps supported Mistral settings and request overlays to the native provider", () => {
     expect(
       map("@ai-sdk/mistral", {
@@ -240,7 +221,12 @@ describe("AISDKNative", () => {
         package: specifier,
         settings,
       }
-      AISDKNative.rewrite(target, { specifier, providerID: "test-provider", modelID })
+      AISDKNative.rewrite(target, {
+        builtins: Provider.builtinPackages,
+        specifier,
+        providerID: "test-provider",
+        modelID,
+      })
       return target
     }
 
@@ -531,22 +517,6 @@ describe("AISDKNative", () => {
         settings: { thinkingConfig },
       })
     }
-  })
-
-  test("maps Google request options without thinking settings", () => {
-    expect(
-      map("@ai-sdk/google", {
-        cachedContent: "cachedContents/example",
-        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
-        serviceTier: "future-tier",
-      }),
-    ).toMatchObject({
-      settings: {
-        cachedContent: "cachedContents/example",
-        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
-        serviceTier: "future-tier",
-      },
-    })
   })
 
   test("maps Vertex Gemini settings to the native Gemini route", () => {

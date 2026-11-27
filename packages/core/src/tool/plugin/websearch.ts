@@ -1,13 +1,16 @@
 export * as WebSearchTool from "./websearch.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema, Semaphore } from "effect"
 import { HttpClientError } from "effect/http"
+import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
+import { Flag } from "../../flag.js"
 import { Form } from "../../form.js"
 import { Permission } from "../../permission.js"
 import { WebSearch } from "../../websearch.js"
+import { WebSearchMcp } from "../../plugin/websearch/mcp.js"
 
 export const name = "websearch"
 export const NO_RESULTS = "No search results found. Please try a different query."
@@ -25,22 +28,32 @@ export const Input = Schema.Struct({
   query: Schema.String.annotate({ description: "Websearch query" }),
 })
 
-const Output = Schema.Struct({
-  provider: WebSearch.ID,
-  results: Schema.Array(WebSearch.Result),
-})
+const Output = Schema.Array(
+  Schema.Struct({
+    url: WebSearch.Result.fields.url,
+    title: WebSearch.Result.fields.title,
+    published: WebSearch.Result.fields.time.fields.published,
+    content: WebSearch.Result.fields.content,
+  }),
+)
 export const Plugin = {
   id: "opencode.tool.websearch",
   effect: Effect.fn("WebSearchTool.Plugin")(function* (ctx: Context) {
     const permission = yield* Permission.Service
     const forms = yield* Form.Service
     const websearch = yield* WebSearch.Service
+    const config = yield* Config.Service
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
+    const flags = yield* Flag.Service
 
     yield* ctx.tool
       .transform((editor) =>
         editor.add({
           name,
-          options: { codemode: false },
+          // Pinned so quick questions call it without searching the catalog first.
+          options: flags.resolve(loaded.entries).full_codemode.enabled
+            ? { codemode: { pinned: true } }
+            : { codemode: false },
           description,
           input: Input,
           output: Output,
@@ -144,12 +157,14 @@ export const Plugin = {
                     )
                 }),
               )
-              const output = {
-                provider: result.providerID,
-                results: result.results,
-              }
-              const content = output.results.length
-                ? output.results
+              const output = result.results.map((hit) => ({
+                url: hit.url,
+                ...(hit.title === undefined ? {} : { title: hit.title }),
+                ...(hit.content === undefined ? {} : { content: hit.content }),
+                ...(hit.time.published === undefined ? {} : { published: hit.time.published }),
+              }))
+              const content = result.results.length
+                ? result.results
                     .map((result) => {
                       const title = result.title ?? result.url
                       const published = result.time.published
@@ -159,15 +174,16 @@ export const Plugin = {
                     })
                     .join("\n\n")
                 : NO_RESULTS
-              return { output, content, metadata: { provider: output.provider } }
+              return { output, content, metadata: { provider: result.providerID } }
             }).pipe(
               Effect.mapError((error) => {
                 const fallback = `Unable to search the web for ${input.query}`
                 if (!Schema.is(WebSearch.RequestError)(error)) return new ToolFailure({ message: fallback, error })
                 const status = HttpClientError.isHttpClientError(error.cause) ? error.cause.response?.status : undefined
                 return new ToolFailure({
-                  message:
-                    status === undefined
+                  message: Schema.is(WebSearchMcp.ToolError)(error.cause)
+                    ? `Web search failed: ${error.cause.message}`
+                    : status === undefined
                       ? fallback
                       : (httpErrors.get(status) ?? `Web search request failed (HTTP ${status})`),
                   error,
@@ -178,17 +194,5 @@ export const Plugin = {
         }),
       )
       .pipe(Effect.orDie)
-
-    const hook = (event: SessionHooks["context"]) =>
-      Effect.gen(function* () {
-        const disabled = yield* websearch.default().pipe(
-          Effect.as(false),
-          Effect.catchTag("WebSearch.Disabled", () => Effect.succeed(true)),
-        )
-        if (disabled) delete event.tools[name]
-      })
-    yield* ctx.session.hook("context", hook)
-    yield* ctx.session.hook("compaction", hook)
-    yield* ctx.session.hook("generate", hook)
   }),
 }

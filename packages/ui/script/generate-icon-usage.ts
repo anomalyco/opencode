@@ -1,0 +1,172 @@
+import { join } from "node:path"
+import { fileURLToPath } from "node:url"
+import { format } from "prettier"
+import ts from "typescript"
+import { isIconName, resolveIconName } from "../src/icons/catalog"
+
+type ArtworkName = ReturnType<typeof resolveIconName>
+
+const roots = ["app", "desktop", "gui-plugins", "session-ui", "ui"].map((name) => `packages/${name}/src`)
+
+const sourceFiles = new Bun.Glob("**/*.{ts,tsx}")
+
+const excluded =
+  /(?:^|\/)(?:components-lab|fixtures|i18n|locales|stories|storybook)\/|(?:[.-](?:test|spec|fixture|fixtures|stories|story|bench|generated))\.tsx?$/
+
+const iconProperty =
+  /^(?:icon|activeIcon|clearIcon|closeIcon|emptyIcon|errorIcon|leadingIcon|secondaryIcon|successIcon|targetIcon|titleIcon|trailingIcon|triggerIcon)$/
+
+const fallbackOperators = new Set([
+  ts.SyntaxKind.QuestionQuestionToken,
+  ts.SyntaxKind.BarBarToken,
+  ts.SyntaxKind.AmpersandAmpersandToken,
+])
+
+const iconBinding = /^(?:icon|iconName|\w*Icons?|[A-Z_]*ICONS?)$/
+
+// These suppliers compute a catalog name but aren't named after their output.
+const iconSuppliers = {
+  "packages/app/src/shell/notifications/toast.tsx": ["resolveIcon"],
+  "packages/ui/src/components/card.tsx": ["pick"],
+} satisfies Record<string, string[]>
+
+export function iconsInSource(file: string, source: string) {
+  const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true)
+
+  const icons = new Set<ArtworkName>()
+
+  const suppliers = Object.entries(iconSuppliers).find(([path]) => path === file)?.[1]
+
+  function visit(node: ts.Node) {
+    if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && isIconName(node.text)) {
+      if (isIconValue(node)) icons.add(resolveIconName(node.text))
+    }
+
+    ts.forEachChild(node, visit)
+  }
+
+  function isIconValue(node: ts.Node) {
+    for (let child = node, parent = node.parent; parent; child = parent, parent = parent.parent) {
+      if (ts.isTypeNode(parent) || ts.isElementAccessExpression(parent)) return false
+
+      if (
+        ts.isBinaryExpression(parent) &&
+        (parent.right !== child || !fallbackOperators.has(parent.operatorToken.kind))
+      )
+        return false
+
+      if (ts.isConditionalExpression(parent) && parent.condition === child) return false
+
+      if (ts.isJsxAttribute(parent)) {
+        const tag = parent.parent.parent.tagName.getText(tree)
+
+        const name = parent.name.getText(tree)
+
+        return (
+          (name === "name" && (tag === "Icon" || tag.endsWith(".Icon"))) ||
+          iconProperty.test(name) ||
+          (name === "fallback" && (tag === "Glyph" || tag === "Identity"))
+        )
+      }
+
+      if (ts.isCallExpression(parent)) {
+        const callee = parent.expression.getText(tree)
+
+        // Icon's unknown-name fallback and the standalone chevron used by the file tree.
+        return callee === "getIcon" || callee === "resolveIconName"
+      }
+
+      if (ts.isPropertyAssignment(parent)) {
+        if (parent.name === child) return false
+
+        if (iconProperty.test(parent.name.getText(tree).replace(/^["']|["']$/g, ""))) {
+          // Entries in the open-in-app menu use AppIcon's separate sprite.
+          return (
+            !ts.isObjectLiteralExpression(parent.parent) ||
+            !parent.parent.properties.some((prop) => prop.name?.getText(tree) === "openWith")
+          )
+        }
+      }
+
+      if (ts.isVariableDeclaration(parent)) {
+        const binding = parent.name.getText(tree)
+
+        // Some components call their inline SVG selector `icon`, too.
+        if (binding === "icon") return /\bname=\{icon\(\)\}/.test(source)
+
+        if (iconBinding.test(binding)) return true
+
+        if (!suppliers) return false
+      }
+
+      if (ts.isGetAccessorDeclaration(parent)) return iconProperty.test(parent.name.getText(tree))
+
+      if (ts.isFunctionDeclaration(parent)) {
+        const name = parent.name?.getText(tree) ?? ""
+
+        // TextField's copyKind variants are only enabled by its story.
+        if (name === "selectTextFieldCopyIcon") return false
+
+        return iconBinding.test(name) || suppliers?.includes(name) === true
+      }
+
+      if (ts.isJsxElement(parent) || ts.isJsxSelfClosingElement(parent) || ts.isExpressionStatement(parent))
+        return false
+    }
+
+    return false
+  }
+
+  visit(tree)
+
+  return [...icons].toSorted()
+}
+
+async function generate() {
+  const workspace = new URL("../../../", import.meta.url)
+
+  const files = roots.flatMap((root) =>
+    Array.from(sourceFiles.scanSync({ cwd: fileURLToPath(new URL(root, workspace)) }), (file) =>
+      join(root, file).replaceAll("\\", "/"),
+    ),
+  )
+
+  const entries = await Promise.all(files.flatMap((file) => (excluded.test(file) ? [] : [readUsage(file, workspace)])))
+
+  const usage = Object.fromEntries(
+    entries
+      .toSorted((a, b) => a.file.localeCompare(b.file, "en"))
+      .flatMap((entry) => (entry.icons.length ? [[entry.file, entry.icons]] : [])),
+  )
+
+  return format(
+    `// Generated by bun run --cwd packages/ui generate:icon-usage. Do not edit.
+import type { artworkNames } from "../catalog"
+
+type ArtworkName = ReturnType<typeof artworkNames>[number]
+
+export const iconUsageByFile = ${JSON.stringify(usage)} satisfies Record<string, readonly ArtworkName[]>`,
+    { parser: "typescript", semi: false, printWidth: 120 },
+  )
+}
+
+async function readUsage(file: string, workspace: URL) {
+  return { file, icons: iconsInSource(file, await Bun.file(new URL(file, workspace)).text()) }
+}
+
+if (import.meta.main) {
+  const destination = Bun.file(new URL("../src/icons/icon/icon-usage.generated.ts", import.meta.url))
+
+  const content = await generate()
+
+  if (process.argv.includes("--check")) {
+    if ((await destination.exists()) && (await destination.text()).replaceAll("\r\n", "\n") === content) {
+      console.log("Icon usage audit is up to date.")
+    } else {
+      console.error("Icon usage audit is stale. Run bun run --cwd packages/ui generate:icon-usage.")
+      process.exitCode = 1
+    }
+  } else {
+    await Bun.write(destination, content)
+  }
+}

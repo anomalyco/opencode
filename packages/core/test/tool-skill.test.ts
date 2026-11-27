@@ -19,7 +19,7 @@ import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodeReplacements } from "./lib/tool"
 import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/policy"
 
 const skillToolNode = makeLocationNode({
@@ -106,13 +106,15 @@ describe("SkillTool", () => {
           })
           const skills = Layer.mock(Skill.Service, {
             get: (id) => Effect.succeed(current.find((skill) => skill.id === id)),
+            resolve: (id) => Effect.succeed(current.find((skill) => skill.id === id)),
+            instructions: (id) => Effect.succeed(current.find((skill) => skill.id === id)?.content ?? ""),
             files: () => Effect.undefined,
+            approval: (id) => Effect.succeed({ resources: [id], save: [id] }),
             list: () => Effect.succeed(current),
           })
           const skillToolLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode]), [
-            Permission.node.replace(permission),
+            ...toolNodeReplacements(permission),
             Skill.node.replace(skills),
-            Image.node.replace(imagePassthrough),
           ])
 
           return yield* Effect.gen(function* () {
@@ -140,7 +142,7 @@ describe("SkillTool", () => {
               }),
             ).toEqual({
               status: "completed",
-              output: { name: "Effect", directory, output: Skill.toModelOutput(info, [reference]) },
+              output: { directory, content: Skill.toModelOutput(info, [reference]) },
               content: [{ type: "text", text: Skill.toModelOutput(info, [reference]) }],
               metadata: { name: "Effect", directory },
             })

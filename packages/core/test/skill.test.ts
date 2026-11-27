@@ -1,6 +1,7 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { Agent } from "@opencode/core/agent"
+import { PermissionPolicy } from "@opencode/core/permission/policy"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -31,6 +32,57 @@ const info = (id: string, description: string) =>
     content: `# ${id}`,
   })
 
+const file = (value: string) => {
+  const parsed = Skill.parseFilePath(value)
+  if (!parsed) throw new Error(`unsafe test path: ${value}`)
+  return parsed
+}
+
+describe("Skill.parseAddress", () => {
+  test("parses skill:// paths into an ID, a file and the canonical URI", () => {
+    const address = Skill.parseAddress("skill://docs:pdf/references/FORMS.md")
+    expect(address?.id).toBe(Skill.ID.make("docs:pdf"))
+    expect(String(address?.file)).toBe("references/FORMS.md")
+    expect(address?.uri).toBe("skill://docs:pdf/references/FORMS.md")
+    expect(Skill.parseAddress("skill://docs:pdf/references/")?.uri).toBe("skill://docs:pdf/references")
+    expect(Skill.parseAddress("skill://docs:pdf/")?.uri).toBe("skill://docs:pdf")
+    const folder = Skill.parseAddress("skill://docs:pdf")
+    expect(folder?.file).toBeUndefined()
+    expect(folder?.uri).toBe("skill://docs:pdf")
+  })
+
+  test("refuses anything that isn't a safe skill:// path", () => {
+    for (const value of [
+      "/skills/pdf/SKILL.md",
+      "skill://",
+      "skill://../x",
+      "skill://pdf/../secret",
+      "skill://pdf/a\\b",
+    ])
+      expect(Skill.parseAddress(value)).toBeUndefined()
+  })
+})
+
+describe("Skill.parseFilePath", () => {
+  test("accepts paths inside a skill's folder and nothing else", () => {
+    expect(String(Skill.parseFilePath("references/FORMS.md"))).toBe("references/FORMS.md")
+    for (const value of [
+      "",
+      ".",
+      "../secret",
+      "a/../../b",
+      "%2e%2e/x",
+      "a#b",
+      "a?b",
+      "/etc/passwd",
+      "C:\\x",
+      "https://x/y",
+      "a\\b",
+    ])
+      expect(Skill.parseFilePath(value)).toBeUndefined()
+  })
+})
+
 describe("Skill", () => {
   it.live("hides and refuses denied skills while organization policy overrides local allows", () =>
     Effect.gen(function* () {
@@ -58,7 +110,7 @@ describe("Skill", () => {
       expect(yield* skills.get(Skill.ID.make("deploy"))).toBeUndefined()
       expect(yield* skills.get(Skill.ID.make("team:review"))).toEqual(info("team:review", "Review"))
       const instructions = yield* SkillInstructions.Service
-      const guidance = yield* instructions.load([]).pipe(Effect.flatMap(readInitial))
+      const guidance = yield* instructions.load(PermissionPolicy.empty).pipe(Effect.flatMap(readInitial))
       expect(guidance.text).toContain("<id>team:review</id>")
       expect(guidance.text).not.toContain("deploy")
 
@@ -209,6 +261,54 @@ describe("Skill", () => {
     }),
   )
 
+  it.effect("lists a lazy skill with empty content and loads only what is asked for", () =>
+    Effect.gen(function* () {
+      const skill = yield* Skill.Service
+      const loaded: string[] = []
+      const load = <A>(name: string, value: A) => Effect.sync(() => (loaded.push(name), value))
+      yield* skill.transform((editor) =>
+        editor.add(
+          { ...info("remote", "Remote"), content: load("SKILL.md", "# remote") },
+          { "references/a.md": load("references/a.md", "A"), "references/b.md": "B" },
+        ),
+      )
+      const id = Skill.ID.make("remote")
+
+      expect((yield* skill.list()).map((item) => item.content)).toEqual([""])
+      expect((yield* skill.files(id))?.map(String)).toEqual(["references/a.md", "references/b.md"])
+      expect(loaded).toEqual([])
+      expect(yield* skill.content(id)).toBe("# remote")
+      expect(new TextDecoder().decode(yield* skill.read(id, file("references/a.md")))).toBe("A")
+      expect(loaded).toEqual(["SKILL.md", "references/a.md"])
+    }),
+  )
+
+  it.effect("drops file names that aren't safe paths when a skill is added", () =>
+    Effect.gen(function* () {
+      const skill = yield* Skill.Service
+      yield* skill.transform((editor) =>
+        editor.add(
+          { ...info("bundle", "Bundle"), path: AbsolutePath.make(Skill.uri("bundle", "SKILL.md")) },
+          { "references/a.md": "A", "../secret": "no", "/etc/passwd": "no", "a?b": "no" },
+        ),
+      )
+      expect((yield* skill.files(Skill.ID.make("bundle")))?.map(String)).toEqual(["references/a.md"])
+    }),
+  )
+
+  it.effect("uses content a plugin sets on a lazy skill instead of loading it", () =>
+    Effect.gen(function* () {
+      const skill = yield* Skill.Service
+      yield* skill.transform((editor) => {
+        editor.add({ ...info("remote", "Remote"), content: Effect.die("loaded") })
+        editor.update("remote", (draft) => {
+          draft.content = "# Set by a plugin"
+        })
+      })
+      expect(yield* skill.content(Skill.ID.make("remote"))).toBe("# Set by a plugin")
+    }),
+  )
+
   it.effect("filters values by agent permissions", () =>
     Effect.gen(function* () {
       const agents = yield* Agent.Service
@@ -218,7 +318,7 @@ describe("Skill", () => {
         }),
       )
       const agent = yield* agents.get(Agent.ID.make("reviewer"))
-      expect(Skill.available([info("deploy", "Deploy")], agent!.permissions)).toEqual([])
+      expect(Skill.available([info("deploy", "Deploy")], PermissionPolicy.fromRules(agent!.permissions))).toEqual([])
     }),
   )
 
@@ -241,10 +341,11 @@ describe("Skill", () => {
         })
 
         const files = yield* skill.files(Skill.ID.make("review"))
-        expect(Array.from(files ?? [])).toEqual([
-          ["references/a.md", "A"],
-          ["references/b.md", "B"],
-        ])
+        expect(files?.map(String)).toEqual(["references/a.md", "references/b.md"])
+        expect(new TextDecoder().decode(yield* skill.read(Skill.ID.make("review"), file("references/a.md")))).toBe("A")
+        expect((yield* skill.read(Skill.ID.make("review"), file("missing.md")).pipe(Effect.flip))._tag).toBe(
+          "Skill.FileNotFoundError",
+        )
         const fs = yield* FSUtil.Service
         const prepared = yield* Skill.prepare(
           { ...fs, scan: () => Effect.die(new Error("unexpected disk scan")) },

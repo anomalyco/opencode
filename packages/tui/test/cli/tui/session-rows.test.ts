@@ -6,10 +6,13 @@ import { SessionTurn } from "@opencode/util/session-turn"
 import {
   cacheReuseDrop,
   messageBoundaryIDs,
-  reduceSessionRows,
+  reduceSessionRows as reduceRows,
   sessionRowID,
   type SessionRow,
 } from "../../../src/routes/session/rows"
+
+const reduceSessionRows = (messages: SessionMessageInfo[], inputs = new Set<string>(), turnTokens = false) =>
+  reduceRows(messages, inputs, turnTokens, "medium")
 
 test("indexed tail footer calculations do not subscribe to an unrelated history prefix", () => {
   createRoot((dispose) => {

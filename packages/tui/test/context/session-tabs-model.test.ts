@@ -112,6 +112,14 @@ describe("session tabs", () => {
     expect(closeSessionTab(tabs, "missing").tabs).toBe(tabs)
   })
 
+  test("closing an already removed tab picks the neighbour at its last index", () => {
+    const tabs = [{ sessionID: "a" }, { sessionID: "c" }]
+    expect(closeSessionTab(tabs, "b", 1)).toEqual({ tabs, next: "c" })
+    expect(closeSessionTab(tabs, "d", 2).next).toBe("c")
+    expect(closeSessionTab(tabs, "b").next).toBeUndefined()
+    expect(closeSessionTab([], "b", 0).next).toBeUndefined()
+  })
+
   test("cycles through a filtered tab set in either direction", () => {
     const tabs = ["a", "c", "e"].map((sessionID) => ({ sessionID }))
     expect(cycleSessionTab(tabs, "c", 1)?.sessionID).toBe("e")

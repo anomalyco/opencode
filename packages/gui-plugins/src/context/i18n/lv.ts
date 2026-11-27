@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Izlietojums",
   "usage.cost": "Izmaksas",
   "usage.view": "Skatīt konteksta izlietojumu",
-  "systemPrompt.title": "Sistēmas uzvedne",
   "rawMessages.title": "Neapstrādātas ziņas",
   "export.session": "Eksportēt sesiju",
   "stats.session": "Sesija",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Sesija saglabāta kā {{filename}}",
   "export.failed.title": "Neizdevās eksportēt sesiju",
   "export.failed.description": "Radās kļūda, eksportējot sesiju",
+  "usage.toggle": "Rādīt/Slēpt sesijas kontekstu",
 }

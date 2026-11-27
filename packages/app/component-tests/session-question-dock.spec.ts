@@ -28,7 +28,9 @@ for (const variant of ["classic", "experimental"] as const) {
       await page.mouse.down()
       await page.mouse.move(box!.x + box!.width - 1, box!.y + box!.height / 2, { steps: 12 })
       await page.mouse.up()
-      await expect.poll(() => page.evaluate(() => window.getSelection()?.toString().trim())).toBe(await text.innerText())
+      await expect
+        .poll(() => page.evaluate(() => window.getSelection()?.toString().trim()))
+        .toBe(await text.innerText())
     }
 
     for (const slot of ["option-label", "option-description"]) {
@@ -64,7 +66,30 @@ for (const variant of ["classic", "experimental"] as const) {
     await files.click({ position: { x: 4, y: 4 } })
     await expect(files).not.toBeChecked()
   })
+
+  story(`${variant} question text links URLs`, async ({ mount, page }) => {
+    await page.addInitScript(
+      (enabled) => localStorage.setItem("settings.v3", JSON.stringify({ general: { newQuestionUI: enabled } })),
+      variant === "experimental",
+    )
+
+    const component = await mount("session-question-switch--link-prompt")
+    const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+    const url = "https://www.npmjs.com/auth/cli/2ff15723-dfa2-4eec-addd-53cb3ff7597f"
+    const link = question.locator('[data-slot="question-text"]').getByRole("link", { name: url, exact: true })
+
+    await expect(link).toHaveAttribute("href", url)
+    await expect(link).toHaveAttribute("target", "_blank")
+  })
 }
+
+story("MCP elicitation message and field descriptions link URLs", async ({ mount }) => {
+  const component = await mount("app-current-session-surface--mcp-elicitation-request")
+  const dock = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+
+  for (const url of ["https://example.com/releases/v2.4.0", "https://example.com/docs/release-notes"])
+    await expect(dock.getByRole("link", { name: url, exact: true })).toHaveAttribute("href", url)
+})
 
 story(
   "uses the original question cards by default and submits selected and custom answers",
@@ -108,8 +133,6 @@ story(
     await terminal.click()
     await input.fill("Diagnostics")
     await expect(custom).toBeChecked()
-    await input.press("Enter")
-    await expect(custom).toBeFocused()
     await expect(input).toHaveValue("Diagnostics")
     await question.getByRole("button", { name: "Back", exact: true }).click()
     await expect(wide).toBeChecked()
@@ -140,10 +163,44 @@ story("keeps classic long answer lists inside the panel and scrolls them", async
     .toEqual({ fits: true, scrolls: true })
 
   await first.press("End")
-  await expect(question.getByRole("checkbox", { name: "Type your own answer…", exact: true })).toBeFocused()
+  await expect(question.getByRole("textbox", { name: "Type your own answer…", exact: true })).toBeFocused()
   await expect(question.locator('[data-slot="question-option"][data-custom="true"]')).toBeInViewport({ ratio: 1 })
   await question.getByRole("button", { name: "Next", exact: true }).click()
   await expect(question.getByRole("radio", { name: "One pull request", exact: true })).toBeFocused()
+})
+
+story("classic arrow keys land in the custom answer's field and Up from its start leaves it", async ({ mount, page }) => {
+  const component = await mount("app-current-session-surface--question-request")
+  const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+  const focused = question.getByRole("radio", { name: /Focused/ })
+  const wide = question.getByRole("radio", { name: /Wide/ })
+  const custom = question.getByRole("radio", { name: "Type your own answer…", exact: true })
+  const input = question.getByRole("textbox", { name: "Type your own answer…", exact: true })
+  await expect(focused).toBeFocused()
+  await page.keyboard.press("1")
+  await expect(focused).toBeChecked()
+
+  await page.keyboard.press("ArrowDown")
+  await page.keyboard.press("ArrowDown")
+  await expect(input).toBeFocused()
+  await expect(custom).not.toBeChecked()
+  await expect(focused).toBeChecked()
+
+  await page.keyboard.press("ArrowUp")
+  await expect(wide).toBeFocused()
+  await expect(focused).toBeChecked()
+
+  await page.keyboard.press("End")
+  await expect(input).toBeFocused()
+  await page.keyboard.type("S")
+  await expect(custom).toBeChecked()
+  await expect(focused).not.toBeChecked()
+
+  await page.keyboard.press("ArrowUp")
+  await expect(input).toBeFocused()
+  await page.keyboard.press("ArrowUp")
+  await expect(wide).toBeFocused()
+  await expect(custom).toBeChecked()
 })
 
 story.describe("on a 393x852 mobile viewport", () => {
@@ -275,8 +332,6 @@ story(
     await expect(toggle).not.toBeChecked()
     await expect(question.getByRole("radio", { name: /Focused/ })).toBeFocused()
     await input.fill("Split view")
-    await input.press("Enter")
-    await expect(question.getByRole("radio", { name: "Type your own answer…", exact: true })).toBeFocused()
 
     await toggle.press(" ")
     await expect(question).toHaveAttribute("data-variant", "experimental")
@@ -984,12 +1039,13 @@ story.describe("with the new question UI experiment enabled", () => {
       expect(values.slice(1).every((value, i) => way * (value - values[i]!) >= -0.01)).toBe(true)
     }
 
-    story("fades Back in and out and turns Next into Submit with the switch", async ({ mount }) => {
+    story("fades Back in and out and turns Next into Submit with the switch", async ({ mount, page }) => {
       const component = await mount("session-question-switch--question-series")
       const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
       const back = question.locator('[data-slot="question-footer-back"]')
       await expect(question.getByRole("radio").first()).toBeFocused()
       await expect(question.getByRole("button", { name: "Back", exact: true })).toHaveCount(0)
+      await page.evaluate(() => document.fonts.ready.then(() => undefined))
 
       // Going on from the first question, Back comes in and can be clicked at once, while Next stays where it is.
       const nextBox = await question.getByRole("button", { name: "Next", exact: true }).boundingBox()
@@ -1060,7 +1116,8 @@ story.describe("with the new question UI experiment enabled", () => {
 
           const sample = () => ({
             animations: document.getAnimations().length,
-            heights: [...root.querySelectorAll<HTMLElement>("*")].filter((el) => el.style.height).length,
+            // The custom answer's field keeps an inline height that fits its lines; the switch doesn't set it.
+            heights: [...root.querySelectorAll<HTMLElement>("*:not(textarea)")].filter((el) => el.style.height).length,
             ghosts: root.querySelectorAll("[data-ghost]").length,
           })
 
@@ -1081,6 +1138,44 @@ story.describe("with the new question UI experiment enabled", () => {
 
       expect(frames.moving.heights + frames.moving.ghosts).toBeGreaterThan(0)
       expect(frames.after).toEqual({ animations: 0, heights: 0, ghosts: 0 })
+    })
+
+    story("lands the composer's switch to a question at once when the knob turns off", async ({ mount }) => {
+      const component = await mount("session-composer-docks--empty")
+      await expect(component.locator('[data-slot="composer-face"]')).toHaveCount(1)
+
+      const frames = await component.evaluate(
+        async (root, tuning) => {
+          const { motionTuning } = await import(tuning)
+          const knob = motionTuning.list().find((item: MotionKnob) => item.id === "question.motion")
+          const region = root.querySelector<HTMLElement>('[data-slot="composer-morph"]')!
+          const frame = () => new Promise((resolve) => requestAnimationFrame(resolve))
+
+          const sample = () => ({
+            moving: region.hasAttribute("data-moving"),
+            height: !!region.style.height,
+            faces: region.querySelectorAll('[data-slot="composer-face"]').length,
+          })
+
+          // A face that changes within 250ms of mount swaps without a flight.
+          for (const end = performance.now() + 300; performance.now() < end; ) await frame()
+          motionTuning
+            .actions()
+            .find((action: { id: string }) => action.id === "docks.question")
+            .run()
+          await frame()
+          await frame()
+          const moving = sample()
+          motionTuning.set(knob, false)
+          await frame()
+
+          return { moving, after: sample() }
+        },
+        sourceURL(new URL("../../ui/src/motion-tuning.ts", import.meta.url)),
+      )
+
+      expect(frames.moving).toEqual({ moving: true, height: true, faces: 2 })
+      expect(frames.after).toEqual({ moving: false, height: false, faces: 1 })
     })
   })
 
@@ -1276,11 +1371,12 @@ story.describe("with the new question UI experiment enabled", () => {
   story("shows question navigation shortcuts in buttons and tooltips", async ({ mount, page }) => {
     const component = await mount("app-current-session-surface--question-request")
     const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
-    const shortcut = mac ? "⌘⏎" : "Ctrl+⏎"
+    // Enter submits by default, and Cmd/Ctrl+Enter still does.
+    const shortcut = "⏎"
     const next = component.getByRole("button", { name: "Next", exact: true })
     await expect(next.locator('[data-slot="question-submit-shortcut"]')).toBeVisible()
     await expect(next.locator('[data-slot="question-submit-shortcut"]')).toHaveText(shortcut)
-    await expect(next).toHaveAttribute("aria-keyshortcuts", "Meta+Enter Control+Enter")
+    await expect(next).toHaveAttribute("aria-keyshortcuts", "Enter Meta+Enter Control+Enter")
     await next.hover()
     await expect(page.getByRole("tooltip")).toContainText("Next")
     await expect(page.getByRole("tooltip")).toContainText(shortcut)
@@ -1288,7 +1384,7 @@ story.describe("with the new question UI experiment enabled", () => {
     const submit = component.getByRole("button", { name: "Submit", exact: true })
     await expect(submit.locator('[data-slot="question-submit-shortcut"]')).toBeVisible()
     await expect(submit.locator('[data-slot="question-submit-shortcut"]')).toHaveText(shortcut)
-    await expect(submit).toHaveAttribute("aria-keyshortcuts", "Meta+Enter Control+Enter")
+    await expect(submit).toHaveAttribute("aria-keyshortcuts", "Enter Meta+Enter Control+Enter")
     // Pressing the button closes its tooltip until the pointer comes back to it.
     await page.mouse.move(0, 0)
     await submit.hover()

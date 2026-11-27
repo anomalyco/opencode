@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer } from "effect"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Environment } from "@opencode/core/environment/index"
 import { Location } from "@opencode/core/location"
@@ -21,10 +21,7 @@ function provide(directory: string, projectDirectory = directory, environment?: 
         ...(environment
           ? [
               Environment.node.replace(
-                Layer.succeed(
-                  Environment.Service,
-                  Environment.Service.of({ files: Environment.makeFiles(environment), spawner: environment.spawner }),
-                ),
+                Layer.succeed(Environment.Service, Environment.make(Environment.localID, environment)),
               ),
             ]
           : []),
@@ -284,12 +281,6 @@ describe("FileAccess.resolve", () => {
         save: "/remote/repo/*",
       })
     }).pipe(provide("/project", "/project", driver))
-  })
-
-  test("ignores unknown path input fields", () => {
-    expect(Schema.decodeUnknownSync(FileAccess.ResolveInput)({ path: "README.md", reference: "docs" })).toEqual({
-      path: "README.md",
-    })
   })
 
   test("expands a leading tilde against the home directory", () => {

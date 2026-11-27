@@ -2,7 +2,17 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Ref, Schema } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ai, Message, ToolCallPart, ToolDefinition, ToolNamespace } from "../src/effect.js"
-import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "../src/protocols.js"
+import {
+  AnthropicMessages,
+  BedrockConverse,
+  CohereChat,
+  Gemini,
+  GoogleInteractions,
+  MistralChat,
+  OpenAIChat,
+  OpenAICompatibleResponses,
+  OpenAIResponses,
+} from "../src/protocols.js"
 import { Auth, LLMClient } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import { mergeProviderOptions } from "../src/schema/index.js"
@@ -45,13 +55,18 @@ describe("request option precedence", () => {
       const route = OpenAIChat.route.with({
         endpoint: { baseURL: "https://api.openai.test/v1/" },
         auth: Auth.bearer("test"),
-        generation: { maxTokens: 10, temperature: 1, stop: ["route"] },
+        maxTokens: 10,
+        temperature: 1,
+        stop: ["route"],
         providerOptions: { store: false, reasoningEffort: "low" },
       })
       const model = route.model({
         id: "gpt-4o-mini",
-        defaults: {
-          generation: { maxTokens: 20, temperature: 0.5, frequencyPenalty: 0.25, stop: ["model"] },
+        options: {
+          maxTokens: 20,
+          temperature: 0.5,
+          frequencyPenalty: 0.25,
+          stop: ["model"],
           providerOptions: { reasoningEffort: "medium" },
         },
       })
@@ -59,7 +74,9 @@ describe("request option precedence", () => {
         ai.request({
           model,
           prompt: "Say hello.",
-          generation: { maxTokens: 30, topP: 0.9, stop: ["request"] },
+          maxTokens: 30,
+          topP: 0.9,
+          stop: ["request"],
           providerOptions: { store: true },
         }),
       )
@@ -161,6 +178,132 @@ describe("request option precedence", () => {
     }),
   )
 
+  it.effect("forces a namespaced tool under its flattened name on flat protocols", () =>
+    Effect.forEach(
+      [
+        AnthropicMessages,
+        BedrockConverse,
+        CohereChat,
+        Gemini,
+        GoogleInteractions,
+        MistralChat,
+        OpenAIChat,
+        OpenAICompatibleResponses,
+      ],
+      (protocol) =>
+        Effect.gen(function* () {
+          const prepared = yield* compileRequest(
+            ai.request({
+              model: protocol.route
+                .with({
+                  provider: protocol.route.provider ?? "custom",
+                  endpoint: { baseURL: protocol.route.endpoint.baseURL ?? "https://example.invalid/v1" },
+                  auth: Auth.bearer("unused"),
+                })
+                .model({ id: "test-model" }),
+              prompt: "Look up a customer",
+              tools: [
+                ToolNamespace.make({
+                  name: "crm",
+                  description: "CRM tools",
+                  tools: [ToolDefinition.make({ name: "lookup", description: "Look up", inputSchema: {} })],
+                }),
+              ],
+              toolChoice: "crm.lookup",
+            }),
+          )
+          const body = JSON.stringify(prepared.body)
+          expect(body).toContain("crm_lookup")
+          expect(body).not.toContain("crm.lookup")
+        }),
+      { discard: true },
+    ),
+  )
+
+  it.effect("flattens a forced choice only when it names a namespaced tool", () =>
+    Effect.gen(function* () {
+      const choose = (name: string) =>
+        compileRequest(
+          ai.request({
+            model: OpenAIChat.route.model({ id: "gpt-4o-mini" }),
+            prompt: "Hi",
+            tools: [
+              ToolDefinition.make({ name: "foo_bar", description: "Top level", inputSchema: {} }),
+              ToolNamespace.make({
+                name: "crm",
+                description: "CRM tools",
+                tools: [ToolDefinition.make({ name: "customer.lookup", description: "Look up", inputSchema: {} })],
+              }),
+            ],
+            toolChoice: name,
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.tool_choice))
+      // A dotted leaf flattens as flattenTools names it.
+      expect(yield* choose("crm.customer.lookup")).toEqual({
+        type: "function",
+        function: { name: "crm_customer.lookup" },
+      })
+      // A dotted name that isn't a namespaced tool is left for the provider to reject, not matched to foo_bar.
+      expect(yield* choose("foo.bar")).toEqual({ type: "function", function: { name: "foo.bar" } })
+    }),
+  )
+
+  it.effect("flattens a forced choice for a namespace a tool update adds", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: AnthropicMessages.route
+            .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.bearer("unused") })
+            .model({ id: "claude-opus-5", capabilities: { tools: { updates: ["add", "remove", "replace"] } } }),
+          messages: [
+            Message.user("Hi"),
+            Message.tools({
+              add: [
+                ToolNamespace.make({
+                  name: "crm",
+                  description: "CRM tools",
+                  tools: [ToolDefinition.make({ name: "lookup", description: "Look up", inputSchema: {} })],
+                }),
+              ],
+            }),
+            Message.user("Look up a customer"),
+          ],
+          toolChoice: "crm.lookup",
+        }),
+      )
+      expect(prepared.body.tool_choice).toMatchObject({ type: "tool", name: "crm_lookup" })
+    }),
+  )
+
+  it.effect("flattens namespaces when a flat protocol's body is built directly", () =>
+    Effect.gen(function* () {
+      const body = yield* OpenAIChat.protocol.body.from(
+        ai.request({
+          model: OpenAIChat.route.model({ id: "gpt-4o-mini" }),
+          tools: [
+            ToolNamespace.make({
+              name: "crm",
+              description: "CRM tools",
+              tools: [ToolDefinition.make({ name: "lookup", description: "Look up", inputSchema: {} })],
+            }),
+          ],
+          messages: [
+            Message.user("Look up a customer"),
+            Message.assistant(ToolCallPart.make({ id: "call_1", name: "lookup", namespace: "crm", input: {} })),
+          ],
+          toolChoice: "crm.lookup",
+        }),
+      )
+      const json = JSON.stringify(body)
+      expect(json).toContain("crm_lookup")
+      expect(json).not.toContain("crm.lookup")
+      expect(body.messages).toMatchObject([
+        { role: "user" },
+        { role: "assistant", tool_calls: [{ function: { name: "crm_lookup" } }] },
+      ])
+    }),
+  )
+
   it.effect("normalizes tool history before protocol lowering", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -188,28 +331,25 @@ describe("request option precedence", () => {
           .with({
             endpoint: { baseURL: "https://api.openai.test/v1/" },
             auth: Auth.bearer("fresh-key"),
+            headers: { "x-route": "route", "x-shared": "route" },
             http: {
               body: { metadata: { route: true, shared: "route" }, value: "route" },
-              headers: { "x-route": "route", "x-shared": "route" },
               query: { route: "1", shared: "route" },
             },
           })
           .model({
             id: "gpt-4o-mini",
-            defaults: {
+            options: {
+              headers: { "x-model": "model", "x-shared": "model" },
               http: {
                 body: { metadata: { model: true, shared: "model" }, value: "model" },
-                headers: { "x-model": "model", "x-shared": "model" },
                 query: { model: "1", shared: "model" },
               },
             },
           }),
         prompt: "Say hello.",
-        http: {
-          body: { metadata: { request: true }, value: null },
-          headers: { "x-request": "request" },
-          query: { request: "1" },
-        },
+        headers: { "x-request": "request" },
+        http: { body: { metadata: { request: true }, value: null }, query: { request: "1" } },
       }),
     ).pipe(
       Effect.provide(
@@ -450,7 +590,7 @@ describe("request option precedence", () => {
       const model = route.model({ id: "claude-sonnet-4-5" })
       const withoutMaxTokens = yield* compileRequest(ai.request({ model, prompt: "Say hello.", cache: "none" }))
       const withMaxTokens = yield* compileRequest(
-        ai.request({ model, prompt: "Say hello.", cache: "none", generation: { maxTokens: 8_000 } }),
+        ai.request({ model, prompt: "Say hello.", cache: "none", maxTokens: 8_000 }),
       )
 
       expect(withoutMaxTokens.body.max_tokens).toBe(32_000)

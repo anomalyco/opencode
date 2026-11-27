@@ -26,8 +26,8 @@ describe("Google Images recorded", () => {
       })
 
       expect(response.images).toHaveLength(1)
-      expect(response.image.mediaType).toMatch(/^image\//)
-      expect((yield* response.image.bytes()).length).toBeGreaterThan(0)
+      expect(response.images[0].mediaType).toMatch(/^image\//)
+      expect((yield* response.images[0].bytes()).length).toBeGreaterThan(0)
     }),
   )
 
@@ -46,8 +46,8 @@ describe("Google Images recorded", () => {
         aspect: "1:1",
       })
 
-      expect(response.image.mediaType).toBe("image/jpeg")
-      expect(dimensions(yield* response.image.bytes())).toEqual({ width: 1024, height: 1024 })
+      expect(response.images[0].mediaType).toBe("image/jpeg")
+      expect(dimensions(yield* response.images[0].bytes())).toEqual({ width: 1024, height: 1024 })
     }),
   )
 })

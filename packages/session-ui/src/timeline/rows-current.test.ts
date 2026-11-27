@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Predicate } from "effect"
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
+import { commentaryRuns } from "../storybook/current-session-fixtures"
 import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
 import { timelinePresets } from "./detail"
 import { createTimelineProjection, Timeline, TimelineRow } from "./projection"
@@ -670,6 +671,53 @@ describe("current session timeline rows", () => {
     ])
   })
 
+  test.each(["grouped", "hidden"] as const)("%s commentary keeps the answer of each run", (placement) => {
+    const runs = commentaryRuns()
+    const detail = { ...timelinePresets[2].value, commentary: { placement } }
+
+    const rows = (sessionMessages: SessionMessageInfo[], type: "idle" | "busy") =>
+      createTimelineProjection({ sessionMessages, status: { type }, timelineDetail: detail, reasoningMode: "compact" })
+        .rows
+
+    const groups = (rows: TimelineRow.TimelineRow[]) =>
+      rows.flatMap((row) => {
+        if (!Predicate.isTagged(row, "AssistantPart")) return []
+
+        if (row.group.type === "part") return [`part:${row.group.ref.partID}`]
+
+        return [`${row.group.type}:${row.group.refs.map((ref) => ref.partID).join("+")}`]
+      })
+
+    const complete = [
+      "part:reply:text:0",
+      ...[1, 2, 3].flatMap((index) => [
+        placement === "grouped"
+          ? `context:notice-${index}+work-${index}:text:0+tool-${index}`
+          : `context:notice-${index}+tool-${index}`,
+        `part:reply-${index}:text:0`,
+      ]),
+    ]
+
+    expect(groups(rows(runs.complete, "idle"))).toEqual(complete)
+    expect(groups(rows(runs.toolOnly, "busy"))).toEqual([...complete, "context:tool-only-notice+tool-only-call"])
+
+    const live = [
+      "part:prior:text:0",
+      placement === "grouped" ? "context:wake+working:text:0+running" : "context:wake+running",
+    ]
+
+    expect(groups(rows(runs.busy, "busy"))).toEqual(live)
+    expect(groups(rows(runs.failed, "busy"))).toEqual(live)
+
+    expect({
+      justClosed: groups(rows(runs.busy.slice(0, -2), "busy")),
+      beforeStep: groups(rows(runs.busy.slice(0, -1), "busy")),
+    }).toEqual({
+      justClosed: ["part:prior:text:0"],
+      beforeStep: ["part:prior:text:0", "context:wake"],
+    })
+  })
+
   test("keeps assistant errors and retries before later notices", () => {
     const result = Timeline.constructSessionMessageRows(
       [
@@ -1181,6 +1229,7 @@ describe("current session timeline rows", () => {
     { name: "opted in", grouped: true, groups: [["context", "read", "grep", "agent_1", "agent_2", "glob", "read_2"]] },
   ])("gives each subagent its own row unless subagent grouping is enabled ($name)", (input) => {
     const compact = timelinePresets.find((preset) => preset.id === "compact")!.value
+
     const rows = Timeline.constructSessionMessageRows(
       storyDocument([
         storyTool("read", "read", "completed", { path: "src/a.ts" }),
@@ -1638,7 +1687,10 @@ describe("current session timeline rows", () => {
 
     const go = [
       user,
-      { ...assistant, error: { type: "provider.go-limit", message: "Go usage limit reached.", retryAfterMs: 120_000 } },
+      {
+        ...assistant,
+        error: { type: "provider.go-limit", message: "Go usage limit reached.", retryAfterMs: 25 * 86_400_000 },
+      },
     ] satisfies SessionMessageInfo[]
 
     expect(Timeline.constructSessionMessageRows(step, true, { type: "idle" }).rows.at(-1)).toEqual(
@@ -1671,7 +1723,7 @@ describe("current session timeline rows", () => {
         userMessageID: "msg_user",
         text: "Go usage limit reached.",
         kind: "go-limit",
-        resetAt: 121_000,
+        resetAt: 1_000 + 25 * 86_400_000,
       }),
     )
     expect(Timeline.constructSessionMessageRows(quota, true, { type: "idle" }).rows.at(-1)).toEqual(
@@ -1681,8 +1733,11 @@ describe("current session timeline rows", () => {
 
   test("marks a Console budget refusal with the reset its envelope names", () => {
     const user = { id: "msg_user", type: "user", text: "prompt", time: { created: 1 } } satisfies SessionMessageInfo
-    const refused = (type: string, body?: string) =>
-      Timeline.constructSessionMessageRows(
+
+    const refused = (type: string, body?: string) => {
+      const error = { type, message: "Budget reached.", status: 429 }
+
+      return Timeline.constructSessionMessageRows(
         [
           user,
           {
@@ -1692,13 +1747,14 @@ describe("current session timeline rows", () => {
             model: { id: "claude-opus-5", providerID: "opencode" },
             content: [],
             finish: "error",
-            error: { type, message: "Budget reached.", status: 429, ...(body ? { response: { body } } : {}) },
+            error: body ? { ...error, response: { body } } : error,
             time: { created: 2, completed: 3 },
           },
         ],
         true,
         { type: "idle" },
       ).rows.at(-1)
+    }
 
     // Anthropic and OpenAI clients get Console's own envelope; Google clients get the reset in ErrorInfo's metadata.
     expect(
