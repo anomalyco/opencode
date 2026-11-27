@@ -1,5 +1,6 @@
 export * as FileSystem from "./filesystem.js"
 
+import { realpathSync } from "node:fs"
 import path from "node:path"
 import { Entry, FileSystem, FindInput, Write } from "@opencode/schema/filesystem"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -150,6 +151,13 @@ const baseLayer = Layer.effect(
     // remote sandbox or worker boundary.
     const root = environment.local
       ? yield* fs.realPath(location.directory).pipe(
+          // Windows' native realpath fails with ENOENT on drive letters without a volume mount point, such as
+          // DriveCrypt drives, although the directory is readable; the JS realpath walks the path and resolves it.
+          // A directory that is really missing fails both, so the NotFound below still applies.
+          Effect.catchIf(
+            (cause) => cause.reason._tag === "NotFound",
+            (cause) => Effect.try({ try: () => realpathSync(location.directory), catch: () => cause }),
+          ),
           // Linux realpath succeeds on an unreadable directory, so probe readability explicitly.
           Effect.tap((real) => fs.access(real, { readable: true })),
           Effect.catch((cause): Effect.Effect<never, DirectoryNotFoundError | DirectoryAccessDeniedError> => {
