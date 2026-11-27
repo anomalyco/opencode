@@ -75,7 +75,7 @@ export interface SnapshotOptions {
   readonly api?: Context.Context<CodeModeTool.Api>
   /** With `codemode_agents`, what runs Code Mode's agent() and llm(). */
   readonly agents?: Context.Context<CodeModeTool.Agents>
-  /** With `saved_tools`, what runs Code Mode's tool.define() and tool.delete(). */
+  /** With `codemode_tools`, what runs Code Mode's tool.define() and tool.delete(). */
   readonly savedTools?: Context.Context<CodeModeTool.SavedTools>
   readonly tools?: Policy
 }

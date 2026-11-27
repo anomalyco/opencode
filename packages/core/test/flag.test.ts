@@ -33,6 +33,12 @@ const every = (state: Flag.State): Record<Flag.Key, Flag.State> => ({
   opencode_api: { enabled: false, source: "default" },
 })
 
+// codemode_tools is local-only: releases leave it off whatever the wildcards say.
+const release = (state: Flag.State): Record<Flag.Key, Flag.State> => ({
+  ...every(state),
+  codemode_tools: { enabled: false, source: "default" },
+})
+
 describe("Flag.resolve", () => {
   test.each([
     ["local", true],
@@ -56,6 +62,13 @@ describe("Flag.resolve", () => {
       enabled: true,
       source: "config",
     })
+  })
+
+  test("codemode_tools is on by default in local and dev builds, and never in releases", () => {
+    const resolve = (channel: string, overrides?: string) =>
+      Flag.resolve({ entries: [document({ codemode_tools: true })], channel, overrides }).codemode_tools
+    expect(Flag.resolve({ entries: [], channel: "local" }).codemode_tools).toEqual({ enabled: true, source: "default" })
+    expect(resolve("latest", "codemode_tools")).toEqual({ enabled: false, source: "default" })
   })
 
   test("opencode_api turns on only by name, and only in local and dev builds", () => {
@@ -139,10 +152,10 @@ describe("Flag.resolve", () => {
   test("OPENCODE_FLAGS=all turns every flag on, and a -key in the same list still wins", () => {
     const entries = [document({ media_blob: false })]
     expect(Flag.resolve({ entries, channel: "latest", overrides: "all" })).toEqual(
-      every({ enabled: true, source: "env" }),
+      release({ enabled: true, source: "env" }),
     )
     expect(Flag.resolve({ entries: [], channel: "latest", overrides: " -media_blob , all, " })).toEqual({
-      ...every({ enabled: true, source: "env" }),
+      ...release({ enabled: true, source: "env" }),
       media_blob: { enabled: false, source: "env" },
     })
     expect(Flag.resolve({ entries, channel: "latest", overrides: "-all" })).toEqual(
@@ -153,7 +166,7 @@ describe("Flag.resolve", () => {
   test("experimental.all_flags turns every flag on below OPENCODE_FLAGS and below a per-flag setting", () => {
     const entries = [document({ all_flags: true, media_blob: false })]
     expect(Flag.resolve({ entries, channel: "latest", overrides: "-artifacts" })).toEqual({
-      ...every({ enabled: true, source: "config" }),
+      ...release({ enabled: true, source: "config" }),
       media_blob: { enabled: false, source: "config" },
       artifacts: { enabled: false, source: "env" },
     })
@@ -172,7 +185,7 @@ describe("Flag.resolve", () => {
     const global = document({ all_flags: true })
     expect(
       Flag.resolve({ entries: [global, document({ subagent_depth: 2, full_codemode: false })], channel: "latest" }),
-    ).toEqual({ ...every({ enabled: true, source: "config" }), full_codemode: { enabled: false, source: "config" } })
+    ).toEqual({ ...release({ enabled: true, source: "config" }), full_codemode: { enabled: false, source: "config" } })
     expect(Flag.resolve({ entries: [global, document({ all_flags: false })], channel: "latest" })).toEqual(
       every({ enabled: false, source: "default" }),
     )

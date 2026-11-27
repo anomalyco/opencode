@@ -106,7 +106,7 @@ export type Inventory = {
 /** With the `codemode_agents` flag, the session's agent() and llm(): see `CodeModeAgents`. */
 export type Agents = CodeModeAgents.Service
 
-/** With the `saved_tools` flag, what runs tool.define() and tool.delete(): see `CodeModeSavedTools`. */
+/** With the `codemode_tools` flag, what runs tool.define() and tool.delete(): see `CodeModeSavedTools`. */
 export type SavedTools = CodeModeSavedTools.Service
 
 const extensions = [
@@ -185,7 +185,7 @@ export const create = (
   api?: Context.Context<Api>,
   /** With `codemode_agents`, what runs agent() and llm(). Without it, programs don't get them. */
   agents?: Context.Context<Agents>,
-  /** With `saved_tools`, what runs tool.define() and tool.delete(). Without it, programs don't get them. */
+  /** With `codemode_tools`, what runs tool.define() and tool.delete(). Without it, programs don't get them. */
   saved?: Context.Context<SavedTools>,
 ) => {
   return {

@@ -5,6 +5,7 @@ import type { LLMClientService, LLMRequest } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import { Agent } from "@opencode/core/agent"
+import { App } from "@opencode/core/app"
 import { Bus } from "@opencode/core/bus"
 import { CodeModeSavedTools } from "@opencode/core/codemode/saved-tools"
 import { Config } from "@opencode/core/config"
@@ -115,7 +116,7 @@ const modelLayer = Layer.succeed(
 const harness = Effect.fnUntraced(function* () {
   const dir = yield* tmpdirScoped()
   yield* Effect.promise(() =>
-    Bun.write(path.join(dir.path, "opencode.json"), JSON.stringify({ experimental: { saved_tools: true } })),
+    Bun.write(path.join(dir.path, "opencode.json"), JSON.stringify({ experimental: { codemode_tools: true } })),
   )
   const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
   const scope = yield* Effect.scope
@@ -128,6 +129,8 @@ const harness = Effect.fnUntraced(function* () {
     AppNodeBuilder.build(nodes, [
       Database.node.replace(Database.configured({ path: ":memory:" })),
       Global.node.replace(Layer.succeedContext(global)),
+      // codemode_tools only turns on in local and dev builds.
+      App.node.replace(Layer.succeed(App.Service, App.make({ name: "test", version: "test", channel: "local" }))),
       offlineModels,
       PluginSupervisor.node.replace(pluginSupervisor),
       LayerNodePlatform.llmClient.replace(Layer.succeedContext(llmContext as Context.Context<LLMClientService>)),

@@ -64,7 +64,7 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`saved_tool\` (
+        CREATE TABLE \`codemode_tool\` (
           \`scope\` text NOT NULL,
           \`name\` text NOT NULL,
           \`description\` text NOT NULL,
@@ -73,7 +73,7 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`code\` text NOT NULL,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL,
-          CONSTRAINT \`saved_tool_pk\` PRIMARY KEY(\`scope\`, \`name\`)
+          CONSTRAINT \`codemode_tool_pk\` PRIMARY KEY(\`scope\`, \`name\`)
         );
       `)
       yield* tx.run(`

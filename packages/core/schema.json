@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "18b0c1ab-e12f-4938-9df1-5e1ff979c6f7",
+  "id": "35976a9b-c7be-4331-9a10-732bc0c44754",
   "prevIds": ["ea7fb45e-fef3-40b6-8e09-42b781c5bf23"],
   "ddl": [
     {
@@ -21,7 +21,7 @@
       "entityType": "tables"
     },
     {
-      "name": "saved_tool",
+      "name": "codemode_tool",
       "entityType": "tables"
     },
     {
@@ -526,7 +526,7 @@
       "generated": null,
       "name": "scope",
       "entityType": "columns",
-      "table": "saved_tool"
+      "table": "codemode_tool"
     },
     {
       "type": "text",
@@ -536,7 +536,7 @@
       "generated": null,
       "name": "name",
       "entityType": "columns",
-      "table": "saved_tool"
+      "table": "codemode_tool"
     },
     {
       "type": "text",
@@ -546,7 +546,7 @@
       "generated": null,
       "name": "description",
       "entityType": "columns",
-      "table": "saved_tool"
+      "table": "codemode_tool"
     },
     {
       "type": "text",
@@ -556,7 +556,7 @@
       "generated": null,
       "name": "input",
       "entityType": "columns",
-      "table": "saved_tool"
+      "table": "codemode_tool"
     },
     {
       "type": "text",
@@ -566,7 +566,7 @@
       "generated": null,
       "name": "output",
       "entityType": "columns",
-      "table": "saved_tool"
+      "table": "codemode_tool"
     },
     {
       "type": "text",
@@ -576,7 +576,7 @@
       "generated": null,
       "name": "code",
       "entityType": "columns",
-      "table": "saved_tool"
+      "table": "codemode_tool"
     },
     {
       "type": "integer",
@@ -586,7 +586,7 @@
       "generated": null,
       "name": "time_created",
       "entityType": "columns",
-      "table": "saved_tool"
+      "table": "codemode_tool"
     },
     {
       "type": "integer",
@@ -596,7 +596,7 @@
       "generated": null,
       "name": "time_updated",
       "entityType": "columns",
-      "table": "saved_tool"
+      "table": "codemode_tool"
     },
     {
       "type": "text",
@@ -2342,9 +2342,9 @@
     {
       "columns": ["scope", "name"],
       "nameExplicit": false,
-      "name": "saved_tool_pk",
+      "name": "codemode_tool_pk",
       "entityType": "pks",
-      "table": "saved_tool"
+      "table": "codemode_tool"
     },
     {
       "columns": ["project_id", "directory"],

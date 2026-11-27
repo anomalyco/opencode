@@ -18,7 +18,7 @@ const Depth = EffectContext.Reference<number>("@opencode/SavedToolsPlugin/Depth"
 export const Plugin = {
   id: "opencode.tool.saved-tools",
   effect: Effect.fn("SavedToolsPlugin")(function* (ctx: Context) {
-    if (!(yield* Flag.enabled("saved_tools"))) return
+    if (!(yield* Flag.enabled("codemode_tools"))) return
     const store = yield* CodeModeSavedTools.Store
     const registry = yield* CodeModeSavedTools.Service
     const tools = yield* Tool.Service

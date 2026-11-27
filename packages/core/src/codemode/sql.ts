@@ -3,7 +3,7 @@ import type { JsonSchema } from "effect"
 import { Timestamps } from "../database/schema.sql.js"
 
 export const SavedToolTable = sqliteTable(
-  "saved_tool",
+  "codemode_tool",
   {
     /** The project ID it belongs to, or `*` for one every project sees. */
     scope: text().notNull(),

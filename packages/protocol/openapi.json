@@ -19034,7 +19034,7 @@
               "codemode_agents": {
                 "type": "boolean"
               },
-              "saved_tools": {
+              "codemode_tools": {
                 "type": "boolean"
               },
               "machines": {

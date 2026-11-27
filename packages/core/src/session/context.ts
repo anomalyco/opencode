@@ -177,7 +177,7 @@ const layer = Layer.effect(
           flags.enabled("full_codemode"),
           flags.enabled("opencode_api"),
           flags.enabled("codemode_agents"),
-          flags.enabled("saved_tools"),
+          flags.enabled("codemode_tools"),
         ],
         { concurrency: "unbounded" },
       )
