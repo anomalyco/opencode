@@ -749,19 +749,23 @@ const layer = Layer.effect(
         Effect.flatMap((rows) => Effect.forEach(rows, (row) => execution.wake(row.sessionID), { discard: true })),
       )
 
-    const hasActiveRows = (timersOnly = false) =>
+    const rawActiveRows = (timersOnly = false) =>
       db
-        .select({ id: AutomationTable.id })
+        .select({ id: AutomationTable.id, directory: AutomationTable.directory })
         .from(AutomationTable)
         .where(
           and(eq(AutomationTable.status, "active"), timersOnly ? isNotNull(AutomationTable.next_due_at) : undefined),
         )
-        .limit(1)
-        .get()
-        .pipe(
-          Effect.orDie,
-          Effect.map((row) => row !== undefined),
-        )
+        .all()
+        .pipe(Effect.orDie)
+
+    // The lease belongs to a process that can actually run work. A row in a location with automations off must not
+    // make this process claim or renew it, or it blocks the process that is allowed to run the row.
+    const hasActiveRows = (timersOnly = false) =>
+      rawActiveRows(timersOnly).pipe(
+        Effect.flatMap((rows) => Effect.filter(rows, (row) => visible(row.directory))),
+        Effect.map((rows) => rows.length > 0),
+      )
 
     const ownerID = randomUUID()
     // Claim once on startup even with nothing active: a finished automation may have left a prompt pending.
@@ -981,6 +985,13 @@ const layer = Layer.effect(
     const loop = Effect.gen(function* () {
       yield* doorbell.close
       const active = yield* hasActiveRows()
+      // Every active row belongs to a location with automations off. Never claim, and give up a lease we already hold.
+      // An empty database still claims once on startup to recover a prompt left by a finished automation.
+      if (!active && (yield* rawActiveRows()).length > 0) {
+        if (leadership === "leader") yield* releaseLeader
+        leadership = "follower"
+        return yield* idle
+      }
       if (!active && leadership !== "unchecked") {
         if (leadership === "leader") yield* releaseLeader
         return yield* idle

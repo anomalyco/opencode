@@ -1247,6 +1247,36 @@ describe("Automation", () => {
     }),
   )
 
+  it.effect("releases the scheduler lease when its location turns automations off", () =>
+    Effect.gen(function* () {
+      const automations = yield* setup(toggleDirectory)
+      toggle.on = true
+      yield* automations.create({
+        sessionID,
+        name: "poll",
+        trigger: every("1 minute"),
+        action: prompt("poll"),
+      })
+      const { db } = yield* Database.Service
+      const leases = () =>
+        db
+          .select({ key: KVTable.key })
+          .from(KVTable)
+          .where(eq(KVTable.key, "automation:leader"))
+          .all()
+          .pipe(Effect.orDie)
+      const runner = yield* Effect.forkChild(automations.run)
+      yield* Effect.repeat(Effect.yieldNow, { times: 5 })
+      expect(yield* leases()).toHaveLength(1)
+
+      toggle.on = false
+      yield* TestClock.adjust("30 seconds")
+      yield* Effect.repeat(Effect.yieldNow, { times: 5 })
+      expect(yield* leases()).toHaveLength(0)
+      yield* Fiber.interrupt(runner)
+    }),
+  )
+
   it.effect("picks up an automation created by another process sharing the DB while idle", () =>
     Effect.gen(function* () {
       const primary = yield* setup()
