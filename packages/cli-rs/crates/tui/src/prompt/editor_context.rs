@@ -350,19 +350,12 @@ impl Context {
         Disposer::new(bind!(self.0, |state| state.borrow_mut().watchers.retain(|(other, _)| *other != id)))
     }
 
-    /// Follows the session's directory (`reconnect`); `None` is the TUI's own directory. The selection is
-    /// cleared unless a new session asked to keep it.
+    /// Follows the session's directory (`reconnect`); `None` is the TUI's own directory. A new directory
+    /// clears the selection unless a new session asked to keep it; the directory already followed keeps it, as a
+    /// Zed selection can arrive before the session's location does.
     pub fn reconnect(&self, tui: &Tui, directory: Option<&str>) {
         let resolved = directory.filter(|directory| !directory.is_empty()).unwrap_or(&tui.directory).to_owned();
-        let same = self.0.borrow().directory == resolved;
-        let preserved = std::mem::take(&mut self.0.borrow_mut().preserve);
-        if !preserved {
-            if !same {
-                self.0.borrow_mut().last_zed_key = None;
-            }
-            self.set_selection(None);
-        }
-        if same {
+        if !self.retarget(&resolved) {
             return;
         }
         let mut state = self.0.borrow_mut();
@@ -376,6 +369,20 @@ impl Context {
             started.task.abort();
             started.task = spawn(tui, &started.source, &directory, generation, &started.proxy);
         }
+    }
+
+    /// Whether `directory` is new; a new one clears the selection unless a new session asked to keep it.
+    fn retarget(&self, directory: &str) -> bool {
+        let same = self.0.borrow().directory == directory;
+        let preserved = std::mem::take(&mut self.0.borrow_mut().preserve);
+        if same {
+            return false;
+        }
+        if !preserved {
+            self.0.borrow_mut().last_zed_key = None;
+            self.set_selection(None);
+        }
+        true
     }
 
     fn listener_id(&self) -> u64 {
@@ -1105,6 +1112,36 @@ mod tests {
     /// A POSIX test path as an absolute path of this platform: `/w/app` is `C:\w\app` on Windows.
     fn abs(posix: &str) -> String {
         if cfg!(windows) { format!("C:{}", posix.replace('/', "\\")) } else { posix.to_owned() }
+    }
+
+    fn selection(file_path: &str) -> Selection {
+        Selection {
+            file_path: file_path.to_owned(),
+            source: Some(SourceKind::Zed),
+            ranges: vec![Range {
+                text: "ab".to_owned(),
+                selection: Span { start: Position { line: 2, character: 0 }, end: Position { line: 3, character: 0 } },
+            }],
+        }
+    }
+
+    #[test]
+    fn a_zed_selection_survives_a_reconnect_to_the_directory_it_followed() {
+        let context = Context::default();
+        context.0.borrow_mut().directory = "/w".to_owned();
+        let posted = |file_path: &str| Posted { generation: 0, event: Event::Zed(Some(selection(file_path))) };
+        context.apply(&posted("/w/a.ts"));
+        assert_eq!(context.selection().map(|selection| selection.label()), Some("a.ts#2-3".to_owned()));
+        // The session's location lands after the first Zed poll; it names the directory already followed.
+        assert!(!context.retarget("/w"));
+        assert_eq!(context.selection().map(|selection| selection.label()), Some("a.ts#2-3".to_owned()));
+        context.apply(&posted("/w/a.ts"));
+        assert_eq!(context.selection().map(|selection| selection.label()), Some("a.ts#2-3".to_owned()));
+        // A new directory clears it, and its own poll brings its selection in.
+        assert!(context.retarget("/other"));
+        assert!(context.selection().is_none());
+        context.apply(&posted("/other/a.ts"));
+        assert_eq!(context.selection().map(|selection| selection.label()), Some("a.ts#2-3".to_owned()));
     }
 
     #[test]
