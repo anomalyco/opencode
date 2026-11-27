@@ -49,6 +49,7 @@ export default {
   "home.title": "Open a page",
   "home.description": "Preview your app, read docs, or browse the web.",
   "home.recent": "Recent",
+  "home.session": "From this session",
   "action.reload": "Reload",
   "site.info": "Site information",
   "site.secure": "Connection is secure",
