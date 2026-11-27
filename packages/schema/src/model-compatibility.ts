@@ -44,6 +44,8 @@ export const Compatibility = Schema.Struct({
   supportsThinkingBlockBinding: Schema.Boolean.pipe(optional),
   /** Anthropic Messages and OpenAI Responses: supports per-message effort updates. Overrides model-ID detection. */
   supportsEffortUpdates: Schema.Boolean.pipe(optional),
+  /** Anthropic Messages: accepts system messages mid-conversation. Overrides model-ID detection. */
+  supportsSystemUpdates: Schema.Boolean.pipe(optional),
   /** System One: where the decision host reads media. Unset keeps the route default. */
   mediaInput: MediaInput.pipe(optional),
 }).annotate({ identifier: "Model.Compatibility" })
@@ -51,5 +53,5 @@ export const Compatibility = Schema.Struct({
 // Provider defaults inherited by its models. Model-version features stay model-only.
 export interface ProviderCompatibility extends Schema.Schema.Type<typeof ProviderCompatibility> {}
 export const ProviderCompatibility = Schema.Struct(
-  Struct.omit(Compatibility.fields, ["supportsThinkingBlockBinding", "supportsEffortUpdates"]),
+  Struct.omit(Compatibility.fields, ["supportsThinkingBlockBinding", "supportsEffortUpdates", "supportsSystemUpdates"]),
 ).annotate({ identifier: "Provider.Compatibility" })
