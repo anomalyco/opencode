@@ -352,27 +352,7 @@ describe("LocationWatcher subscriptions", () => {
   })
 
   it.live("follows the branch ref that HEAD points at", () => {
-    const subscriptions: Watcher.WatchInput[] = []
-    const queues = new Map<string, Queue.Queue<Watcher.Update>>()
-    const released: string[] = []
-    const watcher = Layer.succeed(
-      Watcher.Service,
-      Watcher.Service.of({
-        subscribe: (input) =>
-          Effect.gen(function* () {
-            subscriptions.push(input)
-            const queue = yield* Queue.unbounded<Watcher.Update>()
-            queues.set(input.path, queue)
-            return Stream.fromQueue(queue).pipe(Stream.ensuring(Effect.sync(() => released.push(input.path))))
-          }),
-      }),
-    )
-    const until = (check: () => boolean) =>
-      Effect.sync(check).pipe(
-        Effect.filterOrFail(Boolean),
-        Effect.retry(Schedule.spaced("10 millis")),
-        Effect.timeout("5 seconds"),
-      )
+    const { watcher, subscriptions, released, offer } = queuedWatcher()
     return withTmp(
       (directory) =>
         Effect.gen(function* () {
@@ -382,9 +362,7 @@ describe("LocationWatcher subscriptions", () => {
           const setHead = (content: string) =>
             nextUpdate(
               (event) => event.file === head,
-              fs
-                .writeFileString(head, content)
-                .pipe(Effect.andThen(Queue.offer(queues.get(head)!, { path: head, type: "update" }))),
+              fs.writeFileString(head, content).pipe(Effect.andThen(offer(head))),
             )
           yield* LocationWatcher.Service
           yield* until(() => subscriptions.length === 2)
@@ -404,33 +382,317 @@ describe("LocationWatcher subscriptions", () => {
           expect(subscriptions[2]).toEqual({ path: switched, type: "file" })
           expect(released).toEqual([initial])
 
-          expect(
-            yield* nextUpdate(
-              (event) => event.file === switched,
-              Queue.offer(queues.get(switched)!, { path: switched, type: "update" }),
-            ),
-          ).toEqual({ file: switched, event: "change" })
-          yield* Effect.sleep("10 millis")
-          expect(subscriptions).toHaveLength(3)
+          expect(yield* nextUpdate((event) => event.file === switched, offer(switched))).toEqual({
+            file: switched,
+            event: "change",
+          })
 
           const detached = yield* Effect.promise(() => $`git rev-parse HEAD`.cwd(directory).text())
           yield* setHead(detached)
           yield* until(() => released.length === 2)
-          yield* Effect.sleep("10 millis")
+
+          // The ref update and the detached HEAD added no subscription: the next symbolic HEAD is the fourth.
+          yield* Effect.promise(() => $`git branch after/detached`.cwd(directory).quiet())
+          const after = path.join(gitdir, "refs", "heads", "after", "detached")
+          yield* setHead("ref: refs/heads/after/detached\n")
+          yield* until(() => subscriptions.length === 4 && released.length === 2)
+          expect(subscriptions).toEqual([
+            { path: head, type: "file" },
+            { path: initial, type: "file" },
+            { path: switched, type: "file" },
+            { path: after, type: "file" },
+          ])
           expect(released).toEqual([initial, switched])
-          expect(subscriptions).toHaveLength(3)
+        }),
+      { vcs: "git", watcher },
+    )
+  })
+
+  it.live("adds no ref watch for a HEAD that names no branch in the repository", () => {
+    const { watcher, subscriptions, released, offer } = queuedWatcher()
+    return withTmp(
+      (directory) =>
+        Effect.gen(function* () {
+          const fs = yield* FSUtil.Service
+          const gitdir = path.join(directory, ".git")
+          const head = path.join(gitdir, "HEAD")
+          const setHead = (content: string) =>
+            nextUpdate(
+              (event) => event.file === head,
+              fs.writeFileString(head, content).pipe(Effect.andThen(offer(head))),
+            )
+          yield* LocationWatcher.Service
+          yield* until(() => subscriptions.length === 2)
+          const initial = path.join(
+            gitdir,
+            (yield* Effect.promise(() => $`git symbolic-ref HEAD`.cwd(directory).text())).trimEnd(),
+          )
+
+          yield* Effect.promise(() => $`git branch after/crafted`.cwd(directory).quiet())
 
           // A symbolic HEAD outside refs/heads names no branch to follow.
           yield* setHead("ref: refs/tags/v1\n")
-          yield* Effect.sleep("50 millis")
-          expect(subscriptions).toHaveLength(3)
-          expect(released).toEqual([initial, switched])
-
-          // A crafted HEAD naming a path outside the common directory adds no ref watch.
+          // A crafted HEAD naming a path outside the common directory adds no ref watch either.
           yield* setHead("ref: refs/heads/../../../outside\n")
-          yield* Effect.sleep("50 millis")
-          expect(subscriptions).toHaveLength(3)
-          expect(released).toEqual([initial, switched])
+          // Both were read before the next HEAD, whose ref is the only subscription after them.
+          const after = path.join(gitdir, "refs", "heads", "after", "crafted")
+          yield* setHead("ref: refs/heads/after/crafted\n")
+          yield* until(() => subscriptions.length === 3 && released.length === 1)
+          expect(subscriptions).toEqual([
+            { path: head, type: "file" },
+            { path: initial, type: "file" },
+            { path: after, type: "file" },
+          ])
+          expect(released).toEqual([initial])
+        }),
+      { vcs: "git", watcher },
+    )
+  })
+
+  it.live("watches the folder of a packed nested branch until its ref exists", () => {
+    const { watcher, subscriptions, released, offer } = queuedWatcher()
+    return withTmp(
+      (directory) =>
+        Effect.gen(function* () {
+          const policy = yield* LocationWatcherPolicy.Service
+          const bus = yield* Bus.Service
+          const fs = yield* FSUtil.Service
+          const gitdir = path.join(directory, ".git")
+          const head = path.join(gitdir, "HEAD")
+          const folder = path.join(gitdir, "refs", "heads", "feat")
+          const ref = path.join(folder, "packed")
+          const changes: WatcherEvent[] = []
+          yield* bus.subscribe(FileSystem.Event.Changed).pipe(
+            Stream.runForEach((event) => Effect.sync(() => changes.push(event.data))),
+            Effect.forkScoped,
+          )
+          const setHead = (content: string) =>
+            nextUpdate(
+              (event) => event.file === head,
+              fs.writeFileString(head, content).pipe(Effect.andThen(offer(head))),
+            )
+          // `git pack-refs` keeps the packed refs and removes the folder of a nested branch name.
+          yield* Effect.promise(() => $`git branch feat/packed`.cwd(directory).quiet())
+          yield* Effect.promise(() => $`git pack-refs --all`.cwd(directory).quiet())
+          yield* LocationWatcher.Service
+          yield* until(() => subscriptions.length === 2)
+          const initial = path.join(
+            gitdir,
+            (yield* Effect.promise(() => $`git symbolic-ref HEAD`.cwd(directory).text())).trimEnd(),
+          )
+          expect(subscriptions).toEqual([
+            { path: head, type: "file" },
+            { path: initial, type: "file" },
+          ])
+
+          expect(yield* setHead("ref: refs/heads/feat/packed\n")).toEqual({ file: head, event: "change" })
+          yield* until(() => subscriptions.length === 3 && released.length === 1)
+          // The ref file does not exist, so the missing folder is watched in its place.
+          expect(subscriptions[2]).toEqual({ path: folder, type: "file" })
+          expect(released).toEqual([initial])
+
+          // A commit creates the folder and the ref before the folder event is handled.
+          yield* Effect.promise(() => $`git commit --allow-empty -m packed`.cwd(directory).quiet())
+          expect(yield* nextUpdate((event) => event.file === ref, offer(folder))).toEqual({
+            file: ref,
+            event: "change",
+          })
+          yield* until(() => subscriptions.length === 4 && released.length === 2)
+          expect(subscriptions[3]).toEqual({ path: ref, type: "file" })
+          expect(released).toEqual([initial, folder])
+
+          // Once the ref exists its own watch sees the later commits, and a reconcile reports nothing more.
+          expect(yield* nextUpdate((event) => event.file === ref, offer(ref))).toEqual({
+            file: ref,
+            event: "change",
+          })
+          yield* policy.reload()
+          expect(subscriptions).toHaveLength(4)
+          // The folder event alone is no change of the ref.
+          expect(changes.filter((event) => event.file === folder)).toEqual([])
+          expect(changes.filter((event) => event.file === ref)).toHaveLength(2)
+        }),
+      { vcs: "git", watcher },
+    )
+  })
+
+  it.live("sees a packed nested branch appear once its folder exists", () => {
+    const { watcher, subscriptions, released, offer } = queuedWatcher()
+    return withTmp(
+      (directory) =>
+        Effect.gen(function* () {
+          const policy = yield* LocationWatcherPolicy.Service
+          const bus = yield* Bus.Service
+          const fs = yield* FSUtil.Service
+          const gitdir = path.join(directory, ".git")
+          const head = path.join(gitdir, "HEAD")
+          const folder = path.join(gitdir, "refs", "heads", "feat")
+          const ref = path.join(folder, "packed")
+          const changes: WatcherEvent[] = []
+          yield* bus.subscribe(FileSystem.Event.Changed).pipe(
+            Stream.runForEach((event) => Effect.sync(() => changes.push(event.data))),
+            Effect.forkScoped,
+          )
+          yield* Effect.promise(() => $`git branch feat/packed`.cwd(directory).quiet())
+          yield* Effect.promise(() => $`git pack-refs --all`.cwd(directory).quiet())
+          yield* LocationWatcher.Service
+          yield* until(() => subscriptions.length === 2)
+          yield* nextUpdate(
+            (event) => event.file === head,
+            fs.writeFileString(head, "ref: refs/heads/feat/packed\n").pipe(Effect.andThen(offer(head))),
+          )
+          yield* until(() => subscriptions.length === 3 && released.length === 1)
+
+          // The folder appears first: the ref is then watched directly while its file is still missing.
+          yield* fs.ensureDir(folder)
+          yield* until(() => subscriptions.length === 4 && released.length === 2, offer(folder))
+          expect(subscriptions[3]).toEqual({ path: ref, type: "file" })
+          expect(changes.filter((event) => event.file !== head)).toEqual([])
+
+          yield* Effect.promise(() => $`git commit --allow-empty -m packed`.cwd(directory).quiet())
+          expect(yield* nextUpdate((event) => event.file === ref, offer(ref))).toEqual({
+            file: ref,
+            event: "change",
+          })
+          // Its own watch saw the change, so a reconcile reports nothing more.
+          yield* policy.reload()
+          expect(changes.filter((event) => event.file === ref)).toHaveLength(1)
+        }),
+      { vcs: "git", watcher },
+    )
+  })
+
+  it.live("reports no change for a ref that appeared while it was not followed", () => {
+    const { watcher, subscriptions, released, offer } = queuedWatcher()
+    return withTmp(
+      (directory) =>
+        Effect.gen(function* () {
+          const bus = yield* Bus.Service
+          const fs = yield* FSUtil.Service
+          const gitdir = path.join(directory, ".git")
+          const head = path.join(gitdir, "HEAD")
+          const folder = path.join(gitdir, "refs", "heads", "feat")
+          const ref = path.join(folder, "packed")
+          const changes: WatcherEvent[] = []
+          yield* bus.subscribe(FileSystem.Event.Changed).pipe(
+            Stream.runForEach((event) => Effect.sync(() => changes.push(event.data))),
+            Effect.forkScoped,
+          )
+          const setHead = (content: string) =>
+            nextUpdate(
+              (event) => event.file === head,
+              fs.writeFileString(head, content).pipe(Effect.andThen(offer(head))),
+            )
+          yield* Effect.promise(() => $`git branch feat/packed`.cwd(directory).quiet())
+          yield* Effect.promise(() => $`git pack-refs --all`.cwd(directory).quiet())
+          yield* LocationWatcher.Service
+          yield* until(() => subscriptions.length === 2)
+          const initial = path.join(
+            gitdir,
+            (yield* Effect.promise(() => $`git symbolic-ref HEAD`.cwd(directory).text())).trimEnd(),
+          )
+          yield* setHead("ref: refs/heads/feat/packed\n")
+          yield* until(() => subscriptions.length === 3 && released.length === 1)
+
+          // Back on the first branch, whose packed ref is watched directly.
+          yield* setHead(`ref: ${path.relative(gitdir, initial)}\n`)
+          yield* until(() => subscriptions.length === 4 && released.length === 2)
+          expect(subscriptions[3]).toEqual({ path: initial, type: "file" })
+
+          // The nested ref appears while it is not followed; following it again reports no change of it.
+          yield* fs.ensureDir(folder)
+          yield* fs.writeFileString(
+            ref,
+            `${yield* Effect.promise(() => $`git rev-parse HEAD`.cwd(directory).text())}\n`,
+          )
+          yield* setHead("ref: refs/heads/feat/packed\n")
+          yield* until(() => subscriptions.length === 5 && released.length === 3)
+          expect(subscriptions[4]).toEqual({ path: ref, type: "file" })
+          expect(changes.filter((event) => event.file !== head)).toEqual([])
+        }),
+      { vcs: "git", watcher },
+    )
+  })
+
+  it.live("reads the ref again once the watch for its missing folder is acquired", () => {
+    const acquiring = Deferred.makeUnsafe<void>()
+    const acquire = Deferred.makeUnsafe<void>()
+    const watcher = Watcher.layer().pipe(
+      Layer.provide(
+        Layer.succeed(Watcher.Native, {
+          subscribe: (input) =>
+            (path.basename(input.target) === "feat"
+              ? Deferred.succeed(acquiring, undefined).pipe(Effect.andThen(Deferred.await(acquire)))
+              : Effect.void
+            ).pipe(Effect.as({ unsubscribe: () => Promise.resolve() })),
+        }),
+      ),
+    )
+    return withTmp(
+      (directory) =>
+        Effect.gen(function* () {
+          const policy = yield* LocationWatcherPolicy.Service
+          const fs = yield* FSUtil.Service
+          const head = path.join(directory, ".git", "HEAD")
+          const ref = path.join(directory, ".git", "refs", "heads", "feat", "packed")
+          yield* Effect.promise(() => $`git branch feat/packed`.cwd(directory).quiet())
+          yield* Effect.promise(() => $`git pack-refs --all`.cwd(directory).quiet())
+          yield* LocationWatcher.Service
+          yield* fs.writeFileString(head, "ref: refs/heads/feat/packed\n")
+          yield* policy.reload()
+          yield* Deferred.await(acquiring).pipe(Effect.timeout("5 seconds"))
+          // The commit lands while the watch for the folder is still being acquired, so no watch sees it.
+          yield* Effect.promise(() => $`git commit --allow-empty -m packed`.cwd(directory).quiet())
+          const seen = yield* wait((event) => event.file === ref)
+          yield* Deferred.succeed(acquire, undefined)
+          expect(yield* Deferred.await(seen.deferred).pipe(Effect.timeout("5 seconds"))).toEqual({
+            file: ref,
+            event: "change",
+          })
+        }),
+      { vcs: "git", watcher },
+    )
+  })
+
+  it.live("acquires a subscription again at the next reconcile once its stream ends", () => {
+    const attempts = { ref: 0 }
+    const publish = new Map<string, (update: Watcher.Update) => void>()
+    const { watcher, acquired } = acquiredWatcher(
+      Watcher.layer().pipe(
+        Layer.provide(
+          Layer.succeed(Watcher.Native, {
+            subscribe: (input) =>
+              Effect.sync(() => {
+                if (path.basename(input.target) === "HEAD") return { unsubscribe: () => Promise.resolve() }
+                attempts.ref++
+                // Like a missing folder, the first subscription gets no native watch and ends at once.
+                if (attempts.ref === 1) return undefined
+                publish.set(input.target, input.publish)
+                return { unsubscribe: () => Promise.resolve() }
+              }),
+          }),
+        ),
+      ),
+    )
+    return withTmp(
+      (directory) =>
+        Effect.gen(function* () {
+          const policy = yield* LocationWatcherPolicy.Service
+          const ref = path.join(
+            directory,
+            ".git",
+            (yield* Effect.promise(() => $`git symbolic-ref HEAD`.cwd(directory).text())).trimEnd(),
+          )
+          yield* LocationWatcher.Service
+          // The first subscription ends at once and is not kept as active, so a later reconcile acquires it again.
+          yield* until(() => acquired.includes(ref), policy.reload())
+          expect(attempts.ref).toBe(2)
+          expect(
+            yield* nextUpdate(
+              (event) => event.file === ref,
+              Effect.sync(() => publish.get(ref)!({ path: ref, type: "update" })),
+            ),
+          ).toEqual({ file: ref, event: "change" })
         }),
       { vcs: "git", watcher },
     )
@@ -708,6 +970,56 @@ function ready(file: string, eventFile = file) {
   })
 }
 
+// A Watcher that records every subscription and delivers only what the test offers to its queue.
+function queuedWatcher() {
+  const subscriptions: Watcher.WatchInput[] = []
+  const queues = new Map<string, Queue.Queue<Watcher.Update>>()
+  const released: string[] = []
+  const watcher = Layer.succeed(
+    Watcher.Service,
+    Watcher.Service.of({
+      subscribe: (input) =>
+        Effect.gen(function* () {
+          subscriptions.push(input)
+          const queue = yield* Queue.unbounded<Watcher.Update>()
+          queues.set(input.path, queue)
+          return Stream.fromQueue(queue).pipe(Stream.ensuring(Effect.sync(() => released.push(input.path))))
+        }),
+    }),
+  )
+  const offer = (file: string) => Queue.offer(queues.get(file)!, { path: file, type: "update" })
+  return { watcher, subscriptions, released, offer }
+}
+
+// Waits for `check`, running `each` before every attempt.
+function until(check: () => boolean, each: Effect.Effect<void> = Effect.void) {
+  return each.pipe(
+    Effect.andThen(Effect.sync(check)),
+    Effect.filterOrFail(Boolean),
+    Effect.retry(Schedule.spaced("10 millis")),
+    Effect.timeout("5 seconds"),
+  )
+}
+
+// The given Watcher, recording the target of each acquisition once the subscription is live.
+function acquiredWatcher(base: Layer.Layer<Watcher.Service>) {
+  const acquired: string[] = []
+  const watcher = Layer.effect(
+    Watcher.Service,
+    Effect.gen(function* () {
+      const service = yield* Watcher.Service
+      return Watcher.Service.of({
+        subscribe: (input, onReady) =>
+          service.subscribe(
+            input,
+            Effect.sync(() => acquired.push(input.path)).pipe(Effect.andThen(onReady ?? Effect.void)),
+          ),
+      })
+    }),
+  ).pipe(Layer.provide(base))
+  return { watcher, acquired }
+}
+
 describeNative("LocationWatcher", () => {
   it.live("limits file watches to the exact target", () =>
     withTmp((directory) =>
@@ -791,6 +1103,43 @@ describeNative("LocationWatcher", () => {
       { vcs: "git" },
     ),
   )
+
+  it.live("publishes the ref events of a packed nested branch", () => {
+    const { watcher, acquired } = acquiredWatcher(AppNodeBuilder.build(Watcher.node))
+    return withTmp(
+      (directory) =>
+        Effect.gen(function* () {
+          const head = path.join(directory, ".git", "HEAD")
+          const folder = path.join(directory, ".git", "refs", "heads", "feat")
+          const ref = path.join(folder, "packed")
+          yield* ready(head)
+          // `git pack-refs` keeps the packed refs and removes the folder of a nested branch name.
+          yield* Effect.promise(() => $`git branch feat/packed`.cwd(directory).quiet())
+          yield* Effect.promise(() => $`git pack-refs --all`.cwd(directory).quiet())
+          expect(
+            yield* nextUpdate(
+              (event) => event.file === head,
+              Effect.promise(() => $`git checkout feat/packed`.cwd(directory).quiet()),
+            ),
+          ).toEqual({ file: head, event: "change" })
+          yield* until(() => acquired.includes(folder))
+          expect(
+            yield* nextUpdate(
+              (event) => event.file === ref,
+              Effect.promise(() => $`git commit --allow-empty -m packed`.cwd(directory).quiet()),
+            ),
+          ).toEqual({ file: ref, event: "change" })
+          yield* until(() => acquired.includes(ref))
+          expect(
+            yield* nextUpdate(
+              (event) => event.file === ref,
+              Effect.promise(() => $`git commit --allow-empty -m next`.cwd(directory).quiet()),
+            ),
+          ).toEqual({ file: ref, event: "change" })
+        }),
+      { vcs: "git", watcher },
+    )
+  })
 
   const describeSymlink = process.platform !== "win32" ? describe : describe.skip
   describeSymlink("symlinked .git", () => {
