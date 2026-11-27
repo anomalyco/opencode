@@ -10,6 +10,7 @@ use opencode_api::generated::{
 use opencode_store::State;
 use opencode_ui::keymap::Slash;
 
+use super::find_view::{self, FindInner};
 use super::scroll;
 use crate::dialogs::{export, fork, rename, timeline};
 use crate::prelude::*;
@@ -21,20 +22,28 @@ struct Inner {
     tui: Weak<Tui>,
     session: SessionID,
     scroll: Weak<scroll::Inner>,
+    find: Weak<FindInner>,
     layers: RefCell<Vec<Disposer>>,
 }
 
 type Run = fn(&Inner, &Tui, Option<&str>);
 
 impl Actions {
-    pub fn new(tui: &Tui, session: &SessionID, scroll: &scroll::Controls) -> Self {
+    pub fn new(
+        tui: &Tui,
+        session: &SessionID,
+        scroll: &scroll::Controls,
+        find: &find_view::Find,
+        prompt_available: impl Fn() -> bool + 'static,
+    ) -> Self {
         let inner = Rc::new(Inner {
             tui: tui.weak(),
             session: session.clone(),
             scroll: Rc::downgrade(&scroll.0),
+            find: find.weak(),
             layers: RefCell::default(),
         });
-        inner.register(tui, &inner);
+        inner.register(tui, &inner, prompt_available);
         Self(inner)
     }
 }
@@ -51,7 +60,7 @@ impl Drop for Actions {
 }
 
 impl Inner {
-    fn register(&self, tui: &Tui, this: &Rc<Inner>) {
+    fn register(&self, tui: &Tui, this: &Rc<Inner>, prompt_available: impl Fn() -> bool + 'static) {
         let command = |id: &str, title: &str, run: Run| {
             TuiCommand::new(
                 id,
@@ -77,9 +86,21 @@ impl Inner {
             let session = self.session.clone();
             Condition::when(bind!(tui, |tui| routed(&tui, &session, |info| info.parent_id.is_some())))
         };
+        let find_enabled = {
+            let session = self.session.clone();
+            Condition::when(bind!(tui, |tui| {
+                *tui.route() == (Route::Session { id: session.clone() })
+                    && tui.settings.experiment("session-find")
+                    && prompt_available()
+            }))
+        };
         let commands = vec![
             command("session.rename", "Rename session", Inner::rename).palette().slash(slash("rename", true)),
             command("session.timeline", "Jump to message", Inner::timeline).palette().slash(slash("timeline", false)),
+            command("session.find", "Find in session", Inner::find)
+                .palette()
+                .enabled(find_enabled)
+                .slash(slash("find", false)),
             command("session.fork", "Fork session", Inner::fork).palette().slash(slash("fork", false)),
             command("session.compact", "Compact session", Inner::compact).palette().slash(slash("compact", false)),
             command("session.undo", "Undo previous message", Inner::undo).palette().slash(slash("undo", false)),
@@ -139,6 +160,13 @@ impl Inner {
     fn timeline(&self, tui: &Tui, _: Option<&str>) {
         let scroll = self.scroll.clone();
         timeline::show(tui, self.session.clone(), Rc::new(bind!(scroll, |scroll, tui, id| scroll.jump(tui, id))));
+    }
+
+    fn find(&self, tui: &Tui, _: Option<&str>) {
+        tui.dialogs.clear();
+        if let Some(find) = self.find.upgrade() {
+            find.open(tui);
+        }
     }
 
     fn fork(&self, tui: &Tui, _: Option<&str>) {

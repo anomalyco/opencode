@@ -82,6 +82,11 @@ fn mentions_any(source: &str, sessions: &HashSet<SessionID>) -> bool {
 }
 
 impl Links {
+    /// Transforms inline Markdown spans to link known session IDs, using this instance's tracked IDs.
+    pub fn transform(&self, tui: &Tui, spans: Vec<InlineSpan>, cx: &InlineContext<'_>) -> Vec<InlineSpan> {
+        link_spans(tui, &self.used, spans, cx)
+    }
+
     /// The session a plain left click opens: a press and a release on the same cell, without a modifier or selected
     /// text (the [`crate::features::links`] rules), on a link the last frame drew.
     fn clicked(&self, tui: &Tui, event: &MouseEvent) -> Option<String> {

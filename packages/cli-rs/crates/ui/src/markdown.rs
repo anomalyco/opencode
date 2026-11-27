@@ -40,6 +40,12 @@ impl CodeBlockRenderers {
     pub fn register_math(&mut self, render: InlineMathRenderer) {
         self.math = Some(render);
     }
+
+    /// Returns the custom code-block renderer registered for `language`, if any.
+    pub fn get(&self, language: &str) -> Option<&CodeBlockRenderer> {
+        let language = opentui::syntax::filetype_for_info_string(language).unwrap_or_else(|| language.to_owned());
+        self.blocks.iter().find(|(key, _)| *key == language).map(|(_, render)| render)
+    }
 }
 
 /// Makes `hook` the inline hook of a [`view`] made with `renderers`, after the inline math renderer's own.
