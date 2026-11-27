@@ -55,6 +55,7 @@ import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { Expected } from "./lib/session-message"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import { nativeSandbox } from "./fixture/sandbox-host"
 
 const sessionID = Session.ID.make("ses_shell_tool_test")
 const sessionModel = Model.Ref.make({ id: Model.ID.make("test"), providerID: Provider.ID.make("test") })
@@ -328,11 +329,9 @@ const withSession = <A, E, R>(directory: string, body: (registry: Tool.Interface
     }).pipe(Effect.provide(locationLayer), Effect.ensuring(locations.invalidate(location)))
   })
 
-const seatbelt =
-  process.platform === "darwin" &&
-  Bun.spawnSync(["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)", "/usr/bin/true"]).exitCode === 0
+const backend = await nativeSandbox()
 
-;(seatbelt ? sandboxIt.live : sandboxIt.live.skip)("the shell tool executes in the sandbox and preserves denies", () =>
+;(backend ? sandboxIt.live : sandboxIt.live.skip)("the shell tool executes in the sandbox and preserves denies", () =>
   Effect.acquireUseRelease(
     Effect.promise(() => tmpdir()),
     (tmp) =>
@@ -362,7 +361,7 @@ const seatbelt =
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
   ),
 )
-;(seatbelt ? sandboxCodeModeIt.live : sandboxCodeModeIt.live.skip)("Code Mode shell calls remain sandboxed", () =>
+;(backend ? sandboxCodeModeIt.live : sandboxCodeModeIt.live.skip)("Code Mode shell calls remain sandboxed", () =>
   withTempDir((tmp) =>
     Effect.gen(function* () {
       reset()
@@ -394,7 +393,7 @@ const seatbelt =
     }),
   ),
 )
-;(seatbelt ? sandboxDaemonIt.live : sandboxDaemonIt.live.skip)(
+;(backend ? sandboxDaemonIt.live : sandboxDaemonIt.live.skip)(
   "sandboxed commands do not bypass confinement through the process daemon",
   () =>
     withTempDir((tmp) =>

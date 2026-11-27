@@ -12,13 +12,14 @@ test("reads and merges sandbox options from global JSONC files", async () => {
   )
   await Bun.write(
     path.join(root.path, "opencode.jsonc"),
-    '{ // user preference\n "experimental": { "sandbox": { "full_disk_read": true, "allow_git_writes": true, }, }, }',
+    '{ // user preference\n "experimental": { "sandbox": { "full_disk_read": true, "allow_git_writes": true, "linux": { "binary": "/opt/bwrap" }, }, }, }',
   )
   expect(await Effect.runPromise(SandboxConfig.read(root.path))).toEqual({
     enabled: true,
     readable_roots: ["/usr"],
     full_disk_read: true,
     allow_git_writes: true,
+    linux: { binary: "/opt/bwrap" },
   })
 })
 
@@ -26,7 +27,7 @@ test("invalid sandbox settings matter only when the effective configuration enab
   await using root = await tmpdir()
   const json = path.join(root.path, "opencode.json")
   const jsonc = path.join(root.path, "opencode.jsonc")
-  for (const sandbox of [{ readable_roots: "not-an-array" }, { full_disk_reads: true }]) {
+  for (const sandbox of [{ readable_roots: "not-an-array" }, { full_disk_reads: true }, { linux: { binary: 123 } }]) {
     await Bun.write(json, JSON.stringify({ experimental: { sandbox } }))
     expect(await Effect.runPromise(SandboxConfig.read(root.path))).toEqual({})
     await Bun.write(jsonc, JSON.stringify({ experimental: { sandbox: { enabled: true } } }))

@@ -6,9 +6,7 @@ import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
 
-const macos = process.platform === "darwin" ? it.live : it.live.skip
-
-macos("invalid sandbox roots prevent the server from starting", () =>
+it.live("invalid sandbox roots prevent the server from starting", () =>
   Effect.gen(function* () {
     const tmp = yield* tmpdirScoped("opencode-sandbox-server-")
     const result = yield* Effect.exit(

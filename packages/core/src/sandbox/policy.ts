@@ -6,6 +6,7 @@ import path from "node:path"
 export interface Options {
   readonly enabled?: boolean
   readonly fullDiskRead?: boolean
+  readonly linux?: { readonly binary?: string }
   readonly allowGitWrites?: boolean
   readonly readableRoots?: readonly string[]
   readonly writableRoots?: readonly string[]

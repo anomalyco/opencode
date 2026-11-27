@@ -2,7 +2,7 @@
 title: "Shell sandbox"
 ---
 
-The experimental shell sandbox runs agent shell commands under macOS Seatbelt. It is disabled by default and supports local macOS hosts only.
+The experimental shell sandbox runs agent shell commands under macOS Seatbelt or Linux Bubblewrap and seccomp. It is disabled by default and applies to local execution.
 
 **This confines the shell tool only.** Built-in file and search tools, formatters, snapshots, plugins, MCP services, web tools, and human-operated terminals remain outside the sandbox and retain their existing permissions. It is not a security boundary around the whole agent or server.
 
@@ -22,9 +22,10 @@ Settings are read when the server starts. Restart the background service with `o
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `enabled` | `false` | Enable the shell sandbox on a local macOS host. |
+| `enabled` | `false` | Enable the shell sandbox on a local macOS or Linux host. |
 | `full_disk_read` | `false` | Allow broad reads, subject to protected-path exclusions. |
 | `allow_git_writes` | `false` | Allow writes to `.git` metadata inside the workspace, including nested repositories and submodules. |
+| `linux.binary` | Unset | Absolute path to a custom Bubblewrap executable on Linux. Overrides system discovery. |
 | `readable_roots` | `[]` | Additional existing absolute paths shell commands may read. |
 | `writable_roots` | `[]` | Additional existing absolute paths shell commands may write. |
 
@@ -34,7 +35,7 @@ Sandboxed shell commands and their descendants can write to the workspace, a ded
 
 Shell commands skip the default approval prompt when no rule matches. Explicit shell and external-directory rules still apply, including rules that ask for approval or deny a command. The sandbox does not currently support requesting an unsandboxed shell command. Commands that need access outside the sandbox must be run separately by the user, or the server must be restarted with the sandbox disabled.
 
-By default, the sandbox protects `.git` metadata at every level of the workspace. Set `allow_git_writes` to `true` to allow commands such as `git add`, `git commit`, and branch checkouts to update that metadata.
+By default, the sandbox protects `.git` metadata at every level of the workspace. On Linux this covers paths present before the command starts, including linked Git directories, and cannot protect a new nested `.git` created during that command. Set `allow_git_writes` to `true` to allow commands such as `git add`, `git commit`, and branch checkouts to update that metadata.
 
 ```jsonc
 {
@@ -74,3 +75,10 @@ Set `full_disk_read` to `true` to allow broad filesystem reads while retaining t
 OpenCode configuration, data and state directories, its configured SQLite database and journals, and `.aws` and `.ssh` directly under the home directory or writable roots are excluded. This list describes the current implementation and may change; it does not cover every possible credential or sensitive file.
 
 The server refuses to start if sandbox setup fails or the host is unsupported. On a supported host, remote workspaces remain available, but their shell tool reports that sandboxed execution is unavailable. Sandboxed background commands are tied to their location and do not survive location teardown or server restart. CPU, memory, and process-count quotas are not provided.
+
+
+## Linux prerequisites
+
+Install Bubblewrap through your distribution. The host must permit unprivileged user, mount, PID, IPC, and network namespaces and a fresh procfs. OpenCode checks standard system paths first. Releases do not ship Bubblewrap. For manual testing, an executable named `bwrap` in `opencode-sandbox/` next to the OpenCode binary can serve as a fallback. Keep this fallback outside the sandbox's writable roots.
+
+You can set `experimental.sandbox.linux.binary` in global config to select a specific executable. A configured executable takes precedence and is protected against sandboxed writes. The server refuses to start if the configured executable cannot apply the sandbox. Bubblewrap may leave empty mount targets on disk when protecting paths that did not exist at launch.

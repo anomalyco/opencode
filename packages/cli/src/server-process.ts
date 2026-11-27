@@ -116,6 +116,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             enabled: configuredSandbox.enabled,
             fullDiskRead: configuredSandbox.full_disk_read,
             allowGitWrites: configuredSandbox.allow_git_writes,
+            linux: configuredSandbox.linux,
             readableRoots: configuredSandbox.readable_roots,
             writableRoots: configuredSandbox.writable_roots,
           },

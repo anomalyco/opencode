@@ -10,12 +10,15 @@ import { AppProcess } from "@opencode/util/process"
 import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import { Location } from "./location.js"
 import { ShellSelect } from "./shell/select.js"
+import { SandboxBackend } from "./sandbox/backend.js"
+import { SandboxHostPolicy } from "./sandbox/host-policy.js"
 import { SandboxPolicy } from "./sandbox/policy.js"
 
 export const Options = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean),
   fullDiskRead: Schema.optional(Schema.Boolean),
   allowGitWrites: Schema.optional(Schema.Boolean),
+  linux: Schema.optional(Schema.Struct({ binary: Schema.optional(Schema.String) })),
   readableRoots: Schema.optional(Schema.Array(Schema.String)),
   writableRoots: Schema.optional(Schema.Array(Schema.String)),
 })
@@ -25,9 +28,10 @@ export class UnavailableError extends Schema.TaggedError<UnavailableError>()("Sa
   message: Schema.String,
 }) {}
 
-export class Settings extends Context.Service<Settings, Options & { readonly databasePath?: string }>()(
-  "@opencode/Sandbox/Settings",
-) {}
+export class Settings extends Context.Service<
+  Settings,
+  Options & { readonly databasePath?: string; readonly backend?: SandboxBackend.Interface }
+>()("@opencode/Sandbox/Settings") {}
 
 export const settingsConfigured = (input: Options = {}, databasePath?: string) =>
   makeGlobalNode({
@@ -36,19 +40,20 @@ export const settingsConfigured = (input: Options = {}, databasePath?: string) =
       Settings,
       Effect.gen(function* () {
         if (!input.enabled) return Settings.of(input)
-        if (process.platform !== "darwin")
-          return yield* Effect.die(new UnavailableError({ message: "The shell sandbox requires a local macOS host." }))
         const global = yield* Global.Service
-        const { MacSandbox } = yield* Effect.promise(() => import("./sandbox/macos.js"))
         const options = yield* Effect.tryPromise({
           try: async () => ({
             ...input,
-            readableRoots: await MacSandbox.roots(input.readableRoots ?? []),
-            writableRoots: await MacSandbox.roots(input.writableRoots ?? []),
+            readableRoots: await SandboxHostPolicy.roots(input.readableRoots ?? []),
+            writableRoots: await SandboxHostPolicy.roots(input.writableRoots ?? []),
             databasePath:
               databasePath && databasePath !== ":memory:" ? path.resolve(global.data, databasePath) : undefined,
           }),
           catch: (cause) => new UnavailableError({ message: `Invalid sandbox roots: ${cause}` }),
+        }).pipe(Effect.orDie)
+        const backend = yield* Effect.tryPromise({
+          try: () => SandboxBackend.select(process.platform, options),
+          catch: (cause) => new UnavailableError({ message: `Unable to initialize sandbox backend: ${cause}` }),
         }).pipe(Effect.orDie)
         const subprocess = yield* AppProcess.Service
         yield* Effect.scoped(
@@ -60,13 +65,9 @@ export const settingsConfigured = (input: Options = {}, databasePath?: string) =
             const directory = path.join(scratch, "workspace")
             yield* Effect.tryPromise(() => fs.mkdir(directory))
             const policy = yield* Effect.tryPromise(() =>
-              MacSandbox.policy({ ...global, directory, scratch }, options, options.databasePath),
+              backend.policy({ ...global, directory, scratch }, options, options.databasePath),
             )
-            const launch = MacSandbox.launch(policy, "/bin/sh", ["-c", "exit 0"], {
-              PATH: "/usr/bin:/bin",
-              HOME: scratch,
-              TMPDIR: scratch,
-            })
+            const launch = yield* Effect.tryPromise(async () => backend.probe(policy))
             yield* subprocess
               .run(
                 ChildProcess.make(launch.command, launch.args, { cwd: directory, env: launch.env, extendEnv: false }),
@@ -78,7 +79,7 @@ export const settingsConfigured = (input: Options = {}, databasePath?: string) =
           Effect.mapError((cause) => new UnavailableError({ message: `Sandbox startup check failed: ${cause}` })),
           Effect.orDie,
         )
-        return Settings.of(options)
+        return Settings.of({ ...options, backend })
       }),
     ),
     deps: [Global.node, AppProcess.node],
@@ -122,13 +123,15 @@ export const configured = (input?: Options) =>
             prepare: () => Effect.fail(unavailable),
           })
         }
-        const { MacSandbox } = yield* Effect.promise(() => import("./sandbox/macos.js"))
+        const backend = options.backend
+        if (!backend)
+          return yield* Effect.die(new UnavailableError({ message: "Shell sandbox backend is unavailable." }))
         const scratch = yield* Effect.acquireRelease(
           Effect.tryPromise(() => fs.mkdtemp(path.join(global.tmp, "sandbox-"))).pipe(Effect.orDie),
           (directory) => Effect.promise(() => fs.rm(directory, { recursive: true, force: true })),
         )
         const policy = yield* Effect.tryPromise(() =>
-          MacSandbox.policy({ ...global, directory: location.directory, scratch }, options, options.databasePath),
+          backend.policy({ ...global, directory: location.directory, scratch }, options, options.databasePath),
         ).pipe(Effect.orDie)
         return Service.of({
           enabled: true,
@@ -136,12 +139,13 @@ export const configured = (input?: Options) =>
           prepare: (invocation) =>
             Effect.tryPromise({
               try: async () => {
-                await fs.access(MacSandbox.executable, fs.constants.X_OK)
-                return MacSandbox.launch(
+                await fs.access(backend.executable, fs.constants.X_OK)
+                return backend.launch(
                   policy,
                   invocation.shell,
                   ShellSelect.args(invocation.shell, invocation.command),
                   SandboxPolicy.environment(invocation.env, scratch),
+                  invocation.cwd,
                 )
               },
               catch: (cause) => new UnavailableError({ message: `Unable to prepare shell sandbox: ${cause}` }),
