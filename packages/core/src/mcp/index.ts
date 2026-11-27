@@ -108,8 +108,11 @@ const unavailable = (server: ServerName, status: Status) => {
   }
 }
 
+/** Internal config provenance: a cwd default used only by the shared connection. */
+export type ServerConfig = Mcp.ServerConfig & { readonly poolCwd?: string }
+
 type ServerEntry = {
-  readonly config: Mcp.ServerConfig
+  readonly config: ServerConfig
   status: Status
   readonly startup: Latch.Latch
   // The connection attempt in flight: when it began and a latch that opens once it settles.
@@ -159,19 +162,19 @@ const isEnded = (error: Error) =>
   error instanceof EventsUnavailableError
 
 type Data = {
-  servers: Map<ServerName, Types.DeepMutable<Mcp.ServerConfig>>
+  servers: Map<ServerName, Types.DeepMutable<ServerConfig>>
   removed: Set<ServerName>
 }
 
 export type Editor = {
-  list: () => readonly [ServerName, Types.DeepMutable<Mcp.ServerConfig>][]
-  get: (server: ServerName | string) => Types.DeepMutable<Mcp.ServerConfig> | undefined
-  set: (server: ServerName | string, config: Mcp.ServerConfig) => void
-  update: (server: ServerName | string, update: (config: Types.DeepMutable<Mcp.ServerConfig>) => void) => void
+  list: () => readonly [ServerName, Types.DeepMutable<ServerConfig>][]
+  get: (server: ServerName | string) => Types.DeepMutable<ServerConfig> | undefined
+  set: (server: ServerName | string, config: ServerConfig) => void
+  update: (server: ServerName | string, update: (config: Types.DeepMutable<ServerConfig>) => void) => void
   remove: (server: ServerName | string) => void
 }
 
-const cloneConfig = (config: Mcp.ServerConfig) => structuredClone(config) as Types.DeepMutable<Mcp.ServerConfig>
+const cloneConfig = (config: ServerConfig) => structuredClone(config) as Types.DeepMutable<ServerConfig>
 
 export interface Interface extends State.Transformable<Editor> {
   readonly servers: () => Effect.Effect<ServerInfo[]>
@@ -668,7 +671,7 @@ export const layer = (options?: Options) =>
           }),
       }
 
-      const makeEntry = (name: ServerName, config: Mcp.ServerConfig, started: number): ServerEntry => {
+      const makeEntry = (name: ServerName, config: ServerConfig, started: number): ServerEntry => {
         // Local servers run on this Location's execution plane, so only Locations on the host share them.
         const pooled =
           config.pool === true &&
@@ -687,8 +690,11 @@ export const layer = (options?: Options) =>
               }
               // Resolved exactly as the spawn resolves it, `~` included, so the key matches where the server runs.
               const { McpStdio } = yield* Effect.promise(() => import("./stdio.js"))
+              const cwd = input.config.cwd ?? config.poolCwd
+              const resolved = McpStdio.resolveCwd(input.directory, cwd)
               return {
-                key: McpPool.key({ ...input, cwd: McpStdio.resolveCwd(input.directory, input.config.cwd) }),
+                key: McpPool.key({ ...input, cwd: resolved }),
+                cwd: cwd === undefined ? undefined : resolved,
                 authProvider: input.authProvider,
               }
             }),
@@ -808,7 +814,7 @@ export const layer = (options?: Options) =>
         if (entry.registration) yield* entry.registration.dispose
       })
 
-      const replaceServer = Effect.fnUntraced(function* (name: ServerName, serverConfig: Mcp.ServerConfig) {
+      const replaceServer = Effect.fnUntraced(function* (name: ServerName, serverConfig: ServerConfig) {
         const previous = entries.get(name)
         if (previous) yield* disposeServer(previous)
         const entry = makeEntry(name, serverConfig, yield* Clock.currentTimeMillis)

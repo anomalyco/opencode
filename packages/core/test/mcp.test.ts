@@ -393,6 +393,7 @@ function resourceMcpLayer(
     Layer.provideMerge(Flag.layer),
     Layer.provide(
       Layer.mergeAll(
+        Layer.succeed(Global.Service, Global.make()),
         overrides?.pool ?? poolLayer,
         overrides?.entries
           ? Layer.succeed(
@@ -3177,6 +3178,7 @@ describe("MCP pool", () => {
       name?: string
       credentials?: Partial<Credential.Interface>
       bus?: Layer.Layer<Bus.Service>
+      entries?: Config.Interface["entries"]
     } = {},
   ) =>
     Effect.gen(function* () {
@@ -3191,6 +3193,7 @@ describe("MCP pool", () => {
           name: overrides.name,
           credentials: overrides.credentials,
           bus: overrides.bus,
+          entries: overrides.entries,
         }),
         scope,
       )
@@ -3679,6 +3682,145 @@ describe("MCP pool", () => {
       expect(error.message).toContain("roots/list")
     }),
   )
+
+  // Exercise config provenance through real connections, recording shared and private spawns separately.
+  const configuredLocal = (
+    fields: Partial<ConfigMCP.Local> = {},
+    options: { files?: (directory: string) => string[]; hostsServer?: boolean } = {},
+  ) =>
+    Effect.gen(function* () {
+      const pooled: Array<ChildProcess.Command> = []
+      const privateSpawns: Array<ChildProcess.Command> = []
+      const pool = yield* recordingPool(pooled)
+      const config = new ConfigMCP.Local({
+        type: "local",
+        command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-modern-stdio.ts")],
+        ...fields,
+      })
+      const environment = Layer.effect(
+        Environment.Service,
+        Effect.gen(function* () {
+          const environment = yield* Environment.Service
+          return Environment.Service.of({ ...environment, hostsServer: options.hostsServer ?? true })
+        }),
+      ).pipe(Layer.provide(recordingEnvironmentLayer(privateSpawns)))
+      const locations = yield* Effect.forEach(
+        directories,
+        (directory) =>
+          open(config, pool, directory, {
+            environment,
+            entries: () =>
+              Effect.succeed(
+                [path.join(Global.Path.config, "opencode.json"), ...(options.files?.(directory) ?? [])].map(
+                  (file) =>
+                    new Document({
+                      type: "document",
+                      path: AbsolutePath.make(file),
+                      info: new Info({ mcp: new ConfigMCP.Info({ servers: { resources: config } }) }),
+                    }),
+                ),
+              ),
+          }),
+        { concurrency: "unbounded" },
+      )
+      for (const { mcp } of locations) expect(yield* status(mcp)).toEqual({ status: "connected" })
+      const cwds = (spawns: ChildProcess.Command[]) =>
+        spawns
+          .map((command) => {
+            if (!ChildProcess.isStandardCommand(command)) throw new Error("expected a standard command")
+            return command.options.cwd
+          })
+          .sort()
+      return {
+        pooled: cwds(pooled),
+        private: cwds(privateSpawns),
+        tools: yield* Effect.forEach(locations, ({ mcp }) => mcp.tools()),
+      }
+    })
+
+  live("shares one global local process in home across concurrent Locations", () =>
+    Effect.gen(function* () {
+      const result = yield* configuredLocal()
+      expect(result.pooled).toEqual([Global.Path.home])
+      expect(result.private).toEqual([])
+      expect(result.tools[0]?.[0]?.inputSchema).toBe(result.tools[1]?.[0]?.inputSchema)
+    }),
+  )
+
+  for (const cwd of ["~", directories[0]])
+    live(`shares a global local process with explicit cwd: ${cwd}`, () =>
+      Effect.gen(function* () {
+        const result = yield* configuredLocal({ cwd })
+        expect(result.pooled).toEqual([McpStdio.resolveCwd(directories[0], cwd)])
+        expect(result.private).toEqual([])
+      }),
+    )
+
+  live("keeps an explicit relative cwd scoped to each Location", () =>
+    Effect.gen(function* () {
+      const result = yield* configuredLocal({ cwd: "." })
+      expect(result.pooled).toEqual(directories.slice().sort())
+      expect(result.private).toEqual([])
+    }),
+  )
+
+  for (const folder of [".", ".opencode"])
+    live(`a project config in ${folder} replaces the global server's scope`, () =>
+      Effect.gen(function* () {
+        const result = yield* configuredLocal(
+          {},
+          { files: (directory) => [path.join(directory, folder, "opencode.json")] },
+        )
+        expect(result.pooled).toEqual([])
+        expect(result.private).toEqual(directories.slice().sort())
+      }),
+    )
+
+  live("keeps pool:false global servers in each workspace", () =>
+    Effect.gen(function* () {
+      const result = yield* configuredLocal({ pool: false })
+      expect(result.pooled).toEqual([])
+      expect(result.private).toEqual(directories.slice().sort())
+    }),
+  )
+
+  const legacyCommand = [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")]
+  live("keeps explicitly legacy global servers in each workspace", () =>
+    Effect.gen(function* () {
+      const result = yield* configuredLocal({ command: legacyCommand, protocol: "legacy" })
+      expect(result.pooled).toEqual([])
+      expect(result.private).toEqual(directories.slice().sort())
+    }),
+  )
+
+  for (const [outcome, environment] of [
+    ["negotiates legacy", {}],
+    ["is refused", { MCP_REQUIRE_ROOTS: "1" }],
+  ] as const)
+    live(`returns to workspace cwd after a global pooled handshake ${outcome}`, () =>
+      Effect.gen(function* () {
+        const result = yield* configuredLocal({ command: legacyCommand, environment })
+        expect(result.pooled).toEqual([Global.Path.home])
+        expect(result.private).toEqual(directories.slice().sort())
+      }),
+    )
+
+  live("preserves explicit cwd when a global server falls back to legacy", () =>
+    Effect.gen(function* () {
+      const result = yield* configuredLocal({ command: legacyCommand, cwd: directories[0] })
+      expect(result.pooled).toEqual([directories[0]])
+      expect(result.private).toEqual([directories[0], directories[0]])
+    }),
+  )
+
+  for (const pool of [undefined, true])
+    live(`keeps global local MCP servers in their remote workspace (pool: ${pool})`, () =>
+      Effect.gen(function* () {
+        const result = yield* configuredLocal({ pool }, { hostsServer: false })
+        expect(result.pooled).toEqual([])
+        expect(result.private).toEqual(directories.slice().sort())
+      }),
+    )
 
   live("shares a local server across directories only when its cwd is fixed", () => {
     const captured = poolLogs()

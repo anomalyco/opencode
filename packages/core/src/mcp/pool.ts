@@ -25,6 +25,8 @@ export interface Input extends Omit<McpConnection.Input, "endpointLoads"> {
 
 export interface Selection {
   readonly key: string
+  /** Resolved cwd for the pooled spawn only; private fallback keeps the original config. */
+  readonly cwd?: string
   readonly authProvider: Effect.Effect<AuthProvider | undefined>
 }
 
@@ -242,13 +244,15 @@ export const layer = Layer.effect(
         })
       })
 
-    const acquire = Effect.fnUntraced(function* (key: string, input: Input, holder: Holder) {
+    const acquire = Effect.fnUntraced(function* (selected: Selection, input: Input, holder: Holder) {
+      const key = selected.key
       if (unpoolable.has(key)) return "private" as const
       const slot =
         slots.get(key) ??
         open(key, {
           name: input.name,
-          config: input.config,
+          config:
+            input.config.type === "local" ? { ...input.config, cwd: selected.cwd ?? input.config.cwd } : input.config,
           directory: input.directory,
           clientInfo: input.clientInfo,
         })
@@ -314,7 +318,7 @@ export const layer = Layer.effect(
           }
           state.claim = claim
           state.holder = holder
-          const outcome = yield* acquire(selected.key, input, holder).pipe(
+          const outcome = yield* acquire(selected, input, holder).pipe(
             Scope.provide(claim),
             Effect.onInterrupt(() => clear),
           )
@@ -354,7 +358,13 @@ export const layer = Layer.effect(
           return live().skills
         },
         start: Effect.gen(function* () {
-          if (input.config.type === "local" && input.config.cwd === undefined && !unfixed.has(input.name)) {
+          const selected = yield* input.select
+          if (
+            input.config.type === "local" &&
+            input.config.cwd === undefined &&
+            selected.cwd === undefined &&
+            !unfixed.has(input.name)
+          ) {
             unfixed.add(input.name)
             yield* Effect.logWarning(
               "mcp pool ignored: local server has no fixed cwd, so each directory runs its own",
@@ -363,7 +373,6 @@ export const layer = Layer.effect(
               },
             )
           }
-          const selected = yield* input.select
           state.selected = selected
           if (!unpoolable.has(selected.key) && (yield* join(selected))) return
           state.own = legacy.has(selected.key) ? older : configured

@@ -2,8 +2,9 @@ export * as ConfigMcpPlugin from "./mcp.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
 import { Document, type Entry } from "@opencode/schema/config"
-import type { ServerConfig } from "@opencode/schema/mcp"
+import { Global } from "@opencode/util/global"
 import { Effect, Stream } from "effect"
+import path from "node:path"
 import { Config } from "../../config.js"
 import { Mcp } from "../../mcp/index.js"
 
@@ -19,6 +20,7 @@ export const register = Effect.fn("ConfigMCPPlugin.register")(function* (
 ) {
   const config = yield* Config.Service
   const mcp = yield* Mcp.Service
+  const global = yield* Global.Service
   const loaded = { entries: [] as Entry[] }
 
   yield* events.pipe(
@@ -43,10 +45,16 @@ export const register = Effect.fn("ConfigMCPPlugin.register")(function* (
       {},
       ...documents.flatMap((entry) => (entry.info.mcp?.timeout ? [entry.info.mcp.timeout] : [])),
     )
-    const servers = new Map<string, ServerConfig>()
+    const servers = new Map<string, Mcp.ServerConfig>()
     for (const document of documents) {
       for (const [name, server] of Object.entries(document.info.mcp?.servers ?? {})) {
-        servers.set(name, server)
+        // Apply defaults before folding: a project definition replaces the global server, including its scope.
+        servers.set(
+          name,
+          server.type === "local" && document.path && path.dirname(document.path) === global.config
+            ? { ...server, poolCwd: global.home, pool: server.pool ?? true }
+            : server,
+        )
       }
     }
     for (const [name, server] of servers) {
