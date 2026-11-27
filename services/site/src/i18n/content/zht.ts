@@ -14,11 +14,6 @@ export const content = {
       action: "安裝",
     },
     sdk: { name: "SDK", body: "從你自己的腳本、CI 工作和工具驅動 OpenCode。", action: "閱讀文件" },
-    ide: {
-      name: "IDE 擴充功能",
-      body: "在 VS Code、Cursor 和 Windsurf 中開啟 OpenCode，或透過 ACP 在 Zed 和 JetBrains IDE 中使用。",
-      action: "安裝",
-    },
     mini: {
       name: "Mini",
       body: "極簡的終端機介面，回覆直接輸出到捲動紀錄中，下方只有一個提示詞輸入框。",
@@ -129,23 +124,6 @@ export const content = {
         },
       },
     },
-    ide: {
-      title: "OpenCode | 適用於 VS Code、Cursor、Zed 等的 IDE 擴充功能",
-      description:
-        "在編輯器中使用 OpenCode。VS Code、Cursor、Windsurf 和 VSCodium 有專用擴充功能，Zed、JetBrains IDE 和其他 ACP 編輯器可使用 opencode acp。",
-      intro:
-        "在編輯器中使用 OpenCode。在 VS Code、Cursor、Windsurf 和 VSCodium 中，於整合式終端機執行 opencode，擴充功能就會自動安裝。Zed、JetBrains IDE 以及其他支援 Agent Client Protocol 的編輯器可透過 opencode acp 執行 OpenCode。",
-      features: {
-        "quick-launch": { title: "快速啟動", body: "Cmd+Esc 或 Ctrl+Esc 在分割終端機中開啟 OpenCode。" },
-        "new-session": { title: "新工作階段", body: "Cmd+Shift+Esc 或 Ctrl+Shift+Esc 開啟另一個工作階段。" },
-        context: { title: "上下文", body: "將目前選取的內容或分頁分享給 OpenCode。" },
-        "file-references": { title: "檔案參照", body: "Cmd+Option+K 或 Alt+Ctrl+K 插入 @File#L37-42。" },
-        "installs-itself": { title: "自動安裝", body: "在整合式終端機中執行 opencode 即可加入。" },
-        "acp-editors": { title: "ACP 編輯器", body: "Zed、JetBrains IDE、Avante.nvim 和 CodeCompanion.nvim。" },
-        "open-vsx": { title: "Open VSX", body: "也在 Open VSX 上提供，適用於 Cursor、Windsurf 和 VSCodium。" },
-        "same-agent": { title: "同一個代理", body: "就是你在終端機中執行的 OpenCode，就在程式碼旁邊。" },
-      },
-    },
     mini: {
       title: "OpenCode | Mini，代理的極簡終端機介面",
       description:
@@ -175,9 +153,9 @@ export const content = {
       body: "讓代理使用你真正的瀏覽器。",
       title: "OpenCode | Browse，為編碼代理準備的真正瀏覽器",
       description:
-        "Browse 讓 OpenCode 和其他 MCP 用戶端使用你真正的瀏覽器。代理透過 Playwright 操作背景分頁，並把登入和雙重驗證交還給你。",
+        "Browse 讓 OpenCode 和其他 MCP 用戶端使用你真正的瀏覽器。代理會閱讀頁面、點擊、輸入、擷取螢幕畫面、錄製分頁，並把登入和雙重驗證交還給你。",
       intro:
-        "一個 MCP 伺服器加上一個 Chromium 擴充功能，讓你的代理使用真正的瀏覽器，包括你的分頁、登入狀態和擴充功能。代理透過 Playwright 開啟並操作分頁、擷取螢幕畫面和錄製螢幕，這些分頁都在背景分組，不會打擾你。輪到你操作時，例如登入、雙重驗證或付款，代理會把分頁交還給你，你按下「繼續」後它再接著工作。",
+        "一個 MCP 伺服器加上一個 Chromium 擴充功能，讓你的代理使用真正的瀏覽器，包括你的分頁、登入狀態和擴充功能。代理在背景開啟分頁，分組收好，不打擾你，並閱讀頁面、點擊、輸入、擷取螢幕畫面和錄製分頁。輪到你操作時，例如登入、雙重驗證或付款，代理會把分頁交還給你，你按下「繼續」後它再接著工作。",
       features: {
         "your-real-browser": {
           title: "真正的瀏覽器",
@@ -186,7 +164,7 @@ export const content = {
         "out-of-your-way": { title: "不打擾你", body: "代理的分頁在背景開啟，並收進摺疊的群組中。" },
         handoffs: { title: "交接", body: "自己完成登入或雙重驗證，然後按下「繼續」。" },
         "lend-a-tab": { title: "借出分頁", body: "按一下工具列按鈕，把已開啟的分頁交給代理。" },
-        "record-and-capture": { title: "錄製與擷取", body: "螢幕截圖、螢幕錄影，以及 HAR 格式的網路流量。" },
+        "record-and-capture": { title: "錄製與擷取", body: "螢幕截圖、分頁錄製和網路流量。" },
         "any-mcp-client": {
           title: "任何 MCP 用戶端",
           body: "OpenCode、Claude Code、Cursor、Codex、Zed 等眾多用戶端。",
@@ -195,7 +173,7 @@ export const content = {
           title: "沿用你的所有登入",
           body: "代理直接使用你已登入的網站。無需金鑰，無需設定。",
         },
-        allowlists: { title: "允許清單", body: "將工作階段的分頁限制在你指定的網站內。" },
+        "allowed-sites": { title: "允許的網站", body: "讓代理的分頁只停留在你指定的網站。" },
       },
       install:
         "請先安裝 [Chrome 擴充功能]，它會引導你完成其餘步驟。如需直接安裝 CLI（通常不需要），可使用以下任一指令。",
@@ -272,7 +250,7 @@ export const content = {
     },
     colors: {
       title: "色彩",
-      body: "Logo 和字標使用同一種墨色的三種不透明度，深色背景則使用較淺的墨色。下方數值是該墨色疊在白色或 #0B0B0B 上的效果，與標準檔案一致。點一下數值即可複製。",
+      body: "Logo 和字標使用同一種墨色的三種不透明度，深色背景則使用較淺的墨色。下方數值是標準檔案中的色彩。這些色彩僅用於 Logo 和字標，請勿用於其他文字或背景。點一下數值即可複製。",
       palettes: {
         light: {
           name: "淺色",
@@ -357,7 +335,7 @@ export const content = {
       badges: {
         body: "在 README、文件或網站中放上徽章，並連結到 opencode.ai。依背景選擇淺色或深色檔案（HTML 會自動切換），不要更改顏色或文字。",
         sizes: "每種樣式都提供 20、32 和 44px（Shields 僅有 20px），格式為 SVG 和 2 倍 PNG。",
-        mono: "每個檔案也有使用 OpenTUI Mono 字型的版本，在副檔名前加上 -mono，例如 opencode-works-with-a-light-20-mono.svg；加上 -mono-caps 則為大寫 OpenTUI Mono。",
+        mono: "每個檔案也有使用 OpenMono 字型的版本，在副檔名前加上 -mono，例如 opencode-works-with-a-light-20-mono.svg；加上 -mono-caps 則為大寫 OpenMono。",
         groups: {
           "works-with": { title: "相容", alt: "相容 OpenCode", body: "適用於搭配 OpenCode 執行的外掛、供應商和工具。" },
           "built-with": { title: "打造於", alt: "以 OpenCode 打造", body: "適用於用 OpenCode 製作的專案。" },
@@ -604,14 +582,6 @@ export const content = {
   productDownloads: {
     terminal: { commands: { curl: { name: "指令碼" } } },
     sdk: { more: { label: "閱讀 SDK 文件" } },
-    ide: {
-      links: {
-        "vs-code-marketplace": { label: "VS Code Marketplace" },
-        "open-vsx-cursor-windsurf-vscodium": { label: "Open VSX (Cursor, Windsurf, VSCodium)" },
-      },
-      lead: "在編輯器的整合式終端機中執行 opencode，擴充功能就會自動安裝，也可以手動安裝。",
-      more: { label: "設定 Zed、JetBrains IDE 和其他 ACP 編輯器" },
-    },
     mini: {
       commands: { curl: { name: "指令碼" } },
       lead: "Mini 隨 OpenCode CLI 一起提供。用以下任一方式安裝，然後執行 opencode mini。",

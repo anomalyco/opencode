@@ -49,6 +49,7 @@ export class VoiceTransport {
   private disconnectTimer?: ReturnType<typeof setTimeout>
   private closeTimer?: ReturnType<typeof setTimeout>
   private levelTimer?: ReturnType<typeof setInterval>
+  private model = ""
 
   constructor(
     private readonly inputOptions: {
@@ -238,12 +239,13 @@ export class VoiceTransport {
     await this.context.resume()
     const offered = await this.inputOptions.voice.models({ signal: this.abort.signal })
 
-    if (
-      !offered.models.some(
-        (model) => model.model === "gpt-live-1" && model.available && model.transports.includes("webrtc"),
-      )
+    // The server lists models newest first.
+    const live = offered.models.find(
+      (model) => model.engine === "openai-live" && model.available && model.transports.includes("webrtc"),
     )
-      return this.dispatch({ type: "step.failed", step: "offer", reason: "unavailable" })
+
+    if (!live) return this.dispatch({ type: "step.failed", step: "offer", reason: "unavailable" })
+    this.model = live.model
 
     await this.peer.setLocalDescription(await this.peer.createOffer())
     this.dispatch({ type: "offer.ready", iceComplete: this.peer.iceGatheringState === "complete" })
@@ -252,9 +254,9 @@ export class VoiceTransport {
   private async negotiate(viewing: VoiceJoinTarget, tail: string) {
     const response = await this.inputOptions.voice.session(
       {
-        model: "gpt-live-1",
+        model: this.model,
         session: {
-          model: "gpt-live-1",
+          model: this.model,
           instructions: liveInstructions,
           audio: { output: { voice: "marin" } },
           delegation: {

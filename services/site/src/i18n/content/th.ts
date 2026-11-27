@@ -18,11 +18,6 @@ export const content = {
       action: "ติดตั้ง",
     },
     sdk: { name: "SDK", body: "ควบคุม OpenCode จากสคริปต์ งาน CI และเครื่องมือของคุณเอง", action: "อ่านเอกสาร" },
-    ide: {
-      name: "ส่วนขยาย IDE",
-      body: "เปิด OpenCode ใน VS Code, Cursor และ Windsurf หรือใน Zed และ JetBrains IDE ผ่าน ACP",
-      action: "ติดตั้ง",
-    },
     mini: {
       name: "Mini",
       body: "อินเทอร์เฟซเทอร์มินัลแบบมินิมอล คำตอบจะพิมพ์ลงใน scrollback ของคุณ โดยมีพรอมต์เดียวอยู่ด้านล่าง",
@@ -157,26 +152,6 @@ export const content = {
         },
       },
     },
-    ide: {
-      title: "OpenCode | การเชื่อมต่ออีดิเตอร์สำหรับ VS Code, Cursor และ Zed",
-      description:
-        "ใช้ OpenCode ในอีดิเตอร์ของคุณ ด้วยส่วนขยายสำหรับ VS Code, Cursor, Windsurf และ VSCodium และ opencode acp สำหรับ Zed, JetBrains IDE และอีดิเตอร์ ACP อื่นๆ",
-      intro:
-        "ใช้ OpenCode ในอีดิเตอร์ของคุณ ใน VS Code, Cursor, Windsurf และ VSCodium ให้รัน opencode ในเทอร์มินัลในตัว แล้วส่วนขยายจะติดตั้งเอง Zed, JetBrains IDE และอีดิเตอร์อื่นที่รองรับ Agent Client Protocol จะรัน OpenCode ด้วย opencode acp",
-      features: {
-        "quick-launch": { title: "เปิดด่วน", body: "Cmd+Esc หรือ Ctrl+Esc เปิด OpenCode ในเทอร์มินัลแบบแยกหน้าจอ" },
-        "new-session": { title: "เซสชันใหม่", body: "Cmd+Shift+Esc หรือ Ctrl+Shift+Esc เริ่มอีกเซสชัน" },
-        context: { title: "บริบท", body: "แชร์ส่วนที่เลือกหรือแท็บปัจจุบันกับ OpenCode" },
-        "file-references": { title: "อ้างอิงไฟล์", body: "Cmd+Option+K หรือ Alt+Ctrl+K แทรก @File#L37-42" },
-        "installs-itself": { title: "ติดตั้งเอง", body: "รัน opencode ในเทอร์มินัลในตัวเพื่อเพิ่มส่วนขยาย" },
-        "acp-editors": { title: "อีดิเตอร์ ACP", body: "Zed, JetBrains IDE, Avante.nvim และ CodeCompanion.nvim" },
-        "open-vsx": { title: "Open VSX", body: "มีบน Open VSX สำหรับ Cursor, Windsurf และ VSCodium ด้วย" },
-        "same-agent": {
-          title: "เอเจนต์เดียวกัน",
-          body: "OpenCode ตัวเดียวกับที่คุณใช้ในเทอร์มินัล อยู่ข้างโค้ดของคุณ",
-        },
-      },
-    },
     mini: {
       title: "OpenCode | Mini อินเทอร์เฟซเทอร์มินัลแบบมินิมอลสำหรับเอเจนต์",
       description:
@@ -209,9 +184,9 @@ export const content = {
       body: "ให้เอเจนต์ใช้เบราว์เซอร์จริงของคุณ",
       title: "OpenCode | Browse เบราว์เซอร์จริงของคุณสำหรับเอเจนต์เขียนโค้ด",
       description:
-        "Browse ให้ OpenCode และไคลเอนต์ MCP อื่นๆ ใช้เบราว์เซอร์จริงของคุณ เอเจนต์ควบคุมแท็บเบื้องหลังด้วย Playwright และส่งการล็อกอินกับ 2FA กลับให้คุณทำเอง",
+        "Browse ให้ OpenCode และไคลเอนต์ MCP อื่นๆ ใช้เบราว์เซอร์จริงของคุณ เอเจนต์อ่านหน้าเว็บ คลิก พิมพ์ ถ่ายภาพหน้าจอ บันทึกแท็บ และส่งการล็อกอินกับ 2FA กลับให้คุณทำเอง",
       intro:
-        "เซิร์ฟเวอร์ MCP และส่วนขยาย Chromium ที่ให้เอเจนต์ใช้เบราว์เซอร์จริงของคุณ ทั้งแท็บ การล็อกอิน และส่วนขยายของคุณ เอเจนต์เปิดและควบคุมแท็บด้วย Playwright ถ่ายภาพหน้าจอ และบันทึกหน้าจอ ในแท็บเบื้องหลังที่จัดกลุ่มไว้ไม่ให้เกะกะ เมื่อถึงตาคุณ เช่น การล็อกอิน การยืนยัน 2FA หรือการชำระเงิน เอเจนต์จะส่งแท็บกลับให้คุณ และทำงานต่อเมื่อคุณคลิก Continue",
+        "เซิร์ฟเวอร์ MCP และส่วนขยาย Chromium ที่ให้เอเจนต์ใช้เบราว์เซอร์จริงของคุณ ทั้งแท็บ การล็อกอิน และส่วนขยายของคุณ เอเจนต์เปิดแท็บเบื้องหลัง จัดกลุ่มไว้ไม่ให้เกะกะ และอ่านหน้าเว็บ คลิก พิมพ์ ถ่ายภาพหน้าจอ และบันทึกแท็บ เมื่อถึงตาคุณ เช่น การล็อกอิน การยืนยัน 2FA หรือการชำระเงิน เอเจนต์จะส่งแท็บกลับให้คุณ และทำงานต่อเมื่อคุณคลิก Continue",
       features: {
         "your-real-browser": {
           title: "เบราว์เซอร์จริงของคุณ",
@@ -222,7 +197,7 @@ export const content = {
         "lend-a-tab": { title: "ให้ยืมแท็บ", body: "คลิกปุ่มในแถบเครื่องมือเพื่อส่งแท็บที่เปิดอยู่ให้เอเจนต์" },
         "record-and-capture": {
           title: "บันทึกและจับภาพ",
-          body: "ภาพหน้าจอ การบันทึกหน้าจอ และทราฟฟิกเครือข่ายเป็นไฟล์ HAR",
+          body: "ภาพหน้าจอ การบันทึกแท็บ และทราฟฟิกเครือข่าย",
         },
         "any-mcp-client": {
           title: "ไคลเอนต์ MCP ใดก็ได้",
@@ -232,7 +207,7 @@ export const content = {
           title: "ใช้การล็อกอินทั้งหมดของคุณ",
           body: "เอเจนต์ใช้เว็บไซต์ที่คุณล็อกอินไว้แล้ว ไม่ต้องใช้คีย์ ไม่ต้องตั้งค่า",
         },
-        allowlists: { title: "รายการที่อนุญาต", body: "จำกัดแท็บของเซสชันไว้เฉพาะเว็บไซต์ที่คุณระบุ" },
+        "allowed-sites": { title: "เว็บไซต์ที่อนุญาต", body: "เก็บแท็บของเอเจนต์ไว้บนเว็บไซต์ที่คุณระบุ" },
       },
       install:
         "ติดตั้ง[ส่วนขยาย Chrome]ก่อน แล้วส่วนขยายจะพาคุณทำขั้นตอนที่เหลือ หากต้องการติดตั้ง CLI โดยตรง (ปกติไม่จำเป็น) ให้ใช้คำสั่งใดคำสั่งหนึ่งต่อไปนี้",
@@ -313,7 +288,7 @@ export const content = {
     },
     colors: {
       title: "สี",
-      body: "โลโก้และตัวอักษรแบรนด์ใช้หมึกสีเดียวที่ความทึบสามระดับ และใช้หมึกที่สว่างกว่าบนพื้นหลังมืด ค่าด้านล่างคือหมึกนั้นบนพื้นขาวหรือ #0B0B0B ตามที่ไฟล์มาตรฐานแสดง คลิกค่าเพื่อคัดลอก",
+      body: "โลโก้และตัวอักษรแบรนด์ใช้หมึกสีเดียวที่ความทึบสามระดับ และใช้หมึกที่สว่างกว่าบนพื้นหลังมืด ค่าด้านล่างคือสีในไฟล์มาตรฐาน ใช้สีเหล่านี้กับโลโก้และตัวอักษรแบรนด์เท่านั้น ห้ามใช้กับข้อความหรือพื้นหลังอื่น คลิกค่าเพื่อคัดลอก",
       palettes: {
         light: {
           name: "สว่าง",
@@ -398,7 +373,7 @@ export const content = {
       badges: {
         body: "ใส่ป้ายใน README เอกสาร หรือเว็บไซต์ของคุณ และลิงก์ไปที่ opencode.ai เลือกไฟล์แบบสว่างหรือมืดตามพื้นหลัง (HTML จะสลับให้เอง) และอย่าเปลี่ยนสีหรือข้อความ",
         sizes: "ทุกสไตล์มีขนาด 20, 32 และ 44px (Shields มีเฉพาะ 20px) ทั้งแบบ SVG และ PNG ขนาด 2×",
-        mono: "แต่ละไฟล์มีแบบข้อความ OpenTUI Mono ด้วย เพิ่ม -mono ก่อนนามสกุลไฟล์ เช่น opencode-works-with-a-light-20-mono.svg หรือ -mono-caps สำหรับ OpenTUI Mono ตัวพิมพ์ใหญ่",
+        mono: "แต่ละไฟล์มีแบบข้อความ OpenMono ด้วย เพิ่ม -mono ก่อนนามสกุลไฟล์ เช่น opencode-works-with-a-light-20-mono.svg หรือ -mono-caps สำหรับ OpenMono ตัวพิมพ์ใหญ่",
         groups: {
           "works-with": {
             title: "Works with",
@@ -670,14 +645,6 @@ export const content = {
   productDownloads: {
     terminal: { commands: { curl: { name: "สคริปต์" } } },
     sdk: { more: { label: "อ่านเอกสาร SDK" } },
-    ide: {
-      lead: "รัน opencode ในเทอร์มินัลในตัวของอีดิเตอร์ แล้วส่วนขยายจะติดตั้งเอง หรือติดตั้งด้วยตัวเองก็ได้",
-      links: {
-        "vs-code-marketplace": { label: "VS Code Marketplace" },
-        "open-vsx-cursor-windsurf-vscodium": { label: "Open VSX (Cursor, Windsurf, VSCodium)" },
-      },
-      more: { label: "ตั้งค่า Zed, JetBrains IDE และอีดิเตอร์ ACP อื่นๆ" },
-    },
     mini: {
       commands: { curl: { name: "สคริปต์" } },
       lead: "Mini มาพร้อมกับ OpenCode CLI ติดตั้งด้วยวิธีใดก็ได้ด้านล่าง แล้วรัน opencode mini",

@@ -4,21 +4,21 @@
   "id": "vesper",
   "light": {
     "palette": {
-      "neutral": "#F0F0F0",
+      "neutral": "#f5f4f2",
       "ink": "#101010",
-      "primary": "#FFC799",
-      "accent": "#B30000",
-      "success": "#99FFE4",
-      "warning": "#FFC799",
-      "error": "#FF8080",
-      "info": "#FFC799",
-      "diffAdd": "#99FFE4",
-      "diffDelete": "#FF8080"
+      "primary": "#9c5319",
+      "accent": "#b32424",
+      "success": "#117e69",
+      "warning": "#a65a17",
+      "error": "#c23030",
+      "info": "#256d85",
+      "diffAdd": "#117e69",
+      "diffDelete": "#c23030"
     },
     "overrides": {
       "syntax-comment": "#7a7a7a",
       "syntax-keyword": "#6e6e6e",
-      "syntax-string": "#117e69",
+      "syntax-string": "#107d69",
       "syntax-primitive": "#8d541c",
       "syntax-property": "#101010",
       "syntax-type": "#8d541c",
@@ -28,7 +28,7 @@
   "dark": {
     "palette": {
       "neutral": "#101010",
-      "ink": "#FFF",
+      "ink": "#ffffff",
       "primary": "#FFC799",
       "accent": "#FF8080",
       "success": "#99FFE4",

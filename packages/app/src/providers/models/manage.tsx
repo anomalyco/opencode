@@ -32,9 +32,6 @@ export const DialogManageModels: Component = () => {
 
   const providerList = (providerID: string) => local.model.list().filter((x) => x.provider.id === providerID)
 
-  const providerVisible = (providerID: string) =>
-    providerList(providerID).every((x) => local.model.visible({ modelID: x.id, providerID: x.provider.id }))
-
   const setProviderVisibility = (providerID: string, checked: boolean) => {
     providerList(providerID).forEach((x) => {
       local.model.setVisibility({ modelID: x.id, providerID: x.provider.id }, checked)
@@ -105,7 +102,7 @@ export const DialogManageModels: Component = () => {
           title={language.t("dialog.model.manage")}
           description={language.t("dialog.model.manage.description")}
         />
-        <Button variant="neutral" size="small" icon="plus" onClick={handleConnectProvider}>
+        <Button variant="neutral" size="small" icon="plus" class="-me-0.5" onClick={handleConnectProvider}>
           {language.t("command.provider.connect")}
         </Button>
       </DialogHeader>
@@ -114,7 +111,7 @@ export const DialogManageModels: Component = () => {
           <TextInput
             type="search"
             appearance="base"
-            class="!w-full self-stretch"
+            class="!h-8 !w-full self-stretch"
             leadingIcon={<Icon name="magnifying-glass" />}
             value={list.filter()}
             onInput={(event) => list.onInput(event.currentTarget.value)}
@@ -126,7 +123,7 @@ export const DialogManageModels: Component = () => {
             autofocus
             aria-label={language.t("dialog.model.search.placeholder")}
             showClearButton={!!list.filter()}
-            clearIcon="circle-xmark"
+            clearIcon="close"
             clearLabel={language.t("common.clear")}
             onClearClick={() => list.clear()}
           />
@@ -160,16 +157,7 @@ export const DialogManageModels: Component = () => {
                   disabled={searching()}
                   onExpandedChange={(key, value) => setStore("collapsed", key, !value)}
                   onSetVisibility={setProviderVisibility}
-                  action={(group) => (
-                    <Switch
-                      class="me-6"
-                      checked={providerVisible(group.category)}
-                      onChange={(checked) => setProviderVisibility(group.category, checked)}
-                      hideLabel
-                    >
-                      {group.items[0].provider.name}
-                    </Switch>
-                  )}
+                  cards
                   rows={(items) => <ModelRows items={items} />}
                 />
               </Show>

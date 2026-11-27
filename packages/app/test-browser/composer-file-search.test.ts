@@ -88,9 +88,37 @@ test("closing @ aborts its session search, and reopening on the same word waits 
   }
 })
 
+test("moving the @ highlight reuses the current query results", async () => {
+  const searches: string[] = []
+
+  const value = setup(
+    { se: ["src/server.ts", "src/session.ts"] },
+    {
+      searchSessions: (query) => {
+        searches.push(query)
+
+        return []
+      },
+    },
+  )
+
+  try {
+    await value.type("@se")
+    searches.length = 0
+    value.editor.onKeyDown(new KeyboardEvent("keydown", { key: "ArrowDown" }))
+    expect(activeID(value)).toBe("file:src/session.ts")
+    expect(searches).toEqual([])
+  } finally {
+    value.dispose()
+  }
+})
+
 function setup(
   results: Record<string, string[]>,
-  options?: { requestSessionSearch?: (word: string, signal: AbortSignal) => Promise<void> },
+  options?: {
+    searchSessions?: (query: string) => ComposerSuggestion[]
+    requestSessionSearch?: (word: string, signal: AbortSignal) => Promise<void>
+  },
 ) {
   jest.useFakeTimers()
 
@@ -112,7 +140,7 @@ function setup(
 
         return paths.map(file)
       },
-      searchSessions: () => [],
+      searchSessions: options?.searchSessions,
       requestSessionSearch: options?.requestSessionSearch,
       view: { submit: { stopping: () => false, onSubmit() {}, onStop() {} } },
     })

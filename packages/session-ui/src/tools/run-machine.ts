@@ -116,25 +116,40 @@ function sameShellRun(a: ShellRunState, b: ShellRunState) {
   return a.shellID === b.shellID && a.streamed === b.streamed
 }
 
+/**
+ * A shell call the user stopped fails with its output followed by a notice, which its metadata names. Its output shows
+ * like a finished call's and only the notice as the error. A plugin that rewrote the error gets it shown as is.
+ */
+export function stoppedShell(tool: {
+  readonly tool: string
+  readonly status?: string
+  readonly metadata: { readonly interrupted?: boolean; readonly notice?: string }
+  readonly error?: string
+}) {
+  if (tool.tool !== "shell" || tool.status !== "error" || tool.metadata.interrupted !== true) return undefined
+
+  const notice = tool.metadata.notice
+
+  if (!notice || !tool.error?.endsWith(notice)) return undefined
+
+  return { output: tool.error.slice(0, -notice.length).replace(/\n+$/, ""), notice }
+}
+
 /** A subagent call as the renderer decoded it. */
 type SubagentTool = {
   readonly status: string | undefined
-  readonly metadata: { readonly status?: string; readonly background?: boolean }
+  readonly metadata: { readonly status?: string }
 }
 
 export type SubagentRunProps = {
   readonly status: string | undefined
-  readonly background: boolean
-  /** The child session is busy, which outlives the call when the subagent runs in the background. */
+  /** The child session is busy, which outlives the call because every subagent runs in the background. */
   readonly childBusy: boolean
 }
 
 export function subagentRunProps(tool: SubagentTool, childBusy: boolean): SubagentRunProps {
   return {
     status: tool.status,
-    // A completed call whose result reports `running` handed the subagent off to the background.
-    background:
-      tool.metadata.background === true || (tool.status === "completed" && tool.metadata.status === "running"),
     childBusy,
   }
 }
@@ -142,7 +157,7 @@ export function subagentRunProps(tool: SubagentTool, childBusy: boolean): Subage
 /** The model is writing the delegation, or the subagent runs, finished or failed. */
 export type SubagentRunState =
   | { readonly status: "delegating" }
-  | { readonly status: "running" | "completed" | "error"; readonly background: boolean }
+  | { readonly status: "running" | "completed" | "error" }
 
 export type SubagentRunEvent = { readonly type: "sync"; readonly props: SubagentRunProps }
 
@@ -156,9 +171,9 @@ export function transitionSubagentRun(state: SubagentRunState, event: SubagentRu
   const status =
     props.status === "running" || props.childBusy ? "running" : props.status === "error" ? "error" : "completed"
 
-  if (state.status === status && state.background === props.background) return state
+  if (state.status === status) return state
 
-  return { status, background: props.background }
+  return { status }
 }
 
 export function viewSubagentRun(state: SubagentRunState) {
@@ -166,6 +181,5 @@ export function viewSubagentRun(state: SubagentRunState) {
     delegating: state.status === "delegating",
     running: state.status === "delegating" || state.status === "running",
     basicStatus: state.status === "delegating" ? "streaming" : state.status,
-    background: state.status !== "delegating" && state.background,
   }
 }

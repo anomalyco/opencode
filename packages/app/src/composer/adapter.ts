@@ -96,7 +96,11 @@ export type ComposerSession = {
     location: { command: Pick<Data["location"]["command"], "list"> }
     session: {
       prompt: (input: Parameters<Data["session"]["prompt"]>[0]) => ReturnType<Data["session"]["prompt"]>
+      // Runs a request in the session's send chain, after the sends made before it have settled.
+      sequence: Data["session"]["sequence"]
       setStatus: Data["session"]["setStatus"]
+      // Records an accepted user send so the desktop list promotes the session immediately.
+      acceptSend: (sessionID: string) => void
     }
   }
   current: Accessor<

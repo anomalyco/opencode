@@ -15,6 +15,7 @@ import {
 import { ProviderID } from "./ids.js"
 import { Media } from "../media.js"
 import { Json } from "../utils/json.js"
+import type { ToolChangesInput } from "../tool.js"
 
 export const MessageRole = Schema.Literals(["system", "user", "assistant", "tool"])
 export type MessageRole = Schema.Schema.Type<typeof MessageRole>
@@ -237,10 +238,18 @@ export const ContentPart = Schema.Union([
 ]).pipe(Schema.toTaggedUnion("type"))
 export type ContentPart = Schema.Schema.Type<typeof ContentPart>
 
+/** Tools changed here: `add` appends or redefines tools by name, `remove` drops them by name. */
+export const ToolChanges = Schema.Struct({
+  add: Schema.Array(Schema.suspend((): Schema.Codec<ToolEntry> => ToolEntry)),
+  remove: Schema.Array(Schema.String),
+}).annotate({ identifier: "LLM.ToolChanges" })
+export type ToolChanges = Schema.Schema.Type<typeof ToolChanges>
+
 export class SystemMessage extends Schema.Class<SystemMessage>("LLM.SystemMessage")({
   id: Schema.optional(Schema.String),
   role: Schema.Literal("system"),
   content: Schema.Array(Schema.Union([TextPart, EffortPart]).pipe(Schema.toTaggedUnion("type"))),
+  tools: Schema.optional(ToolChanges),
 }) {}
 
 export class UserMessage extends Schema.Class<UserMessage>("LLM.UserMessage")({
@@ -283,9 +292,9 @@ export namespace Message {
   >
   type RoleInput<Props, Content> = Omit<Props, "content"> & { readonly content: Content }
   export type SystemInput = RoleInput<
-    ConstructorParameters<typeof SystemMessage>[0],
+    Omit<ConstructorParameters<typeof SystemMessage>[0], "tools">,
     ContentInput<SystemMessage["content"][number]>
-  >
+  > & { readonly tools?: ToolChangesInput }
   export type UserInput = RoleInput<ConstructorParameters<typeof UserMessage>[0], UserContentInput>
   export type AssistantInput = RoleInput<ConstructorParameters<typeof AssistantMessage>[0], AssistantContentInput>
   export type ToolInput = RoleInput<
@@ -324,8 +333,15 @@ function make(input: ToolMessage | Message.ToolInput): ToolMessage
 function make(input: Message | Message.Input): Message
 function make(input: Message | Message.Input): Message {
   switch (input.role) {
-    case "system":
-      return input instanceof SystemMessage ? input : new SystemMessage({ ...input, content: content(input.content) })
+    case "system": {
+      if (input instanceof SystemMessage) return input
+      const { tools, ...rest } = input
+      return new SystemMessage({
+        ...rest,
+        content: content(input.content),
+        ...(tools === undefined ? {} : { tools: toolChanges(tools) }),
+      })
+    }
     case "user":
       return input instanceof UserMessage
         ? input
@@ -361,20 +377,28 @@ export const Message = withStatics(messageSchema, {
   system: (input: Message.SystemContentInput) => make({ role: "system", content: input }),
   effort: (input: { readonly effort?: ReasoningEffort; readonly previous?: ReasoningEffort }) =>
     make({ role: "system", content: [{ type: "effort", effort: input.effort, previous: input.previous }] }),
+  /**
+   * Change the available tools at this point. A route sends the change in place when the model's `tools.updates`
+   * allows it, and otherwise folds it into the top-level `tools`. Returns message input that keeps the tool objects,
+   * so `ai.loop` can run an executable tool added here.
+   */
+  tools: (input: ToolChangesInput) => ({ role: "system" as const, content: [], tools: input }),
   tool: (result: ToolResultPart | Parameters<typeof ToolResultPart.make>[0]) =>
     make({ role: "tool", content: ["type" in result ? result : ToolResultPart.make(result)] }),
 })
 
+const toolChanges = (input: ToolChangesInput): ToolChanges => ({
+  add: (input.add ?? []).map((item) => ("_definition" in item ? item._definition : ToolEntry.make(item))),
+  remove: (input.remove ?? []).map((item) => (typeof item === "string" ? item : item.name)),
+})
+
 /**
- * Raw-text wire encoding for a tool with exactly one required string parameter. Models that accept the format
- * write that parameter's value directly instead of JSON arguments; calls still decode to the normal object input.
+ * Raw-text wire encoding for a tool with exactly one required string parameter, or the one its `field` names among
+ * others. Models that accept the format write that parameter's value directly instead of JSON arguments, after a
+ * first line holding the others; calls still decode to the normal object input.
  */
-export const Freeform = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("text") }),
-  Schema.Struct({ type: Schema.Literal("regex"), pattern: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("lark"), grammar: Schema.String }),
-]).annotate({ identifier: "LLM.Freeform" })
-export type Freeform = Schema.Schema.Type<typeof Freeform>
+export const Freeform = Tool.Freeform
+export type Freeform = Tool.Freeform
 
 const toolDefinitionFields = {
   name: Schema.String,
@@ -403,12 +427,15 @@ export namespace ToolDefinition {
   /** Normalize tool definition input into the canonical `ToolDefinition` class. */
   export const make = (input: Input) => (input instanceof ToolDefinition ? input : new ToolDefinition(input))
 
-  /** The parameter a freeform call fills: the input schema's only property, when it is a required string. */
-  export const freeformField = (schema: JsonSchema) => {
+  /**
+   * The parameter a freeform call fills, when it is a required string: the one the format's `field` names, otherwise
+   * the input schema's only property.
+   */
+  export const freeformField = (schema: JsonSchema, freeform?: Freeform) => {
     const properties = Object.entries(Schema.is(JsonSchema)(schema.properties) ? schema.properties : {})
-    if (properties.length !== 1) return undefined
-    const [name, property] = properties[0]
-    if (!Schema.is(JsonSchema)(property) || property.type !== "string") return undefined
+    if (freeform?.field === undefined && properties.length !== 1) return undefined
+    const [name, property] = properties.find(([name]) => (freeform?.field ?? name) === name) ?? []
+    if (name === undefined || !Schema.is(JsonSchema)(property) || property.type !== "string") return undefined
     return Array.isArray(schema.required) && schema.required.includes(name) ? name : undefined
   }
 }

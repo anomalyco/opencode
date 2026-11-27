@@ -1,7 +1,7 @@
 import { describe, expect, setDefaultTimeout } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Deferred, Duration, Effect, Fiber, Layer, LayerMap, Schedule } from "effect"
+import { Deferred, Duration, Effect, Fiber, Layer, Schedule } from "effect"
 import { TestClock } from "effect/testing"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Event } from "@opencode/schema/config"
@@ -54,6 +54,8 @@ const npmLayer = Layer.succeed(
       }),
     check: () => Effect.succeed(false),
     update: (name) => Effect.succeed({ directory: npm.directory, name }),
+    follows: () => Effect.succeed(false),
+    reject: () => Effect.succeed(false),
     which: () => Effect.undefined,
   }),
 )
@@ -62,7 +64,7 @@ const instances = Layer.effect(
   LocationServiceMap.Service,
   Effect.gen(function* () {
     const watcher = yield* Watcher.Test
-    const map = yield* LayerMap.make((ref: Location.Ref) => Instance.layer(ref, { replacements: bindings }), {
+    const map = yield* LocationServiceMap.make((ref: Location.Ref) => Instance.layer(ref, { replacements: bindings }), {
       idleTimeToLive: Duration.infinity,
     })
     const bindings: LayerNode.Replacements = [

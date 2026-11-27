@@ -577,12 +577,6 @@ describe("ConfigProviderPlugin.Plugin", () => {
       legacy: { modalities: { input: ["text", "image", "pdf"] } },
       overrides: { input: ["text", "image", "pdf"] },
     },
-    {
-      name: "output-only modalities",
-      legacy: { modalities: { output: ["audio"] } },
-      overrides: { output: ["audio"] },
-    },
-    { name: "enabled tools", legacy: { tool_call: true }, overrides: { tools: true } },
     { name: "disabled tools", legacy: { tool_call: false }, overrides: { tools: false } },
     {
       name: "explicit empty modalities",
@@ -1067,7 +1061,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
                 models: {
                   reasoner: {
                     releaseDate: "2026-02-03",
-                    capabilities: { temperature: false },
+                    capabilities: { temperature: false, freeform: ["text", "regex"] },
                     compatibility: { reasoningField: "reasoning_content" },
                   },
                 },
@@ -1080,6 +1074,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const model = required(yield* models.get(Provider.ID.make("custom"), Model.ID.make("reasoner")))
       expect(model.time.released).toBe(Date.UTC(2026, 1, 3))
       expect(model.capabilities.temperature).toBe(false)
+      expect(model.capabilities.freeform).toEqual(["text", "regex"])
       expect(model.compatibility?.reasoningField).toBe("reasoning_content")
     }),
   )

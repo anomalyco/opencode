@@ -183,7 +183,7 @@ function drawBoot(ctx: CanvasRenderingContext2D, width: number, height: number, 
   const lead = size * 1.45
   const left = width * 0.06
   let y = height * 0.06 + size
-  ctx.font = `${size}px "OpenTUI Mono", "OpenTUI Mono Menlo", ui-monospace, monospace`
+  ctx.font = `${size}px "OpenMono", "OpenMono Menlo", ui-monospace, monospace`
   ctx.textBaseline = "alphabetic"
   ctx.shadowColor = glowColor
   ctx.shadowBlur = size * 0.6

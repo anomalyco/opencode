@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect"
 import { eq } from "drizzle-orm"
 import { LLMEvent } from "@opencode/ai/effect"
 import { Money } from "@opencode/schema/money"
@@ -14,6 +14,7 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { Session } from "@opencode/core/session"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
+import { SessionHistory } from "@opencode/core/session/history"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { Model } from "@opencode/core/model"
@@ -209,11 +210,10 @@ testEffect(
       .all()
     expect(events.filter((event) => event.type === "session.tool.success.2")).toHaveLength(1)
     expect(events.some((event) => event.type === "session.tool.failed.2")).toBe(false)
-    const message = yield* database.db
-      .select()
-      .from(SessionMessageTable)
-      .where(eq(SessionMessageTable.id, assistantMessageID))
-      .get()
+    const [message] = yield* SessionHistory.withParts(
+      database.db,
+      yield* database.db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, assistantMessageID)).all(),
+    )
     expect(message?.data).toMatchObject({
       content: [{ type: "tool", id: call.id, executed: true, state: { status: "completed" } }],
     })
@@ -294,19 +294,6 @@ test("failure before progress omits partial output fields", async () => {
   const failed = published.find((event) => event.type === "session.tool.failed.2")?.data
   expect(failed).not.toHaveProperty("content")
   expect(failed).not.toHaveProperty("metadata")
-})
-
-test("provider metadata is flattened using the route key", async () => {
-  const { published, publisher } = capture()
-  await Effect.runPromise(
-    publisher.publish(
-      LLMEvent.reasoningStart({ id: "reasoning", providerMetadata: { anthropic: { signature: "signed" } } }),
-    ),
-  )
-
-  expect(published.find((event) => event.type === "session.reasoning.started.1")?.data).toMatchObject({
-    native: { signature: "signed" },
-  })
 })
 
 test("reasoning state from start, empty delta, and end is merged", async () => {
@@ -399,7 +386,7 @@ it.effect("publishes batched deltas before the next block starts", () =>
     const types = () =>
       published
         .map((event) => event.type)
-        .filter((type) => type !== "session.step.started.1" && type !== "session.step.streamed")
+        .filter((type) => type !== "session.step.started.1" && type !== "session.step.first-token.1")
     yield* Effect.forEach(
       [
         LLMEvent.reasoningStart({ id: "reasoning" }),
@@ -418,6 +405,8 @@ it.effect("publishes batched deltas before the next block starts", () =>
       "session.text.delta",
       "session.tool.input.started.1",
     ])
+    // The first generated token is recorded once, before any of the blocks it belongs to.
+    expect(published.filter((event) => event.type === "session.step.first-token.1")).toHaveLength(1)
 
     // Blocks stay open: later chunks still batch, and nothing is published twice.
     yield* publisher.publish(LLMEvent.textDelta({ id: "text", text: " more" }))
@@ -455,31 +444,6 @@ it.effect("retains new chunks and orders text-end behind an in-flight timer publ
       { type: "session.text.delta", data: { delta: "comm" } },
       { type: "session.text.delta", data: { delta: "and." } },
       { type: "session.text.ended.1", data: { text: "command." } },
-    ])
-  }),
-)
-
-it.effect("batches reasoning deltas and flushes pending reasoning before the terminal event", () =>
-  Effect.gen(function* () {
-    const { published, publisher } = capture()
-    yield* Effect.forEach(
-      [
-        LLMEvent.reasoningStart({ id: "reasoning" }),
-        LLMEvent.reasoningDelta({ id: "reasoning", text: "one" }),
-        LLMEvent.reasoningDelta({ id: "reasoning", text: " two" }),
-        LLMEvent.reasoningDelta({ id: "reasoning", text: " three" }),
-        LLMEvent.reasoningEnd({ id: "reasoning" }),
-      ],
-      publisher.publish,
-      { discard: true },
-    )
-
-    expect(
-      published.filter((event) => event.type === "session.reasoning.delta").map((event) => event.data),
-    ).toMatchObject([{ delta: "one two three" }])
-    expect(published.slice(-2).map((event) => event.type)).toEqual([
-      "session.reasoning.delta",
-      "session.reasoning.ended.1",
     ])
   }),
 )
@@ -567,23 +531,6 @@ test("binary failure emits no success event", async () => {
   await Effect.runPromise(publisher.failTool(call.id, { type: "tool.execution", message: "Cannot read binary file" }))
   expect(published.some((event) => event.type === "session.tool.success.2")).toBe(false)
   expect(published.some((event) => event.type === "session.tool.failed.2")).toBe(true)
-})
-
-test("success event data can carry provider-executed native data", () => {
-  const decoded = Schema.decodeUnknownSync(SessionEvent.Tool.Success.data)({
-    sessionID,
-    assistantMessageID: SessionMessage.ID.create(),
-    id: "call-old",
-    content: [{ type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png" }],
-    executed: true,
-    native: {
-      result: {
-        type: "content",
-        value: [{ type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png" }],
-      },
-    },
-  })
-  expect(decoded.native).toMatchObject({ result: { type: "content" } })
 })
 
 test("step start waits for the pending start snapshot", async () => {

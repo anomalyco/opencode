@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Mints a short-lived Cloudflare token for the current release job from the token issuer
+# Mints a short-lived Cloudflare token for the current job from the token issuer
 # (anomalyco/secrets). Run after aws-actions/configure-aws-credentials has assumed
-# arn:aws:iam::604439173067:role/github/opencode-release: the Lambda identifies the role from the
-# SigV4 signature and mints only the `opencode/release` token. No repo, stage, permission or TTL
-# is sent in the request, and the token is pinned to the runner's IP for 30 minutes.
+# arn:aws:iam::604439173067:role/github/opencode-<stage> (release, dev or production): the Lambda
+# identifies the role from the SigV4 signature and mints only that stage's token. No repo, stage,
+# permission or TTL is sent in the request, and the token is pinned to the runner's IP.
 #
 # Step-scoped by default: the token goes to $GITHUB_OUTPUT and only steps that list
 # `CLOUDFLARE_API_TOKEN: ${{ steps.<id>.outputs.token }}` in their env receive it.
@@ -12,6 +12,10 @@ set +x
 
 url=${CLOUDFLARE_TOKEN_URL:-https://kjivkui2evldapbok5fhrrl6oy0fctkp.lambda-url.us-east-1.on.aws/}
 account=${CLOUDFLARE_ACCOUNT_ID:-15d29c8639fd3733b1b5486a2acfd968}
+if [[ $# == 1 ]]; then
+  . "$(dirname "$0")/lib.sh"
+  account=$(stage_account "$1")
+fi
 
 # One argv value, never a line in curl's config: a newline in an override must not be able to
 # inject curl options or move the AWS credentials into Basic auth.

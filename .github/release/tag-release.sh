@@ -5,6 +5,16 @@
 . "$(dirname "$0")/lib.sh"
 
 tag="v$OPENCODE_VERSION"
+if ! dry_run; then
+  umask 077
+  ssh_dir=$(mktemp -d)
+  trap 'rm -rf "$ssh_dir"' EXIT
+  printf '%s\n' "$RELEASE_TAG_KEY" > "$ssh_dir/key"
+  unset RELEASE_TAG_KEY
+  echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$ssh_dir/known_hosts"
+  export GIT_SSH_COMMAND="ssh -i $ssh_dir/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$ssh_dir/known_hosts"
+  git remote set-url origin git@github.com:anomalyco/opencode.git
+fi
 # @opencode/pty is versioned separately, by process-daemon-v<version> tags.
 git ls-files -z -- '*package.json' bun.lock ':!packages/process-daemon/**' | xargs -0 sed -i -E "s/\"version\": \"[^\"]+\"/\"version\": \"$OPENCODE_VERSION\"/g"
 
@@ -37,5 +47,5 @@ if [ -n "$existing" ]; then
   echo "sha=$existing" >> "$GITHUB_OUTPUT"
   exit 0
 fi
-git push -q origin "HEAD:refs/tags/$tag"
+if ! dry_run; then git push -q origin "HEAD:refs/tags/$tag"; fi
 echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"

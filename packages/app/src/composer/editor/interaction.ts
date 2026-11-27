@@ -59,6 +59,7 @@ export type ComposerEditorView = {
   }
   agent?: ComposerSelectControl
   variant?: ComposerSelectControl
+  speed?: ComposerSelectControl
   submit: {
     available?: Accessor<boolean>
     stopping: Accessor<boolean>
@@ -70,11 +71,10 @@ export type ComposerEditorView = {
     canSubmit?: Accessor<boolean>
     working?: Accessor<boolean>
     queue?: ComposerQueue
-    quote?: {
-      available: Accessor<boolean>
-      delivery: Accessor<ComposerDelivery | undefined>
-      onSubmit: (key: string, comment: string) => Promise<boolean>
-    }
+    /** The quote comment editor's Mod+Enter send, which takes the composer's Mod+Enter delivery. */
+    quote?: ComposerCommentSend
+    /** A plugin comment editor's send, which takes the follow-up behavior the composer's Enter uses. */
+    comment?: ComposerCommentSend
     onSubmit: (options?: { alternate?: boolean; first?: boolean }) => void
     onStop: () => void
   }
@@ -82,6 +82,13 @@ export type ComposerEditorView = {
     onOpen: () => void
     onClose: () => void
   }
+}
+
+/** Sends one attached part on its own; `delivery` is undefined while the session is idle. */
+export type ComposerCommentSend = {
+  available: Accessor<boolean>
+  delivery: Accessor<ComposerDelivery | undefined>
+  onSubmit: (key: string, comment: string) => Promise<boolean>
 }
 
 const DRAFT_EDITED: ComposerInteractionEvent = Object.freeze({ type: "draft.edited" })
@@ -115,24 +122,25 @@ export function createComposerEditor(input: {
   let editor: HTMLElement | undefined
   let fileInput: HTMLInputElement | undefined
   let focusFrame: number | undefined
-  let focusCursor: number | undefined
+  let focusRequest: { cursor: number } | undefined
 
   const cancelFocus = () => {
     if (focusFrame === undefined) return
     cancelAnimationFrame(focusFrame)
     focusFrame = undefined
-    focusCursor = undefined
+    focusRequest = undefined
   }
 
   const flushFocus = () => {
-    const cursor = focusCursor
+    const request = focusRequest
 
-    if (cursor === undefined) return
+    if (!request) return
     cancelFocus()
 
     if (!editor) return
+
     editor.focus()
-    setCursorPosition(editor, cursor)
+    setCursorPosition(editor, request.cursor)
   }
 
   onCleanup(cancelFocus)
@@ -287,9 +295,12 @@ export function createComposerEditor(input: {
   })
   onCleanup(() => dispatchMentionSearch({ type: "disposed" }))
 
+  const contextOpen = createMemo(() => state.popover.type === "context")
+  const fileRows = createMemo(() => selectMentionFiles(mentionSearch()))
+
   const contextList = useFilteredList<ComposerSuggestion>({
     items: (query) => {
-      if (state.popover.type !== "context") return []
+      if (!contextOpen()) return []
 
       const sessions = input.searchSessions?.(query) ?? []
 
@@ -301,12 +312,7 @@ export function createComposerEditor(input: {
 
       const seen = new Set(recent.map((item) => item.id))
 
-      return [
-        ...fixed,
-        ...sessions,
-        ...recent,
-        ...selectMentionFiles(mentionSearch()).filter((item) => !seen.has(item.id)),
-      ]
+      return [...fixed, ...sessions, ...recent, ...fileRows().filter((item) => !seen.has(item.id))]
     },
     key: (item) => item.id,
     filterKeys: ["label"],
@@ -476,19 +482,6 @@ export function createComposerEditor(input: {
 
     flushFocus()
 
-    if (
-      mode() === "normal" &&
-      (event.metaKey || event.ctrlKey) &&
-      !event.altKey &&
-      !event.shiftKey &&
-      event.key.toLowerCase() === "u"
-    ) {
-      event.preventDefault()
-      attach()
-
-      return true
-    }
-
     const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
     const open = isComposerPopoverOpen(readState())
 
@@ -539,18 +532,6 @@ export function createComposerEditor(input: {
       return true
     }
 
-    const stop =
-      (input.view.submit.working?.() || input.view.submit.held?.()) &&
-      ((event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "g") ||
-        event.key === "Escape")
-
-    if (stop) {
-      event.preventDefault()
-      input.view.submit.onStop()
-
-      return true
-    }
-
     if (
       !event.altKey &&
       !event.ctrlKey &&
@@ -587,7 +568,7 @@ export function createComposerEditor(input: {
 
   const restoreFocus = (cursor = draft.state.cursor ?? promptLength(draft.state.prompt)) => {
     cancelFocus()
-    focusCursor = cursor
+    focusRequest = { cursor }
     focusFrame = requestAnimationFrame(flushFocus)
   }
 
@@ -726,6 +707,9 @@ export function createComposerEditor(input: {
     setEditor(element: HTMLElement) {
       editor = element
       input.onEditor?.(element)
+    },
+    restoreCaret() {
+      if (editor) setCursorPosition(editor, draft.state.cursor ?? promptLength(draft.state.prompt))
     },
     restoreFocus,
     onInput(value: string, prompt?: ComposerPersistedState["prompt"], cursor?: number) {

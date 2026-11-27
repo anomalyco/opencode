@@ -1,14 +1,36 @@
 import { expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import type { IpcClient } from "@opencode/plugin/gui"
+import { Schema } from "effect"
 import { openBinding } from "./connection"
-import type { BrowserPane, PaneEvent } from "./ipc"
+import { BrowserPane, PluginTabHandle, type PaneEvent } from "./ipc"
 
 type Client = IpcClient<(typeof BrowserPane)["spec"]>
 
 const tabID = Browser.TabID.make("tab_aaaaaaaa-1111-1111-1111-111111111111")
 
 const element = Browser.Ref.make("e4")
+
+test("viewport IPC accepts Auto or two bounded whole CSS dimensions", () => {
+  const accepts = Schema.is(BrowserPane.spec.methods.setViewport.input)
+
+  const message = { binding: "desktop", tabID }
+  expect(accepts({ ...message, viewport: { mode: "auto" } })).toBe(true)
+  const viewport = { mode: "fixed", width: 1, height: 4096, preset: "laptop", scale: 2 } as const
+
+  const command = Schema.decodeUnknownSync(BrowserPane.spec.methods.setViewport.input)({ ...message, viewport })
+  expect(command.viewport).toEqual(viewport)
+  expect(
+    Schema.decodeUnknownSync(BrowserPane.spec.events.event)({
+      binding: message.binding,
+      event: { type: "page", tabID, zoom: 1, viewport: command.viewport },
+    }).event,
+  ).toMatchObject({ viewport })
+
+  for (const invalid of [{ height: undefined }, { width: 1.5 }, { width: 0 }, { height: 4097 }, { scale: 3 }]) {
+    expect(accepts({ ...message, viewport: { ...viewport, ...invalid } })).toBe(false)
+  }
+})
 
 // The client stands in for the pane's main entry; `reject` is the error its register rejects with.
 function fixture(reject?: Error) {
@@ -20,6 +42,7 @@ function fixture(reject?: Error) {
   const events: PaneEvent[] = []
 
   const client: Client = {
+    forget: async () => undefined,
     register: async (input) => {
       registered.push(input)
 
@@ -27,13 +50,23 @@ function fixture(reject?: Error) {
     },
     load: async () => undefined,
     command: async () => undefined,
+    find: async () => undefined,
+    notice: async () => undefined,
+    reviewLink: async () => tabID,
+    answer: async () => undefined,
     inspect: async () => undefined,
     highlight: async (input) => {
       highlights.push(input)
     },
     zoom: async () => undefined,
+    setViewport: async () => undefined,
     site: async () => ({ cookies: 0 }),
     clearSite: async () => undefined,
+    clearCache: async () => undefined,
+    reveal: async () => undefined,
+    openPage: async () => undefined,
+    createTab: async () => PluginTabHandle.make("handle"),
+    closeTab: async () => true,
     close: async (input) => {
       closed.push(input.binding)
     },
@@ -90,4 +123,15 @@ test("main's answer to the register reaches the owner", async () => {
   await Bun.sleep(0)
   expect(accepted.outcomes).toEqual(["accepted"])
   expect(rejected.outcomes).toEqual(["browser.pane.registration.invalid"])
+})
+
+test("a plugin open requires its session on screen, including after registration", async () => {
+  const app = fixture()
+  const url = "https://example.invalid"
+  await expect(app.registration.createTab("owner", url, () => false)).rejects.toThrow("notOnScreen")
+  const route = { current: true }
+  const opening = app.registration.createTab("owner", url, () => route.current)
+  route.current = false
+  await expect(opening).rejects.toThrow("notOnScreen")
+  expect(await app.registration.createTab("owner", url, () => true)).toBe(PluginTabHandle.make("handle"))
 })

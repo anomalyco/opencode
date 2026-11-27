@@ -1,5 +1,6 @@
 ---
 title: "Models"
+description: "Choose a model per session or run, set a default, and configure variants, reasoning, prompt caching, and local models."
 ---
 
 Choose a model for the current session with `/models`:
@@ -74,6 +75,8 @@ opencode service set env OPENCODE_DISABLE_FREE_MODELS 1
 Free means an `opencode` or `opencode-go` model with no input price. These models disappear from the catalog and defaults;
 explicitly selecting one fails with `Model unavailable`. Signed out, the `opencode` provider is absent until you connect
 an OpenCode Console account or set `OPENCODE_API_KEY`, which restores its paid models.
+
+To block free models for everyone in an organization, use a policy instead. See [Enterprise](/enterprise#block-free-models).
 
 ## Variants
 
@@ -212,6 +215,7 @@ Use `modelID` to give an API model a friendlier catalog ID:
           "name": "Coding default",
           "capabilities": {
             "tools": true,
+            "freeform": ["text", "lark"],
             "input": ["text", "image"],
             "output": ["text"],
           },
@@ -229,9 +233,11 @@ Use `modelID` to give an API model a friendlier catalog ID:
 Here, `openai/coding-default` is the selectable reference and `gpt-6.1-sol` is sent to the provider. For a model that is not
 already in the catalog, OpenCode assumes:
 
-- Tool support, text and image input, and text output.
+- JSON tool support, text and image input, and text output. No freeform tool input unless `capabilities.freeform` lists the format.
 - A 200,000-token context limit and 32,000-token output limit.
 - An unspecified input limit.
+
+OpenCode recognizes `text`, `regex`, and `lark`. Other format names from models.dev are ignored without dropping the model or its tools. If a proxy in front of a catalog model rejects freeform tools, set `capabilities.freeform` to `[]` on that model.
 
 These are fallback assumptions, not detected capabilities. Set accurate `capabilities` and `limit` values when known;
 explicit values replace the fallbacks. Add `disabled: true` to hide a model from the available catalog:
@@ -364,8 +370,10 @@ takes effect when that API reads it. Other fields are ignored.
 
 Provider `compatibility` applies to every model of that provider. A model's own `compatibility` overrides it field by
 field: OpenCode starts from the values [models.dev](https://models.dev) publishes for the model's API (`reasoningField`,
-`maxTokensField`, and `mediaInput`), then applies the model's configuration. Unset fields keep the provider package's
-built-in default or detection. `supportsThinkingBlockBinding` and `supportsEffortUpdates` are model-only.
+`maxTokensField`, and `mediaInput`, and `supportsEffortUpdates` and `supportsSystemUpdates` when models.dev marks the
+API as supporting them), then applies the model's configuration. Unset fields keep the provider package's built-in
+default or detection. `supportsThinkingBlockBinding`, `supportsEffortUpdates` and `supportsSystemUpdates` are
+model-only.
 
 | Field | What it does | Read by | Values and default |
 | --- | --- | --- | --- |
@@ -379,6 +387,7 @@ built-in default or detection. `supportsThinkingBlockBinding` and `supportsEffor
 | `cacheFormat` | Prompt-cache marker syntax the endpoint accepts. Overrides the provider's automatic breakpoint placement. `alibaba` skips tool definitions. | Every API with prompt-cache markers, including OpenAI Chat, Anthropic Messages, and Bedrock Converse | `anthropic` or `alibaba`. Unset uses the provider default. See [Prompt caching](#prompt-caching). |
 | `supportsThinkingBlockBinding` | Asks the API to drop thinking blocks whose earlier context changed instead of rejecting the request. | Anthropic Messages, Bedrock Converse | `true` or `false`. Unset detects Claude 5.1 and later. |
 | `supportsEffortUpdates` | Sends reasoning effort changes as per-message updates, which keep the prompt cache. Otherwise the effort changes for the whole request. | Anthropic Messages, OpenAI Responses | `true` or `false`. Unset detects Claude Opus 5, Claude 5.1 and later, and GPT-6 and later. |
+| `supportsSystemUpdates` | Sends system messages added mid-conversation as native system messages. Otherwise they're wrapped as text in the next user turn. | Anthropic Messages | `true` or `false`. Unset detects Claude Opus 4.8 and Claude 5 and later. |
 | `mediaInput` | Where images and other media go in a decision request. | System One | `assets` (images referenced from the state), `state` (inline in the state), or `root` (top-level `images`, `audio`, and `videos` lists). Unset uses the provider default. |
 
 ## Local

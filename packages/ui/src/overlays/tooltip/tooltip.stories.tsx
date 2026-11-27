@@ -1,4 +1,5 @@
-import { Tooltip } from "./tooltip"
+import { createSignal } from "solid-js"
+import { Tooltip, TooltipText } from "./tooltip"
 import { Button } from "@opencode/ui/button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
@@ -32,14 +33,40 @@ export default {
   },
 }
 
-export const Simple = {
-  render: () => (
+function SimpleTip(props: { forceOpen?: boolean; inactive?: boolean }) {
+  return (
     <div style={{ padding: "80px", display: "flex", "justify-content": "center" }}>
-      <Tooltip value="Tooltip Text">
+      <Tooltip value="Tooltip Text" {...props}>
         <span>Hover me</span>
       </Tooltip>
     </div>
-  ),
+  )
+}
+
+export const Simple = { render: () => <SimpleTip /> }
+
+export const Open = { render: () => <SimpleTip forceOpen /> }
+
+export const Inactive = { render: () => <SimpleTip inactive /> }
+
+export const WithButton = {
+  render: () => {
+    const [count, setCount] = createSignal(0)
+
+    return (
+      <div
+        style={{ padding: "80px", display: "flex", gap: "12px", "align-items": "center", "justify-content": "center" }}
+      >
+        <Tooltip value="Add one to the count">
+          <Button onClick={() => setCount((value) => value + 1)}>Add</Button>
+        </Tooltip>
+        <Tooltip value="Reset the count">
+          <Button onClick={() => setCount(0)}>Reset</Button>
+        </Tooltip>
+        <output>Count: {count()}</output>
+      </div>
+    )
+  },
 }
 
 export const Appearances = {
@@ -99,7 +126,9 @@ export const Path = {
       <Tooltip
         value={
           <>
-            Components <span style={{ color: "var(--text-text-faint)" }}>/</span> Tooltip
+            <TooltipText>Components</TooltipText>
+            <TooltipText variant="faint">/</TooltipText>
+            <TooltipText>Tooltip</TooltipText>
           </>
         }
       >
@@ -115,13 +144,56 @@ export const TitleDescription = {
       <Tooltip
         value={
           <>
-            <span>Title</span>
-            <span style={{ color: "var(--text-text-faint)" }}>·</span>
-            <span style={{ color: "var(--text-text-faint)" }}>Description</span>
+            <TooltipText>Title</TooltipText>
+            <TooltipText variant="muted">·</TooltipText>
+            <TooltipText variant="muted">Description</TooltipText>
           </>
         }
       >
         <span>Hover me</span>
+      </Tooltip>
+    </div>
+  ),
+}
+
+export const Colors = {
+  render: () => (
+    <div style={{ padding: "80px", display: "flex", "flex-direction": "column", gap: "48px", "align-items": "center" }}>
+      <Tooltip
+        forceOpen
+        value={
+          <>
+            <TooltipText>Included in Go</TooltipText>
+            <TooltipText variant="accent">60% off</TooltipText>
+          </>
+        }
+      >
+        <span>Accent</span>
+      </Tooltip>
+      <Tooltip
+        forceOpen
+        value={
+          <>
+            <TooltipText>Everyone except</TooltipText>
+            <TooltipText variant="warning">Set by the rules below</TooltipText>
+          </>
+        }
+      >
+        <span>Warning</span>
+      </Tooltip>
+    </div>
+  ),
+}
+
+export const Wrapping = {
+  render: () => (
+    <div style={{ padding: "80px", display: "flex", "justify-content": "center" }}>
+      <Tooltip
+        forceOpen
+        contentStyle={{ "max-width": "200px" }}
+        value="Only with OpenCode Go. Stops when the allowance runs out."
+      >
+        <span>Two lines</span>
       </Tooltip>
     </div>
   ),

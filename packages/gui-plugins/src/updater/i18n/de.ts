@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "Weiter",
   "releaseNotes.action.hideFuture": "In Zukunft nicht mehr anzeigen",
   "releaseNotes.media.alt": "Vorschau auf die Version",
+  "action.reload": "Zum Aktualisieren neu laden",
+  "action.reloading": "Wird neu geladen…",
+  "web.ready.title": "Update bereit",
+  "web.ready.message":
+    "Eine neue Version von OpenCode ist bereit. Laden Sie neu, um sie in allen geöffneten Fenstern zu verwenden.",
+  "web.reload": "Neu laden",
+  "web.reset.title": "Vom Server neu laden",
+  "web.reset.description": "Die gespeicherte Kopie der App löschen und die aktuelle Version des Servers laden",
+  "web.reset.action": "Vom Server neu laden",
 }

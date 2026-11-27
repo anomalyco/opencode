@@ -3,17 +3,20 @@ title: "API Overview"
 description: "Authenticate with the OpenCode Console API using personal API keys or service account keys, and scope what each key can do."
 ---
 
-The Console API lets your scripts and integrations call models. Every request authenticates with an API key.
+The Console API lets your scripts and integrations call models and export usage. Every request authenticates with an API
+key.
 
 ```bash
 curl --fail-with-body "https://opencode.ai/inference/v1/models" \
   --header "Authorization: Bearer oc_sk_..."
 ```
 
-| API                                 | Endpoints                                  |
-| ----------------------------------- | ------------------------------------------ |
-| [Inference](/console/api/inference) | `https://opencode.ai/inference/...`        |
-| [Providers](/console/api/providers) | `https://opencode.ai/inference/custom/...` |
+| API                                       | Endpoints                                         |
+| ----------------------------------------- | ------------------------------------------------- |
+| [Models](/console/api/models)             | `https://opencode.ai/console/api/v1/models`       |
+| [Inference](/console/api/inference)       | `https://opencode.ai/inference/...`               |
+| [Providers](/console/api/providers)       | `https://opencode.ai/inference/custom/...`        |
+| [Usage export](/console/api/usage-export) | `https://opencode.ai/console/api/v2/usage/export` |
 
 ## API keys
 

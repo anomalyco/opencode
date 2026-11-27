@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "Indiki",
   "releaseNotes.action.hideFuture": "Geljekde bulary görkezmäň",
   "releaseNotes.media.alt": "Öňünden görüş",
+  "action.reload": "Täzelemek üçin täzeden ýükläň",
+  "action.reloading": "Täzeden ýüklenýär…",
+  "web.ready.title": "Täzelenme taýýar",
+  "web.ready.message": "OpenCode-yň täze wersiýasy taýýar. Ony ähli açyk penjirelerde ulanmak üçin täzeden ýükläň.",
+  "web.reload": "Täzeden ýükle",
+  "web.reset.title": "Serwerden täzeden ýükläň",
+  "web.reset.description": "Programmanyň saklanan nusgasyny arassalaň we serweriň häzirki wersiýasyny ýükläň",
+  "web.reset.action": "Serwerden täzeden ýükläň",
 }

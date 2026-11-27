@@ -12,4 +12,12 @@ export default {
   noChanges: "Üýtgeşme ýok",
   "settings.wrapLines.title": "Setirleri dola",
   "settings.wrapLines.description": "Mobil diff-lerde uzyn setirleri kese süýşürmegiň ýerine dola",
+  "menu.count.one": "{{count}} faýl üýtgedildi",
+  "menu.count.other": "{{count}} faýl üýtgedildi",
+  "folder.more": "{{count}} · galanlary görkezilmedi",
+  "folder.failed": "Üýtgeşmeleri ýükläp bolmady",
+  "command.open": "Gözden geçirmäni açyň",
+  "load.failed": "Üýtgeşmeleri ýükläp bolmady",
+  "load.timeout": "Serwer jogap bermek üçin gaty köp wagt aldy",
+  offline: "Bu serwere ýetip bolmaýar",
 }

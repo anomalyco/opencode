@@ -114,6 +114,17 @@ describe("new tab machine", () => {
     expect(result.state.panes.side).toEqual({ ids: ["new:1"], chosen: undefined })
   })
 
+  test("opening the tab the pane already selects replaces the New tab shown over it", () => {
+    const region: Region = { regionActive: "a", side: { active: "a", keys: ["a", "b"] } }
+    const opened: NewTabsEvent[] = [sync(region), { type: "open", pane: "side" }, { type: "open", pane: "side" }]
+    const result = run([...opened, { type: "open.selected", pane: "side" }, sync(region)])
+
+    // Only the shown one goes, as when another tab selects itself; with none shown the event changes nothing.
+    expect(result.state.panes.side).toEqual({ ids: ["new:1"], chosen: undefined })
+    expect(shown(result.state, region, "side")).toBeUndefined()
+    expect(transitionNewTabs(result.state, { type: "open.selected", pane: "side" }).state).toBe(result.state)
+  })
+
   test("a split pane that loses its last tab takes its New tabs and choice with it", () => {
     const open: Region = { regionActive: "t", side: none, split: { active: "t", keys: ["t"] } }
     const closed: Region = { side: { active: "a", keys: ["a"] } }

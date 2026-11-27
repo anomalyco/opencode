@@ -1,17 +1,3 @@
-[data-component="dialog-v2"]:has(.new-session-location) {
-  align-items: flex-start;
-}
-
-[data-component="dialog-v2"]:has(.new-session-location) [data-slot="dialog-container"] {
-  width: min(calc(100vw - 24px), 480px);
-  height: auto;
-  max-height: min(calc(100vh - 96px), 480px);
-  min-height: 0;
-  margin-top: max(48px, calc((100vh - 480px) / 2));
-  background: var(--v2-background-bg-base);
-  box-shadow: var(--v2-elevation-overlay);
-}
-
 .new-session-location .palette-menu-search {
   padding: 6px 6px 0;
 }
@@ -30,24 +16,35 @@
   padding-inline-start: 6px;
 }
 
+/* The negative margin cancels the padding, so the button takes the icon's space. */
+.new-session-location-search-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: -4px;
+  padding: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: default;
+
+  &:hover {
+    background: var(--v2-overlay-simple-overlay-hover);
+  }
+}
+
 .new-session-location .palette-menu-search [data-slot="text-input-v2-input"]::placeholder {
   color: var(--v2-text-text-base);
   opacity: 0.5;
 }
 
 .new-session-location-divider {
-  position: relative;
-  height: 9px;
+  height: 1px;
   flex-shrink: 0;
-  margin-block: 4px;
-}
-
-.new-session-location-divider::after {
-  position: absolute;
-  inset-inline: 0;
-  top: 4px;
-  border-top: 0.5px solid var(--v2-border-border-base);
-  content: "";
+  margin-block: 6px 2px;
+  background: var(--v2-border-border-base);
+  transform: scaleY(0.5);
 }
 
 .new-session-location .command-palette-results {
@@ -56,7 +53,11 @@
 }
 
 .new-session-location .command-palette-group {
-  gap: 4px;
+  gap: 2px;
+}
+
+.new-session-location .command-palette-group:not(:has(> .command-palette-group-title:first-child)) {
+  padding-top: 4px;
 }
 
 .new-session-location-action-divider {
@@ -64,38 +65,29 @@
   flex-shrink: 0;
   margin-block: 2px;
   margin-inline: -6px;
-  background: var(--v2-border-border-muted);
+  background: var(--v2-border-border-base);
   transform: scaleY(0.5);
 }
 
 .new-session-location .command-palette-group-title {
   display: flex;
-  height: 28px;
   flex-shrink: 0;
   align-items: center;
   margin: 0;
-  padding: 0 6px;
-  color: var(--v2-text-text-muted);
-  line-height: var(--line-height-compact);
-}
-
-.new-session-location-back {
-  border: 0;
-  border-radius: 2px;
-  background: transparent;
-  font: inherit;
-  font-size: 13px;
-  text-align: start;
-  cursor: pointer;
-}
-
-.new-session-location-back:focus-visible {
-  outline: 2px solid var(--v2-border-border-focus);
-  outline-offset: 2px;
+  padding: 10px 8px 2px;
+  color: var(--v2-text-text-faint);
+  font-size: 12px;
+  line-height: 18px;
+  letter-spacing: 0.05px;
 }
 
 .new-session-location .palette-menu-row[data-size="compact"] {
-  padding-inline: 6px;
+  height: 32px;
+  padding-inline: 8px 6px;
+}
+
+.new-session-location .palette-menu-title {
+  font-weight: 440;
 }
 
 .new-session-location .palette-menu-row:is([data-active], :focus-visible) {
@@ -159,6 +151,26 @@
   flex-shrink: 0;
   align-items: center;
   gap: 6px;
+}
+
+.new-session-location-branch {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  color: var(--v2-text-text-muted);
+}
+
+.new-session-location-branch [data-slot="icon-svg"] {
+  flex-shrink: 0;
+  color: var(--v2-icon-icon-muted);
+}
+
+.new-session-location-branch > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .new-session-location-tag {

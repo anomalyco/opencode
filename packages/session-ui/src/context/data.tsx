@@ -11,7 +11,7 @@ import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 export type SessionSummary = Pick<SessionInfo, "id" | "parentID" | "title" | "time">
 
 type ProviderCatalog = {
-  all: Map<string, { models: Record<string, { name: string }> }>
+  all: Map<string, { models: Record<string, { name: string; speed?: { base: string; id: string } }> }>
   default: {
     [key: string]: string
   }
@@ -60,6 +60,15 @@ export type ReadMediaUrlFn = (uri: string, mime: string, signal?: AbortSignal) =
 
 export type PeekMediaUrlFn = (uri: string, mime: string) => string | undefined
 
+/** A file in the result of a call in a Session, by the call's ID and the file's position in the call's content. */
+export type ToolFileInput = { sessionID: string; callID: string; index: number; mime: string }
+
+/** Reads tool-result files the host keeps without their bytes, one at a time as they show. */
+export type ToolFileSource = {
+  read: (input: ToolFileInput, signal?: AbortSignal) => Promise<string | undefined>
+  peek: (input: ToolFileInput) => string | undefined
+}
+
 export const {
   use: useData,
   provider: DataProvider,
@@ -72,17 +81,16 @@ export const {
     sessionID?: string
     /** Whether message meta names the agent; the app follows its Show agent setting. Defaults to true. */
     agents?: boolean
-    /** Whether the assistant copy control stays visible at rest; the app enables this on dev/local builds. */
-    copyAlwaysVisible?: boolean
     shellRunning?: (id: string) => boolean
     shellOutput?: (input: ShellOutputInput) => Promise<ShellOutputOutput>
     turnDiff?: TurnDiffSource
     readMedia?: ReadMediaUrlFn
     peekMedia?: PeekMediaUrlFn
+    toolFile?: ToolFileSource
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
-    /** Whether `experimental.background_compaction` is on for this location; automatic compactions then show quietly. */
-    backgroundCompaction?: boolean
+    /** Resolved feature flags of the session's location, from the server's experimental flag endpoint. */
+    flags?: Readonly<Record<string, boolean>>
   }) => {
     return {
       get store() {
@@ -97,11 +105,12 @@ export const {
       get agents() {
         return props.agents ?? true
       },
-      get copyAlwaysVisible() {
-        return props.copyAlwaysVisible === true
+      get flags() {
+        return props.flags
       },
-      get backgroundCompaction() {
-        return props.backgroundCompaction === true
+      /** Whether the server reports `key` on for the session's location; off when unknown. */
+      flag(key: string) {
+        return props.flags?.[key] === true
       },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,
@@ -112,6 +121,7 @@ export const {
       },
       readMedia: props.readMedia,
       peekMedia: props.peekMedia,
+      toolFile: props.toolFile,
     }
   },
 })

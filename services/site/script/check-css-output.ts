@@ -5,15 +5,15 @@
 // the production page silently differs from the development server. vite.config.ts's cssTarget
 // keeps light-dark() native; this guards against that target being lowered again.
 //
-// It also fails when a stylesheet outgrows its budget (gzipped): the shell's, which every page links
-// and holds up its first paint for, and each of the others, a group of pages' or one that loads on
-// demand (script/stylesheet-groups.ts).
+// It also fails when a stylesheet outgrows its budget (gzipped): the shell's, which every page but the
+// not-found page links and holds up its first paint for, the not-found page's, which it links alone,
+// and each of the others, a group of pages' or one that loads on demand (script/stylesheet-groups.ts).
 // Run after `vite build`, optionally with the output directory: `bun script/check-css-output.ts .output`.
 import path from "node:path"
 import { Glob } from "bun"
 
 const root = path.resolve(process.argv[2] ?? path.join(import.meta.dir, "..", ".output"), "public")
-const budgets = { shell: 27.5 * 1024, other: 10.5 * 1024 }
+const budgets = { shell: 27.5 * 1024, notFound: 26 * 1024, other: 10.5 * 1024 }
 const lowered: string[] = []
 const over: string[] = []
 const shells: string[] = []
@@ -24,7 +24,8 @@ for await (const file of new Glob("**/*.css").scan(root)) {
   const shell = path.basename(file).startsWith("shell-")
   if (shell) shells.push(file)
   const size = Bun.gzipSync(css, { level: 9 }).length
-  const budget = shell ? budgets.shell : budgets.other
+  const notFound = path.basename(file).startsWith("not-found-")
+  const budget = shell ? budgets.shell : notFound ? budgets.notFound : budgets.other
   if (size > budget) over.push(`${file} ${(size / 1024).toFixed(1)} kB (budget ${(budget / 1024).toFixed(1)} kB)`)
 }
 if (lowered.length > 0) {

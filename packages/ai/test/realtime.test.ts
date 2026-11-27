@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
 import { Effect, Redacted } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { TestClock } from "effect/testing"
@@ -13,6 +13,7 @@ describe("experimental Realtime", () => {
 
       expect(
         yield* Realtime.connect({
+          engine: Realtime.engines[0],
           model: "gpt-live-1",
           apiKey: Redacted.make("sk-openai"),
           session: { instructions: "Be concise.", voice: "marin" },
@@ -22,6 +23,7 @@ describe("experimental Realtime", () => {
 
       expect(
         yield* Realtime.connect({
+          engine: Realtime.engines[1],
           model: "gpt-realtime-2.1",
           apiKey: Redacted.make("sk-openai"),
           session: { type: "realtime", instructions: "Brief." },
@@ -31,6 +33,7 @@ describe("experimental Realtime", () => {
 
       expect(
         yield* Realtime.connect({
+          engine: Realtime.engines[1],
           model: "gpt-realtime-2.1",
           apiKey: Redacted.make("sk-openai"),
           session: { type: "realtime", instructions: "Brief." },
@@ -45,6 +48,7 @@ describe("experimental Realtime", () => {
 
       expect(
         yield* Realtime.connect({
+          engine: Realtime.engines[2],
           model: "grok-voice-3.0",
           apiKey: Redacted.make("xai-key"),
           session: { voice: "ara" },
@@ -59,6 +63,7 @@ describe("experimental Realtime", () => {
 
       expect(
         yield* Realtime.connect({
+          engine: Realtime.engines[3],
           model: "gemini-3.8-live",
           apiKey: Redacted.make("gemini-key"),
           session: {
@@ -137,38 +142,22 @@ describe("experimental Realtime", () => {
     ),
   )
 
-  test("routes bare and versioned model names to their engine", () => {
-    expect(Realtime.engines.map((item) => Realtime.engine(item.model)?.id)).toEqual(
-      Realtime.engines.map((item) => item.id),
-    )
-    expect(
-      [
-        "gpt-realtime",
-        "gpt-realtime-2.1",
-        "gpt-live",
-        "grok-voice-latest",
-        "gemini-3.8-live",
-        "gemini-3.8-live-extended-thinking",
-      ].map((model) => Realtime.engine(model)?.id),
-    ).toEqual(["openai-realtime", "openai-realtime", "openai-live", "xai-realtime", "gemini-live", "gemini-live"])
-    expect(Realtime.engine("gpt-realtimex")).toBeUndefined()
-    expect(Realtime.engine("gemini-3.8-flash")).toBeUndefined()
-    expect(Realtime.engine("gemini-3.5-live")).toBeUndefined()
-  })
-
   it.effect("rejects unsupported transports before network I/O", () =>
     Effect.gen(function* () {
       const liveWs = yield* Realtime.connect({
+        engine: Realtime.engines[0],
         model: "gpt-live-1",
         apiKey: Redacted.make("k"),
         transport: { type: "websocket" },
       }).pipe(Effect.flip)
       const grokRtc = yield* Realtime.connect({
+        engine: Realtime.engines[2],
         model: "grok-voice-3.0",
         apiKey: Redacted.make("k"),
         transport: { type: "webrtc", sdp: "v=0" },
       }).pipe(Effect.flip)
       const geminiRtc = yield* Realtime.connect({
+        engine: Realtime.engines[3],
         model: "gemini-3.8-live",
         apiKey: Redacted.make("k"),
         transport: { type: "webrtc", sdp: "v=0" },

@@ -20,11 +20,28 @@ type Key = Pick<
   "key" | "keyCode" | "repeat" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey" | "isComposing"
 >
 
-// Maps one keydown to what the dock should do. The arrows only move the highlight; Space marks the highlighted answer and
-// Enter commits it and moves on. Answers act on key down, so Space never waits for its release.
+// The key that moves the dock on, or submits it on the last question: Enter, or Cmd/Ctrl+Enter.
+export type QuestionSubmitKey = "enter" | "mod+enter"
+
+// What an Enter does in the question dock: `submit` moves on, `select` picks the highlighted answer, or in the custom
+// answer starts a new line. Cmd/Ctrl+Enter always submits. With Enter submitting, Shift+Enter selects; with
+// Cmd/Ctrl+Enter submitting, Enter selects with or without Shift.
+export function questionEnter(event: Key, submit: QuestionSubmitKey): "submit" | "select" | undefined {
+  if (event.key !== "Enter" || event.isComposing || event.keyCode === 229 || event.altKey) return
+
+  if (event.metaKey || event.ctrlKey) return "submit"
+
+  if (submit === "mod+enter") return "select"
+
+  return event.shiftKey ? "select" : "submit"
+}
+
+// Maps one keydown to what the dock should do. The arrows only move the highlight; Space marks the highlighted answer,
+// the submit key commits it and moves on, and the other Enter marks it. Answers act on key down, so Space never waits
+// for its release.
 export function questionKey(
   event: Key,
-  context: { mac: boolean; zone: QuestionKeyZone; count: number },
+  context: { mac: boolean; zone: QuestionKeyZone; count: number; submit: QuestionSubmitKey },
 ): QuestionKeyIntent {
   // Enter and Escape during IME composition confirm or cancel the composition; Safari reports those as keyCode 229.
   if (event.isComposing || event.keyCode === 229) return { type: "none" }
@@ -75,7 +92,13 @@ export function questionKey(
 
   if (event.key === " ") return event.repeat ? { type: "swallow" } : { type: "activate" }
 
-  if (event.key === "Enter" && !event.shiftKey) return event.repeat ? { type: "swallow" } : { type: "commit" }
+  const enter = questionEnter(event, context.submit)
+
+  if (!enter) return { type: "none" }
+
+  if (event.repeat) return { type: "swallow" }
+
+  return enter === "submit" ? { type: "commit" } : { type: "activate" }
 
   return { type: "none" }
 }

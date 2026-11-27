@@ -5,6 +5,7 @@ import {
   ScrollBoxRenderable,
   TextAttributes,
   type MouseEvent,
+  type TimerHandle,
 } from "@opentui/core"
 import {
   For,
@@ -19,7 +20,7 @@ import {
   onCleanup,
   untrack,
 } from "solid-js"
-import { Portal, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { onAnimationTick, Portal, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { useConfig } from "../config"
 import { useSessionTabs } from "../context/session-tabs"
 import { useData } from "../context/data"
@@ -227,10 +228,12 @@ function createNumberIgnition(runs: () => boolean, prompt: () => number, animati
   return ignition
 }
 
-function fadeTitleColor(color: RGBA, background: RGBA, index: number, length: number, leading: number) {
+export function fadeTitleColor(color: RGBA, background: RGBA, index: number, length: number, leading: number) {
   const fade = (position: number) => (position <= 0 ? 0 : 0.2 + 0.72 * ((position - 1) / Math.max(1, FADE_WIDTH - 1)))
-  const start = index < FADE_WIDTH ? FADE_WIDTH - index : 0
-  const end = index - (length - FADE_WIDTH) + 1
+  // Narrow titles shorten both fades so they never overlap and the middle cell stays fully opaque.
+  const width = Math.min(FADE_WIDTH, Math.floor((length - 1) / 2))
+  const start = index < width ? FADE_WIDTH - index : 0
+  const end = index >= length - width ? index - (length - FADE_WIDTH) + 1 : 0
   const opacity = Math.max(fade(start) * leading, fade(end))
   return opacity === 0 ? color : tint(color, background, opacity)
 }
@@ -277,29 +280,27 @@ function heldSessionTabLayout(hold: MouseCloseHold, tabs: readonly SessionTab[])
 export function createMarquee(animations: () => boolean) {
   const [offset, setOffset] = createSignal(0)
   const [active, setActive] = createSignal<string>()
+  const [scrolling, setScrolling] = createSignal(false)
   const leading = createAnimatable({ opacity: 0 }, { enabled: animations, transition: tween({ duration: 0.25 }) })
-  let delay: ReturnType<typeof setTimeout> | undefined
-  let interval: ReturnType<typeof setInterval> | undefined
+  const clock = useRenderer().clock
+  let delay: TimerHandle | undefined
   let cycleWidth = 0
 
   const clear = () => {
-    if (delay) clearTimeout(delay)
-    if (interval) clearInterval(interval)
+    if (delay !== undefined) clock.clearTimeout(delay)
     delay = undefined
-    interval = undefined
+    setScrolling(false)
   }
-  const scroll = () => {
-    interval = setInterval(
-      () =>
-        setOffset((value) => {
-          if (value + 1 < cycleWidth) return value + 1
-          clear()
-          leading.animate({ opacity: 0 })
-          return 0
-        }),
-      MARQUEE_INTERVAL,
-    )
-  }
+  // Not bound to a node's draw; reset() and unmount end the scroll.
+  onAnimationTick(
+    () => (scrolling() ? 1000 / MARQUEE_INTERVAL : undefined),
+    (_deltaTime, ticks) => {
+      if (offset() + ticks < cycleWidth) return setOffset(offset() + ticks)
+      clear()
+      leading.animate({ opacity: 0 })
+      setOffset(0)
+    },
+  )
   const enter = (sessionID: string, title: string, width: number) => {
     if (!marqueeOverflows(title, width)) {
       reset()
@@ -311,10 +312,10 @@ export function createMarquee(animations: () => boolean) {
     setActive(sessionID)
     setOffset(0)
     leading.jump({ opacity: 0 })
-    delay = setTimeout(() => {
+    delay = clock.setTimeout(() => {
       setOffset(1)
       leading.animate({ opacity: 1 })
-      scroll()
+      setScrolling(true)
     }, MARQUEE_DELAY)
   }
   const leave = (sessionID: string) => {

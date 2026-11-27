@@ -210,7 +210,7 @@ describe("transitionLineComment", () => {
       expect(transitionLineComment(state, { type: "comment.hovered", range: line(3) }).state).toBe(state)
   })
 
-  test("submitting trims the text, rejects blank text and clears the selection first", () => {
+  test("submitting trims the text, rejects blank text, clears the selection first and carries send", () => {
     const drafting: LineCommentMode = { status: "drafting", range: line(1, 2), text: "  note  " }
 
     expect(transitionLineComment(drafting, { type: "draft.submitted", text: "   " }).state).toBe(drafting)
@@ -218,9 +218,12 @@ describe("transitionLineComment", () => {
       state: IDLE_LINE_COMMENT_MODE,
       effects: [
         { type: "sync-selected", range: null },
-        { type: "submit-draft", comment: "note", selection: line(1, 2) },
+        { type: "submit-draft", comment: "note", selection: line(1, 2), send: false },
       ],
     })
+    expect(
+      transitionLineComment(drafting, { type: "draft.submitted", text: "note", send: true }).effects,
+    ).toContainEqual({ type: "submit-draft", comment: "note", selection: line(1, 2), send: true })
 
     const editing: LineCommentMode = { status: "editing", id: "c1", range: line(4), text: "x" }
 
@@ -229,8 +232,17 @@ describe("transitionLineComment", () => {
       state: IDLE_LINE_COMMENT_MODE,
       effects: [
         { type: "sync-selected", range: null },
-        { type: "submit-edit", id: "c1", comment: "fixed", selection: line(4) },
+        { type: "submit-edit", id: "c1", comment: "fixed", selection: line(4), send: false },
       ],
+    })
+    expect(
+      transitionLineComment(editing, { type: "edit.submitted", text: "fixed", send: true }).effects,
+    ).toContainEqual({
+      type: "submit-edit",
+      id: "c1",
+      comment: "fixed",
+      selection: line(4),
+      send: true,
     })
   })
 

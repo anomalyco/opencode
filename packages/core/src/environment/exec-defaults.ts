@@ -145,6 +145,8 @@ export const execDefaults = (spawner: ChildProcessSpawner["Service"]): FilesImpl
     move: (from, to) =>
       run(from, moveScript, [to]).pipe(Effect.flatMap((result) => classifyPlain(from, result, () => undefined))),
     mkdir: (path) => run(path, `mkdir -p -- "$1"`).pipe(Effect.flatMap((result) => complete(path, result))),
+    append: (path, bytes) =>
+      run(path, `cat >> "$1"`, [], bytes).pipe(Effect.flatMap((result) => complete(path, result))),
   }
 }
 
@@ -190,9 +192,22 @@ const parseList = (bytes: Uint8Array) => {
   }))
 }
 
-export const makeFiles = (driver: Driver): Files => ({
-  ...execDefaults(driver.spawner),
-  ...driver.overrides,
-})
+/** Drivers with a native channel for every operation skip building the process-backed fallbacks. */
+export const makeFiles = (driver: Driver): Files =>
+  isComplete(driver.overrides) ? driver.overrides : { ...execDefaults(driver.spawner), ...driver.overrides }
+
+const methods = Object.values({
+  read: "read",
+  write: "write",
+  stat: "stat",
+  list: "list",
+  remove: "remove",
+  move: "move",
+  mkdir: "mkdir",
+  append: "append",
+} satisfies { readonly [Method in keyof FilesImpl]: Method })
+
+const isComplete = (overrides: Partial<FilesImpl> | undefined): overrides is FilesImpl =>
+  overrides !== undefined && methods.every((method) => overrides[method] !== undefined)
 
 export * as EnvironmentExecDefaults from "./exec-defaults.js"

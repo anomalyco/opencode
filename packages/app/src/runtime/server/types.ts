@@ -1,3 +1,4 @@
+/* oxlint-disable anti-slop/no-unsafe-dictionary-type -- option and settings bags are passed along as the server sends them */
 import type { ProjectListOutput, WorktreeDirectory } from "@opencode/client/promise"
 
 export type Project = Omit<ProjectListOutput[number], "canonical"> & {
@@ -102,6 +103,8 @@ type Model = {
   headers: Record<string, string>
   release_date: string
   variants?: Record<string, Record<string, unknown>>
+  /** Set on a model that is another model (`base`) served faster or slower, such as "gpt-5.5-fast". */
+  speed?: { base: string; id: string; faster: boolean }
 }
 
 export type Provider = {

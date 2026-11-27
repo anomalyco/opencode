@@ -18,6 +18,8 @@ const patterns = [
   /input is too long for (?:the )?(?:requested|selected) model/i,
   // OpenCode Go
   /too large for the model'?s configured input limit/i,
+  // Tencent TokenHub code 400003, which OpenCode Go passes through for Hy models.
+  /input tokens exceeds? the model'?s? context limit/i,
   // Cloudflare Workers AI reports this as HTTP 413.
   /exceeded this model context window limit/i,
   /exceeds the context window/i,
@@ -128,9 +130,17 @@ const CONTENT_POLICY_CODES = new Set([
   "responsibleaipolicyviolation",
   "content_policy_violation",
   "image_content_policy_violation",
+  // OpenAI's cybersecurity safeguard, as an HTTP 400 or a mid-stream error frame.
+  "cyber_policy",
   "refusal",
   "datainspectionfailed",
   "moderation_blocked",
+  // Gemini Decisions rejects blocked input with these `error.code` strings on a 400.
+  "safety",
+  "prohibited_content",
+  "blocklist",
+  "image_safety",
+  "content_blocked",
 ])
 // OpenCode Zen replaces upstream codes outside its allow-list but keeps the original
 // as a `[code]` label at the start of the rewritten message.
@@ -142,13 +152,13 @@ const RATE_LIMIT_TEXT = /rate increased too quickly|rate[-_\s]?limit|too[_\s]?ma
 // Z.ai reports balance, plan expiry, plan limits, and plan model access on 429.
 // Cerebras reports its per-minute token throttle as `token_quota_exceeded`; that is a rate limit.
 const QUOTA_TEXT =
-  /insufficient[-_\s]?(?:quota|balance)|(?<!token_)quota[-_\s]?exceeded|budget exceeded|usage limit|limit exhausted|package has expired|plan does not yet include/i
+  /insufficient[-_\s]?(?:quota|balance)|(?<!token_)quota[-_\s]?exceeded|budget exceeded|usage limit|(?<!rate[-_\s]?)limit exhausted|package has expired|plan does not yet include/i
 // Policy rejections without a dedicated code, matched against the provider's own
 // explanation only. OpenAI reuses `invalid_prompt` for usage-policy rejections while
 // Bedrock Mantle reuses it for schema validation; Anthropic reports blocked output
 // under `invalid_request_error`. The Vercel AI Gateway drops OpenAI's `moderation_blocked` code.
 const CONTENT_POLICY_TEXT =
-  /violating our usage policy|blocked by content filtering policy|content[-_\s]?policy|rejected (?:as a result of our|by the) safety system|detected potentially unsafe or sensitive content/i
+  /violating our usage policy|blocked by content filtering policy|content[-_\s]?policy|rejected (?:as a result of our|by the) safety system|detected potentially unsafe or sensitive content|rejected in accordance with our terms of use/i
 const SERVER_ERROR_TEXT =
   /\b(?:try again|(?:please |you can )?retry (?:the |this |your )?request|try (?:the |this |your )?request again|(?:currently |temporarily )?at capacity|overloaded|temporarily unavailable|service[-_\s]?unavailable|(?:server|internal)[-_\s]?error|server (?:is )?busy|provider returned (?:an )?error|resource[-_\s]?exhausted|upstream (?:connect|connection|request)|request buffer limit while retrying upstream)\b/i
 

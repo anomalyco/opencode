@@ -10,6 +10,7 @@ import type { Location } from "@opencode/schema/location"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { isDeepStrictEqual } from "node:util"
+import { isSqlError } from "effect/sql/SqlError"
 import { Durable } from "@opencode/schema/durable-event-manifest"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { SessionLegacy } from "@opencode/schema/session-legacy"
@@ -99,24 +100,37 @@ export const versionedType = Event.versionedType
 export const durable = Event.durable
 export const ephemeral = Event.ephemeral
 
-export interface PublishOptions {
+export interface PublishOptions<E = never> {
   readonly id?: Event.ID
   readonly metadata?: Record<string, unknown>
   readonly location?: Location.Ref
   readonly global?: boolean
-  /** Local operational projection committed atomically with a new durable event. Not replayed or serialized. */
-  readonly commit?: (seq: number) => Effect.Effect<void>
+  /**
+   * Local operational projection committed atomically with a new durable event. Not replayed or serialized.
+   * A failure rolls back the transaction, publishes nothing and surfaces from `publish`.
+   */
+  readonly commit?: (seq: number) => Effect.Effect<void, E>
 }
 
-export type PublishInput<D extends Event.DurableDefinition = Event.DurableDefinition> = readonly [
+export type PublishInput<D extends Event.DurableDefinition = Event.DurableDefinition, E = never> = readonly [
   definition: D,
   data: Event.Data<D>,
-  options?: PublishOptions,
+  options?: PublishOptions<E>,
 ]
 
-export type PublishResult<I extends readonly PublishInput[]> = {
-  readonly [K in keyof I]: I[K] extends PublishInput<infer D> ? Event.Payload<D> : never
+type AnyPublishInput = PublishInput<Event.DurableDefinition, unknown>
+
+export type PublishResult<I extends readonly AnyPublishInput[]> = {
+  readonly [K in keyof I]: I[K] extends PublishInput<infer D, unknown> ? Event.Payload<D> : never
 }
+
+export type PublishError<I extends readonly AnyPublishInput[]> = I[number][2] extends infer O
+  ? O extends { readonly commit?: infer C }
+    ? C extends (seq: number) => Effect.Effect<void, infer E>
+      ? E
+      : never
+    : never
+  : never
 
 /** Marker/event union emitted by `log`. */
 export type LogItem = Event.Payload | EventLog.Synced
@@ -148,14 +162,14 @@ const isDefinition = (input: Event.Definition | readonly Event.Definition[]): in
   !Array.isArray(input)
 
 export interface Interface {
-  readonly publish: <D extends Event.Definition>(
+  readonly publish: <D extends Event.Definition, E = never>(
     definition: D,
     data: Event.Data<D>,
-    options?: PublishOptions,
-  ) => Effect.Effect<Event.Payload<D>>
-  readonly publishAll: <const I extends readonly [PublishInput, ...PublishInput[]]>(
+    options?: PublishOptions<E>,
+  ) => Effect.Effect<Event.Payload<D>, E>
+  readonly publishAll: <const I extends readonly [AnyPublishInput, ...AnyPublishInput[]]>(
     events: I,
-  ) => Effect.Effect<PublishResult<I>>
+  ) => Effect.Effect<PublishResult<I>, PublishError<I>>
   readonly subscribe: Subscribe
   /**
    * Durable, ordered per-aggregate log read. Forked aggregates may reserve an
@@ -287,7 +301,7 @@ export function configured(options?: Options) {
           }),
         )
 
-        function commitDurableEvent(
+        function commitDurableEvent<E = never>(
           definition: Event.Definition,
           event: Event.Payload,
           input?: {
@@ -296,7 +310,7 @@ export function configured(options?: Options) {
             readonly ownerID?: string
             readonly strictOwner?: boolean
           },
-          commit?: (seq: number) => Effect.Effect<void>,
+          commit?: (seq: number) => Effect.Effect<void, E>,
         ) {
           return Effect.gen(function* () {
             const durable = definition.durable
@@ -433,7 +447,7 @@ export function configured(options?: Options) {
                       }),
                     { behavior: "immediate" },
                   )
-                  .pipe(Effect.orDie)
+                  .pipe(Effect.catchIf(isSqlError, Effect.die))
                 if (committed) {
                   committed.route()
                   yield* Effect.forEach(
@@ -448,10 +462,10 @@ export function configured(options?: Options) {
           })
         }
 
-        function publishEvent<D extends Event.Definition>(
+        function publishEvent<D extends Event.Definition, E>(
           definition: D,
           event: Event.Payload<D>,
-          commit?: PublishOptions["commit"],
+          commit?: PublishOptions<E>["commit"],
         ) {
           return Effect.gen(function* () {
             if (!definition.durable && commit)
@@ -507,7 +521,11 @@ export function configured(options?: Options) {
           })
         }
 
-        const makePayload = (definition: Event.Definition, data: unknown, options: PublishOptions | undefined) =>
+        const makePayload = (
+          definition: Event.Definition,
+          data: unknown,
+          options: PublishOptions<unknown> | undefined,
+        ) =>
           Effect.gen(function* () {
             const serviceLocation = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
             const location = options?.global
@@ -526,14 +544,18 @@ export function configured(options?: Options) {
             } as Event.Payload
           })
 
-        function publish<D extends Event.Definition>(definition: D, data: Event.Data<D>, options?: PublishOptions) {
+        function publish<D extends Event.Definition, E = never>(
+          definition: D,
+          data: Event.Data<D>,
+          options?: PublishOptions<E>,
+        ) {
           return Effect.gen(function* () {
             const event = (yield* makePayload(definition, data, options)) as Event.Payload<D>
             return yield* publishEvent(definition, event, options?.commit)
           })
         }
 
-        function publishAll<const I extends readonly [PublishInput, ...PublishInput[]]>(events: I) {
+        function publishAll<const I extends readonly [AnyPublishInput, ...AnyPublishInput[]]>(events: I) {
           return Effect.gen(function* () {
             const payloads = yield* Effect.forEach(events, ([definition, data, options]) =>
               Effect.gen(function* () {
@@ -541,7 +563,8 @@ export function configured(options?: Options) {
                 return {
                   definition,
                   aggregateID,
-                  commit: options?.commit,
+                  // The tuple's own commit types are what PublishError<I> reads; the loop erases them to unknown.
+                  commit: options?.commit as PublishOptions<PublishError<I>>["commit"],
                   event: yield* makePayload(definition, data, options),
                 }
               }),
@@ -633,7 +656,7 @@ export function configured(options?: Options) {
                         }),
                       { behavior: "immediate" },
                     )
-                    .pipe(Effect.orDie)
+                    .pipe(Effect.catchIf(isSqlError, Effect.die))
                   committed.route()
                   yield* Effect.forEach(
                     pubsub.durable.get(aggregateID) ?? [],

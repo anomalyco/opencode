@@ -3,7 +3,7 @@
    is the style the docs have today, so it has no rules here. Each option is one block, keyed by the
    site root's data-docs-variants ("callout-3" and so on) and scoped to docs pages, so a chosen option
    can be kept and the rest deleted. Vocabulary (from /font, legal, changelog, press and brand):
-   hairline rules, OpenTUI Mono annotations in small uppercase with a little tracking, plates with a ruled
+   hairline rules, OpenMono annotations in small uppercase with a little tracking, plates with a ruled
    header, em dash and tree marks, crosshair grids, pipes on the left, ink (inverted) panels, neutral
    greys only, square corners. */
 
@@ -155,7 +155,7 @@
 
 /* Option 6, the site scale (★ the default, 5 Nov 2026): the marketing site's tokens and the typography
    review (local review notes), so docs read like the rest of the site. Levels only step down:
-   H1 the page title and H2 the section title (OpenTUI Mono, as on the home page), H3 and H4 in Inter by
+   H1 the page title and H2 the section title (OpenMono, as on the home page), H3 and H4 in Inter by
    weight, H5 and H6 as uppercase mono labels that never go below small text. The lead is one step
    above the body; small is one step below. Phones get the larger values from the token block. */
 [data-page="docs"][data-docs-variants~="typography-6"] [data-component="docs-article"] {
@@ -576,7 +576,7 @@
 
   /* On the red tint the code header label steps one shade darker, to keep a margin over 4.5:1. */
   &[data-type="danger"] {
-    --code-label: light-dark(#5e5e5e, #8f8f8f);
+    --code-label: light-dark(#5c5c5c, #8f8f8f);
   }
 
   /* The label in the mono font's bold, a confident semibold at 12px (the label only, not bold text
@@ -766,7 +766,7 @@
 }
 
 /* With the Vercel square code tabs, plan tabs (which switch prose, not code) take the code tabs'
-   label: OpenTUI Mono, muted until selected, with the 2px ink underline and an inside focus ring. */
+   label: OpenMono, muted until selected, with the 2px ink underline and an inside focus ring. */
 [data-page="docs"][data-docs-variants~="tabs-6"] [data-component="docs-article"] [data-component="plan-tabs"] {
   [role="tablist"] {
     overflow-x: auto;
@@ -846,7 +846,7 @@
 
 /* ───────────── Titled code (figure with a caption) ─────────────
    From v2's astro-code-figure (bordered, a 12px muted caption row with a bottom rule).
-   2 · v2 · 3 · v2 with a OpenTUI Mono uppercase caption · 4 · the caption as a tab above the box
+   2 · v2 · 3 · v2 with an OpenMono uppercase caption · 4 · the caption as a tab above the box
    5 · v2 with a file mark before the name (Next.js, Vercel) */
 
 [data-page="docs"]:is(
@@ -1184,9 +1184,9 @@
     display: block;
     margin: 0 -1rem 0.875rem;
     padding: 0.5rem 1rem;
-    border-bottom: 1px solid #2e2e2e;
+    border-bottom: 1px solid var(--fixed-dark-line);
     font-size: var(--anno-size);
-    color: #a0a0a0;
+    color: var(--fixed-dark-muted);
   }
 }
 
@@ -1199,12 +1199,12 @@
     display: block;
     height: 2rem;
     margin: 0 -1rem 0.875rem;
-    border-bottom: 1px solid #2e2e2e;
+    border-bottom: 1px solid var(--fixed-dark-line);
     background:
-      radial-gradient(circle, #555 3.5px, transparent 4px) 1rem center / 8px 8px no-repeat,
-      radial-gradient(circle, #555 3.5px, transparent 4px) 1.75rem center / 8px 8px no-repeat,
-      radial-gradient(circle, #555 3.5px, transparent 4px) 2.5rem center / 8px 8px no-repeat,
-      #161616;
+      radial-gradient(circle, var(--fixed-dark-line-strong) 3.5px, transparent 4px) 1rem center / 8px 8px no-repeat,
+      radial-gradient(circle, var(--fixed-dark-line-strong) 3.5px, transparent 4px) 1.75rem center / 8px 8px no-repeat,
+      radial-gradient(circle, var(--fixed-dark-line-strong) 3.5px, transparent 4px) 2.5rem center / 8px 8px no-repeat,
+      var(--fixed-dark-raised);
   }
 }
 
@@ -1397,7 +1397,7 @@
 
 /* ───────────── Cards ─────────────
    From v2's Card and CardGroup (1px border, 1rem padding, 0.75rem gap, muted description, the
-   surface on hover). 2 · v2 · 3 · v2 with OpenTUI Mono titles · 4 · v1's link card, an arrow at the right
+   surface on hover). 2 · v2 · 3 · v2 with OpenMono titles · 4 · v1's link card, an arrow at the right
    5 · one joined grid with shared rules */
 
 [data-page="docs"]:is(
@@ -1503,7 +1503,7 @@
 
 /* ───────────── Tables ─────────────
    From v2's prose tables (13px, a rule under every row, no side padding on the left).
-   2 · v2 · 3 · v2 with a OpenTUI Mono uppercase head on a strong rule · 4 · v2 with zebra rows
+   2 · v2 · 3 · v2 with an OpenMono uppercase head on a strong rule · 4 · v2 with zebra rows
    5 · a full grid */
 
 [data-page="docs"]:is(
@@ -1567,7 +1567,7 @@
   }
 }
 
-/* David's pick (5 Nov 2026), with the head in the reference tables' label style (12px OpenTUI Mono,
+/* David's pick (5 Nov 2026), with the head in the reference tables' label style (12px OpenMono,
    uppercase, +0.04em, grey) on the code header tone, and 12px inside every cell. */
 [data-page="docs"][data-docs-variants~="tables-5"]
   [data-component="docs-article"]
@@ -2155,8 +2155,8 @@
 }
 
 [data-page="docs"][data-docs-variants~="cli-4"] [data-component="docs-article"] [data-component="cli-command"] pre {
-  background: #0a0a0a;
-  color: #eeeeee;
+  background: var(--fixed-dark);
+  color: var(--fixed-dark-text);
 }
 
 [data-page="docs"][data-docs-variants~="cli-5"] [data-component="docs-article"] [data-component="cli-command"] pre {
@@ -2170,7 +2170,7 @@
 
 /* ───────────── Prev / next ─────────────
    v2 has none, so these follow v1's Starlight pagination (two boxes, a small label over the title,
-   next aligned right). 2 · v1's boxes · 3 · arrows on a rule, no boxes · 4 · OpenTUI Mono labels on a
+   next aligned right). 2 · v1's boxes · 3 · arrows on a rule, no boxes · 4 · OpenMono labels on a
    rule · 5 · one compact line */
 
 [data-page="docs"]:is(
@@ -2343,7 +2343,7 @@
 
 /* ───────────── Breadcrumbs ─────────────
    Neither docs has breadcrumbs, so these use v2's sidebar voice (muted links, the current page in
-   the foreground). 2 · 13px muted · 3 · OpenTUI Mono uppercase · 4 · underlined links · 5 · over a rule */
+   the foreground). 2 · 13px muted · 3 · OpenMono uppercase · 4 · underlined links · 5 · over a rule */
 
 [data-page="docs"]:is(
     [data-docs-variants~="breadcrumbs-2"],
@@ -2534,7 +2534,7 @@
 
 /* ───────────── Edit on GitHub, last updated ─────────────
    v2 has none, so these follow v1's Starlight page footer (a muted edit link, the date beside it).
-   2 · v1's row, link left and date right, over a rule · 3 · stacked · 4 · OpenTUI Mono uppercase
+   2 · v1's row, link left and date right, over a rule · 3 · stacked · 4 · OpenMono uppercase
    5 · right aligned with a pencil mark */
 
 [data-page="docs"]:is(
@@ -2592,7 +2592,7 @@
 
 /* ───────────── Feedback ─────────────
    No docs have one, so the buttons borrow v2's search trigger. 2 · v2's bordered buttons
-   3 · text links · 4 · a ruled block · 5 · OpenTUI Mono uppercase */
+   3 · text links · 4 · a ruled block · 5 · OpenMono uppercase */
 
 [data-page="docs"]:is(
     [data-docs-variants~="feedback-2"],
@@ -2745,20 +2745,20 @@
    block type sits on it: a white body lifted off the off-white page (a step lighter than the page in
    dark), a header row in the page's tone with the label (file mark and name, ">_ Terminal", Files,
    Usage) and an always-visible Copy, a 1px border round the block and a divider under the header.
-   Like Vercel, the header is the darker of the two in both themes (#fafafa over #fff, #000 over
-   #0a0a0a there). The border is decorative (about 1.3:1); the marks that carry meaning (highlight
+   Like Vercel, the header is the darker of the two in both themes: the page colour over the raised
+   body. The border is decorative (about 1.3:1); the marks that carry meaning (highlight
    and diff bars, the selected tab) are 3:1 or more, and all text is 4.5:1 or more. */
 
 [data-page="docs"] {
-  --code-body: light-dark(#ffffff, #161616);
-  --code-head: light-dark(#f7f7f7, #111111);
-  --code-border: light-dark(#e0e0e0, #2e2e2e);
-  --code-text: light-dark(#141414, #f2f2f2);
-  --code-label: light-dark(#666666, #8f8f8f);
+  --code-body: var(--grey-2);
+  --code-head: var(--grey-1);
+  --code-border: var(--grey-5);
+  --code-text: var(--grey-11);
+  --code-label: var(--grey-8);
   /* Reference table heads (Tables 5, API, CLI): the label style in ink with the titles' faux medium
      (the site serves no 500 weight); 12px uppercase keeps them reading as labels. */
   --ref-head: var(--text-strong);
-  --code-number: light-dark(#737373, #858585);
+  --code-number: var(--grey-8);
   --code-mark: light-dark(#3b5cf6, #6b8fff);
   --code-mark-tint: light-dark(#eff2fe, #1e2637);
   --code-del: light-dark(#d61f1f, #f04c4c);
@@ -2770,7 +2770,7 @@
   --token-flag: light-dark(#7a3fc4, #9d7cd8);
   --token-string: light-dark(#2b7a3d, #7fd88f);
   --token-operator: light-dark(#0f6e7a, #56b6c2);
-  --token-output: light-dark(#666666, #8f8f8f);
+  --token-output: var(--grey-8);
 }
 
 /* Outside option 6 the frame folds away and its header hides, so the older options look as before. */
@@ -3277,9 +3277,9 @@
   :is(p, li, td, th, dd, dt, h2, h3, h4, a, strong, em, small, span[data-slot])
   > code {
   padding: 0.1em 0.35em;
-  border: 1px solid light-dark(#e6e6e6, #262626);
+  border: 1px solid var(--grey-5);
   border-radius: 0;
-  background: light-dark(#f2f2f2, #161616);
+  background: var(--grey-3);
   color: var(--text-strong);
 }
 
@@ -4211,7 +4211,7 @@
   :not(pre) > code:not([data-component="code-frame"] *) {
     padding: 0.1em 0.35em;
     border: 1px solid var(--surface-chip-edge);
-    background: linear-gradient(light-dark(#f2f2f2, #161616), light-dark(#f2f2f2, #161616)), var(--surface-layer);
+    background: linear-gradient(var(--grey-3), var(--grey-3)), var(--surface-layer);
     background-blend-mode: var(--blend), normal;
     color: var(--text-strong);
   }

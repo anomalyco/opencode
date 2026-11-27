@@ -7,7 +7,7 @@ import type { McpController } from "./mcp"
 import { McpDialog } from "./mcp-dialog"
 import { createMcpState, type McpEvent, transitionMcp } from "./mcp-machine"
 
-function McpDialogStory(props: { server?: string }) {
+function McpDialogStory(props: { server?: string; empty?: boolean; signingIn?: boolean }) {
   const dialog = useDialog()
 
   const [servers, setServers] = createStore<McpServer[]>([
@@ -24,8 +24,16 @@ function McpDialogStory(props: { server?: string }) {
     },
   ])
 
-  // The real machine, mounted for the story's lifetime, with toggles that succeed at once and stay in the story.
-  const [mcpState, setMcpState] = createSignal(transitionMcp(createMcpState(), { type: "mounted" }).state)
+  // Start the busy preset after the sign-in was requested. Other rows still complete their fixture toggles.
+  const mounted = transitionMcp(createMcpState(), { type: "mounted" }).state
+
+  const [mcpState, setMcpState] = createSignal(
+    props.signingIn
+      ? transitionMcp(mounted, { type: "toggle.requested", name: "figma-remote", enabled: true, status: "needs_auth" })
+          .state
+      : mounted,
+  )
+
   const listeners = new Set<Parameters<McpController["onFocus"]>[0]>()
 
   const mcp: Pick<McpController, "state" | "dispatch" | "onFocus"> = {
@@ -51,7 +59,8 @@ function McpDialogStory(props: { server?: string }) {
     },
   }
 
-  const open = () => dialog.show(() => <McpDialog servers={servers} server={props.server} mcp={mcp} />)
+  const open = () =>
+    dialog.show(() => <McpDialog servers={props.empty ? [] : servers} server={props.server} mcp={mcp} />)
 
   onMount(open)
 
@@ -74,3 +83,7 @@ export const Default = {
 export const ConnectionError = {
   render: () => <McpDialogStory server="unreachable-server" />,
 }
+
+export const NoServers = { render: () => <McpDialogStory empty /> }
+
+export const SigningIn = { render: () => <McpDialogStory signingIn /> }

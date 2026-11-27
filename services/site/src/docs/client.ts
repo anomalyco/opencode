@@ -6,7 +6,6 @@ import { Funnel } from "../lib/funnel"
 import { downloadOf, surfaceOf, targetOf } from "../lib/funnel-config"
 import { startContents } from "../component/site/contents-spy"
 import { copyHeadingLinks, copyWithFeedback } from "../component/site/copy-feedback"
-import { fanMotion } from "../component/site/fan-motion"
 import { holdOpenMenu } from "../component/site/menu-hold"
 import { navMenusOnIntent } from "../component/site/nav-intent"
 import { isSearchShortcut } from "../component/site/search-key"
@@ -106,181 +105,13 @@ function toggleSection(open?: boolean) {
   holdOpenMenu()
 }
 
-phone.addEventListener("change", () => {
-  toggleSection(false)
-  closeLockup()
-})
+phone.addEventListener("change", () => toggleSection(false))
 
-// The logo menu and the product menu (on DOCS), shared with the site and the other OpenCode sites (packages/nav-menus),
-// loaded on first use (nav-intent.ts). Opening one closes the lockup's own menus, as the static pages' script closes
-// the site's (src/client/menus.ts).
-const navMenus = navMenusOnIntent({ link: (path) => path })
-on("opencode-nav-menu-open" as keyof DocumentEventMap, () => closeLockup())
-
-// The sections menu and its V2/V1 flyout come in as one panel with the nav menus' motion (packages/nav-menus).
-// Reduced motion shows them at once.
-function enter(menu: HTMLElement) {
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return
-  menu.animate([{ transform: fanMotion.start(0) }, { transform: fanMotion.rest }], {
-    duration: 450,
-    easing: fanMotion.spring,
-  })
-  menu.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: "ease-out" })
-}
-
-// The docs lockup (component/site/docs-lockup.tsx): the chevron opens the sections menu, where "Docs"
-// has its versions in a flyout beside it, or nested under it on phones and touch screens. An older
-// version adds a second menu, of the versions, so each dropdown in it opens on its own.
-const dropdown = '[data-component="docs-lockup"] [data-slot="dropdown"]'
-let lockup: HTMLElement | undefined
-let subTimer = 0
-const menuOf = (root: HTMLElement) => $("[data-slot=menu]", root)!
-const rows = (root: HTMLElement) =>
-  $$<HTMLAnchorElement>(
-    root.querySelector("[data-submenu=nested]")
-      ? "[data-slot=menu] [role=menuitem]:not([hidden] *)"
-      : "[data-slot=menu] > [role=menuitem], [data-slot=menu] > [data-slot=parent] > [role=menuitem]",
-    root,
-  )
-
-function openLockup(root: HTMLElement, focus?: "first" | "last" | "current") {
-  closeLockup()
-  navMenus.close()
-  lockup = root
-  const menu = menuOf(root)
-  // Phones: the labels start at the bar's logo mark and the "›" centres on the bar's last mark (the
-  // GitHub mark, on the menu column), from the inline start and end edges (docs-lockup.css).
-  const logo = $("[data-component=topbar] [data-slot=logo] [data-slot=icon]")?.getBoundingClientRect()
-  const button = $("[data-component=topbar] [data-component=github-link]")?.getBoundingClientRect()
-  if (logo?.width && button?.width) {
-    const rtl = html.dir === "rtl"
-    const centre = button.left + button.width / 2
-    menu.style.setProperty("--menu-label", `${rtl ? html.clientWidth - logo.right : logo.left}px`)
-    menu.style.setProperty("--menu-chevron", `${rtl ? centre : html.clientWidth - centre}px`)
-  }
-  menu.dataset.submenu = matchMedia("(max-width: 60rem), (hover: none), (pointer: coarse)").matches
-    ? "nested"
-    : "flyout"
-  menu.hidden = false
-  enter(menu)
-  $$("[aria-haspopup=menu]:not([role=menuitem], [data-nav-product])", root).forEach((button) =>
-    button.setAttribute("aria-expanded", "true"),
-  )
-  const items = rows(root)
-  if (focus)
-    (focus === "first"
-      ? items[0]
-      : focus === "last"
-        ? items.at(-1)
-        : (items.find((item) => item.matches("[aria-current]")) ?? items[0])
-    )?.focus()
-}
-
-function closeLockup(refocus?: boolean) {
-  if (!lockup) return
-  const root = lockup
-  lockup = undefined
-  menuOf(root).hidden = true
-  toggleSub(root, false)
-  $$("[aria-haspopup=menu]:not([role=menuitem], [data-nav-product])", root).forEach((button) =>
-    button.setAttribute("aria-expanded", "false"),
-  )
-  if (refocus) ($("[data-slot=toggle]", root) ?? $("[data-slot=trigger]", root))?.focus()
-}
-
-function toggleSub(root: HTMLElement, open: boolean, focus?: boolean) {
-  clearTimeout(subTimer)
-  const parent = $("[data-slot=parent]", root)
-  if (!parent) return
-  const opening = open && !parent.hasAttribute("data-open")
-  parent.toggleAttribute("data-open", open)
-  const submenu = $("[data-slot=submenu]", parent)!
-  submenu.hidden = !open
-  if (opening && menuOf(root).dataset.submenu === "flyout") enter(submenu)
-  $$("[aria-expanded]", parent).forEach((item) => item.setAttribute("aria-expanded", String(open)))
-  if (open && focus)
-    ($('[aria-current="page"]', $("[data-slot=submenu]", parent)!) ?? $("[data-slot=submenu] a", parent))?.focus()
-}
-
-on("click", (event) => {
-  const target = event.target as Element
-  const root = target.closest<HTMLElement>(dropdown)
-  if (!root) return
-  if (target.closest("[data-slot=toggle], [data-slot=trigger]"))
-    return lockup === root ? closeLockup() : openLockup(root)
-  const expand = target.closest("[data-slot=expand]")
-  if (expand) return toggleSub(root, expand.getAttribute("aria-expanded") !== "true")
-  if (target.closest("a")) closeLockup()
-})
-
-on("keydown", (event) => {
-  const target = event.target as HTMLElement
-  const key = inline(event.key)
-  // Escape closes the lockup wherever focus is: a click on its trigger may leave focus on the trigger (or,
-  // in Safari, on the page), and keyboard opening moves it into the menu, so it can't wait for a keydown
-  // that started inside the menu.
-  if (key === "Escape" && lockup) {
-    event.preventDefault()
-    const inSub = !!target.closest?.("[data-slot=submenu]") && menuOf(lockup).dataset.submenu === "flyout"
-    if (!inSub) return closeLockup(true)
-    toggleSub(lockup, false)
-    return $("[data-slot=parent] > [role=menuitem]", lockup)?.focus()
-  }
-  const root = target.closest?.<HTMLElement>(dropdown)
-  if (!root) return
-  if (target.matches("[data-slot=toggle], [data-slot=trigger]")) {
-    if (key === "ArrowDown" || key === "Enter" || key === " ") openLockup(root, "current")
-    else if (key === "ArrowUp") openLockup(root, "last")
-    else return
-    return event.preventDefault()
-  }
-  if (!lockup) return
-  const items = rows(root)
-  const at = items.indexOf(target as HTMLAnchorElement)
-  const inSub = !!target.closest("[data-slot=submenu]") && menuOf(root).dataset.submenu === "flyout"
-  const moves: Record<string, number> = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }
-  if (key in moves && !inSub) {
-    event.preventDefault()
-    toggleSub(root, menuOf(root).dataset.submenu === "nested" && !!$("[data-slot=parent][data-open]", root))
-    items[(moves[key] + items.length) % items.length]?.focus()
-  } else if (key in moves) {
-    event.preventDefault()
-    const subs = $$<HTMLAnchorElement>("[data-slot=submenu] a", root)
-    const i = subs.indexOf(target as HTMLAnchorElement)
-    subs[
-      ({ ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: subs.length - 1 }[key]! + subs.length) % subs.length
-    ]?.focus()
-  } else if (key === "ArrowRight" && target.closest("[data-slot=parent]") && !inSub) {
-    event.preventDefault()
-    toggleSub(root, true, true)
-  } else if (key === "ArrowLeft" && inSub) {
-    event.preventDefault()
-    toggleSub(root, false)
-    $("[data-slot=parent] > [role=menuitem]", root)?.focus()
-  } else if (key === "Tab") closeLockup()
-})
-
-// The flyout opens while the pointer rests on "Docs" and closes 300ms after it leaves, so the pointer
-// can cut across to it. Keyboard focus follows the pointer between rows, so only one row looks active, as in the
-// static pages' menus (src/client/menus.ts).
-on("pointerover", (event) => {
-  if (event.pointerType !== "mouse" || !lockup) return
-  const target = event.target as Element
-  const row = target.closest<HTMLElement>("[role=menuitem]")
-  if (row && lockup.contains(document.activeElement) && document.activeElement !== row)
-    row.focus({ preventScroll: true })
-  if (menuOf(lockup).dataset.submenu !== "flyout") return
-  if (target.closest("[data-slot=parent]")) toggleSub(lockup, true)
-  else if (target.closest("[data-slot=menu]")) {
-    const root = lockup
-    clearTimeout(subTimer)
-    subTimer = window.setTimeout(() => toggleSub(root, false), 300)
-  }
-})
+// The shared logo right-click menu (packages/nav-menus), loaded on first use (nav-intent.ts).
+navMenusOnIntent({ link: (path) => path })
 
 on("pointerdown", (event) => {
   const target = event.target as Element
-  if (lockup && !lockup.contains(target)) closeLockup()
   const section = $("[data-component=section-nav][data-open]")
   if (section && !section.contains(target)) toggleSection(false)
 })
@@ -330,7 +161,10 @@ sectionNavScroll(nav)
 // (site.css): while it is on its way out its items pass under them, and data-under fades them there,
 // as Site does on the site's own pages.
 const sidebar = nav.parentElement!
-const under = () => sidebar.toggleAttribute("data-under", sidebar.getBoundingClientRect().top < -0.5)
+const under = () => {
+  sidebar.toggleAttribute("data-under", sidebar.getBoundingClientRect().top < -0.5)
+  site.toggleAttribute("data-scrolled", scrollY > 4)
+}
 addEventListener("scroll", under, { passive: true })
 addEventListener("resize", under, { passive: true })
 under()

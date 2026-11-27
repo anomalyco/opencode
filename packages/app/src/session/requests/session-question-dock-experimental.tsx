@@ -7,7 +7,6 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { DockPrompt } from "@opencode/session-ui/dock-prompt"
 import { LinkedText } from "@opencode/session-ui/linked-text"
 import { Icon } from "@opencode/ui/icon"
-import { TextInput } from "@opencode/ui/text-input"
 import { frameLoop, Spring, type DurationOptions } from "@opencode/ui/motion"
 import { motionTuning } from "@opencode/ui/motion-tuning"
 import type { FormInfo } from "@opencode/client/promise"
@@ -15,7 +14,9 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useCommand } from "@/shell/commands/command"
-import { questionKey, type QuestionKeyZone } from "./question-keys"
+import { questionEnter, questionKey, type QuestionKeyZone } from "./question-keys"
+import { fitCustomAnswer, questionSubmitShortcuts } from "./question-submit"
+import { useSettings } from "@/settings/model"
 import { questionMotion } from "./question-motion"
 import { useServerSDK } from "@/runtime/server/client"
 import { createQuestionDock } from "./question-controller"
@@ -273,6 +274,8 @@ function Option(props: {
 export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onSubmit: () => void }> = (props) => {
   const language = useLanguage()
   const command = useCommand()
+  const settings = useSettings()
+  const submitKey = settings.general.questionSubmitKey
 
   const form = createQuestionDock({
     sdk: useServerSDK(),
@@ -303,7 +306,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
   let customRef: HTMLButtonElement | undefined
   let customRow: HTMLDivElement | undefined
   let highlightRef: HTMLSpanElement | undefined
-  let customInput: HTMLInputElement | undefined
+  let customInput: HTMLTextAreaElement | undefined
   let optsRef: HTMLDivElement[] = []
 
   const question = createMemo(() => questions()[form.tab()])
@@ -370,6 +373,8 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
 
   const measure = () => {
     if (!root) return
+
+    if (customInput) fitCustomAnswer(customInput)
 
     const scroller = document.querySelector('[data-slot="session-timeline-scroll"] > .scroll-view__viewport')
     const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
@@ -506,7 +511,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
 
     const dock = root?.closest('[data-component="session-composer-dock"]')
     const scroller = document.querySelector('[data-slot="session-timeline-scroll"] > .scroll-view__viewport')
-    createResizeObserver([dock, scroller], requestMeasure)
+    createResizeObserver([dock, scroller, customInput], requestMeasure)
 
     focus(pickFocus())
   })
@@ -565,7 +570,15 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
   })
 
   const sending = form.busy
-  const submitShortcut = () => (IS_MAC ? "⌘⏎" : `${language.t("common.key.ctrl")}+⏎`)
+
+  // The custom answer's field fits its text as it is typed and when another question's answer shows in it.
+  createEffect(() => {
+    input()
+
+    if (customInput) fitCustomAnswer(customInput)
+  })
+
+  const shortcuts = createMemo(() => questionSubmitShortcuts(submitKey(), IS_MAC, language.t("common.key.ctrl")))
   const backShortcut = () => (IS_MAC ? "⌘[" : `${language.t("common.key.alt")}+←`)
 
   const reject = form.dismiss
@@ -590,8 +603,8 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
     focus(options().length)
   }
 
-  // Enter picks the highlighted answer of a single-choice question, then moves on. An empty custom answer opens its
-  // field instead, since there is nothing to pick yet.
+  // The submit key picks the highlighted answer of a single-choice question, then moves on. An empty custom answer
+  // opens its field instead, since there is nothing to pick yet.
   const commit = () => {
     if (multi()) return next()
 
@@ -623,7 +636,12 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
   const nav = (event: KeyboardEvent) => {
     if (event.defaultPrevented) return
 
-    const intent = questionKey(event, { mac: IS_MAC, zone: zone(event.target), count: count() })
+    const intent = questionKey(event, {
+      mac: IS_MAC,
+      zone: zone(event.target),
+      count: count(),
+      submit: submitKey(),
+    })
 
     if (intent.type === "none") return
 
@@ -1098,7 +1116,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
                 </Show>
                 <IconButton
                   ref={(el: HTMLButtonElement) => (chevron = el)}
-                  icon={<Icon name="outline-chevron-down" size="normal" />}
+                  icon={<Icon name="chevron-down" size="normal" />}
                   variant="ghost"
                   size="large"
                   disabled={sending()}
@@ -1185,7 +1203,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
                 value={
                   <>
                     {last() ? language.t("ui.common.submit") : language.t("ui.common.next")}
-                    <span style={{ opacity: 0.6 }}>{submitShortcut()}</span>
+                    <span style={{ opacity: 0.6 }}>{shortcuts().label}</span>
                   </>
                 }
               >
@@ -1201,12 +1219,12 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
                       size="large"
                       disabled={sending()}
                       onClick={next}
-                      aria-keyshortcuts="Meta+Enter Control+Enter"
+                      aria-keyshortcuts={shortcuts().aria}
                     >
                       <span data-slot="question-advance-label" ref={(el) => (nextLabel = el)}>
                         {language.t("ui.common.next")}
                         <span data-slot="question-submit-shortcut" aria-hidden="true">
-                          {submitShortcut()}
+                          {shortcuts().label}
                         </span>
                       </span>
                     </Button>
@@ -1222,12 +1240,12 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
                       size="large"
                       disabled={sending()}
                       onClick={next}
-                      aria-keyshortcuts="Meta+Enter Control+Enter"
+                      aria-keyshortcuts={shortcuts().aria}
                     >
                       <span data-slot="question-advance-label" ref={(el) => (submitLabel = el)}>
                         {language.t("ui.common.submit")}
                         <span data-slot="question-submit-shortcut" aria-hidden="true">
-                          {submitShortcut()}
+                          {shortcuts().label}
                         </span>
                       </span>
                     </Button>
@@ -1315,9 +1333,11 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
                 >
                   <Mark multi={multi()} picked={on()} shortcut={count() <= 9 ? String(count()) : undefined} />
                 </button>
-                <TextInput
+                <textarea
                   ref={(el) => (customInput = el)}
                   class="question-custom-field"
+                  data-slot="question-custom-input"
+                  rows={1}
                   dir="auto"
                   aria-label={customLabel()}
                   placeholder={customLabel()}
@@ -1342,7 +1362,8 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
 
                     if ((e.metaKey || e.ctrlKey) && !e.altKey) return
 
-                    if (e.key !== "Enter") return
+                    // The other Enter starts a new line, as the field does by itself.
+                    if (questionEnter(e, submitKey()) !== "submit") return
                     e.preventDefault()
 
                     if (!e.repeat) next()

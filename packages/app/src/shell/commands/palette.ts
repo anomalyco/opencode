@@ -14,6 +14,7 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
 import { displayName } from "@opencode/ui/project-avatar"
 import { projectForSession } from "@/shell/layout/helpers"
+import { mergeRootSessionIndex } from "@/runtime/server/session-index"
 import { usePluginHost } from "@/runtime/plugin/host"
 import { usePluginAttachment } from "@/runtime/plugin/host-apis"
 import { looksLikeSessionID } from "@/session/search"
@@ -196,6 +197,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
   const sessions = createServerSessionEntries({
     server: ServerConnection.key(serverSDK.server),
     known: createKnownServerSessions(() => serverCtx),
+    apply: serverCtx.data.session.apply,
     projects: serverCtx.projects.list,
     load: (search, signal) =>
       serverSDK.api.session.list({ parentID: null, search, archived: false, limit: 50 }, { signal }),
@@ -268,9 +270,10 @@ export function createCommandPaletteCommandEntry(option: CommandOption, category
 
 export function createServerSessionEntries(props: {
   server: ServerConnection.Key
-  archived?: boolean
+  /** Typed searches also match archived sessions, marked `archived` so their rows dim. Recent rows never list them. */
+  includeArchived?: boolean
   known?: () => SessionInfo[]
-  /** Hides sessions deleted since they were loaded. */
+  /** Hides sessions deleted since they were loaded and adds a pending send's bump. */
   apply?: (sessions: SessionInfo[]) => SessionInfo[]
   projects: () => Project[]
   load: (search: string, signal: AbortSignal) => Promise<{ data: SessionInfo[] }>
@@ -292,17 +295,12 @@ export function createServerSessionEntries(props: {
     }
   >()
 
-  // Let the newest metadata win duplicates before ranking the merged sessions newest-first.
+  // The server's list carries each step's `time.updated` bump. Like Home, keep the cached time until a run ends.
+  // Sort after `apply` so a pending send's bump decides which sessions make the recent group.
   const known = createMemo(() => {
-    const merged = [
-      ...new Map(
-        [...(props.known?.() ?? []), ...sourceState().loaded]
-          .toSorted((a, b) => a.time.updated - b.time.updated)
-          .map((session) => [session.id, session] as const),
-      ).values(),
-    ].toSorted((a, b) => b.time.updated - a.time.updated)
+    const merged = mergeRootSessionIndex(props.known?.() ?? [], sourceState().loaded)
 
-    return props.apply?.(merged) ?? merged
+    return (props.apply?.(merged) ?? merged).toSorted((a, b) => b.time.updated - a.time.updated)
   })
 
   const dispatch = (event: SessionSourceEvent) =>
@@ -385,7 +383,7 @@ export function createServerSessionEntries(props: {
     const category = search ? props.category() : props.recentCategory()
 
     return sessions.flatMap((session) => {
-      if (!!session.time.archived !== !!props.archived) return []
+      if (session.time.archived && !(search && props.includeArchived)) return []
 
       const project = projectForSession(session, projects)
 
@@ -400,6 +398,7 @@ export function createServerSessionEntries(props: {
           sessionID: session.id,
           server: props.server,
           project,
+          archived: session.time.archived,
           updated: session.time.updated,
         },
       ]
@@ -433,7 +432,13 @@ export function createServerSessionEntries(props: {
     items(text: string) {
       const search = text.trim()
 
-      if (!search) return entries(known().slice(0, props.recentLimit ?? ENTRY_LIMIT), search)
+      if (!search)
+        return entries(
+          known()
+            .filter((session) => !session.time.archived)
+            .slice(0, props.recentLimit ?? ENTRY_LIMIT),
+          search,
+        )
 
       // The server matches titles, so narrow the loaded sessions before building entries for them. Building an entry
       // per known session on every keystroke is what made search slow once the loaded index grew.
@@ -455,6 +460,7 @@ export function createKnownServerSessions(context: Accessor<ServerCtx | undefine
 
     if (!server) return []
 
-    return server.data.session.list().filter((session) => !session.parentID && !session.time.archived)
+    // Raw records: `apply` adds the send bump after the merge, so a projected time never reaches it as a server time.
+    return server.data.session.known().filter((session) => !session.parentID && !session.time.archived)
   }
 }

@@ -5,7 +5,6 @@ import {
   InlineToolRow,
   executeCallSummary,
   genericToolSummary,
-  isBackgroundSubagent,
   parseApplyPatchFiles,
   parseDiagnostics,
   parseQuestionAnswers,
@@ -229,13 +228,6 @@ describe("TUI inline tool wrapping", () => {
         "a.ts",
       ),
     ).toEqual([{ message: "valid", range: { start: { line: 2, character: 3 } } }])
-  })
-
-  test("labels only detached or async subagents as background", () => {
-    expect(isBackgroundSubagent({ status: "running" }, "running")).toBeFalse()
-    expect(isBackgroundSubagent({ status: "running" }, "completed")).toBeTrue()
-    expect(isBackgroundSubagent({ status: "running" }, "error")).toBeFalse()
-    expect(isBackgroundSubagent({ status: "completed" }, "completed")).toBeFalse()
   })
 
   test("labels only explicit subagent model overrides", () => {

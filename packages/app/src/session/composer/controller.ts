@@ -16,6 +16,7 @@ export function createSessionComposerController(input: {
   sessionKey: Accessor<string>
   controls: Accessor<ComposerControls>
   dock: Parameters<typeof createSessionComposerRegionController>[0]
+  takeBack: () => Promise<void>
 }) {
   const settings = useSettings()
   const dialog = useDialog()
@@ -31,6 +32,7 @@ export function createSessionComposerController(input: {
     controls: input.controls,
     submitted: region.onResponseSubmit,
     background,
+    takeBack: input.takeBack,
     setEditor: (element) => {
       setEditor(element)
       region.setPromptRef(element)

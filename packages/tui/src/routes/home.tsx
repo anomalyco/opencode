@@ -16,7 +16,6 @@ import { useUpdateNotification } from "../context/update-notification"
 import { useExit } from "../context/exit"
 import { FadeInText } from "../component/fade-in-text"
 
-let once = false
 const placeholder = {
   normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],
   shell: ["ls -la", "git status", "pwd"],
@@ -26,6 +25,7 @@ export function Home() {
   const route = useRouteData("home")
   const promptRef = usePromptRef()
   const [ref, setRef] = createSignal<PromptRef | undefined>()
+  const [startup, setStartup] = createSignal<string>()
   const args = useArgs()
   const local = useLocal()
   const editor = useEditorContext()
@@ -53,9 +53,11 @@ export function Home() {
   const bind = (r: PromptRef | undefined) => {
     setRef(r)
     promptRef.set(r)
-    if (once || !r || route.prompt || !args.prompt) return
-    r.set({ text: args.prompt, files: [], agents: [], pasted: [] })
-    once = true
+    if (!r || route.prompt) return
+    const text = args.takePrompt()
+    if (!text) return
+    r.set({ text, files: [], agents: [], pasted: [] })
+    setStartup(text)
   }
 
   createEffect(() => {
@@ -68,12 +70,12 @@ export function Home() {
   // Wait for everything submit needs before auto-submitting --prompt; it runs once.
   createEffect(() => {
     const r = ref()
+    const text = startup()
     if (sent) return
-    if (!r) return
+    if (!r || !text) return
     if (!local.model.ready || !local.model.catalogReady) return
     if (!local.agent.current() || !local.model.current()) return
-    if (!args.prompt) return
-    if (r.current.text !== args.prompt) return
+    if (r.current.text !== text) return
     sent = true
     r.submit()
   })

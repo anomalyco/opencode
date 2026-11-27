@@ -211,7 +211,7 @@
     flex: 0 0 100%;
     aspect-ratio: 16 / 9;
     overflow: hidden;
-    background: #0a0a0a;
+    background: var(--fixed-dark);
 
     :is(video, img) {
       position: absolute;
@@ -972,7 +972,7 @@
   width: 2rem;
   height: 2rem;
   padding: 0;
-  color: #fff;
+  color: var(--fixed-white);
   background: rgb(0 0 0 / 0.6);
   opacity: 0.8;
   transition: opacity 150ms ease;

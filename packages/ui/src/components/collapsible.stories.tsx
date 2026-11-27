@@ -1,5 +1,5 @@
-// @ts-nocheck
-import * as mod from "./collapsible"
+import { createEffect, createSignal } from "solid-js"
+import { Collapsible, type CollapsibleProps } from "./collapsible"
 
 const docs = `### Overview
 Toggleable content region with optional arrow indicator.
@@ -28,7 +28,8 @@ Compose \`Collapsible.Trigger\`, \`Collapsible.Content\`, and \`Collapsible.Arro
 export default {
   title: "UI/Collapsible",
   id: "components-collapsible",
-  component: mod.Collapsible,
+  component: Collapsible,
+  args: { disabled: false },
   tags: ["autodocs"],
   parameters: {
     docs: {
@@ -45,42 +46,31 @@ export default {
   },
 }
 
-export const Basic = {
-  args: {
-    variant: "normal",
-    defaultOpen: true,
-  },
-  render: (props) => (
-    <mod.Collapsible {...props}>
-      <mod.Collapsible.Trigger data-slot="collapsible-trigger">
+function Details(props: CollapsibleProps & { label: string; content: string }) {
+  const [open, setOpen] = createSignal(props.defaultOpen)
+  createEffect(() => setOpen(props.defaultOpen))
+
+  return (
+    <Collapsible variant={props.variant} disabled={props.disabled} open={open()} onOpenChange={setOpen}>
+      <Collapsible.Trigger>
         <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
-          <span>Details</span>
-          <mod.Collapsible.Arrow />
+          <span>{props.label}</span>
+          <Collapsible.Arrow />
         </div>
-      </mod.Collapsible.Trigger>
-      <mod.Collapsible.Content data-slot="collapsible-content">
-        <div style={{ color: "var(--text-weak)", "padding-top": "8px" }}>Optional details sit here.</div>
-      </mod.Collapsible.Content>
-    </mod.Collapsible>
-  ),
+      </Collapsible.Trigger>
+      <Collapsible.Content>
+        <div style={{ color: "var(--text-weak)", "padding-top": "8px" }}>{props.content}</div>
+      </Collapsible.Content>
+    </Collapsible>
+  )
+}
+
+export const Basic = {
+  args: { variant: "normal", defaultOpen: true },
+  render: (props: CollapsibleProps) => <Details {...props} label="Details" content="Optional details sit here." />,
 }
 
 export const Ghost = {
-  args: {
-    variant: "ghost",
-    defaultOpen: false,
-  },
-  render: (props) => (
-    <mod.Collapsible {...props}>
-      <mod.Collapsible.Trigger data-slot="collapsible-trigger">
-        <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
-          <span>Ghost trigger</span>
-          <mod.Collapsible.Arrow />
-        </div>
-      </mod.Collapsible.Trigger>
-      <mod.Collapsible.Content data-slot="collapsible-content">
-        <div style={{ color: "var(--text-weak)", "padding-top": "8px" }}>Ghost content.</div>
-      </mod.Collapsible.Content>
-    </mod.Collapsible>
-  ),
+  args: { variant: "ghost", defaultOpen: false },
+  render: (props: CollapsibleProps) => <Details {...props} label="Ghost trigger" content="Ghost content." />,
 }

@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import {
   INITIAL_KEYBIND_CAPTURE_STATE,
+  selectCapturePrefix,
   selectCapturingKeybind,
+  selectExtendableKeybind,
   transitionKeybindCapture,
   type KeybindCaptureEffect,
   type KeybindCaptureEvent,
@@ -16,6 +18,20 @@ function replay(events: KeybindCaptureEvent[], state = INITIAL_KEYBIND_CAPTURE_S
 }
 
 const capture = (id: string, pageActive = true): KeybindCaptureEvent => ({ type: "capture.toggled", id, pageActive })
+
+const press = (stroke: string, conflictTitles: string[] = []): KeybindCaptureEvent => ({
+  type: "key.pressed",
+  input: { kind: "stroke", stroke, conflictTitles },
+})
+
+const extend = (id: string, chord: string): KeybindCaptureEvent => ({
+  type: "capture.extended",
+  id,
+  chord,
+  pageActive: true,
+})
+
+const backspace: KeybindCaptureEvent = { type: "key.pressed", input: { kind: "backspace" } }
 
 describe("keybind capture machine", () => {
   test("moving the recording to another row keeps shortcuts suspended", () => {
@@ -52,30 +68,54 @@ describe("keybind capture machine", () => {
     ])
   })
 
-  test("a conflicting combination keeps recording; a free one binds and resumes", () => {
-    const capturing = replay([capture("session.beta")]).state
+  test("a key saves at once, and + adds the next key to the saved shortcut", () => {
+    const saved = replay([capture("session.beta"), press("mod+k")])
 
-    const conflict = transitionKeybindCapture(capturing, {
-      type: "key.pressed",
-      input: { kind: "combo", keybind: "mod+a", conflictTitles: ["Alpha"] },
-    })
+    expect(saved.effects).toEqual([
+      { type: "binding.set", id: "session.beta", value: "mod+k" },
+      { type: "keybinds.resume" },
+    ])
+    expect(selectExtendableKeybind(saved.state)).toBe("session.beta")
 
-    expect(conflict.state).toBe(capturing)
-    expect(conflict.effects).toEqual([{ type: "notify.conflict", keybind: "mod+a", conflictTitles: ["Alpha"] }])
+    const extending = replay([extend("session.beta", "mod+k")], saved.state)
+    expect(extending.effects).toEqual([{ type: "keybinds.suspend" }])
+    expect(replay([press("mod+c")], extending.state).effects).toEqual([
+      { type: "binding.set", id: "session.beta", value: "mod+k mod+c" },
+      { type: "keybinds.resume" },
+    ])
 
-    expect(
-      transitionKeybindCapture(capturing, {
-        type: "key.pressed",
-        input: { kind: "combo", keybind: "mod+x", conflictTitles: [] },
-      }).effects,
-    ).toEqual([{ type: "binding.set", id: "session.beta", value: "mod+x" }, { type: "keybinds.resume" }])
-    expect(transitionKeybindCapture(capturing, { type: "key.pressed", input: { kind: "modifier-only" } }).state).toBe(
-      capturing,
-    )
-    expect(transitionKeybindCapture(capturing, { type: "key.pressed", input: { kind: "clear" } }).effects).toEqual([
+    // Recording another row, or unbinding, takes the + away.
+    expect(selectExtendableKeybind(replay([capture("session.alpha")], saved.state).state)).toBeUndefined()
+    expect(selectExtendableKeybind(replay([{ type: "unbind.clicked", id: "x" }], saved.state).state)).toBeUndefined()
+  })
+
+  test("a clashing key keeps recording the same chord", () => {
+    const extending = replay([extend("session.beta", "mod+k")]).state
+    const clash = transitionKeybindCapture(extending, press("mod+c", ["Alpha"]))
+
+    expect(clash.state).toBe(extending)
+    expect(selectCapturePrefix(clash.state)).toBe("mod+k")
+    expect(clash.effects).toEqual([{ type: "notify.conflict", keybind: "mod+k mod+c", conflictTitles: ["Alpha"] }])
+  })
+
+  test("Backspace drops the key being added, and with nothing before it removes the shortcut", () => {
+    const dropped = replay([extend("session.beta", "mod+k"), backspace])
+    expect(selectCapturingKeybind(dropped.state)).toBe("session.beta")
+    expect(selectCapturePrefix(dropped.state)).toBe("")
+    expect(dropped.effects).toEqual([])
+
+    expect(replay([capture("session.beta"), backspace]).effects).toEqual([
       { type: "binding.set", id: "session.beta", value: "none" },
       { type: "keybinds.resume" },
     ])
+  })
+
+  test("modifier-only keys are ignored and Escape stops recording", () => {
+    const capturing = replay([capture("session.beta")]).state
+
+    expect(transitionKeybindCapture(capturing, { type: "key.pressed", input: { kind: "modifier-only" } }).state).toBe(
+      capturing,
+    )
     expect(transitionKeybindCapture(capturing, { type: "key.pressed", input: { kind: "escape" } }).effects).toEqual([
       { type: "keybinds.resume" },
     ])
@@ -95,8 +135,8 @@ describe("keybind capture machine", () => {
   test("disposal resumes shortcuts once and ignores later keys", () => {
     const disposed = replay([capture("session.alpha"), { type: "disposed" }])
     expect(disposed.effects).toEqual([{ type: "keybinds.resume" }])
-    expect(transitionKeybindCapture(disposed.state, { type: "key.pressed", input: { kind: "escape" } }).effects).toEqual(
-      [],
-    )
+    expect(
+      transitionKeybindCapture(disposed.state, { type: "key.pressed", input: { kind: "escape" } }).effects,
+    ).toEqual([])
   })
 })

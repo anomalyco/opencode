@@ -12,4 +12,12 @@ export default {
   noChanges: "変更なし",
   "settings.wrapLines.title": "折り返しライン",
   "settings.wrapLines.description": "横にスクロールするのではなく、モバイル差分で長い行を折り返す",
+  "menu.count.one": "{{count}}件のファイルを変更",
+  "menu.count.other": "{{count}}件のファイルを変更",
+  "folder.more": "{{count}} · 他は非表示",
+  "folder.failed": "変更を読み込めませんでした",
+  "command.open": "レビューを開く",
+  "load.failed": "変更を読み込めませんでした",
+  "load.timeout": "サーバーの応答に時間がかかりすぎました",
+  offline: "このサーバーにアクセスできません",
 }

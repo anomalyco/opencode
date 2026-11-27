@@ -2,11 +2,13 @@ import type { UsageLimitsBudget, UsageLimitsInfo } from "@opencode/client/promis
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { onMount } from "solid-js"
-import { DialogStoryRuntime, STORY_DIRECTORY } from "@/components-lab/dialog-story-runtime"
+import { DialogStoryRuntime, STORY_DIRECTORY, STORY_LOCKED_SERVER } from "@/components-lab/dialog-story-runtime"
 import { DialogUsage, UsageDialogContent } from "./dialog"
 import type { CurrentModel } from "./limits"
 
-const resetsAt = Date.UTC(2026, 10, 1)
+const today = new Date()
+
+const resetsAt = Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1)
 
 const hour = 3_600_000
 
@@ -33,11 +35,11 @@ const anthropic = (spent: number) =>
 
 const pool = (spent: number) => budget({ id: "pool", scope: "combined", shared: true, limit: 1_000, spent })
 
-const info = (budgets: UsageLimitsBudget[], go = false): UsageLimitsInfo => ({
+const info = (budgets: UsageLimitsBudget[], go?: "available" | "limited"): UsageLimitsInfo => ({
   workspace: { id: "wrk_1", name: "Acme", usageURL: "https://opencode.ai/wrk_1/activity/overview" },
   go: go
     ? {
-        rolling: { percent: 42, limited: false, resetsAt: Date.now() + 3 * hour },
+        rolling: { percent: go === "limited" ? 100 : 42, limited: go === "limited", resetsAt: Date.now() + 3 * hour },
         weekly: { percent: 18, limited: false, resetsAt: Date.now() + 100 * hour },
         monthly: { percent: 7, limited: false, resetsAt: Date.now() + 500 * hour },
       }
@@ -82,7 +84,7 @@ export default {
   id: "app-dialog-usage",
 }
 
-export const Default = { render: () => <UsageStory info={info([anthropic(123.14), pool(394.57)], true)} /> }
+export const Default = { render: () => <UsageStory info={info([anthropic(123.14), pool(394.57)], "available")} /> }
 
 export const SignedOut = {
   render: () => (
@@ -123,3 +125,13 @@ export const WorkspaceBudgetReached = { render: () => <UsageStory info={info([an
 export const OutOfCredits = { render: () => <UsageStory credits info={info([anthropic(80), pool(394.57)])} /> }
 
 export const NoBudgets = { render: () => <UsageStory info={info([])} /> }
+
+export const GoLimitReached = { render: () => <UsageStory info={info([pool(394.57)], "limited")} /> }
+
+export const LoadFailed = {
+  render: () => (
+    <DialogStoryRuntime servers={[STORY_LOCKED_SERVER]}>
+      <LiveUsageStory />
+    </DialogStoryRuntime>
+  ),
+}

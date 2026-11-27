@@ -341,6 +341,41 @@ test("a blank Enter leaves the running session alone while Stop still interrupts
   expect(mock.prompts).toEqual([])
 })
 
+test("stopping before the model answers takes the prompt back, as in the TUI", async ({ page }) => {
+  const mock = createQueueMock(
+    [],
+    [
+      { id: "msg_queue_unanswered", type: "user", text: "Reword this prompt", time: { created: 1 } },
+      {
+        id: "msg_queue_thinking",
+        type: "assistant",
+        agent: "build",
+        model: { id: "queue-model", providerID: "opencode" },
+        content: [{ type: "reasoning", text: "Thinking it over" }],
+        time: { created: 2 },
+      },
+    ],
+  )
+
+  const view = await openQueue(page, mock)
+  const requests: string[] = []
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname
+
+    const step = ["/interrupt", "/wait", "/revert/stage", "/revert/commit"].find((suffix) =>
+      path.endsWith(`/${sessionID}${suffix}`),
+    )
+
+    if (step) requests.push(step)
+  })
+
+  await expect(userRow(page, "msg_queue_unanswered")).toBeVisible()
+  await view.input.press("Escape")
+
+  await expect.poll(() => requests).toEqual(["/interrupt", "/wait", "/revert/stage", "/revert/commit"])
+  await expect(view.input).toHaveText("Reword this prompt")
+})
+
 test.describe("touch keyboard", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
 
@@ -1442,9 +1477,12 @@ for (const delivery of ["steer", "queue"] as const) {
       await expect(bubble).toHaveCSS("transition-duration", "0s")
       await expect(pending.locator('[data-slot="user-message-copy-wrapper"]')).toHaveCSS("opacity", "1")
       // Pending closes the meta line, after the agent and model that show on hover.
-      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Queue Model\s*·\s*Pending$/, {
-        useInnerText: true,
-      })
+      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(
+        /^Build\s*·\s*Queue Model\s*·\s*Pending$/,
+        {
+          useInnerText: true,
+        },
+      )
       await bubble.evaluate((element) => (element.dataset.deliveryMarker = "pending"))
     }
 
@@ -1526,7 +1564,7 @@ for (const delivery of ["steer", "queue"] as const) {
 
     if (colors) {
       await expect(bubble).toHaveAttribute("data-delivery-marker", "pending")
-      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Queue Model$/, {
+      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Build\s*·\s*Queue Model$/, {
         useInnerText: true,
       })
       await expect(bubble).toHaveCSS("background-color", colors.delivered.background)

@@ -33,6 +33,7 @@ export const mergeCapabilities = (config: Partial<Capabilities>, base: Capabilit
   const fallback = base ?? Capabilities.default()
   return {
     tools: config.tools ?? fallback.tools,
+    freeform: (config.freeform ?? base?.freeform)?.slice(),
     input: [...(config.input ?? fallback.input)],
     output: [...(config.output ?? fallback.output)],
     temperature: config.temperature ?? base?.temperature,
@@ -232,6 +233,14 @@ const layer = Layer.effect(
             byProvider.get(providerID)?.forEach((model, id, models) => {
               if (!model.cost.some((cost) => cost.input > 0)) models.delete(id)
             })
+        // A model's speeds ("gpt-5.5-fast") are offered only while the model is: whatever disabled or removed the
+        // model, such as a workspace's settings, did not name its speeds.
+        byProvider.forEach((models) =>
+          models.forEach((model, id) => {
+            const base = model.experimental?.speed?.base
+            if (base && model.enabled && !models.get(base)?.enabled) models.set(id, { ...model, enabled: false })
+          }),
+        )
         // Non-chat models (image, decision…) only show up when listed by type, so nothing that
         // picks or resolves a session model can reach them.
         const other = new Map<Model.Type, Info[]>()
@@ -328,7 +337,6 @@ export const node = makeLocationNode({ service: Service, layer, deps: [Provider.
 const PREFERRED_FREE = [
   "big-pickle",
   "deepseek-v4.1-flash-free",
-  "glm-5.3-flash-free",
   "muse-spark-1.3-contributor-free",
 ]
 

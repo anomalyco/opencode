@@ -21,7 +21,17 @@ const streams = new Map<string, Stream>()
 
 const projections = new Map<string, Projection>()
 
-const parser = createMarkdownParser()
+const fragments = new Map<string, string>()
+
+const parser = createMarkdownParser((html, block, display) => {
+  const key = Array.from(crypto.getRandomValues(new Uint32Array(4)), (n) => n.toString(16).padStart(8, "0")).join("")
+  fragments.set(key, html)
+  const tag = block ? "pre" : "span"
+
+  // A display formula is a block up to its maximum size wherever it sits in a line. The sanitizer reads the mark
+  // to keep such a block out of an application link's label, and drops it like every authored data attribute.
+  return `<${tag} id="${key}"${display ? " data-display" : ""}></${tag}>`
+})
 
 // Requests run in arrival order. The main thread's lanes already keep at most one request per key in flight and drop
 // superseded snapshots before posting, so the worker needs no queue of its own.
@@ -51,9 +61,13 @@ self.onmessage = (event: MessageEvent<MarkdownWorkerRequest>) => {
 
 async function parse(request: Extract<MarkdownWorkerRequest, { type: "parse" }>) {
   try {
-    post({ type: "parse", id: request.id, html: await parser.parse(request.text) })
+    const html = parser.parse(request.text, { async: false })
+    // postMessage clones synchronously. No fragment or token survives into the next request.
+    post({ type: "parse", id: request.id, html: fragments.size ? { html, fragments } : html })
   } catch (error) {
     post({ type: "error", id: request.id, message: error instanceof Error ? error.message : String(error) })
+  } finally {
+    fragments.clear()
   }
 }
 

@@ -35,6 +35,7 @@ import {
   type SessionHeaderTitleEvent,
 } from "./header-actions-machine"
 import { createTimelineProjection } from "./projection"
+import { createNextTimelineProjection } from "@opencode/session-ui/timeline-next"
 import { useServer } from "@/runtime/server/current"
 import type { ReasoningMode } from "@opencode/session-ui/timeline/projection"
 
@@ -69,7 +70,14 @@ export type TimelineSessionSource = {
   history: Pick<SessionModel["history"], "messages">
 }
 
-export function createTimelineController(input: { session: TimelineSessionSource; active: Accessor<boolean> }) {
+export function createTimelineController(input: {
+  session: TimelineSessionSource
+  active: Accessor<boolean>
+  /** Whether this timeline is the New timeline experiment. */
+  next: boolean
+  /** The server's `full_codemode` flag: without it, a script's changes neither show nor count. */
+  scriptDiffs: Accessor<boolean>
+}) {
   const navigate = useNavigate()
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
@@ -200,17 +208,24 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const shellToolPartsExpanded = () => timelineDetail().shell.details === "expanded"
   const editToolPartsExpanded = () => timelineDetail().edit.details === "expanded"
 
-  const projection = createTimelineProjection({
+  const projectionInput = {
     sessionMessages: projectedMessages,
     status: input.session.data.status,
-    reasoningMode,
-    shellToolDefaultOpen: shellToolPartsExpanded,
-    editToolDefaultOpen: editToolPartsExpanded,
     timelineDetail,
     pendingInputIDs,
     queuedCompactionIDs,
     turnDiffs: settings.general.showTurnDiffs,
-  })
+    scriptDiffs: input.scriptDiffs,
+  }
+
+  const projection = input.next
+    ? createNextTimelineProjection(projectionInput)
+    : createTimelineProjection({
+        ...projectionInput,
+        reasoningMode,
+        shellToolDefaultOpen: shellToolPartsExpanded,
+        editToolDefaultOpen: editToolPartsExpanded,
+      })
 
   const errorMessage = (cause: unknown) =>
     Option.match(decodeErrorData(cause), {
@@ -223,6 +238,8 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const [titleState, setTitleState] = createSignal(
     createSessionHeaderTitleState(untrack(input.session.identity.sessionKey)),
   )
+
+  const [generatingTitles, setGeneratingTitles] = createSignal<ReadonlySet<string>>(new Set())
 
   let titleInput: HTMLInputElement | undefined
   let titleTimer: ReturnType<typeof setTimeout> | undefined
@@ -438,6 +455,47 @@ export function createTimelineController(input: { session: TimelineSessionSource
           editable: editable(),
           currentTitle: titleLabel(),
         }),
+      // As in the TUI, `/rename <title>` renames and a bare `/rename` asks the server to generate a new title.
+      generating: () => {
+        const sessionID = input.session.identity.sessionID()
+
+        return !!sessionID && generatingTitles().has(sessionID)
+      },
+      set: (title: string) => {
+        const sessionID = input.session.identity.sessionID()
+
+        if (!sessionID || !editable()) return
+        const next = title.trim()
+
+        // Generating takes a model call; a repeat while one is in flight would only start a second one.
+        if (!next && untrack(generatingTitles).has(sessionID)) return
+
+        if (!next) setGeneratingTitles((current) => new Set(current).add(sessionID))
+
+        return Promise.try(() => serverSDK.api.session.update({ sessionID, title: next }))
+          .then(
+            () => {
+              // A generated title arrives with the response's session event; sync in case the response beat it.
+              data.session.invalidate(sessionID)
+
+              return data.session.sync(sessionID)
+            },
+            (cause: unknown) => {
+              showToast({ title: language.t("common.requestFailed"), description: errorMessage(cause) })
+            },
+          )
+          .finally(() => {
+            if (next) return
+
+            setGeneratingTitles((current) => {
+              const remaining = new Set(current)
+
+              remaining.delete(sessionID)
+
+              return remaining
+            })
+          })
+      },
     },
     action: {
       export: (id: string) => exporter.export({ server: server.key, sessionID: id }),

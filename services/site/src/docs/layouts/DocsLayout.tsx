@@ -1,5 +1,5 @@
 import { For, Show, type JSX } from "solid-js"
-import { DocsLockup, docsSectionName, type DocsVersion } from "~/component/site/docs-lockup"
+import { DocsLockup, DocsSectionLinks, docsSectionName, type DocsVersion } from "~/component/site/docs-lockup"
 import { DocsVersionNotice } from "~/component/site/docs-version-notice"
 import { GitHubLink } from "~/component/site/github-link"
 import { Chevron, NewTab, SearchIcon } from "~/component/site/icons"
@@ -9,10 +9,12 @@ import { Bracket } from "~/component/site/site-controls"
 import { monoFontLatin } from "~/component/site/mono-fonts"
 import { OnThisPage } from "~/component/site/on-this-page"
 import { defaultRootAttributes, themeScript } from "~/component/site/preload-settings"
+import { shareTags } from "~/component/share-meta"
 import { config } from "~/config"
 import { useI18n } from "~/context/i18n"
 import type { I18n } from "~/context/i18n-context"
 import { parseLocale } from "~/lib/language"
+import { ogImage } from "~/lib/og"
 import { latestDocs, type DocsSet } from "../config"
 import { DocsFooter } from "../components/DocsFooter"
 import { DocsSearchDialog } from "../components/DocsSearchDialog"
@@ -79,17 +81,11 @@ export function DocsLayout(props: {
   const next = at >= 0 ? pages[at + 1] : undefined
   const current = pages[at]
   const description = props.description ?? `${props.title} documentation for OpenCode.`
+  const title = `${props.title} | OpenCode${props.set.id === "v1" ? " V1" : ""}`
   const canonical = new URL(docsHref(props.currentSlug, props.set), "https://opencode.ai").href
   const contents = props.headings
     .filter((heading) => heading.depth === 2 || heading.depth === 3)
     .map((heading) => ({ id: heading.slug, title: heading.text, level: heading.depth as 2 | 3 }))
-  // The lockup's versions: this page in each (the versions menu, and "| V1" on V1 pages).
-  const version = () =>
-    props.versions && {
-      current: props.set.id,
-      href: (id: DocsVersion) => props.versions![id],
-      onSelect: () => undefined,
-    }
   const logo = () => (
     <a
       href="/"
@@ -124,7 +120,11 @@ export function DocsLayout(props: {
         <link rel="canonical" href={canonical} />
         <link rel="icon" type="image/svg+xml" href={`${latestDocs.base}favicon.svg`} />
         <Show when={props.markdown}>{(href) => <link rel="alternate" type="text/markdown" href={href()} />}</Show>
-        <title>{`${props.title} | OpenCode${props.set.id === "v1" ? " V1" : ""}`}</title>
+        <title>{title}</title>
+        {/* The link preview: OG Studio's /docs card (image and video) in English, with the page's title and description. */}
+        <For each={shareTags({ title, description, image: ogImage("/docs"), locale: "en", englishOnly: true })}>
+          {(tag) => <meta {...tag} />}
+        </For>
         <link rel="preload" href={interLatin} as="font" type="font/woff2" crossorigin="anonymous" />
         <link rel="preload" href={monoFontLatin} as="font" type="font/woff2" crossorigin="anonymous" />
         <link rel="stylesheet" href={props.assets.stylesheet} />
@@ -146,7 +146,7 @@ export function DocsLayout(props: {
           </a>
           <header data-component="topbar">
             {logo()}
-            <DocsLockup current={section.title} inline="topbar" version={version()} />
+            <DocsLockup inline="topbar" />
             <button
               type="button"
               data-slot="search-button"
@@ -158,6 +158,7 @@ export function DocsLayout(props: {
             </button>
             <GitHubLink owner="topbar" />
           </header>
+          <DocsSectionLinks current={section.title} v1={props.set.id === "v1"} v1Href={props.versions?.v1} />
 
           <div data-slot="frame">
             <aside
@@ -166,7 +167,7 @@ export function DocsLayout(props: {
               data-section="nav"
               aria-label={i18n.t("site.landmark.navigation")}
             >
-              <DocsLockup current={section.title} inline="sidebar" version={version()} />
+              <DocsLockup inline="sidebar" />
               {logo()}
               <div data-component="section-nav">
                 <button type="button" data-slot="section-toggle" aria-expanded="false" aria-controls="section-nav">
@@ -213,15 +214,15 @@ export function DocsLayout(props: {
 
             <main data-component="content" id="content" tabindex={-1}>
               <div data-slot="page">
-                <Show when={props.set.id === "v1" && props.versions}>
-                  {(versions) => <DocsVersionNotice latest={versions().latest} />}
-                </Show>
                 <article
                   data-component="docs-article"
                   data-section="article"
                   data-pagefind-body={props.noindex ? undefined : ""}
                   data-pagefind-meta={`title:${props.title}`}
                 >
+                  <Show when={props.set.id === "v1" && props.versions}>
+                    {(versions) => <DocsVersionNotice latest={versions().latest} />}
+                  </Show>
                   <h1 data-pagefind-meta={`section:${docsSectionName(i18n, section.title)}`}>{props.title}</h1>
                   {props.children}
                   <footer data-slot="article-footer" data-pagefind-ignore>

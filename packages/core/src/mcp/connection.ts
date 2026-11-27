@@ -1,6 +1,6 @@
 export * as McpConnection from "./connection.js"
 
-import type { OAuthClientProvider } from "@modelcontextprotocol/client"
+import type { AuthProvider } from "@modelcontextprotocol/client"
 import type { Mcp } from "@opencode/schema/mcp"
 import { Cause, Effect, Exit, Scope } from "effect"
 import { FetchHttpClient } from "effect/http"
@@ -10,12 +10,8 @@ import type { McpClient } from "./client.js"
 
 export type Failure = Extract<Mcp.Status, { readonly status: "failed" | "needs_auth" }>
 
-/** A catalog the server can change: its tools, prompts or resources. */
-export type Kind = "tools" | "prompts" | "resources"
-
-// Unshared connections to one remote endpoint, from any number of Locations, take turns at their
-// handshake so the endpoint does not receive a startup burst.
-const endpointLoads = KeyedMutex.makeUnsafe<string>()
+/** A catalog the server can change: its tools, prompts, resources or skills. */
+export type Kind = "tools" | "prompts" | "resources" | "skills"
 
 /**
  * What a connection reports to its owner. Each runs inline, in order, so the owner can keep its own
@@ -51,8 +47,10 @@ export interface Input {
    */
   readonly shared?: boolean
   readonly clientInfo?: { readonly name: string; readonly version: string }
+  /** Lists the server's MCP Skills when it offers them. */
+  readonly skills?: boolean
   /** Read on every attempt, so a credential change applies to the next one. */
-  readonly authProvider: Effect.Effect<OAuthClientProvider | undefined>
+  readonly authProvider: Effect.Effect<AuthProvider | undefined>
   readonly elicitation: McpClient.ElicitationHandler
   /** A stdio server is spawned on this execution plane. */
   readonly environment: Environment.Interface
@@ -62,6 +60,11 @@ export interface Input {
   readonly scope: Scope.Scope
   /** Serializes lifecycle work. Callbacks and recovery take it; `start` and `stop` expect the caller to hold it. */
   readonly lock: <A, E>(effect: Effect.Effect<A, E>) => Effect.Effect<A, E>
+  /**
+   * Unshared connections to one remote endpoint, from any number of Locations on the same host, take turns at
+   * their handshake so the endpoint does not receive a startup burst.
+   */
+  readonly endpointLoads: KeyedMutex.KeyedMutex<string>
   /** Runs callbacks from the live connection. */
   readonly callbacks: (effect: Effect.Effect<void>) => unknown
   /** Runs recovery that a background request triggered. */
@@ -80,6 +83,8 @@ export interface Connection {
   /** The server's tool list as listed. Each refresh replaces the array. */
   readonly tools: ReadonlyArray<McpClient.Tool> | undefined
   readonly prompts: ReadonlyArray<McpClient.Prompt> | undefined
+  /** The server's skill entries as listed, when it offers MCP Skills. Each refresh replaces the array. */
+  readonly skills: ReadonlyArray<McpClient.Skill> | undefined
   /** Connects and lists tools; a failure is reported through `failed`. */
   readonly start: Effect.Effect<void>
   readonly stop: Effect.Effect<void>
@@ -100,7 +105,9 @@ export function make(input: Input): Connection {
     client?: McpClient.Connection
     tools?: ReadonlyArray<McpClient.Tool>
     prompts?: ReadonlyArray<McpClient.Prompt>
+    skills?: ReadonlyArray<McpClient.Skill>
   } = {}
+
   const requests = new Map<McpClient.Connection, { count: number; scope?: Scope.Closeable }>()
 
   const request = <A, E>(client: McpClient.Connection, run: (client: McpClient.Connection) => Effect.Effect<A, E>) =>
@@ -145,6 +152,16 @@ export function make(input: Input): Connection {
       Effect.andThen(input.events.changed("prompts")),
     )
 
+  const refreshSkills = (client: McpClient.Connection) =>
+    client.skills
+      ? client.skills.list().pipe(
+          Effect.map((skills) => {
+            state.skills = skills
+          }),
+          Effect.andThen(input.events.changed("skills")),
+        )
+      : Effect.void
+
   // Re-establishes a connection whose HTTP session the server dropped, unless another path already
   // replaced it while this one waited for the lock.
   const recover = (client: McpClient.Connection) =>
@@ -155,18 +172,39 @@ export function make(input: Input): Connection {
       yield* start
     }).pipe(input.lock)
 
+  // A request the server refused for authorization ends the connection in needs_auth, as a refused connect does, so the
+  // status says so and later calls stop refreshing a token the server will not take.
+  const refused = (client: McpClient.Connection, message: string) =>
+    Effect.gen(function* () {
+      if (state.client !== client) return
+      // A shared connection's holders learn of its end only through `closed`, which stops it.
+      if (input.shared) return yield* input.events.closed(message)
+      yield* stop()
+      yield* input.events.failed({ status: "needs_auth", error: message }, false)
+    }).pipe(input.lock)
+
+  // The client module is loaded lazily, so match its tagged errors by tag rather than class.
+  const tagged = (error: Error, tag: string) => "_tag" in error && error._tag === tag
+
   const recovering = <A, E extends Error>(
     client: McpClient.Connection,
     run: (client: McpClient.Connection) => Effect.Effect<A, E>,
-  ) =>
-    request(client, run).pipe(
+  ) => {
+    // A retry after reconnecting runs on the new client, so a refusal there must end that one.
+    const attempt = (target: McpClient.Connection) =>
+      request(target, run).pipe(
+        Effect.tapError((error) =>
+          tagged(error, "MCP.NeedsAuthError") ? refused(target, error.message) : Effect.void,
+        ),
+      )
+    return attempt(client).pipe(
       Effect.catchIf(
-        // The client module is loaded lazily, so match the tagged error by tag rather than class.
-        (error) => "_tag" in error && error._tag === "MCP.SessionExpiredError",
+        (error) => tagged(error, "MCP.SessionExpiredError"),
         (error) =>
-          recover(client).pipe(Effect.flatMap(() => (state.client ? request(state.client, run) : Effect.fail(error)))),
+          recover(client).pipe(Effect.flatMap(() => (state.client ? attempt(state.client) : Effect.fail(error)))),
       ),
     )
+  }
 
   const watch = (client: McpClient.Connection) => {
     const live = whenLive(client)
@@ -176,7 +214,8 @@ export function make(input: Input): Connection {
     client.onSessionExpired(() => input.fork(recover(client)))
     client.onToolsChanged(() => live(refreshTools(client).pipe(Effect.andThen(input.events.changed("tools")))))
     client.onPromptsChanged(() => live(refreshPrompts(client)))
-    client.onResourcesChanged(() => live(input.events.changed("resources")))
+    // MCP Skills announces a changed skill list as a resource list change.
+    client.onResourcesChanged(() => live(input.events.changed("resources").pipe(Effect.andThen(refreshSkills(client)))))
   }
 
   const start: Effect.Effect<void> = Effect.suspend(() =>
@@ -204,6 +243,8 @@ export function make(input: Input): Connection {
         elicitation: input.elicitation,
         clientInfo: input.clientInfo,
         roots: !input.shared,
+        events: true,
+        skills: input.skills,
       }).pipe(
         Effect.flatMap(
           (client): Effect.Effect<{ client: McpClient.Connection; tools?: ReadonlyArray<McpClient.Tool> }, Error> =>
@@ -214,7 +255,8 @@ export function make(input: Input): Connection {
         Effect.provideService(Environment.Service, input.environment),
         Effect.provideService(FetchHttpClient.Fetch, input.fetch),
         Scope.provide(scope),
-        (effect) => (config.type === "remote" && !input.shared ? endpointLoads.withLock(config.url)(effect) : effect),
+        (effect) =>
+          config.type === "remote" && !input.shared ? input.endpointLoads.withLock(config.url)(effect) : effect,
         Effect.exit,
       )
       if (Exit.isSuccess(result) && !result.value.tools) {
@@ -226,9 +268,11 @@ export function make(input: Input): Connection {
         state.client = result.value.client
         state.tools = result.value.tools
         state.prompts = []
+        state.skills = []
         watch(result.value.client)
         yield* input.events.connected
         whenLive(result.value.client)(refreshPrompts(result.value.client))
+        whenLive(result.value.client)(refreshSkills(result.value.client))
         return
       }
       yield* Scope.close(scope, Exit.void)
@@ -266,6 +310,7 @@ export function make(input: Input): Connection {
       state.client = undefined
       state.tools = undefined
       state.prompts = undefined
+      state.skills = undefined
       // Closing the SDK rejects every pending request with ConnectionClosed, hiding its own response.
       // During recovery, let those requests settle so only explicit session-expiry responses are retried.
       if (drain && active) active.scope = scope
@@ -273,6 +318,7 @@ export function make(input: Input): Connection {
       yield* input.events.changed("tools")
       yield* input.events.changed("resources")
       yield* input.events.changed("prompts")
+      yield* input.events.changed("skills")
     })
 
   return {
@@ -284,6 +330,9 @@ export function make(input: Input): Connection {
     },
     get prompts() {
       return state.prompts
+    },
+    get skills() {
+      return state.skills
     },
     start,
     stop: stop(),

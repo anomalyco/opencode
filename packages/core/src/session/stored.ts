@@ -3,7 +3,7 @@ export * as SessionStored from "./stored.js"
 import { Schema } from "effect"
 import { FileAttachment, MediaRef } from "@opencode/schema/prompt"
 import { optional } from "@opencode/schema/schema"
-import { UserPayload as InboxUserPayload } from "@opencode/schema/session-inbox"
+import { SessionInbox } from "@opencode/schema/session-inbox"
 import { Tool } from "@opencode/schema/tool"
 import { SessionMessage } from "./message.js"
 
@@ -37,7 +37,7 @@ const files = Schema.Array(File).pipe(optional)
 
 /** A `session_inbox` user payload as stored, whose files may be refs. */
 export interface UserPayload extends Schema.Schema.Type<typeof UserPayload> {}
-export const UserPayload = Schema.Struct({ ...InboxUserPayload.fields, files })
+export const UserPayload = Schema.Struct({ ...SessionInbox.UserPayload.fields, files })
 
 /** A `session_message` user message as stored, whose files may be refs. */
 export interface User extends Schema.Schema.Type<typeof User> {}

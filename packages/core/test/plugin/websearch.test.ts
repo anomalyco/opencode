@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { Integration } from "@opencode/core/integration"
 import { WebSearch } from "@opencode/core/websearch"
 import { WebSearchExa } from "@opencode/core/plugin/websearch/exa"
 import { WebSearchFirecrawl } from "@opencode/core/plugin/websearch/firecrawl"
+import { WebSearchMcp } from "@opencode/core/plugin/websearch/mcp"
 import { WebSearchParallel } from "@opencode/core/plugin/websearch/parallel"
 import { WebSearchTavily } from "@opencode/core/plugin/websearch/tavily"
 import { WebSearchTinyFish } from "@opencode/core/plugin/websearch/tinyfish"
@@ -37,13 +38,8 @@ beforeEach(() => {
 const it = webSearchIntegrationTest
 
 describe("built-in web search providers", () => {
-  ;[
-    WebSearchExa.Plugin,
-    WebSearchParallel.Plugin,
-    WebSearchFirecrawl.Plugin,
-    WebSearchTavily.Plugin,
-    WebSearchTinyFish.Plugin,
-  ].forEach((plugin) => {
+  // Exa stands in for Parallel and Firecrawl, which share its WebSearchMcp request path.
+  ;[WebSearchExa.Plugin, WebSearchTavily.Plugin, WebSearchTinyFish.Plugin].forEach((plugin) => {
     it.effect(`releases rate-limited HTTP requests for ${plugin.id} before caching their errors`, () =>
       Effect.gen(function* () {
         resetWebSearchFixture("Rate limited", 429)
@@ -368,6 +364,29 @@ describe("built-in web search providers", () => {
         body: { method: "tools/call" },
       })
       expect(requests[3]?.headers["x-tinyfish-access-mode"]).toBeUndefined()
+    }),
+  )
+})
+
+describe("WebSearchMcp.parseResponse", () => {
+  const output = Schema.Struct({ value: Schema.String })
+  const events = (...messages: object[]) =>
+    messages.map((message) => `event: message\ndata: ${JSON.stringify(message)}\n\n`).join("")
+
+  it.effect("skips notifications and requests sent ahead of the response (#61887)", () =>
+    Effect.gen(function* () {
+      const body = events(
+        { jsonrpc: "2.0", method: "notifications/message", params: { level: "info", data: "searching" } },
+        { jsonrpc: "2.0", id: 7, method: "ping" },
+        { jsonrpc: "2.0", id: 1, result: { value: "found" } },
+      )
+      expect(yield* WebSearchMcp.parseResponse(body, output)).toEqual({ value: "found" })
+      expect(
+        (yield* WebSearchMcp.parseResponse(
+          events({ jsonrpc: "2.0", id: 1, error: { code: -32000, message: "quota exceeded" } }),
+          output,
+        ).pipe(Effect.flip)).message,
+      ).toBe("quota exceeded")
     }),
   )
 })

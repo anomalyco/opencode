@@ -44,11 +44,6 @@ export const content = {
       body: "Controle o OpenCode pelos seus scripts, jobs de CI e ferramentas.",
       action: "Ver docs",
     },
-    ide: {
-      name: "Extensões de IDE",
-      body: "Abra o OpenCode no VS Code, Cursor e Windsurf, ou no Zed e em IDEs JetBrains via ACP.",
-      action: "Instalar",
-    },
     mini: {
       name: "Mini",
       body: "Uma interface de terminal mínima. As respostas vão para o seu histórico, com um prompt embaixo.",
@@ -258,47 +253,6 @@ export const content = {
         },
       },
     },
-    ide: {
-      title: "OpenCode | Integrações com editores como VS Code, Cursor e Zed",
-      description:
-        "Use o OpenCode no seu editor, com a extensão para VS Code, Cursor, Windsurf e VSCodium, e opencode acp para Zed, IDEs JetBrains e outros editores ACP.",
-      intro:
-        "Use o OpenCode no seu editor. No VS Code, Cursor, Windsurf e VSCodium, rode opencode no terminal integrado e a extensão se instala sozinha. Zed, IDEs JetBrains e outros editores compatíveis com o Agent Client Protocol rodam o OpenCode com opencode acp.",
-      features: {
-        "quick-launch": {
-          title: "Abertura rápida",
-          body: "Cmd+Esc ou Ctrl+Esc abre o OpenCode em um terminal dividido.",
-        },
-        "new-session": {
-          title: "Nova sessão",
-          body: "Cmd+Shift+Esc ou Ctrl+Shift+Esc inicia outra sessão.",
-        },
-        context: {
-          title: "Contexto",
-          body: "Compartilha sua seleção ou aba atual com o OpenCode.",
-        },
-        "file-references": {
-          title: "Citar arquivos",
-          body: "Cmd+Option+K ou Alt+Ctrl+K insere @File#L37-42.",
-        },
-        "installs-itself": {
-          title: "Instala sozinha",
-          body: "Rode opencode no terminal integrado para adicioná-la.",
-        },
-        "acp-editors": {
-          title: "Editores ACP",
-          body: "Zed, IDEs JetBrains, Avante.nvim e CodeCompanion.nvim.",
-        },
-        "open-vsx": {
-          title: "Open VSX",
-          body: "Também no Open VSX para Cursor, Windsurf e VSCodium.",
-        },
-        "same-agent": {
-          title: "Mesmo agente",
-          body: "O OpenCode que você roda no terminal, ao lado do seu código.",
-        },
-      },
-    },
     mini: {
       title: "OpenCode | Mini, uma interface de terminal mínima para o agente",
       description:
@@ -352,9 +306,9 @@ export const content = {
       body: "Deixe agentes usarem seu navegador de verdade.",
       title: "OpenCode | Browse, seu navegador real para agentes de programação",
       description:
-        "Browse deixa o OpenCode e outros clientes MCP usarem seu navegador de verdade. Agentes controlam abas em segundo plano com Playwright e devolvem logins e 2FA a você.",
+        "Browse deixa o OpenCode e outros clientes MCP usarem seu navegador de verdade. Agentes leem, clicam, digitam, tiram capturas, gravam abas e devolvem logins e 2FA a você.",
       intro:
-        "Um servidor MCP e uma extensão do Chromium que deixam seus agentes usarem seu navegador de verdade, com suas abas, seus logins e suas extensões. Eles abrem e controlam abas com Playwright, tiram capturas de tela e gravam a tela, em abas de segundo plano agrupadas fora do seu caminho. Quando é a sua vez, para um login, um código 2FA ou um pagamento, eles devolvem a aba a você e continuam quando você clica em Continue.",
+        "Um servidor MCP e uma extensão do Chromium que deixam seus agentes usarem seu navegador de verdade, com suas abas, seus logins e suas extensões. Eles abrem abas em segundo plano, agrupadas fora do seu caminho, e leem páginas, clicam, digitam, tiram capturas de tela e gravam abas. Quando é a sua vez, para um login, um código 2FA ou um pagamento, eles devolvem a aba a você e continuam quando você clica em Continue.",
       features: {
         "your-real-browser": {
           title: "Seu navegador real",
@@ -374,7 +328,7 @@ export const content = {
         },
         "record-and-capture": {
           title: "Grave e capture",
-          body: "Capturas de tela, gravações de tela e tráfego de rede em HAR.",
+          body: "Capturas de tela, gravações de abas e tráfego de rede.",
         },
         "any-mcp-client": {
           title: "Todo cliente MCP",
@@ -384,9 +338,9 @@ export const content = {
           title: "Todos os seus logins",
           body: "Os agentes usam os sites em que você já está conectado. Sem chaves, sem configuração.",
         },
-        allowlists: {
-          title: "Lista de sites",
-          body: "Limite as abas de uma sessão aos sites que você escolher.",
+        "allowed-sites": {
+          title: "Sites permitidos",
+          body: "Mantenha a aba de um agente nos sites que você indicar.",
         },
       },
       install:
@@ -554,7 +508,7 @@ export const content = {
     },
     colors: {
       title: "Cores",
-      body: "O logo e o logotipo usam uma tinta em três opacidades, com uma tinta mais clara para fundos escuros. Os valores abaixo são essa tinta sobre branco ou #0B0B0B, como os arquivos padrão a mostram. Clique em um valor para copiá-lo.",
+      body: "O logo e o logotipo usam uma tinta em três opacidades, com uma tinta mais clara para fundos escuros. Os valores abaixo são as cores nos arquivos padrão. Use-as apenas no logo e no logotipo, não em outros textos ou fundos. Clique em um valor para copiá-lo.",
       palettes: {
         light: {
           name: "Claro",
@@ -726,7 +680,7 @@ export const content = {
       badges: {
         body: "Coloque um selo no seu README, docs ou site com link para opencode.ai. Escolha o arquivo claro ou escuro para o seu fundo (o HTML alterna sozinho) e não mude as cores nem o texto.",
         sizes: "Todo estilo vem em 20, 32 e 44px (Shields só em 20px), em SVG e em PNG a 2×.",
-        mono: "Cada arquivo também vem com texto em OpenTUI Mono. Adicione -mono antes da extensão, como em opencode-works-with-a-light-20-mono.svg, ou -mono-caps para OpenTUI Mono em maiúsculas.",
+        mono: "Cada arquivo também vem com texto em OpenMono. Adicione -mono antes da extensão, como em opencode-works-with-a-light-20-mono.svg, ou -mono-caps para OpenMono em maiúsculas.",
         groups: {
           "works-with": {
             title: "Funciona com",
@@ -1179,20 +1133,6 @@ export const content = {
     sdk: {
       more: {
         label: "Ler a documentação do SDK",
-      },
-    },
-    ide: {
-      links: {
-        "vs-code-marketplace": {
-          label: "VS Code Marketplace",
-        },
-        "open-vsx-cursor-windsurf-vscodium": {
-          label: "Open VSX (Cursor, Windsurf, VSCodium)",
-        },
-      },
-      lead: "Rode opencode no terminal integrado do seu editor e a extensão se instala sozinha, ou instale você mesmo.",
-      more: {
-        label: "Configure o Zed, IDEs JetBrains e outros editores ACP",
       },
     },
     mini: {
