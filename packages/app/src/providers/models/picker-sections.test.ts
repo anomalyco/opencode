@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { FREE_GROUP_KEY, pickerSections, splitFreeModels } from "./picker-sections"
+import { FREE_GROUP_KEY, pickerSections, signInAccounts, splitFreeModels } from "./picker-sections"
 
 const provider = (id: string, name: string, integrationID = id) => ({ id, name, integrationID })
 
@@ -85,4 +85,16 @@ test("the free group keeps OpenCode's key only when OpenCode has no paid models 
     groups: [{ category: "anthropic", items: [sonnet] }],
     free: undefined,
   })
+})
+
+test("the account menu lists only sign-in accounts, and none while an API key is active", () => {
+  const account = (id: string, method: "oauth" | "key") => ({ type: "credential" as const, id, method, label: id })
+  const personal = account("personal", "oauth")
+  const key = account("key", "key")
+  const acme = account("acme", "oauth")
+
+  expect(signInAccounts([personal, key, acme])).toEqual([personal, acme])
+  expect(signInAccounts([personal, key])).toEqual([personal])
+  expect(signInAccounts([key, personal])).toEqual([])
+  expect(signInAccounts([])).toEqual([])
 })

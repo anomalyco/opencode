@@ -1,3 +1,4 @@
+import type { ProviderAccount } from "@/settings/providers/accounts"
 import { consoleProviderGroup } from "@/providers/catalog/console"
 import { isFreeModel } from "./models"
 
@@ -91,4 +92,12 @@ export function pickerSections<M extends Model>(input: {
     }),
     ...(split.free ? [{ key: "free", list: "free" as const, items: split.free.items }] : []),
   ]
+}
+
+/**
+ * The picker's OpenCode accounts: its sign-in accounts, the active one first. API keys stay in Settings, so an active
+ * key lists none.
+ */
+export function signInAccounts(accounts: readonly ProviderAccount[]) {
+  return accounts[0]?.method === "oauth" ? accounts.filter((account) => account.method === "oauth") : []
 }

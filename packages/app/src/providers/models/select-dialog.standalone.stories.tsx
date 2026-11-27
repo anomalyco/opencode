@@ -141,17 +141,24 @@ const workspaceModels: StoryModel[] = [
   ...models.filter((model) => model.provider.id === "anthropic"),
 ]
 
+// The sign-in accounts, the active one first, and an API key the picker's menu leaves out.
 const consoleAccounts = (...labels: string[]) => [
   {
     id: "opencode",
     name: "OpenCode Console",
-    methods: [{ type: "oauth" as const, id: "console", label: "OpenCode Console account" }],
-    connections: labels.map((label) => ({
-      type: "credential" as const,
-      id: `cred_${label.toLowerCase()}`,
-      method: "oauth" as const,
-      label,
-    })),
+    methods: [
+      { type: "oauth" as const, id: "console", label: "OpenCode Console account" },
+      { type: "key" as const, label: "API key (service account)" },
+    ],
+    connections: [
+      ...labels.map((label) => ({
+        type: "credential" as const,
+        id: `cred_${label.toLowerCase()}`,
+        method: "oauth" as const,
+        label,
+      })),
+      { type: "credential" as const, id: "cred_service_key", method: "key" as const, label: "Service key" },
+    ],
   },
 ]
 
@@ -279,7 +286,7 @@ export const Workspace = {
   ),
 }
 
-/** The workspace's only OpenCode account names it, without a menu. */
+/** One sign-in account still opens the menu, to add or manage accounts. */
 export const WorkspaceOneAccount = {
   render: () => (
     <DialogStoryRuntime integrations={consoleAccounts("Personal")}>

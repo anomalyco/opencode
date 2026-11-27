@@ -73,7 +73,7 @@ import { useIntegrations } from "@/providers/catalog/integrations"
 import { CONSOLE_INTEGRATION } from "@/providers/connect/dialog-machine"
 import { providerAccounts } from "@/settings/providers/accounts"
 import { useProviderAccountActions } from "@/settings/providers/account-actions"
-import { pickerSections, splitFreeModels, type PickerSection } from "./picker-sections"
+import { pickerSections, signInAccounts, splitFreeModels, type PickerSection } from "./picker-sections"
 import { WorkspaceHeader } from "./picker-header"
 import "@/settings/settings.css"
 import "@/shell/commands/dialog.css"
@@ -649,7 +649,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
   const usage = createModelUsage({ refresh: true })
 
   const accounts = createMemo(() =>
-    providerAccounts(integrations.list().find((integration) => integration.id === CONSOLE_INTEGRATION)),
+    signInAccounts(providerAccounts(integrations.list().find((integration) => integration.id === CONSOLE_INTEGRATION))),
   )
 
   const go = () => !!labels.group()?.providers.some((provider) => provider.id === "opencode-go")
