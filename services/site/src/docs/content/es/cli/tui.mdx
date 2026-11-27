@@ -52,7 +52,7 @@ Escribe `!` al principio de un prompt vacío para entrar en el modo de shell. Es
 !git status
 ```
 
-Los comandos de shell se ejecutan en el directorio de trabajo de la sesión y su salida permanece en la sesión.
+Los comandos de shell se ejecutan en el directorio de trabajo de la sesión y su salida queda registrada en ella.
 
 ## Comandos
 
@@ -64,7 +64,7 @@ Escribe `/` para listar los comandos de barra. Sigue escribiendo para filtrar la
 
 Los comandos habituales incluyen `/new`, `/sessions`, `/models`, `/agents`, `/undo`, `/redo` y `/editor`. Pulsa **Ctrl+P** para abrir la paleta de comandos con todas las acciones disponibles en la vista actual.
 
-Después de una actualización, OpenCode muestra una vez las novedades de la versión en la pantalla de inicio. Ejecuta `/highlights` para verlas de nuevo, o define `"highlights": false` en [`cli.json`](/cli/config#alerts) para que no se abran automáticamente.
+Después de una actualización, OpenCode muestra las novedades de la versión una sola vez en la pantalla de inicio. Ejecuta `/highlights` para verlas de nuevo o define `"highlights": false` en [`cli.json`](/cli/config#alerts) para que no se abran automáticamente.
 
 ## Preguntas al margen
 
@@ -90,7 +90,7 @@ Las pestañas están habilitadas de forma predeterminada. Usa **Ctrl+Tab** y **C
 
 ## Historial
 
-Pulsa **Ctrl+X** y luego **U**, o ejecuta `/undo`, para revertir el último mensaje del usuario y el trabajo que lo siguió. El prompt revertido vuelve al campo de entrada para que puedas editarlo.
+Pulsa **Ctrl+X** y luego **U**, o ejecuta `/undo`, para revertir el último mensaje del usuario y el trabajo realizado a partir de él. El prompt revertido vuelve al campo de entrada para que puedas editarlo.
 
 Pulsa **Ctrl+X** y luego **R**, o ejecuta `/redo`, para restaurar el trabajo revertido. Si en su lugar envías un prompt nuevo, aceptas la reversión y continúas desde ese punto.
 

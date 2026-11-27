@@ -52,7 +52,7 @@ En **Settings › Privacy**, un propietario o administrador puede habilitar:
 - **LongCat 2.5:** selecciona **Global** en **Regions**.
 - **Muse Spark 1.3 Contributor y Muse Spark 1.2 Contributor:** activa **Allow paid endpoints that train on request data**.
 
-Consulta la [privacidad](#privacy) para los términos de entrenamiento y retención de cada modelo.
+En la sección de [privacidad](#privacy) puedes consultar las condiciones de entrenamiento y retención de datos de cada modelo.
 
 ## Pagar con el saldo de créditos
 
@@ -82,7 +82,7 @@ Tu cliente debería:
    la caché de prompts.
 
 Las solicitudes de [decisión](#decision-models) y de [embedding](#embedding-models) no necesitan `x-opencode-session`, así que cualquier
-cliente, como una biblioteca RAG, un proveedor de memoria o un script, puede llamarlas con tu clave de Go.
+cliente, como una biblioteca RAG, un proveedor de memoria o un script, puede enviarlas con tu clave de Go.
 
 Consulta [Harnesses](/console/harnesses) para configurar Go en Claude Code, Codex, Hermes, OpenClaw, Pi y Raycast.
 
@@ -260,7 +260,7 @@ curl https://opencode.ai/inference/go/openai/v1/embeddings \
 
 ### Uso
 
-Consulta cuánto has consumido de tus [límites de uso](#usage-limits), por ejemplo para mostrarlo en tu propio cliente:
+Consulta qué parte de tus [límites de uso](#usage-limits) has consumido, por ejemplo para mostrarla en tu propio cliente:
 
 ```bash
 curl https://opencode.ai/inference/go/v1/usage \
@@ -337,10 +337,10 @@ Consulta si cada modelo [entrena con tus datos](https://opencode.ai/console/go#p
 - **GPT 6 Luna / GPT 5.6 Luna:** Los registros de supervisión de abusos se generan para todo uso de funciones de la API y se conservan hasta 30 días. [Más información](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
 - **Claude Haiku 5.5:** Las solicitudes se conservan durante 30 días según las [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).
 - **Gemini 4 Argon:** Las solicitudes se conservan hasta 55 días para la supervisión de abusos, de acuerdo con los [Términos de la API Gemini de Google](https://ai.google.dev/gemini-api/terms).
-- **Muse Spark 1.3 Contributor:** Precios de tokens con un descuento importante a cambio de permiso para usar tus prompts y completions para entrenar futuros modelos de Meta. La disponibilidad se limita a las regiones permitidas por la [Política de uso geográfico](https://ai.developer.meta.com/legal/geographic-use-policy) de Meta. [Más información](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
-- **Muse Spark 1.2 Contributor:** Precios de tokens con un descuento importante a cambio de permiso para usar tus prompts y completions para entrenar futuros modelos de Meta. La disponibilidad se limita a las regiones permitidas por la [Política de uso geográfico](https://ai.developer.meta.com/legal/geographic-use-policy) de Meta. [Más información](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
-- **Iceman Contributor Free:** Gratis por tiempo limitado a cambio de permiso para usar tus prompts y completions para mejorar el modelo.
-- **HungerG Free:** Gratis por tiempo limitado. Sin entrenamiento con datos: tus prompts y completions no se usan para entrenar modelos.
+- **Muse Spark 1.3 Contributor:** Descuento considerable en el precio por token a cambio de permitir que se usen tus prompts y las respuestas generadas para entrenar futuros modelos de Meta. La disponibilidad se limita a las regiones permitidas por la [Política de uso geográfico](https://ai.developer.meta.com/legal/geographic-use-policy) de Meta. [Más información](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
+- **Muse Spark 1.2 Contributor:** Descuento considerable en el precio por token a cambio de permitir que se usen tus prompts y las respuestas generadas para entrenar futuros modelos de Meta. La disponibilidad se limita a las regiones permitidas por la [Política de uso geográfico](https://ai.developer.meta.com/legal/geographic-use-policy) de Meta. [Más información](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
+- **Iceman Contributor Free:** Gratis por tiempo limitado a cambio de permitir que se usen tus prompts y las respuestas generadas para mejorar el modelo.
+- **HungerG Free:** Gratis por tiempo limitado. Tus prompts y las respuestas generadas no se usan para entrenar modelos.
 - **LongCat 2.5:** Alojado en China. Requiere la región **Global** en los ajustes de privacidad de tu espacio de trabajo.
 - **DeepSeek:** El acuerdo de ZDR se renueva mensualmente. El acuerdo actual es válido hasta el 31 de diciembre de 2026.
 
@@ -355,7 +355,7 @@ Sin embargo, conseguir acceso fiable y de baja latencia a ellos puede ser difíc
 Para resolverlo, hicimos varias cosas:
 
 1. Probamos un grupo selecto de modelos abiertos y hablamos con sus equipos sobre cómo ejecutarlos de la mejor forma.
-2. Trabajamos con algunos proveedores para asegurarnos de que se sirvieran correctamente.
+2. Trabajamos con algunos proveedores para asegurarnos de que ofrecieran los modelos correctamente.
 3. Medimos el rendimiento de las combinaciones de modelo y proveedor y preparamos una lista que podemos recomendar con confianza.
 
 Go, Go Plus y Go Teams ofrecen acceso a estos modelos; elige el plan que se ajuste a cuánto los usas, o Go

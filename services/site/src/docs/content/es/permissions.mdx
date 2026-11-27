@@ -1,6 +1,6 @@
 ---
 title: "Permisos"
-description: "Controla lo que pueden hacer los agentes de OpenCode con reglas ordenadas de permitir, denegar y preguntar que coinciden con acciones y recursos como rutas y comandos."
+description: "Controla qué pueden hacer los agentes de OpenCode con reglas que se evalúan en orden para permitir, denegar o pedir confirmación según la acción y el recurso, como una ruta o un comando."
 ---
 
 Los permisos controlan si un agente puede realizar una acción sobre un recurso.
@@ -22,7 +22,7 @@ y bloquear siempre los push. Agrega estas reglas ordenadas a `opencode.jsonc`:
 }
 ```
 
-Gana la última regla que coincide, así que las excepciones concretas van después de la regla amplia.
+Prevalece la última regla que coincide, así que coloca las excepciones concretas después de la regla general.
 
 <Callout type="warning">
   V1 usa nombres de campo y de acción distintos. En V2, usa `permissions`, `shell` y `subagent` en lugar de `permission`,
@@ -141,7 +141,7 @@ Por ejemplo, permite una skill y deniega todas las demás:
 
 ## Directorios
 
-Una ruta fuera de la Location activa y de su worktree de proyecto no raíz se comprueba contra `external_directory` antes que sus reglas `read` o `edit`. La política predeterminada permite `external_directory`, así que las rutas externas no preguntan a menos que agregues una regla. Para que se pregunte antes de cualquier acceso fuera del proyecto:
+Si una ruta está fuera tanto de la Location activa como del worktree no raíz de su proyecto, OpenCode evalúa primero `external_directory` y luego las reglas `read` o `edit`. La política predeterminada permite `external_directory`, así que OpenCode no pide confirmación para rutas externas a menos que agregues una regla. Para pedir confirmación antes de cualquier acceso fuera del proyecto:
 
 ```jsonc
 {
@@ -224,7 +224,7 @@ Los agentes incluidos agregan estas políticas:
 | `build`      | Permite preguntas                                                              |
 | `plan`       | Permite preguntas; deniega las ediciones excepto los archivos bajo `~/.opencode/plan` |
 | `general`    | Deniega preguntas y lanzar subagentes                                          |
-| `explore`    | Deniega todo excepto shell, lecturas, globs, grep, web fetches, búsquedas web y directorios externos; pregunta para leer `.env` |
+| `explore`    | Deniega todo excepto shell, lecturas, globs, grep, consultas a páginas web, búsquedas web y directorios externos; pide confirmación para leer `.env` |
 | `title`      | Deniega todas las acciones                                                     |
 | `summary`    | Deniega todas las acciones                                                     |
 | `compaction` | Mantiene la política base                                                      |
@@ -279,9 +279,9 @@ prefijo de shell que cubre comandos `git status` posteriores:
 shell: git status * → allow
 ```
 
-Las aprobaciones guardadas son reglas `allow` duraderas y con ámbito de proyecto. Nunca sobrescriben
-un `deny` configurado. Las herramientas eligen el patrón guardado propuesto: algunas proponen `*`,
-shell propone prefijos de comando, web fetch propone el sitio de la URL (como
+Las aprobaciones guardadas son reglas `allow` persistentes que solo se aplican al proyecto. Nunca prevalecen sobre
+un `deny` configurado. Cada herramienta propone el patrón que se guardará: algunas proponen `*`,
+la herramienta de shell propone prefijos de comandos, la de consulta de páginas web propone el sitio de la URL (como
 `https://opencode.ai/*`) y las skills y los subagentes proponen sus ID.
 Revisa las aprobaciones amplias y elimina las que ya no necesites.
 

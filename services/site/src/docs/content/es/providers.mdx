@@ -31,7 +31,7 @@ Consulta la [guía de Go](/console/go) para los límites de uso, los endpoints y
 ## ChatGPT
 
 Usa un plan ChatGPT Plus o Pro en lugar de una clave de API de OpenAI. Conecta **OpenAI** y luego elige **Sign in with ChatGPT**
-o uno de los métodos heredados de inicio de sesión **Codex**. El uso cuenta para tu plan, así que estos modelos no muestran costo.
+o uno de los métodos de inicio de sesión anteriores de **Codex**. El uso se descuenta de la cuota de tu plan, así que estos modelos no muestran ningún costo.
 
 ```text
 /connect
@@ -40,8 +40,8 @@ o uno de los métodos heredados de inicio de sesión **Codex**. El uso cuenta pa
 
 ### Límites de contexto
 
-De forma predeterminada, OpenCode limita la ventana de contexto de estos inicios de sesión por debajo del límite real de cada modelo. Los límites coinciden con los
-valores predeterminados de Codex, así que el uso de tu plan se consume a un ritmo similar al de otros productos de OpenAI.
+Con estos métodos de inicio de sesión, la ventana de contexto que usa OpenCode es, de forma predeterminada, menor que el límite real de cada modelo.
+Los límites coinciden con los valores predeterminados de Codex, así que consumes la cuota de tu plan a un ritmo similar al de otros productos de OpenAI.
 
 | Modelo                 | Límite de entrada |
 | ---------------------- | ----------------- |
@@ -99,8 +99,8 @@ El objeto `providers` usa como claves el ID de proveedor que se usa en las refer
 
 ## Endpoint
 
-Sobrescribe `settings.baseURL` para enviar un proveedor del catálogo a través de un proxy o un endpoint compatible. Su paquete,
-modelos y conexión existentes se siguen aplicando.
+Sobrescribe `settings.baseURL` para enviar las solicitudes a un proveedor del catálogo a través de un proxy o un endpoint compatible. Se mantienen
+el paquete, los modelos y la conexión del proveedor.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -184,8 +184,8 @@ transporte WebSocket, `chunkTimeout` limita el intervalo entre frames y usa trei
 }
 ```
 
-Una solicitud que supera cualquiera de los límites falla con un error de transporte. OpenCode reintenta una solicitud agotada hasta tres
-veces antes de rendirse.
+Una solicitud que supera cualquiera de los límites falla con un error de transporte. Si se agota el tiempo de espera, OpenCode vuelve a enviar la solicitud
+hasta tres veces antes de darla por fallida.
 
 ## Codificación de solicitudes
 
@@ -294,7 +294,7 @@ ID que se envía al proveedor.
 | `modelID` | ID de modelo o implementación que se envía al proveedor. |
 | `name` | Nombre visible. |
 | `family` | Familia de modelo que se usa para agrupar modelos relacionados. |
-| `type` | Qué produce el modelo: `chat`, `decision`, `image`, `video`, `realtime`, `embedding` o `transcription`. Usa `chat` de forma predeterminada; solo los modelos de chat se ofrecen para sesiones. Los modelos en tiempo real que responden con voz se ofrecen para voz, y con `disabled: true` no. |
+| `type` | Qué produce el modelo: `chat`, `decision`, `image`, `video`, `realtime`, `embedding` o `transcription`. El valor predeterminado es `chat`: solo los modelos de chat están disponibles para las sesiones. Los modelos en tiempo real que responden por voz están disponibles para las sesiones de voz, salvo si se configura `disabled: true`. |
 | `releaseDate` | Fecha de lanzamiento como `YYYY-MM-DD` o `YYYY-MM`. |
 | `package` | Sobrescritura del tiempo de ejecución para este modelo. Un modelo de transcripción indica su protocolo de transcripción, como `@opencode/ai/protocols/openai-transcription`; un modelo en tiempo real no toma ninguno, ya que las sesiones de voz empiezan a través de su API. |
 | `settings` | Controles de OpenCode a nivel de modelo y ajustes JSON específicos del paquete. |
@@ -361,9 +361,9 @@ En lugar de la configuración, `AZURE_RESOURCE_NAME` proporciona el nombre del r
 
 ### Implementaciones
 
-Azure sirve un modelo solo a través de una implementación, así que OpenCode lista las implementaciones de tu recurso y las muestra
-en lugar de todo el catálogo de Azure. La lista se carga en segundo plano después del inicio, después de conectar y después de
-cambiar de cuenta. Para recoger una implementación agregada más tarde, reinicia OpenCode o vuelve a conectar.
+Azure solo ofrece modelos a través de implementaciones, así que OpenCode muestra las implementaciones de tu recurso en lugar de todo el catálogo de Azure.
+La lista se carga en segundo plano al iniciar OpenCode, conectar Azure o cambiar de cuenta. Para que aparezca una implementación que agregaste después,
+reinicia OpenCode o vuelve a conectar Azure.
 
 - Hasta que se carga la lista de una conexión, o si falla, todo el catálogo sigue disponible.
 - Una recarga fallida de la misma conexión conserva su último inventario completo.
@@ -379,7 +379,7 @@ de otra forma, como `gpt-4` para GPT-4 Turbo. Una implementación llamada como o
 `gpt-6-luna`, muestra el nombre, los límites y los costos de ese modelo.
 
 Con la CLI de Azure, OpenCode lista las implementaciones a través de la API de administración de Azure, que necesita acceso de lectura al
-recurso. Si eso falla, y siempre con una clave de API, usa el inventario heredado de implementaciones del recurso. El descubrimiento lee
+recurso. Si la consulta falla o si te conectas con una clave de API, OpenCode usa el inventario heredado de implementaciones del recurso. Lee
 todas las páginas antes de publicar la lista. Un `settings.baseURL` personalizado conserva el catálogo.
 
 Configura una implementación explícitamente cuando su modelo no esté en el catálogo, como un modelo ajustado, o para asignar tú mismo un ID de modelo
@@ -491,8 +491,8 @@ OpenCode también resuelve el proyecto desde `GOOGLE_VERTEX_PROJECT`, `GOOGLE_CL
 GOOGLE_CLOUD_PROJECT=my-project GOOGLE_VERTEX_LOCATION=europe-west4 opencode --standalone
 ```
 
-Las cuentas de servicio funcionan a través del mismo camino de ADC. Apunta `GOOGLE_APPLICATION_CREDENTIALS` al archivo JSON de la cuenta de servicio
-y sigue proporcionando un proyecto mediante los ajustes o una de las variables de proyecto anteriores.
+Las cuentas de servicio también usan ADC. Haz que `GOOGLE_APPLICATION_CREDENTIALS` apunte al archivo JSON de la cuenta de servicio
+e indica también el proyecto en los ajustes o en una de las variables de proyecto anteriores.
 
 ```bash
 GOOGLE_APPLICATION_CREDENTIALS=/secure/vertex.json \
@@ -528,7 +528,7 @@ y cada vez que cambia la cuenta de Copilot activa.
 ## Ollama
 
 Inicia Ollama y descarga un modelo. OpenCode sondea `http://127.0.0.1:11434`, descubre los modelos de completado y los agrega a
-`/models` sin conexión de cuenta.
+`/models` sin que tengas que conectar una cuenta.
 
 ```bash
 ollama serve
