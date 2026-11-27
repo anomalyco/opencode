@@ -79,6 +79,9 @@ describe("history reconciliation", () => {
     expect(SyncDecision.decide([past[0]!], record).kind).toBe("changed")
     expect(SyncDecision.decide([user("Compacted summary"), user("Next")], record).kind).toBe("fresh")
     expect(SyncDecision.decide([...past, user("Next")], { claudeSessionID: "old" }).kind).toBe("fresh")
+    // Retrying an identical prompt after a turn that saved no assistant reply must branch instead of sending empty input.
+    const unanswered = { claudeSessionID: "claude-a", history: Fingerprint.groups([...past, user("Next")]) }
+    expect(SyncDecision.decide([...past, user("Next")], unanswered)).toEqual({ kind: "changed", start: 0 })
   })
 
   test("ignores thinking, metadata and reordered user notes, but notices changed visible text", () => {

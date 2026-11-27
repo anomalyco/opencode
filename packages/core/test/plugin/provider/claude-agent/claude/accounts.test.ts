@@ -283,6 +283,49 @@ describe("Claude accounts", () => {
     }),
   )
 
+  it.effect("a synthetic placeholder before a limit error does not block failover to the next account", () =>
+    Effect.gen(function* () {
+      const base = limitTurn()
+      const assistant = (base.replies as SDKMessage[]).find((message) => message.type === "assistant")!
+      const { error: _error, ...rest } = assistant
+      const placeholder: SDKMessage = {
+        ...rest,
+        uuid: crypto.randomUUID(),
+        message: {
+          ...assistant.message,
+          id: "synthetic-before-limit",
+          model: "<synthetic>",
+          stop_reason: "stop_sequence",
+          usage: {
+            ...assistant.message.usage,
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+          },
+          content: [{ type: "text", text: "No response requested.", citations: null }],
+        },
+      }
+      const syntheticThenLimit = { ...base, replies: [placeholder, ...base.replies] }
+      const claude = FakeClaude.make([
+        FakeClaude.expectStartup(),
+        syntheticThenLimit,
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        FakeClaude.expectInterrupt(),
+      ])
+      const test = yield* TestSessions.start(claude, TestSessions.storage(), pool)
+      const parts = yield* TestSessions.reply(test.model, first)
+      expect(TestSessions.text(parts)).toBe("COPPER-OTTER")
+      expect(parts.some((part) => part.type === "error")).toBe(false)
+      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual([a, b])
+      expect(test.storage.data.get("accounts/session-a")).toBe(b)
+      yield* test.registry.close()
+      claude.check()
+    }),
+  )
+
   it.effect("a new fork starts on its parent's account and forks the parent's transcript", () =>
     Effect.gen(function* () {
       const claude = FakeClaude.make([

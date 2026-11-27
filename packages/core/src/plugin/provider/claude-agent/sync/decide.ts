@@ -25,7 +25,7 @@ export function decide(prompt: LanguageModelV3Prompt, record?: SessionRecord.Rec
     matched++
   }
   const start = groups[matched]?.start ?? prompt.length
-  if (record?.interrupted && start === prompt.length) return { kind: "changed", start: 0 } as const
+  if (start === prompt.length) return { kind: "changed", start: 0 } as const
   const missed = groups.slice(matched)
   const kind = missed.some((group) => group.role !== "user") ? "catch-up" : "continue"
   return { kind, start } as const
