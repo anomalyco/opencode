@@ -113,10 +113,22 @@ const toolCall = (tool: SessionMessage.AssistantTool, providerMetadata: Provider
     providerMetadata,
   })
 
+// A provider that refuses an empty tool message answers 400, and the same stored history is replayed on
+// every later request, so one silent command would leave the session permanently unusable. Say there was
+// no output instead, as the shell tool already does for an empty capture.
+const NO_OUTPUT = "(no output)"
+
+const toolOutput = (
+  content: SessionMessage.ToolStateCompleted["content"],
+): SessionMessage.ToolStateCompleted["content"] =>
+  content.every((part) => part.type === "text" && part.text.trim() === "")
+    ? [{ type: "text" as const, text: NO_OUTPUT }]
+    : content
+
 const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: ProviderMetadata | undefined) => {
   if (tool.state.status === "completed") {
     // TODO: Materialize remote and managed URIs before provider-history lowering.
-    const content = tool.state.content
+    const content = toolOutput(tool.state.content)
     const single = content.length === 1 ? content[0] : undefined
     return ToolResultPart.make({
       id: tool.id,
