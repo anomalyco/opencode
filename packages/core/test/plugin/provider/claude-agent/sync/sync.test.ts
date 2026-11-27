@@ -212,10 +212,8 @@ describe("history reconciliation", () => {
     expect(JSON.stringify(blocks)).toContain("marker.txt")
     expect(JSON.stringify(blocks)).toContain("LEMON-IBIS")
     expect(JSON.stringify(blocks)).not.toContain("PRIVATE")
-    // Files from earlier turns sit under the tool that returned them, and the image is wrapped in a document so Claude
-    // Code does not take it for a new paste. An image sent now stays an image.
     expect(blocks.slice(-8)).toEqual([
-      { type: "text", text: "<tool>" },
+      { type: "text", text: "<user>" },
       { type: "text", text: "Attached media from tool result:" },
       {
         type: "document",
@@ -225,7 +223,7 @@ describe("history reconciliation", () => {
         },
       },
       { type: "document", source: { type: "base64", media_type: "application/pdf", data: "AwQ=" } },
-      { type: "text", text: "</tool>" },
+      { type: "text", text: "</user>" },
       { type: "text", text: "</conversation-checkpoint>" },
       { type: "text", text: "Continue" },
       { type: "image", source: { type: "base64", media_type: "image/png", data: "BQY=" } },
