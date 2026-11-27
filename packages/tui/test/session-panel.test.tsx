@@ -203,6 +203,72 @@ test("right-clicking an inactive diff focuses its screen-relative file menu", as
   expect(prompt.plainText).toBe("")
 })
 
+test.each([
+  { name: "default right", position: undefined, width: 160, expectedSidebarX: 118, expectedSessionX: 0 },
+  { name: "left", position: "left", width: 160, expectedSidebarX: 0, expectedSessionX: 42 },
+  { name: "right", position: "right", width: 100, expectedSidebarX: 58, expectedSessionX: 0 },
+  { name: "left", position: "left", width: 100, expectedSidebarX: 0, expectedSessionX: 0 },
+] as const)(
+  "session sidebar position $name at $width columns",
+  async ({ position, width, expectedSidebarX, expectedSessionX }) => {
+    await using state = await tmpdir()
+    await using setup = await createSessionFixture(state.path, {
+      width,
+      session: {
+        sidebar: width > 120 ? "auto" : "hide",
+        ...(position ? { sidebar_position: position } : {}),
+      },
+    })
+    await ready(setup)
+
+    if (width <= 120) {
+      setup.mockInput.pressKey("x", { ctrl: true })
+      setup.mockInput.pressKey("b")
+      await setup.waitFor(() => setup.renderer.root.findDescendantById("session-sidebar")?.parent?.width === width)
+    } else {
+      await setup.waitFor(() => node(setup, "session-pane").width < width)
+    }
+
+    expect(node(setup, "session-sidebar").x).toBe(expectedSidebarX)
+    expect(node(setup, "session-pane").x).toBe(expectedSessionX)
+
+    if (width <= 120) {
+      setup.mockInput.pressEscape()
+      await setup.waitFor(() => !setup.renderer.root.findDescendantById("session-sidebar"))
+    }
+  },
+)
+
+test("opening the diff replaces the left sidebar with a right-hand panel", async () => {
+  await using state = await tmpdir()
+  await using setup = await createSessionFixture(state.path, {
+    session: { sidebar: "auto", sidebar_position: "left" },
+  })
+  await ready(setup)
+  expect(node(setup, "session-sidebar").x).toBe(0)
+  expect(node(setup, "session-pane").x).toBeGreaterThan(0)
+
+  setup.mockInput.pressKey("F6")
+  await panelReady(setup)
+
+  expect(setup.renderer.root.findDescendantById("session-sidebar")).toBeUndefined()
+  expect(node(setup, "session-pane").x).toBe(0)
+  expect(node(setup, "session-panel").x).toBeGreaterThan(0)
+})
+
+test("left session sidebar stays beside the vertical tabs", async () => {
+  await using state = await tmpdir()
+  await using setup = await createSessionFixture(state.path, {
+    width: 200,
+    session: { sidebar: "auto", sidebar_position: "left" },
+    tabs: { mode: "on", layout: "vertical" },
+  })
+  await ready(setup)
+
+  expect(node(setup, "session-sidebar").x).toBe(42)
+  expect(node(setup, "session-pane").x).toBe(84)
+})
+
 test.each([60, 80])("a panel opened at %i columns can split after growing without remounting", async (width) => {
   await using state = await tmpdir()
   await using setup = await createSessionFixture(state.path, { width })
@@ -552,6 +618,7 @@ async function createSessionFixture(
   state: string,
   input: {
     width?: number
+    session?: Config.Info["session"]
     tabs?: Config.Info["tabs"]
     diffs?: Config.Info["diffs"]
     keybinds?: Config.Info["keybinds"]
@@ -608,7 +675,7 @@ async function createSessionFixture(
     config: {
       animations: false,
       tabs: input.tabs ?? { enabled: false },
-      session: { sidebar: "hide" },
+      session: { sidebar: "hide", ...input.session },
       // Keep patch geometry stable while testing host presentation changes, not split/unified diff layout.
       diffs: { tree: false, view: "unified", ...input.diffs },
       keybinds: { "diff.open": "f6", ...input.keybinds },

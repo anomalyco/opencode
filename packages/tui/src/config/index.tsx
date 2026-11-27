@@ -154,6 +154,9 @@ export const Info = Schema.Struct({
       sidebar: Schema.optional(Schema.Literals(["auto", "hide"])).annotate({
         description: "Session sidebar visibility; 'auto' shows it when space permits",
       }),
+      sidebar_position: Schema.optional(Schema.Literals(["left", "right"])).annotate({
+        description: "Position of the session sidebar",
+      }),
       scrollbar: Schema.optional(Schema.Boolean).annotate({ description: "Show the session transcript scrollbar" }),
       submit_scroll: Schema.optional(Schema.Literals(["bottom", "keep"])).annotate({
         description: "Jump to the latest message when sending a prompt, or keep the current transcript position",

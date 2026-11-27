@@ -263,7 +263,9 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       flexGrow={1}
       minWidth={0}
       minHeight={0}
-      flexDirection="row"
+      flexDirection={
+        rightPane() === "sidebar" && config.data.session?.sidebar_position === "left" ? "row-reverse" : "row"
+      }
       position="relative"
       onMouseDrag={paneResize.onMouseDrag}
       onMouseDragEnd={finishPaneResize}
@@ -389,7 +391,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           left={0}
           right={0}
           bottom={0}
-          alignItems="flex-end"
+          alignItems={config.data.session?.sidebar_position === "left" ? "flex-start" : "flex-end"}
           backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
         >
           <Sidebar sessionID={props.sessionID} />
