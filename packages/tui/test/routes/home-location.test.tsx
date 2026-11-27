@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
-import { InputRenderable } from "@opentui/core"
+import { InputRenderable, TextareaRenderable } from "@opentui/core"
 import path from "node:path"
+import { takeDraft } from "../../src/component/prompt/draft-stash"
 import { createAppFixture } from "../fixture/app"
 import { tmpdir } from "../fixture/fixture"
 import { json, worktree } from "../fixture/tui-client"
@@ -10,9 +11,9 @@ const beta = "/tmp/wt-beta"
 const project = { id: "proj_test", directory: worktree, canonical: worktree }
 
 test("switching Home between worktrees loads the branch of each", async () => {
+  takeDraft(undefined)
   await using state = await tmpdir()
   const vcs: string[] = []
-  let worktreeReads = 0
   await using setup = await createAppFixture({
     state: state.path,
     width: 120,
@@ -24,29 +25,22 @@ test("switching Home between worktrees loads the branch of each", async () => {
         const branch = path.basename(directory).replace("wt-", "")
         return json({ location: { directory, project }, data: { branch: { current: branch, default: "main" } } })
       }
-      if (url.pathname === "/api/worktree" && request.method === "GET") {
-        worktreeReads++
+      if (url.pathname === "/api/worktree" && request.method === "GET")
         return json([
           { directory: worktree },
           { directory: alpha, strategy: "git" },
           { directory: beta, strategy: "git" },
         ])
-      }
     },
   })
   await setup.ready
 
-  // Frame waits give up after a fixed number of rendered frames, so wait for the server to answer first: on
-  // slow runners (Windows) the location and vcs round trips a worktree switch needs can outlast that budget.
-  async function served(check: () => boolean) {
-    while (!check()) await Bun.sleep(10)
-  }
-
   async function select(filter: string) {
-    const reads = worktreeReads
+    // Keys go to whatever is focused, so wait for Home's prompt to mount and take focus before typing.
+    await setup.waitFor(() => setup.renderer.currentFocusedEditor instanceof TextareaRenderable)
     await setup.mockInput.typeText("/worktrees")
+    await setup.waitForFrame((frame) => frame.includes("/worktrees"))
     setup.mockInput.pressEnter()
-    await served(() => worktreeReads > reads)
     await setup.waitForFrame((frame) => frame.includes(alpha) && frame.includes(beta))
     await setup.waitFor(() => setup.renderer.currentFocusedRenderable instanceof InputRenderable)
     await setup.mockInput.typeText(filter)
@@ -55,10 +49,8 @@ test("switching Home between worktrees loads the branch of each", async () => {
   }
 
   await select("alpha")
-  await served(() => vcs.includes(alpha))
   await setup.waitForFrame((frame) => frame.includes(`${alpha}:alpha`))
   await select("beta")
-  await served(() => vcs.includes(beta))
   const frame = await setup.waitForFrame((frame) => frame.includes(`${beta}:beta`))
 
   expect(frame).toContain(`${beta}:beta`)
