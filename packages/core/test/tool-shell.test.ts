@@ -659,6 +659,42 @@ describe("ShellTool scanner permissions", () => {
     ))
 })
 
+describe("ShellTool root deletes", () => {
+  // Scanned with the shell each platform runs commands in. The host never resolves (.invalid), so even a missing guard
+  // could not reach a machine to run the delete on.
+  const shell = isWindows ? "pwsh" : "sh"
+  const test = Bun.which(shell) ? permissionIt.live : permissionIt.live.skip
+
+  test("refuses a recursive delete of a drive root even under allow-all rules", () =>
+    withScanner(
+      (registry, fixture) =>
+        Effect.gen(function* () {
+          const agents = yield* Agent.Service
+          yield* agents.transform((editor) =>
+            editor.update(toolIdentity.agent, (agent) => {
+              agent.permissions = [{ action: "*", resource: "*", effect: "allow" }]
+            }),
+          )
+          const result = yield* runPermissionCommand(
+            registry,
+            // Single quotes keep the backslash literal in both sh and PowerShell.
+            "ssh -o BatchMode=yes -o ConnectTimeout=1 opencode.invalid 'rd /s /q C:\\'",
+            path.join(fixture.active, "marker"),
+            [],
+          )
+          expect(result.requests).toEqual([])
+          expect(result.exit).toMatchObject({
+            _tag: "Success",
+            value: {
+              status: "error",
+              error: { message: expect.stringContaining("recursively deletes the drive root") },
+            },
+          })
+        }),
+      shell,
+    ))
+})
+
 describe("ShellTool conditional process substitution", () => {
   const test = isWindows || !Bun.which("bash") ? permissionIt.live.skip : permissionIt.live
   test("a nested deny prevents the substitution from running", () =>

@@ -4,6 +4,7 @@ import { Effect, Result, Schema } from "effect"
 import fs from "fs"
 import os from "os"
 import path from "path"
+import { ShellRootDelete } from "./root-delete.js"
 import { ShellScan } from "./scan.js"
 import { ShellSelect } from "./select.js"
 import { Wildcard } from "../util/wildcard.js"
@@ -16,6 +17,8 @@ const POWERSHELL_STACK_FLAG_RE = /^-(?:stack(?:name|nam|na|n)?|st):?$/i
 export type Result = {
   commands: Array<{ resource: string; save: string }>
   directories: string[]
+  /** The first command that recursively deletes a drive root, and that operand. */
+  rootDelete?: { command: string; operand: string }
 }
 
 export class OpaqueError extends Schema.TaggedError<OpaqueError>()("ShellParse.OpaqueError", {
@@ -187,6 +190,8 @@ export function scan(
     for (const item of scanned.commands) {
       // Declarations are skipped as standalone permission resources, while nested substitutions remain.
       if (item.declaration) continue
+      const operand = output.rootDelete ? undefined : ShellRootDelete.find(item.words)
+      if (operand !== undefined) output.rootDelete = { command: item.resource, operand }
       if (item.redirectPrefixEnd !== undefined) {
         const head = item.resource.slice(0, item.redirectPrefixEnd)
         const next = item.resource[item.redirectPrefixEnd]
