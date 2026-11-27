@@ -614,9 +614,12 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       "MCP connect",
       negotiate(url).pipe(
         Effect.catch((error) => {
-          if (!addedCodemode || !(error instanceof SdkHttpError) || (error.status !== 400 && error.status !== 404))
-            return Effect.fail(error)
-          // Servers that reject unknown query params get one retry at the configured URL.
+          if (!addedCodemode) return Effect.fail(error)
+          const rejected = error instanceof SdkHttpError && (error.status === 400 || error.status === 404)
+          // A server that answers any URL carrying a query string with an empty success has no JSON body
+          // for `initialize`; the SDK reports that as ClientHttpUnexpectedContent (sometimes wrapped by the
+          // auto probe). That reply is unusable, so retry at the configured URL like a query rejection.
+          if (!rejected && !unusableReply(error)) return Effect.fail(error)
           return negotiate(new URL(config.url))
         }),
       ),
@@ -1060,6 +1063,14 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     })
   return yield* new ConnectError({ server, message: explain(error), answered: !repeats(error) })
 })
+
+// A reply the SDK cannot parse as JSON-RPC, e.g. an empty 200 with no Content-Type from a server that
+// answers any query string with an empty success. A failed auto probe wraps the error it hit.
+function unusableReply(error: unknown): boolean {
+  if (error instanceof SdkError && error.code === SdkErrorCode.EraNegotiationFailed && error.cause !== undefined)
+    return unusableReply(error.cause)
+  return error instanceof SdkError && error.code === SdkErrorCode.ClientHttpUnexpectedContent
+}
 
 // Connecting again would fail the same way: the server could not be spawned or reached, did not answer in
 // time, is overloaded or down for now, or refused this client's access. A failed auto probe wraps the error it hit.

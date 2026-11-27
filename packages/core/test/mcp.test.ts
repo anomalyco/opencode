@@ -64,6 +64,7 @@ import {
   Stream,
 } from "effect"
 import { TestClock } from "effect/testing"
+import { FetchHttpClient } from "effect/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
 import { Global } from "@opencode/util/global"
@@ -1105,6 +1106,43 @@ for (const entry of [
     }),
   )
 }
+
+testEffect(Layer.empty).live("retries the configured URL when the codemode query yields an empty reply", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer({
+      respond: async (request) => {
+        const url = new URL(request.url)
+        let method: unknown
+        if (request.method === "POST") {
+          // A non-JSON body is not one of our JSON-RPC requests; fall through to the real handler.
+          const body: unknown = await request.clone().json().catch(() => undefined)
+          method = isRecord(body) ? body.method : undefined
+        }
+        // A server that answers any query string with an empty success has no JSON body for initialize.
+        if (url.search && method === "initialize") return new Response(null, { status: 200 })
+        return undefined
+      },
+    })
+    // A non-loopback hostname so OpenCode adds ?codemode=false; route it back to the local fixture server.
+    const url = new URL(server.url)
+    const host = url.hostname
+    url.hostname = "mcp.example.test"
+    const localFetch = ((input: string | URL | Request, init?: RequestInit) => {
+      const target = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url)
+      target.hostname = host
+      target.port = url.port
+      return fetch(target, init)
+    }) as typeof fetch
+    const config = new ConfigMCP.Remote({ type: "remote", url: url.toString(), oauth: false })
+    const connection = yield* connect("resources", config, import.meta.dir).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, localFetch),
+    )
+    expect((yield* connection.tools()).map((tool) => tool.name)).toEqual(["echo"])
+    expect(new Set(server.state.urls.map((request) => new URL(request).search))).toEqual(
+      new Set(["?codemode=false", ""]),
+    )
+  }),
+)
 
 for (const entry of [
   { name: "401", status: 401, query: "", codemode: undefined, attempts: 1 },
