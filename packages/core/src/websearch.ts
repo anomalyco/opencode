@@ -225,16 +225,14 @@ const layer = Layer.effect(
   }),
 )
 
-// Quota and provider-reported failures rarely clear within a minute, but an MCP `isError` can be specific to one query,
-// so those providers are skipped for an hour rather than for good. Auth failures (401/403) stay visible instead.
-const FAILOVER_SKIP_MILLIS = 3_600_000
-
+// Rate limits, used-up quotas and provider-reported errors all move a random search to another provider for the same
+// short cooldown. The session then keeps the new provider; auth failures (401/403) stay visible instead.
 function failoverUntil(cause: unknown, now: number) {
-  if (Schema.is(WebSearchMcp.ToolError)(cause)) return now + FAILOVER_SKIP_MILLIS
+  if (Schema.is(WebSearchMcp.ToolError)(cause)) return now + cooldownMillis(undefined, now)
   if (!HttpClientError.isHttpClientError(cause)) return
   const status = cause.response?.status
-  if (status === 429) return now + cooldownMillis(cause.response?.headers["retry-after"], now)
-  if (status === 402 || status === 432) return now + FAILOVER_SKIP_MILLIS
+  if (status === 429 || status === 402 || status === 432)
+    return now + cooldownMillis(cause.response?.headers["retry-after"], now)
 }
 
 function cooldownMillis(value: string | undefined, now: number) {

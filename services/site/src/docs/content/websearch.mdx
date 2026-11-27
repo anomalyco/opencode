@@ -72,7 +72,7 @@ Use `"random"` to choose an available provider automatically. Each session keeps
 
 ## Limits
 
-With random selection, a search that hits a rate limit, a used-up quota or plan limit, or an error reported by the provider's search service is retried with another available provider. A rate-limited provider waits for its `Retry-After` period, or 60 seconds when the response does not include one. A provider that failed for any of the other reasons is skipped for an hour. If every provider fails, the search reports the last provider's error. A provider you chose directly never fails over.
+With random selection, a search that hits a rate limit, a used-up quota or plan limit, or an error reported by the provider's search service is retried with another available provider. The failed provider waits for its `Retry-After` period, or 60 seconds when the response does not include one, and the session keeps using the new provider. If every provider fails, the search reports the last provider's error. A provider you chose directly never fails over.
 
 ```text
 A provider returns HTTP 429
