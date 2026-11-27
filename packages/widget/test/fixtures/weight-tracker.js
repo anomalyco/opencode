@@ -1,6 +1,7 @@
 // Weight and calorie tracker on widget.storage: one key per entry ("entry:<ISO time>:<random>"), so entries logged on
-// two devices never overwrite each other. Native inputs log a meal or a weight, a select picks the week or the month,
-// and a 2D canvas charts the history: each day's calories as bars, the weight as a line, press or drag to read a day.
+// two devices never overwrite each other. Two pages: Today, where native inputs log a meal or a weight with a note and
+// a 2D canvas charts the week or the month (each day's calories as bars, the weight as a line, press or drag to read a
+// day); and History, every entry in a table, sorted by a header press, a row press selecting one to delete.
 // The chart's drawing is the built-in `chart` template's (widget-templates/chart.js), with a second value axis for the
 // weight, run from a live program: it animates in on frames, then redraws on pointer input and storage changes. Days
 // are UTC days, so every device shows the same history.
@@ -14,16 +15,20 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 async function main(data) {
   const s = {
+    page: "today",
     range: "week",
     kcal: "",
     kg: "",
-    note: null,
+    text: "",
+    message: null,
     logged: 0,
     active: null,
     down: false,
     width: 0,
     t: INTRO,
     intro: 0,
+    sort: { column: 0, descending: true },
+    picked: null,
   }
   const entries = () =>
     widget.storage
@@ -31,17 +36,18 @@ async function main(data) {
       .map((key) => ({ key, ...widget.storage.get(key) }))
       .filter((entry) => typeof entry.at === "string")
   const days = () => history(entries(), s.range === "week" ? 7 : 30)
+  // The chart is on the Today page only.
   const paint = () => {
-    if (s.width > 0) widget.draw("chart", chart(days(), s.width, s.t, s.active))
+    if (s.page === "today" && s.width > 0) widget.draw("chart", chart(days(), s.width, s.t, s.active))
   }
   // Animates the chart in over INTRO seconds on display frames, which also give its width; a newer intro stops it.
   const intro = async () => {
     const run = ++s.intro
     const start = widget.now()
     s.t = 0
-    while (s.t < INTRO && run === s.intro) {
+    while (s.t < INTRO && run === s.intro && s.page === "today") {
       const frame = await widget.frame()
-      if (run !== s.intro) return
+      if (run !== s.intro || s.page !== "today") return
       s.width = frame.width
       s.t = Math.min(INTRO, (widget.now() - start) / 1000)
       paint()
@@ -50,19 +56,32 @@ async function main(data) {
   const log = async (field, text, low, high, unit) => {
     const value = Number(String(text).replace(",", "."))
     if (!(value >= low && value <= high)) {
-      s.note = "Enter " + (field === "kcal" ? "calories" : "a weight") + " from " + low + " to " + high + " " + unit
+      s.message = "Enter " + (field === "kcal" ? "calories" : "a weight") + " from " + low + " to " + high + " " + unit
       return view()
     }
     const at = new Date().toISOString()
+    const note = s.text.trim()
     s[field] = ""
+    s.text = ""
     s.logged++
-    s.note = "Logged " + value + " " + unit
-    await widget.storage.set("entry:" + at + ":" + Math.random().toString(36).slice(2, 6), { at, [field]: value })
+    s.message = "Logged " + value + " " + unit
+    await widget.storage.set("entry:" + at + ":" + Math.random().toString(36).slice(2, 6), {
+      at,
+      [field]: value,
+      ...(note ? { note } : {}),
+    })
     view()
   }
   const remove = async (key) => {
+    s.picked = null
     await widget.storage.delete(key)
     view()
+  }
+  const page = (value) => {
+    s.page = value
+    s.active = null
+    view()
+    if (value === "today") intro()
   }
   const onPointer = (pointer) => {
     if (pointer.kind === "wheel") return
@@ -83,7 +102,6 @@ async function main(data) {
     const list = days()
     const today = list[list.length - 1]
     const weights = all.filter((entry) => entry.kg !== undefined)
-    const active = s.active === null ? null : list[s.active]
     widget.render(
       ui.column({ gap: 2, align: "stretch" }, [
         ui.text(data.title ?? "Weight & calories", { style: "title" }),
@@ -96,64 +114,119 @@ async function main(data) {
             all.length +
             " entries",
         ),
-        ui.row({ gap: 1 }, [
-          // Typing only keeps the text: a render per keystroke would send back a value behind what was typed. A new
-          // key after each entry gives an empty input.
-          ui.input(s.kcal, {
-            key: "kcal" + s.logged,
-            placeholder: "Calories (kcal)",
-            onChange: (value) => (s.kcal = value),
-          }),
-          ui.button("Log meal", { variant: "primary", onPress: () => log("kcal", s.kcal, 1, 9999, "kcal") }),
-        ]),
-        ui.row({ gap: 1 }, [
-          ui.input(s.kg, { key: "kg" + s.logged, placeholder: "Weight (kg)", onChange: (value) => (s.kg = value) }),
-          ui.button("Log weight", { variant: "primary", onPress: () => log("kg", s.kg, 20, 400, "kg") }),
-        ]),
-        s.note && ui.text(s.note, { style: "caption", tone: s.note.startsWith("Logged") ? "success" : "warning" }),
+        // The pages, as tabs: a carousel would page on the swipes that read the chart.
         ui.select(
           [
-            { value: "week", label: "Last 7 days" },
-            { value: "month", label: "Last 30 days" },
+            { value: "today", label: "Today" },
+            { value: "history", label: "History" },
           ],
-          {
-            value: s.range,
-            onChange: (value) => {
-              s.range = value
-              s.active = null
-              view()
-              intro()
-            },
-          },
+          { value: s.page, onChange: page },
         ),
-        ui.canvas({ key: "chart", height: HEIGHT, alt: summary(list), onPointer }),
-        ui.text(
-          active
-            ? label(active.day) + ": " + active.kcal + " kcal" + (active.kg === null ? "" : " · " + active.kg + " kg")
-            : "Press or drag the chart to read a day",
-          { style: "caption", tone: active ? "default" : "muted" },
-        ),
-        ui.divider(),
-        ui.text("Recent entries", { style: "caption", tone: "muted" }),
-        all
-          .slice(-5)
-          .reverse()
-          .map((entry) =>
-            ui.row({ key: entry.key, gap: 1 }, [
-              ui.text(
-                entry.at.slice(5, 16).replace("T", " ") + "  " + (entry.kcal ? entry.kcal + " kcal" : entry.kg + " kg"),
-              ),
-              ui.button("Delete", { variant: "secondary", onPress: () => remove(entry.key) }),
-            ]),
-          ),
+        s.page === "today" ? todayPage(list) : historyPage(all),
       ]),
     )
     paint()
+  }
+  const todayPage = (list) => {
+    const active = s.active === null ? null : list[s.active]
+    return ui.column({ gap: 2, align: "stretch" }, [
+      ui.row({ gap: 1 }, [
+        // Typing only keeps the text: a render per keystroke would send back a value behind what was typed. A new
+        // key after each entry gives an empty input.
+        ui.input(s.kcal, {
+          key: "kcal" + s.logged,
+          placeholder: "Calories (kcal)",
+          onChange: (value) => (s.kcal = value),
+        }),
+        ui.button("Log meal", { variant: "primary", onPress: () => log("kcal", s.kcal, 1, 9999, "kcal") }),
+      ]),
+      ui.row({ gap: 1 }, [
+        ui.input(s.kg, { key: "kg" + s.logged, placeholder: "Weight (kg)", onChange: (value) => (s.kg = value) }),
+        ui.button("Log weight", { variant: "primary", onPress: () => log("kg", s.kg, 20, 400, "kg") }),
+      ]),
+      ui.input(s.text, {
+        key: "note" + s.logged,
+        placeholder: "Note (optional)",
+        onChange: (value) => (s.text = value),
+      }),
+      s.message &&
+        ui.text(s.message, { style: "caption", tone: s.message.startsWith("Logged") ? "success" : "warning" }),
+      ui.select(
+        [
+          { value: "week", label: "Last 7 days" },
+          { value: "month", label: "Last 30 days" },
+        ],
+        {
+          value: s.range,
+          onChange: (value) => {
+            s.range = value
+            s.active = null
+            view()
+            intro()
+          },
+        },
+      ),
+      ui.canvas({ key: "chart", height: HEIGHT, alt: summary(list), onPointer }),
+      ui.text(
+        active
+          ? label(active.day) + ": " + active.kcal + " kcal" + (active.kg === null ? "" : " · " + active.kg + " kg")
+          : "Press or drag the chart to read a day",
+        { style: "caption", tone: active ? "default" : "muted" },
+      ),
+    ])
+  }
+  // Every entry in a table, newest first until a header press sorts by its column (again: the other way round).
+  const historyPage = (all) => {
+    const rows = sorted(all, s.sort)
+    const picked = rows.findIndex((entry) => entry.key === s.picked)
+    return ui.column({ gap: 2, align: "stretch" }, [
+      ui.table(
+        ["Date", { label: "Weight (kg)", align: "end" }, { label: "Calories (kcal)", align: "end" }, "Note"],
+        rows.map((entry) => [stamp(entry.at), entry.kg ?? "", entry.kcal ?? "", entry.note ?? ""]),
+        {
+          sort: s.sort,
+          selected: picked === -1 ? undefined : picked,
+          onPress: (row) => {
+            s.picked = rows[row].key === s.picked ? null : rows[row].key
+            view()
+          },
+          onSort: (column) => {
+            s.sort =
+              s.sort.column === column
+                ? { column, descending: !s.sort.descending }
+                : { column, descending: column !== 3 }
+            view()
+          },
+        },
+      ),
+      picked === -1
+        ? ui.text("Tap a row to select it, a header to sort by it", { style: "caption", tone: "muted" })
+        : ui.row({ gap: 1, align: "center" }, [
+            ui.text(stamp(rows[picked].at) + " selected", { style: "caption" }),
+            ui.button("Delete entry", { variant: "danger", onPress: () => remove(rows[picked].key) }),
+          ]),
+    ])
   }
   widget.on("storage", () => view())
   widget.on("resumed", () => view())
   view()
   await intro()
+}
+
+// The entries sorted by a table column: the time, the weight, the calories or the note; empty cells last.
+function sorted(entries, sort) {
+  const value = (entry) => [entry.at, entry.kg, entry.kcal, entry.note][sort.column]
+  return entries.slice().sort((a, b) => {
+    const [x, y] = [value(a), value(b)]
+    if (x === undefined || y === undefined) return x === y ? 0 : x === undefined ? 1 : -1
+    const order = x < y ? -1 : x > y ? 1 : 0
+    return sort.descending ? -order : order
+  })
+}
+
+// An entry's UTC time, as "Nov 27 12:20".
+function stamp(at) {
+  return label(at.slice(0, 10)) + " " + at.slice(11, 16)
 }
 
 // The last `count` UTC days up to today: each day's calories, and its last weight (null without one).

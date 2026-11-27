@@ -279,10 +279,40 @@ test("the weight tracker logs from inputs and charts the history: live changes, 
   await widget.when(() => chart().some((command) => command[0] === "text" && command[3] === "2100 kcal"))
 
   // The last 30 days: the pick is cleared and the chart animates in again.
-  widget.event({ id: id((node) => node.type === "select"), type: "change", value: "month" })
+  const select = (first: string) =>
+    id(
+      (node) =>
+        node.type === "select" && (node as unknown as { options: { value: string }[] }).options[0]!.value === first,
+    )
+  widget.event({ id: select("week"), type: "change", value: "month" })
   await widget.when(() => caption() === "Press or drag the chart to read a day")
   await intro()
   const alt = find((node) => node.type === "canvas") as { alt: string }
   expect(alt.alt.startsWith("Chart of the last 30 days.")).toBe(true)
+
+  // History: every entry in a table, newest first; a header press sorts by it, again the other way round; a row press
+  // selects an entry to delete.
+  widget.event({ id: select("today"), type: "change", value: "history" })
+  type Table = {
+    id: string
+    rows: (string | number)[][]
+    sort: { column: number; descending: boolean }
+    selected?: number
+  }
+  const table = () => find((node) => node.type === "table") as unknown as Table | undefined
+  await widget.when(() => table() !== undefined)
+  expect(table()!.rows.map((row) => row[2])).toEqual([450, 600, 2100, "", 1800, ""])
+  expect(table()!.sort).toEqual({ column: 0, descending: true })
+  widget.event({ id: table()!.id, type: "change", value: 2 })
+  await widget.when(() => table()!.sort.column === 2)
+  expect(table()!.rows.map((row) => row[2])).toEqual([2100, 1800, 600, 450, "", ""])
+  widget.event({ id: table()!.id, type: "change", value: 2 })
+  await widget.when(() => table()!.sort.descending === false)
+  expect(table()!.rows.map((row) => row[2])).toEqual([450, 600, 1800, 2100, "", ""])
+  widget.event({ id: table()!.id, type: "press", value: 0 })
+  await widget.when(() => table()!.selected === 0)
+  widget.event({ id: button("Delete entry"), type: "press" })
+  await widget.when(() => table()!.rows.length === 5 && table()!.selected === undefined)
+  expect(summary()).toBe("Today 600 kcal · 79.6 kg · 5 entries")
   await widget.stop()
 })
