@@ -607,9 +607,9 @@ export const executeManyCallsDocument = document([
         output: "48",
         metadata: {
           toolCalls: Array.from({ length: 75 }, (_, index) => ({
-            tool: "Bun",
+            tool: "read",
             status: "completed",
-            input: { method: "file", path: `src/session/module-${index}.ts` },
+            input: { path: `src/session/module-${index}.ts` },
           })),
         },
       }),
@@ -1373,7 +1373,7 @@ export const largeCompletedDocument = {
   status: { type: "idle" },
   diffs: [
     {
-      file: "packages/session-ui/src/timeline/session-timeline.stories.tsx",
+      file: "packages/session-ui/src/timeline/session-timeline.lab.tsx",
       patch: "@@ -0,0 +1,16 @@",
       additions: 16,
       deletions: 0,

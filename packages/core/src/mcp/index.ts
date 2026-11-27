@@ -203,7 +203,7 @@ export interface Interface extends State.Transformable<Editor> {
     readonly server: ServerName | string
     readonly name: string
     readonly args?: Record<string, string>
-  }) => Effect.Effect<PromptResult | undefined, NotFoundError>
+  }) => Effect.Effect<PromptResult | undefined, NotFoundError | Error>
   readonly resourceCatalog: () => Effect.Effect<ResourceCatalog>
   readonly resources: (input: { readonly server: ServerName | string }) => Effect.Effect<ResourceCatalog, Error>
   readonly readResource: (input: {
@@ -220,7 +220,7 @@ export interface Interface extends State.Transformable<Editor> {
     readonly server: ServerName | string
     readonly entry: McpClient.Skill
     readonly ref?: string
-  }) => Effect.Effect<McpClient.SkillFile, NotFoundError | Error>
+  }) => Effect.Effect<McpClient.SkillFile, NotFoundError | McpClient.SkillMismatchError | Error>
   /** Experimental: one skill of a server by its `SKILL.md` URI, listed or not (`skills/get`). No file is read. */
   readonly getSkill: (input: {
     readonly server: ServerName | string
@@ -1141,9 +1141,9 @@ export const layer = (options?: Options) =>
         prompt: Effect.fn("MCP.prompt")(function* (input) {
           const target = yield* connected(ServerName.make(input.server))
           if (!target.client) return undefined
-          return yield* target.entry.connection
-            .recovering(target.client, (connection) => connection.prompt({ name: input.name, args: input.args }))
-            .pipe(Effect.orElseSucceed(() => undefined))
+          return yield* target.entry.connection.recovering(target.client, (connection) =>
+            connection.prompt({ name: input.name, args: input.args }),
+          )
         }),
         resourceCatalog: Effect.fn("MCP.resourceCatalog")(function* () {
           const empty = ResourceCatalog.make({ resources: [], templates: [] })

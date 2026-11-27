@@ -1,7 +1,7 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionRequest } from "@opencode/plugin/effect/session"
-import { Deferred, Effect, Option, Schema, Semaphore } from "effect"
+import { Deferred, Effect, Exit, Option, Schema, Semaphore } from "effect"
 import type { Server } from "node:http"
 import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
@@ -79,7 +79,7 @@ const browser = (app: App.Info) =>
           const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
           const value = url.searchParams.get("code")
           if (error) {
-            Effect.runFork(Deferred.fail(code, new Error(error)))
+            Deferred.doneUnsafe(code, Exit.fail(new Error(error)))
             response
               .writeHead(400, { "Content-Type": "text/html" })
               .end(OauthCallbackPage.error(error, { provider: "ChatGPT" }))
@@ -87,13 +87,13 @@ const browser = (app: App.Info) =>
           }
           if (!value || url.searchParams.get("state") !== state) {
             const message = value ? "Invalid OAuth state" : "Missing authorization code"
-            Effect.runFork(Deferred.fail(code, new Error(message)))
+            Deferred.doneUnsafe(code, Exit.fail(new Error(message)))
             response
               .writeHead(400, { "Content-Type": "text/html" })
               .end(OauthCallbackPage.error(message, { provider: "ChatGPT" }))
             return
           }
-          Effect.runFork(Deferred.succeed(code, value))
+          Deferred.doneUnsafe(code, Exit.succeed(value))
           response
             .writeHead(200, { "Content-Type": "text/html" })
             .end(OauthCallbackPage.success({ provider: "ChatGPT" }))

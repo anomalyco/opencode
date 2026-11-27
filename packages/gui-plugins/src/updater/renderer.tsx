@@ -99,6 +99,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     get entries() {
       return [
         { id: "settings-release-notes", title: ctx.t("releaseNotes.title") },
+        { id: "settings-install-on-quit", title: ctx.t("installOnQuit.title") },
         { id: "settings-check-updates", title: ctx.t("check.title") },
       ]
     },
@@ -106,6 +107,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       <Suspense>
         <Section
           action={() => updaterAction(state(), windowState())}
+          updaterDisabled={() => state()?.status === "disabled"}
           run={() => {
             const run = updaterAction(state(), windowState()).run
 

@@ -158,6 +158,33 @@ export interface BuiltinSlotMap extends SlotMap {
     /** The location icon: monitor for the local repository, worktree for a worktree. */
     readonly icon: IconName
   }
+  /**
+   * Across the top of the side panel's New tab view, full width, above its launchers. A tab that opens in the view's
+   * pane from here replaces the New tab, as a launcher's does.
+   */
+  readonly "session.panel.new": NewTabSlotInput
+  /** In the side panel's New tab view, under its launchers and above the recently closed tabs. */
+  readonly "session.panel.new.list": NewTabSlotInput
+}
+
+/** What the slots of the side panel's New tab view pass to `render`. */
+export type NewTabSlotInput = SlotMap["session.panel.end"] & {
+  /**
+   * Makes the plugin's next tab open in this New tab's pane. Call it just before opening the tab.
+   *
+   * @param plugin - The plugin's id, `ctx.id`.
+   */
+  target(plugin: string): void
+  /**
+   * Hands the view the control that takes the keyboard when the person opens this New tab, such as an address field.
+   * Call it once the control is in the document; the returned function takes it back, as when the control goes.
+   *
+   * @param control - Focuses the control.
+   */
+  autofocus(control: {
+    /** Gives the control the keyboard. */
+    focus(): void
+  }): () => void
 }
 
 /** A `Slot` that may also fill the slots only built-ins use. */

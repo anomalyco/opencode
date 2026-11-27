@@ -18,7 +18,7 @@ const modeVerb = {
  * A group's parts as facts. What background work reported counts as its outcome; notices count nothing. A script's
  * files count where they are placed, so only those in the group.
  */
-export function activityFacts(parts: readonly ActivityGroupPart[]) {
+export function activityFacts(parts: readonly ActivityGroupPart[], scriptSteps = false) {
   const facts = factsOf(
     parts.flatMap((part, index): FactPart[] => {
       // Thoughts one after another count as one, as they show.
@@ -31,6 +31,8 @@ export function activityFacts(parts: readonly ActivityGroupPart[]) {
 
       return [{ type: "outcome", id: part.id, outcome: { kind, verb, failed, key: workKey(part.event) } }]
     }),
+    true,
+    scriptSteps,
   )
 
   return [
@@ -43,12 +45,18 @@ export function activityFacts(parts: readonly ActivityGroupPart[]) {
  * Names a stretch of the agent's work by its main mode, then what its other calls did: "Edited 4 files · 2 commands,
  * started 1 shell". A background shell is counted once by its outcome.
  */
-export function activityLabel(parts: readonly ActivityGroupPart[], i18n: UiI18n) {
-  const summary = summarize(activityFacts(parts))
+export function activityLabel(parts: readonly ActivityGroupPart[], i18n: UiI18n, scriptSteps = false) {
+  const summary = summarize(activityFacts(parts, scriptSteps))
   const launches = summary.background.verbs
   const launched = launches.map((bucket) => i18n.plural(launchKeys[bucket.verb], bucket.count))
+
   // Files a script changed name the group as edits do, where they are placed in it.
-  const mode = modePriority.find((item) => summary.modes[item] > 0 || (item === "edit" && summary.files.length > 0))
+  // Counting a script's steps, an edit step leads only once its files have landed.
+  const mode = modePriority.find((item) =>
+    item === "edit" && scriptSteps
+      ? summary.files.length > 0
+      : summary.modes[item] > 0 || (item === "edit" && summary.files.length > 0),
+  )
 
   if (!mode) {
     const [first, ...rest] = launches
@@ -76,7 +84,15 @@ export function activityLabel(parts: readonly ActivityGroupPart[], i18n: UiI18n)
 
   // Commands are counted, never quoted: a command can be any length.
   const commands = summary.commands ? [i18n.plural("ui.timeline.activity.commands", summary.commands)] : []
-  const used = [...new Set(summary.tools.map((name) => toolTitle(name, i18n)))]
+  // Counting a script's steps, tools the timeline doesn't know read as one "Tool", after the ones it does.
+  const titles = summary.tools.map((name) => toolTitle(name, i18n))
+  const other = i18n.t("ui.timeline.activity.otherTool")
+  const unknown = scriptSteps && summary.tools.some((name, index) => titles[index] === name)
+
+  const used = [
+    ...new Set(titles.filter((title, index) => !scriptSteps || title !== summary.tools[index])),
+    ...(unknown ? [other] : []),
+  ]
 
   const others = {
     explore: explore(false),

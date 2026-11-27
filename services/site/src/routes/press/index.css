@@ -854,6 +854,12 @@
         width: 24%;
       }
 
+      /* Cropped to a circle, the way profiles show them. */
+      &[data-kind="avatar"] img {
+        width: 32%;
+        border-radius: 50%;
+      }
+
       &[data-kind="wordmark"] img {
         width: 46%;
       }

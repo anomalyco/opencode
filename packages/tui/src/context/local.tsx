@@ -77,9 +77,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     function createAgent() {
-      const agents = createMemo(() =>
-        (data.location.agent.list(location.ref) ?? []).filter((agent) => agent.mode !== "subagent" && !agent.hidden),
+      const primaryAgents = createMemo(() =>
+        (data.location.agent.list(location.ref) ?? []).filter((agent) => agent.mode !== "subagent"),
       )
+      const agents = createMemo(() => primaryAgents().filter((agent) => !agent.hidden))
       const visibleAgents = createMemo(() =>
         (data.location.agent.list(location.ref) ?? []).filter((agent) => !agent.hidden),
       )
@@ -116,7 +117,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
                 data.session.get(route.data.sessionID)?.agent ??
                 agentStore.current)
               : agentStore.current
-          return agents().find((agent) => agent.id === selected) ?? agents().at(0)
+          // A command can switch the session to a hidden agent, which stays out of the list but is still in use.
+          return primaryAgents().find((agent) => agent.id === selected) ?? agents().at(0)
         },
         set(id: string) {
           if (!agents().some((agent) => agent.id === id))

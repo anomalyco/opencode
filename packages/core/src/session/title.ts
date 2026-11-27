@@ -3,7 +3,7 @@ export * as SessionTitle from "./title.js"
 import { isDeepStrictEqual } from "node:util"
 import { LLMClient, LLMEvent, Message, SystemPart } from "@opencode/ai/effect"
 import type { Agent } from "@opencode/schema/agent"
-import { Context, DateTime, Effect, Layer, Stream } from "effect"
+import { Context, Data, DateTime, Effect, Layer, Stream } from "effect"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -21,7 +21,8 @@ import { SessionStore } from "./store.js"
 const MAX_LENGTH = 100
 const MAX_CONTEXT_LENGTH = 8_000
 const MAX_FIRST_MESSAGE_LENGTH = 2_000
-const titleChanged = Symbol("Session title changed")
+// The title moved on while the model was naming it; the newer title wins.
+class TitleChanged extends Data.TaggedError("SessionTitle.TitleChanged") {}
 
 export interface Interface {
   /** Generates an initial title or regenerates one from bounded conversation history. */
@@ -159,9 +160,9 @@ export const layer = Layer.effect(
             sessionID: session.id,
             title: truncate(title),
           },
-          { commit: (sequence) => (sequence === expectedSequence ? Effect.void : Effect.die(titleChanged)) },
+          { commit: (sequence) => (sequence === expectedSequence ? Effect.void : Effect.fail(new TitleChanged())) },
         )
-        .pipe(Effect.catchDefect((defect) => (defect === titleChanged ? Effect.void : Effect.die(defect))))
+        .pipe(Effect.catchTag("SessionTitle.TitleChanged", () => Effect.void))
     })
     return Service.of({ generate })
   }),

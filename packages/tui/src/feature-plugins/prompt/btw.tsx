@@ -178,7 +178,7 @@ export function Answer(props: {
               renderBlock={props.markdown()}
               content={props.answer}
               conceal
-              tableOptions={{ style: "grid", cellPaddingX: 1 }}
+              tableOptions={{ style: "grid", cellPaddingX: 1, borderColor: overlay.border.base }}
               fg={overlay.markdown.text}
               bg={overlay.background.raised.high}
             />

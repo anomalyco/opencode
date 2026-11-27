@@ -14,10 +14,27 @@ import file9 from "./api/model.md" with { type: "text" }
 import file10 from "./api/permission.md" with { type: "text" }
 import file11 from "./api/project.md" with { type: "text" }
 import file12 from "./api/provider.md" with { type: "text" }
-import file13 from "./api/session.md" with { type: "text" }
-import file14 from "./api/skill.md" with { type: "text" }
-import file15 from "./api/vcs.md" with { type: "text" }
-import file16 from "./api/worktree.md" with { type: "text" }
+import file13 from "./api/session/index.md" with { type: "text" }
+import file14 from "./api/session/active.md" with { type: "text" }
+import file15 from "./api/session/agent.md" with { type: "text" }
+import file16 from "./api/session/command.md" with { type: "text" }
+import file17 from "./api/session/compact.md" with { type: "text" }
+import file18 from "./api/session/context.md" with { type: "text" }
+import file19 from "./api/session/diff.md" with { type: "text" }
+import file20 from "./api/session/fork.md" with { type: "text" }
+import file21 from "./api/session/form.md" with { type: "text" }
+import file22 from "./api/session/generate.md" with { type: "text" }
+import file23 from "./api/session/inbox.md" with { type: "text" }
+import file24 from "./api/session/interrupt.md" with { type: "text" }
+import file25 from "./api/session/message.md" with { type: "text" }
+import file26 from "./api/session/model.md" with { type: "text" }
+import file27 from "./api/session/permission.md" with { type: "text" }
+import file28 from "./api/session/prompt.md" with { type: "text" }
+import file29 from "./api/session/synthetic.md" with { type: "text" }
+import file30 from "./api/session/wait.md" with { type: "text" }
+import file31 from "./api/skill.md" with { type: "text" }
+import file32 from "./api/vcs.md" with { type: "text" }
+import file33 from "./api/worktree.md" with { type: "text" }
 
 export const files: Record<string, string> = {
   "api.md": file0,
@@ -33,8 +50,25 @@ export const files: Record<string, string> = {
   "api/permission.md": file10,
   "api/project.md": file11,
   "api/provider.md": file12,
-  "api/session.md": file13,
-  "api/skill.md": file14,
-  "api/vcs.md": file15,
-  "api/worktree.md": file16,
+  "api/session/index.md": file13,
+  "api/session/active.md": file14,
+  "api/session/agent.md": file15,
+  "api/session/command.md": file16,
+  "api/session/compact.md": file17,
+  "api/session/context.md": file18,
+  "api/session/diff.md": file19,
+  "api/session/fork.md": file20,
+  "api/session/form.md": file21,
+  "api/session/generate.md": file22,
+  "api/session/inbox.md": file23,
+  "api/session/interrupt.md": file24,
+  "api/session/message.md": file25,
+  "api/session/model.md": file26,
+  "api/session/permission.md": file27,
+  "api/session/prompt.md": file28,
+  "api/session/synthetic.md": file29,
+  "api/session/wait.md": file30,
+  "api/skill.md": file31,
+  "api/vcs.md": file32,
+  "api/worktree.md": file33,
 }

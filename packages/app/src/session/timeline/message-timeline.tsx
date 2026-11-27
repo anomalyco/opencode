@@ -4,6 +4,7 @@ import { abort } from "@opencode/util/abort"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import type { SessionUserActions } from "@opencode/session-ui/actions"
+import { useData } from "@opencode/session-ui/context"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -29,7 +30,6 @@ import { containsDirectory } from "@opencode/util/path"
 import { isWorkspaceDirectory } from "@/workspaces/paths"
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
 import { parseVoiceDelegation } from "./voice-delegation"
-import { inlineQuotes } from "./inline-quotes"
 import { useCommand } from "@/shell/commands/command"
 import { usePluginScoped } from "@/runtime/plugin/commands"
 import {
@@ -116,10 +116,13 @@ export function MessageTimeline(props: MessageTimelineProps) {
 }
 
 function MountedTimeline(props: MessageTimelineProps & { next: boolean }) {
+  const data = useData()
+
   const controller = createTimelineController({
     session: props.session,
     active: () => props.active !== false,
     next: props.next,
+    scriptDiffs: () => data.flag("full_codemode"),
   })
 
   const tail = props.follow.following() ? controller.data.projection.rows().at(-1) : undefined
@@ -335,7 +338,6 @@ function MessageTimelineView(
 
   const rowInput = {
     foldUserMessages: settings.general.foldUserMessages,
-    inlineQuotes: () => inlineQuotes,
     sessionID: () => sessionID()!,
     status: sessionStatus,
     projection,

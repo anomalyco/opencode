@@ -16,6 +16,7 @@ import { use } from "./render-context"
 import { generateThinkingSyntax } from "./thinking-syntax"
 import { canonicalToolName } from "../../util/tool-display"
 import { useSessionLinks } from "../../ui/session-link"
+import { useFindHighlight } from "./find-view"
 
 export const INLINE_TOOL_ICON_WIDTH = 2
 
@@ -135,7 +136,7 @@ export function ReasoningBody(props: { content: string; streaming: boolean; sour
         streaming={props.streaming}
         syntaxStyle={thinkingSyntax()}
         content={props.content}
-        tableOptions={{ style: "grid", cellPaddingX: 1 }}
+        tableOptions={{ style: "grid", cellPaddingX: 1, borderColor: theme.border.base }}
         conceal={true}
         fg={theme.text.muted}
       />
@@ -200,23 +201,33 @@ function ReasoningHeader(props: {
 export function TextPart(props: {
   last: boolean
   part: SessionMessageAssistantText
+  partID: string
   message: SessionMessageAssistant
 }) {
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
   const plugins = usePlugin()
+  const links = useSessionLinks()
+  const find = useFindHighlight(() => ({
+    messageID: props.message.id,
+    partID: props.partID,
+    text: props.part.text.trim(),
+  }))
   return (
     <Show when={props.part.text.trim()}>
       <box paddingLeft={3} flexShrink={0}>
         {/* Configure custom nodes before parsing; apply content before streaming so completion keeps the final tokens. */}
         <markdown
-          ref={useSessionLinks()}
+          ref={(renderable) => {
+            links(renderable)
+            find(renderable)
+          }}
           syntaxStyle={syntax()}
           renderBlock={plugins.markdown()}
           content={props.part.text.trim()}
           streaming={props.message.time.completed === undefined}
-          tableOptions={{ style: "grid", cellPaddingX: 1 }}
+          tableOptions={{ style: "grid", cellPaddingX: 1, borderColor: theme.border.base }}
           conceal={ctx.markdownMode() === "rendered"}
           fg={theme.markdown.text}
           bg={theme.background.base}

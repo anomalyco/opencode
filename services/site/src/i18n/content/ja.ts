@@ -416,7 +416,7 @@ export const content = {
       badges: {
         body: "README、ドキュメント、Webサイトにバッジを置き、opencode.aiにリンクしてください。背景に合わせてライトかダークのファイルを選び（HTMLは自動で切り替わります）、色やテキストは変更しないでください。",
         sizes: "どのスタイルも20、32、44px（Shieldsは20pxのみ）で、SVGと2倍サイズのPNGがあります。",
-        mono: "各ファイルには、テキストをOpenTUI Monoにした版もあります。opencode-works-with-a-light-20-mono.svg のように拡張子の前に -mono を付けます。大文字のOpenTUI Monoなら -mono-caps を付けます。",
+        mono: "各ファイルには、テキストをOpenMonoにした版もあります。opencode-works-with-a-light-20-mono.svg のように拡張子の前に -mono を付けます。大文字のOpenMonoなら -mono-caps を付けます。",
         groups: {
           "works-with": {
             title: "Works with",
@@ -607,6 +607,13 @@ export const content = {
         "mark-white": { name: "マーク、白" },
         "wordmark-black": { name: "ワードマーク、黒" },
         "wordmark-white": { name: "ワードマーク、白" },
+      },
+      avatars: {
+        body: "X、GitHub、Slack、LinkedInなどのプロフィール用の正方形アバター。マークは円の内側に十分収まっているので、丸く切り抜いても問題ありません。PNGの幅は1024 pxと400 pxです。",
+        items: {
+          "avatar-dark": { name: "アバター、ダーク" },
+          "avatar-light": { name: "アバター、ライト" },
+        },
       },
       all: { text: "一括ダウンロード" },
     },

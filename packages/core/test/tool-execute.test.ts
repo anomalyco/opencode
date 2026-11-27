@@ -68,6 +68,33 @@ test("execute takes raw code as freeform text, and Code Mode calls freeform tool
   expect(calls.output.toolCalls.map((call) => call.input)).toEqual([{ text: "first" }, { text: "second" }])
 })
 
+test("execute rows cap long input strings, and cut them to a preview once a script's rows hold 1M chars", async () => {
+  const input = Schema.Struct({ text: Schema.String })
+  const received: Array<number> = []
+  const echo = {
+    name: "echo",
+    description: "Echo text",
+    input,
+    output: Schema.String,
+    execute: ({ text }) => Effect.sync(() => received.push(text.length)).pipe(Effect.as({ output: "ok" })),
+  } satisfies Info<typeof input, typeof Schema.String>
+  const result = await Effect.runPromise(
+    createCodeMode(new Map([["echo", echo]])).execute(
+      {
+        code: 'for (let i = 0; i < 64; i++) await tools.echo({ text: "x".repeat(20000) })\nawait tools.echo({ text: "short" })',
+      },
+      context,
+    ),
+  )
+  const texts = result.output.toolCalls.map((call) => call.input?.text)
+  expect(received).toEqual([...Array(64).fill(20000), 5])
+  expect(texts[0]).toBe(`${"x".repeat(16000)}… [4000 more chars]`)
+  expect(texts[62]).toBe(texts[0])
+  expect(texts[63]).toBe(`${"x".repeat(200)}… [19800 more chars]`)
+  expect(texts[64]).toBe("short")
+  expect(result.metadata).toEqual({ toolCalls: result.output.toolCalls })
+})
+
 test("with full_codemode, raw-text models set execute's timeout and background on a first line", async () => {
   const base = OpenAI.model("gpt-5.4", { apiKey: "test" })
   const model = LanguageModel.update(base, {
@@ -315,6 +342,29 @@ describe("Bun", () => {
     expect((await fs.readdir(tmp.path)).toSorted()).toEqual(
       ["bytes.bin", "copy.txt", "deep", "log.txt", "notes.txt"].toSorted(),
     )
+  })
+
+  test("Bun.file, Bun.write and Bun.Glob show as read, write and glob calls", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "notes.txt"), "hello")
+    const result = await Effect.runPromise(
+      createCodeMode(new Map(), allowAll, codeModeServices(tmp.path)).execute(
+        {
+          code: `await Bun.file("notes.txt").text()
+          await Bun.write("copy.txt", Bun.file("notes.txt"))
+          await Bun.write("new.txt", "text")
+          new Bun.Glob("*.txt")`,
+        },
+        context,
+      ),
+    )
+    expect(result.output.toolCalls).toEqual([
+      { tool: "read", status: "completed", input: { path: "notes.txt" } },
+      { tool: "read", status: "completed", input: { path: "notes.txt" } },
+      { tool: "write", status: "completed", input: { path: "copy.txt", from: "notes.txt" } },
+      { tool: "write", status: "completed", input: { path: "new.txt" } },
+      { tool: "glob", status: "completed", input: { pattern: "*.txt" } },
+    ])
   })
 
   test("Bun.Glob scans for files, with dot files, folders and absolute paths on request", async () => {
@@ -972,7 +1022,7 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
   await Effect.runPromise(
     createCodeMode(new Map(inventory.tools)).execute({ code: 'return await tools.echo({ value: "next" })' }, context),
   )
-  expect(conversions).toBe(2)
+  expect(conversions).toBe(1)
 })
 
 const progressCodeMode = (started: Deferred.Deferred<void>, wait: Effect.Effect<void>) =>

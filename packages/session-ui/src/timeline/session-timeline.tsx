@@ -2,6 +2,7 @@ import { For, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"
 import type { SessionUserActions } from "../actions"
+import { useData } from "../context"
 import type { TimelineDetail } from "./detail"
 import { createReactiveTimelineProjection, TimelineRow, type ReasoningMode } from "./projection"
 import { createSessionTimelineRowRenderer, type SessionUserPresentation } from "./session-timeline-row"
@@ -17,11 +18,12 @@ export type SessionTimelineProps = {
   editToolDefaultOpen?: boolean
   timelineDetail?: TimelineDetail
   turnDiffs?: boolean
-  inlineQuotes?: boolean
   class?: string
 }
 
 export function SessionTimeline(props: SessionTimelineProps) {
+  const data = useData()
+
   const projection = createReactiveTimelineProjection({
     sessionMessages: () => props.document.messages,
     status: () => props.document.status,
@@ -30,6 +32,7 @@ export function SessionTimeline(props: SessionTimelineProps) {
     editToolDefaultOpen: () => props.editToolDefaultOpen ?? false,
     timelineDetail: props.timelineDetail && (() => props.timelineDetail!),
     turnDiffs: () => props.turnDiffs ?? false,
+    scriptDiffs: () => data.flag("full_codemode"),
   })
 
   const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>({})
@@ -44,7 +47,6 @@ export function SessionTimeline(props: SessionTimelineProps) {
     shellToolDefaultOpen: () => props.shellToolDefaultOpen ?? false,
     editToolDefaultOpen: () => props.editToolDefaultOpen ?? false,
     timelineDetail: props.timelineDetail && (() => props.timelineDetail!),
-    inlineQuotes: () => props.inlineQuotes ?? false,
     disclosure: {
       value: (key) => toolOpen[key],
       set: (key, open) => setToolOpen(key, open),

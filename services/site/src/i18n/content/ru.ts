@@ -407,7 +407,7 @@ export const content = {
       badges: {
         body: "Разместите бейдж в README, документации или на сайте со ссылкой на opencode.ai. Выберите светлый или тёмный файл под ваш фон (HTML переключается сам) и не меняйте цвета и текст.",
         sizes: "Каждый стиль есть в размерах 20, 32 и 44px (Shields только 20px), в SVG и в PNG с плотностью 2×.",
-        mono: "У каждого файла есть версия с текстом, набранным шрифтом OpenTUI Mono. Добавьте -mono перед расширением, как в opencode-works-with-a-light-20-mono.svg, или -mono-caps для OpenTUI Mono в верхнем регистре.",
+        mono: "У каждого файла есть версия с текстом, набранным шрифтом OpenMono. Добавьте -mono перед расширением, как в opencode-works-with-a-light-20-mono.svg, или -mono-caps для OpenMono в верхнем регистре.",
         groups: {
           "works-with": {
             title: "Работает с",
@@ -591,6 +591,13 @@ export const content = {
         "mark-white": { name: "Знак, белый" },
         "wordmark-black": { name: "Вордмарк, чёрный" },
         "wordmark-white": { name: "Вордмарк, белый" },
+      },
+      avatars: {
+        body: "Квадратные аватары для X, GitHub, Slack, LinkedIn и других профилей. Знак стоит глубоко внутри круга, поэтому аватары переживают круглую обрезку. Ширина PNG — 1024 и 400 px.",
+        items: {
+          "avatar-dark": { name: "Аватар, тёмный" },
+          "avatar-light": { name: "Аватар, светлый" },
+        },
       },
       all: { text: "Скачать всё" },
     },

@@ -32,32 +32,38 @@ static EXPLICIT_SHAPE: LazyLock<Regex> = LazyLock::new(|| pattern(&format!(r"^{I
 static CIRCLE: LazyLock<Regex> = LazyLock::new(|| pattern(&format!(r"^{ID}\(\(.+\)\)$")));
 static CLASS_SUFFIX: LazyLock<Regex> = LazyLock::new(|| pattern(r"\s*:::.*$"));
 static END: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^end$"));
-// TS `EDGE_OPERATOR_RE` without the lookahead `-\.(?!->)`; `edge_operator_matches` applies it.
-const EDGE_OPERATOR_REST: &str =
-    r"(--|==|-\.)\s+(.+?)\s+(-->|==>|\.->|-\.->|\.-)|(<-->|-->|==>|-\.->|---|~~~)\s*(?:\|([^|]*)\|\s*)?";
+// TS `EDGE_OPERATOR_RE` without its lookarounds, which `edge_operator_matches` applies.
+const INLINE_DASHED_EDGE: &str = r"(-\.(.+?)\.(?:->|-))";
+const LABELED_EDGE: &str = r"(--|==|-\.)\s*(.+?)\s*(-->|==>|\.->|-\.->|\.-)";
+const PLAIN_EDGE: &str = r"(<-->|-->|==>|-\.->|---|~~~)\s*(?:\|([^|]*)\|\s*)?";
 static EDGE_OPERATOR: LazyLock<Regex> =
-    LazyLock::new(|| pattern(&format!(r"(-\.(.+?)\.(?:->|-))|{EDGE_OPERATOR_REST}")));
-// The same groups with the first branch disabled (`\z-` never matches), anchored for a retry where the
-// lookahead fails.
-static EDGE_OPERATOR_AFTER_LOOKAHEAD: LazyLock<Regex> =
-    LazyLock::new(|| pattern(&format!(r"^(?:(\z-(.+?)\.(?:->|-))|{EDGE_OPERATOR_REST})")));
+    LazyLock::new(|| pattern(&format!("{INLINE_DASHED_EDGE}|{LABELED_EDGE}|{PLAIN_EDGE}")));
+// Anchored retries with the same groups, each disabling one more leading branch (`\z` before it never matches) for
+// when that branch's lookaround fails.
+static EDGE_OPERATOR_RETRIES: LazyLock<[Regex; 3]> = LazyLock::new(|| {
+    [
+        pattern(&format!(r"^(?:{INLINE_DASHED_EDGE}|{LABELED_EDGE}|{PLAIN_EDGE})")),
+        pattern(&format!(r"^(?:\z{INLINE_DASHED_EDGE}|{LABELED_EDGE}|{PLAIN_EDGE})")),
+        pattern(&format!(r"^(?:\z{INLINE_DASHED_EDGE}|\z{LABELED_EDGE}|{PLAIN_EDGE})")),
+    ]
+});
 
 /// The matches of `EDGE_OPERATOR_RE`, with each capture's byte range in `text`.
 fn edge_operator_matches(text: &str) -> Vec<Vec<Option<std::ops::Range<usize>>>> {
     let mut matches = Vec::new();
     let mut start = 0;
-    while let Some(captures) = EDGE_OPERATOR.captures_at(text, start) {
-        let whole = captures.get(0).expect("match");
-        let ranges = if captures.get(1).is_some() && text[whole.start()..].starts_with("-.->") {
-            let Some(retry) = EDGE_OPERATOR_AFTER_LOOKAHEAD.captures(&text[whole.start()..]) else {
-                start = whole.start() + 1;
-                continue;
-            };
-            let offset = whole.start();
-            retry.iter().map(|m| m.map(|m| m.start() + offset..m.end() + offset)).collect::<Vec<_>>()
-        } else {
-            captures.iter().map(|m| m.map(|m| m.range())).collect()
+    while let Some(found) = EDGE_OPERATOR.find_at(text, start) {
+        let offset = found.start();
+        let rest = &text[offset..];
+        let Some(captures) = EDGE_OPERATOR_RETRIES.iter().filter_map(|regex| regex.captures(rest)).find(|captures| {
+            (captures.get(1).is_none() || !rest.starts_with("-.->"))
+                && (captures.get(3).is_none()
+                    || !(text[..offset].ends_with(['-', '=', '.']) || rest[2..].starts_with(['-', '.', '=', '>'])))
+        }) else {
+            start = offset + 1;
+            continue;
         };
+        let ranges = captures.iter().map(|m| m.map(|m| m.start() + offset..m.end() + offset)).collect::<Vec<_>>();
         start = ranges[0].as_ref().expect("match").end;
         matches.push(ranges);
     }

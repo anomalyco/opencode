@@ -375,7 +375,7 @@ export const content = {
       badges: {
         body: "README, 문서, 웹사이트에 배지를 넣고 opencode.ai로 링크하세요. 배경에 맞춰 라이트 또는 다크 파일을 고르고(HTML은 자동으로 전환됩니다), 색상이나 텍스트는 바꾸지 마세요.",
         sizes: "모든 스타일은 20, 32, 44px(Shields는 20px만)로 제공되며, SVG와 2배 PNG 형식입니다.",
-        mono: "각 파일에는 OpenTUI Mono 텍스트 버전도 있습니다. opencode-works-with-a-light-20-mono.svg처럼 확장자 앞에 -mono를 붙이고, 대문자 OpenTUI Mono는 -mono-caps를 붙이세요.",
+        mono: "각 파일에는 OpenMono 텍스트 버전도 있습니다. opencode-works-with-a-light-20-mono.svg처럼 확장자 앞에 -mono를 붙이고, 대문자 OpenMono는 -mono-caps를 붙이세요.",
         groups: {
           "works-with": {
             title: "호환",
@@ -561,6 +561,13 @@ export const content = {
         "mark-white": { name: "마크, 흰색" },
         "wordmark-black": { name: "워드마크, 검은색" },
         "wordmark-white": { name: "워드마크, 흰색" },
+      },
+      avatars: {
+        body: "X, GitHub, Slack, LinkedIn 등의 프로필을 위한 정사각형 아바타입니다. 마크가 원 안쪽에 넉넉히 들어가므로, 원형으로 잘려도 문제없습니다. PNG는 너비 1024px와 400px입니다.",
+        items: {
+          "avatar-dark": { name: "아바타, 다크" },
+          "avatar-light": { name: "아바타, 라이트" },
+        },
       },
       all: { text: "모두 다운로드" },
     },

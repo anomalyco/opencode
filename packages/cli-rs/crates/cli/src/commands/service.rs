@@ -24,8 +24,14 @@ pub fn run(_context: &Context, args: &ServiceArgs) -> error::Result<()> {
     let Some(command) = &args.command else { return crate::help::print(&["service"]) };
     let local = Local::from_env()?;
     match command {
-        ServiceCommand::Start => print(&(block_on(local.ensure())??.service.endpoint.url + "\n")),
-        ServiceCommand::Restart => print(&(block_on(local.restart())?? + "\n")),
+        ServiceCommand::Start => {
+            local.config().read()?;
+            print(&(block_on(local.ensure())??.service.endpoint.url + "\n"))
+        }
+        ServiceCommand::Restart => {
+            local.config().read()?;
+            print(&(block_on(local.restart())?? + "\n"))
+        }
         ServiceCommand::Status => {
             let found = block_on(local.discover())?;
             print(&(found.map_or("stopped".into(), |found| found.service.endpoint.url) + "\n"))
@@ -35,6 +41,7 @@ pub fn run(_context: &Context, args: &ServiceArgs) -> error::Result<()> {
         ServiceCommand::Set(set) => {
             let edit = Edit::set(&set.key, &set.value, set.env_value.as_deref())?;
             if edit.needs_tunnel() {
+                local.config().read()?;
                 // The TS command creates the tunnel in the foreground, then stops the service and writes
                 // the route; a tunnel that cannot be created leaves remote access off.
                 let child = delegate::enable_remote(&TsCommand::from_env())?;
@@ -107,9 +114,10 @@ impl Local {
         Ok(self.ensure().await?.service.endpoint.url)
     }
 
-    /// `ServiceConfig.set` or `unset` for every key but `remote true`: stops the service first when TS
-    /// does, then writes the file.
+    /// `ServiceConfig.set` or `unset` for every key but `remote true`: validates the existing config first,
+    /// stops the service when TS does, then writes the file.
     pub fn edit(&self, edit: &Edit) -> error::Result<()> {
+        self.config().read()?;
         if edit.stops_service() {
             block_on(self.stop())??;
         }

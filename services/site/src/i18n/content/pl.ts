@@ -680,7 +680,7 @@ export const content = {
       badges: {
         body: "Umieść odznakę w README, dokumentacji lub na stronie i podlinkuj ją do opencode.ai. Wybierz plik jasny lub ciemny pod swoje tło (HTML przełącza się sam) i nie zmieniaj kolorów ani tekstu.",
         sizes: "Każdy styl jest w rozmiarach 20, 32 i 44px (Shields tylko 20px), jako SVG i PNG w 2×.",
-        mono: "Każdy plik ma też wersję z tekstem OpenTUI Mono. Dodaj -mono przed rozszerzeniem, jak w opencode-works-with-a-light-20-mono.svg, albo -mono-caps dla OpenTUI Mono wielkimi literami.",
+        mono: "Każdy plik ma też wersję z tekstem OpenMono. Dodaj -mono przed rozszerzeniem, jak w opencode-works-with-a-light-20-mono.svg, albo -mono-caps dla OpenMono wielkimi literami.",
         groups: {
           "works-with": {
             title: "Działa z",
@@ -1009,6 +1009,13 @@ export const content = {
         },
         "wordmark-white": {
           name: "Logotyp, biały",
+        },
+      },
+      avatars: {
+        body: "Kwadratowe awatary dla X, GitHuba, Slacka, LinkedIna i innych profili. Znak leży głęboko w okręgu, więc przetrwa okrągłe przycięcie. Pliki PNG mają 1024 i 400 px szerokości.",
+        items: {
+          "avatar-dark": { name: "Awatar, ciemny" },
+          "avatar-light": { name: "Awatar, jasny" },
         },
       },
       all: {

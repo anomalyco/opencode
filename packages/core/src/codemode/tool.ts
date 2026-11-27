@@ -22,6 +22,7 @@ import { FileWrite } from "../file-write.js"
 import { Location } from "../location.js"
 import { Permission } from "../permission.js"
 import { PositiveInt } from "../schema.js"
+import { CodeModeAgents } from "./agents.js"
 import { CodeModeApi } from "./api.js"
 import { CodeModeBun } from "./bun.js"
 import { CodeModeCatalog } from "./catalog.js"
@@ -101,21 +102,33 @@ export type Inventory = {
   readonly definitions?: ReadonlyMap<string, ToolDefinition>
 }
 
-const extensions = [CodeModeFetch.extension, CodeModePath.extension, CodeModeBun.extension] as const
-const fetchOnly = [CodeModeFetch.extension] as const
-const runExtensions = (full: boolean) => (full ? extensions : fetchOnly)
+/** With the `codemode_agents` flag, the session's agent() and llm(): see `CodeModeAgents`. */
+export type Agents = CodeModeAgents.Service
+
+const extensions = [
+  CodeModeFetch.extension,
+  CodeModePath.extension,
+  CodeModeBun.extension,
+  CodeModeAgents.extension,
+] as const
+const runExtensions = (full: boolean, agents: boolean) => [
+  CodeModeFetch.extension,
+  ...(full ? [CodeModePath.extension, CodeModeBun.extension] : []),
+  ...(agents ? [CodeModeAgents.extension] : []),
+]
 
 const executionServices = (
   context: ToolContext,
   permission: Permission.Interface,
   services?: Context.Context<Services>,
   api?: Context.Context<Api>,
+  agents?: Context.Context<Agents>,
 ) =>
   Effect.map(Effect.abortSignal, (signal) =>
-    Context.merge(services ?? Context.empty(), api ?? Context.empty()).pipe(
-      Context.add(CodeModeExecution.Service, { ...context, signal }),
-      Context.add(Permission.Service, permission),
-    ),
+    Context.merge(
+      Context.merge(services ?? Context.empty(), api ?? Context.empty()),
+      agents ?? Context.make(CodeModeAgents.Service, CodeModeAgents.unavailable),
+    ).pipe(Context.add(CodeModeExecution.Service, { ...context, signal }), Context.add(Permission.Service, permission)),
   )
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions. With `full_codemode`,
@@ -161,6 +174,8 @@ export const create = (
   services?: Context.Context<Services>,
   /** What `opencode://` fetch sends requests through. Without it, `opencode://` fails as unavailable. */
   api?: Context.Context<Api>,
+  /** With `codemode_agents`, what runs agent() and llm(). Without it, programs don't get them. */
+  agents?: Context.Context<Agents>,
 ) => {
   return {
     name: "execute",
@@ -205,7 +220,7 @@ export const create = (
         const diffs = CodeModeDiffs.make(record(() => {}))
         const result = yield* runtime(inventory)
           .execute(code, undefined, {
-            extensions: runExtensions(services !== undefined),
+            extensions: runExtensions(services !== undefined, agents !== undefined),
           })
           .pipe(
             Effect.provideService(Run, {
@@ -244,7 +259,7 @@ export const create = (
               lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
             ),
             // Readers outlive the fetch call that returned them, up to the end of this program's scope.
-            Effect.provide(yield* executionServices(context, permission, services, api)),
+            Effect.provide(yield* executionServices(context, permission, services, api, agents)),
             Effect.provideService(CodeModeDiffs.Service, diffs),
           )
         const toolCalls = calls.slice()
@@ -285,10 +300,11 @@ export const create = (
 // Rows appear in start order; the same call object arrives at both hooks, so a call finds its row again.
 function progressHooks(record: (update: (items: Array<ExecuteCall>) => void) => Effect.Effect<unknown>) {
   const rows = new WeakMap<object, number>()
+  const shown = { chars: 0 }
   const start = (call: object, entry: ExecuteCall) =>
     record((items) => {
       rows.set(call, items.length)
-      items.push(entry)
+      items.push(entry.input ? { ...entry, input: capInput(entry.input, shown) } : entry)
     })
   const settle = (call: object, result: CodeMode.CallResult) => {
     const index = rows.get(call)
@@ -299,8 +315,8 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => void) => 
   }
   return {
     "tool.before": (call) => {
-      const shown = displayInput(call.input)
-      return start(call, { tool: call.name, status: "running", ...(shown ? { input: shown } : {}) })
+      const input = displayInput(call.input)
+      return start(call, { tool: call.name, status: "running", ...(input ? { input } : {}) })
     },
     "tool.after": settle,
     // Only listed extension functions get a row; anything else stays out of the TUI.
@@ -308,9 +324,16 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => void) => 
       switch (call.name) {
         case "fetch":
           return start(call, { tool: call.name, status: "running", input: CodeModeFetch.display(call.args) })
+        case "agent":
+        case "llm":
+          return start(call, {
+            tool: call.name,
+            status: "running",
+            input: CodeModeAgents.display(call.name, call.args),
+          })
         default:
           if (call.extension === "bun")
-            return start(call, { tool: "Bun", status: "running", input: CodeModeBun.display(call.name, call.args) })
+            return start(call, { status: "running", ...CodeModeBun.display(call.name, call.args) })
           return Effect.void
       }
     },
@@ -368,7 +391,10 @@ function renderCatalog(root: CatalogNode): ReadonlyArray<CodeModeCatalog.Tool | 
 
 // Inventories are immutable snapshots, so tool definitions, schemas, and the search index are built
 // once per inventory and shared by its catalog and every execution.
-const runtimes = new WeakMap<Inventory, CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service>>()
+const runtimes = new WeakMap<
+  Inventory,
+  CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service | CodeModeAgents.Service>
+>()
 
 function runtime(inventory: Inventory) {
   const cached = runtimes.get(inventory)
@@ -399,7 +425,7 @@ export const check = (
     hooks: runHooks,
     limits: input.limits,
   })
-    .execute(input.code, input.bindings, { extensions: runExtensions(input.services !== undefined) })
+    .execute(input.code, input.bindings, { extensions: runExtensions(input.services !== undefined, false) })
     .pipe(
       Effect.provideService(Run, {
         executeTool: (name, tool, input) => executeTool(name, tool, input).pipe(Effect.map(resultValue)),
@@ -530,6 +556,27 @@ function displayInput(input: unknown): Record<string, typeof Schema.Json.Type> |
   if (typeof input !== "object" || Array.isArray(input)) return { input: input as typeof Schema.Json.Type }
   if (Object.keys(input).length === 0) return
   return input as Record<string, typeof Schema.Json.Type>
+}
+
+// Rows are display only, since the tools already got the full input: each string keeps a head, and once one script's
+// rows hold the budget, long strings keep a short preview.
+const ROW_STRING_CHARS = 16_000
+const ROW_BUDGET_CHARS = 1_000_000
+const ROW_PREVIEW_CHARS = 200
+
+function capInput(input: Record<string, typeof Schema.Json.Type>, shown: { chars: number }) {
+  const cap = (value: typeof Schema.Json.Type): typeof Schema.Json.Type => {
+    if (typeof value === "string") {
+      const limit = shown.chars < ROW_BUDGET_CHARS ? ROW_STRING_CHARS : ROW_PREVIEW_CHARS
+      shown.chars += Math.min(value.length, limit)
+      return value.length > limit ? `${value.slice(0, limit)}… [${value.length - limit} more chars]` : value
+    }
+    if (Array.isArray(value)) return value.map(cap)
+    if (value !== null && typeof value === "object")
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, cap(item)]))
+    return value
+  }
+  return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, cap(value)]))
 }
 
 function formatResult(result: CodeMode.Result) {

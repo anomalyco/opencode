@@ -2,7 +2,7 @@ export * as PersistentPty from "./index.js"
 
 import { stat } from "node:fs/promises"
 import path from "node:path"
-import { Context, Effect, Layer, Schema, Stream } from "effect"
+import { Context, Effect, FiberSet, Layer, Schema, Stream } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import {
   Added,
@@ -201,8 +201,7 @@ const makeLayer = (options: Options = {}) =>
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const global = yield* Global.Service
-      const context = yield* Effect.context()
-      const runFork = Effect.runForkWith(context)
+      const runFork = yield* FiberSet.makeRuntime()
       let binary: Promise<string> | undefined
       const daemon = yield* makeDaemonTransport(
         options.root ?? path.join(global.state, "pty"),

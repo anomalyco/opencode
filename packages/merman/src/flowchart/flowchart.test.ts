@@ -1337,6 +1337,23 @@ flowchart TD
     ])
   })
 
+  test("parses inline edge labels written without spaces", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  A[Start]--yes-->B[End]
+  B==done==>C
+  C-.retry.->A
+  A --- D --> E`)
+
+    expect(diagram.nodes.map((node) => node.id)).toEqual(["A", "B", "C", "D", "E"])
+    expect(diagram.edges).toEqual([
+      { from: "A", to: "B", label: "yes" },
+      { from: "B", to: "C", label: "done", style: "thick" },
+      { from: "C", to: "A", label: "retry", style: "dashed" },
+      { from: "A", to: "D", label: "", arrowhead: false },
+      { from: "D", to: "E", label: "" },
+    ])
+  })
+
   test("expands & node groups into fan-in and fan-out edges", () => {
     const diagram = parseMermaidFlowchartDiagram(`flowchart LR
   N[Native] & M[Mapped] & O --> LM["LanguageModel"]
@@ -1963,6 +1980,22 @@ flowchart LR
     expect(
       styled.chunks.some((chunk) => chunk.text.includes("option flags") && chunk.attributes === TextAttributes.ITALIC),
     ).toBe(true)
+  })
+
+  test("renders bold node text without the tags", () => {
+    const grid = drawFlowchartDiagramGrid(`flowchart TD
+  A["<b>Service A</b>"] --> B["<strong>Service B</strong><br/>Line 2"]`)
+    const output = grid.toString({ trimTop: true, trimBottom: true })
+    const styled = renderGridStyledText(grid, resolveFlowchartStyleColors())
+
+    expect(output).not.toMatch(/<\/?(?:b|strong)>/)
+    for (const label of ["Service A", "Service B"])
+      expect(
+        styled.chunks.some((chunk) => chunk.text.includes(label) && chunk.attributes === TextAttributes.BOLD),
+      ).toBe(true)
+    expect(
+      styled.chunks.some((chunk) => chunk.text.includes("Line 2") && chunk.attributes === TextAttributes.BOLD),
+    ).toBe(false)
   })
 
   test("keeps quoted architecture labels from distorting subgraph routes", () => {

@@ -217,6 +217,7 @@ export function DialogSessionList() {
       skipFilter={true}
       current={currentSessionID()}
       focusCurrent={false}
+      preserveSelection
       onFilter={(query) => {
         setFilter(query)
         setSearch(query)
@@ -289,8 +290,11 @@ export function DialogSessionList() {
         {
           command: "session.rename",
           title: "rename",
-          onTrigger: (option: { value: string; title: string }) =>
-            DialogSessionRename.show(dialog, option.value, option.title),
+          onTrigger: (option: { value: string }) => {
+            // The row title may be the delete confirmation prompt, so prefill from the session itself.
+            const session = sessions().find((session) => session.id === option.value)
+            DialogSessionRename.show(dialog, option.value, session && withTimestampedFallback(session))
+          },
         },
       ]}
       footerHints={[

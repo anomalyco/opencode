@@ -638,7 +638,7 @@ export const content = {
       badges: {
         body: "Metti un badge nel README, nella documentazione o sul sito e collegalo a opencode.ai. Scegli il file chiaro o scuro in base allo sfondo (l'HTML cambia da solo) e non modificare colori o testo.",
         sizes: "Ogni stile è disponibile a 20, 32 e 44px (Shields solo a 20px), in SVG e in PNG a 2×.",
-        mono: "Ogni file esiste anche con testo in OpenTUI Mono. Aggiungi -mono prima dell'estensione, come in opencode-works-with-a-light-20-mono.svg, o -mono-caps per OpenTUI Mono in maiuscolo.",
+        mono: "Ogni file esiste anche con testo in OpenMono. Aggiungi -mono prima dell'estensione, come in opencode-works-with-a-light-20-mono.svg, o -mono-caps per OpenMono in maiuscolo.",
         groups: {
           "works-with": {
             title: "Funziona con",
@@ -953,6 +953,13 @@ export const content = {
         },
         "wordmark-white": {
           name: "Logotipo, bianco",
+        },
+      },
+      avatars: {
+        body: "Avatar quadrati per X, GitHub, Slack, LinkedIn e altri profili. Il simbolo sta ben dentro il cerchio, così regge un ritaglio rotondo. I PNG sono larghi 1024 e 400 px.",
+        items: {
+          "avatar-dark": { name: "Avatar, scuro" },
+          "avatar-light": { name: "Avatar, chiaro" },
         },
       },
       all: {

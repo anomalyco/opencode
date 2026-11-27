@@ -226,10 +226,9 @@ export interface Interface {
     onAccepted?: Effect.Effect<void>,
   ) => ReturnType<Session.Handle["prompt"]>
   /** Generates text from current Session context without admitting input or mutating history. Its usage counts toward the Session's totals. */
-  readonly generate: (input: {
-    sessionID: SessionSchema.ID
-    prompt: string
-  }) => Effect.Effect<SessionGenerate.Result, NotFoundError | SessionGenerate.Error>
+  readonly generate: (
+    input: Omit<SessionGenerate.Input, "session"> & { sessionID: SessionSchema.ID },
+  ) => Effect.Effect<SessionGenerate.Result, NotFoundError | SessionGenerate.Error>
   readonly command: (input: {
     sessionID: SessionSchema.ID
     command: string
@@ -512,7 +511,8 @@ const layer = Layer.effect(
       prompt: (input, onAccepted) => sessions.forSession(input.sessionID).prompt(input, onAccepted),
       generate: Effect.fn("Session.generate")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        return yield* SessionGenerate.generate({ session, prompt: input.prompt }).pipe(
+        const { sessionID: _, ...rest } = input
+        return yield* SessionGenerate.generate({ ...rest, session }).pipe(
           Effect.provideService(Instance.Service, instances),
           Effect.provideService(Database.Service, database),
           Effect.provideService(LLMClient.Service, llm),

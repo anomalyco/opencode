@@ -22,6 +22,7 @@ export function settingsSearchIndex(input: {
   /** The server per-server pages show; only its settings and projects are indexed. */
   selected?: string
   desktop: boolean
+  linux: boolean
   browser: boolean
   mobile: boolean
   translate: ReturnType<typeof useLanguage>["t"]
@@ -93,6 +94,8 @@ export function settingsSearchIndex(input: {
 
   clientSettings.forEach((entry) => {
     if (entry.available === "desktop" && !input.desktop) return
+
+    if (entry.available === "linux" && !input.linux) return
 
     if (entry.available === "browser" && !input.browser) return
 

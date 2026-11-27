@@ -6,6 +6,7 @@
 //! `contextualize` does.
 
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use opentui::style::Color;
 use serde_json::{Map, Value};
@@ -92,10 +93,17 @@ fn expanded<'a>(group: Group<'a>, path: &[&str]) -> Option<&'a Value> {
     if value.is_some_and(|value| !value.is_null()) {
         return value;
     }
+    // Selected text reads like the focused row of a list unless the theme picks its own colors.
+    static TEXT_SELECTION: LazyLock<Value> =
+        LazyLock::new(|| Value::String("$text.action.primary.$focused".to_owned()));
+    static BACKGROUND_SELECTION: LazyLock<Value> =
+        LazyLock::new(|| Value::String("$background.action.primary.$focused".to_owned()));
     let present = |path: &[&str]| get(group, path).filter(|value| truthy(value));
     let derived = match *path {
         ["text", "muted"] => present(&["text", "base"]),
         ["text", "faint"] => present(&["text", "muted"]).or_else(|| present(&["text", "base"])),
+        ["text", "selection"] => present(&["text", "base"]).map(|_| &*TEXT_SELECTION),
+        ["background", "selection"] => present(&["background", "base"]).map(|_| &*BACKGROUND_SELECTION),
         ["text", "feedback", kind, "muted"] => present(&["text", "feedback", kind, "base"]),
         [section @ ("text" | "background"), "formfield", state] if STATE_KEYS.contains(&state) => {
             present(&[section, "formfield", "base"])

@@ -158,6 +158,7 @@ function repairObject(
 
   const properties = Predicate.isObject(schema.properties) ? schema.properties : {}
   const required = Array.isArray(schema.required) ? schema.required : []
+  const missing = required.some((key) => !Object.hasOwn(parsed, key))
   const patterned = Predicate.isObject(schema.patternProperties)
   const composed = Array.isArray(schema.allOf) || Array.isArray(schema.anyOf) || Array.isArray(schema.oneOf)
 
@@ -166,7 +167,7 @@ function repairObject(
     const declared = Object.hasOwn(properties, key)
     const property = declared ? properties[key] : !patterned ? schema.additionalProperties : undefined
 
-    if (!declared && schema.additionalProperties === false && !patterned && !composed) {
+    if (!declared && schema.additionalProperties === false && !patterned && !composed && !missing) {
       const next = { ...result }
       delete next[key]
       return next

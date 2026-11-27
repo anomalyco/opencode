@@ -2,7 +2,10 @@
 
 use futures_util::FutureExt;
 use futures_util::future::BoxFuture;
-use opencode_api::generated::{SessionBackgroundInput, SessionInboxDelivery, SessionInfo, SessionInterruptInput};
+use opencode_api::generated::{
+    ExperimentalSessionWaitInput, SessionBackgroundInput, SessionInboxDelivery, SessionInfo, SessionInterruptInput,
+    SessionMessageAssistantContentItem, SessionMessageUser, SessionRevertCommitInput, SessionRevertStageInput,
+};
 use opencode_local::cli_config::Permissions;
 use opencode_local::jsonl::empty_prompt;
 use opencode_store::SessionStatus;
@@ -96,30 +99,119 @@ impl Shared {
         }
     }
 
-    /// Sends `session.interrupt` for `session` after its pending ones.
-    fn interrupt(&self, tui: &Tui, session: SessionID) {
+    /// Sends `session.interrupt` for `session` after its pending ones. When `take_back` is set and the interrupt
+    /// actually stopped a run, waits for it to settle and undoes the last prompt if the model had not answered yet.
+    fn interrupt(&self, tui: &Tui, session: SessionID, take_back: bool) {
         let client = tui.data.client().clone();
         let previous = self.interrupted(&session);
+        let (send, recv) = tokio::sync::oneshot::channel();
         let input = SessionInterruptInput { session_id: session.clone(), resume: Some(true) };
         let request = async move {
             previous.await;
-            if let Err(error) = client.session_interrupt(&input).await {
-                log::warn!("interrupt failed: {error}");
-            }
+            let _ = send.send(client.session_interrupt(&input).await);
         }
         .boxed()
         .shared();
         self.interrupts.borrow_mut().insert(session.clone(), request.clone());
+        let cleanup = session.clone();
+        let tracked = request.clone();
         tui.app.spawn(
-            request.clone(),
-            bind!(tui, |tui, _, ()| {
-                let mut interrupts = tui.prompt.interrupts.borrow_mut();
-                if interrupts.get(&session).is_some_and(|latest| latest.ptr_eq(&request)) {
-                    interrupts.remove(&session);
+            async move {
+                request.await;
+                recv.await.ok()
+            },
+            bind!(tui, |tui, _, result| {
+                {
+                    let mut interrupts = tui.prompt.interrupts.borrow_mut();
+                    if interrupts.get(&cleanup).is_some_and(|latest| latest.ptr_eq(&tracked)) {
+                        interrupts.remove(&cleanup);
+                    }
+                }
+                match result {
+                    // A repeated press finds the execution already stopping and reports nothing interrupted.
+                    Some(Ok(reply)) if take_back && reply.interrupted => wait_and_take_back(&tui, session),
+                    Some(Ok(_)) | None => {}
+                    Some(Err(error)) => {
+                        log::warn!("interrupt failed: {error}");
+                        interrupt_error(&tui, &error);
+                    }
                 }
             }),
         );
     }
+}
+
+/// Interrupting before the model has answered with text or a tool call takes the prompt back, as `/undo` does: the
+/// likeliest reason to stop that early is to reword what was just sent.
+fn wait_and_take_back(tui: &Tui, session: SessionID) {
+    let client = tui.data.client().clone();
+    let target = session.clone();
+    tui.app.spawn(
+        async move { client.experimental_session_wait(&ExperimentalSessionWaitInput { session_id: session }).await },
+        bind!(tui, |tui, _, result| {
+            if let Err(error) = result {
+                interrupt_error(&tui, &error);
+                return;
+            }
+            let Some(message) = tui.data.read(|state| unanswered_prompt(state.messages(&target))) else {
+                return;
+            };
+            let prompt = crate::routes::session::actions::restored(
+                &tui.app,
+                crate::routes::session::actions::projected(
+                    &message.text,
+                    message.files.as_deref(),
+                    message.agents.as_deref(),
+                    message.skills.as_deref(),
+                ),
+            );
+            let client = tui.data.client().clone();
+            let session = target.clone();
+            let id = message.id;
+            tui.app.spawn(
+                async move {
+                    // The model called no tool, so any file that changed meanwhile is the user's own edit.
+                    client
+                        .session_revert_stage(&SessionRevertStageInput {
+                            session_id: session.clone(),
+                            message_id: id,
+                            files: Some(false),
+                        })
+                        .await?;
+                    // Nothing of an answer is lost and the prompt is back in the composer, so drop it for good instead
+                    // of leaving a "reverted" notice to redo from.
+                    client.session_revert_commit(&SessionRevertCommitInput { session_id: session }).await
+                },
+                bind!(tui, |tui, _, result| match result {
+                    Ok(()) => crate::routes::session::actions::append_prompt(&tui, &target, prompt.clone()),
+                    Err(error) => interrupt_error(&tui, &error),
+                }),
+            );
+        }),
+    );
+}
+
+fn interrupt_error(tui: &Tui, error: &opencode_api::error::Error) {
+    tui.toasts.show(ToastOptions::new(Variant::Error, error.tui_message()).duration(Duration::from_millis(5000)));
+}
+
+/// The latest user prompt, unless the model has already answered it with text or a tool call, or a shell command,
+/// compaction, or synthetic prompt has run since.
+fn unanswered_prompt(messages: &[SessionMessageInfo]) -> Option<SessionMessageUser> {
+    let index = messages.iter().rposition(|message| matches!(message, SessionMessageInfo::User(_)))?;
+    let SessionMessageInfo::User(message) = &messages[index] else { return None };
+    // A shell command, a compaction and a synthetic prompt each start a run of their own, so the one just stopped
+    // wasn't this prompt's.
+    let answered = messages[index + 1..].iter().any(|item| match item {
+        SessionMessageInfo::Shell(_) | SessionMessageInfo::Compaction(_) | SessionMessageInfo::Synthetic(_) => true,
+        SessionMessageInfo::Assistant(assistant) => assistant.content.iter().any(|part| match part {
+            SessionMessageAssistantContentItem::Tool(_) => true,
+            SessionMessageAssistantContentItem::Text(text) => !text.text.trim().is_empty(),
+            _ => false,
+        }),
+        _ => false,
+    });
+    (!answered).then(|| message.clone())
 }
 
 pub struct Prompt {
@@ -833,7 +925,10 @@ impl Inner {
             }),
         )));
         if self.interrupt.get() >= 2 {
-            tui.prompt.interrupt(tui, session);
+            // A draft or a pending prompt means the user has moved on to something else, so keep the plain interrupt.
+            let take_back =
+                self.textarea.text().trim().is_empty() && tui.data.read(|state| state.pending(&session).is_empty());
+            tui.prompt.interrupt(tui, session, take_back);
             self.interrupt.set(0);
         }
         tui.dialogs.clear();
@@ -1057,6 +1152,12 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
         ])
         .target(target)
         .priority(1),
+        // Down also toggles the subagent picker; keep it moving through a multi-line prompt when history doesn't claim it.
+        KeymapLayer::default()
+            .enabled(when(|prompt, _| history::above_last_row(&prompt.textarea)))
+            .target(target)
+            .priority(1)
+            .bindings(["input.move.down"]),
     ]
     .into_iter()
     .chain(super::shell::layers(inner, target));
@@ -1070,4 +1171,84 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
 
 fn scanner(color: Color) -> ScannerOptions {
     ScannerOptions { style: ScannerStyle::Blocks, inactive_factor: 0.6, min_alpha: 0.3, ..ScannerOptions::new(color) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn message(value: Value) -> SessionMessageInfo {
+        serde_json::from_value(value).unwrap()
+    }
+
+    fn user(id: &str, text: &str) -> SessionMessageInfo {
+        message(json!({ "type": "user", "id": id, "text": text, "time": { "created": 1 } }))
+    }
+
+    fn assistant(id: &str, content: Value) -> SessionMessageInfo {
+        message(json!({
+            "type": "assistant", "id": id, "agent": "build",
+            "model": { "providerID": "p", "id": "m" }, "time": { "created": 2 }, "content": content,
+        }))
+    }
+
+    #[test]
+    fn unanswered_prompt_matches_typescript_rules() {
+        assert_eq!(unanswered_prompt(&[]), None);
+        assert_eq!(unanswered_prompt(&[user("msg_1", "hello")]).map(|m| m.id.0), Some("msg_1".into()));
+        // Reasoning and blank text do not count as an answer.
+        let reasoning_only = [
+            user("msg_1", "hello"),
+            assistant(
+                "msg_2",
+                json!([{ "type": "reasoning", "text": "thinking" }, { "type": "text", "text": " \n " }]),
+            ),
+        ];
+        assert_eq!(unanswered_prompt(&reasoning_only).map(|m| m.id.0), Some("msg_1".into()));
+        // Non-empty text or a tool call counts as an answer.
+        let answered_text = [user("msg_1", "hello"), assistant("msg_2", json!([{ "type": "text", "text": "hi" }]))];
+        assert_eq!(unanswered_prompt(&answered_text), None);
+        let answered_tool = [
+            user("msg_1", "hello"),
+            assistant(
+                "msg_2",
+                json!([{
+                    "type": "tool", "id": "call_1", "name": "read", "time": { "created": 2 },
+                    "state": { "status": "running", "input": {}, "metadata": {} },
+                }]),
+            ),
+        ];
+        assert_eq!(unanswered_prompt(&answered_tool), None);
+        // Shell, compaction, and synthetic each start a run of their own.
+        let after_shell = [
+            user("msg_1", "hello"),
+            message(json!({
+                "type": "shell", "id": "msg_s", "shellID": "sh_1", "command": "ls",
+                "status": "completed", "time": { "created": 2 },
+            })),
+        ];
+        assert_eq!(unanswered_prompt(&after_shell), None);
+        let after_compaction = [
+            user("msg_1", "hello"),
+            message(json!({
+                "type": "compaction", "id": "msg_c", "status": "running", "reason": "manual",
+                "summary": "", "time": { "created": 2 },
+            })),
+        ];
+        assert_eq!(unanswered_prompt(&after_compaction), None);
+        let after_synthetic = [
+            user("msg_1", "hello"),
+            message(json!({ "type": "synthetic", "id": "msg_y", "text": "notice", "time": { "created": 2 } })),
+        ];
+        assert_eq!(unanswered_prompt(&after_synthetic), None);
+        // Only the latest user prompt matters.
+        let second_turn = [
+            user("msg_1", "first"),
+            assistant("msg_2", json!([{ "type": "text", "text": "done" }])),
+            user("msg_3", "second"),
+            assistant("msg_4", json!([])),
+        ];
+        assert_eq!(unanswered_prompt(&second_turn).map(|m| m.id.0), Some("msg_3".into()));
+    }
 }

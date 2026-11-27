@@ -1346,6 +1346,9 @@ impl Inner {
             .shrink(0.0)
             .height(Length::Cells(lines.min(max) as f32))
             .child(&content);
+        if let Some(tui) = self.tui.upgrade() {
+            opencode_ui::scroll::apply(&review, crate::dialogs::scroll_config(&tui.settings.info()));
+        }
         *self.review.borrow_mut() = Some(review.clone());
         self.review_lines.set(lines);
         review

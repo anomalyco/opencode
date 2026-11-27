@@ -9,7 +9,6 @@ import { SessionSystemPrompt } from "../session/system-prompt.js"
 import PROMPT_GPT from "./system-prompt/gpt.txt"
 import PROMPT_GPT_6_2 from "./system-prompt/gpt-6.2.txt"
 import PROMPT_ASTRA from "./system-prompt/gpt-astra.txt"
-import PROMPT_KIMI from "./system-prompt/kimi.txt"
 import PROMPT_META from "./system-prompt/meta.txt"
 import PROMPT_TRINITY from "./system-prompt/trinity.txt"
 import PROMPT_ANTHROPIC from "./system-prompt/anthropic.txt"
@@ -42,18 +41,16 @@ export const AnthropicPlugin = make(
   "append",
 )
 
-export const KimiPlugin = make("opencode.prompt.kimi", (model) =>
-  model.id.toLowerCase().includes("kimi") ? PROMPT_KIMI : undefined,
-)
 export const ArceePlugin = make("opencode.prompt.arcee", (model) =>
   model.id.toLowerCase().includes("trinity") ? PROMPT_TRINITY : undefined,
 )
-export const MetaPlugin = make("opencode.prompt.meta", (model) => {
-  if (!model.id.toLowerCase().includes("muse")) return undefined
-  return PROMPT_META.replaceAll("{{MODEL_NAME}}", model.name)
-})
+export const MetaPlugin = make(
+  "opencode.prompt.meta",
+  (model) => (model.id.toLowerCase().includes("muse") ? PROMPT_META : undefined),
+  "append",
+)
 
-export const Plugins = [OpenAIPlugin, AnthropicPlugin, KimiPlugin, ArceePlugin, MetaPlugin] as const
+export const Plugins = [OpenAIPlugin, AnthropicPlugin, ArceePlugin, MetaPlugin] as const
 
 const models = new WeakMap<SessionHooks["context"], Model.Info>()
 

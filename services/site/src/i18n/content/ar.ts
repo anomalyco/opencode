@@ -341,7 +341,7 @@ export const content = {
       badges: {
         body: "ضع شارة في ملف README أو الوثائق أو موقعك واربطها بـ opencode.ai. اختر الملف الفاتح أو الداكن حسب خلفيتك (تتبدّل نسخة HTML تلقائيًا)، ولا تغيّر الألوان أو النص.",
         sizes: "يتوفر كل نمط بأحجام 20 و32 و44px (Shields بحجم 20px فقط)، بصيغة SVG وبصيغة PNG بدقة 2×.",
-        mono: "لكل ملف أيضًا نسخة بخط OpenTUI Mono. أضف -mono قبل الامتداد، كما في opencode-works-with-a-light-20-mono.svg، أو -mono-caps لخط OpenTUI Mono بالأحرف الكبيرة.",
+        mono: "لكل ملف أيضًا نسخة بخط OpenMono. أضف -mono قبل الامتداد، كما في opencode-works-with-a-light-20-mono.svg، أو -mono-caps لخط OpenMono بالأحرف الكبيرة.",
         groups: {
           "works-with": {
             title: "يعمل مع",
@@ -523,6 +523,13 @@ export const content = {
         "mark-white": { name: "الرمز، أبيض" },
         "wordmark-black": { name: "الشعار النصي، أسود" },
         "wordmark-white": { name: "الشعار النصي، أبيض" },
+      },
+      avatars: {
+        body: "صور رمزية مربعة لحسابات X وGitHub وSlack وLinkedIn وغيرها. يقع الرمز داخل الدائرة بمسافة كافية، فيصمد أمام القص الدائري. عرض ملفات PNG هو 1024 و400 px.",
+        items: {
+          "avatar-dark": { name: "صورة رمزية، داكنة" },
+          "avatar-light": { name: "صورة رمزية، فاتحة" },
+        },
       },
       all: { text: "تنزيل الكل" },
     },

@@ -1,5 +1,11 @@
 import { ClientError } from "@opencode/client/effect"
-import { InvalidCursorError, InvalidRequestError, SessionNotFoundError } from "@opencode/protocol/errors"
+import {
+  CommandExecutionError,
+  CommandNotFoundError,
+  InvalidCursorError,
+  InvalidRequestError,
+  SessionNotFoundError,
+} from "@opencode/protocol/errors"
 import { Session } from "@opencode/schema/session"
 import { Effect, Schema } from "effect"
 import { HttpClientError } from "effect/http"
@@ -20,6 +26,17 @@ export function classify(error: unknown): Effect.Effect<never, ACPError.Error> {
     return Effect.fail(new ACPError.InvalidRequestError({ message: error.message, field: error.field }))
   if (error instanceof InvalidCursorError)
     return Effect.fail(new ACPError.InvalidRequestError({ message: error.message, field: "cursor" }))
+  if (error instanceof CommandNotFoundError)
+    return Effect.fail(new ACPError.InvalidRequestError({ message: error.message, field: "prompt" }))
+  // The message is the command's own, such as its usage, so the client shows it instead of a generic failure.
+  if (error instanceof CommandExecutionError)
+    return Effect.fail(
+      new ACPError.ServiceFailureError({
+        safeMessage: error.message,
+        service: "command",
+        errorName: "CommandExecutionError",
+      }),
+    )
   return Effect.die(error)
 }
 

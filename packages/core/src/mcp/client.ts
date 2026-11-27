@@ -29,7 +29,7 @@ import {
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
 import type { CallToolResult as SdkCallToolResult } from "@modelcontextprotocol/client"
-import { SKILLS_EXTENSION_ID, SkillsClient } from "@modelcontextprotocol/client/ext/skills"
+import { SKILLS_EXTENSION_ID, SkillsClient, SkillVerificationError } from "@modelcontextprotocol/client/ext/skills"
 import type { Skill as SdkSkill, SkillFile as SdkSkillFile } from "@modelcontextprotocol/client/ext/skills"
 import {
   Cause,
@@ -320,6 +320,13 @@ export interface Events {
   }) => Stream.Stream<EventMessage, Error>
 }
 
+/** A skill file the server served doesn't match its entry: not listed, or a different size, digest or frontmatter. */
+export class SkillMismatchError extends Schema.TaggedError<SkillMismatchError>()("McpClient.SkillMismatchError", {
+  uri: Schema.String,
+  check: Schema.Literals(["unlisted", "size", "digest", "frontmatter"]),
+  message: Schema.String,
+}) {}
+
 /** Experimental: MCP Skills is a beta extension; may change without compatibility guarantees. */
 export interface Skills {
   /** Every valid skill the server lists (`skills/list`); invalid entries are logged and skipped. No file is read. */
@@ -328,7 +335,7 @@ export interface Skills {
    * Reads one file of a listed skill, its `SKILL.md` when `ref` is omitted, and verifies its size, digest and, for
    * `SKILL.md`, frontmatter against the entry.
    */
-  readonly read: (skill: Skill, ref?: string) => Effect.Effect<SkillFile, Error>
+  readonly read: (skill: Skill, ref?: string) => Effect.Effect<SkillFile, SkillMismatchError | Error>
   /** One skill by its `SKILL.md` URI, listed or not (`skills/get`). No file is read. */
   readonly get: (uri: string) => Effect.Effect<Skill, Error>
 }
@@ -526,9 +533,18 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   const failure = (error: unknown) => {
     // A tool call that relists first can fail with the list's already mapped expiry.
     if (error instanceof SessionExpiredError) return error
+    // The server refused the credential even after a refresh, or there is none it would take: only a new login helps.
+    // A 403 for more scope is left to fail the one request: servers ask for it per tool, and a new login asks for the
+    // scope of the first challenge, so ending the connection would only take the server's other tools down with it.
+    if (
+      error instanceof UnauthorizedError ||
+      (error instanceof SdkHttpError && error.code === SdkErrorCode.ClientHttpAuthentication)
+    )
+      return new NeedsAuthError({ server, message: describe(error) })
     if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return new Error(explain(error))
+    // Some servers answer a method they don't implement with a 404 that carries a JSON-RPC method-not-found error.
     const expired =
-      error.status === 404 ||
+      (error.status === 404 && !methodNotFound(error.data.text)) ||
       (error.status === 400 &&
         typeof error.data.text === "string" &&
         error.data.text.includes("Bad Request: Server not initialized"))
@@ -585,12 +601,17 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     })
     // Every attempt opens a fresh transport; no retry starts once the startup timeout has passed.
     const deadline = (yield* Clock.currentTimeMillis) + (timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT)
-    // Over HTTP the SDK treats an unanswered auto probe as an outage, but slow legacy servers may still initialize
-    // within what is left of the startup timeout.
+    // Over HTTP the SDK treats an unanswered auto probe as an outage and a 5xx answer as a failed connect, but slow
+    // legacy servers may still initialize within what is left of the startup timeout, and many (Spring AI among
+    // them) answer the unknown server/discover with a 500.
     const negotiate = (url: URL) =>
       open(url, protocol).pipe(
         Effect.catchIf(
-          (error) => protocol === "auto" && error instanceof SdkError && error.code === SdkErrorCode.RequestTimeout,
+          (error) =>
+            protocol === "auto" &&
+            error instanceof SdkError &&
+            (error.code === SdkErrorCode.RequestTimeout ||
+              (error instanceof SdkHttpError && error.code === SdkErrorCode.EraNegotiationFailed)),
           (error) =>
             Clock.currentTimeMillis.pipe(
               Effect.flatMap((now) => (now < deadline ? open(url, "legacy", deadline - now) : Effect.fail(error))),
@@ -833,7 +854,17 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                 Effect.map((result) => result.skills),
               ),
             read: (skill, ref) =>
-              request("read MCP skill file", (signal) => skills.read(skill, ref, { signal, timeout: execution })),
+              Effect.tryPromise({
+                try: (signal) => skills.read(skill, ref, { signal, timeout: execution }),
+                catch: (error) =>
+                  error instanceof SkillVerificationError
+                    ? new SkillMismatchError({ uri: error.uri, check: error.reason, message: error.message })
+                    : failure(error),
+              }).pipe(
+                Effect.tapError((error) =>
+                  Effect.logWarning("failed to read MCP skill file", { server, error: error.message }),
+                ),
+              ),
             get: (uri) =>
               request("get MCP skill", (signal) => skills.get(uri, { signal, timeout: execution })).pipe(
                 Effect.map((result) => result.skill),
@@ -1038,6 +1069,11 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     })
   return yield* new ConnectError({ server, message: explain(error), answered: !repeats(error) })
 })
+
+const decodeMethodNotFound = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ error: Schema.Struct({ code: Schema.Literal(-32601) }) })),
+)
+const methodNotFound = (body: unknown) => typeof body === "string" && Option.isSome(decodeMethodNotFound(body))
 
 // Connecting again would fail the same way: the server could not be spawned or reached, did not answer in
 // time, is overloaded or down for now, or refused this client's access. A failed auto probe wraps the error it hit.

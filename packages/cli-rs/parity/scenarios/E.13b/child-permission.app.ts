@@ -27,7 +27,9 @@ export default defineApp({
     { method: "POST", path: "/api/rpc/opencode.goal/get", json: { output: null } },
   ],
   steps: [
-    { checkpoint: "prompted", until: "Permission required" },
+    // Since `@opentui/core` 0.9.9, TS can draw the prompt while its tab is still the child's, before the tab moves to
+    // the root session; the checkpoint waits for the root's tab, which shows the pending permission (`!`).
+    { checkpoint: "prompted", until: "! Plan the release" },
     { keys: ["enter"] },
     { checkpoint: "composer", until: "Subagents" },
   ],

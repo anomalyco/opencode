@@ -4,6 +4,7 @@ import { resolveBlobUrl, setMediaBlobLoader } from "../persistence/drafts"
 import { createApiForServer } from "./api"
 import { readLocalImage } from "./image"
 import { createMediaCache } from "./media"
+import { createToolFileCache } from "./tool-file"
 
 function setup(
   respond: (init?: RequestInit) => Response | Promise<Response> = () => new Response(new Uint8Array([0, 127, 255])),
@@ -210,5 +211,56 @@ describe("readLocalImage", () => {
     expect(await resolveBlobUrl({ id: `media:${hashA}` })).toBe(`blob:srv1:media:${hashA}`)
     setMediaBlobLoader("srv-1", undefined)
     expect(await resolveBlobUrl({ id: `media:${hashA}` })).toBeUndefined()
+  })
+
+  test("createToolFileCache reads files the store dropped again from their message, once per message", async () => {
+    const hash = "c".repeat(64)
+
+    const message = {
+      type: "assistant",
+      id: "msg_1",
+      content: [
+        {
+          type: "tool",
+          id: "call_1",
+          name: "execute",
+          state: {
+            status: "completed",
+            input: {},
+            content: [
+              { type: "text", text: "2 screenshots" },
+              { type: "file", mime: "image/png", uri: `data:image/png;base64,${btoa("\x89PNG")}` },
+              { type: "file", mime: "image/png", uri: `media:${hash}` },
+            ],
+          },
+          time: { created: 1 },
+        },
+      ],
+      time: { created: 1, completed: 2 },
+    }
+
+    const { api, requests } = setup(() =>
+      requests.at(-1)?.url.pathname.includes("/message/")
+        ? Response.json({ data: message })
+        : new Response(new Uint8Array([1, 2, 3])),
+    )
+
+    const media = createMediaCache(() => api)
+    const cache = createToolFileCache(() => api, media)
+    const input = { sessionID: "ses_1", messageID: "msg_1", callID: "call_1", mime: "image/png" }
+
+    const [inline, stored] = await Promise.all([cache.load({ ...input, index: 1 }), cache.load({ ...input, index: 2 })])
+
+    expect(requests.map((request) => request.url.pathname)).toEqual([
+      "/api/session/ses_1/message/msg_1",
+      `/api/experimental/media/${hash}`,
+    ])
+    expect(await resolveObjectURL(inline!)?.bytes()).toEqual(new Uint8Array([137, 80, 78, 71]))
+    expect(await resolveObjectURL(stored!)?.bytes()).toEqual(new Uint8Array([1, 2, 3]))
+    expect(cache.peek("call_1", 1)).toBe(inline)
+    expect(await cache.load({ ...input, index: 0 })).toBeUndefined()
+    cache.dispose()
+    media.dispose()
+    expect(resolveObjectURL(inline!)).toBeUndefined()
   })
 })

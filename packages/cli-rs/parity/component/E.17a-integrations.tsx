@@ -62,6 +62,12 @@ const INTEGRATIONS = [
     connections: [credential("cred_ant", "personal", { status: "expired", message: "Expired" })],
   },
   {
+    id: "claude-agent",
+    name: "Claude Agent",
+    methods: [{ type: "key" }],
+    connections: [],
+  },
+  {
     id: "github-copilot",
     name: "GitHub Copilot",
     methods: [
@@ -170,7 +176,7 @@ async function render(fixture: string, ready: (frame: string) => boolean, act?: 
   })
 }
 
-// Sorted: OpenCode Console, OpenAI, GitHub Copilot, Anthropic (Popular); Acme, Zed (Services).
+// Sorted: OpenCode Console, OpenAI, Anthropic, Claude Agent, GitHub Copilot (Popular); Acme, Zed (Services).
 // The ready check also matches the list, which shows before `act` runs.
 const listed = (frame: string) => frame.includes("Connect an integration")
 const down = async (setup: Parameters<NonNullable<Act>>[0], count: number) => {
@@ -220,7 +226,7 @@ await render(
   "E.17a/form",
   (frame) => listed(frame) || frame.includes("Deployment"),
   async (setup) => {
-    await down(setup, 2)
+    await down(setup, 4)
     setup.mockInput.pressEnter()
     await Bun.sleep(100)
   },
@@ -229,7 +235,7 @@ await render(
   "E.17a/oauth",
   (frame) => listed(frame) || frame.includes("Waiting for authorization"),
   async (setup) => {
-    await down(setup, 2)
+    await down(setup, 4)
     setup.mockInput.pressEnter()
     await Bun.sleep(100)
     setup.mockInput.pressEnter()

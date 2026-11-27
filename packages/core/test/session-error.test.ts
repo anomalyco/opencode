@@ -431,4 +431,20 @@ describe("toSessionError", () => {
       ),
     ).toBeTrue()
   })
+
+  test("retries a stream that drops after a successful response that said not to retry", () => {
+    expect(
+      SessionRunnerRetry.isRetryable(
+        llm(
+          new TransportError({
+            message: "Connection lost while reading the response: ECONNRESET",
+            transport: "http",
+            operation: "read",
+            code: "ECONNRESET",
+            http: new HttpContext({ url: "https://example.com", status: 200, headers: { "x-should-retry": "false" } }),
+          }),
+        ),
+      ),
+    ).toBeTrue()
+  })
 })

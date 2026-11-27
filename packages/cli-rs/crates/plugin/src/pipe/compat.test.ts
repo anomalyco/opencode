@@ -426,6 +426,18 @@ test("client.rpc calls a plugin's own server RPC and hears its events", async ()
   ])
   expect(fetched[0].query).toEqual([["location[directory]", "/d"]])
   expect(typeof ctx.client.rpc.call).toBe("function")
+  // As fetch does: an aborted call never starts, and an abort mid-call rejects with the signal's reason.
+  const reason = new Error("stop")
+  const rejected = (call: Promise<unknown>) => call.then(() => undefined, (error: Json) => error.cause)
+  expect(await rejected(echo.say({}, { signal: AbortSignal.abort(reason) }))).toBe(reason)
+  expect(fetched.length).toBe(1)
+  let answer: (value: Json) => void = () => {}
+  fake.fetch = () => new Promise((resolve) => (answer = resolve))
+  const aborting = new AbortController()
+  const pending = rejected(echo.say({}, { signal: aborting.signal }))
+  aborting.abort(reason)
+  answer({ Ok: { output: {} } })
+  expect(await pending).toBe(reason)
   const heard: Json[] = []
   const off = echo.events.on("said", (event: Json) => heard.push(event.data))
   const events = echo.events.subscribe("said")[Symbol.asyncIterator]()

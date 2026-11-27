@@ -21,6 +21,7 @@ import {
 import { Database } from "./database/database.js"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { EnvironmentDriver } from "./environment/driver.js"
+import { WorkspaceConnector } from "./environment/workspace-connector.js"
 import { KV } from "./kv.js"
 import { Identity } from "./machine/identity.js"
 import { WorkspaceDriver } from "./workspace/driver.js"
@@ -79,9 +80,8 @@ export interface Interface {
   readonly provision: (
     workspaceID: ID,
   ) => Effect.Effect<Info, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
-  readonly connect: (
-    workspaceID: ID,
-  ) => Effect.Effect<EnvironmentDriver.Driver, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
+  /** Returns a lazy driver at once; each operation wakes the workspace and fails on its own if that fails. */
+  readonly connect: (workspaceID: ID) => Effect.Effect<EnvironmentDriver.Driver>
   /** Whether a logical workspace row exists; never wakes or provisions the backing resource. */
   readonly exists: (workspaceID: ID) => Effect.Effect<boolean>
   /** Whether the workspace currently holds a live connection in memory; never wakes or provisions it. */
@@ -282,9 +282,8 @@ const layer = (options: Options) =>
         if (existing) return existing
 
         const row = yield* load(workspaceID)
-        // Bindings are persisted before provision resolves and never nulled; a raced
-        // destroy deletes the whole row and surfaces as NotFound from load above.
-        if (!row.binding) return yield* Effect.die(new Error(`workspace ${workspaceID} has no binding after provision`))
+        // Unbound (fresh create, or destroy+create raced while waiting): caller provisions outside the lock.
+        if (!row.binding) return undefined
         const driver = yield* registry.get(row.provider)
         const scope = yield* Scope.fork(lifetime)
         const environment = yield* driver
@@ -476,42 +475,46 @@ const layer = (options: Options) =>
           )
         }),
         provision,
-        connect: Effect.fn("Workspace.connect")(function* (workspaceID) {
-          const acquire = Effect.acquireRelease(
-            // A live connection implies the binding is already persisted, so skip the provision hop.
-            Effect.suspend(() => (connections.has(workspaceID) ? Effect.void : provision(workspaceID))).pipe(
-              Effect.andThen(
+        connect: (workspaceID) =>
+          Effect.sync(() => {
+            const acquire = Effect.acquireRelease(
+              Effect.gen(function* () {
+                while (true) {
+                  const connection = yield* locks.withLock(workspaceID)(
+                    Effect.gen(function* () {
+                      const connection = yield* open(workspaceID)
+                      if (!connection) return undefined
+                      yield* Ref.set(connection.lastActivity, yield* Clock.currentTimeMillis)
+                      yield* Ref.update(connection.active, (active) => active + 1)
+                      return connection
+                    }),
+                  )
+                  if (connection) return connection
+                  // Provision takes the same lock. Release it first, then recheck in case destroy/create raced again.
+                  yield* provision(workspaceID)
+                }
+              }),
+              (connection) =>
                 locks.withLock(workspaceID)(
                   Effect.gen(function* () {
-                    const connection = yield* open(workspaceID)
-                    yield* Ref.set(connection.lastActivity, yield* Clock.currentTimeMillis)
-                    yield* Ref.update(connection.active, (active) => active + 1)
-                    return connection
+                    const active = yield* Ref.updateAndGet(connection.active, (count) => count - 1)
+                    const now = yield* Clock.currentTimeMillis
+                    yield* Ref.set(connection.lastActivity, now)
+                    if (active > 0) return
+                    // Connection was detached by re-attach or destroy while this op ran: close only its own scope.
+                    if (connections.get(workspaceID) !== connection) return yield* closeScope(connection.scope)
+                    yield* touch(workspaceID, now)
+                    yield* kv.set(idleKey(workspaceID), now + idleThreshold)
+                    if (keepWarm === 0) yield* dropConnection(workspaceID)
+                    yield* scheduleNextIdle()
                   }),
                 ),
-              ),
-            ),
-            (connection) =>
-              locks.withLock(workspaceID)(
-                Effect.gen(function* () {
-                  const active = yield* Ref.updateAndGet(connection.active, (count) => count - 1)
-                  const now = yield* Clock.currentTimeMillis
-                  yield* Ref.set(connection.lastActivity, now)
-                  if (active > 0) return
-                  // Connection was detached by re-attach or destroy while this op ran: close only its own scope.
-                  if (connections.get(workspaceID) !== connection) return yield* closeScope(connection.scope)
-                  yield* touch(workspaceID, now)
-                  yield* kv.set(idleKey(workspaceID), now + idleThreshold)
-                  if (keepWarm === 0) yield* dropConnection(workspaceID)
-                  yield* scheduleNextIdle()
-                }),
-              ),
-          )
-          return EnvironmentDriver.lazy(
-            Effect.map(acquire, (connection) => connection.environment),
-            { module: "Workspace", spawnDescription: `Failed to wake workspace ${workspaceID}` },
-          )
-        }),
+            )
+            return EnvironmentDriver.lazy(
+              Effect.map(acquire, (connection) => connection.environment),
+              { module: "Workspace", spawnDescription: `Failed to wake workspace ${workspaceID}` },
+            )
+          }),
         exists: Effect.fn("Workspace.exists")(function* (workspaceID) {
           return (yield* find(workspaceID)) !== undefined
         }),
@@ -555,6 +558,16 @@ const layer = (options: Options) =>
   )
 
 export const node = configured()
+
+/** Connects workspace placements through the host's workspace registry. */
+export const connectorNode = makeGlobalNode({
+  service: WorkspaceConnector.Service,
+  layer: Layer.effect(
+    WorkspaceConnector.Service,
+    Effect.map(Service, (workspaces) => WorkspaceConnector.Service.of({ connect: workspaces.connect })),
+  ),
+  deps: [node],
+})
 
 // TODO(workspace-plan): add the boot janitor and ~23h safety snapshot rotation in a later PR.
 // TODO(workspace-plan): make cold wake interruptible with a re-pin loop against janitor races.

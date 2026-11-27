@@ -412,7 +412,7 @@ export const content = {
       badges: {
         body: "Sett et merke i README-en, dokumentasjonen eller på nettstedet ditt, og lenk det til opencode.ai. Velg den lyse eller mørke filen for bakgrunnen din (HTML-en bytter av seg selv), og ikke endre fargene eller teksten.",
         sizes: "Alle stiler finnes i 20, 32 og 44px (Shields bare i 20px), som SVG og som PNG i 2×.",
-        mono: "Hver fil finnes også med tekst i OpenTUI Mono. Legg til -mono før filtypen, som i opencode-works-with-a-light-20-mono.svg, eller -mono-caps for OpenTUI Mono med store bokstaver.",
+        mono: "Hver fil finnes også med tekst i OpenMono. Legg til -mono før filtypen, som i opencode-works-with-a-light-20-mono.svg, eller -mono-caps for OpenMono med store bokstaver.",
         groups: {
           "works-with": {
             title: "Virker med",
@@ -599,6 +599,13 @@ export const content = {
         "mark-white": { name: "Merke, hvitt" },
         "wordmark-black": { name: "Ordmerke, svart" },
         "wordmark-white": { name: "Ordmerke, hvitt" },
+      },
+      avatars: {
+        body: "Kvadratiske avatarer for X, GitHub, Slack, LinkedIn og andre profiler. Merket sitter godt innenfor sirkelen, så det tåler en rund beskjæring. PNG-ene er 1024 og 400 px brede.",
+        items: {
+          "avatar-dark": { name: "Avatar, mørk" },
+          "avatar-light": { name: "Avatar, lys" },
+        },
       },
       all: { text: "Last ned alt" },
     },

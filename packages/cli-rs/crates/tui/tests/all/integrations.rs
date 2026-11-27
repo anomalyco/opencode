@@ -51,6 +51,11 @@ fn integrations() -> Value {
             "connections": [credential("cred_ant", "personal", Some(json!({ "status": "expired", "message": "Expired" })))],
         },
         {
+            "id": "claude-agent", "name": "Claude Agent",
+            "methods": [{ "type": "key" }],
+            "connections": [],
+        },
+        {
             "id": "github-copilot", "name": "GitHub Copilot",
             "methods": [{
                 "type": "oauth", "id": "device", "label": "Sign in with GitHub",
@@ -255,8 +260,8 @@ fn integrations_match_typescript() {
     open(&["return"], "Connected accounts", "E.17a/accounts");
     open(&["down", "return"], "Connect OpenAI", "E.17a/methods");
     open(&["down", "return", "down", "return"], "Submit", "E.17a/key");
-    open(&["down", "down", "return"], "Deployment", "E.17a/form");
-    open(&["down", "down", "return", "return"], "Waiting for authorization", "E.17a/oauth");
+    open(&["down", "down", "down", "down", "return"], "Deployment", "E.17a/form");
+    open(&["down", "down", "down", "down", "return", "return"], "Waiting for authorization", "E.17a/oauth");
     open_with("code", &["down", "return", "return"], "Authorization code", "E.17a/oauth-code");
     open_with("paste", &["down", "return", "return"], "Redirect URL", "E.17a/oauth-paste");
 }
@@ -293,7 +298,7 @@ fn an_api_key_connects_and_opens_the_provider_models() {
 fn a_rejected_key_shows_the_error_and_stays() {
     let kit = Kit::new();
     kit.connect();
-    kit.down(3);
+    kit.down(2);
     kit.app.press("return");
     kit.wait_for("Connected accounts");
     kit.down(1);
@@ -313,7 +318,7 @@ fn a_rejected_key_shows_the_error_and_stays() {
 fn oauth_sends_the_form_answer_opens_the_sink_and_completes() {
     let kit = Kit::new();
     kit.connect();
-    kit.down(2);
+    kit.down(4);
     kit.app.press("return");
     kit.wait_for("Deployment");
     kit.app.press("return");
@@ -356,7 +361,7 @@ fn oauth_sends_the_form_answer_opens_the_sink_and_completes() {
 fn closing_a_pending_oauth_cancels_it() {
     let kit = Kit::new();
     kit.connect();
-    kit.down(2);
+    kit.down(4);
     kit.app.press("return");
     kit.wait_for("Deployment");
     kit.app.press("return");
@@ -370,7 +375,7 @@ fn closing_a_pending_oauth_cancels_it() {
     assert!(!kit.tui.dialogs.is_open());
     // Escape on the form's first field cancels the connect without a request.
     kit.connect();
-    kit.down(2);
+    kit.down(4);
     kit.app.press("return");
     kit.wait_for("Deployment");
     kit.app.press("escape");
@@ -588,4 +593,75 @@ fn form_steps_open_a_link_take_an_own_answer_and_a_multiselect() {
             })
         )]
     );
+}
+
+#[test]
+fn connecting_an_integration_lists_every_provider_it_serves() {
+    let fake = Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/location") => (200, support::location(DIRECTORY)),
+        ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
+        ("GET", "/api/integration") => (
+            200,
+            list(
+                DIRECTORY,
+                json!([{
+                    "id": "opencode", "name": "OpenCode",
+                    "methods": [{ "type": "key", "id": "key", "label": "API key" }],
+                    "connections": [{ "type": "credential", "id": "cred_1", "label": "Personal", "method": "key" }],
+                }]),
+            ),
+        ),
+        ("GET", "/api/provider") => (
+            200,
+            list(
+                DIRECTORY,
+                json!([
+                    {
+                        "id": "opencode", "name": "Personal / OpenCode", "integrationID": "opencode",
+                        "activation": "enabled", "package": "opencode",
+                    },
+                    {
+                        "id": "opencode-go", "name": "OpenCode Go", "integrationID": "opencode",
+                        "activation": "enabled", "package": "opencode",
+                    },
+                    { "id": "ollama", "name": "Ollama", "activation": "enabled", "package": "openai-compatible" },
+                ]),
+            ),
+        ),
+        ("GET", "/api/model") => (
+            200,
+            list(
+                DIRECTORY,
+                json!([
+                    support::model("opencode", "zen", "Zen Model"),
+                    support::model("opencode-go", "go", "Go Model"),
+                    support::model("ollama", "local", "Local Model"),
+                ]),
+            ),
+        ),
+        ("POST", "/api/integration/opencode/connect/key") => (204, Value::Null),
+        _ => support::base(seen, DIRECTORY),
+    });
+    let home = opencode_util::temp::tempdir().unwrap();
+    let deps = Deps {
+        directory: DIRECTORY.into(),
+        roots: support::roots(support::home_paths(home.path()), "test"),
+        route: Route::Home,
+        ..support::deps(Arc::new(fake))
+    };
+    let h = support::mount(100, 34, deps);
+    let local = h.tui.local.clone();
+    assert!(h.app.wait_until(WAIT, || local.ready() && local.catalog_ready() && local.connected()));
+    h.tui.keymap.dispatch("provider.connect", None);
+    h.wait_for("Connect an integration");
+    h.app.press("return");
+    h.wait_for("Connected accounts");
+    h.app.press("return");
+    h.wait_for("Submit");
+    h.app.type_text("sk-test");
+    h.app.press("return");
+    let screen = h.wait_for("Search models");
+    assert!(screen.contains("Zen Model"), "{screen}");
+    assert!(screen.contains("Go Model"), "{screen}");
+    assert!(!screen.contains("Local Model"), "{screen}");
 }
