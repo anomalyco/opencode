@@ -262,7 +262,7 @@ await tool.define({
 })
 \`\`\`
 
-Later scripts call it as \`tools.${NAMESPACE}.add(input)\`, and it is listed in the catalog. Defining an existing name replaces it; \`await tool.delete(name)\` removes it. \`run\` runs on its own: it sees only \`input\` and \`tools\`, not the defining script's variables. Save a tool when the user asks for one.`
+Later scripts call it as \`tools.${NAMESPACE}.add(input)\`, and \`search\` finds it. Defining an existing name replaces it; \`await tool.delete(name)\` removes it. \`run\` runs on its own: it sees only \`input\` and \`tools\`, not the defining script's variables. Save a tool when the user asks for one.`
 
 const instructionsKey = Instructions.Key.make("core/codemode-saved-tools")
 const instructionsCodec = Schema.toCodecJson(Schema.String)

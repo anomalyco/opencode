@@ -123,7 +123,7 @@ export const Plugin = {
             input: saved.input,
             // Without a schema the tool may return any value, which the script gets as it is.
             output: saved.output ?? {},
-            options: { namespace: CodeModeSavedTools.NAMESPACE, codemode: { pinned: true } },
+            options: { namespace: CodeModeSavedTools.NAMESPACE, codemode: true },
             execute: (input: unknown, context) => run(saved, input, context),
           })
         }
