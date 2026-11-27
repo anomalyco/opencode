@@ -1,8 +1,8 @@
-import { encodeFilePath } from "@opencode/util/path"
+import { encodeFilePath, fileUrl } from "@opencode/util/path"
 import type { Files } from "@opencode/plugin/gui"
 
 export function pathToFileUrl(filepath: string): string {
-  return `file://${encodeFilePath(filepath)}`
+  return fileUrl(filepath)
 }
 
 /** A file tab id is "//" and the encoded path, so its stored key stays the `file://<path>` it was before plugins. */

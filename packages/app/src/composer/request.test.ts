@@ -316,6 +316,12 @@ describe("buildPromptRequest", () => {
       uri: "file:///C:/Users/test/Documents/file%23name.txt",
     },
     { dir: "/home/user/project", path: "src/app.ts", uri: "file:///home/user/project/src/app.ts" },
+    // A WSL workspace is a UNC path; its server belongs in the URI's host.
+    {
+      dir: "\\\\wsl.localhost\\Ubuntu-22.04\\home\\x\\project",
+      path: "apps/[id]/page.tsx",
+      uri: "file://wsl.localhost/Ubuntu-22.04/home/x/project/apps/%5Bid%5D/page.tsx",
+    },
     { dir: "C:\\current\\project", path: "D:\\other\\project\\file.ts", uri: "file:///D:/other/project/file.ts" },
     {
       dir: "C:\\project",
