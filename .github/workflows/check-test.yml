@@ -73,8 +73,8 @@ jobs:
             echo "app=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # packages/stories hosts the component tests, but no app package depends on it.
-          bun x turbo@2.10.2 ls --affected --filter=@opencode/app --filter=@opencode/stories --output=json > affected.json
+          # packages/lab hosts the component tests, but no app package depends on it.
+          bun x turbo@2.10.2 ls --affected --filter=@opencode/app --filter=@opencode/lab --output=json > affected.json
           bun -e 'const result = await Bun.file("affected.json").json(); console.log(`app=${result.packages.count > 0}`)' >> "$GITHUB_OUTPUT"
 
   unit:
@@ -235,7 +235,7 @@ jobs:
         # Playwright splits whole spec files across shards by test count, not duration. Every app-N
         # entry must use the same total, and the entries must cover 1..total. The service worker suite
         # reuses shard 2's production build. Each component suite runs once per OS in its own leg, so the
-        # two suites' story servers and test time are not added up on one runner.
+        # two suites' Lab servers and test time are not added up on one runner.
         suite:
           - id: app-1
             shard: 1/2

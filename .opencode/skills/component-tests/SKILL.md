@@ -102,7 +102,7 @@ From the owning package (`packages/session-ui` or `packages/app`):
    - Do not skip on Windows, and do not raise `config.ts` timeouts, retries or the `mount` wait.
    - If one test does genuinely expensive work, call `test.setTimeout(...)` in that test, with a comment that names the work.
 6. **Confirm CI ran the component legs.** Pull requests run only the affected unit tests on Linux, so the component legs come from a push to dev or beta, a nightly run or the release gate.
-   - The `affected` gate filters on `@opencode/app` and `@opencode/stories`. `ui`, `session-ui` and `gui-plugins` count through app's dependencies. Manual runs force the legs on.
+   - The `affected` gate filters on `@opencode/app` and `@opencode/lab`. `ui`, `session-ui` and `gui-plugins` count through app's dependencies. Manual runs force the legs on.
    - `check-test.yml` is listed in `globalDependencies` (`turbo.json:8`), so editing it marks every package affected.
    - The `e2e (linux)` and `e2e (windows)` checks also pass when no leg was needed. Look for `e2e (<os>, session-ui-components)` and `e2e (<os>, app-components)`.
    - If no push has run them, report your local cold run in the PR.

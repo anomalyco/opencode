@@ -122,7 +122,7 @@ Run from `packages/app`:
 
 ## When CI flakes
 
-- **Find it.** e2e runs on every push to dev and beta, on nightly and manual runs, and as the gate `release.yml` calls before a stable release. Pull requests never run it. On a push the `affected` gate still skips it when nothing in `@opencode/app` or `@opencode/stories`, or their workspace dependencies, changed (`.github/workflows/check-test.yml`).
+- **Find it.** e2e runs on every push to dev and beta, on nightly and manual runs, and as the gate `release.yml` calls before a stable release. Pull requests never run it. On a push the `affected` gate still skips it when nothing in `@opencode/app` or `@opencode/lab`, or their workspace dependencies, changed (`.github/workflows/check-test.yml`).
   - Each OS has the legs `app-1` and `app-2` (the shards), `session-ui-components` and `app-components`.
   - The `e2e (linux)` and `e2e (windows)` checks only aggregate those legs.
   - A pass on retry leaves a leg green. Check each Windows shard report's Flaky list, and make sure your new tests are not on it.
