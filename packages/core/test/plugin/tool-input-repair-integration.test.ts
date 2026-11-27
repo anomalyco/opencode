@@ -6,6 +6,7 @@ import { ToolInputRepairPlugin } from "@opencode/core/plugin/tool-input-repair"
 import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Tool } from "@opencode/core/tool"
+import { ShellTool } from "@opencode/core/tool/plugin/shell"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -343,5 +344,81 @@ it.effect("keeps undeclared keys when a required key is missing so the error sho
       },
     })
     expect(executed).toEqual([{ path: "a.ts", oldString: "a", newString: "b" }])
+  }),
+)
+
+it.effect("fails a Code Mode shell call with keys its input doesn't take instead of dropping them", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const registry = yield* Tool.Service
+    const executed: unknown[] = []
+    yield* plugins.activate([{ ...ToolInputRepairPlugin.Plugin, revision: "1" }])
+    yield* registry.transform((draft) =>
+      draft.add({
+        name: ShellTool.name,
+        description: "Shell",
+        input: ShellTool.Input,
+        options: { codemode: { input: ShellTool.CodeModeInput } },
+        execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "ok" })),
+      }),
+    )
+    const snapshot = yield* registry.snapshot()
+    const run = (id: string, input: object) =>
+      snapshot
+        .execute({
+          ...identity,
+          call: {
+            type: "tool-call",
+            id,
+            name: "execute",
+            input: {
+              code: `try { return await tools.shell(${JSON.stringify(input)}) } catch (e) { return String(e.message ?? e) }`,
+            },
+          },
+        })
+        .pipe(
+          Effect.map((result) =>
+            result.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"),
+          ),
+        )
+
+    const timeout = yield* run("call-shell-timeout", { command: "make", timeout: 600_000 })
+    expect(timeout).toContain(
+      [
+        "<tool-repair>",
+        "tools.shell takes only `command` and `workdir` in Code Mode, so this call did not run.",
+        "`timeout` isn't supported here; the command runs until it exits. Use `timeout N <command>` to bound it.",
+        "</tool-repair>",
+      ].join("\n"),
+    )
+    const others = yield* run("call-shell-others", { command: "make", background: true, yield_ms: 1000, nohup: 1 })
+    expect(others).toContain(
+      [
+        "tools.shell takes only `command` and `workdir` in Code Mode, so this call did not run.",
+        "`background` isn't supported here; the command runs until it exits. execute's `background` option runs a whole script in the background.",
+        "`yield_ms`, `nohup` isn't supported here.",
+      ].join("\n"),
+    )
+    expect(executed).toEqual([])
+
+    // A key that changes nothing about the command is dropped.
+    yield* run("call-shell-plain", { command: "make", workdir: "/tmp", description: "Build" })
+    expect(executed).toEqual([{ command: "make", workdir: "/tmp" }])
+
+    // The direct shell still takes `timeout` and `background`.
+    const direct = yield* registry.snapshot(undefined, { tools: { direct: new Set([ShellTool.name]) } })
+    yield* direct.execute({
+      ...identity,
+      call: {
+        type: "tool-call",
+        id: "call-direct-shell",
+        name: ShellTool.name,
+        input: { command: "make", timeout: 600_000, background: true, extra: 1 },
+      },
+    })
+    expect(executed).toEqual([
+      { command: "make", workdir: "/tmp" },
+      { command: "make", timeout: 600_000, background: true },
+    ])
   }),
 )
