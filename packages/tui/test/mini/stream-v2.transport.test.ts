@@ -4702,4 +4702,67 @@ describe("V2 mini transport", () => {
     ])
     await transport.close()
   })
+
+  test("skips bookkeeping rows when collecting replayLimit messages across pages", async () => {
+    const rows: SessionMessages = [
+      { id: "msg_idle", type: "idle", outcome: "succeeded", time: { created: 5 } },
+      { id: "msg_loc", type: "location-switched", location: { directory: "/tmp" }, time: { created: 4 } },
+      {
+        id: "msg_a2",
+        type: "assistant",
+        agent: "build",
+        model: { providerID: "test", id: "model" },
+        content: [{ type: "text", text: "Latest reply" }],
+        time: { created: 3, completed: 3 },
+      },
+      {
+        id: "msg_model",
+        type: "model-switched",
+        model: { providerID: "test", id: "model" },
+        time: { created: 2 },
+      },
+      { id: "msg_u2", type: "user", text: "Latest prompt", files: [], agents: [], time: { created: 1 } },
+    ]
+
+    const run = async (replayLimit: number) => {
+      const requests: Array<{ limit?: number; order?: string; cursor?: string }> = []
+      const events = feed()
+      events.push(connected())
+      const client = sdk({ streams: [events], messages: { ses_1: [] } })
+      spyOn(client.message, "list").mockImplementation((request) => {
+        requests.push({ limit: request.limit, order: request.order, cursor: request.cursor })
+        if (request.cursor && request.order !== undefined) {
+          return Promise.reject(new Error("Cursor cannot be combined with order"))
+        }
+        const offset = request.cursor ? Number(request.cursor) : 0
+        const data = rows.slice(offset, offset + (request.limit ?? 50))
+        return ok({ data, cursor: { next: data.length > 0 ? String(offset + data.length) : undefined } })
+      })
+      const ui = footer()
+      const transport = await createSessionTransport({
+        sdk: client,
+        sessionID: "ses_1",
+        thinking: false,
+        replay: true,
+        replayLimit,
+        footer: ui.api,
+      })
+      await transport.close()
+      return { commits: ui.commits.map((commit) => [commit.kind, commit.text]), requests }
+    }
+
+    const one = await run(1)
+    expect(one.commits).toEqual([["assistant", "Latest reply"]])
+    expect(one.requests).toEqual([
+      { limit: 1, order: "desc", cursor: undefined },
+      { limit: 1, order: undefined, cursor: "1" },
+      { limit: 1, order: undefined, cursor: "2" },
+    ])
+
+    const two = await run(2)
+    expect(two.commits).toEqual([
+      ["user", "Latest prompt"],
+      ["assistant", "Latest reply"],
+    ])
+  })
 })

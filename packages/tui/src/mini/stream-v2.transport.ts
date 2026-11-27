@@ -392,6 +392,11 @@ const catalogEvents = new Set([
   "reference.updated",
 ])
 
+const DEFAULT_REPLAY_LIMIT = 200
+const MAX_MESSAGE_PAGE_LIMIT = 200
+
+const replayMessageTypes = new Set<SessionMessageInfo["type"]>(["user", "assistant", "compaction", "skill", "shell"])
+
 // session.shell resolves after the command settled server-side; the matching
 // live shell.ended event usually lands within the same tick, but hold the turn
 // briefly so the output commit renders inside it.
@@ -899,13 +904,27 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
   }
 
-  const projectedMessages = async (client: OpenCodeClient, signal: AbortSignal) =>
-    (
-      await client.message.list(
-        { sessionID: input.sessionID, limit: input.replayLimit ?? 200, order: "desc" },
+  const projectedMessages = async (client: OpenCodeClient, signal: AbortSignal) => {
+    const target = input.replayLimit ?? DEFAULT_REPLAY_LIMIT
+    const limit = Math.min(MAX_MESSAGE_PAGE_LIMIT, target)
+    const collected: SessionMessageInfo[] = []
+    let cursor: string | undefined
+    while (collected.length < target) {
+      const page = await client.message.list(
+        cursor ? { sessionID: input.sessionID, limit, cursor } : { sessionID: input.sessionID, limit, order: "desc" },
         { signal },
       )
-    ).data.toReversed()
+      for (const message of page.data) {
+        if (!replayMessageTypes.has(message.type)) continue
+        collected.push(message)
+        if (collected.length >= target) break
+      }
+      const next = page.cursor.next ?? undefined
+      if (collected.length >= target || !next || next === cursor || page.data.length < limit) break
+      cursor = next
+    }
+    return collected.toReversed()
+  }
 
   const waitForSession = async (initial: OpenCodeClient) => {
     let client = initial

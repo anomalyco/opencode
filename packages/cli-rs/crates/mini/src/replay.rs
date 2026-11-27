@@ -26,6 +26,8 @@ use crate::scrollback::{EntryKind, Phase, Source, ToolState};
 pub const GLOBAL: &str = "global";
 /// `--replay-limit`'s default: the newest messages a replay lists.
 pub const DEFAULT_REPLAY_LIMIT: u32 = 200;
+/// Maximum `limit` accepted by `GET /api/session/:sessionID/message`.
+const MAX_MESSAGE_PAGE_LIMIT: u32 = 200;
 /// `LOCAL_REPLAY_ROW_LIMIT`: rows printed only locally (errors, prompts in flight) that a resize replays.
 pub const LOCAL_ROW_LIMIT: usize = 100;
 pub const RESIZE_DELAY: Duration = Duration::from_millis(250);
@@ -1623,18 +1625,59 @@ pub enum Incoming {
     Disconnected(String),
 }
 
-/// `projectedMessages`: the newest `limit` messages, oldest first.
+/// True for message types that mini renders into the transcript (excluding bookkeeping rows such as `idle` or
+/// `location-switched`).
+fn is_replay_message(message: &SessionMessageInfo) -> bool {
+    matches!(
+        message,
+        SessionMessageInfo::User(_)
+            | SessionMessageInfo::Assistant(_)
+            | SessionMessageInfo::Skill(_)
+            | SessionMessageInfo::Shell(_)
+            | SessionMessageInfo::Compaction(
+                SessionMessageCompaction::Running(_)
+                    | SessionMessageCompaction::Completed(_)
+                    | SessionMessageCompaction::Failed(_)
+            )
+    )
+}
+
+/// `projectedMessages`: the newest `limit` replayable messages, oldest first.
 pub async fn messages(client: &Client, session: &str, limit: u32) -> Result<Vec<SessionMessageInfo>, String> {
-    let input = MessageListInput {
-        session_id: SessionID(session.to_owned()),
-        limit: Some(i64::from(limit)),
-        order: Some(MessageListInputOrder::Desc),
-        ..Default::default()
-    };
-    let call = Client::message_list_call(&input).map_err(|error| error.to_string())?;
-    let list: Value = client.json(call).await.map_err(|error| error.to_string())?;
-    let data = list["data"].as_array().map(Vec::as_slice).unwrap_or_default();
-    Ok(data.iter().rev().map(decode_message).collect())
+    let target = limit as usize;
+    let page_limit = limit.min(MAX_MESSAGE_PAGE_LIMIT);
+    let mut collected = Vec::with_capacity(target.min(MAX_MESSAGE_PAGE_LIMIT as usize));
+    let mut cursor: Option<String> = None;
+    while collected.len() < target {
+        let input = MessageListInput {
+            session_id: SessionID(session.to_owned()),
+            limit: Some(i64::from(page_limit)),
+            order: cursor.is_none().then_some(MessageListInputOrder::Desc),
+            cursor: cursor.clone(),
+            r#type: None,
+        };
+        let call = Client::message_list_call(&input).map_err(|error| error.to_string())?;
+        let list: Value = client.json(call).await.map_err(|error| error.to_string())?;
+        let data = list["data"].as_array().map(Vec::as_slice).unwrap_or_default();
+        for value in data {
+            let message = decode_message(value);
+            if !is_replay_message(&message) {
+                continue;
+            }
+            collected.push(message);
+            if collected.len() >= target {
+                break;
+            }
+        }
+        let next = list["cursor"]["next"].as_str().filter(|value| !value.is_empty());
+        if collected.len() >= target || next.is_none() || next == cursor.as_deref() || data.len() < page_limit as usize
+        {
+            break;
+        }
+        cursor = next.map(str::to_owned);
+    }
+    collected.reverse();
+    Ok(collected)
 }
 
 /// Decodes a listed message once, at the boundary. A message this client cannot read is kept as unknown, so one
@@ -1871,6 +1914,98 @@ mod tests {
         assert_eq!(wait(&client, "ses_1", receiver).await, Ok(()));
         assert_eq!(memory.requests().len(), 1);
         drop(connected);
+    }
+
+    /// A paginated `/api/session/:id/message` transport that enforces the server's `limit <= 200` and
+    /// cursor-vs-order rules.
+    struct PagedMessages {
+        desc_rows: Vec<Value>,
+        queries: Mutex<Vec<Vec<(String, String)>>>,
+    }
+
+    impl PagedMessages {
+        fn new(desc_rows: Vec<Value>) -> Self {
+            Self { desc_rows, queries: Mutex::new(Vec::new()) }
+        }
+    }
+
+    impl opencode_api::transport::Transport for PagedMessages {
+        fn send(
+            &self,
+            request: opencode_api::transport::Request,
+        ) -> futures_util::future::BoxFuture<'_, Result<opencode_api::transport::Response, String>> {
+            let query: Vec<(String, String)> =
+                request.url.query_pairs().map(|(key, value)| (key.into_owned(), value.into_owned())).collect();
+            self.queries.lock().unwrap().push(query.clone());
+            let param = |key: &str| query.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str());
+            let cursor = param("cursor");
+            let order = param("order");
+            if cursor.is_some() && order.is_some() {
+                return Box::pin(async { Err("cursor cannot be combined with order".to_owned()) });
+            }
+            let limit: usize = param("limit").and_then(|v| v.parse().ok()).unwrap_or(50);
+            if limit == 0 || limit > MAX_MESSAGE_PAGE_LIMIT as usize {
+                return Box::pin(async move { Err(format!("invalid limit {limit}")) });
+            }
+            let offset: usize = cursor.and_then(|v| v.parse().ok()).unwrap_or(0);
+            let end = (offset + limit).min(self.desc_rows.len());
+            let page = if offset >= self.desc_rows.len() { &[][..] } else { &self.desc_rows[offset..end] };
+            let body = if page.is_empty() {
+                json!({ "data": [], "cursor": {} })
+            } else {
+                json!({ "data": page, "cursor": { "next": end.to_string() } })
+            };
+            let memory = opencode_api::memory::Memory::new(vec![opencode_api::memory::Route::json(
+                "GET",
+                request.url.path(),
+                200,
+                &body,
+            )]);
+            Box::pin(async move { memory.send(request).await })
+        }
+    }
+
+    #[tokio::test]
+    async fn messages_skips_bookkeeping_rows_across_pages() {
+        let rows = vec![
+            json!({ "id": "msg_idle", "type": "idle", "outcome": "succeeded", "time": { "created": 5 } }),
+            json!({ "id": "msg_loc", "type": "location-switched", "location": { "directory": "/tmp" }, "time": { "created": 4 } }),
+            json!({
+                "id": "msg_a2",
+                "type": "assistant",
+                "agent": "build",
+                "model": { "id": "model", "providerID": "demo" },
+                "content": [{ "type": "text", "text": "Latest reply" }],
+                "time": { "created": 3 },
+            }),
+            json!({ "id": "msg_model", "type": "model-switched", "model": { "id": "m", "providerID": "p" }, "time": { "created": 2 } }),
+            json!({ "id": "msg_u2", "type": "user", "text": "Latest prompt", "time": { "created": 1 } }),
+        ];
+
+        let paged = Arc::new(PagedMessages::new(rows.clone()));
+        let client = Client::with_transport("http://test", paged.clone()).unwrap();
+        let listed = messages(&client, "ses_1", 1).await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert!(matches!(&listed[0], SessionMessageInfo::Assistant(a) if a.id.as_str() == "msg_a2"));
+        let queries = paged.queries.lock().unwrap().clone();
+        assert_eq!(queries.len(), 3);
+        assert!(queries[0].iter().any(|(k, v)| k == "order" && v == "desc"));
+        assert!(
+            queries[1..].iter().all(|q| q.iter().any(|(k, _)| k == "cursor") && !q.iter().any(|(k, _)| k == "order"))
+        );
+
+        let paged = Arc::new(PagedMessages::new(rows));
+        let client = Client::with_transport("http://test", paged).unwrap();
+        let listed = messages(&client, "ses_1", 2).await.unwrap();
+        let ids: Vec<&str> = listed
+            .iter()
+            .map(|msg| match msg {
+                SessionMessageInfo::User(u) => u.id.as_str(),
+                SessionMessageInfo::Assistant(a) => a.id.as_str(),
+                _ => "other",
+            })
+            .collect();
+        assert_eq!(ids, ["msg_u2", "msg_a2"]);
     }
 
     fn texts(output: &Output) -> Vec<(EntryKind, String)> {
