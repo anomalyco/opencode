@@ -38,6 +38,11 @@ pub fn italic() -> u8 {
     4
 }
 
+/// OpenTUI's `BOLD` attribute bit, as TS stores it.
+pub fn bold() -> u8 {
+    1
+}
+
 #[derive(Debug)]
 pub enum DrawError {
     Size(SizeError),
@@ -67,7 +72,7 @@ fn merge(existing: &Cell<Style>, incoming: Cell<Style>) -> Cell<Style> {
 fn set_rich_text(grid: &mut Grid, x: i32, y: i32, runs: &[TextRun], style: Style) -> i32 {
     let mut offset = 0;
     for run in runs {
-        let attributes = if run.italic { italic() } else { 0 };
+        let attributes = (if run.italic { italic() } else { 0 }) | (if run.bold { bold() } else { 0 });
         grid.text_with(x + offset, y, &run.text, Some(style), |_| attributes);
         offset += width(&run.text);
     }

@@ -163,6 +163,13 @@ export function locationKey(location: LocationRef) {
   return JSON.stringify([location.directory, location.workspaceID])
 }
 
+const catalogEvents = ["provider.updated", "model.updated", "agent.updated", "command.updated", "skill.updated"] as const
+type CatalogEvent = (typeof catalogEvents)[number]
+
+function isCatalogEvent(type: string): type is CatalogEvent {
+  return catalogEvents.some((catalog) => catalog === type)
+}
+
 function locationQuery(ref: LocationRef) {
   return { directory: ref.directory }
 }
@@ -1506,23 +1513,25 @@ export function createData(config: CreateDataInput) {
       return
     }
 
-    if (!event.location) return
+    if (!event.location) {
+      // A catalog change published outside a Location's context (a plugin's deferred registration) carries no
+      // location, and the catalog publishes no further event once it settles. It may belong to any Location here.
+      const type = event.type
+      if (isCatalogEvent(type))
+        Object.keys(store.location).forEach((key) => {
+          const ref = JSON.parse(key) as [string, string | null]
+          refreshCatalog(type, { directory: ref[0], workspaceID: ref[1] ?? undefined })
+        })
+      return
+    }
     const location = event.location
     switch (event.type) {
       case "provider.updated":
-        refreshLocation("provider", result.location.provider, location)
-        break
       case "model.updated":
-        refreshLocation("model", result.location.model, location)
-        break
       case "agent.updated":
-        refreshLocation("agent", result.location.agent, location)
-        break
       case "command.updated":
-        refreshLocation("command", result.location.command, location)
-        break
       case "skill.updated":
-        refreshLocation("skill", result.location.skill, location)
+        refreshCatalog(event.type, location)
         break
       case "vcs.branch.updated":
         // The event names only the current branch. Reload the rest: the default branch and provider can change with
@@ -1605,6 +1614,14 @@ export function createData(config: CreateDataInput) {
   function hasLocation<Field extends keyof LocationData>(field: Field, ref?: LocationRef) {
     const id = locationKey(ref ?? defaultLocation())
     return store.location[id]?.[field] !== undefined || sync.has(`location.${field}:${id}`)
+  }
+
+  function refreshCatalog(type: CatalogEvent, location: LocationRef) {
+    if (type === "provider.updated") return refreshLocation("provider", result.location.provider, location)
+    if (type === "model.updated") return refreshLocation("model", result.location.model, location)
+    if (type === "agent.updated") return refreshLocation("agent", result.location.agent, location)
+    if (type === "command.updated") return refreshLocation("command", result.location.command, location)
+    refreshLocation("skill", result.location.skill, location)
   }
 
   function refreshLocation<Field extends keyof LocationData>(

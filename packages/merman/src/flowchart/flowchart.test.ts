@@ -1965,6 +1965,22 @@ flowchart LR
     ).toBe(true)
   })
 
+  test("renders bold node text without the tags", () => {
+    const grid = drawFlowchartDiagramGrid(`flowchart TD
+  A["<b>Service A</b>"] --> B["<strong>Service B</strong><br/>Line 2"]`)
+    const output = grid.toString({ trimTop: true, trimBottom: true })
+    const styled = renderGridStyledText(grid, resolveFlowchartStyleColors())
+
+    expect(output).not.toMatch(/<\/?(?:b|strong)>/)
+    for (const label of ["Service A", "Service B"])
+      expect(styled.chunks.some((chunk) => chunk.text.includes(label) && chunk.attributes === TextAttributes.BOLD)).toBe(
+        true,
+      )
+    expect(styled.chunks.some((chunk) => chunk.text.includes("Line 2") && chunk.attributes === TextAttributes.BOLD)).toBe(
+      false,
+    )
+  })
+
   test("keeps quoted architecture labels from distorting subgraph routes", () => {
     const source = `flowchart TB
     subgraph consumer["Durable Object"]
