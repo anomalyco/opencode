@@ -1425,7 +1425,7 @@ impl Mini {
                 let session = session.clone();
                 async move {
                     replay::wait(&client, &session, connected).await?;
-                    replay::messages(&client, &session, limit).await
+                    replay::projected(&client, &session, limit).await
                 }
             },
             move |cx, result| {

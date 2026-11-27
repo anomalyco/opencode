@@ -60,7 +60,6 @@ export const iconUsageByFile = {
   "packages/app/src/providers/connect/controller.ts": ["circle-check"],
   "packages/app/src/providers/connect/dialog.tsx": [
     "check",
-    "chevron-down",
     "chevron-right",
     "circle-ban-sign",
     "circle-check",
@@ -74,6 +73,7 @@ export const iconUsageByFile = {
   ],
   "packages/app/src/providers/connect/mcp-dialog.tsx": ["arrow-left", "check", "copy"],
   "packages/app/src/providers/connect/mcp-sign-in.tsx": ["arrow-up-right"],
+  "packages/app/src/providers/connect/remote.tsx": ["server"],
   "packages/app/src/providers/connect/tip.tsx": ["chevron-down", "close"],
   "packages/app/src/providers/models/details.tsx": [
     "check",
@@ -117,8 +117,13 @@ export const iconUsageByFile = {
   "packages/app/src/session/composer/subagent-bar.tsx": ["check", "close"],
   "packages/app/src/session/header/session-header-actions.tsx": ["layout-right", "layout-right-full"],
   "packages/app/src/session/requests/session-permission-dock.tsx": ["warning"],
-  "packages/app/src/session/requests/session-question-dock-classic.tsx": ["check", "chevron-down"],
-  "packages/app/src/session/requests/session-question-dock-experimental.tsx": ["chevron-down"],
+  "packages/app/src/session/requests/session-question-dock-classic.tsx": [
+    "arrow-right",
+    "arrow-up",
+    "check",
+    "chevron-down",
+    "close",
+  ],
   "packages/app/src/session/route-error.tsx": ["close"],
   "packages/app/src/session/screen.tsx": ["chevron-down"],
   "packages/app/src/session/server-unavailable-panel.tsx": ["close", "lock", "outline-hexagonal-warning"],

@@ -161,6 +161,7 @@ const source = {
   "ui.timeline.activity.edited": "Edited",
   "ui.timeline.activity.ran": "Ran",
   "ui.timeline.activity.used": "Used",
+  "ui.timeline.activity.otherTool": "tool",
   "ui.timeline.activity.worked": "Worked {{duration}}",
   "ui.timeline.activity.workedUnknown": "Worked",
   "ui.timeline.activity.files.one": "{{count}} file",
@@ -314,6 +315,7 @@ const source = {
   "ui.tool.agent.default": "Agent",
   "ui.tool.agent.delegating": "Delegating agent…",
   "ui.tool.skill": "Skill",
+  "ui.tool.other": "Tool",
 
   "ui.basicTool.called": "Called `{{tool}}`",
   "ui.toolErrorCard.failed": "Failed",

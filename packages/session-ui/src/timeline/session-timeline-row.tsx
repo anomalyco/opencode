@@ -114,7 +114,6 @@ export function createSessionTimelineRowRenderer(input: {
   editToolDefaultOpen: Accessor<boolean>
   timelineDetail?: Accessor<TimelineDetail>
   foldUserMessages?: Accessor<boolean>
-  inlineQuotes?: Accessor<boolean>
   disclosure: {
     value: (key: string) => boolean | undefined
     set: (key: string, open: boolean) => void
@@ -1253,7 +1252,6 @@ export function createSessionTimelineRowRenderer(input: {
                         )
                       }
                       fold={input.foldUserMessages?.()}
-                      inlineQuotes={input.inlineQuotes?.()}
                       expanded={input.disclosure.value(`user-expanded:${message().id}`)}
                       onExpandedChange={(open) => input.disclosure.set(`user-expanded:${message().id}`, open)}
                     />

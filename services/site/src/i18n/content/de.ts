@@ -639,6 +639,13 @@ export const content = {
         "wordmark-black": { name: "Wortmarke, schwarz" },
         "wordmark-white": { name: "Wortmarke, weiß" },
       },
+      avatars: {
+        body: "Quadratische Avatare für X, GitHub, Slack, LinkedIn und andere Profile. Das Zeichen sitzt gut innerhalb des Kreises, so übersteht es einen runden Zuschnitt. PNGs sind 1024 und 400 px breit.",
+        items: {
+          "avatar-dark": { name: "Avatar, dunkel" },
+          "avatar-light": { name: "Avatar, hell" },
+        },
+      },
       all: { text: "Alle laden" },
     },
     coverage: { title: "Presseecho" },

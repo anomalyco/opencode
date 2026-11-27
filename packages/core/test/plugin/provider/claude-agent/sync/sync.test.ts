@@ -197,17 +197,39 @@ describe("history reconciliation", () => {
         role: "user",
         content: [
           { type: "text", text: "Attached media from tool result:" },
-          { type: "file", mediaType: "image/png", data: "AQI=" },
+          { type: "file", mediaType: "image/png", data: "AQI=", filename: "swatch.png" },
           { type: "file", mediaType: "application/pdf", data: "AwQ=" },
+          { type: "file", mediaType: "image/bmp", data: "Qk0=" },
         ],
       },
-      user("Continue"),
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Continue" },
+          { type: "file", mediaType: "image/png", data: "BQY=" },
+        ],
+      },
     ])
     expect(JSON.stringify(blocks)).toContain("marker.txt")
     expect(JSON.stringify(blocks)).toContain("LEMON-IBIS")
     expect(JSON.stringify(blocks)).not.toContain("PRIVATE")
-    expect(blocks.some((block) => block.type === "image")).toBe(true)
-    expect(blocks.some((block) => block.type === "document")).toBe(true)
-    expect(blocks.at(-1)).toEqual({ type: "text", text: "Continue" })
+    expect(blocks.slice(-9)).toEqual([
+      { type: "text", text: "<tool>" },
+      { type: "text", text: "Attached media from tool result:" },
+      {
+        type: "document",
+        source: {
+          type: "content",
+          content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "AQI=" } }],
+        },
+        title: "swatch.png",
+      },
+      { type: "document", source: { type: "base64", media_type: "application/pdf", data: "AwQ=" } },
+      { type: "text", text: "[image/bmp was left out: Claude Code cannot read this file type.]" },
+      { type: "text", text: "</tool>" },
+      { type: "text", text: "</conversation-checkpoint>" },
+      { type: "text", text: "Continue" },
+      { type: "image", source: { type: "base64", media_type: "image/png", data: "BQY=" } },
+    ])
   })
 })

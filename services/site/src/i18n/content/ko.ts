@@ -562,6 +562,13 @@ export const content = {
         "wordmark-black": { name: "워드마크, 검은색" },
         "wordmark-white": { name: "워드마크, 흰색" },
       },
+      avatars: {
+        body: "X, GitHub, Slack, LinkedIn 등의 프로필을 위한 정사각형 아바타입니다. 마크가 원 안쪽에 넉넉히 들어가므로, 원형으로 잘려도 문제없습니다. PNG는 너비 1024px와 400px입니다.",
+        items: {
+          "avatar-dark": { name: "아바타, 다크" },
+          "avatar-light": { name: "아바타, 라이트" },
+        },
+      },
       all: { text: "모두 다운로드" },
     },
     coverage: { title: "보도" },

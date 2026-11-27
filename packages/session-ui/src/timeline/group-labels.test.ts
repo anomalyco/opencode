@@ -59,4 +59,19 @@ describe("group labels", () => {
     expect(contextGroupLabel([script], i18n, true).text).toBe("Used 4 Read, Shell, Edit")
     expect(contextGroupLabel([script], i18n).text).toBe("Used 1 Execute")
   })
+
+  test("counting a script's steps, unknown tools read as one Tool, last", () => {
+    const step = (tool: string) => ({ tool, status: "completed", input: {} })
+
+    const script = (tools: string[]) =>
+      storyTool("x1", "execute", "completed", {}, { metadata: { toolCalls: tools.map(step) } })
+
+    const mixed = script(["anomaly_slack.slack_search_users", "shell", "anomaly_slack.slack_read_thread", "search"])
+
+    expect(contextGroupLabel([mixed], i18n, true).text).toBe("Used 4 Shell, Tool")
+    expect(contextGroupLabel([script(["search", "anomaly_slack.slack_read_thread"])], i18n, true).text).toBe(
+      "Used 2 Tool",
+    )
+    expect(contextGroupLabel([mixed], i18n).text).toBe("Used 1 Execute")
+  })
 })

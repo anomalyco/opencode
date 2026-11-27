@@ -1293,6 +1293,7 @@ type RegionHost = {
     reopen(): void
     focus: SideFocus
     newTab(pane: "side"): boolean
+    newTabs(pane: "side"): readonly string[]
     openNewTab(): void
     closeNewTab(): boolean
   }
@@ -1310,11 +1311,11 @@ type RegionHost = {
     switchSession: () => void
     /** The side region, for its tab shortcuts. */
     side: () => SideShortcuts | undefined
-    /** The shortcut the browser's + menu item shows, as the host formats it; empty when it shows none. */
-    shortcut: (shortcut: Accessor<string>) => void
   }>
   /** The real host wrapper that renders a plugin in its context. */
   Contribution: Component<{ plugin: string; children: () => JSX.Element }>
+  /** The host's slot above the launchers of a New tab view. */
+  NewTabSlot: Component<{ session: MountedSession; screen: SessionScreen }>
   /** The host's own placement of a tab it adds without selecting it: after `after` when the strip has it, else last. */
   appendTab(strip: { all: string[] }, tab: string, after?: string): { all: string[] }
   /** The host's own choice of the sessions whose stored strips it forgets: all but the `max` used last, and never `keep`. */
@@ -1390,7 +1391,6 @@ export function mountBrowserRegion(input: RegionHost) {
       inspects: [],
     })
 
-    const [shortcut, setShortcut] = createSignal<Accessor<string>>(() => "")
     const [sideRegion, setSideRegion] = createSignal<ReturnType<RegionHost["createRegion"]>>()
     const strip = (session: string) => store.strips[session] ?? { all: [] }
     const setAll = (session: string, all: string[]) => setStore("strips", session, "all", all)
@@ -1804,6 +1804,12 @@ export function mountBrowserRegion(input: RegionHost) {
           </div>
           <p data-testid="selected">{region.active() ?? "none"}</p>
           <p data-testid="side-new-tab">{region.newTab("side") ? "shown" : "none"}</p>
+          <p data-testid="side-new-tabs">{region.newTabs("side").length}</p>
+          <Show when={region.newTab("side")}>
+            <div data-testid="side-new-tab-view">
+              <input.NewTabSlot session={view()} screen={screen} />
+            </div>
+          </Show>
           <Show when={browser()}>
             {(shown) => {
               // The pane's last reads come after the route has left its tab: they get the entry it mounted with.
@@ -1887,7 +1893,6 @@ export function mountBrowserRegion(input: RegionHost) {
               reopenSide={() => sideRegion()?.reopen()}
               switchSession={() => setStore("switches", (count) => count + 1)}
               side={sideRegion}
-              shortcut={(next) => setShortcut(() => next)}
             />
             <h1 style={{ "font-size": "24px", "margin-bottom": "16px" }}>Restored side strip</h1>
             <nav style={{ display: "flex", gap: "12px", margin: "16px 0" }}>
@@ -2023,7 +2028,6 @@ export function mountBrowserRegion(input: RegionHost) {
             <p data-testid="browser-reloads">{store.reloads}</p>
             <p data-testid="session-reopens">{store.reopens}</p>
             <p data-testid="session-switches">{store.switches}</p>
-            <p data-testid="add-shortcut">{shortcut()() || "none"}</p>
             <p data-testid="browser-closes">{JSON.stringify(store.closes)}</p>
             <p data-testid="browser-inspects">{JSON.stringify(store.inspects)}</p>
             <Ready>

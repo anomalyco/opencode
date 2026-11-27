@@ -40,9 +40,10 @@ export function Home() {
 
   // Track only the route location and (when absent) the default location; location.set
   // reads other signals internally and tracking them would re-assert the route location
-  // after the user overrides it with /cd.
+  // after the user overrides it with /cd. Copy the fields: navigating Home to Home reconciles
+  // the route's location object in place, so tracking the object alone misses the change.
   createEffect(() => {
-    const target = currentLocation()
+    const target = { ...currentLocation() }
     untrack(() => location.set(target))
   })
 

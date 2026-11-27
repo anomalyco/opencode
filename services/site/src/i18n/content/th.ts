@@ -569,6 +569,13 @@ export const content = {
         "wordmark-black": { name: "ตัวอักษรแบรนด์ ดำ" },
         "wordmark-white": { name: "ตัวอักษรแบรนด์ ขาว" },
       },
+      avatars: {
+        body: "รูปโปรไฟล์สี่เหลี่ยมจัตุรัสสำหรับ X, GitHub, Slack, LinkedIn และโปรไฟล์อื่นๆ สัญลักษณ์อยู่ภายในวงกลมอย่างพอดี จึงครอปเป็นวงกลมได้โดยไม่เสียรูป ไฟล์ PNG กว้าง 1024 และ 400 px",
+        items: {
+          "avatar-dark": { name: "รูปโปรไฟล์ มืด" },
+          "avatar-light": { name: "รูปโปรไฟล์ สว่าง" },
+        },
+      },
       all: { text: "ดาวน์โหลดทั้งหมด" },
     },
     coverage: { title: "ข่าวที่เผยแพร่" },
