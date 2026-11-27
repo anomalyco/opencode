@@ -673,6 +673,9 @@ pub fn encode_post(m: &HostValue) -> Result<Vec<u8>, EncodeError> {
     })
 }
 
+const STORAGE_KEY: &str = "a storage post needs a key of 1 to 256 characters";
+const STORAGE_VALUE: &str = "a storage post's value must be JSON text of at most 64 KiB";
+
 /// Why a post can't be written: a draw's commands fail their check (its message as it is), or the post is invalid.
 enum PostError {
     Post(String),
@@ -755,6 +758,27 @@ fn post(m: &HostValue) -> Result<Vec<u8>, PostError> {
         "capture" => {
             out.push(CAPTURE);
             out.push(matches!(field(m, "value"), Some(HostValue::Bool(true))) as u8);
+        }
+        // `widget.storage` (`widgets-live.md`, Storage): the prelude checks the limits; these catch a program that
+        // posts around it.
+        "storage" => {
+            out.push(STORAGE);
+            let Some(HostValue::String(key)) = field(m, "key") else {
+                return Err(STORAGE_KEY.into());
+            };
+            let key = key.to_string_lossy();
+            if key.is_empty() || key.encode_utf16().count() > 256 {
+                return Err(STORAGE_KEY.into());
+            }
+            put_str(&mut out, &key);
+            match field(m, "value") {
+                None | Some(HostValue::Undefined) => out.push(0),
+                Some(HostValue::String(value)) if value.to_string_lossy().len() <= 64 * 1024 => {
+                    out.push(1);
+                    put_str(&mut out, &value.to_string_lossy());
+                }
+                Some(_) => return Err(STORAGE_VALUE.into()),
+            }
         }
         other => return Err(format!("unknown post type \"{other}\"").into()),
     }

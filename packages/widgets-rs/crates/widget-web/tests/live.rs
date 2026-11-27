@@ -1030,3 +1030,24 @@ fn an_invalid_draw_is_at_its_line() {
     );
     assert_eq!(failure(exit, first), (None, Some("draw"), 3));
 }
+
+/// `widget.storage` on the web host, which has no spaces sync: the first use fails at the template's line, with the
+/// prelude's `Unsupported` message (`widgets-live.md`, Storage).
+#[test]
+fn widget_storage_on_a_client_without_storage_fails_at_its_line() {
+    let (out, exit, first) = located(
+        "async function main() {\n  widget.render(ui.text(\"x\"))\n  await widget.storage.set(\"entry:1\", { kcal: 500 })\n}\n",
+        None,
+    );
+    assert!(!out.iter().any(|m| m["type"] == "storage"), "{out:?}");
+    let Some(LiveExit::Failed { error }) = &exit else {
+        panic!("{exit:?}")
+    };
+    assert!(
+        error
+            .reason()
+            .contains("Unsupported: widget.storage: storage needs a client with spaces sync"),
+        "{error}"
+    );
+    assert_eq!(failure(exit, first).2, 3);
+}

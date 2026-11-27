@@ -52,6 +52,7 @@ clamps, unknown node types dropped).
 | `01 05` | `dismiss` |
 | `01 06 u8(wake) json(value)` | `send` |
 | `01 07 u8(on)` | `capture` |
+| `01 0B str(key) u8(set) [str(value)]` | `storage` (`widgets-live.md`, Storage): `set` 1 with the value's JSON text, 0 for a delete. The encoder fails a key that isn't 1 to 256 characters or a value that isn't text of at most 64 KiB as an invalid post |
 
 `state`, `submit` and `send` stay JSON: they're generic data, the client never inspects them, and
 `state` goes back verbatim in the next step input. The step input stays JSON.

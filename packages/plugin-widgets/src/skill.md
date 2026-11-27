@@ -128,5 +128,13 @@ live program can re-render every frame (3D games: physics in `main`, a raymarche
 only; the local network is blocked; ≤ 4 in flight and 10 a second; 15 s; 2 MB. Only for widgets that must refresh
 while open; otherwise fetch the data yourself and pass it in `data`.
 
+**Storage** (live only): `capabilities: { storage: {} }` gives the widget data kept on this server and synced to the
+user's other devices, shared by every widget of the same template name (every version and session). `widget.storage.get(key)`
+and `widget.storage.keys(prefix?)` read the local copy at once; `await widget.storage.set(key, value)` (JSON) and `await
+widget.storage.delete(key)` write; `widget.on("storage", ({ key, value }) => …)` hears changes from elsewhere (`value`
+`null` when deleted): re-render then. Use one key per record (`entry:<time>:<random>`), so writes from two devices never
+overwrite each other. Keys ≤ 256 characters, values ≤ 64 KiB of JSON, ≤ 1,000 keys and 1 MiB per template. Clients
+without spaces sync (iOS for now, the web host) throw `Unsupported` on first use.
+
 **Limits.** A step must finish in 250 ms; a live program must `await` at least every 50 ms; ≤ 240 posts a second;
 pausing (out of view) freezes timers and frames. Always set `alt` on canvases: the terminal shows it.

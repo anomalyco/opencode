@@ -108,6 +108,10 @@ fn post_from_json(v: &Value) -> Post {
             wake: v["wake"] != json!(false),
         },
         "capture" => Post::Capture(v["value"] == json!(true)),
+        "storage" => Post::Storage {
+            key: v["key"].as_str().unwrap().to_owned(),
+            value: v.get("value").and_then(Value::as_str).map(str::to_owned),
+        },
         t => panic!("{t}"),
     }
 }
@@ -313,6 +317,9 @@ fn every_post_kind_decodes_as_its_json() {
     {{ type: "send", value: null }},
     {{ type: "capture", value: true }},
     {{ type: "capture", value: false }},
+    {{ type: "storage", key: "entry:2026-11-27:é", value: JSON.stringify({{ kcal: 500 }}) }},
+    {{ type: "storage", key: "k".repeat(256), value: "x".repeat(65536) }},
+    {{ type: "storage", key: "entry:1" }},
   ].map((m) => {{
     if (m.type === "gpu") m.expect = expect(all)
     if (m.gpu) m.gpu.expect = m.gpu.bytes ? expect(m.gpu.bytes.buffer ?? m.gpu.bytes) : []
@@ -320,7 +327,7 @@ fn every_post_kind_decodes_as_its_json() {
   }})
 }})()"##
     ));
-    assert_eq!(pairs.len(), 18);
+    assert_eq!(pairs.len(), 21);
     for (i, (bin, json)) in pairs.iter().enumerate() {
         assert_eq!(bin, json, "post {i}");
     }
@@ -388,6 +395,22 @@ fn invalid_outputs_and_posts_fail_to_encode() {
         ("1", "invalid post: a post is an object with a type"),
         (r#"{ type: "explode" }"#, "unknown post type \"explode\""),
         (r#"{ type: "draw", commands: [] }"#, "needs its canvas's id"),
+        (
+            r#"{ type: "storage", key: "" }"#,
+            "a storage post needs a key of 1 to 256 characters",
+        ),
+        (
+            r#"{ type: "storage", key: "k".repeat(257) }"#,
+            "a storage post needs a key of 1 to 256",
+        ),
+        (
+            r#"{ type: "storage", key: "a", value: 1 }"#,
+            "value must be JSON text of at most 64 KiB",
+        ),
+        (
+            r#"{ type: "storage", key: "a", value: "é".repeat(32769) }"#,
+            "value must be JSON text of at most 64 KiB",
+        ),
         (
             r#"{ type: "draw", id: "x", commands: [["nope"]] }"#,
             "draw command 0",

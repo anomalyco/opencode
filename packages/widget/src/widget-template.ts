@@ -8,10 +8,11 @@ export type Mode = "step" | "live"
 
 /**
  * What a live widget template may use beyond rendering (widgets-live.md, Capabilities). `https.hosts` entries are exact host
- * names, `*.` suffix wildcards, or `"*"` for any host.
+ * names, `*.` suffix wildcards, or `"*"` for any host. `storage: {}`: `widget.storage` (widgets-live.md, Storage).
  */
 export interface Capabilities {
   readonly https?: { readonly hosts: ReadonlyArray<string> }
+  readonly storage?: {}
 }
 
 export interface WidgetTemplate {

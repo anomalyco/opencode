@@ -46,7 +46,8 @@ fixed list in `widgets-live.md` (Host functions); none reaches a platform API by
 **A fixed capability list.** What a widget can do is exactly: native UI from the node schema (`widgets.md`, Nodes), 2D
 canvases from checked draw commands (`widgets.md`, Canvas), a WebGPU subset whose batches every host checks ("Nothing
 else from WebGPU exists", `widgets-gpu.md`), and HTTPS `fetch` to the hosts the widget template declares
-(`widgets-live.md`, Capabilities). Nothing else crosses.
+(`widgets-live.md`, Capabilities), and with `storage` the widget template's own data on the user's server
+(`widgets-live.md`, Storage). Nothing else crosses.
 
 **Local network blocked outside dev mode.** "By default `fetch` refuses `http:` and any destination that resolves to a
 loopback, private or link-local address"; `allowLocalNetwork` comes only from the app's dev mode, "never from

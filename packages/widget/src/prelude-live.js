@@ -604,11 +604,43 @@ function __widget_gpu(watch) {
   }
 }
 
+// `widget.storage` limits (widgets-live.md, Storage): a key's characters, a value's UTF-8 bytes of JSON, and per
+// widget template the keys and the UTF-8 bytes of keys and values together.
+const __WIDGET_STORAGE = { key: 256, value: 64 * 1024, keys: 1000, bytes: 1024 * 1024 }
+
+// A storage error: an Error, so it fails the program at the template's line, with a `kind` like fetch's errors.
+function __widget_storage_error(kind, message) {
+  const error = new Error(kind + ": widget.storage: " + message)
+  error.kind = kind
+  return error
+}
+
+// The UTF-8 length of a string, counting a lone surrogate as the 3 bytes of U+FFFD.
+function __widget_utf8(text) {
+  let bytes = 0
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index)
+    if (code < 0x80) bytes += 1
+    else if (code < 0x800) bytes += 2
+    else if (code >= 0xd800 && code < 0xdc00 && index + 1 < text.length) {
+      const next = text.charCodeAt(index + 1)
+      if (next >= 0xdc00 && next < 0xe000) {
+        bytes += 4
+        index++
+      } else bytes += 3
+    } else bytes += 3
+  }
+  return bytes
+}
+
 // Live mode (specs/v2/widgets-live.md): `main(data)` runs once, on the host's `__host.post`, `__host.receive`,
 // `__host.sleep`, `__host.now` and `__host.fetch`. While the view has handlers, hooks are registered or a frame is
 // awaited, a pump receives client messages and calls handlers and hooks between the program's awaits.
 const widget = (() => {
-  const hooks = { key: [], focus: [], fullscreen: [], capture: [], resumed: [] }
+  const hooks = { key: [], focus: [], fullscreen: [], capture: [], resumed: [], storage: [] }
+  // `widget.storage` (widgets-live.md, Storage): the client's copy of the widget template's space, JSON text by key,
+  // from `__input().storage`; `undefined` on a client without storage, `null` without the capability.
+  const store = { input: undefined, values: new Map(), bytes: 0 }
   const live = {
     frame: null,
     requested: false,
@@ -672,6 +704,7 @@ const widget = (() => {
     if (message.type === "event") return dispatch(message.event ?? {})
     if (message.type === "canvas" || message.type === "gpu") return gpu().accept(message)
     if (message.type === "resumed") return emit("resumed", message.pausedMs)
+    if (message.type === "storage") return changed(message)
     if (message.type !== "frame") return
     live.requested = false
     live.frame = message.frame
@@ -705,6 +738,49 @@ const widget = (() => {
     }
     live.requested = true
     post(batch ? { type: "frame", gpu: batch } : { type: "frame" })
+  }
+  // A change to the space from elsewhere (another device or another widget of this template), in the server's order.
+  // One that leaves the copy as it is, such as this run's own write coming back, fires no hook.
+  const changed = (message) => {
+    if (!store.input || typeof message.key !== "string") return
+    const value = typeof message.value === "string" ? message.value : undefined
+    if (store.values.get(message.key) === value) return
+    keep(message.key, value)
+    emit("storage", { key: message.key, value: value === undefined ? null : parsed(value) })
+  }
+  const keep = (key, value) => {
+    const before = store.values.get(key)
+    if (before !== undefined) store.bytes -= __widget_utf8(key) + __widget_utf8(before)
+    if (value === undefined) return void store.values.delete(key)
+    store.values.set(key, value)
+    store.bytes += __widget_utf8(key) + __widget_utf8(value)
+  }
+  const parsed = (text) => {
+    try {
+      return JSON.parse(text)
+    } catch (error) {
+      return text
+    }
+  }
+  const storage = () => {
+    if (store.input === undefined)
+      throw __widget_storage_error(
+        "Unsupported",
+        "storage needs a client with spaces sync (OpenCode desktop or Android); this client has none",
+      )
+    if (store.input === null)
+      throw __widget_storage_error(
+        "CapabilityDenied",
+        "storage is not declared: save the widget template with capabilities: { storage: {} }",
+      )
+    return store
+  }
+  const key = (call, value) => {
+    if (typeof value !== "string" || value.length === 0)
+      throw new TypeError("widget.storage." + call + " needs a key that is a non-empty string")
+    if (value.length > __WIDGET_STORAGE.key)
+      throw __widget_storage_error("TooLarge", "a key is longer than " + __WIDGET_STORAGE.key + " characters")
+    return value
   }
   const take = () => {
     const frame = live.frame
@@ -782,6 +858,45 @@ const widget = (() => {
         throw error?.kind ? error : { kind: "Network", message: error?.message ?? String(error) }
       }
     },
+    storage: {
+      get: (name) => {
+        const text = storage().values.get(key("get", name))
+        return text === undefined ? undefined : parsed(text)
+      },
+      keys: (prefix) => {
+        const start = prefix === undefined ? "" : String(prefix)
+        return [...storage().values.keys()].filter((name) => name.startsWith(start)).sort()
+      },
+      set: (name, value) => {
+        const current = storage()
+        name = key("set", name)
+        const text = JSON.stringify(value === undefined ? null : value)
+        if (typeof text !== "string") throw new TypeError("widget.storage.set needs a JSON value")
+        if (__widget_utf8(text) > __WIDGET_STORAGE.value)
+          throw __widget_storage_error("TooLarge", "a value is over " + (__WIDGET_STORAGE.value >> 10) + " KiB of JSON")
+        const before = current.values.get(name)
+        if (before === undefined && current.values.size >= __WIDGET_STORAGE.keys)
+          throw __widget_storage_error("TooLarge", "storage holds " + __WIDGET_STORAGE.keys + " keys already")
+        const bytes =
+          current.bytes +
+          __widget_utf8(name) +
+          __widget_utf8(text) -
+          (before === undefined ? 0 : __widget_utf8(name) + __widget_utf8(before))
+        if (bytes > __WIDGET_STORAGE.bytes)
+          throw __widget_storage_error("TooLarge", "storage would hold over " + (__WIDGET_STORAGE.bytes >> 20) + " MiB")
+        keep(name, text)
+        post({ type: "storage", key: name, value: text })
+        return Promise.resolve()
+      },
+      delete: (name) => {
+        const current = storage()
+        name = key("delete", name)
+        if (!current.values.has(name)) return Promise.resolve()
+        keep(name, undefined)
+        post({ type: "storage", key: name })
+        return Promise.resolve()
+      },
+    },
     send: (value, options) => post({ type: "send", value: value ?? null, wake: options?.wake !== false }),
     capturePointer: () => post({ type: "capture", value: true }),
     releasePointer: () => post({ type: "capture", value: false }),
@@ -789,8 +904,10 @@ const widget = (() => {
   Object.defineProperty(api, "gpu", { get: () => gpu().api, enumerable: true })
   // Runs `main`, then keeps the widget interactive while its view has handlers or hooks are registered.
   // `gpu`: the live input's `{ available, format }` (specs/v2/widgets-gpu.md), none without a GPU.
-  api.__run = async (data, gpuInput) => {
+  api.__run = async (data, gpuInput, storageInput) => {
     gpu().start(gpuInput)
+    store.input = storageInput === undefined ? undefined : storageInput && { entries: storageInput.entries ?? [] }
+    store.input?.entries.forEach((entry) => keep(String(entry.key), String(entry.value)))
     const failed = new Promise((_, reject) => (live.reject = reject))
     failed.catch(() => {})
     await Promise.race([main(data), failed])
@@ -803,6 +920,6 @@ const widget = (() => {
 
 // Hosts run `return await __widget_live(__input(), true)` (specs/v2/widgets.md, Native hosts).
 async function __widget_live(input) {
-  await widget.__run(input.data, input.gpu)
+  await widget.__run(input.data, input.gpu, input.storage)
   return null
 }

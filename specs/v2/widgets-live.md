@@ -46,12 +46,13 @@ The prelude exposes a `widget` object inside `main` (implemented with `__host`):
 | `await widget.sleep(ms)` | timer |
 | `widget.now()` | ms of running time (excludes paused time; use `Date.now()` for wall-clock time) |
 | `await widget.fetch(url, { method, headers, body })` | HTTPS request → `{ ok, status, headers, text(), json() }` (needs the `https` capability) |
-| `widget.on(kind, fn)` | `kind`: `key` (`fn(key)`), `focus` (`fn(focused)`), `fullscreen` (`fn(on)`), `capture` (`fn(captured)`), `resumed` (`fn(pausedMs)`); returns an unsubscribe function |
+| `widget.on(kind, fn)` | `kind`: `key` (`fn(key)`), `focus` (`fn(focused)`), `fullscreen` (`fn(on)`), `capture` (`fn(captured)`), `resumed` (`fn(pausedMs)`), `storage` (`fn({ key, value })`, see Storage); returns an unsubscribe function |
 | `widget.keys` | the `code`s of the keys held now (a `Set`; cleared on blur), to read each frame |
 | `widget.pointer` | the last pointer value from any node, or `null` |
 | `widget.submit(value)` / `widget.dismiss()` | final answer; the client stops the program |
 | `widget.send(value, { wake })` | non-final message to the agent (as in step mode) |
 | `widget.capturePointer()` / `widget.releasePointer()` | ask for pointer capture (granted on the next click) / give it back; see `widgets-input.md` |
+| `widget.storage.get(key)` / `.keys(prefix?)` / `await .set(key, value)` / `await .delete(key)` | the widget template's storage, synced across the user's devices (needs the `storage` capability; see Storage) |
 
 `Math.random()` is allowed in live mode. There is no `widget.event()` or `widget.next()`: input arrives through
 handlers, and `widget.frame()`, `widget.sleep()` and `Promise.race` cover waiting.
@@ -80,12 +81,14 @@ Program → client (`post`): `{ type: "render", node }`, `{ type: "draw", id, co
 whose `key` isn't a string is an invalid post: the run ends with the program error `A draw post needs a string key`),
 `{ type: "frame" }` (one frame wanted), `{ type: "submit", value }`, `{ type: "dismiss" }`, `{ type: "send", value, wake }`, `{ type: "capture", value: true |
 false }` (`capturePointer` / `releasePointer`; clients without capture ignore it), `{ type: "gpu", ops, bytes }` (a GPU
-canvas batch; a frame request may carry one as `{ type: "frame", gpu }`, `widgets-gpu.md`).
+canvas batch; a frame request may carry one as `{ type: "frame", gpu }`, `widgets-gpu.md`), `{ type: "storage", key,
+value? }` (a storage write, Storage).
 
 Client → program (`receive`): `{ type: "event", event }` (`{ id, type, value }` for a prelude-assigned id, or `id: ""`
 for keys, focus, full screen and capture; the prelude routes it), `{ type: "frame", frame }` (only after a frame request, at
 the next vsync while the widget is visible), `{ type: "resumed", pausedMs }` (after a pause, see below), `{ type: "canvas", key, width, height }` and
-`{ type: "gpu", lost }` (GPU canvases, `widgets-gpu.md`).
+`{ type: "gpu", lost }` (GPU canvases, `widgets-gpu.md`), `{ type: "storage", key, value? }` (a storage change from
+elsewhere, Storage).
 
 ## Post rate
 
@@ -106,7 +109,7 @@ Every host applies the same rule to a live run's posts; it never drops a post an
   run the client stops drops them.
 - **`frame` requests** are idempotent: at most one is pending. They are never counted, never wait and are never
   dropped; a frame request while one is pending changes nothing (a GPU batch it carries still applies).
-- **Not counted:** `submit`, `dismiss` and `capture` go to the client at once (ahead of waiting posts). `send` goes at
+- **Not counted:** `submit`, `dismiss`, `capture` and `storage` go to the client at once (ahead of waiting posts). `send` goes at
   once too; the server limits it (`rate_limited`, `widgets.md`). A post carrying a GPU batch (a `gpu` post, or a
   `frame` request with `gpu`) takes no token but never overtakes a waiting post: while counted posts wait, it joins the
   end of the queue, and goes out, in order, as soon as the posts ahead of it have (a batch may configure a canvas a
@@ -117,7 +120,10 @@ Every host applies the same rule to a live run's posts; it never drops a post an
 A live widget template declares what it needs beyond rendering, as a widget template field:
 
 ```ts
-capabilities?: { https?: { hosts: string[] } }   // e.g. { https: { hosts: ["api.github.com", "*.coingecko.com"] } }
+capabilities?: {
+  https?: { hosts: string[] }   // e.g. { https: { hosts: ["api.github.com", "*.coingecko.com"] } }
+  storage?: {}                  // widget.storage (Storage)
+}
 ```
 
 `hosts` entries are exact host names or `*.` suffix wildcards; `["*"]` means any host. Clients show the granted
@@ -141,6 +147,59 @@ rebinding can't reach the local network when the flag is off.
 Errors reject with `{ kind: "CapabilityDenied" | "Network" | "Timeout" |
 "TooLarge" | "RateLimited", message }`. Mobile hosts get `fetch` from `psychoscript-mobile`, which enforces these rules
 and hands the actual transfer to the app (URLSession / OkHttp), so system TLS and proxies apply.
+
+## Storage
+
+A live widget template that declares `storage: {}` gets data that stays on its server and syncs to the user's other
+clients: a weight log, a tracker's entries, a game's high scores. It is one **space** of the server's spaces
+(`/api/experimental/space/*`), named `widget.<widget template name>`, so it is shared by every widget of that name on
+that server: every version, every Session, every client. Keys are the program's keys as they are; values are JSON text.
+
+The program reads a local copy and writes through the client:
+
+| Call | Effect |
+| --- | --- |
+| `widget.storage.get(key)` | the value (parsed JSON; text that isn't JSON as a string), or `undefined`; synchronous |
+| `widget.storage.keys(prefix?)` | the keys starting with `prefix` (default `""`), sorted; synchronous |
+| `await widget.storage.set(key, value)` | stores `JSON.stringify(value)` (`undefined` as `null`); resolves once the local copy has it and the client holds the write |
+| `await widget.storage.delete(key)` | removes the key; deleting a missing key does nothing |
+| `widget.on("storage", ({ key, value }) => …)` | a change from elsewhere (another client, or another widget of the template on this one), with `value` parsed, `null` when deleted |
+
+A change that leaves the copy as it is (the program's own write coming back) fires no hook. Several writes to one key
+end with the last the server took (one key per record avoids that, e.g. `entry:<time>:<random>`).
+
+**Limits**, checked by the prelude against its copy (so the error is at the template's call) and again by the host for
+a program that posts around the prelude: a key is 1 to 256 characters; a value at most 64 KiB of UTF-8 JSON; at most
+1,000 keys and 1 MiB (keys and values in UTF-8) per widget template. Errors are `Error`s with a `kind`, and their
+message starts with it: `TooLarge: widget.storage: a key is longer than 256 characters`, `TooLarge: widget.storage: a
+value is over 64 KiB of JSON`, `TooLarge: widget.storage: storage holds 1000 keys already`, `TooLarge: widget.storage:
+storage would hold over 1 MiB`; a key that isn't a non-empty string is a `TypeError`.
+
+**Clients.** The live input gains `storage` (`{ data, gpu?, storage? }`):
+
+- `{ entries: [{ key, value }] }`: the client follows the space and grants the capability; `entries` is its copy now
+  (the last complete sync, kept on the device, with its pending writes applied).
+- `null`: the client has storage, but the widget template doesn't declare it. Any `widget.storage` call throws
+  `CapabilityDenied: widget.storage: storage is not declared: save the widget template with capabilities: { storage:
+  {} }`.
+- left out: the client has no spaces sync (iOS for now, the web host, the TUI). Any `widget.storage` call throws
+  `Unsupported: widget.storage: storage needs a client with spaces sync (OpenCode desktop or Android); this client has
+  none`.
+
+A client with storage follows `widget.<name>` with its generic spaces client while a storage widget of that template
+runs on that server, and:
+
+- starts the run with its copy in `storage.entries`;
+- hands each storage post (`{ type: "storage", key, value }` sets, without `value` deletes) to the spaces client's
+  pending writes, which carry it to the server, also after a time offline; a post that breaks a limit fails the run
+  as an invalid post;
+- delivers every change of the space, in order, to every running widget of that template on that server as `{ type:
+  "storage", key, value }` (`value` left out for a delete), its writer's own included, and every key that changed when
+  the space syncs again (after a `resync` or a reset epoch).
+
+Clients grant `storage` automatically for now and show it on the widget (a "Storage" chip, beside "Network"); the
+permission dialog of Capabilities applies to it later. The server adds nothing for storage: it is a space like any
+other, events go through the existing event feed, and the spaces' own limits (1 MiB a value) stand.
 
 ## Lifecycle and budgets
 

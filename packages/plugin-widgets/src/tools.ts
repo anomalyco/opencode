@@ -73,7 +73,7 @@ export const WidgetTemplateInput = Schema.Struct({
   }),
   capabilities: Widget.Capabilities.pipe(optional).annotate({
     description:
-      'For save, live widget templates only: what the widget may use, e.g. { https: { hosts: ["api.github.com"] } } for widget.fetch. Declare the fewest hosts it needs',
+      'For save, live widget templates only: what the widget may use, e.g. { https: { hosts: ["api.github.com"] } } for widget.fetch (declare the fewest hosts it needs), { storage: {} } for widget.storage',
   }),
   example: Schema.Record(Schema.String, Schema.Json).pipe(optional).annotate({
     description: "Example data (a JSON object) to test the widget template with, for save (and edit when data changes)",

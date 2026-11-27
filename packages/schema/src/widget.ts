@@ -32,11 +32,13 @@ export type Mode = typeof Mode.Type
 
 /**
  * What a live widget template may use beyond rendering (widgets-live.md, Capabilities). `https.hosts` entries are exact host
- * names or `*.` suffix wildcards; `["*"]` is any host.
+ * names or `*.` suffix wildcards; `["*"]` is any host. `storage: {}` gives it `widget.storage`, one space per widget
+ * template name on its server (widgets-live.md, Storage).
  */
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
 export const Capabilities = Schema.Struct({
   https: optional(Schema.Struct({ hosts: Schema.Array(Schema.String) })),
+  storage: optional(Schema.Struct({})),
 }).annotate({ identifier: "Widget.Capabilities" })
 
 /** A widget template version without its source, as listed. */

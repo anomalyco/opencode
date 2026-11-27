@@ -425,6 +425,23 @@ describe("capabilities", () => {
         )
       }),
     ))
+
+  test("stores storage with https or on its own, in the version and the widget's state; never on a step template", () =>
+    run((fake) =>
+      Effect.gen(function* () {
+        const capabilities = { https: { hosts: ["api.github.com"] }, storage: {} }
+        yield* save(fake, { capabilities })
+        const program = yield* fake.call<Widget.Program>("program", { name: "zen" })
+        expect(program).toMatchObject({ capabilities })
+        expect(Exit.isSuccess(yield* save(fake, { capabilities: { storage: {} } }))).toBe(true)
+        expect((yield* fake.call<Widget.Program>("program", { name: "zen" })).version).not.toBe(program.version)
+        yield* execute(fake, "widget", { widgetTemplate: "zen", data: { items: ["x"] } })
+        expect((yield* states(fake))[0]).toMatchObject({ capabilities: { storage: {} } })
+        expect(
+          String(failure(yield* save(fake, { mode: "step", source: pickerSource, capabilities: { storage: {} } }))),
+        ).toContain("only live widget templates can declare capabilities")
+      }),
+    ))
 })
 
 describe("widget answers", () => {

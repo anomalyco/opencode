@@ -48,7 +48,7 @@ type WidgetTemplate = {
                         // mode are "step"). A live version hashes program + "\n" + JSON(data) + "\nlive", so the
                         // mode is part of the content address; declared capabilities follow as
                         // "\n" + JSON(capabilities)
-  capabilities?: { https?: { hosts: string[] } }  // live widget templates only (widgets-live.md, Capabilities)
+  capabilities?: { https?: { hosts: string[] }; storage?: {} }  // live widget templates only (widgets-live.md, Capabilities)
   builtin: boolean
 }
 ```
@@ -668,7 +668,7 @@ type State = {
     sent: boolean                       // the agent has been told (automatically, or through ask)
   }
   wait: boolean                         // the tool call waits for the answer (see Tools)
-  capabilities?: { https?: { hosts: string[] } }   // the widget template's, for the client's grant chip
+  capabilities?: { https?: { hosts: string[] }; storage?: {} }   // the widget template's, for the client's grant chip
   time: { created: number; responded?: number }   // epoch ms
 }
 ```
@@ -694,7 +694,7 @@ A widget goes `open → submitted`, `open → dismissed` or `open → superseded
 ```ts
 type Summary = {
   name: string; version: string; description: string; data: JSONSchema; mode: "step" | "live"
-  capabilities?: { https?: { hosts: string[] } }   // live widget templates only
+  capabilities?: { https?: { hosts: string[] }; storage?: {} }   // live widget templates only
   builtin: boolean
 }
 type Program = Summary & { source: string; program: string }   // program as served (Prelude and step ABI)
@@ -787,7 +787,7 @@ input: {
   edits?: { oldText: string; newText: string }[]   // edit
   source?: string                  // save
   mode?: "step" | "live"           // save; default "step"
-  capabilities?: { https?: { hosts: string[] } }   // save; live widget templates only (widgets-live.md, Capabilities)
+  capabilities?: { https?: { hosts: string[] }; storage?: {} }   // save; live widget templates only (widgets-live.md, Capabilities)
   example?: object                 // save; edit when `data` changes
 }
 ```

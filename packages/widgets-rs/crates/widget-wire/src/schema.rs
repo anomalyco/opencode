@@ -24,6 +24,7 @@ pub(crate) const SEND: u8 = 6;
 pub(crate) const CAPTURE: u8 = 7;
 pub(crate) const FRAME_GPU: u8 = 9;
 pub(crate) const GPU: u8 = 10;
+pub(crate) const STORAGE: u8 = 11;
 
 pub(crate) fn type_id(name: &str) -> u32 {
     match name {

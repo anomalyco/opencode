@@ -76,6 +76,11 @@ pub enum Post {
         wake: bool,
     },
     Capture(bool),
+    /// A write to the widget template's storage: `value` is JSON text, `None` deletes the key.
+    Storage {
+        key: String,
+        value: Option<String>,
+    },
 }
 
 pub fn decode_output(b: &[u8]) -> Result<Output, DecodeError> {
@@ -115,6 +120,14 @@ pub fn decode_post(b: &[u8]) -> Result<Post, DecodeError> {
             }
         }
         CAPTURE => Post::Capture(flag(c.u8()?)?),
+        STORAGE => {
+            let key = c.str()?.to_owned();
+            let value = match flag(c.u8()?)? {
+                true => Some(c.str()?.to_owned()),
+                false => None,
+            };
+            Post::Storage { key, value }
+        }
         k => return Err(Malformed(format!("unknown post kind {k}")).into()),
     };
     c.end("the message")?;

@@ -20,6 +20,10 @@ import { compiled } from "./compiled.js"
 import { located, MAX_VALUE_DEPTH, NEWER, OLDER, protocol, PROTOCOL, TYPED_ARRAYS } from "./host.js"
 import { canvasSize, type GpuBatch, type GpuError, gpuChecks, STRIKE_MS } from "./gpu.js"
 
+/** `widget.storage` limits a host checks on a post (widgets-live.md, Storage): a key's characters, a value's UTF-8 bytes. */
+const STORAGE_KEY = 256
+const STORAGE_VALUE = 64 * 1024
+
 /** A display frame in live mode: like a canvas frame, without the canvas id. */
 export type LiveFrame = Omit<Frame, "id">
 
@@ -36,6 +40,8 @@ export type LiveMessage =
   | { readonly type: "send"; readonly value: unknown; readonly wake: boolean }
   /** Ask for pointer capture (granted on the next click inside the widget) or give it back (widgets-input.md). */
   | { readonly type: "capture"; readonly value: boolean }
+  /** A write to the widget template's storage (widgets-live.md, Storage): `value` is JSON text; without it, a delete. */
+  | { readonly type: "storage"; readonly key: string; readonly value?: string }
 
 /** What a client sends a live program. */
 export type LiveInput =
@@ -46,6 +52,8 @@ export type LiveInput =
   | { readonly type: "canvas"; readonly key: string; readonly width: number; readonly height: number }
   /** The GPU device is lost: every handle is gone. */
   | { readonly type: "gpu"; readonly lost: string }
+  /** A change to the widget template's storage from elsewhere: `value` is JSON text; without it, the key was deleted. */
+  | { readonly type: "storage"; readonly key: string; readonly value?: string }
 
 /** How a live program ended. `return`: `main` returned without an answer; its last view stays. */
 export type LiveEnd =
@@ -126,6 +134,12 @@ export interface LiveOptions {
    * without replaying them (it draws no canvas); `false`: none, so the program records nothing.
    */
   readonly gpu?: false | { readonly format?: "bgra8unorm" | "rgba8unorm" }
+  /**
+   * The widget template's storage as the client holds it (widgets-live.md, Storage): its entries, JSON text by key, when
+   * the client follows its space; `null` when the widget template doesn't declare `storage`. Left out, the program runs
+   * as on a client without storage.
+   */
+  readonly storage?: { readonly entries: ReadonlyArray<{ readonly key: string; readonly value: string }> } | null
 }
 
 /**
@@ -169,6 +183,8 @@ export interface LiveWidget {
   /** Resolves once `predicate` holds, checked now and after every post; rejects if the program ends first. */
   readonly when: (predicate: (widget: LiveWidget) => boolean) => Promise<void>
   readonly stop: () => Promise<LiveEnd>
+  /** Delivers a change to the widget template's storage from elsewhere; no `value` deletes the key. */
+  readonly storage: (key: string, value?: string) => void
 }
 
 export const LiveWidget = {
@@ -548,6 +564,15 @@ export const LiveWidget = {
       if (message.type === "submit") return { type: "submit", value: message.value ?? null }
       if (message.type === "dismiss") return { type: "dismiss" }
       if (message.type === "send") return { type: "send", value: message.value ?? null, wake: message.wake !== false }
+      if (message.type === "storage") {
+        // The prelude checks these; a program that posts around it fails like an invalid post.
+        if (typeof message.key !== "string" || message.key.length === 0 || message.key.length > STORAGE_KEY)
+          return void fail("invalid", `A storage post needs a key of 1 to ${STORAGE_KEY} characters`)
+        if (message.value === undefined) return { type: "storage", key: message.key }
+        if (typeof message.value !== "string" || new TextEncoder().encode(message.value).length > STORAGE_VALUE)
+          return void fail("invalid", `A storage post's value must be JSON text of at most ${STORAGE_VALUE >> 10} KiB`)
+        return { type: "storage", key: message.key, value: message.value }
+      }
       if (message.type === "capture") {
         if (typeof message.value !== "boolean") return warn(`Ignored a capture post without a boolean value`)
         return { type: "capture", value: message.value }
@@ -623,6 +648,8 @@ export const LiveWidget = {
         end({ type: "stop" })
         return ending.promise
       },
+      storage: (key, value) =>
+        deliver(value === undefined ? { type: "storage", key } : { type: "storage", key, value }),
     }
 
     const version = protocol(program)
@@ -636,11 +663,11 @@ export const LiveWidget = {
       limits: { maxValueDepth: MAX_VALUE_DEPTH },
       typedArrays: TYPED_ARRAYS,
       globals: () => ({
-        __input: Host.fn(() =>
-          options?.gpu === false
-            ? { data }
-            : { data, gpu: { available: true, format: options?.gpu?.format ?? "rgba8unorm" } },
-        ),
+        __input: Host.fn(() => ({
+          data,
+          ...(options?.gpu === false ? {} : { gpu: { available: true, format: options?.gpu?.format ?? "rgba8unorm" } }),
+          ...(options?.storage === undefined ? {} : { storage: options.storage }),
+        })),
         __host: {
           post: located((args) => post(args)),
           receive: located((args, call) => (checked("receive", args), receive(call.signal)), {
