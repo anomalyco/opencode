@@ -17,6 +17,20 @@ Explain how authentication works in this project
 Pressione **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** ou **Ctrl+J** para inserir uma quebra de linha. Enquanto o OpenCode trabalha,
 **Enter** redireciona a sessão ativa com o novo prompt. Pressione **Ctrl+X** e depois **Enter** para pôr o prompt na fila.
 
+## Projetos e diretórios
+
+O OpenCode procura arquivos e executa comandos de shell no diretório em que você o inicia. Os diretórios de um mesmo
+repositório Git, incluindo suas worktrees, fazem parte de um único projeto. Um diretório sem controle de versão é um projeto à parte.
+
+Passe um diretório para iniciar em outro projeto:
+
+```bash
+opencode ~/code/another-project
+```
+
+Pressione **Ctrl+O** para abrir a lista de sessões e projetos recentes. Com um projeto selecionado, pressione **Right**
+para listar as worktrees e **Ctrl+N** nessa lista para criar uma.
+
 ## Contexto
 
 Digite `@` para procurar um arquivo e selecione-o para anexar esse arquivo ao prompt. Continue digitando depois de `@` para restringir os resultados.
@@ -71,7 +85,12 @@ Pressione **Ctrl+X** e depois **A** para escolher um agente, ou execute `/agents
 
 ## Sessões
 
-Pressione **Ctrl+X** e depois **N** para iniciar uma nova sessão. Pressione **Ctrl+X** e depois **L**, ou execute `/sessions`, para voltar a uma sessão existente; **Ctrl+O** abre as sessões e os projetos recentes juntos.
+Cada sessão é uma conversa independente, com histórico e diretório próprios. Para trabalhar em outra tarefa, execute `/new` ou
+pressione **Ctrl+X** e depois **N**. As sessões anteriores continuam disponíveis. Novas sessões começam no diretório em que
+você iniciou o OpenCode ou, se [`session.new_location`](/cli/config#sessions) estiver definido como `inherit`, no diretório da sessão atual.
+
+Pressione **Ctrl+X** e depois **L** ou execute `/sessions` para voltar a uma sessão existente. Nessa lista, pressione **Ctrl+A**
+para alternar entre as sessões do diretório atual e as de todos os projetos. **Ctrl+O** abre as sessões e os projetos recentes na mesma lista.
 
 As abas são ativadas por padrão. Use **Ctrl+Tab** e **Ctrl+Shift+Tab** para alternar entre elas, **Ctrl+X** e depois **W** para fechar uma, e **Ctrl+Shift+T** para reabrir a última aba fechada.
 

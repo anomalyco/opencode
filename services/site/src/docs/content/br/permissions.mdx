@@ -120,10 +120,13 @@ atualmente usam estas ações e recursos:
 | `websearch`          | Consulta de pesquisa                                                                |
 | `generate_image` | Modelo de imagem selecionado como `providerID/modelID`, mais `#variant` quando definido |
 | `external_directory` | Limite canônico de diretório externo, normalmente terminado em `/*`              |
-| `<server>_<tool>`    | `*` para uma ferramenta MCP; caracteres sem suporte nos dois nomes viram `_`        |
+| `<server>_<tool>`    | `*` para uma ferramenta MCP; os dois nomes mantêm letras, dígitos, `_` e `-`. Qualquer outro caractere vira `_`. |
 | `opencode_list_mcp_resources` | Nome do servidor MCP                                                    |
 | `opencode_read_mcp_resource`  | `<server>:<uri>`                                                   |
 | `execute`            | `*`; um deny remove o Code Mode e lista as ferramentas dele diretamente, enquanto as ferramentas aninhadas aplicam as próprias regras |
+
+As ações do MCP mantêm os hífens. As ferramentas de um servidor chamado `mcp-atlassian` correspondem a `mcp-atlassian_*`,
+não a `mcp_atlassian_*`.
 
 Por exemplo, permita uma skill e negue todas as outras:
 

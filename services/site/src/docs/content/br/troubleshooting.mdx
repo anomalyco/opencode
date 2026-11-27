@@ -112,6 +112,36 @@ grep 'role=server' ~/.local/share/opencode/log/opencode.log
 grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
 ```
 
+## Exportar telemetria
+
+O OpenCode pode enviar logs e traces para um coletor OpenTelemetry ou um backend de APM que aceite OTLP sobre HTTP.
+Defina a URL base do coletor, sem incluir um caminho:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer example-token"
+export OTEL_RESOURCE_ATTRIBUTES="team=platform,host.name=dev-laptop"
+opencode
+```
+
+| Variável                      | Comportamento |
+| ----------------------------- | ------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | URL base. Os logs vão para `<endpoint>/v1/logs` e os traces, para `<endpoint>/v1/traces`. Se a variável não estiver definida, a exportação fica desativada. |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | Cabeçalhos no formato `key=value`, separados por vírgulas, enviados em cada exportação. Um exemplo é uma chave de API. |
+| `OTEL_RESOURCE_ATTRIBUTES`    | Atributos no formato `key=value`, codificados para URL e separados por vírgulas, adicionados a cada registro. Se uma entrada estiver malformada, todas são descartadas. |
+
+Cada registro também inclui `service.name` (`opencode`), `service.version`, `deployment.environment.name` (o canal de
+lançamento), `opencode.client` e `opencode.run`, o mesmo ID de execução que aparece no arquivo de log.
+
+O serviço em segundo plano é um processo separado e não herda as variáveis do seu shell. Defina as variáveis também
+no serviço para rastrear chamadas ao modelo e execuções de ferramentas:
+
+```bash
+opencode service set env OTEL_EXPORTER_OTLP_ENDPOINT http://localhost:4318
+opencode service set env OTEL_EXPORTER_OTLP_HEADERS "authorization=Bearer example-token"
+opencode service start
+```
+
 ## Capturar um snapshot de heap
 
 Grave um snapshot de memória (heap) do servidor em segundo plano em execução em qualquer plataforma:

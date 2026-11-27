@@ -572,6 +572,8 @@ inicialização do cliente de terminal da V2 migra as configurações globais de
 inalterados. A configuração local do cliente no projeto não é migrada, porque a configuração do cliente da V2 é global. Consulte
 [Configurações da CLI](/cli/config) para a referência atual das configurações do cliente.
 
+Quando `cli.json` já existe, alterações em `tui.json` não têm efeito. Veja [`tui.json` legado](/cli/config#legacy-tuijson).
+
 ## Plugins
 
 Renomeie `plugin` para `plugins`. Substitua uma tupla de pacote e opções por um objeto:

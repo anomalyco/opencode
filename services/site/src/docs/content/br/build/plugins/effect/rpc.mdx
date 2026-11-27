@@ -45,8 +45,9 @@ JSON Schema e Standard Schema também são compatíveis.
 
 ### Entrada e saída
 
-Use `input` para o argumento do método e `output` para o valor de retorno. Omita
-o campo correspondente quando não houver valor.
+Use `input` para o argumento do método e `output` para o valor de retorno. Os dois campos são obrigatórios.
+Se o método não receber argumento ou não tiver valor de retorno, use `Schema.Struct({})` para o campo correspondente.
+Passe `{}` na chamada quando não houver argumento e retorne `{}` quando não houver valor de retorno.
 
 ```ts
 search: {
@@ -67,7 +68,8 @@ errors: {
 
 ### Eventos
 
-Adicione eventos ao mapa `events` de nível superior. Os dados de evento precisam ser um objeto.
+Adicione eventos ao mapa `events` de nível superior. Os dados de cada evento precisam ser um objeto.
+O mapa é obrigatório. Use `events: {}` se o RPC não tiver eventos.
 
 ```ts
 events: {

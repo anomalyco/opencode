@@ -3,19 +3,19 @@ title: "Rede"
 description: "Configure proxies, autoridades de certificação personalizadas e certificados de cliente."
 ---
 
-Defina as variáveis de proxy padrão e exclua os endereços de loopback. O OpenCode usa conexões HTTP locais entre a CLI e
-o serviço em segundo plano dela, então a exclusão de loopback é obrigatória quando um proxy está configurado no ambiente da CLI.
+Defina as variáveis de proxy padrão. O OpenCode usa conexões HTTP locais entre a CLI e o serviço em segundo plano.
+A CLI exclui automaticamente os endereços de loopback do proxy.
 
 ```bash
 export HTTP_PROXY=http://proxy.example.com:8080
 export HTTPS_PROXY=http://proxy.example.com:8080
-export NO_PROXY=localhost,127.0.0.1,::1
 
 opencode
 ```
 
-`HTTP_PROXY` trata destinos HTTP e `HTTPS_PROXY` trata destinos HTTPS. A própria URL do proxy pode usar `http://`
-nas duas variáveis. `NO_PROXY` é uma lista separada por vírgulas de hosts e endereços que se conectam diretamente.
+Use `HTTP_PROXY` para destinos HTTP e `HTTPS_PROXY` para destinos HTTPS. A URL do proxy pode usar `http://` nas duas
+variáveis. Ao iniciar, a CLI adiciona `127.0.0.1`, `localhost` e `::1` tanto a `NO_PROXY` quanto a `no_proxy`.
+Para outros hosts que precisam de conexão direta, liste-os em `NO_PROXY`, separados por vírgulas.
 
 ## Serviço
 
@@ -25,13 +25,13 @@ na configuração do serviço gerenciado para manter a mesma configuração de r
 ```bash
 opencode service set env HTTP_PROXY http://proxy.example.com:8080
 opencode service set env HTTPS_PROXY http://proxy.example.com:8080
-opencode service set env NO_PROXY localhost,127.0.0.1,::1
+opencode service set env NO_PROXY llm.company.example
 opencode service start
 ```
 
 Alterar uma variável de ambiente gerenciada interrompe o serviço em execução. Use `service start` para iniciá-lo com o novo ambiente.
-Mantenha `NO_PROXY` no shell da CLI também quando esse shell define um proxy, porque as variáveis do serviço gerenciado valem para o processo
-do servidor, não para o processo da CLI.
+Defina as variáveis de proxy também no shell da CLI, pois as do serviço gerenciado só se aplicam ao processo do servidor.
+Tanto a CLI quanto o servidor excluem automaticamente os endereços de loopback.
 
 Remova uma variável persistida com `service unset env`:
 
@@ -131,7 +131,6 @@ processos.
 ```bash
 HTTP_PROXY=http://proxy.example.com:8080 \
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode --standalone
 ```
 
@@ -139,7 +138,6 @@ Aplique o mesmo padrão a um servidor em primeiro plano:
 
 ```bash
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode serve
 ```
 

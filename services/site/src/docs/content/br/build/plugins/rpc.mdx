@@ -68,9 +68,18 @@ e erros. Ela aceita dois formatos de schema:
 
 ### Entrada e saída
 
-Cada método pode definir um schema `input` para o argumento dele e um schema `output`
-para o valor de retorno. Omita o schema de entrada se o método não aceitar um valor e o de saída se não
-retornar um valor.
+Cada método precisa de um schema `input` para o argumento e de um schema `output` para o valor de retorno.
+Se o método não receber argumento ou não tiver valor de retorno, use um schema de objeto vazio para o campo
+correspondente. Passe `{}` na chamada quando não houver argumento e retorne `{}` quando não houver valor de retorno:
+
+```ts
+refresh: {
+  input: { type: "object", additionalProperties: false },
+  output: { type: "object", additionalProperties: false },
+}
+```
+
+Se um método retornar `undefined`, a chamada falha com `rpc.invalid_output`.
 
 ```ts
 search: {
@@ -111,7 +120,7 @@ Nomes de erro que começam com `rpc.` são reservados pelo OpenCode.
 ### Eventos
 
 Adicione eventos ao mapa `events` de nível superior. Cada evento tem um schema para os dados
-enviados aos assinantes.
+enviados aos assinantes. O mapa é obrigatório. Use `events: {}` se o RPC não tiver eventos.
 
 Os dados de evento precisam ser um objeto. Use um schema de objeto vazio quando não houver dados:
 

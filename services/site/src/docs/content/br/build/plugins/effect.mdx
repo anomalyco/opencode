@@ -1037,8 +1037,9 @@ As ferramentas Effect aceitam a mesma [declaração de entrada em formato livre]
 
 As ferramentas têm um `id` que contém o nome efetivo delas, e `get()` retorna `undefined` quando esse ID não está presente. Use
 `update` e `remove` com o nome efetivo da ferramenta, incluindo o namespace dela (`acme_greeting` acima). Pontos em
-namespaces e caracteres sem suporte em nomes de ferramenta viram `_`. Nomes ausentes são ignorados; criar uma ferramenta exige
-`add` com uma definição completa. As atualizações preservam o nome e o namespace. Atribua novos schemas ou opções para substituí-los
+namespaces viram `_`. Nos nomes das ferramentas, qualquer caractere que não seja letra, dígito, `_` ou `-` vira `_`.
+Nomes ausentes são ignorados. Para criar uma ferramenta, use `add` com uma definição completa.
+As atualizações preservam o nome e o namespace. Atribua novos schemas ou opções para substituí-los
 em vez de mutar valores aninhados. Atualizações inválidas são registradas e deixam a definição anterior intacta.
 
 {/* prettier-ignore */}
