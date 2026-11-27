@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { $ } from "bun"
+import { Database as BunSqlite } from "bun:sqlite"
 import { fileURLToPath } from "url"
 import path from "path"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
@@ -42,6 +43,35 @@ const run = <A, E>(
   )
 
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
+
+type Db = Effect.Success<typeof makeDb>
+
+const race = (filename: string, migrate: (db: Db) => Effect.Effect<void, unknown, Global.Service>) =>
+  Effect.gen(function* () {
+    const first = yield* makeDb.pipe(
+      Effect.provide(yield* Layer.build(SqliteClient.layer({ filename, disableWAL: true }))),
+    )
+    const second = yield* makeDb.pipe(
+      Effect.provide(yield* Layer.build(SqliteClient.layer({ filename, disableWAL: true }))),
+    )
+    const global = yield* Global.Service
+    const transaction = first.transaction.bind(first)
+    // Let a separate connection commit immediately before the first connection
+    // starts its write transaction. Any unlocked check is now stale.
+    let interleave = true
+    first.transaction = (body, config) =>
+      Effect.suspend(() => {
+        if (!interleave) return transaction(body, config)
+        interleave = false
+        return migrate(second).pipe(
+          Effect.provideService(Global.Service, global),
+          Effect.orDie,
+          Effect.andThen(transaction(body, config)),
+        )
+      })
+    yield* migrate(first)
+    expect(interleave).toBe(false)
+  })
 
 // A real in-memory SqlClient whose schema inspection signals `arrived` and then
 // waits on `gate`. Bootstrap inspects the schema as its first locked statement,
@@ -130,6 +160,59 @@ describe("DatabaseMigration", () => {
         }),
       ),
     ).rejects.toThrow("does not match any known migration")
+  })
+
+  test("bootstrap rechecks schema after another connection commits", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "bootstrap.sqlite")
+    await Effect.runPromise(
+      race(filename, (db) => DatabaseMigration.apply(db, { legacyCredentials: false })).pipe(
+        Effect.provideService(Global.Service, Global.make({ data: tmp.path })),
+        Effect.scoped,
+      ),
+    )
+    using db = new BunSqlite(filename)
+    expect(db.query("SELECT count(*) AS count FROM migration").get()).toEqual({ count: migrations.length })
+  })
+
+  test("incremental migration skips work committed by another connection", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "incremental.sqlite")
+    using db = new BunSqlite(filename)
+    db.run("CREATE TABLE session (id TEXT PRIMARY KEY)")
+    db.run("CREATE TABLE migration (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)")
+    db.run("INSERT INTO migration VALUES ('previous', 0)")
+    await Effect.runPromise(
+      race(filename, (db) =>
+        DatabaseMigration.applyOnly(db, [
+          {
+            id: "session-cost",
+            up: (tx) => Effect.asVoid(tx.run(sql`ALTER TABLE session ADD COLUMN cost INTEGER`)),
+          },
+        ]),
+      ).pipe(Effect.provideService(Global.Service, Global.make({ data: tmp.path })), Effect.scoped),
+    )
+    expect(db.query("SELECT id FROM migration ORDER BY id").all()).toEqual([{ id: "previous" }, { id: "session-cost" }])
+    expect(db.query("SELECT name FROM pragma_table_info('session')").all()).toEqual([{ name: "id" }, { name: "cost" }])
+  })
+
+  test("rolls back unnamed legacy Drizzle journal backfill atomically when a timestamp is unknown", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE __drizzle_migrations (id integer PRIMARY KEY, hash text, created_at integer)`)
+        yield* db.run(sql`
+          INSERT INTO __drizzle_migrations (hash, created_at)
+          VALUES ('', ${Date.UTC(2026, 3, 10, 17, 45, 13)}), ('', 1234567890000)
+        `)
+
+        const exit = yield* Effect.exit(DatabaseMigration.applyOnly(db, [workspaceNameMigration]))
+        expect(exit._tag).toBe("Failure")
+        const table = yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'migration'`)
+        const rows = table ? yield* db.all(sql`SELECT id FROM migration`) : []
+        expect(rows).toEqual([])
+      }),
+    )
   })
 
   test("serializes concurrent embedded initialization for one database path", async () => {
