@@ -6987,7 +6987,7 @@ describe("SessionRunnerLLM", () => {
     function* (s) {
       const scheduled = yield* subscribeRetries(s)
       yield* s.admit("Mix retry paths")
-      const failure = incompleteStream()
+      const failure = streamDisconnected()
       const partial = TestLLM.failAfter(
         failure,
         LLMEvent.stepStart({ index: 0 }),
@@ -7035,14 +7035,14 @@ describe("SessionRunnerLLM", () => {
 
     const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    for (const delay of RETRY_GAPS_MAX) {
+    for (const delay of RETRY_GAPS_MAX.slice(0, 2)) {
       yield* Queue.take(scheduled)
       yield* TestClock.adjust(delay)
     }
     expect(yield* Fiber.join(run).pipe(Effect.flip)).toBe(failure)
-    expect(s.requests).toHaveLength(RETRY_GAPS.length + 1)
+    expect(s.requests).toHaveLength(3)
     const context = yield* s.context
-    expect(context.filter((message) => message.type === "assistant")).toHaveLength(RETRY_GAPS.length + 1)
+    expect(context.filter((message) => message.type === "assistant")).toHaveLength(3)
     expect(context.filter((message) => message.type === "synthetic")).toHaveLength(0)
 
     yield* s.llm.always(TestLLM.text("Continued after exhaustion", "after-exhaustion"))

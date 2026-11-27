@@ -64,11 +64,22 @@ const unreachableSchedule = Schedule.max([
 // dead provider hold a call for most of an hour. Cap those attempts well below it.
 const MAX_TIMEOUT_RETRIES = 3
 
+// An incomplete stream already reached the provider and may have processed the full prompt, so
+// exhausting the general allowance turns a deterministic proxy or finish-reason bug into 11 copies
+// of the request. Allow two retries for transient drops and empty responses.
+const MAX_INCOMPLETE_STREAM_RETRIES = 2
+
+const isTimeout = (error: AIError) => error.reason._tag === "Transport" && error.reason.code === "Timeout"
+
+const isIncompleteStream = (error: AIError) =>
+  error.reason._tag === "InvalidProviderOutput" && error.reason.classification === "incomplete-stream"
+
 export const policy = Effect.gen(function* () {
   const step = yield* Schedule.toStep(schedule)
   const unreachable = yield* Schedule.toStep(unreachableSchedule)
   let attempt = 1
   let timeouts = 0
+  let incompleteStreams = 0
   return (input: Input) =>
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis
@@ -79,11 +90,17 @@ export const policy = Effect.gen(function* () {
       if (!next) return undefined
       const [, duration] = next
       attempt++
-      if (input.cause.reason._tag === "Transport" && input.cause.reason.code === "Timeout") timeouts++
+      const timedOut = isTimeout(input.cause)
+      const incomplete = isIncompleteStream(input.cause)
+      if (timedOut) timeouts++
+      if (incomplete) incompleteStreams++
+      const withinCap =
+        (!timedOut || timeouts <= MAX_TIMEOUT_RETRIES) &&
+        (!incomplete || incompleteStreams <= MAX_INCOMPLETE_STREAM_RETRIES)
       return {
         attempt,
         delay: Math.ceil(Duration.toMillis(duration)),
-        retry: input.retry && timeouts <= MAX_TIMEOUT_RETRIES,
+        retry: input.retry && withinCap,
       }
     })
 })
