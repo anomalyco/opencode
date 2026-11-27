@@ -297,20 +297,30 @@ fn find_counter(screen: &str) -> Option<(usize, usize)> {
     Some((current, total))
 }
 
-/// Counts matches using `MarkdownParser` alone (no widgets, no layout), matching the unmounted path.
-fn parser_count(h: &Harness, source: &str, query: &str, conceal: bool, renderers: &CodeBlockRenderers) -> usize {
+/// Counts matches using `MarkdownParser` alone (no widgets, no layout). Returns `None` when a
+/// custom-rendered code block matches `query` (requiring a real mount to know whether it draws).
+fn parser_count(
+    h: &Harness,
+    source: &str,
+    query: &str,
+    conceal: bool,
+    renderers: &CodeBlockRenderers,
+) -> Option<usize> {
     let pattern = opencode_tui::routes::session::find::find_pattern(query);
     let mut parser = MarkdownParser::new(h.app.app()).unwrap();
     let syntax = opencode_ui::code::syntax_theme(&h.tui.page());
     let parsed = parser.parse(h.app.app(), source.trim(), renderers, conceal, &syntax, |spans, icx| {
         opencode_tui::features::session_links::transform_readonly(&h.tui, spans, icx)
     });
-    parsed
-        .blocks
-        .iter()
-        .filter_map(|block| block.text())
-        .map(|text| opencode_tui::routes::session::find::find_ranges(text, pattern.as_ref()).len())
-        .sum()
+    let mut total = 0usize;
+    for block in &parsed.blocks {
+        let count = opencode_tui::routes::session::find::find_ranges(block.text(), pattern.as_ref()).len();
+        if block.is_claimed_code() && count > 0 {
+            return None;
+        }
+        total += count;
+    }
+    Some(total)
 }
 
 #[test]
@@ -368,7 +378,7 @@ fn unmounted_and_mounted_find_counts_match_across_markdown_corpus() {
             let h = mount_session_with(100, 30, messages, mode);
             assert!(h.app.wait_until(WAIT, || h.app.text().contains("Filler 49")), "{mode_name}/{name}");
             let renderers = opencode_tui::plugins::host::code_blocks(&h.tui);
-            let unmounted = parser_count(&h, doc, query, conceal, &renderers);
+            let static_count = parser_count(&h, doc, query, conceal, &renderers);
 
             h.app.press("ctrl+x");
             h.app.press("f");
@@ -379,15 +389,38 @@ fn unmounted_and_mounted_find_counts_match_across_markdown_corpus() {
                 "{mode_name}/{name}: find counter never appeared:\n{}",
                 h.app.text()
             );
-            // Let deferred mount + settle finish.
             h.app.render();
             h.app.render();
-            let (_, mounted_total) = find_counter(&h.app.text()).unwrap();
+            let (_, unmounted_session_total) = find_counter(&h.app.text()).unwrap();
+            if let Some(expected) = static_count {
+                assert_eq!(
+                    expected,
+                    unmounted_session_total,
+                    "{mode_name}/{name} (query={query:?}): parser count ({expected}) != session total ({unmounted_session_total})\ndoc:\n{doc}\nscreen:\n{}",
+                    h.app.text()
+                );
+            }
+
+            // Compare against a session where the same document is mounted directly at the tail.
+            let direct = mount_session_with(100, 30, vec![assistant_msg("msg_000", doc, 1)], mode);
+            assert!(direct.app.wait_until(WAIT, || direct.app.text().contains("Build")), "{mode_name}/{name}");
+            direct.app.press("ctrl+x");
+            direct.app.press("f");
+            assert!(direct.app.wait_until(WAIT, || direct.app.text().contains("Find in session...")));
+            direct.app.type_text(query);
+            assert!(
+                direct.app.wait_until(WAIT, || find_counter(&direct.app.text()).is_some()),
+                "{mode_name}/{name}: direct find counter never appeared:\n{}",
+                direct.app.text()
+            );
+            direct.app.render();
+            direct.app.render();
+            let (_, mounted_total) = find_counter(&direct.app.text()).unwrap();
             assert_eq!(
-                unmounted,
+                unmounted_session_total,
                 mounted_total,
-                "{mode_name}/{name} (query={query:?}): unmounted parser count ({unmounted}) != mounted total ({mounted_total})\ndoc:\n{doc}\nscreen:\n{}",
-                h.app.text()
+                "{mode_name}/{name} (query={query:?}): unmounted count ({unmounted_session_total}) != mounted total ({mounted_total})\ndoc:\n{doc}\nscreen:\n{}",
+                direct.app.text()
             );
         }
     }
@@ -577,4 +610,211 @@ fn consecutive_identical_unmounted_messages_and_session_links_match_mounted_coun
         h.app.render();
     }
     assert_eq!(find_counter(&h.app.text()), Some((1, 4)));
+}
+
+#[test]
+fn plugin_fence_find_never_makes_throwaway_calls_and_keeps_counts_stable() {
+    use std::sync::Mutex;
+
+    use opencode_plugin_abi::{Fenced, Plugin, Setup, Span as AbiSpan};
+
+    #[derive(Default)]
+    struct Log {
+        renders: Vec<(String, u64, String)>,
+        gone: Vec<u64>,
+        drawn_once: std::collections::HashSet<u64>,
+    }
+
+    static LOG: std::sync::OnceLock<Mutex<Log>> = std::sync::OnceLock::new();
+    let log = LOG.get_or_init(|| Mutex::new(Log::default()));
+    *log.lock().unwrap() = Log::default();
+
+    fn setup(setup: &mut Setup) -> Result<(), String> {
+        let log = LOG.get().unwrap();
+        setup.on_fence_gone(move |key| {
+            log.lock().unwrap().gone.push(key);
+        });
+        setup.code_block("drawfence", move |_, fence| {
+            log.lock().unwrap().renders.push((fence.language.clone(), fence.key, fence.code.clone()));
+            Fenced::Lines { lines: vec![vec![AbiSpan::new("DRAWN-WIDGET")]], fg: None, drag: false }
+        });
+        setup.code_block("codefence", move |_, fence| {
+            log.lock().unwrap().renders.push((fence.language.clone(), fence.key, fence.code.clone()));
+            Fenced::Code
+        });
+        setup.code_block("keepfence", move |_, fence| {
+            log.lock().unwrap().renders.push((fence.language.clone(), fence.key, fence.code.clone()));
+            Fenced::Keep
+        });
+        setup.code_block("stickyfence", move |_, fence| {
+            let mut guard = log.lock().unwrap();
+            guard.renders.push((fence.language.clone(), fence.key, fence.code.clone()));
+            if guard.drawn_once.insert(fence.key) {
+                Fenced::Lines { lines: vec![vec![AbiSpan::new("STICKY-WIDGET")]], fg: None, drag: false }
+            } else {
+                Fenced::Keep
+            }
+        });
+        Ok(())
+    }
+
+    // Four unmounted messages with matching fences at the head, separated by 70 filler rows from
+    // an unmounted non-matching drawfence (`m_skip`, whose text has no letter of "needle" and sits
+    // outside every mount window), then 70 more filler rows, then one tail prompt:
+    // m_draw: prose before + drawfence (draws -> 0 matches) + prose after -> 2 matches.
+    // m_sticky: stickyfence (draws once, then Fenced::Keep) + rust code fence -> 1 match (forces full repaint on step).
+    // m_code: prose before + codefence (Fenced::Code -> 1 match) + prose after -> 3 matches.
+    // m_keep: prose before + keepfence (Fenced::Keep with no previous -> code -> 1 match) + prose after -> 3 matches.
+    // m_skip: drawfence with "xyzzy" -> never matches any prefix of "needle" and never mounts -> 0 plugin calls!
+    // m_tail: "Tail prompt needle" -> 1 match.
+    // Total = 2 + 1 + 3 + 3 + 1 = 10.
+    let mut messages = vec![
+        assistant_msg("m_draw", "Before draw needle\n\n```drawfence\ndrawn hidden needle\n```\n\nAfter draw needle", 1),
+        assistant_msg(
+            "m_sticky",
+            "```stickyfence\nsticky hidden needle\n```\n\n```rust\nlet sticky_rust = \"needle\";\n```",
+            2,
+        ),
+        assistant_msg(
+            "m_code",
+            "Before code needle\n\n```codefence\nfallback code needle\n```\n\nAfter code needle",
+            3,
+        ),
+        assistant_msg(
+            "m_keep",
+            "Before keep needle\n\n```keepfence\nkeep fallback needle\n```\n\nAfter keep needle",
+            4,
+        ),
+    ];
+    for index in 0..70 {
+        messages.push(user_msg(&format!("pf1_{index:03}"), &format!("Gap A {index}"), 10 + index as u64));
+    }
+    messages.push(assistant_msg("m_skip", "```drawfence\nxyzzy\n```", 100));
+    for index in 0..70 {
+        messages.push(user_msg(&format!("pf2_{index:03}"), &format!("Gap B {index}"), 110 + index as u64));
+    }
+    messages.push(user_msg("m_tail", "Tail prompt needle", 300));
+
+    let mut info: Info = opencode_local::cli_config::decode_text(
+        &json!({ "animations": false, "experimental": { "session-find": true } }).to_string(),
+    )
+    .unwrap();
+    info.tabs = Some(Tabs { mode: Some(TabsMode::Off), ..Tabs::default() });
+    let fake = support::Fake::new(move |seen: &Seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/session/ses_find_test") => (200, json!({ "data": support::session(SESSION, "Find") })),
+        ("GET", "/api/session/ses_find_test/message") => {
+            let mut rev = messages.clone();
+            rev.reverse();
+            (200, json!({ "data": rev, "cursor": {} }))
+        }
+        ("GET", "/api/session/ses_find_test/inbox") => (200, json!({ "data": [] })),
+        _ => support::base(seen, DIRECTORY),
+    });
+    let deps = Deps {
+        config: support::config(info),
+        route: support::session_route(SESSION),
+        builtins: vec![Plugin { id: "test.fences", setup }.into()],
+        ..support::deps(Arc::new(fake))
+    };
+    let h = support::mount(100, 30, deps);
+    assert!(h.app.wait_until(WAIT, || h.app.text().contains("Tail prompt needle")));
+    assert!(log.lock().unwrap().renders.is_empty(), "unmounted fences should not render before Find");
+
+    h.app.press("ctrl+x");
+    h.app.press("f");
+    assert!(h.app.wait_until(WAIT, || h.app.text().contains("Find in session...")));
+    h.app.type_text("needle");
+    assert!(h.app.wait_until(WAIT, || h.app.text().contains("Find · 1 of 10")), "{}", h.app.text());
+
+    // Verify no throwaway key 0 and no call for the non-matching unmounted fence (`m_skip`).
+    {
+        let recorded = log.lock().unwrap();
+        assert!(recorded.renders.iter().all(|(_, key, _)| *key > 0), "saw throwaway key 0: {:?}", recorded.renders);
+        assert!(recorded.gone.iter().all(|&key| key > 0), "saw fence-gone(0): {:?}", recorded.gone);
+        assert!(
+            !recorded.renders.iter().any(|(_, _, code)| code.contains("xyzzy")),
+            "non-matching unmounted fence should never be rendered: {:?}",
+            recorded.renders
+        );
+        let draw_keys: Vec<u64> =
+            recorded.renders.iter().filter(|(lang, _, _)| lang == "drawfence").map(|(_, key, _)| *key).collect();
+        assert_eq!(draw_keys.len(), 1, "drawfence should render once with one real key: {draw_keys:?}");
+        assert!(recorded.gone.is_empty(), "no fence-gone while Find keeps drawn fence mounted: {:?}", recorded.gone);
+    }
+
+    // Step forwards through all 10 matches and wrap back to 1: total stays 10 at every single step.
+    let markers = [
+        "Before draw needle",
+        "After draw needle",
+        "sticky_rust",
+        "Before code needle",
+        "fallback code needle",
+        "After code needle",
+        "Before keep needle",
+        "keep fallback needle",
+        "After keep needle",
+        "Tail prompt needle",
+    ];
+    let theme = h.tui.page();
+    for step in 0..=markers.len() {
+        let idx = step % markers.len();
+        let label = format!("Find · {} of 10", idx + 1);
+        let marker = markers[idx];
+        assert!(
+            h.app.wait_until(WAIT, || {
+                let screen = h.app.text();
+                screen.contains(&label) && screen.contains(marker)
+            }),
+            "forward step {step}: expected {label:?} with {marker:?}:\n{}",
+            h.app.text()
+        );
+        assert_eq!(find_counter(&h.app.text()), Some((idx + 1, 10)));
+        assert_eq!(painted_runs(&h, theme.find.background.current), vec!["needle"]);
+        if step < markers.len() {
+            h.app.press("enter");
+        }
+    }
+
+    // Step backwards across all 10 matches: total stays 10.
+    for back in 0..markers.len() {
+        h.app.press("up");
+        let idx = markers.len() - 1 - back;
+        let label = format!("Find · {} of 10", idx + 1);
+        let marker = markers[idx];
+        assert!(
+            h.app.wait_until(WAIT, || {
+                let screen = h.app.text();
+                screen.contains(&label) && screen.contains(marker)
+            }),
+            "backward step {back}: expected {label:?} with {marker:?}:\n{}",
+            h.app.text()
+        );
+        assert_eq!(find_counter(&h.app.text()), Some((idx + 1, 10)));
+    }
+
+    // Move back to the tail (match 10) so m_draw and m_sticky are off-window, then close Find: their real keys go.
+    h.app.press("up");
+    assert!(
+        h.app.wait_until(WAIT, || h.app.text().contains("Find · 10 of 10") && h.app.text().contains("Tail prompt"))
+    );
+    h.app.press("escape");
+    assert!(h.app.wait_until(WAIT, || !h.app.text().contains("Find ·")));
+    h.app.render();
+    let recorded = log.lock().unwrap();
+    let drawn_keys: std::collections::HashSet<u64> = recorded
+        .renders
+        .iter()
+        .filter(|(lang, _, _)| lang == "drawfence" || lang == "stickyfence")
+        .map(|(_, key, _)| *key)
+        .collect();
+    assert_eq!(drawn_keys.len(), 2, "expected one real key each for drawfence and stickyfence: {drawn_keys:?}");
+    assert!(drawn_keys.iter().all(|&key| key > 0));
+    for key in &drawn_keys {
+        assert!(
+            recorded.gone.contains(key),
+            "closing Find should release off-window drawn fence key {key} (drawn={drawn_keys:?}, gone={:?})",
+            recorded.gone
+        );
+    }
+    assert!(recorded.gone.iter().all(|&key| key > 0), "never fence-gone(0): {:?}", recorded.gone);
 }

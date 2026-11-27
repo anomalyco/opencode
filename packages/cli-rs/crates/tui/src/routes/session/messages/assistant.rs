@@ -76,9 +76,16 @@ impl TextPart {
         let text = part.text.trim();
         self.root.visible(!text.is_empty());
         self.markdown.conceal(cx.conceal);
+        let streaming = message.time.completed.is_none();
+        if cx.find.is_some() && !text.is_empty() && self.markdown.with_markdown(str::is_empty) {
+            if self.streaming.replace(streaming) != streaming {
+                self.markdown.streaming(streaming);
+            }
+            self.find.sync(cx, &self.markdown, &self._links, &message.id.0, FindPartId::Text(ordinal), text);
+            return;
+        }
         // Content goes in before streaming ends, so completion keeps the final tokens.
         self.find.feed(&self.markdown, text, cx.find.is_some());
-        let streaming = message.time.completed.is_none();
         if self.streaming.replace(streaming) != streaming {
             self.markdown.streaming(streaming);
         }

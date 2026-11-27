@@ -98,6 +98,10 @@ struct Inner {
     look: RefCell<Look>,
     /// The mounted rows by key: a render's plan builds and drops them.
     rows: RefCell<HashMap<RowKey, Row>>,
+    /// Off-window rows pinned while Find has an active query matching a plugin-claimed fence,
+    /// adopted into `rows` when the window moves over them and dropped when Find closes.
+    find_pinned: RefCell<HashMap<RowKey, Row>>,
+    find_pinned_keys: RefCell<HashSet<RowKey>>,
     hooks: RefCell<Hooks>,
     find: RefCell<FindHandle>,
 }
@@ -121,7 +125,9 @@ impl Drop for Inner {
             if let Some(id) = hooks.resize.take() {
                 tui.app.remove_handler(id);
             }
-            crate::features::release::dropped(&tui.app, self.rows.get_mut().len());
+            let dropped = self.rows.get_mut().len() + self.find_pinned.get_mut().len();
+            self.find_pinned.get_mut().clear();
+            crate::features::release::dropped(&tui.app, dropped);
         }
     }
 }
@@ -409,6 +415,8 @@ impl Transcript {
             model: RefCell::new(Model { settings: RowSettings::read(&tui.config()), ..Model::default() }),
             look: RefCell::new(Look { paint: Rc::new(Paint::new(theme)), keys: (u64::MAX, Rc::default()) }),
             rows: RefCell::default(),
+            find_pinned: RefCell::default(),
+            find_pinned_keys: RefCell::default(),
             hooks: RefCell::default(),
             find: RefCell::default(),
         });
@@ -425,6 +433,7 @@ impl Transcript {
             self.0.model.borrow_mut().session = Some(session.clone());
             *self.0.groups.expanded.borrow_mut() = tui.tabs.expanded_groups(&session.0);
             self.0.toggles.0.borrow_mut().clear();
+            self.clear_find_pinned(tui);
         }
         self.0.locate(tui, session);
         // The rows read the location's agents and models, what the local selection reads, and, a shell's rows, its
@@ -554,6 +563,85 @@ impl Transcript {
             inner.show(tui, start, end);
         }
         true
+    }
+
+    /// Ensures every row in `keys` is mounted (in `rows` or in `find_pinned`) and updated with
+    /// active Find state, dropping any previously pinned rows no longer in `keys`.
+    pub fn pin_find_rows(&self, tui: &Tui, keys: &[FindPartKey]) {
+        if keys.is_empty() {
+            self.clear_find_pinned(tui);
+            return;
+        }
+        let Some(session) = self.session() else { return };
+        let wanted: HashSet<RowKey> = tui.data.read(|state| {
+            let Some(transcript) = state.transcript(&session) else { return HashSet::new() };
+            keys.iter()
+                .filter_map(|key| {
+                    let msg_key = transcript.key(&key.message_id)?;
+                    Some(match key.part {
+                        FindPartId::Message => RowKey::Message(msg_key),
+                        FindPartId::Text(ordinal) => RowKey::Part(msg_key, Part::Text(ordinal)),
+                    })
+                })
+                .collect()
+        });
+        *self.0.find_pinned_keys.borrow_mut() = wanted.clone();
+        // Drop any previously pinned rows no longer needed for this query.
+        let dropped = {
+            let mut pinned = self.0.find_pinned.borrow_mut();
+            let before = pinned.len();
+            let rows = self.0.rows.borrow();
+            pinned.retain(|key, _| wanted.contains(key) && !rows.contains_key(key));
+            before - pinned.len()
+        };
+        if dropped > 0 {
+            crate::features::release::dropped(&tui.app, dropped);
+        }
+        let (paint, key_shortcuts) = self.0.look(tui);
+        let find = self.0.find.borrow().snapshot();
+        let (specs, legacy) = {
+            let model = self.0.model.borrow();
+            (model.specs.clone(), model.legacy)
+        };
+        tui.data.read(|state| {
+            let visible = Visible::of(state, &session);
+            let cx = self.0.context(tui, state, &visible, (&paint, &key_shortcuts), legacy, find.as_ref());
+            for spec in specs.iter() {
+                let key = spec.key();
+                if !wanted.contains(&key) {
+                    continue;
+                }
+                if let Some(row) = self.0.rows.borrow().get(&key) {
+                    row.update_find(&cx, spec);
+                    continue;
+                }
+                if let Some(row) = self.0.find_pinned.borrow().get(&key) {
+                    row.update_find(&cx, spec);
+                    continue;
+                }
+                let row = Row::new(&cx, spec);
+                self.0.hold(&row.wrapper, key);
+                row.update(&cx, spec);
+                self.0.find_pinned.borrow_mut().insert(key, row);
+            }
+        });
+    }
+
+    /// Drops all off-window rows pinned by Find.
+    pub fn clear_find_pinned(&self, tui: &Tui) {
+        if self.0.find_pinned_keys.borrow().is_empty() && self.0.find_pinned.borrow().is_empty() {
+            return;
+        }
+        self.0.find_pinned_keys.borrow_mut().clear();
+        let count = {
+            let mut pinned = self.0.find_pinned.borrow_mut();
+            let count = pinned.len();
+            pinned.clear();
+            count
+        };
+        if count > 0 {
+            crate::features::release::dropped(&tui.app, count);
+        }
     }
 
     /// Screen rect of the mounted row for `key`, if currently mounted.
@@ -1333,15 +1421,23 @@ impl Inner {
     /// messages `changed`, and orders them. `mounted` holds the children's keys before and after.
     fn apply(&self, cx: &Context<'_>, plan: &Plan, changed: impl Fn(MessageKey) -> bool, mounted: &mut Vec<RowKey>) {
         let mut rows = self.rows.borrow_mut();
-        let before = rows.len();
-        rows.retain(|key, row| {
-            let keep = plan.wanted.contains(key);
-            if !keep {
+        let mut pinned = self.find_pinned.borrow_mut();
+        let pinned_keys = self.find_pinned_keys.borrow();
+        let gone: Vec<RowKey> = rows.keys().copied().filter(|key| !plan.wanted.contains(key)).collect();
+        let mut dropped_count = 0usize;
+        for key in gone {
+            if let Some(row) = rows.remove(&key) {
                 row.wrapper.detach();
+                if pinned_keys.contains(&key) {
+                    pinned.insert(key, row);
+                } else {
+                    dropped_count += 1;
+                }
             }
-            keep
-        });
-        crate::features::release::dropped(cx.app, before - rows.len());
+        }
+        if dropped_count > 0 {
+            crate::features::release::dropped(cx.app, dropped_count);
+        }
         mounted.retain(|key| plan.wanted.contains(key));
         let window = &plan.specs[plan.window.clone()];
         for spec in window {
@@ -1349,13 +1445,40 @@ impl Inner {
             let mut touched = false;
             spec.messages(&mut |message| touched = touched || changed(message));
             let fresh = !rows.contains_key(&key);
+            let adopted = fresh && pinned.contains_key(&key);
             let row = rows.entry(key).or_insert_with(|| {
+                if let Some(row) = pinned.remove(&key) {
+                    return row;
+                }
                 let row = Row::new(cx, spec);
                 self.hold(&row.wrapper, key);
                 row
             });
-            if fresh || touched {
+            if adopted {
+                if touched {
+                    row.update(cx, spec);
+                } else {
+                    row.update_find(cx, spec);
+                }
+            } else if fresh || touched {
                 row.update(cx, spec);
+            }
+        }
+        if !pinned.is_empty() {
+            let valid: HashSet<RowKey> = plan.specs.iter().map(Spec::key).collect();
+            let before = pinned.len();
+            pinned.retain(|key, _| valid.contains(key));
+            if before > pinned.len() {
+                crate::features::release::dropped(cx.app, before - pinned.len());
+            }
+            for spec in &plan.specs {
+                if let Some(row) = pinned.get(&spec.key()) {
+                    let mut touched = false;
+                    spec.messages(&mut |message| touched = touched || changed(message));
+                    if touched {
+                        row.update(cx, spec);
+                    }
+                }
             }
         }
         for (index, key) in window.iter().map(Spec::key).enumerate() {
@@ -1373,6 +1496,16 @@ impl Inner {
     /// Updates the rows of the messages changed in place; false when the transcript must render.
     fn patch(&self, tui: &Tui, session: &SessionID, changes: &Changes) -> bool {
         if self.model.borrow().settings.turn_tokens.is_some() {
+            return false;
+        }
+        if !self.find_pinned.borrow().is_empty()
+            && tui.data.read(|state| {
+                let pinned = self.find_pinned.borrow();
+                changes
+                    .message_keys(state, session)
+                    .any(|msg| pinned.keys().any(|row_key| row_key.message() == Some(msg)))
+            })
+        {
             return false;
         }
         let (paint, keys) = self.look(tui);
@@ -1448,11 +1581,16 @@ impl Inner {
         })
     }
 
-    /// Runs `each` on the mounted rows of `specs`, in order.
+    /// Runs `each` on the mounted (and Find-pinned) rows of `specs`, in order.
     fn update<'s>(&self, cx: &Context<'_>, specs: impl Iterator<Item = &'s Spec>, each: fn(&Row, &Context<'_>, &Spec)) {
         let rows = self.rows.borrow();
+        let pinned = self.find_pinned.borrow();
+        let has_pinned = !pinned.is_empty();
         for spec in specs {
-            if let Some(row) = rows.get(&spec.key()) {
+            let key = spec.key();
+            if let Some(row) = rows.get(&key) {
+                each(row, cx, spec);
+            } else if has_pinned && let Some(row) = pinned.get(&key) {
                 each(row, cx, spec);
             }
         }

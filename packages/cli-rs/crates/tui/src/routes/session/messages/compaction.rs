@@ -126,7 +126,9 @@ impl Compaction {
         // Streams only while it runs, so a finished summary's last line is final (#63989).
         self.markdown.streaming(status == Status::Running);
         let previous = self.rendered.borrow().as_ref().map(|r| r.content.clone());
-        if previous.as_deref() != Some(rendered.content.as_str()) {
+        let defer_feed =
+            cx.find.is_some() && !rendered.content.is_empty() && self.markdown.with_markdown(str::is_empty);
+        if !defer_feed && previous.as_deref() != Some(rendered.content.as_str()) {
             self.find.feed(&self.markdown, rendered.content.as_str(), cx.find.is_some());
         }
         self.body.visible(!rendered.content.is_empty());
