@@ -137,8 +137,8 @@ describe("transitionSessionHandoff", () => {
 
   test.each<[string, SessionHandoffEvent]>([
     ["its echo", { type: "handoff.cleared", sessionID: "ses_1", messageID: "msg_1" }],
-    ["a revert at the prompt", { type: "session.reverted", sessionID: "ses_1", boundary: "msg_1" }],
-    ["a revert before the prompt", { type: "session.reverted", sessionID: "ses_1", boundary: "msg_0" }],
+    // The prompt isn't in the transcript yet, so any staged boundary is at or before it, whatever its ID.
+    ["a revert", { type: "session.reverted", sessionID: "ses_1" }],
     ["the session's deletion", { type: "session.deleted", sessionID: "ses_1" }],
   ])("%s ends a handoff in every phase", (_, event) => {
     const phases = [
@@ -159,15 +159,9 @@ describe("transitionSessionHandoff", () => {
     })
   })
 
-  test("a revert after the prompt, or another prompt's echo, leaves the handoff", () => {
+  test("another prompt's echo or another session's deletion leaves the handoff", () => {
     const state = transitionSessionHandoff(createSessionHandoffState(), set("msg_1")).state
 
-    expect(
-      transitionSessionHandoff(state, { type: "session.reverted", sessionID: "ses_1", boundary: "msg_2" }),
-    ).toEqual({
-      state,
-      effects: [],
-    })
     expect(
       transitionSessionHandoff(state, { type: "handoff.cleared", sessionID: "ses_1", messageID: "msg_0" }).state,
     ).toBe(state)

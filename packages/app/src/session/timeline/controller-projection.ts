@@ -1,5 +1,5 @@
 import type { ModelRef, SessionInboxInfo, SessionMessageInfo } from "@opencode/client/promise"
-import { messagesBeforeRevert } from "@opencode/client/solid"
+import { messagesBeforeRevert, type RevertBoundary } from "@opencode/client/solid"
 import type { SessionMessageHandoff } from "@/session/handoff"
 
 // Projects a submitted prompt, and the agent and model switches it makes, until the server's echoes replace them.
@@ -69,7 +69,7 @@ function handoffNotices(
 export function visibleTimelineMessages(
   messages: SessionMessageInfo[],
   pending: SessionInboxInfo[],
-  revertMessageID?: string,
+  revert?: RevertBoundary,
 ) {
   const queued = new Set(
     pending.flatMap((item) => (item.type === "user" && item.delivery === "queue" ? [item.id] : [])),
@@ -81,9 +81,9 @@ export function visibleTimelineMessages(
     ),
   )
 
-  if (queued.size === 0 && inputs.size === 0 && !revertMessageID) return messages
+  if (queued.size === 0 && inputs.size === 0 && !revert) return messages
 
-  const visible = (revertMessageID ? messagesBeforeRevert(messages, revertMessageID) : messages).filter(
+  const visible = (revert ? messagesBeforeRevert(messages, revert) : messages).filter(
     (message) => !queued.has(message.id),
   )
 

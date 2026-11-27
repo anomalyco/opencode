@@ -304,6 +304,54 @@ describe("SessionProjector", () => {
     }).pipe(Effect.provide(sessionsLayer)),
   )
 
+  it.effect("exposes transcript positions on messages, inbox items and the staged revert", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const sessions = yield* Session.Service
+      // An automation prompt's ID sorts after every other message ID, though it came first.
+      const automation = SessionMessage.ID.make("msg_aut_first")
+      const later = SessionMessage.ID.make("msg_0later")
+      const queued = SessionMessage.ID.make("msg_0queued")
+      const deliver = (inboxID: SessionMessage.ID) =>
+        Effect.gen(function* () {
+          yield* bus.publish(SessionEvent.InboxEnqueued, {
+            sessionID,
+            inboxID,
+            item: { type: "user", payload: { text: inboxID }, delivery: "steer" },
+          })
+          return (yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID })).durable.seq
+        })
+
+      const first = yield* deliver(automation)
+      const second = yield* deliver(later)
+      const enqueued = yield* bus.publish(SessionEvent.InboxEnqueued, {
+        sessionID,
+        inboxID: queued,
+        item: { type: "user", payload: { text: "queued" }, delivery: "queue" },
+      })
+      yield* bus.publish(SessionEvent.RevertEvent.Staged, { sessionID, revert: { messageID: later, files: [] } })
+
+      expect(
+        (yield* sessions.messages({ sessionID, order: "asc" })).map((message) => [message.id, message.seq]),
+      ).toEqual([
+        [automation, first],
+        [later, second],
+      ])
+      expect((yield* sessions.message({ sessionID, messageID: later }))?.seq).toBe(second)
+      expect((yield* SessionInbox.list(db, sessionID)).map((item) => [item.id, item.enqueuedSeq])).toEqual([
+        [queued, enqueued.durable.seq],
+      ])
+      expect((yield* sessions.get(sessionID)).revert).toEqual({ messageID: later, files: [], seq: second })
+      // The position is read-model state; the stored message itself holds no copy.
+      expect(
+        (yield* db.select({ data: SessionMessageTable.data }).from(SessionMessageTable).all()).map(
+          (row) => "seq" in row.data,
+        ),
+      ).toEqual([false, false])
+    }).pipe(Effect.provide(sessionsLayer)),
+  )
+
   it.effect("maps malformed persisted rows consistently while single-message lookup defects", () =>
     Effect.gen(function* () {
       const db = yield* seedSession()
@@ -1017,6 +1065,7 @@ describe("SessionProjector", () => {
       expect(messages).toEqual([
         SessionMessage.Assistant.make({
           id: SessionMessage.ID.make("msg_assistant_completed"),
+          seq: 1,
           type: "assistant",
           agent: build,
           model,
@@ -1025,6 +1074,7 @@ describe("SessionProjector", () => {
         }),
         SessionMessage.Assistant.make({
           id: SessionMessage.ID.make("msg_assistant_stale"),
+          seq: 0,
           type: "assistant",
           agent: build,
           model,
@@ -2569,10 +2619,10 @@ describe("SessionProjector", () => {
       const messages = yield* store.messages({ sessionID, order: "asc" })
       const assistants = messages.filter((message) => message.type === "assistant")
       expect(assistants.map((message) => message.content.length)).toEqual([3, 1])
-      // Each row holds the whole encoded message, as before part rows existed.
+      // Each row holds the whole encoded message, as before part rows existed. `seq` is the row's own column.
       const rows = yield* messageRows(db, sessionID)
       for (const message of assistants) {
-        const { id: _, type: __, ...data } = encodeMessage(message)
+        const { id: _, type: __, seq: ___, ...data } = encodeMessage(message)
         expect(rows.find((row) => row.id === message.id)?.data).toEqual(data)
       }
     }),

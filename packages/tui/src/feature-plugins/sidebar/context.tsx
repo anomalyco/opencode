@@ -14,7 +14,7 @@ export function SidebarContext(props: { context: Plugin.Context; sessionID: stri
   const cost = createMemo(() => props.context.data.session.cost(props.sessionID))
 
   const state = createMemo(() =>
-    contextUsage(msg(), props.context.data.location.model.list(session()?.location), session()?.revert?.messageID),
+    contextUsage(msg(), props.context.data.location.model.list(session()?.location), session()?.revert),
   )
 
   return (

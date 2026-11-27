@@ -470,6 +470,7 @@ export type SessionForkBoundary =
 
 export type SessionMessageAgentSelected = {
   id: SessionMessageID
+  seq?: number
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
   type: "agent-switched"
@@ -479,6 +480,7 @@ export type SessionMessageAgentSelected = {
 
 export type SessionMessageSynthetic = {
   id: SessionMessageID
+  seq?: number
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
   text: string
@@ -488,6 +490,7 @@ export type SessionMessageSynthetic = {
 
 export type SessionMessageSystem = {
   id: SessionMessageID
+  seq?: number
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
   type: "system"
@@ -498,6 +501,7 @@ export type SessionMessageSystem = {
 export type SessionMessageCompactionRunning = {
   type: "compaction"
   id: SessionMessageID
+  seq?: number
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
   status: "running"
@@ -510,6 +514,14 @@ export type UsageLimitsBudgetModel = { providerID: ProviderID; modelID: string; 
 export type SessionGenerateResponse = { data: { text: string; tokens: TokenUsageInfo; cost: MoneyUSD } }
 
 export type FileSystemEntry = { path: RelativePath; type: "file" | "directory" }
+
+export type SessionRevertInfo = {
+  messageID: SessionMessageID
+  partID?: string
+  snapshot?: SnapshotID
+  files?: Array<FileDiffInfo>
+  seq?: number
+}
 
 export type SessionRevert = {
   messageID: SessionMessageID
@@ -535,6 +547,7 @@ export type PromptSkillAttachment = { id: SkillID; name: SkillName; text?: strin
 
 export type SessionMessageSkill = {
   id: SessionMessageID
+  seq?: number
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
   type: "skill"
@@ -554,6 +567,7 @@ export type SkillInfo = {
 
 export type SessionInboxSynthetic = {
   id: SessionMessageID
+  enqueuedSeq?: number
   sessionID: SessionID
   time: { created: number }
   type: "synthetic"
@@ -563,6 +577,7 @@ export type SessionInboxSynthetic = {
 
 export type SessionInboxCompaction = {
   id: SessionMessageID
+  enqueuedSeq?: number
   sessionID: SessionID
   time: { created: number }
   type: "compaction"
@@ -572,6 +587,7 @@ export type SessionInboxCompaction = {
 
 export type SessionMessageShell = {
   id: SessionMessageID
+  seq?: number
   metadata?: { [x: string]: JsonValue }
   time: { created: number; completed?: number }
   type: "shell"
@@ -626,6 +642,7 @@ export type SessionMessageAssistantRetry = { attempt: number; at: number; error:
 export type SessionMessageCompactionFailed = {
   type: "compaction"
   id: SessionMessageID
+  seq?: number
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
   status: "failed"
@@ -637,6 +654,7 @@ export type SessionMessageCompactionFailed = {
 
 export type SessionMessageIdle = {
   id: SessionMessageID
+  seq?: number
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
   type: "idle"
@@ -1098,6 +1116,7 @@ export type ConfigModelCapabilities = {
 
 export type SessionMessageLocationSwitched = {
   id: SessionMessageID
+  seq?: number
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
   type: "location-switched"
@@ -1132,6 +1151,7 @@ export type WorktreeList = Array<WorktreeDirectory>
 
 export type SessionMessageModelSelected = {
   id: SessionMessageID
+  seq?: number
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
   type: "model-switched"
@@ -1142,6 +1162,7 @@ export type SessionMessageModelSelected = {
 export type SessionMessageCompactionCompleted = {
   type: "compaction"
   id: SessionMessageID
+  seq?: number
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
   status: "completed"
@@ -1230,6 +1251,7 @@ export type SessionInboxUserPayload = {
 
 export type SessionMessageUser = {
   id: SessionMessageID
+  seq?: number
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
   text: string
@@ -2451,6 +2473,7 @@ export type PushDevice = {
 
 export type SessionInboxMove = {
   id: SessionMessageID
+  enqueuedSeq?: number
   sessionID: SessionID
   time: { created: number }
   type: "move"
@@ -2543,7 +2566,7 @@ export type SessionInfo = {
   subpath?: RelativePath
   metadata?: SessionMetadata
   permissions?: PermissionRuleset
-  revert?: SessionRevert
+  revert?: SessionRevertInfo
   location: LocationPublicRef
 }
 
@@ -2819,6 +2842,7 @@ export type GenerateImageResponse = { data: GenerateImageResult }
 
 export type SessionInboxUser = {
   id: SessionMessageID
+  enqueuedSeq?: number
   sessionID: SessionID
   time: { created: number }
   type: "user"
@@ -2938,6 +2962,7 @@ export type SessionInboxInfo = SessionInboxUser | SessionInboxSynthetic | Sessio
 
 export type SessionMessageAssistant = {
   id: SessionMessageID
+  seq?: number
   metadata?: { [x: string]: JsonValue }
   time: { created: number; firstToken?: number; streamed?: number; completed?: number }
   type: "assistant"
@@ -4142,6 +4167,7 @@ export type ExperimentalSessionImportInput = {
         readonly status: "added" | "deleted" | "modified"
         readonly more?: true
       }>
+      readonly seq?: number
     }
     readonly location: { readonly directory: string }
   }

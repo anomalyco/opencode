@@ -38,8 +38,17 @@ type MessageEvent = Exclude<
   typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type
 >
 
-const encodeMessage = Schema.encodeSync(SessionMessage.Info)
-const encodeStoredUser = Schema.encodeSync(SessionStored.User)
+// `seq` is the row's own column, which reads put back on the message, so a stored message never keeps a copy.
+const encodeInfo = Schema.encodeSync(SessionMessage.Info)
+const encodeMessage = (message: SessionMessage.Info) => {
+  const { seq: _, ...encoded } = encodeInfo(message)
+  return encoded
+}
+const encodeUser = Schema.encodeSync(SessionStored.User)
+const encodeStoredUser = (message: SessionStored.User) => {
+  const { seq: _, ...encoded } = encodeUser(message)
+  return encoded
+}
 
 export class SessionAlreadyProjected extends Error {}
 
@@ -1142,7 +1151,24 @@ const layer = Layer.effectDiscard(
     )
     yield* bus.project(SessionEvent.Compaction.Failed, (event) => run(db, event))
     yield* bus.project(SessionEvent.RevertEvent.Staged, (event) =>
-      setSession(db, event.data.sessionID, { revert: event.data.revert, time_updated: event.created }),
+      Effect.gen(function* () {
+        // Readers hide by position, so the read model records the boundary's `seq` the event leaves out.
+        const boundary = yield* db
+          .select({ seq: SessionMessageTable.seq })
+          .from(SessionMessageTable)
+          .where(
+            and(
+              eq(SessionMessageTable.session_id, event.data.sessionID),
+              eq(SessionMessageTable.id, event.data.revert.messageID),
+            ),
+          )
+          .get()
+          .pipe(Effect.orDie)
+        yield* setSession(db, event.data.sessionID, {
+          revert: { ...event.data.revert, seq: boundary?.seq },
+          time_updated: event.created,
+        })
+      }),
     )
     yield* bus.project(SessionEvent.RevertEvent.Cleared, (event) =>
       setSession(db, event.data.sessionID, { revert: null, time_updated: event.created }),

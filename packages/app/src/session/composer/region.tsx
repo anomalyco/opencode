@@ -506,7 +506,7 @@ export function ActiveSessionComposerRegion(props: {
   // transcript is read only then, so its changes cost nothing while no plan can show.
   const todos = createMemo(() =>
     todoEnabled() && props.session.data.working()
-      ? sessionTodos(props.session.history.messages(), props.session.data.revertMessageID())
+      ? sessionTodos(props.session.history.messages(), props.session.data.revert())
       : [],
   )
 

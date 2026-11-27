@@ -66,8 +66,8 @@ export type TimelineCursorEvent =
       readonly viewReady: boolean
       /** The transcript's first sync is still under way, so the loaded messages may not be the newest page yet. */
       readonly syncing: boolean
-      readonly revertMessageID: string | undefined
-      readonly oldestMessageID: string | undefined
+      /** The target is loaded but the revert hides it. */
+      readonly reverted: boolean
       readonly history: HistorySeekStatus
       readonly hash: string
     }
@@ -364,14 +364,11 @@ function targetSynced(
     )
   }
 
-  // Message IDs ascend and older pages hold only older messages, so a target the revert hides, or one at or after the
-  // oldest loaded message, never loads.
-  if (event.revertMessageID !== undefined && state.messageID >= event.revertMessageID) return missing(state, event.hash)
+  if (event.reverted) return missing(state, event.hash)
 
   if (event.syncing) return unchanged(state)
 
-  if (event.oldestMessageID !== undefined && state.messageID >= event.oldestMessageID) return missing(state, event.hash)
-
+  // Message IDs don't follow the transcript, so a target that isn't loaded can only be looked for in older pages.
   if (event.history === "seekable") return changed(state, HISTORY_SEEK)
 
   if (event.history === "loading") return unchanged(state)

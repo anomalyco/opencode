@@ -1,3 +1,4 @@
+import { messagesBeforeRevert, type RevertBoundary } from "@opencode/client/solid"
 import type { JumpPrompt } from "./jump-to-message"
 
 /**
@@ -143,6 +144,27 @@ export function transitionJumpToMessage(state: JumpToMessageState, event: JumpTo
 
 export function selectJumpHistory(state: JumpToMessageState) {
   return state.status === "ready" || state.status === "opening" ? state.history : []
+}
+
+/**
+ * The rows the dialog lists: the older history the revert leaves visible, then the loaded timeline's visible prompts,
+ * without inputs still waiting in the inbox. The history is newest first.
+ */
+export function selectJumpPrompts(input: {
+  readonly history: readonly JumpPrompt[]
+  readonly visible: readonly JumpPrompt[]
+  readonly pending: ReadonlySet<string>
+  readonly revert: RevertBoundary | undefined
+}) {
+  const history = input.revert
+    ? messagesBeforeRevert(input.history.toReversed(), input.revert).toReversed()
+    : input.history
+
+  const all = new Map(history.map((row) => [row.id, row]))
+
+  input.visible.forEach((row) => all.set(row.id, row))
+
+  return [...all.values()].filter((row) => row.text.trim() && !input.pending.has(row.id))
 }
 
 export function selectJumpOpening(state: JumpToMessageState) {

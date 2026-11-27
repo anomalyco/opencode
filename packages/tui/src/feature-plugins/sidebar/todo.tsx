@@ -9,7 +9,7 @@ export function SidebarTodo(props: { context: Plugin.Context; sessionID: string 
   const list = createMemo(() =>
     sessionTodos(
       props.context.data.session.message.list(props.sessionID),
-      props.context.data.session.get(props.sessionID)?.revert?.messageID,
+      props.context.data.session.get(props.sessionID)?.revert,
     ),
   )
   const remaining = createMemo(

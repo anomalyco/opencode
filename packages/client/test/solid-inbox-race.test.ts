@@ -3,8 +3,10 @@ import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
 import { OpenCode, type OpenCodeEvent, type SessionInboxItem } from "../src/promise"
 
+// Enqueued by `enqueued` below, as both its echo and a server read report it.
 const item: SessionInboxItem = {
   id: "msg_remote",
+  enqueuedSeq: 1,
   sessionID: "ses_remote",
   type: "user",
   delivery: "steer",

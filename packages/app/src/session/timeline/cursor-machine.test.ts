@@ -57,8 +57,7 @@ const synced = (
     loaded: false,
     viewReady: true,
     syncing: false,
-    revertMessageID: undefined,
-    oldestMessageID: "msg_0040",
+    reverted: false,
     history: "seekable",
     hash: `message-${messageID}`,
     ...input,
@@ -97,7 +96,7 @@ const landed = (state: TimelineCursorState) => replay([{ type: "seek.landed", at
 describe("cursor machine", () => {
   test("a hash target the revert hides stops at once and returns an opened session to the end", () => {
     const pending = open("#message-msg_0050").state
-    const hidden = transitionTimelineCursor(pending, synced(pending, { revertMessageID: "msg_0048" }))
+    const hidden = transitionTimelineCursor(pending, synced(pending, { reverted: true }))
 
     expect(hidden.state).toEqual({ status: "none", attempt: pending.attempt + 1, echo: true })
     expect(hidden.effects).toEqual([{ type: "follow.end" }, { type: "hash.clear" }])
@@ -107,18 +106,21 @@ describe("cursor machine", () => {
     expect(echoed.effects).toEqual([])
   })
 
-  test("a hash target at or after the oldest loaded message stops once the transcript has synced", () => {
-    const pending = open("#message-msg_0045").state
+  test("a hash target that isn't loaded waits for the first sync, then pages back whatever its ID", () => {
+    // Automation, watch and forked message IDs sort after the loaded ones although they are older, so the ID says
+    // nothing about where the target sits.
+    for (const id of ["msg_aut_1", "msg_watch_1", "msg_fork_notice_ses_1", "msg_evt_10"]) {
+      const pending = open(`#message-${id}`).state
 
-    expectIgnored(pending, synced(pending, { syncing: true }))
-    expect(transitionTimelineCursor(pending, synced(pending)).effects).toEqual([
-      { type: "follow.end" },
+      expectIgnored(pending, synced(pending, { syncing: true }))
+      expect(transitionTimelineCursor(pending, synced(pending)).effects).toEqual([{ type: "history.seek" }])
+    }
+
+    // A later link that runs out of history keeps the reader where they were.
+    const linked = navigate(idle(), "#message-zzz").state
+    expect(transitionTimelineCursor(linked, synced(linked, { history: "exhausted" })).effects).toEqual([
       { type: "hash.clear" },
     ])
-
-    // A later link keeps the reader where they were.
-    const linked = navigate(idle(), "#message-zzz").state
-    expect(transitionTimelineCursor(linked, synced(linked)).effects).toEqual([{ type: "hash.clear" }])
   })
 
   test("a hash target older than the loaded messages pages until it loads, history runs out or a page fails", () => {
@@ -128,11 +130,6 @@ describe("cursor machine", () => {
     expect(seek.state).toBe(pending)
     expect(seek.effects).toEqual([{ type: "history.seek" }])
     expectIgnored(pending, synced(pending, { history: "loading" }))
-
-    // An older page that passes the target without it ends the search.
-    expect(transitionTimelineCursor(pending, synced(pending, { oldestMessageID: "msg_0005" })).state.status).toBe(
-      "none",
-    )
 
     const exhausted = transitionTimelineCursor(pending, synced(pending, { history: "exhausted" }))
     expect(exhausted.state.status).toBe("none")

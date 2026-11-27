@@ -83,7 +83,7 @@ const layer = Layer.effect(
         )
         const messages = input.data.messages.filter(isSettled).map((message, index) => {
           const encoded = encodeMessage(message)
-          const { id: _, type, ...data } = encoded
+          const { id: _, seq: __, type, ...data } = encoded
           return {
             id: message.id,
             session_id: sessionID,

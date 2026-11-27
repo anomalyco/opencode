@@ -39,6 +39,7 @@ import {
   type ModelInfo,
   type PermissionRequest,
 } from "@opencode/client"
+import { messagesBeforeRevert } from "@opencode/client/solid"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
 import { FilePath } from "../../ui/file-path"
@@ -179,17 +180,13 @@ export function Session(props: {
   const messages = () => data.session.message.list(route.sessionID)
   const messageIndexes = createMemo(() => new Map(messages().map((message, index) => [message.id, index])))
   const legacy = createMemo(() => SessionTurn.legacy(messages()))
-  const messagesBeforeRevert = () => {
-    const messageID = session()?.revert?.messageID
-    if (!messageID) return messages()
-    const index = messages().findIndex((message) => message.id === messageID)
-    return index === -1 ? messages() : messages().slice(0, index)
-  }
+  const keptByRevert = createMemo(() => {
+    const revert = session()?.revert
+    return revert ? messagesBeforeRevert(messages(), revert) : messages()
+  })
   const messagesFromRevert = () => {
-    const messageID = session()?.revert?.messageID
-    if (!messageID) return []
-    const index = messages().findIndex((message) => message.id === messageID)
-    return index === -1 ? [] : messages().slice(index)
+    const kept = new Set(keptByRevert().map((message) => message.id))
+    return messages().filter((message) => !kept.has(message.id))
   }
   const currentLocation = useLocation()
   const location = createMemo(() => session()?.location ?? currentLocation.ref)
@@ -1255,7 +1252,7 @@ export function Session(props: {
       group: "Session",
       slash: { name: "undo" },
       run: () => {
-        const message = messagesBeforeRevert().findLast(
+        const message = keptByRevert().findLast(
           (message): message is SessionMessageUser => message.type === "user" && !!message.text.trim(),
         )
         if (!message) {
@@ -1410,7 +1407,7 @@ export function Session(props: {
         name: "copy",
       },
       run: () => {
-        const lastAssistantMessage = messagesBeforeRevert().findLast(
+        const lastAssistantMessage = keptByRevert().findLast(
           (msg) => msg.type === "assistant" || (msg.type === "compaction" && msg.status === "completed" && msg.summary.trim() !== ""),
         )
         if (!lastAssistantMessage) {

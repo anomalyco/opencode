@@ -1,33 +1,43 @@
 import type { SessionMessageInfo } from "@opencode/client/promise"
+import { messagesBeforeRevert, type RevertBoundary } from "@opencode/client/solid"
+import { Option, Schema } from "effect"
 
-export type TodoStatus = "pending" | "in_progress" | "completed" | "cancelled"
+const Status = Schema.Literals(["pending", "in_progress", "completed", "cancelled"])
+
+export type TodoStatus = typeof Status.Type
 
 export type Todo = {
   content: string
   status: TodoStatus
 }
 
-const statuses = new Set<unknown>(["pending", "in_progress", "completed", "cancelled"])
+// The tool input is the model's JSON, so each entry is read on its own: one malformed entry drops only itself, and an
+// unknown status reads as pending.
+const decodeEntries = Schema.decodeUnknownOption(Schema.Array(Schema.Unknown))
+
+const decodeEntry = Schema.decodeUnknownOption(
+  Schema.Struct({ content: Schema.NonEmptyString, status: Schema.optional(Schema.Unknown) }),
+)
+
+const decodeStatus = Schema.decodeUnknownOption(Status)
 
 // The experimental `todowrite` tool keeps no server state: the current list is the input of the latest completed call
 // before the revert boundary.
-export function sessionTodos(messages: readonly SessionMessageInfo[], boundary?: string): Todo[] {
-  const end = boundary ? messages.findIndex((message) => message.id === boundary) : -1
-  const input = messages
-    .slice(0, end === -1 ? messages.length : end)
+export function sessionTodos(messages: readonly SessionMessageInfo[], revert?: RevertBoundary): Todo[] {
+  const input = (revert ? messagesBeforeRevert(messages, revert) : messages)
     .flatMap((message) => (message.type === "assistant" ? message.content : []))
     .findLast((item) => item.type === "tool" && item.name === "todowrite" && item.state.status === "completed")
+
   const todos = input?.type === "tool" && input.state.status === "completed" ? input.state.input.todos : undefined
 
-  if (!Array.isArray(todos)) return []
-
-  return todos.flatMap((item: unknown) => {
-    if (typeof item !== "object" || item === null || !("content" in item) || typeof item.content !== "string") return []
-    if (!item.content) return []
-    const status = "status" in item && statuses.has(item.status) ? (item.status as TodoStatus) : "pending"
-
-    return [{ content: item.content, status }]
-  })
+  return Option.getOrElse(decodeEntries(todos), () => []).flatMap((value) =>
+    Option.match(decodeEntry(value), {
+      onNone: () => [],
+      onSome: (entry) => [
+        { content: entry.content, status: Option.getOrElse(decodeStatus(entry.status), () => "pending" as const) },
+      ],
+    }),
+  )
 }
 
 /** The todo the agent is on: the one in progress, else the next pending one, else the last finished one. */

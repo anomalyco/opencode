@@ -11,6 +11,7 @@ import { JumpToMessage, type JumpPrompt } from "./jump-to-message"
 import {
   selectJumpHistory,
   selectJumpOpening,
+  selectJumpPrompts,
   selectJumpStatus,
   startJumpToMessage,
   transitionJumpToMessage,
@@ -46,6 +47,7 @@ function prompt(message: SessionMessageUser, attachment: string): JumpPrompt {
     id: message.id,
     text: labels.filter(Boolean).join("\n"),
     created: message.time.created,
+    seq: message.seq,
   }
 }
 
@@ -156,22 +158,16 @@ export function DialogJumpToMessage(props: {
     if (key !== props.session.identity.sessionKey()) dialog.close()
   })
 
-  const prompts = createMemo(() => {
-    const reverted = data.session.get(id)?.revert?.messageID
-
-    const history = selectJumpHistory(state())
-
-    // The history is newest first, so the revert hides the rows up to and including its boundary.
-    const all = new Map(history.slice(history.findIndex((row) => row.id === reverted) + 1).map((row) => [row.id, row]))
-
-    for (const message of props.session.history.visibleUserMessages()) {
-      all.set(message.id, prompt(message, language.t("common.attachment")))
-    }
-
-    const pending = new Set(data.session.input.list(id))
-
-    return [...all.values()].filter((row) => row.text.trim() && !pending.has(row.id))
-  })
+  const prompts = createMemo(() =>
+    selectJumpPrompts({
+      history: selectJumpHistory(state()),
+      visible: props.session.history
+        .visibleUserMessages()
+        .map((message) => prompt(message, language.t("common.attachment"))),
+      pending: new Set(data.session.input.list(id)),
+      revert: data.session.get(id)?.revert,
+    }),
+  )
 
   const status = () => {
     const note = selectJumpStatus(state())

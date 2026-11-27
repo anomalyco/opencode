@@ -116,7 +116,7 @@ export default function SessionContextTab(props: { session: MountedSession }) {
 
   // Same step as the TUI and the header button: after the last completed compaction and before an undo boundary.
   const context = createMemo(() => {
-    const message = lastAssistantWithUsage(messages(), info()?.revert?.messageID)
+    const message = lastAssistantWithUsage(messages(), info()?.revert)
 
     if (!message) return
     const entry = catalogModel(props.session, message.model)

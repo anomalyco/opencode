@@ -45,7 +45,7 @@ export type SessionHandoffEvent =
   | { readonly type: "handoff.held"; readonly sessionID: string; readonly handoff: SessionMessageHandoff }
   | { readonly type: "prompt.settled"; readonly sessionID: string; readonly messageID: string }
   | { readonly type: "handoff.cleared"; readonly sessionID: string; readonly messageID: string }
-  | { readonly type: "session.reverted"; readonly sessionID: string; readonly boundary: string }
+  | { readonly type: "session.reverted"; readonly sessionID: string }
   | { readonly type: "session.deleted"; readonly sessionID: string }
   | { readonly type: "connection.changed"; readonly connected: boolean }
   | { readonly type: "sending.timed-out"; readonly sessionID: string; readonly attempt: number }
@@ -151,11 +151,9 @@ export function transitionSessionHandoff(
   if (event.type === "handoff.cleared")
     return messageID === event.messageID ? clear(state, event.sessionID) : { state, effects: [] }
 
-  // A revert staged at or before the prompt hides it, so the handoff must not bring it back.
-  if (event.type === "session.reverted")
-    return event.boundary <= messageID ? clear(state, event.sessionID) : { state, effects: [] }
-
-  if (event.type === "session.deleted") return clear(state, event.sessionID)
+  // The prompt isn't in the transcript yet, so a revert staged now starts at or before it and hides it: the handoff
+  // must not bring it back. The inbox read decides the rest.
+  if (event.type === "session.reverted" || event.type === "session.deleted") return clear(state, event.sessionID)
 
   if (entry.attempt !== event.attempt) return { state, effects: [] }
 

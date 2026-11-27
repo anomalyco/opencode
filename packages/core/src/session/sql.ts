@@ -15,7 +15,7 @@ import { Timestamps } from "../database/schema.sql.js"
 import type { Instruction } from "@opencode/schema/instruction"
 import type { Session } from "@opencode/schema/session"
 import type { CompactionPayload, MovePayload, SyntheticPayload } from "@opencode/schema/session-inbox"
-import type { RevertV1 } from "@opencode/schema/session-revert"
+import type { RevertInfo, RevertV1 } from "@opencode/schema/session-revert"
 import type { Schema } from "effect"
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
@@ -54,7 +54,7 @@ export const SessionTable = sqliteTable(
     tokens_reasoning: integer().notNull().default(0),
     tokens_cache_read: integer().notNull().default(0),
     tokens_cache_write: integer().notNull().default(0),
-    revert: text({ mode: "json" }).$type<Session.Revert | RevertV1>(),
+    revert: text({ mode: "json" }).$type<RevertInfo | RevertV1>(),
     permission: text({ mode: "json" }).$type<Permission.Ruleset>(),
     agent: text().$type<Agent.ID>(),
     model: text({ mode: "json" }).$type<{

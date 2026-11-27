@@ -11,7 +11,7 @@ import "@/shell/commands/dialog.css"
 import "@/shell/palette-menu.css"
 import "@/shell/search-list.css"
 
-export type JumpPrompt = { id: string; text: string; created: number }
+export type JumpPrompt = { id: string; text: string; created: number; seq?: number }
 
 export function JumpToMessage(props: {
   prompts: JumpPrompt[]
