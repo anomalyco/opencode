@@ -18,20 +18,6 @@ use crate::theme::Theme;
 /// [`Markdown::code_block_renderer`].
 pub type CodeBlockRenderer = Rc<dyn Fn(&CodeBlock<'_>) -> Option<AnyWidget>>;
 
-/// Input passed to a widget-free [`CodeBlockProbe`] to check whether a custom renderer claims
-/// a code block instead of falling back to the default code view.
-pub struct CodeBlockProbeInput<'a> {
-    pub language: &'a str,
-    pub info: &'a str,
-    pub code: &'a str,
-    pub conceal: bool,
-    pub width: u16,
-}
-
-/// Widget-free check returning `true` when the registered code-block renderer claims the fence
-/// (drawing a custom view instead of a `Code` widget) and `false` when it falls back to code.
-pub type CodeBlockProbe = Rc<dyn Fn(&CodeBlockProbeInput<'_>) -> bool>;
-
 /// Renders inline math's TeX as one row of spans, or returns `None` to show the TeX as typed.
 pub type InlineMathRenderer = Rc<dyn Fn(&str) -> Option<Vec<Span<'static>>>>;
 
@@ -39,30 +25,16 @@ pub type InlineMathRenderer = Rc<dyn Fn(&str) -> Option<Vec<Span<'static>>>>;
 /// `renderNode` (`plugins.markdown()`), and the inline math renderer. Empty until a plugin registers one.
 #[derive(Clone, Default)]
 pub struct CodeBlockRenderers {
-    blocks: Vec<(String, CodeBlockRenderer, Option<CodeBlockProbe>)>,
+    blocks: Vec<(String, CodeBlockRenderer)>,
     math: Option<InlineMathRenderer>,
 }
 
 impl CodeBlockRenderers {
     /// Renders fences of `language` with `render`. A later registration for the same language replaces it.
     pub fn register(&mut self, language: impl Into<String>, render: CodeBlockRenderer) {
-        self.register_entry(language.into(), render, None);
-    }
-
-    /// Renders fences of `language` with `render`, pairing a widget-free `probe` so callers can
-    /// tell whether a fence is claimed without building a widget.
-    pub fn register_with_probe(
-        &mut self,
-        language: impl Into<String>,
-        render: CodeBlockRenderer,
-        probe: CodeBlockProbe,
-    ) {
-        self.register_entry(language.into(), render, Some(probe));
-    }
-
-    fn register_entry(&mut self, language: String, render: CodeBlockRenderer, probe: Option<CodeBlockProbe>) {
-        self.blocks.retain(|(key, _, _)| *key != language);
-        self.blocks.push((language, render, probe));
+        let language = language.into();
+        self.blocks.retain(|(key, _)| *key != language);
+        self.blocks.push((language, render));
     }
 
     /// Renders inline math with `render`, replacing an earlier one. A [`view`] with an inline math renderer parses
@@ -74,17 +46,12 @@ impl CodeBlockRenderers {
     /// Returns the custom code-block renderer registered for `language`, if any.
     pub fn get(&self, language: &str) -> Option<&CodeBlockRenderer> {
         let language = filetype_for_info_string(language).unwrap_or_else(|| language.to_owned());
-        self.blocks.iter().find(|(key, _, _)| *key == language).map(|(_, render, _)| render)
+        self.blocks.iter().find(|(key, _)| *key == language).map(|(_, render)| render)
     }
 
-    /// Whether a registered custom code-block renderer claims this fence (returning a custom widget
-    /// instead of falling back to the default code view), evaluated without building any widget.
-    pub fn claims(&self, input: &CodeBlockProbeInput<'_>) -> bool {
-        let language = filetype_for_info_string(input.language).unwrap_or_else(|| input.language.to_owned());
-        let Some((_, _, probe)) = self.blocks.iter().find(|(key, _, _)| *key == language) else {
-            return false;
-        };
-        probe.as_ref().is_none_or(|probe| probe(input))
+    /// Whether a custom code-block renderer is registered for `language`, without calling it.
+    pub fn has(&self, language: &str) -> bool {
+        self.get(language).is_some()
     }
 }
 
@@ -172,7 +139,7 @@ pub fn view(
         .table_options(table(theme))
         .conceal(conceal)
         .streaming(streaming);
-    for (language, render, _) in &renderers.blocks {
+    for (language, render) in &renderers.blocks {
         let render = render.clone();
         markdown.code_block_renderer(language, move |block| render(block));
     }
@@ -231,20 +198,30 @@ pub enum ShownBlock {
     Prose { top_index: usize, text: String },
     /// One GFM table cell after `inline_hook`.
     TableCell { top_index: usize, row: usize, total_rows: usize, text: String },
-    /// A fenced or indented code block rendered as code (not claimed by a custom renderer).
-    Code { top_index: usize, language: Option<String>, has_info: bool, source_range: Range<usize>, text: String },
-    /// A fenced code block claimed by a custom renderer (e.g. Mermaid or LaTeX): displays a
-    /// custom widget rather than `Code`, so it contributes zero code-block text matches.
-    CustomCode { top_index: usize, language: String },
+    /// A fenced or indented code block. When `claimed` is true, a custom code-block renderer is
+    /// registered for `language` and only a real render decides whether it draws a custom view or
+    /// falls back to code.
+    Code {
+        top_index: usize,
+        language: Option<String>,
+        has_info: bool,
+        claimed: bool,
+        source_range: Range<usize>,
+        text: String,
+    },
 }
 
 impl ShownBlock {
-    /// The displayed text of this block, or `None` for custom-rendered code blocks.
-    pub fn text(&self) -> Option<&str> {
+    /// The block's text before any custom code-block renderer replaces it.
+    pub fn text(&self) -> &str {
         match self {
-            Self::Prose { text, .. } | Self::TableCell { text, .. } | Self::Code { text, .. } => Some(text),
-            Self::CustomCode { .. } => None,
+            Self::Prose { text, .. } | Self::TableCell { text, .. } | Self::Code { text, .. } => text,
         }
+    }
+
+    /// Whether a custom code-block renderer is registered for this block's language.
+    pub fn is_claimed_code(&self) -> bool {
+        matches!(self, Self::Code { claimed: true, .. })
     }
 }
 
@@ -323,7 +300,6 @@ impl MarkdownParser {
         }
         let mut current_row = vec![0usize; blocks.len()];
         let mut shown = Vec::new();
-        let width = app.size().0;
         for block in &blocks {
             let index = block.index as usize;
             let top_index = block_top.get(index).copied().unwrap_or(0);
@@ -365,21 +341,14 @@ impl MarkdownParser {
                     let is_math = u32::from(block.flags) & sys::OT_MD_BLOCK_MATH != 0;
                     let name = if is_math { Some("math") } else { (!info.is_empty()).then_some(info) };
                     let language = name.and_then(filetype_for_info_string);
-                    if let Some(lang) = language.as_deref() {
-                        let probe_info = if is_math { "math" } else { info };
-                        let input =
-                            CodeBlockProbeInput { language: lang, info: probe_info, code: &code, conceal, width };
-                        if renderers.claims(&input) {
-                            shown.push(ShownBlock::CustomCode { top_index, language: lang.to_owned() });
-                            continue;
-                        }
-                    }
+                    let claimed = language.as_deref().is_some_and(|lang| renderers.has(lang));
                     let start = (block.source_start_byte as usize).min(source.len());
                     let end = (block.source_end_byte as usize).clamp(start, source.len());
                     shown.push(ShownBlock::Code {
                         top_index,
                         language,
                         has_info: name.is_some(),
+                        claimed,
                         source_range: start..end,
                         text: code,
                     });
