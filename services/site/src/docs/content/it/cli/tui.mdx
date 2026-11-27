@@ -16,6 +16,20 @@ Explain how authentication works in this project
 
 Premi **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** o **Ctrl+J** per andare a capo. Mentre OpenCode lavora, premi **Enter** per orientare la sessione in corso, oppure **Ctrl+X** seguito da **Enter** per mettere il prompt in coda.
 
+## Progetti e directory
+
+OpenCode cerca i file ed esegue i comandi della shell nella directory da cui lo avvii. Le directory dello stesso repository Git,
+compresi i suoi worktree, appartengono a un unico progetto. Una directory senza controllo di versione costituisce un progetto a sé.
+
+Passa una directory per avviare OpenCode in un altro progetto:
+
+```bash
+opencode ~/code/another-project
+```
+
+Premi **Ctrl+O** per aprire le sessioni e i progetti recenti. Seleziona un progetto e premi **Right** per elencarne i worktree.
+Da quell'elenco, premi **Ctrl+N** per crearne uno.
+
 ## Contesto
 
 Digita `@` per cercare un file, poi selezionalo per allegare quel file al prompt. Continua a digitare dopo `@` per restringere i risultati.
@@ -68,7 +82,13 @@ Premi **Ctrl+X**, poi **A** per scegliere un agente, oppure esegui `/agents`. Pr
 
 ## Sessioni
 
-Premi **Ctrl+X**, poi **N** per avviare una nuova sessione. Premi **Ctrl+X**, poi **L** o esegui `/sessions` per tornare a una sessione esistente; **Ctrl+O** apre insieme sessioni e progetti recenti.
+Ogni sessione è una conversazione separata, con una propria cronologia e una propria directory. Per passare a un'altra attività,
+esegui `/new` o premi **Ctrl+X**, poi **N**: le sessioni precedenti restano disponibili. Le nuove sessioni partono dalla
+directory da cui hai avviato OpenCode o, se imposti [`session.new_location`](/cli/config#sessions) su `inherit`,
+dalla directory della sessione corrente.
+
+Premi **Ctrl+X**, poi **L**, o esegui `/sessions` per tornare a una sessione esistente. Nell'elenco, **Ctrl+A** alterna la vista
+delle sessioni nella directory corrente e quella delle sessioni di tutti i progetti. **Ctrl+O** apre insieme sessioni e progetti recenti.
 
 Le schede sono abilitate per impostazione predefinita. Usa **Ctrl+Tab** e **Ctrl+Shift+Tab** per spostarti tra loro, **Ctrl+X** poi **W** per chiuderne una, e **Ctrl+Shift+T** per riaprire l'ultima scheda chiusa.
 

@@ -233,7 +233,7 @@ OpenCode si identifica al server di autorizzazione con il primo metodo applicabi
 | --- | --- |
 | Client pre-registrato | `oauth.client_id` è configurato. |
 | [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents) (CIMD) | Il server di autorizzazione supporta CIMD e i client pubblici, e `oauth.redirect_uri` non è impostato. |
-| [Registrazione dinamica del client](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | Nessuno dei precedenti si applica. OpenCode registra un client e lo riusa negli accessi successivi. |
+| [Registrazione dinamica del client](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | Nessuno dei metodi precedenti è applicabile. OpenCode registra un client e lo riutilizza negli accessi successivi, mettendosi in ascolto sulla porta registrata. Se la porta è occupata, OpenCode registra di nuovo il client. |
 
 Un server di autorizzazione aderisce a CIMD tramite i suoi metadati:
 
@@ -290,8 +290,8 @@ Quando un provider ti dà le credenziali del client, usa i campi OAuth in snake_
 | --- | --- |
 | `client_id` | ID del client pre-registrato. Ha la priorità su CIMD e DCR. |
 | `client_secret` | Segreto per un client riservato, inviato nel corpo della richiesta di token. Omettilo per i client pubblici. |
-| `scope` | Scope da richiedere, separati da spazi. Il valore predefinito è lo scope indicato dal server quando rifiuta una richiesta non autenticata. |
-| `callback_port` | Porta locale di callback da `1` a `65535`. Il valore predefinito è la porta del `redirect_uri`, poi una porta effimera disponibile. |
+| `scope` | Scope da richiedere, separati da spazi. Il valore predefinito è lo scope indicato dal server quando rifiuta una richiesta non autenticata. Quando rinnova il token, OpenCode invia di nuovo lo scope concesso. |
+| `callback_port` | Porta locale di callback da `1` a `65535`. In assenza di un valore esplicito, OpenCode usa, nell'ordine, la porta di `redirect_uri`, quella di un client registrato durante un accesso precedente o una porta effimera disponibile. |
 | `redirect_uri` | URI loopback pre-registrato il cui percorso e la cui porta raggiungono il listener di callback locale. Impostarlo disattiva CIMD. |
 | `auth_server_metadata_url` | URL del documento di metadati OAuth o OpenID Connect del server di autorizzazione. Impostalo quando il server MCP non pubblica metadati delle risorse protette che indicano il suo server di autorizzazione. |
 

@@ -193,7 +193,7 @@ const agents = await ctx.agent.list()
 const build = await ctx.agent.get({ agentID: "build" })
 ```
 
-Registra una trasformazione per ispezionare, aggiornare, rimuovere o selezionare l'agente predefinito.
+Registra una trasformazione per ispezionare, creare, aggiornare o rimuovere agenti, oppure per selezionare quello predefinito.
 
 ```ts
 await ctx.agent.transform((editor) => {
@@ -205,6 +205,19 @@ await ctx.agent.transform((editor) => {
     agent.description = "Builds features and fixes bugs"
   })
   editor.remove("legacy")
+})
+```
+
+Registra un nuovo agente con `editor.update`. Se l'ID esiste già, il metodo modifica l'agente corrispondente. Altrimenti,
+ne crea uno con `Agent.Info.default(id)` prima di eseguire il callback.
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
 })
 ```
 
@@ -1042,8 +1055,9 @@ await ctx.tool.reload()
 Usa `list()` e `get()` per ispezionare gli strumenti attualmente nell'editor. Gli strumenti hanno un `id` che contiene il loro nome effettivo,
 e `get()` restituisce `undefined` quando quell'ID non è presente. Usa `update` e `remove` con il nome effettivo dello strumento,
 compreso il suo namespace (`acme_greeting` sopra). I punti nei
-namespace e i caratteri non supportati nei nomi degli strumenti diventano `_`. I nomi mancanti vengono ignorati; creare uno strumento richiede
-`add` con una definizione completa. Gli aggiornamenti preservano nome e namespace. Assegna nuovi schema o opzioni per sostituirli
+namespace diventano `_`. Nei nomi degli strumenti, ogni carattere diverso da lettere, cifre, `_` e `-` diventa `_`.
+L'editor ignora i nomi mancanti. Per creare uno strumento, usa `add` con una definizione completa.
+Gli aggiornamenti preservano nome e namespace. Assegna nuovi schemi o opzioni per sostituirli
 invece di modificare i valori annidati. Gli aggiornamenti non validi vengono registrati e lasciano intatta la definizione precedente.
 
 ```ts

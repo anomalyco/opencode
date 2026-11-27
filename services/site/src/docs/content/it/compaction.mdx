@@ -10,7 +10,7 @@ riassunto, così la sessione può continuare oltre il limite di contesto del mod
 
 Quando una sessione si avvicina al limite di contesto del modello, OpenCode riassume
 l'intera conversazione corrente. Mantiene anche la conversazione più recente, circa
-15.000 token per impostazione predefinita, accanto al riassunto, così i dettagli recenti esatti restano
+15,000 token per impostazione predefinita, accanto al riassunto, così i dettagli recenti esatti restano
 disponibili.
 
 ```text
@@ -101,6 +101,29 @@ Aggiungi `compaction` a qualsiasi [file di configurazione di OpenCode](/config):
 - Accetta da `"1%"` a `"99%"`, compresi i decimali come `"12.5%"`.
 - Funziona anche un numero di token come `20000`. Lo stesso numero è una quota grande di una finestra piccola e una quota piccola di una grande.
 - Un numero di token almeno pari alla finestra del modello viene ignorato e si applica il valore predefinito.
+
+### Finestra
+
+La finestra corrisponde al limite di input del modello (`limit.input`), senza superare il limite di contesto (`limit.context`).
+Se il modello specifica uno solo dei due limiti, OpenCode usa quello. Se non ne specifica nessuno, non c'è compattazione
+automatica: OpenCode compatta una volta quando il provider rifiuta una richiesta perché troppo lunga.
+
+I limiti impostati nella configurazione sostituiscono solo i campi corrispondenti. Se il catalogo specifica entrambi i limiti,
+aumentare solo `limit.context` non cambia la finestra, che resta al limite di input del catalogo. Imposta quindi anche `limit.input`:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "limit": { "context": 1050000, "input": 1000000 },
+        },
+      },
+    },
+  },
+}
+```
 
 ## Modello
 

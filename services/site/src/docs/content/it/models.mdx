@@ -234,13 +234,14 @@ Qui `openai/coding-default` è il riferimento selezionabile e `gpt-6.1-sol` vien
 già nel catalogo, OpenCode assume:
 
 - Supporto agli strumenti JSON, input testo e immagini, output testo. Nessun input freeform agli strumenti a meno che `capabilities.freeform` elenchi il formato.
-- Un limite di contesto di 200.000 token e un limite di output di 32.000 token.
+- Un limite di contesto di 200,000 token e un limite di output di 32,000 token.
 - Un limite di input non specificato.
 
 OpenCode riconosce `text`, `regex` e `lark`. Gli altri nomi di formato di models.dev vengono ignorati senza scartare il modello o i suoi strumenti. Se un proxy davanti a un modello del catalogo rifiuta gli strumenti freeform, imposta `capabilities.freeform` su `[]` su quel modello.
 
 Queste sono ipotesi di ripiego, non capacità rilevate. Imposta valori accurati di `capabilities` e `limit` quando li conosci;
-i valori espliciti sostituiscono i ripieghi. Aggiungi `disabled: true` per nascondere un modello dal catalogo disponibile:
+i valori espliciti sostituiscono i ripieghi. La compattazione automatica usa `limit.input`, senza superare `limit.context`. Vedi
+[Finestra](/compaction#window). Aggiungi `disabled: true` per nascondere un modello dal catalogo dei modelli disponibili:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -341,7 +342,7 @@ quindi usa un valore che il provider accetta:
 | OpenAI Chat e Responses | `"24h"` va in `prompt_cache_retention`; gli altri valori vanno in `prompt_cache_options.ttl`. |
 
 I provider che mettono in cache automaticamente senza marker, come Gemini, lo ignorano. Una durata più lunga di solito costa di più da
-scrivere: Anthropic addebita 2× il prezzo di input per una scrittura di cache di un'ora e 1,25× per una di cinque minuti.
+scrivere: Anthropic addebita 2× il prezzo di input per una scrittura di cache di un'ora e 1.25× per una di cinque minuti.
 
 Il [warming](/warming) può usare la durata per temporizzare le sue richieste con `interval: "auto"`.
 

@@ -96,8 +96,33 @@ vivere su una proprietà `client` separata.
 `ctx.location` descrive la location in cui questa istanza del plugin si è caricata. Non è la location di ogni sessione o evento
 che il plugin può osservare. Leggi i dati della sessione o dell'evento quando quella distinzione conta.
 
-Il contesto espone molti più domini di quelli elencati nella tabella, compresi cataloghi, comandi, integrazioni, server MCP,
+Il contesto espone molti più domini di quelli elencati nella tabella, tra cui comandi, integrazioni, server MCP,
 riferimenti, skill, archiviazione, VCS, worktree e ricerca web. Vedi il [contesto completo dei plugin](/build/plugins/server#api).
+
+### Migrare il dominio del catalogo
+
+Nelle build precedenti, i plugin pubblicavano provider e modelli tramite `ctx.catalog`. Ora OpenCode espone `ctx.provider`
+e `ctx.model` come domini distinti, quindi un plugin che chiama `ctx.catalog.transform` non si carica.
+
+| API precedente del catalogo | Equivalente attuale |
+| --- | --- |
+| `ctx.catalog.transform(draft => …)` | `ctx.provider.transform(editor => …)` e `ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)` | `editor.update(id, fn)` su `ctx.provider` |
+| `draft.model.update(providerID, modelID, fn)` | `editor.update(providerID, modelID, fn)` su `ctx.model` |
+| `ctx.catalog.reload()` | `ctx.provider.reload()` e `ctx.model.reload()` |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+Vedi [Provider](/build/plugins/server#providers) e [Modelli](/build/plugins/server#models) per le API complete degli editor.
 
 ## Registrare gli hook in `setup`
 

@@ -45,8 +45,9 @@ Sono supportati anche JSON Schema e Standard Schema.
 
 ### Input e output
 
-Usa `input` per l'argomento del metodo e `output` per il suo valore di ritorno. Ometti
-l'uno o l'altro quando non c'è un valore.
+Usa `input` per l'argomento del metodo e `output` per il valore restituito. Entrambi sono obbligatori.
+Se il metodo non accetta o non restituisce alcun valore, usa `Schema.Struct({})`, chiamalo con `{}`
+e restituisci `{}`.
 
 ```ts
 search: {
@@ -67,7 +68,8 @@ errors: {
 
 ### Eventi
 
-Aggiungi eventi alla mappa `events` di primo livello. I dati degli eventi devono essere un oggetto.
+Aggiungi gli eventi alla mappa `events` di primo livello. I dati di ogni evento devono essere un oggetto.
+La mappa è obbligatoria: usa `events: {}` se l'RPC non ha eventi.
 
 ```ts
 events: {

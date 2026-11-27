@@ -426,10 +426,11 @@ await context.ui.dialog.select({
 - Escape, `clear()` o la visualizzazione di un altro dialogo risolve `undefined`.
 - Non associare `ctrl+n` o `ctrl+p`. Il dialogo li riserva alla navigazione, e i suoi binding hanno la precedenza.
 
-I dialoghi JSX personalizzati possono impostare la propria dimensione e chiudersi da soli.
+I dialoghi JSX personalizzati possono impostare le proprie dimensioni e chiudersi da soli. Chiama `set` dopo `show`:
+quando mostri un dialogo, questo torna a `medium` e non è più centrato. Le larghezze di `medium`, `large` e `xlarge`
+sono rispettivamente 60, 88 e 116 colonne.
 
 ```tsx
-context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.show(
   () => (
     <box>
@@ -438,6 +439,7 @@ context.ui.dialog.show(
   ),
   () => console.log("closed"),
 )
+context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.clear()
 ```
 
@@ -646,8 +648,8 @@ Esponi il plugin TUI tramite `./tui`; aggiungi i peer di OpenTUI quando il plugi
     "@opencode/plugin": "latest"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.6.6",
-    "@opentui/solid": ">=0.6.6",
+    "@opentui/core": ">=0.8.0",
+    "@opentui/solid": ">=0.8.0",
     "solid-js": ">=1.9.0"
   }
 }

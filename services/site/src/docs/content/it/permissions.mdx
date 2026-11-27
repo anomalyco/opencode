@@ -119,10 +119,13 @@ attualmente queste azioni e risorse:
 | `websearch`          | Query di ricerca                                                            |
 | `generate_image` | Modello immagine selezionato come `providerID/modelID`, più `#variant` quando impostato |
 | `external_directory` | Confine canonico della directory esterna, normalmente terminante in `/*`    |
-| `<server>_<tool>`    | `*` per uno strumento MCP; i caratteri non supportati in entrambi i nomi diventano `_` |
+| `<server>_<tool>`    | `*` per uno strumento MCP. Entrambi i nomi conservano lettere, cifre, `_` e `-`; ogni altro carattere diventa `_`. |
 | `opencode_list_mcp_resources` | Nome del server MCP                                                |
 | `opencode_read_mcp_resource`  | `<server>:<uri>`                                                   |
 | `execute`            | `*`; un deny rimuove Code Mode ed elenca i suoi strumenti direttamente, mentre gli strumenti annidati applicano le proprie regole |
+
+Le azioni MCP conservano i trattini. Gli strumenti del server `mcp-atlassian` corrispondono quindi a `mcp-atlassian_*`, non a
+`mcp_atlassian_*`.
 
 Ad esempio, consenti una skill e nega tutte le altre:
 

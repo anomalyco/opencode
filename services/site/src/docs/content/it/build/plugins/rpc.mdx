@@ -68,9 +68,18 @@ ed errori. Supporta due formati di schema:
 
 ### Input e output
 
-Ogni metodo può definire uno schema `input` per il suo argomento e uno schema `output`
-per il suo valore di ritorno. Ometti l'uno o l'altro se il metodo non accetta o non
-restituisce un valore.
+Ogni metodo richiede uno schema `input` per l'argomento e uno schema `output` per il valore restituito.
+Se il metodo non accetta o non restituisce alcun valore, usa uno schema di oggetto vuoto, chiamalo con
+`{}` e restituisci `{}`:
+
+```ts
+refresh: {
+  input: { type: "object", additionalProperties: false },
+  output: { type: "object", additionalProperties: false },
+}
+```
+
+Se il metodo restituisce `undefined`, la chiamata fallisce con `rpc.invalid_output`.
 
 ```ts
 search: {
@@ -110,8 +119,8 @@ I nomi degli errori che iniziano con `rpc.` sono riservati da OpenCode.
 
 ### Eventi
 
-Aggiungi eventi alla mappa `events` di primo livello. Ogni evento ha uno schema per i dati
-inviati ai sottoscrittori.
+Aggiungi gli eventi alla mappa `events` di primo livello. Ogni evento ha uno schema per i dati inviati
+ai sottoscrittori. La mappa è obbligatoria: usa `events: {}` se l'RPC non ha eventi.
 
 I dati degli eventi devono essere un oggetto. Usa uno schema di oggetto vuoto quando non ci sono dati:
 
@@ -166,8 +175,7 @@ Una volta registrato l'RPC, può essere chiamato via HTTP o da un altro plugin.
 
 ### HTTP
 
-Crea un client OpenCode, poi usa `client.rpc` per creare un subclient per l'
-RPC:
+Crea un client OpenCode, poi usa `client.rpc` per creare un subclient per l'RPC:
 
 ```ts
 import { OpenCode } from "@opencode/client"

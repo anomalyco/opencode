@@ -39,7 +39,7 @@ Salva gli agenti Markdown a livello globale per tutti i progetti o dentro un pro
 .opencode/agents/<name>.md
 ```
 
-OpenCode scopre le directory `.opencode` del progetto dalla directory corrente fino alla radice del progetto. Un percorso annidato diventa parte dell'ID dell'agente:
+OpenCode cerca le directory `.opencode` del progetto risalendo dalla directory corrente fino alla radice del file system. Un percorso annidato diventa parte dell'ID dell'agente:
 
 ```text
 .opencode/agents/team/reviewer.md  →  team/reviewer

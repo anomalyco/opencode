@@ -48,7 +48,7 @@ OpenCode cerca automaticamente in queste posizioni:
 | Progetto               | `.opencode/skills`                     |
 | Compatibilità progetto | `.claude/skills`, `.agents/skills`     |
 
-Per le fonti di progetto, OpenCode cerca dalla directory corrente fino alla radice del progetto e include le directory corrispondenti a ogni livello.
+Per le fonti del progetto, OpenCode risale dalla directory corrente fino alla radice del file system e include le directory corrispondenti a ogni livello.
 
 Ogni fonte può contenere una delle due forme:
 
@@ -177,7 +177,7 @@ Le fonti sono registrate dalla precedenza più bassa alla più alta:
 2. `.claude/skills`, prima globale e poi dall'antenato più lontano verso la directory corrente
 3. `.agents/skills`, prima globale e poi dall'antenato più lontano verso la directory corrente
 4. `~/.config/opencode/skills`
-5. `.opencode/skills` del progetto, dalla radice del progetto verso la directory corrente
+5. `.opencode/skills` del progetto, dalla directory antenata più lontana fino a quella corrente
 6. Voci esplicite della configurazione `skills`, in priorità di configurazione e ordine dell'array
 
 Evita ID duplicati a meno che tu non voglia sovrascrivere una skill precedente.
