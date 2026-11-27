@@ -215,6 +215,20 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
         Effect.map((result) => JSON.parse(result.content?.[0]?.type === "text" ? result.content[0].text : "")),
       )
     const directory = path.join(parent.path, "task")
+    const resource = directory.replaceAll("\\", "/")
+
+    // Creating a worktree requires the same approval as removing one. Rejection leaves nothing behind.
+    approvals.rejectEdit = true
+    expect(yield* call("worktree_create", { name: "task" })).toMatchObject({
+      content: [{ type: "text", text: "Keep this worktree" }],
+      metadata: { error: true },
+    })
+    expect(yield* Effect.promise(() => Bun.file(directory).exists())).toBe(false)
+    expect(approvals.assertions).toMatchObject([
+      { action: "edit", resources: [resource], save: ["*"], sessionID: session.id },
+    ])
+    approvals.rejectEdit = false
+    approvals.assertions.length = 0
 
     expect(yield* run("worktree_create", { name: " task " })).toEqual({ directory })
     expect(yield* Effect.promise(() => fs.stat(directory).then((stat) => stat.isDirectory()))).toBe(true)
@@ -263,7 +277,6 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
     })
     expect(yield* Effect.promise(() => Bun.file(path.join(directory, ".git")).exists())).toBe(false)
     // Permission resources always use forward slashes, including on Windows.
-    const resource = directory.replaceAll("\\", "/")
     expect(approvals.assertions).toMatchObject([
       { action: "edit", resources: [resource], save: ["*"], sessionID: session.id },
       { action: "edit", resources: [resource], save: ["*"], sessionID: session.id },

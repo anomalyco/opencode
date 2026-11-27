@@ -8,11 +8,13 @@ import { AbsolutePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Effect, Schema } from "effect"
+import path from "path"
 import { toolFailure } from "../runtime.js"
 import { FileAccess } from "../../file-access.js"
 import { Git } from "../../git.js"
 import { Permission } from "../../permission.js"
 import { Worktree } from "../../worktree.js"
+import { WorktreeStrategies } from "../../worktree/strategies.js"
 
 export const RenameInput = Schema.Struct({
   sessionID: Schema.optionalKey(Session.ID).annotate({ description: "Omit to rename the current session." }),
@@ -99,6 +101,7 @@ export const Plugin = {
   effect: Effect.fn("OpenCodeTools.Plugin")(function* (ctx: Context) {
     const access = yield* FileAccess.Service
     const permission = yield* Permission.Service
+    const worktreeStrategies = yield* WorktreeStrategies.Service
     const hook = (event: SessionHooks["context"]) =>
       Effect.sync(() => {
         const text =
@@ -181,14 +184,27 @@ export const Plugin = {
           description: "Create a named worktree. Returns its directory.",
           input: WorktreeCreateInput,
           output: Worktree.Info,
-          options: { namespace: "opencode", codemode: { pinned: true } },
-          execute: (input) =>
-            ctx.worktree.create({ projectID: ctx.location.project.id, name: input.name }).pipe(
-              Effect.map((output) => ({ output, content: `Created worktree in ${output.directory}.` })),
-              Effect.mapError(
-                (error) => new ToolFailure({ message: `Unable to create worktree ${input.name}`, error }),
-              ),
-            ),
+          options: { namespace: "opencode", codemode: { pinned: true }, permission: "edit" },
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              // Creating a worktree writes a directory and registers it in .git/worktrees, so it requires
+              // the same approval as editing files.
+              const target = yield* access.resolve({
+                path: path.join(worktreeStrategies.get().directory, input.name),
+                kind: "directory",
+              })
+              yield* permission.assert({
+                action: "edit",
+                resources: [target.resource],
+                save: [FileAccess.always(target)],
+                ...Permission.invocation(context),
+              })
+              const output = yield* ctx.worktree.create({
+                projectID: ctx.location.project.id,
+                name: input.name,
+              })
+              return { output, content: `Created worktree in ${output.directory}.` }
+            }).pipe(Effect.mapError(toolFailure(`Unable to create worktree ${input.name}`))),
         })
         draft.add({
           name: "worktree_list",
