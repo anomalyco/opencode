@@ -679,30 +679,26 @@ impl Server {
     fn plugin_fences(mut self) -> Self {
         let mut messages = Vec::with_capacity(2 * TURNS);
         for turn in 1..=TURNS {
-            let base = 1_700_000_000_000_u64 + turn as u64 * 10_000;
+            let created = turn as u64 * 100_000;
             messages.push(
                 json!({
-                    "id": format!("msg_pf_u_{turn:04}"),
+                    "id": format!("msg_{turn:04}a"),
                     "type": "user",
-                    "time": { "created": base },
-                    "agent": "build",
-                    "model": { "providerID": "provider-0", "modelID": "model-0-0" },
-                    "content": [{ "type": "text", "text": format!("Question {turn} prompt") }],
+                    "text": format!("Question {turn} prompt"),
+                    "time": { "created": created },
                 })
                 .to_string(),
             );
             let body = format!("Reply {turn}\n\n```customfence\nblock {turn} alpha payload\n```");
             messages.push(
                 json!({
-                    "id": format!("msg_pf_a_{turn:04}"),
+                    "id": format!("msg_{turn:04}b"),
                     "type": "assistant",
-                    "parentID": format!("msg_pf_u_{turn:04}"),
-                    "time": { "created": base + 100, "completed": base + 500 },
-                    "model": { "providerID": "provider-0", "modelID": "model-0-0" },
                     "agent": "build",
-                    "cost": 0.0,
-                    "tokens": { "input": 10, "output": 10, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
+                    "model": { "providerID": "provider-0", "id": "model-0-0" },
+                    "time": { "created": created + 1000, "completed": created + 3000 },
                     "finish": "stop",
+                    "tokens": { "input": 10, "output": 10, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
                     "content": [{ "type": "text", "text": body }],
                 })
                 .to_string(),
