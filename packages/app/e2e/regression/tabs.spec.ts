@@ -2402,7 +2402,7 @@ test("opening a session from the inbox keeps the list's scroll position and rows
   await expect(items).toHaveCount(10)
   await expect(items).toContainText(Array.from({ length: 10 }, (_, index) => `Inbox session ${23 - index}`))
   await expect(list.getByRole("group", { name: "Recent", exact: true })).toBeVisible()
-  await expect(list.getByText("Recent", { exact: true })).toHaveCount(0)
+  await expect(list.getByText("Recent", { exact: true })).toBeVisible()
   await list.evaluate((element) => element.scrollTo(0, element.scrollHeight))
   await expect(target).toBeInViewport({ ratio: 1 })
   // Git metadata must load for an unopened worktree, not only after selecting its session.
