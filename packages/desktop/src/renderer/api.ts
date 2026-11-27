@@ -95,6 +95,8 @@ export const api: ElectronAPI = {
   setSpellcheckEnabled: (enabled) => invoke("AppSetSpellcheckEnabled", { enabled }),
   getSmoothScrollingEnabled: () => invoke("AppGetSmoothScrollingEnabled"),
   setSmoothScrollingEnabled: (enabled) => invoke("AppSetSmoothScrollingEnabled", { enabled }),
+  getKeepServiceRunning: () => invoke("AppGetKeepServiceRunning"),
+  setKeepServiceRunning: (enabled) => invoke("AppSetKeepServiceRunning", { enabled }),
   recordFatalRendererError: (error) => invoke("AppRecordFatalRendererError", { error }),
   setNativeTranslations: (bundle) => invoke("AppSetNativeTranslations", { value: bundle }),
 }
