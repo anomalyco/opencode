@@ -284,6 +284,39 @@ pub struct ProviderRequest {
     pub body: IndexMap<String, serde_json::Value>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct AgentInfoInstructionsObject {
+    pub selected: String,
+    pub unselected: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum AgentInfoInstructions {
+    String(String),
+    Object(AgentInfoInstructionsObject),
+    /// A shape this client does not know, kept as it arrived.
+    Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for AgentInfoInstructions {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl AgentInfoInstructions {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+        if let Ok(member) = raw.decode() {
+            return Ok(Self::String(member));
+        }
+        if let Ok(member) = raw.decode() {
+            return Ok(Self::Object(member));
+        }
+        raw.unknown().map(Self::Unknown)
+    }
+}
+
 literal_enum! {
 AgentInfoMode {
     Subagent => "subagent",
@@ -322,6 +355,8 @@ pub struct AgentInfo {
     pub request: ProviderRequest,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub system: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instructions: Option<AgentInfoInstructions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub mode: AgentInfoMode,
@@ -7647,6 +7682,14 @@ pub struct SkillListOutput {
     pub data: Vec<SkillInfo>,
 }
 
+/// Input of `Client::experimental_skill_file`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalSkillFileInput {
+    pub skill_id: SkillID,
+    pub location: Option<LocationQueryInput>,
+    pub path: String,
+}
+
 /// Input of `Client::rpc_call`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct RpcCallInput {
@@ -8722,6 +8765,22 @@ pub struct WebsearchUpdated {
 }
 
 /// Any value but `null`.
+pub type ExperimentalPushUpdatedData = crate::de::NotNull;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalPushUpdated {
+    pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
+    pub created: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: tag::ExperimentalPushUpdated,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<LocationRef>,
+    pub data: ExperimentalPushUpdatedData,
+}
+
+/// Any value but `null`.
 pub type ArtifactUpdatedData = crate::de::NotNull;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -9031,6 +9090,74 @@ pub struct ExperimentalMcpEvent {
     pub data: ExperimentalMcpEventData,
 }
 
+string_type!(SpaceName, "`Space.Name`");
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceResyncData {
+    pub space: SpaceName,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceResync {
+    pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
+    pub created: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: tag::ExperimentalSpaceResync,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<LocationRef>,
+    pub data: ExperimentalSpaceResyncData,
+}
+
+string_type!(SpaceKey, "`Space.Key`");
+
+string_type!(SpaceValue, "`Space.Value`");
+
+/// `Space.Revision`
+pub type SpaceRevision = i64;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceUpdatedData {
+    pub space: SpaceName,
+    pub key: SpaceKey,
+    pub value: SpaceValue,
+    pub revision: SpaceRevision,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceUpdated {
+    pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
+    pub created: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: tag::ExperimentalSpaceUpdated,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<LocationRef>,
+    pub data: ExperimentalSpaceUpdatedData,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceDeletedData {
+    pub space: SpaceName,
+    pub key: SpaceKey,
+    pub revision: SpaceRevision,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceDeleted {
+    pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
+    pub created: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: tag::ExperimentalSpaceDeleted,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<LocationRef>,
+    pub data: ExperimentalSpaceDeletedData,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct V2EventRpc {
     pub id: EventID,
@@ -9043,8 +9170,11 @@ pub struct V2EventRpc {
     pub data: IndexMap<String, serde_json::Value>,
 }
 
-/// Any value but `null`.
-pub type V2EventServerConnectedData = crate::de::NotNull;
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct V2EventServerConnectedData {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stream: Option<String>,
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct V2EventServerConnected {
@@ -9147,6 +9277,7 @@ pub enum V2Event {
     FormReplied(FormReplied),
     FormCancelled(FormCancelled),
     WebsearchUpdated(WebsearchUpdated),
+    ExperimentalPushUpdated(ExperimentalPushUpdated),
     ArtifactUpdated(ArtifactUpdated),
     SessionStatus(SessionStatusUpdated),
     SessionIdle(SessionIdle),
@@ -9160,6 +9291,9 @@ pub enum V2Event {
     McpStatusChanged(McpStatusChanged),
     McpResourcesChanged(McpResourcesChanged),
     ExperimentalMcpEvent(ExperimentalMcpEvent),
+    ExperimentalSpaceResync(ExperimentalSpaceResync),
+    ExperimentalSpaceUpdated(ExperimentalSpaceUpdated),
+    ExperimentalSpaceDeleted(ExperimentalSpaceDeleted),
     Rpc(V2EventRpc),
     ServerConnected(V2EventServerConnected),
     /// A member this client does not know, kept as it arrived.
@@ -9261,6 +9395,7 @@ impl V2Event {
             Some("form.replied") => raw.variant().map(Self::FormReplied),
             Some("form.cancelled") => raw.variant().map(Self::FormCancelled),
             Some("websearch.updated") => raw.variant().map(Self::WebsearchUpdated),
+            Some("experimental.push.updated") => raw.variant().map(Self::ExperimentalPushUpdated),
             Some("artifact.updated") => raw.variant().map(Self::ArtifactUpdated),
             Some("session.status") => raw.variant().map(Self::SessionStatus),
             Some("session.idle") => raw.variant().map(Self::SessionIdle),
@@ -9274,6 +9409,9 @@ impl V2Event {
             Some("mcp.status.changed") => raw.variant().map(Self::McpStatusChanged),
             Some("mcp.resources.changed") => raw.variant().map(Self::McpResourcesChanged),
             Some("experimental.mcp.event") => raw.variant().map(Self::ExperimentalMcpEvent),
+            Some("experimental.space.resync") => raw.variant().map(Self::ExperimentalSpaceResync),
+            Some("experimental.space.updated") => raw.variant().map(Self::ExperimentalSpaceUpdated),
+            Some("experimental.space.deleted") => raw.variant().map(Self::ExperimentalSpaceDeleted),
             Some("server.connected") => raw.variant().map(Self::ServerConnected),
             Some(tag) if tag.starts_with("rpc.") => raw.variant().map(Self::Rpc),
             _ => raw.unknown().map(Self::Unknown),
@@ -9371,6 +9509,7 @@ impl V2Event {
             Self::FormReplied(value) => value.r#type.as_str(),
             Self::FormCancelled(value) => value.r#type.as_str(),
             Self::WebsearchUpdated(value) => value.r#type.as_str(),
+            Self::ExperimentalPushUpdated(value) => value.r#type.as_str(),
             Self::ArtifactUpdated(value) => value.r#type.as_str(),
             Self::SessionStatus(value) => value.r#type.as_str(),
             Self::SessionIdle(value) => value.r#type.as_str(),
@@ -9384,6 +9523,9 @@ impl V2Event {
             Self::McpStatusChanged(value) => value.r#type.as_str(),
             Self::McpResourcesChanged(value) => value.r#type.as_str(),
             Self::ExperimentalMcpEvent(value) => value.r#type.as_str(),
+            Self::ExperimentalSpaceResync(value) => value.r#type.as_str(),
+            Self::ExperimentalSpaceUpdated(value) => value.r#type.as_str(),
+            Self::ExperimentalSpaceDeleted(value) => value.r#type.as_str(),
             Self::Rpc(value) => value.r#type.as_str(),
             Self::ServerConnected(value) => value.r#type.as_str(),
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
@@ -9479,6 +9621,7 @@ impl V2Event {
             Self::FormReplied(value) => value.id.as_str(),
             Self::FormCancelled(value) => value.id.as_str(),
             Self::WebsearchUpdated(value) => value.id.as_str(),
+            Self::ExperimentalPushUpdated(value) => value.id.as_str(),
             Self::ArtifactUpdated(value) => value.id.as_str(),
             Self::SessionStatus(value) => value.id.as_str(),
             Self::SessionIdle(value) => value.id.as_str(),
@@ -9492,6 +9635,9 @@ impl V2Event {
             Self::McpStatusChanged(value) => value.id.as_str(),
             Self::McpResourcesChanged(value) => value.id.as_str(),
             Self::ExperimentalMcpEvent(value) => value.id.as_str(),
+            Self::ExperimentalSpaceResync(value) => value.id.as_str(),
+            Self::ExperimentalSpaceUpdated(value) => value.id.as_str(),
+            Self::ExperimentalSpaceDeleted(value) => value.id.as_str(),
             Self::Rpc(value) => value.id.as_str(),
             Self::ServerConnected(value) => value.id.as_str(),
             Self::Unknown(value) => value.get("id").and_then(serde_json::Value::as_str).unwrap_or_default(),
@@ -9587,6 +9733,7 @@ impl V2Event {
             Self::FormReplied(value) => Some(value.created),
             Self::FormCancelled(value) => Some(value.created),
             Self::WebsearchUpdated(value) => Some(value.created),
+            Self::ExperimentalPushUpdated(value) => Some(value.created),
             Self::ArtifactUpdated(value) => Some(value.created),
             Self::SessionStatus(value) => Some(value.created),
             Self::SessionIdle(value) => Some(value.created),
@@ -9600,6 +9747,9 @@ impl V2Event {
             Self::McpStatusChanged(value) => Some(value.created),
             Self::McpResourcesChanged(value) => Some(value.created),
             Self::ExperimentalMcpEvent(value) => Some(value.created),
+            Self::ExperimentalSpaceResync(value) => Some(value.created),
+            Self::ExperimentalSpaceUpdated(value) => Some(value.created),
+            Self::ExperimentalSpaceDeleted(value) => Some(value.created),
             Self::Rpc(value) => Some(value.created),
             Self::ServerConnected(_) | Self::Unknown(_) => None,
         }
@@ -9694,6 +9844,7 @@ impl V2Event {
             Self::FormReplied(value) => value.metadata.as_ref(),
             Self::FormCancelled(value) => value.metadata.as_ref(),
             Self::WebsearchUpdated(value) => value.metadata.as_ref(),
+            Self::ExperimentalPushUpdated(value) => value.metadata.as_ref(),
             Self::ArtifactUpdated(value) => value.metadata.as_ref(),
             Self::SessionStatus(value) => value.metadata.as_ref(),
             Self::SessionIdle(value) => value.metadata.as_ref(),
@@ -9707,6 +9858,9 @@ impl V2Event {
             Self::McpStatusChanged(value) => value.metadata.as_ref(),
             Self::McpResourcesChanged(value) => value.metadata.as_ref(),
             Self::ExperimentalMcpEvent(value) => value.metadata.as_ref(),
+            Self::ExperimentalSpaceResync(value) => value.metadata.as_ref(),
+            Self::ExperimentalSpaceUpdated(value) => value.metadata.as_ref(),
+            Self::ExperimentalSpaceDeleted(value) => value.metadata.as_ref(),
             Self::Rpc(value) => value.metadata.as_ref(),
             Self::ServerConnected(value) => value.metadata.as_ref(),
             Self::Unknown(_) => None,
@@ -9802,6 +9956,7 @@ impl V2Event {
             | Self::FormReplied(_)
             | Self::FormCancelled(_)
             | Self::WebsearchUpdated(_)
+            | Self::ExperimentalPushUpdated(_)
             | Self::ArtifactUpdated(_)
             | Self::SessionStatus(_)
             | Self::SessionIdle(_)
@@ -9815,6 +9970,9 @@ impl V2Event {
             | Self::McpStatusChanged(_)
             | Self::McpResourcesChanged(_)
             | Self::ExperimentalMcpEvent(_)
+            | Self::ExperimentalSpaceResync(_)
+            | Self::ExperimentalSpaceUpdated(_)
+            | Self::ExperimentalSpaceDeleted(_)
             | Self::Rpc(_)
             | Self::ServerConnected(_)
             | Self::Unknown(_) => None,
@@ -9910,6 +10068,7 @@ impl V2Event {
             | Self::FormReplied(_)
             | Self::FormCancelled(_)
             | Self::WebsearchUpdated(_)
+            | Self::ExperimentalPushUpdated(_)
             | Self::ArtifactUpdated(_)
             | Self::SessionStatus(_)
             | Self::SessionIdle(_)
@@ -9923,6 +10082,9 @@ impl V2Event {
             | Self::McpStatusChanged(_)
             | Self::McpResourcesChanged(_)
             | Self::ExperimentalMcpEvent(_)
+            | Self::ExperimentalSpaceResync(_)
+            | Self::ExperimentalSpaceUpdated(_)
+            | Self::ExperimentalSpaceDeleted(_)
             | Self::Rpc(_)
             | Self::ServerConnected(_)
             | Self::Unknown(_) => None,
@@ -10018,6 +10180,7 @@ impl V2Event {
             | Self::FormReplied(_)
             | Self::FormCancelled(_)
             | Self::WebsearchUpdated(_)
+            | Self::ExperimentalPushUpdated(_)
             | Self::ArtifactUpdated(_)
             | Self::SessionStatus(_)
             | Self::SessionIdle(_)
@@ -10031,6 +10194,9 @@ impl V2Event {
             | Self::McpStatusChanged(_)
             | Self::McpResourcesChanged(_)
             | Self::ExperimentalMcpEvent(_)
+            | Self::ExperimentalSpaceResync(_)
+            | Self::ExperimentalSpaceUpdated(_)
+            | Self::ExperimentalSpaceDeleted(_)
             | Self::Rpc(_)
             | Self::ServerConnected(_)
             | Self::Unknown(_) => None,
@@ -10128,6 +10294,7 @@ pub enum EventKind {
     FormReplied,
     FormCancelled,
     WebsearchUpdated,
+    ExperimentalPushUpdated,
     ArtifactUpdated,
     SessionStatus,
     SessionIdle,
@@ -10141,6 +10308,9 @@ pub enum EventKind {
     McpStatusChanged,
     McpResourcesChanged,
     ExperimentalMcpEvent,
+    ExperimentalSpaceResync,
+    ExperimentalSpaceUpdated,
+    ExperimentalSpaceDeleted,
     Rpc,
     ServerConnected,
     Unknown,
@@ -10148,7 +10318,7 @@ pub enum EventKind {
 
 impl EventKind {
     /// How many kinds there are, `Unknown` included.
-    pub const COUNT: usize = 102;
+    pub const COUNT: usize = 106;
 
     /// The kind an event whose `type` is `tag` decodes to.
     pub fn from_tag(tag: &str) -> Self {
@@ -10239,6 +10409,7 @@ impl EventKind {
             "form.replied" => Self::FormReplied,
             "form.cancelled" => Self::FormCancelled,
             "websearch.updated" => Self::WebsearchUpdated,
+            "experimental.push.updated" => Self::ExperimentalPushUpdated,
             "artifact.updated" => Self::ArtifactUpdated,
             "session.status" => Self::SessionStatus,
             "session.idle" => Self::SessionIdle,
@@ -10252,6 +10423,9 @@ impl EventKind {
             "mcp.status.changed" => Self::McpStatusChanged,
             "mcp.resources.changed" => Self::McpResourcesChanged,
             "experimental.mcp.event" => Self::ExperimentalMcpEvent,
+            "experimental.space.resync" => Self::ExperimentalSpaceResync,
+            "experimental.space.updated" => Self::ExperimentalSpaceUpdated,
+            "experimental.space.deleted" => Self::ExperimentalSpaceDeleted,
             "server.connected" => Self::ServerConnected,
             tag if tag.starts_with("rpc.") => Self::Rpc,
             _ => Self::Unknown,
@@ -10354,6 +10528,7 @@ impl V2Event {
             Self::FormReplied(_) => EventKind::FormReplied,
             Self::FormCancelled(_) => EventKind::FormCancelled,
             Self::WebsearchUpdated(_) => EventKind::WebsearchUpdated,
+            Self::ExperimentalPushUpdated(_) => EventKind::ExperimentalPushUpdated,
             Self::ArtifactUpdated(_) => EventKind::ArtifactUpdated,
             Self::SessionStatus(_) => EventKind::SessionStatus,
             Self::SessionIdle(_) => EventKind::SessionIdle,
@@ -10367,6 +10542,9 @@ impl V2Event {
             Self::McpStatusChanged(_) => EventKind::McpStatusChanged,
             Self::McpResourcesChanged(_) => EventKind::McpResourcesChanged,
             Self::ExperimentalMcpEvent(_) => EventKind::ExperimentalMcpEvent,
+            Self::ExperimentalSpaceResync(_) => EventKind::ExperimentalSpaceResync,
+            Self::ExperimentalSpaceUpdated(_) => EventKind::ExperimentalSpaceUpdated,
+            Self::ExperimentalSpaceDeleted(_) => EventKind::ExperimentalSpaceDeleted,
             Self::Rpc(_) => EventKind::Rpc,
             Self::ServerConnected(_) => EventKind::ServerConnected,
             Self::Unknown(_) => EventKind::Unknown,
@@ -10606,6 +10784,9 @@ pub struct ExperimentalMediaGetInput {
 pub struct ExperimentalBlobGetInput {
     pub id: BlobID,
 }
+
+/// Output of `Client::experimental_browser_tunnel`.
+pub type ExperimentalBrowserTunnelOutput = bool;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AutomationTriggerAt {
@@ -11252,6 +11433,333 @@ pub struct ExperimentalMachineRemoveInput {
     pub name: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PushSettings {
+    pub paused: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<i64>,
+}
+
+string_type!(PushDeviceID, "`Push.DeviceID`");
+
+literal_enum! {
+/// `Push.Platform`
+PushPlatform {
+    Android => "android",
+    Ios => "ios",
+}
+}
+
+literal_enum! {
+/// `Push.Level`
+PushLevel {
+    All => "all",
+    Attention => "attention",
+    None => "none",
+}
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PushDeviceSettings {
+    pub default: PushLevel,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PushBell {
+    pub level: PushLevel,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PushDeviceTime {
+    pub created: i64,
+    pub updated: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PushDevice {
+    pub id: PushDeviceID,
+    pub name: String,
+    pub platform: PushPlatform,
+    #[serde(rename = "expiresAt")]
+    pub expires_at: i64,
+    pub settings: PushDeviceSettings,
+    pub paused: bool,
+    pub sessions: IndexMap<String, PushBell>,
+    pub time: PushDeviceTime,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PushInfo {
+    pub settings: PushSettings,
+    pub devices: Vec<PushDevice>,
+    pub sessions: IndexMap<String, PushBell>,
+}
+
+/// Output of `Client::experimental_push_get`.
+pub type ExperimentalPushGetOutput = PushInfo;
+
+/// Input of `Client::experimental_push_device_register`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExperimentalPushDeviceRegisterInput {
+    pub device_id: PushDeviceID,
+    pub callback_url: String,
+    pub expires_at: i64,
+    pub public_key: String,
+    pub platform: PushPlatform,
+    pub name: String,
+    pub settings: Option<PushDeviceSettings>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PushRegistered {
+    #[serde(rename = "publicKey")]
+    pub public_key: String,
+}
+
+/// Output of `Client::experimental_push_device_register`.
+pub type ExperimentalPushDeviceRegisterOutput = PushRegistered;
+
+/// Input of `Client::experimental_push_device_remove`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalPushDeviceRemoveInput {
+    pub device_id: PushDeviceID,
+}
+
+/// Input of `Client::experimental_push_device_update`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalPushDeviceUpdateInput {
+    pub device_id: PushDeviceID,
+    pub paused: Option<bool>,
+    pub settings: Option<PushDeviceSettings>,
+}
+
+/// Output of `Client::experimental_push_device_update`.
+pub type ExperimentalPushDeviceUpdateOutput = PushDevice;
+
+/// Input of `Client::experimental_push_device_session_set`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExperimentalPushDeviceSessionSetInput {
+    pub device_id: PushDeviceID,
+    pub session_id: SessionID,
+    pub level: PushLevel,
+    pub until: Option<i64>,
+}
+
+/// Output of `Client::experimental_push_device_session_set`.
+pub type ExperimentalPushDeviceSessionSetOutput = PushBell;
+
+/// Input of `Client::experimental_push_device_session_remove`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalPushDeviceSessionRemoveInput {
+    pub device_id: PushDeviceID,
+    pub session_id: SessionID,
+}
+
+/// Input of `Client::experimental_push_session_set`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExperimentalPushSessionSetInput {
+    pub session_id: SessionID,
+    pub level: PushLevel,
+    pub until: Option<i64>,
+}
+
+/// Output of `Client::experimental_push_session_set`.
+pub type ExperimentalPushSessionSetOutput = PushBell;
+
+/// Input of `Client::experimental_push_session_remove`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalPushSessionRemoveInput {
+    pub session_id: SessionID,
+}
+
+/// Input of `Client::experimental_push_settings_set`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalPushSettingsSetInput {
+    pub paused: bool,
+    pub until: Option<i64>,
+}
+
+/// Output of `Client::experimental_push_settings_set`.
+pub type ExperimentalPushSettingsSetOutput = PushSettings;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SpaceChange {
+    pub key: SpaceKey,
+    #[serde(default)]
+    pub value: Option<SpaceValue>,
+}
+
+/// Input of `Client::experimental_space_write`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalSpaceWriteInput {
+    pub space: SpaceName,
+    pub changes: Vec<SpaceChange>,
+}
+
+string_type!(SpaceCursor, "`Space.Cursor`");
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceWriteOutput {
+    pub revision: SpaceRevision,
+    pub cursor: SpaceCursor,
+}
+
+/// Input of `Client::experimental_space_sync`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalSpaceSyncInput {
+    pub space: SpaceName,
+    pub cursor: Option<SpaceCursor>,
+}
+
+string_type!(SpaceEpoch, "`Space.Epoch`");
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SpaceEntry {
+    pub key: SpaceKey,
+    pub value: SpaceValue,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SpaceSnapshot {
+    pub r#type: tag::Snapshot,
+    pub space: SpaceName,
+    pub epoch: SpaceEpoch,
+    pub revision: SpaceRevision,
+    pub entries: Vec<SpaceEntry>,
+    pub cursor: SpaceCursor,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next: Option<SpaceCursor>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SpaceDelta {
+    pub r#type: tag::Delta,
+    pub space: SpaceName,
+    pub epoch: SpaceEpoch,
+    pub revision: SpaceRevision,
+    pub entries: Vec<SpaceEntry>,
+    pub cursor: SpaceCursor,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next: Option<SpaceCursor>,
+    pub deleted: Vec<SpaceKey>,
+}
+
+/// `Space.Page`, tagged by `type`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum SpacePage {
+    Snapshot(SpaceSnapshot),
+    Delta(SpaceDelta),
+    /// A member this client does not know, kept as it arrived.
+    Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for SpacePage {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl SpacePage {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+        match raw.field("type").as_str() {
+            Some("snapshot") => raw.variant().map(Self::Snapshot),
+            Some("delta") => raw.variant().map(Self::Delta),
+            _ => raw.unknown().map(Self::Unknown),
+        }
+    }
+}
+
+impl SpacePage {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Snapshot(value) => value.r#type.as_str(),
+            Self::Delta(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `space` field, also of an unknown member.
+    pub fn space(&self) -> &str {
+        match self {
+            Self::Snapshot(value) => value.space.as_str(),
+            Self::Delta(value) => value.space.as_str(),
+            Self::Unknown(value) => value.get("space").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `epoch` field, also of an unknown member.
+    pub fn epoch(&self) -> &str {
+        match self {
+            Self::Snapshot(value) => value.epoch.as_str(),
+            Self::Delta(value) => value.epoch.as_str(),
+            Self::Unknown(value) => value.get("epoch").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `revision` field, also of an unknown member.
+    pub fn revision(&self) -> SpaceRevision {
+        match self {
+            Self::Snapshot(value) => value.revision,
+            Self::Delta(value) => value.revision,
+            Self::Unknown(value) => value.get("revision").and_then(serde_json::Value::as_i64).unwrap_or_default(),
+        }
+    }
+
+    /// The `entries` field, of the members that have it.
+    pub fn entries(&self) -> Option<&[SpaceEntry]> {
+        match self {
+            Self::Snapshot(value) => Some(value.entries.as_slice()),
+            Self::Delta(value) => Some(value.entries.as_slice()),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `cursor` field, also of an unknown member.
+    pub fn cursor(&self) -> &str {
+        match self {
+            Self::Snapshot(value) => value.cursor.as_str(),
+            Self::Delta(value) => value.cursor.as_str(),
+            Self::Unknown(value) => value.get("cursor").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `next` field, of the members that have it.
+    pub fn next(&self) -> Option<&str> {
+        match self {
+            Self::Snapshot(value) => value.next.as_ref().map(SpaceCursor::as_str),
+            Self::Delta(value) => value.next.as_ref().map(SpaceCursor::as_str),
+            Self::Unknown(_) => None,
+        }
+    }
+}
+
+/// Output of `Client::experimental_space_sync`.
+pub type ExperimentalSpaceSyncOutput = SpacePage;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceSubscribeInputSpacesItem {
+    pub space: SpaceName,
+    pub cursor: SpaceCursor,
+}
+
+/// Input of `Client::experimental_space_subscribe`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalSpaceSubscribeInput {
+    pub stream: String,
+    pub spaces: Vec<ExperimentalSpaceSubscribeInputSpacesItem>,
+}
+
+/// Input of `Client::experimental_space_unsubscribe`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalSpaceUnsubscribeInput {
+    pub stream: String,
+    pub spaces: Vec<SpaceName>,
+}
+
 /// Input of `Client::shell_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ShellListInput {
@@ -11840,6 +12348,18 @@ pub struct ExperimentalUsageLimitsOutput {
     pub location: LocationPublicRef,
     #[serde(default)]
     pub data: Option<UsageLimitsInfo>,
+}
+
+/// Input of `Client::experimental_flag_get`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalFlagGetInput {
+    pub location: Option<LocationQueryInput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalFlagGetOutput {
+    pub location: LocationPublicRef,
+    pub data: IndexMap<String, bool>,
 }
 
 /// Input of `Client::config_get`.
@@ -12625,9 +13145,9 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recommended_api: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model_speeds: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub full_codemode: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codemode_agents: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub machines: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -12637,7 +13157,13 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opencode_api: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_skills: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compaction_jobs: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sqlite_fts: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browser_stream_tunnel: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub video_generate: Option<ConfigEntryDocumentInfoExperimentalVideoGenerate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -12915,6 +13441,18 @@ pub struct ConflictError {
 
 impl crate::TaggedError for ConflictError {
     const TAG: &'static str = "ConflictError";
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SkillLoadError {
+    #[serde(rename = "_tag")]
+    pub tag: String,
+    pub skill: SkillID,
+    pub message: String,
+}
+
+impl crate::TaggedError for SkillLoadError {
+    const TAG: &'static str = "SkillLoadError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -13344,6 +13882,19 @@ impl crate::TaggedError for MachineNotFoundError {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PushDeviceNotFoundError {
+    #[serde(rename = "_tag")]
+    pub tag: String,
+    #[serde(rename = "deviceID")]
+    pub device_id: String,
+    pub message: String,
+}
+
+impl crate::TaggedError for PushDeviceNotFoundError {
+    const TAG: &'static str = "PushDeviceNotFoundError";
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ShellNotFoundError {
     #[serde(rename = "_tag")]
     pub tag: String,
@@ -13568,16 +14119,18 @@ pub mod tag {
         Code = "code", Codemode = "codemode", Command = "command", CommandUpdated = "command.updated",
         Compaction = "compaction", Complete = "complete", Completed = "completed", ConfigUpdated = "config.updated",
         Connected = "connected", Credential = "credential", CredentialSwitched = "credential.switched",
-        CredentialUpdated = "credential.updated", Cron = "cron", Detail = "detail", Directory = "directory",
-        Disabled = "disabled", Document = "document", Env = "env", Error = "error", Event = "event", Every = "every",
-        ExperimentalJobUpdated = "experimental.job.updated", ExperimentalMcpEvent = "experimental.mcp.event",
-        Expired = "expired", External = "external", Failed = "failed", File = "file",
-        FilesystemChanged = "filesystem.changed", FormCancelled = "form.cancelled", FormCreated = "form.created",
-        FormReplied = "form.replied", Git = "git", Idle = "idle", Image = "image", Inline = "inline",
-        InstallationUpdateAvailable = "installation.update-available", InstallationUpdated = "installation.updated",
-        Integer = "integer", IntegrationUpdated = "integration.updated", Iroh = "iroh", Json = "json", Key = "key",
-        Local = "local", LocationShutdown = "location.shutdown", LocationSwitched = "location-switched",
-        LogSynced = "log.synced", McpResourcesChanged = "mcp.resources.changed",
+        CredentialUpdated = "credential.updated", Cron = "cron", Delta = "delta", Detail = "detail",
+        Directory = "directory", Disabled = "disabled", Document = "document", Env = "env", Error = "error",
+        Event = "event", Every = "every", ExperimentalJobUpdated = "experimental.job.updated",
+        ExperimentalMcpEvent = "experimental.mcp.event", ExperimentalPushUpdated = "experimental.push.updated",
+        ExperimentalSpaceDeleted = "experimental.space.deleted", ExperimentalSpaceResync = "experimental.space.resync",
+        ExperimentalSpaceUpdated = "experimental.space.updated", Expired = "expired", External = "external",
+        Failed = "failed", File = "file", FilesystemChanged = "filesystem.changed", FormCancelled = "form.cancelled",
+        FormCreated = "form.created", FormReplied = "form.replied", Git = "git", Idle = "idle", Image = "image",
+        Inline = "inline", InstallationUpdateAvailable = "installation.update-available",
+        InstallationUpdated = "installation.updated", Integer = "integer", IntegrationUpdated = "integration.updated",
+        Iroh = "iroh", Json = "json", Key = "key", Local = "local", LocationShutdown = "location.shutdown",
+        LocationSwitched = "location-switched", LogSynced = "log.synced", McpResourcesChanged = "mcp.resources.changed",
         McpStatusChanged = "mcp.status.changed", ModelSwitched = "model-switched", ModelUpdated = "model.updated",
         ModelsDevRefreshed = "models-dev.refreshed", Move = "move", Multiselect = "multiselect", Native = "native",
         NeedsAuth = "needs_auth", None = "none", Number = "number", Oauth = "oauth", Package = "package",
@@ -13620,12 +14173,12 @@ pub mod tag {
         SessionUnarchived = "session.unarchived", SessionUsageRecorded = "session.usage.recorded",
         SessionUsageUpdated = "session.usage.updated", SessionViewed = "session.viewed", Shell = "shell",
         ShellCreated = "shell.created", ShellDeleted = "shell.deleted", ShellExited = "shell.exited", Skill = "skill",
-        SkillUpdated = "skill.updated", Streaming = "streaming", String = "string", Subagent = "subagent",
-        Summary = "summary", Synthetic = "synthetic", System = "system", Text = "text", Through = "through",
-        Tool = "tool", TuiCommandExecute = "tui.command.execute", TuiPromptAppend = "tui.prompt.append",
-        TuiSessionSelect = "tui.session.select", TuiToastShow = "tui.toast.show", Uri = "uri", Url = "url",
-        User = "user", VcsBranchUpdated = "vcs.branch.updated", Video = "video", Webrtc = "webrtc",
-        WebsearchUpdated = "websearch.updated", Websocket = "websocket", WorktreeResolved = "worktree.resolved",
-        WorktreeUpdated = "worktree.updated",
+        SkillUpdated = "skill.updated", Snapshot = "snapshot", Streaming = "streaming", String = "string",
+        Subagent = "subagent", Summary = "summary", Synthetic = "synthetic", System = "system", Text = "text",
+        Through = "through", Tool = "tool", TuiCommandExecute = "tui.command.execute",
+        TuiPromptAppend = "tui.prompt.append", TuiSessionSelect = "tui.session.select", TuiToastShow = "tui.toast.show",
+        Uri = "uri", Url = "url", User = "user", VcsBranchUpdated = "vcs.branch.updated", Video = "video",
+        Webrtc = "webrtc", WebsearchUpdated = "websearch.updated", Websocket = "websocket",
+        WorktreeResolved = "worktree.resolved", WorktreeUpdated = "worktree.updated",
     }
 }

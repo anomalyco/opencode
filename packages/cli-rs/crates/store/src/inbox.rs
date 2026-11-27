@@ -147,9 +147,10 @@ impl State {
     /// Removes an item from pending and the transcript (`retractLocal`).
     pub(crate) fn retract_local(&mut self, session: &SessionID, inbox: &str) {
         self.remove_pending(session, inbox);
-        if let Some(transcript) = self.sessions.get_mut(session).and_then(|session| session.transcript.as_mut())
-            && transcript.remove(inbox).is_some()
+        if let Some(record) = self.sessions.get_mut(session)
+            && let Some(position) = record.transcript.as_mut().and_then(|transcript| transcript.remove(inbox))
         {
+            record.shrink_anchor(position);
             self.touch(session, Touched::SHAPE);
         }
     }
@@ -228,11 +229,14 @@ impl State {
         self.remove_pending(session, inbox);
         self.observe(session, inbox);
         if admitted
-            && let Some(transcript) = self.sessions.get_mut(session).and_then(|session| session.transcript.as_mut())
+            && let Some(record) = self.sessions.get_mut(session)
+            && let Some(transcript) = record.transcript.as_mut()
             && let Some(item) = transcript.get_mut(inbox)
         {
             item.set_created(event.created);
-            transcript.move_last(inbox);
+            if let Some(position) = transcript.move_last(inbox) {
+                record.shrink_anchor(position);
+            }
             self.created(session, inbox);
             self.touch(session, Touched::SHAPE);
         }
@@ -241,6 +245,9 @@ impl State {
         let read = Read::Session(session.as_str(), SessionRead::Messages);
         if known || !self.has_read(read) {
             return;
+        }
+        if let Some(record) = self.sessions.get_mut(session) {
+            record.seal_anchor();
         }
         self.invalidate(read);
         effects.push(Effect::Messages(session.clone()));
@@ -408,10 +415,14 @@ impl State {
             .collect();
         let record = self.sessions.get_or_insert(session);
         let mut retracted = false;
-        if let Some(transcript) = &mut record.transcript {
-            for id in &dropped {
-                retracted |= transcript.remove(id).is_some();
+        for id in &dropped {
+            if let Some(position) = record.transcript.as_mut().and_then(|transcript| transcript.remove(id)) {
+                record.shrink_anchor(position);
+                retracted = true;
             }
+        }
+        if retracted {
+            record.seal_anchor();
         }
         record.pending = merged.clone();
         let read = Read::Session(session.as_str(), SessionRead::Messages);

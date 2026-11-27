@@ -43,7 +43,7 @@ export const create = Effect.fn("EmbeddedHost.create")(function* <R = never>(
       workspaceProviders
         ? [...(embed.overrides ?? []), WorkspaceDriver.node.replace(WorkspaceDriver.registryNode(workspaceProviders))]
         : embed.overrides,
-      selector ? (replacements) => SdkInstances.node(selector, replacements) : undefined,
+      selector ? SdkInstances.node(selector) : undefined,
     ).pipe(Layer.provide(HttpServer.layerServices), Layer.provideMerge(layer(log))),
   )
 

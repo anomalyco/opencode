@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
 import { SystemPart } from "@opencode/ai/effect"
 import { Agent } from "@opencode/core/agent"
 import { Plugin } from "@opencode/core/plugin"
@@ -16,8 +16,8 @@ import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 import PROMPT_META from "../../src/plugin/system-prompt/meta.txt"
 import PROMPT_GPT from "../../src/plugin/system-prompt/gpt.txt"
+import PROMPT_GPT_6_2 from "../../src/plugin/system-prompt/gpt-6.2.txt"
 import PROMPT_ASTRA from "../../src/plugin/system-prompt/gpt-astra.txt"
-import PROMPT_KIMI from "../../src/plugin/system-prompt/kimi.txt"
 import PROMPT_TRINITY from "../../src/plugin/system-prompt/trinity.txt"
 import PROMPT_ANTHROPIC from "../../src/plugin/system-prompt/anthropic.txt"
 
@@ -47,23 +47,34 @@ const context = (id: string, system = fallback): SessionHooks["context"] => ({
 })
 
 describe("OptimizePlugin", () => {
-  test("enables prompt plugins without model-specific tool optimization", () => {
-    expect(OptimizePlugin.Plugins.map((plugin) => plugin.id)).toEqual([
-      "opencode.prompt.openai",
-      "opencode.prompt.anthropic",
-      "opencode.prompt.kimi",
-      "opencode.prompt.arcee",
-      "opencode.prompt.meta",
-    ])
-  })
-
   it.effect("selects model-lab prompts through session context hooks", () =>
     Effect.gen(function* () {
       const catalog = yield* Provider.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       yield* catalog.transform((editor) => {
-        for (const id of ["gpt-5", "gpt-4.1", "gpt-5-codex", "gpt-6", "gpt-6-astra", "gpt-5-astra"])
+        for (const id of [
+          "gpt-5",
+          "gpt-4.1",
+          "gpt-5-codex",
+          "gpt-6",
+          "gpt-6-astra",
+          "gpt-5-astra",
+          "gpt-35-turbo",
+          "chatgpt-4o-latest",
+          "gpt-6.1-sol",
+          "gpt-6-1-sol",
+          "openai-gpt-61-sol",
+          "gpt-oss-120b",
+          "gpt-6.2-sol",
+          "gpt-6-2-sol",
+          "openai-gpt-62-sol",
+          "gpt-6.2-astra",
+          "gpt-sol-latest",
+          "gpt-latest",
+          "gpt-6.3-sol",
+          "gpt-7",
+        ])
           editor.models.update(Provider.ID.make("test"), Model.ID.make(id), () => {})
         editor.models.update(Provider.ID.make("test"), Model.ID.make("meta/muse-spark-1.1"), (model) => {
           model.name = "Muse Spark"
@@ -80,9 +91,23 @@ describe("OptimizePlugin", () => {
         ["gpt-6", PROMPT_GPT],
         ["gpt-6-astra", PROMPT_ASTRA],
         ["gpt-5-astra", PROMPT_ASTRA],
+        ["gpt-35-turbo", PROMPT_GPT],
+        ["chatgpt-4o-latest", PROMPT_GPT],
+        ["gpt-6.1-sol", PROMPT_GPT],
+        ["gpt-6-1-sol", PROMPT_GPT],
+        ["openai-gpt-61-sol", PROMPT_GPT],
+        ["gpt-oss-120b", PROMPT_GPT],
+        ["gpt-6.2-sol", PROMPT_GPT_6_2],
+        ["gpt-6-2-sol", PROMPT_GPT_6_2],
+        ["openai-gpt-62-sol", PROMPT_GPT_6_2],
+        ["gpt-6.2-astra", PROMPT_GPT_6_2],
+        ["gpt-sol-latest", PROMPT_GPT_6_2],
+        ["gpt-latest", PROMPT_GPT_6_2],
+        ["gpt-6.3-sol", PROMPT_GPT],
+        ["gpt-7", PROMPT_GPT],
         ["gemini-2.5-pro", fallback],
         ["claude-sonnet-4", appended],
-        ["kimi-k2", PROMPT_KIMI],
+        ["kimi-k2", fallback],
         ["trinity", PROMPT_TRINITY],
         ["meta/muse-spark-1.1", PROMPT_META.replaceAll("{{MODEL_NAME}}", "Muse Spark")],
         ["llama-3.3", fallback],
@@ -222,15 +247,15 @@ describe("OptimizePlugin", () => {
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
-      yield* OptimizePlugin.KimiPlugin.effect(pluginHost)
+      yield* OptimizePlugin.ArceePlugin.effect(pluginHost)
       const gemini = context("gemini-2.5-pro")
-      const kimi = context("kimi-k2")
+      const trinity = context("trinity")
 
       yield* hooks.trigger("session", "context", gemini)
-      yield* hooks.trigger("session", "context", kimi)
+      yield* hooks.trigger("session", "context", trinity)
 
       expect(gemini.system[0]?.text).toBe(fallback)
-      expect(kimi.system[0]?.text).toBe(SessionSystemPrompt.render(PROMPT_KIMI, Object.keys(kimi.tools)))
+      expect(trinity.system[0]?.text).toBe(SessionSystemPrompt.render(PROMPT_TRINITY, Object.keys(trinity.tools)))
     }),
   )
 

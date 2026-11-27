@@ -6,6 +6,7 @@ import { disabledReason } from "./installation"
 
 test("a Flatpak installation with a native update feed leaves updates to Flatpak", async () => {
   const resources = await mkdtemp(join(tmpdir(), "opencode-update-"))
+
   try {
     expect(disabledReason(resources, undefined)).toBe("app-update.yml is missing")
     await writeFile(join(resources, "app-update.yml"), "provider: generic\n")

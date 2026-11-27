@@ -90,6 +90,7 @@ const it = testEffect(
       Bus.node,
       SessionProjector.node,
       SessionStore.node,
+      SessionInbox.node,
       Session.node,
       LocationServiceMap.node,
     ]),

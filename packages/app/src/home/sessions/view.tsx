@@ -29,6 +29,7 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { showToast } from "@/shell/notifications/toast"
 import { sessionLabel } from "@/session/title"
+import { SessionCopyMenu } from "@/session/session-copy-menu"
 import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { shouldOpenSessionInBackground } from "./open"
 import { createAltHold } from "./alt-hold"
@@ -237,7 +238,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
       aria-label={props.language.t("sidebar.project.recentSessions")}
     >
       <div
-        class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-1 pt-6 md:pb-3 lg:pt-12"
+        class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-1 pt-6 md:pb-3 md:pt-12"
         onWheel={props.onWheel}
       >
         <HomeSessionSearch
@@ -247,7 +248,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           onHoverSession={(sessionID) => setHover("sessionID", sessionID)}
         />
         <Show when={props.groups.length > 0 && props.canCreateSession}>
-          <div class="pointer-events-none absolute right-0 top-[68px] z-20 flex md:top-[84px] lg:top-[108px]">
+          <div class="pointer-events-none absolute right-0 top-[68px] z-20 flex md:top-[108px]">
             <Button
               data-action="home-new-session"
               variant="ghost-muted"
@@ -261,18 +262,18 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           </div>
         </Show>
       </div>
-      <div class="pointer-events-none sticky top-[68px] z-40 h-0 -mr-3 md:top-[84px] lg:top-[108px]">
+      <div class="pointer-events-none sticky top-[68px] z-40 h-0 -mr-3 md:top-[108px]">
         <div
           ref={props.onSetThumbTrack}
           data-component="home-session-scroll-track"
-          class="relative ml-auto h-[calc(100cqh-68px)] w-3 md:h-[calc(100cqh-84px)] lg:h-[calc(100cqh-108px)]"
+          class="relative ml-auto h-[calc(100cqh-68px)] w-3 md:h-[calc(100cqh-108px)]"
         />
       </div>
       <div
         data-slot="home-sessions-list"
         data-focus-scope
         data-reveal={skeleton() || undefined}
-        class="relative -mr-3 min-h-[calc(100cqh-64px)] md:min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]"
+        class="relative -mr-3 min-h-[calc(100cqh-64px)] md:min-h-[calc(100cqh-96px)]"
         aria-busy={props.listView.status === "loading"}
       >
         <Show when={skeleton()}>
@@ -690,7 +691,7 @@ function HomeSessionGroupHeader(props: {
       ref={element}
       class={`
         pointer-events-none sticky top-[68px] flex h-7 min-w-0 items-center justify-between
-        bg-v2-background-bg-base ps-1.5 md:ps-3 md:top-[84px] lg:top-[108px]
+        bg-v2-background-bg-base ps-1.5 md:ps-3 md:top-[108px]
       `}
       classList={{ "home-session-group-header z-[5]": !!props.elevated, "z-10": !props.elevated }}
     >
@@ -923,13 +924,15 @@ function HomeSessionRow(
             >
               {props.language.t("common.rename")}
             </Menu.Item>
+            <SessionReadMenuItem server={props.server} session={props.record.session} />
+            <Menu.Separator />
+            <SessionCopyMenu server={props.server} session={props.record.session} />
             <Menu.Item
               disabled={props.isExportingSession(props.server, props.record.session)}
               onSelect={() => props.onExportSession(props.server, props.record.session)}
             >
               {props.language.t("common.export")}…
             </Menu.Item>
-            <SessionReadMenuItem server={props.server} session={props.record.session} />
             <Menu.Separator />
             <Menu.Item onSelect={() => props.onDeleteSession(props.server, props.record.session)}>
               {props.language.t("common.delete")}…

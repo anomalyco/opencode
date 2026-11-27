@@ -1,6 +1,7 @@
 export * as Permission from "./permission.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { isRecord } from "@opencode/util/record"
 import { Context, Deferred, Effect, Layer, Schema, Scope } from "effect"
 import { Permission } from "@opencode/schema/permission"
 import type { Tool } from "@opencode/schema/tool"
@@ -93,6 +94,19 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Permissi
 export type Error = BlockedError | CorrectedError
 
 export { ignoresCase, pathActions } from "./permission/policy.js"
+
+/**
+ * What "Allow always" saves for a web URL: its site, so approving one page doesn't allow every URL. Rules match the URL
+ * as written, so the site is kept as written, with and without a path. The site ends where URL parsing ends it,
+ * including at `\`, which parsers treat as `/`. A URL with credentials or whitespace in its site
+ * (`https://opencode.ai@evil.com` goes to evil.com) saves only itself. Rules treat `*` and `?` as wildcards, so a site
+ * with either, such as `https://*`, gets no pattern, and neither does an unusual URL with either: no "Allow always".
+ */
+export function site(url: string) {
+  const origin = /^https?:\/\/[^/\\?#@\s*]+(?=[/\\?#]|$)/i.exec(url)?.[0]
+  if (origin) return [origin, `${origin}/*`]
+  return /[*?]/.test(url) ? [] : [url]
+}
 
 export function evaluate(action: string, resource: string, ...rulesets: Permission.Ruleset[]): Permission.Rule {
   return PermissionPolicy.evaluate(PermissionPolicy.fromRules(...rulesets), action, resource)
@@ -210,8 +224,14 @@ const layer = Layer.effect(
       const unattended = yield* Unattended
       if (event.effect !== "ask" || unattended === undefined)
         return { effect: event.effect, message: event.message, policy: effective }
-      const settled = PermissionPolicy.override(effective, unattended)
-      if (PermissionPolicy.evaluateAll(settled, input.action, input.resources) === "allow")
+      // When an evaluate hook downgraded `allow` to `ask`, unattended rules must explicitly allow the request
+      // rather than inheriting the pre-hook `allow` from `effective`.
+      const settled =
+        effect === "ask" ? PermissionPolicy.override(effective, unattended) : PermissionPolicy.fromRules(unattended)
+      if (
+        (effect === "ask" || input.resources.length > 0) &&
+        PermissionPolicy.evaluateAll(settled, input.action, input.resources) === "allow"
+      )
         return { effect: "allow" as const, policy: effective }
       return {
         effect: "deny" as const,
@@ -227,11 +247,7 @@ const layer = Layer.effect(
         action: input.action,
         resources: input.resources,
         save: input.save,
-        // Tools copy optional inputs straight into metadata; undefined values are not JSON and would
-        // fail the HttpApi response encoder when clients list pending requests.
-        metadata:
-          input.metadata &&
-          Object.fromEntries(Object.entries(input.metadata).filter(([, value]) => value !== undefined)),
+        metadata: input.metadata && withoutUndefined(input.metadata),
         source: row(input.source),
         message,
       }
@@ -392,6 +408,16 @@ const layer = Layer.effect(
     return Service.of({ ask, assert, assertNotDenied, allows, reply, get, forSession, list, nested, close })
   }),
 )
+
+// Tools copy optional inputs straight into metadata, nested objects included; undefined values are not JSON
+// and would fail the HttpApi response encoder when clients list pending requests.
+function withoutUndefined(record: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(record)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => [key, isRecord(value) ? withoutUndefined(value) : value]),
+  )
+}
 
 export const node = makeLocationNode({
   service: Service,

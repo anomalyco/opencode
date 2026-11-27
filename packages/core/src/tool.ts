@@ -73,6 +73,8 @@ export interface SnapshotOptions {
   readonly services?: Context.Context<CodeModeTool.Services>
   /** What `opencode://` fetch sends requests through; see the `opencode_api` flag. */
   readonly api?: Context.Context<CodeModeTool.Api>
+  /** With `codemode_agents`, what runs Code Mode's agent() and llm(). */
+  readonly agents?: Context.Context<CodeModeTool.Agents>
   readonly tools?: Policy
 }
 
@@ -307,9 +309,9 @@ const layer = Layer.effect(
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
       codeModeTools: (paths) => Effect.sync(() => new Map(codeModeTools(state.get().tools, paths))),
-      snapshot: Effect.fn("Tool.snapshot")((permissions, options) =>
+      snapshot: Effect.fn("Tool.snapshot")((input, options) =>
         Effect.gen(function* () {
-          const policy = permissions ?? PermissionPolicy.empty
+          const policy = input ?? PermissionPolicy.empty
           // Without Code Mode its tools would be unreachable, so expose them as direct tools instead.
           const codeModeEnabled = codeModeAvailable(policy)
           const full = codeModeEnabled && options?.services !== undefined && (yield* flags.enabled("full_codemode"))
@@ -346,6 +348,7 @@ const layer = Layer.effect(
                 const inventory = cached?.inventory ?? {
                   tools: new Map(codemodeEntries),
                   namespaces: data.namespaces,
+                  definitions: data.definitions,
                 }
                 const tool = CodeModeTool.create(
                   inventory,
@@ -353,6 +356,7 @@ const layer = Layer.effect(
                   permission,
                   full ? options.services : undefined,
                   options?.api,
+                  options?.agents,
                 )
                 const entry = cached ?? {
                   inventory,
@@ -439,7 +443,7 @@ const layer = Layer.effect(
         const callSeq = yield* Ref.make(0)
         const full = input.services !== undefined && (yield* flags.enabled("full_codemode"))
         return yield* CodeModeTool.check(
-          { tools, namespaces: data.namespaces },
+          { tools, namespaces: data.namespaces, definitions: data.definitions },
           {
             ...input,
             context: { ...input.context, id: Tool.CallID.make(`call_${input.context.messageID}_execute`) },

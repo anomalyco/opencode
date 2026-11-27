@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test"
+import type { Locator, Page } from "@playwright/test"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 // What the fixture's faked browser profile answers; see `SiteScenario` in the fixture.
@@ -25,7 +25,8 @@ const modules = {
 }
 
 // Any story loads the app styles; the fixture opens the real import dialog in the real dialog host beside it. Most
-// cases here are about the site list, so the dialog opens with it shown unless the case says otherwise.
+// cases here are about the site list, so the dialog opens on "Only sites I choose" unless the case says otherwise. The
+// faked browser has two profiles, so the dialog offers a profile picker and its title names no browser.
 async function open(page: Page, given: SiteScenario, direction: "ltr" | "rtl" = "ltr") {
   const scenario = { reveal: true, ...given }
 
@@ -38,7 +39,7 @@ async function open(page: Page, given: SiteScenario, direction: "ltr" | "rtl" = 
     { modules, scenario, direction },
   )
 
-  const dialog = page.getByRole("dialog", { name: /^Import from Google Chrome/ })
+  const dialog = page.getByRole("dialog", { name: "Import from another browser", exact: true })
 
   return {
     dialog,
@@ -50,11 +51,23 @@ async function open(page: Page, given: SiteScenario, direction: "ltr" | "rtl" = 
     // What comes over: two real checkboxes, ticked until the person unticks one.
     signins: dialog.getByRole("checkbox", { name: "Sign-ins", exact: true }),
     history: dialog.getByRole("checkbox", { name: "Browsing history", exact: true }),
-    selectNone: dialog.getByRole("button", { name: "Select none", exact: true }),
+    // Which sites: every one, or only the ticked ones, which start with none.
+    every: dialog.getByRole("radio", { name: /^All sites/ }),
+    only: dialog.getByRole("radio", { name: "Only sites I choose", exact: true }),
+    // One box ticks or unticks every site the search shows.
+    selectAll: dialog.getByRole("checkbox", { name: /^Select (all|[\d,]+ shown)$/ }),
+    profile: dialog.getByRole("button", { name: /Browser profile/ }),
     // The dialog is modal, so the record beside it is hidden from the accessibility tree.
     record: page.getByTestId("site-chooser-imports"),
   }
 }
+
+// A radio's or a box's input is visually hidden under the control drawn for it, which takes the pointer.
+const press = (input: Locator) =>
+  input
+    .locator('xpath=ancestor::*[@data-slot="radio-v2-item" or @data-slot="checkbox-v2"][1]')
+    .locator('[data-slot$="-control"]')
+    .click()
 
 story.beforeEach(async ({ mount }) => {
   await mount("ui-line-comment--editor")
@@ -66,35 +79,36 @@ story("lists 5,000 sites in a window of rows, as one keyboard stop with roving f
   await expect(view.options.first()).toHaveAttribute("data-site", "github.com")
   await expect(view.list).toHaveAttribute("aria-multiselectable", "true")
   await expect(view.options.first()).toHaveAttribute("aria-setsize", "5000")
-  // Every site comes over until the person changes that.
-  await expect(view.dialog.getByText("5,000 of 5,000 selected")).toBeVisible()
+  // Only the sites the person ticks come over, and none is ticked yet: there is nothing to import.
+  await expect(view.dialog.getByText("0 of 5,000 selected")).toBeVisible()
   expect(await view.options.count()).toBeLessThan(45)
   await expect(view.importButton).toHaveText("Import")
+  await expect(view.importButton).toBeDisabled()
 
-  // The two boxes come before the search in reading order. Tab goes from the search, past the profile and the
-  // selection's one enabled action, to the list, then out of it.
+  // Reading order: the profile, the two boxes and the choice of sites come before the search. Tab goes from the
+  // search, past the box that ticks every site, to the list, then out of it.
   await expect(view.search).toBeFocused()
+  await page.keyboard.press("Shift+Tab")
+  await expect(view.only).toBeFocused()
   await page.keyboard.press("Shift+Tab")
   await expect(view.history).toBeFocused()
   await page.keyboard.press("Shift+Tab")
   await expect(view.signins).toBeFocused()
+  await page.keyboard.press("Shift+Tab")
+  await expect(view.profile).toBeFocused()
+  await page.keyboard.press("Tab")
+  await page.keyboard.press("Tab")
   await page.keyboard.press("Tab")
   await page.keyboard.press("Tab")
   await expect(view.search).toBeFocused()
   await page.keyboard.press("Tab")
-  await expect(view.dialog.getByRole("button", { name: /Browser profile/ })).toBeFocused()
-  await page.keyboard.press("Tab")
-  await expect(view.selectNone).toBeFocused()
+  await expect(view.selectAll).toBeFocused()
   await page.keyboard.press("Tab")
   await expect(view.list).toBeFocused()
   await page.keyboard.press("Tab")
-  await expect(view.dialog.getByRole("button", { name: "Choose sites" })).toBeFocused()
+  await expect(view.dialog.getByRole("button", { name: "Cancel", exact: true })).toBeFocused()
   await page.keyboard.press("Shift+Tab")
   await expect(view.list).toBeFocused()
-  await view.selectNone.click()
-  await expect(view.dialog.getByText("0 of 5,000 selected")).toBeVisible()
-  await expect(view.importButton).toBeDisabled()
-  await view.list.focus()
 
   // Down moves, Space toggles, End goes to the last site, and type-ahead jumps to the next site that starts so.
   await page.keyboard.press("ArrowDown")
@@ -118,15 +132,15 @@ story("lists 5,000 sites in a window of rows, as one keyboard stop with roving f
   await expect(view.record).toHaveAttribute("data-imported", "1")
 })
 
-story("says what Select acts on while a search is active, and only offers what would change something", async ({ page }) => {
+story("the box that ticks every site acts on what a search shows, and says so", async ({ page }) => {
   const view = await open(page, { sites: 5_000 })
 
-  await view.selectNone.click()
   await view.search.fill("site-01")
   await expect(view.dialog.getByText("100 shown, 0 selected")).toBeVisible()
-  await view.dialog.getByRole("button", { name: "Select 100 shown", exact: true }).click()
-  await expect(view.dialog.getByRole("button", { name: "Deselect 100 shown", exact: true })).toBeEnabled()
-  await expect(view.dialog.getByRole("button", { name: "Select 100 shown", exact: true })).toBeDisabled()
+  await expect(view.selectAll).toHaveAccessibleName("Select 100 shown")
+  await press(view.selectAll)
+  await expect(view.selectAll).toBeChecked()
+  await expect(view.dialog.getByText("100 shown, 100 selected")).toBeVisible()
   await view.search.fill("github")
   await expect(view.options).toHaveCount(1)
   await view.options.click()
@@ -165,17 +179,17 @@ story("leaves Escape and ArrowDown to an input method while it composes", async 
   await expect(view.record).toHaveAttribute("data-closed", "true")
 })
 
-story("switches profiles back to every site chosen, at the top, and reads a profile only once while open", async ({ page }) => {
+story("switches profiles at the top with none of another profile's sites chosen, and reads a profile only once while open", async ({ page }) => {
   const view = await open(page, { sites: 5_000 })
 
   await view.options.first().click()
   await view.list.focus()
   await page.keyboard.press("End")
-  await view.dialog.getByRole("button", { name: /Browser profile/ }).click()
+  await view.profile.click()
   await page.getByRole("option", { name: "Google Chrome · Home" }).click()
   await expect(view.options).toHaveCount(4)
-  await expect(view.dialog.getByText("4 of 4 selected")).toBeVisible()
-  await view.dialog.getByRole("button", { name: /Browser profile/ }).click()
+  await expect(view.dialog.getByText("0 of 4 selected")).toBeVisible()
+  await view.profile.click()
   await page.getByRole("option", { name: "Google Chrome · Work" }).click()
   await expect(view.options.first()).toHaveAttribute("data-site", "github.com")
   await expect(view.options.first()).toBeInViewport()
@@ -189,8 +203,10 @@ story("starts from the site a passkey request came from, brings its sign-in alon
   await expect(view.options).toHaveAttribute("data-site", "github.com")
   // The site the page belongs to is chosen already.
   await expect(view.options).toHaveAttribute("aria-selected", "true")
-  // This dialog is about one site's sign-in: it offers no boxes, and asks main for no history.
-  await expect(view.dialog.getByRole("checkbox")).toHaveCount(0)
+  // This dialog is about one site's sign-in: it offers neither box nor a choice of sites, and asks main for no history.
+  await expect(view.signins).toHaveCount(0)
+  await expect(view.history).toHaveCount(0)
+  await expect(view.dialog.getByRole("radio")).toHaveCount(0)
   await view.importButton.click()
   await expect(view.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default", sites: ["github.com"], cookies: true, history: false })])
   const status = view.dialog.getByRole("status")
@@ -214,8 +230,8 @@ story("starts from the site a passkey request came from, brings its sign-in alon
       topClearanceSearch: body && search ? Math.round(search.top - body.top) : -1,
       topClearanceSelect: body && select ? Math.round(select.top - body.top) : -1,
       leftDeltas: title && search && msg ? [search.left - title.left, msg.left - title.left].map((v) => Math.round(v)) : [],
-      rightDeltas:
-        importBtn && closeSvg && select ? [closeSvg.right - importBtn.right, select.right - importBtn.right].map((v) => Math.round(v)) : [],
+      // The profile picker is as wide as its name, so only the close button ends on the buttons' edge.
+      rightDeltas: importBtn && closeSvg ? [Math.round(closeSvg.right - importBtn.right)] : [],
     }
   })
 
@@ -223,13 +239,13 @@ story("starts from the site a passkey request came from, brings its sign-in alon
   expect(layout.topClearanceSearch).toBeGreaterThanOrEqual(4)
   expect(layout.topClearanceSelect).toBeGreaterThanOrEqual(4)
   expect(layout.leftDeltas).toEqual([0, 0])
-  expect(layout.rightDeltas).toEqual([0, 0])
+  expect(layout.rightDeltas).toEqual([0])
 })
 
 story("opened for a site, moves on to the browser profile that has exactly it, and chooses only that one", async ({ page }) => {
   const view = await open(page, { sites: 5, site: { name: "google.com", choose: true } })
 
-  await expect(view.dialog.getByRole("button", { name: /Browser profile/ })).toContainText("Home")
+  await expect(view.profile).toContainText("Home")
   await expect(view.options).toHaveCount(2)
   await expect(view.dialog.locator('[data-site="google.com"]')).toHaveAttribute("aria-selected", "true")
   await expect(view.dialog.locator('[data-site="google.com.au"]')).toHaveAttribute("aria-selected", "false")
@@ -286,7 +302,7 @@ story("keeps the active row off the list's edges, and brings it into view from t
 
   // The count alone is a live region, so a selection is announced.
   await page.keyboard.press("Space")
-  await expect(view.dialog.locator('[aria-live="polite"]')).toHaveText("4,999 of 5,000 selected")
+  await expect(view.dialog.locator('[aria-live="polite"]')).toHaveText("1 of 5,000 selected")
 })
 
 story("shows what the list is doing in its place, with a way to try again", async ({ page }) => {
@@ -315,7 +331,7 @@ story("an empty profile says so", async ({ page }) => {
   await expect(view.importButton).toBeDisabled()
 })
 
-// Where the two boxes are in the dialog, in CSS pixels: each box's left edge and label against the title's left edge,
+// Where the two boxes of what comes over are in the dialog, in CSS pixels: each box's left edge and label against the title's left edge,
 // each 28px row's top from the dialog's top, and how far the first box's focus ring (a 2px outline, 2px off the 16px
 // box) stays inside what clips the body.
 const boxes = (dialog: ReturnType<Page["getByRole"]>) =>
@@ -331,7 +347,7 @@ const boxes = (dialog: ReturnType<Page["getByRole"]>) =>
     const container = (node.closest('[data-slot="dialog-container"]') ?? node).getBoundingClientRect()
     const title = text(node.querySelector('[data-slot="dialog-title"]'))
     const clip = node.querySelector('[data-slot="dialog-body"] [data-scrollable]')?.getBoundingClientRect()
-    const kinds = Array.from(node.querySelectorAll('[data-slot="dialog-body"] [data-slot="checkbox-v2"]:not([aria-hidden])'))
+    const kinds = Array.from(node.querySelectorAll('[data-slot="dialog-body"] section:first-of-type [data-slot="checkbox-v2"]'))
     const controls = kinds.map((kind) => kind.querySelector('[data-slot="checkbox-v2-control"]')?.getBoundingClientRect())
     const first = controls[0]
     const last = controls[controls.length - 1]
@@ -345,15 +361,15 @@ const boxes = (dialog: ReturnType<Page["getByRole"]>) =>
     }
   })
 
-story("opens on two ticked boxes and Import, which brings everything without the list", async ({ page }) => {
+story("opens on two ticked boxes, All sites and Import, which brings everything without the list", async ({ page }) => {
   const view = await open(page, { sites: 5, reveal: false, pages: 4210 })
 
-  // No sentence: the title, the two boxes and the buttons say it.
+  // No sentence: the title, the two boxes, the choice of sites and the buttons say it.
   await expect(view.signins).toBeChecked()
   await expect(view.history).toBeChecked()
+  await expect(view.every).toBeChecked()
   await expect(view.dialog.locator('[data-slot="dialog-description"]')).toHaveCount(0)
   await expect(view.list).toHaveCount(0)
-  await expect(view.dialog.getByRole("button", { name: "Choose sites" })).toHaveAttribute("aria-expanded", "false")
   await expect(view.importButton).toHaveText("Import")
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
   const collapsed = await boxes(view.dialog)
@@ -362,13 +378,14 @@ story("opens on two ticked boxes and Import, which brings everything without the
   expect(collapsed).toMatchObject({ left: [0, 0], label: [24, 24], height: [28, 28] })
   expect(Math.min(...collapsed.ring)).toBeGreaterThanOrEqual(0)
 
-  // "Choose sites" opens the list under the boxes, which stay where they are.
-  await view.dialog.getByRole("button", { name: "Choose sites" }).click()
+  // "Only sites I choose" opens the list under the choice; the dialog keeps its top edge, so the boxes stay where they
+  // are.
+  await press(view.only)
   await expect(view.options).toHaveCount(5)
   const expanded = await boxes(view.dialog)
   expect(expanded).toMatchObject({ left: [0, 0], label: [24, 24], height: [28, 28], top: collapsed.top })
   expect(Math.min(...expanded.ring)).toBeGreaterThanOrEqual(0)
-  await view.dialog.getByRole("button", { name: "Choose sites" }).click()
+  await press(view.every)
   await expect(view.list).toHaveCount(0)
 
   await view.importButton.click()
@@ -380,11 +397,13 @@ story("opens on two ticked boxes and Import, which brings everything without the
 story("a box the person unticks stays behind, Import needs one of them, and Enter on a box imports", async ({ page }) => {
   const view = await open(page, { sites: 5, reveal: false, pages: 4210 })
 
-  // The dialog opens with the focus on itself. Tab reaches the boxes in reading order, after Close; Space toggles the
-  // one that has the focus.
+  // The dialog opens with the focus on itself. Tab reaches the boxes in reading order, after Close and the profile;
+  // Space toggles the one that has the focus.
   await expect(view.dialog.locator('[data-slot="dialog-content"]').or(view.dialog)).toBeFocused()
   await page.keyboard.press("Tab")
   await expect(view.dialog.getByRole("button", { name: "Close", exact: true })).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(view.profile).toBeFocused()
   await page.keyboard.press("Tab")
   await expect(view.signins).toBeFocused()
   await page.keyboard.press("Space")
@@ -413,11 +432,9 @@ story("with Browsing history unticked the import brings sign-ins alone, of the c
   await view.dialog.getByText("Browsing history", { exact: true }).click()
   await expect(view.history).not.toBeChecked()
   await view.dialog.locator('[data-site="github.com"]').click()
-  await expect(view.importButton).toHaveText("Import 4 sites")
+  await expect(view.importButton).toHaveText("Import 1 site")
   await view.importButton.click()
-  const sent = JSON.parse((await view.record.locator("li").textContent()) ?? "{}")
-  expect(sent).toMatchObject({ cookies: true, history: false })
-  expect(sent.sites).toHaveLength(4)
+  await expect(view.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default", sites: ["github.com"], cookies: true, history: false })])
 })
 
 story("empty fallback uses a compact fit dialog when no browsers are found", async ({ page }) => {
@@ -436,32 +453,33 @@ story("empty fallback uses a compact fit dialog when no browsers are found", asy
   expect(box && box.width <= 480 && box.height < 250).toBe(true)
 })
 
-story("Choose sites shows the list in place, every site ticked, and the button then names how many it brings", async ({ page }) => {
+story("Only sites I choose shows the list in place with none ticked, and the button then names how many it brings", async ({ page }) => {
   const view = await open(page, { sites: 5, reveal: false })
-  const choose = view.dialog.getByRole("button", { name: "Choose sites" })
 
-  await choose.click()
-  await expect(choose).toHaveAttribute("aria-expanded", "true")
+  await press(view.only)
   await expect(view.options).toHaveCount(5)
+  await expect(view.dialog.getByText("0 of 5 selected")).toBeVisible()
+  await expect(view.importButton).toHaveText("Import")
+  await expect(view.importButton).toBeDisabled()
+  await view.dialog.locator('[data-site="github.com"]').click()
+  await expect(view.importButton).toHaveText("Import 1 site")
+  // Every site ticked is everything again.
+  await press(view.selectAll)
   await expect(view.dialog.getByText("5 of 5 selected")).toBeVisible()
   await expect(view.importButton).toHaveText("Import")
   await view.dialog.locator('[data-site="github.com"]').click()
   await expect(view.importButton).toHaveText("Import 4 sites")
-  // Ticking it again is everything again.
-  await view.dialog.locator('[data-site="github.com"]').click()
-  await expect(view.importButton).toHaveText("Import")
-  await view.dialog.locator('[data-site="github.com"]').click()
   await view.importButton.click()
   const sent = JSON.parse((await view.record.locator("li").textContent()) ?? "{}")
   expect(sent.sites).toHaveLength(4)
   expect(sent.sites).not.toContain("github.com")
 })
 
-story("a list that Choose sites revealed after its sites loaded still draws the rows it scrolls to", async ({ page }) => {
+story("a list that Only sites I choose showed after its sites loaded still draws the rows it scrolls to", async ({ page }) => {
   const view = await open(page, { sites: 5_000, reveal: false })
 
-  await view.dialog.getByRole("button", { name: "Choose sites" }).click()
-  await expect(view.dialog.getByText("5,000 of 5,000 selected")).toBeVisible()
+  await press(view.only)
+  await expect(view.dialog.getByText("0 of 5,000 selected")).toBeVisible()
   await view.list.hover()
   await page.mouse.wheel(0, 4_000)
   await expect(view.dialog.locator('[data-site="github.com"]')).not.toBeInViewport()
@@ -521,7 +539,9 @@ story("the bar's own dialog brings history alone when Sign-ins is unticked, and 
 
   await page.getByRole("button", { name: "Import from another browser", exact: true }).click()
   await page.getByRole("menuitem", { name: "Choose sites to import", exact: true }).click()
-  const dialog = page.getByRole("dialog", { name: /^Import from Google Chrome/ })
+  const dialog = page.getByRole("dialog", { name: "Import from another browser", exact: true })
+  // It opens on the sites the person ticks, none yet; All sites brings the whole profile.
+  await press(dialog.getByRole("radio", { name: /^All sites/ }))
   await dialog.getByText("Sign-ins", { exact: true }).click()
   await expect(dialog.getByRole("checkbox", { name: "Sign-ins", exact: true })).not.toBeChecked()
   await dialog.getByRole("button", { name: "Import", exact: true }).click()

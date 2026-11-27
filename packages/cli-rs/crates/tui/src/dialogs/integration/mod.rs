@@ -10,7 +10,7 @@ use opencode_api::generated::{
     IntegrationCommandMethod, IntegrationCommandStatusInput, IntegrationConnectExternalInput,
     IntegrationConnectKeyInput, IntegrationExternalMethod, IntegrationID, IntegrationInfo, IntegrationKeyMethod,
     IntegrationMethod, IntegrationOAuthMethod, IntegrationOauthCancelInput, IntegrationOauthCompleteInput,
-    IntegrationOauthConnectInput, IntegrationOauthStatusInput, LocationQueryInput, ModelInfoStatus,
+    IntegrationOauthConnectInput, IntegrationOauthStatusInput, LocationQueryInput,
 };
 use opencode_api::js::locale_compare;
 use opencode_store::Catalog;
@@ -27,7 +27,7 @@ const PRIORITY: [&str; 6] = ["opencode", "opencode-go", "openai", "github-copilo
 const SIGN_IN: &str = "Sign in required →";
 const POLL: Duration = Duration::from_millis(500);
 
-/// What runs after a connect, with the provider whose models to show (`onConnected`).
+/// What runs after a connect, with the integration whose providers' models to show (`onConnected`).
 pub type OnConnected = Rc<dyn Fn(&Rc<Local>, Option<String>)>;
 
 pub fn install(tui: &Rc<Tui>) {
@@ -1334,33 +1334,19 @@ fn connected(flow: &Flow, integration: &IntegrationInfo) {
         }
         local.toasts.show(ToastOptions::new(Variant::Success, format!("Connected {}", integration.name)));
         match &flow.on_connected {
-            Some(on_connected) => on_connected(local, provider_id(local, &integration.id)),
+            Some(on_connected) => {
+                // One integration can serve several providers, such as OpenCode's workspace models and OpenCode Go, so
+                // the model picker that follows lists all of them rather than the first.
+                let has_provider = local.providers(|providers| {
+                    providers.iter().any(|provider| {
+                        provider.integration_id.as_ref() == Some(&integration.id) || provider.id.0 == integration.id.0
+                    })
+                });
+                on_connected(local, has_provider.then(|| integration.id.0.clone()));
+            }
             None => local.dialogs.clear(),
         }
     });
-}
-
-/// `providerID`: the integration's provider that has a model in use, else its first.
-fn provider_id(local: &Local, integration: &IntegrationID) -> Option<String> {
-    local.models(|models| {
-        local.providers(|providers| {
-            let matches: Vec<_> = providers
-                .iter()
-                .filter(|provider| {
-                    provider.integration_id.as_ref() == Some(integration) || provider.id.0 == integration.0
-                })
-                .collect();
-            matches
-                .iter()
-                .find(|provider| {
-                    models.iter().any(|model| {
-                        model.provider_id == provider.id && !matches!(model.status, ModelInfoStatus::Deprecated)
-                    })
-                })
-                .or(matches.first())
-                .map(|provider| provider.id.0.clone())
-        })
-    })
 }
 
 #[cfg(test)]

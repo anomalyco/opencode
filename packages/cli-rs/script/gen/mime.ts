@@ -14,6 +14,6 @@ const lines = [
   "",
 ]
 
-const file = new URL("../../crates/cli/src/run/mime.rs", import.meta.url).pathname
+const file = new URL("../../crates/util/src/mime/types.rs", import.meta.url).pathname
 await Bun.write(file, lines.join("\n"))
 console.log(`mime: ${entries.length} extensions`)

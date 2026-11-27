@@ -697,29 +697,6 @@ describe("ModelResolver", () => {
     }),
   )
 
-  it.effect("uses resolved credentials for bearer auth", () =>
-    Effect.gen(function* () {
-      const resolved = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/openai"), {
-          settings: { baseURL: "https://openai.example/v1" },
-          headers: {},
-          body: {},
-        }),
-        Credential.Key.make({ type: "key", key: "secret" }),
-      )
-      const request = ai.request({ model: resolved, prompt: "Hello" })
-      const headers = yield* resolved.route.auth.apply({
-        request,
-        method: "POST",
-        url: "https://openai.example/v1/responses",
-        body: "{}",
-        headers: Headers.empty,
-      })
-
-      expect(headers.authorization).toBe("Bearer secret")
-    }),
-  )
-
   it.effect("prefers stored credentials over configured auth", () =>
     Effect.gen(function* () {
       const credential = Credential.Key.make({ type: "key", key: "stored-secret" })

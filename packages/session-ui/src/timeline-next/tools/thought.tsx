@@ -1,14 +1,18 @@
 import type { SessionMessageAssistantReasoning } from "@opencode/client/promise"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
-import { createMemo, Show } from "solid-js"
+import { createMemo, Index, Show } from "solid-js"
 import { BasicTool } from "../../components/basic-tool"
 import { PacedMarkdown } from "../../message/message-content"
 
-/** A thought on its own row reads like a row of activity: Thought, then how long it took. Opening it shows the thought. */
+export type ThoughtPart = SessionMessageAssistantReasoning & { id: string; streaming?: boolean }
+
+/**
+ * Thoughts one after another read like one row of activity: Thought, then how long they took together. Opening it
+ * shows each thought in turn.
+ */
 export function ThoughtRow(props: {
-  id: string
-  content: SessionMessageAssistantReasoning
+  parts: ThoughtPart[]
   streaming: boolean
   defaultOpen?: boolean
   open?: boolean
@@ -18,10 +22,12 @@ export function ThoughtRow(props: {
   const i18n = useI18n()
 
   const duration = createMemo(() => {
-    const time = props.content.time
+    const durations = props.parts.flatMap((part) =>
+      part.time?.completed === undefined ? [] : [Math.max(0, part.time.completed - part.time.created)],
+    )
 
-    if (time?.completed === undefined) return undefined
-    const total = Math.max(0, Math.round((time.completed - time.created) / 1000))
+    if (props.parts.length === 0 || durations.length < props.parts.length) return undefined
+    const total = Math.round(durations.reduce((sum, duration) => sum + duration, 0) / 1000)
     const numfmt = new Intl.NumberFormat(i18n.locale())
 
     if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt.format(total) })
@@ -33,14 +39,15 @@ export function ThoughtRow(props: {
   })
 
   return (
-    <div data-component="reasoning-part" data-timeline-part-id={props.id}>
+    // Each thought's body carries its own ID, so quotes and anchors resolve to that body rather than the header.
+    <div data-component="reasoning-part" data-timeline-part-ids={props.parts.map((part) => part.id).join(",")}>
       <BasicTool
         icon="mcp"
         status={props.streaming ? "running" : "completed"}
         compact
         hasContent
         allowOpenWhilePending
-        hideDetails={!props.content.text.trim()}
+        hideDetails={props.parts.every((part) => !part.text.trim())}
         open={props.open}
         defaultOpen={props.defaultOpen}
         onOpenChange={(value) => {
@@ -63,7 +70,17 @@ export function ThoughtRow(props: {
           </div>
         }
       >
-        <PacedMarkdown text={props.content.text} cacheKey={props.id} streaming={props.streaming} />
+        <div data-slot="reasoning-part-run">
+          <Index each={props.parts}>
+            {(part) => (
+              <Show when={part().text.trim() || part().streaming}>
+                <div data-timeline-part-id={part().id}>
+                  <PacedMarkdown text={part().text} cacheKey={part().id} streaming={part().streaming ?? false} />
+                </div>
+              </Show>
+            )}
+          </Index>
+        </div>
       </BasicTool>
     </div>
   )

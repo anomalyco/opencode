@@ -801,14 +801,15 @@ async fn an_older_page_does_not_leave_a_gap_after_a_refresh() {
         tokio::spawn(data.message_load_more(&session, LoadMore::default()))
     };
     settle().await;
-    latest.store(3, Ordering::SeqCst);
+    // Jump past the newest page and all three bridge pages so the refresh replaces the transcript and its cursor.
+    latest.store(7, Ordering::SeqCst);
     data.message_invalidate(&session);
     data.message_sync(&session).await.unwrap();
     release.resolve(());
     load.await.unwrap().unwrap();
     let ids: Vec<String> =
         data.read(|state| state.messages(&session).iter().map(|item| item.id().to_owned()).collect());
-    assert_eq!(ids.first().map(String::as_str), Some("msg_2"), "{ids:?}");
-    assert_eq!(ids, ["msg_2", "msg_3"]);
-    assert!(data.read(|state| state.has_more_messages(&session)), "the cursor to msg_1 is kept");
+    assert_eq!(ids.first().map(String::as_str), Some("msg_3"), "{ids:?}");
+    assert_eq!(ids, ["msg_3", "msg_4", "msg_5", "msg_6", "msg_7"]);
+    assert!(data.read(|state| state.has_more_messages(&session)), "the cursor to msg_2 is kept");
 }

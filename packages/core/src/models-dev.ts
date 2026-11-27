@@ -135,9 +135,9 @@ const SourceProvider = Schema.Struct({
   models: Schema.Record(Schema.String, Schema.Unknown),
 })
 
-// The model types opencode keeps. Only chat models are offered for sessions; the others are listed on request,
-// realtime ones as voice models.
-const TYPES: readonly string[] = ["chat", "decision", "image", "video", "realtime"]
+// The model types opencode keeps. Only chat models are offered for sessions; the others are listed by type, realtime
+// ones that answer in speech also as voice models.
+const TYPES: readonly string[] = ["chat", "decision", "image", "video", "realtime", "embedding", "transcription"]
 
 const ContextCondition = Schema.Struct({ gt: Schema.optional(Schema.Finite), gte: Schema.optional(Schema.Finite) })
 const decodeModel = Schema.decodeUnknownResult(SourceModel)
@@ -187,7 +187,8 @@ const decodeSubscription = Schema.decodeUnknownOption(Subscription)
 
 type Route = {
   readonly protocol: string
-  readonly package: string
+  /** Unset for a realtime model: a voice session starts through its API, not a package. */
+  readonly package?: string
   readonly freeform?: Model.Capabilities["freeform"]
   readonly baseURL?: string
   readonly compatibility?: Model.Compatibility
@@ -213,11 +214,7 @@ const BUILDS_OWN_URL = new Set([
   "aisdk:watsonx-ai-provider",
 ])
 
-const normalize = Effect.fnUntraced(function* (
-  catalog: Record<string, unknown>,
-  recommended: boolean,
-  speeds: boolean,
-) {
+const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>, recommended: boolean) {
   const failed: { readonly model: string; readonly issue: unknown }[] = []
   const unknown = new Set<string>()
   const source = isV1(catalog) ? toV2(catalog) : catalog
@@ -255,9 +252,10 @@ const normalize = Effect.fnUntraced(function* (
     if (sources.length === 0) return []
     // v2 lists APIs per model, so the provider defaults are what most of its models use. A model that
     // builds its own URL would inherit a provider baseURL, so then every model carries its own instead.
-    const packageName = mostCommon(sources.map((source) => source.route.package))
+    const packaged = sources.filter((source) => source.route.package !== undefined)
+    const packageName = mostCommon(packaged.map((source) => source.route.package))
     if (!packageName) return []
-    const urls = sources.map((source) => source.route.baseURL)
+    const urls = packaged.map((source) => source.route.baseURL)
     const baseURL = urls.every((url) => url !== undefined) ? mostCommon(urls) : undefined
     const info = {
       id: providerID,
@@ -271,6 +269,7 @@ const normalize = Effect.fnUntraced(function* (
       const baseCost = cost(source.model.cost)
       const id = Model.ID.make(source.model.id)
       const base = modelInfo(providerID, { packageName, baseURL }, id, source, { cost: baseCost })
+      if (source.route.package === undefined) return [base]
       const variants = Variant.resolve(
         { ...base, package: source.route.package },
         Variant.supports(source.model.capabilities.reasoning),
@@ -278,14 +277,13 @@ const normalize = Effect.fnUntraced(function* (
       const modes = entries(source.model.experimental?.modes, decodeMode)
       // Each service tier is a model of its own ("gpt-5.5-fast"), marked as a speed of this one. Only the request
       // code of an @opencode/ai package knows where a tier goes in the request.
-      const tiers =
-        speeds && !Provider.isAISDK(source.route.package)
-          ? [...(source.model.capabilities.service_tier ?? [])].sort((a, b) => tierRank(a) - tierRank(b))
-          : []
+      const tiers = Provider.isAISDK(source.route.package)
+        ? []
+        : [...(source.model.capabilities.service_tier ?? [])].sort((a, b) => tierRank(a) - tierRank(b))
       const speed = (name: string, tier: string) => ({
         name: `${source.model.name} ${name.charAt(0).toUpperCase()}${name.slice(1)}`,
         variants,
-        ...(speeds ? { speed: { base: id, id: name, faster: !SLOWER.has(tier) } } : {}),
+        speed: { base: id, id: name, faster: !SLOWER.has(tier) },
       })
       return [
         { ...base, variants },
@@ -364,13 +362,35 @@ function entries<A>(record: Record<string, unknown> | undefined, decode: (input:
   )
 }
 
-function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>, recommended: boolean) {
+function route(
+  providerID: Provider.ID,
+  model: SourceModel,
+  unknown: Set<string>,
+  recommended: boolean,
+): Route | undefined {
   // A chat model uses its first API with a package. Other types (image, decision…) only run through the
   // opencode entrypoint for their type (`providers/<P>/images`) that this build can load, and are skipped
   // without one: a chat entrypoint loads a chat model, which can't generate images or decisions.
   const apis = entries(model.api, decodeApi).map(
     ([protocol, entry]) => [protocol, entry, loadable(entry.sdk?.opencodeai, unknown)] as const,
   )
+  // A voice session starts through the model's first API, by the API's name, with no package.
+  if (model.type === "realtime") {
+    const [protocol, api] = apis[0] ?? []
+    if (!protocol || !api) return undefined
+    return { protocol, ...(api.base_url ? { baseURL: api.base_url } : {}) }
+  }
+  // A transcription model names the transcription protocol of its `transcriptions` API
+  // (`protocols/openai-transcription`), which isn't a provider package: it's kept for the model's caller to load.
+  if (model.type === "transcription") {
+    const api = apis.find(([protocol, entry]) => protocol === "transcriptions" && entry.sdk?.opencodeai)?.[1]
+    if (!api?.sdk?.opencodeai) return undefined
+    return {
+      protocol: "transcriptions",
+      package: api.sdk.opencodeai,
+      ...(api.base_url ? { baseURL: api.base_url } : {}),
+    }
+  }
   const eligible = ([, entry, opencodeai]: (typeof apis)[number]) =>
     model.type === "chat" ? opencodeai || entry.sdk?.aisdk : opencodeai?.endsWith(`/${model.type}s`)
   const preferred = recommended ? apis.find((api) => api[0] === model.recommended_api && eligible(api)) : undefined
@@ -434,10 +454,8 @@ const zero = Money.USDPerMillionTokens.zero
 // no place in opencode's cost yet. Context overrides become tiers; other conditions
 // (service tier, time of day…) are left out.
 function cost(input: SourceCost | undefined): Model.Info["cost"] {
-  const text = input?.text
-  const perToken = (unit: string | undefined) => unit === undefined || unit === "token"
-  if (!text?.input || !text.output || !perToken(text.input.unit) || !perToken(text.output.unit))
-    return [{ input: zero, output: zero, cache: { read: zero, write: zero } }]
+  const text = perTokenText(input)
+  if (!text) return [{ input: zero, output: zero, cache: { read: zero, write: zero } }]
   const textInput = text.input
   const textOutput = text.output
   const base = {
@@ -474,6 +492,14 @@ function cost(input: SourceCost | undefined): Model.Info["cost"] {
   return [base, ...tiers.values()]
 }
 
+// Both text prices, when both are set and per token; otherwise opencode can't price the model.
+function perTokenText(source: SourceCost | undefined) {
+  const text = source?.text
+  const perToken = (unit: string | undefined) => unit === undefined || unit === "token"
+  if (!text?.input || !text.output || !perToken(text.input.unit) || !perToken(text.output.unit)) return undefined
+  return { input: text.input, output: text.output }
+}
+
 // opencode has one cache write price: the first TTL listed, else the explicit cache's.
 function cacheWrite(cache: typeof CachePrices.Type | undefined) {
   const first = (write: typeof CacheWrite.Type | undefined) =>
@@ -482,8 +508,8 @@ function cacheWrite(cache: typeof CachePrices.Type | undefined) {
 }
 
 // A mode (a speed, or a mode listed as its own model) without its own cost takes the base prices scaled by its
-// service tier's multiplier (the mode name by default), or else the tier's own prices. The base context tiers are kept
-// as they are.
+// service tier's multiplier (the mode name by default), or else the tier's own prices, context tiers included. The base
+// context tiers are otherwise kept as they are.
 function modeCost(model: SourceModel, base: Model.Info["cost"], name: string, mode: SourceMode): Model.Info["cost"] {
   const [baseDefault, ...baseTiers] = base
   if (mode.cost) return [cost(mode.cost)[0], ...baseTiers]
@@ -504,7 +530,7 @@ function modeCost(model: SourceModel, base: Model.Info["cost"], name: string, mo
     )
   })?.factor
   if (!baseDefault) return base
-  if (factor === undefined) return [tierPrices(model.cost, baseDefault, tier), ...baseTiers]
+  if (factor === undefined) return [baseDefault, ...baseTiers].map((prices) => tierPrices(model.cost, prices, tier))
   const scale = (price: Money.USDPerMillionTokens, path: readonly string[]) =>
     Money.USDPerMillionTokens.make(Math.round(price * factorAt(factor, path) * 1e10) / 1e10)
   return [
@@ -520,13 +546,24 @@ function modeCost(model: SourceModel, base: Model.Info["cost"], name: string, mo
   ]
 }
 
-// Hosts such as DigitalOcean list a tier's prices instead of a multiplier, as overrides of the base prices.
+// Hosts such as DigitalOcean list a tier's prices instead of a multiplier, as overrides of the base prices. A context
+// tier takes the overrides for both the service tier and its context size.
 function tierPrices(source: SourceCost | undefined, base: Model.Info["cost"][number], tier: string) {
-  const matches = (when: Record<string, unknown>) =>
-    Object.keys(when).length === 1 && Option.getOrUndefined(decodeServiceTier(when.service_tier))?.equals === tier
-  const input = source?.text?.input?.overrides?.find((override) => matches(override.when))
-  const output = source?.text?.output?.overrides?.find((override) => matches(override.when))
+  const matches = (when: Record<string, unknown>) => {
+    const context = Option.getOrUndefined(decodeContext(when.context))
+    return (
+      Object.keys(when).length === (base.tier ? 2 : 1) &&
+      Option.getOrUndefined(decodeServiceTier(when.service_tier))?.equals === tier &&
+      (!base.tier || (context?.gt ?? context?.gte) === base.tier.size)
+    )
+  }
+  // The base is free when its prices aren't per token, and so is every tier.
+  const text = perTokenText(source)
+  if (!text) return base
+  const input = text.input.overrides?.find((override) => matches(override.when))
+  const output = text.output.overrides?.find((override) => matches(override.when))
   return {
+    ...base,
     input: input?.price ?? base.input,
     output: output?.price ?? base.output,
     cache: { read: input?.cache?.read ?? base.cache.read, write: cacheWrite(input?.cache) ?? base.cache.write },
@@ -592,7 +629,7 @@ function modelInfo(
     ...(source.route.baseURL !== undefined && source.route.baseURL !== provider.baseURL
       ? { baseURL: source.route.baseURL }
       : {}),
-    ...(COMPATIBLE.has(source.route.package) ? { provider: providerID } : {}),
+    ...(source.route.package && COMPATIBLE.has(source.route.package) ? { provider: providerID } : {}),
     ...input.request?.settings,
   }
   return {
@@ -631,8 +668,7 @@ function modelInfo(
 export { Event } from "@opencode/schema/models-dev"
 
 export interface Interface {
-  /** `speeds` also lists each of a model's service tiers as a model of its own, marked as a speed of it. */
-  readonly get: (recommended?: boolean, speeds?: boolean) => Effect.Effect<readonly Snapshot[]>
+  readonly get: (recommended?: boolean) => Effect.Effect<readonly Snapshot[]>
   readonly refresh: (force?: boolean) => Effect.Effect<void>
 }
 
@@ -665,8 +701,8 @@ const defaultSource = "https://models.opencode.ai"
 // The experimental v2 API, limited to the model types opencode keeps, with the hidden OpenAI subscription lists included.
 export const catalogPath = `/experimental/v2.0/api.json?type=${TYPES.join(",")}&include=${OPENAI_SUBSCRIPTIONS.join(",")}`
 
-export const decodeSnapshot = (text: string, recommended = false, speeds = false) =>
-  decodeCatalog(text).pipe(Effect.flatMap((catalog) => normalize(catalog, recommended, speeds)))
+export const decodeSnapshot = (text: string, recommended = false) =>
+  decodeCatalog(text).pipe(Effect.flatMap((catalog) => normalize(catalog, recommended)))
 
 // Bundled snapshot of the catalog at `catalogPath`, committed at
 // packages/core/src/models-dev/snapshot.txt and refreshed via
@@ -675,22 +711,22 @@ export const decodeSnapshot = (text: string, recommended = false, speeds = false
 // flag value per isolate: the snapshot is a multi-MB module-level constant and one isolate can
 // host many runtimes (Cloudflare colocates Durable Object instances), so
 // per-runtime decoding would multiply the cost.
-const bundledCache = new Map<string, readonly Snapshot[]>()
-const bundledSnapshot = (recommended: boolean, speeds: boolean) =>
+const bundledCache = new Map<boolean, readonly Snapshot[]>()
+const bundledSnapshot = (recommended: boolean) =>
   Effect.suspend(() => {
-    const key = `${recommended}:${speeds}`
-    const cached = bundledCache.get(key)
+    const cached = bundledCache.get(recommended)
     return cached
       ? Effect.succeed(cached)
-      : decodeSnapshot(snapshotText, recommended, speeds).pipe(
-          Effect.tap((snapshot) => Effect.sync(() => bundledCache.set(key, snapshot))),
+      : decodeSnapshot(snapshotText, recommended).pipe(
+          Effect.tap((snapshot) => Effect.sync(() => bundledCache.set(recommended, snapshot))),
         )
   })
 
-// Versioned so an entry cached for another catalog query is never read: v1 was the v1 API, v2 had no realtime models.
+// Versioned so an entry cached for another catalog query is never read: v1 was the v1 API, v2 had no realtime models,
+// v3 no embedding or transcription models.
 function cacheKey(source: string) {
-  if (source === defaultSource) return "models-dev:v3:catalog"
-  return `models-dev:v3:catalog:${Hash.fast(source)}`
+  if (source === defaultSource) return "models-dev:v4:catalog"
+  return `models-dev:v4:catalog:${Hash.fast(source)}`
 }
 
 export function bodyDigest(text: string) {
@@ -722,7 +758,7 @@ export const layer = (options?: Options) =>
       const lock = Semaphore.makeUnsafe(1)
       // Free the multi-MB rows cached under earlier keys.
       yield* Effect.forEach(
-        ["models-dev:", "models-dev:v2:"].map((prefix) => key.replace("models-dev:v3:", prefix)),
+        ["models-dev:", "models-dev:v2:", "models-dev:v3:"].map((prefix) => key.replace("models-dev:v4:", prefix)),
         (old) => Effect.andThen(kv.remove(old), kv.remove(`${old}:meta`)),
         { discard: true },
       )
@@ -804,13 +840,13 @@ export const layer = (options?: Options) =>
         return catalog
       })
 
-      const populate = Effect.fn("ModelsDev.populate")(function* (recommended: boolean, speeds: boolean) {
+      const populate = Effect.fn("ModelsDev.populate")(function* (recommended: boolean) {
         const fromFile = yield* loadFromFile
-        if (fromFile) return yield* normalize(fromFile, recommended, speeds)
+        if (fromFile) return yield* normalize(fromFile, recommended)
         const cached = options?.file ? undefined : yield* loadFromCache()
-        if (cached) return yield* normalize(cached.catalog, recommended, speeds)
+        if (cached) return yield* normalize(cached.catalog, recommended)
         // The bundled snapshot is the boot-time floor until the periodic fetch refreshes it.
-        const bundled = options?.snapshot === false ? undefined : yield* bundledSnapshot(recommended, speeds)
+        const bundled = options?.snapshot === false ? undefined : yield* bundledSnapshot(recommended)
         if (bundled) return bundled
         if (!fetch) return []
         const catalog = yield* lock.withPermit(
@@ -820,15 +856,13 @@ export const layer = (options?: Options) =>
             return yield* fetchAndWrite()
           }),
         )
-        return yield* normalize(catalog, recommended, speeds)
+        return yield* normalize(catalog, recommended)
       }, Effect.orDie)
 
-      // One per combination of the two flags, each normalized on first use.
-      const caches = yield* Effect.forEach(
-        [false, true].flatMap((recommended) => [false, true].map((speeds) => [recommended, speeds] as const)),
-        ([recommended, speeds]) => Effect.cachedInvalidateWithTTL(populate(recommended, speeds), Duration.infinity),
+      const caches = yield* Effect.forEach([false, true], (recommended) =>
+        Effect.cachedInvalidateWithTTL(populate(recommended), Duration.infinity),
       )
-      const get = (recommended = false, speeds = false) => caches[Number(recommended) * 2 + Number(speeds)][0]
+      const get = (recommended = false) => caches[Number(recommended)][0]
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
         yield* lock

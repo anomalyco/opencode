@@ -113,7 +113,7 @@ describe("SessionCwdInstructions", () => {
   it.effect("adds nothing when the cwd is this Location's own directory", () =>
     Effect.gen(function* () {
       const local = Environment.make(Environment.localID, Environment.makeMemoryDriver(), {
-        hostsServer: true,
+        local: true,
         path: posix,
       })
       yield* local.files.mkdir(directory)
@@ -180,7 +180,7 @@ describe("SessionCwdInstructions", () => {
   it.effect("reports a local cwd that is a different directory than the Location's", () =>
     Effect.gen(function* () {
       const local = Environment.make(Environment.localID, Environment.makeMemoryDriver(), {
-        hostsServer: true,
+        local: true,
         path: posix,
       })
       yield* local.files.mkdir("/elsewhere")
@@ -290,7 +290,7 @@ describe("SessionCwdInstructions", () => {
   nestedLocation.effect("skips a local ancestor cwd already covered by project InstructionDiscovery", () =>
     Effect.gen(function* () {
       const local = Environment.make(Environment.localID, Environment.makeMemoryDriver(), {
-        hostsServer: true,
+        local: true,
         path: posix,
       })
       yield* local.files.mkdir("/repo")

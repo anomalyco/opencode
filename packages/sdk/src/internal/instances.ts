@@ -6,8 +6,7 @@ import { Plugin } from "@opencode/core/plugin"
 import type { InstancePlugins } from "@opencode/core/plugin/instance"
 import type { Session } from "@opencode/schema/session"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
-import type { LayerNode } from "@opencode/util/effect/layer-node"
-import { Context, Duration, Effect, Layer, LayerMap, RcMap, Scope } from "effect"
+import { Context, Duration, Effect, Exit, Layer, LayerMap, RcMap, Scope } from "effect"
 
 export interface Configuration {
   readonly plugins: InstancePlugins.List
@@ -36,26 +35,30 @@ export function provide<R>(options: Options<R>, context: Context.Context<R>): Op
   }
 }
 
-/** Replaces the host's `Instance.node`; `replacements` resolves lazily so instances inherit the final host graph. */
-export function node(options: Options, replacements: () => LayerNode.Replacements) {
+/** Replaces the host's `Instance.node` with per-session instances backed by the host's `LocationServiceMap`. */
+export function node(options: Options) {
   return makeGlobalNode({
     service: Instance.Service,
-    layer: layer(options, replacements),
+    layer: layer(options),
     deps: [LocationServiceMap.node],
   })
 }
 
-export function layer(options: Options, replacements: () => LayerNode.Replacements) {
+function layer(options: Options) {
   return Layer.effect(
     Instance.Service,
     Effect.gen(function* () {
-      const scope = yield* Effect.scope
       const locations = yield* LocationServiceMap.Service
+      const host = locations.host
+      const instanceScope = locations.instanceScope
+      if (!host || !instanceScope)
+        return yield* Effect.die(new Error("SdkInstances needs the host's own LocationServiceMap"))
       const key = (session: Session.Info) => ({
         key: options.key(session),
         ...LocationServiceMap.canonical(session.location),
       })
       const provide = (session: Session.Info) => Effect.provide(instances.get(key(session)))
+      // Owned by instanceScope so every private instance closes before Stage-1 globals tear down.
       const instances: LayerMap.LayerMap<
         ReturnType<typeof key>,
         Instance.Services,
@@ -65,15 +68,11 @@ export function layer(options: Options, replacements: () => LayerNode.Replacemen
           Layer.unwrap(
             Effect.gen(function* () {
               const configuration = yield* options.configure(input.key).pipe(Effect.orDie)
+              // Instances read this selector and the host's Location map from the host context, so they never
+              // retain their Layer scopes; retaining the selector would block its shutdown on its own entries.
               return Instance.layer(input, {
                 plugins: configuration.plugins,
-                replacements: [
-                  ...replacements(),
-                  // Instances borrow this selector and the host's Location map instead of retaining
-                  // their Layer scopes; retaining the selector would block its shutdown on its own entries.
-                  Instance.node.replace(Layer.succeed(Instance.Service, { provide })),
-                  LocationServiceMap.node.replace(Layer.succeed(LocationServiceMap.Service, locations)),
-                ],
+                host: yield* host,
               }).pipe(
                 Layer.tap((context) =>
                   Effect.gen(function* () {
@@ -96,10 +95,24 @@ export function layer(options: Options, replacements: () => LayerNode.Replacemen
           ).pipe(
             // Eviction can close the lookup's scope; do not make that fiber wait on itself.
             Layer.tapCause(() =>
-              instances.invalidate(input).pipe(Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid),
+              instances.invalidate(input).pipe(Effect.forkIn(instanceScope, { startImmediately: true }), Effect.asVoid),
             ),
           ),
         { idleTimeToLive: Duration.infinity },
+      ).pipe(Scope.provide(instanceScope))
+      // Close all open private instances concurrently before instanceScope tears down the RcMap and before
+      // Stage-1 globals release.
+      yield* Scope.addFinalizer(
+        instanceScope,
+        Effect.suspend(() =>
+          instances.rcMap.state._tag === "Closed"
+            ? Effect.void
+            : Effect.forEach(
+                instances.rcMap.state.map,
+                ([, entry]) => Effect.exit(Scope.close(entry.scope, Exit.void)),
+                { concurrency: "unbounded", discard: true },
+              ),
+        ),
       )
       return Instance.Service.of({ provide, live: (session) => RcMap.has(instances.rcMap, key(session)) })
     }),

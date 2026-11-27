@@ -10,6 +10,7 @@ import { PluginHost } from "@opencode/core/plugin/host"
 import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
 import { OpencodeArtifacts } from "@opencode/core/plugin/provider/opencode-artifacts"
 import { OpencodeWatches } from "@opencode/core/plugin/provider/opencode-watches"
+import { advance } from "../lib/clock"
 import { eventually } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -21,6 +22,7 @@ function fakeConsole() {
   const state = {
     artifacts: true,
     watches: true,
+    configs: 0,
     blobs: new Map<string, Uint8Array>(),
     blobReads: new Array<string>(),
     uploads: new Array<string>(),
@@ -34,7 +36,8 @@ function fakeConsole() {
     fetch: async (request) => {
       const url = new URL(request.url)
       const slug = url.pathname.split("/").at(-1) ?? ""
-      if (url.pathname === "/api/v2/config")
+      if (url.pathname === "/api/v2/config") {
+        state.configs++
         return Response.json(
           {},
           {
@@ -44,6 +47,7 @@ function fakeConsole() {
             },
           },
         )
+      }
       if (url.pathname === "/api/artifacts/prepare") {
         const body = (await request.json()) as { files: { sha256: string }[] }
         state.prepared.push(body)
@@ -135,7 +139,9 @@ describe("OpencodePlugin artifacts", () => {
         expect((yield* artifacts.prompts()).defaultProvider.prompt).toContain("Comments wake this session.")
 
         console.state.artifacts = false
-        yield* TestClock.adjust("1 minute")
+        const before = console.state.configs
+        yield* TestClock.adjust("5 minutes")
+        yield* advance(() => console.state.configs > before)
         const providers = yield* eventually(artifacts.providers(), (list) => list.length === 1)
         expect(providers.map((provider) => [provider.id, provider.default])).toEqual([[Artifact.LocalProviderID, true]])
       }),
@@ -177,6 +183,21 @@ describe("OpencodePlugin artifacts", () => {
 
           yield* artifacts.remove(created.id)
           expect(console.state.deleted).toEqual([slug])
+        }),
+      ),
+  )
+
+  it.effect(
+    "publishes a subagent's artifact with its root session, so comments wake the session a person talks to",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          const artifacts = yield* Artifact.Service
+          const host = yield* start(console)
+          const root = yield* host.session.create({})
+          const subagent = yield* host.session.create({ parentID: root.id })
+          yield* artifacts.create({ title: "Screens", files, sessionID: subagent.id })
+          expect(console.state.published[0]?.body).toMatchObject({ sessionID: root.id })
         }),
       ),
   )

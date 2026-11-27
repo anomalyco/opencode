@@ -6,6 +6,7 @@ import { Agent } from "@opencode/core/agent"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Environments } from "@opencode/core/environment/environments"
+import { WorkspaceConnector } from "@opencode/core/environment/workspace-connector"
 import { Environment, makeMemoryDriver } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
 import { Flag } from "@opencode/core/flag"
@@ -86,6 +87,7 @@ const buildLayer = (options: {
       Workspace.node,
     ]),
     [
+      WorkspaceConnector.node.replace(Workspace.connectorNode),
       Location.node.replace(
         Layer.succeed(
           Location.Service,
@@ -344,7 +346,9 @@ describe("CdTool", () => {
       // On a sandboxed workspace Location, a sandbox path matching a host worktree path must still prompt.
       const sandboxAssertions: Permission.AssertInput[] = []
       const memory = makeMemoryDriver()
-      const sandboxWorktreePath = AbsolutePath.make("/outside-wt")
+      // A sandboxed Location resolves plain paths with the host's path rules (`D:\outside-wt` on Windows), so create
+      // the directory where that resolution lands for the memory driver to find it.
+      const sandboxWorktreePath = AbsolutePath.make(path.resolve("/outside-wt"))
       yield* memory.overrides!.mkdir!(sandboxWorktreePath)
       const wrkID = Workspace.ID.make("wrk_wt_test")
       const sandboxLayer = buildLayer({

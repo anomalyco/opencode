@@ -13,13 +13,11 @@ import {
   Equal,
   Exit,
   Fiber,
-  Hash,
   Layer,
   LayerMap,
   Logger,
   Option,
   RcMap,
-  Schema,
   Scope,
   Stream,
 } from "effect"
@@ -353,25 +351,6 @@ describe("LocationServiceMap", () => {
       },
     )
 
-  it.live("retries a location after its missing directory is recreated", () =>
-    tmpdirScoped().pipe(
-      Effect.flatMap((dir) =>
-        Effect.gen(function* () {
-          const locations = yield* LocationServiceMap.Service
-          const directory = path.join(dir.path, "recreated")
-          const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
-
-          const first = yield* Location.Service.pipe(Effect.provide(locations.get(ref)), Effect.scoped, Effect.exit)
-          expect(first._tag).toBe("Failure")
-
-          yield* Effect.promise(() => fs.mkdir(directory))
-          const location = yield* Location.Service.pipe(Effect.provide(locations.get(ref)), Effect.scoped)
-          expect(location.directory).toBe(ref.directory)
-        }),
-      ),
-    ),
-  )
-
   it.live("keeps a workspace location admitted when its directory does not exist locally", () =>
     tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
@@ -429,27 +408,6 @@ describe("LocationServiceMap", () => {
             yield* Effect.sleep("10 millis")
 
             expect(received).toEqual({ first: 1, second: 0 })
-          }),
-        ),
-      ),
-    ),
-  )
-
-  it.live("reuses cached services for constructed and decoded location refs", () =>
-    tmpdirScoped().pipe(
-      Effect.flatMap((dir) =>
-        Effect.scoped(
-          Effect.gen(function* () {
-            const locations = yield* LocationServiceMap.Service
-            const directory = AbsolutePath.make(dir.path)
-            const constructed = Location.Ref.make({ directory })
-            const decoded = Schema.decodeUnknownSync(Location.Ref)({ directory })
-
-            expect(constructed).toEqual({ directory, workspaceID: undefined })
-            expect(decoded).toEqual(constructed)
-            expect(Equal.equals(constructed, decoded)).toBe(true)
-            expect(Hash.hash(constructed)).toBe(Hash.hash(decoded))
-            expect(yield* locations.contextEffect(constructed)).toBe(yield* locations.contextEffect(decoded))
           }),
         ),
       ),

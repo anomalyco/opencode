@@ -1,18 +1,51 @@
 import type { Browser } from "@opencode/plugin-browser/rpc"
 
-/** Electron rejects loadURL as soon as a second main-frame navigation starts, before its document commits. */
+/**
+ * Electron rejects `loadURL` with `ERR_ABORTED` (-3) when a client redirect or second main-frame
+ * navigation supersedes the initial load before it commits. Tracks whether a replacement navigation
+ * actually commits a document while preserving genuine no-commit aborts (stops, downloads, 204s).
+ */
 export function replacementNavigation() {
   let starts = 0
+  let awaitingLateStart = false
   let replacement: ReturnType<typeof Promise.withResolvers<boolean>> | undefined
+
+  const ensure = () => (replacement ??= Promise.withResolvers<boolean>())
 
   return {
     start(event: { isMainFrame: boolean; isSameDocument: boolean }) {
-      if (event.isMainFrame && !event.isSameDocument && ++starts === 2) replacement = Promise.withResolvers<boolean>()
+      if (!event.isMainFrame || event.isSameDocument) return
+
+      starts += 1
+
+      if (starts >= 2) {
+        awaitingLateStart = false
+        ensure()
+      }
     },
-    commit: () => replacement?.resolve(true),
-    stop: () => replacement?.resolve(false),
-    after(error: Error) {
-      return "errno" in error && error.errno === -3 ? replacement?.promise : undefined
+    commit: () => {
+      if (starts >= 2 || awaitingLateStart) replacement?.resolve(true)
+    },
+    stop: (stillLoading = false) => {
+      // A redirect chain can emit did-stop-loading for the aborted hop while Chromium is still loading the replacement.
+      if (stillLoading) return
+
+      replacement?.resolve(false)
+    },
+    after(error: Error, stillLoading = false) {
+      if (!("errno" in error && error.errno === -3)) return undefined
+
+      if (replacement) return replacement.promise
+
+      // A client redirect can reject the first loadURL with -3 just before its did-start-navigation fires;
+      // wait for either an actual commit or loading stopping without a commit (never unconditional success).
+      if (stillLoading) {
+        awaitingLateStart = true
+
+        return ensure().promise
+      }
+
+      return undefined
     },
   }
 }

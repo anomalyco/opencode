@@ -1,6 +1,9 @@
 use serde_json::{Value, json};
 
-use crate::wire::{RpcError, Wire, WireOptions, assert_matches, current_value, lock, make_session, start_wire};
+use crate::wire::{
+    RpcError, Wire, WireOptions, assert_matches, current_value, durable_event, lock, make_session, start_session,
+    start_wire,
+};
 
 fn error(result: Result<Value, RpcError>) -> Value {
     match result {
@@ -322,6 +325,107 @@ async fn answers_protocol_errors_and_unknown_methods() {
             "data": { "_errors": [], "cwd": { "_errors": ["Invalid input: expected string, received undefined"] } },
         })
     );
+}
+
+#[tokio::test]
+async fn pushes_a_sessions_new_title_to_the_client() {
+    let acp = start_session(WireOptions::default(), json!({})).await;
+    acp.server
+        .send(&[durable_event("session.renamed", json!({ "sessionID": acp.session_id, "title": "Fix the build" }))]);
+
+    let update =
+        acp.wait_for_update("title update", |item| item["update"]["sessionUpdate"] == "session_info_update").await;
+    assert_eq!(
+        update,
+        json!({ "sessionId": acp.session_id, "update": { "sessionUpdate": "session_info_update", "title": "Fix the build" } })
+    );
+}
+
+#[tokio::test]
+async fn links_subagent_sessions_to_their_parent_in_session_list() {
+    let acp = start_wire(WireOptions::default()).await;
+    {
+        let mut state = acp.server.state();
+        let mut root = make_session("ses_root", "/workspace");
+        root["time"] = json!({ "created": 0, "updated": 2 });
+        state.sessions.insert("ses_root".to_owned(), root);
+        let mut child = make_session("ses_child", "/workspace");
+        child["parentID"] = json!("ses_root");
+        child["time"] = json!({ "created": 0, "updated": 1 });
+        state.sessions.insert("ses_child".to_owned(), child);
+    }
+    acp.initialize(json!({})).await;
+
+    let listed = acp.request("session/list", json!({ "cwd": "/workspace" })).await.unwrap();
+    let rows: Vec<(&str, Option<&Value>)> = listed["sessions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|session| (session["sessionId"].as_str().unwrap(), session.get("_meta")))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            ("ses_root", None),
+            (
+                "ses_child",
+                Some(
+                    &json!({ "opencode/child-session": { "id": "ses_child", "parentID": "ses_root", "title": "Session ses_child" } })
+                ),
+            ),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn loads_a_session_moved_into_a_worktree_of_the_cwds_project_and_names_the_directory_otherwise() {
+    let acp = start_wire(WireOptions::default()).await;
+    {
+        let mut moved = make_session("ses_moved", "/worktrees/fix");
+        moved["projectID"] = json!("prj_app");
+        acp.server.state().sessions.insert("ses_moved".to_owned(), moved);
+    }
+    acp.initialize(json!({})).await;
+    let load =
+        || acp.request("session/load", json!({ "cwd": "/workspace", "sessionId": "ses_moved", "mcpServers": [] }));
+
+    assert_eq!(
+        error(load().await),
+        json!({
+            "code": -32602,
+            "message": "Invalid params: session ses_moved does not belong to cwd: /workspace",
+            "data": { "sessionId": "ses_moved", "cwd": "/workspace", "directory": "/worktrees/fix" },
+        })
+    );
+    acp.server.state().project_id = "prj_app".to_owned();
+    assert_eq!(current_value(&load().await.unwrap(), "model"), "test/test-model");
+}
+
+#[tokio::test]
+async fn adds_a_sessions_mcp_servers_again_after_its_location_shuts_down() {
+    let server = json!({ "name": "tools", "command": "bun", "args": ["server.ts"], "env": [] });
+    let acp = start_wire(WireOptions::default()).await;
+    acp.initialize(json!({})).await;
+    let session = acp.new_session("/workspace", json!([server])).await.unwrap();
+    let other = acp.new_session("/elsewhere", json!([server])).await.unwrap();
+    let session_id = session["sessionId"].as_str().unwrap().to_owned();
+    let other_id = other["sessionId"].as_str().unwrap().to_owned();
+    acp.prompt(&session_id, "before").await.unwrap();
+    let dirs = || -> Vec<String> {
+        acp.server.state().mcp.iter().filter_map(|item| item["directory"].as_str().map(str::to_owned)).collect()
+    };
+    assert_eq!(dirs(), vec!["/workspace", "/elsewhere"]);
+
+    acp.server.send(&[
+        json!({ "id": "", "created": 0, "type": "location.shutdown", "location": { "directory": "/workspace" }, "data": {} }),
+        // Selection and title events share one stream, so the title arriving means the shutdown was seen.
+        durable_event("session.renamed", json!({ "sessionID": session_id, "title": "after" })),
+    ]);
+    acp.wait_for_update("renamed", |item| item["update"]["sessionUpdate"] == "session_info_update").await;
+    acp.prompt(&session_id, "after").await.unwrap();
+    acp.prompt(&other_id, "elsewhere").await.unwrap();
+
+    assert_eq!(dirs(), vec!["/workspace", "/elsewhere", "/workspace"]);
 }
 
 #[tokio::test]

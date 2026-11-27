@@ -55,11 +55,59 @@ fn cancels_forms_from_unsupported_clients_unknown_flows_and_credential_looking_f
         json!([{ "key": "q0", "title": "GitHub token", "type": "string" }]),
         json!([{ "key": "q0", "title": "Password", "type": "string", "hidden": true, "default": "" }]),
         json!([{ "key": "q0", "title": "Setup", "description": "Paste your API key", "type": "string" }]),
-        json!([{ "key": "q0", "title": "Setup", "type": "string", "options": [{ "value": "a", "label": "Use my access token" }] }]),
+        json!([{ "key": "q0", "title": "Token count", "type": "integer" }]),
     ];
     for fields in credentials {
         assert!(requested_schema(&form(fields.clone(), question.clone()), &CAPABLE).is_none(), "{fields}");
     }
+}
+
+#[test]
+fn asks_a_choice_worded_like_a_credential_without_its_typed_answer() {
+    let choice = |custom: bool| {
+        json!([
+            {
+                "key": "q0",
+                "title": "Token",
+                "description": "Which API token should I use?",
+                "type": "string",
+                "options": [
+                    { "value": "alpha", "label": "Alpha" },
+                    { "value": "beta", "label": "Beta" },
+                ],
+                "custom": custom,
+            },
+            { "key": "q1", "title": "Rotate secrets?", "type": "boolean" },
+        ])
+    };
+    let expected = Some(json!({
+        "type": "object",
+        "properties": {
+            "q0": {
+                "type": "string",
+                "title": "Token",
+                "description": "Which API token should I use?",
+                "oneOf": [
+                    { "const": "alpha", "title": "Alpha" },
+                    { "const": "beta", "title": "Beta" },
+                ],
+            },
+            "q1": { "type": "boolean", "title": "Rotate secrets?" },
+        },
+        "required": [],
+    }));
+    let question = json!({ "kind": "question" });
+    assert_eq!(requested_schema(&form(choice(true), question.clone()), &CAPABLE), expected);
+    assert_eq!(requested_schema(&form(choice(false), question.clone()), &CAPABLE), expected);
+    let custom = requested_schema(
+        &form(
+            json!([{ "key": "q0", "title": "Runtime", "type": "string", "options": [{ "value": "bun", "label": "Bun" }], "custom": true }]),
+            question,
+        ),
+        &CAPABLE,
+    )
+    .unwrap();
+    assert!(custom["properties"].get("q0_custom").is_some());
 }
 
 #[test]

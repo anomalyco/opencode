@@ -135,6 +135,7 @@ impl Client {
     endpoint!(" `DELETE /api/experimental/fs/watch` (`unwatch`)", experimental_file_unwatch, experimental_file_unwatch_call, empty, (), input: ExperimentalFileUnwatchInput);
     endpoint!(" `GET /api/command` (`list`)", command_list, command_list_call, json, CommandListOutput, input: CommandListInput);
     endpoint!(" `GET /api/skill` (`list`)", skill_list, skill_list_call, json, SkillListOutput, input: SkillListInput);
+    endpoint!(" `GET /api/experimental/skill/:skillID/file/*` (`file`)", experimental_skill_file, experimental_skill_file_call, binary, bytes::Bytes, input: ExperimentalSkillFileInput);
     endpoint!(" `POST /api/rpc/:rpcID/:method` (`call`)", rpc_call, rpc_call_call, json, RpcCallOutput, input: RpcCallInput);
     endpoint!(" `GET /api/event` (`subscribe`)", event_subscribe, event_subscribe_call, sse, SseResponse<EventSubscribeOutput>, input: EventSubscribeInput);
     endpoint!(" `GET /api/pty` (`list`)", pty_list, pty_list_call, json, PtyListOutput, input: PtyListInput);
@@ -167,6 +168,13 @@ impl Client {
     endpoint!(" `POST /api/experimental/persistent-pty/:ptyID/connect-token` (`persistentPty.connectToken`)", experimental_persistent_pty_connect_token, experimental_persistent_pty_connect_token_call, data, ExperimentalPersistentPtyConnectTokenOutput, input: ExperimentalPersistentPtyConnectTokenInput);
     endpoint!(" `GET /api/experimental/media/:hash` (`media.get`)", experimental_media_get, experimental_media_get_call, binary, bytes::Bytes, input: ExperimentalMediaGetInput);
     endpoint!(" `GET /api/experimental/blob/:id` (`blob.get`)", experimental_blob_get, experimental_blob_get_call, binary, bytes::Bytes, input: ExperimentalBlobGetInput);
+    endpoint!(
+        " `GET /api/experimental/browser/tunnel` (`browser.tunnel`)",
+        experimental_browser_tunnel,
+        experimental_browser_tunnel_call,
+        json,
+        ExperimentalBrowserTunnelOutput
+    );
     endpoint!(" `POST /api/experimental/automation` (`automation.create`)", experimental_automation_create, experimental_automation_create_call, data, ExperimentalAutomationCreateOutput, input: ExperimentalAutomationCreateInput);
     endpoint!(" `GET /api/experimental/automation` (`automation.list`)", experimental_automation_list, experimental_automation_list_call, data, ExperimentalAutomationListOutput, input: ExperimentalAutomationListInput);
     endpoint!(" `GET /api/experimental/automation/:automationID` (`automation.get`)", experimental_automation_get, experimental_automation_get_call, data, ExperimentalAutomationGetOutput, input: ExperimentalAutomationGetInput);
@@ -191,6 +199,32 @@ impl Client {
     );
     endpoint!(" `POST /api/experimental/machine` (`machine.add`)", experimental_machine_add, experimental_machine_add_call, data, ExperimentalMachineAddOutput, input: ExperimentalMachineAddInput);
     endpoint!(" `DELETE /api/experimental/machine/:name` (`machine.remove`)", experimental_machine_remove, experimental_machine_remove_call, empty, (), input: ExperimentalMachineRemoveInput);
+    endpoint!(
+        " `GET /api/experimental/push` (`push.get`)",
+        experimental_push_get,
+        experimental_push_get_call,
+        data,
+        ExperimentalPushGetOutput
+    );
+    endpoint!(" `PUT /api/experimental/push/device/:deviceID` (`push.device.register`)", experimental_push_device_register, experimental_push_device_register_call, data, ExperimentalPushDeviceRegisterOutput, input: ExperimentalPushDeviceRegisterInput);
+    endpoint!(" `DELETE /api/experimental/push/device/:deviceID` (`push.device.remove`)", experimental_push_device_remove, experimental_push_device_remove_call, empty, (), input: ExperimentalPushDeviceRemoveInput);
+    endpoint!(" `PATCH /api/experimental/push/device/:deviceID` (`push.device.update`)", experimental_push_device_update, experimental_push_device_update_call, data, ExperimentalPushDeviceUpdateOutput, input: ExperimentalPushDeviceUpdateInput);
+    endpoint!(" `PUT /api/experimental/push/device/:deviceID/session/:sessionID` (`push.device.session.set`)", experimental_push_device_session_set, experimental_push_device_session_set_call, data, ExperimentalPushDeviceSessionSetOutput, input: ExperimentalPushDeviceSessionSetInput);
+    endpoint!(" `DELETE /api/experimental/push/device/:deviceID/session/:sessionID` (`push.device.session.remove`)", experimental_push_device_session_remove, experimental_push_device_session_remove_call, empty, (), input: ExperimentalPushDeviceSessionRemoveInput);
+    endpoint!(" `PUT /api/experimental/push/session/:sessionID` (`push.session.set`)", experimental_push_session_set, experimental_push_session_set_call, data, ExperimentalPushSessionSetOutput, input: ExperimentalPushSessionSetInput);
+    endpoint!(" `DELETE /api/experimental/push/session/:sessionID` (`push.session.remove`)", experimental_push_session_remove, experimental_push_session_remove_call, empty, (), input: ExperimentalPushSessionRemoveInput);
+    endpoint!(" `PUT /api/experimental/push/settings` (`push.settings.set`)", experimental_push_settings_set, experimental_push_settings_set_call, data, ExperimentalPushSettingsSetOutput, input: ExperimentalPushSettingsSetInput);
+    endpoint!(" `POST /api/experimental/space/:space/write` (`space.write`)", experimental_space_write, experimental_space_write_call, json, ExperimentalSpaceWriteOutput, input: ExperimentalSpaceWriteInput);
+    endpoint!(" `GET /api/experimental/space/:space` (`space.sync`)", experimental_space_sync, experimental_space_sync_call, json, ExperimentalSpaceSyncOutput, input: ExperimentalSpaceSyncInput);
+    endpoint!(" `POST /api/experimental/space/subscribe` (`space.subscribe`)", experimental_space_subscribe, experimental_space_subscribe_call, empty, (), input: ExperimentalSpaceSubscribeInput);
+    endpoint!(" `POST /api/experimental/space/unsubscribe` (`space.unsubscribe`)", experimental_space_unsubscribe, experimental_space_unsubscribe_call, empty, (), input: ExperimentalSpaceUnsubscribeInput);
+    endpoint!(
+        " `POST /api/experimental/space/reset` (`space.reset`)",
+        experimental_space_reset,
+        experimental_space_reset_call,
+        empty,
+        ()
+    );
     endpoint!(" `GET /api/shell` (`list`)", shell_list, shell_list_call, json, ShellListOutput, input: ShellListInput);
     endpoint!(" `POST /api/shell` (`create`)", shell_create, shell_create_call, json, ShellCreateOutput, input: ShellCreateInput);
     endpoint!(" `GET /api/shell/:id` (`get`)", shell_get, shell_get_call, json, ShellGetOutput, input: ShellGetInput);
@@ -226,6 +260,7 @@ impl Client {
     endpoint!(" `GET /api/websearch/provider` (`providers`)", websearch_providers, websearch_providers_call, json, WebsearchProvidersOutput, input: WebsearchProvidersInput);
     endpoint!(" `POST /api/websearch` (`query`)", websearch_query, websearch_query_call, json, WebsearchQueryOutput, input: WebsearchQueryInput);
     endpoint!(" `GET /api/experimental/usage/limits` (`limits`)", experimental_usage_limits, experimental_usage_limits_call, json, ExperimentalUsageLimitsOutput, input: ExperimentalUsageLimitsInput);
+    endpoint!(" `GET /api/experimental/flag` (`get`)", experimental_flag_get, experimental_flag_get_call, json, ExperimentalFlagGetOutput, input: ExperimentalFlagGetInput);
     endpoint!(" `GET /api/config` (`get`)", config_get, config_get_call, json, ConfigGetOutput, input: ConfigGetInput);
     endpoint!(" `GET /api/config/shell` (`shells`)", config_shells, config_shells_call, json, ConfigShellsOutput);
     endpoint!(" `PATCH /api/experimental/config` (`update`)", experimental_config_update, experimental_config_update_call, empty, (), input: ExperimentalConfigUpdateInput);

@@ -68,6 +68,7 @@ pub enum Failure {
     SessionDirectoryMismatch {
         session_id: String,
         cwd: String,
+        directory: String,
     },
     InvalidConfigOption {
         config_id: String,
@@ -97,6 +98,8 @@ pub enum Failure {
         safe_message: String,
         service: Option<String>,
         error_name: Option<String>,
+        status: Option<i64>,
+        retry_after_ms: Option<i64>,
     },
     ServerUnavailable,
     CatalogNotReady(NotReady),
@@ -144,8 +147,8 @@ impl Failure {
                 json!({ "sessionId": session_id }),
                 &format!("session not found: {session_id}"),
             ),
-            Self::SessionDirectoryMismatch { session_id, cwd } => RpcError::invalid_params(
-                json!({ "sessionId": session_id, "cwd": cwd }),
+            Self::SessionDirectoryMismatch { session_id, cwd, directory } => RpcError::invalid_params(
+                json!({ "sessionId": session_id, "cwd": cwd, "directory": directory }),
                 &format!("session {session_id} does not belong to cwd: {cwd}"),
             ),
             Self::InvalidConfigOption { config_id } => RpcError::invalid_params(
@@ -174,8 +177,16 @@ impl Failure {
                 field.as_ref().map_or_else(|| json!({}), |field| json!({ "field": field })),
                 message,
             ),
-            Self::ServiceFailure { safe_message, service, error_name } => {
-                RpcError::internal_error(json_object! { "service"?: service, "errorName"?: error_name }, safe_message)
+            Self::ServiceFailure { safe_message, service, error_name, status, retry_after_ms } => {
+                RpcError::internal_error(
+                    json_object! {
+                        "service"?: service,
+                        "errorName"?: error_name,
+                        "status"?: status,
+                        "retryAfterMs"?: retry_after_ms,
+                    },
+                    safe_message,
+                )
             }
             Self::ServerUnavailable => {
                 RpcError::internal_error(json!({ "errorName": "ServerUnavailable" }), "OpenCode server is unavailable")
@@ -184,6 +195,8 @@ impl Failure {
                 safe_message: not_ready_message(*reason).to_owned(),
                 service: None,
                 error_name: Some("CatalogNotReady".to_owned()),
+                status: None,
+                retry_after_ms: None,
             }
             .to_rpc(),
             Self::CatalogLoad(cause) => crate::client::classify(cause).to_rpc(),
@@ -205,7 +218,13 @@ pub fn not_ready_message(reason: NotReady) -> &'static str {
 
 /// `fromUnknown`: a defect reaches the client only as its error name.
 pub fn from_unknown(name: Option<String>) -> Failure {
-    Failure::ServiceFailure { safe_message: "Internal service failure".to_owned(), service: None, error_name: name }
+    Failure::ServiceFailure {
+        safe_message: "Internal service failure".to_owned(),
+        service: None,
+        error_name: name,
+        status: None,
+        retry_after_ms: None,
+    }
 }
 
 impl From<RpcError> for Failure {
