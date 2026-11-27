@@ -13,7 +13,9 @@ const clipboard: ClipboardService = {
   async read() {
     return undefined
   },
-  async write() {},
+  async write() {
+    return "copied" as const
+  },
 }
 
 export function TestTuiContexts(
