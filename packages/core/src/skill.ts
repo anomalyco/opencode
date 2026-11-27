@@ -226,8 +226,8 @@ export interface Interface extends State.Transformable<Editor> {
   /** The skill with this ID, or the one a resolver finds for it. */
   readonly resolve: (id: string) => Effect.Effect<Info | undefined, LoadError>
   /**
-   * What the `skill` permission is checked against: the ID, plus `<id>@<version>` for a skill that has a version.
-   * Approving saves the exact version, so a changed skill is asked about again.
+   * What the `skill` permission is checked against: the ID, or `<id>@<version>` for a skill that has a version. A rule
+   * for the ID covers every version, while approving saves the exact one, so a changed skill is asked about again.
    */
   readonly approval: (id: ID) => Effect.Effect<{ resources: string[]; save: string[] }>
   /** The body as the model is given it: `content`, led by where the skill came from when that isn't this machine. */
@@ -331,7 +331,7 @@ const layer = Layer.effect(
         const origin = state.get().entries.get(id)?.origin
         if (!origin) return { resources: [id], save: [id] }
         const versioned = `${id}@${origin.version}`
-        return { resources: [id, versioned], save: [versioned] }
+        return { resources: [versioned], save: [versioned] }
       }),
       instructions: Effect.fn("Skill.instructions")(function* (id) {
         const body = yield* content(id)

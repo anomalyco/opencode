@@ -8,6 +8,7 @@ import { Bus } from "@opencode/core/bus"
 import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
 import { PermissionTable } from "@opencode/core/permission/sql"
+import { PermissionPolicy } from "@opencode/core/permission/policy"
 import { PermissionSaved } from "@opencode/core/permission/saved"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Project } from "@opencode/core/project"
@@ -120,6 +121,36 @@ test("Permission.site saves a web URL's site as written, and only the URL itself
     expect(Permission.site(url)).toEqual([url])
   for (const url of ["https://*/x", "https://*.com/x", "https://opencode.ai@evil.com/x?y"])
     expect(Permission.site(url)).toEqual([])
+})
+
+describe("PermissionPolicy skill versions", () => {
+  const evaluate = (resource: string, ...rules: Permission.Ruleset) =>
+    PermissionPolicy.evaluate(PermissionPolicy.fromRules(rules), "skill", resource).effect
+
+  test("a rule without a version covers every version of the skill", () => {
+    expect(evaluate("docs:pdf@sha256:a", { action: "skill", resource: "docs:pdf", effect: "deny" })).toBe("deny")
+    expect(evaluate("docs:pdf@sha256:a", { action: "skill", resource: "docs:pdf@sha256:b", effect: "deny" })).toBe(
+      "ask",
+    )
+    expect(evaluate("docs:pdfx@sha256:a", { action: "skill", resource: "docs:pdf", effect: "deny" })).toBe("ask")
+    expect(
+      PermissionPolicy.evaluate(
+        PermissionPolicy.restrict(PermissionPolicy.empty, [{ action: "skill", resource: "docs:pdf" }]),
+        "skill",
+        "docs:pdf@sha256:a",
+      ).effect,
+    ).toBe("deny")
+  })
+
+  test("other actions match resources with @ literally", () => {
+    expect(
+      PermissionPolicy.evaluate(
+        PermissionPolicy.fromRules([{ action: "read", resource: "pkg", effect: "deny" }]),
+        "read",
+        "pkg@1.0.0",
+      ).effect,
+    ).toBe("ask")
+  })
 })
 
 describe("Permission.isActionDenied", () => {

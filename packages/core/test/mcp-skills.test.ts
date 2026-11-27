@@ -276,9 +276,9 @@ describe("MCP skills", () => {
       yield* connect("team", server.url, ["team:deploy"])
       const skills = yield* Skill.Service
       const approval = yield* skills.approval(id)
-      expect(approval.resources[0]).toBe(id)
-      expect(approval.resources[1]).toMatch(/^team:deploy@sha256:[0-9a-f]{64}$/)
-      expect(approval.save).toEqual([approval.resources[1]])
+      expect(approval.resources).toHaveLength(1)
+      expect(approval.resources[0]).toMatch(/^team:deploy@sha256:[0-9a-f]{64}$/)
+      expect(approval.save).toEqual(approval.resources)
 
       const defaults = Agent.Info.default(Agent.ID.make("build")).permissions
       const effect = (...rules: Permission.Ruleset) =>
@@ -286,7 +286,9 @@ describe("MCP skills", () => {
       expect(effect()).toBe("ask")
       expect(PermissionPolicy.evaluateAll(PermissionPolicy.fromRules(defaults), "skill", ["local-skill"])).toBe("allow")
       expect(effect({ action: "skill", resource: "team:*", effect: "allow" })).toBe("allow")
+      expect(effect({ action: "skill", resource: "team:deploy", effect: "allow" })).toBe("allow")
       expect(effect({ action: "skill", resource: "team:deploy", effect: "deny" })).toBe("deny")
+      expect(effect({ action: "skill", resource: "team:deploy@sha256:other", effect: "allow" })).toBe("ask")
       const saved = PermissionPolicy.fromRules(
         approval.save.map((resource) => ({ action: "skill", resource, effect: "allow" as const })),
       )

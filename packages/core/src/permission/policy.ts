@@ -71,10 +71,22 @@ export function fallback(base: Policy, secondary: Policy): Policy {
   return { _tag: "fallback", base, secondary }
 }
 
-function matchLast(rules: Permission.Ruleset, action: string, resource: string): Permission.Rule | undefined {
+/**
+ * Whether `pattern` covers `resource`. A `skill` resource can name a version after `@` (`docs:pdf@sha256:…`), and a
+ * pattern without one covers every version, so `docs:pdf` allows or denies the skill whatever its version.
+ */
+function matchesResource(action: string, resource: string, pattern: string) {
   const ignoreCase = ignoresCase(action)
+  if (Wildcard.match(resource, pattern, ignoreCase)) return true
+  const at = resource.lastIndexOf("@")
+  return (
+    action === "skill" && at > 0 && !pattern.includes("@") && Wildcard.match(resource.slice(0, at), pattern, ignoreCase)
+  )
+}
+
+function matchLast(rules: Permission.Ruleset, action: string, resource: string): Permission.Rule | undefined {
   return rules.findLast(
-    (rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource, ignoreCase),
+    (rule) => Wildcard.match(action, rule.action) && matchesResource(action, resource, rule.resource),
   )
 }
 
@@ -85,9 +97,8 @@ function evaluateRule(policy: Policy, action: string, resource: string): Permiss
     case "override":
       return matchLast(policy.next, action, resource) ?? evaluateRule(policy.base, action, resource)
     case "restrict": {
-      const ignoreCase = ignoresCase(action)
       const denied = policy.denies.findLast(
-        (rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource, ignoreCase),
+        (rule) => Wildcard.match(action, rule.action) && matchesResource(action, resource, rule.resource),
       )
       if (denied) return { action: denied.action, resource: denied.resource, effect: "deny" }
       return evaluateRule(policy.base, action, resource)
