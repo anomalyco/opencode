@@ -438,12 +438,23 @@ export const authorize = (input: {
     yield* Effect.logInfo("mcp oauth authorization started", fields)
     const oauth = input.config.oauth || undefined
     const store = memoryStore()
-    // Reuse the client registered by an earlier login; the SDK discards it if the issuer changed.
     const previous = (yield* credentials.list(input.integrationID)).at(-1)?.value
-    if (previous?.type === "oauth") {
-      const client = clientFromCredential(previous)
-      if (client) yield* Effect.promise(() => store.saveClientInformation(client))
-    }
+    const previousClient = previous?.type === "oauth" ? clientFromCredential(previous) : undefined
+    const registeredPort = (() => {
+      if (!previousClient || !("redirect_uris" in previousClient) || !Array.isArray(previousClient.redirect_uris))
+        return undefined
+      for (const uri of previousClient.redirect_uris) {
+        if (typeof uri !== "string") continue
+        try {
+          const parsed = new URL(uri)
+          if (parsed.protocol === "http:" && (parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost")) {
+            const port = Number(parsed.port)
+            if (port > 0) return port
+          }
+        } catch {}
+      }
+      return undefined
+    })()
     const code = yield* Deferred.make<
       { code: string; iss: string | undefined; host?: string; response?: ServerResponse },
       Error
@@ -496,13 +507,26 @@ export const authorize = (input: {
         response.writeHead(409).end("OAuth callback already received")
     })
 
-    // callback_port, else the port pinned by redirect_uri, else ephemeral; a mismatch strands the browser.
+    // callback_port, else the port pinned by redirect_uri, else registered loopback port, else ephemeral.
     const redirectPort = Number(redirect?.port) || undefined
     const port = yield* Effect.callback<number, Error>((resume) => {
-      server.once("error", (error) => resume(Effect.fail(error)))
-      server.listen(oauth?.callback_port ?? redirectPort ?? 0, "127.0.0.1", () => {
-        resume(Effect.succeed((server.address() as AddressInfo).port))
-      })
+      const listen = (target: number, fallback: boolean) => {
+        const onError = (error: Error) => {
+          if (fallback) {
+            server.removeListener("error", onError)
+            listen(0, false)
+            return
+          }
+          resume(Effect.fail(error))
+        }
+        server.once("error", onError)
+        server.listen(target, "127.0.0.1", () => {
+          server.removeListener("error", onError)
+          resume(Effect.succeed((server.address() as AddressInfo).port))
+        })
+      }
+      const target = oauth?.callback_port ?? redirectPort ?? registeredPort ?? 0
+      listen(target, !oauth?.callback_port && !redirectPort && Boolean(registeredPort))
     })
     yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))
 
@@ -551,7 +575,22 @@ export const authorize = (input: {
     // Some authorization servers (Clerk) rewrite a 127.0.0.1 redirect to localhost before sending the browser back,
     // and issue the code for the rewritten URI. Both are registered, and the token exchange repeats the one used.
     const loopback = (host: string) => `http://${host}:${port}${redirectPath}`
+    const registeredUris = oauth?.redirect_uri ? [oauth.redirect_uri] : [loopback("127.0.0.1"), loopback("localhost")]
     let reached = "127.0.0.1"
+
+    // Reuse the client registered by an earlier login only when its registered redirect URIs match this attempt.
+    // A stored client with no redirect URIs (CIMD) is reused only when this attempt also selects CIMD.
+    const clientMatches = (() => {
+      if (!previousClient || oauth?.client_id) return false
+      const uris =
+        "redirect_uris" in previousClient && Array.isArray(previousClient.redirect_uris)
+          ? previousClient.redirect_uris.filter((uri): uri is string => typeof uri === "string")
+          : undefined
+      if (uris && uris.length > 0) return registeredUris.every((uri) => uris.includes(uri))
+      return Boolean(cimd)
+    })()
+    if (clientMatches && previousClient) yield* Effect.promise(() => store.saveClientInformation(previousClient))
+
     let authorizationUrl: URL | undefined
     const oauthProvider = provider({
       config: input.config,
@@ -560,7 +599,7 @@ export const authorize = (input: {
       discovery: { ...discovery, resourceMetadataUrl: resourceMetadataUrl?.toString() },
       redirect: {
         url: () => oauth?.redirect_uri ?? loopback(reached),
-        registered: oauth?.redirect_uri ? [oauth.redirect_uri] : [loopback("127.0.0.1"), loopback("localhost")],
+        registered: registeredUris,
         state,
         open: (url) => {
           authorizationUrl = url
