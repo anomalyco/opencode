@@ -61,7 +61,6 @@ export const content = {
         results: { title: "结果", body: "你交代的工作完成后，通话会告诉你改了什么。" },
         voice: { title: "语音", body: "呼叫会话，说出你的需求。agent 会出声回答。" },
         sessions: { title: "会话", body: "打开任意会话查看进度，然后从上次中断的地方继续。" },
-        steer: { title: "引导", body: "发送后续消息，在会话中途调整方向。" },
       },
     },
     terminal: {
