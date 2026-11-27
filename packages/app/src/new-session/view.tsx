@@ -38,6 +38,10 @@ import {
   type CheckoutLabelEvent,
 } from "./workspace/checkout-machine"
 import { BaseBranchPicker } from "./workspace/selector"
+import type { NewSessionMcps } from "./extensions/mcp/controller"
+import type { useNewSessionMcpsDialog } from "./extensions/mcp/dialog"
+import type { NewSessionSkills } from "./extensions/skills/controller"
+import type { useNewSessionSkillsDialog } from "./extensions/skills/dialog"
 import { NewSessionBrickBreaker } from "./brick-breaker"
 import { NewSessionPinBoard } from "./pin-board"
 import { NewSessionWordmark } from "./wordmark"
@@ -58,6 +62,10 @@ export function NewSessionView(props: {
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
   location: ReturnType<typeof useNewSessionLocationDialog>
+  mcps: NewSessionMcps
+  skills: NewSessionSkills
+  mcpsDialog: ReturnType<typeof useNewSessionMcpsDialog>
+  skillsDialog: ReturnType<typeof useNewSessionSkillsDialog>
 }) {
   const [onboarding, setOnboarding, , onboardingReady] = persisted(
     Persist.global("workspace-onboarding"),
@@ -123,6 +131,10 @@ export function NewSessionView(props: {
                       onboarding={onboardingReady() && !onboarding.used && props.workspace.bar.visible()}
                       onProjects={() => location()}
                       onWorktree={project().id && project().vcs === "git" ? () => location(project()) : undefined}
+                      mcps={props.mcps}
+                      skills={props.skills}
+                      onMcps={() => props.mcpsDialog()}
+                      onSkills={() => props.skillsDialog()}
                     />
                   )}
                 </Show>
@@ -201,6 +213,10 @@ function NewSessionLocation(props: {
   onboarding: boolean
   onProjects: () => void
   onWorktree?: () => void
+  mcps: NewSessionMcps
+  skills: NewSessionSkills
+  onMcps: () => void
+  onSkills: () => void
 }) {
   const language = useLanguage()
   const command = useCommand()
@@ -375,6 +391,30 @@ function NewSessionLocation(props: {
               </Show>
             )}
           </Show>
+          <button
+            type="button"
+            data-action="prompt-mcps"
+            aria-haspopup="dialog"
+            aria-description={language.t("dialog.mcp.title")}
+            class={`${TRIGGER} min-w-0`}
+            onClick={props.onMcps}
+          >
+            <Icon name="mcp" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
+            <span class="min-w-0 truncate">{language.plural("session.new.extensions.mcps", props.mcps.count())}</span>
+          </button>
+          <button
+            type="button"
+            data-action="prompt-skills"
+            aria-haspopup="dialog"
+            aria-description={language.t("settings.extensions.tab.skills")}
+            class={`${TRIGGER} min-w-0`}
+            onClick={props.onSkills}
+          >
+            <Icon name="post-skill" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
+            <span class="min-w-0 truncate">
+              {language.plural("session.new.extensions.skills", props.skills.count())}
+            </span>
+          </button>
         </div>
       </div>
       {/* An open tooltip can outlive this row; keep its path instead of a stale Show accessor. */}

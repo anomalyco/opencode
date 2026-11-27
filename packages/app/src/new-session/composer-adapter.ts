@@ -108,6 +108,11 @@ export function createNewSessionComposerAdapter(props: {
       const directory = worktree === "main" ? projectDirectory : worktree
       const sessionID = Session.ID.create()
       const settled = Promise.withResolvers<Started>()
+      const permissions = (tabs.draft(props.draftID).disabledSkills ?? []).map((resource) => ({
+        action: "skill",
+        resource,
+        effect: "deny" as const,
+      }))
 
       const accepted = props.start.start(
         {
@@ -205,6 +210,7 @@ export function createNewSessionComposerAdapter(props: {
                       variant: selection.variant,
                     },
                     location: { directory: effect.directory },
+                    permissions,
                   })
                   .request.then(
                     () => {

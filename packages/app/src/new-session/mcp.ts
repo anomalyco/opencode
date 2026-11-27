@@ -1,6 +1,6 @@
 import { createMemo } from "solid-js"
 import { type McpControls, useMcpController, useMcpPool } from "@/providers/connect/mcp"
-import { isMcpToggling } from "@/providers/connect/mcp-machine"
+import { isMcpToggling, mcpRowView } from "@/providers/connect/mcp-machine"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
 import { useServer } from "@/runtime/server/current"
@@ -51,11 +51,12 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
     get states() {
       return states()
     },
-    get pending() {
-      return input.preparing() || (!preview() && isMcpToggling(mcp.state()))
+    // Per server, as in the MCPs dialog: one server's toggle leaves the others free.
+    pending(name) {
+      return input.preparing() || (!preview() && mcpRowView(mcp.state(), name, undefined).busy)
     },
     change(name, enabled) {
-      if (controls.pending) return
+      if (controls.pending(name)) return
       tabs.updateDraft(input.draftID, { mcp: { target: target(), states: { ...states(), [name]: enabled } } })
 
       if (preview()) return

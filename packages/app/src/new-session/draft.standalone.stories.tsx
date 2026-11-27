@@ -12,6 +12,10 @@ import { useLocal } from "@/providers/models/selection"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useDirectoryPicker } from "@/workspaces/selection/picker"
 import { LocationProvider } from "@/workspaces/location"
+import { createNewSessionMcps } from "./extensions/mcp/controller"
+import { useNewSessionMcpsDialog } from "./extensions/mcp/dialog"
+import { createNewSessionSkills } from "./extensions/skills/controller"
+import { useNewSessionSkillsDialog } from "./extensions/skills/dialog"
 import { useNewSessionLocationDialog } from "./location/dialog"
 import { createPromptProjectController, type PromptProject } from "./project/selector"
 import { NewSessionView } from "./view"
@@ -58,7 +62,9 @@ function DraftLanding(props: DraftArgs & { directory: string; setDirectory: (dir
     location: DraftArgs["location"]
     activity: string
     agent: string
-  }>({ available: projects, location: props.location, activity: "", agent: "build" })
+    mcpStates: Record<string, boolean>
+    disabledSkills: string[]
+  }>({ available: projects, location: props.location, activity: "", agent: "build", mcpStates: {}, disabledSkills: [] })
 
   const select = (directory: string, _server?: string, workspace = "main") => {
     props.setDirectory(directory)
@@ -176,9 +182,38 @@ function DraftLanding(props: DraftArgs & { directory: string; setDirectory: (dir
 
   const openLocation = useNewSessionLocationDialog({ project, workspace, onDone: editor.restoreFocus })
 
+  const mcps = createNewSessionMcps({
+    servers: () => [
+      { id: "github", name: "github", status: "connected" },
+      { id: "linear", name: "linear", status: "needs_auth" },
+      { id: "sentry", name: "sentry", status: "disabled" },
+    ],
+    states: () => state.mcpStates,
+    pending: () => false,
+    change: (name, enabled) => setState("mcpStates", name, enabled),
+  })
+
+  const skills = createNewSessionSkills({
+    skills: () => ["brainstorming", "debugging", "review"].map((id) => ({ id, name: id })),
+    disabled: () => state.disabledSkills,
+    setDisabled: (ids) => setState("disabledSkills", ids),
+  })
+
+  const openMcps = useNewSessionMcpsDialog({ mcps, onDone: editor.restoreFocus })
+  const openSkills = useNewSessionSkillsDialog({ skills, onDone: editor.restoreFocus })
+
   return (
     <div class="relative flex h-dvh w-full flex-col bg-v2-background-bg-deep p-2">
-      <NewSessionView composer={composer} project={project} workspace={workspace} location={openLocation} />
+      <NewSessionView
+        composer={composer}
+        project={project}
+        workspace={workspace}
+        location={openLocation}
+        mcps={mcps}
+        skills={skills}
+        mcpsDialog={openMcps}
+        skillsDialog={openSkills}
+      />
       <Show when={state.activity}>
         <output class="absolute inset-x-4 bottom-4 text-center text-12-regular text-text-weak">{state.activity}</output>
       </Show>

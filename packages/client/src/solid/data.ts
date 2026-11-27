@@ -1877,6 +1877,7 @@ export function createData(config: CreateDataInput) {
         model?: ModelRef
         location?: LocationRef
         projectID?: string
+        permissions?: ReadonlyArray<{ action: string; resource: string; effect: "allow" | "deny" | "ask" }>
       }) {
         const { projectID, ...payload } = input
         const id = payload.id ?? SessionID.create()
