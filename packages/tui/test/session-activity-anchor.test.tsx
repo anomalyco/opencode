@@ -71,7 +71,11 @@ const running: SessionMessageInfo[] = [
   },
 ]
 
-async function withSession(run: (setup: Setup) => Promise<void>, history = messages) {
+async function withSession(
+  run: (setup: Setup) => Promise<void>,
+  history = messages,
+  ready = history === messages ? "Turn 5 answer" : "1 command",
+) {
   await using state = await tmpdir()
   const setup = await createTestRenderer({ width: 100, height: 30, kittyKeyboard: true })
   await setup.renderer.setupTerminal()
@@ -100,7 +104,7 @@ async function withSession(run: (setup: Setup) => Promise<void>, history = messa
     }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
   )
   try {
-    await setup.waitForFrame((frame) => frame.includes(history === messages ? "Turn 5 answer" : "1 command"))
+    await setup.waitForFrame((frame) => frame.includes(ready))
     await setup.waitForVisualIdle({ quietFrames: 3 })
     await run(setup)
   } finally {
@@ -176,5 +180,24 @@ test("a low activity summary that ends the transcript opens like v2 at the botto
       expect(lines(setup.captureCharFrame())[expand.row]).toContain(`+ ${label}`)
     },
     [...messages, ...running],
+  )
+}, 20000)
+
+test("collapsing activity clears the jump prompt when the transcript fits", async () => {
+  await withSession(
+    async (setup) => {
+      const label = "7 commands"
+      await toggle(setup, label)
+      setup.mockInput.pressKey("HOME")
+      await setup.waitForFrame((frame) => frame.includes("Jump to latest"))
+      await setup.waitForVisualIdle({ quietFrames: 3 })
+
+      await toggle(setup, label)
+      const collapsed = setup.captureCharFrame()
+      expect(collapsed).toContain("Turn 5 answer")
+      expect(collapsed).not.toContain("Jump to latest")
+    },
+    messages.slice(-2),
+    "Turn 5 answer",
   )
 }, 20000)
