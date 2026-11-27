@@ -1521,9 +1521,9 @@ dependencies = [
 
 [[package]]
 name = "psychoscript-gpu"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0b893763c16cf57bb94d37ca6ba61c17bbd819354d4d6f8ce8e4285c9e62071"
+checksum = "0032cd5b5b99c0d47e27de9fc664660360cfb71aa59343676071ee5d380dcf0d"
 dependencies = [
  "serde_json",
  "wgpu",
