@@ -962,13 +962,23 @@ export const layer = (options?: Options) =>
           return
         }
 
-        for (const [name, entry] of entries) {
-          const updated = servers.get(name)
-          if (isDeepStrictEqual(entry.config, updated)) continue
-          yield* (updated ? replaceServer(name, updated) : removeServer(name, entry)).pipe(locks.withLock(name))
+        // Decide each server from fresh state under its own lock. A reconcile can run while add() is
+        // inserting a server; the snapshot read above would then mistake that new server for a removed one.
+        for (const name of Array.from(entries.keys())) {
+          yield* Effect.suspend(() => {
+            const entry = entries.get(name)
+            if (!entry) return Effect.void
+            const updated = state.get().servers.get(name)
+            if (isDeepStrictEqual(entry.config, updated)) return Effect.void
+            return updated ? replaceServer(name, updated) : removeServer(name, entry)
+          }).pipe(locks.withLock(name))
         }
-        for (const [name, updated] of servers) {
-          if (!entries.has(name)) yield* replaceServer(name, updated).pipe(locks.withLock(name))
+        for (const name of Array.from(state.get().servers.keys())) {
+          yield* Effect.suspend(() => {
+            const updated = state.get().servers.get(name)
+            if (!updated || entries.has(name)) return Effect.void
+            return replaceServer(name, updated)
+          }).pipe(locks.withLock(name))
         }
       })
 
