@@ -1,6 +1,6 @@
 ---
 title: "SSO"
-description: "通过 OIDC 或 SAML，使用你的身份提供商登录 OpenCode Console 工作区。"
+description: "通过 OIDC 或 SAML，使用你的身份提供商登录 OpenCode 控制台工作区。"
 ---
 
 单点登录（SSO）会让工作区成员在登录时跳转到你公司的身份提供商。所有者可以在 **Settings › Security** 中设置，所有工作区都包含此功能。
@@ -23,7 +23,7 @@ description: "通过 OIDC 或 SAML，使用你的身份提供商登录 OpenCode 
 https://opencode.ai/console/auth/sso/ssoconn_.../callback
 ```
 
-保存时，Console 会检查颁发者是否可访问。连接保存后，SSO 立即生效。
+保存时，控制台会检查颁发者是否可访问。连接保存后，SSO 立即生效。
 
 ## 设置 SAML
 
@@ -41,7 +41,7 @@ SP Entity ID:  https://opencode.ai/console/auth/sso/ssoconn_.../metadata
 
 ## 验证邮箱域名
 
-使用已验证域名下的邮箱登录 [Console](https://opencode.ai/console) 的用户，会被转到你的身份提供商。SSO 生效后，在 **Email domains** 下点击 **Add domain**，输入你的域名，然后发布页面上显示的 TXT 记录。
+使用已验证域名下的邮箱登录 [控制台](https://opencode.ai/console) 的用户，会被转到你的身份提供商。SSO 生效后，在 **Email domains** 下点击 **Add domain**，输入你的域名，然后发布页面上显示的 TXT 记录。
 
 ```text
 Name:   _opencode-console-challenge.example.com
@@ -53,7 +53,7 @@ Value:  oc-verify=...
 
 ## 强制使用 SSO
 
-工作区启用 SSO 后，管理员和成员必须通过 SSO 登录才能打开该工作区，Console 会自动将他们重定向到身份提供商。使用 `/connect` 连接 OpenCode 时也遵循同样的规则。
+工作区启用 SSO 后，管理员和成员必须通过 SSO 登录才能打开该工作区，控制台会自动将他们重定向到身份提供商。使用 `/connect` 连接 OpenCode 时也遵循同样的规则。
 
 所有者也可以不通过 SSO 登录，这样即使身份提供商配置有误，也不会导致无法进入工作区设置。
 
@@ -69,7 +69,7 @@ Value:  oc-verify=...
 
 ## 现有账号
 
-如果某人已经有使用相同邮箱的 Console 账号，其需要在 SSO 流程中再次登录，并通过 **Link account** 确认。邀请不会跳过这一步。在已验证域名的工作区中，通过 SCIM 预配的账号仍可自动关联。
+如果某人已经有使用相同邮箱的控制台账号，其需要在 SSO 流程中再次登录，并通过 **Link account** 确认。邀请不会跳过这一步。在已验证域名的工作区中，通过 SCIM 预配的账号仍可自动关联。
 
 ## 编辑或删除
 

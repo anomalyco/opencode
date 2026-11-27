@@ -1,9 +1,9 @@
 ---
-title: "Console 提供商"
-description: "将你自己的模型提供商账号接入 OpenCode Console 工作区，并选择成员可以使用哪些模型。"
+title: "控制台提供商"
+description: "将你自己的模型提供商账号接入 OpenCode 控制台工作区，并选择成员可以使用哪些模型。"
 ---
 
-你可以接入已在付费使用的提供商账号，例如 Anthropic、OpenAI 或 AWS Bedrock，并与工作区中的所有人共享它们的模型。Console 保存凭据，并通过自己的网关提供各个提供商的服务，因此成员可以直接使用模型，而永远看不到提供商的密钥。你自己的工具也可以通过 [Providers API](/console/api/providers) 使用同一个网关。
+你可以接入已在付费使用的提供商账号，例如 Anthropic、OpenAI 或 AWS Bedrock，并与工作区中的所有人共享它们的模型。控制台保存凭据，并通过自己的网关提供各个提供商的服务，因此成员可以直接使用模型，而永远看不到提供商的密钥。你自己的工具也可以通过 [Providers API](/console/api/providers) 使用同一个网关。
 
 所有者和管理员在 **Providers** 标签页中管理提供商。成员在 OpenCode 中运行 `/connect` 后，即可使用已启用的模型。
 
@@ -33,10 +33,10 @@ description: "将你自己的模型提供商账号接入 OpenCode Console 工作
 
 | 字段       | 说明                                                                            |
 | ---------- | ------------------------------------------------------------------------------- |
-| 基础 URL   | Console 转发请求的目标地址，例如 `https://api.deepseek.com/v1`。                |
+| 基础 URL   | 控制台转发请求的目标地址，例如 `https://api.deepseek.com/v1`。                |
 | 格式       | Chat Completions、Responses API、Anthropic Compatible 或 Google Generative AI。 |
 | 认证方式   | Bearer、API 密钥请求头或自定义请求头。                                       |
-| 凭据       | Console 发送给提供商的密钥。                                                    |
+| 凭据       | 控制台发送给提供商的密钥。                                                    |
 
 ## 选择模型
 
@@ -76,11 +76,11 @@ description: "将你自己的模型提供商账号接入 OpenCode Console 工作
 
 ## OpenCode 模型
 
-**Models** 标签页用于管理 Console 提供的[模型](/console/models)，这些模型由工作区额度支付。它的用法和提供商页面一样：
+**Models** 标签页用于管理控制台提供的[模型](/console/models)，这些模型由工作区额度支付。它的用法和提供商页面一样：
 
 - 单独启用或停用某个模型。
 - 关闭 **Free models**，可以在工作区中禁用免费模型。
-- 开启 **New models**，可以自动启用新的 Console 模型。
+- 开启 **New models**，可以自动启用新的控制台模型。
 
 如果只想使用你自己的提供商，可以通过 **⋯ › Disable** 停用整个提供商。
 
@@ -96,7 +96,7 @@ Acme Inc. / Anthropic
 
 ## 发送身份
 
-如果提供商是你自己运行的网关，请在其页面上开启 **Send identity**。Console 随后会在发往该网关的每个模型请求中添加一个 `x-opencode-actor` 请求头。该请求头指明请求背后的成员或服务账号，因此你的网关可以按发送者记录日志或限制请求。
+如果提供商是你自己运行的网关，请在其页面上开启 **Send identity**。控制台随后会在发往该网关的每个模型请求中添加一个 `x-opencode-actor` 请求头。该请求头指明请求背后的成员或服务账号，因此你的网关可以按发送者记录日志或限制请求。
 
 ```text
 x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZCI6Ii4uLiJ9...
@@ -104,12 +104,12 @@ x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZC
 
 - 默认关闭，更改基础 URL 也会将其关闭。
 - 仍指向厂商自身 API 的提供商（例如 `https://api.openai.com/v1`）不会显示该设置，因为厂商会忽略这个请求头。
-- Console 会移除客户端发送的任何 `x-opencode-*` 请求头，因此你的网关收到的唯一 `x-opencode-actor` 就是 Console 签名的那一个。
+- 控制台会移除客户端发送的任何 `x-opencode-*` 请求头，因此你的网关收到的唯一 `x-opencode-actor` 就是控制台签名的那一个。
 - **Test connection** 和模型列表只带凭据调用 `GET <base URL>/models`，不会发送该请求头，因此不要在这条路由上强制要求该请求头。
 
 ### 令牌
 
-该请求头是 Console 为每个请求签名的 JWT。
+该请求头是控制台为每个请求签名的 JWT。
 
 | 字段        | 值                                            |
 | ------------ | ------------------------------------------------ |
@@ -147,7 +147,7 @@ x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZC
 
 ### 验证令牌
 
-Console 在 `https://opencode.ai/inference/.well-known/jwks.json` 公布公钥，并通过 `Cache-Control: public, max-age=300` 提供。请检查签名、签发者、受众、类型和有效期，再检查工作区。以下示例使用 [jose](https://github.com/panva/jose)。
+控制台在 `https://opencode.ai/inference/.well-known/jwks.json` 公布公钥，并通过 `Cache-Control: public, max-age=300` 提供。请检查签名、签发者、受众、类型和有效期，再检查工作区。以下示例使用 [jose](https://github.com/panva/jose)。
 
 ```ts
 import { createRemoteJWKSet, jwtVerify } from "jose"
@@ -170,7 +170,7 @@ export async function sender(request: Request) {
 }
 ```
 
-将 `audience` 设为 Console 中保存的提供商基础 URL（去掉末尾斜杠），并将 `org_...` 替换为 Console URL 中的工作区 ID。Console 会在使用新签名密钥签名之前先公布它，因此像 `createRemoteJWKSet` 这样按 `kid` 查找密钥的验证方可以在密钥轮换期间继续工作。
+将 `audience` 设为控制台中保存的提供商基础 URL（去掉末尾斜杠），并将 `org_...` 替换为控制台 URL 中的工作区 ID。控制台会在使用新签名密钥签名之前先公布它，因此像 `createRemoteJWKSet` 这样按 `kid` 查找密钥的验证方可以在密钥轮换期间继续工作。
 
 ## 停用或移除
 
@@ -183,6 +183,6 @@ export async function sender(request: Request) {
 
 ## 计费
 
-token 费用由提供商直接向你收取，Console 不会为此扣除额度。不过，Console 仍会记录每个请求，并按模型价格计算其成本，因此用量报告和[预算](/console/budgets)中会包含这些请求。
+token 费用由提供商直接向你收取，控制台不会为此扣除额度。不过，控制台仍会记录每个请求，并按模型价格计算其成本，因此用量报告和[预算](/console/budgets)中会包含这些请求。
 
 如果要在自己的工具（而不是 OpenCode）中调用提供商，请使用 [Providers API](/console/api/providers)。

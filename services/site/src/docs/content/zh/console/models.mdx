@@ -1,15 +1,15 @@
 ---
-title: "Console 模型"
-description: "经过精选的编程模型、按量付费价格，以及通过 OpenCode Console 提供的 API 访问。"
+title: "控制台模型"
+description: "经过精选的编程模型、按量付费价格，以及通过 OpenCode 控制台提供的 API 访问。"
 ---
 
-OpenCode Console 提供一份经过 OpenCode 团队测试和验证的模型列表。登录、充值额度并获取 API 密钥，即可在 OpenCode 或其他编程 agent 中使用这些模型。
+OpenCode 控制台提供一份经过 OpenCode 团队测试和验证的模型列表。登录、充值额度并获取 API 密钥，即可在 OpenCode 或其他编程 agent 中使用这些模型。
 
-Console 在 OpenCode 中的用法与其他提供商相同。它**完全是可选的**，你也可以改用任何其他提供商。如果想要包含用量的订阅，请参阅 [OpenCode Go](/console/go)。
+控制台在 OpenCode 中的用法与其他提供商相同。它**完全是可选的**，你也可以改用任何其他提供商。如果想要包含用量的订阅，请参阅 [OpenCode Go](/console/go)。
 
 ## 工作原理
 
-1. 登录 [Console](https://opencode.ai/console)，添加账单信息和额度，然后复制你的 API 密钥。
+1. 登录 [控制台](https://opencode.ai/console)，添加账单信息和额度，然后复制你的 API 密钥。
 2. 在 TUI 中运行 `/connect`，选择 OpenCode 按量付费提供商，然后粘贴 API 密钥。
 
    ```text
@@ -28,9 +28,9 @@ Console 在 OpenCode 中的用法与其他提供商相同。它**完全是可选
 
 你也可以通过以下 API 端点直接访问这些模型。免费层级对话模型只能在 OpenCode 中使用；其他客户端请使用付费模型或 [Go](/console/go)。
 
-每个模型都以其原生 API 列出，但所有文本模型也能通过 Console 转换的其他 API 使用。完整列表请参阅[基础 URL](/console/harnesses#base-urls)。
+每个模型都以其原生 API 列出，但所有文本模型也能通过控制台转换的其他 API 使用。完整列表请参阅[基础 URL](/console/harnesses#base-urls)。
 
-<div class="docs-table-scroll" role="region" aria-label="Console 模型端点" tabIndex={0}>
+<div class="docs-table-scroll" role="region" aria-label="控制台模型端点" tabIndex={0}>
 
 | 模型                       | 模型 ID                    | 端点                                                                                    | AI SDK 包              |
 | --------------------------- | --------------------------- | ------------------------------------------------------------------------------------------- | --------------------------- |
@@ -160,13 +160,13 @@ Console 在 OpenCode 中的用法与其他提供商相同。它**完全是可选
 curl https://opencode.ai/inference/v1/models
 ```
 
-关于响应中的每个字段，以及包含工作区已连接提供商的 Console 模型列表，请参阅[模型列表 API](/console/api/models)。
+关于响应中的每个字段，以及包含工作区已连接提供商的控制台模型列表，请参阅[模型列表 API](/console/api/models)。
 
 ### Jev
 
 Jev 是 TypeSafe AI 的 System One 模型，用于快速做出结构化决策。它不生成文本，而是根据有类型定义的问题评估 `state`，返回代码可以直接使用的值和概率。它支持是/否（`noul`）、多选（`choice`）和基于评分标准（`score`）的问题。
 
-使用 OpenCode Console API 密钥调用 `https://opencode.ai/inference/systemone/v1/systemone` 端点。以下示例检查一个支持请求是否紧急：
+使用 OpenCode 控制台 API 密钥调用 `https://opencode.ai/inference/systemone/v1/systemone` 端点。以下示例检查一个支持请求是否紧急：
 
 ```bash
 curl https://opencode.ai/inference/systemone/v1/systemone \
@@ -236,7 +236,7 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
 
 ### 图片模型
 
-`gpt-image-2.5-sunburst`、`gemini-nano-banana-2.1` 和 `grok-imagine-image-2.0` 可以生成和编辑图片。它们不是对话模型，因此不会出现在 `/models` 或模型端点中，`opencode/<model-id>` 也无法选择它们。请使用 Console 密钥在它们的原生 API 上调用，或者通过设置 `experimental.image_generate.model`（例如 `opencode/gpt-image-2.5-sunburst`），让 OpenCode 的 [`generate_image`](/tools#image-generate) 工具使用图片模型。
+`gpt-image-2.5-sunburst`、`gemini-nano-banana-2.1` 和 `grok-imagine-image-2.0` 可以生成和编辑图片。它们不是对话模型，因此不会出现在 `/models` 或模型端点中，`opencode/<model-id>` 也无法选择它们。请使用控制台密钥在它们的原生 API 上调用，或者通过设置 `experimental.image_generate.model`（例如 `opencode/gpt-image-2.5-sunburst`），让 OpenCode 的 [`generate_image`](/tools#image-generate) 工具使用图片模型。
 
 ```bash
 curl https://opencode.ai/inference/openai/v1/images/generations \
@@ -253,7 +253,7 @@ Google 使用其原生的 `contents` 和 `generationConfig`，xAI 使用其原�
 
 ### 嵌入模型
 
-`text-embedding-3-small`、`qwen3-embedding-8b` 以及上表中的其他嵌入模型会把文本转换为向量。OpenCode 不会用它们做对话，因此它们永远不会出现在 `/models` 中，免费层级也不包含它们。[Go](/console/go#embedding-models) 包含其中的一部分。请使用 Console 密钥在 OpenAI 的 Embeddings API 上调用它们。
+`text-embedding-3-small`、`qwen3-embedding-8b` 以及上表中的其他嵌入模型会把文本转换为向量。OpenCode 不会用它们做对话，因此它们永远不会出现在 `/models` 中，免费层级也不包含它们。[Go](/console/go#embedding-models) 包含其中的一部分。请使用控制台密钥在 OpenAI 的 Embeddings API 上调用它们。
 
 ```bash
 curl https://opencode.ai/inference/openai/v1/embeddings \
@@ -275,9 +275,9 @@ curl https://opencode.ai/inference/openai/v1/embeddings \
 
 ## 价格
 
-Console 采用按量付费。以下价格均为**每 1M token**，图片模型在注明时按图片计费。
+控制台采用按量付费。以下价格均为**每 1M token**，图片模型在注明时按图片计费。
 
-<div class="docs-table-scroll" role="region" aria-label="Console 模型价格" tabIndex={0}>
+<div class="docs-table-scroll" role="region" aria-label="控制台模型价格" tabIndex={0}>
 
 | 模型                               | 输入           | 输出            | 缓存读取        | 缓存写入 |
 | ----------------------------------- | --------------- | ----------------- | ------------------ | ------------ |
@@ -504,7 +504,7 @@ Console 采用按量付费。以下价格均为**每 1M token**，图片模型�
 
 ## 面向团队
 
-你可以在[工作区](/console/workspaces)中与团队共享 Console 模型。所有者和管理员可以[邀请成员](/console/members)、在 **Models** 标签页中选择启用哪些模型、设置[预算](/console/budgets)，以及接入[自有提供商](/console/providers)。
+你可以在[工作区](/console/workspaces)中与团队共享控制台模型。所有者和管理员可以[邀请成员](/console/members)、在 **Models** 标签页中选择启用哪些模型、设置[预算](/console/budgets)，以及接入[自有提供商](/console/providers)。
 
 ## 背景
 
@@ -518,13 +518,13 @@ Console 采用按量付费。以下价格均为**每 1M token**，图片模型�
 2. 与提供商合作，确保模型能够正确提供服务。
 3. 对每个模型/提供商组合做基准测试，整理出一份我们愿意推荐的列表。
 
-Console 是一个 AI 网关，让你可以使用这些模型。
+控制台是一个 AI 网关，让你可以使用这些模型。
 
 ## 目标
 
-我们构建 Console 的目标是：
+我们构建控制台的目标是：
 
 1. 为编程 agent **基准测试**出最好的模型和提供商。
 2. 提供**最高质量**的选项，不降低性能，也不路由到更便宜的提供商。
 3. 按成本价销售，把**降价**回馈给你，只加收覆盖支付手续费的部分。
-4. **不锁定**：可以在任何编程 agent 中使用 Console，也可以在 OpenCode 中使用其他提供商。
+4. **不锁定**：可以在任何编程 agent 中使用控制台，也可以在 OpenCode 中使用其他提供商。

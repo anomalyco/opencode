@@ -1,12 +1,12 @@
 ---
 title: "Claude Code"
-description: "在 Claude Code 中使用 Console 和 Go 模型。"
+description: "在 Claude Code 中使用控制台和 Go 模型。"
 ---
 
-Claude Code 使用 Anthropic Messages API。用两个环境变量将它指向 Console，即可使用任何付费或 Go 模型，包括 GPT、Gemini 和开源模型。对不接受 Anthropic Messages 的模型，Console 会转换请求。
+Claude Code 使用 Anthropic Messages API。用两个环境变量将它指向控制台，即可使用任何付费或 Go 模型，包括 GPT、Gemini 和开源模型。对不接受 Anthropic Messages 的模型，控制台会转换请求。
 
 <Callout>
-  [Console CLI](/console/harnesses#console-cli) 可以用一条命令设置好 Claude Code，包括工作区的策略、MCP 服务器、技能和指令。运行 `npx @opencode/console setup claude-code`。以下步骤介绍如何手动设置。
+  [控制台 CLI](/console/harnesses#console-cli) 可以用一条命令设置好 Claude Code，包括工作区的策略、MCP 服务器、技能和指令。运行 `npx @opencode/console setup claude-code`。以下步骤介绍如何手动设置。
 </Callout>
 
 ```bash
@@ -19,7 +19,7 @@ claude --model claude-sonnet-5-5
 
 ## 配置
 
-在 `~/.claude/settings.json` 中设置这些变量，即可在每个会话中使用 Console。将 `opus`、`sonnet` 和 `haiku` 别名映射到 Console 模型，让 `/model` 和后台任务也能使用它们。
+在 `~/.claude/settings.json` 中设置这些变量，即可在每个会话中使用控制台。将 `opus`、`sonnet` 和 `haiku` 别名映射到控制台模型，让 `/model` 和后台任务也能使用它们。
 
 ```json title="~/.claude/settings.json"
 {
@@ -36,7 +36,7 @@ claude --model claude-sonnet-5-5
 Claude Code 会在基础 URL 后追加 `/v1/messages`，因此不要写这个路径。运行 `/status` 确认基础 URL 和令牌已生效。
 
 <Callout>
-  请使用 `ANTHROPIC_AUTH_TOKEN`，而不是 `ANTHROPIC_API_KEY`。如果你已登录 Claude 账号，请先运行 `/logout`，以免 Claude Code 把该登录信息发送给 Console。
+  请使用 `ANTHROPIC_AUTH_TOKEN`，而不是 `ANTHROPIC_API_KEY`。如果你已登录 Claude 账号，请先运行 `/logout`，以免 Claude Code 把该登录信息发送给控制台。
 </Callout>
 
 ## Go
@@ -56,15 +56,15 @@ Claude Code 会在基础 URL 后追加 `/v1/messages`，因此不要写这个路
 
 ## 模型
 
-可以使用 [Console](/console/models#endpoints) 或 [Go](/console/go#endpoints) 表格中的任何模型 ID。在会话中用 `/model` 切换模型，或为单次运行选择一个模型。
+可以使用 [控制台](/console/models#endpoints) 或 [Go](/console/go#endpoints) 表格中的任何模型 ID。在会话中用 `/model` 切换模型，或为单次运行选择一个模型。
 
 ```bash
 claude --model gpt-6.1-sol
 ```
 
-## Console MCP
+## 控制台 MCP
 
-为你的所有项目添加 [Console MCP](/console/harnesses#console-mcp) 服务器。
+为你的所有项目添加 [控制台 MCP](/console/harnesses#console-mcp) 服务器。
 
 ```bash
 claude mcp add --transport http --scope user opencode-console https://opencode.ai/console/mcp

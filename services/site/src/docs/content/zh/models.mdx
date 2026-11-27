@@ -68,7 +68,7 @@ OPENCODE_DISABLE_FREE_MODELS=1 opencode serve
 opencode service set env OPENCODE_DISABLE_FREE_MODELS 1
 ```
 
-免费是指 `opencode` 或 `opencode-go` 中没有输入价格的模型。这些模型会从目录和默认值中消失；显式选择它们会失败并提示 `Model unavailable`。未登录时，`opencode` 提供商不存在，直到你连接 OpenCode Console 账号或设置 `OPENCODE_API_KEY`，后者会恢复其付费模型。
+免费是指 `opencode` 或 `opencode-go` 中没有输入价格的模型。这些模型会从目录和默认值中消失；显式选择它们会失败并提示 `Model unavailable`。未登录时，`opencode` 提供商不存在，直到你连接 OpenCode 控制台账号或设置 `OPENCODE_API_KEY`，后者会恢复其付费模型。
 
 要为组织中的所有人屏蔽免费模型，请改用策略。请参阅[企业版](/enterprise#block-free-models)。
 

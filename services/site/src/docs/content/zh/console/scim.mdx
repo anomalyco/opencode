@@ -3,7 +3,7 @@ title: "目录同步"
 description: "从 Okta、Microsoft Entra ID 或任何 SCIM 2.0 身份提供商自动添加和移除工作区成员。"
 ---
 
-目录同步（SCIM 2.0）会在你于身份提供商中分配用户时将其添加到工作区，并在取消分配时撤销其访问权限。角色仍在 Console 中管理。
+目录同步（SCIM 2.0）会在你于身份提供商中分配用户时将其添加到工作区，并在取消分配时撤销其访问权限。角色仍在控制台中管理。
 
 ```text
 https://opencode.ai/console/scim/v2
@@ -43,13 +43,13 @@ Authorization: Bearer <token>
 
 ### 其他提供商
 
-使用支持请求头令牌认证的 SCIM 2.0 应用，并将其指向基础 URL。Console 支持 `/Users` 和 `/Groups` 端点。
+使用支持请求头令牌认证的 SCIM 2.0 应用，并将其指向基础 URL。控制台支持 `/Users` 和 `/Groups` 端点。
 
 请先分配一名测试用户。收到第一个请求后，**Directory sync** 会显示 **Connected to your identity provider**。
 
 ## 同步内容
 
-| 在身份提供商中      | 在 Console 中                                                     |
+| 在身份提供商中      | 在控制台中                                                     |
 | ------------------- | ----------------------------------------------------------------- |
 | 分配用户            | 以 **Member** 身份添加。已有成员保留原有角色。                    |
 | 更新姓名            | 更新个人资料。                                                    |

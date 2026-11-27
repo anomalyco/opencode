@@ -1,17 +1,17 @@
 ---
 title: "Codex"
-description: "在 Codex 中使用 Console 和 Go 模型。"
+description: "在 Codex 中使用控制台和 Go 模型。"
 ---
 
-Codex 使用 OpenAI Responses API。将它指向 Console，即可使用任何付费或 Go 模型，包括 Claude、Gemini 和开源模型。对不接受 Responses 的模型，Console 会转换请求。
+Codex 使用 OpenAI Responses API。将它指向控制台，即可使用任何付费或 Go 模型，包括 Claude、Gemini 和开源模型。对不接受 Responses 的模型，控制台会转换请求。
 
 <Callout>
-  [Console CLI](/console/harnesses#console-cli) 可以用一条命令设置好 Codex，包括工作区的策略、MCP 服务器、技能和指令。运行 `npx @opencode/console setup codex`。以下步骤介绍如何手动设置。
+  [控制台 CLI](/console/harnesses#console-cli) 可以用一条命令设置好 Codex，包括工作区的策略、MCP 服务器、技能和指令。运行 `npx @opencode/console setup codex`。以下步骤介绍如何手动设置。
 </Callout>
 
 ## 配置
 
-在 `~/.codex/config.toml` 中将 Console 添加为模型提供商，并将其设为默认。
+在 `~/.codex/config.toml` 中将控制台添加为模型提供商，并将其设为默认。
 
 ```toml title="~/.codex/config.toml"
 model = "gpt-6.1-sol"
@@ -52,7 +52,7 @@ wire_api = "responses"
 
 ## 模型
 
-将 `model` 设为 [Console](/console/models#endpoints) 或 [Go](/console/go#endpoints) 表格中的任何模型 ID。使用 `--model` 可以为单次运行覆盖它。
+将 `model` 设为 [控制台](/console/models#endpoints) 或 [Go](/console/go#endpoints) 表格中的任何模型 ID。使用 `--model` 可以为单次运行覆盖它。
 
 ```bash
 codex --model claude-sonnet-5-5
@@ -73,9 +73,9 @@ model_provider = "opencode-go"
 codex --profile go
 ```
 
-## Console MCP
+## 控制台 MCP
 
-添加 [Console MCP](/console/harnesses#console-mcp) 服务器，并在浏览器中登录。
+添加 [控制台 MCP](/console/harnesses#console-mcp) 服务器，并在浏览器中登录。
 
 ```bash
 codex mcp add opencode-console --url https://opencode.ai/console/mcp

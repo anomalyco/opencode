@@ -1,9 +1,9 @@
 ---
 title: "Harnesses"
-description: "在其他编程 agent 和 AI 应用中使用 Console 和 Go 模型。"
+description: "在其他编程 agent 和 AI 应用中使用控制台和 Go 模型。"
 ---
 
-Console 可以配合 OpenCode 以外的编程 agent 使用。用 API 密钥让 harness 指向 Console 网关，即可使用任何付费或 Go 模型，用量会像其他请求一样计入你的工作区。
+控制台可以配合 OpenCode 以外的编程 agent 使用。用 API 密钥让 harness 指向控制台网关，即可使用任何付费或 Go 模型，用量会像其他请求一样计入你的工作区。
 
 | Harness                                       | 按量付费 | Go        | MCP |
 | --------------------------------------------- | ------------- | --------- | --- |
@@ -14,11 +14,11 @@ Console 可以配合 OpenCode 以外的编程 agent 使用。用 API 密钥让 h
 | [Pi](/console/harnesses/pi)                   | 内置      | 内置  | 是 |
 | [Raycast](/console/harnesses/raycast)         | 扩展     | 扩展 | 是 |
 
-免费层级对话模型只能在 OpenCode 内使用。其他 harness 即使带有 Console API 密钥，对这些模型的请求也会收到 HTTP `403`。请使用付费模型或 Go 订阅。
+免费层级对话模型只能在 OpenCode 内使用。其他 harness 即使带有控制台 API 密钥，对这些模型的请求也会收到 HTTP `403`。请使用付费模型或 Go 订阅。
 
-## Console CLI
+## 控制台 CLI
 
-[Console CLI](https://github.com/anomalyco/opencode-console-cli) 可以用一条命令把 harness 连接到你的工作区。它需要 Node.js 22 或更高版本。
+[控制台 CLI](https://github.com/anomalyco/opencode-console-cli) 可以用一条命令把 harness 连接到你的工作区。它需要 Node.js 22 或更高版本。
 
 | Harness          | 命令                                        |
 | ---------------- | ---------------------------------------------- |
@@ -29,9 +29,9 @@ Console 可以配合 OpenCode 以外的编程 agent 使用。用 API 密钥让 h
 | Pi               | `npx @opencode/console setup pi`               |
 | DeepSeek Harness | `npx @opencode/console setup deepseek-harness` |
 
-浏览器会打开 Console，你可以在其中批准登录并选择工作区。随后 harness 会获得
+浏览器会打开控制台，你可以在其中批准登录并选择工作区。随后 harness 会获得
 
-- 工作区的模型，通过 Console 提供
+- 工作区的模型，通过控制台提供
 - 工作区的策略，在每次工具调用前检查
 - 工作区的 MCP 服务器、技能和指令
 
@@ -47,9 +47,9 @@ npx @opencode/console setup codex --keep-provider
 
 ## 获取 API 密钥
 
-Harness 使用 Console API 密钥认证。最快的方式是使用[个人 API 密钥](/console/api#personal-api-keys)，它以你的身份调用模型。
+Harness 使用控制台 API 密钥认证。最快的方式是使用[个人 API 密钥](/console/api#personal-api-keys)，它以你的身份调用模型。
 
-1. 在 [Console](https://opencode.ai/console) 的账号菜单中打开 **Account**。
+1. 在 [控制台](https://opencode.ai/console) 的账号菜单中打开 **Account**。
 2. 在 **Personal API keys** 下点击 **Add API key**。
 3. 选择工作区，为密钥命名，然后点击 **Create**。
 4. 复制密钥。它只显示一次。
@@ -71,7 +71,7 @@ oc_sk_1a2b3c4d5e6f_...
 | 按量付费 | `https://opencode.ai/inference`    |
 | Go            | `https://opencode.ai/inference/go` |
 
-在后面追加你的 harness 所用 API 的路径。每个 API 都提供所有付费和 Go 文本模型：当模型原生支持该 API 时，Console 会把请求发到模型自己的端点，否则会做转换。
+在后面追加你的 harness 所用 API 的路径。每个 API 都提供所有付费和 Go 文本模型：当模型原生支持该 API 时，控制台会把请求发到模型自己的端点，否则会做转换。
 
 | API                     | 路径                                            |
 | ----------------------- | ----------------------------------------------- |
@@ -86,17 +86,17 @@ https://opencode.ai/inference/go/openai/v1/chat/completions
 
 ## 会话
 
-在每个请求中发送稳定的会话 ID，让 Console 能一致地路由对话并复用其提示词缓存。Go [要求这样做](/console/go#where-can-i-use-it)。
+在每个请求中发送稳定的会话 ID，让控制台能一致地路由对话并复用其提示词缓存。Go [要求这样做](/console/go#where-can-i-use-it)。
 
 ```text
 x-opencode-session: ses_...
 ```
 
-Console 还能识别 Claude Code、Codex、Hermes 和 Pi 发送的原生会话请求头，OpenClaw 则会自行发送 `x-opencode-session`，因此它们都不需要额外配置。
+控制台还能识别 Claude Code、Codex、Hermes 和 Pi 发送的原生会话请求头，OpenClaw 则会自行发送 `x-opencode-session`，因此它们都不需要额外配置。
 
-## Console MCP
+## 控制台 MCP
 
-支持 MCP 的 harness 可以通过 Console MCP 服务器管理你的工作区。它使用 OAuth 和动态客户端注册，因此你可以在浏览器中登录，而无需粘贴密钥。
+支持 MCP 的 harness 可以通过控制台 MCP 服务器管理你的工作区。它使用 OAuth 和动态客户端注册，因此你可以在浏览器中登录，而无需粘贴密钥。
 
 ```text
 https://opencode.ai/console/mcp

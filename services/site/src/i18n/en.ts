@@ -373,6 +373,7 @@ export const dict = {
   "docs.nav.plugins": "Plugins",
   "docs.nav.client": "Client",
   "docs.nav.workspace": "Workspace",
+  "docs.nav.console": "Console",
   "docs.lockup.sectionDocs": "{{section}} docs",
   "docs.lockup.switchLabel": "{{name}}, switch docs",
   "docs.lockup.home": "{{name}} home",

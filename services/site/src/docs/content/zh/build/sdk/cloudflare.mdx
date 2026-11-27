@@ -55,7 +55,7 @@ Wrangler 会通过 `workerd` 包条件（package condition）选择 OpenCode 中
 
 ## 路由出站请求
 
-传入 `fetch`，即可通过自定义处理程序（例如 Service Binding）路由 OpenCode 的出站 HTTP 请求（OpenCode Console 配置、模型请求、网页抓取和搜索、well-known 配置，以及远程 MCP 服务器）。Code Mode 中的 agent 代码仍使用 `globalThis.fetch`。
+传入 `fetch`，即可通过自定义处理程序（例如 Service Binding）路由 OpenCode 的出站 HTTP 请求（OpenCode 控制台配置、模型请求、网页抓取和搜索、well-known 配置，以及远程 MCP 服务器）。Code Mode 中的 agent 代码仍使用 `globalThis.fetch`。
 
 ```ts
 OpenCodeWorkerd.create({

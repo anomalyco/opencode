@@ -1,9 +1,9 @@
 ---
 title: "API 概览"
-description: "使用个人 API 密钥或服务账号密钥向 OpenCode Console API 验证身份，并限定每个密钥可以做什么。"
+description: "使用个人 API 密钥或服务账号密钥向 OpenCode 控制台 API 验证身份，并限定每个密钥可以做什么。"
 ---
 
-Console API 让你的脚本和集成能够调用模型并导出用量。每个请求都使用 API 密钥认证。
+控制台 API 让你的脚本和集成能够调用模型并导出用量。每个请求都使用 API 密钥认证。
 
 ```bash
 curl --fail-with-body "https://opencode.ai/inference/v1/models" \
@@ -34,7 +34,7 @@ Authorization: Bearer oc_sk_...
 | 适用场景         | 你自己的脚本和 [Harness](/console/harnesses)   | CI、共享机器和集成                                    |
 
 - 每个密钥仅在一个工作区中有效，创建时选择该工作区。无需额外的工作区请求头。
-- 完整密钥只会在创建后显示一次，之后 Console 只显示其前缀。
+- 完整密钥只会在创建后显示一次，之后控制台只显示其前缀。
 - **Expiration** 是可选的：**Never**、**1 day**、**7 days**、**30 days** 或 **Custom**（1 到 365 天）。过期的密钥无法续期，请创建新密钥。
 
 ## 个人 API 密钥
@@ -107,13 +107,13 @@ Models:      Request
 
 ### 谁可以授予什么
 
-- **成员**只能创建用于列出和调用模型的个人密钥。Console 会显示“This key can list and call models as you.”，而不是权限选项。
+- **成员**只能创建用于列出和调用模型的个人密钥。控制台会显示“This key can list and call models as you.”，而不是权限选项。
 - **所有者和管理员**可以为其个人密钥授予 **All**、**Restricted** 或 **Read only**，但不超过自己的角色。默认为 **Restricted**，并将 **Models** 设为 **Request**。如果之后被降级，其密钥的权限也会相应缩小。
 - **服务账号密钥**默认为 **All**。所有者和管理员选择其权限。
 
 ### 限制
 
-有些操作必须有人在 Console 中登录后才能执行，使用密钥创建密钥也受到严格限制。
+有些操作必须有人在控制台中登录后才能执行，使用密钥创建密钥也受到严格限制。
 
 - 任何 API 密钥都不能更改 SSO 设置或删除工作区。
 - 服务账号密钥不能邀请成员、更改角色、移除成员、管理账单、更改工作区设置、管理模型，也不能创建或移除服务账号，即使拥有 **All** 也不行。

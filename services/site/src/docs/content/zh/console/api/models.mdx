@@ -1,9 +1,9 @@
 ---
 title: "模型列表 API"
-description: "列出工作区可以使用的模型及其上限、价格、能力，以及调用每个模型的 Console URL。"
+description: "列出工作区可以使用的模型及其上限、价格、能力，以及调用每个模型的控制台 URL。"
 ---
 
-模型列表有两种。[Console 列表](#console-model-list)返回工作区可以使用的所有内容，包括已连接的提供商。[推理列表](#inference-model-lists)以 OpenAI 的列表格式返回公开的 OpenCode Models 和 Go 目录。
+模型列表有两种。[控制台列表](#console-model-list)返回工作区可以使用的所有内容，包括已连接的提供商。[推理列表](#inference-model-lists)以 OpenAI 的列表格式返回公开的 OpenCode Models 和 Go 目录。
 
 | 列表                                                | 返回                                                                                        | 密钥      |
 | --------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------- |
@@ -11,9 +11,9 @@ description: "列出工作区可以使用的模型及其上限、价格、能力
 | [`/inference/v1/models`](#inference-model-lists)    | OpenCode Models。不带密钥时返回所有公开模型；带密钥时返回其工作区可以使用的模型。 | 可选 |
 | [`/inference/go/v1/models`](#inference-model-lists) | [Go](/console/go) 模型，格式相同。                                                  | 可选 |
 
-如果你的客户端需要提供与 OpenCode 相同的模型（包括已连接的提供商），请使用 Console 列表。如果你只需要 OpenCode Models 或 Go，或者还没有密钥、想要公开目录，请使用推理列表。
+如果你的客户端需要提供与 OpenCode 相同的模型（包括已连接的提供商），请使用控制台列表。如果你只需要 OpenCode Models 或 Go，或者还没有密钥、想要公开目录，请使用推理列表。
 
-## Console 模型列表
+## 控制台模型列表
 
 `GET https://opencode.ai/console/api/v1/models` 返回调用方可以使用的每个提供商，以及每个提供商下可以调用的模型。
 
@@ -109,15 +109,15 @@ curl --fail-with-body "https://opencode.ai/console/api/v1/models" \
 | `cost`         | 每 1M token 的美元价格：`text.input.price`、`text.input.cache.read`、`text.input.cache.write` 和 `text.output.price`。`0` 表示免费。缺少缓存字段表示该模型没有缓存价格。部分模型会添加 `cost.multipliers`，在指定的时段提高价格。 |
 | `capabilities` | 模型能做什么，例如工具调用和推理强度。                                                                                                                                                                                                                     |
 | `modalities`   | 接受的输入类型，例如 `text`、`image/png` 或 `application/pdf`，以及输出类型。                                                                                                                                                                                          |
-| `api`          | 用于该模型的 Console URL 和 SDK。请参阅[模型 API](#model-api)。                                                                                                                                                                                                         |
+| `api`          | 用于该模型的控制台 URL 和 SDK。请参阅[模型 API](#model-api)。                                                                                                                                                                                                         |
 
 ### 模型 API
 
-`api` 只有一项，以模型所用的协议为键：OpenAI Chat Completions 为 `chat-completions`，OpenAI Responses 为 `responses`，Anthropic Messages 为 `messages`，Gemini 为 `generate-content`，[OpenAI Embeddings](/console/models#embedding-models) 为 `embeddings`。它是该协议在 models.dev 中的条目，将厂商 URL 替换为 Console 的 URL，并省略其他协议。
+`api` 只有一项，以模型所用的协议为键：OpenAI Chat Completions 为 `chat-completions`，OpenAI Responses 为 `responses`，Anthropic Messages 为 `messages`，Gemini 为 `generate-content`，[OpenAI Embeddings](/console/models#embedding-models) 为 `embeddings`。它是该协议在 models.dev 中的条目，将厂商 URL 替换为控制台的 URL，并省略其他协议。
 
 | 字段            | 含义                                                                                                                                                                                                                                            |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `base_url`       | 向该模型发送请求的地址。OpenCode Models 使用 `https://opencode.ai/inference/...`，Go 使用 `https://opencode.ai/inference/go/...`，连接则使用其 Console API URL，即 `https://opencode.ai/inference/custom/<connection_id>`。 |
+| `base_url`       | 向该模型发送请求的地址。OpenCode Models 使用 `https://opencode.ai/inference/...`，Go 使用 `https://opencode.ai/inference/go/...`，连接则使用其控制台 API URL，即 `https://opencode.ai/inference/custom/<connection_id>`。 |
 | `sdk.aisdk`      | 该协议的 AI SDK 包，与[模型端点](/console/models#endpoints)表格中的相同。                                                                                                                                       |
 | `sdk.opencodeai` | OpenCode 加载的对应提供商模块。                                                                                                                                                                                                       |
 
@@ -170,7 +170,7 @@ curl https://opencode.ai/inference/v1/models
 
 不带密钥时，列表包含所有公开模型。带密钥时，只包含该密钥所在工作区可以使用的模型，因此服务账号密钥需要 **Models › Read**。请在 `Authorization: Bearer` 或 `x-api-key` 中发送它。私有或已弃用的模型不会包含在内。
 
-每一项都以 OpenAI 的 `id`、`object`、`created` 和 `owned_by` 开头，然后是 [Console 列表](#fields)使用的相同 models.dev 字段：`name`、`type`、`limit`、`cost`、`capabilities`、`modalities`、`api`、`family`、`release_date` 等。与 Console 列表不同，推理列表不包含工作区的连接。如果 models.dev 数据暂时不可用，条目仍会出现，但只包含 OpenAI 的字段，且 `name` 等于 ID。
+每一项都以 OpenAI 的 `id`、`object`、`created` 和 `owned_by` 开头，然后是 [控制台列表](#fields)使用的相同 models.dev 字段：`name`、`type`、`limit`、`cost`、`capabilities`、`modalities`、`api`、`family`、`release_date` 等。与控制台列表不同，推理列表不包含工作区的连接。如果 models.dev 数据暂时不可用，条目仍会出现，但只包含 OpenAI 的字段，且 `name` 等于 ID。
 
 每个 Go 模型还有 `go`：它在各套餐上的每月用量限额（`monthly_usage`）、是否用请求训练（`training`）、是否零数据保留（`zdr`），以及是否拒绝某些国家或地区的访问（`limited_regions`）。
 

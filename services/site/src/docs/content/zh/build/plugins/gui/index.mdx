@@ -2534,7 +2534,7 @@ const limits = () => (session.location ? data.location.usage.limits(session.loca
 ```
 
 - `step()` 是当前填充上下文窗口 token 的助手步骤，与应用上下文环使用的一致。请将其 `tokens` 与 `data.location.model.list` 中模型的 `limit.context` 比较。
-- `data.location.usage.sync(location)` 加载后，`limits()` 保存 OpenCode Console 预算和 Go 套餐额度。服务器未报告时它为 `null`。
+- `data.location.usage.sync(location)` 加载后，`limits()` 保存 OpenCode 控制台预算和 Go 套餐额度。服务器未报告时它为 `null`。
 
 ### 标签页
 

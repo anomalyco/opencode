@@ -4,7 +4,7 @@ Shared terms for the V2 docs translations (`src/docs/content/<locale>/`). The En
 
 ## Keep in English
 
-- Product names: OpenCode, Zen, Go, Go Plus, Go Teams, Console, Desktop.
+- Product names: OpenCode, Zen, Go, Go Plus, Go Teams, Desktop.
 - The role words `agent` and `subagent`, including compounds such as coding agent.
 - Provider, model, company, app and tool names.
 - Acronyms: MCP, LSP, SDK, CLI, API, TUI, JSON.
@@ -17,6 +17,7 @@ Shared terms for the V2 docs translations (`src/docs/content/<locale>/`). The En
 | --- | --- | --- |
 | agent, subagent | agent、subagent、编程 agent | `child agent` → 子 agent |
 | workspace / team | 工作区 / 团队 | Go Teams stays in English |
+| Console (the product) | 控制台 | OpenCode Console → OpenCode 控制台; keep English in URLs, paths, code and bold UI labels such as **Console API URL** |
 | account | 账号 | Never 账户 |
 | authentication / authenticate | 认证 | Never 身份验证 |
 | OAuth, access, bearer or install token | 令牌 | Model, usage, design and contract tokens stay `token` |

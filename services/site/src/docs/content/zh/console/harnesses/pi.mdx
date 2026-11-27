@@ -1,12 +1,12 @@
 ---
 title: "Pi"
-description: "在 Pi 编程 agent 中使用 Console 和 Go 模型。"
+description: "在 Pi 编程 agent 中使用控制台和 Go 模型。"
 ---
 
 [Pi](https://pi.dev) 内置了按量付费和 Go 的 OpenCode 提供商。它会为每个付费或 Go 模型选择正确的 API。免费层级对话模型只能在 OpenCode 中使用，从 Pi 调用会返回 HTTP `403`。
 
 <Callout>
-  [Console CLI](/console/harnesses#console-cli) 可以用一条命令设置好 Pi，包括工作区的策略、MCP 服务器、技能和指令。运行 `npx @opencode/console setup pi`。以下步骤介绍如何手动设置。
+  [控制台 CLI](/console/harnesses#console-cli) 可以用一条命令设置好 Pi，包括工作区的策略、MCP 服务器、技能和指令。运行 `npx @opencode/console setup pi`。以下步骤介绍如何手动设置。
 </Callout>
 
 | 提供商      | 套餐          |
@@ -39,7 +39,7 @@ pi --model opencode-go/kimi-k3
 
 ## 模型
 
-以 `<provider>/<model-id>` 的形式选择模型，使用 [Console](/console/models#endpoints) 或 [Go](/console/go#endpoints) 表格中的 ID。使用 `--list-models` 列出 Pi 已知的模型。
+以 `<provider>/<model-id>` 的形式选择模型，使用 [控制台](/console/models#endpoints) 或 [Go](/console/go#endpoints) 表格中的 ID。使用 `--list-models` 列出 Pi 已知的模型。
 
 ```bash
 pi --list-models opencode-go
@@ -54,11 +54,11 @@ pi --list-models opencode-go
 }
 ```
 
-当新的 Console 模型尚未出现时，运行 `pi update --models`。
+当新的控制台模型尚未出现时，运行 `pi update --models`。
 
-## Console MCP
+## 控制台 MCP
 
-Pi v0.99.0 及更高版本支持 MCP。添加 [Console MCP](/console/harnesses#console-mcp) 服务器，然后在浏览器中登录。
+Pi v0.99.0 及更高版本支持 MCP。添加 [控制台 MCP](/console/harnesses#console-mcp) 服务器，然后在浏览器中登录。
 
 ```bash
 pi mcp add opencode-console --url https://opencode.ai/console/mcp

@@ -17,7 +17,7 @@ Go 在 OpenCode 中的用法和其他提供商一样：订阅 OpenCode Go 后获
 
 ## 工作原理
 
-1. 登录 [OpenCode Console](https://opencode.ai/console)，订阅 Go、Go Plus 或 Go Teams，添加账单信息，然后复制你的 API 密钥。
+1. 登录 [OpenCode 控制台](https://opencode.ai/console)，订阅 Go、Go Plus 或 Go Teams，添加账单信息，然后复制你的 API 密钥。
 2. 在 TUI 中运行 `/connect`，选择 **OpenCode Go**，然后粘贴 API 密钥。
 
    ```text
@@ -105,7 +105,7 @@ OpenCode Go 专为 [OpenCode](https://opencode.ai) 以及会产生类似请求�
 - **每周限额**为每月额度的 50%。它会在每周一 00:00 UTC 重置。
 - **每月额度**会在新的付费周期开始时重置。
 
-切换模型会从同一份额度中扣除。达到限额后，你可以使用免费模型，或开启[额外用量](#usage-beyond-limits)，在额度恢复之前使用 Console 额度。
+切换模型会从同一份额度中扣除。达到限额后，你可以使用免费模型，或开启[额外用量](#usage-beyond-limits)，在额度恢复之前使用控制台额度。
 
 每个模型的[每月限额](https://opencode.ai/console/go#limits)显示了套餐能覆盖多少用量，前提是你整月只使用该模型。
 例如，在限额为 $15 的模型上使用 $1.50，会占用每月额度的 10%；在限额为 $60 的模型上使用 $6 也是如此。Go 的响应会在 [`opencode.allowance`](/console/api/inference#cost) 中报告每个请求计入了多少。
@@ -122,9 +122,9 @@ OpenCode Go 专为 [OpenCode](https://opencode.ai) 以及会产生类似请求�
 
 ### 估算请求数
 
-Console 的 Go 页面会针对每个模型[估算每 5 小时的请求数](https://opencode.ai/console/go#limits)，依据是典型的 Go 使用模式。实际用量会有所不同。
+控制台的 Go 页面会针对每个模型[估算每 5 小时的请求数](https://opencode.ai/console/go#limits)，依据是典型的 Go 使用模式。实际用量会有所不同。
 
-你可以在 [Console](https://opencode.ai/console) 中，或通过[用量端点](#usage)跟踪当前用量。
+你可以在 [控制台](https://opencode.ai/console) 中，或通过[用量端点](#usage)跟踪当前用量。
 
 <Callout type="tip">达到用量限额后，你仍可以继续使用免费模型。</Callout>
 
@@ -134,7 +134,7 @@ Console 的 Go 页面会针对每个模型[估算每 5 小时的请求数](https
 
 ### 超出限额的用量
 
-如果你的 Console 余额中还有额度，可以在 **Go** 页面上开启 **Extra Usage**。启用后，Go 会在你达到用量限额后回退到[按量付费余额](/console/models#pricing)，而不是阻止请求。
+如果你的控制台余额中还有额度，可以在 **Go** 页面上开启 **Extra Usage**。启用后，Go 会在你达到用量限额后回退到[按量付费余额](/console/models#pricing)，而不是阻止请求。
 
 Go Teams 默认开启 **Extra Usage**，你可以在 **Go** 页面上关闭或重新开启。
 
@@ -150,7 +150,7 @@ Go Teams 默认开启 **Extra Usage**，你可以在 **Go** 页面上关闭或�
 
 ## 端点
 
-你也可以通过 `https://opencode.ai/inference/go` 上的 API 访问 Go 模型。每个模型的 [ID、路径和 AI SDK 包](https://opencode.ai/console/go#api)见 Console 的 Go 页面。每个模型都以其原生 API 列出，但所有文本模型也能通过 Console 转换的其他 API 使用。完整列表请参阅[基础 URL](/console/harnesses#base-urls)。
+你也可以通过 `https://opencode.ai/inference/go` 上的 API 访问 Go 模型。每个模型的 [ID、路径和 AI SDK 包](https://opencode.ai/console/go#api)见控制台的 Go 页面。每个模型都以其原生 API 列出，但所有文本模型也能通过控制台转换的其他 API 使用。完整列表请参阅[基础 URL](/console/harnesses#base-urls)。
 
 这些 AI SDK 包适用于直接调用 Go 的应用。要在 OpenCode 中使用 Go，请通过 `/connect` 连接，并使用 `opencode-go/<model-id>` 格式设置[模型](/models)：
 
@@ -173,7 +173,7 @@ curl https://opencode.ai/inference/go/v1/models
 
 ### 决策模型
 
-决策模型针对 `state` 回答有类型定义的问题，而不是生成文本。请使用 Go 密钥，把与 [Console 模型](/console/models#jev)相同的 System One 请求发送到 `https://opencode.ai/inference/go/systemone/v1/systemone`：
+决策模型针对 `state` 回答有类型定义的问题，而不是生成文本。请使用 Go 密钥，把与 [控制台模型](/console/models#jev)相同的 System One 请求发送到 `https://opencode.ai/inference/go/systemone/v1/systemone`：
 
 ```bash
 curl https://opencode.ai/inference/go/systemone/v1/systemone \

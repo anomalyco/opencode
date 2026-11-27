@@ -1,9 +1,9 @@
 ---
 title: "提供商 API"
-description: "使用 Console 密钥，通过 Console 网关调用接入工作区的提供商。"
+description: "使用控制台密钥，通过控制台网关调用接入工作区的提供商。"
 ---
 
-接入工作区的每个[提供商](/console/providers)都会通过 Console 网关，以各自独立的 URL 提供服务。OpenCode 在 `/connect` 之后会自动使用它；你也可以直接调用该 URL，在自己的工具中使用相同的提供商。Console 会在转发请求前添加提供商凭据，因此提供商密钥永远不会离开工作区。
+接入工作区的每个[提供商](/console/providers)都会通过控制台网关，以各自独立的 URL 提供服务。OpenCode 在 `/connect` 之后会自动使用它；你也可以直接调用该 URL，在自己的工具中使用相同的提供商。控制台会在转发请求前添加提供商凭据，因此提供商密钥永远不会离开工作区。
 
 ```bash
 curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
@@ -25,17 +25,17 @@ https://opencode.ai/inference/custom/<connection_id>
 
 ## 认证
 
-将 `<token>` 替换为在 Console 中创建的[服务账号密钥](/console/api#service-accounts)。Console 会在转发前将其替换为该连接的凭据。
+将 `<token>` 替换为在控制台中创建的[服务账号密钥](/console/api#service-accounts)。控制台会在转发前将其替换为该连接的凭据。
 
 ```text
 Authorization: Bearer <token>
 ```
 
-Console 也会从 `x-api-key`、`api-key` 或 `x-goog-api-key` 中读取密钥，因此只要将提供商的 SDK 指向 Console API URL，就可以直接使用。
+控制台也会从 `x-api-key`、`api-key` 或 `x-goog-api-key` 中读取密钥，因此只要将提供商的 SDK 指向控制台 API URL，就可以直接使用。
 
 ## 端点
 
-在 Console API URL 后面追加提供商的 API 路径即可。Console 会将请求转发到该连接的基础 URL，并原样返回提供商的响应。
+在控制台 API URL 后面追加提供商的 API 路径即可。控制台会将请求转发到该连接的基础 URL，并原样返回提供商的响应。
 
 | 格式                 | 路径                              |
 | -------------------- | --------------------------------- |
@@ -45,7 +45,7 @@ Console 也会从 `x-api-key`、`api-key` 或 `x-goog-api-key` 中读取密钥�
 | Google Generative AI | `/models/<model>:generateContent` |
 | Embeddings           | `/embeddings`                     |
 
-请按照提供商页面上显示的模型 ID 发送请求。如果模型在上游使用不同的 API ID，Console 会自动改写。对未在该连接上启用的模型发起的请求会被拒绝。
+请按照提供商页面上显示的模型 ID 发送请求。如果模型在上游使用不同的 API ID，控制台会自动改写。对未在该连接上启用的模型发起的请求会被拒绝。
 
 ### Chat Completions
 

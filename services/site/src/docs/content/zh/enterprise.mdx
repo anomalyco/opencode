@@ -36,16 +36,16 @@ description: "控制组织中的成员可以在 OpenCode 中使用哪些模型�
 }
 ```
 
-免费层级是没有账号的 `opencode` 集成。已登录的 Console 账号是 `opencode#<account>`，因此该语句不会影响它们。
+免费层级是没有账号的 `opencode` 集成。已登录的控制台账号是 `opencode#<account>`，因此该语句不会影响它们。
 
-Console 工作区也可以提供免费模型。要屏蔽它们：
+控制台工作区也可以提供免费模型。要屏蔽它们：
 
-- 在你自己的工作区中，关闭 Console Models 标签页上的 **Free models**。请参阅 [OpenCode 模型](/console/providers#opencode-models)。
+- 在你自己的工作区中，关闭控制台 Models 标签页上的 **Free models**。请参阅 [OpenCode 模型](/console/providers#opencode-models)。
 - 要在每个账号中隐藏免费模型，请在 OpenCode 服务上设置 `OPENCODE_DISABLE_FREE_MODELS=1`。请参阅[免费模型](/models#free-models)。
 
-## 要求使用你的 Console 工作区
+## 要求使用你的控制台工作区
 
-只允许你组织的 Console 工作区。其他任何内容都无法连接或使用。
+只允许你组织的控制台工作区。其他任何内容都无法连接或使用。
 
 ```jsonc
 {
@@ -58,11 +58,11 @@ Console 工作区也可以提供免费模型。要屏蔽它们：
 }
 ```
 
-- `/connect` 只会列出 OpenCode Console，以便成员登录。
-- 仅你的工作区可用。免费层级、个人 Console 账号、其他组织、来自环境变量的 API 密钥，以及 `opencode.json` 中的提供商都会被阻止。
-- 你工作区的模型、MCP 服务器和网页搜索仍然可用。在 Console 中更改它们即可，无需重新部署策略。
+- `/connect` 只会列出 OpenCode 控制台，以便成员登录。
+- 仅你的工作区可用。免费层级、个人控制台账号、其他组织、来自环境变量的 API 密钥，以及 `opencode.json` 中的提供商都会被阻止。
+- 你工作区的模型、MCP 服务器和网页搜索仍然可用。在控制台中更改它们即可，无需重新部署策略。
 
-将 `org_01M3CAP8H43Z49CER6NT0Y3ZF1` 替换为你工作区的组织 ID。如果还要在工作区中屏蔽免费模型，请在 Console 中关闭 **Free models**。
+将 `org_01M3CAP8H43Z49CER6NT0Y3ZF1` 替换为你工作区的组织 ID。如果还要在工作区中屏蔽免费模型，请在控制台中关闭 **Free models**。
 
 ## 只允许已批准的提供商
 
