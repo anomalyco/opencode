@@ -5,6 +5,7 @@ import { gap, sentenceGap, stop } from "~/i18n/rich"
 // full-width sentence stop. Full-width ！ must count as CJK text for all three.
 const cases = [
   { text: "你好！", want: { gap: "", stop: "。", sentenceGap: "" } },
+  { text: "你好！ ", want: { gap: "", stop: "。", sentenceGap: "" } },
   { text: "你好", want: { gap: "", stop: "。", sentenceGap: " " } },
   { text: "Hello.", want: { gap: " ", stop: ".", sentenceGap: " " } },
   { text: "Hello", want: { gap: " ", stop: ".", sentenceGap: " " } },
