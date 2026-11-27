@@ -68,11 +68,12 @@ Solid's universal renderer into plain nodes, which each view reads into a contra
   key that ran the command goes on as declined, first, then the keys after it, and the log says so once. A late
   answer still applies its effects but does not put the key back, so a command that would have taken the key after
   the limit also typed it. Declined rather than handled, so that no key is lost behind a slow JS host, and none lands
-  after the keys typed since (a late Enter after more text). Until the JS host sends anything again (its
-  acknowledgement of a read aside), a key that runs a JS command is not held: it goes on at once, as declined, and its
-  command runs late, in its order. A
+  after the keys typed since (a late Enter after more text). Until that call is answered, a key that runs a JS command
+  is not held: it goes on at once, as declined, and its command runs late, in its order. What the JS host sends as it
+  begins or runs that handler, such as its entry or a log line, is not its answer and holds no key again. A
   JS host that ends, or a call it never reads, releases what it holds at once, its bound key as declined, and such
   a call is not sent again to the next JS host (`plugin_compat::a_stalled_js_host_holds_keys_no_longer_than_the_limit`,
+  `plugin_compat::a_stalled_js_hosts_entry_holds_the_keys_after_it_no_more`,
   `plugin_compat::a_js_host_that_ends_while_keys_are_held_releases_them`).
 - **`data.listen`** hears every event as `{ details }`, through one subscription of the plugin to each type the generated
   client names (`EventSubscribeInput`), made with its first listener; a type the client does not name, as a plugin's
