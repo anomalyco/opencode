@@ -278,24 +278,26 @@ const layer = Layer.effect(
         return [...instances]
           .sort(([left], [right]) => left.localeCompare(right))
           .map(([id, machine]) => {
-            const hello = machine.hello()
-            const refused = machine.refusal()
-            const connection = machine.describe()
-            return hello
-              ? new Info({
+            const link = machine.state()
+            const paired = keys.has(id)
+            switch (link._tag) {
+              case "Connected": {
+                const connection = link.describe?.()
+                return new Info({
                   id,
                   online: true,
-                  paired: keys.has(id),
-                  os: hello.os,
-                  arch: hello.arch,
+                  paired,
+                  os: link.hello.os,
+                  arch: link.hello.arch,
                   ...(connection ? { connection } : {}),
                 })
-              : new Info({
-                  id,
-                  online: false,
-                  paired: keys.has(id),
-                  ...(refused ? { refused } : {}),
-                })
+              }
+              case "Refused":
+                return new Info({ id, online: false, paired, refused: link })
+              case "Never":
+              case "Disconnected":
+                return new Info({ id, online: false, paired })
+            }
           })
       }),
       get: Effect.fn("Machines.get")(function* (id) {
@@ -306,12 +308,9 @@ const layer = Layer.effect(
       home: Effect.fn("Machines.home")(function* (id) {
         const machine = instances.get(id)
         if (!machine) return yield* new NotFound({ machine: id })
-        const hello = machine.hello()
-        if (!hello) {
-          const refused = machine.refusal()
-          return yield* new Machine.NotSent({ machine: id, ...(refused ? { refused } : {}) })
-        }
-        return hello.home
+        const link = machine.state()
+        if (link._tag !== "Connected") return yield* Machine.notSent(id, link)
+        return link.hello.home
       }),
       connect: Effect.fn("Machines.connect")(function* (id, connection) {
         const machine = instances.get(id)
