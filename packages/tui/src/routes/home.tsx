@@ -16,7 +16,6 @@ import { useUpdateNotification } from "../context/update-notification"
 import { useExit } from "../context/exit"
 import { FadeInText } from "../component/fade-in-text"
 
-let once = false
 const placeholder = {
   normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],
   shell: ["ls -la", "git status", "pwd"],
@@ -37,6 +36,7 @@ export function Home() {
   const currentLocation = () => route.location ?? data.location.default()
   const forms = createMemo(() => data.session.form.list("global", currentLocation()) ?? [])
   let sent = false
+  let startup: string | undefined
 
   // Track only the route location and (when absent) the default location; location.set
   // reads other signals internally and tracking them would re-assert the route location
@@ -53,9 +53,11 @@ export function Home() {
   const bind = (r: PromptRef | undefined) => {
     setRef(r)
     promptRef.set(r)
-    if (once || !r || route.prompt || !args.prompt) return
-    r.set({ text: args.prompt, files: [], agents: [], pasted: [] })
-    once = true
+    if (startup !== undefined || !r || route.prompt) return
+    const text = args.takePrompt()
+    if (!text) return
+    startup = text
+    r.set({ text, files: [], agents: [], pasted: [] })
   }
 
   createEffect(() => {
@@ -72,8 +74,8 @@ export function Home() {
     if (!r) return
     if (!local.model.ready || !local.model.catalogReady) return
     if (!local.agent.current() || !local.model.current()) return
-    if (!args.prompt) return
-    if (r.current.text !== args.prompt) return
+    if (!startup) return
+    if (r.current.text !== startup) return
     sent = true
     r.submit()
   })
