@@ -2454,6 +2454,55 @@ test("renaming an inbox card updates the same session on Home", async ({ page })
   await expect(home).toContainText("Renamed inbox title")
 })
 
+test("archiving the open inbox session opens the row below it, not the next tab", async ({ page }) => {
+  const sessions = ["First", "Second", "Third", "Fourth"].map((name, index) => ({
+    id: `ses_inbox_next_${index}`,
+    title: `${name} inbox row`,
+    time: { created: T0, updated: T0, idle: T0 - index, viewed: T0 + 100 },
+  }))
+
+  const [first, second, third, fourth] = sessions
+
+  // The tab order differs from the inbox's, so the tab next to each archived session is another row.
+  await mockWorkspace(page, {
+    name: "ArchiveInboxNext",
+    sessions,
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [second.id, fourth.id, first.id, third.id],
+    },
+  })
+  await page.goto(sessionHref(second.id))
+  await expectSessionTitle(page, second.title)
+
+  const items = page.locator('[data-slot="sidebar-inbox"] [data-slot="sidebar-inbox-item"]')
+  const row = (session: { title: string }) => items.filter({ hasText: session.title })
+  await expect(items).toContainText(sessions.map((session) => session.title))
+  await expect(row(second)).toHaveAttribute("data-state", "active")
+
+  await row(second).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Archive", exact: true }).click()
+
+  await expectPath(page, sessionHref(third.id))
+  await expect(row(third)).toHaveAttribute("data-state", "active")
+  await expect(items).toContainText([first, third, fourth].map((session) => session.title))
+
+  await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+Shift+s")
+
+  await expectPath(page, sessionHref(fourth.id))
+  await expect(row(fourth)).toHaveAttribute("data-state", "active")
+  await expect(items).toContainText([first, fourth].map((session) => session.title))
+  await expect(page.getByRole("heading", { name: fourth.title, exact: true })).toBeVisible()
+
+  // The last row has nothing below it, so the row above opens.
+  await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+Shift+s")
+
+  await expectPath(page, sessionHref(first.id))
+  await expect(row(first)).toHaveAttribute("data-state", "active")
+})
+
 test("the inbox lists archived sessions in a collapsed section and pins sessions at the top of Recent", async ({ page }) => {
   await page.clock.install({ time: T0 + 41 * 60_000 })
   await mockWorkspace(page, {
