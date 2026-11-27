@@ -1,11 +1,11 @@
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import type { Route, CompactionOperations } from "../route/client.js"
 import { MediaRoute } from "../route/media.js"
 import { Provider } from "../provider.js"
 import { chatBinding } from "./openai/chat.js"
 import { responsesBinding } from "./openai/responses.js"
 import { shared, type Settings } from "./openai/shared.js"
 import {
+  LanguageModel,
   mergeTransport,
   ProviderID,
   ToolDefinition,
@@ -16,7 +16,7 @@ import {
 } from "../schema/index.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
-import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
+import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 import { OpenAIImages } from "../protocols/openai-images.js"
 import { OpenAISpeech } from "../protocols/openai-speech.js"
 import { OpenAITranscription } from "../protocols/openai-transcription.js"
@@ -88,26 +88,20 @@ const defaults = (input: Config) => {
   return rest
 }
 
-const configuredRoute = <Body, Prepared, Compact extends CompactionOperations | undefined>(
-  route: Route<Body, Prepared, Compact>,
-  input: Config,
-) =>
-  route.with({
-    auth: auth(input),
-    endpoint: { baseURL: input.baseURL, query: input.queryParams },
-  })
-
 export const configure = (input: Config = {}) => {
-  const responsesRoute = configuredRoute(OpenAIResponses.route, input)
-  const chatRoute = configuredRoute(OpenAIChat.route, input)
-  const modelDefaults = defaults(input)
+  const configured = openai.with({
+    ...(input.auth ? { auth: input.auth } : { apiKey: input.apiKey }),
+    baseURL: input.baseURL,
+    query: input.queryParams,
+    options: defaults(input),
+  })
   const responses = (id: string | ModelID) =>
-    responsesRoute.with(withOpenAIOptions(id, modelDefaults)).model<OpenAIProviderOptionsInput>({ id })
+    configured.model(id, { api: "responses" }) as LanguageModel<
+      OpenAIProviderOptionsInput,
+      typeof OpenAIResponses.api.compact
+    >
   const chat = (id: string | ModelID) =>
-    chatRoute.with(withOpenAIOptions(id, modelDefaults)).model<OpenAIProviderOptionsInput>({
-      id,
-      capabilities: { promptCacheKey: true },
-    })
+    configured.model(id, { api: "chat" }) as LanguageModel<OpenAIProviderOptionsInput>
   const media = MediaRoute.deployment(
     { ...mergeTransport(input, { http: { query: input.queryParams } }), baseURL: input.baseURL },
     auth(input),
