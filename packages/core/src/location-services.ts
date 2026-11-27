@@ -25,6 +25,50 @@ export type LocationServices = Instance.Services
 
 const HELD_WARNING_AFTER = "30 seconds"
 
+export function invalidateLocationIfIdle(
+  locations: LayerMap.LayerMap<Location.Ref, LocationServices, Instance.Error>,
+  ref: Location.Ref,
+  options: {
+    readonly isProtected: () => boolean
+    readonly canEvict: () => boolean
+    /** Cache-pressure eviction keeps borrowed Locations; idle eviction closes their long-lived requests. */
+    readonly protectBorrowers?: boolean
+  },
+): Effect.Effect<boolean> {
+  const key = LocationServiceMap.canonical(ref)
+  return Effect.gen(function* () {
+    const state = locations.rcMap.state
+    if (state._tag !== "Open" || options.isProtected() || !options.canEvict()) return false
+    const direct = Option.getOrUndefined(MutableHashMap.get(state.map, key))
+    const stored = direct
+      ? ([key, direct] as const)
+      : Array.from(state.map).find(
+          ([candidate]) => candidate.directory === key.directory && candidate.workspaceID === key.workspaceID,
+        )
+    if (!stored) return false
+    const [target, entry] = stored
+    // Idle eviction closes long-lived borrowers; only LocationLifecycle.retain protects them. Cache-pressure
+    // eviction leaves borrowers alone. Both checks happen again after the current context is read.
+    if (options.protectBorrowers && entry.refCount !== 0) return false
+    const context = yield* locations.contextEffectOption(target).pipe(
+      Effect.orElseSucceed(() => Option.none()),
+      Effect.scoped,
+    )
+    if (Option.isNone(context)) return false
+    const lifecycle = Option.getOrUndefined(
+      Option.flatMap(context, (value) => Context.getOption(value, LocationLifecycle.Service)),
+    )
+    return yield* Effect.suspend(() => {
+      const current = locations.rcMap.state
+      if (current._tag !== "Open" || options.isProtected() || !options.canEvict()) return Effect.succeed(false)
+      const latest = Option.getOrUndefined(MutableHashMap.get(current.map, target))
+      if (latest !== entry || lifecycle?.isRetained()) return Effect.succeed(false)
+      if (options.protectBorrowers && latest.refCount !== 0) return Effect.succeed(false)
+      return locations.invalidate(target).pipe(Effect.as(true))
+    }).pipe(Effect.uninterruptible)
+  })
+}
+
 export function buildLocationServiceMap(
   replacements: LayerNode.Replacements = [],
 ): Layer.Layer<LocationServiceMap.Service> {

@@ -1,6 +1,7 @@
 import type { FileSystem } from "@opencode/core/filesystem"
+import type { Instance } from "@opencode/core/instance"
 import { describe, expect } from "bun:test"
-import { Context, Deferred, Duration, Effect, Fiber, Layer, LayerMap, RcMap, Schema } from "effect"
+import { Context, Deferred, Duration, Effect, Exit, Fiber, Layer, LayerMap, RcMap, Schema, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -123,7 +124,145 @@ const it = testEffect(
   ),
 )
 
+const activityNode = (limit: number | false) =>
+  makeGlobalNode({
+    service: LocationActivity.Service,
+    layer: LocationActivity.layer({ limit }),
+    deps: [Bus.node, Job.node, LocationServiceMap.node, SessionExecution.node, SessionStore.node],
+  })
+
+const itLimited = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      Job.node,
+      SessionStore.node,
+      LocationServiceMap.node,
+      SessionExecution.node,
+      LocationActivity.node,
+    ]),
+    [
+      LocationServiceMap.node.replace(
+        makeGlobalNode({
+          service: LocationServiceMap.Service,
+          layer: locations,
+          deps: [Bus.node],
+        }),
+      ),
+      LocationActivity.node.replace(activityNode(2)),
+    ],
+  ),
+)
+
+const itUnlimited = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      Job.node,
+      SessionStore.node,
+      LocationServiceMap.node,
+      SessionExecution.node,
+      LocationActivity.node,
+    ]),
+    [
+      LocationServiceMap.node.replace(
+        makeGlobalNode({
+          service: LocationServiceMap.Service,
+          layer: locations,
+          deps: [Bus.node],
+        }),
+      ),
+      LocationActivity.node.replace(activityNode(false)),
+    ],
+  ),
+)
+
+const locationRef = (workspaceID: string) =>
+  Location.Ref.make({ directory: AbsolutePath.make("/project"), workspaceID: Workspace.ID.make(workspaceID) })
+const loadLocation = (map: LayerMap.LayerMap<Location.Ref, Instance.Services, Instance.Error>, ref: Location.Ref) =>
+  Location.Service.pipe(Effect.provide(map.get(ref)), Effect.scoped)
+
 describe("LocationActivity eviction", () => {
+  itLimited.effect("evicts the least recently used location when the cache exceeds its limit", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const map = yield* LocationServiceMap.Service
+      const first = locationRef("wrk_first")
+      const second = locationRef("wrk_second")
+      const third = locationRef("wrk_third")
+      yield* loadLocation(map, first)
+      yield* loadLocation(map, second)
+      yield* TestClock.adjust("1 minute")
+
+      yield* bus.publish(
+        SessionEvent.Execution.Started,
+        { sessionID: Session.ID.make("ses_touch_first") },
+        { location: first },
+      )
+      yield* loadLocation(map, third)
+      yield* TestClock.adjust("1 minute")
+
+      expect(yield* RcMap.has(map.rcMap, first)).toBe(true)
+      expect(yield* RcMap.has(map.rcMap, second)).toBe(false)
+      expect(yield* RcMap.has(map.rcMap, third)).toBe(true)
+    }),
+  )
+
+  itLimited.effect("does not evict a borrowed location under cache pressure", () =>
+    Effect.gen(function* () {
+      const map = yield* LocationServiceMap.Service
+      const borrowed = locationRef("wrk_borrowed")
+      const idle = locationRef("wrk_idle")
+      const latest = locationRef("wrk_latest")
+      const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void))
+      const context = yield* map.contextEffect(borrowed).pipe(Scope.provide(scope))
+      yield* loadLocation(map, idle)
+      yield* TestClock.adjust("1 minute")
+      yield* loadLocation(map, latest)
+      yield* TestClock.adjust("1 minute")
+
+      expect(yield* RcMap.has(map.rcMap, borrowed)).toBe(true)
+      expect(yield* RcMap.has(map.rcMap, idle)).toBe(false)
+      expect(yield* RcMap.has(map.rcMap, latest)).toBe(true)
+      expect(yield* map.contextEffect(borrowed).pipe(Effect.scoped)).toBe(context)
+      yield* Scope.close(scope, Exit.void)
+    }),
+  )
+
+  itLimited.effect("does not count-evict a location with idle unloading disabled", () =>
+    Effect.gen(function* () {
+      const map = yield* LocationServiceMap.Service
+      const workspaceID = Workspace.ID.make("wrk_pinned")
+      const pinned = Location.Ref.make({ directory: AbsolutePath.make("/project"), workspaceID })
+      const idle = locationRef("wrk_idle")
+      const latest = locationRef("wrk_latest")
+      idleTimeouts.set(workspaceID, false)
+      yield* Effect.addFinalizer(() => Effect.sync(() => idleTimeouts.delete(workspaceID)))
+      yield* loadLocation(map, pinned)
+      yield* loadLocation(map, idle)
+      yield* TestClock.adjust("1 minute")
+      yield* loadLocation(map, latest)
+      yield* TestClock.adjust("1 minute")
+
+      expect(yield* RcMap.has(map.rcMap, pinned)).toBe(true)
+      expect(yield* RcMap.has(map.rcMap, idle)).toBe(false)
+      expect(yield* RcMap.has(map.rcMap, latest)).toBe(true)
+    }),
+  )
+
+  itUnlimited.effect("can disable the location count limit", () =>
+    Effect.gen(function* () {
+      const map = yield* LocationServiceMap.Service
+      const refs = [locationRef("wrk_one"), locationRef("wrk_two"), locationRef("wrk_three")]
+      yield* Effect.forEach(refs, (ref) => loadLocation(map, ref), { discard: true })
+      yield* TestClock.adjust("1 minute")
+
+      for (const ref of refs) expect(yield* RcMap.has(map.rcMap, ref)).toBe(true)
+    }),
+  )
+
   for (const count of [1, 2]) {
     it.effect(`keeps a location with ${count} executions waiting on a question until they go idle`, () =>
       Effect.gen(function* () {

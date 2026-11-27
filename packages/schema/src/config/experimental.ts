@@ -1,7 +1,7 @@
 export * as ConfigExperimental from "./experimental.js"
 
 import { Record, Schema } from "effect"
-import { NonNegativeInt, optional } from "../schema.js"
+import { NonNegativeInt, PositiveInt, optional } from "../schema.js"
 import { ConfigFlag } from "./flag.js"
 import { ConfigModel } from "./model.js"
 import { ConfigPolicy } from "./policy.js"
@@ -65,6 +65,12 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     .annotate({
       description:
         'How long a location can go without session activity before its services are unloaded. Running sessions and background jobs keep a location loaded. Set to false to never unload (default: "60 minutes")',
+    }),
+  location_cache_limit: Schema.Union([PositiveInt, Schema.Literal(false)])
+    .pipe(optional)
+    .annotate({
+      description:
+        "Maximum number of loaded locations kept in the service cache. The least recently used locations are unloaded above this count. Set to false to keep every loaded location (default: 16)",
     }),
   policies: ConfigPolicy.Info.pipe(Schema.Array, optional).annotate({
     description: "Deprecated: use top-level policies. Ordered policies controlling access to configured resources",

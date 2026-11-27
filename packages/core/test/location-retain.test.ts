@@ -1,5 +1,6 @@
 import { expect } from "bun:test"
 import { Clock, Context, Duration, Effect, Exit, Layer, RcMap, Schedule, Scope } from "effect"
+import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -51,6 +52,67 @@ const it = testEffect(
       ),
     ],
   ),
+)
+
+const itCap = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, Bus.node, Session.node, LocationServiceMap.node, LocationActivity.node]),
+    [
+      Global.node.replace(tempGlobalLayer),
+      offlineModels,
+      LocationActivity.node.replace(
+        makeGlobalNode({
+          service: LocationActivity.Service,
+          layer: LocationActivity.layer({ timeToLive: "1 hour", sweepInterval: "20 millis", limit: 1 }),
+          deps: [Bus.node, Job.node, LocationServiceMap.node, SessionExecution.node, SessionStore.node],
+        }),
+      ),
+    ],
+  ),
+)
+
+itCap.effect(
+  "count pressure keeps a retained location and evicts it once released",
+  () =>
+    Effect.gen(function* () {
+      const locations = yield* LocationServiceMap.Service
+      const [retained, sibling] = yield* Effect.forEach([0, 1], () =>
+        tmpdirScoped().pipe(
+          Effect.map((dir) =>
+            LocationServiceMap.canonical(Location.Ref.make({ directory: AbsolutePath.make(dir.path) })),
+          ),
+        ),
+      )
+      const lifecycle = Context.get(
+        yield* locations.contextEffect(retained).pipe(Effect.scoped),
+        LocationLifecycle.Service,
+      )
+      yield* locations.contextEffect(sibling).pipe(Effect.scoped)
+      const hold = yield* Scope.make()
+      yield* lifecycle.retain.pipe(Scope.provide(hold))
+      const cached = (ref: Location.Ref) => RcMap.has(locations.rcMap, ref)
+      // The cap alone evicts here: the TTL is one hour and the TestClock only advances sweep ticks.
+      const until = (check: Effect.Effect<boolean>) =>
+        TestClock.adjust("20 millis").pipe(
+          Effect.andThen(check),
+          Effect.flatMap((done) => (done ? Effect.void : Effect.fail("pending"))),
+          Effect.retry(Schedule.recurs(500)),
+          Effect.orDie,
+        )
+
+      yield* until(cached(sibling).pipe(Effect.map((has) => !has)))
+      expect(yield* cached(retained)).toBe(true)
+      expect(lifecycle.isClosed()).toBe(false)
+
+      yield* Scope.close(hold, Exit.void)
+      // Keep pressure above the cap so only count eviction can remove the released location.
+      const third = yield* tmpdirScoped().pipe(
+        Effect.map((dir) => LocationServiceMap.canonical(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))),
+      )
+      yield* locations.contextEffect(third).pipe(Effect.scoped)
+      yield* until(cached(retained).pipe(Effect.map((has) => !has)))
+      expect(lifecycle.isClosed()).toBe(true)
+    }),
 )
 
 it.live(
