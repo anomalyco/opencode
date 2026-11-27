@@ -418,14 +418,19 @@ pub fn tag_untagged_code_blocks(source: &str, parsed: &ParsedMarkdown, tag: &str
         {
             continue;
         }
-        out.push_str(&source[pos..range.start]);
         let slice = &source[range.start..range.end];
         if let Some(insert_at) = plain_fence_insert_offset(slice) {
+            out.push_str(&source[pos..range.start]);
             out.push_str(&slice[..insert_at]);
             out.push_str(tag);
             out.push_str(&slice[insert_at..]);
         } else {
-            write_fenced_indented(&mut out, source, range, code, tag);
+            let line_start = source[..range.start].rfind('\n').map_or(0, |index| index + 1);
+            if line_start < pos {
+                continue;
+            }
+            out.push_str(&source[pos..line_start]);
+            write_fenced_indented(&mut out, source, line_start, range, code, tag);
         }
         pos = range.end;
     }
@@ -467,17 +472,23 @@ fn plain_fence_insert_offset(slice: &str) -> Option<usize> {
     Some(offset + indent + count)
 }
 
-/// Rewrites an indented code block at `range` into a tagged fenced code block carrying the exact
-/// same `code` bytes and container prefix.
-fn write_fenced_indented(out: &mut String, source: &str, range: &Range<usize>, code: &str, tag: &str) {
+/// Rewrites an indented code block at `range` (whose line starts at `line_start`) into a tagged
+/// fenced code block carrying the exact same `code` bytes and container prefix.
+fn write_fenced_indented(
+    out: &mut String,
+    source: &str,
+    line_start: usize,
+    range: &Range<usize>,
+    code: &str,
+    tag: &str,
+) {
     let slice = &source[range.start..range.end];
-    let line_start = source[..range.start].rfind('\n').map_or(0, |index| index + 1);
-    let before = &source[line_start..range.start];
-    let first_end = slice.find('\n').unwrap_or(slice.len());
-    let raw_first = slice[..first_end].strip_suffix('\r').unwrap_or(&slice[..first_end]);
-    let code_first = code.split('\n').next().unwrap_or_default().strip_suffix('\r').unwrap_or_default();
-    let cont_in_range = raw_first.strip_suffix(code_first).map(strip_code_indent).unwrap_or("");
-    let full_prefix = format!("{before}{cont_in_range}");
+    let line_end = source[line_start..range.end].find('\n').map_or(range.end, |rel| line_start + rel);
+    let full_first = source[line_start..line_end].strip_suffix('\r').unwrap_or(&source[line_start..line_end]);
+    let first = code.split('\n').next().unwrap_or_default();
+    let code_first = first.strip_suffix('\r').unwrap_or(first);
+    let raw_prefix = full_first.strip_suffix(code_first).unwrap_or(&source[line_start..range.start]);
+    let container_prefix = strip_code_indent(raw_prefix);
     let mut max_ticks = 0usize;
     let mut run = 0usize;
     for byte in code.bytes() {
@@ -489,17 +500,17 @@ fn write_fenced_indented(out: &mut String, source: &str, range: &Range<usize>, c
         }
     }
     let fence: String = std::iter::repeat_n('`', (max_ticks + 1).max(3)).collect();
-    out.push_str(cont_in_range);
+    out.push_str(container_prefix);
     out.push_str(&fence);
     out.push_str(tag);
     out.push('\n');
     let body = code.strip_suffix('\n').unwrap_or(code);
     for line in body.split('\n') {
-        out.push_str(&full_prefix);
+        out.push_str(container_prefix);
         out.push_str(line);
         out.push('\n');
     }
-    out.push_str(&full_prefix);
+    out.push_str(container_prefix);
     out.push_str(&fence);
     if slice.ends_with('\n') {
         out.push('\n');
