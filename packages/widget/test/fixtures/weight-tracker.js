@@ -13,7 +13,18 @@ const KG = "accent"
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 async function main(data) {
-  const s = { range: "week", kcal: "", kg: "", note: null, active: null, down: false, width: 0, t: INTRO, intro: 0 }
+  const s = {
+    range: "week",
+    kcal: "",
+    kg: "",
+    note: null,
+    logged: 0,
+    active: null,
+    down: false,
+    width: 0,
+    t: INTRO,
+    intro: 0,
+  }
   const entries = () =>
     widget.storage
       .keys("entry:")
@@ -44,6 +55,7 @@ async function main(data) {
     }
     const at = new Date().toISOString()
     s[field] = ""
+    s.logged++
     s.note = "Logged " + value + " " + unit
     await widget.storage.set("entry:" + at + ":" + Math.random().toString(36).slice(2, 6), { at, [field]: value })
     view()
@@ -85,11 +97,17 @@ async function main(data) {
             " entries",
         ),
         ui.row({ gap: 1 }, [
-          ui.input(s.kcal, { placeholder: "Calories (kcal)", onChange: (value) => ((s.kcal = value), view()) }),
+          // Typing only keeps the text: a render per keystroke would send back a value behind what was typed. A new
+          // key after each entry gives an empty input.
+          ui.input(s.kcal, {
+            key: "kcal" + s.logged,
+            placeholder: "Calories (kcal)",
+            onChange: (value) => (s.kcal = value),
+          }),
           ui.button("Log meal", { variant: "primary", onPress: () => log("kcal", s.kcal, 1, 9999, "kcal") }),
         ]),
         ui.row({ gap: 1 }, [
-          ui.input(s.kg, { placeholder: "Weight (kg)", onChange: (value) => ((s.kg = value), view()) }),
+          ui.input(s.kg, { key: "kg" + s.logged, placeholder: "Weight (kg)", onChange: (value) => (s.kg = value) }),
           ui.button("Log weight", { variant: "primary", onPress: () => log("kg", s.kg, 20, 400, "kg") }),
         ]),
         s.note && ui.text(s.note, { style: "caption", tone: s.note.startsWith("Logged") ? "success" : "warning" }),

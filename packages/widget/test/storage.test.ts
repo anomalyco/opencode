@@ -258,6 +258,14 @@ test("the weight tracker logs from inputs and charts the history: live changes, 
   widget.event({ id: button("Log meal"), type: "press" })
   await widget.when(() => summary() === "Today 1050 kcal · 79.6 kg · 6 entries")
   expect(texts()).toContain("Logged 450 kcal")
+  // Typing doesn't render; after an entry the input is a new, empty one.
+  const before = kcal()
+  widget.event({ id: before, type: "change", value: "12" })
+  await Bun.sleep(50)
+  expect(kcal()).toBe(before)
+  expect(
+    (find((node) => node.type === "input" && node.placeholder === "Calories (kcal)") as { value: string }).value,
+  ).toBe("")
 
   // Press the last day, then drag to the one before: the caption and the tooltip show the day under the pointer.
   const canvas = id((node) => node.type === "canvas")
