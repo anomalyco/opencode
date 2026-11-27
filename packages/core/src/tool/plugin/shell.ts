@@ -479,18 +479,15 @@ export const Plugin = {
                     ),
                   )
                   // The rg the grep and glob tools use, so the model's commands can run it even without a system copy.
-                  // Without one the command still runs; resolution reports its failures as defects.
+                  // Never downloaded here, so a command doesn't wait on the network; without one it still runs, and
+                  // resolution reports some failures as defects.
                   const rg = target.environment.local
-                    ? yield* restore(
-                        Effect.raceFirst(
-                          ripgrep.filepath.pipe(
-                            Effect.option,
-                            Effect.catchDefect(() => Effect.succeed(Option.none())),
-                          ),
-                          stoppedBeforeStart,
-                        ),
+                    ? yield* ripgrep.installed.pipe(
+                        Effect.map(Option.fromUndefinedOr),
+                        Effect.orElseSucceed(() => Option.none<string>()),
+                        Effect.catchDefect(() => Effect.succeed(Option.none<string>())),
                       )
-                    : Option.none()
+                    : Option.none<string>()
                   const info = yield* shell.create(
                     {
                       command: input.command,

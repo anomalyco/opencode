@@ -177,7 +177,10 @@ const ripgrepDirectory = path.join(os.tmpdir(), "opencode-shell-test-ripgrep")
 const ripgrep = RipgrepBinary.node.replace(
   Layer.succeed(
     RipgrepBinary.Service,
-    RipgrepBinary.Service.of({ filepath: Effect.succeed(path.join(ripgrepDirectory, "rg")) }),
+    RipgrepBinary.Service.of({
+      filepath: Effect.succeed(path.join(ripgrepDirectory, "rg")),
+      installed: Effect.succeed(path.join(ripgrepDirectory, "rg")),
+    }),
   ),
 )
 const daemonReplacements = [
