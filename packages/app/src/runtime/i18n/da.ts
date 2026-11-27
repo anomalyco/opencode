@@ -1427,6 +1427,10 @@ export const dict = {
   "settings.providers.account.switched.description": "Bruger nu {{account}}.",
   "settings.providers.account.removed.title": "{{account}} fjernet",
   "settings.providers.account.removed.description": "{{provider}} vil ikke længere bruge denne konto.",
+  "settings.providers.account.remove.title": "Fjern {{account}}?",
+  "settings.providers.account.remove.description": "{{provider}} vil ikke længere bruge denne konto.",
+  "settings.providers.account.remove.finalDescription":
+    "Du har kun én konto hos {{provider}}. Hvis du fjerner den, afbrydes forbindelsen til {{provider}}.",
   "settings.providers.console.available.one": "{{count}} udbyder tilgængelig",
   "settings.providers.console.available.other": "{{count}} udbydere tilgængelige",
   "settings.providers.tag.account": "Konto",
