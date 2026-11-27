@@ -1,0 +1,674 @@
+---
+title: "Provider"
+description: "Collega OpenCode a provider di modelli come OpenCode Go, ChatGPT, Amazon Bedrock, Google Vertex, GitHub Copilot e Ollama, o aggiungine uno personalizzato."
+---
+
+OpenCode include un catalogo di provider e modelli da [models.dev](https://models.dev). Per la maggior parte dei provider, collega prima un
+account, poi seleziona un modello.
+
+## Configurazione
+
+Esegui `/connect`, scegli un provider e inserisci le sue credenziali. Poi esegui `/models` per selezionare uno dei suoi modelli.
+
+```text
+/connect
+/models
+```
+
+## Go
+
+[OpenCode Go](/console/go) è un abbonamento facoltativo per i modelli di coding testati dal team di OpenCode. Abbonati nella
+[Console](https://opencode.ai/console), copia la tua chiave API, poi collegala come **OpenCode Go**.
+
+```text
+/connect
+# Select OpenCode Go, then paste your API key.
+/models
+```
+
+Vedi la [guida a Go](/console/go) per limiti di utilizzo, endpoint e dettagli sulla privacy.
+
+## ChatGPT
+
+Usa un piano ChatGPT Plus or Pro invece di una chiave API OpenAI. Collega **OpenAI**, poi scegli **Sign in with ChatGPT**
+o uno dei metodi di accesso legacy **Codex**. L'utilizzo viene conteggiato nel tuo piano, quindi questi modelli non mostrano costi.
+
+```text
+/connect
+/models
+```
+
+### Limiti di contesto
+
+Per impostazione predefinita, OpenCode limita la finestra di contesto di questi accessi sotto il limite reale di ogni modello. I limiti corrispondono ai
+valori predefiniti di Codex, così l'utilizzo del tuo piano viene consumato a un ritmo simile a quello di altri prodotti OpenAI.
+
+| Modello                | Limite di input |
+| ---------------------- | --------------- |
+| GPT-6.1 Sol e successivi | 500.000       |
+| Modelli precedenti     | 272.000         |
+
+Per disattivare il limite, disabilita il plugin del limite nella tua configurazione. Il prefisso `-` disattiva un plugin integrato; tutti gli altri plugin restano
+abilitati.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["-opencode.provider.openai-context-caps"],
+}
+```
+
+## Personalizzati
+
+Aggiungi un provider quando la sua API non è già nel catalogo. Questo esempio compatibile con OpenAI definisce insieme credenziale,
+pacchetto runtime, endpoint e primo modello.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "name": "Acme",
+      "env": ["ACME_API_KEY"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.acme.example/v1",
+      },
+      "models": {
+        "qwen3-coder": {
+          "name": "Qwen 3 Coder",
+        },
+      },
+    },
+  },
+}
+```
+
+L'oggetto `providers` ha come chiave l'ID del provider usato nei riferimenti ai modelli, ad esempio `acme/qwen3-coder`.
+
+| Campo | Scopo |
+| --- | --- |
+| `name` | Nome visualizzato. |
+| `env` | Nomi ordinati di variabili d'ambiente che possono fornire la credenziale. |
+| `package` | Pacchetto del provider a runtime. |
+| `canonical` | ID di un provider integrato di cui questo provider eredita i valori predefiniti del catalogo. |
+| `compatibility` | Particolarità dell'API condivise da ogni modello di questo provider. Vedi [Compatibilità](/models#compatibility). |
+| `settings` | Controlli tipizzati di OpenCode e opzioni JSON passate al pacchetto runtime. |
+| `headers` | Header HTTP con valori stringa aggiunti alle richieste. |
+| `body` | Campi JSON uniti ai corpi delle richieste. |
+| `models` | Modelli da aggiungere o sovrascrivere, con chiave l'ID del modello di OpenCode. |
+
+## Endpoint
+
+Sovrascrivi `settings.baseURL` per inviare un provider del catalogo tramite un proxy o un endpoint compatibile. Il suo pacchetto,
+i modelli e la connessione esistenti si applicano comunque.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "baseURL": "https://llm-proxy.example.com/anthropic",
+      },
+    },
+  },
+}
+```
+
+`settings` dipende dal pacchetto. Un campo ha effetto solo quando il pacchetto selezionato lo supporta.
+
+## Richieste
+
+Usa `headers` per header HTTP aggiuntivi e `body` per i campi JSON da unire a ogni corpo di richiesta.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+      "body": {
+        "metadata": {
+          "application": "opencode",
+        },
+      },
+    },
+  },
+}
+```
+
+Entrambi i campi possono essere impostati anche su un modello o una variante quando solo una parte del traffico di un provider ha bisogno della sostituzione.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "headers": { "X-Model-Tier": "coding" },
+          "variants": [
+            {
+              "id": "batch",
+              "body": { "service_tier": "flex" },
+            },
+          ],
+        },
+      },
+    },
+  },
+}
+```
+
+## Timeout
+
+Le richieste HTTP aspettano fino a cinque minuti per gli header di risposta e fino a quindici minuti tra i chunk di risposta in streaming.
+Imposta `settings.headerTimeout` o `settings.chunkTimeout` del provider su un numero di millisecondi per cambiare un limite,
+o su `false` per disattivarlo. `settings.timeout` limita inoltre l'intera richiesta dall'invio al completamento
+della risposta; non ha un valore predefinito. Queste impostazioni di configurazione si applicano a tutto il provider, non per modello o variante. Su un
+trasporto WebSocket, `chunkTimeout` limita invece l'intervallo tra i frame e il valore predefinito è trenta minuti.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "headerTimeout": 600000,
+        "chunkTimeout": false,
+      },
+    },
+  },
+}
+```
+
+Una richiesta che supera uno dei due limiti fallisce con un errore di trasporto. OpenCode riprova una richiesta scaduta fino a tre
+volte prima di arrendersi.
+
+## Codifica delle richieste
+
+`settings.encoding` comprime i corpi delle richieste HTTP con `"zstd"` o `"gzip"`, oppure invia JSON semplice con `"none"`. Impostalo
+su un provider, modello o variante; vince il valore più specifico. Abilita solo una codifica che l'endpoint decodifica: la maggior parte
+dei provider e dei gateway rifiuta i corpi compressi. OpenAI usa `"zstd"` per impostazione predefinita quando accedi con ChatGPT e non è configurato un
+`baseURL` personalizzato; le chiavi API inviano JSON semplice. I messaggi WebSocket non sono interessati.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "encoding": "none" },
+    },
+  },
+}
+```
+
+## Pacchetti
+
+Il campo `package` seleziona il runtime che comunica con un provider. Usa il runtime compatibile per le API che
+implementano il formato di richiesta OpenAI.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.acme.example/v1",
+      },
+      "models": {
+        "qwen3-coder": {},
+      },
+    },
+  },
+}
+```
+
+Le opzioni dei pacchetti nativi includono:
+
+- `@opencode/ai/providers/openai`
+- `@opencode/ai/providers/openai/chat`
+- `@opencode/ai/providers/openai/responses`
+- `@opencode/ai/providers/openai-compatible`
+- `@opencode/ai/providers/openai-compatible/responses`
+- `@opencode/ai/providers/anthropic`
+- `@opencode/ai/providers/anthropic-compatible`
+- `@opencode/ai/providers/google`
+- `@opencode/ai/providers/google-vertex`
+- `@opencode/ai/providers/google-vertex/gemini`
+- `@opencode/ai/providers/google-vertex/chat`
+- `@opencode/ai/providers/google-vertex/responses`
+- `@opencode/ai/providers/google-vertex/messages`
+- `@opencode/ai/providers/azure`
+- `@opencode/ai/providers/azure/chat`
+- `@opencode/ai/providers/azure/responses`
+- `@opencode/ai/providers/amazon-bedrock`
+- `@opencode/ai/providers/amazon-bedrock/mantle`
+- `@opencode/ai/providers/amazon-bedrock/mantle/chat`
+- `@opencode/ai/providers/amazon-bedrock/mantle/messages`
+- `@opencode/ai/providers/amazon-bedrock/mantle/responses`
+- `@opencode/ai/providers/openrouter`
+- `@opencode/ai/providers/xai`
+
+Puoi anche usare un pacchetto npm come `@acme/opencode-provider` o un URL `file://` assoluto per un pacchetto locale.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "package": "@acme/opencode-provider",
+      "models": { "acme-coder": {} },
+    },
+  },
+}
+```
+
+## Modelli
+
+Aggiungi o sovrascrivi i modelli nella mappa `models` di un provider. La chiave della mappa è l'ID del modello usato da OpenCode; `modelID` cambia
+l'ID inviato al provider.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/coding",
+  "providers": {
+    "openai": {
+      "models": {
+        "coding": {
+          "modelID": "gpt-6.1-sol",
+          "name": "GPT-6.1 Sol Coding",
+        },
+      },
+    },
+  },
+}
+```
+
+| Campo | Scopo |
+| --- | --- |
+| `modelID` | ID del modello o del deployment inviato al provider. |
+| `name` | Nome visualizzato. |
+| `family` | Famiglia del modello usata per raggruppare modelli correlati. |
+| `type` | Cosa produce il modello: `chat`, `decision`, `image`, `video`, `realtime`, `embedding` o `transcription`. Il valore predefinito è `chat`; solo i modelli chat vengono offerti per le sessioni. I modelli realtime che rispondono a voce vengono offerti per la voce, e con `disabled: true` no. |
+| `releaseDate` | Data di rilascio come `YYYY-MM-DD` o `YYYY-MM`. |
+| `package` | Sostituzione del runtime per questo modello. Un modello di trascrizione indica il suo protocollo di trascrizione, ad esempio `@opencode/ai/protocols/openai-transcription`; un modello realtime non ne prende nessuno, perché le sessioni vocali partono tramite la sua API. |
+| `settings` | Controlli di OpenCode a livello di modello e impostazioni JSON specifiche del pacchetto. |
+| `headers` | Header di richiesta aggiuntivi con valori stringa. |
+| `body` | Campi JSON aggiuntivi del corpo della richiesta. |
+| `capabilities` | Supporto agli strumenti, tipi di media di input e output accettati, supporto della temperatura e controlli di ragionamento. |
+| `compatibility` | Particolarità dell'API per questo modello, che sovrascrivono quelle del provider. Vedi [Compatibilità](/models#compatibility). |
+| `variants` | Varianti con nome con propri `settings`, `headers` e `body`. |
+| `cost` | Prezzi per milione di token in input e in output, con prezzi facoltativi per la cache. |
+| `limit` | Limiti di token di contesto, input e output. |
+| `disabled` | Rimuove il modello dalla selezione quando è `true`. |
+
+Vedi [Modelli](/models) per selezione, valori predefiniti, capacità, limiti, costi e varianti.
+
+## Azure
+
+L'endpoint standard del catalogo Azure richiede un nome della risorsa oltre alla credenziale. Imposta `settings.resourceName`
+una volta, poi collega una chiave API o usa la sessione Microsoft Entra ID della CLI di Azure come descritto in
+[Account dei provider](/cli/providers).
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "azure": {
+      "settings": {
+        "resourceName": "my-models",
+      },
+    },
+  },
+}
+```
+
+Trova il **Resource name** in [Azure portal](https://portal.azure.com/) o in
+[Microsoft Foundry](https://ai.azure.com/). È anche la prima parte di endpoint come
+`https://my-models.openai.azure.com/` e `https://my-models.services.ai.azure.com/`.
+
+```bash
+az cognitiveservices account list \
+  --query "[].{name:name,resourceGroup:resourceGroup}" \
+  --output table
+```
+
+Per usare Entra ID, installa la [CLI di Azure](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli), accedi, poi
+scegli **Microsoft Entra ID (Azure CLI)** quando colleghi Azure.
+
+```bash
+az login
+```
+
+Inserisci il nome della risorsa al collegamento se non è già fornito dalla configurazione o dall'ambiente. Un nome della risorsa
+salvato con una connessione ha la precedenza sulla configurazione; collegati di nuovo per cambiarlo.
+
+Le connessioni della CLI di Azure usano l'account selezionato nella CLI di Azure. Per una risorsa in un altro tenant o subscription,
+seleziona entrambi esplicitamente.
+
+```bash
+az login --tenant TENANT_ID
+az account set --subscription NAME_OR_ID
+```
+
+Invece della configurazione, `AZURE_RESOURCE_NAME` fornisce il nome della risorsa al server OpenCode. Funziona anche la variabile legacy
+`AZURE_COGNITIVE_SERVICES_RESOURCE_NAME`.
+
+### Deployment
+
+Azure serve un modello solo tramite un deployment, quindi OpenCode elenca i deployment della tua risorsa e mostra quelli
+invece dell'intero catalogo Azure. L'elenco si carica in background dopo l'avvio, dopo il collegamento e dopo il
+cambio di account. Per rilevare un deployment aggiunto dopo, riavvia OpenCode o collegati di nuovo.
+
+- Finché l'elenco non si carica per una connessione, o se fallisce, l'intero catalogo resta disponibile.
+- Un ricaricamento fallito per la stessa connessione conserva il suo ultimo inventario completo.
+- Cambiare account non mostra mai l'inventario dell'account precedente; il nuovo account parte dall'intero catalogo.
+- I deployment ereditano limiti, costi e capacità dai loro modelli del catalogo.
+
+I nomi dei deployment sono i loro ID modello, in minuscolo perché Azure ignora il maiuscolo nei nomi, ad esempio
+`azure/gpt-production`. Un deployment chiamato come il suo modello, come `gpt-6-luna`, mantiene l'ID del catalogo. Questi ID restano
+stabili quando altri deployment vengono aggiunti o rimossi.
+
+OpenCode abbina un deployment al catalogo in base al modello che distribuisce, o al suo nome quando Azure scrive il modello
+diversamente, come con `gpt-4` per GPT-4 Turbo. Un deployment chiamato come un altro modello, ad esempio `gpt-6.1-sol` che distribuisce
+`gpt-6-luna`, mostra nome, limiti e costi di quel modello.
+
+Con Azure CLI, OpenCode elenca i deployment tramite l'API di gestione Azure, che richiede accesso in lettura alla
+risorsa. Se l'operazione non riesce o se usi una chiave API, OpenCode usa l'inventario legacy dei deployment della risorsa. Legge tutte le pagine prima di pubblicare l'elenco. Se imposti un `settings.baseURL` personalizzato, OpenCode continua a mostrare il catalogo.
+
+Configura esplicitamente un deployment quando il suo modello non è nel catalogo, ad esempio un modello con fine-tuning, o per mappare tu stesso un ID modello
+a un deployment. OpenCode registra un avviso che nomina tali deployment. I modelli configurati esplicitamente vengono sempre
+conservati.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "azure": {
+      "models": {
+        "gpt-6-luna": {
+          "modelID": "gpt-production",
+        },
+      },
+    },
+  },
+}
+```
+
+La tua identità ha bisogno di uno di questi ruoli:
+
+- **Cognitive Services OpenAI User** per i modelli Azure OpenAI.
+- **Cognitive Services User** per gli altri modelli Foundry.
+
+Se una richiesta usa un token del tenant sbagliato, accedi di nuovo con il tenant richiesto.
+
+```bash
+az login --tenant TENANT_ID
+```
+
+## Bedrock
+
+Amazon Bedrock usa la catena di credenziali predefinita di AWS. Un profilo AWS con nome è la configurazione durevole più semplice; OpenCode riconosce anche
+ambienti con chiavi di accesso, identità web e credenziali dei container.
+
+```bash
+aws configure sso --profile work
+aws sso login --profile work
+```
+
+Seleziona profilo e regione nelle impostazioni del provider. Un `profile`, `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`, file di token di
+identità web o URI delle credenziali dei container configurati attivano il provider; una regione da sola no.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "amazon-bedrock": {
+      "settings": {
+        "profile": "work",
+        "region": "us-west-2",
+      },
+    },
+  },
+}
+```
+
+Senza una regione esplicita, OpenCode usa `AWS_REGION`, poi `AWS_DEFAULT_REGION`, poi `us-east-1`. Per un endpoint privato o
+VPC, imposta `baseURL` mantenendo lo stesso profilo e la stessa regione.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "amazon-bedrock": {
+      "settings": {
+        "profile": "work",
+        "region": "us-west-2",
+        "baseURL": "https://bedrock-runtime.vpce.example.com",
+      },
+    },
+  },
+}
+```
+
+Le chiavi API Bedrock usano `AWS_BEARER_TOKEN_BEDROCK`. Le altre variabili AWS alimentano SigV4 e non vengono archiviate come account
+con chiave API di OpenCode.
+
+## Vertex
+
+Google Vertex usa le credenziali predefinite dell'applicazione (ADC) e richiede un progetto prima che i suoi modelli diventino disponibili.
+Crea ADC locali, poi imposta progetto e location nelle impostazioni del provider.
+
+```bash
+gcloud auth application-default login
+```
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "google-vertex": {
+      "settings": {
+        "project": "my-project",
+        "location": "us-central1",
+      },
+    },
+  },
+}
+```
+
+OpenCode risolve anche il progetto da `GOOGLE_VERTEX_PROJECT`, `GOOGLE_CLOUD_PROJECT`, `GCP_PROJECT` o
+`GCLOUD_PROJECT`, in quest'ordine. Risolve la location da `GOOGLE_VERTEX_LOCATION`, `GOOGLE_CLOUD_LOCATION` o
+`VERTEX_LOCATION`, e il valore predefinito è `us-central1`.
+
+```bash
+GOOGLE_CLOUD_PROJECT=my-project GOOGLE_VERTEX_LOCATION=europe-west4 opencode --standalone
+```
+
+Gli account di servizio funzionano tramite lo stesso percorso ADC. Punta `GOOGLE_APPLICATION_CREDENTIALS` al file JSON dell'account
+di servizio e fornisci comunque un progetto tramite le impostazioni o una delle variabili di progetto qui sopra.
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS=/secure/vertex.json \
+GOOGLE_CLOUD_PROJECT=my-project \
+opencode --standalone
+```
+
+Usa l'unico ID provider `google-vertex` per i modelli del catalogo Vertex Gemini, Anthropic e compatibili con OpenAI. Il vecchio
+ID provider `google-vertex-anthropic` non è disponibile in V2.
+
+## Copilot
+
+GitHub Copilot supporta OAuth dispositivo invece dell'inserimento manuale della chiave API. Collega **GitHub Copilot**, scegli GitHub.com o
+GitHub Enterprise, completa il flusso dispositivo, poi apri `/models`.
+
+```text
+/connect
+# Select GitHub Copilot, then Login with GitHub Copilot.
+/models
+```
+
+Per GitHub Enterprise, inserisci l'URL del deployment o il dominio quando richiesto. OpenCode usa un endpoint API Copilot restituito
+da GitHub quando disponibile; altrimenti deriva l'endpoint dal dominio enterprise.
+
+```text
+company.ghe.com
+```
+
+L'account collegato ha bisogno dell'accesso a Copilot Chat. Se GitHub segnala che non hai il diritto, iscriviti a Copilot Free o chiedi
+all'organizzazione di assegnare un posto Copilot, poi collegati di nuovo. OpenCode recupera l'elenco dei modelli correnti dell'account dopo l'accesso
+e ogni volta che l'account Copilot attivo cambia.
+
+## Ollama
+
+Avvia Ollama e scarica un modello. OpenCode sonda `http://127.0.0.1:11434`, scopre i modelli di completamento e li aggiunge a
+`/models` senza collegare un account.
+
+```bash
+ollama serve
+ollama pull qwen3:8b
+```
+
+Per collegare OpenCode a un server Ollama remoto o dietro un proxy, imposta `settings.baseURL`. Includi `/v1`: da lì OpenCode ricava i percorsi nativi `/api/tags` e `/api/show` per il rilevamento dei modelli. `apiKey` è facoltativa; OpenCode la invia come token bearer sia per rilevare i modelli sia per interrogarli.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "ollama": {
+      "settings": {
+        "baseURL": "https://ollama.example.com/v1",
+        "apiKey": "{env:OLLAMA_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+OpenCode aggiorna periodicamente l'elenco e, in caso di interruzione temporanea, conserva l'ultimo elenco ottenuto. I modelli solo embedding non compaiono: OpenCode aggiunge solo i modelli i cui metadati Ollama dichiarano la funzionalità `completion`.
+
+## Runtime
+
+OpenCode rileva automaticamente anche i modelli locali di LM Studio e vLLM. I loro endpoint predefiniti sono
+`http://127.0.0.1:1234/v1` e `http://127.0.0.1:8000/v1`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "lmstudio": {
+      "settings": { "baseURL": "http://gpu-host:1234/v1" },
+    },
+    "vllm": {
+      "settings": { "baseURL": "http://gpu-host:8000/v1" },
+    },
+  },
+}
+```
+
+Per LM Studio, OpenCode rileva i modelli linguistici da `/api/v1/models`. Per vLLM, controlla `/health` prima di leggere `/v1/models`. Il rilevamento automatico non può stabilire se i modelli vLLM supportano gli strumenti, quindi li lascia disattivati. Per un altro runtime compatibile con OpenAI, segui l'esempio del [provider personalizzato](#custom) ed elenca esplicitamente i modelli.
+
+## Gateway
+
+OpenRouter usa il suo runtime e catalogo nativi. Fornisci `OPENROUTER_API_KEY` al server OpenCode o collega un
+account OpenRouter, poi fai riferimento ai modelli con l'ID completo del modello OpenRouter dopo il prefisso del provider.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openrouter/anthropic/claude-sonnet-5.5",
+}
+```
+
+Mantieni il pacchetto nativo di OpenRouter quando sovrascrivi il suo endpoint o instradi tramite un gateway compatibile con OpenRouter.
+Questo preserva il comportamento di richiesta e ragionamento di OpenRouter.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openrouter": {
+      "settings": {
+        "baseURL": "https://openrouter-gateway.example.com/api/v1",
+      },
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+    },
+  },
+}
+```
+
+Per un gateway che espone un'API compatibile con OpenAI ma ha un proprio inventario di modelli, definisci invece un provider personalizzato.
+La chiave di configurazione diventa il prefisso del provider e ogni chiave `models` diventa un ID modello selezionabile.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "company/coder",
+  "providers": {
+    "company": {
+      "env": ["COMPANY_GATEWAY_KEY"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://gateway.example.com/v1",
+      },
+      "models": {
+        "coder": { "modelID": "upstream/coder-v2" },
+      },
+    },
+  },
+}
+```
+
+## Errori
+
+Gli errori di provider e modelli di solito identificano la fase fallita. Controlla l'ambiente del processo del server e l'esatto ID
+del modello prima di cambiare pacchetti.
+
+| Errore o sintomo | Verifica |
+| --- | --- |
+| `No model is available for session ...` | Nessun modello abilitato è selezionabile al momento. Completa la configurazione specifica del provider, poi scegli un modello in `/models`. |
+| `Model unavailable: provider/model` | Il provider è inattivo, l'ID del modello è assente o disabilitato, o la scoperta dinamica non lo restituisce più. Per gli alias personalizzati, controlla la chiave della mappa `models` invece di `modelID`. |
+| `Cannot initialize provider/model: NAME is required to resolve the provider endpoint` | Un segnaposto `${NAME}` resta in `baseURL`. Imposta quella variabile sul server OpenCode o sostituisci il template con un endpoint completo. |
+| `Azure resource name is missing` | Imposta `providers.azure.settings.resourceName`, `AZURE_RESOURCE_NAME` o un `settings.baseURL` completo. |
+| Vertex non compare | Imposta un progetto risolvibile nelle impostazioni del provider o una variabile di progetto supportata. ADC da solo non attiva il provider. |
+| Bedrock non compare | Fornisci un profilo o un altro input supportato della catena di credenziali AWS. `AWS_REGION` da solo seleziona solo una regione. |
+| Ollama non ha modelli | Conferma che il server esponga `/api/tags` e `/api/show` al percorso derivato da `baseURL`, e che `/api/show` riporti la capacità `completion`. |
+| Copilot non ha modelli | Conferma che l'account OAuth attivo abbia accesso a Copilot Chat. Una sincronizzazione dei modelli fallita viene registrata come `failed to sync GitHub Copilot models`. |
+
+V2 rifiuta gli ID provider ritirati con una sostituzione diretta. Usa `azure/<model>` invece di
+`azure-cognitive-services/<model>`, e `google-vertex/<model>` invece di `google-vertex-anthropic/<model>`.
+
+## WebSocket
+
+I modelli OpenAI, xAI e Azure Responses supportati possono mantenere una connessione WebSocket aperta per sessione. I passi consecutivi
+riusano il prefisso di richiesta invariato e inviano solo il contenuto aggiunto dopo la risposta precedente, riducendo gli upload nelle sessioni
+lunghe.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "transport": "http" },
+    },
+  },
+}
+```
+
+Il comportamento WebSocket segue queste regole:
+
+- I provider integrati attivano le route supportate secondo la propria policy.
+- `settings.transport: "websocket"` del provider lo abilita; `"http"` lo disabilita.
+- `"websocket"` su una route senza canale WebSocket registra un avviso e ricade su HTTP.
+- La compattazione del provider OpenAI usa la stessa connessione.
+- xAI continua solo dalle risposte archiviate. Con il suo `store: false` predefinito, ogni passo viene inviato per intero sulla connessione
+  riusata.
+- Un socket chiuso si riconnette al passo successivo. Se la connessione non si apre, la sessione continua su HTTP.
+- I plugin dei provider con hook `http.request` o `http.response` restano su HTTP, così ogni richiesta resta osservabile.
