@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "../component/prompt"
-import { createEffect, createMemo, createSignal, onMount, Show, untrack } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show, untrack } from "solid-js"
 import { Logo } from "../component/logo"
 import { useArgs } from "../context/args"
 import { useRouteData } from "../context/route"
@@ -15,6 +15,7 @@ import { useTheme } from "../context/theme"
 import { useUpdateNotification } from "../context/update-notification"
 import { useExit } from "../context/exit"
 import { FadeInText } from "../component/fade-in-text"
+import { useClient } from "../context/client"
 
 let once = false
 const placeholder = {
@@ -32,11 +33,37 @@ export function Home() {
   const data = useData()
   const location = useLocation()
   const dimensions = useTerminalDimensions()
+  const theme = useTheme()
   const [logoWidth, setLogoWidth] = createSignal(0)
   // Global MCP elicitations can arrive without a session route, so keep them reachable from Home.
   const currentLocation = () => route.location ?? data.location.default()
   const forms = createMemo(() => data.session.form.list("global", currentLocation()) ?? [])
   let sent = false
+  const client = useClient()
+  const [startup, { refetch }] = createResource(
+    () => !!args.prompt && client.connection.status() === "connected" && currentLocation(),
+    async (target) => {
+      try {
+        const plugins = await client.api.plugin.list({ location: target })
+        if (!plugins.data.length) return "waiting" as const
+        // A cold server publishes its inventory only after activation. Replace any early
+        // built-in-only agent snapshot before selecting the default for --prompt.
+        data.location.agent.invalidate(target)
+        await data.location.agent.sync(target)
+        return "ready" as const
+      } catch {
+        return "error" as const
+      }
+    },
+  )
+  onCleanup(
+    data.on("plugin.updated", (event) => {
+      const target = currentLocation()
+      if (sent || !args.prompt || !target || !event.location) return
+      if (event.location.directory !== target.directory || event.location.workspaceID !== target.workspaceID) return
+      void refetch()
+    }),
+  )
 
   // Track only the route location and (when absent) the default location; location.set
   // reads other signals internally and tracking them would re-assert the route location
@@ -70,6 +97,7 @@ export function Home() {
     const r = ref()
     if (sent) return
     if (!r) return
+    if (startup.loading || startup() !== "ready") return
     if (!local.model.ready || !local.model.catalogReady) return
     if (!local.agent.current() || !local.model.current()) return
     if (!args.prompt) return
@@ -100,6 +128,16 @@ export function Home() {
         <UpdateNotification width={logoWidth()} />
         <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0} position="relative">
           <Prompt ref={bind} placeholders={placeholder} disabled={forms().length > 0} />
+          <Show when={args.prompt && ref()?.current.text === args.prompt && startup() !== "ready"}>
+            <text fg={theme.text.muted} paddingLeft={2}>
+              {startup() === "error" ? "Could not load plugins." : "Waiting for plugins before sending."}
+              <Show
+                when={local.model.ready && local.model.catalogReady && local.agent.current() && local.model.current()}
+              >
+                {" Press Enter to send manually."}
+              </Show>
+            </text>
+          </Show>
         </box>
         <box flexGrow={1} minHeight={0} />
       </box>
