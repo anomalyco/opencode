@@ -108,6 +108,7 @@ export function relativeTime(at: number, language: Language) {
 // "5m", "2h", "3d": how long until the next run, for the list's chip.
 export function shortDuration(at: number, language: Language) {
   const minutes = Math.max(1, Math.round((at - Date.now()) / 60_000))
+
   const [value, unit] =
     minutes < 60
       ? [minutes, "minute"]
