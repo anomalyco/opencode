@@ -58,7 +58,7 @@ Se nenhuma regra corresponder, o OpenCode usa `ask`.
 
 ## Correspondência
 
-Ações e recursos usam curingas simples de valor inteiro:
+Nas ações e nos recursos, os curingas simples se aplicam ao valor completo:
 
 | Padrão | Correspondência                                      |
 | ------- | ------------------------------------------ |
@@ -83,7 +83,7 @@ Um padrão de shell terminado em ` *` também corresponde ao comando sem argumen
 { "action": "shell", "resource": "git status *", "effect": "allow" }
 ```
 
-Isto corresponde a `git status` e a `git status --short`.
+Esse padrão corresponde tanto a `git status` quanto a `git status --short`.
 
 O OpenCode combina as regras em ordem e usa a última correspondência. A configuração de prioridade
 mais baixa carrega primeiro, as regras globais são acrescentadas depois e as regras do agente
@@ -213,8 +213,8 @@ recurso `shell` e para `external_directory` `*`. Apenas uma regra que permite to
 }
 ```
 
-As regras de permissão, os padrões de aprovação salvos e a inferência de diretório de melhor esforço valem para cada subcomando extraído e cada alvo de `cd`. Não há modo extra de
-aprovação nem restrição geral para diretórios desconhecidos.
+Para cada subcomando extraído e cada destino de `cd`, o OpenCode aplica as regras de permissão e os padrões de aprovação salvos e tenta identificar os diretórios usados. Não há um modo de
+aprovação adicional nem uma restrição geral para diretórios desconhecidos.
 
 ## Padrões
 
@@ -241,10 +241,10 @@ Os agentes fornecidos acrescentam estas políticas:
 | `summary`    | Nega todas as ações                                                              |
 | `compaction` | Mantém a política base                                                          |
 
-Como nenhuma regra padrão pede `external_directory`, leituras e edições fora
-do local e do worktree prosseguem sem prompt. Adicione uma regra
+Como nenhuma regra padrão exige aprovação para `external_directory`, leituras e edições fora
+do local e da worktree não pedem confirmação. Adicione uma regra
 `external_directory` `ask` ou `deny`, como mostrado em
-[Diretórios](#directories), para restaurar um prompt ou bloquear o acesso externo.
+[Diretórios](#directories), para exigir confirmação ou bloquear o acesso externo.
 Regras globais e de agente posteriores substituem esses padrões.
 
 ## Agentes
@@ -291,9 +291,9 @@ prefixo de shell que cobre comandos `git status` posteriores:
 shell: git status * → allow
 ```
 
-As aprovações salvas são regras `allow` duráveis e com escopo de projeto. Elas nunca substituem
-um `deny` configurado. As ferramentas escolhem o padrão salvo proposto: algumas propõem `*`,
-o shell propõe prefixos de comando, buscas na web propõem o site da URL (como
+As aprovações salvas são regras `allow` persistentes que se aplicam ao projeto. Elas nunca substituem
+um `deny` configurado. Cada ferramenta propõe o padrão a salvar: algumas propõem `*`,
+o shell propõe prefixos de comando, a ferramenta de leitura de páginas web propõe o site da URL (como
 `https://opencode.ai/*`), e skills e subagentes propõem os próprios IDs.
 Revise aprovações amplas e remova as que não forem mais necessárias.
 

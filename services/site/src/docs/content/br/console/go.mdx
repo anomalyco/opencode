@@ -65,7 +65,7 @@ forma de pagamento ao assinar ou depois em **Manage subscription**. Isso não de
   tenta cobrar de novo 1, 3 e 7 dias após o fim do período e assim que houver crédito suficiente. Se a última
   tentativa falhar, a assinatura do Go é encerrada.
 - Espaços de trabalho em [cobrança por fatura](/console/billing#invoiced-billing) não podem pagar o Go com crédito.
-- O reembolso de um pagamento do Go feito com créditos volta para o saldo e encerra o período correspondente da assinatura.
+- Se um pagamento do Go feito com créditos for reembolsado, o valor volta para o saldo e o período correspondente da assinatura termina.
 
 ## Onde posso usar?
 
@@ -82,7 +82,7 @@ Seu cliente deve:
    o cache de prompt.
 
 Requisições de [decisão](#decision-models) e de [embedding](#embedding-models) não precisam de `x-opencode-session`, então qualquer
-cliente, como uma biblioteca de RAG, um provedor de memória ou um script, pode chamá-las com a sua chave do Go.
+cliente, como uma biblioteca de RAG, um provedor de memória ou um script, pode enviá-las com a sua chave do Go.
 
 Consulte [Harnesses](/console/harnesses) para configurar o Go no Claude Code, no Codex, no Hermes, no OpenClaw, no Pi e no Raycast.
 
@@ -122,7 +122,7 @@ Os modelos pagos que você usa no Go compartilham uma única cota de uso. No Go 
 - O **limite semanal** é 50% da sua cota mensal. Ele é renovado na segunda-feira às 00:00 UTC.
 - A sua **cota mensal** é renovada no início de cada período pago.
 
-Mesmo que você troque de modelo, o consumo continua descontando da mesma cota. Se atingir um limite, use um modelo grátis ou ative o
+Mesmo que você troque de modelo, o uso continua sendo descontado da mesma cota. Se atingir um limite, use um modelo grátis ou ative o
 [Extra Usage](#usage-beyond-limits) para usar os créditos do Console até ter cota disponível de novo.
 
 O [limite mensal](https://opencode.ai/console/go#limits) de cada modelo mostra quanto uso o seu plano cobre se você usar apenas esse modelo no mês.
@@ -168,7 +168,7 @@ No Go, o uso mensal incluído varia por modelo.
 
 Na maioria dos modelos, conseguimos isso com descontos por volume e capacidade de GPU reservada. Repassamos essa economia para você na forma de limites mensais maiores.
 
-Em alguns modelos, não tivemos a oportunidade de negociar um desconto ou hospedá-los a um custo menor, seja porque o modelo é novo ou porque o preço público deles já tem desconto.
+Para alguns modelos, ainda não conseguimos negociar um desconto nem reduzir o custo de hospedagem, seja porque são novos ou porque o preço público já inclui desconto.
 
 Nesses modelos, você ainda ganha um pouco mais do que se pagasse diretamente aos provedores do modelo; por isso o uso mensal incluído deles é menor.
 
@@ -260,7 +260,7 @@ curl https://opencode.ai/inference/go/openai/v1/embeddings \
 
 ### Uso
 
-Veja quanto dos seus [limites de uso](#usage-limits) você já usou, por exemplo para exibi-los no seu próprio cliente:
+Consulte quanto dos seus [limites de uso](#usage-limits) já foi consumido. Você pode, por exemplo, mostrar esses dados no seu cliente:
 
 ```bash
 curl https://opencode.ai/inference/go/v1/usage \
@@ -341,7 +341,7 @@ Veja se cada modelo [treina com os seus dados](https://opencode.ai/console/go#pr
 - **Muse Spark 1.2 Contributor:** Preço por token com grande desconto em troca de permissão para usar seus prompts e as respostas geradas no treinamento de futuros modelos da Meta. A disponibilidade é limitada às regiões permitidas pela [Política de Uso Geográfico](https://ai.developer.meta.com/legal/geographic-use-policy) da Meta. [Saiba mais](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Iceman Contributor Free:** Grátis por tempo limitado em troca de permissão para usar seus prompts e as respostas geradas para melhorar o modelo.
 - **HungerG Free:** Grátis por tempo limitado. Seus prompts e as respostas geradas não são usados para treinar modelos.
-- **LongCat 2.5:** Hospedado na China. Exige as regiões **Global** nas configurações de privacidade do seu espaço de trabalho.
+- **LongCat 2.5:** Hospedado na China. Para usá-lo, selecione **Global** nas configurações de privacidade do seu espaço de trabalho.
 - **DeepSeek:** O acordo de ZDR é renovado mensalmente. O acordo atual vale até 31 de dezembro de 2026.
 
 ## Contexto
@@ -355,7 +355,7 @@ No entanto, obter acesso confiável e de baixa latência a eles pode ser difíci
 Para resolver isso, fizemos algumas coisas:
 
 1. Testamos um grupo seleto de modelos abertos e conversamos com as equipes deles sobre a melhor forma de executá-los.
-2. Trabalhamos com alguns provedores para garantir que fossem servidos corretamente.
+2. Trabalhamos com alguns provedores para garantir que disponibilizassem os modelos corretamente.
 3. Medimos o desempenho das combinações de modelo e provedor e chegamos a uma lista que podemos recomendar com confiança.
 
 Go, Go Plus e Go Teams dão acesso a esses modelos; escolha o plano que corresponde ao quanto você os usa, ou o Go

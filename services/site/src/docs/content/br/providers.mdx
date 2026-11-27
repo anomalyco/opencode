@@ -8,7 +8,7 @@ conta primeiro e depois selecione um modelo.
 
 ## Configuração inicial
 
-Execute `/connect`, escolha um provedor e informe as credenciais dele. Depois execute `/models` para selecionar um dos modelos dele.
+Execute `/connect`, escolha um provedor e informe as credenciais. Em seguida, execute `/models` para selecionar um modelo desse provedor.
 
 ```text
 /connect
@@ -40,8 +40,8 @@ ou um dos métodos de login legados do **Codex**. O uso é descontado do plano, 
 
 ### Limites de contexto
 
-Por padrão, o OpenCode limita a janela de contexto desses logins abaixo do limite real de cada modelo. Os limites correspondem aos
-padrões do Codex, então o uso do seu plano é consumido a uma taxa semelhante à de outros produtos da OpenAI.
+Por padrão, com essas formas de login, o OpenCode limita a janela de contexto a um tamanho menor que o limite real de cada modelo.
+Os limites são os mesmos do Codex, então você usa a cota do seu plano em um ritmo parecido com o de outros produtos da OpenAI.
 
 | Modelo                 | Limite de entrada |
 | --------------------- | ----------- |
@@ -99,8 +99,8 @@ No objeto `providers`, a chave de cada entrada é o ID de provedor usado nas ref
 
 ## Endpoint
 
-Substitua `settings.baseURL` para enviar um provedor do catálogo por um proxy ou endpoint compatível. O pacote,
-os modelos e a conexão existentes continuam valendo.
+Substitua `settings.baseURL` para encaminhar as requisições a um provedor do catálogo por um proxy ou endpoint compatível. O pacote,
+os modelos e a conexão do provedor não mudam.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -294,7 +294,7 @@ ID enviado ao provedor.
 | `modelID` | ID de modelo ou de implantação enviado ao provedor. |
 | `name` | Nome de exibição. |
 | `family` | Família do modelo usada para agrupar modelos relacionados. |
-| `type` | O que o modelo produz: `chat`, `decision`, `image`, `video`, `realtime`, `embedding` ou `transcription`. O padrão é `chat`; apenas modelos de chat são oferecidos para sessões. Modelos de tempo real que respondem em fala são oferecidos para voz, e definidos como `disabled: true` não são. |
+| `type` | O que o modelo produz: `chat`, `decision`, `image`, `video`, `realtime`, `embedding` ou `transcription`. O padrão é `chat`: só modelos de chat estão disponíveis para sessões. Modelos em tempo real que respondem por voz ficam disponíveis para sessões de voz, a menos que você defina `disabled: true`. |
 | `releaseDate` | Data de lançamento como `YYYY-MM-DD` ou `YYYY-MM`. |
 | `package` | Substituição de runtime para este modelo. Um modelo de transcrição nomeia o protocolo de transcrição dele, como `@opencode/ai/protocols/openai-transcription`; um modelo de tempo real não aceita nenhum, já que as sessões de voz começam pela API dele. |
 | `settings` | Controles do OpenCode no nível do modelo e configurações JSON específicas do pacote. |
@@ -361,9 +361,9 @@ Em vez da configuração, `AZURE_RESOURCE_NAME` fornece o nome do recurso ao ser
 
 ### Implantações
 
-O Azure só serve um modelo por meio de uma implantação, então o OpenCode lista as implantações do seu recurso e mostra essas
-em vez do catálogo inteiro do Azure. A lista carrega em segundo plano após a inicialização, após conectar e após
-trocar de conta. Para reconhecer uma implantação adicionada depois, reinicie o OpenCode ou conecte de novo.
+O Azure só disponibiliza modelos por meio de implantações. Por isso, o OpenCode mostra as implantações do seu recurso em vez do catálogo inteiro do Azure.
+A lista carrega em segundo plano após a inicialização, quando você conecta o Azure e quando troca de conta. Para ver uma implantação
+adicionada depois, reinicie o OpenCode ou conecte o Azure de novo.
 
 - Até a lista carregar para uma conexão, ou se falhar, o catálogo inteiro continua disponível.
 - Uma recarga que falha para a mesma conexão mantém o último inventário completo dela.
@@ -379,7 +379,7 @@ de outra forma, como `gpt-4` para GPT-4 Turbo. Uma implantação nomeada como ou
 `gpt-6-luna`, mostra o nome, os limites e os custos desse modelo.
 
 Com a CLI do Azure, o OpenCode lista as implantações pela API de gerenciamento do Azure, que precisa de acesso de leitura ao
-recurso. Se isso falhar, e sempre com uma chave de API, ele usa o inventário de implantações legado do recurso. A descoberta lê
+recurso. Se a consulta falhar ou se você usar uma chave de API, o OpenCode usa o inventário de implantações legado do recurso. Ele lê
 todas as páginas antes de publicar a lista. Um `settings.baseURL` personalizado mantém o catálogo.
 
 Configure uma implantação explicitamente quando o modelo dela não estiver no catálogo, como um modelo ajustado, ou para mapear um ID de modelo
@@ -491,8 +491,8 @@ O OpenCode também resolve o projeto a partir de `GOOGLE_VERTEX_PROJECT`, `GOOGL
 GOOGLE_CLOUD_PROJECT=my-project GOOGLE_VERTEX_LOCATION=europe-west4 opencode --standalone
 ```
 
-As contas de serviço funcionam pelo mesmo caminho ADC. Aponte `GOOGLE_APPLICATION_CREDENTIALS` para o arquivo JSON da conta de serviço
-e ainda forneça um projeto pelas configurações ou por uma das variáveis de projeto acima.
+As contas de serviço também usam ADC. Aponte `GOOGLE_APPLICATION_CREDENTIALS` para o arquivo JSON da conta de serviço
+e informe o projeto nas configurações ou em uma das variáveis de projeto acima.
 
 ```bash
 GOOGLE_APPLICATION_CREDENTIALS=/secure/vertex.json \
@@ -535,7 +535,7 @@ ollama serve
 ollama pull qwen3:8b
 ```
 
-Aponte o OpenCode para um servidor Ollama remoto ou com proxy com `settings.baseURL`. Inclua `/v1`; o OpenCode deriva os caminhos nativos
+Use `settings.baseURL` para apontar o OpenCode para um servidor Ollama remoto ou acessível por proxy. Inclua `/v1`; o OpenCode deriva os caminhos nativos
 de descoberta `/api/tags` e `/api/show` a partir dele. Se você definir `apiKey`, ela é enviada como token Bearer nas requisições de
 descoberta e nas requisições ao modelo.
 
