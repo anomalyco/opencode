@@ -6,7 +6,7 @@
 
 - `src/i18n/tr.ts` ve V1 Türkçe dokümanlarla uyumlu: siz hitabı, sade ve doğrudan anlatım, emir kipi ("Dosyayı açın", "Komutu çalıştırın").
 - "lütfen", "yapmanız gerekmektedir", "-mektedir" gibi ağır kalıplar yok; kısa cümleler.
-- İngilizce terimden sonra Türkçe ek kesme işaretiyle ve site genelindeki gibi düz kesme işaretiyle yazılır: OpenCode'u, Console'a, Go'ya, API'yi, MCP'yi.
+- İngilizce terimden sonra Türkçe eki sözcüğün okunuşuna göre getirin ve düz kesme işareti kullanın: OpenCode'u, Console'a, Go'ya, API'yi, MCP'yi, TUI'da. Sözlüğe yerleşik yazımları koruyun: promptu, promptlar.
 - Tırnak içinde arayüz etiketi verilirken İngilizce etiket korunur: **Settings › Billing**.
 - Tire yerine Türkçe noktalama; iki nokta üst üste yalnızca liste veya tanım başlatırken.
 
@@ -45,7 +45,7 @@
 | transcript | konuşma dökümü | |
 | scrollback | kaydırma geçmişi | |
 | harness | harness | İngilizce kalır |
-| inference | inference | Türkçe geliştirici metinlerinde yaygın; "çıkarım" kullanılmaz |
+| inference | inference | "Inference API" API adı olarak korunur. Tamlamaları Türkçe kurun: Console'un inference hizmeti. |
 | endpoint | endpoint | |
 | base URL | base URL | |
 | API key | API anahtarı | |

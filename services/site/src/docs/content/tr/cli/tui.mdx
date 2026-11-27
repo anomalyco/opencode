@@ -1,9 +1,9 @@
 ---
 title: "TUI"
-description: "Bir oturum başlatın ve terminal arayüzündeki günlük iş akışlarını kullanın."
+description: "Terminal arayüzünde oturum başlatın ve sık kullandığınız işlemleri yapın."
 ---
 
-OpenCode'u projenizden çalıştırın, bir istek yazın ve **Enter** tuşuna basın.
+OpenCode'u proje dizininizde çalıştırın, bir istek yazın ve **Enter** tuşuna basın.
 
 ```bash
 cd ~/code/my-project
@@ -14,8 +14,9 @@ opencode
 Explain how authentication works in this project
 ```
 
-Yeni satır için **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** veya **Ctrl+J** tuşlarına basın. OpenCode çalışırken **Enter**
-etkin oturumu yönlendirir; promptu sonrası için kuyruğa almak üzere **Ctrl+X** ardından **Enter** tuşlarına basın.
+Yeni satır açmak için **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** veya **Ctrl+J** tuşlarına basın. OpenCode çalışırken
+**Enter** tuşuyla promptu gönderip devam eden oturumu yönlendirebilirsiniz. Promptu daha sonra işlenmek üzere kuyruğa
+almak için önce **Ctrl+X**, ardından **Enter** tuşuna basın.
 
 ## Projeler ve dizinler
 
@@ -34,14 +35,14 @@ seçiliyken **Right** (sağ ok) tuşuna, listede yeni bir worktree oluşturmak i
 
 ## Bağlam
 
-Bir dosya aramak için `@` yazın, ardından dosyayı prompta eklemek için seçin. Sonuçları daraltmak için `@` sonrasında
-yazmaya devam edin.
+Dosya aramak için `@` yazın ve prompta eklemek istediğiniz dosyayı seçin. Sonuçları daraltmak için `@` işaretinden
+sonra yazmaya devam edin.
 
 ```text
 Review @src/auth.ts for error handling problems
 ```
 
-Yoldan sonra bir satır veya aralık ekleyebilirsiniz.
+Dosya yolundan sonra satır numarası veya satır aralığı belirtebilirsiniz.
 
 ```text
 Explain @src/auth.ts#20-45
@@ -60,18 +61,19 @@ Kabuk komutları oturumun çalışma dizininde çalışır ve çıktıları otur
 
 ## Komutlar
 
-Eğik çizgi komutlarını listelemek için `/` yazın. Listeyi filtrelemek için yazmaya devam edin, ardından seçili komutu
+Eğik çizgiyle başlayan komutları listelemek için `/` yazın. Listeyi filtrelemek için yazmaya devam edin, ardından seçili komutu
 çalıştırmak için **Enter** tuşuna basın.
 
 ```text
 /models
 ```
 
-Yaygın komutlar arasında `/new`, `/sessions`, `/models`, `/agents`, `/undo`, `/redo` ve `/editor` bulunur. Geçerli görünümde
-kullanılabilir her eylem için komut paletini açmak üzere **Ctrl+P** tuşlarına basın.
+Sık kullanılan komutlar arasında `/new`, `/sessions`, `/models`, `/agents`, `/undo`, `/redo` ve `/editor` bulunur.
+Geçerli ekranda yapabileceğiniz tüm işlemleri görmek için **Ctrl+P** ile komut paletini açın.
 
 Bir güncellemeden sonra OpenCode, sürümdeki yenilikleri ana ekranda bir kez gösterir. Yeniden görmek için `/highlights`
-çalıştırın veya otomatik açılmasını durdurmak için [`cli.json`](/cli/config#alerts) içinde `"highlights": false` ayarlayın.
+komutunu çalıştırın. Yeniliklerin otomatik olarak açılmasını istemiyorsanız [`cli.json`](/cli/config#alerts) dosyasında
+`"highlights": false` ayarını kullanın.
 
 ## Yan sorular
 
@@ -85,11 +87,11 @@ alanının altında `/btw` göstergesi görünür. Yanıt bir iletişim kutusund
 
 ## Modeller
 
-Model seçmek için **Ctrl+X** ardından **M** tuşlarına basın veya `/models` çalıştırın. Son kullanılan modeller arasında
-dönmek için **F2** tuşuna basın.
+Model seçmek için önce **Ctrl+X**, ardından **M** tuşuna basın veya `/models` komutunu çalıştırın. Son kullandığınız
+modeller arasında geçiş yapmak için **F2** tuşuna basın.
 
-Agent seçmek için **Ctrl+X** ardından **A** tuşlarına basın veya `/agents` çalıştırın. Agent'lar arasında dönmek için
-**Shift+Tab** tuşlarına basın.
+Agent seçmek için önce **Ctrl+X**, ardından **A** tuşuna basın veya `/agents` komutunu çalıştırın. Agent'lar arasında
+geçiş yapmak için **Shift+Tab** tuşlarına basın.
 
 ## Oturumlar
 
@@ -102,26 +104,27 @@ Var olan bir oturuma dönmek için **Ctrl+X** ardından **L** tuşlarına basın
 listede **Ctrl+A**, geçerli dizindeki oturumlarla tüm projelerdeki oturumlar arasında geçiş yapar. **Ctrl+O** son
 oturumları ve projeleri birlikte açar.
 
-Sekmeler varsayılan olarak etkindir. Aralarında geçmek için **Ctrl+Tab** ve **Ctrl+Shift+Tab**, birini kapatmak için
+Sekmeler varsayılan olarak etkindir. Sekmeler arasında geçiş yapmak için **Ctrl+Tab** ve **Ctrl+Shift+Tab**, sekmeyi kapatmak için
 **Ctrl+X** ardından **W**, son kapatılan sekmeyi yeniden açmak için **Ctrl+Shift+T** kullanın.
 
 ## Geçmiş
 
 Son kullanıcı mesajını ve ardından gelen çalışmayı geri almak için **Ctrl+X** ardından **U** tuşlarına basın veya `/undo`
-çalıştırın. Geri alınan prompt düzenleyebilmeniz için giriş alanına döner.
+komutunu çalıştırın. Geri alınan prompt, düzenleyebilmeniz için giriş alanına geri gelir.
 
-Geri alınan çalışmayı geri yüklemek için **Ctrl+X** ardından **R** tuşlarına basın veya `/redo` çalıştırın. Bunun yerine
-yeni bir prompt göndermek geri almayı kabul eder ve o noktadan devam eder.
+Geri aldığınız çalışmayı geri yüklemek için önce **Ctrl+X**, ardından **R** tuşuna basın veya `/redo` komutunu çalıştırın.
+Bunun yerine yeni bir prompt gönderirseniz oturum, geri dönülen noktadan devam eder.
 
 ## Düzenleyici
 
-`VISUAL` veya `EDITOR` ayarlayın, ardından **Ctrl+X** sonra **E** tuşlarına basın veya `/editor` çalıştırarak geçerli
-promptu o düzenleyicide düzenleyin. Metni giriş alanına döndürmek için kaydedip çıkın, ardından göndermek için **Enter**
-tuşuna basın.
+`VISUAL` veya `EDITOR` değişkenini ayarlayın. Promptu bu düzenleyicide açmak için önce **Ctrl+X**, ardından **E** tuşuna
+basın ya da `/editor` komutunu çalıştırın. Metni kaydedip düzenleyiciden çıkınca giriş alanına dönersiniz. Promptu
+göndermek için **Enter** tuşuna basın.
 
 ```bash
 export EDITOR="nvim"
 opencode
 ```
 
-Öncü tuş varsayılan olarak **Ctrl+X**'tir. Bu kısayolları değiştirmek için [Tuş atamaları](/cli/keybinds) sayfasına bakın.
+Kısayol dizilerini başlatan tuş birleşimi varsayılan olarak **Ctrl+X**'tir. Bu kısayolları değiştirmek için
+[Tuş atamaları](/cli/keybinds) sayfasına bakın.

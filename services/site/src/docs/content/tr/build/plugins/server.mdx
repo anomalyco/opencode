@@ -4,8 +4,8 @@ description: "Bir OpenCode eklentisinin sunucu parçasını geliştirin: araçla
 ---
 
 Bir eklentinin sunucu parçası OpenCode sunucusunda çalışır. OpenCode'un davranışını değiştirir ve özellikler ekler:
-araçlar, kancalar, entegrasyonlar, komutlar ve agent'lar. Bir eklenti paketinin nasıl düzenlendiği, yüklendiği ve
-yayımlandığı için [Genel bakış](/build/plugins) bölümüne bakın.
+araçlar, kancalar, entegrasyonlar, komutlar ve agent'lar. Eklenti paketini nasıl düzenleyeceğinizi, yükleyeceğinizi ve
+yayımlayacağınızı öğrenmek için [Genel bakış](/build/plugins) bölümüne bakın.
 
 ```ts title=".opencode/plugins/example/index.ts"
 import { Plugin } from "@opencode/plugin"
@@ -89,13 +89,13 @@ export default Plugin.define({
 
 ## Dönüşümler
 
-Dönüşümler OpenCode'un alan durumuna eşzamanlı düzenlemelerdir ve her biri kendi alanındaki önceki kayıtların üzerine
-kurulur. `ctx.model.list()` gibi kayıt defteri okumaları, eklenti kurulumu sırasında da dahil, o ana kadarki her kaydı
-yansıtır; başlangıç toplu işlemesi yalnızca güncelleme bildirimlerini birleştirir ve bir okumanın döndürdüğünü asla
-geciktirmez. Kaynak durum API'leri yine çalışan kaynakların durumunu bildirir: kayıtlı bir tanım, bağlantısının veya
-diğer kaynak işinin tamamlandığı anlamına gelmez.
+Dönüşümler, OpenCode'un ilgili alandaki durumunu eşzamanlı olarak düzenler. Her dönüşüm, o alanda daha önce kaydedilen
+dönüşümlerin sonucuna uygulanır. `ctx.model.list()` gibi kayıt defteri okumaları, eklenti kurulumu sırasında bile o ana
+kadarki tüm kayıtları yansıtır. Başlangıçta yalnızca güncelleme bildirimleri birleştirilir. Okuma sonuçları geciktirilmez.
+Kaynak durum API'leri, çalışmakta olan kaynakların durumunu bildirir. Bir tanımın kaydedilmesi, bağlantının kurulduğu
+veya kaynakla ilgili diğer işlemlerin tamamlandığı anlamına gelmez.
 
-Kaynaklar, `ctx.provider.transform` üzerinden sağlayıcıları ve değişmez model tanımlarını katkı olarak verir.
+Kaynaklar, `ctx.provider.transform` üzerinden sağlayıcı ve değişmez model tanımları ekler.
 
 ```ts title="plugins/models/index.ts"
 import { Model, Plugin, Provider } from "@opencode/plugin"
@@ -817,9 +817,10 @@ await ctx.session.command({ sessionID, name: "review", text: "--staged" })
 const synthetic = await ctx.session.synthetic({ sessionID, text: "Deployment completed" })
 ```
 
-`generate`, `text` değerini çağrının `tokens` ve `cost` değerleriyle, bir asistan mesajının bildirdiği biçimde döndürür.
+`generate`, `text` değerini çağrının `tokens` ve `cost` değerleriyle birlikte döndürür. Bu değerler asistan mesajlarında
+kullanılan biçimdedir.
 
-Bir oturumu yeniden adlandırın, kesin veya bekleyin.
+Bir oturumu yeniden adlandırın, çalışmasını durdurun veya tamamlanmasını bekleyin.
 
 ```ts
 await ctx.session.update({ sessionID, title: "Review" })
@@ -840,9 +841,9 @@ varsayılan olarak sonraki adım sınırında çalışır. Kuyruk sırasını ko
 const compaction = await ctx.session.compact({ sessionID })
 ```
 
-Anahtarlı oturum talimat girdilerini `instructions.entry` ile ekleyin, listeleyin veya kaldırın. Girdiler oturumun
-talimatlarında `<context key="...">` blokları olarak render edilir ve güncellemeler veya kaldırmalar bir mesaj turu
-kuyruğa almadan sonraki adım sınırında duyurulur.
+Anahtarla tanımlanan oturum talimatlarını `instructions.entry` ile ekleyin, listeleyin veya kaldırın. Girdiler, oturum
+talimatlarında `<context key="...">` blokları olarak yer alır. Güncellemeler ve kaldırmalar, kuyruğa yeni bir mesaj turu
+eklenmeden sonraki adım sınırında bildirilir.
 
 ```ts
 await ctx.session.instructions.entry.put({ sessionID, key: "deploy-target", value: "production" })
@@ -945,7 +946,7 @@ interface SkillEditor {
 
 ### Depolama
 
-Eklentiye kapsamlanmış kalıcı JSON değerlerini saklayın, okuyun veya kaldırın.
+Eklentiye özgü kalıcı JSON değerlerini saklayın, okuyun veya kaldırın.
 
 ```ts
 await ctx.storage.set("settings", { strict: true })
@@ -953,7 +954,7 @@ const settings = await ctx.storage.get("settings")
 await ctx.storage.remove("settings")
 ```
 
-Anahtarları isteğe bağlı imleç sayfalamasıyla öneke göre tarayın.
+Anahtarları öneklerine göre tarayın. İsterseniz sonuçları imleç kullanarak sayfa sayfa alın.
 
 ```ts
 const page = await ctx.storage.scan({ prefix: "cache/", limit: 100 })
@@ -1076,7 +1077,7 @@ await ctx.tool.transform((editor) => {
 ```
 
 Güncellemeler ve kaldırmalar, MCP katalog yenilemelerinden sonra da dahil, eklemelerle sırayla yeniden oynatılır.
-Kayıtlarını elden çıkarmak bu değişiklikleri kaldırır ve kalan dönüşümlerden yeniden oluşturur.
+Bu değişikliklerin kayıtları kaldırıldığında araç tanımları kalan dönüşümlerden yeniden oluşturulur.
 
 Bir kaydı kaldırdığınızda ilgili dönüşüm de kaldırılır ve sonuç kalan dönüşümlerden yeniden oluşturulur. Böylece kaldırılan dönüşümün geçersiz kıldığı önceki tanım yeniden geçerli olur. Aynı kaydı tekrar kaldırmanın ek bir etkisi yoktur. Eklenti devreden çıkarıldığında kayıtları da kaldırılır.
 
@@ -1084,10 +1085,10 @@ Bir kaydı kaldırdığınızda ilgili dönüşüm de kaldırılır ve sonuç ka
 await registration.dispose()
 ```
 
-Her model isteği kararlı ve yürütülebilir bir araç anlık görüntüsü yakalar. Sonraki dönüşümler, yeniden yüklemeler ve
-elden çıkarma, zaten yakalanmış tanımları, Code Mode ad alanı açıklamalarını veya yürütücüleri değil gelecekteki anlık
-görüntüleri etkiler. Değiştirilebilir eklenti verilerini kapatarak kullanan yürütücüler o verileri yine görür; bir
-tanıma bağlı kalması gerektiğinde dönüşüm içinde bir değer yakalayın.
+Her model isteği, çalıştırılabilir araçların o andaki sabit bir görüntüsünü alır. Sonraki dönüşümler, yeniden yüklemeler
+ve kayıt kaldırmaları yalnızca gelecekteki görüntüleri etkiler. Daha önce alınan araç tanımları, Code Mode ad alanı
+açıklamaları ve yürütücüler değişmez. Dış kapsamdan değiştirilebilir eklenti verilerine başvuran yürütücüler bu
+verilerdeki değişiklikleri yine görür. Bir değerin tanıma bağlı kalması gerekiyorsa değeri dönüşüm içinde alın.
 
 #### Referans
 
@@ -1113,7 +1114,7 @@ interface ToolEditor {
 
 ### VCS
 
-Depo bilgilerini, çalışma kopyası durumunu veya dosya diff'lerini okuyun.
+Depo bilgilerini, çalışma kopyasının durumunu veya dosya farklarını okuyun.
 
 ```ts
 const info = await ctx.vcs.get()
@@ -1139,9 +1140,9 @@ await ctx.vcs.transform((editor) => {
 })
 ```
 
-Sağlayıcı geri çağırmaları geçerli konumu, çalışma kopyası kökünü, asıl proje kökünü ve isteğe bağlı depo deposunu alır.
-Diff geri çağırmaları ayrıca seçilen modu, istenen bağlamı ve çıktı bayt bütçesini alır. Depo keşfi OpenCode'un yerleşik
-Git ve Mercurial algılayıcılarını kullanmaya devam eder.
+Sağlayıcının geri çağırma işlevleri geçerli konumu, çalışma kopyasının kökünü, projenin asıl kökünü ve varsa deponun
+saklandığı yeri alır. Dosya farklarını hesaplayan işlevler ayrıca seçilen modu, istenen bağlamı ve bayt cinsinden
+çıktı bütçesini alır. OpenCode, depoları bulmak için yerleşik Git ve Mercurial algılayıcılarını kullanmaya devam eder.
 
 Sağlayıcılar isteğe bağlı olarak `scope.worktree` içinde bir depo oluşturmak için `init(scope, { signal })` uygulayabilir.
 Başlatma sağlayıcıyı algılanan depo türüne göre değil kimliğine göre (varsayılan Git) seçer. Konumda henüz depo olmasa
@@ -1303,7 +1304,7 @@ kayıt defterini kullanır. Core yapılandırma bağdaştırıcıları dizin aya
 
 ### Websearch
 
-Websearch sağlayıcılarını listeleyin veya seçili sağlayıcı üzerinden bir sorgu çalıştırın.
+Web araması sağlayıcılarını listeleyin veya seçili sağlayıcı üzerinden bir sorgu çalıştırın.
 
 ```ts
 const providers = await ctx.websearch.providers()
@@ -1327,7 +1328,7 @@ await ctx.websearch.transform((editor) => {
 })
 ```
 
-`false` seçerek websearch'ü devre dışı bırakın veya harici durum değiştikten sonra sağlayıcıları yeniden yükleyin.
+Web aramasını kapatmak için `false` seçin. Harici durum değiştiğinde sağlayıcıları yeniden yükleyin.
 
 ```ts
 await ctx.websearch.transform((editor) => editor.default.set(false))
@@ -1405,7 +1406,7 @@ Oturum kancaları prompt kabulünde, model çağrılarında, doğrudan HTTP traf
 
 #### Fork'lar
 
-`fork` kancası, OpenCode geçmişi kopyaladıktan sonra ve fork çağrısı dönmeden önce çalışır. `sessionID` yeni oturumu
+`fork` kancası, OpenCode geçmişi kopyaladıktan sonra ve oturumu dallandıran çağrı tamamlanmadan önce çalışır. `sessionID` yeni oturumu
 tanımlar.
 
 ```ts
@@ -1414,7 +1415,7 @@ await ctx.session.hook("fork", ({ sessionID }) => console.log(sessionID))
 
 #### Prompt kabulü
 
-Gelen kullanıcı prompt'larını, ekler ve skill'ler çözümlenmeden ve prompt kalıcı gelen kutusuna alınmadan önce işleyin:
+Gelen kullanıcı promptlarını, ekler ve skill'ler çözümlenmeden ve prompt kalıcı gelen kutusuna alınmadan önce işleyin:
 
 ```ts
 await ctx.session.hook("prompt", (event) => {
@@ -1583,7 +1584,7 @@ WebSocket üzerinden akış yapan sağlayıcılar oturum başına bir bağlantı
 bu nedenle `http.request` ve `http.response` o trafiği hiç görmez. `experimental.ws.handshake` kancası model çağrısı
 başına bir kez, bağlantı seçilmeden önce çalışır. HTTP kancalarıyla aynı `sessionID`, `agent`, `model` ve `kind`
 değerlerini, ayrıca bağlantının `url` ve `headers` değerlerini taşır. `url` veya `headers` değiştirmek isteğin hangi
-soketi kullanacağını değiştirir; böylece döndürülmüş bir bearer token bağlantıyı yeniden açar.
+  soketi kullanacağını değiştirir. Bu nedenle bearer token yenilendiğinde bağlantı yeniden açılır.
 
 HTTP kancaları tüm HTTP isteklerinde çalışmaya devam eder. WebSocket yerine HTTP'ye geçildiğinde gönderilen istek de buna dahildir.
 
@@ -1894,8 +1895,8 @@ export default {
 - V2 varsayılan dışa aktarımın `id` ve `setup()` değerlerini (Effect eklentilerinde `effect()`) okur, `server()` yok
   sayar.
 - Her uygulamayı kendi API'sinde tutun; bir dışa aktarımı paylaşmak V1 kancalarını V2 kancalarına çevirmez.
-- V2 tanımını `server()` işlevinden ayrı olarak tür denetlemek için `Plugin.define(...)` sonucunu dışa aktarılan nesneye
-  yayın.
+- V2 tanımının türlerini `server()` işlevinden bağımsız olarak denetlemek için `Plugin.define(...)` sonucundaki alanları
+  yayma sözdizimiyle dışa aktarılan nesneye ekleyin.
 
 V1 nesne biçimi OpenCode `1.18.29` sürümünde desteklenir. Daha eski V1 sürümleri bunun yerine işlev dışa aktarımları
 bekleyebilir; kurulu paketi desteklemeyi amaçladığınız en eski V1 sürümüyle ve V2 ile test edin.

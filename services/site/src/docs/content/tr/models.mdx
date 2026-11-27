@@ -1,6 +1,6 @@
 ---
 title: "Modeller"
-description: "Oturum veya çalıştırma başına bir model seçin, varsayılan ayarlayın ve varyantları, akıl yürütmeyi, prompt önbelleğini ve yerel modelleri yapılandırın."
+description: "Her oturum veya komut için model seçin, varsayılan modeli belirleyin. Varyantları, akıl yürütmeyi, prompt önbelleğini ve yerel modelleri yapılandırın."
 ---
 
 Geçerli oturum için `/models` ile bir model seçin:
@@ -9,14 +9,14 @@ Geçerli oturum için `/models` ile bir model seçin:
 /models
 ```
 
-OpenCode modelleri [models.dev](https://models.dev), sağlayıcı entegrasyonları ve yapılandırmanızdan listeler. Seçici
-yalnızca sağlayıcısı geçerli projede kullanılabilir olan etkin modelleri gösterir. Sağlayıcıları
-[Sağlayıcılar](/providers) bölümünde bağlayın.
+OpenCode, [models.dev](https://models.dev) kataloğundaki, sağlayıcı entegrasyonlarındaki ve kendi yapılandırmanızdaki
+modelleri listeler. Model seçim ekranında yalnızca etkin ve sağlayıcısı bu projede kullanılabilen modeller gösterilir.
+Sağlayıcı bağlama adımları için [Sağlayıcılar](/providers) sayfasına bakın.
 
 ## Seçim
 
-Sağlayıcısını veya model kimliğini tahmin etmek yerine `/models` listesinden bir girdi seçin. Seçim geçerli oturuma
-uygulanır ve yapılandırmanızı değiştirmez.
+Sağlayıcı veya model kimliğini tahmin etmek yerine `/models` listesinden bir model seçin. Seçim yalnızca geçerli
+oturum için geçerlidir ve yapılandırmanızı değiştirmez.
 
 ```text
 anthropic/claude-sonnet-5-5
@@ -30,7 +30,7 @@ Kullanılabilirlik projeye özgüdür:
 
 ## Çalıştırmalar
 
-Yapılandırılmış varsayılanı değiştirmeden tek bir komut satırı çalıştırması için model seçmek üzere `--model` kullanın:
+Varsayılan modeli değiştirmeden, yalnızca çalıştırdığınız komut için bir model seçmek üzere `--model` kullanın:
 
 ```bash
 opencode run --model anthropic/claude-sonnet-5-5 "Refactor parseToken"
@@ -49,12 +49,12 @@ Yeni iş için varsayılanı seçmek üzere `opencode.json` veya `opencode.jsonc
 }
 ```
 
-Yapılandırılmış model, etkin olduğunda ve sağlayıcısı kullanılabilir olduğunda katalog varsayılanı olur. Aksi halde
-OpenCode kullanılabilir en yeni desteklenen modele geri döner.
+Yapılandırmada belirttiğiniz model etkinse ve sağlayıcısı kullanılabiliyorsa kataloğun varsayılan modeli olur.
+Aksi hâlde OpenCode, desteklenen modeller arasından kullanılabilen en yeni modeli seçer.
 
 - Bir oturum için zaten seçilmiş bir model, yapılandırılmış varsayılanın önüne geçer.
 - Bir oturumun modelini değiştirmek yapılandırma dosyasını yeniden yazmaz.
-- Kök `model` şu anda yalnızca varsayılan sağlayıcıyı ve modeli saklar, bir varyantı saklamaz.
+- Üst düzey `model` alanı şu anda yalnızca varsayılan sağlayıcıyı ve modeli saklar. Varyant saklanmaz.
 
 Yapılandırma konumları ve öncelik sırası için [Yapılandırma](/config) sayfasına bakın.
 
@@ -73,12 +73,12 @@ Paylaşılan arka plan sunucusu için:
 opencode service set env OPENCODE_DISABLE_FREE_MODELS 1
 ```
 
-Ücretsiz, girdi fiyatı olmayan bir `opencode` veya `opencode-go` modeli anlamına gelir. Bu modeller katalogdan ve
-varsayılanlardan kaybolur; açıkça seçmek `Model unavailable` hatasıyla başarısız olur. Oturum açılmadığında, bir OpenCode
-Console hesabı bağlayana veya `OPENCODE_API_KEY` ayarlayana kadar `opencode` sağlayıcısı yoktur; bu, ücretli modellerini
-geri getirir.
+Girdi için ücret almayan `opencode` veya `opencode-go` modelleri ücretsiz sayılır. Bu modeller katalogdan ve
+varsayılan seçeneklerden kaldırılır. Doğrudan seçmeye çalışırsanız `Model unavailable` hatası alırsınız. Oturum
+açmadıysanız `opencode` sağlayıcısı görünmez. Bir OpenCode Console hesabı bağladığınızda veya `OPENCODE_API_KEY`
+değerini ayarladığınızda sağlayıcının ücretli modelleri yeniden görünür.
 
-Bir kuruluştaki herkes için ücretsiz modelleri engellemek için bunun yerine bir politika kullanın. Bkz.
+Ücretsiz modelleri kuruluşunuzdaki herkes için engellemek istiyorsanız bunun yerine bir politika kullanın. Bkz.
 [Kurumsal](/enterprise#block-free-models).
 
 ## Varyantlar
@@ -154,10 +154,10 @@ paketi için varyantları bunlardan oluşturur:
 
 | Alan        | Amaç                                                                       |
 | ----------- | -------------------------------------------------------------------------- |
-| `supported` | Modelin akıl yürütüp yürütmediği. `false` veya denetimsiz `true` varyant eklemez. |
+| `supported` | Modelin akıl yürütmeyi destekleyip desteklemediğini belirtir. `false` seçilirse veya akıl yürütme ayarları belirtilmeden `true` seçilirse varyant eklenmez. |
 | `toggle`    | Akıl yürütmeyi kapatan bir `none` varyantı ekler.                          |
 | `effort`    | Sunulacak akıl yürütme düzeyleri. `default` sağlayıcının varsayılanını korur ve varyant eklemez. |
-| `budget`    | İsteğe bağlı `min` ve `max` düşünme token'ları. `effort` ayarlandığında yok sayılır. |
+| `budget`    | Düşünme için isteğe bağlı `min` ve `max` token sayıları. `effort` ayarlanırsa bu alan yok sayılır. |
 
 `variants` içinde listelenen varyantlar, `capabilities.reasoning` üzerinden oluşturulanların üzerine uygulanır.
 
@@ -196,7 +196,7 @@ Sağlayıcı ve model girdileri istekleri `settings`, `headers` ve `body` ile ö
 | `headers`  | Ek HTTP istek başlıkları.                                          |
 | `body`     | Sağlayıcıya özgü istek gövdesi alanları.                           |
 
-OpenCode önce sağlayıcı değerlerini, sonra model değerlerini, en son seçili varyantı uygular.
+OpenCode önce sağlayıcı değerlerini, sonra model değerlerini, son olarak da seçili varyantın değerlerini uygular.
 
 - İç içe `settings` ve `body` nesneleri birleştirilir.
 - Sonraki diziler ve skaler değerler önceki değerlerin yerini alır.
@@ -205,7 +205,7 @@ OpenCode önce sağlayıcı değerlerini, sonra model değerlerini, en son seçi
 
 ## Takma adlar
 
-Bir API modeline daha dostça bir katalog kimliği vermek için `modelID` kullanın:
+Bir API modeline kullanımı daha kolay bir katalog kimliği vermek için `modelID` kullanın:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -234,14 +234,16 @@ Bir API modeline daha dostça bir katalog kimliği vermek için `modelID` kullan
 }
 ```
 
-Burada `openai/coding-default` seçilebilir referanstır ve sağlayıcıya `gpt-6.1-sol` gönderilir. Katalogda zaten olmayan bir
-model için OpenCode şunları varsayar:
+Bu örnekte `openai/coding-default` ile modeli seçersiniz. Sağlayıcıya `gpt-6.1-sol` kimliği gönderilir. OpenCode,
+katalogda bulunmayan bir model için aşağıdaki varsayımları kullanır:
 
 - JSON araç desteği, metin ve görsel girdisi ve metin çıktısı. `capabilities.freeform` biçimi listelemediği sürece serbest biçimli araç girdisi yoktur.
-- 200.000 token bağlam limiti ve 32.000 token çıktı limiti.
+- Bağlam limiti 200.000 token, çıktı limiti 32.000 token.
 - Belirtilmemiş bir girdi limiti.
 
-OpenCode `text`, `regex` ve `lark` biçimlerini tanır. models.dev'deki diğer biçim adları, model veya araçları düşürülmeden yok sayılır. Bir katalog modelinin önündeki proxy serbest biçimli araçları reddediyorsa o modelde `capabilities.freeform` değerini `[]` yapın.
+OpenCode `text`, `regex` ve `lark` biçimlerini tanır. models.dev'deki diğer biçim adları yok sayılır, ancak model ve
+araçları kullanılabilir kalır. Katalogdaki modele istek ileten proxy serbest biçimli araçları reddediyorsa o model için
+`capabilities.freeform` değerini `[]` olarak ayarlayın.
 
 Bunlar tespit edilen yetenekler değil, değer belirtilmediğinde kullanılan varsayımlardır. Doğru `capabilities` ve `limit`
 değerlerini biliyorsanız ayarlayın; belirttiğiniz değerler varsayımların yerini alır. Otomatik sıkıştırma `limit.input`
@@ -264,8 +266,8 @@ Bir modeli kullanılabilir modeller kataloğundan gizlemek için `disabled: true
 
 ## Akıl yürütme
 
-Akıl yürütmeyi özel bir asistan mesajı alanında akıtan OpenAI uyumlu bir model için `compatibility.reasoningField`
-ayarlayın:
+Akıl yürütme verilerini kendine özgü bir asistan mesajı alanında akış hâlinde gönderen OpenAI uyumlu modeller için
+`compatibility.reasoningField` alanını ayarlayın:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -283,15 +285,16 @@ ayarlayın:
 }
 ```
 
-OpenCode `reasoning`, `reasoning_content` ve `reasoning_text` alanlarını tanır ve başka bir sağlayıcıya özgü dizeyi de kabul
-eder. Akıtılan akıl yürütmeyi o alandan okur ve önceki asistan mesajlarını modele geri gönderirken alanı geri yükler.
+OpenCode `reasoning`, `reasoning_content` ve `reasoning_text` alanlarını tanır. Sağlayıcıya özgü başka bir alan adı da
+kullanabilirsiniz. OpenCode akıştaki akıl yürütme verilerini bu alandan okur ve önceki asistan mesajlarını modele
+yeniden gönderirken alanı geri yükler.
 İlgili `requireReasoning` alanı için [Uyumluluk](#compatibility) bölümüne bakın.
 
 ## Prompt önbelleği
 
-OpenCode, prompt önbelleği kesme noktalarını ihtiyaç duyduğu bilinen rotalara, örneğin Anthropic'e otomatik olarak yerleştirir.
-Claude modelleri LiteLLM gibi OpenAI uyumlu bir proxy üzerinden sunulduğunda OpenCode, Anthropic tarzı `cache_control`
-kesme noktalarına ihtiyaç duyduklarını anlayamaz. Bu Claude modellerinde `compatibility.cacheFormat` ayarlayın:
+OpenCode, Anthropic gibi önbellek kesme noktalarına ihtiyaç duyduğu bilinen rotalarda promptlara bu işaretleri otomatik
+olarak ekler. Claude modelleri LiteLLM gibi OpenAI uyumlu bir proxy üzerinden sunulduğunda OpenCode, Anthropic biçimindeki
+`cache_control` işaretlerinin gerekli olduğunu belirleyemez. Bu modeller için `compatibility.cacheFormat` alanını ayarlayın:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -322,9 +325,9 @@ ediyorsa `compatibility.cacheFormat` değerini bunun yerine sağlayıcıda ayarl
 
 ### Önbellek ömrü
 
-OpenCode varsayılan olarak bir önbellek ömrü göndermez; bu nedenle her sağlayıcı kendi varsayılanını kullanır, örneğin
-Anthropic'te beş dakika. Farklı bir ömür istemek için bir sağlayıcıda veya modelde `settings.cache.ttl` ayarlayın. Model
-ayarı sağlayıcı ayarını geçersiz kılar.
+OpenCode varsayılan olarak önbellek süresi göndermez. Her sağlayıcı kendi varsayılan süresini kullanır. Anthropic'te bu
+süre beş dakikadır. Farklı bir süre istemek için sağlayıcıda veya modelde `settings.cache.ttl` değerini ayarlayın.
+Model ayarı, sağlayıcı ayarının önüne geçer.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -342,16 +345,17 @@ ayarı sağlayıcı ayarını geçersiz kılar.
 `ttl` bir sayı ve bir birim alır: `ms`, `s`, `m`, `h` veya `d`, örneğin `"5m"`, `"1h"` veya `"24h"`. OpenCode bunu olduğu
 gibi gönderir; bu nedenle sağlayıcının kabul ettiği bir değer kullanın:
 
-| API | Ömrün gittiği yer |
+| API | Sürenin gönderildiği alan |
 | --- | --- |
 | Anthropic Messages | Her önbellek işaretçisinde `cache_control.ttl`. Anthropic `"5m"` ve `"1h"` kabul eder. |
 | Bedrock Converse | Her `cachePoint` üzerinde `ttl`. Yalnızca beş dakika önbelleğe alan eski Claude modelleri `"1h"` değerini yok sayar. |
 | OpenAI Chat ve Responses | `"24h"` `prompt_cache_retention` alanına, diğer değerler `prompt_cache_options.ttl` alanına gider. |
 
-Gemini gibi işaretçi olmadan otomatik önbelleğe alan sağlayıcılar bunu yok sayar. Daha uzun bir ömür genellikle yazmak için
-daha pahalıdır: Anthropic bir saatlik önbellek yazımı için girdi fiyatının 2 katını, beş dakikalık için 1,25 katını alır.
+Gemini gibi işaretçi olmadan otomatik önbellekleme yapan sağlayıcılar bu değeri yok sayar. Daha uzun süreli önbelleğe
+yazmanın maliyeti genellikle daha yüksektir. Anthropic, bir saatlik önbelleğe yazmak için girdi fiyatının 2 katını,
+beş dakikalık önbelleğe yazmak için ise 1,25 katını alır.
 
-[Isıtma](/warming), isteklerini `interval: "auto"` ile zamanlamak için ömürden yararlanabilir.
+[Isıtma](/warming) özelliği `interval: "auto"` ayarıyla istekleri önbellek süresine göre zamanlayabilir.
 
 ## Uyumluluk
 
@@ -374,27 +378,27 @@ yalnızca o API onu okuduğunda etkili olur. Diğer alanlar yok sayılır.
 }
 ```
 
-Sağlayıcı `compatibility` ayarı o sağlayıcının her modeline uygulanır. Bir modelin kendi `compatibility` ayarı onu alan alan
-geçersiz kılar: OpenCode modelin API'si için [models.dev](https://models.dev) tarafından yayımlanan değerlerden başlar
-(`reasoningField`, `maxTokensField` ve `mediaInput`, ayrıca models.dev API'yi bunları destekliyor olarak işaretlediğinde
-`supportsEffortUpdates` ve `supportsSystemUpdates`), ardından modelin yapılandırmasını uygular. Ayarlanmamış alanlar
-sağlayıcı paketinin yerleşik varsayılanını veya algılamasını korur. `supportsThinkingBlockBinding`, `supportsEffortUpdates`
-ve `supportsSystemUpdates` yalnızca model düzeyindedir.
+Sağlayıcının `compatibility` ayarı tüm modelleri için geçerlidir. Modelin kendi `compatibility` ayarı, belirttiği her alan
+için sağlayıcı ayarının önüne geçer. OpenCode önce modelin API'si için [models.dev](https://models.dev) tarafından
+yayımlanan değerleri kullanır: `reasoningField`, `maxTokensField` ve `mediaInput`, ayrıca models.dev API'nin desteklediğini
+belirtiyorsa `supportsEffortUpdates` ve `supportsSystemUpdates`. Ardından modelin yapılandırmasını uygular. Ayarlanmayan
+alanlar için sağlayıcı paketi kendi varsayılanını kullanır veya değeri otomatik olarak belirler.
+`supportsThinkingBlockBinding`, `supportsEffortUpdates` ve `supportsSystemUpdates` yalnızca model düzeyinde ayarlanabilir.
 
-| Alan | Ne yapar | Okuyan | Değerler ve varsayılan |
+| Alan | İşlevi | Kullanan API'ler | Değerler ve varsayılan |
 | --- | --- | --- | --- |
-| `reasoningField` | Akıl yürütmeyi taşıyan asistan mesajı alanı. Akıtılan akıl yürütme okunurken önce denetlenir ve önceki akıl yürütme geri gönderilirken kullanılır. | OpenAI Chat | `role`, `content`, `refusal` veya `tool_calls` dışında herhangi bir alan adı. Ayarlanmamışsa akışta görülen alan, o da yoksa `reasoning_content` kullanılır. |
-| `requireReasoning` | Akıl yürütme alanını her önceki asistan mesajında, akıl yürütme yoksa boş dize olarak gönderir. | OpenAI Chat | `true` veya `false`. `reasoningField` ayarlıysa veya model DeepSeek ise varsayılan `true`, aksi halde `false`. |
+| `reasoningField` | Asistan mesajında akıl yürütme verilerini içeren alan. Akış okunurken önce bu alana bakılır. Önceki akıl yürütme verileri modele yeniden gönderilirken de bu alan kullanılır. | OpenAI Chat | `role`, `content`, `refusal` veya `tool_calls` dışında herhangi bir alan adı. Ayarlanmamışsa akışta görülen alan, o da yoksa `reasoning_content` kullanılır. |
+| `requireReasoning` | Önceki asistan mesajlarının her birinde akıl yürütme alanını gönderir. Akıl yürütme verisi yoksa boş dize gönderir. | OpenAI Chat | `true` veya `false`. `reasoningField` ayarlıysa veya model DeepSeek ise varsayılan `true`, aksi hâlde `false`. |
 | `maxTokensField` | Çıktı token limitini taşıyan gövde alanı. | OpenAI Chat | `max_completion_tokens` veya `max_tokens`. Ayarlanmamışsa DeepSeek, Moonshot, Together AI, Z.AI ve Cerebras gibi ihtiyaç duyan sağlayıcılar için `max_tokens`, aksi halde `max_completion_tokens` algılanır. |
 | `requireFinishReason` | `finish_reason` olmadan biten bir akışı eksik yanıt hatası olarak değerlendirir. `false` onu bitmiş kabul eder. | OpenAI Chat | `true` veya `false`. Varsayılan `true`. |
 | `requireAssistantAfterTool` | Bu sırayı reddeden endpoint'ler için araç sonucuyla sonraki kullanıcı mesajı arasına bir asistan mesajı ekler. | OpenAI Chat | `true` veya `false`. Mistral ailesi model kimlikleri için varsayılan `true`, aksi hâlde `false`. |
 | `supportsPromptCacheKey` | Endpoint'in `prompt_cache_key` gövde alanını kabul edip etmediği. | OpenAI Chat, OpenAI Responses, Mistral | `true` veya `false`. OpenAI Chat anahtarı yalnızca `true` olduğunda gönderir; bazı sağlayıcı paketlerinde varsayılan budur. Diğer API'ler `false` olmadıkça gönderir. |
 | `streamUsage` | Akışta `stream_options.include_usage` ile token kullanımını ister. | OpenAI Chat | `true` veya `false`. Varsayılan `true`. |
 | `cacheFormat` | Endpoint'in kabul ettiği prompt önbelleği işaretçisi sözdizimi. Sağlayıcının otomatik kesme noktası yerleşiminin önüne geçer. `alibaba` araç tanımlarını atlar. | OpenAI Chat, Anthropic Messages ve Bedrock Converse dahil prompt önbelleği işaretçilerini destekleyen her API | `anthropic` veya `alibaba`. Ayarlanmamışsa sağlayıcının varsayılanı kullanılır. Bkz. [Prompt önbelleği](#prompt-caching). |
-| `supportsThinkingBlockBinding` | API'den, önceki bağlamı değişmiş düşünme bloklarını isteği reddetmek yerine düşürmesini ister. | Anthropic Messages, Bedrock Converse | `true` veya `false`. Ayarlanmamışsa Claude 5.1 ve üstü algılanır. |
+| `supportsThinkingBlockBinding` | API'den, isteği reddetmek yerine önceki bağlamı değişen düşünme bloklarını çıkarmasını ister. | Anthropic Messages, Bedrock Converse | `true` veya `false`. Ayarlanmamışsa Claude 5.1 ve üstü algılanır. |
 | `supportsEffortUpdates` | Akıl yürütme düzeyindeki değişiklikleri mesaj bazında göndererek prompt önbelleğini korur. Aksi hâlde düzey isteğin tamamı için değişir. | Anthropic Messages, OpenAI Responses | `true` veya `false`. Ayarlanmamışsa Claude Opus 5, Claude 5.1 ve üstü ile GPT-6 ve üstü algılanır. |
-| `supportsSystemUpdates` | Konuşma ortasında eklenen sistem mesajlarını yerel sistem mesajları olarak gönderir. Aksi halde sonraki kullanıcı turunda metin olarak sarılır. | Anthropic Messages | `true` veya `false`. Ayarlanmamışsa Claude Opus 4.8 ile Claude 5 ve üstü algılanır. |
-| `mediaInput` | Bir karar isteğinde görsellerin ve diğer medyanın gideceği yer. | System One | `assets` (durumdan başvurulan görseller), `state` (durum içinde satır içi) veya `root` (üst düzey `images`, `audio` ve `videos` listeleri). Ayarlanmamışsa sağlayıcı varsayılanı kullanılır. |
+| `supportsSystemUpdates` | Konuşma sırasında eklenen sistem mesajlarını API'nin kendi sistem mesajı biçiminde gönderir. Aksi hâlde bu mesajlar sonraki kullanıcı mesajına metin olarak eklenir. | Anthropic Messages | `true` veya `false`. Ayarlanmamışsa Claude Opus 4.8 ile Claude 5 ve üstü algılanır. |
+| `mediaInput` | Karar isteğinde görsellerin ve diğer medya öğelerinin nereye yerleştirileceği. | System One | `assets` (durumdan referans verilen görseller), `state` (doğrudan durumun içinde) veya `root` (üst düzey `images`, `audio` ve `videos` listeleri). Ayarlanmamışsa sağlayıcı varsayılanı kullanılır. |
 
 ## Yerel
 
@@ -418,8 +422,8 @@ Ollama `http://127.0.0.1:11434` adresinde dinlerken `ollama` sağlayıcı kimli�
 }
 ```
 
-OpenCode envanteri arka planda yeniler ve bağlam, görme ve araç kullanımı yeteneklerini Ollama'dan okur. Yalnızca gömme
-modelleri hariç tutulur.
+OpenCode model listesini arka planda yeniler. Bağlam, görsel işleme ve araç kullanımı özelliklerini Ollama'dan okur.
+Yalnızca gömme üreten modeller listeye alınmaz.
 
 Başka bir ana bilgisayar veya bağlantı noktası için Ollama'nın OpenAI uyumlu URL'sini ayarlayın. Keşif yine aynı yol
 önekinde yerel Ollama API'sini kullanır:
@@ -442,8 +446,8 @@ Başka bir ana bilgisayar veya bağlantı noktası için Ollama'nın OpenAI uyum
 
 ### LM Studio
 
-`http://127.0.0.1:1234` adresinde kimlik doğrulaması olmayan bir LM Studio sunucusuyla `lmstudio` sağlayıcı kimliğiyle
-keşfedilen bir model seçin:
+LM Studio sunucusu `http://127.0.0.1:1234` adresinde kimlik doğrulaması olmadan çalışıyorsa bulunan modellerden birini
+`lmstudio` sağlayıcı kimliğiyle seçin:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -452,8 +456,8 @@ keşfedilen bir model seçin:
 }
 ```
 
-OpenCode envanteri arka planda yeniler ve bağlam, görme ve araç kullanımı yeteneklerini LM Studio'dan okur. Gömme modelleri
-hariç tutulur.
+OpenCode model listesini arka planda yeniler. Bağlam, görsel işleme ve araç kullanımı özelliklerini LM Studio'dan okur.
+Gömme modelleri listeye alınmaz.
 
 Başka bir ana bilgisayar veya bağlantı noktası için OpenAI uyumlu URL'yi ayarlayın. Modeller yine otomatik olarak keşfedilir:
 
@@ -484,11 +488,12 @@ vLLM `http://127.0.0.1:8000` adresinde dinlerken `vllm` sağlayıcı kimliğiyle
 }
 ```
 
-OpenCode `/health` denetler, `/v1/models` listesini arka planda yeniler, bildirilen `max_model_len` değerini bağlam limiti
-olarak kullanır ve yalnızca `vllm` sahibi model kartlarını dahil eder.
+OpenCode `/health` adresini denetler ve `/v1/models` listesini arka planda yeniler. Bildirilen `max_model_len` değerini
+bağlam limiti olarak kullanır ve yalnızca sahibi `vllm` olan model kartlarını listeye alır.
 
-Keşfedilen modeller metin girdisi ve çıktısı sunar, ancak görme veya araçları sunmaz. vLLM araç çağrısını
-`--enable-auto-tool-choice` ve `--tool-call-parser` gibi sunucu bayraklarıyla etkinleştirir; keşif bunları bildirmez.
+Otomatik bulunan modellerin bildirdiği yetenekler arasında metin girdisi ve çıktısı vardır, ancak görsel işleme ve
+araç desteği yoktur. vLLM, `--enable-auto-tool-choice` ve `--tool-call-parser` gibi sunucu seçenekleriyle araç çağrılarını
+etkinleştirebilir. Otomatik model bulma bu seçenekleri bildirmez.
 
 Başka bir endpoint ya da kimlik doğrulaması gerektiren bir sunucu kullanıyorsanız OpenAI uyumlu URL'yi ayarlayın:
 
@@ -507,8 +512,8 @@ Başka bir endpoint ya da kimlik doğrulaması gerektiren bir sunucu kullanıyor
 
 - Kimlik doğrulama kapalıyken `apiKey` alanını atlayın.
 - Keşfi `"plugins": ["-opencode.provider.vllm"]` ile kapatın.
-- Yol önekli proxy'ler desteklenir. Örneğin `https://example.com/vllm/v1` `/vllm/health` denetler ve `/vllm/v1/models`
-  keşfeder.
+- Yol önekli proxy'ler desteklenir. Örneğin `https://example.com/vllm/v1` adresini ayarlarsanız OpenCode
+  `/vllm/health` adresini denetler ve modelleri `/vllm/v1/models` üzerinden bulur.
 
 ### Uyumlu
 
@@ -577,7 +582,7 @@ biçimini veya genişletilmiş bir nesneyi kabul eder:
 }
 ```
 
-Genişletilmiş biçim, oluşturulan veya programatik yapılandırma için kullanışlıdır.
+Genişletilmiş biçim, otomatik olarak veya kodla oluşturulan yapılandırmalarda kullanışlıdır.
 
 ## Dikkat edilmesi gerekenler
 
@@ -593,6 +598,6 @@ Modelleri yapılandırırken şu kuralları aklınızda tutun:
 - Kök seçim biçimi bir varyantı kabul etse de V2 katalog varsayılanı onu saklamaz. Varyantları bunun yerine bir oturum,
   çalıştırma, agent veya komut için seçin.
 - Model seçenekleri sağlayıcıya özgüdür. Başka bir sağlayıcı paketi onları yok sayabilir veya reddedebilir.
-- Katalog verisi, kimlik bilgileri ve yapılandırma konum kapsamlıdır. Bir projede kullanılabilir bir model başka bir
+- Katalog verileri, kimlik bilgileri ve yapılandırma bulundukları konuma özeldir. Bir projede kullanılabilen model başka bir
   projede kullanılamayabilir.
 - Yapılandırma dosyaları normalde otomatik olarak yeniden yüklenir. Devam eden bir model isteği başladığı ayarları korur.

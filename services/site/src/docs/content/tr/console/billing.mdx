@@ -5,8 +5,7 @@ description: "OpenCode Console'da kredi ekleyin, otomatik yüklemeyi ayarlayın,
 
 Console, ekip büyüklüğü ne olursa olsun ücretsizdir; üye başına ayrıca ücret alınmaz. Yalnızca kullanımınız kadar ödeme yaparsınız. Ücretler, çalışma alanının ortak ön ödemeli kredi bakiyesinden düşülür. Sahipler ve yöneticiler faturalandırmayı **Settings › Billing** bölümünden yönetir.
 
-[Kendi sağlayıcılarınız](/console/providers) üzerinden kullanım, Console tarafından değil sağlayıcı tarafından
-faturalandırılır.
+[Kendi sağlayıcılarınız](/console/providers) üzerinden yaptığınız kullanımın ücretini Console değil, ilgili sağlayıcı tahsil eder.
 
 ## Ödeme yöntemi ekleme
 
@@ -30,7 +29,8 @@ Otomatik ödemelerde kullanılacak yöntemi **⋯ › Make default** ile belirle
 2. $10, $50 veya $100 tutarlarından birini seçin ya da **Other** ile farklı bir tutar girin.
 3. Bir ödeme yöntemi seçin ve **Confirm and pay** düğmesine tıklayın.
 
-Satın alma tutarına %4,6 + $0,31 işlem ücreti eklenir. Örneğin $50 kredi için $52,61 ödersiniz; bakiyenize $50'nin tamamı eklenir.
+Satın alma tutarına %4,6 + 0,31 dolar işlem ücreti eklenir. Örneğin 50 dolarlık kredi almak için 52,61 dolar ödersiniz
+ve bakiyenize 50 doların tamamı eklenir.
 
 ## Otomatik yükleme
 
@@ -44,14 +44,14 @@ Yükleme tutarı ve işlem ücreti, varsayılan ödeme yönteminizden tahsil edi
 
 ## Bakiyenizi görüntüleme
 
-**Activity** sayfasındaki **Billing** kartı sahipler ve yöneticiler için bakiyeyi gösterir ve **Settings › Billing**
-bölümünü açar.
+Sahipler ve yöneticiler bakiyeyi **Activity** sayfasındaki **Billing** kartında görebilir. Kartı seçtiğinizde
+**Settings › Billing** bölümü açılır.
 
 Çalışma alanının üst çubuğundaki **Billing** düğmesi veya `B` tuşu, güncel Go limitlerini, kredileri ve kullanımı gösteren paneli açar. Sahipler ve yöneticiler çalışma alanı bakiyesini, kullanımını ve otomatik yükleme ayarlarını; üyeler yalnızca kendi kullanımlarını ve limitlerini görür.
 
 ## Krediler tükendiğinde
 
-Bakiye sıfıra ulaştığında ücretli istekler HTTP `402` ile başarısız olur. Bakiye asla negatife düşmez.
+Bakiye sıfıra indiğinde ücretli istekler HTTP `402` ile reddedilir. Bakiye sıfırın altına düşmez.
 
 ```text
 Upstream request failed: Insufficient account funds
@@ -70,7 +70,7 @@ Her ödeme **Invoices** altında durumuyla ve **Download invoice** veya **View r
 | Go Plus yükseltmesi | Go'dan Go Plus'a yükseltme            |
 | Go Teams yükseltmesi | Go veya Go Plus'tan Go Teams'e yükseltme |
 | Go Teams üyesi   | Go Teams kullanan bir çalışma alanına katılan üye |
-| Aylık kullanım   | Faturalı ödeme                           |
+| Monthly Usage    | Faturalı ödeme                           |
 
 ## Vergi formları
 

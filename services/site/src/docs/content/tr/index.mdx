@@ -1,9 +1,9 @@
 ---
 title: "Giriş"
-description: "Açık kaynaklı kodlama agent'ı OpenCode'u CLI, masaüstü uygulaması, web uygulaması veya Docker imajı olarak kurun, ardından bir model sağlayıcısı bağlayın."
+description: "Açık kaynaklı kodlama agent'ı OpenCode'u CLI, masaüstü uygulaması, web uygulaması veya Docker imajı olarak kurun. Ardından bir model sağlayıcısına bağlanın."
 ---
 
-OpenCode açık kaynaklı bir kodlama agent'ıdır. Terminal arayüzü, masaüstü uygulaması veya web uygulaması olarak kullanabilirsiniz.
+OpenCode açık kaynaklı bir kodlama agent'ıdır. OpenCode'u terminalden, masaüstü uygulamasından veya web arayüzünden kullanabilirsiniz.
 
 
 ## CLI
@@ -24,14 +24,14 @@ OpenCode açık kaynaklı bir kodlama agent'ıdır. Terminal arayüzü, masaüst
   ]}
 />
 
-npm paketi, platformunuz için yerel `opencode` ikili dosyasını seçmek üzere bir postinstall betiği kullanır. Bun ve pnpm komutları
-gerekli betiğe açıkça izin verir; Vite+ ek bir bayrak gerektirmez. mise komutu mise 2026.10.9 veya üstünü gerektirir;
-eski sürümler OpenCode 1'i kurar.
+npm paketi, platformunuza uygun `opencode` ikili dosyasını yükleme sonrası bir betikle seçer. Bun ve pnpm komutları
+bu betiğin çalışmasına açıkça izin verir. Vite+ için ek bir seçenek gerekmez. mise komutu için mise 2026.10.9 veya
+daha yeni bir sürüm gerekir; eski sürümler OpenCode 1'i kurar.
 
 Windows paket yöneticileri desteklenmez.
 
 
-Platformunuz için bağımsız bir CLI ikili dosyası indirin.
+Platformunuza uygun bağımsız CLI dosyasını indirin.
 
 - **macOS:** [Apple silicon](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-arm64.zip) · [Intel](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64.zip) · [Intel (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64-baseline.zip)
 - **Windows:** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-arm64.zip) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64.zip) · [x64 (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64-baseline.zip)
@@ -63,7 +63,7 @@ $ opencode pair
 
 ## Docker
 
-Docker imajları `ghcr.io/anomalyco/opencode:2.0.0` gibi sürüm içeren etiketler kullanır. Sunucuyu bir kapsayıcıda
+Docker imajlarının etiketinde sürüm numarası bulunur. Örneğin `ghcr.io/anomalyco/opencode:2.0.0`. Sunucuyu bir kapsayıcıda
 çalıştırmak için [Docker](/cli/web#docker) bölümüne bakın.
 
 ---
@@ -75,8 +75,7 @@ OpenCode birçok LLM sağlayıcısını yerleşik olarak destekler. Bunlara `/co
 
 Özel sağlayıcıları yapılandırmak için [Sağlayıcılar](/providers) sayfasına bakın.
 
-En iyi kodlama modellerine kolayca erişmek isterseniz
-[OpenCode Console](/console) ürününü deneyebilirsiniz.
+En iyi kodlama modellerine kolayca erişmek için [OpenCode Console](/console) hizmetini deneyebilirsiniz.
 
 En iyi kodlama modellerine erişim sağlayan aylık 10 dolarlık [OpenCode Go](/console/go) aboneliğini de deneyebilirsiniz.
 
@@ -92,6 +91,6 @@ sunucuları bağlayarak](/mcp-servers) veya [komutlar oluşturarak](/commands) O
 
 ## Öğrenme
 
-OpenCode hakkında kapsamlı bir kurs isterseniz Boot.dev, ekibimize danışarak mükemmel bir
-[OpenCode ile AI Kodlama](https://www.boot.dev/courses/learn-ai-coding) kursu hazırladı. Kurstaki tüm bilgiler
-ücretsiz okunabilir ve izlenebilir; ancak bazı etkileşimli özellikler ücretli olabilir.
+OpenCode'u ayrıntılı öğrenmek için Boot.dev'in ekibimize danışarak hazırladığı
+[OpenCode ile AI Kodlama](https://www.boot.dev/courses/learn-ai-coding) kursuna göz atın. Tüm ders metinleri ve videolar
+ücretsizdir. Bazı etkileşimli özellikler ücretli olabilir.

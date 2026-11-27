@@ -1,14 +1,14 @@
 ---
 title: "İzinler"
-description: "OpenCode agent'larının neler yapabileceğini, eylemler ve yollar, komutlar gibi kaynaklarla eşleşen sıralı allow, deny ve ask kurallarıyla denetleyin."
+description: "OpenCode agent'larının hangi eylemleri hangi kaynaklarda gerçekleştirebileceğini sıralı allow, deny ve ask kurallarıyla belirleyin. Kaynaklar dosya yolu veya komut olabilir."
 ---
 
-İzinler, bir agent'ın bir kaynak üzerinde bir eylem yapıp yapamayacağını denetler.
+İzinler, bir agent'ın belirli bir kaynak üzerinde bir eylemi gerçekleştirip gerçekleştiremeyeceğini belirler.
 
 ## Yapılandırma
 
-Yaygın bir kurulum, kabuk komutlarını çalıştırmadan önce onay istemek, rutin Git denetimlerine izin vermek ve push'ları her
-zaman engellemektir. Bu sıralı kuralları `opencode.jsonc` dosyasına ekleyin:
+Yaygın bir yapılandırmada kabuk komutları çalıştırılmadan önce onay istenir, depoyu inceleyen rutin Git komutlarına izin
+verilir ve push işlemleri her zaman engellenir. Aşağıdaki kuralları bu sırayla `opencode.jsonc` dosyasına ekleyin:
 
 ```jsonc
 {
@@ -22,7 +22,7 @@ zaman engellemektir. Bu sıralı kuralları `opencode.jsonc` dosyasına ekleyin:
 }
 ```
 
-Son eşleşen kural kazanır; bu nedenle belirli istisnalar geniş kuralın ardından gelir.
+Son eşleşen kural uygulanır. Bu yüzden istisnaları genel kuraldan sonra yazın.
 
 <Callout type="warning">
   V1 farklı alan ve eylem adları kullanır. V2'de `permission`, `bash` ve `task` yerine `permissions`, `shell` ve
@@ -31,11 +31,11 @@ Son eşleşen kural kazanır; bu nedenle belirli istisnalar geniş kuralın ard�
 
 ## Kurallar
 
-Her kural üç dize alanı gerektirir:
+Her kuralda dize türünde üç alan bulunmalıdır:
 
 | Alan       | Anlamı                                                                     |
 | ---------- | -------------------------------------------------------------------------- |
-| `action`   | Araç izin eylemi                                                           |
+| `action`   | Araç için izni denetlenen eylem                                             |
 | `resource` | Kullanılan değer; örneğin bir yol, komut, URL, sorgu, skill kimliği veya agent kimliği |
 | `effect`   | `allow`, `deny` veya `ask`                                                  |
 
@@ -50,15 +50,15 @@ Her kural üç dize alanı gerektirir:
 
 | Etki    | Sonuç                               |
 | ------- | ----------------------------------- |
-| `allow` | İstemde bulunmadan devam et         |
-| `deny`  | İşlemi engelle                      |
-| `ask`   | İstemciden bir karar bekle          |
+| `allow` | Onay istemeden devam eder           |
+| `deny`  | İşlemi engeller                     |
+| `ask`   | İstemcinin kararını bekler          |
 
 Hiçbir kural eşleşmezse OpenCode `ask` kullanır.
 
 ## Eşleştirme
 
-Eylemler ve kaynaklar basit tam değer joker karakterleri kullanır:
+Eylem ve kaynak desenlerindeki joker karakterler, değerin tamamıyla eşleştirilir:
 
 | Desen | Eşleşme                                    |
 | ------- | ------------------------------------------ |
@@ -74,10 +74,10 @@ Eylemler ve kaynaklar basit tam değer joker karakterleri kullanır:
 }
 ```
 
-Bu desen normalleştirilmiş yolun tamamıyla eşleşir. Ters eğik çizgiler eğik çizgiye normalleştirilir ve Windows'ta
-eşleştirme büyük/küçük harfe duyarsızdır.
+Bu desen, normalleştirilmiş yolun tamamıyla eşleşir. Ters eğik çizgiler eğik çizgiye dönüştürülür. Windows'ta
+büyük ve küçük harf ayrımı yapılmaz.
 
-` *` ile biten bir kabuk deseni, komutun argümansız halini de eşleştirir:
+` *` ile biten bir kabuk deseni, komutun argümansız hâliyle de eşleşir:
 
 ```jsonc
 { "action": "shell", "resource": "git status *", "effect": "allow" }
@@ -97,32 +97,33 @@ genel kurallar ve en son agent kuralları eklenir.
 }
 ```
 
-İşlemler birden fazla kaynağı denetleyebilir; örneğin birkaç dosyaya dokunan bir yama. Herhangi bir `deny` işlemi reddeder;
-aksi halde herhangi bir `ask` onay ister; aksi halde işleme izin verilir.
+Bir işlemde birden çok kaynak denetlenebilir. Birden çok dosyayı değiştiren bir yama buna örnektir. Kaynaklardan biri için
+`deny` kararı verilirse işlem reddedilir. Ret kararı yoksa ancak `ask` kararı varsa onay istenir. Diğer durumlarda işleme
+izin verilir.
 
 ## Eylemler
 
-V2 eylem adları dizedir; bu nedenle eklentiler daha fazla eylem tanımlayabilir. Yerleşik araçlar şu anda şu eylemleri ve
+V2'de eylem adları dize türündedir. Bu sayede eklentiler yeni eylemler tanımlayabilir. Yerleşik araçlar şu eylemleri ve
 kaynakları kullanır:
 
 | Eylem                | Kaynak                                                                      |
 | -------------------- | --------------------------------------------------------------------------- |
-| `read`               | Location'a göreli iç yol veya kurallı mutlak dış yol                         |
+| `read`               | Location'a göre verilen iç yol veya kanonik biçimdeki mutlak dış yol |
 | `edit`               | `edit`, `write` ve `patch` için hedef yol                                   |
 | `glob`               | İstenen glob deseni                                                         |
 | `grep`               | İstenen düzenli ifade, arama yolu değil                                     |
-| `shell`              | Tarayıcının ürettiği komut dizesi; bileşik komutlar birkaç tane üretebilir  |
+| `shell`              | Kabuk tarayıcısının çıkardığı komut dizesi. Bileşik bir komuttan birden fazla dize çıkarılabilir. |
 | `subagent`           | Hedef agent kimliği                                                         |
 | `skill`              | Skill kimliği                                                               |
 | `question`           | `*`                                                                         |
 | `webfetch`           | İstenen URL                                                                 |
 | `websearch`          | Arama sorgusu                                                               |
-| `generate_image` | Ayarlanmışsa `#variant` ile birlikte, seçilen görsel modeli `providerID/modelID` olarak |
-| `external_directory` | Kurallı dış dizin sınırı, normalde `/*` ile biter                           |
+| `generate_image` | Seçilen görsel modelinin kimliği. Varyant ayarlanmışsa `#variant` ekiyle birlikte `providerID/modelID` biçiminde belirtilir. |
+| `external_directory` | Kanonik biçimdeki dış dizin sınırı. Genellikle `/*` ile biter. |
 | `<server>_<tool>`    | Bir MCP aracı için `*`. Her iki adda da harfler, rakamlar, `_` ve `-` korunur; diğer karakterler `_` ile değiştirilir. |
 | `opencode_list_mcp_resources` | MCP sunucu adı                                                    |
 | `opencode_read_mcp_resource`  | `<server>:<uri>`                                                   |
-| `execute`            | `*`; bir deny Code Mode'u kaldırır ve araçlarını doğrudan listeler, iç içe araçlar ise kendi kurallarını uygular |
+| `execute`            | `*`. Ret kararı verilirse Code Mode devre dışı kalır ve araçları doğrudan listelenir. İç içe çağrılan araçlara kendi kuralları uygulanır. |
 
 MCP eylem adlarında kısa çizgiler korunur. Bu nedenle `mcp-atlassian` adlı bir sunucunun araçları `mcp-atlassian_*`
 deseniyle eşleşir, `mcp_atlassian_*` ile eşleşmez.
@@ -142,9 +143,10 @@ deseniyle eşleşir, `mcp_atlassian_*` ile eşleşmez.
 
 ## Dizinler
 
-Hem etkin Location'ın hem de kök olmayan proje çalışma ağacının dışındaki bir yol, `read` veya `edit` kurallarından önce
-`external_directory` ile denetlenir. Varsayılan politika `external_directory` iznine sahiptir; bu nedenle bir kural
-eklemezseniz harici yollarda istem gösterilmez. Proje dışındaki her erişimden önce onay istenmesi için:
+Hem etkin Location'ın hem de kök dizin olmayan proje worktree'sinin dışında kalan yollar, `read` veya `edit`
+kurallarından önce `external_directory` ile denetlenir. Varsayılan politika `external_directory` eylemine izin verir.
+Bu nedenle bir kural eklemedikçe dış yollara erişim için onay istenmez. Proje dışındaki her erişimden önce onay istemek
+için şu kuralı ekleyin:
 
 ```jsonc
 {
@@ -155,7 +157,7 @@ eklemezseniz harici yollarda istem gösterilmez. Proje dışındaki her erişimd
 }
 ```
 
-Ardından gelen daha dar kurallar belirli dizinlere izin verebilir veya onları reddedebilir:
+Ardından daha dar kapsamlı kurallar ekleyerek belirli dizinlere erişime izin verebilir veya erişimi engelleyebilirsiniz:
 
 ```jsonc
 {
@@ -168,8 +170,8 @@ Ardından gelen daha dar kurallar belirli dizinlere izin verebilir veya onları 
 }
 ```
 
-Bu, `read`, `edit`, `write` ve `patch` tarafından kullanılan harici yollara uygulanır. Shell, `shell` kaynaklarını
-denetlemeden önce harici çalışma dizinini ve tarayıcısının çıkardığı dizinleri denetler.
+Bu kural, `read`, `edit`, `write` ve `patch` araçlarının kullandığı dış yollar için geçerlidir. Kabuk aracı, `shell`
+kaynaklarından önce dış çalışma dizinini ve tarayıcının komuttan çıkardığı dizinleri denetler.
 
 `external_directory`, `read` ve `edit` için baştaki `~`, `~/`, `$HOME` veya `$HOME/` yapılandırma yüklenirken genişletilir:
 
@@ -177,7 +179,7 @@ denetlemeden önce harici çalışma dizinini ve tarayıcısının çıkardığ�
 { "action": "read", "resource": "$HOME/reference/*", "effect": "allow" }
 ```
 
-Kabuk kaynakları ham komut metni olarak kalır ve ana dizine göre genişletilmez.
+Kabuk kaynaklarında ham komut metni olduğu gibi kalır. Ana dizin kısaltmaları açılmaz.
 
 <Callout type="warning">
   `shell`, ana bilgisayar kullanıcısının dosya sistemi, süreç ve ağ yetkisiyle çalışır. Komut metninden dizin çıkarımı
@@ -185,16 +187,17 @@ Kabuk kaynakları ham komut metni olarak kalır ve ana dizine göre genişletilm
   komutlarına izin verin.
 </Callout>
 
-Göreli değişiklik yolları, proje çalışma ağacının içinde kalarak etkin Location'dan çıkabilir. Açık harici yollar
-eşleştirmeden önce kurallı hale getirilir; bu nedenle yalnızca güvenilir dizin sınırlarına yetki verin.
+Dosya değişikliklerinde kullanılan göreli yollar, etkin Location'ın dışına çıkıp proje worktree'sinin içinde kalabilir.
+Açıkça belirtilen dış yollar eşleştirmeden önce kanonik biçime dönüştürülür. Bu yüzden yalnızca güvendiğiniz dizinler için
+izin verin.
 
 ## Kabuk komutu tarayıcısı
 
-Kabuk izin denetimleri, Bash, Zsh, POSIX `sh` ve PowerShell genelinde OpenCode'un yerleşik kabuk tarayıcısını kullanır.
-Bazı komutlar güvenle çözümlenemez; örneğin bozuk sözdizimi veya `eval` gibi dinamik değerlendirme. Herhangi bir `shell`
-ret kuralı geçerliyse böyle bir komut tarayıcı hatasıyla başarısız olur; çünkü alt komutları ret kuralına göre
-denetlenemez. Aksi halde komutun tamamı tek bir `shell` kaynağı olarak ve `external_directory` `*` için onay gerektirir.
-İkinci onayı yalnızca her dizine izin veren bir kural veya kullanıcı verebilir ve iki onay da desen olarak kaydedilmez.
+OpenCode, Bash, Zsh, POSIX `sh` ve PowerShell komutlarının izinlerini yerleşik kabuk tarayıcısıyla denetler. Sözdizimi
+bozuk komutlar veya `eval` gibi dinamik değerlendirme içeren komutlar güvenli biçimde çözümlenemeyebilir. Geçerli bir
+`shell` ret kuralı varsa alt komutlar bu kurala göre denetlenemediğinden tarayıcı hata verir. Böyle bir kural yoksa iki
+onay gerekir: tek bir `shell` kaynağı olarak komutun tamamı ve `external_directory` için `*`. İkinci onayı yalnızca
+tüm dizinlere izin veren bir kural veya kullanıcı verebilir. İki onay da desen olarak kaydedilmez.
 
 ```jsonc
 {
@@ -233,15 +236,15 @@ OpenCode ile gelen agent'lar şu politikaları ekler:
 | `build`      | Sorulara izin verir                                                            |
 | `plan`       | Sorulara izin verir; `~/.opencode/plan` altındaki dosyalar dışındaki düzenlemeleri reddeder |
 | `general`    | Soruları ve subagent başlatmayı reddeder                                       |
-| `explore`    | shell, okumalar, glob'lar, grep, web getirmeleri, web aramaları ve harici dizinler dışındaki her şeyi reddeder; `.env` okumaları için onay ister |
+| `explore`    | Kabuk komutları, dosya okuma, glob, grep, web'den içerik alma, web araması ve dış dizinlere erişim dışında her şeyi reddeder. `.env` dosyalarını okumak için onay ister. |
 | `title`      | Tüm eylemleri reddeder                                                         |
 | `summary`    | Tüm eylemleri reddeder                                                         |
 | `compaction` | Temel politikayı korur                                                         |
 
-Hiçbir varsayılan kural `external_directory` için onay istemediği için Location ve çalışma ağacı dışındaki okumalar ve
-düzenlemeler istem gösterilmeden ilerler. İstem göstermeye veya dış erişimi engellemeye dönmek için
-[Dizinler](#directories) bölümünde gösterildiği gibi bir `external_directory` `ask` veya `deny` kuralı ekleyin. Sonraki
-genel ve agent kuralları bu varsayılanları geçersiz kılar.
+Varsayılan kurallar `external_directory` için onay istemez. Bu nedenle Location ve worktree dışındaki dosyalar onay
+istenmeden okunabilir ve düzenlenebilir. Dış erişim için onay istemek veya dış erişimi engellemek üzere
+[Dizinler](#directories) bölümündeki gibi `external_directory` için `ask` veya `deny` kuralı ekleyin. Sonradan uygulanan
+genel kurallar ve agent kuralları bu varsayılanların önüne geçer.
 
 ## Agent'lar
 
@@ -266,8 +269,8 @@ Paylaşılan kuralları üst düzeye, daha dar kuralları `agents.<id>.permissio
 }
 ```
 
-Agent kuralları genel kurallardan sonra eklenir; genel dizinin yerini almaz. Özel bir subagent, üst oturumunun
-izinlerinin bir alt kümesini değil kendi izinlerini kullanır.
+Agent kuralları genel kurallar dizisinin yerini almaz, sonuna eklenir. Özel bir subagent, üst agent'ın izinlerinin bir
+alt kümesini değil, kendi izinlerini kullanır.
 
 ## Onaylar
 
@@ -275,9 +278,9 @@ Bir kural `ask` olarak sonuçlandığında istemciler şu yanıtlardan birini ve
 
 | Seçim          | Yanıt      | Sonuç                                                               |
 | -------------- | ---------- | -------------------------------------------------------------------- |
-| Bir kez izin ver | `once`   | Yalnızca bekleyen isteği onayla                                     |
-| Her zaman izin ver | `always` | İsteği onayla ve aracın önerdiği desenleri proje için kaydet       |
-| Reddet         | `reject`   | İsteği ve o oturumdaki diğer tüm bekleyen izin isteklerini reddet   |
+| Allow once     | `once`     | Yalnızca bekleyen isteği onaylar.                                    |
+| Allow always   | `always`   | İsteği onaylar ve aracın önerdiği desenleri proje için kaydeder.      |
+| Reject         | `reject`   | İsteği ve bu oturumda bekleyen diğer tüm izin isteklerini reddeder.   |
 
 Örneğin `git status --short` için **Allow always** seçmek, sonraki `git status` komutlarını kapsayan bir kabuk öneki
 kaydedebilir:
@@ -286,10 +289,10 @@ kaydedebilir:
 shell: git status * → allow
 ```
 
-Kaydedilmiş onaylar kalıcı, proje kapsamlı `allow` kurallarıdır. Yapılandırılmış bir `deny` kuralını asla geçersiz
-kılmazlar. Kaydedilecek önerilen deseni araçlar seçer: bazıları `*`, shell komut önekleri, web getirmeleri URL'nin sitesini
-(örneğin `https://opencode.ai/*`), skill'ler ve subagent'lar ise kimliklerini önerir. Geniş onayları gözden geçirin ve
-artık ihtiyaç duyulmayanları kaldırın.
+Kaydedilen onaylar, proje için geçerli kalıcı `allow` kurallarıdır. Yapılandırılmış bir `deny` kuralının önüne geçemezler.
+Kaydedilmesi önerilen deseni araç belirler. Bazı araçlar `*`, kabuk aracı komut önekleri, web'den içerik alan araç ise
+URL'nin ait olduğu siteyi (örneğin `https://opencode.ai/*`) önerir. Skill'ler ve subagent'lar kendi kimliklerini önerir.
+Geniş kapsamlı onayları gözden geçirin ve artık gerek duymadıklarınızı kaldırın.
 
 İstemciler reddederken geri bildirim ekleyebilir. Etkileşimli olmayan istemciler izin isteklerini nasıl ele alacaklarına
 karar vermelidir; yapılandırılmış `deny` kuralları her zaman uygulanmaya devam eder.
