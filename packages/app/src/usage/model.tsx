@@ -4,12 +4,12 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useData } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useUsageFormat } from "./format"
-import { modelUsage, servedByConsole, type LimitedModel } from "./limits"
+import { modelUsage, type LimitedModel } from "./limits"
 
 /**
  * The member's Console usage limits for this location: undefined until loaded, null when signed out. Only OpenCode
- * Console limits models, so only a model it serves loads them. Spend moves with every request, so loaded limits reload
- * as the session's turns end.
+ * Console limits models, with its budgets or the Go allowance, so only a model it serves loads them. Spend moves with
+ * every request, so loaded limits reload as the session's turns end.
  */
 export function createUsageLimits(input: {
   model: () => LimitedModel | undefined
@@ -21,7 +21,7 @@ export function createUsageLimits(input: {
   const load = () => void data.location.usage.sync(location().ref).catch(() => undefined)
   createEffect(() => {
     const model = input.model()
-    if (model && servedByConsole(model) && limits() === undefined) load()
+    if (model?.provider.integrationID === "opencode" && limits() === undefined) load()
   })
   onCleanup(
     data.on("session.execution.succeeded", (event) => {

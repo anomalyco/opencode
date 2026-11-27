@@ -9,6 +9,7 @@ import { Persistence } from "@/runtime/persistence/schema"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import type { ModelSelection } from "@/providers/models/selection"
 import { limitResetAt } from "../usage-exceeded-dialogs"
+import { SessionLimitPanel } from "./limit-panel"
 
 const GO_URL = "https://opencode.ai/go"
 
@@ -91,43 +92,35 @@ export function SessionFreeLimitPanel(props: { resetAt: number | null; selection
   }
 
   return (
-    <div
-      data-component="session-free-limit"
-      role="status"
-      class="flex flex-col gap-4 rounded-xl bg-v2-background-bg-base p-2 [[data-color-scheme=dark]_&]:bg-v2-background-bg-layer-01 shadow-[var(--v2-elevation-raised)] [font-family:var(--v2-font-family-sans)]"
+    <SessionLimitPanel
+      component="session-free-limit"
+      title={language.t("session.freeLimit.title")}
+      body={
+        <Show when={reset()} fallback={language.t("session.freeLimit.noReset")}>
+          {(time) => language.t("session.freeLimit.reset", { time: time() })}
+        </Show>
+      }
     >
-      <div class="flex flex-col gap-0.5 ps-1.5 pe-1 pt-1">
-        <div class="text-[13px] font-[530] leading-[var(--line-height-base)] text-v2-text-text-base">
-          {language.t("session.freeLimit.title")}
-        </div>
-        <div class="text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-muted [font-variant-numeric:tabular-nums]">
-          <Show when={reset()} fallback={language.t("session.freeLimit.noReset")}>
-            {(time) => language.t("session.freeLimit.reset", { time: time() })}
-          </Show>
-        </div>
-      </div>
-      <div class="flex items-center justify-end gap-1.5">
-        <Button
-          data-action="session-free-limit-subscribe"
-          type="button"
-          size="normal"
-          variant="ghost"
-          class="![font-weight:530]"
-          onClick={subscribe}
-        >
-          {language.t("session.freeLimit.subscribe")}
-        </Button>
-        <Button
-          data-action="session-free-limit-connect"
-          type="button"
-          size="normal"
-          variant="submit"
-          class="![font-weight:530]"
-          onClick={() => connect()}
-        >
-          {language.t("session.freeLimit.connect")}
-        </Button>
-      </div>
-    </div>
+      <Button
+        data-action="session-free-limit-subscribe"
+        type="button"
+        size="normal"
+        variant="ghost"
+        class="![font-weight:530]"
+        onClick={subscribe}
+      >
+        {language.t("session.freeLimit.subscribe")}
+      </Button>
+      <Button
+        data-action="session-free-limit-connect"
+        type="button"
+        size="normal"
+        variant="submit"
+        class="![font-weight:530]"
+        onClick={() => connect()}
+      >
+        {language.t("session.freeLimit.connect")}
+      </Button>
+    </SessionLimitPanel>
   )
 }
