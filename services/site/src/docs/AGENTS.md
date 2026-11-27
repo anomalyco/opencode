@@ -7,6 +7,7 @@
 - Content lives in `content/` as MDX. A file's path is its URL: `content/cli/keybinds.mdx` is `/docs/cli/keybinds/`. Other repositories read some of these files by path, so don't move them without checking.
 - `lib/navigation.ts` is the source of truth for header sections and sidebar ordering.
 - `frontmatter.ts` is the frontmatter schema; a page that doesn't match it fails the build.
+- An indexable latest page must be in `lib/navigation.ts`; a page left out of the navigation must set `noindex: true` in its frontmatter, or the build's sitemap/hreflang check fails.
 - `config.ts` holds each set's mount path (`/docs/`) and the names of its own files beside the pages (`files`: `_build`, `assets`, `pagefind`, `llms.txt`, …), which no page may use. Build URLs from it (`docsHref`), never from the site's base. MDX reads it as `import.meta.env.BASE_URL`.
 - Keep internal Markdown links docs-root-relative, for example `/config`; `remark-links.ts` adds `/docs`.
 - Components used in MDX are registered in `document.tsx`. Named slots work as in Astro: `<div slot="go">` inside a component becomes that slot's content (`remark-slots.ts`, `components/Slot.tsx`).

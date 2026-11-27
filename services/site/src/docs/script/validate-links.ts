@@ -146,7 +146,7 @@ async function checkHreflang() {
         : undefined
     if (expected === undefined) {
       failures.push(
-        `${shown}: no sitemap alternates for ${page}, and ${canonicalPath ?? "no canonical"} is not a listed fallback`,
+        `${shown}: no sitemap alternates for ${page}, and ${canonicalPath ?? "no canonical"} is not a listed fallback (add ${page} to navigation.ts or set noindex: true)`,
       )
       continue
     }
