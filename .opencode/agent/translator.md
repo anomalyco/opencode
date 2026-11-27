@@ -35,6 +35,20 @@ When translating the marketing site (`services/site/src/i18n/<locale>.ts` and `s
 
 ---
 
+# V2 Docs Pages (opencode.ai/docs)
+
+When translating a page of the latest docs (`services/site/src/docs/content`):
+
+- Translate the English page at `src/docs/content/<same path>.mdx` into `src/docs/content/<locale>/<same path>.mdx`, using the site's language folder (`zh`, `zht`, `ko`, `de`, `es`, `fr`, `it`, `da`, `ja`, `pl`, `ru`, `uk`, `ar`, `no`, `br`, `th`, `tr`). English stays at the root.
+- Translate the frontmatter's `title` and `description`; keep every other key and value as written.
+- Keep the English heading structure: the same headings, in the same order and depth. Translated pages reuse the English heading ids, so `#anchors` keep working in every language. If you must add a heading, add it after the English headings it follows; do not reorder or remove them.
+- Keep every MDX component, prop, code block, inline code span, path, URL, command, flag, config key and product name exactly as written. Translate only prose, table headers and code-block captions.
+- Keep internal links docs-root-relative (`/config`): the site adds the page's language prefix. Do not write `/docs/...`, `/<locale>/docs/...` or `https://opencode.ai/docs/...`.
+- A page you do not translate is served in English under that language's chrome, with a notice, so partial translations are safe.
+- From `services/site`, run `bun src/docs/script/check-translations.ts <locale>` to list missing pages and pages whose English changed since their stamp, then run it with `--stamp` once the language is up to date. Stamps live in `src/docs/i18n/stamps/<locale>.json`.
+
+---
+
 # Locale-Specific Glossaries
 
 When a locale glossary exists, use it to:

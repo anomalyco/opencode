@@ -370,6 +370,7 @@ export const dict = {
   "docs.callout.caution": "警告",
   "docs.callout.danger": "危险",
   "docs.v1.markdownNote": "这是 OpenCode V1 的文档。最新的 OpenCode V2 文档位于 https://opencode.ai/docs/llms.txt。",
+  "docs.translation.missing": "此页面尚未翻译，当前显示英文版本。",
   "site.companions": "与 OpenCode 完美搭配",
   "site.notFound.title": "页面未找到",
   "site.arcade.alt": "夜晚废弃的街机厅。一台街机的屏幕仍亮着，显示 404，屏幕前的地上躺着一枚代币。",

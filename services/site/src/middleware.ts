@@ -86,10 +86,10 @@ export default [
       if (event.request.method !== "GET" && event.request.method !== "HEAD") return
       const path = url.pathname.length > 1 ? url.pathname.replace(/\/$/, "") : url.pathname
       // One address per page: English pages have no /en prefix, addresses that never take a locale
-      // (the docs, the Console, the English-only changelog and font; lib/language.ts `localized`)
+      // (the V1 docs, the Console, the English-only changelog and font; lib/language.ts `localized`)
       // have no locale prefix, and pages have no trailing slash, so those addresses redirect rather
       // than serve a duplicate. /data picks its own locale and keeps /en; the docs have their own
-      // slash rules.
+      // slash rules. The latest docs' prefixes are served by the docs middleware above.
       const english = locale === "en" && !/^\/data(\/|$)/.test(path)
       const englishOnly = locale !== null && !localized(path)
       const slash = requested.length > 1 && requested.endsWith("/") && !/^\/docs(\/|$)/.test(path)

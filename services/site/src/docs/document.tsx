@@ -1,6 +1,7 @@
 import type { ComponentProps, JSX } from "solid-js"
 import { NoHydration, ssr } from "solid-js/web"
 import { CodeFrame } from "~/component/site/code-frame"
+import type { Locale } from "~/lib/language"
 import { FileTree } from "~/component/site/file-type-icon"
 import { HeadingLink } from "~/component/site/on-this-page"
 import { useI18n } from "~/context/i18n"
@@ -16,9 +17,9 @@ import { PlanTabs } from "./components/PlanTabs"
 import { Slot } from "./components/Slot"
 import { Tabs } from "./components/Tabs"
 import type { DocsSet } from "./config"
-import { docsFiles, type DocsModule } from "./content"
+import { docsFiles, docsTranslationFiles, type DocsModule } from "./content"
 import { DocsLayout, type DocsAssets, type DocsV1, type DocsVersions } from "./layouts/DocsLayout"
-import { docsMarkdownHref } from "./lib/navigation"
+import { docsLocaleMarkdownHref, docsMarkdownHref } from "./lib/navigation"
 import type { V1Locale } from "./lib/v1-navigation"
 
 /**
@@ -30,6 +31,11 @@ export type DocsRender = {
   slug: string
   module?: DocsModule
   assets: DocsAssets
+  /** The latest docs' page language, and whether its content is translated (a fallback page shows English). */
+  locale: Locale
+  translated: boolean
+  /** The languages the page is translated into, for its hreflang links. */
+  alternates: readonly Locale[]
   versions?: DocsVersions
   v1?: DocsV1
 }
@@ -64,15 +70,16 @@ const components = {
 }
 
 // The site's components and the docs' own read their copy from the I18n context: the page's
-// language's strings (the latest docs are English; the V1 docs have the site's languages and
+// language's strings (the latest docs' site languages; the V1 docs have the site's languages and
 // Bosnian, src/i18n/bs.ts) with their {{params}} filled in (as ~/i18n's interpolate), without the
 // site's language loader.
-const dicts = import.meta.glob<typeof dict>("../i18n/{ar,br,bs,da,de,es,fr,it,ja,ko,no,pl,ru,th,tr,zh,zht}.ts", {
+const dicts = import.meta.glob<typeof dict>("../i18n/{ar,br,bs,da,de,es,fr,it,ja,ko,no,pl,ru,th,tr,uk,zh,zht}.ts", {
   eager: true,
   import: "dict",
 })
-export const docsI18n = (locale?: V1Locale) => {
-  const table = dicts[`../i18n/${locale?.site ?? locale?.path}.ts`] ?? dict
+export const docsI18n = (locale?: Locale | V1Locale) => {
+  const path = typeof locale === "string" ? locale : (locale?.site ?? locale?.path)
+  const table = dicts[`../i18n/${path}.ts`] ?? dict
   return {
     t: (key: keyof typeof dict, params?: Record<string, string | number>) =>
       table[key].replace(/\{\{(\w+)\}\}/g, (raw, name: string) => String(params?.[name] ?? raw)),
@@ -92,10 +99,14 @@ const link = (anchor: (href: string) => string) => (props: JSX.AnchorHTMLAttribu
  */
 export function DocsDocument(props: DocsRender) {
   const module = props.module
+  const source =
+    props.set.id === "latest" && props.translated && props.locale !== "en"
+      ? docsTranslationFiles.get(props.locale)?.get(props.slug)
+      : docsFiles.get(props.set.id)?.get(props.slug)
   return (
     <NoHydration>
       {ssr("<!DOCTYPE html>") as unknown as Element}
-      <I18nContext.Provider value={docsI18n(props.v1?.locale)}>
+      <I18nContext.Provider value={docsI18n(props.v1?.locale ?? props.locale)}>
         {module ? (
           <DocsLayout
             set={props.set}
@@ -105,15 +116,27 @@ export function DocsDocument(props: DocsRender) {
             headings={module.frontmatter.tableOfContents === false ? [] : module.headings}
             noindex={module.frontmatter.noindex}
             assets={props.assets}
-            source={docsFiles.get(props.set.id)?.get(props.slug)}
-            markdown={docsMarkdownHref(props.slug, props.set)}
+            locale={props.locale}
+            translated={props.translated}
+            alternates={props.alternates}
+            source={source}
+            markdown={
+              props.set.id === "latest"
+                ? docsLocaleMarkdownHref(props.slug, props.set, props.locale)
+                : docsMarkdownHref(props.slug, props.set)
+            }
             versions={props.versions}
             v1={props.v1}
           >
             <module.default components={props.v1 ? { ...components, a: link(props.v1.anchor) } : components} />
           </DocsLayout>
         ) : (
-          <OpenApiReference assets={props.assets} />
+          <OpenApiReference
+            assets={props.assets}
+            locale={props.locale}
+            translated={props.translated}
+            alternates={props.alternates}
+          />
         )}
       </I18nContext.Provider>
     </NoHydration>

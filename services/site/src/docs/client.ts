@@ -136,6 +136,31 @@ on("change", (event) => {
   if (select) location.assign(select.value)
 })
 
+// The latest docs' language picker (DocsLanguagePicker.tsx), as the site's static pages drive
+// theirs (client/menus.ts): the popover's open state, focus to the current language when it opens
+// from the keyboard, and the chosen language saved where the site reads it. The links themselves
+// are ordinary page loads, so the picker still works without this.
+document.addEventListener(
+  "toggle",
+  (event) => {
+    const menu = event.target as HTMLElement
+    if (!(event instanceof ToggleEvent) || !menu.matches?.("[data-component=language-picker] [data-slot=dropdown]"))
+      return
+    const trigger = menu.previousElementSibling as HTMLElement | null
+    trigger?.setAttribute("aria-expanded", String(event.newState === "open"))
+    if (event.newState === "open" && trigger?.matches(":focus-visible"))
+      menu.querySelector<HTMLElement>('[aria-current="true"]')?.focus()
+  },
+  true,
+)
+on("click", (event) => {
+  const item = (event.target as Element).closest?.<HTMLElement>(
+    "[data-component=language-picker] [data-slot=item][data-locale]",
+  )
+  if (item?.dataset.locale)
+    document.cookie = `oc_locale=${encodeURIComponent(item.dataset.locale)}; Path=/; Max-Age=31536000; SameSite=Lax`
+})
+
 // Escape closes the section menu (the Contents menu closes itself, contents-spy.ts) and gives focus
 // back to its button; "/", ⌘K and Ctrl+K open search (search-key.ts); "0" goes to the site's home
 // page, as on the site's pages (src/client/entry.ts, which also has the nav's number keys).

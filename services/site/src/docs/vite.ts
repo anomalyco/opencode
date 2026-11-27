@@ -1,4 +1,5 @@
 import { readdirSync } from "node:fs"
+import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { transformAsync } from "@babel/core"
 import { compile } from "@mdx-js/mdx"
@@ -11,9 +12,9 @@ import type { Plugin } from "vite"
 import { parse } from "yaml"
 import { docsSets, latestDocs, v1Docs, type DocsSet } from "./config"
 import { frontmatterSchema } from "./frontmatter"
-import { docsSlug } from "./lib/navigation"
+import { docsLocaleBase, docsSlug, docsTranslation } from "./lib/navigation"
 import recmaSolid from "./recma-solid"
-import rehypeHeadings from "./rehype-headings"
+import rehypeHeadings, { type DocsHeading } from "./rehype-headings"
 import rehypeShiki from "./rehype-shiki"
 import rehypeTableScroll from "./rehype-table-scroll"
 import remarkDocsLinks from "./remark-links"
@@ -73,12 +74,18 @@ function setOf(file: string) {
   return docsSets.find((set) => file.startsWith(path.join(repository, set.content) + path.sep))
 }
 
-/** A set's page slugs: its MDX files, and the latest docs' API reference (render.tsx). */
+/**
+ * A set's page slugs: its MDX files, and the latest docs' API reference (render.tsx). The latest
+ * docs' translated pages are not slugs of their own: they share the English page's slug, at
+ * `/<locale>/docs/<slug>/` (content.ts).
+ */
 function slugsOf(set: DocsSet) {
   return [
     ...readdirSync(path.join(repository, set.content), { recursive: true, encoding: "utf8" })
       .filter((file) => file.endsWith(".mdx"))
-      .map((file) => docsSlug(file.replaceAll("\\", "/"))),
+      .map((file) => file.replaceAll("\\", "/"))
+      .filter((file) => set.id !== "latest" || !docsTranslation(file))
+      .map((file) => docsSlug(file)),
     ...(set.id === "latest" ? ["api"] : []),
   ].toSorted()
 }
@@ -86,12 +93,16 @@ function slugsOf(set: DocsSet) {
 // MDX as Astro's MDX integration compiled it (GitHub-flavoured Markdown, smart punctuation, Shiki,
 // heading ids), with the docs' own plugins, which wrap code in the site's CodeFrame and headings in
 // HeadingLink. The module also exports the page's frontmatter, its headings and its Markdown twin (`# Title` and the source, as the docs have always served it).
-// The V1 docs are Starlight's MDX (remark-starlight.ts), and their twins leave out its imports.
+// The V1 docs are Starlight's MDX (remark-starlight.ts), and their twins leave out its imports. A
+// translated page links within its own language and keeps the English page's heading ids, so
+// #anchors mean the same section everywhere.
 async function compileMdx(source: string, id: string, set: DocsSet) {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(source)
   const parsed = frontmatterSchema.safeParse(match ? parse(match[1]) : {})
   if (!parsed.success) throw new Error(`${id}: invalid frontmatter\n${parsed.error.message}`)
   const body = match ? source.slice(match[0].length) : source
+  const translation = set.id === "latest" ? translationOf(id) : undefined
+  const base = translation ? docsLocaleBase(translation.locale, set) : set.base
   // Blank lines in place of the frontmatter keep compile errors' line numbers right.
   const file = new VFile({ path: id, value: (match ? "\n".repeat(match[0].split("\n").length - 1) : "") + body })
   const compiled = await compile(file, {
@@ -100,18 +111,78 @@ async function compileMdx(source: string, id: string, set: DocsSet) {
     elementAttributeNameCase: "html",
     stylePropertyNameCase: "css",
     remarkPlugins:
-      set.id === "v1"
-        ? v1Plugins(id)
-        : [remarkGfm, remarkSmartypants, [remarkDocsLinks, { base: set.base }], remarkSlots],
-    rehypePlugins: [rehypeShiki, rehypeTableScroll, rehypeHeadings],
+      set.id === "v1" ? v1Plugins(id) : [remarkGfm, remarkSmartypants, [remarkDocsLinks, { base }], remarkSlots],
+    rehypePlugins: [
+      rehypeShiki,
+      rehypeTableScroll,
+      [rehypeHeadings, { ids: translation ? await headingsOf(translation.slug) : undefined }],
+    ],
     recmaPlugins: [recmaSolid],
   })
+  const markdown = set.id === "v1" ? v1Markdown(body) : body.trim()
   return [
     String(compiled.value).replaceAll("import.meta.env.BASE_URL", JSON.stringify(set.base)),
     `export const frontmatter = ${JSON.stringify(parsed.data)}`,
     `export const headings = ${JSON.stringify(compiled.data.headings ?? [])}`,
-    `export const markdown = ${JSON.stringify(`# ${parsed.data.title}\n\n${set.id === "v1" ? v1Markdown(body) : body.trim()}`)}`,
+    `export const markdown = ${JSON.stringify(
+      `# ${parsed.data.title}\n\n${translation ? localizeMarkdownLinks(markdown, base) : markdown}`,
+    )}`,
   ].join("\n")
+}
+
+/** A translated page's language and slug, from its file under the latest docs' content folder. */
+function translationOf(id: string) {
+  const folder = path.join(repository, latestDocs.content) + path.sep
+  if (!id.startsWith(folder)) return
+  return docsTranslation(path.relative(folder, id).replaceAll("\\", "/"))
+}
+
+// English heading ids, by slug: a translated page reuses them in order (rehype-headings.ts). Parsing
+// the English page's headings needs its MDX, not a second Shiki pass, so it compiles with the same
+// Markdown plugins and only the heading plugin.
+const englishHeadings = new Map<string, Promise<string[]>>()
+function headingsOf(slug: string) {
+  const known = englishHeadings.get(slug)
+  if (known) return known
+  const promise = readHeadings(slug)
+  englishHeadings.set(slug, promise)
+  return promise
+}
+
+async function readHeadings(slug: string) {
+  const id = path.join(repository, latestDocs.content, `${slug}.mdx`)
+  const source = await readFile(id, "utf8")
+  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(source)
+  const file = new VFile({ path: id, value: match ? source.slice(match[0].length) : source })
+  await compile(file, {
+    jsx: true,
+    format: "mdx",
+    remarkPlugins: [remarkGfm, remarkSmartypants],
+    rehypePlugins: [rehypeHeadings],
+  })
+  return ((file.data.headings ?? []) as DocsHeading[]).map((heading) => heading.slug)
+}
+
+/**
+ * A translated page's Markdown twin links within its own language: its links are docs-root-relative
+ * (remark-links.ts prefixes them in the page), so the twin prefixes them too outside fenced code.
+ */
+function localizeMarkdownLinks(markdown: string, base: string) {
+  const docs = base.replace(/\/$/, "")
+  let fenced = false
+  return markdown
+    .split("\n")
+    .map((line) => {
+      if (/^\s*(```|~~~)/.test(line)) {
+        fenced = !fenced
+        return line
+      }
+      if (fenced) return line
+      return line.replace(/\]\((\/(?!\/)[^)\s]*)\)/g, (raw, url: string) =>
+        url === "/docs" || url.startsWith("/docs/") ? raw : `](${docs}${url})`,
+      )
+    })
+    .join("\n")
 }
 
 function v1Plugins(id: string) {

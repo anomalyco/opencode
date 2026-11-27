@@ -374,6 +374,7 @@ export const dict = {
   "docs.v1.markdownNote":
     "هذه وثائق OpenCode V1. أحدث الوثائق، الخاصة بـ OpenCode V2، موجودة على https://opencode.ai/docs/llms.txt.",
   "site.companions": "أدوات تعمل بكفاءة مع OpenCode",
+  "docs.translation.missing": "لم تُترجم هذه الصفحة بعد. تُعرض النسخة الإنجليزية.",
   "site.notFound.title": "الصفحة غير موجودة",
   "site.arcade.alt":
     "صالة ألعاب مهجورة ليلًا. لا تزال شاشة إحدى الآلات مضيئة وعليها 404، وأمامها على الأرض قطعة نقدية للعب.",

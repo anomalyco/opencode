@@ -71,6 +71,7 @@ export const dict = {
   "docs.callout.tip": "Savjet",
   "docs.callout.caution": "Oprez",
   "docs.callout.danger": "Opasnost",
+  "docs.translation.missing": "Ova stranica još nije prevedena. Prikazana je engleska verzija.",
   "docs.v1.markdownNote":
     "Ovo je dokumentacija za OpenCode V1. Najnovija dokumentacija, za OpenCode V2, nalazi se na https://opencode.ai/docs/llms.txt.",
   "site.search.label": "Pretraga",

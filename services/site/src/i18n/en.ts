@@ -405,6 +405,7 @@ export const dict = {
   "docs.callout.danger": "Danger",
   "docs.v1.markdownNote":
     "These are the docs for OpenCode V1. The latest docs, for OpenCode V2, are at https://opencode.ai/docs/llms.txt.",
+  "docs.translation.missing": "This page hasn't been translated yet. Showing the English version.",
   "site.companions": "Works great with OpenCode",
   "site.announcement.label": "New. {{message}}",
   "site.announcement.aside": "New in OpenCode",

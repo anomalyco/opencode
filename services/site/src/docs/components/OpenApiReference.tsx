@@ -1,5 +1,6 @@
 import { For, Show, type JSX } from "solid-js"
 import { HeadingLink } from "~/component/site/on-this-page"
+import type { Locale } from "~/lib/language"
 import openapi from "../../../../../packages/protocol/openapi.json"
 import { latestDocs } from "../config"
 import { DocsLayout, type DocsAssets } from "../layouts/DocsLayout"
@@ -41,7 +42,12 @@ const schemas = Object.entries(openapi.components.schemas) as [string, OpenApiSc
  * resource with its endpoint cards (docs-variants.css api-7), then the schemas. Each card opens on
  * its own, and on its address (`#operation-id`, client.ts), so the page stays scannable.
  */
-export function OpenApiReference(props: { assets: DocsAssets }) {
+export function OpenApiReference(props: {
+  assets: DocsAssets
+  locale: Locale
+  translated: boolean
+  alternates: readonly Locale[]
+}) {
   return (
     <DocsLayout
       set={latestDocs}
@@ -53,6 +59,9 @@ export function OpenApiReference(props: { assets: DocsAssets }) {
         { depth: 2, slug: "schemas", text: "Schemas" },
       ]}
       assets={props.assets}
+      locale={props.locale}
+      translated={props.translated}
+      alternates={props.alternates}
     >
       <p>
         {openapi.info.description} The reference covers {operations.length} operations and {schemas.length} schemas from

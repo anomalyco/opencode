@@ -377,6 +377,7 @@ export const dict = {
   "docs.callout.caution": "警告",
   "docs.callout.danger": "危險",
   "docs.v1.markdownNote": "這是 OpenCode V1 的文件。最新的 OpenCode V2 文件位於 https://opencode.ai/docs/llms.txt。",
+  "docs.translation.missing": "此頁面尚未翻譯，目前顯示英文版本。",
   "site.companions": "與 OpenCode 完美搭配",
   "site.notFound.title": "找不到頁面",
   "site.arcade.alt": "夜裡，一間廢棄的電玩遊樂場。只有一台機台的螢幕仍亮著，顯示 404，機台前的地上有一枚代幣。",

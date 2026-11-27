@@ -1,3 +1,5 @@
+// Relative, not ~: vite.config.ts imports this module before the site's aliases exist.
+import { LOCALES, type Locale } from "../../lib/language"
 import type { DocsSet } from "../config"
 
 export interface DocsNavItem {
@@ -199,6 +201,53 @@ export function docsHref(slug: string, set: DocsSet) {
  */
 export function docsMarkdownHref(slug: string, set: DocsSet) {
   return slug === "index" ? `${set.base}index.md` : `${docsHref(slug, set).replace(/\/$/, "")}.md`
+}
+
+/** A page's URL in one of the latest docs' languages: English keeps the set's base, the rest take `/<locale>`. */
+export function docsLocaleBase(locale: Locale, set: DocsSet) {
+  return locale === "en" ? set.base : `/${locale}${set.base}`
+}
+
+/** A page's URL in a language, for its language alternates and the language picker. */
+export function docsLocaleHref(slug: string, set: DocsSet, locale: Locale) {
+  return locale === "en" ? docsHref(slug, set) : `/${locale}${docsHref(slug, set)}`
+}
+
+/** A page's Markdown twin in a language. */
+export function docsLocaleMarkdownHref(slug: string, set: DocsSet, locale: Locale) {
+  return locale === "en" ? docsMarkdownHref(slug, set) : `/${locale}${docsMarkdownHref(slug, set)}`
+}
+
+/** The search index a page loads: each language has its own, beside its pages (script/build.ts). */
+export function docsPagefindHref(set: DocsSet, locale: Locale) {
+  return `${docsLocaleBase(locale, set)}pagefind/pagefind.js`
+}
+
+/** The languages a page is available in: English always, plus the languages it has a translation in. */
+export function docsAlternates(slug: string, translated: ReadonlyMap<string, readonly Locale[]>) {
+  const locales = translated.get(slug) ?? []
+  return LOCALES.filter((locale) => locale === "en" || locales.includes(locale))
+}
+
+/**
+ * A page's canonical URL: its own address when it is translated (or English), and the English page's
+ * when that language only has the fallback (translated pages reuse the English page's headings, so the
+ * fallback is the same content in another chrome). Its hreflang alternates list only the languages
+ * with a translation, so a fallback page never competes with the English one.
+ */
+export function docsCanonicalHref(slug: string, set: DocsSet, locale: Locale, translated: boolean) {
+  if (locale === "en" || translated) return docsLocaleHref(slug, set, locale)
+  return docsHref(slug, set)
+}
+
+/**
+ * Where a file under the latest docs' `content/` is: its translated language and English slug, or
+ * undefined for an English page. Translations live in `content/<locale>/<same path>.mdx`.
+ */
+export function docsTranslation(file: string) {
+  const [first, ...rest] = file.split("/")
+  if (!rest.length || !(LOCALES as readonly string[]).includes(first)) return
+  return { locale: first as Locale, slug: docsSlug(rest.join("/")) }
 }
 
 /** A content file's slug: its path under content/ without `.mdx` or a trailing `/index`. */

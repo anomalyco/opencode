@@ -389,6 +389,7 @@ export const dict = {
   "docs.callout.danger": "Gefahr",
   "docs.v1.markdownNote":
     "Dies ist die Doku für OpenCode V1. Die aktuelle Doku für OpenCode V2 findest du unter https://opencode.ai/docs/llms.txt.",
+  "docs.translation.missing": "Diese Seite wurde noch nicht übersetzt. Die englische Version wird angezeigt.",
   "site.companions": "Passt perfekt zu OpenCode",
   "site.notFound.title": "Seite nicht gefunden",
   "site.arcade.alt":

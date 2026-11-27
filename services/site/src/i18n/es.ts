@@ -393,6 +393,7 @@ export const dict = {
   "docs.v1.markdownNote":
     "Estos son los docs de OpenCode V1. Los docs actuales, de OpenCode V2, están en https://opencode.ai/docs/llms.txt.",
   "site.companions": "Funciona muy bien con OpenCode",
+  "docs.translation.missing": "Esta página aún no está traducida. Se muestra la versión en inglés.",
   "site.notFound.title": "Página no encontrada",
   "site.arcade.alt":
     "Un salón recreativo abandonado de noche. La pantalla de una máquina aún brilla y muestra 404, y hay una ficha en el suelo delante de ella.",

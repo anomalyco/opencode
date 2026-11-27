@@ -383,6 +383,7 @@ export const dict = {
   "docs.callout.danger": "危険",
   "docs.v1.markdownNote":
     "これはOpenCode V1のドキュメントです。OpenCode V2の最新ドキュメントは https://opencode.ai/docs/llms.txt にあります。",
+  "docs.translation.missing": "このページはまだ翻訳されていません。英語版を表示しています。",
   "site.companions": "OpenCodeと相性抜群",
   "site.notFound.title": "ページが見つかりません",
   "site.arcade.alt":

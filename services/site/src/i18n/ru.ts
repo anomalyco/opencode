@@ -370,6 +370,7 @@ export const dict = {
   "docs.callout.danger": "Опасно",
   "docs.v1.markdownNote":
     "Это документация OpenCode V1. Актуальная документация для OpenCode V2 находится по адресу https://opencode.ai/docs/llms.txt.",
+  "docs.translation.missing": "Эта страница ещё не переведена. Показана английская версия.",
   "site.companions": "Отлично работает с OpenCode",
   "site.notFound.title": "Страница не найдена",
   "site.arcade.alt":

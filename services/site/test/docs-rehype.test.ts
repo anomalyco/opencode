@@ -100,6 +100,31 @@ describe("docs headings", () => {
       { depth: 4, slug: "ollama", text: "Ollama" },
     ])
   })
+
+  test("a translated page reuses the English page's ids in order, and names any heading it adds", () => {
+    const heading = (tagName: string, text: string): Element => ({
+      type: "element",
+      tagName,
+      properties: {},
+      children: [{ type: "text", value: text }],
+    })
+    const tree: Root = {
+      type: "root",
+      children: [heading("h2", "本地模型"), heading("h3", "Ollama"), heading("h2", "新增的一节")],
+    }
+    const file = new VFile()
+    rehypeHeadings({ ids: ["local-models", "ollama"] })(tree, file)
+    expect((tree.children as Element[]).map((node) => node.properties.id)).toEqual([
+      "local-models",
+      "ollama",
+      "新增的一节",
+    ])
+    expect(file.data.headings).toEqual([
+      { depth: 2, slug: "local-models", text: "本地模型" },
+      { depth: 3, slug: "ollama", text: "Ollama" },
+      { depth: 2, slug: "新增的一节", text: "新增的一节" },
+    ])
+  })
 })
 
 describe("V1 docs' Starlight syntax", () => {

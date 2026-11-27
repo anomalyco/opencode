@@ -392,6 +392,7 @@ export const dict = {
   "docs.callout.danger": "Fare",
   "docs.v1.markdownNote":
     "Dette er dokumentasjonen for OpenCode V1. Den nyeste dokumentasjonen, for OpenCode V2, finner du på https://opencode.ai/docs/llms.txt.",
+  "docs.translation.missing": "Denne siden er ikke oversatt ennå. Den engelske versjonen vises.",
   "site.companions": "Fungerer godt med OpenCode",
   "site.notFound.title": "Fant ikke siden",
   "site.arcade.alt":

@@ -9,15 +9,20 @@ export type DocsHeading = { depth: number; slug: string; text: string }
 // Gives every heading a GitHub-style id (as Astro did, so existing anchors keep working) and records
 // them in `file.data.headings` for the Contents rail. The text of each h2 and h3 goes inside the
 // site's HeadingLink (component/site/on-this-page.tsx): a click copies the section's address.
-export default function rehypeHeadings() {
+// A translated page passes the English page's ids (vite.ts), which it reuses in order so its
+// anchors are the English ones; headings it adds beyond them get a GitHub-style id of their own.
+export default function rehypeHeadings(options: { ids?: readonly string[] } = {}) {
   return (tree: Root, file: VFile) => {
     const slugger = new Slugger()
     const headings: DocsHeading[] = []
+    let index = 0
     visit(tree, "element", (node: Element) => {
       const depth = Number(/^h([1-6])$/.exec(node.tagName)?.[1])
       if (!depth) return
       const text = headingText(node)
-      if (typeof node.properties.id !== "string") node.properties.id = slugger.slug(text)
+      const id = typeof node.properties.id === "string" ? node.properties.id : (options.ids?.[index] ?? text)
+      index++
+      node.properties.id = slugger.slug(id)
       const slug = node.properties.id as string
       headings.push({ depth, slug, text })
       if (depth !== 2 && depth !== 3) return

@@ -392,6 +392,7 @@ export const dict = {
   "docs.callout.danger": "Tehlike",
   "docs.v1.markdownNote":
     "Bunlar OpenCode V1 dokümanlarıdır. OpenCode V2 için güncel dokümanlar https://opencode.ai/docs/llms.txt adresinde.",
+  "docs.translation.missing": "Bu sayfa henüz çevrilmedi. İngilizce sürüm gösteriliyor.",
   "site.companions": "OpenCode ile harika çalışır",
   "site.notFound.title": "Sayfa bulunamadı",
   "site.arcade.alt":

@@ -1,3 +1,5 @@
+import { LOCALES, type Locale } from "../lib/language"
+
 /**
  * A set of docs on the site, each mounted at its own path: every page (`/docs/cli/keybinds/`) and every
  * file the pages load or link lives under its `base`. Docs code builds its URLs from it (`docsHref`),
@@ -27,6 +29,12 @@ export const latestDocs: DocsSet = {
   content: "services/site/src/docs/content",
   files: ["_build", "assets", "pagefind", "favicon.svg", "llms.txt", "sitemap.xml", "openapi.json"],
 }
+
+/**
+ * The latest docs' languages: English at the set's base, every other site language under its own
+ * prefix (`/<locale>/docs/`). A translated page is `content/<locale>/<same path>.mdx`.
+ */
+export const latestDocsLocales: readonly Locale[] = LOCALES
 
 // The V1 docs, in their Starlight app's MDX (vite.ts reads its syntax).
 export const v1Docs: DocsSet = {

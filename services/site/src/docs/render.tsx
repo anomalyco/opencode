@@ -1,13 +1,15 @@
 import { renderToString } from "solid-js/web"
-import { docsSets, latestDocs, v1Docs, type DocsSet } from "./config"
-import { docsContent } from "./content"
+import type { Locale } from "~/lib/language"
+import { docsSets, latestDocs, latestDocsLocales, v1Docs, type DocsSet } from "./config"
+import { docsContent, docsTranslated, docsTranslations } from "./content"
 import { DocsDocument, docsI18n } from "./document"
 import type { DocsAssets } from "./layouts/DocsLayout"
-import { docsHref } from "./lib/navigation"
+import { docsAlternates, docsLocaleHref, docsHref } from "./lib/navigation"
 import { latestHref, v1Href, v1Locales, v1Page, v1Section, v1Slug, type V1Locale } from "./lib/v1-navigation"
 
 export { renderLlmsTxt } from "./lib/llms"
 export { renderSitemap } from "./lib/sitemap"
+export { docsTranslated } from "./content"
 
 // The docs' renderer: script/build.ts prerenders every page with it, and the development server
 // renders on request (middleware.ts). The Worker never renders docs.
@@ -20,35 +22,55 @@ export const docsSlugs = Object.fromEntries(
   ]),
 ) as Record<DocsSet["id"], string[]>
 
+/** Every language the pages are prerendered in, by set: the latest docs' languages, and English for V1 (its slugs carry theirs). */
+export const docsPageLocales: Record<DocsSet["id"], readonly Locale[]> = { latest: latestDocsLocales, v1: ["en"] }
+
 /** A docs page as HTML, or undefined when there is no such page. */
-export async function renderDocsPage(set: DocsSet, slug: string, assets: DocsAssets) {
-  if (!docsSlugs[set.id].includes(slug)) return
-  const module = await docsContent.get(set.id)!.get(slug)?.()
-  const { locale, page } = v1Page(slug)
+export async function renderDocsPage(set: DocsSet, slug: string, assets: DocsAssets, locale: Locale = "en") {
+  if (!docsSlugs[set.id].includes(slug) || !docsPageLocales[set.id].includes(locale)) return
+  const english = await docsContent.get(set.id)!.get(slug)?.()
+  const translation =
+    set.id === "latest" && locale !== "en" ? await docsTranslations.get(locale)?.get(slug)?.() : undefined
+  const module = translation ?? english
+  const translated = translation !== undefined || locale === "en"
+  const { locale: v1Locale, page } = v1Page(slug)
   const versions =
     set.id === "v1"
       ? { latest: latestHref(page, docsSlugs.latest), v1: docsHref(slug, v1Docs) }
-      : { latest: docsHref(slug, latestDocs), v1: v1Href(slug, docsSlugs.v1) }
+      : { latest: docsLocaleHref(slug, latestDocs, locale), v1: v1Href(slug, docsSlugs.v1) }
   const v1 =
     set.id === "v1"
       ? {
-          locale,
-          section: v1Section(locale, await v1Titles(locale)),
+          locale: v1Locale,
+          section: v1Section(v1Locale, await v1Titles(v1Locale)),
           languages: languages(page),
           anchor: anchor(slug, await v1Ids()),
         }
       : undefined
   return renderToString(() => (
-    <DocsDocument set={set} slug={slug} module={module} assets={assets} versions={versions} v1={v1} />
+    <DocsDocument
+      set={set}
+      slug={slug}
+      module={module}
+      assets={assets}
+      locale={set.id === "latest" ? locale : "en"}
+      translated={translated}
+      alternates={set.id === "latest" ? docsAlternates(slug, docsTranslated) : []}
+      versions={versions}
+      v1={v1}
+    />
   ))
 }
 
 /**
- * A content page's Markdown twin, or undefined when it has none. A V1 page's says under its title, in
- * its language, that it's the V1 docs and where the latest are.
+ * A content page's Markdown twin, or undefined when it has none. A translated page serves its own
+ * Markdown; a language without a translation serves the English page's. A V1 page's says under its
+ * title, in its language, that it's the V1 docs and where the latest are.
  */
-export async function renderDocsMarkdown(set: DocsSet, slug: string) {
-  const markdown = (await docsContent.get(set.id)!.get(slug)?.())?.markdown
+export async function renderDocsMarkdown(set: DocsSet, slug: string, locale: Locale = "en") {
+  const translation =
+    set.id === "latest" && locale !== "en" ? await docsTranslations.get(locale)?.get(slug)?.() : undefined
+  const markdown = (translation ?? (await docsContent.get(set.id)!.get(slug)?.()))?.markdown
   if (set.id !== "v1" || markdown === undefined) return markdown
   const note = docsI18n(v1Page(slug).locale).t("docs.v1.markdownNote")
   return markdown.replace(/\n\n/, `\n\n> ${note}\n\n`)
