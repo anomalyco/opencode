@@ -45,8 +45,9 @@ JSON Schema and Standard Schema are also supported.
 
 ### Input and output
 
-Use `input` for the method argument and `output` for its return value. Leave
-either one out when there is no value.
+Use `input` for the method argument and `output` for its return value. Both
+are required. When a method takes or returns nothing, use `Schema.Struct({})`,
+call it with `{}` and return `{}`.
 
 ```ts
 search: {
@@ -67,7 +68,8 @@ errors: {
 
 ### Events
 
-Add events to the top-level `events` map. Event data must be an object.
+Add events to the top-level `events` map. Event data must be an object. The map
+is required; use `events: {}` when the RPC has no events.
 
 ```ts
 events: {
