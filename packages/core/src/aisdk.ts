@@ -384,6 +384,11 @@ export const locationLayer = Layer.effect(
   }),
 )
 
+// Wrapping keeps finished events from reading as provider frames, which raw-event output would echo.
+class Finished {
+  constructor(readonly event: LLMEvent) {}
+}
+
 function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
   const packageName = Provider.packageName(info.package!)
   const projected = mapBodyToProviderOptions(info, packageName)
@@ -412,7 +417,7 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
       stream: {
         event: Schema.Any,
         initial: () => undefined,
-        step: (state, event: LLMEvent) => Effect.succeed([state, [event]] as const),
+        step: (state, frame: Finished) => Effect.succeed([state, [frame.event]] as const),
       },
     }),
     transport: {
@@ -424,7 +429,7 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
             language,
             prepared as LanguageModelV3CallOptions,
             (options as StreamOptions | undefined)?.http,
-          ),
+          ).pipe(Stream.map((event) => new Finished(event))),
         }),
     },
   })
@@ -926,7 +931,9 @@ function jsonObject(input: Record<string, unknown>) {
 function jsonValue(input: unknown): JSONValue {
   try {
     const encoded = JSON.stringify(input)
-    return encoded === undefined ? null : (Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(encoded) as JSONValue)
+    return encoded === undefined
+      ? null
+      : (Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(encoded) as JSONValue)
   } catch {
     return stringify(input)
   }

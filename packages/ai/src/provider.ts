@@ -37,6 +37,8 @@ export const custom = (definition: Auth.Definition): Authentication => ({ kind: 
 
 /** Connection settings applied over a provider. Later patches win; headers, query and body merge by key. */
 export interface Patch {
+  /** Serve under another provider id, which also names the metadata namespace unless an API sets its own. */
+  readonly id?: string
   readonly apiKey?: ApiKey
   readonly auth?: Auth.Definition
   /** Replaces the base URL of every API the provider serves. */
@@ -113,7 +115,7 @@ export const make = <const Apis extends ReadonlyArray<AnyApi>>(
 }
 
 const build = <Apis extends ReadonlyArray<AnyApi>>(input: Input<Apis>, connection: Patch): Definition<Apis> => {
-  const id = ProviderID.make(input.id)
+  const id = ProviderID.make(connection.id ?? input.id)
   return {
     id,
     baseURL: input.baseURL,
@@ -122,11 +124,11 @@ const build = <Apis extends ReadonlyArray<AnyApi>>(input: Input<Apis>, connectio
     settings: input.settings,
     model: (modelID, options = {}) => {
       const api = options.api === undefined ? input.apis[0] : input.apis.find((item) => item.name === options.api)
-      if (api === undefined) throw new Error(`Provider ${input.id} does not serve a ${options.api} API`)
+      if (api === undefined) throw new Error(`Provider ${id} does not serve a ${options.api} API`)
       const host = api.host
       const baseURL = connection.baseURL ?? host.baseURL ?? input.baseURL
       if (baseURL === undefined)
-        throw new ProviderConfigurationError({ provider: id, message: `${input.id} needs a baseURL for ${api.name}` })
+        throw new ProviderConfigurationError({ provider: id, message: `${id} needs a baseURL for ${api.name}` })
       const query = merged(host.query, connection.query)
       return LanguageModel.make({
         id: modelID,
@@ -187,6 +189,7 @@ const fromSettings = (provider: AnyProvider, settings: ProviderPackage.Settings)
 }
 
 const mergePatch = (base: Patch, next: Patch): Patch => ({
+  id: next.id ?? base.id,
   apiKey: next.apiKey ?? base.apiKey,
   auth: next.auth ?? base.auth,
   baseURL: next.baseURL ?? base.baseURL,

@@ -1,5 +1,6 @@
 import type { Effect } from "effect"
 import { Capabilities } from "./capabilities.js"
+import { flattenRequest } from "./protocols/shared.js"
 import type { CompactionOperations } from "./route/client.js"
 import type { EndpointPart } from "./route/endpoint.js"
 import type { Framing } from "./route/framing.js"
@@ -82,8 +83,8 @@ export type MakeInput<Name extends string, Caps, Compact, Body, Frame, Event, St
   readonly options?: RequestOptions
   readonly capabilities?: Caps
   readonly compact?: Compact
-} & // oxlint-disable-next-line typescript-eslint/no-explicit-any
-(| { readonly transport: Transport<Body, any, Frame>; readonly framing?: never }
+} & ( // oxlint-disable-next-line typescript-eslint/no-explicit-any
+  | { readonly transport: Transport<Body, any, Frame>; readonly framing?: never }
   | { readonly framing: Framing.Definition<Frame>; readonly transport?: never }
 )
 
@@ -148,7 +149,14 @@ const build = <
         ? {
             ...definition.protocol,
             id: patch.id,
-            body: { ...definition.protocol.body, from: (request) => patch.body!(request, definition.protocol.body.from) },
+            body: {
+              ...definition.protocol.body,
+              from: (request) =>
+                patch.body!(
+                  definition.protocol.namespaces ? request : flattenRequest(request),
+                  definition.protocol.body.from,
+                ),
+            },
           }
         : definition.protocol,
       path: patch.path ?? definition.path,
@@ -172,6 +180,12 @@ export const modelCapabilities = <Caps extends Capabilities.Any>(
 }
 
 const glob = (pattern: string) =>
-  new RegExp(`^${pattern.toLowerCase().split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`)
+  new RegExp(
+    `^${pattern
+      .toLowerCase()
+      .split("*")
+      .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+      .join(".*")}$`,
+  )
 
 export * as Api from "./api.js"

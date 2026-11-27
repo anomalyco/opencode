@@ -437,6 +437,31 @@ it.effect("closes the open AI SDK reasoning part when the next one starts", () =
   }),
 )
 
+it.effect("does not echo AI SDK events as raw provider frames", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel([
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", delta: "Hi" },
+            { type: "text-end", id: "t1" },
+            { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+          ]),
+      }
+    })
+
+    const resolved = yield* aisdk.model(model("@ai-sdk/gateway"))
+    const response = yield* LLMClient.generate(ai.request({ model: resolved, prompt: "Hi", includeRaw: true })).pipe(
+      Effect.provide(client),
+    )
+
+    expect(response.events.filter((event) => event.type === "raw")).toEqual([])
+    expect(response.text).toBe("Hi")
+  }),
+)
+
 it.effect("normalizes repeated, reopened, and overlapping AI SDK fragment boundaries", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service

@@ -201,7 +201,7 @@ export const chatCompletions = Api.make({
   capabilities: Capabilities.defaults<Capabilities.ChatCompletions>(),
 }).configure({
   capabilities: { cache: { promptCacheKey: true } },
-  models: { "*": { cache: { markers: false } }, ...gatewayModels },
+  models: gatewayModels,
 })
 
 export const openrouter = Provider.make({ ...shared, apis: [chatCompletions, responses] })

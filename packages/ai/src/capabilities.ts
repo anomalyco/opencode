@@ -53,6 +53,8 @@ export interface Common {
 export interface Cache {
   /** The endpoint reads inline cache markers, so the cache policy places them. */
   readonly markers?: boolean
+  /** Where `cache: "auto"` places markers: everywhere useful (default), Qwen's system-and-tail layout, or nowhere. */
+  readonly auto?: "standard" | "qwen" | "none"
   readonly implicit?: true | { readonly ttl?: ReadonlyArray<CacheTTL>; readonly minTokens?: number }
   readonly explicit?:
     | true

@@ -68,7 +68,10 @@ export const provider = <A extends AnyApi>(api: A, path: string) =>
     auth,
     apis: [api],
     settings: {
-      keys: ["region", "workspaceID", "baseURL"],
-      patch: (values: Partial<Location>) => ({ baseURL: baseURL(values, path) }),
+      keys: ["region", "workspaceID", "baseURL", "provider"],
+      patch: (values: Partial<Location> & { readonly provider?: string }) => ({
+        id: values.provider,
+        baseURL: baseURL(values, path),
+      }),
     },
   })

@@ -18,8 +18,8 @@ export const messages = api({
 }).configure({
   // Recorded Gateway translations for non-Claude models return thinking with empty signatures.
   models: {
-    "*": { cache: { markers: false }, reasoning: { signature: false } },
     ...gatewayModels,
+    "*": { ...gatewayModels["*"], reasoning: { signature: false } },
     "anthropic/*": { ...gatewayModels["anthropic/*"], reasoning: { signature: true } },
   },
 })

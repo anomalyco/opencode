@@ -62,15 +62,19 @@ export const requestTTL = (request: LLMRequest) => (typeof request.cache === "ob
 const QWEN: CachePolicyObject = { system: true, messages: { tail: 1 } }
 
 /**
- * `models` patterns for gateways that forward cache markers. Upstreams other than Anthropic and Alibaba Qwen cache
- * without breakpoints; Gemini uses only the last breakpoint, so a conversation-tail breakpoint would write a new
- * cache every step. `~anthropic/…` IDs are OpenRouter aliases for the latest model in a family.
+ * `models` patterns for gateways that forward cache markers, steering only where `cache: "auto"` puts them; an
+ * explicit layout is sent for every model. Upstreams other than Anthropic and Alibaba Qwen cache without breakpoints;
+ * Gemini uses only the last breakpoint, so a conversation-tail breakpoint would write a new cache every step.
+ * `~…` IDs are OpenRouter aliases for the latest model in a family.
  */
 export const gatewayModels = {
-  "anthropic/*": { cache: { markers: true } },
-  "~anthropic/*": { cache: { markers: true } },
-  "qwen/*": { cache: { format: "alibaba" } },
-  "alibaba/qwen*": { cache: { format: "alibaba" } },
+  "*": { cache: { markers: true, auto: "none" } },
+  "anthropic/*": { cache: { auto: "standard" } },
+  "~anthropic/*": { cache: { auto: "standard" } },
+  "qwen/*": { cache: { auto: "qwen" } },
+  "~qwen/*": { cache: { auto: "qwen" } },
+  "alibaba/qwen*": { cache: { auto: "qwen" } },
+  "~alibaba/qwen*": { cache: { auto: "qwen" } },
 } as const satisfies Record<string, Capabilities.Any>
 
 const makeHint = (ttl: CacheTTL | undefined): CacheHint =>
@@ -225,5 +229,8 @@ const selectPolicy = (request: LLMRequest): CachePolicyObject => {
   if (cache.format === "alibaba") return auto ? QWEN : { ...resolve(request.cache), tools: false }
   if (cache.format === "anthropic") return resolve(request.cache)
   if (!cache.markers) return NONE
-  return auto ? AUTO : resolve(request.cache)
+  if (!auto) return resolve(request.cache)
+  if (cache.auto === "qwen") return QWEN
+  if (cache.auto === "none") return NONE
+  return AUTO
 }
