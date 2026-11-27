@@ -132,7 +132,7 @@ story("summarizes subagents as Agent while retaining their card titles", async (
   })
 
   expect(gap).toBeLessThanOrEqual(8)
-  await expect(group.locator('[data-component="task-tool-title"]')).toHaveText(["General", "Explore"])
+  await expect(group.locator('[data-component="task-tool-title"]')).toHaveText(["General started", "Explore started"])
 })
 
 for (const direction of ["ltr", "rtl"]) {
@@ -250,7 +250,7 @@ for (const width of [840, 390]) {
       await expect(trigger).toBeFocused()
     }
 
-    const cards = group.locator('[data-component="task-tool-surface"]')
+    const cards = group.locator('[data-component="task-tool-card"]')
     await expect(cards).toHaveCount(2)
     await expect
       .poll(() =>
@@ -261,7 +261,7 @@ for (const width of [840, 390]) {
             const item = node.closest('[data-slot="context-tool-group-item"]')!.getBoundingClientRect()
 
             return (
-              card.height === 36 &&
+              card.height === 24 &&
               card.top >= trigger.top &&
               card.bottom <= trigger.bottom &&
               card.top >= item.top &&
