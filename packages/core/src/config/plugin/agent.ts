@@ -31,7 +31,7 @@ const formatIssue = SchemaIssue.makeFormatterDefault()
 type PathAction = FileAccess.ExternalDirectoryAuthorization["action"] | typeof ReadTool.name | typeof EditTool.name
 const agentKeys = new Set(["variant", ...Object.keys(ConfigAgent.Info.fields)])
 // Fields only V2 understands. A file that uses any of them is read as V2, whatever else it contains.
-const nativeKeys = ["permissions", "request", "system", "disabled"]
+const nativeKeys = ["compaction", "permissions", "request", "system", "disabled"]
 
 export const Plugin = define({
   id: "opencode.config.agent",
@@ -88,6 +88,12 @@ export const Plugin = define({
                 providerID: item.model.providerID,
                 ...(item.model.variant === undefined ? {} : { variant: item.model.variant }),
               }
+            if (item.compaction?.window !== undefined) {
+              agent.request.settings.compaction = {
+                ...agent.request.settings.compaction,
+                window: item.compaction.window,
+              }
+            }
             if (item.request !== undefined) {
               Object.assign(agent.request.headers, item.request.headers ?? {})
               Object.assign(agent.request.body, item.request.body ?? {})

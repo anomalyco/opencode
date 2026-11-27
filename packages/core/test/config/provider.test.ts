@@ -79,6 +79,32 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("merges provider compaction type with model compaction window", () =>
+    Effect.gen(function* () {
+      const models = yield* Model.Service
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "@opencode/ai/providers/openai/responses",
+                settings: { compaction: { type: "native" } },
+                models: {
+                  windowed: {
+                    settings: { compaction: { window: 180_000 } },
+                  },
+                },
+              },
+            },
+          }),
+        }),
+      ])
+      const model = required(yield* models.get(Provider.ID.make("custom"), Model.ID.make("windowed")))
+      expect(model.settings?.compaction).toEqual({ type: "native", window: 180_000 })
+    }),
+  )
+
   it.effect("keeps provider and model compatibility precedence across config documents", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service
