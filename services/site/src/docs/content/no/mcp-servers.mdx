@@ -233,7 +233,7 @@ OpenCode identifiserer seg til autorisasjonsserveren med den første metoden som
 | --- | --- |
 | Forhåndsregistrert klient | `oauth.client_id` er konfigurert. |
 | [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents) (CIMD) | Autorisasjonsserveren støtter CIMD og offentlige klienter, og `oauth.redirect_uri` er ikke satt. |
-| [Dynamisk klientregistrering](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | Ingenting av det ovenstående gjelder. OpenCode registrerer en klient og gjenbruker den ved senere pålogginger. |
+| [Dynamisk klientregistrering](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | Ingen av de andre metodene kan brukes. OpenCode registrerer en klient og bruker den på nytt ved senere pålogginger ved å lytte på porten den registrerte. Hvis porten er opptatt, registrerer OpenCode klienten på nytt. |
 
 En autorisasjonsserver velger CIMD gjennom metadataene sine:
 
@@ -290,8 +290,8 @@ Når en leverandør gir deg tilgangsopplysninger for klienten, bruker du OAuth-f
 | --- | --- |
 | `client_id` | Forhåndsregistrert klient-ID. Har forrang over CIMD og DCR. |
 | `client_secret` | Hemmelighet for en konfidensiell klient, sendt i tokenforespørselens body. Utelat den for offentlige klienter. |
-| `scope` | Mellomromsdelte scopes som skal forespørres. Standard er scopet serveren angir når den avviser en uautentisert forespørsel. |
-| `callback_port` | Lokal callback-port fra `1` til `65535`. Standard er `redirect_uri`-porten, deretter en ledig efemer port. |
+| `scope` | Tilgangsomfang du ber om, atskilt med mellomrom. Som standard brukes omfanget serveren oppgir når den avviser en uautentisert forespørsel. OpenCode sender det innvilgede omfanget på nytt når tokenet fornyes. |
+| `callback_port` | Lokal callback-port fra `1` til `65535`. Som standard brukes porten i `redirect_uri`, deretter porten til en klient som ble registrert ved en tidligere pålogging, og til slutt en ledig midlertidig port. |
 | `redirect_uri` | Forhåndsregistrert loopback-URI der bane og port når den lokale callback-lytteren. Å sette den slår av CIMD. |
 | `auth_server_metadata_url` | URL til autorisasjonsserverens OAuth- eller OpenID Connect-metadata-dokument. Angi den når MCP-serveren ikke publiserer beskyttet ressursmetadata som navngir autorisasjonsserveren. |
 

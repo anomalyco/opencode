@@ -96,8 +96,34 @@ ligge på en egen `client`-egenskap.
 `ctx.location` beskriver plasseringen der denne plugin-forekomsten ble lastet. Det er ikke plasseringen til hver økt eller hendelse
 plugin'en kan observere. Les økt- eller hendelsesdataene når den forskjellen er viktig.
 
-Konteksten eksponerer mange flere domener enn tabellen lister, inkludert kataloger, kommandoer, integrasjoner, MCP-servere,
+Konteksten gir tilgang til flere domener enn tabellen viser, blant annet kommandoer, integrasjoner, MCP-servere,
 referanser, skills, lagring, VCS, worktrees og nettsøk. Se [hele pluginkonteksten](/build/plugins/server#api).
+
+### Migrer katalogdomenet
+
+Tidligere plugin-bygg publiserte leverandører og modeller gjennom `ctx.catalog`. OpenCode har nå to separate domener,
+`ctx.provider` og `ctx.model`. En plugin som kaller `ctx.catalog.transform`, kan derfor ikke lastes inn.
+
+| Tidligere katalog-API                         | Tilsvarende i dagens API |
+| --------------------------------------------- | ------------------------ |
+| `ctx.catalog.transform(draft => …)`           | `ctx.provider.transform(editor => …)` og `ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)`               | `editor.update(id, fn)` på `ctx.provider` |
+| `draft.model.update(providerID, modelID, fn)` | `editor.update(providerID, modelID, fn)` på `ctx.model` |
+| `ctx.catalog.reload()`                        | `ctx.provider.reload()` og `ctx.model.reload()` |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+Se [Leverandører](/build/plugins/server#providers) og [Modeller](/build/plugins/server#models) for en fullstendig
+oversikt over redigerings-API-ene.
 
 ## Registrer hooks i `setup`
 

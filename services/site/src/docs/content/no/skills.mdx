@@ -48,7 +48,7 @@ OpenCode søker automatisk i disse plasseringene:
 | Prosjekt              | `.opencode/skills`                     |
 | Prosjektkompatibilitet | `.claude/skills`, `.agents/skills`     |
 
-For prosjektkilder søker OpenCode fra gjeldende katalog og opp til prosjektroten og inkluderer samsvarende kataloger på hvert nivå.
+OpenCode leter etter prosjektkilder fra gjeldende katalog og opp til roten av filsystemet, og tar med kataloger som samsvarer på hvert nivå.
 
 Hver kilde kan inneholde skills i begge formater:
 
@@ -177,7 +177,7 @@ Kildene registreres fra lavere til høyere prioritet:
 2. `.claude/skills`, først globalt og deretter fra øverste overordnede katalog ned mot gjeldende katalog
 3. `.agents/skills`, først globalt og deretter fra øverste overordnede katalog ned mot gjeldende katalog
 4. `~/.config/opencode/skills`
-5. Prosjektets `.opencode/skills`, fra prosjektroten mot gjeldende katalog
+5. Prosjektets `.opencode/skills`, fra øverste overordnede katalog ned mot gjeldende katalog
 6. Eksplisitte `skills`-konfigurasjonsoppføringer, i konfigurasjonsprioritet og matriserekkefølge
 
 Unngå dupliserte ID-er med mindre du vil overstyre en tidligere skill.

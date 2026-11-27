@@ -1034,9 +1034,10 @@ uten å endre rekkefølgen; den kjører ikke plugin-Effecten på nytt.
 Effect-verktøy godtar samme [deklarasjon av fri form-inndata](/build/plugins/server#freeform-tool-input) som Promise-verktøy. Hvis modellen ikke annonserer det formatet, beholder verktøyet sin normale objektinndata.
 
 Verktøy har en `id` som inneholder deres effektive navn, og `get()` returnerer `undefined` når den ID-en ikke finnes. Bruk
-`update` og `remove` med det effektive verktøynavnet, inkludert navnerommet (`acme_greeting` ovenfor). Punktum i
-navnerom og tegn som ikke støttes i verktøynavn, blir `_`. Manglende navn ignoreres; oppretting av et verktøy krever
-`add` med en komplett definisjon. Oppdateringer bevarer navn og navnerom. Tilordne nye skjemaer eller alternativer for å erstatte
+`update` og `remove` med navnet verktøyet er registrert under, inkludert navnerommet (`acme_greeting` ovenfor).
+Punktum i navnerom blir `_`. I verktøynavn beholdes bokstaver, sifre, `_` og `-`. Alle andre tegn blir `_`.
+Navn som ikke finnes, ignoreres. Bruk `add` med en fullstendig definisjon for å opprette et verktøy.
+Oppdateringer bevarer navn og navnerom. Tilordne nye skjemaer eller alternativer for å erstatte
 dem i stedet for å mutere nestede verdier. Ugyldige oppdateringer logges og lar den forrige definisjonen være intakt.
 
 {/* prettier-ignore */}

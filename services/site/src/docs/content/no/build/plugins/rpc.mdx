@@ -68,8 +68,18 @@ og feil. Den støtter to skjemaformater:
 
 ### Inndata og utdata
 
-Hver metode kan definere et `input`-skjema for argumentet og et `output`-skjema
-for returverdien. Utelat en av dem hvis metoden ikke godtar eller returnerer en verdi.
+Hver metode må ha et `input`-skjema for argumentet og et `output`-skjema for returverdien. Hvis metoden ikke tar imot
+et argument eller ikke har noen returverdi, bruker du et skjema for et tomt objekt. Send inn `{}` når metoden ikke
+tar imot et argument, og returner `{}` når den ikke har noen returverdi:
+
+```ts
+refresh: {
+  input: { type: "object", additionalProperties: false },
+  output: { type: "object", additionalProperties: false },
+}
+```
+
+En metode som returnerer `undefined`, feiler med `rpc.invalid_output`.
 
 ```ts
 search: {
@@ -109,8 +119,8 @@ Feilnavn som begynner med `rpc.`, er reservert av OpenCode.
 
 ### Hendelser
 
-Legg hendelser til det overordnede `events`-kartet. Hver hendelse har et skjema for dataene
-som sendes til abonnenter.
+Legg hendelsene i `events` på øverste nivå. Hver hendelse har et skjema for dataene som sendes til abonnenter.
+Feltet er obligatorisk. Bruk `events: {}` hvis RPC-en ikke har noen hendelser.
 
 Hendelsesdata må være et objekt. Bruk et tomt objektskjema når det ikke finnes data:
 

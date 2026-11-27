@@ -44,8 +44,9 @@ JSON Schema og Standard Schema støttes også.
 
 ### Inndata og utdata
 
-Bruk `input` for metodeargumentet og `output` for returverdien. Utelat
-en av dem når det ikke finnes en verdi.
+Bruk `input` for metodeargumentet og `output` for returverdien. Begge er obligatoriske. Bruk `Schema.Struct({})` hvis
+metoden ikke tar imot et argument eller ikke har noen returverdi. Send inn `{}` når metoden ikke tar imot et argument,
+og returner `{}` når den ikke har noen returverdi.
 
 ```ts
 search: {
@@ -66,7 +67,8 @@ errors: {
 
 ### Hendelser
 
-Legg hendelser til det overordnede `events`-kartet. Hendelsesdata må være et objekt.
+Legg hendelsene i `events` på øverste nivå. Hendelsesdata må være et objekt. Feltet er obligatorisk. Bruk `events: {}`
+hvis RPC-en ikke har noen hendelser.
 
 ```ts
 events: {

@@ -1,6 +1,6 @@
 ---
 title: "TUI"
-description: "Start en økt og lær de vanligste oppgavene i terminalgrensesnittet."
+description: "Start en økt og bruk de vanligste funksjonene i terminalgrensesnittet."
 ---
 
 Kjør OpenCode fra prosjektet ditt, skriv en forespørsel og trykk **Enter**.
@@ -16,6 +16,20 @@ Explain how authentication works in this project
 
 Trykk **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** eller **Ctrl+J** for en ny linje. Mens OpenCode arbeider, styrer **Enter** den aktive økten; trykk **Ctrl+X** og deretter **Enter** for å legge prompten i kø til senere.
 
+## Prosjekter og kataloger
+
+OpenCode søker etter filer og kjører terminalkommandoer i katalogen du starter det fra. Kataloger i samme
+Git-repositorium, inkludert worktrees, hører til ett prosjekt. En katalog uten versjonskontroll er et eget prosjekt.
+
+Oppgi en katalog for å starte i et annet prosjekt:
+
+```bash
+opencode ~/code/another-project
+```
+
+Trykk **Ctrl+O** for å åpne nylige økter og prosjekter. Marker et prosjekt og trykk **Right** for å se prosjektets
+worktrees. Trykk **Ctrl+N** i den listen for å opprette et nytt worktree.
+
 ## Kontekst
 
 Skriv `@` for å søke etter en fil, og velg den for å legge filen ved i prompten. Fortsett å skrive etter `@` for å begrense resultatene.
@@ -24,7 +38,7 @@ Skriv `@` for å søke etter en fil, og velg den for å legge filen ved i prompt
 Review @src/auth.ts for error handling problems
 ```
 
-Du kan ta med en linje eller et område etter banen.
+Du kan angi en linje eller et linjeområde etter filstien.
 
 ```text
 Explain @src/auth.ts#20-45
@@ -68,7 +82,14 @@ Trykk **Ctrl+X** og deretter **A** for å velge en agent, eller kjør `/agents`.
 
 ## Økter
 
-Trykk **Ctrl+X** og deretter **N** for å starte en ny økt. Trykk **Ctrl+X** og deretter **L**, eller kjør `/sessions`, for å gå tilbake til en eksisterende økt; **Ctrl+O** åpner nylige økter og prosjekter sammen.
+Hver økt er en egen samtale med sin egen historikk og katalog. Kjør `/new` eller trykk **Ctrl+X** og deretter **N**
+for å starte en ny økt for en annen oppgave. Tidligere økter er fortsatt tilgjengelige. Nye økter starter i katalogen
+du startet OpenCode fra. Hvis [`session.new_location`](/cli/config#sessions) er satt til `inherit`, starter de i
+katalogen til den gjeldende økten i stedet.
+
+Trykk **Ctrl+X** og deretter **L**, eller kjør `/sessions`, for å gå tilbake til en eksisterende økt. I den listen
+veksler **Ctrl+A** mellom økter i gjeldende katalog og økter i alle prosjekter. Med **Ctrl+O** åpner du en felles
+liste over nylige økter og prosjekter.
 
 Faner er slått på som standard. Bruk **Ctrl+Tab** og **Ctrl+Shift+Tab** for å bevege deg mellom dem, **Ctrl+X** og deretter **W** for å lukke én, og **Ctrl+Shift+T** for å gjenåpne den sist lukkede fanen.
 

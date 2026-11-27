@@ -101,6 +101,7 @@ med OpenCode Go, selv om vi ikke garanterer at de vil fortsette å fungere i fre
 | **jcode**         | Oppdater til **v0.81.6 eller nyere**, som inneholder [rettelsen for øktheadere](https://github.com/1jehuang/jcode/issues/1167).                                                                                                  |
 | **OpenClaw**      | Gjeldende bygg sender `x-opencode-session` på Go-forespørsler. Pålogging i nettleser krever **2026.11.7 eller nyere**.                                                                                                           |
 | **Kilo Code CLI** | Bygg som inneholder [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752), gjenoppretter OpenCode-øktheadere. Rettelsen gjelder CLI, ikke VS Code-utvidelsen. Se [sak #13723](https://github.com/Kilo-Org/kilocode/issues/13723). |
+| **MiMo Code**     | Oppdater til **v0.1.16 eller nyere**. Fra og med denne versjonen sender klienten `x-opencode-session` med forespørsler til Go ([PR #2655](https://github.com/XiaomiMiMo/MiMo-Code/pull/2655)). |
 
 ### Klienter med kjente problemer
 
@@ -112,7 +113,6 @@ undersøkte. De lenkede rapportene følger rettelser og midlertidige løsninger.
 | **DeepSeek Harness**    | Øktinformasjon kommer fram på enkelte modellstier, men mangler på andre. Vi gjenkjenner standardheaderen. Det som gjenstår, er at alle adapterne sender den. [Diskusjon #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495). |
 | **GitHub Copilot Chat** | Automatisk støtte for øktheadere er forespurt i [VS Code-sak #334186](https://github.com/microsoft/vscode/issues/334186).                                                                                                                          |
 | **Kimi Code**           | Forespørselen om øktheadere i [sak #3506](https://github.com/MoonshotAI/kimi-code/issues/3506) ble lukket som ikke planlagt.                                                                                                                           |
-| **MiMo Code**           | [Sak #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) er lukket, og [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327) ble lukket uten å bli slått sammen.                                                                            |
 
 ## Bruksgrenser
 
@@ -126,7 +126,7 @@ Bytte av modell trekker fra samme kvote. Når du når en grense, kan du bruke en
 [Extra Usage](#usage-beyond-limits) for å bruke Console-kredittene dine til du har kvote tilgjengelig igjen.
 
 Den [månedlige grensen](https://opencode.ai/console/go#limits) for en modell viser hvor mye abonnementet dekker hvis du bare bruker den modellen hele måneden.
-Bruker du for eksempel $1,50 på en modell med en grense på $15, har du brukt 10 % av månedskvoten. Det samme gjelder $6 på en modell
+Bruker du for eksempel $1.50 på en modell med en grense på $15, har du brukt 10 % av månedskvoten. Det samme gjelder $6 på en modell
 med en grense på $60. Go oppgir i [`opencode.allowance`](/console/api/inference#cost) hvor mye av kvoten hver forespørsel brukte.
 
 [Tokenpriser](https://opencode.ai/console/go#pricing) er per 1M tokens og er de samme for Go, Go Plus og Go Teams.
@@ -148,7 +148,7 @@ typisk Go-bruk. Faktisk bruk varierer.
 
 Du kan følge med på bruken din i [Console](https://opencode.ai/console) eller via [endepunktet for bruk](#usage).
 
-<Callout type="tip">If you reach the usage limit, you can continue using the free models.</Callout>
+<Callout type="tip">Når du når bruksgrensen, kan du fortsatt bruke de gratis modellene.</Callout>
 
 Bruksgrensene kan endres etter hvert som vi lærer av tidlig bruk og tilbakemeldinger.
 
@@ -350,7 +350,7 @@ Se om hver modell [trener på dataene dine](https://opencode.ai/console/go#priva
 
 Men pålitelig tilgang med lav latenstid kan være vanskelig. Leverandørene varierer i kvalitet og tilgjengelighet.
 
-<Callout type="tip">We tested a select group of models and providers that work well with OpenCode.</Callout>
+<Callout type="tip">Vi testet et utvalg modeller og leverandører som fungerer godt med OpenCode.</Callout>
 
 For å løse dette gjorde vi et par ting:
 

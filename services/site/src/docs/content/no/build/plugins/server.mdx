@@ -193,7 +193,7 @@ const agents = await ctx.agent.list()
 const build = await ctx.agent.get({ agentID: "build" })
 ```
 
-Registrer en transform for å inspisere, oppdatere, fjerne eller velge standardagenten.
+Registrer en transform for å inspisere, opprette, oppdatere eller fjerne agenter, eller for å velge standardagenten.
 
 ```ts
 await ctx.agent.transform((editor) => {
@@ -205,6 +205,19 @@ await ctx.agent.transform((editor) => {
     agent.description = "Builds features and fixes bugs"
   })
   editor.remove("legacy")
+})
+```
+
+Registrer en ny agent med `editor.update`. Hvis ID-en allerede finnes, redigeres den agenten. Ellers opprettes en ny
+agent med `Agent.Info.default(id)` før callback-funksjonen kjøres.
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
 })
 ```
 
@@ -1040,9 +1053,9 @@ await ctx.tool.reload()
 
 Bruk `list()` og `get()` for å inspisere verktøyene som er i redigereren nå. Verktøy har en `id` som inneholder det effektive navnet,
 og `get()` returnerer `undefined` når den ID-en ikke finnes. Bruk `update` og `remove` med det effektive verktøynavnet,
-inkludert navnerommet (`acme_greeting` ovenfor). Punktum i
-navnerom og tegn som ikke støttes i verktøynavn, blir `_`. Manglende navn ignoreres; oppretting av et verktøy krever
-`add` med en komplett definisjon. Oppdateringer bevarer navn og navnerom. Tilordne nye skjemaer eller alternativer for å erstatte
+inkludert navnerommet (`acme_greeting` ovenfor). Punktum i navnerom blir `_`. I verktøynavn beholdes bokstaver, sifre,
+`_` og `-`. Alle andre tegn blir `_`. Navn som ikke finnes, ignoreres. Bruk `add` med en fullstendig definisjon for å
+opprette et verktøy. Oppdateringer bevarer navn og navnerom. Tilordne nye skjemaer eller alternativer for å erstatte
 dem i stedet for å mutere nestede verdier. Ugyldige oppdateringer logges og lar den forrige definisjonen være intakt.
 
 ```ts

@@ -9,7 +9,7 @@ headings normally are. Use « » only when quoting prose; keep straight quotes i
 - Products: OpenCode, Zen, Go, Go Plus, Go Teams, OpenCode Models, OpenCode Console, Console, Desktop, Anomaly.
 - Provider, model, company, app, tool and package names.
 - Acronyms: MCP, LSP, SDK, CLI, API, TUI, JSON, ZDR, SSO, SCIM, OIDC, SAML, ACP, RPC, GUI, HTTP, URL, IDE, LLM, PTY.
-- `harness`, `skill`/`skills`, `token`/`tokens`, `prompt`, `endpoint`, `gateway`, `loopback`, `bundle`, `checkpoint`,
+- `harness`, `skill`/`skills`, `token`/`tokens`, `prompt`, `endpoint`, `gateway`, `loopback`, `bundle`, `worktree`/`worktrees`,
   `commit`, `branch`, `plugin`/`plugins`, `hook`, `Code Mode`, `composer`, `Diff`, `AGENTS.md`, `SKILL.md`.
 - Commands, flags, config keys and values, environment variables, paths, code, URLs.
 - Bold UI labels quoted from the product, such as **Settings › Billing**, **Add credits**, **Extra Usage**.
@@ -68,3 +68,4 @@ headings normally are. Use « » only when quoting prose; keep straight quotes i
 | policy statement | policyregel, regel | Use regel in a policy context, not setning. |
 | prompt cache / prompt caching | promptcache / caching av prompter | Cache is distinct from the reserved context buffer in compaction. |
 | origin (CORS) | origin | Use English when referring to the browser security concept. |
+| scope (OAuth) | tilgangsomfang | Keep `scope` as an identifier. |

@@ -142,3 +142,27 @@ passordet kan endres.
 ```bash
 $ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
 ```
+
+`opencode service set password` gjelder bare den administrerte bakgrunnstjenesten. `opencode serve` leser
+`OPENCODE_PASSWORD`. Hvis variabelen ikke er satt, opprettes et nytt passord ved hver oppstart.
+
+### Docker
+
+For hver versjon publiseres et image på `ghcr.io/anomalyco/opencode` med versjonsnummeret som tagg. Imaget kjører
+`opencode` som startkommando. Den starter TUI-en som standard, så legg til `serve`. Bind serveren til `0.0.0.0`.
+Standardadressen `127.0.0.1` kan bare nås fra innsiden av containeren.
+
+```bash
+$ docker run -d --name opencode -p 4096:4096 \
+    -e OPENCODE_PASSWORD="a-long-secret" \
+    -e ANTHROPIC_API_KEY \
+    -v opencode-data:/root/.local/share/opencode \
+    -v opencode-config:/root/.config/opencode \
+    -v "$PWD":/workspace -w /workspace \
+    ghcr.io/anomalyco/opencode:<version> serve --hostname 0.0.0.0 --port 4096
+```
+
+- Angi `OPENCODE_PASSWORD` for å beholde samme passord etter omstart.
+- Monter datakatalogen `/root/.local/share/opencode`. Den inneholder databasen med øktene dine. Ellers går øktene
+  tapt når containeren fjernes. Monter konfigurasjonskatalogen `/root/.config/opencode` for å beholde den globale konfigurasjonen.
+- Sjekk at serveren er klar med `curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info`.

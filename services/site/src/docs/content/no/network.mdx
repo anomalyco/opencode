@@ -3,19 +3,19 @@ title: "Nettverk"
 description: "Konfigurer proxyer, egendefinerte sertifikatmyndigheter og klientsertifikater."
 ---
 
-Angi de vanlige proxyvariablene og unnta loopback-adresser fra proxyen. OpenCode bruker lokale HTTP-tilkoblinger mellom CLI-en og
-bakgrunnstjenesten, så du må unnta disse adressene hvis du har satt opp en proxy i CLI-miljøet.
+Angi de vanlige proxyvariablene. OpenCode bruker lokale HTTP-tilkoblinger mellom CLI-en og bakgrunnstjenesten.
+CLI-en sørger automatisk for at trafikk til loopback-adresser går utenom proxyen.
 
 ```bash
 export HTTP_PROXY=http://proxy.example.com:8080
 export HTTPS_PROXY=http://proxy.example.com:8080
-export NO_PROXY=localhost,127.0.0.1,::1
 
 opencode
 ```
 
-`HTTP_PROXY` håndterer HTTP-destinasjoner og `HTTPS_PROXY` håndterer HTTPS-destinasjoner. Selve proxy-URLen kan bruke `http://`
-for begge variablene. `NO_PROXY` er en kommaseparert liste over verter og adresser som kobles direkte til.
+Bruk `HTTP_PROXY` for HTTP og `HTTPS_PROXY` for HTTPS. Selve proxy-URL-en kan bruke `http://` i begge variablene.
+Ved oppstart legger CLI-en `127.0.0.1`, `localhost` og `::1` til i både `NO_PROXY` og `no_proxy`. Bruk `NO_PROXY`
+til å angi en kommaseparert liste over andre verter du må koble til direkte.
 
 ## Tjeneste
 
@@ -25,15 +25,15 @@ Lagre variablene i den administrerte tjenestekonfigurasjonen, så brukes de samm
 ```bash
 opencode service set env HTTP_PROXY http://proxy.example.com:8080
 opencode service set env HTTPS_PROXY http://proxy.example.com:8080
-opencode service set env NO_PROXY localhost,127.0.0.1,::1
+opencode service set env NO_PROXY llm.company.example
 opencode service start
 ```
 
-Endring av en administrert miljøvariabel stopper den kjørende tjenesten. `service start` starter den igjen med det nye miljøet.
-Behold også `NO_PROXY` i shell-miljøet til CLI-en hvis proxyen er satt der, fordi administrerte tjenestevariabler gjelder serverprosessen,
-ikke CLI-prosessen.
+Hvis du endrer en administrert miljøvariabel, stopper tjenesten. Kjør `service start` for å starte den igjen med det
+nye miljøet. Shell-miljøet til CLI-en trenger egne proxyvariabler. Variablene du angir for tjenesten, gjelder
+serverprosessen, ikke CLI-prosessen. Både klienten og serveren unntar loopback-adresser automatisk.
 
-Fjern en varig variabel med `service unset env`:
+Fjern en lagret variabel med `service unset env`:
 
 ```bash
 opencode service unset env HTTPS_PROXY
@@ -48,8 +48,8 @@ Prosentkod tegn som `@`, `:` og `/` i både brukernavnet og passordet.
 export HTTPS_PROXY='http://user:p%40ssword@proxy.example.com:8080'
 ```
 
-For bakgrunnstjenesten, gjør hele URLen varig. Verdien lagres i den private tjenestekonfigurasjonen og
-vises av `opencode service get env`, så ikke del denne utdataen.
+Lagre hele URL-en i konfigurasjonen for bakgrunnstjenesten. `opencode service get env` viser verdien fra den private
+tjenestekonfigurasjonen, så ikke del utdataene fra kommandoen.
 
 ```bash
 opencode service set env HTTPS_PROXY 'http://user:p%40ssword@proxy.example.com:8080'
@@ -65,7 +65,7 @@ export NODE_EXTRA_CA_CERTS=/etc/company/ca.pem
 opencode --standalone
 ```
 
-Gjør filbanen varig for bakgrunnstjenesten, og start den deretter på nytt:
+Lagre filstien i konfigurasjonen for bakgrunnstjenesten, og start tjenesten på nytt:
 
 ```bash
 opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
@@ -89,7 +89,7 @@ Løs det på én av to måter:
 
 - Utelat `opencode.ai` og `*.opencode.ai` fra HTTPS-skanning i antivirusinnstillingene. Legg også til leverandørens API-vert,
   for eksempel `api.anthropic.com`, hvis du kobler direkte til en leverandør.
-- Eksporter sertifikatet til sertifikatmyndigheten som brukes til inspeksjon, som en PEM-fil. Bruk `NODE_EXTRA_CA_CERTS` for å klarere sertifikatet, som vist i
+- Eksporter sertifikatet fra sertifikatmyndigheten som brukes til inspeksjon, som en PEM-fil. Bruk `NODE_EXTRA_CA_CERTS` for å angi at OpenCode skal stole på sertifikatet, som vist i
   [Sertifikater](#certificates).
 
 ## Klientsertifikater
@@ -132,7 +132,6 @@ prosessene.
 ```bash
 HTTP_PROXY=http://proxy.example.com:8080 \
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode --standalone
 ```
 
@@ -140,7 +139,6 @@ Bruk samme mønster for en forgrunnsserver:
 
 ```bash
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode serve
 ```
 

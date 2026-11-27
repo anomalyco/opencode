@@ -36,6 +36,19 @@ OpenCode legger til `$schema` når det oppretter eller migrerer denne filen. Gyl
 
 Ukjente innstillinger ignoreres. Behold `$schema`, slik at editoren markerer ugyldige verdier.
 
+### Eldre `tui.json`
+
+V1 lagret innstillingene for terminalklienten i `tui.json`. V2 leser filen én gang for å migrere innstillingene. Den
+brukes ikke som reserve for innstillinger som mangler i `cli.json`:
+
+- Hvis `cli.json` mangler, oppretter CLI-en filen med innstillingene den støtter fra den globale `tui.json` i samme katalog,
+  og de lagrede preferansene fra `kv.json` i katalogen for tilstandsdata.
+- Når `cli.json` finnes, ignorerer CLI-en `tui.json`. Senere endringer i den gamle filen har ingen effekt, og du kan
+  beholde eller slette den.
+- Hvis du sletter `cli.json`, kjøres migreringen på nytt ved neste oppstart.
+- Migreringen endrer eller sletter aldri de gamle filene.
+- CLI-en leser bare den globale `tui.json`. Den migrerer verken prosjektlokale `tui.json`-filer eller `tui.jsonc`.
+
 ## Inline-konfigurasjon
 
 Angi `OPENCODE_CLI_CONFIG_CONTENT` for å bruke CLI-innstillinger fra inline-JSON:

@@ -240,8 +240,10 @@ katalogen, antar OpenCode:
 
 OpenCode gjenkjenner `text`, `regex` og `lark`. Andre formatnavn fra models.dev ignoreres uten å droppe modellen eller verktøyene. Hvis en proxy foran en katalogmodell avviser fri form-verktøy, angi `capabilities.freeform` til `[]` på den modellen.
 
-Dette er reserveantakelser, ikke oppdagede egenskaper. Angi nøyaktige `capabilities`- og `limit`-verdier når de er kjent;
-eksplisitte verdier erstatter reservene. Legg til `disabled: true` for å skjule en modell fra den tilgjengelige katalogen:
+Dette er verdier OpenCode antar, ikke egenskaper det har oppdaget. Angi de riktige verdiene for `capabilities` og `limit`
+hvis du kjenner dem. Verdiene du angir, erstatter de antatte. Automatisk komprimering bruker `limit.input`, men aldri
+mer enn `limit.context`. Se [Kontekstvindu](/compaction#window). Legg til `disabled: true` for å skjule en modell i katalogen
+over tilgjengelige modeller:
 
 ```jsonc title="opencode.jsonc"
 {
