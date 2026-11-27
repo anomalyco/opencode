@@ -586,10 +586,11 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
   const result = {
     role: "assistant" as const,
     content: (() => {
-      if (content.some((part) => part.cache_control !== undefined)) return content
       const text = content.map((part) => part.text).join("")
       // Strict OpenAI-compatible APIs reject `content: ""` next to tool calls, so an empty turn sends null.
+      // This also covers an empty text part that carries cache_control.
       if (text === "" && toolCalls.length > 0) return null
+      if (content.some((part) => part.cache_control !== undefined)) return content
       return text
     })(),
     ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
