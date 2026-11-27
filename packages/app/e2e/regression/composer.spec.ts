@@ -559,7 +559,7 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
   })
 
   const control = page.locator('[data-action="composer-model"]')
-  await expect(control).toHaveText("Alpha")
+  await expect(control).toHaveText("AlphaFree")
   await view.editor.fill("Keep my selected model")
 
   catalog.current = provider(beta)
@@ -589,7 +589,7 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
       data: {},
     },
   ])
-  await expect(control).toHaveText("Alpha")
+  await expect(control).toHaveText("AlphaFree")
   await expect(page.getByRole("button", { name: "Choose model variant", exact: true })).toHaveText("high")
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(1)
@@ -612,7 +612,7 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
     .getByRole("dialog", { name: "Select model" })
     .getByRole("button", { name: "Beta Free", exact: true })
     .click()
-  await expect(control).toHaveText("Beta")
+  await expect(control).toHaveText("BetaFree")
   await view.editor.fill("Use the replacement I chose")
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(2)
@@ -664,8 +664,8 @@ test("an existing session's model never shows a fallback while its agent loads",
   const agentLoaded = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/agent")
   agents.resolve()
   await agentLoaded
-  await expect(control).toHaveText("Alpha")
-  expect(await page.evaluate(() => [...(window.__chipTexts ?? [])])).toEqual(["Alpha"])
+  await expect(control).toHaveText("AlphaFree")
+  expect(await page.evaluate(() => [...(window.__chipTexts ?? [])])).toEqual(["AlphaFree"])
 })
 
 test("a send pressed while the Location's plugins activate waits, Esc cancels it, and it sends once catalogs load", async ({
@@ -736,7 +736,7 @@ test("an opened session in another Location names its model from a loaded catalo
 
   const control = page.locator('[data-action="composer-model"]')
   await page.goto(sessionHref("ses_warm_here"))
-  await expect(control).toHaveText("Alpha")
+  await expect(control).toHaveText("AlphaFree")
 
   const held = await holdRoute(
     page,
@@ -747,7 +747,7 @@ test("an opened session in another Location names its model from a loaded catalo
   try {
     await page.locator(`[data-slot="vertical-tabs"] a[href="${sessionHref("ses_warm_there", SERVER)}"]`).click()
     await held.arrived
-    await expect(control).toHaveText("Beta")
+    await expect(control).toHaveText("BetaFree")
     await expect(page.getByRole("button", { name: "Choose model variant" })).toHaveText("high")
     const painted = await control.elementHandle()
 
@@ -772,7 +772,7 @@ test("an opened session in another Location names its model from a loaded catalo
     await Promise.all(loaded)
     await expect(page.getByRole("dialog")).toBeVisible()
     // The loaded selection keeps the same chip instead of replacing it.
-    await expect(control).toHaveText("Beta")
+    await expect(control).toHaveText("BetaFree")
     expect(await painted?.evaluate((element) => element.isConnected)).toBe(true)
   } finally {
     held.release()

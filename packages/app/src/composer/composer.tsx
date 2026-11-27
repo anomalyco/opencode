@@ -1,6 +1,7 @@
 import { Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
+import { Badge } from "@opencode/ui/badge"
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
@@ -12,6 +13,8 @@ import { DialogSelectModel, ModelSelectorDrawer } from "@/providers/models/selec
 import { DialogSelectModelUnpaid } from "@/providers/models/unpaid"
 import { formatKeybind, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
+import { useUsageFormat } from "@/usage/format"
+import type { ModelBadge } from "@/usage/limits"
 import type { ComposerModel } from "./model"
 import type { ComposerModelLabel } from "./model-label"
 import {
@@ -77,6 +80,7 @@ export function Composer(props: {
             loading={props.model.model.loading}
             preview={!!props.model.model.preview}
             paid={props.model.model.paid}
+            badge={(props.model.model.preview ?? props.model.model).badge}
             title={language.t("command.model.choose")}
             keybind={command.keybindParts("model.choose")}
             model={props.model.model.selection}
@@ -94,6 +98,7 @@ function ComposerModelControl(props: {
   loading: boolean
   preview: boolean
   paid: boolean
+  badge?: ModelBadge
   title: string
   keybind: string[]
   model: ComposerModel["model"]["selection"]
@@ -105,6 +110,17 @@ function ComposerModelControl(props: {
   const shouldAnimate = createMemo<boolean>((previous) => previous ?? (props.loading && !props.preview))
   const mobile = createMediaQuery("(max-width: 767px)")
   const dialog = useDialog()
+  const language = useLanguage()
+  const format = useUsageFormat()
+
+  const badge = () => {
+    const value = props.badge
+
+    if (!value) return
+    if (value.kind === "free") return language.t("model.tag.free")
+
+    return language.t("usage.budget.left", { amount: format.money(value.left, "auto") })
+  }
 
   const open = (detail: number) => {
     if (!props.paid) return props.onUnpaidClick()
@@ -172,6 +188,7 @@ function ComposerModelControl(props: {
         </Show>
         <bdi class="min-w-0 truncate">{props.label.model}</bdi>
       </span>
+      <Show when={badge()}>{(label) => <Badge class="shrink-0">{label()}</Badge>}</Show>
       <span class="-ml-0.5 -mr-1 flex shrink-0">
         <Icon name="chevron-down" />
       </span>

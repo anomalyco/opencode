@@ -822,7 +822,7 @@ test("a variant picked on a worktree draft stays with the session it starts, eve
   await expect(pending.message.locator('[data-slot="user-message-text"]')).toHaveText(text)
   await expect(variant).toHaveText("high")
   await page.reload()
-  await expect(composer.locator('[data-action="composer-model"]')).toHaveText("Pending Model")
+  await expect(composer.locator('[data-action="composer-model"]')).toHaveText("Pending ModelFree")
   await expect(variant).toHaveText("high")
 })
 
@@ -1530,7 +1530,7 @@ for (const row of [
     expect((await listed).ok()).toBe(true)
     const composer = page.locator('[data-component="composer"]')
     const send = composer.getByRole("button", { name: "Send", exact: true })
-    await expect(composer.locator('[data-action="composer-model"]')).toHaveText("Accent Model")
+    await expect(composer.locator('[data-action="composer-model"]')).toHaveText("Accent ModelFree")
     await view.editor.fill("Inspect this fixture workspace.")
     await expect(send).toBeEnabled()
     await expectBackground(send, "icon-button-contrast")
