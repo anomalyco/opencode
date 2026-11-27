@@ -1,5 +1,6 @@
 import path, { dirname, join, type PlatformPath } from "path"
 import { realpathSync } from "fs"
+import { fileURLToPath } from "url"
 import { lookup } from "mime-types"
 import { Context, Effect, FileSystem, Layer, Schema } from "effect"
 import type { PlatformError } from "effect/PlatformError"
@@ -254,6 +255,26 @@ export namespace FSUtil {
       .replace(/^\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
       .replace(/^\/cygdrive\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
       .replace(/^\/mnt\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
+  }
+
+  /**
+   * Expand a leading `~`, `~/` and, on Windows, `~\` to `home`. Anything else, including `~user`, is returned unchanged.
+   * Joins with the rules of the platform `home` belongs to, so a Windows home still joins with `\` when read on POSIX.
+   */
+  export function expandHome(input: string, home: string) {
+    if (input === "~") return home
+    if (!input.startsWith("~/") && !(process.platform === "win32" && input.startsWith("~\\"))) return input
+    return (path.posix.isAbsolute(home) ? path.posix : path.win32).join(home, input.slice(2))
+  }
+
+  /**
+   * `fileURLToPath`, also reading the four-slash UNC form `file:////server/share/...` (RFC 8089 E.3.2) on Windows.
+   * Bun would otherwise decode it to `\server\share\...`, a path on the current drive.
+   */
+  export function fileUrlPath(url: URL) {
+    if (process.platform === "win32" && url.host === "" && /^\/\/[^/]/.test(url.pathname))
+      return fileURLToPath(`file:${url.pathname}`)
+    return fileURLToPath(url)
   }
 
   export const ignoredDirectories = ["node_modules", ".git", ".venv", "venv", "__pycache__"]

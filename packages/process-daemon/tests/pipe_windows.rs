@@ -316,6 +316,19 @@ fn reports_ordered_output_and_exit_code_without_a_terminal() {
 }
 
 #[test]
+fn passes_the_quotes_of_a_cmd_command_through() {
+    let service = TerminalService::default();
+    let (info, file) = start(&service, |file| {
+        cmd(r#"echo "hello world"&if "a b"=="a b" echo same"#, file)
+    });
+    assert_eq!(
+        run(&service, info.id, &file).output,
+        "\"hello world\"\r\nsame\r\n"
+    );
+    service.terminate(info.id).unwrap();
+}
+
+#[test]
 fn fast_exit_without_output_is_reported() {
     let service = TerminalService::default();
     let (info, file) = start(&service, |file| cmd("exit /b 3", file));

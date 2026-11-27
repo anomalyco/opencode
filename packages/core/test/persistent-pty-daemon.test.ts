@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises"
 import net from "node:net"
 import path from "node:path"
 import { Effect, Fiber } from "effect"
+import { TestClock } from "effect/testing"
 import { makeDaemonTransport } from "../src/persistent-pty/daemon"
 import { frame, listen, pong, temporaryDirectory, terminal, writeRegistration } from "./fixture/persistent-pty-daemon"
 import { it } from "./lib/effect"
@@ -285,6 +286,98 @@ it.live("stops a discovered inherited daemon when adoption fails", () =>
     expect(shutdowns).toBe(1)
   }),
 )
+
+it.effect("replaces a daemon that stops answering, without replaying the request whose reply was lost", () =>
+  Effect.gen(function* () {
+    const { root, directory } = yield* temporaryRuntime()
+    const socketPath = path.join(directory, "daemon.sock")
+    // Stands in for the wedged daemon's process, which the transport stops.
+    const wedged = yield* Effect.acquireRelease(
+      Effect.sync(() => spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"])),
+      (child) => Effect.sync(() => child.kill()),
+    )
+    const exited = new Promise<void>((resolve) => wedged.once("exit", () => resolve()))
+    const received: unknown[] = []
+    let answering = true
+    yield* listen(socketPath, (_socket, request) => {
+      received.push(request.op)
+      if (answering && request.op === "ping") return { ...pong, pid: wedged.pid }
+      // From the first request on, it accepts connections and never answers, as in #65175.
+      answering = false
+      return undefined
+    })
+    yield* Effect.promise(() => writeRegistration(directory, socketPath, "test", "test", wedged.pid))
+    let spawns = 0
+    const daemon = yield* makeDaemonTransport(root, "daemon", () => {
+      spawns++
+      return Promise.reject(new Error("no opencode-pty binary"))
+    })
+
+    const creating = yield* daemon.request({ op: "create" }, true).pipe(Effect.flip, Effect.forkScoped)
+    yield* live(() => received.includes("create"))
+    yield* TestClock.adjust("5 seconds")
+    yield* live(() => received.filter((op) => op === "ping").length === 2)
+    yield* TestClock.adjust("5 seconds")
+    expect(yield* Fiber.join(creating)).toMatchObject({ kind: "response", message: "opencode-pty request timed out" })
+    yield* Effect.promise(() => exited)
+
+    // The next request starts a fresh daemon instead of waiting on the wedged one again.
+    expect((yield* Effect.flip(daemon.request({ op: "list" }, true))).kind).toBe("spawn")
+    expect(spawns).toBe(1)
+    expect(received.filter((op) => op === "create" || op === "list")).toEqual(["create"])
+  }),
+)
+
+it.effect("keeps a daemon that answers a ping after one lost reply", () =>
+  Effect.gen(function* () {
+    const { root, directory } = yield* temporaryRuntime()
+    const socketPath = path.join(directory, "daemon.sock")
+    let creates = 0
+    yield* listen(socketPath, (_socket, request) => {
+      if (request.op === "ping") return pong
+      if (request.op === "create") creates++
+      return creates === 1 ? undefined : { type: "ok" }
+    })
+    yield* Effect.promise(() => writeRegistration(directory, socketPath))
+    const daemon = yield* makeDaemonTransport(root, "daemon")
+
+    const creating = yield* daemon.request({ op: "create" }, true).pipe(Effect.flip, Effect.forkScoped)
+    yield* live(() => creates === 1)
+    yield* TestClock.adjust("5 seconds")
+    expect((yield* Fiber.join(creating)).kind).toBe("response")
+    expect(yield* daemon.request({ op: "create" }, true)).toEqual({ type: "ok" })
+    expect(creates).toBe(2)
+  }),
+)
+
+it.effect("does not start a daemon again for a minute after it failed to start", () =>
+  Effect.gen(function* () {
+    const { root } = yield* temporaryRuntime()
+    let spawns = 0
+    const daemon = yield* makeDaemonTransport(root, "daemon", () => {
+      spawns++
+      return Promise.reject(new Error("no opencode-pty binary"))
+    })
+
+    expect((yield* Effect.flip(daemon.request({ op: "list" }, true))).kind).toBe("spawn")
+    expect((yield* Effect.flip(daemon.request({ op: "list" }, true))).kind).toBe("spawn")
+    expect(spawns).toBe(1)
+    yield* TestClock.adjust("1 minute")
+    yield* Effect.flip(daemon.request({ op: "list" }, true))
+    expect(spawns).toBe(2)
+  }),
+)
+
+// Waits in real time for what a real socket delivers, while the test clock holds the transport's timeouts.
+function live(ready: () => boolean) {
+  return TestClock.withLive(
+    Effect.gen(function* () {
+      const deadline = Date.now() + 10_000
+      while (!ready() && Date.now() < deadline) yield* Effect.sleep(10)
+      expect(ready()).toBeTrue()
+    }),
+  )
+}
 
 function poll(ready: () => boolean) {
   return Effect.gen(function* () {

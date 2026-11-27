@@ -1,4 +1,4 @@
-import { encodeFilePath, getFilename } from "@opencode/util/path"
+import { fileUrl, getFilename } from "@opencode/util/path"
 import { parseSessionMention } from "@opencode/util/session-mention"
 import { serializePrompt } from "./prompt-parts"
 import type { FileSelection } from "@/workspaces/files/model"
@@ -140,7 +140,7 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
     const path = absolute(input.sessionDirectory, attachment.path)
 
     return {
-      uri: attachment.url ?? `file://${encodeFilePath(path)}${fileQuery(attachment.selection)}`,
+      uri: attachment.url ?? `${fileUrl(path)}${fileQuery(attachment.selection)}`,
       mime: attachment.mime ?? "text/plain",
       name: attachment.filename ?? getFilename(attachment.path),
       description: attachment.description,
@@ -160,7 +160,7 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
     parseCommentMentions(comment).flatMap((path) => {
       if (input.existingMentions && !input.existingMentions.has(path)) return []
 
-      const uri = `file://${encodeFilePath(absolute(input.sessionDirectory, path))}`
+      const uri = fileUrl(absolute(input.sessionDirectory, path))
 
       if (used.has(uri)) return []
       used.add(uri)
@@ -185,7 +185,7 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
     }
 
     const path = absolute(input.sessionDirectory, item.path)
-    const uri = `file://${encodeFilePath(path)}${fileQuery(item.selection)}`
+    const uri = `${fileUrl(path)}${fileQuery(item.selection)}`
     const comment = item.comment?.trim()
 
     if (!comment && used.has(uri)) return []

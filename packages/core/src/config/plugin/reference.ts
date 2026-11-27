@@ -8,6 +8,7 @@ import { Effect } from "effect"
 import { Config } from "../../config.js"
 import { Reference } from "../../reference.js"
 import { AbsolutePath } from "../../schema.js"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Location } from "../../location.js"
 import { ConfigEntryObserver } from "./entry-observer.js"
@@ -57,11 +58,11 @@ function validAlias(name: string) {
 
 function local(entry: ConfigReference.Entry): entry is string | ConfigReference.Local {
   return typeof entry === "string"
-    ? entry.startsWith(".") || entry.startsWith("/") || entry.startsWith("~")
+    ? // On Windows `path.isAbsolute` also accepts `C:\...`, `D:/...` and `\\server\share`, which would otherwise read as SCP remotes.
+      entry.startsWith(".") || entry.startsWith("~") || path.isAbsolute(entry)
     : "path" in entry
 }
 
 function localPath(directory: string, home: string, value: string) {
-  if (value.startsWith("~/")) return path.join(home, value.slice(2))
-  return path.isAbsolute(value) ? value : path.resolve(directory, value)
+  return path.resolve(directory, FSUtil.expandHome(value, home))
 }

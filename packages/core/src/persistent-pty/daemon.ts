@@ -2,10 +2,12 @@ import { spawn } from "node:child_process"
 import { readFile } from "node:fs/promises"
 import net from "node:net"
 import path from "node:path"
-import { Cause, Data, Duration, Effect, Schema, Semaphore } from "effect"
+import { Cause, Clock, Data, Duration, Effect, Schema, Semaphore } from "effect"
 import type { Handoff } from "@opencode/schema/persistent-pty"
 
 const ProtocolVersion = 9
+// How long, in ms, a daemon that failed to start is not started again.
+const START_RETRY_AFTER = 60_000
 const MaxFrameBytes = 8 * 1024 * 1024
 
 const Lifecycle = Schema.Union([
@@ -333,6 +335,23 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       ),
     )
 
+  // A failed start is remembered for a while: until then a request that would start the daemon fails at once with the
+  // same error, so its caller falls back right away instead of waiting out another start on every call.
+  let failedStart: { readonly error: DaemonError; readonly until: number } | undefined
+  const startOnce = Effect.fnUntraced(function* () {
+    const now = yield* Clock.currentTimeMillis
+    if (failedStart && now < failedStart.until) return yield* Effect.fail(failedStart.error)
+    return yield* start().pipe(
+      Effect.tapError((error) =>
+        Clock.currentTimeMillis.pipe(
+          Effect.map((now) => {
+            failedStart = { error, until: now + START_RETRY_AFTER }
+          }),
+        ),
+      ),
+    )
+  })
+
   const abandon = () => {
     owner?.socket.destroy()
     owner = undefined
@@ -349,7 +368,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
         const found = yield* discover().pipe(
           Effect.catch((error) => {
             // Starting the same incompatible binary again would only fail again.
-            if (shouldStart && error.kind === "connect") return incompatible ? Effect.fail(incompatible) : start()
+            if (shouldStart && error.kind === "connect") return incompatible ? Effect.fail(incompatible) : startOnce()
             return Effect.fail(error)
           }),
         )
@@ -376,10 +395,31 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     withRegistration(shouldStart, (current) => oneShot(current, value)),
   )
 
+  // A lost reply is never replayed: the request may have run. But a daemon that no longer answers a ping either is
+  // wedged, and every later request would time out against it the same way until the server restarts. Stop it, so
+  // the next request starts a fresh one.
+  const probe = Effect.fnUntraced(function* () {
+    const current = registration
+    if (!current) return
+    const failed = yield* oneShot(current, { op: "ping" }).pipe(
+      Effect.as(undefined),
+      Effect.catch((error) => Effect.succeed(error)),
+    )
+    if (!failed || registration !== current) return
+    if (failed.kind === "connect") {
+      registration = undefined
+      return
+    }
+    yield* Effect.logWarning("opencode-pty stopped answering; replacing it", { pid: current.pid })
+    abandon()
+    yield* Effect.try(() => process.kill(current.pid)).pipe(Effect.ignore)
+  })
+
   const request = Effect.fn("PersistentPty.daemon.request")(function* (value: object, shouldStart = false) {
     return yield* attempt(value, shouldStart).pipe(
       Effect.catch((error) => {
         if (error.kind === "registration") return attempt(value, shouldStart)
+        if (error.kind === "response") return probe().pipe(Effect.andThen(Effect.fail(error)))
         if (error.kind !== "connect") return Effect.fail(error)
         registration = undefined
         if (!shouldStart) return Effect.fail(error)

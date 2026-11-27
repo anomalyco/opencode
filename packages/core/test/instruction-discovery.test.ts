@@ -310,6 +310,8 @@ describe("ConfigInstructionPlugin.Plugin", () => {
         const homeFile = path.join(tmp.path, "home.md")
         const noteTop = path.join(tmp.path, "notes", "guide.md")
         const noteNested = path.join(tmp.path, "notes", "projects", "memory.md")
+        // `~\` is a home path only on Windows.
+        const backslash = process.platform === "win32" ? [path.join(tmp.path, "backslash.md")] : []
         const remote = "https://example.test/instructions.md"
         const requests: string[] = []
         return Effect.gen(function* () {
@@ -325,6 +327,7 @@ describe("ConfigInstructionPlugin.Plugin", () => {
               fs.writeFile(homeFile, "home"),
               fs.writeFile(noteTop, "note top"),
               fs.writeFile(noteNested, "note nested"),
+              fs.writeFile(path.join(tmp.path, "backslash.md"), "backslash"),
             ])
           })
 
@@ -340,6 +343,7 @@ describe("ConfigInstructionPlugin.Plugin", () => {
               `Instructions from: ${homeFile}\nhome`,
               `Instructions from: ${noteTop}\nnote top`,
               `Instructions from: ${noteNested}\nnote nested`,
+              ...backslash.map((file) => `Instructions from: ${file}\nbackslash`),
               `Instructions from: ${remote}\nremote`,
             ].join("\n\n"),
           )
@@ -361,6 +365,7 @@ describe("ConfigInstructionPlugin.Plugin", () => {
                 absolute,
                 "~/home.md",
                 "~/notes/**/*.md",
+                "~\\backslash.md",
                 remote,
                 "missing.md",
                 "https://example.test/missing.md",

@@ -28,6 +28,8 @@ import { ConfigNormalize } from "@opencode/core/config/normalize"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { EventManifest } from "@opencode/schema/event-manifest"
 import { Workspace } from "@opencode/schema/workspace"
+import { Session } from "@opencode/schema/session"
+import { PersistentPty } from "@opencode/core/persistent-pty"
 import { host } from "./plugin/host"
 import { initRepo } from "./fixture/git"
 import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
@@ -61,7 +63,15 @@ function worktreeLayer(
   workspaceID?: Workspace.ID,
 ) {
   return AppNodeBuilder.build(
-    LayerNode.group([Worktree.node, WorktreeStrategies.node, Git.node, FSUtil.node, Location.node, Global.node]),
+    LayerNode.group([
+      Worktree.node,
+      WorktreeStrategies.node,
+      Git.node,
+      FSUtil.node,
+      Location.node,
+      Global.node,
+      PersistentPty.node,
+    ]),
     [
       Database.node.replace(Layer.succeed(Database.Service, database)),
       Bus.node.replace(Layer.succeed(Bus.Service, bus)),
@@ -410,6 +420,34 @@ describe("Worktree", () => {
       expect(created.directory).toBe(abs(path.join(targetParent, "target")))
       yield* worktree.remove({ directory: created.directory, force: false })
       yield* worktree.remove({ directory: source.directory, force: false })
+    }),
+  )
+
+  it.live("ends the terminals started in a worktree before removing it", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktree = yield* fixtureWorktree()
+      const pty = yield* PersistentPty.Service
+      yield* Effect.addFinalizer(() => pty.shutdown().pipe(Effect.ignore))
+      const created = yield* worktree.create({ name: "terminal" })
+      yield* Effect.promise(() => fs.mkdir(path.join(created.directory, "src")))
+      const terminal = (cwd: string) =>
+        pty.create(Session.ID.make("ses_worktree_terminal"), {
+          cwd,
+          args: [],
+          title: "shell",
+          env: Object.fromEntries(
+            Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+          ),
+        })
+      yield* terminal(path.join(created.directory, "src"))
+      const outside = yield* terminal(input.sourceDirectory)
+
+      // On Windows the terminal's working directory would fail the delete after git had unregistered the worktree.
+      yield* worktree.remove({ directory: created.directory, force: false })
+
+      expect(yield* Effect.promise(() => fs.stat(created.directory).then(() => true, () => false))).toBe(false)
+      expect((yield* pty.list()).map((item) => item.id)).toEqual([outside.id])
     }),
   )
 
@@ -884,7 +922,10 @@ describe("Worktree", () => {
       expect(third.directory).toBe(abs(path.join(input.root.path, "worktree", input.projectID.slice(0, 6), "three")))
     }),
   )
-  ;["relative", "absolute", "home"].forEach((mode) => {
+  // `~\` is a home path only on Windows; elsewhere it is an ordinary relative name.
+  const directoryModes = ["relative", "absolute", "home", "bare-home"]
+  if (process.platform === "win32") directoryModes.push("backslash-home")
+  directoryModes.forEach((mode) => {
     it.live(`resolves ${mode} global directory config from a linked checkout's subdirectory`, () =>
       Effect.gen(function* () {
         const input = yield* setup()
@@ -901,7 +942,15 @@ describe("Worktree", () => {
         })
         const project = yield* projects.resolve(nested)
         const directory =
-          mode === "relative" ? ".lane/trees" : mode === "home" ? "~/copies" : path.join(home, "absolute")
+          mode === "relative"
+            ? ".lane/trees"
+            : mode === "absolute"
+              ? path.join(home, "absolute")
+              : mode === "bare-home"
+                ? "~"
+                : mode === "backslash-home"
+                  ? "~\\copies"
+                  : "~/copies"
         yield* config.setEntries([
           new Document({
             type: "document",
@@ -922,7 +971,11 @@ describe("Worktree", () => {
           abs(
             mode === "relative"
               ? path.join(input.sourceDirectory, ".lane/trees/task")
-              : path.join(home, mode === "home" ? "copies/task" : "absolute/task"),
+              : mode === "absolute"
+                ? path.join(home, "absolute/task")
+                : mode === "bare-home"
+                  ? path.join(home, "task")
+                  : path.join(home, "copies/task"),
           ),
         )
       }),

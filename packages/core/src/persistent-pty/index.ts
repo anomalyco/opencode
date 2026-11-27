@@ -18,6 +18,7 @@ import { SessionEvent } from "@opencode/schema/session-event"
 import { Bus } from "../bus.js"
 import { Pty } from "@opencode/schema/pty"
 import { Global } from "@opencode/util/global"
+import { containsDirectory } from "@opencode/util/path"
 import { ShellSelect } from "../shell/select.js"
 import {
   makeDaemonTransport,
@@ -169,6 +170,11 @@ export interface Interface {
   readonly snapshot: (id: Pty.ID) => Effect.Effect<Snapshot, NotFoundError | UnavailableError>
   readonly read: (sessionID: Session.ID, lines?: number) => Effect.Effect<ReadResult | null, UnavailableError>
   readonly remove: (id: Pty.ID) => Effect.Effect<void, NotFoundError | UnavailableError>
+  /**
+   * Ends every terminal started in `directory` or below it, so the directory can be deleted: Windows refuses while a
+   * running process has its working directory there.
+   */
+  readonly removeWithin: (directory: string) => Effect.Effect<void, UnavailableError>
   readonly shutdown: () => Effect.Effect<void, UnavailableError>
   readonly handoff: () => Effect.Effect<Handoff | null, UnavailableError>
   /**
@@ -365,6 +371,15 @@ const makeLayer = (options: Options = {}) =>
         return undefined
       })
 
+      const removeWithin = Effect.fn("PersistentPty.removeWithin")(function* (directory: string) {
+        const terminals = (yield* list()).filter((terminal) => containsDirectory(directory, terminal.cwd))
+        yield* Effect.forEach(
+          terminals,
+          (terminal) => remove(terminal.id).pipe(Effect.catchTag("PersistentPty.NotFoundError", () => Effect.void)),
+          { discard: true },
+        )
+      })
+
       // When the prepared handoff's ticket expires; 0 when none is prepared.
       let handoffExpiresAt = 0
 
@@ -522,6 +537,7 @@ const makeLayer = (options: Options = {}) =>
         snapshot,
         read,
         remove,
+        removeWithin,
         shutdown,
         handoff,
         handoffPrepared: () => Date.now() < handoffExpiresAt,

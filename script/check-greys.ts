@@ -68,7 +68,8 @@ const entries = (
   await Promise.all(
     files.map(async (file) => {
       const source = await Bun.file(path.join(repo(), file)).text()
-      const exception = EXCEPTIONS.find(([re]) => re.test(file))?.[1]
+      // The glob yields `\` separators on Windows; the exceptions are written with `/`.
+      const exception = EXCEPTIONS.find(([re]) => re.test(file.replaceAll("\\", "/")))?.[1]
       const allowed = allowedRanges(source)
       return declarations(source).flatMap((decl) =>
         neutrals(decl.value).map((hex) => ({

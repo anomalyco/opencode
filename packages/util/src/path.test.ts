@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { encodeFilePath, getDirectory, getFilename, getFilenameTruncated, truncateMiddle } from "./path.js"
+import { fileURLToPath } from "url"
+import { encodeFilePath, fileUrl, getDirectory, getFilename, getFilenameTruncated, truncateMiddle } from "./path.js"
 
 describe("client paths", () => {
   test("reads POSIX and Windows paths with the same rules", () => {
@@ -47,6 +48,23 @@ describe("client paths", () => {
     expect(truncateMiddle("abcd", 4)).toBe("abcd")
     expect(truncateMiddle("abcd", 10)).toBe("abcd")
     expect(truncateMiddle("a", 1)).toBe("a")
+  })
+})
+
+describe("fileUrl", () => {
+  test.each([
+    ["/home/user/a b.ts", "file:///home/user/a%20b.ts"],
+    ["C:\\Users\\x\\a.ts", "file:///C:/Users/x/a.ts"],
+    ["\\\\wsl.localhost\\Ubuntu-22.04\\home\\x\\[id]\\", "file://wsl.localhost/Ubuntu-22.04/home/x/%5Bid%5D/"],
+    ["//server/share/docs/a.md", "file://server/share/docs/a.md"],
+  ] as const)("builds %p as %p", (input, expected) => {
+    expect(fileUrl(input)).toBe(expected)
+  })
+
+  // Node and Bun decode a UNC URL back to the same path only when the server is the URL's host.
+  test.skipIf(process.platform !== "win32")("round-trips a UNC path through fileURLToPath on Windows", () => {
+    const unc = "\\\\wsl.localhost\\Ubuntu-22.04\\home\\x\\[id]\\"
+    expect(fileURLToPath(fileUrl(unc))).toBe(unc)
   })
 })
 

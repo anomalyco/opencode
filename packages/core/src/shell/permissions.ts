@@ -13,6 +13,15 @@ export class UnverifiableError extends Schema.TaggedError<UnverifiableError>()("
   }
 }
 
+export class RootDeleteError extends Schema.TaggedError<RootDeleteError>()("ShellPermissions.RootDeleteError", {
+  command: Schema.String,
+  operand: Schema.String,
+}) {
+  override get message() {
+    return `Refusing to run ${this.command}: once its quoting is parsed, it recursively deletes the drive root ${this.operand}. No permission rule can allow this. In PowerShell, \\" inside a double-quoted string ends the string instead of escaping the quote; to delete a folder, use Remove-Item -LiteralPath '<folder>' -Recurse -Force.`
+  }
+}
+
 export const requests = Effect.fnUntraced(function* <E>(
   access: FileAccess.Interface,
   input: {
@@ -41,6 +50,8 @@ export const requests = Effect.fnUntraced(function* <E>(
     ]
   }
   const parsed = scanned.success
+  // Checked before any rule, so neither an allow rule nor an approval can run it.
+  if (parsed.rootDelete) return yield* new RootDeleteError(parsed.rootDelete)
   // Directory arguments are relative to the command's working directory on the same machine.
   const directories = yield* Effect.forEach(parsed.directories, (directory) =>
     access.resolve({ path: directory, base: input.target, kind: "directory" }),

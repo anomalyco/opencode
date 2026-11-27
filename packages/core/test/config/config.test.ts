@@ -1754,6 +1754,23 @@ describe("Config", () => {
     ),
   )
 
+  it.live("expands ~/ and, on Windows, ~\\ in {file:...} references", () =>
+    withTempDir((tmp) =>
+      withEnv({ OPENCODE_TEST_HOME: tmp.path }, () =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "key.txt"), "secret"))
+          const text = yield* ConfigVariable.substitute({
+            type: "virtual",
+            source: "test",
+            dir: path.join(tmp.path, "config"),
+            text: JSON.stringify({ slash: "{file:~/key.txt}", backslash: "{file:~\\key.txt}" }),
+          })
+          expect(JSON.parse(text)).toEqual({ slash: "secret", backslash: process.platform === "win32" ? "secret" : "" })
+        }),
+      ),
+    ).pipe(Effect.provide(AppNodeBuilder.build(FSUtil.node))),
+  )
+
   it.effect("keeps env values unescaped when the config already parses", () =>
     Effect.gen(function* () {
       const text = yield* ConfigVariable.substitute({

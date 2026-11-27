@@ -90,6 +90,12 @@ export function encodeFilePath(filepath: string): string {
     .join("/")
 }
 
+/** The `file:` URL of an absolute path. A UNC path's server is the URL's host: `\\host\share\a` is `file://host/share/a`. */
+export function fileUrl(filepath: string) {
+  const encoded = encodeFilePath(filepath)
+  return /^(?:\\\\|\/\/)[^\\/]/.test(filepath) ? `file:${encoded}` : `file://${encoded}`
+}
+
 const MAX_LINE_NUMBER = 1_000_000
 
 const lineHashPattern = /^#L(\d+)(?:C\d+)?(?:-L?(\d+)(?:C\d+)?)?$/i

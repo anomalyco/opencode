@@ -97,6 +97,42 @@ describe("FileSystem", () => {
     ),
   )
 
+  it.live("opens a directory the native realpath reports missing when the JS realpath resolves it", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "README.md"), "# Test"))
+        const filesystem = yield* FSUtil.Service
+        // What `realpath.native` answers for a folder on a DriveCrypt drive (#64905).
+        const cause = PlatformError.systemError({
+          _tag: "NotFound",
+          module: "FileSystem",
+          method: "realPath",
+          pathOrDescriptor: directory,
+          cause: Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
+        })
+        const entries = yield* FileSystem.Service.pipe(
+          Effect.flatMap((service) => service.list()),
+          Effect.provide(
+            LayerNode.compile(FileSystem.node, {
+              replacements: [
+                Location.node.replace(
+                  Layer.succeed(Location.Service, location({ directory: AbsolutePath.make(directory) })),
+                ),
+                FSUtil.node.replace(
+                  Layer.succeed(FSUtil.Service, {
+                    ...filesystem,
+                    realPath: (target) => (target === directory ? Effect.fail(cause) : filesystem.realPath(target)),
+                  }),
+                ),
+              ],
+            }),
+          ),
+        )
+        expect(entries.map((entry) => entry.path)).toEqual([RelativePath.make("README.md")])
+      }).pipe(Effect.provide(LayerNode.compile(FSUtil.node))),
+    ),
+  )
+
   for (const input of [
     { reason: "PermissionDenied", code: "EACCES", denied: true },
     { reason: "Unknown", code: "EPERM", denied: true },
