@@ -96,8 +96,33 @@ living on a separate `client` property.
 `ctx.location` describes the location where this plugin instance loaded. It is not the location of every session or event
 the plugin may observe. Read the session or event data when that distinction matters.
 
-The context exposes many more domains than the table lists, including catalogs, commands, integrations, MCP servers,
-references, skills, storage, VCS, worktrees, and web search. See the [complete plugin context](/build/plugins/server#api).
+The context exposes many more domains than the table lists, including commands, integrations, MCP servers, references,
+skills, storage, VCS, worktrees, and web search. See the [complete plugin context](/build/plugins/server#api).
+
+### Migrate the catalog domain
+
+Earlier plugin builds published providers and models through `ctx.catalog`. OpenCode now exposes `ctx.provider` and
+`ctx.model` as separate domains, so a plugin that calls `ctx.catalog.transform` fails to load.
+
+| Earlier catalog API | Current equivalent |
+| ------------------- | ------------------ |
+| `ctx.catalog.transform(draft => …)` | `ctx.provider.transform(editor => …)` and `ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)` | `editor.update(id, fn)` on `ctx.provider` |
+| `draft.model.update(providerID, modelID, fn)` | `editor.update(providerID, modelID, fn)` on `ctx.model` |
+| `ctx.catalog.reload()` | `ctx.provider.reload()` and `ctx.model.reload()` |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+See [Providers](/build/plugins/server#providers) and [Models](/build/plugins/server#models) for the full editor APIs.
 
 ## Register hooks in `setup`
 
