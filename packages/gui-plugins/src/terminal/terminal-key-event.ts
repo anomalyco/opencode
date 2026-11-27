@@ -6,6 +6,19 @@ export function terminalKeyInput(event: KeyboardEvent) {
   return "\x15"
 }
 
+/** Shift+PageUp, PageDown, Home and End: the scrollback moves other terminals give these keys. */
+export function terminalScrollKey(event: KeyboardEvent) {
+  if (!event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return
+
+  if (event.key === "PageUp") return "page-up"
+
+  if (event.key === "PageDown") return "page-down"
+
+  if (event.key === "Home") return "top"
+
+  if (event.key === "End") return "bottom"
+}
+
 // ghostty-web sends the raw character to the PTY for Command chords, so consume them here.
 // Returning true makes ghostty-web preventDefault, so physical KeyV/KeyC are left alone
 // (whatever character the layout gives them, e.g. RTL) so native paste and copy still run.

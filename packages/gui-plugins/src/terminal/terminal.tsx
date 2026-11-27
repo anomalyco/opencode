@@ -22,7 +22,7 @@ import {
 import type { TerminalProps } from "./props"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "./runtime-adapters"
 import { terminalLinkLabel } from "./hover-label"
-import { consumeTerminalMetaKey, terminalKeyInput, terminalLinkTarget } from "./terminal-key-event"
+import { consumeTerminalMetaKey, terminalKeyInput, terminalScrollKey, terminalLinkTarget } from "./terminal-key-event"
 import { TerminalQuote } from "./quote"
 
 type TerminalColors = {
@@ -116,7 +116,9 @@ const useTerminalUiBindings = (input: {
 
     event.preventDefault()
     event.stopPropagation()
-    input.term.paste(text)
+    // A terminal sends Enter as CR. Windows clipboards end lines with CR LF, which PowerShell reads as Enter followed by
+    // a stray line feed, so send each line break as one CR, as other terminals do.
+    input.term.paste(text.replace(/\r?\n/g, "\r"))
   }
 
   const handleTextareaFocus = () => {
@@ -472,6 +474,22 @@ export const Terminal = (props: TerminalProps) => {
 
       if (input) {
         t.input(input, true)
+
+        return true
+      }
+
+      // Programs on the alternate screen (vim, less) keep these keys; on the normal screen they move through the
+      // scrollback, as in other terminals.
+      const scroll = terminalScrollKey(event)
+
+      if (scroll && !t.wasmTerm?.isAlternateScreen()) {
+        if (scroll === "page-up") t.scrollPages(-1)
+
+        if (scroll === "page-down") t.scrollPages(1)
+
+        if (scroll === "top") t.scrollToTop()
+
+        if (scroll === "bottom") t.scrollToBottom()
 
         return true
       }
