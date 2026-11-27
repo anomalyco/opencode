@@ -30,6 +30,12 @@ pub fn fail(error: error::Error) -> u8 {
     if let Some(exit) = error.downcast_ref::<Exit>() {
         return exit.0;
     }
-    eprintln!("Error: {}", opencode_ui::terminal_text(&format!("{error:#}")));
+    let tag = match error.downcast_ref::<opencode_local::service_config::Error>() {
+        Some(opencode_local::service_config::Error::InvalidConfig { .. }) => {
+            opencode_local::service_config::INVALID_ERROR_TAG
+        }
+        _ => error.downcast_ref::<opencode_service::connect::Error>().and_then(|error| error.tag).unwrap_or("Error"),
+    };
+    eprintln!("{tag}: {}", opencode_ui::terminal_text(&format!("{error:#}")));
     1
 }

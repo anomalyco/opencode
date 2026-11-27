@@ -1908,22 +1908,19 @@ pub fn experimental_push_settings_set(
     call
 }
 
-/// `POST /api/experimental/space/:space/write` (`space.write`)
+/// `POST /api/experimental/space/write` (`space.write`)
 pub fn experimental_space_write(input: &ExperimentalSpaceWriteInput) -> Call<ExperimentalSpaceWriteOutput> {
-    let mut call = Call::new("POST", String::new(), Reply::Json, 200, &[400, 401]);
-    call.path = format!("/api/experimental/space/{}/write", call.param(&input.space));
+    let mut call = Call::new("POST", "/api/experimental/space/write".to_owned(), Reply::Json, 200, &[400, 401]);
     call.object();
     call.field("changes", &input.changes);
     call
 }
 
-/// `GET /api/experimental/space/:space` (`space.sync`)
+/// `POST /api/experimental/space/sync` (`space.sync`)
 pub fn experimental_space_sync(input: &ExperimentalSpaceSyncInput) -> Call<ExperimentalSpaceSyncOutput> {
-    let mut call = Call::new("GET", String::new(), Reply::Json, 200, &[400, 401]);
-    call.path = format!("/api/experimental/space/{}", call.param(&input.space));
-    if let Some(value) = &input.cursor {
-        call.query("cursor", value);
-    }
+    let mut call = Call::new("POST", "/api/experimental/space/sync".to_owned(), Reply::Json, 200, &[400, 401]);
+    call.object();
+    call.field("spaces", &input.spaces);
     call
 }
 
@@ -3231,18 +3228,10 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
             .cast())
         })()),
         "experimental.space.write" => Some((|| {
-            Ok(experimental_space_write(&ExperimentalSpaceWriteInput {
-                space: field(input, "space")?,
-                changes: field(input, "changes")?,
-            })
-            .cast())
+            Ok(experimental_space_write(&ExperimentalSpaceWriteInput { changes: field(input, "changes")? }).cast())
         })()),
         "experimental.space.sync" => Some((|| {
-            Ok(experimental_space_sync(&ExperimentalSpaceSyncInput {
-                space: field(input, "space")?,
-                cursor: field(input, "cursor")?,
-            })
-            .cast())
+            Ok(experimental_space_sync(&ExperimentalSpaceSyncInput { spaces: field(input, "spaces")? }).cast())
         })()),
         "experimental.space.subscribe" => Some((|| {
             Ok(experimental_space_subscribe(&ExperimentalSpaceSubscribeInput {
