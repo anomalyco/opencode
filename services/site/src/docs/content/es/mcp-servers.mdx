@@ -233,7 +233,7 @@ OpenCode se identifica ante el servidor de autorización con el primer método q
 | --- | --- |
 | Cliente prerregistrado | `oauth.client_id` está configurado. |
 | [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents) (CIMD) | El servidor de autorización admite CIMD y clientes públicos, y `oauth.redirect_uri` no está definido. |
-| [Registro dinámico de clientes](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | No se aplica ninguno de los anteriores. OpenCode registra un cliente y lo reutiliza en inicios de sesión posteriores. |
+| [Registro dinámico de clientes](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | No se aplica ninguno de los anteriores. OpenCode registra un cliente, lo reutiliza en inicios de sesión posteriores y escucha en el puerto que registró. Si ese puerto está ocupado, vuelve a registrar el cliente. |
 
 Un servidor de autorización opta por CIMD a través de sus metadatos:
 
@@ -290,8 +290,8 @@ Cuando un proveedor te da credenciales de cliente, usa los campos OAuth snake_ca
 | --- | --- |
 | `client_id` | ID de cliente prerregistrado. Tiene prioridad sobre CIMD y DCR. |
 | `client_secret` | Secreto de un cliente confidencial, enviado en el cuerpo de la solicitud de token. Omítelo para clientes públicos. |
-| `scope` | Ámbitos separados por espacios que se solicitan. Usa por defecto el ámbito que indica el servidor cuando rechaza una solicitud no autenticada. |
-| `callback_port` | Puerto de callback local de `1` a `65535`. Usa por defecto el puerto de `redirect_uri` y luego un puerto efímero disponible. |
+| `scope` | Ámbitos que se solicitan, separados por espacios. De forma predeterminada, se usa el ámbito que indica el servidor al rechazar una solicitud no autenticada. Al renovar el token, OpenCode vuelve a enviar el ámbito concedido. |
+| `callback_port` | Puerto de callback local de `1` a `65535`. Si no lo defines, se usa primero el puerto de `redirect_uri`, luego el de un cliente registrado en un inicio de sesión anterior y, en último caso, un puerto efímero disponible. |
 | `redirect_uri` | URI de loopback prerregistrada con la ruta y el puerto donde se recibe el callback local. Si la defines, se deshabilita CIMD. |
 | `auth_server_metadata_url` | URL del documento de metadatos OAuth u OpenID Connect del servidor de autorización. Defínelo cuando el servidor MCP no publique metadatos de recurso protegido que nombren su servidor de autorización. |
 

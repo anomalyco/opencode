@@ -191,7 +191,7 @@ const agents = await ctx.agent.list()
 const build = await ctx.agent.get({ agentID: "build" })
 ```
 
-Registra una transformación para inspeccionar, actualizar, eliminar o seleccionar el agente predeterminado.
+Registra una transformación para inspeccionar, crear, actualizar o eliminar agentes, o seleccionar el agente predeterminado.
 
 ```ts
 await ctx.agent.transform((editor) => {
@@ -203,6 +203,19 @@ await ctx.agent.transform((editor) => {
     agent.description = "Builds features and fixes bugs"
   })
   editor.remove("legacy")
+})
+```
+
+Registra un agente nuevo con `editor.update`. Si el ID ya existe, se modifica ese agente. Si no existe, se crea uno con
+`Agent.Info.default(id)` antes de ejecutar el callback.
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
 })
 ```
 
@@ -1038,8 +1051,9 @@ await ctx.tool.reload()
 
 Usa `list()` y `get()` para inspeccionar las herramientas que hay actualmente en el editor. Las herramientas tienen un `id` que contiene su nombre efectivo,
 y `get()` devuelve `undefined` cuando ese ID no está presente. Usa `update` y `remove` con el nombre efectivo de la herramienta,
-incluido su espacio de nombres (`acme_greeting` arriba). Los puntos en los
-espacios de nombres y los caracteres no admitidos en los nombres de herramientas se convierten en `_`. Los nombres ausentes se ignoran; crear una herramienta requiere
+incluido su espacio de nombres (`acme_greeting` en el ejemplo anterior). En los espacios de nombres, los puntos se sustituyen por `_`.
+En los nombres de herramientas se conservan las letras, los dígitos, `_` y `-`; cualquier otro carácter se sustituye por `_`.
+Los nombres que no existen se ignoran. Para crear una herramienta, usa
 `add` con una definición completa. Las actualizaciones conservan el nombre y el espacio de nombres. Asigna esquemas u opciones nuevas para sustituirlos
 en lugar de mutar valores anidados. Las actualizaciones no válidas se registran y dejan intacta la definición anterior.
 

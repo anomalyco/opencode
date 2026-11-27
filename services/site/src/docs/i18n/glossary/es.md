@@ -32,6 +32,7 @@ Neutral international Spanish for Spain and Latin America. Address the reader as
 | model | modelo | model ID → ID del modelo |
 | inference | inferencia | |
 | request | solicitud | |
+| rate limit | límite de solicitudes | Use `límite de uso` for usage limit |
 | usage / spend | uso / gasto | |
 | budget / limit / allowance | presupuesto / límite / cuota | |
 | credit / balance / top up | crédito / saldo / recargar | |
@@ -51,6 +52,8 @@ Neutral international Spanish for Spain and Latin America. Address the reader as
 | snapshot | instantánea | |
 | checkpoint | punto de control | |
 | compaction / summarize | compactación / resumir | |
+| context window / input limit | ventana de contexto / límite de entrada | Use `ventana` when unambiguous |
+| loopback / callback | loopback / callback | dirección de loopback, puerto de callback |
 | formatter | formateador | |
 | theme | tema | |
 | keybind / keybinding | atajo de teclado | |

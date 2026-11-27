@@ -96,8 +96,33 @@ estar en una propiedad `client` aparte.
 `ctx.location` describe la ubicación donde se cargó esta instancia del plugin. No es la ubicación de cada sesión o evento
 que el plugin pueda observar. Lee los datos de la sesión o del evento cuando esa distinción importe.
 
-El contexto expone muchos más dominios que los de la tabla, incluidos catálogos, comandos, integraciones, servidores MCP,
+El contexto expone muchos más dominios que los de la tabla, incluidos comandos, integraciones, servidores MCP,
 referencias, skills, almacenamiento, VCS, worktrees y búsqueda web. Consulta el [contexto completo de plugins](/build/plugins/server#api).
+
+### Migrar el dominio del catálogo
+
+Las versiones anteriores de los plugins publicaban proveedores y modelos a través de `ctx.catalog`. OpenCode ahora expone
+`ctx.provider` y `ctx.model` como dominios separados. Por eso, un plugin que llame a `ctx.catalog.transform` no se carga.
+
+| API del catálogo anterior                     | Equivalente actual                                                           |
+| --------------------------------------------- | ---------------------------------------------------------------------------- |
+| `ctx.catalog.transform(draft => …)`           | `ctx.provider.transform(editor => …)` y `ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)`               | `editor.update(id, fn)` en `ctx.provider`                                    |
+| `draft.model.update(providerID, modelID, fn)` | `editor.update(providerID, modelID, fn)` en `ctx.model`                      |
+| `ctx.catalog.reload()`                        | `ctx.provider.reload()` y `ctx.model.reload()`                             |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+Consulta [Proveedores](/build/plugins/server#providers) y [Modelos](/build/plugins/server#models) para ver las API completas de los editores.
 
 ## Registrar hooks en `setup`
 

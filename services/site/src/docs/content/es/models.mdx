@@ -239,8 +239,9 @@ está ya en el catálogo, OpenCode supone:
 
 OpenCode reconoce `text`, `regex` y `lark`. Otros nombres de formato de models.dev se ignoran sin descartar el modelo ni sus herramientas. Si un proxy delante de un modelo del catálogo rechaza las herramientas de forma libre, define `capabilities.freeform` como `[]` en ese modelo.
 
-Estas son suposiciones de reserva, no capacidades detectadas. Define valores precisos de `capabilities` y `limit` cuando los conozcas;
-los valores explícitos sustituyen a los de reserva. Agrega `disabled: true` para ocultar un modelo del catálogo disponible:
+Estos valores son suposiciones que OpenCode aplica cuando faltan datos, no capacidades detectadas. Si conoces los valores correctos, define
+`capabilities` y `limit`: los valores explícitos tienen prioridad. La compactación automática usa `limit.input` sin superar `limit.context`; consulta
+[Ventana](/compaction#window). Agrega `disabled: true` para ocultar un modelo del catálogo disponible:
 
 ```jsonc title="opencode.jsonc"
 {

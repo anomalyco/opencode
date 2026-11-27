@@ -112,6 +112,36 @@ grep 'role=server' ~/.local/share/opencode/log/opencode.log
 grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
 ```
 
+## Exportar telemetría
+
+OpenCode puede enviar sus registros y trazas a un colector de OpenTelemetry o a un backend de APM que acepte OTLP a través de HTTP. Define
+la URL base del colector, sin ruta:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer example-token"
+export OTEL_RESOURCE_ATTRIBUTES="team=platform,host.name=dev-laptop"
+opencode
+```
+
+| Variable                      | Comportamiento                                                                                                 |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | URL base. Los registros se envían a `<endpoint>/v1/logs` y las trazas a `<endpoint>/v1/traces`. Si no se define, se desactiva la exportación. |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | Encabezados `key=value` separados por comas que se envían en cada exportación, como una clave de API. |
+| `OTEL_RESOURCE_ATTRIBUTES`    | Atributos `key=value` codificados para URL y separados por comas que se agregan a cada registro. Si una entrada tiene un formato incorrecto, se ignoran todas. |
+
+Cada registro incluye también `service.name` (`opencode`), `service.version`, `deployment.environment.name` (el canal de
+lanzamiento), `opencode.client` y `opencode.run`, que coincide con el ID de ejecución que aparece en el archivo de registro.
+
+El servicio en segundo plano se ejecuta en un proceso separado y no hereda el entorno de tu shell. Configura las variables también en ese servicio
+para obtener trazas de las llamadas a modelos y las ejecuciones de herramientas:
+
+```bash
+opencode service set env OTEL_EXPORTER_OTLP_ENDPOINT http://localhost:4318
+opencode service set env OTEL_EXPORTER_OTLP_HEADERS "authorization=Bearer example-token"
+opencode service start
+```
+
 ## Capturar una instantánea del heap
 
 Escribe una instantánea de memoria (heap) del servidor en segundo plano en ejecución en cualquier plataforma:

@@ -118,10 +118,13 @@ Los nombres de acción de V2 son cadenas, así que los plugins pueden definir m�
 | `websearch`          | Consulta de búsqueda                                                        |
 | `generate_image` | Modelo de imagen seleccionado como `providerID/modelID`, más `#variant` cuando está definido |
 | `external_directory` | Límite canónico del directorio externo, normalmente termina en `/*`         |
-| `<server>_<tool>`    | `*` para una herramienta MCP; los caracteres no admitidos en ambos nombres se convierten en `_` |
+| `<server>_<tool>`    | `*` para una herramienta MCP; ambos nombres conservan las letras, los dígitos, `_` y `-`. Cualquier otro carácter se sustituye por `_` |
 | `opencode_list_mcp_resources` | Nombre del servidor MCP                                           |
 | `opencode_read_mcp_resource`  | `<server>:<uri>`                                                  |
 | `execute`            | `*`; un deny elimina Code Mode y lista sus herramientas directamente, mientras las herramientas anidadas aplican sus reglas |
+
+Las acciones de MCP conservan los guiones. Por eso, las herramientas de un servidor llamado `mcp-atlassian` coinciden con `mcp-atlassian_*`, no con
+`mcp_atlassian_*`.
 
 Por ejemplo, permite una skill y deniega todas las demás:
 

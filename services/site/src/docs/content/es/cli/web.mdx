@@ -143,3 +143,27 @@ se puede cambiar la contraseña.
 ```bash
 $ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
 ```
+
+`opencode service set password` solo se aplica al servicio gestionado en segundo plano. `opencode serve` lee
+`OPENCODE_PASSWORD`. Si no está definida, genera una contraseña nueva cada vez que se inicia.
+
+### Docker
+
+Cada versión publica una imagen en `ghcr.io/anomalyco/opencode` con su número de versión como etiqueta. El punto de entrada de la imagen es
+`opencode`, que inicia la TUI, así que pásale `serve`. Configura el servidor para que escuche en `0.0.0.0`: solo se puede acceder a la dirección
+predeterminada, `127.0.0.1`, desde dentro del contenedor.
+
+```bash
+$ docker run -d --name opencode -p 4096:4096 \
+    -e OPENCODE_PASSWORD="a-long-secret" \
+    -e ANTHROPIC_API_KEY \
+    -v opencode-data:/root/.local/share/opencode \
+    -v opencode-config:/root/.config/opencode \
+    -v "$PWD":/workspace -w /workspace \
+    ghcr.io/anomalyco/opencode:<version> serve --hostname 0.0.0.0 --port 4096
+```
+
+- Define `OPENCODE_PASSWORD` para conservar la misma contraseña al reiniciar.
+- Monta el directorio de datos, `/root/.local/share/opencode`. Contiene la base de datos con tus sesiones. Si no lo montas, las perderás
+  al eliminar el contenedor. Monta el directorio `/root/.config/opencode` para conservar tu configuración global.
+- Comprueba que el servidor está listo con `curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info`.

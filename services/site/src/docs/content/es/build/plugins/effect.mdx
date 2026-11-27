@@ -1035,8 +1035,9 @@ sin cambiar su orden; no vuelve a ejecutar el efecto del plugin.
 Las herramientas de Effect aceptan la misma [declaración de entrada en formato libre](/build/plugins/server#freeform-tool-input) que las herramientas Promise. Si el modelo no declara que admite ese formato, la herramienta sigue recibiendo un objeto como entrada.
 
 Las herramientas tienen un `id` que contiene su nombre efectivo, y `get()` devuelve `undefined` cuando ese ID no está presente. Usa
-`update` y `remove` con el nombre efectivo de la herramienta, incluido su espacio de nombres (`acme_greeting` arriba). Los puntos en los
-espacios de nombres y los caracteres no admitidos en los nombres de herramientas se convierten en `_`. Los nombres ausentes se ignoran; crear una herramienta requiere
+`update` y `remove` con el nombre efectivo de la herramienta, incluido su espacio de nombres (`acme_greeting` en el ejemplo anterior). En los
+espacios de nombres, los puntos se sustituyen por `_`. En los nombres de herramientas se conservan las letras, los dígitos, `_` y `-`; cualquier
+otro carácter se sustituye por `_`. Los nombres que no existen se ignoran. Para crear una herramienta, usa
 `add` con una definición completa. Las actualizaciones conservan el nombre y el espacio de nombres. Asigna esquemas u opciones nuevas para sustituirlos
 en lugar de mutar valores anidados. Las actualizaciones no válidas se registran y dejan intacta la definición anterior.
 

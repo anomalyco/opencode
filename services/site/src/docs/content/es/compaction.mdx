@@ -102,6 +102,29 @@ Agrega `compaction` a cualquier [archivo de configuración de OpenCode](/config)
 - Un número de tokens como `20000` también funciona. El mismo número es una parte grande de una ventana pequeña y una parte pequeña de una grande.
 - Un número de tokens al menos tan grande como la ventana del modelo se ignora y se aplica el valor predeterminado.
 
+### Ventana
+
+La ventana es el límite de entrada del modelo (`limit.input`), sin superar su límite de contexto (`limit.context`). Si el modelo solo tiene
+uno de los dos, se usa ese. Si no tiene ninguno, no hay compactación automática: OpenCode compacta una vez cuando el
+proveedor rechaza una solicitud por ser demasiado larga.
+
+Si cambias los límites en la configuración, solo se sustituyen los campos que definas. Si el catálogo define ambos límites, aumentar solo
+`limit.context` deja la ventana en el límite de entrada del catálogo. Por eso, define también `limit.input`:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "limit": { "context": 1050000, "input": 1000000 },
+        },
+      },
+    },
+  },
+}
+```
+
 ## Modelo
 
 De forma predeterminada, OpenCode escribe el resumen él mismo, usando el modelo de la sesión. Define

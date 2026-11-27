@@ -16,6 +16,20 @@ Explain how authentication works in this project
 
 Pulsa **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** o **Ctrl+J** para insertar un salto de línea. Mientras OpenCode trabaja, pulsa **Enter** para reorientar la sesión activa o **Ctrl+X** y luego **Enter** para dejar el prompt en cola.
 
+## Proyectos y directorios
+
+OpenCode busca archivos y ejecuta comandos de shell en el directorio desde el que lo inicias. Los directorios del mismo repositorio
+de Git, incluidos sus worktrees, pertenecen a un único proyecto. Un directorio sin control de versiones es un proyecto independiente.
+
+Indica un directorio para iniciar OpenCode en otro proyecto:
+
+```bash
+opencode ~/code/another-project
+```
+
+Pulsa **Ctrl+O** para abrir la lista de sesiones y proyectos recientes. Con un proyecto seleccionado, pulsa **Right** para ver sus worktrees y,
+desde ahí, **Ctrl+N** para crear uno.
+
 ## Contexto
 
 Escribe `@` para buscar un archivo y selecciónalo para adjuntarlo al prompt. Sigue escribiendo después de `@` para acotar los resultados.
@@ -68,7 +82,9 @@ Pulsa **Ctrl+X** y luego **A** para elegir un agente, o ejecuta `/agents`. Pulsa
 
 ## Sesiones
 
-Pulsa **Ctrl+X** y luego **N** para iniciar una sesión nueva. Pulsa **Ctrl+X** y luego **L**, o ejecuta `/sessions`, para volver a una sesión existente; **Ctrl+O** abre juntas las sesiones y los proyectos recientes.
+Cada sesión es una conversación independiente con su propio historial y directorio. Ejecuta `/new` o pulsa **Ctrl+X** y luego **N** para iniciar una sesión para otra tarea. Las sesiones anteriores siguen disponibles. Las nuevas sesiones se abren en el directorio desde el que iniciaste OpenCode o, si [`session.new_location`](/cli/config#sessions) está definido como `inherit`, en el directorio de la sesión actual.
+
+Pulsa **Ctrl+X** y luego **L**, o ejecuta `/sessions`, para volver a una sesión existente. En esa lista, **Ctrl+A** alterna entre las sesiones del directorio actual y las de todos los proyectos. **Ctrl+O** muestra juntas las sesiones y los proyectos recientes.
 
 Las pestañas están habilitadas de forma predeterminada. Usa **Ctrl+Tab** y **Ctrl+Shift+Tab** para moverte entre ellas, **Ctrl+X** y luego **W** para cerrar una, y **Ctrl+Shift+T** para reabrir la última pestaña cerrada.
 

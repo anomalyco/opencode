@@ -67,9 +67,18 @@ y errores. Admite dos formatos de esquema:
 
 ### Entrada y salida
 
-Cada método puede definir un esquema `input` para su argumento y un esquema `output`
-para su valor de retorno. Omite el primero si el método no acepta ningún valor y
-el segundo si no devuelve ninguno.
+Cada método requiere un esquema `input` para su argumento y un esquema `output`
+para su valor de retorno. Si el método no recibe o no devuelve datos,
+usa un esquema de objeto vacío para el valor que falte. Pasa `{}` en la llamada o devuelve `{}`, según corresponda:
+
+```ts
+refresh: {
+  input: { type: "object", additionalProperties: false },
+  output: { type: "object", additionalProperties: false },
+}
+```
+
+Si un método devuelve `undefined`, falla con `rpc.invalid_output`.
 
 ```ts
 search: {
@@ -110,7 +119,7 @@ Los nombres de error que empiezan por `rpc.` están reservados por OpenCode.
 ### Eventos
 
 Agrega eventos al mapa `events` de nivel superior. Cada evento tiene un esquema para los datos
-que se envían a los suscriptores.
+que se envían a los suscriptores. El mapa es obligatorio. Si el RPC no tiene eventos, usa `events: {}`.
 
 Los datos del evento deben ser un objeto. Usa un esquema de objeto vacío cuando no haya datos:
 

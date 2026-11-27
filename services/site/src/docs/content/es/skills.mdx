@@ -48,7 +48,7 @@ OpenCode busca automáticamente en estas ubicaciones:
 | Proyecto                  | `.opencode/skills`                     |
 | Compatibilidad de proyecto | `.claude/skills`, `.agents/skills`    |
 
-Para los orígenes de proyecto, OpenCode busca desde el directorio actual hasta la raíz del proyecto e incluye los directorios que coinciden en cada nivel.
+Para las fuentes de skills de un proyecto, OpenCode busca desde el directorio actual hasta la raíz del sistema de archivos e incluye los directorios que coinciden en cada nivel.
 
 Cada origen puede contener cualquiera de las dos formas:
 
@@ -174,10 +174,10 @@ OpenCode selecciona las skills por ID. Si dos fuentes definen `git-release`, Ope
 Los orígenes se registran de menor a mayor precedencia:
 
 1. Skills integradas
-2. `.claude/skills`, primero el global y luego desde el ancestro más lejano hacia el directorio actual
-3. `.agents/skills`, primero el global y luego desde el ancestro más lejano hacia el directorio actual
+2. `.claude/skills`, primero el global y luego desde el directorio superior más lejano hasta el actual
+3. `.agents/skills`, primero el global y luego desde el directorio superior más lejano hasta el actual
 4. `~/.config/opencode/skills`
-5. `.opencode/skills` del proyecto, desde la raíz del proyecto hacia el directorio actual
+5. `.opencode/skills` del proyecto, desde el directorio superior más lejano hasta el actual
 6. Entradas explícitas de configuración `skills`, en prioridad de configuración y orden del array
 
 Evita los ID duplicados a menos que quieras sustituir una skill anterior.
