@@ -4504,11 +4504,12 @@ export type SkillUpdated = _Event1<"skill.updated", any>
 export type SnapshotID = string
 
 export type SpaceChange = {
+    space: SpaceName,
     key: SpaceKey,
     value: SpaceValue?,
 }
 
---- Covers this write and every change before it.
+--- Covers this write and every change of the space before it.
 export type SpaceCursor = string
 
 export type SpaceCursor1 = string
@@ -5531,19 +5532,25 @@ export type Client = {
                 } },
             }) -> (nil, string?),
             sync: (input: {
-                space: string,
-                cursor: string?,
-            }) -> (SpacePage?, string?),
+                spaces: { {
+                    space: SpaceName,
+                    cursor: SpaceCursor1?,
+                } },
+            }) -> ({
+                pages: { SpacePage },
+            }?, string?),
             unsubscribe: (input: {
                 stream: string,
                 spaces: { SpaceName },
             }) -> (nil, string?),
             write: (input: {
-                space: string,
                 changes: { SpaceChange },
             }) -> ({
-                revision: SpaceRevision,
-                cursor: SpaceCursor,
+                spaces: { {
+                    space: SpaceName,
+                    revision: SpaceRevision,
+                    cursor: SpaceCursor,
+                } },
             }?, string?),
         },
         usage: {

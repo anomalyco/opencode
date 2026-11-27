@@ -2453,7 +2453,8 @@ export default {{ id: "example.ending", setup(api) {{
     std::fs::write(plugin.join("tui.ts"), module).unwrap();
     let open = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let asked = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let (server_gate, seen) = (open.clone(), asked.clone());
+    let answered = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (server_gate, seen, served) = (open.clone(), asked.clone(), answered.clone());
     let server = support::Fake::new(move |request| match request.path.as_str() {
         "/api/held" => {
             seen.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -2461,6 +2462,7 @@ export default {{ id: "example.ending", setup(api) {{
             while !server_gate.load(std::sync::atomic::Ordering::SeqCst) && begun.elapsed() < Duration::from_secs(20) {
                 std::thread::sleep(Duration::from_millis(2));
             }
+            served.store(true, std::sync::atomic::Ordering::SeqCst);
             (200, serde_json::json!({ "held": true }))
         }
         "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
@@ -2501,10 +2503,8 @@ export default {{ id: "example.ending", setup(api) {{
     assert_eq!(scripts.overflow_bytes(), 0, "the overflow drained");
     until(h, "the fetch settled", || std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n')));
     open.store(true, std::sync::atomic::Ordering::SeqCst);
-    for _ in 0..200 {
-        h.app.advance(Duration::from_millis(2));
-        std::thread::sleep(Duration::from_millis(1));
-    }
+    // The fetch the deactivation refused is answered at last: it settles once, and its late answer appends nothing.
+    until(h, "the server answered the refused fetch", || answered.load(std::sync::atomic::Ordering::SeqCst));
     pipe.settle();
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "settled Err\n", "settled once, refused");
 }
@@ -2559,6 +2559,10 @@ export default {{ id: "example.quota", setup(api) {{
     assert_eq!(bytes, 32_779);
     h.tui.keymap.dispatch("quota.stall", None);
     until(h, "the JS host stalled", || stalled.exists());
+    // The JS host's input stays queued, as for one that reads nothing: a wake that moved the overflow into the queue
+    // would leave the read room before it is pushed, and its refusal would depend on the OS socket's buffer and on
+    // when the writer thread ran (overflow-read).
+    scripts.hold_input(true);
     // A backlog that leaves the overflow less room than the read.
     for _ in 0..10_000 {
         if scripts.overflow_bytes() > (64 << 10) - bytes / 2 {
@@ -2574,6 +2578,7 @@ export default {{ id: "example.quota", setup(api) {{
     until(h, "the read was refused", || pipe::crossed().refused_sends > refused);
     // A failed read holds nothing, as one past the frame: what is left is the neighbour's.
     assert_eq!(limits::held(id).content, null, "the refused read is still charged");
+    scripts.hold_input(false);
     std::fs::write(&gate, "").unwrap();
     pipe.settle();
     // The queue drained: the read goes again, and holds its room.

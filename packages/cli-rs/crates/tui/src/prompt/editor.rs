@@ -1152,6 +1152,12 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
         ])
         .target(target)
         .priority(1),
+        // Down also toggles the subagent picker; keep it moving through a multi-line prompt when history doesn't claim it.
+        KeymapLayer::default()
+            .enabled(when(|prompt, _| history::above_last_row(&prompt.textarea)))
+            .target(target)
+            .priority(1)
+            .bindings(["input.move.down"]),
     ]
     .into_iter()
     .chain(super::shell::layers(inner, target));

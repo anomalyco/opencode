@@ -51,6 +51,11 @@ fn integrations() -> Value {
             "connections": [credential("cred_ant", "personal", Some(json!({ "status": "expired", "message": "Expired" })))],
         },
         {
+            "id": "claude-agent", "name": "Claude Agent",
+            "methods": [{ "type": "key" }],
+            "connections": [],
+        },
+        {
             "id": "github-copilot", "name": "GitHub Copilot",
             "methods": [{
                 "type": "oauth", "id": "device", "label": "Sign in with GitHub",
@@ -255,8 +260,8 @@ fn integrations_match_typescript() {
     open(&["return"], "Connected accounts", "E.17a/accounts");
     open(&["down", "return"], "Connect OpenAI", "E.17a/methods");
     open(&["down", "return", "down", "return"], "Submit", "E.17a/key");
-    open(&["down", "down", "return"], "Deployment", "E.17a/form");
-    open(&["down", "down", "return", "return"], "Waiting for authorization", "E.17a/oauth");
+    open(&["down", "down", "down", "down", "return"], "Deployment", "E.17a/form");
+    open(&["down", "down", "down", "down", "return", "return"], "Waiting for authorization", "E.17a/oauth");
     open_with("code", &["down", "return", "return"], "Authorization code", "E.17a/oauth-code");
     open_with("paste", &["down", "return", "return"], "Redirect URL", "E.17a/oauth-paste");
 }
@@ -293,7 +298,7 @@ fn an_api_key_connects_and_opens_the_provider_models() {
 fn a_rejected_key_shows_the_error_and_stays() {
     let kit = Kit::new();
     kit.connect();
-    kit.down(3);
+    kit.down(2);
     kit.app.press("return");
     kit.wait_for("Connected accounts");
     kit.down(1);
@@ -313,7 +318,7 @@ fn a_rejected_key_shows_the_error_and_stays() {
 fn oauth_sends_the_form_answer_opens_the_sink_and_completes() {
     let kit = Kit::new();
     kit.connect();
-    kit.down(2);
+    kit.down(4);
     kit.app.press("return");
     kit.wait_for("Deployment");
     kit.app.press("return");
@@ -356,7 +361,7 @@ fn oauth_sends_the_form_answer_opens_the_sink_and_completes() {
 fn closing_a_pending_oauth_cancels_it() {
     let kit = Kit::new();
     kit.connect();
-    kit.down(2);
+    kit.down(4);
     kit.app.press("return");
     kit.wait_for("Deployment");
     kit.app.press("return");
@@ -370,7 +375,7 @@ fn closing_a_pending_oauth_cancels_it() {
     assert!(!kit.tui.dialogs.is_open());
     // Escape on the form's first field cancels the connect without a request.
     kit.connect();
-    kit.down(2);
+    kit.down(4);
     kit.app.press("return");
     kit.wait_for("Deployment");
     kit.app.press("escape");

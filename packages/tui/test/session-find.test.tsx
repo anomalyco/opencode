@@ -35,6 +35,12 @@ describe("find", () => {
     expect(findPattern("Needle")?.source).toBe(findPattern("needle")?.source)
   })
 
+  test("matches a capital whose lowercase form is longer, like dotted capital I", () => {
+    expect(findRanges("Tell me about İstanbul", findPattern("İstanbul"))).toEqual([{ start: 14, end: 22 }])
+    expect(findRanges("Tell me about İstanbul", findPattern("İSTANBUL"))).toEqual([{ start: 14, end: 22 }])
+    expect(findPattern("İStanbul")?.source).toBe(findPattern("İstanbul")?.source)
+  })
+
   test("searches prompts, assistant text and compaction summaries in transcript order, not reasoning or tools", () => {
     const messages: Record<string, SessionMessageInfo> = {
       u1: { id: "u1", type: "user", text: "find the needle", time: { created: 1 } } as SessionMessageInfo,

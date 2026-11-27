@@ -58,6 +58,7 @@ import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useClient } from "../../context/client"
 import { useEditorContext } from "../../context/editor"
 import { useDialog } from "../../ui/dialog"
+import { clickedLink } from "../../ui/link"
 import { DialogSelect } from "../../ui/dialog-select"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { TodoItem } from "../../component/todo-item"
@@ -2574,8 +2575,10 @@ function UserMessage(props: { message: SessionMessageUser }) {
           onMouseOut={() => {
             setHover(false)
           }}
-          onMouseUp={() => {
+          onMouseUp={(event) => {
             if (renderer.getSelection()?.getSelectedText()) return
+            // The app opens the clicked link.
+            if (clickedLink(renderer, event)) return
             if (delivery() === "steer") {
               dialog.replace(() => (
                 <DialogSelect

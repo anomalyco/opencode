@@ -4,6 +4,8 @@ import path from "path"
 
 process.env.OPENCODE_DB = ":memory:"
 process.env.NPM_CONFIG_AUDIT = "false"
+// Git Bash exports SHELL=/usr/bin/bash. Windows tests expect the platform default shell, PowerShell.
+if (process.platform === "win32") delete process.env.SHELL
 
 // Direct `bun test` invocations bypass `packages/core/script/test.ts`.
 // Isolate home and XDG roots before any module reads them.

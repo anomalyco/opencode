@@ -11588,6 +11588,7 @@ pub type ExperimentalPushSettingsSetOutput = PushSettings;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SpaceChange {
+    pub space: SpaceName,
     pub key: SpaceKey,
     #[serde(default)]
     pub value: Option<SpaceValue>,
@@ -11596,23 +11597,34 @@ pub struct SpaceChange {
 /// Input of `Client::experimental_space_write`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalSpaceWriteInput {
-    pub space: SpaceName,
     pub changes: Vec<SpaceChange>,
 }
 
 string_type!(SpaceCursor, "`Space.Cursor`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalSpaceWriteOutput {
+pub struct ExperimentalSpaceWriteOutputSpacesItem {
+    pub space: SpaceName,
     pub revision: SpaceRevision,
     pub cursor: SpaceCursor,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceWriteOutput {
+    pub spaces: Vec<ExperimentalSpaceWriteOutputSpacesItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceSyncInputSpacesItem {
+    pub space: SpaceName,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<SpaceCursor>,
 }
 
 /// Input of `Client::experimental_space_sync`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalSpaceSyncInput {
-    pub space: SpaceName,
-    pub cursor: Option<SpaceCursor>,
+    pub spaces: Vec<ExperimentalSpaceSyncInputSpacesItem>,
 }
 
 string_type!(SpaceEpoch, "`Space.Epoch`");
@@ -11739,8 +11751,10 @@ impl SpacePage {
     }
 }
 
-/// Output of `Client::experimental_space_sync`.
-pub type ExperimentalSpaceSyncOutput = SpacePage;
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceSyncOutput {
+    pub pages: Vec<SpacePage>,
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ExperimentalSpaceSubscribeInputSpacesItem {

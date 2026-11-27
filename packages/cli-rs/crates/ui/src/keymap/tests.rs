@@ -267,3 +267,28 @@ fn a_plugin_slash_name_never_takes_another_commands() {
     assert_eq!(names("taker.run"), Some(vec!["harmless".to_owned()]));
     assert_eq!(names("whole.run"), None);
 }
+
+#[test]
+fn an_unmatched_leader_sequence_consumes_its_last_key() {
+    let tui = TuiKeymap::<u32>::new(Keybinds::defaults(), Options::default());
+    let _layer = tui
+        .layer(KeymapLayer { commands: vec![TuiCommand::inline("<leader>a", |_, _| ())], ..KeymapLayer::default() })
+        .unwrap();
+    let mut parser = Parser::standalone().unwrap();
+    let mut press = |bytes: &str| {
+        let mut out = Vec::new();
+        parser.feed(bytes.as_bytes(), Instant::now(), &mut out).unwrap();
+        out.into_iter()
+            .filter_map(|input| match input {
+                Input::Event(Event::Key(event)) => Some(tui.handle_key(&event)),
+                _ => None,
+            })
+            .last()
+            .unwrap()
+    };
+    assert_eq!(press("\x18").reason, KeyReason::SequencePending);
+    let miss = press("z");
+    assert_eq!(miss.reason, KeyReason::SequenceMiss);
+    assert!(miss.stop_propagation && miss.prevent_default);
+    assert!(!press("z").stop_propagation);
+}
