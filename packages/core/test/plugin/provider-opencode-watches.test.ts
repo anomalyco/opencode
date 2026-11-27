@@ -767,6 +767,28 @@ describe("OpencodePlugin event watches", () => {
     ),
   )
 
+  it.effect("wakes a full window for a CI failure that settles with another watch's status change", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const { host, wakes } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        for (const index of [1, 2, 3, 4, 5]) yield* deliver(console, watchEvent(session.id, `evt_${index}`))
+        yield* hold(console, host, watchEvent(session.id, "evt_ci", { kind: "workflow_run", status: "failure" }))
+        yield* TestClock.adjust("5 seconds")
+        yield* hold(
+          console,
+          host,
+          watchEvent(session.id, "evt_state", { watchID: "ew_2", kind: "state", status: "closed" }),
+        )
+        yield* TestClock.adjust(OpencodeWatches.SETTLE)
+        yield* waitUntil(Effect.sync(() => console.state.acks.flat().includes("evt_state")))
+        expect(wakes.at(-1)?.metadata?.events).toEqual(["evt_ci", "evt_state"])
+        expect(wakes.map((wake) => wake.resume)).toEqual([true, true, true, true, true, true])
+      }),
+    ),
+  )
+
   it.effect("wakes once for status changes seconds apart, once 15 seconds pass without another or 30 at most", () =>
     withConsole({}, (console) =>
       Effect.gen(function* () {
