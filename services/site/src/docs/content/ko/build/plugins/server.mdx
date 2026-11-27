@@ -178,7 +178,7 @@ const agents = await ctx.agent.list()
 const build = await ctx.agent.get({ agentID: "build" })
 ```
 
-에이전트를 조회, 업데이트 또는 제거하거나 기본 에이전트를 선택하는 변환을 등록합니다.
+에이전트를 조회, 생성, 업데이트, 제거하거나 기본 에이전트를 선택하려면 변환을 등록하세요.
 
 ```ts
 await ctx.agent.transform((editor) => {
@@ -190,6 +190,19 @@ await ctx.agent.transform((editor) => {
     agent.description = "Builds features and fixes bugs"
   })
   editor.remove("legacy")
+})
+```
+
+새 에이전트를 등록하려면 `editor.update`를 사용하세요. ID가 이미 있으면 해당 에이전트를 수정합니다.
+ID가 없으면 `Agent.Info.default(id)`로 에이전트를 생성한 뒤 콜백을 실행합니다.
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
 })
 ```
 
@@ -944,14 +957,14 @@ interface StorageScanResult {
 
 ### 도구
 
-변환 콜백 밖에서, 모든 변환이 끝난 뒤 현재 등록된 도구를 읽습니다. 각 도구에는 유효 이름이 담긴 `id`가 있습니다.
+변환 콜백 밖에서, 모든 변환이 끝난 뒤 현재 등록된 도구를 읽습니다. 각 도구의 `id`에는 최종 이름이 담깁니다.
 
 ```ts
 const tools = await ctx.tool.list()
 const read = tools.find((tool) => tool.id === "read")
 ```
 
-Promise 플러그인을 포함해 동기 변환으로 도구를 등록, 업데이트, 제거합니다. 등록이나 다시 로드 전에 외부 데이터를 로드하세요. 나중의 유효한 등록이 같은 유효 도구 이름을 재정의합니다.
+Promise 플러그인을 포함해 동기 변환으로 도구를 등록, 업데이트, 제거합니다. 등록이나 다시 로드 전에 외부 데이터를 로드하세요. 최종 도구 이름이 같으면 나중에 유효하게 등록된 정의가 이전 정의를 대체합니다.
 
 ```ts
 const registration = await ctx.tool.transform((editor) => {
@@ -1011,7 +1024,12 @@ Code Mode(`codemode: true`) 안에서는 자유 형식 도구가 문자열을 �
 await ctx.tool.reload()
 ```
 
-`list()`와 `get()`으로 현재 편집기의 도구를 검사합니다. 도구에는 유효 이름이 담긴 `id`가 있으며 해당 ID가 없으면 `get()`이 `undefined`를 반환합니다. `update`와 `remove`는 네임스페이스를 포함한 유효 도구 이름(위의 `acme_greeting`)을 사용하세요. 네임스페이스의 점과 도구 이름의 지원되지 않는 문자는 `_`가 됩니다. 없는 이름은 무시되며, 도구 생성에는 완전한 정의와 함께 `add`가 필요합니다. 업데이트는 이름과 네임스페이스를 유지합니다. 중첩 값을 변경하지 말고 새 스키마나 옵션을 할당해 교체하세요. 잘못된 업데이트는 기록되고 이전 정의는 그대로 유지됩니다.
+`list()`와 `get()`으로 편집기에 등록된 도구를 확인하세요. 도구의 `id`에는 최종 이름이 담깁니다. 해당 ID가
+없으면 `get()`이 `undefined`를 반환합니다. `update`와 `remove`에는 위의 `acme_greeting`처럼 네임스페이스를
+포함한 최종 도구 이름을 사용하세요. 네임스페이스의 점은 `_`로 바뀝니다. 도구 이름에서는 영문자, 숫자, `_`, `-`를
+제외한 문자가 `_`로 바뀝니다. 존재하지 않는 이름은 무시됩니다. 도구를 만들려면 `add`에 전체 정의를 전달하세요.
+업데이트해도 이름과 네임스페이스는 유지됩니다. 중첩된 값을 직접 수정하지 말고 새 스키마나 옵션을 할당해 교체하세요.
+잘못된 업데이트는 로그에 남고 이전 정의는 그대로 유지됩니다.
 
 ```ts
 await ctx.tool.transform((editor) => {

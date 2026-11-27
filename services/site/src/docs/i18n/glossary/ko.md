@@ -59,9 +59,11 @@ file records how Korean renders those rows and the terms the shared file leaves 
 | session | 세션 | |
 | prompt | 프롬프트 | |
 | context | 컨텍스트 | |
+| context window | 컨텍스트 윈도 | 압축 문서에서 짧게 `window`라고도 함 |
 | compaction | 압축 | Page title Compaction → 압축 |
 | summarize | 요약 | |
 | tool / tool call | 도구 / 도구 호출 | |
+| effective tool name | 최종 도구 이름 | 네임스페이스와 문자 치환을 반영한 이름 |
 | skill | 스킬 | |
 | plugin | 플러그인 | |
 | command / slash command | 명령어 / 슬래시 명령어 | |
@@ -85,6 +87,7 @@ file records how Korean renders those rows and the terms the shared file leaves 
 | proxy (network) | 프록시 | |
 | loopback | 루프백 | |
 | transcript | 대화 기록 | |
+| telemetry / trace | 텔레메트리 / 트레이스 | OpenTelemetry 관측 데이터 |
 | scrollback | 스크롤백 | |
 | bundle | 번들 | |
 | expose (API, endpoint, tool, RPC) | 제공 | Public network exposure → 노출 |

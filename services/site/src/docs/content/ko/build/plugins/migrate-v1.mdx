@@ -94,8 +94,33 @@ V2 컨텍스트는 OpenCode 클라이언트이자 플러그인 API입니다. 대
 `ctx.location`은 이 플러그인 인스턴스가 로드된 위치를 설명합니다. 플러그인이 관찰할 수 있는 모든 세션 또는 이벤트의
 위치는 아닙니다. 구분이 중요할 때는 세션이나 이벤트 데이터를 읽으세요.
 
-컨텍스트는 표에 나열된 것보다 많은 도메인을 제공합니다. 카탈로그, 명령어, 통합, MCP 서버, 참조, 스킬, 저장소,
+컨텍스트는 표에 나열된 것보다 많은 도메인을 제공합니다. 명령어, 통합, MCP 서버, 참조, 스킬, 저장소,
 VCS, 워크트리, 웹 검색 등입니다. [전체 플러그인 컨텍스트](/build/plugins/server#api)를 참고하세요.
+
+### 카탈로그 도메인 마이그레이션
+
+이전 플러그인 빌드에서는 `ctx.catalog`를 통해 제공자와 모델을 게시했습니다. 이제 OpenCode는 `ctx.provider`와
+`ctx.model`을 별도 도메인으로 제공합니다. 따라서 `ctx.catalog.transform`을 호출하는 플러그인은 로드되지 않습니다.
+
+| 이전 카탈로그 API | 현재 API |
+| --- | --- |
+| `ctx.catalog.transform(draft => …)` | `ctx.provider.transform(editor => …)` 및 `ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)` | `ctx.provider`의 `editor.update(id, fn)` |
+| `draft.model.update(providerID, modelID, fn)` | `ctx.model`의 `editor.update(providerID, modelID, fn)` |
+| `ctx.catalog.reload()` | `ctx.provider.reload()` 및 `ctx.model.reload()` |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+전체 편집기 API는 [제공자](/build/plugins/server#providers)와 [모델](/build/plugins/server#models)을 참고하세요.
 
 ## `setup`에서 훅 등록
 

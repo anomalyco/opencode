@@ -233,7 +233,7 @@ OpenCode는 해당되는 첫 번째 방법으로 인증 서버에 자신을 식�
 | --- | --- |
 | 사전 등록 클라이언트 | `oauth.client_id`가 구성된 경우. |
 | [클라이언트 ID 메타데이터 문서](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents)(CIMD) | 인증 서버가 CIMD와 공개 클라이언트를 지원하고 `oauth.redirect_uri`가 설정되지 않은 경우. |
-| [동적 클라이언트 등록](https://datatracker.ietf.org/doc/html/rfc7591)(DCR) | 위 두 경우에 해당하지 않을 때. OpenCode가 클라이언트를 등록하고 이후 로그인에서 재사용합니다. |
+| [동적 클라이언트 등록](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | 위 두 경우에 해당하지 않을 때. OpenCode가 클라이언트를 등록하고 이후 로그인에서도 같은 클라이언트와 등록한 수신 포트를 사용합니다. 해당 포트가 이미 사용 중이면 클라이언트를 다시 등록합니다. |
 
 인증 서버는 메타데이터로 CIMD를 선택합니다.
 
@@ -290,8 +290,8 @@ https://opencode.ai/oauth/opencode/client.json
 | --- | --- |
 | `client_id` | 사전 등록된 클라이언트 ID. CIMD와 DCR보다 우선합니다. |
 | `client_secret` | 기밀 클라이언트의 시크릿으로 토큰 요청 본문에 전송됩니다. 공개 클라이언트에서는 생략하세요. |
-| `scope` | 요청할 공백 구분 스코프. 서버가 인증되지 않은 요청을 거부할 때 밝히는 스코프가 기본값입니다. |
-| `callback_port` | `1`부터 `65535`까지의 로컬 콜백 포트. `redirect_uri` 포트, 그다음 사용 가능한 임시 포트가 기본값입니다. |
+| `scope` | 요청할 스코프를 공백으로 구분해 지정합니다. 기본값은 서버가 인증되지 않은 요청을 거부할 때 알려 주는 스코프입니다. OpenCode는 토큰을 갱신할 때 부여받은 스코프를 다시 보냅니다. |
+| `callback_port` | `1`부터 `65535`까지의 로컬 콜백 포트입니다. 기본값은 `redirect_uri`의 포트, 이전 로그인에서 등록한 클라이언트의 포트, 사용 가능한 임시 포트 순으로 결정됩니다. |
 | `redirect_uri` | 경로와 포트가 로컬 콜백 리스너에 도달하는 사전 등록 루프백 URI. 설정하면 CIMD가 비활성화됩니다. |
 | `auth_server_metadata_url` | 인증 서버의 OAuth 또는 OpenID Connect 메타데이터 문서 URL. MCP 서버가 인증 서버를 밝히는 보호 리소스 메타데이터를 게시하지 않을 때 설정하세요. |
 

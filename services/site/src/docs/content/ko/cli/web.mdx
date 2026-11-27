@@ -136,3 +136,28 @@ $ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
 ```bash
 $ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
 ```
+
+`opencode service set password`는 관리형 백그라운드 서비스에만 적용됩니다. `opencode serve`는 `OPENCODE_PASSWORD`의
+값을 사용합니다. 이 변수가 설정되지 않으면 시작할 때마다 새 비밀번호를 생성합니다.
+
+### Docker
+
+릴리스마다 해당 버전을 태그로 지정한 이미지를 `ghcr.io/anomalyco/opencode`에 게시합니다. 이미지의 진입점인
+`opencode`는 TUI를 시작하므로 서버를 실행하려면 `serve`를 전달하세요. 기본 주소인 `127.0.0.1`로는 컨테이너
+내부에서만 접근할 수 있으므로 `0.0.0.0`에 바인딩하세요.
+
+```bash
+$ docker run -d --name opencode -p 4096:4096 \
+    -e OPENCODE_PASSWORD="a-long-secret" \
+    -e ANTHROPIC_API_KEY \
+    -v opencode-data:/root/.local/share/opencode \
+    -v opencode-config:/root/.config/opencode \
+    -v "$PWD":/workspace -w /workspace \
+    ghcr.io/anomalyco/opencode:<version> serve --hostname 0.0.0.0 --port 4096
+```
+
+- 다시 시작해도 같은 비밀번호를 사용하려면 `OPENCODE_PASSWORD`를 설정하세요.
+- 데이터 디렉터리 `/root/.local/share/opencode`를 마운트하세요. 세션 데이터베이스가 이 디렉터리에 있으므로
+  마운트하지 않으면 컨테이너를 삭제할 때 세션도 사라집니다. 전역 설정을 유지하려면 설정 디렉터리
+  `/root/.config/opencode`도 마운트하세요.
+- `curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info`로 서버가 요청을 받을 준비가 되었는지 확인하세요.

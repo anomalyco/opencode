@@ -111,6 +111,36 @@ grep 'role=server' ~/.local/share/opencode/log/opencode.log
 grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
 ```
 
+## 텔레메트리 내보내기
+
+OpenCode는 로그와 트레이스를 OpenTelemetry 수집기나 HTTP를 통한 OTLP를 지원하는 APM 백엔드로 보낼 수 있습니다.
+수집기의 기본 URL을 설정하세요. URL에 경로는 넣지 마세요.
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer example-token"
+export OTEL_RESOURCE_ATTRIBUTES="team=platform,host.name=dev-laptop"
+opencode
+```
+
+| 변수 | 동작 |
+| --- | --- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | 기본 URL입니다. 로그는 `<endpoint>/v1/logs`로, 트레이스는 `<endpoint>/v1/traces`로 보냅니다. 이 변수를 설정하지 않으면 내보내지 않습니다. |
+| `OTEL_EXPORTER_OTLP_HEADERS` | 내보낼 때마다 전송할 헤더입니다. API 키처럼 전송할 헤더를 `key=value` 형식으로 작성하고 쉼표로 구분하세요. |
+| `OTEL_RESOURCE_ATTRIBUTES` | 모든 레코드에 추가할 URL 인코딩된 `key=value` 형식의 속성입니다. 쉼표로 구분하세요. 형식이 잘못된 항목이 하나라도 있으면 어떤 속성도 추가하지 않습니다. |
+
+모든 레코드에는 `service.name`(`opencode`), `service.version`, `deployment.environment.name`(릴리스 채널),
+`opencode.client`, `opencode.run`도 포함됩니다. 마지막 필드의 값은 로그 파일에 기록된 실행 ID와 같습니다.
+
+백그라운드 서비스는 별도 프로세스로 실행되며 현재 셸의 환경 변수를 물려받지 않습니다. 모델 호출과 도구 실행도
+추적하려면 서비스에 환경 변수를 설정하세요.
+
+```bash
+opencode service set env OTEL_EXPORTER_OTLP_ENDPOINT http://localhost:4318
+opencode service set env OTEL_EXPORTER_OTLP_HEADERS "authorization=Bearer example-token"
+opencode service start
+```
+
 ## 힙 스냅샷 캡처
 
 모든 플랫폼에서 실행 중인 백그라운드 서버의 메모리(힙) 스냅샷을 작성합니다.

@@ -421,10 +421,11 @@ await context.ui.dialog.select({
 - Escape, `clear()`, 또는 다른 대화 상자 표시는 `undefined`로 완료합니다.
 - `ctrl+n`이나 `ctrl+p`를 바인딩하지 마세요. 대화 상자가 탐색용으로 예약하며 자체 바인딩이 우선합니다.
 
-커스텀 JSX 대화 상자는 크기를 설정하고 스스로 닫을 수 있습니다.
+커스텀 JSX 대화 상자는 자체 크기를 설정하고 스스로 닫을 수 있습니다. `set`은 `show` 뒤에 호출하세요. 대화 상자를
+열면 크기가 `medium`으로 재설정되고 가운데 정렬이 해제됩니다. `medium`, `large`, `xlarge`의 너비는
+각각 60열, 88열, 116열입니다.
 
 ```tsx
-context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.show(
   () => (
     <box>
@@ -433,6 +434,7 @@ context.ui.dialog.show(
   ),
   () => console.log("closed"),
 )
+context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.clear()
 ```
 
@@ -631,8 +633,8 @@ const displayPath = context.ui.format.path(context.location?.directory ?? "/home
     "@opencode/plugin": "latest"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.6.6",
-    "@opentui/solid": ">=0.6.6",
+    "@opentui/core": ">=0.8.0",
+    "@opentui/solid": ">=0.8.0",
     "solid-js": ">=1.9.0"
   }
 }

@@ -239,7 +239,7 @@ OpenCode는 제공자 값, 모델 값, 선택한 변형 순서로 적용합니�
 
 OpenCode는 `text`, `regex`, `lark`를 인식합니다. models.dev의 다른 형식 이름은 모델이나 도구를 버리지 않고 무시합니다. 카탈로그 모델 앞의 프록시가 자유 형식 도구를 거부하면 해당 모델의 `capabilities.freeform`을 `[]`로 설정하세요.
 
-위 값은 실제 모델에서 감지한 값이 아니라 OpenCode가 가정하는 기본값입니다. 정확한 값을 알고 있다면 `capabilities`와 `limit`에 지정하세요. 직접 지정한 값이 기본값보다 우선합니다. 사용 가능한 카탈로그에서 모델을 숨기려면 `disabled: true`를 추가하세요.
+위 값은 실제 모델에서 감지한 값이 아니라 OpenCode가 가정하는 기본값입니다. 정확한 값을 알고 있다면 `capabilities`와 `limit`에 지정하세요. 직접 지정한 값이 기본값보다 우선합니다. 자동 압축에는 `limit.input`을 사용하되 `limit.context`를 넘지 않도록 제한합니다. [컨텍스트 윈도](/compaction#window)를 참고하세요. 사용 가능한 카탈로그에서 모델을 숨기려면 `disabled: true`를 추가하세요.
 
 ```jsonc title="opencode.jsonc"
 {

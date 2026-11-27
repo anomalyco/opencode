@@ -99,6 +99,7 @@ OpenCode 외에 다음 클라이언트가 OpenCode Go와 정상적으로 동작�
 | **jcode**         | **v0.81.6 이상**으로 업데이트하세요. [세션 헤더 수정](https://github.com/1jehuang/jcode/issues/1167)이 포함되어 있습니다.                                                                                                                  |
 | **OpenClaw**      | 최신 빌드는 Go 요청에 `x-opencode-session`을 보냅니다. 브라우저 로그인은 **2026.11.7 이상**이 필요합니다.                                                                                                                                   |
 | **Kilo Code CLI** | [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752)가 포함된 빌드에서 OpenCode 세션 헤더가 복원됩니다. 이 수정은 CLI에만 적용되며 VS Code 확장 프로그램에는 적용되지 않습니다. [이슈 #13723](https://github.com/Kilo-Org/kilocode/issues/13723)을 참고하세요. |
+| **MiMo Code**     | **v0.1.16 이상**으로 업데이트하세요. 이 버전부터 Go 요청에 `x-opencode-session` 헤더를 보냅니다([PR #2655](https://github.com/XiaomiMiMo/MiMo-Code/pull/2655)). |
 
 ### 알려진 문제 클라이언트
 
@@ -110,7 +111,6 @@ OpenCode 외에 다음 클라이언트가 OpenCode Go와 정상적으로 동작�
 | **DeepSeek Harness**    | 일부 모델 경로에서는 세션 정보가 도착하지만 다른 경로에서는 누락됩니다. 자체 헤더는 인식하므로, 모든 어댑터에서 보내도록 하는 작업이 남아 있습니다. [토론 #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495).                    |
 | **GitHub Copilot Chat** | [VS Code 이슈 #334186](https://github.com/microsoft/vscode/issues/334186)에서 세션 헤더 자동 지원을 요청했습니다.                                                                                                                                     |
 | **Kimi Code**           | [이슈 #3506](https://github.com/MoonshotAI/kimi-code/issues/3506)의 세션 헤더 요청은 계획되지 않음으로 종료되었습니다.                                                                                                                                 |
-| **MiMo Code**           | [이슈 #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317)은 종료되었고 [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327)은 병합 없이 종료되었습니다.                                                                                |
 
 ## 사용 한도
 

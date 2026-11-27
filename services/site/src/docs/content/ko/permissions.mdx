@@ -118,10 +118,13 @@ V2 액션 이름은 문자열이므로 플러그인이 액션을 더 정의할 �
 | `websearch`          | 검색 쿼리                                                                |
 | `generate_image` | 선택한 이미지 모델을 `providerID/modelID`로, 변형이 있으면 `#variant`를 붙임 |
 | `external_directory` | 표준 외부 디렉터리 경계. 보통 `/*`로 끝남              |
-| `<server>_<tool>`    | MCP 도구는 `*`. 두 이름의 지원되지 않는 문자는 `_`가 됨        |
+| `<server>_<tool>`    | MCP 도구는 `*`. 서버와 도구 이름 모두 영문자, 숫자, `_`, `-`는 그대로 두고 나머지 문자는 `_`로 바꿉니다. |
 | `opencode_list_mcp_resources` | MCP 서버 이름                                                    |
 | `opencode_read_mcp_resource`  | `<server>:<uri>`                                                   |
 | `execute`            | `*`. deny면 Code Mode가 제거되고 그 도구들이 직접 나열되며, 중첩 도구는 자체 규칙을 적용함 |
+
+MCP 액션 이름에는 하이픈이 유지됩니다. 예를 들어 `mcp-atlassian` 서버의 도구는 `mcp-atlassian_*` 패턴과 일치합니다.
+`mcp_atlassian_*` 패턴과는 일치하지 않습니다.
 
 예를 들어 하나의 스킬만 허용하고 나머지 스킬은 모두 거부합니다.
 
