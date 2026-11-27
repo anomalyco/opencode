@@ -1353,13 +1353,8 @@ export const dict = {
   "settings.timeline.row.width.focused": "Tập trung",
   "settings.timeline.row.width.comfortable": "Thoải mái",
   "settings.timeline.row.width.wide": "Rộng",
-  "settings.timeline.description.compact":
-    "Hiển thị tác nhân phụ riêng biệt. Nhóm hoạt động khác với chi tiết được thu gọn.",
-  "settings.timeline.description.quiet": "Hiển thị tác nhân phụ riêng biệt và nhóm các chỉnh sửa. Ẩn hoạt động khác.",
   "settings.timeline.row.foldUserMessages.title": "Thu gọn tin nhắn dài",
   "settings.timeline.row.foldUserMessages.description": "Thu gọn tin nhắn của bạn dài quá 12 dòng sau nút Đọc thêm",
-  "settings.timeline.row.turnDiffs.title": "Tệp đã thay đổi",
-  "settings.timeline.row.turnDiffs.description": "Liệt kê các tệp mỗi lượt đã thay đổi khi lượt đó kết thúc",
   "settings.timeline.category.commentary": "Bình luận",
   "settings.general.row.spellcheck.title": "Kiểm tra chính tả",
   "settings.general.row.spellcheck.description": "Gạch chân các từ sai chính tả khi gõ",
