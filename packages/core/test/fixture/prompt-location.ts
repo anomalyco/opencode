@@ -9,7 +9,7 @@ import { Skill } from "@opencode/core/skill"
 import type { Location } from "@opencode/schema/location"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { Effect, Layer, LayerMap } from "effect"
+import { Effect, Layer } from "effect"
 
 // Plain-prompt unit fixtures use virtual directories.
 export const promptLocationNode = makeGlobalNode({
@@ -18,7 +18,7 @@ export const promptLocationNode = makeGlobalNode({
     LocationServiceMap.Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
-      return yield* LayerMap.make(
+      return yield* LocationServiceMap.make(
         (_ref: Location.Ref) =>
           LayerNode.compile(LayerNode.group([PluginHooks.node, Image.node, Skill.node, Plugin.node]), {
             replacements: [
