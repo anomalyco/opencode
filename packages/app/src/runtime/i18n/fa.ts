@@ -941,6 +941,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "مدیریت مصرف در تنظیمات ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "متوجه شدم",
   "provider.connect.models.list": "مدل‌های در دسترس از ⁨{{provider}}⁩",
+  "provider.connect.models.search": "جستجوی مدل‌های ⁨{{provider}}⁩",
   "provider.connect.chatgptUsageLimit.title": "به سقف مصرف ChatGPT رسیدید",
   "provider.connect.chatgptUsageLimit.description": "مصرف و محدودیت‌های خود را در تنظیمات ChatGPT بررسی کنید.",
   "provider.connect.chatgptUsageLimit.manage": "مدیریت مصرف",

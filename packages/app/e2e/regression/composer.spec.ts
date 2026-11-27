@@ -301,7 +301,7 @@ test("the free usage limit opens the Go dialog once, swaps the composer for the 
   const connect = page.getByRole("dialog", { name: "Connect OpenCode", exact: true })
   await connect.getByRole("button", { name: "OpenCode account", exact: true }).click()
   const connected = page.getByRole("dialog", { name: "Connected to OpenCode" })
-  await connected.getByRole("combobox", { name: "Search models", exact: true }).fill("glm")
+  await connected.getByRole("combobox", { name: "Search OpenCode models", exact: true }).fill("glm")
   await connected.getByRole("option", { name: "GLM-5 Go", exact: true }).click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expectPath(page, sessionHref(sessionID))

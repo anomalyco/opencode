@@ -938,6 +938,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Ulanylyşy ChatGPT sazlamalarynda dolandyryň",
   "provider.connect.chatgptWelcome.confirm": "Düşnükli",
   "provider.connect.models.list": "{{provider}} üpjün edijisinden elýeterli modeller",
+  "provider.connect.models.search": "{{provider}} üpjün edijisiniň modellerini gözle",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT ulanyş limitine ýetildi",
   "provider.connect.chatgptUsageLimit.description": "Ulanylyşyňyzy we limitleriňizi ChatGPT sazlamalarynda barlaň.",
   "provider.connect.chatgptUsageLimit.manage": "Ulanylyşy dolandyryň",

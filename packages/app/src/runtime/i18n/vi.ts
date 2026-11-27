@@ -945,6 +945,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Quản lý mức sử dụng trong cài đặt ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "Đã hiểu",
   "provider.connect.models.list": "Mô hình khả dụng từ {{provider}}",
+  "provider.connect.models.search": "Tìm kiếm mô hình {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Đã đạt giới hạn sử dụng ChatGPT",
   "provider.connect.chatgptUsageLimit.description": "Kiểm tra mức sử dụng và giới hạn trong cài đặt ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "Quản lý mức sử dụng",

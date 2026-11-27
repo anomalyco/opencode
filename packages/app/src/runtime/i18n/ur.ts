@@ -960,6 +960,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "ChatGPT کی ترتیبات میں استعمال کا نظم کریں",
   "provider.connect.chatgptWelcome.confirm": "سمجھ آ گیا",
   "provider.connect.models.list": "⁨{{provider}}⁩ سے دستیاب ماڈلز",
+  "provider.connect.models.search": "⁨{{provider}}⁩ کے ماڈلز تلاش کریں",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT کے استعمال کی حد پوری ہو گئی",
   "provider.connect.chatgptUsageLimit.description": "ChatGPT کی ترتیبات میں اپنا استعمال اور حدیں چیک کریں۔",
   "provider.connect.chatgptUsageLimit.manage": "استعمال کا نظم کریں",

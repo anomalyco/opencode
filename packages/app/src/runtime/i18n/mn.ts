@@ -952,6 +952,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Хэрэглээг ChatGPT тохиргоонд удирдах",
   "provider.connect.chatgptWelcome.confirm": "Ойлголоо",
   "provider.connect.models.list": "{{provider}}-оос боломжтой загварууд",
+  "provider.connect.models.search": "{{provider}} загвар хайх",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT-ийн хэрэглээний хязгаарт хүрлээ",
   "provider.connect.chatgptUsageLimit.description": "Хэрэглээ болон хязгаараа ChatGPT тохиргооноос шалгана уу.",
   "provider.connect.chatgptUsageLimit.manage": "Хэрэглээг удирдах",

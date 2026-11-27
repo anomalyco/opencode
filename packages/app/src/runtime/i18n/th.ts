@@ -987,6 +987,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "จัดการการใช้งานในการตั้งค่า ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "เข้าใจแล้ว",
   "provider.connect.models.list": "โมเดลที่พร้อมใช้งานจาก {{provider}}",
+  "provider.connect.models.search": "ค้นหาโมเดล {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "ถึงขีดจำกัดการใช้งาน ChatGPT แล้ว",
   "provider.connect.chatgptUsageLimit.description": "ตรวจสอบการใช้งานและขีดจำกัดในการตั้งค่า ChatGPT",
   "provider.connect.chatgptUsageLimit.manage": "จัดการการใช้งาน",

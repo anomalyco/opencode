@@ -950,6 +950,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "İstifadəni ChatGPT tənzimləmələrində idarə edin",
   "provider.connect.chatgptWelcome.confirm": "Aydındır",
   "provider.connect.models.list": "{{provider}} tərəfindən təqdim olunan modellər",
+  "provider.connect.models.search": "{{provider}} modellərini axtar",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT istifadə limitinə çatıldı",
   "provider.connect.chatgptUsageLimit.description": "İstifadənizi və limitlərinizi ChatGPT tənzimləmələrində yoxlayın.",
   "provider.connect.chatgptUsageLimit.manage": "İstifadəni idarə et",

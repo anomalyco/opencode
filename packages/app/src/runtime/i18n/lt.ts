@@ -974,6 +974,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Tvarkykite naudojimą ChatGPT nustatymuose",
   "provider.connect.chatgptWelcome.confirm": "Supratau",
   "provider.connect.models.list": "{{provider}} pasiekiami modeliai",
+  "provider.connect.models.search": "Ieškoti {{provider}} modelių",
   "provider.connect.chatgptUsageLimit.title": "Pasiektas ChatGPT naudojimo limitas",
   "provider.connect.chatgptUsageLimit.description": "Patikrinkite naudojimą ir limitus ChatGPT nustatymuose.",
   "provider.connect.chatgptUsageLimit.manage": "Tvarkyti naudojimą",

@@ -973,6 +973,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Spravujte využitie v nastaveniach ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "Rozumiem",
   "provider.connect.models.list": "Modely dostupné od {{provider}}",
+  "provider.connect.models.search": "Hľadať modely od {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Dosiahnutý limit využitia ChatGPT",
   "provider.connect.chatgptUsageLimit.description": "Skontrolujte svoje využitie a limity v nastaveniach ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "Spravovať využitie",

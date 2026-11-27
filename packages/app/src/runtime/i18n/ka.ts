@@ -948,6 +948,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "გამოყენების მართვა ChatGPT-ის პარამეტრებში",
   "provider.connect.chatgptWelcome.confirm": "გასაგებია",
   "provider.connect.models.list": "{{provider}}-ის ხელმისაწვდომი მოდელები",
+  "provider.connect.models.search": "{{provider}}-ის მოდელების ძიება",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT-ის გამოყენების ლიმიტი ამოიწურა",
   "provider.connect.chatgptUsageLimit.description": "შეამოწმეთ გამოყენება და ლიმიტები ChatGPT-ის პარამეტრებში.",
   "provider.connect.chatgptUsageLimit.manage": "გამოყენების მართვა",

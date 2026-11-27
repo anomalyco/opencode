@@ -946,6 +946,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Hantera användning i ChatGPT-inställningarna",
   "provider.connect.chatgptWelcome.confirm": "Uppfattat",
   "provider.connect.models.list": "Modeller tillgängliga från {{provider}}",
+  "provider.connect.models.search": "Sök efter modeller från {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Användningsgränsen för ChatGPT har nåtts",
   "provider.connect.chatgptUsageLimit.description":
     "Kontrollera din användning och dina gränser i ChatGPT-inställningarna.",

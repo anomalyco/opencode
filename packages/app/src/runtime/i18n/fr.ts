@@ -988,6 +988,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Gérer l’utilisation dans les paramètres ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "Compris",
   "provider.connect.models.list": "Modèles disponibles chez {{provider}}",
+  "provider.connect.models.search": "Rechercher des modèles {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Limite d’utilisation ChatGPT atteinte",
   "provider.connect.chatgptUsageLimit.description":
     "Consultez votre utilisation et vos limites dans les paramètres ChatGPT.",

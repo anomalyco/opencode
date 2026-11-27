@@ -996,6 +996,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "إدارة الاستخدام في إعدادات ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "حسنًا",
   "provider.connect.models.list": "النماذج المتاحة من {{provider}}",
+  "provider.connect.models.search": "البحث عن نماذج من {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "تم بلوغ حد استخدام ChatGPT",
   "provider.connect.chatgptUsageLimit.description": "تحقق من استخدامك وحدودك في إعدادات ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "إدارة الاستخدام",

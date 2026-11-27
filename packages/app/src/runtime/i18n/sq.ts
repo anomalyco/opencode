@@ -948,6 +948,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Menaxhoni përdorimin te cilësimet e ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "Në rregull",
   "provider.connect.models.list": "Modelet e disponueshme nga {{provider}}",
+  "provider.connect.models.search": "Kërko modele nga {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "U arrit kufiri i përdorimit të ChatGPT",
   "provider.connect.chatgptUsageLimit.description": "Kontrolloni përdorimin dhe kufijtë te cilësimet e ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "Menaxho përdorimin",

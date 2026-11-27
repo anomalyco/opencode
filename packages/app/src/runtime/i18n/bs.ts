@@ -1020,6 +1020,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Upravljajte potrošnjom u postavkama ChatGPT-a",
   "provider.connect.chatgptWelcome.confirm": "Razumijem",
   "provider.connect.models.list": "Modeli dostupni od {{provider}}",
+  "provider.connect.models.search": "Pretraži modele od {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Dostignut limit potrošnje za ChatGPT",
   "provider.connect.chatgptUsageLimit.description": "Provjerite potrošnju i limite u postavkama ChatGPT-a.",
   "provider.connect.chatgptUsageLimit.manage": "Upravljaj potrošnjom",

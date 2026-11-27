@@ -958,6 +958,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Beheer gebruik in de ChatGPT-instellingen",
   "provider.connect.chatgptWelcome.confirm": "Begrepen",
   "provider.connect.models.list": "Modellen beschikbaar via {{provider}}",
+  "provider.connect.models.search": "Zoek modellen van {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT-gebruikslimiet bereikt",
   "provider.connect.chatgptUsageLimit.description": "Bekijk je gebruik en limieten in de ChatGPT-instellingen.",
   "provider.connect.chatgptUsageLimit.manage": "Gebruik beheren",

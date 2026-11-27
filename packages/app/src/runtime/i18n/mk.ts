@@ -950,6 +950,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Управувајте со потрошувачката во поставките на ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "Разбрав",
   "provider.connect.models.list": "Модели достапни од {{provider}}",
+  "provider.connect.models.search": "Пребарајте модели од {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Достигнат е лимитот за користење на ChatGPT",
   "provider.connect.chatgptUsageLimit.description": "Проверете ја потрошувачката и лимитите во поставките на ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "Управувај со потрошувачката",

@@ -931,6 +931,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "ຈັດການການນຳໃຊ້ໃນການຕັ້ງຄ່າ ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "ເຂົ້າໃຈແລ້ວ",
   "provider.connect.models.list": "ຕົວແບບທີ່ມີໃຫ້ຈາກ {{provider}}",
+  "provider.connect.models.search": "ຄົ້ນຫາຕົວແບບຈາກ {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "ຮອດຂີດຈຳກັດການນຳໃຊ້ ChatGPT ແລ້ວ",
   "provider.connect.chatgptUsageLimit.description": "ກວດສອບການນຳໃຊ້ ແລະຂີດຈຳກັດຂອງທ່ານໃນການຕັ້ງຄ່າ ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "ຈັດການການນຳໃຊ້",

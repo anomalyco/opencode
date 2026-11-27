@@ -954,6 +954,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Használat kezelése a ChatGPT beállításaiban",
   "provider.connect.chatgptWelcome.confirm": "Értem",
   "provider.connect.models.list": "A(z) {{provider}} elérhető modelljei",
+  "provider.connect.models.search": "Keresés a(z) {{provider}} modelljei között",
   "provider.connect.chatgptUsageLimit.title": "Elérte a ChatGPT használati korlátját",
   "provider.connect.chatgptUsageLimit.description":
     "Ellenőrizze a használatot és a korlátokat a ChatGPT beállításaiban.",

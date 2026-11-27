@@ -947,6 +947,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "ChatGPT 설정에서 사용량 관리",
   "provider.connect.chatgptWelcome.confirm": "확인",
   "provider.connect.models.list": "{{provider}}에서 사용 가능한 모델",
+  "provider.connect.models.search": "{{provider}} 모델 검색",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT 사용 한도에 도달했습니다",
   "provider.connect.chatgptUsageLimit.description": "ChatGPT 설정에서 사용량과 한도를 확인하세요.",
   "provider.connect.chatgptUsageLimit.manage": "사용량 관리",

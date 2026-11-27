@@ -941,6 +941,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Umsit nýtslu í ChatGPT-innstillingunum",
   "provider.connect.chatgptWelcome.confirm": "Skilt",
   "provider.connect.models.list": "Modell tøk frá {{provider}}",
+  "provider.connect.models.search": "Leita eftir modellum frá {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Nýtslumarkið hjá ChatGPT er nátt",
   "provider.connect.chatgptUsageLimit.description": "Kanna nýtslu og mørk í ChatGPT-innstillingunum.",
   "provider.connect.chatgptUsageLimit.manage": "Umsit nýtslu",

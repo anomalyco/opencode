@@ -909,6 +909,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "አጠቃቀምን በChatGPT ቅንብሮች ውስጥ ያስተዳድሩ",
   "provider.connect.chatgptWelcome.confirm": "ገባኝ",
   "provider.connect.models.list": "ከ{{provider}} የሚገኙ ሞዴሎች",
+  "provider.connect.models.search": "የ{{provider}} ሞዴሎችን ይፈልጉ",
   "provider.connect.chatgptUsageLimit.title": "የChatGPT አጠቃቀም ገደብ ላይ ደርሷል",
   "provider.connect.chatgptUsageLimit.description": "አጠቃቀምዎን እና ገደቦችዎን በChatGPT ቅንብሮች ውስጥ ይመልከቱ።",
   "provider.connect.chatgptUsageLimit.manage": "አጠቃቀምን አስተዳድር",

@@ -947,6 +947,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "ChatGPT සැකසීම්වල භාවිතය කළමනාකරණය කරන්න",
   "provider.connect.chatgptWelcome.confirm": "තේරුණා",
   "provider.connect.models.list": "{{provider}} වෙතින් ලබා ගත හැකි ආකෘති",
+  "provider.connect.models.search": "{{provider}} වෙතින් ආකෘති සොයන්න",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT භාවිත සීමාවට ළඟා විය",
   "provider.connect.chatgptUsageLimit.description": "ChatGPT සැකසීම්වල ඔබගේ භාවිතය සහ සීමා පරීක්ෂා කරන්න.",
   "provider.connect.chatgptUsageLimit.manage": "භාවිතය කළමනාකරණය කරන්න",

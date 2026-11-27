@@ -104,12 +104,6 @@ export const DialogConnectProvider: Component<{
   const sdk = useServerSDK()
   const remoteServer = () => (consoleSelected() && frame() !== "picker" ? authServerName(sdk.server) : undefined)
 
-  const selectedModel = () => {
-    const body = view().body
-
-    return body.kind === "models" ? body.selectedModel : undefined
-  }
-
   return (
     <Dialog
       size="large"
@@ -139,10 +133,9 @@ export const DialogConnectProvider: Component<{
         when={frame() !== "models"}
         fallback={
           <ConnectedModelPicker
-            provider={{ id: view().provider ?? "", name: providerName() }}
+            providerName={providerName()}
             groups={controller.connectionGroups()}
             workspace={controller.managedProviders()}
-            selected={selectedModel()}
             onSelect={(model) =>
               controller.dispatch({
                 type: "model.confirmed",

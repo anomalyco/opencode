@@ -971,6 +971,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "在 ChatGPT 設定中管理使用量",
   "provider.connect.chatgptWelcome.confirm": "知道了",
   "provider.connect.models.list": "{{provider}} 提供的模型",
+  "provider.connect.models.search": "搜尋 {{provider}} 模型",
   "provider.connect.chatgptUsageLimit.title": "已達 ChatGPT 使用上限",
   "provider.connect.chatgptUsageLimit.description": "請在 ChatGPT 設定中查看使用量和上限。",
   "provider.connect.chatgptUsageLimit.manage": "管理使用量",

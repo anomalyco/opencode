@@ -942,6 +942,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Կառավարեք օգտագործումը ChatGPT-ի կարգավորումներում",
   "provider.connect.chatgptWelcome.confirm": "Հասկանալի է",
   "provider.connect.models.list": "{{provider}}-ից հասանելի մոդելներ",
+  "provider.connect.models.search": "Որոնել {{provider}}-ի մոդելներ",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT-ի օգտագործման սահմանաչափը սպառված է",
   "provider.connect.chatgptUsageLimit.description":
     "Ստուգեք ձեր օգտագործումն ու սահմանաչափերը ChatGPT-ի կարգավորումներում։",

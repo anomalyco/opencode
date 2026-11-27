@@ -1039,6 +1039,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Керуйте використанням у налаштуваннях ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "Зрозуміло",
   "provider.connect.models.list": "Моделі, доступні від {{provider}}",
+  "provider.connect.models.search": "Пошук моделей від {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Досягнуто ліміту використання ChatGPT",
   "provider.connect.chatgptUsageLimit.description": "Перевірте використання та ліміти в налаштуваннях ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "Керувати використанням",

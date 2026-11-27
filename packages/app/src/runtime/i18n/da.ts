@@ -1002,6 +1002,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Administrer forbrug i ChatGPT-indstillingerne",
   "provider.connect.chatgptWelcome.confirm": "Forstået",
   "provider.connect.models.list": "Modeller tilgængelige fra {{provider}}",
+  "provider.connect.models.search": "Søg modeller fra {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT-forbrugsgrænsen er nået",
   "provider.connect.chatgptUsageLimit.description": "Tjek dit forbrug og dine grænser i ChatGPT-indstillingerne.",
   "provider.connect.chatgptUsageLimit.manage": "Administrer forbrug",

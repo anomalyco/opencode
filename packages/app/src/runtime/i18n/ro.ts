@@ -964,6 +964,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Gestionează utilizarea în setările ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "Am înțeles",
   "provider.connect.models.list": "Modele disponibile de la {{provider}}",
+  "provider.connect.models.search": "Caută modele de la {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Limita de utilizare ChatGPT a fost atinsă",
   "provider.connect.chatgptUsageLimit.description": "Verifică utilizarea și limitele în setările ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "Gestionează utilizarea",

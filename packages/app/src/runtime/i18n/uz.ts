@@ -953,6 +953,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Foydalanishni ChatGPT sozlamalarida boshqaring",
   "provider.connect.chatgptWelcome.confirm": "Tushunarli",
   "provider.connect.models.list": "{{provider}} dagi mavjud modellar",
+  "provider.connect.models.search": "{{provider}} modellarini qidirish",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT foydalanish limitiga yetildi",
   "provider.connect.chatgptUsageLimit.description": "Foydalanish va limitlarni ChatGPT sozlamalarida tekshiring.",
   "provider.connect.chatgptUsageLimit.manage": "Foydalanishni boshqarish",

@@ -935,6 +935,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "គ្រប់គ្រងការប្រើប្រាស់ក្នុងការកំណត់ ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "យល់ហើយ",
   "provider.connect.models.list": "ម៉ូដែលដែលមានពី {{provider}}",
+  "provider.connect.models.search": "ស្វែងរកម៉ូដែលពី {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "បានដល់ដែនកំណត់ការប្រើប្រាស់ ChatGPT",
   "provider.connect.chatgptUsageLimit.description": "ពិនិត្យការប្រើប្រាស់ និងដែនកំណត់របស់អ្នកក្នុងការកំណត់ ChatGPT។",
   "provider.connect.chatgptUsageLimit.manage": "គ្រប់គ្រងការប្រើប្រាស់",

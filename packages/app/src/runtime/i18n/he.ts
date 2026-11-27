@@ -935,6 +935,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "נהל את השימוש בהגדרות ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "הבנתי",
   "provider.connect.models.list": "מודלים זמינים מ-{{provider}}",
+  "provider.connect.models.search": "חפש מודלים של {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "הגעת למגבלת השימוש של ChatGPT",
   "provider.connect.chatgptUsageLimit.description": "בדוק את השימוש והמגבלות שלך בהגדרות ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "ניהול שימוש",

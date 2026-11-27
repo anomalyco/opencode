@@ -59,10 +59,7 @@ export type ProviderDialogStep =
       readonly catalogPending: boolean
       readonly connect: ProviderConnectState
     }
-  | {
-      readonly kind: "models"
-      readonly selectedModel: string
-    }
+  | { readonly kind: "models" }
 
 /** What the server lists for the selected integration. The server lists the active account first. */
 export type ProviderAccounts = {
@@ -98,7 +95,7 @@ export type ProviderDialogState =
 export type ProviderCatalogSnapshot = {
   /** The Console workspace providers had not loaded when the wait ran out. */
   readonly pending: boolean
-  readonly firstModel: string | undefined
+  readonly hasModels: boolean
 }
 
 export type ModelChoice = { readonly providerID: string; readonly modelID: string }
@@ -139,7 +136,7 @@ export type ProviderDialogEvent =
       readonly session: number
       readonly check: number
       readonly hasProblem: boolean
-      readonly firstModel: string | undefined
+      readonly hasModels: boolean
     }
   | { readonly type: "link.copied"; readonly session: number; readonly attemptID: string; readonly copied: boolean }
   | { readonly type: "model.confirmed"; readonly selection: ModelChoice }
@@ -335,7 +332,7 @@ export type ProviderDialogCrumb =
 
 export type ProviderDialogBody =
   | { readonly kind: "picker" }
-  | { readonly kind: "models"; readonly selectedModel: string }
+  | { readonly kind: "models" }
   | {
       readonly kind: "accounts"
       readonly action: AccountStepAction
@@ -393,7 +390,7 @@ function selectBody(
 
   const step = state.step
 
-  if (step.kind === "models") return { kind: "models", selectedModel: step.selectedModel }
+  if (step.kind === "models") return { kind: "models" }
 
   if (step.kind === "accounts") {
     const busy = step.action.type === "activating" || step.action.type === "removing"
@@ -675,7 +672,7 @@ function claude(
     return unchanged(state)
 
   if (event.hasProblem) return set({ status: "idle" })
-  const finished = finish(state, event.firstModel)
+  const finished = finish(state, event.hasModels)
 
   return {
     state: finished.state,
@@ -744,7 +741,7 @@ function connectTransition(
       effects: reveal,
     }
 
-  const finished = finish(notified, catalog?.firstModel, result.state, returnTo)
+  const finished = finish(notified, !!catalog?.hasModels, result.state, returnTo)
 
   return { state: finished.state, effects: [...reveal, ...finished.effects] }
 }
@@ -753,15 +750,15 @@ function connectTransition(
 // open so the workspace can be fixed.
 function finish(
   state: ProviderState,
-  firstModel: string | undefined,
+  hasModels: boolean,
   connect?: ProviderConnectState,
   returnTo: ProviderReturnTarget = "picker",
 ): ProviderDialogTransition {
   const announce: ProviderDialogEffect[] = [{ type: "toast.connected", provider: state.provider }]
 
-  if (firstModel)
+  if (hasModels)
     return {
-      state: { ...state, step: { kind: "models", selectedModel: firstModel } },
+      state: { ...state, step: { kind: "models" } },
       effects: announce,
     }
 

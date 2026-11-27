@@ -953,6 +953,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "ChatGPT ဆက်တင်များတွင် အသုံးပြုမှုကို စီမံပါ",
   "provider.connect.chatgptWelcome.confirm": "နားလည်ပါပြီ",
   "provider.connect.models.list": "{{provider}} မှ ရရှိနိုင်သော မော်ဒယ်များ",
+  "provider.connect.models.search": "{{provider}} မှ မော်ဒယ်များကို ရှာဖွေပါ",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT အသုံးပြုမှု ကန့်သတ်ချက် ပြည့်သွားပါပြီ",
   "provider.connect.chatgptUsageLimit.description":
     "ChatGPT ဆက်တင်များတွင် သင်၏ အသုံးပြုမှုနှင့် ကန့်သတ်ချက်များကို စစ်ဆေးပါ။",

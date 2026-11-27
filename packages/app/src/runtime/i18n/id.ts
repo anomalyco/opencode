@@ -1009,6 +1009,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Kelola penggunaan di pengaturan ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "Mengerti",
   "provider.connect.models.list": "Model yang tersedia dari {{provider}}",
+  "provider.connect.models.search": "Cari model {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Batas penggunaan ChatGPT tercapai",
   "provider.connect.chatgptUsageLimit.description": "Periksa penggunaan dan batas Anda di pengaturan ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "Kelola penggunaan",

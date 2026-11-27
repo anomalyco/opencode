@@ -955,6 +955,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "ChatGPTの設定で使用量を管理",
   "provider.connect.chatgptWelcome.confirm": "OK",
   "provider.connect.models.list": "{{provider}}で利用可能なモデル",
+  "provider.connect.models.search": "{{provider}}のモデルを検索",
   "provider.connect.chatgptUsageLimit.title": "ChatGPTの利用上限に達しました",
   "provider.connect.chatgptUsageLimit.description": "ChatGPTの設定で使用量と上限を確認してください。",
   "provider.connect.chatgptUsageLimit.manage": "使用量を管理",

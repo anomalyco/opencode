@@ -955,6 +955,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "ChatGPT دیاں ترتیبات وچ ورتوں سنبھالو",
   "provider.connect.chatgptWelcome.confirm": "سمجھ آ گئی",
   "provider.connect.models.list": "⁨{{provider}}⁩ توں دستیاب ماڈل",
+  "provider.connect.models.search": "⁨{{provider}}⁩ توں ماڈل لبھو",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT دی ورتوں دی حد پوری ہو گئی",
   "provider.connect.chatgptUsageLimit.description": "ChatGPT دیاں ترتیبات وچ اپنی ورتوں تے حداں چیک کرو۔",
   "provider.connect.chatgptUsageLimit.manage": "ورتوں سنبھالو",

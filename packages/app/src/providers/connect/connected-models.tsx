@@ -1,19 +1,17 @@
-import { Badge } from "@opencode/ui/badge"
 import { DialogBody, DialogTitle } from "@opencode/ui/dialog"
-import { Icon } from "@opencode/ui/icon"
 import { SearchHighlight, SearchList } from "@opencode/ui/search-list"
-import { createMemo, createSignal, Show } from "solid-js"
+import { createMemo, createSignal } from "solid-js"
 import { consoleProviderName } from "@/providers/catalog/console"
-import { ProviderModelIcon } from "@/providers/models/provider-group"
 import { matchesModelSearch } from "@/providers/models/search"
 import { useLanguage } from "@/runtime/i18n/language"
-import { modelKey, type createProviderDialogController } from "./controller"
+import { modelKey } from "./controller"
 import "@/shell/commands/dialog.css"
 import "@/providers/models/select-dialog.css"
 
-type Controller = ReturnType<typeof createProviderDialogController>
-type ConnectionGroup = ReturnType<Controller["connectionGroups"]>[number]
-type ConnectionModel = ConnectionGroup["models"][number]
+type ConnectionModel = { id: string; name: string; providerID: string }
+
+type ConnectionGroup = { provider: { id: string; name: string }; models: ConnectionModel[] }
+
 type Row = { id: string; model: ConnectionModel; provider: ConnectionGroup["provider"] }
 
 /**
@@ -21,11 +19,10 @@ type Row = { id: string; model: ConnectionModel; provider: ConnectionGroup["prov
  * model hands it back, and the connect dialog decides whether it goes to the caller's session or a new one.
  */
 export function ConnectedModelPicker(props: {
-  provider: { id: string; name: string }
+  providerName: string
   groups: ConnectionGroup[]
-  /** A Console workspace's providers, whose names drop the workspace in favor of a badge. */
-  workspace?: { prefix: string; workspace: string }
-  selected?: string
+  /** A Console workspace's providers, whose section names drop the workspace prefix. */
+  workspace?: { prefix: string }
   onSelect: (model: ConnectionModel) => void
 }) {
   const language = useLanguage()
@@ -52,16 +49,20 @@ export function ConnectedModelPicker(props: {
   return (
     <>
       <div class="sr-only">
-        <DialogTitle>{language.t("provider.connect.models.title", { provider: props.provider.name })}</DialogTitle>
+        <DialogTitle>{language.t("provider.connect.models.title", { provider: props.providerName })}</DialogTitle>
       </div>
       <DialogBody class="command-palette-body">
         <SearchList
           topFade={false}
-          class={props.groups.length > 1 ? undefined : "[&_[data-slot=search-list-results]]:!pt-1.5"}
+          // Without the picker's check column, the search icon, section headers and names share one inset.
+          class={[
+            "[&_[data-slot=text-input-v2-leading-icon]]:ms-0.5 [&_[data-slot=search-list-row]]:!ps-2.5 [&_[data-slot=search-list-header]]:!ps-4",
+            props.groups.length > 1 ? "" : "[&_[data-slot=search-list-results]]:!pt-1.5",
+          ].join(" ")}
           query={query()}
           onQuery={setQuery}
-          placeholder={language.t("dialog.model.search.placeholder")}
-          label={language.t("provider.connect.models.list", { provider: props.provider.name })}
+          placeholder={language.t("provider.connect.models.search", { provider: props.providerName })}
+          label={language.t("provider.connect.models.list", { provider: props.providerName })}
           items={rows()}
           key={(row) => row.id}
           // One provider needs no header; a Console workspace or a multi-provider plan names each one.
@@ -80,11 +81,6 @@ export function ConnectedModelPicker(props: {
         >
           {(row, attrs) => (
             <button type="button" {...attrs} data-option-key={row().id}>
-              <span data-slot="model-dialog-check">
-                <Show when={props.selected === row().id}>
-                  <Icon name="check" />
-                </Show>
-              </span>
               <span data-slot="model-dialog-name">
                 <span class="min-w-0 truncate">
                   <SearchHighlight text={row().model.name} />
@@ -93,14 +89,6 @@ export function ConnectedModelPicker(props: {
             </button>
           )}
         </SearchList>
-        <div class="h-px bg-v2-border-border-muted" />
-        <div class="flex min-h-10 items-center gap-2 px-3 py-2 text-[13px] leading-5 text-v2-text-text-base">
-          <ProviderModelIcon provider={props.provider} class="shrink-0" />
-          <span class="min-w-0 flex-1 truncate">
-            {language.t("provider.connect.models.title", { provider: props.provider.name })}
-          </span>
-          <Show when={props.workspace}>{(group) => <Badge class="shrink-0">{group().workspace}</Badge>}</Show>
-        </div>
       </DialogBody>
     </>
   )

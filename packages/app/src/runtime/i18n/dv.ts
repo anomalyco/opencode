@@ -976,6 +976,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "ChatGPT ސެޓިންގްސްގައި ބޭނުންކުރުން މެނޭޖްކުރާ",
   "provider.connect.chatgptWelcome.confirm": "އެނގިއްޖެ",
   "provider.connect.models.list": "⁨{{provider}}⁩ އިން ލިބެންހުރި މޮޑެލްތައް",
+  "provider.connect.models.search": "⁨{{provider}}⁩ ގެ މޮޑެލްތައް ސަރޗް ކުރޭ",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT ބޭނުންކުރުމުގެ ލިމިޓަށް އާދެވިއްޖެ",
   "provider.connect.chatgptUsageLimit.description":
     "ChatGPT ސެޓިންގްސްގައި ބޭނުންކުރި މިންވަރާއި ލިމިޓްތައް ޗެކްކުރާށެވެ.",

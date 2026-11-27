@@ -968,6 +968,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Διαχείριση χρήσης στις ρυθμίσεις του ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "Κατάλαβα",
   "provider.connect.models.list": "Διαθέσιμα μοντέλα από {{provider}}",
+  "provider.connect.models.search": "Αναζήτηση μοντέλων από {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Συμπληρώθηκε το όριο χρήσης του ChatGPT",
   "provider.connect.chatgptUsageLimit.description": "Ελέγξτε τη χρήση και τα όριά σας στις ρυθμίσεις του ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "Διαχείριση χρήσης",

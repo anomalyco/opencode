@@ -957,6 +957,7 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "Истифодаро дар танзимоти ChatGPT идора кунед",
   "provider.connect.chatgptWelcome.confirm": "Фаҳмидам",
   "provider.connect.models.list": "Моделҳои дастрас аз {{provider}}",
+  "provider.connect.models.search": "Ҷустуҷӯи моделҳо аз {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Ба ҳадди истифодаи ChatGPT расидед",
   "provider.connect.chatgptUsageLimit.description": "Истифода ва ҳадҳои худро дар танзимоти ChatGPT санҷед.",
   "provider.connect.chatgptUsageLimit.manage": "Идораи истифода",
