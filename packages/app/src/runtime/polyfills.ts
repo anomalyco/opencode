@@ -37,3 +37,12 @@ if (!Promise.try) {
     return new Promise<T>((resolve) => resolve(callback(...args)))
   } as typeof Promise.try
 }
+
+// URL.parse arrived in Safari 18. Without it, connecting from Safari 17 throws before any request is sent.
+if (!URL.parse) {
+  URL.parse = function parse(url: string | URL, base?: string | URL) {
+    if (!URL.canParse(url, base)) return null
+
+    return new URL(url, base)
+  }
+}
