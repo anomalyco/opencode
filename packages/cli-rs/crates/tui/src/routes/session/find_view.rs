@@ -1,18 +1,21 @@
 //! Find-in-session bar, key mode, match navigation, and Markdown highlight attachment.
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 
-use opencode_ui::markdown::CodeBlockRenderers;
+use opencode_ui::markdown::{
+    CodeBlockRenderers, MarkdownParser, ParsedMarkdown, ShownBlock, hyperlinks, tag_untagged_code_blocks,
+};
 use opentui::syntax::SyntaxTheme;
 use opentui::widget::{CodeBlock, InlineContext, InlineSpan, Input, Markdown, MarkdownColors, WeakWidget};
 
 use super::find::{
-    FindMatch, FindPartId, FindPartKey, FindPattern, PLAIN_FENCE_LANG, TopBlock, find_matches, find_pattern,
-    find_ranges, paint_inline_spans, paint_spans, scan_fences, tag_plain_fences, top_level_blocks, wrapped_row,
+    FindMatch, FindPart, FindPartId, FindPartKey, FindPattern, PLAIN_FENCE_LANG, find_matches, find_pattern,
+    find_ranges, paint_inline_spans, paint_spans, wrapped_row,
 };
 use super::messages::list::{Context, Transcript};
 use super::scroll::{self, after_layout};
-use crate::features::session_links::Links;
+use crate::features::session_links::{self, Links};
 use crate::prelude::*;
 
 pub const FIND_MODE: &str = "find";
@@ -24,7 +27,16 @@ struct ShownEntry {
     pattern_key: String,
     text: String,
     conceal: bool,
+    hyperlinks: bool,
     count: usize,
+}
+
+struct CachedBlocks {
+    text: String,
+    conceal: bool,
+    hyperlinks: bool,
+    width: u16,
+    blocks: Vec<String>,
 }
 
 struct FindSpot {
@@ -46,10 +58,18 @@ impl FindSnapshot {
         self.current.as_ref().filter(|matched| matched.key == *key).map(|matched| matched.occurrence)
     }
 
+    /// Parses `source` through the shared widget-free native Markdown engine.
+    pub fn parse_markdown(&self, tui: &Tui, source: &str, conceal: bool) -> ParsedMarkdown {
+        match self.handle.upgrade() {
+            Some(inner) => inner.parse_markdown(tui, source, conceal),
+            None => ParsedMarkdown::default(),
+        }
+    }
+
     /// Reports how many matches a rendered part shows for the current pattern.
-    pub fn counted(&self, key: FindPartKey, text: &str, conceal: bool, count: usize) {
+    pub fn counted(&self, key: FindPartKey, text: &str, conceal: bool, links: bool, count: usize) {
         if let Some(inner) = self.handle.upgrade() {
-            inner.counted(key, &self.pattern.key, text, conceal, count);
+            inner.counted(key, &self.pattern.key, text, conceal, links, count);
         }
     }
 
@@ -78,8 +98,8 @@ impl FindHandle {
     }
 }
 
-/// Session-scoped controller for Find-in-session. The bar widgets mount lazily on first open so
-/// sessions that never open Find allocate no extra input or handlers.
+/// Session-scoped controller for Find-in-session. The bar widgets and native Markdown parser mount
+/// lazily on first open so sessions that never open Find allocate neither.
 pub struct Find(Rc<FindInner>);
 
 pub(super) struct FindInner {
@@ -89,6 +109,8 @@ pub(super) struct FindInner {
     scroll: Weak<scroll::Inner>,
     root: View,
     bar: RefCell<Option<FindBar>>,
+    parser: RefCell<Option<MarkdownParser>>,
+    parsed_cache: RefCell<HashMap<FindPartKey, CachedBlocks>>,
     on_visibility: OnVisibility,
     open: Cell<bool>,
     query: RefCell<String>,
@@ -233,6 +255,8 @@ impl Find {
             scroll: Rc::downgrade(&scroll.0),
             root,
             bar: RefCell::new(None),
+            parser: RefCell::new(None),
+            parsed_cache: RefCell::new(HashMap::new()),
             on_visibility: Box::new(on_visibility),
             open: Cell::new(false),
             query: RefCell::new(String::new()),
@@ -268,14 +292,22 @@ impl Find {
         self.0.close(tui, restore_prompt);
     }
 
-    /// Recomputes matches after transcript updates while Find is open.
-    pub fn sync(&self, tui: &Tui) {
-        if self.0.open.get() && self.0.pattern.borrow().is_some() {
+    /// Recomputes matches after transcript or session-title updates while Find is open.
+    pub fn sync(&self, tui: &Tui, sessions_changed: bool) {
+        if !self.0.open.get() {
+            return;
+        }
+        if sessions_changed {
+            self.0.parsed_cache.borrow_mut().clear();
+            self.0.shown.borrow_mut().clear();
+        }
+        if self.0.pattern.borrow().is_some() {
             self.0.reconcile(tui);
         }
     }
 
     pub fn restyle(&self, tui: &Tui) {
+        self.0.parsed_cache.borrow_mut().clear();
         if let Some(bar) = self.0.bar.borrow().as_ref() {
             let theme = tui.page();
             bar.paint(&theme, &self.0.query.borrow(), self.0.index.get(), self.0.list.borrow().len());
@@ -293,6 +325,8 @@ impl Drop for Find {
         let resize = self.0.resize.take();
         *self.0.settings.borrow_mut() = None;
         *self.0.spot.borrow_mut() = None;
+        *self.0.parser.borrow_mut() = None;
+        self.0.parsed_cache.borrow_mut().clear();
         if let Some(tui) = self.0.tui.upgrade() {
             if let Some(id) = resize {
                 tui.app.remove_handler(id);
@@ -311,8 +345,15 @@ impl FindInner {
             let bar = FindBar::new(tui, &this);
             *self.bar.borrow_mut() = Some(bar);
             self.resize.set(Some(tui.app.on_resize(bind!(self.this, |inner, _, width, _| {
+                inner.parsed_cache.borrow_mut().clear();
                 if let Some(bar) = inner.bar.borrow().as_ref() {
                     bar.layout_for_width(width);
+                }
+                if inner.open.get()
+                    && inner.pattern.borrow().is_some()
+                    && let Some(tui) = inner.tui.upgrade()
+                {
+                    inner.reconcile(&tui);
                 }
             }))));
             *self.settings.borrow_mut() = Some(tui.settings.subscribe(bind!(self.this, |inner, tui| {
@@ -385,6 +426,8 @@ impl FindInner {
         *self.pattern.borrow_mut() = None;
         *self.selected.borrow_mut() = None;
         self.shown.borrow_mut().clear();
+        self.parsed_cache.borrow_mut().clear();
+        *self.parser.borrow_mut() = None;
         self.list.borrow_mut().clear();
         self.index.set(0);
         let layers = std::mem::take(&mut *self.layers.borrow_mut());
@@ -399,6 +442,68 @@ impl FindInner {
         if restore_prompt {
             (self.on_visibility)(tui, false);
         }
+    }
+
+    fn parse_markdown(&self, tui: &Tui, source: &str, conceal: bool) -> ParsedMarkdown {
+        let mut slot = self.parser.borrow_mut();
+        let parser = match slot.as_mut() {
+            Some(parser) => parser,
+            None => match MarkdownParser::new(&tui.app) {
+                Ok(parser) => slot.insert(parser),
+                Err(_) => return ParsedMarkdown::default(),
+            },
+        };
+        let renderers = self.transcript.renderers();
+        let syntax = self.transcript.syntax();
+        parser.parse(&tui.app, source, renderers, conceal, &syntax, |spans, icx| {
+            session_links::transform_readonly(tui, spans, icx)
+        })
+    }
+
+    fn count_part(
+        &self,
+        tui: &Tui,
+        part: &FindPart,
+        pattern: &FindPattern,
+        conceal: bool,
+        links: bool,
+        width: u16,
+    ) -> usize {
+        if !part.markdown {
+            return find_ranges(&part.text, Some(pattern)).len();
+        }
+        if let Some(entry) = self.shown.borrow().get(&part.key)
+            && entry.pattern_key == pattern.key
+            && entry.text == part.text
+            && entry.conceal == conceal
+            && entry.hyperlinks == links
+        {
+            return entry.count;
+        }
+        let cached = {
+            let cache = self.parsed_cache.borrow();
+            cache
+                .get(&part.key)
+                .filter(|entry| {
+                    entry.text == part.text
+                        && entry.conceal == conceal
+                        && entry.hyperlinks == links
+                        && entry.width == width
+                })
+                .map(|entry| entry.blocks.iter().map(|block| find_ranges(block, Some(pattern)).len()).sum::<usize>())
+        };
+        if let Some(count) = cached {
+            return count;
+        }
+        let parsed = self.parse_markdown(tui, &part.text, conceal);
+        let blocks: Vec<String> =
+            parsed.blocks.into_iter().filter_map(|block| block.text().map(str::to_owned)).collect();
+        let count = blocks.iter().map(|block| find_ranges(block, Some(pattern)).len()).sum();
+        self.parsed_cache.borrow_mut().insert(
+            part.key.clone(),
+            CachedBlocks { text: part.text.clone(), conceal, hyperlinks: links, width, blocks },
+        );
+        count
     }
 
     fn on_input(&self, tui: &Tui, value: &str) {
@@ -446,17 +551,13 @@ impl FindInner {
     fn recompute(&self, tui: &Tui) {
         let pattern = self.pattern.borrow().clone();
         let conceal = self.transcript.conceal();
+        let links = hyperlinks(&tui.app);
+        let width = tui.app.size().0;
         let next_list = match pattern.as_ref() {
             Some(pattern) => {
                 let parts = self.transcript.find_parts(tui);
-                let shown = self.shown.borrow();
-                find_matches(&parts, Some(pattern), conceal, |part| {
-                    shown
-                        .get(&part.key)
-                        .filter(|entry| {
-                            entry.pattern_key == pattern.key && entry.text == part.text && entry.conceal == conceal
-                        })
-                        .map(|entry| entry.count)
+                find_matches(&parts, Some(pattern), |part, pattern| {
+                    self.count_part(tui, part, pattern, conceal, links, width)
                 })
             }
             None => Vec::new(),
@@ -534,14 +635,27 @@ impl FindInner {
         }
     }
 
-    fn counted(&self, key: FindPartKey, pattern_key: &str, text: &str, conceal: bool, count: usize) {
+    fn counted(&self, key: FindPartKey, pattern_key: &str, text: &str, conceal: bool, links: bool, count: usize) {
         let mut shown = self.shown.borrow_mut();
         if shown.get(&key).is_some_and(|entry| {
-            entry.pattern_key == pattern_key && entry.text == text && entry.conceal == conceal && entry.count == count
+            entry.pattern_key == pattern_key
+                && entry.text == text
+                && entry.conceal == conceal
+                && entry.hyperlinks == links
+                && entry.count == count
         }) {
             return;
         }
-        shown.insert(key, ShownEntry { pattern_key: pattern_key.to_owned(), text: text.to_owned(), conceal, count });
+        shown.insert(
+            key,
+            ShownEntry {
+                pattern_key: pattern_key.to_owned(),
+                text: text.to_owned(),
+                conceal,
+                hyperlinks: links,
+                count,
+            },
+        );
         drop(shown);
         if !self.reconcile_due.replace(true)
             && let Some(tui) = self.tui.upgrade()
@@ -596,6 +710,7 @@ impl FindInner {
 #[derive(Default)]
 pub struct FindMarkdown {
     active: Cell<bool>,
+    tagged_plain: Cell<bool>,
     inner: RefCell<Option<Rc<RefCell<FindMarkdownInner>>>>,
 }
 
@@ -611,44 +726,46 @@ struct FindMarkdownInner {
     current: Option<usize>,
     last_source: String,
     last_conceal: bool,
+    last_hyperlinks: bool,
     last_colors: (Color, Color, Color),
     theme: Theme,
     syntax: Arc<SyntaxTheme>,
     md_colors: MarkdownColors,
-    tagged_plain: bool,
     registered_langs: Vec<String>,
     pass_active: bool,
-    cursor: usize,
-    top_blocks: Vec<TopBlock>,
-    search_pos: usize,
-    table_state: Option<(usize, usize)>,
+    actual_total: usize,
+    prose_plan: VecDeque<(usize, usize)>,
+    table_plan: VecDeque<(usize, usize, usize, usize)>,
+    code_plan: VecDeque<usize>,
     current_loc: Option<MatchLoc>,
 }
 
+fn feed_raw(markdown: &Markdown, text: &str) {
+    let kept =
+        markdown.with_markdown(|shown| (shown != text).then(|| if text.starts_with(shown) { shown.len() } else { 0 }));
+    match kept {
+        Some(0) => {
+            markdown.set_markdown(text);
+        }
+        Some(len) => {
+            markdown.append(&text[len..]);
+        }
+        None => {}
+    }
+}
+
 impl FindMarkdown {
-    /// Feeds Markdown content into `markdown`, tagging plain fences when Find is active so
-    /// `code_block_renderer` receives them. When Find is closed, keeps the exact streaming fast path.
+    /// Feeds Markdown content into `markdown`. When Find is closed, keeps the exact streaming fast
+    /// path with zero extra work; when Find is open and untagged code blocks are tagged, defers to
+    /// `sync` to feed the updated tagged text once.
     pub fn feed(&self, markdown: &Markdown, text: &str, find_active: bool) {
-        let tagged = find_active.then(|| tag_plain_fences(text)).flatten();
-        let shown_text = tagged.as_deref().unwrap_or(text);
-        if let Some(inner) = self.inner.borrow().as_ref() {
-            inner.borrow_mut().tagged_plain = tagged.is_some();
+        if find_active && self.tagged_plain.get() {
+            return;
         }
-        let kept = markdown.with_markdown(|shown| {
-            (shown != shown_text).then(|| if shown_text.starts_with(shown) { shown.len() } else { 0 })
-        });
-        match kept {
-            Some(0) => {
-                markdown.set_markdown(shown_text);
-            }
-            Some(len) => {
-                markdown.append(&shown_text[len..]);
-            }
-            None => {}
-        }
+        feed_raw(markdown, text);
     }
 
-    /// Synchronizes Find highlights and counts on `markdown`.
+    /// Synchronizes Find highlights and counts on `markdown` using the shared native Markdown parser.
     pub fn sync(
         &self,
         cx: &Context<'_>,
@@ -666,6 +783,7 @@ impl FindMarkdown {
         };
         let part_key = FindPartKey { message_id: message_id.to_owned(), part };
         let colors = (cx.theme.find.text.current, cx.theme.find.background.r#match, cx.theme.find.background.current);
+        let has_links = hyperlinks(cx.app);
         let my_current = active.current_occurrence(&part_key);
         let state = {
             let mut slot = self.inner.borrow_mut();
@@ -675,17 +793,17 @@ impl FindMarkdown {
                     current: None,
                     last_source: String::new(),
                     last_conceal: cx.conceal,
+                    last_hyperlinks: has_links,
                     last_colors: colors,
                     theme: cx.theme.clone(),
                     syntax: cx.syntax.clone(),
                     md_colors: opencode_ui::markdown::view_colors(cx.theme, cx.syntax),
-                    tagged_plain: false,
                     registered_langs: Vec::new(),
                     pass_active: false,
-                    cursor: 0,
-                    top_blocks: Vec::new(),
-                    search_pos: 0,
-                    table_state: None,
+                    actual_total: 0,
+                    prose_plan: VecDeque::new(),
+                    table_plan: VecDeque::new(),
+                    code_plan: VecDeque::new(),
                     current_loc: None,
                 }))
             })
@@ -699,20 +817,33 @@ impl FindMarkdown {
                 && inner.current == my_current
                 && inner.last_source == source
                 && inner.last_conceal == cx.conceal
+                && inner.last_hyperlinks == has_links
                 && inner.last_colors == colors
         };
         if unchanged {
             return;
         }
-        let (langs, has_plain) = scan_fences(source);
-        if has_plain && !state.borrow().tagged_plain {
-            self.feed(markdown, source, true);
-        } else if !has_plain && state.borrow().tagged_plain {
-            self.feed(markdown, source, false);
+        let parsed = active.parse_markdown(cx.tui, source, cx.conceal);
+        if let Some(tagged) = tag_untagged_code_blocks(source, &parsed, PLAIN_FENCE_LANG) {
+            feed_raw(markdown, &tagged);
+            self.tagged_plain.set(true);
+        } else if self.tagged_plain.replace(false) {
+            feed_raw(markdown, source);
         }
-        let mut needed = langs;
-        if has_plain {
-            needed.push(PLAIN_FENCE_LANG.to_owned());
+        // Register code-block renderers for every code block language in this document.
+        let mut needed: Vec<String> = Vec::new();
+        for block in &parsed.blocks {
+            let lang = match block {
+                ShownBlock::Code { language: Some(lang), .. } => Some(lang.as_str()),
+                ShownBlock::Code { has_info: false, .. } => Some(PLAIN_FENCE_LANG),
+                ShownBlock::CustomCode { language, .. } => Some(language.as_str()),
+                _ => None,
+            };
+            if let Some(lang) = lang
+                && !needed.iter().any(|existing| existing == lang)
+            {
+                needed.push(lang.to_owned());
+            }
         }
         for lang in needed {
             if state.borrow().registered_langs.contains(&lang) {
@@ -721,6 +852,11 @@ impl FindMarkdown {
             let original = cx.renderers.get(&lang).cloned();
             let state_ref = state.clone();
             markdown.code_block_renderer(&lang, move |block: &CodeBlock<'_>| {
+                let pass_active = state_ref.borrow().pass_active;
+                if !pass_active {
+                    return original.as_ref().and_then(|render| render(block));
+                }
+                let first = state_ref.borrow_mut().code_plan.pop_front().unwrap_or(0);
                 if let Some(original) = &original
                     && let Some(widget) = original(block)
                 {
@@ -729,13 +865,7 @@ impl FindMarkdown {
                 let mut inner = state_ref.borrow_mut();
                 let pattern = inner.pattern.as_ref()?;
                 let ranges = find_ranges(block.code, Some(pattern));
-                let first = if inner.pass_active {
-                    let first = inner.cursor;
-                    inner.cursor += ranges.len();
-                    first
-                } else {
-                    return None;
-                };
+                inner.actual_total += ranges.len();
                 if ranges.is_empty() {
                     return None;
                 }
@@ -763,22 +893,47 @@ impl FindMarkdown {
             });
             state.borrow_mut().registered_langs.push(lang);
         }
+        // Precompute exact document-order occurrence offsets and block locations from `parsed`.
         {
             let mut inner = state.borrow_mut();
             inner.pattern = Some(active.pattern.clone());
             inner.current = my_current;
             source.clone_into(&mut inner.last_source);
             inner.last_conceal = cx.conceal;
+            inner.last_hyperlinks = has_links;
             inner.last_colors = colors;
             inner.theme = cx.theme.clone();
             inner.syntax = cx.syntax.clone();
             inner.md_colors = opencode_ui::markdown::view_colors(cx.theme, cx.syntax);
             inner.pass_active = true;
-            inner.cursor = 0;
-            inner.top_blocks = top_level_blocks(source);
-            inner.search_pos = 0;
-            inner.table_state = None;
+            inner.actual_total = 0;
+            inner.prose_plan.clear();
+            inner.table_plan.clear();
+            inner.code_plan.clear();
             inner.current_loc = None;
+            let mut cursor = 0usize;
+            for block in &parsed.blocks {
+                match block {
+                    ShownBlock::Prose { top_index, text } => {
+                        let count = find_ranges(text, Some(&active.pattern)).len();
+                        inner.prose_plan.push_back((*top_index, cursor));
+                        cursor += count;
+                    }
+                    ShownBlock::TableCell { top_index, row, total_rows, text } => {
+                        let count = find_ranges(text, Some(&active.pattern)).len();
+                        inner.table_plan.push_back((*top_index, *row, *total_rows, cursor));
+                        cursor += count;
+                    }
+                    ShownBlock::Code { text, .. } => {
+                        let count = find_ranges(text, Some(&active.pattern)).len();
+                        inner.code_plan.push_back(cursor);
+                        cursor += count;
+                    }
+                    ShownBlock::CustomCode { .. } => {
+                        inner.code_plan.push_back(cursor);
+                    }
+                }
+            }
         }
         let weak_tui = cx.tui.weak();
         let links_ref = links.clone();
@@ -797,36 +952,33 @@ impl FindMarkdown {
                 };
                 let joined: String = spans.iter().map(|span| span.span.content.as_ref()).collect();
                 let ranges = find_ranges(&joined, Some(pattern));
-                let first = if inner.pass_active {
-                    let first = inner.cursor;
-                    inner.cursor += ranges.len();
-                    first
-                } else {
+                if !inner.pass_active {
                     return paint_inline_spans(spans, &ranges, 0, None, &inner.theme);
-                };
-                let hit = inner.current.filter(|&occ| occ >= first && occ < first + ranges.len());
+                }
+                inner.actual_total += ranges.len();
                 if icx.table_cell {
-                    let (top_index, row, total_rows) = locate_table_cell(&mut inner, icx.source);
-                    if hit.is_some() {
+                    let (top_index, row, total_rows, first) = inner.table_plan.pop_front().unwrap_or((0, 0, 1, 0));
+                    if inner.current.is_some_and(|occ| occ >= first && occ < first + ranges.len()) {
                         inner.current_loc = Some(MatchLoc::Table { top_index, row, total_rows });
                     }
+                    paint_inline_spans(spans, &ranges, first, inner.current, &inner.theme)
                 } else {
-                    let top_index = locate_prose_block(&mut inner, icx.source);
-                    if let Some(occ) = hit {
+                    let (top_index, first) = inner.prose_plan.pop_front().unwrap_or((0, 0));
+                    if let Some(occ) = inner.current.filter(|&occ| occ >= first && occ < first + ranges.len()) {
                         let range = ranges[occ - first];
                         inner.current_loc =
                             Some(MatchLoc::Prose { top_index, shown: joined, byte_offset: range.start });
                     }
+                    paint_inline_spans(spans, &ranges, first, inner.current, &inner.theme)
                 }
-                paint_inline_spans(spans, &ranges, first, inner.current, &inner.theme)
             },
         );
         let (total, loc) = {
             let mut inner = state.borrow_mut();
             inner.pass_active = false;
-            (inner.cursor, inner.current_loc.clone())
+            (inner.actual_total, inner.current_loc.clone())
         };
-        active.counted(part_key.clone(), source, cx.conceal, total);
+        active.counted(part_key.clone(), source, cx.conceal, has_links, total);
         if let Some(occurrence) = my_current {
             let md = markdown.clone();
             let row = move || -> Option<f64> {
@@ -868,13 +1020,14 @@ impl FindMarkdown {
     }
 
     fn clear(&self, tui: &Tui, markdown: &Markdown, links: &Rc<Links>, renderers: &CodeBlockRenderers, source: &str) {
+        let tagged_plain = self.tagged_plain.replace(false);
         let Some(state) = self.inner.borrow_mut().take() else { return };
-        let (langs, tagged_plain) = {
+        let langs = {
             let mut inner = state.borrow_mut();
             inner.pattern = None;
             inner.current = None;
             inner.pass_active = false;
-            (std::mem::take(&mut inner.registered_langs), inner.tagged_plain)
+            std::mem::take(&mut inner.registered_langs)
         };
         for lang in langs {
             if let Some(original) = renderers.get(&lang).cloned() {
@@ -893,62 +1046,6 @@ impl FindMarkdown {
             None => spans,
         });
     }
-}
-
-fn locate_prose_block(inner: &mut FindMarkdownInner, inline_source: &str) -> usize {
-    inner.table_state = None;
-    let needle = inline_source.trim();
-    if !needle.is_empty()
-        && let Some(rel) = inner.last_source[inner.search_pos..].find(needle)
-    {
-        let at = inner.search_pos + rel;
-        inner.search_pos = at + needle.len();
-        if let Some(index) = inner.top_blocks.iter().position(|block| at >= block.start && at < block.end) {
-            return index;
-        }
-    }
-    inner
-        .top_blocks
-        .iter()
-        .position(|block| inner.search_pos >= block.start && inner.search_pos < block.end)
-        .unwrap_or(0)
-}
-
-fn locate_table_cell(inner: &mut FindMarkdownInner, cell_source: &str) -> (usize, usize, usize) {
-    let (top_index, cell_pos) = match inner.table_state {
-        Some((top, pos)) => (top, pos),
-        None => {
-            let top = inner
-                .top_blocks
-                .iter()
-                .position(|block| block.table_rows.is_some() && block.end > inner.search_pos)
-                .or_else(|| inner.top_blocks.iter().position(|block| block.table_rows.is_some()))
-                .unwrap_or(0);
-            let start = inner.top_blocks.get(top).map_or(0, |block| block.start);
-            inner.table_state = Some((top, start));
-            (top, start)
-        }
-    };
-    let Some(block) = inner.top_blocks.get(top_index) else { return (0, 0, 1) };
-    let total_rows = block.table_rows.unwrap_or(1);
-    let slice = &inner.last_source[block.start..block.end];
-    let rel_start = cell_pos.saturating_sub(block.start).min(slice.len());
-    let needle = cell_source.trim();
-    let hit_rel = if !needle.is_empty() {
-        slice[rel_start..].find(needle).map(|found| {
-            let at = rel_start + found;
-            inner.table_state = Some((top_index, block.start + at + needle.len()));
-            inner.search_pos = inner.search_pos.max(block.start + at + needle.len());
-            at
-        })
-    } else {
-        None
-    }
-    .unwrap_or(rel_start);
-    // Line 0 is the header (row 0), line 1 is the delimiter (skipped), line 2+ are body rows (row 1+).
-    let raw_line = slice[..hit_rel].bytes().filter(|&byte| byte == b'\n').count();
-    let row = raw_line.saturating_sub(1).min(total_rows.saturating_sub(1));
-    (top_index, row, total_rows)
 }
 
 fn border_chars(vertical: char, bottom_left: char, horizontal: char) -> [char; 11] {

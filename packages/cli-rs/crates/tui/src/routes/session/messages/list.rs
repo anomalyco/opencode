@@ -505,6 +505,14 @@ impl Transcript {
         self.0.model.borrow().settings.conceal
     }
 
+    pub fn renderers(&self) -> &CodeBlockRenderers {
+        &self.0.renderers
+    }
+
+    pub fn syntax(&self) -> Arc<SyntaxTheme> {
+        self.0.look.borrow().paint.syntax.clone()
+    }
+
     /// Searchable transcript parts across all loaded rows (mounted and unmounted) in transcript order.
     pub fn find_parts(&self, tui: &Tui) -> Vec<FindPart> {
         let Some(session) = self.session() else { return Vec::new() };

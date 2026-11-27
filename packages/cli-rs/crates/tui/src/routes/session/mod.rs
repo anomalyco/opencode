@@ -192,9 +192,10 @@ impl RouteView for Session {
         }
         self.transcript.sync(tui, &self.id, changes);
         if self.find.is_open()
-            && changes.has(&self.id, Touched::SHAPE | Touched::CONTENT | Touched::PENDING | Touched::INFO)
+            && (changes.has(&self.id, Touched::SHAPE | Touched::CONTENT | Touched::PENDING | Touched::INFO)
+                || changes.any(Touched::INFO))
         {
-            self.find.sync(tui);
+            self.find.sync(tui, changes.any(Touched::INFO));
         }
         let prompting = self.permission.active() || self.form.active() || self.location.active();
         self.permission.sync(tui, changes);
