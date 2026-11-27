@@ -325,7 +325,8 @@ export default function Home() {
             {/* The sentence before the docs link is editable in Design mode; the link always ends it. */}
             <span data-design-copy="home.what.lead">
               {designCopy("home.what.lead", String(content().what.lead[0]).trim())}
-            </span>{" "}
+            </span>
+            {sentenceGap(designCopy("home.what.lead", String(content().what.lead[0]).trim()))}
             <Rich value={content().what.lead.slice(1)} />
           </p>
           <Show when={import.meta.env.DEV || siteSettings.providerLogos !== "none"}>
@@ -1206,7 +1207,8 @@ function BringYourOwnSubs() {
       <h2 data-slot="label">{subs().title}</h2>
       <div data-slot="body">
         <p data-slot="lead">
-          <span data-design-copy="home.byos.headline">{designCopy("home.byos.headline", subs().headline)}</span>{" "}
+          <span data-design-copy="home.byos.headline">{designCopy("home.byos.headline", subs().headline)}</span>
+          {sentenceGap(designCopy("home.byos.headline", subs().headline))}
           <span data-design-copy="home.byos.line">
             <Rich
               value={linkPhrases(

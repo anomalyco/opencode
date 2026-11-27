@@ -20,17 +20,17 @@ export const content = {
     desktop: {
       title: "OpenCode | 适用于 macOS、Windows 和 Linux 的桌面应用",
       description:
-        "并行运行任意多个 OpenCode agent，在旁边的浏览器中查看每处更改，并在任意设备上继续。适用于 macOS、Windows 和 Linux。",
+        "同时运行任意数量的 OpenCode agent，在旁边的浏览器中查看每处改动，并在任意设备上继续。支持 macOS、Windows 和 Linux。",
       intro:
-        "同时运行多个 agent，每个会话都有独立的标签页。以 diff 审查每处更改，在任意一行添加评论，并在内置浏览器中检查结果。支持 macOS、Windows 和 Linux。",
+        "同时运行多个 agent，每个会话都有独立的标签页。用 diff 审查每处改动，在任意一行添加评论，并在内置浏览器中检查结果。支持 macOS、Windows 和 Linux。",
       showcase: {
         "parallel-agents": {
           title: "并行 agent",
-          body: "想启动多少个 agent 都可以，让它们全部并行工作。哪个完成了，就切换过去查看。",
+          body: "想让多少个 agent 同时工作都行，哪个先完成，就切过去看。",
         },
         "see-it-in-the-browser": {
           title: "在浏览器中查看",
-          body: "你的应用会在 agent 旁边的浏览器中打开，你和 agent 都能看到每处更改落地。",
+          body: "你的应用会在 agent 旁边的浏览器中打开，你和 agent 都能看到每处改动生效。",
         },
         "on-every-device": {
           title: "在每台设备上",
@@ -38,16 +38,15 @@ export const content = {
         },
         "extend-it": {
           title: "扩展它",
-          body: "连接你的工具和服务，让 agent 能处理任何事情。或者让 OpenCode 为自己构建插件，并在侧边栏中拥有自己的界面。",
+          body: "接入你的工具和服务，让 agent 能处理各种工作。或者让 OpenCode 为自己构建插件，在侧边栏里有自己的界面。",
         },
       },
     },
     mobile: {
-      title: "OpenCode | 在手机上引导编程 agent 的移动应用",
-      description:
-        "在手机上启动并引导 OpenCode 会话。agent 在你的电脑上运行时，你可以与它对话。",
+      title: "OpenCode | Mobile，手机上的编程会话",
+      description: "在手机上启动并引导 OpenCode 会话。agent 在你的电脑上运行时，你可以直接和它说话。",
       intro:
-        "无论身在何处，都能在手机上启动并引导会话。给会话打电话与 agent 交谈，或打开任意会话从上次中断处继续，一切都在你自己电脑上的 OpenCode 中运行。",
+        "无论身在何处，都能在手机上启动并引导会话。呼叫会话，和 agent 交谈，或打开任意会话从上次中断处继续，一切都运行在你电脑上的 OpenCode 中。",
       features: {
         "notify-when-done": { title: "完成时通知", body: "你启动的会话完成后，会收到一段简短总结。" },
         "pair-from-anywhere": { title: "随处配对", body: "使用 opencode pair --remote 从任意网络连接。" },
@@ -55,7 +54,7 @@ export const content = {
         "siri-and-shortcuts": { title: "Siri 和快捷指令", body: "通过 Siri 或控制中心发起通话或会话。" },
         "follow-along": { title: "实时跟进", body: "看着时间线随 agent 的工作实时更新。" },
         "your-computer": { title: "你的电脑", body: "连接到你自己机器上运行的 OpenCode。" },
-        "share-sheet": { title: "共享菜单", body: "无需打开应用，即可把任何内容分享到会话。" },
+        "share-sheet": { title: "分享菜单", body: "无需打开应用，即可把任何内容分享到会话。" },
         "mute-sessions": { title: "静音会话", body: "将会话保留在列表中，但不接收它的通知。" },
       },
       showcase: {
@@ -72,7 +71,7 @@ export const content = {
       intro:
         "快速的终端界面，可在任意 shell、编辑器或远程服务器中使用。用自然语言描述需求，看着每处编辑以 diff 呈现，并选择哪些命令可以自动运行。",
       features: {
-        "any-terminal": { title: "任意终端", body: "可在任意 shell、编辑器的终端或远程服务器中使用。" },
+        "any-terminal": { title: "任意终端", body: "可在任意 shell、编辑器内置终端或远程服务器中使用。" },
         "diffs-in-the-timeline": { title: "时间线中的 diff", body: "agent 每做一处编辑，都会以 diff 显示在时间线中。" },
         "pick-up-later": { title: "稍后继续", body: "用 -c 继续上一个会话，或用 -s 继续任意会话。" },
         "one-off-runs": { title: "单次运行", body: "opencode run 发送一条消息并输出回复。" },
@@ -84,27 +83,27 @@ export const content = {
       showcase: {
         "ask-in-plain-words": { title: "用自然语言提问", body: "输入你的需求，agent 会在工作时展示计划。" },
         "approve-what-runs": { title: "批准要运行的内容", body: "编辑以 diff 显示，命令会等待你的许可。" },
-        "make-it-yours": { title: "随心定制", body: "一键切换主题，从默认主题到 tokyonight 等。" },
+        "make-it-yours": { title: "随心定制", body: "按一个键就能切换主题，从默认主题到 tokyonight 等。" },
         mini: { title: "Mini", body: "运行 opencode mini，回复会输出到你自己的滚动记录中。" },
       },
     },
     sdk: {
-      title: "OpenCode | 在代码中驱动 agent 的 TypeScript SDK",
+      title: "OpenCode | 面向脚本、CI 任务和工具的 TypeScript SDK",
       description:
         "在你自己的脚本、CI 任务和工具中驱动 OpenCode。带类型的 TypeScript 客户端可以创建会话、发送提示词，并实时流式传输每个事件。",
       intro:
-        "在你自己的脚本、CI 任务和工具中驱动 OpenCode。SDK 在你的进程内运行 OpenCode，使用你的配置和模型，其带类型的客户端可以创建会话、发送提示词并流式传输每个事件。",
+        "在你自己的脚本、CI 任务和工具中驱动 OpenCode。SDK 在你的进程内运行 OpenCode，使用你的配置和模型。带类型的客户端可以创建会话、发送提示词并流式传输每个事件。",
       features: {
-        "typescript-client": { title: "TypeScript 客户端", body: "带类型的请求和事件，与 @opencode/client 的值相同。" },
+        "typescript-client": { title: "TypeScript 客户端", body: "带类型的请求和事件，值与 @opencode/client 相同。" },
         "sessions-from-code": { title: "用代码创建会话", body: "在任意脚本中创建会话并发送提示词。" },
-        "any-model": { title: "任意模型", body: "使用你的 OpenCode 配置中的任意模型。" },
+        "any-model": { title: "任意模型", body: "使用你 OpenCode 配置中已有的模型。" },
         "npm-or-bun": { title: "npm 或 bun", body: "使用 npm i @opencode/sdk 或 bun add @opencode/sdk 安装。" },
         "in-process-host": { title: "进程内宿主", body: "在内存中运行 OpenCode，无需经过网络。" },
         "your-plugins": { title: "你的插件", body: "创建进程内宿主时传入你自己的插件。" },
         "promise-or-effect": { title: "Promise 或 Effect", body: "Promise API 和 Effect API，返回相同的值。" },
         "cloudflare-workers": {
           title: "Cloudflare Workers",
-          body: "在 Workers 上的 Cloudflare Durable Object 中运行 OpenCode。",
+          body: "在 Cloudflare Workers 的 Durable Object 中运行 OpenCode。",
         },
       },
       showcase: {
@@ -130,7 +129,7 @@ export const content = {
         "your-scrollback": { title: "你的滚动记录", body: "回复就是普通的终端历史。" },
         "one-prompt": { title: "一个输入框", body: "agent、模型、上下文和费用都在一行状态栏中。" },
         permissions: { title: "权限", body: "在输入区域批准编辑和命令。" },
-        "how-much-shows": { title: "显示多少", body: "思考过程和工具输出可设为安静、默认或全部。" },
+        "how-much-shows": { title: "显示多少内容", body: "思考过程和工具输出可设为精简、默认或全部。" },
         "pick-up-later": { title: "稍后继续", body: "用 -c 继续上一个会话，或用 -s 继续任意会话。" },
         "same-opencode": { title: "同一个 OpenCode", body: "服务器、agent 和模型与其他应用相同。" },
         agents: { title: "agent", body: "直接在输入框中切换 agent。" },
@@ -147,7 +146,7 @@ export const content = {
     browse: {
       name: "Browse",
       body: "让 agent 使用你真实的浏览器。",
-      title: "OpenCode | Browse，为编程 agent 准备的真实浏览器",
+      title: "OpenCode | Browse，为编程 agent 打造的真实浏览器",
       description:
         "Browse 让 OpenCode 和其他 MCP 客户端使用你真实的浏览器。agent 会阅读页面、点击、输入、截图、录制标签页，并把登录和双重验证交还给你。",
       intro:
@@ -169,10 +168,9 @@ export const content = {
           title: "沿用你的所有登录",
           body: "agent 直接使用你已登录的网站。无需密钥，无需设置。",
         },
-        "allowed-sites": { title: "允许的网站", body: "让 agent 的标签页只停留在你指定的网站。" },
+        "allowed-sites": { title: "允许的网站", body: "让 agent 的标签页只访问你指定的网站。" },
       },
-      install:
-        "请先安装 [Chrome 扩展]，它会引导你完成其余步骤。如需直接安装 CLI（通常不需要），可使用以下任一命令。",
+      install: "请先安装 [Chrome 扩展]，它会引导你完成其余步骤。如需直接安装 CLI（通常不需要），可使用以下任一命令。",
     },
   },
   apps: {
@@ -193,7 +191,7 @@ export const content = {
     },
     subscriptions: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } },
     steps: {
-      download: { title: "下载", line: "桌面端、终端或移动端。" },
+      download: { title: "下载", line: "桌面应用、终端或移动应用。" },
       "use-free-models": { title: "使用免费模型", line: "OpenCode 内置一组免费模型，无需账户。" },
       "add-more-models": {
         title: "添加更多模型",
@@ -205,7 +203,7 @@ export const content = {
   byos: {
     title: "自带订阅",
     headline: "使用你已有的订阅。",
-    line: "使用 ChatGPT Plus 或 Pro 或 GitHub Copilot 登录，或者使用 OpenCode 订阅。",
+    line: "用 ChatGPT Plus、Pro 或 GitHub Copilot 登录，也可以使用 OpenCode 订阅。",
     yours: { label: "你的订阅", items: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } } },
     planLinks: ["OpenCode 订阅", "OpenCode Go"],
     ours: { label: "OpenCode 套餐" },
@@ -214,13 +212,13 @@ export const content = {
     hero: { copy: { text: "给 agent 的规范", copied: "规范已复制" } },
     naming: {
       title: "命名",
-      body: "OpenCode 写作一个词，O 和 C 大写。不要写成 Opencode、Open Code、OpenCode AI 或 Open-Code。",
+      body: "OpenCode 连写成一个词，O 和 C 大写。不要写成 Opencode、Open Code、OpenCode AI 或 Open-Code。",
       code: "小写的 `opencode` 仅用于代码和包名，例如 `opencode-figma` 或 `@acme/opencode-plugin`。",
     },
     families: {
       logo: {
         title: "Logo",
-        body: "单独的 Logo，用于应用图标、头像和其他小空间。方形版本增加了内边距，适合会裁剪成方形的场景。",
+        body: "单独的 Logo，用于应用图标、头像和其他小空间。方形版本增加了内边距，适合会被裁成方形的场景。",
         assets: {
           light: { name: "浅色" },
           dark: { name: "深色" },
@@ -327,14 +325,14 @@ export const content = {
     },
     integrations: {
       title: "集成",
-      body: "与 OpenCode 配合使用的插件、提供商和工具，以及基于 OpenCode 构建的项目，都可以注明这一点。请使用徽章或合作伙伴组合标识，并为项目命名，清楚表明它属于你。",
+      body: "与 OpenCode 配合使用的插件、提供商和工具，以及基于 OpenCode 构建的项目，都可以这样标注。请使用徽章或合作伙伴组合标识，并为项目命名，清楚表明它属于你。",
       badges: {
         body: "在 README、文档或网站中放置徽章，并链接到 opencode.ai。根据背景选择浅色或深色文件（HTML 会自动切换），不要修改颜色或文字。",
         sizes: "每种样式都提供 20、32 和 44px（Shields 仅 20px），格式为 SVG 和 2 倍 PNG。",
-        mono: "每个文件还有使用 OpenMono 字体的版本，在扩展名前加 -mono，例如 opencode-works-with-a-light-20-mono.svg；加 -mono-caps 则为大写 OpenMono。",
+        mono: "每个文件也有 OpenMono 字体版本。在扩展名前加 -mono，例如 opencode-works-with-a-light-20-mono.svg；加 -mono-caps 则为大写 OpenMono。",
         groups: {
           "works-with": { title: "兼容", alt: "兼容 OpenCode", body: "适用于配合 OpenCode 运行的插件、提供商和工具。" },
-          "built-with": { title: "构建于", alt: "基于 OpenCode 构建", body: "适用于用 OpenCode 制作的项目。" },
+          "built-with": { title: "基于 OpenCode", alt: "基于 OpenCode 构建", body: "适用于用 OpenCode 制作的项目。" },
         },
         styles: { a: { name: "边框" }, c: { name: "格子" }, f: { name: "实心" }, g: { name: "Shields" } },
       },
@@ -394,9 +392,9 @@ export const content = {
     },
     about: {
       title: "关于 OpenCode",
-      body: "OpenCode 及其产品的介绍，有长短两个版本，可直接复制。",
+      body: "OpenCode 及其产品的介绍，有长版和短版，可直接复制。",
       boilerplate: {
-        long: "OpenCode 是一个开源编程 agent。它提供桌面应用、终端界面、移动应用和 SDK，并支持任意提供商的模型，包括 Claude、GPT 和 Gemini。OpenCode 采用 MIT 许可，由 Anomaly 打造。它在 GitHub 上拥有超过 220,000 个星标和 1,000 多位贡献者，每月有超过 2200 万开发者使用。",
+        long: "OpenCode 是一个开源编程 agent。它提供桌面应用、终端界面、移动应用和 SDK，并支持任意提供商的模型，包括 Claude、GPT 和 Gemini。OpenCode 采用 MIT 许可，由 Anomaly 打造。它在 GitHub 上拥有超过 220,000 个星标和 1,000 多位贡献者，每月有超过 2200 万名开发者使用。",
         short: "OpenCode 是 Anomaly 推出的开源编程 agent，提供桌面、终端和移动应用以及 SDK。",
       },
       products: {
@@ -413,7 +411,7 @@ export const content = {
         },
         "opencode-data": {
           name: "OpenCode Data",
-          long: "OpenCode Data 是一个公开仪表盘，展示开发者在 OpenCode 中使用哪些 AI 模型，以及这一组合如何随时间变化。它发布热门模型排行榜、token 用量、会话和 token 成本、缓存比率、市场份额以及按国家划分的数据。数据每小时汇总一次，天和周以 UTC 计算。用户数和会话数为近似值，成本使用 OpenCode 模型目录中的标价。记者可以引用为 OpenCode Data (opencode.ai/data)，并注明页面上显示的更新时间。",
+          long: "OpenCode Data 是一个公开仪表盘，展示开发者在 OpenCode 中使用哪些 AI 模型，以及这一组合如何随时间变化。它发布热门模型排行榜、token 用量、会话和 token 成本、缓存比率、市场份额以及按国家划分的数据。数据每小时汇总一次，天和周以 UTC 计算。用户数和会话数为近似值，成本使用 OpenCode 模型目录中的标价。记者可以引用为 OpenCode Data（opencode.ai/data），并注明页面上显示的更新时间。",
           short:
             "OpenCode Data 是位于 opencode.ai/data 的公开仪表盘，按 OpenCode 中的真实使用量为 AI 模型排名，token、成本和市场份额每小时更新。",
         },
@@ -421,7 +419,7 @@ export const content = {
     },
     facts: {
       title: "概览",
-      items: { license: { label: "许可证" }, "first-release": { label: "首次发布" }, "made-by": { label: "开发者" } },
+      items: { license: { label: "许可证" }, "first-release": { label: "首次发布" }, "made-by": { label: "开发方" } },
     },
     milestones: {
       title: "里程碑",
@@ -539,7 +537,7 @@ export const content = {
         },
         mobile: {
           name: "Mobile",
-          body: "最新的 OpenCode 应用。呼叫会话与 agent 对话，然后随时随地在手机上审查并批准它的更改。",
+          body: "OpenCode 最新推出的应用。呼叫会话与 agent 对话，然后随时随地在手机上审查并批准它的改动。",
         },
         terminal: {
           name: "Terminal",
@@ -593,11 +591,11 @@ export const content = {
   pair: {
     title: "连接手机",
     cardTitle: "一条命令配对手机",
-    intro: "OpenCode Mobile 是你电脑上 OpenCode 的遥控器。会话继续在电脑上运行，应用负责显示它们，并让你引导它们。",
+    intro: "OpenCode Mobile 是你电脑上 OpenCode 的遥控器。会话继续在电脑上运行，应用会显示会话，并让你引导它们。",
     steps: {
       "get-the-app": {
         title: "获取应用",
-        body: "从 TestFlight 在 iPhone 上安装 OpenCode 测试版。Android 应用即将推出。",
+        body: "从 TestFlight 在 iPhone 上安装 OpenCode 测试版，或在 Android 手机上安装应用。",
       },
       "run-this-on-your-computer": {
         title: "在电脑上运行",
@@ -615,7 +613,7 @@ export const content = {
   },
   announcements: {
     "create-install-and-share-desktop-plugins": { text: "创建、安装和分享桌面插件。", link: "查看 2.2 的新功能" },
-    "desktop-terminals-now-survive-restarts": { text: "桌面端终端现在重启后依然保留。", link: "查看 v2.2.4" },
+    "desktop-terminals-now-survive-restarts": { text: "桌面端终端现在重启后不会丢失。", link: "查看 v2.2.4" },
     "agents-can-now-generate-images": { text: "agent 现在可以生成图片了。", link: "查看 v2.2.1" },
     "steer-your-sessions-from-your-phone": { text: "在手机上引导你的会话。", link: "认识 OpenCode Mobile" },
     "a-refreshed-desktop-app": { text: "焕然一新的桌面应用。", link: "查看 2.2 的新功能" },
