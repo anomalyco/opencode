@@ -2579,6 +2579,12 @@ export type ExperimentalMachineListOutput = ReadonlyArray<{
     readonly path?: "direct" | "relayed"
     readonly rtt?: number
   }
+  readonly refused?: {
+    readonly at: number
+    readonly reason:
+      | { readonly type: "protocol-mismatch"; readonly worker: number; readonly home: number }
+      | { readonly type: "invalid-hello"; readonly issue: string }
+  }
 }>
 export type ExperimentalMachineListOperation<E = never> = () => Effect.Effect<ExperimentalMachineListOutput, E>
 
