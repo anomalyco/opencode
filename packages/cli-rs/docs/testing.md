@@ -245,6 +245,9 @@ runner starts `opencode serve` from source in simulation mode with an in-memory 
 with no tools), a recording proxy (`parity/sim/proxy.ts`), and the client with `--server <proxy>` and a headless
 renderer. It sends the steps through `parity/sim/drive.ts`, and kills every process it started at the end.
 
+The server's and both clients' clocks start at a fixed instant (`sim/clock.ts`), so the date a run shows, such
+as the built-in `core/date` instruction, never depends on when it runs; a scenario's `now` overrides it.
+
 A scenario is `parity/scenarios/<group>/<name>.sim.ts` with `export default defineSim({...})`
 (`parity/sim/scenario.ts` has every field):
 
