@@ -15,6 +15,9 @@ type Entry<Tab> = {
   available?: "desktop" | "linux" | "browser" | "mobile"
 }
 
+// Playwright specs import this catalog in Node, where Vite does not define import.meta.env.
+const channel = import.meta.env?.VITE_OPENCODE_CHANNEL
+
 export const clientSettings: Entry<SettingsRootTab>[] = [
   { tab: "general", label: "settings.tab.preferences" },
   {
@@ -161,7 +164,7 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     keywords: "automations schedules timers cron watches events",
   },
   // Matches questionComposerAvailable in settings/model.tsx; that module is too heavy to import here.
-  ...(import.meta.env.VITE_OPENCODE_CHANNEL === "local" || import.meta.env.VITE_OPENCODE_CHANNEL === "dev"
+  ...(channel === "local" || channel === "dev"
     ? [
         {
           tab: "experimental",
