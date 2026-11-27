@@ -137,8 +137,6 @@ export interface MockServerConfig {
   mcpResourceFailures?: () => boolean
   // Runs on DELETE .../connect/oauth/:attemptID, which closes an OAuth attempt the dialog left.
   onIntegrationOAuthCancel?: (attemptID: string) => void
-  // Feature flags served by `/api/experimental/flag`; absent means every flag is off.
-  flags?: Resolvable<Record<string, boolean>>
   plugins?: Resolvable<unknown[]>
   skills?: Resolvable<unknown[]>
   // Replaces the `/api/worktree` inventory, which defaults to the directory plus project sandboxes.
@@ -975,11 +973,9 @@ function mockHandlers(
           Effect.sync(() => ({ location: location(config), data: resolve(config.websearchProviders ?? []) })),
         // No scenario signs in to an OpenCode Console workspace, so none has usage limits.
         usageLimits: () => Effect.succeed({ location: location(config), data: null }),
+        // No scenario turns on a feature flag, so every flag is off.
         flagList: (ctx) =>
-          Effect.sync(() => ({
-            location: location(config, requestDirectory(config, ctx.request)),
-            data: resolve(config.flags ?? {}),
-          })),
+          Effect.sync(() => ({ location: location(config, requestDirectory(config, ctx.request)), data: {} })),
         // No scenario runs background jobs (Code Mode scripts or subagent work), so none is running.
         jobList: () => Effect.succeed({ data: [] }),
         automationList: (ctx) =>

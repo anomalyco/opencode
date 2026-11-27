@@ -8,6 +8,7 @@ import { jumpList, jumpTask } from "../native/jump-list"
 import { deepLinkArguments, takeLaunchLinks } from "./launch-links"
 import { DesktopLogging, scoped } from "../native/logging"
 import { sendMenuCommand } from "../native/menu"
+import { refreshTrayMenu } from "../native/tray-menu"
 import { configureTray, setTrayActive } from "../native/tray"
 import { onNativeTranslations } from "../native/translations"
 import { DesktopPaths } from "../paths"
@@ -110,6 +111,7 @@ const runtime = Layer.effect(
       if (win.isMinimized()) win.restore()
       win.show()
       win.focus()
+      refreshTrayMenu()
     }
 
     const deepLinks = yield* DeepLinks.make(focusWindow)
@@ -138,11 +140,13 @@ const runtime = Layer.effect(
 
           if (win?.isVisible() && !win.isMinimized()) {
             win.hide()
+            refreshTrayMenu()
 
             return
           }
 
           showWindow()
+          refreshTrayMenu()
         },
         isHidden: () => {
           const win = getLastFocusedWindow()

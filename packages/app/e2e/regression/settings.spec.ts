@@ -105,14 +105,13 @@ test("Ctrl+, opens settings as soon as the app loads", async ({ page }) => {
   await expect(page).toHaveURL("/settings")
 })
 
-test("desktop close action changes from Preferences when its flag is on", async ({ page }) => {
+test("desktop close action changes from Preferences", async ({ page }) => {
   await mockWorkspace(page, {
     name: "Close action demo",
     directory,
     provider: NO_PROVIDER,
     sessions: [],
     seed: { tabs: [] },
-    flags: { desktop_close_tray: true },
   })
   await page.goto(
     `/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER, path: "/settings", closeAction: "ask" })}`,

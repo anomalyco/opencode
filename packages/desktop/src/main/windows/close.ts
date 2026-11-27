@@ -2,6 +2,7 @@ import type { DesktopCloseChoice } from "@opencode/app/desktop-close"
 import { Schema } from "effect"
 import electron from "electron"
 import type { BrowserWindow } from "electron"
+import { refreshTrayMenu } from "../native/tray-menu"
 import { nativeT } from "../native/translations"
 import { CLOSE_ACTION_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
@@ -48,7 +49,7 @@ export function readCloseChoice() {
 
 /**
  * No stored choice means the app closes as it always did. A tray only appears after someone chooses Ask or Hide,
- * so the experimental behavior stays dormant until the setting is visible and used.
+ * so closing stays dormant until the user opts in from Settings or the close dialog.
  */
 export function setCloseChoice(choice: DesktopCloseChoice) {
   getStore().set(CLOSE_ACTION_KEY, choice)
@@ -106,6 +107,7 @@ export function createClosePrompt(input: {
     }
 
     win.hide()
+    refreshTrayMenu()
   }
 
   return {

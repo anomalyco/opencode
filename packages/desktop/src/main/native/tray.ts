@@ -1,5 +1,6 @@
 import type { NativeImage } from "electron"
 import { Menu, Tray, nativeImage } from "electron"
+import { onTrayMenuRefresh, refreshTrayMenu } from "./tray-menu"
 import { nativeT, onNativeTranslations } from "./translations"
 
 export type TrayActions = {
@@ -54,41 +55,44 @@ export function setTrayActive(active: boolean) {
 
 function createTray(image: NativeImage, actions: TrayActions) {
   const tray = new Tray(image)
-  let menu = Menu.buildFromTemplate([])
 
   const update = () => {
     tray.setToolTip(nativeT("desktop.tray.tooltip"))
 
-    menu = Menu.buildFromTemplate([
-      {
-        label: nativeT(actions.isHidden() ? "desktop.tray.show" : "desktop.tray.hide"),
-        click: actions.toggle,
-      },
-      { label: nativeT("desktop.tray.newTab"), click: actions.newTab },
-      { label: nativeT("desktop.tray.settings"), click: actions.settings },
-      { type: "separator" },
-      { label: nativeT("desktop.tray.quit"), click: actions.quit },
-    ])
+    // Linux only shows a menu installed with setContextMenu; popUpContextMenu is Windows/macOS only.
+    tray.setContextMenu(
+      Menu.buildFromTemplate([
+        {
+          label: nativeT(actions.isHidden() ? "desktop.tray.show" : "desktop.tray.hide"),
+          click: actions.toggle,
+        },
+        { label: nativeT("desktop.tray.newTab"), click: actions.newTab },
+        { label: nativeT("desktop.tray.settings"), click: actions.settings },
+        { type: "separator" },
+        { label: nativeT("desktop.tray.quit"), click: actions.quit },
+      ]),
+    )
   }
 
   update()
+  const stopMenuRefresh = onTrayMenuRefresh(update)
 
-  // A left click toggles the window; a right click rebuilds the menu so the label matches the current window state.
-  tray.on("click", () => {
-    actions.toggle()
-    update()
-  })
-  tray.on("right-click", () => {
-    update()
-    tray.popUpContextMenu(menu)
-  })
+  // Linux owns the left click for its context menu; elsewhere it toggles the hidden window as before.
+  if (process.platform !== "linux") {
+    tray.on("click", () => {
+      actions.toggle()
+      refreshTrayMenu()
+    })
+  }
+  tray.on("right-click", refreshTrayMenu)
 
-  const stopTranslations = onNativeTranslations(update)
+  const stopTranslations = onNativeTranslations(refreshTrayMenu)
 
   return {
     tray,
     dispose() {
       stopTranslations()
+      stopMenuRefresh()
       tray.destroy()
     },
   }

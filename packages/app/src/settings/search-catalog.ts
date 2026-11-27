@@ -13,8 +13,6 @@ type Entry<Tab> = {
   section?: Label
   subtab?: "mcps" | "plugins" | "skills" | "lsps"
   available?: "desktop" | "linux" | "browser" | "mobile"
-  /** A server feature flag that must be on for this row to exist. */
-  flag?: string
 }
 
 export const clientSettings: Entry<SettingsRootTab>[] = [
@@ -78,7 +76,6 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     target: "settings-close-action",
     keywords: "close window tray hide quit exit ask",
     available: "desktop",
-    flag: "desktop_close_tray",
   },
   {
     tab: "general",

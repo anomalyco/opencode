@@ -2784,7 +2784,6 @@ export type ConfigEntry =
           compaction_jobs?: boolean
           sqlite_fts?: boolean
           browser_stream_tunnel?: boolean
-          desktop_close_tray?: boolean
           video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }

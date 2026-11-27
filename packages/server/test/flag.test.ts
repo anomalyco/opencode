@@ -36,7 +36,7 @@ it.live("reports full_codemode on by default in dev builds", () =>
     expect(result.status).toBe(200)
     expect(result.body).toEqual({
       location: expect.objectContaining({ directory: result.project }),
-      data: { full_codemode: true, desktop_close_tray: true },
+      data: { full_codemode: true },
     })
   }),
 )
@@ -44,7 +44,7 @@ it.live("reports full_codemode on by default in dev builds", () =>
 it.live("reports full_codemode off by default in releases", () =>
   Effect.gen(function* () {
     const result = yield* request({ channel: "latest" })
-    expect(result.body.data).toEqual({ full_codemode: false, desktop_close_tray: false })
+    expect(result.body.data).toEqual({ full_codemode: false })
   }),
 )
 
@@ -52,8 +52,8 @@ it.live("follows the project's opencode.json", () =>
   Effect.gen(function* () {
     const on = yield* request({ channel: "latest", project: { experimental: { full_codemode: true } } })
     const off = yield* request({ channel: "dev", project: { experimental: { full_codemode: false } } })
-    expect(on.body.data).toEqual({ full_codemode: true, desktop_close_tray: false })
-    expect(off.body.data).toEqual({ full_codemode: false, desktop_close_tray: true })
+    expect(on.body.data).toEqual({ full_codemode: true })
+    expect(off.body.data).toEqual({ full_codemode: false })
   }),
 )
 
@@ -65,14 +65,14 @@ it.live("lets OPENCODE_FLAGS override config", () =>
       project: { experimental: { full_codemode: false } },
     })
     const off = yield* request({ channel: "dev", overrides: "-full_codemode" })
-    expect(on.body.data).toEqual({ full_codemode: true, desktop_close_tray: false })
-    expect(off.body.data).toEqual({ full_codemode: false, desktop_close_tray: true })
+    expect(on.body.data).toEqual({ full_codemode: true })
+    expect(off.body.data).toEqual({ full_codemode: false })
   }),
 )
 
 it.live("only reports allowlisted flags", () =>
   Effect.gen(function* () {
     const result = yield* request({ channel: "dev", overrides: "all" })
-    expect(Object.keys(result.body.data)).toEqual(["full_codemode", "desktop_close_tray"])
+    expect(Object.keys(result.body.data)).toEqual(["full_codemode"])
   }),
 )

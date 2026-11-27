@@ -1,4 +1,4 @@
-import { Component, Show, createEffect, createMemo } from "solid-js"
+import { Component, Show, createMemo } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
@@ -6,8 +6,6 @@ import { Icon } from "@opencode/ui/icon"
 import { TimelineDetailControl } from "@/settings/timeline-detail"
 import type { DesktopCloseChoice } from "@/desktop-close"
 import { useLanguage } from "@/runtime/i18n/language"
-import { ServerConnection, useServers } from "@/runtime/server/registry"
-import { useGlobal } from "@/runtime/server/runtime"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { PluginSettingsSections } from "@/runtime/plugin/settings-page-view"
@@ -303,26 +301,9 @@ export const SettingsGeneral: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
   const settings = useSettings()
-  const servers = useServers()
-  const global = useGlobal()
   const mobile = createMediaQuery("(max-width: 767px)")
   const desktop = createMemo(() => platform.platform === "desktop")
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
-
-  const closeTrayContext = createMemo(() => {
-    const conn = servers.visible.find((item) => servers.current(item)) ?? servers.visible[0]
-
-    return conn ? global.serverCtx(ServerConnection.key(conn)) : undefined
-  })
-
-  // Settings can be the first route, so nothing else has synced the Location whose flags gate this row.
-  createEffect(() => {
-    const context = closeTrayContext()
-
-    if (context) void context.data.location.sync()
-  })
-
-  const closeTrayEnabled = () => closeTrayContext()?.data.location.flag("desktop_close_tray") === true
 
   const pinchZoom = createOptimisticSetting({
     source: () => (desktop() && "getPinchZoomEnabled" in platform) || undefined,
@@ -393,7 +374,7 @@ export const SettingsGeneral: Component = () => {
 
         <QuestionSubmitKeySetting />
 
-        <Show when={desktop() && platform.os !== "macos" && closeTrayEnabled()}>
+        <Show when={desktop() && platform.os !== "macos"}>
           <CloseActionSetting />
         </Show>
 
