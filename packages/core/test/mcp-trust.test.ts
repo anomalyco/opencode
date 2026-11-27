@@ -9,6 +9,7 @@ import { Config } from "@opencode/core/config"
 import { ConfigMcpPlugin } from "@opencode/core/config/plugin/mcp"
 import { Credential } from "@opencode/core/credential"
 import { Database } from "@opencode/core/database/database"
+import { KeyedMutex } from "@opencode/core/effect/keyed-mutex"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { ID, type Payload } from "@opencode/schema/event"
@@ -128,7 +129,12 @@ function trustMcpLayer(url: string) {
         }),
         Layer.mock(Credential.Service, {}),
         // The test servers never set pool, so the pool service is requested but never used.
-        Layer.mock(McpPool.Service, { connection: () => { throw new Error("unused pool service") } }),
+        Layer.mock(McpPool.Service, {
+          connection: () => {
+            throw new Error("unused pool service")
+          },
+          endpointLoads: KeyedMutex.makeUnsafe<string>(),
+        }),
         hostEnvironmentLayer,
       ),
     ),
