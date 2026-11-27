@@ -66,6 +66,11 @@ describe("Claude accounts", () => {
       home,
       path.resolve("/tmp/claude-2"),
     ])
+    expect(ClaudeQueryOptions.configDirs("~")).toEqual([os.homedir()])
+    // `~\` is a home path only on Windows.
+    expect(ClaudeQueryOptions.configDirs("~\\.claude-1")).toEqual([
+      process.platform === "win32" ? home : path.resolve("~\\.claude-1"),
+    ])
     expect(ClaudeQueryOptions.configDirs(undefined)).toEqual([])
     const env = ClaudeQueryOptions.connectionEnv({ settings: { configDir: ["~/.claude-1", "/tmp/claude-2"] } })
     expect(env).toEqual({ CLAUDE_CONFIG_DIR: home })

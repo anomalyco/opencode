@@ -256,6 +256,16 @@ export namespace FSUtil {
       .replace(/^\/mnt\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
   }
 
+  /**
+   * Expand a leading `~`, `~/` and, on Windows, `~\` to `home`. Anything else, including `~user`, is returned unchanged.
+   * Joins with the rules of the platform `home` belongs to, so a Windows home still joins with `\` when read on POSIX.
+   */
+  export function expandHome(input: string, home: string) {
+    if (input === "~") return home
+    if (!input.startsWith("~/") && !(process.platform === "win32" && input.startsWith("~\\"))) return input
+    return (path.posix.isAbsolute(home) ? path.posix : path.win32).join(home, input.slice(2))
+  }
+
   export const ignoredDirectories = ["node_modules", ".git", ".venv", "venv", "__pycache__"]
 
   export const ignoreGlobs = [...ignoredDirectories, `**/{${ignoredDirectories.join(",")}}/**`]

@@ -1,11 +1,15 @@
 import { describe, expect } from "bun:test"
+import fs from "fs/promises"
+import path from "path"
 import { Effect } from "effect"
+import { Integration } from "@opencode/core/integration"
 import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { GoogleVertexPlugin } from "@opencode/core/plugin/provider/google-vertex"
 import { Provider } from "@opencode/core/provider"
 import { withEnv } from "../fixture/env"
+import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -120,6 +124,42 @@ describe("GoogleVertexPlugin", () => {
 
           expect(required(yield* catalog.get(Provider.ID.make("google-vertex"))).activation).toBe("enabled")
         }),
+    ),
+  )
+
+  it.live("reads the gcloud project from a home-relative CLOUDSDK_CONFIG", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        withEnv(
+          {
+            OPENCODE_TEST_HOME: tmp.path,
+            // `~\` is a home path only on Windows, as gcloud's own `expanduser` treats it.
+            CLOUDSDK_CONFIG: process.platform === "win32" ? "~\\gcloud" : "~/gcloud",
+            GOOGLE_VERTEX_PROJECT: undefined,
+            GOOGLE_CLOUD_PROJECT: undefined,
+            GCP_PROJECT: undefined,
+            GCLOUD_PROJECT: undefined,
+          },
+          () =>
+            Effect.gen(function* () {
+              yield* Effect.promise(async () => {
+                await fs.mkdir(path.join(tmp.path, "gcloud", "configurations"), { recursive: true })
+                await fs.writeFile(
+                  path.join(tmp.path, "gcloud", "configurations", "config_default"),
+                  "[core]\nproject = home-project\n",
+                )
+              })
+              yield* addPlugin()
+              const integrations = yield* Integration.Service
+              expect((yield* integrations.get(Integration.ID.make(Provider.ID.googleVertex)))?.methods).toContainEqual(
+                expect.objectContaining({
+                  type: "external",
+                  form: expect.arrayContaining([expect.objectContaining({ key: "project", default: "home-project" })]),
+                }),
+              )
+            }),
+        ),
+      ),
     ),
   )
 

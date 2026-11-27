@@ -5,6 +5,7 @@ import path, { basename, dirname, extname, isAbsolute, join, relative } from "pa
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
@@ -249,7 +250,7 @@ export const Plugin = {
         ...Permission.invocation(miss.context),
       })
       if (!readable) return []
-      return [isAbsolute(miss.input) || miss.input.startsWith("~/") ? target.absolute : target.resource]
+      return [isAbsolute(FSUtil.expandHome(miss.input, Global.Path.home)) ? target.absolute : target.resource]
     })
 
     const didYouMean = (suggestions: string[]) =>

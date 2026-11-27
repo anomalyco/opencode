@@ -183,6 +183,12 @@ permissions: [{ action: edit, resource: "*", effect: deny }]`,
       expect(Permission.evaluate("external_directory", "C:\\Users\\test\\cache\\files\\*", permissions).effect).toBe(
         "deny",
       )
+      // `~\` is a home path only on Windows, as it is for tool paths in FileAccess.resolvePath.
+      expect(permissions).toContainEqual({
+        action: "external_directory",
+        resource: process.platform === "win32" ? "C:\\Users\\test\\private\\*" : "~\\private\\*",
+        effect: "deny",
+      })
     }),
   )
 
@@ -814,6 +820,7 @@ function loadHomePermissions(home: string) {
             permission: {
               external_directory: {
                 "~/p/**": "allow",
+                "~\\private\\*": "deny",
                 "/some/~/path": "deny",
                 "$HOMELESS/**": "deny",
               },

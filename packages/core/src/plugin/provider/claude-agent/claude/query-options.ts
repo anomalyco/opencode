@@ -4,6 +4,7 @@ import type { LanguageModelV3FunctionTool } from "@ai-sdk/provider"
 import type { Options } from "@anthropic-ai/claude-agent-sdk"
 import os from "node:os"
 import path from "node:path"
+import { FSUtil } from "@opencode/util/fs-util"
 import { ToolHooks } from "../tools/hooks.js"
 import type { PendingTools } from "../tools/pending.js"
 import { ToolServer } from "../tools/server.js"
@@ -66,8 +67,7 @@ export function configDirs(value: unknown) {
     if (typeof item !== "string") continue
     // Claude Code does not expand ~, so a configDir like ~/.claude-work would point inside the project.
     // An absolute path also means Claude Code and our own transcript lookups agree on the folder.
-    const dir = item.startsWith("~/") ? path.join(os.homedir(), item.slice(2)) : item
-    dirs.push(path.resolve(dir))
+    dirs.push(path.resolve(FSUtil.expandHome(item, os.homedir())))
   }
   return dirs
 }

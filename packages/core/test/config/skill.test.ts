@@ -192,6 +192,9 @@ describe("ConfigSkillPlugin.Plugin", () => {
             path.join(opencode, "skill"),
             path.join(opencode, "skills"),
             path.join(home, "shared"),
+            home,
+            // `~\` is a home path only on Windows.
+            ...(process.platform === "win32" ? [path.join(home, "windows")] : []),
             path.join(directory, "relative"),
           ]
           yield* Effect.promise(() => Promise.all(expected.map((item) => fs.mkdir(item, { recursive: true }))))
@@ -199,7 +202,12 @@ describe("ConfigSkillPlugin.Plugin", () => {
           yield* startEntries(
             [
               new Directory({ type: "directory", path: AbsolutePath.make(opencode) }),
-              new Document({ type: "document", info: decode({ skills: ["~/shared", "./relative"] }) }),
+              new Document({
+                type: "document",
+                info: decode({
+                  skills: ["~/shared", "~", ...(process.platform === "win32" ? ["~\\windows"] : []), "./relative"],
+                }),
+              }),
             ],
             directory,
             home,

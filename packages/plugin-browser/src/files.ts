@@ -28,8 +28,7 @@ export const authorize = Effect.fn("BrowserFiles.authorize")(function* (
 })
 
 export function uploadPath(directory: string, input: string) {
-  const path = FSUtil.windowsPath(input)
-  return resolve(directory, path === "~" ? Global.Path.home : /^~\//.test(path) || (process.platform === "win32" && path.startsWith("~\\")) ? join(Global.Path.home, path.slice(2)) : path)
+  return resolve(directory, FSUtil.expandHome(FSUtil.windowsPath(input), Global.Path.home))
 }
 
 export const physical = (paths: readonly string[]) => Effect.tryPromise({ try: () => Promise.all(paths.map((path) => realpath(path))), catch: (error) => failure("read", error) })

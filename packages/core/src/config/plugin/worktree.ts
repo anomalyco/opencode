@@ -4,6 +4,7 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { Effect } from "effect"
 import path from "path"
 import { Config } from "../../config.js"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Location } from "../../location.js"
 import { AbsolutePath } from "../../schema.js"
@@ -24,9 +25,7 @@ export const Plugin = define({
         const directory = entry.info.worktree.directory
         editor.configure({
           directory: AbsolutePath.make(
-            directory.startsWith("~/")
-              ? path.join(global.home, directory.slice(2))
-              : path.resolve(location.project.canonical, directory),
+            path.resolve(location.project.canonical, FSUtil.expandHome(directory, global.home)),
           ),
         })
       }

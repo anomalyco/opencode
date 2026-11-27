@@ -884,7 +884,10 @@ describe("Worktree", () => {
       expect(third.directory).toBe(abs(path.join(input.root.path, "worktree", input.projectID.slice(0, 6), "three")))
     }),
   )
-  ;["relative", "absolute", "home"].forEach((mode) => {
+  // `~\` is a home path only on Windows; elsewhere it is an ordinary relative name.
+  const directoryModes = ["relative", "absolute", "home", "bare-home"]
+  if (process.platform === "win32") directoryModes.push("backslash-home")
+  directoryModes.forEach((mode) => {
     it.live(`resolves ${mode} global directory config from a linked checkout's subdirectory`, () =>
       Effect.gen(function* () {
         const input = yield* setup()
@@ -901,7 +904,15 @@ describe("Worktree", () => {
         })
         const project = yield* projects.resolve(nested)
         const directory =
-          mode === "relative" ? ".lane/trees" : mode === "home" ? "~/copies" : path.join(home, "absolute")
+          mode === "relative"
+            ? ".lane/trees"
+            : mode === "absolute"
+              ? path.join(home, "absolute")
+              : mode === "bare-home"
+                ? "~"
+                : mode === "backslash-home"
+                  ? "~\\copies"
+                  : "~/copies"
         yield* config.setEntries([
           new Document({
             type: "document",
@@ -922,7 +933,11 @@ describe("Worktree", () => {
           abs(
             mode === "relative"
               ? path.join(input.sourceDirectory, ".lane/trees/task")
-              : path.join(home, mode === "home" ? "copies/task" : "absolute/task"),
+              : mode === "absolute"
+                ? path.join(home, "absolute/task")
+                : mode === "bare-home"
+                  ? path.join(home, "task")
+                  : path.join(home, "copies/task"),
           ),
         )
       }),

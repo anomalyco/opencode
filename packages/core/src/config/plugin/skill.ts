@@ -96,7 +96,7 @@ export const Plugin = define({
           add(Skill.UrlSource.make({ type: "url", url: item }))
           continue
         }
-        const expanded = item.startsWith("~/") ? path.join(global.home, item.slice(2)) : item
+        const expanded = FSUtil.expandHome(item, global.home)
         add(
           Skill.DirectorySource.make({
             type: "directory",
