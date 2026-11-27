@@ -198,7 +198,7 @@ function RootSettings() {
 
   const addServer = () => void dialog.push(() => <DialogServer mode="add" onSave={selectServer} />)
 
-  const pluginTabs = (include: (page: { id: string; group?: "about" }) => boolean) =>
+  const pluginTabs = (include: (page: { id: string; group?: "top" | "about" }) => boolean) =>
     surface.plugins
       .pages()
       .filter((item) => include(item.value))
@@ -206,7 +206,12 @@ function RootSettings() {
 
   const groups = createMemo<SettingsNavGroup[]>(() =>
     [
-      { items: rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })) },
+      {
+        items: [
+          ...rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })),
+          ...pluginTabs((page) => page.group === "top"),
+        ],
+      },
       {
         items: [
           ...serverTabs.map((item) => ({

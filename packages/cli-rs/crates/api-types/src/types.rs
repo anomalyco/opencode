@@ -12276,6 +12276,8 @@ pub struct UsageLimitsInfoWorkspace {
     pub name: Option<String>,
     #[serde(rename = "usageURL")]
     pub usage_url: String,
+    #[serde(rename = "goURL", default, skip_serializing_if = "Option::is_none")]
+    pub go_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -13180,6 +13182,8 @@ pub struct ConfigEntryDocumentInfoExperimental {
     pub sqlite_fts: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub browser_stream_tunnel: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub go_settings: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub video_generate: Option<ConfigEntryDocumentInfoExperimentalVideoGenerate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

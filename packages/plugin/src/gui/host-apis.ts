@@ -1028,6 +1028,24 @@ export interface Layout {
     /** The prompt the draft starts with. */
     readonly prompt: string
   }): void
+  /**
+   * Opens the app's dialog that connects an integration on a server, at that integration's sign-in, as picking it in
+   * Settings › Providers does. The connection is made at the server's default location. Does nothing when the app does
+   * not list the server.
+   *
+   * @param input - The server and the integration to connect.
+   *
+   * @example
+   * ```ts
+   * ctx.layout.connect({ server: server.id, integration: "opencode" })
+   * ```
+   */
+  connect(input: {
+    /** The server's `ServerRef.id`. */
+    readonly server: string
+    /** The integration's id, as the server's integration list names it. */
+    readonly integration: string
+  }): void
 }
 
 /**

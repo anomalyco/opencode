@@ -70,6 +70,8 @@ export const Info = Schema.Struct({
     name: Schema.String.pipe(optional),
     /** The member's usage page in OpenCode Console. */
     usageURL: Schema.String,
+    /** The workspace's OpenCode Go page in OpenCode Console, where it subscribes and manages its plan. */
+    goURL: Schema.String.pipe(optional),
   }),
   go: Go.pipe(optional),
   budgets: Schema.Array(Budget),

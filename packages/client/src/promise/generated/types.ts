@@ -2784,6 +2784,7 @@ export type ConfigEntry =
           compaction_jobs?: boolean
           sqlite_fts?: boolean
           browser_stream_tunnel?: boolean
+          go_settings?: boolean
           video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
@@ -2810,7 +2811,7 @@ export type ConfigEntry =
 export type AutomationAction = AutomationActionPrompt | AutomationActionCode | AutomationActionShell
 
 export type UsageLimitsInfo = {
-  workspace: { id: string; name?: string; usageURL: string }
+  workspace: { id: string; name?: string; usageURL: string; goURL?: string }
   go?: UsageLimitsGo
   budgets: Array<UsageLimitsBudget>
 }
