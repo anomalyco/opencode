@@ -13,12 +13,12 @@ Requirements:
 - Preserve meaning, intent, tone, and formatting (including Markdown/MDX structure).
 - Preserve all technical terms and artifacts exactly: product/company names, API names, identifiers, code, commands/flags, file paths, URLs, versions, error messages, config keys/values, and anything inside inline code or code blocks.
 - Also preserve every term listed in the Do-Not-Translate glossary below.
-- Also apply locale-specific guidance from `.opencode/glossary/<locale>.md` when available (for example, `zh-cn.md`).
+- Also apply the matching locale file when available: `.opencode/glossary/<locale>.md` for the marketing site, `services/site/src/docs/i18n/glossary/<locale>.md` for the docs (for example, `zh-cn.md` and `zh.md`).
 - Do not modify fenced code blocks.
 - Output ONLY the translation (no commentary).
 
 If the target locale is missing, ask the user to provide it.
-If no locale-specific glossary exists, use the global glossary only.
+If no locale-specific glossary exists, use the shared glossary only.
 
 ---
 
@@ -42,6 +42,7 @@ When translating a page of the latest docs (`services/site/src/docs/content`):
 - Translate the English page at `src/docs/content/<same path>.mdx` into `src/docs/content/<locale>/<same path>.mdx`, using the site's language folder (`zh`, `zht`, `ko`, `de`, `es`, `fr`, `it`, `da`, `ja`, `pl`, `ru`, `uk`, `ar`, `no`, `br`, `th`, `tr`). English stays at the root.
 - Translate the frontmatter's `title` and `description`; keep every other key and value as written.
 - Keep the English heading structure: the same headings, in the same order and depth. Translated pages reuse the English heading ids, so `#anchors` keep working in every language. A translation whose heading depths differ is treated as stale: the build warns, the page shows the English fallback, and `check-translations.ts` lists it. If the English page gains a heading, update the translation's headings in the same place.
+- Never call OpenCode an "AI coding agent": it is an "open source coding agent" in every language. Do not add "AI" to that phrase; "AI models" and "AI providers" are fine.
 - Keep every MDX component, prop, code block, inline code span, path, URL, command, flag, config key and product name exactly as written. Translate only prose, table headers and code-block captions.
 - Keep internal links docs-root-relative (`/config`): the site adds the page's language prefix. Do not write `/docs/...`, `/<locale>/docs/...` or `https://opencode.ai/docs/...`.
 - A page you do not translate is served in English under that language's chrome, with a notice, so partial translations are safe.
@@ -52,9 +53,9 @@ When translating a page of the latest docs (`services/site/src/docs/content`):
 - Compare every page paragraph by paragraph, list item, table row and code block against the CURRENT English page, not an older translation, and re-read pages whose English changed since their stamp.
 - Read the result as native prose: remove translationese and literal calques, and keep the tone of the English page.
 - Check numbers, prices, model IDs and version numbers against the English.
-- Keep proper nouns, identifiers and code exactly as written, per `src/docs/i18n/glossary.md`.
+- Keep proper nouns, identifiers and code exactly as written, per the shared rules in `src/docs/i18n/glossary.md`.
 - Keep the English heading order, depth and count; anchors depend on it.
-- Apply the shared terms in `src/docs/i18n/glossary.md` and the locale preferences in `.opencode/glossary/<locale>.md`.
+- Apply the shared rules in `src/docs/i18n/glossary.md` and the language's terms in `src/docs/i18n/glossary/<locale>.md`.
 - Spot-check two or three rendered pages in the built site: title, sidebar and code blocks.
 
 ---

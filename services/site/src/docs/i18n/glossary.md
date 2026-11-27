@@ -1,40 +1,42 @@
 # Docs translation glossary
 
-Shared terms for the V2 docs translations (`src/docs/content/<locale>/`). The English column stays first and unchanged; each language adds its own column after `zh` (for example `de`), keeping the same rows. When a term is missing, follow the nearest row and add the new term here after review.
+Shared rules for the V2 docs translations (`src/docs/content/<locale>/`), plus an index of each language's glossary in `glossary/<locale>.md`. Read both before translating or reviewing a page.
 
-## Keep in English
+## Product rule
 
-- Product names: OpenCode, Zen, Go, Go Plus, Go Teams, Desktop.
-- The role words `agent` and `subagent`, including compounds such as coding agent.
-- Provider, model, company, app and tool names.
-- Acronyms: MCP, LSP, SDK, CLI, API, TUI, JSON.
-- Commands, flags, config keys and values, environment variables, paths, code, URLs and keys.
-- English UI labels quoted from the product, such as **Settings › Billing** or **Add credits**.
+- OpenCode is an "open source coding agent", never an "AI coding agent", in every language. Do not add "AI" to that phrase; "AI models" and "AI providers" are fine.
+- Keep product names as written: OpenCode, Zen, Go, Go Plus, Go Teams, Desktop, Models (OpenCode Models), Anomaly.
+- Keep provider, model, company, app and tool names as written.
+- Keep acronyms as written: MCP, LSP, SDK, CLI, API, TUI, JSON, ZDR, SSO, SCIM, OIDC, SAML, BCP, PTY.
+- Keep commands, flags, config keys and values, environment variables, paths, code, URLs and keys as written.
+- Keep English UI labels quoted from the product in English, such as **Settings › Billing** or **Add credits**.
+- Keep internal links docs-root-relative (`/config`) and keep the English heading order, depth and count.
 
-## Terms
+## Chinese decisions (zh and zht only)
 
-| English | zh | Notes |
+These are not shared rules; every other language follows its own glossary.
+
+- `agent` and `subagent` stay in English, including `coding agent` (编程 agent in zh, 編碼 agent in zht). Never 代理.
+- `Console` (the product) is 控制台. Keep it in English in URLs, paths, code and bold UI labels such as **Console API URL**.
+
+## Glossaries
+
+| Locale | Language | Glossary |
 | --- | --- | --- |
-| agent, subagent | agent、subagent、编程 agent | `child agent` → 子 agent |
-| workspace / team | 工作区 / 团队 | Go Teams stays in English |
-| Console (the product) | 控制台 | OpenCode Console → OpenCode 控制台; keep English in URLs, paths, code and bold UI labels such as **Console API URL** |
-| account | 账号 | Never 账户 |
-| authentication / authenticate | 认证 | Never 身份验证 |
-| OAuth, access, bearer or install token | 令牌 | Model, usage, design and contract tokens stay `token` |
-| proxy (network) | 代理 | Only for network proxies |
-| provider (model provider) | 提供商 | API providers such as the plugin Ipc provider → 提供者 |
-| transcript | 对话记录 | |
-| scrollback | 滚动历史 | |
-| formatter | 格式化程序 | |
-| references (the feature) | 引用 | A docs "Reference" section stays 参考 |
-| checkpoint | 检查点 | |
-| effort (reasoning) | 推理强度 | |
-| loopback | 回环 | |
-| expose (API or RPC) | 对外提供 | Avoid 暴露 |
-| composer | 输入框 | On `build/` plugin and API pages, `composer` names the API object; 输入框 otherwise |
-| bundle | bundle | |
-| harness, profile (Codex) | harness、profile | Keep in English |
-| invoice / invoiced billing / credit limit / credits / balance | 发票 / 按发票结算 / 授信额度 / 额度 / 余额 | |
-| Free (price or tier label) | 免费 | |
-| base URL | 基础 URL | |
-| Diff (the viewer or its section) | Diff | Generic differences → 差异 |
+| zh | Chinese, Simplified | [`glossary/zh.md`](glossary/zh.md) |
+| zht | Chinese, Traditional | [`glossary/zht.md`](glossary/zht.md) |
+| ko | Korean | [`glossary/ko.md`](glossary/ko.md) |
+| de | German | [`glossary/de.md`](glossary/de.md) |
+| es | Spanish | [`glossary/es.md`](glossary/es.md) |
+| fr | French | [`glossary/fr.md`](glossary/fr.md) |
+| it | Italian | [`glossary/it.md`](glossary/it.md) |
+| da | Danish | [`glossary/da.md`](glossary/da.md) |
+| ja | Japanese | [`glossary/ja.md`](glossary/ja.md) |
+| pl | Polish | [`glossary/pl.md`](glossary/pl.md) |
+| ru | Russian | [`glossary/ru.md`](glossary/ru.md) |
+| uk | Ukrainian | [`glossary/uk.md`](glossary/uk.md) |
+| ar | Arabic | [`glossary/ar.md`](glossary/ar.md) |
+| no | Norwegian | [`glossary/no.md`](glossary/no.md) |
+| br | Portuguese, Brazil | [`glossary/br.md`](glossary/br.md) |
+| th | Thai | [`glossary/th.md`](glossary/th.md) |
+| tr | Turkish | [`glossary/tr.md`](glossary/tr.md) |
