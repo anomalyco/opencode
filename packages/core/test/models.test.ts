@@ -279,7 +279,11 @@ describe("ModelsDev Service", () => {
                 responses: {
                   base_url: "https://api.acme.test/v1",
                   sdk: { aisdk: "@ai-sdk/openai", opencodeai: "@opencode/ai/providers/openai/responses" },
-                  capabilities: { tools: { freeform: ["text", "future-grammar", "lark"] } },
+                  capabilities: {
+                    tools: { freeform: ["text", "future-grammar", "lark"] },
+                    effort_updates: true,
+                    system_updates: true,
+                  },
                 },
                 "chat-completions": {
                   base_url: "https://other.acme.test/v1",
@@ -293,7 +297,7 @@ describe("ModelsDev Service", () => {
                 messages: {
                   base_url: "https://claude.acme.test/v1",
                   sdk: { aisdk: "@ai-sdk/anthropic" },
-                  capabilities: { tools: { freeform: ["future-grammar"] } },
+                  capabilities: { tools: { freeform: ["future-grammar"] }, effort_updates: false },
                 },
               },
             }),
@@ -333,6 +337,12 @@ describe("ModelsDev Service", () => {
       // Without an opencode package, the AI SDK package maps to the native one as before.
       expect(acmeModel("acme-fallback")?.package).toBe("@opencode/ai/providers/anthropic")
       expect(acmeModel("acme-fallback")?.capabilities.freeform).toEqual([])
+      // Only a yes on the model's API is passed on; false leaves the protocol's own detection.
+      expect(acmeModel("acme-responses")?.compatibility).toMatchObject({
+        supportsEffortUpdates: true,
+        supportsSystemUpdates: true,
+      })
+      expect(acmeModel("acme-fallback")?.compatibility?.supportsEffortUpdates).toBeUndefined()
       expect(acmeModel("acme-fallback")?.settings).toEqual({ baseURL: "https://claude.acme.test/v1" })
 
       const azureModel = (id: string) => azure?.models.find((model) => model.id === id)
