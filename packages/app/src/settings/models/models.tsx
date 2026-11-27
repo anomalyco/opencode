@@ -15,7 +15,7 @@ import {
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useModels } from "@/providers/models/models"
+import { isFreeModel, useModels } from "@/providers/models/models"
 import { useServerSDK } from "@/runtime/server/client"
 import { popularProviders } from "@/providers/catalog/providers"
 import { Persist, persisted } from "@/runtime/persistence/storage"
@@ -89,10 +89,10 @@ export const SettingsModels: Component<{
   const searching = () => list.filter().length > 0
   const expanded = (key: string) => searching() || !store.collapsed[key]
 
-  const setProviderVisibility = (providerID: string, visible: boolean) =>
+  const setProviderVisibility = (providerID: string, visible: boolean, free: boolean) =>
     models
       .list()
-      .filter((item) => item.provider.id === providerID)
+      .filter((item) => item.provider.id === providerID && isFreeModel(item) === free)
       .forEach((item) => models.setVisibility({ providerID, modelID: item.id }, visible))
 
   function ModelRows(props: { items: ModelItem[] }) {

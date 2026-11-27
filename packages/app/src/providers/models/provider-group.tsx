@@ -9,6 +9,7 @@ import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { consoleProviderGroup, consoleProviderName } from "@/providers/catalog/console"
 import { OpenCodeLogo } from "@/providers/opencode-logo"
 import { useLanguage } from "@/runtime/i18n/language"
+import { splitFreeModels } from "@/providers/models/picker-sections"
 import customManagedProvider from "@/providers/custom-managed-provider.svg"
 import "@/settings/settings.css"
 
@@ -53,7 +54,10 @@ export function consoleModelGroup<T extends ModelItem>(items: readonly T[]) {
   return consoleProviderGroup([...new Map(items.map((item) => [item.provider.id, item.provider])).values()])
 }
 
-/** Provider sections for a model list, with Console workspace providers nested under one OpenCode Console section. */
+/**
+ * Provider sections for a model list, with Console workspace providers nested under one OpenCode Console section and
+ * free models in a section of their own, last.
+ */
 export function ProviderModelSections<T extends ModelItem>(props: {
   groups: ModelGroup<T>[]
   managed: ReturnType<typeof consoleModelGroup<T>>
@@ -65,11 +69,13 @@ export function ProviderModelSections<T extends ModelItem>(props: {
   action?: (group: ModelGroup<T>) => JSX.Element
   /** Shows direct providers as cards like the Console's providers, instead of section headers. */
   cards?: boolean
-  onSetVisibility?: (providerID: string, visible: boolean) => void
+  /** `free`: the free models' section, which holds the provider's free models and only them. */
+  onSetVisibility?: (providerID: string, visible: boolean, free: boolean) => void
   ref?: (providerID: string, element: HTMLElement) => void
 }) {
   type Section = {
     group?: ModelGroup<T>
+    free?: boolean
     managed?: { group: NonNullable<ReturnType<typeof consoleModelGroup<T>>>; providers: ModelGroup<T>[] }
   }
 
@@ -77,26 +83,28 @@ export function ProviderModelSections<T extends ModelItem>(props: {
 
   const sections = createMemo<Section[]>(() => {
     const managed = props.managed
+    const split = splitFreeModels(props.groups)
+    const free = split.free ? [{ group: split.free, free: true }] : []
     const ids = new Set(managed?.providers.map((provider) => provider.id))
-    const nested = props.groups.filter((group) => ids.has(group.category))
+    const nested = split.groups.filter((group) => ids.has(group.category))
 
-    if (!managed || nested.length === 0) return props.groups.map((group) => ({ group }))
-    const first = props.groups.findIndex((group) => ids.has(group.category))
+    if (!managed || nested.length === 0) return [...split.groups.map((group) => ({ group })), ...free]
+    const first = split.groups.findIndex((group) => ids.has(group.category))
 
-    return props.groups.flatMap<Section>((group, index) => {
-      if (!ids.has(group.category)) return [{ group }]
+    return [
+      ...split.groups.flatMap<Section>((group, index) => {
+        if (!ids.has(group.category)) return [{ group }]
 
-      if (index !== first) return []
+        if (index !== first) return []
 
-      return [{ managed: { group: managed, providers: nested } }]
-    })
+        return [{ managed: { group: managed, providers: nested } }]
+      }),
+      ...free,
+    ]
   })
 
-  // Only the keyless catalog is free; a Zen key or Console account keeps the provider's own name.
-  const name = (group: ModelGroup<T>) =>
-    group.category === "opencode" && group.items.every((item) => !item.cost?.input)
-      ? language.t("provider.connect.opencode.freeName")
-      : group.items[0].provider.name
+  const name = (section: Section, group: ModelGroup<T>) =>
+    section.free ? language.t("provider.connect.opencode.freeName") : group.items[0].provider.name
 
   function Header(input: { id: string; icon: JSX.Element; title: JSX.Element; badge?: string; action?: JSX.Element }) {
     return (
@@ -142,7 +150,7 @@ export function ProviderModelSections<T extends ModelItem>(props: {
                       <Header
                         id={group().category}
                         icon={<ProviderModelIcon provider={group().items[0].provider} class="shrink-0" />}
-                        title={name(group())}
+                        title={name(section, group())}
                         action={props.action?.(group())}
                       />
                       <Show when={props.expanded(group().category)}>{props.rows(group().items)}</Show>
@@ -152,12 +160,12 @@ export function ProviderModelSections<T extends ModelItem>(props: {
                   <ProviderModelGroup
                     ref={(element) => props.ref?.(group().category, element)}
                     provider={group().items[0].provider}
-                    name={name(group())}
+                    name={name(section, group())}
                     expanded={props.expanded(group().category)}
                     disabled={props.disabled}
                     onSetVisibility={
                       props.onSetVisibility
-                        ? (visible) => props.onSetVisibility?.(group().category, visible)
+                        ? (visible) => props.onSetVisibility?.(group().items[0].provider.id, visible, !!section.free)
                         : undefined
                     }
                     onExpandedChange={(value) => props.onExpandedChange(group().category, value)}
@@ -203,7 +211,7 @@ export function ProviderModelSections<T extends ModelItem>(props: {
                         disabled={props.disabled}
                         onSetVisibility={
                           props.onSetVisibility
-                            ? (visible) => props.onSetVisibility?.(group.category, visible)
+                            ? (visible) => props.onSetVisibility?.(group.category, visible, false)
                             : undefined
                         }
                         onExpandedChange={(value) => props.onExpandedChange(group.category, value)}

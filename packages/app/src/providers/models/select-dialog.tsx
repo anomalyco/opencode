@@ -69,6 +69,7 @@ import {
   ProviderModelSections,
 } from "@/providers/models/provider-group"
 import { consoleProviderName } from "@/providers/catalog/console"
+import { pickerSections, splitFreeModels, type PickerSection } from "./picker-sections"
 import "@/settings/settings.css"
 import "@/shell/commands/dialog.css"
 import "./select-dialog.css"
@@ -134,20 +135,24 @@ const ModelList: Component<{
   const expanded = (provider: string) => store.search.length > 0 || !store.collapsed[provider]
   const managedIDs = createMemo(() => new Set(managed()?.providers.map((provider) => provider.id) ?? []))
 
-  // Rows in display order: ProviderModelSections nests every managed provider at the first one's position.
+  // Rows in display order: ProviderModelSections nests every managed provider at the first one's position and lists
+  // the free models last.
   const visibleModels = () => {
-    const groups = modelGroups()
-    const first = groups.findIndex((group) => managedIDs().has(group.category))
+    const split = splitFreeModels(modelGroups())
+    const first = split.groups.findIndex((group) => managedIDs().has(group.category))
 
-    return groups.flatMap((group, index) => {
-      if (!managedIDs().has(group.category)) return expanded(group.category) ? group.items : []
+    return [
+      ...split.groups.flatMap((group, index) => {
+        if (!managedIDs().has(group.category)) return expanded(group.category) ? group.items : []
 
-      if (index !== first || !expanded(CONSOLE_GROUP_KEY)) return []
+        if (index !== first || !expanded(CONSOLE_GROUP_KEY)) return []
 
-      return groups
-        .filter((item) => managedIDs().has(item.category) && expanded(item.category))
-        .flatMap((item) => item.items)
-    })
+        return split.groups
+          .filter((item) => managedIDs().has(item.category) && expanded(item.category))
+          .flatMap((item) => item.items)
+      }),
+      ...(split.free && expanded(split.free.category) ? split.free.items : []),
+    ]
   }
 
   let scrollRef: HTMLDivElement | undefined
@@ -558,39 +563,17 @@ function createProviderLabels(all: () => ModelItem[]) {
   }
 }
 
-type ModelGroup = { category: string; items: ModelItem[]; title?: string }
-
-// Favorites and recent models lead the list until a search narrows it. As in the TUI, they then leave their provider
-// group, so no model is listed twice.
-function withSections(input: {
-  groups: ModelGroup[]
-  favorites: ModelItem[]
-  recent: ModelItem[]
-  titles: { favorite: string; recent: string }
-}): ModelGroup[] {
-  const favorites = new Set(input.favorites.map(modelKey))
-
-  const recent = input.recent.filter((item) => !favorites.has(modelKey(item)))
-  const listed = new Set([...favorites, ...recent.map(modelKey)])
-
-  return [
-    ...(input.favorites.length > 0
-      ? [{ category: "favorite", title: input.titles.favorite, items: input.favorites }]
-      : []),
-    ...(recent.length > 0 ? [{ category: "recent", title: input.titles.recent, items: recent }] : []),
-    ...input.groups.flatMap((group) => {
-      const items = group.items.filter((item) => !listed.has(modelKey(item)))
-
-      return items.length > 0 ? [{ ...group, items }] : []
-    }),
-  ]
-}
+const listTitles = {
+  favorite: "dialog.model.favorites",
+  recent: "dialog.model.recent",
+  free: "dialog.model.group.free",
+} as const
 
 const clamp = (value: number) => Math.max(0, Math.min(1, value))
 
 const round = (value: number) => Math.round(value * 1000) / 1000
 
-type ModelRow = { id: string; item: ModelItem; section: string; title?: string }
+type ModelRow = { id: string; item: ModelItem; section: string; list: PickerSection<ModelItem>["list"] }
 
 function createChatgptPlan(current: () => string | undefined) {
   const data = useData()
@@ -664,31 +647,28 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
   let timer: ReturnType<typeof setTimeout> | undefined
   let pointer: { x: number; y: number } | undefined
 
-  const groups = createMemo((): ModelGroup[] => {
-    const providers = controller.groups(controller.models(query.search))
-
-    if (query.search.trim()) return providers
-
-    return withSections({
-      groups: providers,
+  const sections = createMemo(() =>
+    pickerSections({
+      groups: controller.groups(controller.models(query.search)),
+      all: controller.all(),
       favorites: controller.favorites(),
       recent: controller.recent(),
-      titles: { favorite: language.t("dialog.model.favorites"), recent: language.t("dialog.model.recent") },
-    })
-  })
+      searching: query.search.trim().length > 0,
+    }),
+  )
 
   // A row that still shows the same model in the same section keeps its object, so a narrower search re-renders none of
   // the rows that stay.
   const rows = createMemo((previous: ModelRow[]) => {
     const kept = new Map(previous.map((row) => [row.id, row]))
 
-    return groups().flatMap((group) =>
-      group.items.map((item): ModelRow => {
+    return sections().flatMap((section) =>
+      section.items.map((item): ModelRow => {
         const row = kept.get(modelKey(item))
 
-        return row?.item === item && row.section === group.category && row.title === group.title
+        return row?.item === item && row.section === section.key && row.list === section.list
           ? row
-          : { id: modelKey(item), item, section: group.category, title: group.title }
+          : { id: modelKey(item), item, section: section.key, list: section.list }
       }),
     )
   }, [])
@@ -1146,13 +1126,14 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
             <SearchHighlight text={item().name} />
           </span>
           {/* Favorites and Recent mix providers, so their rows name one, with its workspace when its header has one. */}
-          <Show when={row.model.title}>
+          <Show when={row.model.list === "favorite" || row.model.list === "recent"}>
             <span class="min-w-0 shrink-[999] truncate text-v2-text-text-faint">{labels.name(item().provider)}</span>
             <Show when={labels.workspace(item().provider)}>
               {(workspace) => <Badge class="shrink-0">{workspace()}</Badge>}
             </Show>
           </Show>
-          <Show when={isFreeModel(item())}>
+          {/* The Free group's header already says so. */}
+          <Show when={isFreeModel(item()) && row.model.list !== "free"}>
             <Badge class="shrink-0">{language.t("model.tag.free")}</Badge>
           </Show>
           <Show when={item().latest}>
@@ -1240,8 +1221,10 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
             section={(row) => row.section}
             header={(row) => (
               <span data-slot="model-dialog-header-label" class="flex min-w-0 items-center gap-1.5">
-                <span class="min-w-0 truncate">{row.title ?? labels.name(row.item.provider)}</span>
-                <Show when={!row.title && labels.workspace(row.item.provider)}>
+                <span class="min-w-0 truncate">
+                  {row.list ? language.t(listTitles[row.list]) : labels.name(row.item.provider)}
+                </span>
+                <Show when={!row.list && labels.workspace(row.item.provider)}>
                   {(workspace) => <Badge class="shrink-0">{workspace()}</Badge>}
                 </Show>
               </span>
