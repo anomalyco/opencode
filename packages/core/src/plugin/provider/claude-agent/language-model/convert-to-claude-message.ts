@@ -21,7 +21,11 @@ export function content(prompt: LanguageModelV3Prompt): ContentBlock[] {
         continue
       }
       if (part.type === "file") {
-        blocks.push(history ? past(file(part)) : file(part))
+        const block = history ? past(file(part)) : file(part)
+        // An image block has no field for a name.
+        if (block.type === "image" && part.filename)
+          blocks.push({ type: "text", text: `Attached image: ${part.filename}` })
+        blocks.push(block.type === "document" && part.filename ? { ...block, title: part.filename } : block)
         continue
       }
       if (part.type === "tool-call") {
