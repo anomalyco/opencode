@@ -6,7 +6,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import path from "path"
 import { isDeepStrictEqual } from "node:util"
-import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
+import { Effect, FiberMap, PubSub, SchemaIssue, Semaphore, Stream } from "effect"
 import { Config } from "../../config.js"
 import { Watcher } from "../../filesystem/watcher.js"
 import { Location } from "../../location.js"
@@ -17,6 +17,8 @@ import { SkillFile } from "./skill-file.js"
 import { SkillScan } from "./skill-scan.js"
 
 type Source = Skill.DirectorySource | Skill.UrlSource
+
+const formatIssue = SchemaIssue.makeFormatterDefault()
 
 export const Plugin = define({
   id: "opencode.config.skill",
@@ -131,10 +133,13 @@ export const Plugin = define({
           if (!content) continue
           const parsed = SkillFile.parse(directory, filepath, content)
           if (parsed._tag === "Skipped") {
-            yield* Effect.logDebug("skill file skipped", {
+            // A skill that fails to load is a configuration error the user has to see: at the default log
+            // level a debug line leaves the skill missing with no explanation. Same level the agent and
+            // command loaders use for the same class of failure.
+            yield* Effect.logWarning("skill file skipped", {
               filepath,
               reason: parsed.reason,
-              ...(parsed.reason === "frontmatter" ? { issue: parsed.issue } : {}),
+              ...(parsed.reason === "frontmatter" ? { issue: formatIssue(parsed.issue) } : {}),
             })
             continue
           }

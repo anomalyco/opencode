@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
 import { Config } from "@opencode/core/config"
 import { Directory, Document, type Entry, Event, Info } from "@opencode/schema/config"
 import { ConfigSkillPlugin } from "@opencode/core/config/plugin/skill"
@@ -596,6 +596,44 @@ describe("ConfigSkillPlugin.Plugin", () => {
             ),
           ),
         ),
+      ),
+    ),
+  )
+})
+
+describe("ConfigSkillPlugin.Plugin skipped skills", () => {
+  it.live("warns at the default log level when a skill file cannot be loaded", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            // Unparseable YAML reaches gray-matter twice: directly and through the sanitize fallback.
+            await fs.mkdir(path.join(tmp.path, "unparseable"), { recursive: true })
+            await fs.writeFile(
+              path.join(tmp.path, "unparseable", "SKILL.md"),
+              "---\ndescription: foo: bar\nmetadata: [\n---\n# unparseable",
+            )
+            // Parses as YAML, but the frontmatter decodes into the wrong shape.
+            await fs.mkdir(path.join(tmp.path, "mismatch"), { recursive: true })
+            await fs.writeFile(
+              path.join(tmp.path, "mismatch", "SKILL.md"),
+              "---\nname: mismatch\ndescription: [not, a, string]\n---\n# mismatch",
+            )
+          })
+          const warnings: string[] = []
+          const skill = yield* start([tmp.path], tmp.path).pipe(
+            Effect.withLogger(
+              Logger.make((entry) => {
+                if (entry.logLevel === "Warn") warnings.push(JSON.stringify([entry.message, entry.cause]))
+              }),
+            ),
+          )
+
+          expect(yield* skill.list()).toEqual([])
+          expect(warnings.filter((line) => line.includes("skill file skipped"))).toHaveLength(2)
+          expect(warnings.some((line) => line.includes("unparseable") && line.includes("markdown"))).toBe(true)
+          expect(warnings.some((line) => line.includes("mismatch") && line.includes("frontmatter"))).toBe(true)
+        }),
       ),
     ),
   )
