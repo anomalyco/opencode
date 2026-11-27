@@ -172,11 +172,11 @@ opencode mcp add context7 --url https://mcp.context7.com/mcp --header 'CONTEXT7_
 | `url` | نعم | نقطة نهاية Streamable HTTP مطلقة. |
 | `headers` | لا | ترويسات HTTP نصية تُرسل إلى نقطة النهاية. |
 | `oauth` | لا | إعدادات OAuth، أو `false` لتعطيل OAuth. |
-| `disabled` | No | Prevents connection when `true`. Defaults to `false`. |
-| `codemode` | No | Set to `false` to expose tools directly instead of through Code Mode. Defaults to `true`. |
-| `timeout` | No | Per-server timeout overrides. |
-| `protocol` | No | `auto` (default), `legacy`, or `2026-07-28`. See [Protocol version](#protocol-version). |
-| `pool` | No | Share one connection across directories. Defaults to `false`. See [Shared connections](#shared-connections). |
+| `disabled` | لا | يمنع الاتصال عندما يكون `true`. والافتراضي `false`. |
+| `codemode` | لا | اضبطه على `false` لعرض الأدوات مباشرةً بدل Code Mode. والافتراضي `true`. |
+| `timeout` | لا | تجاوزات مهلة خاصة بالخادم. |
+| `protocol` | لا | `auto` (الافتراضي) أو `legacy` أو `2026-07-28`. راجع [إصدار البروتوكول](#protocol-version). |
+| `pool` | لا | مشاركة اتصال واحد بين المجلدات. والافتراضي `false`. راجع [الاتصالات المشتركة](#shared-connections). |
 
 ولا تستخدم `oauth: false` إلا عندما يستخدم الخادم مفتاح API أو بيانة اعتماد ترويسة أخرى حصرًا:
 
@@ -232,8 +232,8 @@ http://127.0.0.1:52817/callback?code=...&state=...
 | الطريقة | تُستخدم عندما |
 | --- | --- |
 | عميل مسجّل مسبقًا | `oauth.client_id` مضبوط. |
-| [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents) (CIMD) | The authorization server supports CIMD and public clients, and `oauth.redirect_uri` is not set. |
-| [Dynamic client registration](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | Neither of the above applies. OpenCode registers a client and reuses it on later sign-ins. |
+| [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents) (CIMD) | يدعم خادم التفويض CIMD والعملاء العامّين، ولم يُضبط `oauth.redirect_uri`. |
+| [Dynamic client registration](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | لا ينطبق أي مما سبق. يسجّل OpenCode عميلًا ويعيد استخدامه في عمليات تسجيل الدخول اللاحقة، ويستمع على المنفذ الذي سجّله. وإذا كان هذا المنفذ مشغولًا، يسجّل OpenCode مرة أخرى. |
 
 ويشترك خادم التفويض في CIMD عبر بياناته الوصفية:
 

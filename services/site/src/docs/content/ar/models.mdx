@@ -150,10 +150,10 @@ opencode run --model openai/gpt-6.1-sol#high "Review this migration plan"
 
 | الحقل       | الغرض                                                                    |
 | ----------- | -------------------------------------------------------------------------- |
-| `supported` | Whether the model reasons. `false`, or `true` without controls, adds no variants. |
-| `toggle`    | Adds a `none` variant that turns reasoning off.                             |
-| `effort`    | Effort levels to offer. `default` keeps the provider default and adds no variant. |
-| `budget`    | Optional `min` and `max` thinking tokens. Ignored when `effort` is set.     |
+| `supported` | هل يستخدم النموذج الاستدلال. والقيمة `false`، أو `true` دون أدوات ضبط، لا تضيف أي صيغة. |
+| `toggle`    | يضيف صيغة `none` تعطّل الاستدلال.                                           |
+| `effort`    | مستويات الجهد المعروضة. وتحتفظ `default` بالافتراضي لدى المزوّد ولا تضيف أي صيغة. |
+| `budget`    | رموز التفكير الاختيارية `min` و`max`. وتُتجاهل عند ضبط `effort`.             |
 
 وتُطبَّق المتغيّرات المدرجة في `variants` فوق تلك المبنية من `capabilities.reasoning`.
 
@@ -188,9 +188,9 @@ opencode run --model openai/gpt-6.1-sol#high "Review this migration plan"
 
 | الحقل      | الغرض                                                            |
 | ---------- | ------------------------------------------------------------------ |
-| `settings` | Provider-package options such as `baseURL` or `reasoningEffort`.  |
-| `headers`  | Additional HTTP request headers.                                 |
-| `body`     | Provider-specific request body fields.                            |
+| `settings` | خيارات حزمة المزوّد مثل `baseURL` أو `reasoningEffort`.           |
+| `headers`  | ترويسات HTTP إضافية للطلبات.                                       |
+| `body`     | حقول جسم الطلب الخاصة بالمزوّد.                                    |
 
 ويطبّق OpenCode قيم المزوّد أولًا، ثم قيم النموذج، ثم المتغيّر المختار أخيرًا.
 
@@ -338,9 +338,9 @@ Anthropic. اضبط `settings.cache.ttl` للمزوّد أو النموذج لط
 
 | API | أين يذهب العمر |
 | --- | --- |
-| Anthropic Messages | `cache_control.ttl` on each cache marker. Anthropic accepts `"5m"` and `"1h"`. |
-| Bedrock Converse | `ttl` on each `cachePoint`. Older Claude models that only cache for five minutes ignore `"1h"`. |
-| OpenAI Chat and Responses | `"24h"` goes to `prompt_cache_retention`; other values go to `prompt_cache_options.ttl`. |
+| Anthropic Messages | `cache_control.ttl` على كل علامة ذاكرة مؤقتة. وتقبل Anthropic القيمتين `"5m"` و`"1h"`. |
+| Bedrock Converse | `ttl` على كل `cachePoint`. وتتجاهل نماذج Claude الأقدم التي تخزّن خمس دقائق فقط القيمة `"1h"`. |
+| OpenAI Chat and Responses | تُوضع `"24h"` في `prompt_cache_retention`، وتُوضع القيم الأخرى في `prompt_cache_options.ttl`. |
 
 ويتجاهله المزوّدون الذين يخزّنون تلقائيًا دون علامات، مثل Gemini. وعمر أطول يكلّف عادةً أكثر عند
 الكتابة: تتقاضى Anthropic ما يعادل 2× سعر الإدخال عند الكتابة إلى ذاكرة مؤقتة تدوم ساعة، و 1.25× سعر الإدخال لذاكرة تدوم خمس دقائق.
@@ -377,18 +377,18 @@ Anthropic. اضبط `settings.cache.ttl` للمزوّد أو النموذج لط
 
 | الحقل | ما يفعله | من يقرأه | القيم والافتراضي |
 | --- | --- | --- | --- |
-| `reasoningField` | Assistant-message field that carries reasoning. Checked first when reading streamed reasoning and used when sending prior reasoning back. | OpenAI Chat | Any field name except `role`, `content`, `refusal`, or `tool_calls`. Unset uses the field seen in the stream, else `reasoning_content`. |
-| `requireReasoning` | Sends the reasoning field on every prior assistant message, as an empty string when there was no reasoning. | OpenAI Chat | `true` or `false`. Defaults to `true` when `reasoningField` is set or the model is DeepSeek, otherwise `false`. |
-| `maxTokensField` | Body field that carries the output token limit. | OpenAI Chat | `max_completion_tokens` or `max_tokens`. Unset detects `max_tokens` for providers that need it, such as DeepSeek, Moonshot, Together AI, Z.AI, and Cerebras, otherwise `max_completion_tokens`. |
-| `requireFinishReason` | Treats a stream that ends without `finish_reason` as an incomplete response error. `false` accepts it as finished. | OpenAI Chat | `true` or `false`. Defaults to `true`. |
-| `requireAssistantAfterTool` | Inserts an assistant message between a tool result and the next user message, for endpoints that reject that order. | OpenAI Chat | `true` or `false`. Defaults to `true` for Mistral-family model IDs, otherwise `false`. |
-| `supportsPromptCacheKey` | Whether the endpoint accepts the `prompt_cache_key` body field. | OpenAI Chat, OpenAI Responses, Mistral | `true` or `false`. OpenAI Chat only sends the key when `true`, which some provider packages set by default. Other APIs send it unless `false`. |
-| `streamUsage` | Requests token usage in the stream with `stream_options.include_usage`. | OpenAI Chat | `true` or `false`. Defaults to `true`. |
-| `cacheFormat` | Prompt-cache marker syntax the endpoint accepts. Overrides the provider's automatic breakpoint placement. `alibaba` skips tool definitions. | Every API with prompt-cache markers, including OpenAI Chat, Anthropic Messages, and Bedrock Converse | `anthropic` or `alibaba`. Unset uses the provider default. See [Prompt caching](#prompt-caching). |
-| `supportsThinkingBlockBinding` | Asks the API to drop thinking blocks whose earlier context changed instead of rejecting the request. | Anthropic Messages, Bedrock Converse | `true` or `false`. Unset detects Claude 5.1 and later. |
-| `supportsEffortUpdates` | Sends reasoning effort changes as per-message updates, which keep the prompt cache. Otherwise the effort changes for the whole request. | Anthropic Messages, OpenAI Responses | `true` or `false`. Unset detects Claude Opus 5, Claude 5.1 and later, and GPT-6 and later. |
-| `supportsSystemUpdates` | Sends system messages added mid-conversation as native system messages. Otherwise they're wrapped as text in the next user turn. | Anthropic Messages | `true` or `false`. Unset detects Claude Opus 4.8 and Claude 5 and later. |
-| `mediaInput` | Where images and other media go in a decision request. | System One | `assets` (images referenced from the state), `state` (inline in the state), or `root` (top-level `images`, `audio`, and `videos` lists). Unset uses the provider default. |
+| `reasoningField` | حقل رسالة المساعد الذي يحمل الاستدلال. ويُفحص أولًا عند قراءة الاستدلال المبثوث، ويُستخدم عند إرسال الاستدلال السابق مجددًا. | OpenAI Chat | أي اسم حقل عدا `role` أو `content` أو `refusal` أو `tool_calls`. وعند عدم ضبطه يُستخدم الحقل الظاهر في البثّ، وإلا فـ`reasoning_content`. |
+| `requireReasoning` | يرسل حقل الاستدلال في كل رسالة مساعد سابقة، كسلسلة فارغة عند عدم وجود استدلال. | OpenAI Chat | `true` أو `false`. والافتراضي `true` عند ضبط `reasoningField` أو عندما يكون النموذج DeepSeek، وإلا فـ`false`. |
+| `maxTokensField` | حقل الجسم الذي يحمل حد رموز الإخراج. | OpenAI Chat | `max_completion_tokens` أو `max_tokens`. وعند عدم ضبطه يُكتشف `max_tokens` للمزوّدين الذين يحتاجونه، مثل DeepSeek وMoonshot وTogether AI وZ.AI وCerebras، وإلا فـ`max_completion_tokens`. |
+| `requireFinishReason` | يعامل البثّ الذي ينتهي دون `finish_reason` كخطأ استجابة غير مكتملة. والقيمة `false` تقبله كمنتهٍ. | OpenAI Chat | `true` أو `false`. والافتراضي `true`. |
+| `requireAssistantAfterTool` | يُدرج رسالة مساعد بين نتيجة أداة ورسالة المستخدم التالية، لنقاط النهاية التي ترفض هذا الترتيب. | OpenAI Chat | `true` أو `false`. والافتراضي `true` لمعرّفات نماذج عائلة Mistral، وإلا فـ`false`. |
+| `supportsPromptCacheKey` | هل تقبل نقطة النهاية حقل الجسم `prompt_cache_key`. | OpenAI Chat، OpenAI Responses، Mistral | `true` أو `false`. لا يرسل OpenAI Chat المفتاح إلا عندما تكون القيمة `true`، وهي القيمة التي تضبطها بعض حزم المزوّدين افتراضيًا. وترسله واجهات API الأخرى ما لم تكن القيمة `false`. |
+| `streamUsage` | يطلب استخدام الرموز في البثّ عبر `stream_options.include_usage`. | OpenAI Chat | `true` أو `false`. والافتراضي `true`. |
+| `cacheFormat` | صيغة علامات التخزين المؤقت للمطالبات التي تقبلها نقطة النهاية. وتتجاوز وضع نقاط التوقف التلقائي لدى المزوّد. والقيمة `alibaba` تتخطى تعريفات الأدوات. | كل واجهة API تستخدم علامات التخزين المؤقت للمطالبات، بما فيها OpenAI Chat وAnthropic Messages وBedrock Converse | `anthropic` أو `alibaba`. وعند عدم ضبطه يُستخدم افتراضي المزوّد. راجع [التخزين المؤقت للمطالبات](#prompt-caching). |
+| `supportsThinkingBlockBinding` | يطلب من API إسقاط كتل التفكير التي تغيّر سياقها السابق بدلًا من رفض الطلب. | Anthropic Messages، Bedrock Converse | `true` أو `false`. وعند عدم ضبطه يُكتشف Claude 5.1 وما بعده. |
+| `supportsEffortUpdates` | يرسل تغييرات جهد الاستدلال كتحديثات لكل رسالة، مما يحافظ على التخزين المؤقت للمطالبات. وإلا يتغيّر الجهد للطلب كله. | Anthropic Messages، OpenAI Responses | `true` أو `false`. وعند عدم ضبطه يُكتشف Claude Opus 5 وClaude 5.1 وما بعدهما وGPT-6 وما بعده. |
+| `supportsSystemUpdates` | يرسل رسائل النظام المضافة في منتصف المحادثة كرسائل نظام أصلية. وإلا تُلفّ كنص في دور المستخدم التالي. | Anthropic Messages | `true` أو `false`. وعند عدم ضبطه يُكتشف Claude Opus 4.8 وClaude 5 وما بعدهما. |
+| `mediaInput` | أين تذهب الصور والوسائط الأخرى في طلب قرار. | System One | `assets` (صور يُشار إليها من الحالة)، أو `state` (مضمّنة في الحالة)، أو `root` (قوائم `images` و`audio` و`videos` في المستوى الأعلى). وعند عدم ضبطه يُستخدم افتراضي المزوّد. |
 
 ## المحلية
 
@@ -554,10 +554,10 @@ openrouter/anthropic/claude-sonnet-5.5#high
 
 | الجزء       | القاعدة                                                       |
 | ---------- | ---------------------------------------------------------- |
-| Provider   | Ends at the first `/`; cannot contain `/` or `#`.          |
-| Model      | May contain additional `/` characters; cannot contain `#`. |
-| Variant    | Follows `#` when present.                                  |
-| Casing     | Provider and model IDs are case-sensitive.                 |
+| المزوّد   | ينتهي عند أول `/`؛ ولا يمكن أن يحتوي `/` أو `#`.          |
+| النموذج   | قد يحتوي على `/` إضافية؛ ولا يمكن أن يحتوي `#`.            |
+| الصيغة    | يأتي بعد `#` عند وجوده.                                    |
+| حالة الأحرف | معرّفات المزوّد والنموذج حساسة لحالة الأحرف.               |
 
 استخدم معرّفات الكتالوج لا أسماء عرض المزوّدين. وتقبل حقول `model` في الجذر والوكيل والأمر الصيغة النصية أعلاه
 أو كائنًا موسّعًا:
