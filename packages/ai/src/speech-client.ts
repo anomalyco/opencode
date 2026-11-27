@@ -1,12 +1,6 @@
 import { Context } from "effect"
 import { MediaClient } from "./media-client.js"
-import {
-  SpeechTimestampsEvent,
-  SpeechFinishEvent,
-  type SpeechEvent,
-  type SpeechRequest,
-  type SpeechResponse,
-} from "./speech.js"
+import type { SpeechEvent, SpeechRequest, SpeechResponse } from "./speech.js"
 
 export type Interface = MediaClient.Interface<SpeechRequest, SpeechEvent, SpeechResponse>
 
@@ -19,12 +13,13 @@ export const SpeechClient = {
   ...MediaClient.make(Service, {
     modality: "speech",
     responseEvents: (response: SpeechResponse) => [
-      ...(response.timestamps === undefined ? [] : [SpeechTimestampsEvent.make({ items: response.timestamps })]),
-      SpeechFinishEvent.make({
+      ...(response.timestamps === undefined ? [] : [{ type: "timestamps" as const, items: response.timestamps }]),
+      {
+        type: "finish" as const,
         audio: response.audio,
         usage: response.usage,
         providerMetadata: response.providerMetadata,
-      }),
+      },
     ],
   }),
 } as const

@@ -136,6 +136,38 @@ test("isolates concurrent side questions and makes interrupted and blank answers
   expect(prompts).toEqual([])
 })
 
+test("marks a side question answered behind another tab until it is shown", async ({ page }) => {
+  const held = Promise.withResolvers<void>()
+
+  const { editor } = await openSession(page, {
+    name: "BtwUnread",
+    generate: async (input) => {
+      if (!input.prompt.includes("slow question")) return { text: "Fast answer" }
+      await held.promise
+
+      return { text: "Slow answer" }
+    },
+  })
+
+  const panel = page.locator('[data-slot="session-btw-panel"]')
+  const slow = page.getByRole("tab", { name: "slow question", exact: true })
+  const fast = page.getByRole("tab", { name: "fast question", exact: true })
+  const unread = page.getByRole("tab", { name: "slow question New answer", exact: true })
+  await editor.fill("/btw slow question")
+  await editor.press("Enter")
+  await expect(panel.getByRole("status")).toContainText("Working")
+  await editor.fill("/btw fast question")
+  await editor.press("Enter")
+  await expect(panel.getByText("Fast answer", { exact: true })).toBeVisible()
+  await expect(fast).toHaveAttribute("data-selected", "")
+  await expect(slow).toBeVisible()
+  held.resolve()
+  await unread.click()
+  await expect(panel.getByText("Slow answer", { exact: true })).toBeVisible()
+  await expect(slow).toHaveAttribute("data-selected", "")
+  await expect(unread).toHaveCount(0)
+})
+
 test("keeps many long-titled side tabs usable at a narrow desktop width", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 900, height: 700 })
 
@@ -163,6 +195,7 @@ test("keeps many long-titled side tabs usable at a narrow desktop width", async 
 })
 
 test("answers /btw in the side panel without admitting a prompt", async ({ page }) => {
+  await page.clock.install()
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"])
   const generations: { sessionID: string; prompt: string }[] = []
   const prompts: unknown[] = []
@@ -228,12 +261,27 @@ test("answers /btw in the side panel without admitting a prompt", async ({ page 
   await expect(panel.getByRole("button", { name: "Revert to here", exact: true })).toHaveCount(0)
   await expect(panel.getByRole("button", { name: "Copy answer", exact: true })).toHaveCount(1)
   await expect(panel.locator('[data-slot="text-part-meta"]')).toContainText(/\d+s/)
-  await panel.locator('[data-component="user-message"]').hover()
-  await panel.getByRole("button", { name: "Copy message", exact: true }).click()
-  await expect(panel.getByRole("button", { name: "Copied", exact: true })).toHaveCount(1)
-  await panel.locator('[data-component="text-part"]').hover()
-  await panel.getByRole("button", { name: "Copy answer", exact: true }).click()
-  await expect(panel.getByRole("button", { name: "Copied", exact: true })).toHaveCount(2)
+  const feedback = page.getByRole("tooltip", { name: "Copied", exact: true })
+
+  for (const [component, label] of [
+    ["user-message", "Copy message"],
+    ["text-part", "Copy answer"],
+  ]) {
+    const row = panel.locator(`[data-component="${component}"]`)
+
+    const button = row.getByRole("button", { name: label, exact: true })
+
+    await row.hover()
+    await button.click()
+    await expect(feedback).toBeVisible()
+    await page.clock.fastForward(1_000)
+    await expect(feedback).toHaveCSS("opacity", "1")
+    await expect(row.getByRole("button", { name: "Copied", exact: true })).toBeVisible()
+    await page.clock.fastForward(1_000)
+    await expect(button).toBeVisible()
+    await expect(page.getByRole("tooltip")).toBeHidden()
+  }
+
   expect(generations).toHaveLength(1)
   expect(generations[0]?.sessionID).toBe(main.id)
   expect(generations[0]?.prompt).toContain("how does the retry loop work?")

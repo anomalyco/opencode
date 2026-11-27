@@ -16,12 +16,25 @@ import {
   workspaceSelectionDirectories,
 } from "@/workspaces/paths"
 
-export function resolveNewSessionWorktree(input: { enabled: boolean; selected?: string; fallback?: string }) {
+export function resolveNewSessionWorktree(input: {
+  enabled: boolean
+  selected?: string
+  directory?: string
+  fallback?: string
+}) {
+  // An explicitly placed draft (for example from an automation) can start in a subdirectory,
+  // including a non-Git folder. Its initial destination is not the user's default worktree.
+  if (input.selected && input.directory && sameDirectory(input.selected, input.directory)) return input.directory
+
   if (!input.enabled) return "main"
 
   if (input.selected) return input.selected
 
   return input.fallback ?? "main"
+}
+
+function checkoutDirectory(worktree: string, root: string) {
+  return worktree === "main" || worktree === "create" ? root : worktree
 }
 
 export function resolveNewSessionBranch(input: {
@@ -31,9 +44,8 @@ export function resolveNewSessionBranch(input: {
   worktreeBranch: (worktree: string) => string | undefined
 }) {
   if (input.worktree === "create" && input.createBranch) return input.createBranch
-  const directory = input.worktree === "main" || input.worktree === "create" ? input.root : input.worktree
 
-  return input.worktreeBranch(directory)
+  return input.worktreeBranch(checkoutDirectory(input.worktree, input.root))
 }
 
 export function resolveNewSessionGit(input: { projectVcs?: string; branch?: string }) {
@@ -137,7 +149,11 @@ export function createNewSessionWorkspaceController(input: {
     const project = currentProject()
     const worktree = input.selectedWorktree()
 
-    if (!project || !worktree) return
+    if (!worktree) return
+
+    if (sameDirectory(worktree, sdk().directory)) return worktree
+
+    if (!project) return
 
     if (isWorkspaceSelection(project, worktree)) return worktree
 
@@ -162,6 +178,7 @@ export function createNewSessionWorkspaceController(input: {
   const value = createMemo(() =>
     resolveNewSessionWorktree({
       enabled: visible(),
+      directory: sdk().directory,
       selected: selected(),
       fallback: fallback(),
     }),
@@ -208,6 +225,13 @@ export function createNewSessionWorkspaceController(input: {
     }),
   )
 
+  // A missing checkout is loading; a loaded checkout may have a detached HEAD.
+  const checkout = createMemo(() => {
+    const info = data.location.vcs.info({ directory: checkoutDirectory(value(), projectRoot()) })
+
+    return info ? { branch: info.branch.current } : undefined
+  })
+
   const remember = (worktree = value()) => {
     const project = currentProject()
 
@@ -218,7 +242,7 @@ export function createNewSessionWorkspaceController(input: {
   }
 
   const select = (worktree: string) => {
-    input.setSelectedBranch(undefined)
+    if (worktree !== "create" || value() !== "create") input.setSelectedBranch(undefined)
     input.setSelectedWorktree(worktree)
     remember(worktree)
   }
@@ -269,6 +293,7 @@ export function createNewSessionWorkspaceController(input: {
     bar: {
       visible,
       branch,
+      checkout,
     },
     branches: (search: string, signal?: AbortSignal) =>
       serverSDK.api.vcs.branch

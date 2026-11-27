@@ -16,7 +16,11 @@ test("groups the CLI choices like /connect while keeping stable login IDs", () =
       integration({ id: "linear", name: "Linear", metadata: { source: "mcp" } }),
       integration({ id: "github", name: "GitHub", metadata: { source: "mcp" } }),
       integration({ id: "opencode", name: "OpenCode Console" }),
-      integration({ id: "opencode-go", name: "OpenCode Go", connections: [{ type: "env", name: "GO_KEY" }] }),
+      integration({
+        id: "opencode-go",
+        name: "OpenCode Go",
+        connections: [{ type: "credential", id: "go", label: "Go", method: "key" }],
+      }),
       integration({ id: "unused", name: "Unused", methods: [{ type: "env", names: ["UNUSED_KEY"] }] }),
     ]),
   ).toEqual([
@@ -27,4 +31,13 @@ test("groups the CLI choices like /connect while keeping stable login IDs", () =
     { value: "openai", label: "OpenAI", category: "Popular", connected: false },
     { value: "mistral", label: "Mistral", category: "Services", connected: false },
   ])
+})
+
+test("hides OpenCode Go until a Go key is saved", () => {
+  expect(
+    loginChoices([
+      integration({ id: "opencode", name: "OpenCode Console" }),
+      integration({ id: "opencode-go", name: "OpenCode Go", connections: [{ type: "env", name: "OPENCODE_API_KEY" }] }),
+    ]).map((choice) => choice.value),
+  ).toEqual(["opencode"])
 })

@@ -83,16 +83,49 @@ export function resolveAttachmentMediaTarget(
 
   if (!uri) return UNREADABLE_ATTACHMENT_MEDIA_TARGET
 
-  const peeked = options.peekMedia?.(uri, file.mime)
+  return resolveMediaUriTarget(uri, file.mime, options)
+}
+
+/** An image named only by a URI, such as a tool result's file: a URL to show, or a `media:` reference to read. */
+export function resolveMediaUriTarget(
+  uri: string,
+  mime: string,
+  options: { readonly peekMedia?: (uri: string, mime: string) => string | undefined; readonly hasReader: boolean },
+): AttachmentMediaTarget {
+  const peeked = options.peekMedia?.(uri, mime)
 
   if (peeked !== undefined) return { kind: "direct", src: peeked }
 
-  if (options.hasReader) return { kind: "remote", key: `${file.mime}:${uri}`, uri, mime: file.mime }
+  if (options.hasReader) return { kind: "remote", key: `${mime}:${uri}`, uri, mime }
 
   // Without a reader a `media:` reference names no loadable URL; anything else is one.
   if (uri.startsWith("media:")) return UNREADABLE_ATTACHMENT_MEDIA_TARGET
 
   return { kind: "direct", src: uri }
+}
+
+/**
+ * An image in a call's result. A host that keeps tool results without their bytes leaves an empty `data:<mime>;base64,`
+ * URI in its place; that one is read again from its call, and is unreadable without a host to read it.
+ */
+export function resolveToolImageTarget(
+  image: { readonly uri: string; readonly mime: string; readonly callID: string; readonly index: number },
+  options: {
+    readonly peekMedia?: (uri: string, mime: string) => string | undefined
+    readonly hasReader: boolean
+    readonly peekToolFile?: () => string | undefined
+    readonly hasToolFileReader: boolean
+  },
+): AttachmentMediaTarget {
+  if (image.uri !== `data:${image.mime};base64,`) return resolveMediaUriTarget(image.uri, image.mime, options)
+
+  const peeked = options.peekToolFile?.()
+
+  if (peeked !== undefined) return { kind: "direct", src: peeked }
+
+  if (!options.hasToolFileReader) return UNREADABLE_ATTACHMENT_MEDIA_TARGET
+
+  return { kind: "remote", key: `tool:${image.callID}:${image.index}`, uri: image.uri, mime: image.mime }
 }
 
 export function transitionAttachmentMedia(

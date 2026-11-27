@@ -1,7 +1,6 @@
-import { DataProvider, type TurnDiffInput } from "@opencode/session-ui/context"
+import { DataProvider, type ToolFileSource, type TurnDiffInput } from "@opencode/session-ui/context"
 import { MarkdownProvider, type ReadMarkdownImage } from "@opencode/session-ui/context/markdown"
 import { useNavigate, useParams } from "@solidjs/router"
-import { useQuery } from "@tanstack/solid-query"
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type ParentProps } from "solid-js"
 import { useProviders } from "@/providers/catalog/providers"
 import { LocalProvider } from "@/providers/models/selection"
@@ -16,6 +15,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
 import { SessionExportProvider } from "@/session/commands/export-session"
 import { createTurnDiffCache } from "@/session/timeline/turn-diffs"
+import { SessionReferenceMenu, type SessionReferenceMenuTarget } from "@/session/session-reference-menu"
 import { useSettings } from "@/settings/model"
 import {
   INITIAL_SESSION_UI_NAVIGATE_STATE,
@@ -24,6 +24,12 @@ import {
   type SessionUINavigateEffect,
   type SessionUINavigateEvent,
 } from "./session-ui-navigate-machine"
+import {
+  createSessionReferenceLookupState,
+  transitionSessionReferenceLookup,
+  type SessionReferenceLookupEffect,
+  type SessionReferenceLookupEvent,
+} from "./session-reference-lookup-machine"
 
 export function SessionUIProvider(
   props: ParentProps<{
@@ -39,8 +45,6 @@ export function SessionUIProvider(
   const language = useLanguage()
   const settings = useSettings()
   const directory = () => props.directory
-  const releaseChannel = import.meta.env.VITE_OPENCODE_CHANNEL ?? "local"
-  const copyAlwaysVisible = releaseChannel === "dev" || releaseChannel === "local"
 
   const readImage = createMemo<ReadMarkdownImage>(() => {
     const dir = directory()
@@ -49,6 +53,25 @@ export function SessionUIProvider(
   })
 
   const href = (sessionID: string) => sessionHref(props.server, sessionID)
+
+  // The store keeps tool-result files without their bytes (`omitToolFileData`), so a tile reads its file again from
+  // the message its call is in.
+  const toolFile: ToolFileSource = {
+    peek: (input) => serverSDK.toolFiles.peek(input.callID, input.index),
+    read(input, signal) {
+      const messageID = data.session.message
+        .list(input.sessionID)
+        .findLast(
+          (message) =>
+            message.type === "assistant" &&
+            message.content.some((part) => part.type === "tool" && part.id === input.callID),
+        )?.id
+
+      if (!messageID) return Promise.resolve(undefined)
+
+      return serverSDK.toolFiles.load({ ...input, messageID }, signal)
+    },
+  }
 
   const origin = (): SessionNavigateOrigin => ({ server: props.server, sessionID: params.id })
   const [navigation, setNavigation] = createSignal(INITIAL_SESSION_UI_NAVIGATE_STATE)
@@ -139,32 +162,62 @@ export function SessionUIProvider(
   const openReferencedSession = (sessionID: string) =>
     dispatchNavigation({ type: "referenced.requested", origin: untrack(origin), targetSessionID: sessionID })
 
+  let referenceLookup = createSessionReferenceLookupState()
+  const referenceLookups = new Map<number, AbortController>()
+
+  const dispatchReferenceLookup = (event: SessionReferenceLookupEvent) => {
+    const next = transitionSessionReferenceLookup(referenceLookup, event)
+
+    referenceLookup = next.state
+    next.effects.forEach((effect) =>
+      Promise.try(() => runReferenceLookup(effect)).catch((cause: unknown) =>
+        console.error("[session.reference]", cause),
+      ),
+    )
+  }
+
+  function runReferenceLookup(effect: SessionReferenceLookupEffect) {
+    if (effect.type === "abort-all") {
+      referenceLookups.forEach((controller) => controller.abort())
+      referenceLookups.clear()
+
+      return
+    }
+
+    if (effect.type === "remember") return data.session.remember(effect.session)
+    const controller = new AbortController()
+    referenceLookups.set(effect.attempt, controller)
+    void Promise.try(() => serverSDK.api.session.get({ sessionID: effect.sessionID }, { signal: controller.signal }))
+      .finally(() => referenceLookups.delete(effect.attempt))
+      .then(
+        (session) =>
+          dispatchReferenceLookup({ type: "resolved", sessionID: effect.sessionID, attempt: effect.attempt, session }),
+        () => dispatchReferenceLookup({ type: "unavailable", sessionID: effect.sessionID, attempt: effect.attempt }),
+      )
+  }
+
+  createEffect(
+    on(
+      () => props.server,
+      () => dispatchReferenceLookup({ type: "server.changed" }),
+      { defer: true },
+    ),
+  )
+  onCleanup(() => dispatchReferenceLookup({ type: "disposed" }))
+
   const sessionTitle = (id: string) => {
+    if (id === params.id) return
     const session = data.session.get(id)
+
+    // Markdown calls this inside its render effect.
+    if (!session) untrack(() => dispatchReferenceLookup({ type: "requested", sessionID: id }))
 
     return session && !session.time.archived ? session.title || language.t("command.session.new") : undefined
   }
 
+  const [referenceMenu, setReferenceMenu] = createSignal<SessionReferenceMenuTarget>()
+
   const providers = useProviders(directory)
-
-  const config = useQuery(() => ({
-    queryKey: [serverSDK.scope, "session-ui-config", directory()],
-    enabled: serverSDK.connection.status() === "connected",
-    queryFn: () => serverSDK.api.config.get({ location: { directory: directory() } }),
-  }))
-
-  onCleanup(
-    serverSDK.event.on("config.updated", (event) => {
-      if (event.location && event.location.directory !== directory()) return
-      void config.refetch()
-    }),
-  )
-
-  // Matches the server: the highest-priority document that sets `experimental` decides.
-  const backgroundCompaction = () =>
-    config.data
-      ?.flatMap((entry) => (entry.type === "document" && entry.info.experimental ? [entry.info.experimental] : []))
-      .at(-1)?.background_compaction === true
 
   // Turn diffs live in the routed tab's in-memory state, so they outlast timeline remounts and go when the tab closes.
   // A cached timeline keeps the source it had while routed, so a child keeps its tab's diffs after the tab returns to
@@ -210,18 +263,30 @@ export function SessionUIProvider(
         directory={directory()}
         sessionID={params.id}
         agents={settings.visibility.customAgents()}
-        copyAlwaysVisible={copyAlwaysVisible}
+        flags={data.location.flags.list({ directory: directory() })}
         shellRunning={(id) => !!data.shell.get(id)}
         shellOutput={(input) => serverSDK.api.shell.output(input)}
         readMedia={(uri, mime, signal) => serverSDK.media.load(uri, mime, signal)}
         peekMedia={(uri, mime) => serverSDK.media.peek(uri, mime)}
+        toolFile={toolFile}
         turnDiff={turnDiff()}
         onNavigateToSession={navigateToSession}
         onSessionHref={href}
-        backgroundCompaction={backgroundCompaction()}
       >
-        <MarkdownProvider readImage={readImage()} openSession={openReferencedSession} sessionTitle={sessionTitle}>
+        <MarkdownProvider
+          readImage={readImage()}
+          openSession={openReferencedSession}
+          sessionTitle={sessionTitle}
+          sessionMenu={(target) => setReferenceMenu({ ...target })}
+          codeWrap={settings.general.wrapCodeBlocks()}
+        >
           <SessionExportProvider>{props.children}</SessionExportProvider>
+          <SessionReferenceMenu
+            target={referenceMenu()}
+            currentSessionID={params.id}
+            onOpenSession={openReferencedSession}
+            onClose={() => setReferenceMenu(undefined)}
+          />
         </MarkdownProvider>
       </DataProvider>
     </LocalProvider>

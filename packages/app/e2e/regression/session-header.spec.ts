@@ -3,7 +3,17 @@ import { expect, test, type Page } from "@playwright/test"
 import { REMOTE_SERVER, seed, sessionHref } from "../utils/app"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { reviewTabs } from "../utils/side-panel"
-import { chooseUserMessageAction, openUserMessageMenu } from "../utils/timeline"
+import {
+  assistantMessage,
+  chooseUserMessageAction,
+  historyMessages,
+  openUserMessageMenu,
+  partUpdated,
+  setupTimeline,
+  shell,
+  textPart,
+  userMessage,
+} from "../utils/timeline"
 import { expectSessionTitle } from "../utils/waits"
 import { mockRemoteServer, mockWorkspace, openSession } from "../utils/workspace"
 
@@ -43,9 +53,13 @@ for (const direction of ["ltr", "rtl"] as const) {
 
     expect(heights).toEqual([28, 28, 28, 28, 28, 28])
 
+    const rename = header.getByRole("heading").getByRole("button", { name: fixture.expected.targetTitle, exact: true })
+
     for (const editing of [false, true]) {
       if (editing) {
-        await header.getByRole("heading").click()
+        await project.press("Tab")
+        await expect(rename).toBeFocused()
+        await page.keyboard.press("Enter")
         await expect(header.getByRole("textbox")).toHaveValue(fixture.expected.targetTitle)
         await expect(header.getByRole("textbox")).toBeFocused()
       }
@@ -77,6 +91,13 @@ for (const direction of ["ltr", "rtl"] as const) {
 
     await header.getByRole("textbox").press("Escape")
     await expect(header.getByRole("heading")).toHaveText(fixture.expected.targetTitle)
+    await expect(rename).toBeFocused()
+    await page.keyboard.press("Shift+Tab")
+    await expect(project).toBeFocused()
+    await details.press("Tab")
+    await expect(review).toBeFocused()
+    await page.keyboard.press("Shift+Tab")
+    await expect(details).toBeFocused()
 
     // The header stays one row at every width.
     for (const width of [900, 1440]) {
@@ -106,6 +127,10 @@ for (const direction of ["ltr", "rtl"] as const) {
     await review.click()
     await expect(review).toHaveAttribute("aria-expanded", "true")
     await expect(page.locator("#review-panel")).toBeVisible()
+    // A settled panel shows its own copy of the toggle; a click that starts on the header's copy as they swap misses.
+    await expect(
+      page.locator("#review-panel").getByRole("button", { name: "Toggle review", exact: true }),
+    ).toBeVisible()
     await review.click()
     await expect(review).toHaveAttribute("aria-expanded", "false")
 
@@ -203,6 +228,106 @@ test("the web session header leaves window dragging to the browser", async ({ pa
   await expect(page.locator('[data-slot="shell-drag-inset"]')).toHaveCount(0)
 })
 
+// The header fits its controls again, with a forced layout, whenever one of them is rebuilt.
+test("the header keeps its controls while the transcript changes", async ({ page }) => {
+  const messages = [
+    ...historyMessages(30),
+    userMessage(),
+    assistantMessage([textPart("prt_active", "Checking the route")], { completed: false }),
+  ]
+
+  const timeline = await setupTimeline(page, {
+    sessionMessages: messages,
+    pageMessages: (_, limit, before) => {
+      const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+      const start = Math.max(0, end - Math.min(16, limit))
+
+      return { items: messages.slice(start, end), cursor: start ? messages[start]!.id : undefined }
+    },
+  })
+
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const review = page.getByRole("button", { name: "Toggle review", exact: true })
+  await expect(scroller.getByText("Checking the route", { exact: true })).toBeInViewport()
+  await expect(review).toBeVisible()
+
+  // Every node the header gains or loses from here on. A control that is rendered again is other nodes.
+  const header = await page.locator("[data-session-title]").evaluateHandle((element) => {
+    const seen = { nodes: 0 }
+
+    new MutationObserver((records) => {
+      seen.nodes += records.reduce((count, record) => count + record.addedNodes.length + record.removedNodes.length, 0)
+    }).observe(element, { childList: true, subtree: true })
+
+    return seen
+  })
+
+  const commandList = await commandListBuilds(page)
+
+  // A running shell enables Move to background, so the command list is built again; the review keybind does not change.
+  // This is the one build the count must see: it shows that the count below is of the function that builds the list.
+  await timeline.send(partUpdated(shell("prt_header_shell", "running")))
+  await expect(scroller.locator('[data-timeline-part-ids*="prt_header_shell"]')).toBeVisible()
+  expect(await commandList()).toBeGreaterThan(0)
+
+  // Each scroll to the top loads an older page, until the first message is in view.
+  await scroller.hover()
+  await expect(async () => {
+    await page.mouse.wheel(0, -100_000)
+    await expect(scroller.getByText(/^Historical response 0\. /)).toBeInViewport({ timeout: 1_000 })
+  }).toPass()
+
+  // The pages change the transcript and no command. The header's count includes the shell above.
+  expect({
+    commandListBuilds: await commandList(),
+    headerNodes: await header.evaluate((seen) => seen.nodes),
+  }).toEqual({ commandListBuilds: 0, headerNodes: 0 })
+})
+
+// Counts the runs of the function that builds the session's commands, with V8's call counts. That function is the
+// smallest one that ran and whose source names both commands below. The first count finds it, so take the first count
+// after a change that builds the list.
+async function commandListBuilds(page: Page) {
+  const devtools = await page.context().newCDPSession(page)
+  const list = { url: "", start: 0, end: 0 }
+  await devtools.send("Profiler.enable")
+  await devtools.send("Profiler.startPreciseCoverage", { callCount: true, detailed: false })
+
+  return async () => {
+    const coverage = await devtools.send("Profiler.takePreciseCoverage")
+
+    const ran = coverage.result.flatMap((script) =>
+      script.functions.map((item) => ({ url: script.url, ...item.ranges[0]! })).filter((item) => item.count > 0),
+    )
+
+    if (!list.url) {
+      // A script that is not a file of the app has no address to read it from.
+      const sources = new Map(
+        await Promise.all(
+          [...new Set(ran.map((item) => item.url))].map(
+            async (url) => [url, url.startsWith("http") ? await (await page.request.get(url)).text() : ""] as const,
+          ),
+        ),
+      )
+
+      const found = ran
+        .filter((item) => {
+          const source = sources.get(item.url)?.slice(item.startOffset, item.endOffset) ?? ""
+
+          return source.includes("session.background") && source.includes("session.undo")
+        })
+        .sort((a, b) => a.endOffset - a.startOffset - (b.endOffset - b.startOffset))[0]
+
+      if (!found) return 0
+      Object.assign(list, { url: found.url, start: found.startOffset, end: found.endOffset })
+    }
+
+    return ran
+      .filter((item) => item.url === list.url && item.startOffset === list.start && item.endOffset === list.end)
+      .reduce((count, item) => count + item.count, 0)
+  }
+}
+
 test.describe("location", () => {
   const root = "C:/OpenCode/Location"
   const worktree = "C:/OpenCode/Worktrees/location/quiet-falcon"
@@ -254,7 +379,12 @@ test.describe("location", () => {
       await expect(usageMenu).toBeVisible({ visible: !state.usage })
       await expect(header.locator(".session-location-worktree-icon")).toBeVisible()
       await expect
-        .poll(() => header.getByRole("heading").evaluate((element) => element.scrollWidth > element.clientWidth))
+        .poll(() =>
+          header
+            .getByRole("heading")
+            .getByRole("button")
+            .evaluate((element) => element.scrollWidth > element.clientWidth),
+        )
         .toBe(state.truncated)
       await expect(header.getByRole("button", { name: "More options", exact: true })).toBeInViewport()
       await header.getByRole("heading").hover()
@@ -512,7 +642,6 @@ test.describe("location", () => {
 
   test("an app launch that never answers releases the Open in controls", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.clock.install()
 
     const mock = await mockWorkspace(page, {
       ...workspace,
@@ -534,6 +663,8 @@ test.describe("location", () => {
     await expectSessionTitle(page, "Location session")
     await page.getByRole("button", { name: "Toggle review", exact: true }).click()
     await expect(page.getByRole("complementary", { name: "Review and files", exact: true })).toBeFocused()
+    // Control the launch timeout, not the page's initial focus and panel animation.
+    await page.clock.install()
     const open = page.getByRole("button", { name: "Open in VS Code", exact: true })
     await open.click()
     await expect(page.getByLabel("Opened paths")).toContainText("Visual Studio Code")

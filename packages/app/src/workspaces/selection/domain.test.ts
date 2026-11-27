@@ -12,6 +12,7 @@ import {
   listPickerDirectory,
   displayPickerPath,
   shortenPickerRecentPath,
+  pickerBreadcrumbs,
   pickerParent,
   pickerRoot,
   pickerAbsoluteInput,
@@ -143,6 +144,41 @@ test.each([
   ],
 ])("uses the selected server path format for %s: %p", (_name, actual, expected) => {
   expect(actual).toBe(expected)
+})
+
+test.each([
+  [
+    "a folder under home",
+    pickerBreadcrumbs("/home/luke/projects/acme", "/home/luke"),
+    [
+      { label: "/", path: "/" },
+      { label: "~", path: "/home/luke" },
+      { label: "projects", path: "/home/luke/projects" },
+      { label: "acme", path: "/home/luke/projects/acme" },
+    ],
+  ],
+  [
+    "a folder outside home",
+    pickerBreadcrumbs("/srv/infra/", "/home/luke"),
+    [
+      { label: "/", path: "/" },
+      { label: "srv", path: "/srv" },
+      { label: "infra", path: "/srv/infra" },
+    ],
+  ],
+  ["the root", pickerBreadcrumbs("/", "/home/luke"), [{ label: "/", path: "/" }]],
+  [
+    "a Windows drive",
+    pickerBreadcrumbs("C:/Users/luke/repo", "C:/Users/luke"),
+    [
+      { label: "C:", path: "C:/" },
+      { label: "Users", path: "C:/Users" },
+      { label: "luke", path: "C:/Users/luke" },
+      { label: "repo", path: "C:/Users/luke/repo" },
+    ],
+  ],
+])("breadcrumbs for %s open each ancestor", (_name, actual, expected) => {
+  expect(actual).toEqual(expected)
 })
 
 test("resolves directory autocomplete from the browser root without changing location", async () => {

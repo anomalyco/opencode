@@ -181,6 +181,15 @@ export class SkillNotFoundError extends Schema.TaggedError<SkillNotFoundError>()
   { httpApiStatus: 404 },
 ) {}
 
+export class SkillLoadError extends Schema.TaggedError<SkillLoadError>()(
+  "SkillLoadError",
+  {
+    skill: Skill.ID,
+    message: Schema.String,
+  },
+  { httpApiStatus: 502 },
+) {}
+
 export class McpServerNotFoundError extends Schema.TaggedError<McpServerNotFoundError>()(
   "McpServerNotFoundError",
   {
@@ -334,10 +343,28 @@ export class ProviderRequestError extends Schema.TaggedError<ProviderRequestErro
   { httpApiStatus: 502 },
 ) {}
 
-export class ScheduleNotFoundError extends Schema.TaggedError<ScheduleNotFoundError>()(
-  "ScheduleNotFoundError",
+export class AutomationNotFoundError extends Schema.TaggedError<AutomationNotFoundError>()(
+  "AutomationNotFoundError",
   {
-    scheduleID: Schema.String,
+    automationID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class VideoNotFoundError extends Schema.TaggedError<VideoNotFoundError>()(
+  "VideoNotFoundError",
+  {
+    videoID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class BlobNotFoundError extends Schema.TaggedError<BlobNotFoundError>()(
+  "BlobNotFoundError",
+  {
+    blobID: Schema.String,
     message: Schema.String,
   },
   { httpApiStatus: 404 },
@@ -347,6 +374,24 @@ export class ArtifactNotFoundError extends Schema.TaggedError<ArtifactNotFoundEr
   "ArtifactNotFoundError",
   {
     artifactID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class MachineNotFoundError extends Schema.TaggedError<MachineNotFoundError>()(
+  "MachineNotFoundError",
+  {
+    machine: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class PushDeviceNotFoundError extends Schema.TaggedError<PushDeviceNotFoundError>()(
+  "PushDeviceNotFoundError",
+  {
+    deviceID: Schema.String,
     message: Schema.String,
   },
   { httpApiStatus: 404 },

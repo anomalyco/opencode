@@ -1,0 +1,3592 @@
+//! Runs TypeScript plugins on a shared Bun process. No UI frame waits for JS. Apply returned effects in call order,
+//! push watched reads before dependent events, and acknowledge each mount revision before adopting another.
+//! Supervision restarts the process on failure; unaffected plugins retain their last accepted trees while
+//! reactivating.
+
+pub mod child;
+mod guest;
+pub mod proto;
+pub(crate) mod tree;
+pub mod wire;
+
+use std::cell::{Cell, RefCell};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::path::{Path, PathBuf};
+use std::rc::{Rc, Weak};
+use std::time::{Duration, Instant};
+
+use opencode_plugin_abi::{HostRequest, Request};
+use opentui::keymap::Disposer;
+use opentui::prelude::*;
+
+use crate::interact::{Heard, InputHold};
+use crate::{Definition, ErrorFn, Host};
+use child::Child;
+pub use child::Limits;
+use guest::Guest;
+use proto::{Down, Up};
+
+/// The JS host's source, written to a private directory and run by Bun.
+const SOURCE: &str = include_str!("host.ts");
+/// The V2 compatibility layer the JS host imports, generated from `compat/` by `script/gen/js-host.ts`.
+const COMPAT: &str = include_str!("compat.js");
+
+/// The JS host's own `bunfig.toml`: Bun installs nothing a plugin imports (js-no-install).
+const BUNFIG: &str = "[install]\nauto = \"disable\"\n";
+
+/// The oldest Bun the JS host was run on (1.4.0 to 1.4.4 were): an opencode binary whose own Bun is older is not used.
+pub const OLDEST_BUN: (u64, u64, u64) = (1, 4, 0);
+
+/// Where the server the client talks to runs, which decides the JS host's runtime.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Server {
+    /// On this machine, running this executable when the client could tell.
+    Local(Option<PathBuf>),
+    /// Perhaps on another machine (`--server`).
+    Remote,
+}
+
+/// How the JS host runs.
+#[derive(Clone, Debug)]
+pub struct Config {
+    /// The Bun executable, or an opencode binary run as the Bun it embeds.
+    pub bun: PathBuf,
+    /// `bun` is an opencode binary, which runs as Bun with `BUN_BE_BUN=1`.
+    pub opencode: bool,
+    /// The version `bun` reported as Bun's, when it was asked.
+    pub bun_version: Option<String>,
+    /// Bun's arguments before the script.
+    pub args: Vec<String>,
+    pub limits: Limits,
+    /// Ends of the JS host within [`Config::window`] after which it is not started again.
+    pub ends: usize,
+    pub window: Duration,
+    /// How long a holding command holds the keys after it.
+    pub hold: Duration,
+    /// The client's version and channel, which a plugin's setup context reads as `app`.
+    pub version: String,
+    pub channel: String,
+    /// The directory the client works in, a project's perhaps: told to the JS host as data, never where Bun starts.
+    pub directory: PathBuf,
+    /// Where Bun is found once a plugin needs the JS host, when it was not found yet ([`Config::from_env`]): `bun`,
+    /// `opencode` and `bun_version` are then the ones it finds.
+    pub find: Option<Find>,
+    /// Variables set on the JS host beyond the ones it inherits: for the tests, which point Bun at a registry of their
+    /// own to prove it asks none.
+    #[doc(hidden)]
+    pub env: Vec<(String, String)>,
+}
+
+/// How [`Config::from_env`] finds Bun later, when a plugin first needs the JS host: the search runs a binary.
+#[derive(Clone)]
+pub struct Find(pub Rc<dyn Fn() -> Option<Config>>);
+
+impl std::fmt::Debug for Find {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("Find(..)")
+    }
+}
+
+/// Whether `OPENCODE_PLUGIN_JS` disables script plugins.
+pub use crate::turned_off;
+
+impl Config {
+    pub fn new(bun: PathBuf) -> Self {
+        Self {
+            bun,
+            opencode: false,
+            bun_version: None,
+            args: Vec::new(),
+            limits: Limits::default(),
+            ends: 3,
+            window: Duration::from_secs(60),
+            hold: Duration::from_millis(50),
+            version: "local".to_owned(),
+            channel: "latest".to_owned(),
+            directory: std::env::current_dir().unwrap_or_default(),
+            find: None,
+            env: Vec::new(),
+        }
+    }
+
+    /// The JS host, unless `OPENCODE_PLUGIN_JS` turns it off ([`turned_off`]). Bun is not looked for yet: that runs a
+    /// binary, so it waits until a plugin needs the JS host ([`Scripts::runtime`]), and [`Config::find`] does it then
+    /// for the client's `server`. A client with no TypeScript plugin starts no process.
+    pub fn from_env(server: &Server) -> Option<Self> {
+        if turned_off(std::env::var_os("OPENCODE_PLUGIN_JS").as_deref()) {
+            return None;
+        }
+        let server = server.clone();
+        let find = Find(Rc::new(move || {
+            let bundled = opencode_util::bundle::server();
+            Self::find(|name| std::env::var_os(name), std::env::current_dir().unwrap_or_default(), &server, bundled)
+        }));
+        Some(Self { find: Some(find), ..Self::new(PathBuf::new()) })
+    }
+
+    /// [`Config::find`], unless `OPENCODE_PLUGIN_JS` in `var` turns the JS host off.
+    pub fn from_vars(
+        var: impl Fn(&str) -> Option<std::ffi::OsString>,
+        directory: PathBuf,
+        server: &Server,
+    ) -> Option<Self> {
+        if turned_off(var("OPENCODE_PLUGIN_JS").as_deref()) {
+            return None;
+        }
+        Self::find(var, directory, server, opencode_util::bundle::server())
+    }
+
+    /// Bun for the JS host, over the environment `var` reads, for a client in `directory`. The runtime is
+    /// `OPENCODE_BUN` (an absolute path only), else the opencode binary of a local server run as its own Bun
+    /// ([`Config::opencode`]; opencode ships with Bun), else `bundled`, the opencode installed beside the client,
+    /// else `bun` on the path ([`find_in`]). The server's binary is the executable its process runs,
+    /// or, where the client cannot tell, the first `opencode` on the path that answers, after `bundled`.
+    pub fn find(
+        var: impl Fn(&str) -> Option<std::ffi::OsString>,
+        directory: PathBuf,
+        server: &Server,
+        bundled: Option<PathBuf>,
+    ) -> Option<Self> {
+        let home = var("HOME").map(PathBuf::from);
+        let path = var("PATH").unwrap_or_default();
+        let opencode =
+            |binary: &Path| outside(binary, &directory, home.as_deref()).then(|| Self::opencode(binary)).flatten();
+        let config = match var("OPENCODE_BUN") {
+            Some(bun) => Some(PathBuf::from(bun)).filter(|bun| bun.is_absolute()).map(Self::new),
+            None => match server {
+                Server::Local(Some(executable)) => opencode(executable),
+                Server::Local(None) | Server::Remote => None,
+            }
+            .or_else(|| bundled.as_deref().and_then(opencode))
+            .or_else(|| match server {
+                Server::Local(None) => found_in("opencode", &path, &directory, home.as_deref())
+                    .iter()
+                    .find_map(|found| Self::opencode(found)),
+                Server::Local(Some(_)) | Server::Remote => None,
+            })
+            .or_else(|| {
+                let bun = find_in("bun", &path, &directory, home.as_deref())?;
+                Some(Self { bun_version: bun_version(&bun), ..Self::new(bun) })
+            }),
+        };
+        let Some(config) = config else {
+            log::warn!(
+                "neither the server's opencode nor bun on the path runs the JS host: TypeScript plugins are skipped"
+            );
+            return None;
+        };
+        let kind = if config.opencode { "opencode's Bun" } else { "Bun" };
+        let version = config.bun_version.as_deref().unwrap_or("unknown");
+        log::info!("the JS host runs on {} ({kind} {version})", config.bun.display());
+        Some(Self { directory, ..config })
+    }
+
+    /// `binary`, an opencode build, run as the Bun it embeds (`BUN_BE_BUN=1`), when that Bun says its version and it is
+    /// [`OLDEST_BUN`] or newer. Its real path is what is asked and run: `opencode` on the path may be a `mise` shim, a
+    /// link to `mise`, which then answers for itself and is not taken.
+    pub fn opencode(binary: &Path) -> Option<Self> {
+        let binary = std::fs::canonicalize(binary).ok()?;
+        let version = bun_version(&binary)?;
+        if semver(&version)? < OLDEST_BUN {
+            log::info!("{} embeds Bun {version}, older than the JS host runs on", binary.display());
+            return None;
+        }
+        Some(Self { opencode: true, bun_version: Some(version), ..Self::new(binary) })
+    }
+}
+
+/// The version `binary --version` prints as Bun (with `BUN_BE_BUN=1`, which makes an opencode binary Bun and changes
+/// nothing for Bun), when it prints one version alone within a second: opencode without `BUN_BE_BUN` prints
+/// `opencode v…`, and `mise` its version and platform. It runs as the JS host does, apart from any project: in the
+/// binary's directory, with the allowlisted environment.
+fn bun_version(binary: &Path) -> Option<String> {
+    let mut child = std::process::Command::new(binary)
+        .arg("--version")
+        .current_dir(binary.parent()?)
+        .env_clear()
+        .envs(std::env::vars_os().filter(|(name, _)| inherited(name)))
+        .env("BUN_BE_BUN", "1")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .ok()?;
+    let begun = Instant::now();
+    let status = loop {
+        if let Some(status) = child.try_wait().ok()? {
+            break status;
+        }
+        if begun.elapsed() > Duration::from_secs(1) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    };
+    let mut out = String::new();
+    std::io::Read::read_to_string(&mut child.stdout.take()?, &mut out).ok()?;
+    let version = out.trim();
+    (status.success() && semver(version).is_some()).then(|| version.to_owned())
+}
+
+/// `major.minor.patch` of a version alone (a `-` or `+` suffix allowed), as Bun prints its own.
+fn semver(text: &str) -> Option<(u64, u64, u64)> {
+    let mut parts = text.split(['-', '+']).next()?.split('.').map(|part| part.parse::<u64>().ok());
+    let version = (parts.next()??, parts.next()??, parts.next()??);
+    parts.next().is_none().then_some(version)
+}
+
+/// `name` on the `PATH`.
+pub fn find(name: &str) -> Option<PathBuf> {
+    let directory = std::env::current_dir().ok()?;
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    find_in(name, &std::env::var_os("PATH")?, &directory, home.as_deref())
+}
+
+/// `name` in the entries of `path`, as the client in `directory` finds it: only in an absolute entry, as a relative or
+/// empty one is the working directory, and not inside `directory` (unless that is the home directory, which is no
+/// project): a project's own `bun` would run as soon as the client opened it.
+pub fn find_in(name: &str, path: &std::ffi::OsStr, directory: &Path, home: Option<&Path>) -> Option<PathBuf> {
+    found_in(name, path, directory, home).into_iter().next()
+}
+
+/// Every `name` [`find_in`] would take, in the order of `path`.
+fn found_in(name: &str, path: &std::ffi::OsStr, directory: &Path, home: Option<&Path>) -> Vec<PathBuf> {
+    let file = format!("{name}{}", std::env::consts::EXE_SUFFIX);
+    std::env::split_paths(path)
+        .filter(|dir| dir.is_absolute())
+        .map(|dir| dir.join(&file))
+        .filter(|path| path.is_file() && outside(path, directory, home))
+        .collect()
+}
+
+/// Whether `path` is outside the project in `directory`; a home directory is no project.
+fn outside(path: &Path, directory: &Path, home: Option<&Path>) -> bool {
+    let real = |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let project = real(directory);
+    Some(&project) == home.map(real).as_ref() || !real(path).starts_with(&project)
+}
+
+/// Bun with the JS host's script in `dir`, its private directory, which it starts in: no `bunfig.toml` (a `preload`),
+/// `.env` or other file of the project it works for is read as Bun starts, and only the variables [`inherited`] allows
+/// reach it. The project's directory is told as data (`OPENCODE_DIRECTORY`). An opencode binary gets `BUN_BE_BUN=1`,
+/// which makes it Bun, and then reads what Bun reads, so the same holds for it.
+///
+/// Bun's auto-install is off twice over (js-no-install): `--no-install`, which a user's own bunfig cannot turn back on,
+/// and `install.auto = "disable"` in the JS host's own bunfig ([`BUNFIG`]). Without them a plugin that imports a package
+/// its directory does not hold made Bun fetch it from npm and run it. Both were checked on Bun and on an opencode
+/// binary run as Bun: neither asks a registry anything.
+fn command(config: &Config, dir: &Path) -> std::process::Command {
+    let mut command = std::process::Command::new(&config.bun);
+    command.current_dir(dir).env_clear().envs(std::env::vars_os().filter(|(name, _)| inherited(name)));
+    if config.opencode {
+        command.env("BUN_BE_BUN", "1");
+    }
+    command.arg("--no-env-file").arg("--no-install").arg(format!("--config={}", dir.join("bunfig.toml").display()));
+    command.args(&config.args).arg(dir.join("host.ts"));
+    command.envs(config.env.iter().map(|(name, value)| (name, value)));
+    command.env("OPENCODE_VERSION", &config.version).env("OPENCODE_CHANNEL", &config.channel);
+    command.env("OPENCODE_DIRECTORY", &config.directory);
+    command
+}
+
+/// Pass only the environment needed for user paths, locale, terminal and proxy configuration. Node and Bun options
+/// can preload code.
+fn inherited(name: &std::ffi::OsStr) -> bool {
+    let name = name.to_string_lossy().to_ascii_uppercase();
+    const NAMES: &[&str] = &[
+        "TERM",
+        "TERM_PROGRAM",
+        "TERM_PROGRAM_VERSION",
+        "COLORTERM",
+        "COLORFGBG",
+        "NO_COLOR",
+        "FORCE_COLOR",
+        "TMUX",
+        "TMUX_PANE",
+        "STY",
+        "TERMINAL_EMULATOR",
+        "VTE_VERSION",
+        "KONSOLE_VERSION",
+        "ITERM_SESSION_ID",
+        "ITERM_PROFILE",
+        "WT_SESSION",
+        "WT_PROFILE_ID",
+        "WEZTERM_EXECUTABLE",
+        "WEZTERM_PANE",
+        "KITTY_WINDOW_ID",
+        "KITTY_PID",
+        "KITTY_INSTALLATION_DIR",
+        "GHOSTTY_RESOURCES_DIR",
+        "GHOSTTY_BIN_DIR",
+        "ALACRITTY_WINDOW_ID",
+        "CONEMUANSI",
+        "WSL_DISTRO_NAME",
+        "SSH_TTY",
+        "PATH",
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+        "LANG",
+        "TZ",
+        "TMPDIR",
+        "TEMP",
+        "TMP",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "NO_PROXY",
+        "ALL_PROXY",
+        "SYSTEMROOT",
+        "WINDIR",
+        "COMSPEC",
+        "PATHEXT",
+        "USERPROFILE",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "PROGRAMDATA",
+        "SYSTEMDRIVE",
+    ];
+    NAMES.contains(&name.as_str())
+        || name.starts_with("LC_")
+        || name.starts_with("XDG_")
+        || name.starts_with("OPENCODE_")
+}
+
+/// What crossed the pipe, counted outside any plugin and any mount.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Crossed {
+    /// Messages and bytes the host sent.
+    pub sent: u64,
+    pub sent_bytes: u64,
+    /// Messages, trees among them, and bytes the host received, and of them in trees.
+    pub received: u64,
+    pub trees: u64,
+    pub received_bytes: u64,
+    pub tree_bytes: u64,
+    /// Revisions adopted, refused, and dropped as stale or for a mount that ended.
+    pub adopted: u64,
+    pub refused: u64,
+    pub dropped: u64,
+    /// JS hosts started.
+    pub started: u64,
+    /// Messages the host had no room for, not sent.
+    pub refused_sends: u64,
+    /// Claimed parts that waited for the queue to drain before they were sent.
+    pub deferred_parts: u64,
+    /// Time the UI thread spent in the carrier's own code: encoding and queueing what it sends, taking what came, and
+    /// reading a revision's tree. Not the host's work on the tree, which every carrier has.
+    pub host: Duration,
+}
+
+thread_local! {
+    static CROSSED: Cell<Crossed> = const { Cell::new(Crossed {
+        sent: 0, sent_bytes: 0, received: 0, trees: 0, received_bytes: 0, tree_bytes: 0, adopted: 0, refused: 0,
+        dropped: 0, started: 0, refused_sends: 0, deferred_parts: 0, host: Duration::ZERO,
+    }) };
+}
+
+/// What crossed the pipe on this thread so far.
+pub fn crossed() -> Crossed {
+    CROSSED.with(Cell::get)
+}
+
+/// Runs `f`, counting its time as the carrier's own.
+fn timed<R>(f: impl FnOnce() -> R) -> R {
+    let begun = Instant::now();
+    let out = f();
+    let took = begun.elapsed();
+    count(|crossed| crossed.host += took);
+    out
+}
+
+fn count(f: impl FnOnce(&mut Crossed)) {
+    crate::tally(&CROSSED, f);
+}
+
+/// Where a loader's target stands on the JS host.
+pub(crate) enum Step {
+    /// Its load is on its way.
+    Starting,
+    /// It imported plugin `id`: [`Scripts::set_up`] when it is enabled, else [`Scripts::inactive`].
+    Described(String),
+    /// It loaded: register it.
+    Ready(Definition, ErrorFn, u64),
+    /// Registered already, and unchanged.
+    Same,
+    /// It has no TUI module, and what its resolution said.
+    Unsupported(String),
+    Failed(String, u64),
+}
+
+/// A target's load.
+struct Load {
+    dir: PathBuf,
+    /// `dir` is a project plugin's approved copy.
+    confined: bool,
+    options: Option<String>,
+    digest: u64,
+    state: Loading,
+    registered: bool,
+}
+
+/// The messages of a plugin's activation the host keeps before it registers it ([`Scripts::keep`]).
+const EARLY: usize = 256;
+
+/// Limit registration changes per plugin within [`RELOAD_WINDOW`], including changes to commands alone.
+const RELOADS: usize = 64;
+const RELOAD_WINDOW: Duration = Duration::from_secs(5);
+
+/// What a reload of a plugin's registrations comes to ([`Scripts::admit_reload`]).
+pub(crate) enum Reload {
+    /// Its load runs as the sending activation: it is taken.
+    Take,
+    /// Its load is another build's, loaded or loading: it is ignored, and not counted.
+    Stale,
+    /// It is past [`RELOADS`] within [`RELOAD_WINDOW`]: the plugin fails.
+    Churning,
+}
+
+impl Load {
+    /// Whether the JS host's activation that `loaded` set up, now `js`, runs as this load, so a manifest of it may
+    /// change the load: the load holds `loaded` itself, or what a reload of that activation made of it, not yet
+    /// registered. A manifest of a version this load replaced (another build, a load not answered yet) may not.
+    fn runs(&self, loaded: &Rc<guest::Loaded>, js: u64) -> bool {
+        matches!(&self.state, Loading::Loaded(held) if Rc::ptr_eq(held, loaded) || (held.seq == js && held.id == loaded.id))
+    }
+}
+
+enum Loading {
+    Waiting(u64),
+    /// Load `seq` imported plugin `id`, whose setup waits for the loader to know it is enabled.
+    Described(u64, String),
+    Loaded(Rc<guest::Loaded>),
+    Unsupported(String),
+    Failed(String),
+}
+
+/// What a sequence awaits; a message that is only acknowledged (an unmount, a deactivation) awaits nothing here.
+enum Waiting {
+    /// A load of the target.
+    Load(String),
+    /// A setup again, for an activation.
+    Activate(Weak<Guest>),
+    /// A handler, kept whole: one the JS host did not start when it ended is sent again to the next one.
+    Call(Box<Call>),
+    /// A mount's or an input's view.
+    View(Weak<Guest>),
+    Ping,
+}
+
+/// A handler's call as the host sent it.
+struct Call {
+    guest: Weak<Guest>,
+    /// The plugin and the JS host's activation it was sent for, whose guest a reload may have replaced by its `Done`.
+    plugin: String,
+    activation: u64,
+    export: &'static str,
+    /// It answers the user's input.
+    user: bool,
+    request: opencode_plugin_abi::Request,
+    /// The input owner of a handler's event: its effects are that mount's, as in process.
+    owner: Option<Weak<crate::interact::Owner>>,
+    /// The mount the call's requests belong to: a route command's, or the input owner's, which outlives the owner.
+    /// What it asks for is that mount's, as in process.
+    mount: Option<Weak<()>>,
+    /// The key that ran a command, which goes on to the host if the command declines.
+    key: Option<Keyed>,
+}
+
+/// Whether `message` settles work the JS host keeps or waits for: a fetch's reply, the answers of a call's or a
+/// batch's effects, which carry a fetch's ID, a cancellation, a sequence skipped, which lets the stream go on, and
+/// a deactivation, which settles what the activation still awaits, and the host's word on a revision, adopted or
+/// refused, without which the JS host keeps the mount's tree in flight for good and draws it no more. It is never
+/// dropped while the JS host runs ([`Scripts::settle`]).
+fn settles(message: &Down) -> bool {
+    matches!(
+        message,
+        Down::Call { call: Request::Reply { .. }, .. }
+            | Down::Part { .. }
+            | Down::Answered { .. }
+            | Down::AnsweredPart { .. }
+            | Down::Cancelled { .. }
+            | Down::Skipped { .. }
+            | Down::Deactivate { .. }
+            | Down::Adopted { .. }
+            | Down::Refused { .. }
+    )
+}
+
+/// Large replies, read snapshots and effect results can be split across frames.
+enum Parted<'a> {
+    Reply { activation: u64, request: opencode_plugin_abi::RequestId, result: &'a Result<serde_json::Value, String> },
+    Snapshot { id: &'a str, activation: u64, key: &'a str, value: &'a serde_json::Value },
+    Answered { id: &'a str, activation: u64, key: &'a str, results: &'a [serde_json::Value] },
+}
+
+impl<'a> Parted<'a> {
+    fn of(message: &'a Down) -> Option<Self> {
+        match message {
+            Down::Call { activation, call: Request::Reply { id, result }, parted: false, .. } => {
+                Some(Self::Reply { activation: *activation, request: *id, result })
+            }
+            Down::Snapshot { id, activation, key, value, error: None, parted: false } => {
+                Some(Self::Snapshot { id, activation: *activation, key, value })
+            }
+            Down::Answered { id, activation, key, results, parted: false, dropped } if dropped.is_empty() => {
+                Some(Self::Answered { id, activation: *activation, key, results })
+            }
+            _ => None,
+        }
+    }
+
+    /// The bytes of the JSON the parts carry.
+    fn len(&self) -> usize {
+        match self {
+            Self::Reply { result, .. } => json_len(result),
+            Self::Snapshot { value, .. } => json_len(value),
+            Self::Answered { results, .. } => json_len(results),
+        }
+    }
+
+    fn json(&self) -> Option<Vec<u8>> {
+        match self {
+            Self::Reply { result, .. } => serde_json::to_vec(result).ok(),
+            Self::Snapshot { value, .. } => serde_json::to_vec(value).ok(),
+            Self::Answered { results, .. } => serde_json::to_vec(results).ok(),
+        }
+    }
+
+    /// A part, with `data` of the JSON in base64.
+    fn part(&self, data: String) -> Down {
+        match self {
+            Self::Reply { activation, request, .. } => Down::Part { activation: *activation, request: *request, data },
+            Self::Snapshot { id, activation, key, .. } => {
+                Down::SnapshotPart { id: (*id).to_owned(), activation: *activation, key: (*key).to_owned(), data }
+            }
+            Self::Answered { id, activation, key, .. } => {
+                Down::AnsweredPart { id: (*id).to_owned(), activation: *activation, key: (*key).to_owned(), data }
+            }
+        }
+    }
+
+    /// `message` as it follows its parts and says they are its own, without what they carry.
+    fn closing(&self, message: &Down) -> Down {
+        match (self, message) {
+            (Self::Reply { request, .. }, Down::Call { seq, id, activation, route, .. }) => {
+                let call = Request::Reply { id: *request, result: Ok(serde_json::Value::Null) };
+                Down::Call {
+                    seq: *seq,
+                    id: id.clone(),
+                    activation: *activation,
+                    call,
+                    route: route.clone(),
+                    parted: true,
+                }
+            }
+            (Self::Snapshot { id, activation, key, .. }, _) => Down::Snapshot {
+                id: (*id).to_owned(),
+                activation: *activation,
+                key: (*key).to_owned(),
+                value: serde_json::Value::Null,
+                error: None,
+                parted: true,
+            },
+            (Self::Answered { id, activation, key, .. }, _) => Down::Answered {
+                id: (*id).to_owned(),
+                activation: *activation,
+                key: (*key).to_owned(),
+                results: Vec::new(),
+                parted: true,
+                dropped: Vec::new(),
+            },
+            _ => unreachable!("a reply's parts close with its call"),
+        }
+    }
+}
+
+/// The plugin and the JS host's activation that sent `up`, a message of a plugin's own.
+fn sender(up: &Up) -> Option<(String, u64)> {
+    match up {
+        Up::Effects { id, activation, .. }
+        | Up::Watch { id, activation, .. }
+        | Up::Unwatch { id, activation, .. }
+        | Up::Fail { id, activation, .. }
+        | Up::Taking { id, activation, .. }
+        | Up::Manifest { id, activation, .. } => Some((id.clone(), *activation)),
+        _ => None,
+    }
+}
+
+/// The bytes of `value`'s JSON, counted without keeping them.
+fn json_len(value: &impl serde::Serialize) -> usize {
+    struct Count(usize);
+    impl std::io::Write for Count {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0 += bytes.len();
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut count = Count(0);
+    serde_json::to_writer(&mut count, value).map_or(usize::MAX, |()| count.0)
+}
+
+/// Whether a result of a call's effects is a scalar: a request's ID, an answer of a verb, nothing. A read's value is
+/// not, and is what a reduced answer drops ([`Scripts::settle`]).
+fn scalar(result: &serde_json::Value) -> bool {
+    matches!(result, serde_json::Value::Number(_) | serde_json::Value::Bool(_) | serde_json::Value::Null)
+}
+
+/// What owns a call's requests: the input owner of a handler's event, and the mount the requests belong to.
+pub(crate) type Owning = (Option<Weak<crate::interact::Owner>>, Option<Weak<()>>);
+
+/// Whom an end of the JS host names.
+enum Blame {
+    /// The work the JS host said it started and did not finish.
+    Running,
+    /// Nobody: the JS host as a whole (its memory).
+    Nobody,
+    /// A plugin that flooded it.
+    Plugin(String),
+}
+
+/// Fault injected into the next handler message in transport tests.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Fault {
+    Drop,
+    Repeat,
+    /// Sent after the message that follows it.
+    Swap,
+}
+
+/// A fault the next revision from the JS host suffers, for the tests.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Tamper {
+    /// It is kept, so [`Scripts::replay`] can deliver it again later, when it is stale.
+    Keep,
+    /// It is held, not delivered, until [`Scripts::replay`] delivers it: a revision that comes after what its JS host
+    /// sent next, as a slow frame has it.
+    Hold,
+    /// Its tree is a keep of a key the host does not hold.
+    UnknownKeep,
+}
+
+/// Posted by a reader thread: the JS host of `Scripts` sent something.
+struct Woken(u64);
+
+/// Posted by a walk of a plugin tree of `Scripts` that found something new ([`tree::Trees`]): the loader reconciles.
+struct Walked(u64);
+
+/// The JS host and the TypeScript plugins on it, on the UI thread.
+pub struct Scripts {
+    this: Weak<Scripts>,
+    config: Config,
+    /// The Bun the JS host runs on, found once a plugin first needs it ([`Scripts::runtime`]), or `None` when there is
+    /// none.
+    runtime: std::cell::OnceCell<Option<Config>>,
+    host: Weak<dyn Host>,
+    id: u64,
+    child: RefCell<Option<Child>>,
+    /// The number of the JS host that runs, counted from 1 at each start, and the one whose end is scheduled ([`Scripts::
+    /// shut`]): an end asked for one child never ends the one that replaced it, and one child ends once.
+    generation: Cell<u64>,
+    ending: Cell<u64>,
+    /// The directory of the written script, while the JS host may run.
+    script: RefCell<Option<opencode_util::temp::TempDir>>,
+    seq: Cell<u64>,
+    /// The bytes read from the running JS host, and of them in trees, as last counted.
+    read: Cell<(u64, u64)>,
+    loads: RefCell<HashMap<String, Load>>,
+    /// Each plugin's running activation, by ID.
+    guests: RefCell<HashMap<String, Weak<Guest>>>,
+    /// What a plugin sent after its setup was answered and before the loader registered it, its watches and its effects,
+    /// and their bytes.
+    early: RefCell<HashMap<String, (Vec<Up>, usize)>>,
+    /// The plugins whose activation sent more than [`EARLY`] messages before it was registered, by that activation:
+    /// it fails once it is ([`Scripts::keep`]).
+    spilled: RefCell<HashMap<String, u64>>,
+    waiting: RefCell<HashMap<u64, Waiting>>,
+    /// The sequences the running JS host said it started.
+    started: RefCell<std::collections::HashSet<u64>>,
+    /// Messages the running JS host's queue had no room for yet, in order, and their bytes: they go once it reads.
+    overflow: RefCell<(VecDeque<(Down, usize)>, usize)>,
+    /// The guests whose claimed parts the queue refused, oldest first, which draw them again once it drained.
+    reoffers: RefCell<Vec<Weak<Guest>>>,
+    /// When each plugin's registrations changed after setup, within the last [`RELOAD_WINDOW`] ([`Scripts::reloaded`]).
+    reloads: RefCell<HashMap<String, VecDeque<Instant>>>,
+    /// The theme's mode and the theme the JS host was told last.
+    theme: RefCell<Option<(String, opencode_ui::theme::Theme)>>,
+    /// The plugin whose code the JS host said it runs outside any sequenced work.
+    entered: RefCell<Option<String>>,
+    reconcile: RefCell<Option<Rc<dyn Fn()>>>,
+    /// What the TypeScript plugins' directories hold, walked off the UI thread.
+    trees: tree::Trees,
+    ends: RefCell<VecDeque<Instant>>,
+    /// Why the JS host is not started again.
+    stopped: RefCell<Option<String>>,
+    /// The ping last answered, and whether a tree waited then.
+    pong: Cell<Option<(u64, bool)>>,
+    /// Whether the last pong said a command still lingers on the JS host, to retire ([`Scripts::retiring`]).
+    retiring: Cell<bool>,
+    hold: RefCell<Hold>,
+    /// What the input put back now goes past ([`Keyed`]).
+    replayed: RefCell<Past>,
+    /// The last key presses, newest last, from which a chord's strokes are put back whole ([`Keyed::chord`]).
+    recent: RefCell<VecDeque<KeyEvent>>,
+    /// Each plugin's listeners of every key that can take a key now, as its JS activation said; the others only
+    /// hear a key, which goes on at once. Its JS state's, so it goes with the activation or the JS host.
+    taking: RefCell<HashMap<String, HashSet<proto::Listener>>>,
+    /// A key command's hold ran out and the JS host has sent nothing since: a key that runs a JS command goes on at once
+    /// as declined, and the command runs late, so typing never waits on a JS host that is stalled.
+    stalled: Cell<bool>,
+    /// What the JS host sent while the tests hold it ([`Scripts::hold_answers`]), in order.
+    held: RefCell<Option<Vec<Up>>>,
+    /// The fault armed for the next handler's message, and a message a swap holds back.
+    fault: Cell<Option<Fault>>,
+    swapped: RefCell<Option<Down>>,
+    tamper: Cell<Option<Tamper>>,
+    kept: RefCell<Option<Box<proto::Revision>>>,
+    _handler: Cell<Option<HandlerId>>,
+    _walked: Cell<Option<HandlerId>>,
+    _intercepts: RefCell<Vec<Disposer>>,
+}
+
+/// The input held for the calls of JS plugins that hold it, one small state machine. Each call that holds owns one
+/// entry of `owners` with its own deadline, from just before it is sent until exactly one of: its answer, its
+/// deadline, its refusal, the JS host's end, or the reserved chord. Only that first end decides its key: an answer
+/// that declines, a deadline, a refusal and an end put the key back once; the reserved chord drops it. Whatever
+/// ends it later finds no owner and does nothing. An answered owner's effects apply after the turn, so the input
+/// waits for those too (`settling`), and then goes on, in the order it came.
+#[derive(Default)]
+struct Hold {
+    owners: Vec<Owner>,
+    /// Answered or refused owners whose effects (or put-back key) go after the turn.
+    settling: usize,
+    /// The input it keeps, in the order it came, each with what it goes past as it is put back.
+    input: VecDeque<(Held, Past)>,
+    /// Input put back now, which the intercepts let through.
+    replaying: bool,
+    /// A plugin's dialog surface just opened and showed no tree of the plugin's yet: the input waits for that tree and
+    /// the focus it asks for (or the mount's end, or [`crate::interact::OPENING`]), so what the user typed as it
+    /// opened is its field's. The number tells this wait from an earlier one, and the timer is its deadline.
+    opening: Option<(u64, TimerId)>,
+    openings: u64,
+}
+
+/// A call input waits for: its sequence, the key that ran it if a key did (it goes back if the call declines it), and
+/// its deadline.
+struct Owner {
+    seq: u64,
+    bound: Option<Keyed>,
+    timer: Option<TimerId>,
+}
+
+/// Input a hold keeps, in the order it came.
+enum Held {
+    Key(KeyEvent),
+    Paste(String),
+}
+
+/// What input put back goes past, and where it was typed.
+#[derive(Clone, Default)]
+struct Past {
+    /// The JS commands that declined it, `<plugin>\0<name>`: each passes it on.
+    commands: Vec<String>,
+    /// The listeners of every key that heard it, which the router skips.
+    heard: Heard,
+    /// The plugin mount whose field listener took the input, which the input after it was typed into too: once that
+    /// mount closed (its route left), the input goes with it rather than reach whatever has the focus now.
+    target: Option<Weak<()>>,
+}
+
+impl Past {
+    /// Whether the input was typed into a mount that closed since.
+    fn orphaned(&self) -> bool {
+        self.target.as_ref().is_some_and(|target| target.upgrade().is_none())
+    }
+}
+
+impl Hold {
+    fn holding(&self) -> bool {
+        !self.owners.is_empty() || self.settling > 0 || self.opening.is_some()
+    }
+
+    /// Ends owner `seq`, if it still owns its entry, and puts its key back if `put_back`: its deadline, to cancel.
+    fn end(&mut self, seq: u64, put_back: bool) -> Option<Option<TimerId>> {
+        let at = self.owners.iter().position(|owner| owner.seq == seq)?;
+        let owner = self.owners.remove(at);
+        if put_back && let Some(keyed) = owner.bound {
+            self.put_back(keyed);
+        }
+        Some(owner.timer)
+    }
+
+    /// Puts `keyed` back first: a chord's strokes in order. The strokes before the last passed every listener.
+    fn put_back(&mut self, keyed: Keyed) {
+        let last = keyed.strokes.len().saturating_sub(1);
+        for (at, key) in keyed.strokes.into_iter().enumerate().rev() {
+            let mut past = keyed.past.clone();
+            if at < last {
+                past.heard = Heard::All;
+            }
+            self.input.push_front((Held::Key(key), past));
+        }
+    }
+}
+
+/// The input a hold keeps before it ends its owners rather than drop any: what comes in the same turn still waits
+/// behind it.
+const HELD: usize = 64;
+
+/// The most key presses kept for a chord's strokes ([`Keyed::chord`]).
+const RECENT: usize = 16;
+
+/// Preserve the whole triggering chord and its fallback target if the JS command or listener declines it.
+#[derive(Clone)]
+pub(crate) struct Keyed {
+    strokes: Vec<KeyEvent>,
+    past: Past,
+}
+
+impl Keyed {
+    /// The key a listener took, which `heard` heard, the listener last; `mount` is the listener's, if a mount's.
+    /// `field` is the plugin whose field's listener it is: TS's keymap saw the key before the field's `onKeyDown`, in
+    /// the state before the handler ran, so the key it declines goes past that plugin's own commands (an `escape` that
+    /// blurs its field, which enables its `escape` command, leaves TS's page open).
+    pub(crate) fn new(
+        key: KeyEvent,
+        scripts: &Scripts,
+        heard: Vec<usize>,
+        mount: Option<Weak<()>>,
+        field: Option<&str>,
+    ) -> Self {
+        let mut past = scripts.past();
+        past.heard = Heard::Some(heard);
+        past.target = past.target.or(mount);
+        past.commands.extend(field.map(|plugin| format!("{plugin}\0")));
+        Self { strokes: vec![key], past }
+    }
+
+    /// The chord that ran command `command`, ending in `key`, which every listener heard: the keymap's pending strokes
+    /// before it, read while they are still pending, are the presses before `key`.
+    pub(crate) fn chord(key: KeyEvent, scripts: &Scripts, command: &str) -> Self {
+        let mut past = scripts.past();
+        past.commands.push(command.to_owned());
+        past.heard = Heard::All;
+        let pending = scripts.host.upgrade().map_or(0, |host| host.keymap().keymap().pending_sequence().len());
+        let recent = scripts.recent.borrow();
+        // The newest press is `key` itself; before it, as many as the keymap holds pending.
+        let strokes = match pending > 0 && recent.len() > pending && recent.back() == Some(&key) {
+            true => recent.iter().skip(recent.len() - pending - 1).copied().collect(),
+            false => vec![key],
+        };
+        Self { strokes, past }
+    }
+}
+
+impl Scripts {
+    pub fn new(config: Config, host: &Rc<dyn Host>) -> Rc<Self> {
+        static IDS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        let id = IDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let scripts = Rc::new_cyclic(|this| Self {
+            this: this.clone(),
+            config,
+            runtime: std::cell::OnceCell::new(),
+            host: Rc::downgrade(host),
+            id,
+            child: RefCell::default(),
+            generation: Cell::new(0),
+            ending: Cell::new(0),
+            script: RefCell::default(),
+            seq: Cell::new(0),
+            read: Cell::new((0, 0)),
+            loads: RefCell::default(),
+            guests: RefCell::default(),
+            early: RefCell::default(),
+            spilled: RefCell::default(),
+            waiting: RefCell::default(),
+            started: RefCell::default(),
+            overflow: RefCell::default(),
+            reoffers: RefCell::default(),
+            reloads: RefCell::default(),
+            theme: RefCell::default(),
+            entered: RefCell::default(),
+            reconcile: RefCell::default(),
+            trees: {
+                let proxy = host.app().proxy();
+                tree::Trees::new(move || {
+                    let _ = proxy.send(Walked(id));
+                })
+            },
+            ends: RefCell::default(),
+            stopped: RefCell::default(),
+            pong: Cell::new(None),
+            retiring: Cell::new(false),
+            hold: RefCell::default(),
+            replayed: RefCell::default(),
+            recent: RefCell::default(),
+            taking: RefCell::default(),
+            stalled: Cell::new(false),
+            held: RefCell::default(),
+            fault: Cell::new(None),
+            swapped: RefCell::default(),
+            tamper: Cell::new(None),
+            kept: RefCell::default(),
+            _handler: Cell::new(None),
+            _walked: Cell::new(None),
+            _intercepts: RefCell::default(),
+        });
+        let weak = Rc::downgrade(&scripts);
+        let handler = host.app().on_message(move |_, woken: &Woken| {
+            if let Some(scripts) = weak.upgrade().filter(|scripts| scripts.id == woken.0) {
+                scripts.woken();
+            }
+        });
+        scripts._handler.set(Some(handler));
+        let weak = Rc::downgrade(&scripts);
+        let walked = host.app().on_message(move |_, walked: &Walked| {
+            let scripts = weak.upgrade().filter(|scripts| scripts.id == walked.0);
+            let reconcile = scripts.and_then(|scripts| scripts.reconcile.borrow().clone());
+            if let Some(reconcile) = reconcile {
+                reconcile();
+            }
+        });
+        scripts._walked.set(Some(walked));
+        let keymap = host.keymap().keymap();
+        let intercepts = [false, true].map(|release| {
+            let weak = Rc::downgrade(&scripts);
+            keymap.intercept_key(i32::MAX, release, move |cx| {
+                if let Some(scripts) = weak.upgrade() {
+                    scripts.intercept(cx.event, || cx.consume());
+                }
+            })
+        });
+        scripts._intercepts.borrow_mut().extend(intercepts);
+        // A paste waits behind the keys it holds, and the reserved chord ends it before anything may stop the chord.
+        if let Some(router) = host.router() {
+            let hold: Weak<dyn InputHold> = Rc::downgrade(&scripts) as Weak<Scripts>;
+            router.add_hold(hold);
+        }
+        scripts
+    }
+
+    /// Runs `reconcile` when a target's load is answered, or a plugin's registrations changed: the loader takes them.
+    pub fn on_reconcile(&self, reconcile: Rc<dyn Fn()>) {
+        *self.reconcile.borrow_mut() = Some(reconcile);
+    }
+
+    /// The JS host's process ID, while it runs.
+    pub fn pid(&self) -> Option<u32> {
+        self.child.borrow().as_ref().map(Child::pid)
+    }
+
+    /// The last lines the JS host wrote to standard error, which the client logs, while it runs.
+    pub fn stderr(&self) -> Vec<String> {
+        self.child.borrow().as_ref().map(Child::stderr).unwrap_or_default()
+    }
+
+    /// The JS host's resident set, while it runs.
+    pub fn resident(&self) -> Option<u64> {
+        self.child.borrow().as_ref().and_then(Child::resident)
+    }
+
+    /// The last records of what the running JS host's plugins wrote to its standard output, as they were logged.
+    #[doc(hidden)]
+    pub fn stray(&self) -> Vec<String> {
+        self.child.borrow().as_ref().map(Child::stray).unwrap_or_default()
+    }
+
+    /// Asks the JS host to answer once it handled everything sent so far; [`Scripts::ponged`] tells when it did.
+    pub fn ping(&self) -> u64 {
+        let seq = self.next();
+        self.send(Down::Ping { seq }, Some(Waiting::Ping));
+        seq
+    }
+
+    /// Whether ping `seq` was answered, and if so whether a tree waited for the host then, or a mount's view still owed
+    /// one (a first render that waits for its reads).
+    pub fn ponged(&self, seq: u64) -> Option<bool> {
+        self.pong.get().filter(|(answered, _)| *answered >= seq).map(|(_, waiting)| waiting)
+    }
+
+    /// Whether the JS host still retires a command a component dropped, by the last ping it answered: its
+    /// registrations change once more when it does.
+    #[doc(hidden)]
+    pub fn retiring(&self) -> bool {
+        self.retiring.get()
+    }
+
+    /// Whether ping `seq` waits for its answer: not once answered, nor when a full overflow refused it, which no answer
+    /// follows.
+    pub fn pinging(&self, seq: u64) -> bool {
+        self.waiting.borrow().contains_key(&seq)
+    }
+
+    /// Whether nothing waits for the JS host: no load, setup, handler or view is unanswered (a ping is left out).
+    pub fn idle(&self) -> bool {
+        self.waiting.borrow().values().all(|waiting| matches!(waiting, Waiting::Ping))
+    }
+
+    /// Holds the copies of approved trees before they read anything while `paused` ([`tree::Trees`]).
+    #[doc(hidden)]
+    pub fn pause_stages(&self, paused: bool) {
+        self.trees.pause_stages(paused);
+    }
+
+    /// Whether a load of `target` was sent and the JS host has not answered it.
+    #[doc(hidden)]
+    pub fn loading(&self, target: &str) -> bool {
+        self.waiting.borrow().values().any(|waiting| matches!(waiting, Waiting::Load(known) if known == target))
+    }
+
+    /// How many answers the host waits for, pings included.
+    #[doc(hidden)]
+    pub fn waiting(&self) -> usize {
+        self.waiting.borrow().len()
+    }
+
+    /// Whether input waits for a call, its effects, or a dialog that opened.
+    #[doc(hidden)]
+    pub fn holds_input(&self) -> bool {
+        let hold = self.hold.borrow();
+        hold.holding() || !hold.input.is_empty()
+    }
+
+    /// The types of what the JS host sent while the tests hold it ([`Scripts::hold_answers`]), in order.
+    #[doc(hidden)]
+    pub fn held_types(&self) -> Vec<String> {
+        let held = self.held.borrow();
+        let types = held
+            .iter()
+            .flatten()
+            .map(|up| serde_json::to_value(up).ok().and_then(|value| value["type"].as_str().map(str::to_owned)));
+        types.map(Option::unwrap_or_default).collect()
+    }
+
+    /// Holds what the JS host sends, unhandled and in order, while `held`; then handles it. A test closes a mount
+    /// before the JS host's answer to its call applies, however fast the JS host answers.
+    #[doc(hidden)]
+    pub fn hold_answers(self: &Rc<Self>, held: bool) {
+        let kept = match held {
+            true => self.held.borrow_mut().get_or_insert_default().len(),
+            false => {
+                let kept = self.held.borrow_mut().take().unwrap_or_default();
+                let count = kept.len();
+                kept.into_iter().for_each(|up| self.up(up));
+                count
+            }
+        };
+        log::debug!("js host: {kept} messages held");
+    }
+
+    /// Handles the oldest message [`Scripts::hold_answers`] holds, if any, and keeps holding the rest, so a test runs the
+    /// host between two of them. Whether one was held.
+    #[doc(hidden)]
+    pub fn release_one(self: &Rc<Self>) -> bool {
+        let up = self.held.borrow_mut().as_mut().and_then(|held| (!held.is_empty()).then(|| held.remove(0)));
+        up.map(|up| self.up(up)).is_some()
+    }
+
+    /// Arms `fault` for the next handler's message.
+    #[doc(hidden)]
+    pub fn fault(&self, fault: Fault) {
+        self.fault.set(Some(fault));
+    }
+
+    /// Arms `tamper` for the next revision.
+    #[doc(hidden)]
+    pub fn tamper(&self, tamper: Tamper) {
+        self.tamper.set(Some(tamper));
+    }
+
+    /// Whether a revision is kept or held for [`Scripts::replay`]: a [`Tamper`] holds the next that comes, which may come
+    /// after the call that sent it was answered.
+    #[doc(hidden)]
+    pub fn kept(&self) -> bool {
+        self.kept.borrow().is_some()
+    }
+
+    /// Delivers again the revision [`Tamper::Keep`] kept.
+    #[doc(hidden)]
+    pub fn replay(&self) {
+        let kept = self.kept.borrow_mut().take();
+        if let Some(tree) = kept {
+            match self.guest(&tree.id) {
+                Some(guest) => guest.tree(tree),
+                None => count(|crossed| crossed.dropped += 1),
+            }
+        }
+    }
+
+    /// Ends the JS host as a crash would, for tests of what follows.
+    pub fn kill(&self) {
+        if let Some(child) = self.child.borrow().as_ref() {
+            child.kill();
+        }
+    }
+
+    fn next(&self) -> u64 {
+        self.seq.set(self.seq.get() + 1);
+        self.seq.get()
+    }
+
+    /// Where `target`, the plugin directory `dir` with `options`, stands; sends its load when it is new or changed.
+    /// `confined`: `dir` is a project plugin's approved copy, whose imports must stay in it.
+    pub(crate) fn step(self: &Rc<Self>, target: &str, dir: &Path, options: Option<&str>, confined: bool) -> Step {
+        if let Some(stopped) = self.stopped.borrow().clone() {
+            return Step::Failed(stopped, 0);
+        }
+        // A staged copy is named by the hash of what it holds, which never changes; another directory's build comes
+        // from a walk off the UI thread, and the plugin starts once the first walk ended.
+        let build = match confined {
+            true => Ok(dir.to_string_lossy().into_owned()),
+            false => match self.trees.light(dir) {
+                Some(build) => build.map(|build| build.to_string()),
+                None => return Step::Starting,
+            },
+        };
+        let digest = digest(&build, options);
+        let mut loads = self.loads.borrow_mut();
+        if let Some(load) = loads.get_mut(target).filter(|load| load.digest == digest) {
+            return match &load.state {
+                Loading::Waiting(_) => Step::Starting,
+                Loading::Described(_, id) => Step::Described(id.clone()),
+                Loading::Loaded(loaded) if !load.registered => {
+                    load.registered = true;
+                    let (definition, error) = guest::define(self, loaded.clone());
+                    Step::Ready(definition, error, digest)
+                }
+                Loading::Loaded(_) => Step::Same,
+                Loading::Unsupported(reason) => Step::Unsupported(reason.clone()),
+                Loading::Failed(error) => Step::Failed(error.clone(), digest),
+            };
+        }
+        let seq = self.next();
+        let options_text = options.map(str::to_owned);
+        loads.insert(
+            target.to_owned(),
+            Load {
+                dir: dir.to_owned(),
+                confined,
+                options: options_text,
+                digest,
+                state: Loading::Waiting(seq),
+                registered: false,
+            },
+        );
+        drop(loads);
+        let options = options.and_then(|options| serde_json::from_str(options).ok());
+        // Nothing of it is set up before the loader knows it is enabled.
+        let dir = dir.to_string_lossy().into_owned();
+        let load = Down::Load {
+            seq,
+            target: target.to_owned(),
+            dir,
+            options,
+            setup: false,
+            confined,
+            seed: Default::default(),
+        };
+        self.send(load, Some(Waiting::Load(target.to_owned())));
+        Step::Starting
+    }
+
+    /// Runs the setup of the plugin `target`'s load described, which is enabled.
+    pub(crate) fn set_up(&self, target: &str) {
+        let seq = self.next();
+        let mut loads = self.loads.borrow_mut();
+        let Some(load) = loads.get_mut(target) else { return };
+        let Loading::Described(described, ref id) = load.state else { return };
+        let seed = proto::seed(&self.host, id);
+        load.state = Loading::Waiting(seq);
+        drop(loads);
+        self.send(Down::Setup { seq, load: described, seed }, Some(Waiting::Load(target.to_owned())));
+    }
+
+    /// Registers the plugin `target`'s load described, which is disabled, without its setup: its activation runs it.
+    pub(crate) fn inactive(&self, target: &str) {
+        let mut loads = self.loads.borrow_mut();
+        let Some(load) = loads.get_mut(target) else { return };
+        let Loading::Described(_, id) = &load.state else { return };
+        let loaded = guest::Loaded {
+            id: id.clone(),
+            target: target.to_owned(),
+            dir: load.dir.clone(),
+            confined: load.confined,
+            options: load.options.clone(),
+            seq: 0,
+            manifest: opencode_plugin_abi::Manifest { id: id.clone(), ..Default::default() },
+            holds: Vec::new(),
+            effects: RefCell::new(None),
+            watches: RefCell::default(),
+            continues: None,
+            relay: RefCell::default(),
+            states: RefCell::default(),
+        };
+        (load.state, load.registered) = (Loading::Loaded(Rc::new(loaded)), false);
+    }
+
+    /// Forgets `target`, which the loader removed: the JS host drops what it has of it.
+    pub(crate) fn forget(&self, target: &str) {
+        let removed = self.loads.borrow_mut().remove(target);
+        if let Some(Loading::Loaded(loaded)) = removed.map(|load| load.state) {
+            self.early.borrow_mut().remove(&loaded.id);
+        }
+        if self.child.borrow().is_some() {
+            self.write(&Down::Forget { target: target.to_owned() });
+        }
+    }
+
+    /// Tells the JS host the theme's mode and colors, when they changed.
+    pub(crate) fn theme(&self) {
+        let Some(host) = self.host.upgrade() else { return };
+        let now = (theme_mode(&*host), host.theme());
+        let same = self.theme.borrow().as_ref().is_some_and(|told| told.0 == now.0 && told.1 == now.1);
+        if same || self.child.borrow().is_none() {
+            return;
+        }
+        let palette = palette(&*host);
+        self.write(&Down::Theme { mode: now.0.clone(), palette: Some(palette) });
+        *self.theme.borrow_mut() = Some(now);
+    }
+
+    /// Sends `message` and records what its sequence awaits. A full queue is back-pressure, not a fault: the message
+    /// waits in the host's overflow, in order, until the JS host reads; past the overflow's bound it is refused. A JS
+    /// host that reads nothing is ended by the progress rule ([`child`]), once.
+    fn send(&self, message: Down, waiting: Option<Waiting>) {
+        let seq = message.seq();
+        if let (Some(seq), Some(waiting)) = (seq, waiting) {
+            self.waiting.borrow_mut().insert(seq, waiting);
+        }
+        if self.stopped.borrow().is_some() || !self.started(seq.map_or(self.seq.get(), |seq| seq - 1)) {
+            return;
+        }
+        if matches!(message, Down::Call { .. })
+            && let Some(fault) = self.fault.take()
+        {
+            match fault {
+                Fault::Drop => return,
+                Fault::Repeat => self.write(&message),
+                Fault::Swap => {
+                    *self.swapped.borrow_mut() = Some(message);
+                    return;
+                }
+            }
+        }
+        self.write(&message);
+        if seq.is_some()
+            && let Some(swapped) = self.swapped.borrow_mut().take()
+        {
+            self.write(&swapped);
+        }
+    }
+
+    /// Writes `message` to the JS host, after what waits in the overflow.
+    fn write(&self, message: &Down) {
+        // Apply the same size policy to direct sends and the overflow queue so oversized messages cannot block
+        // later replies.
+        let size = json_len(message);
+        if !self.fits(size) {
+            if let Some(parts) = self.admit(message) {
+                return parts.iter().for_each(|part| self.write(part));
+            }
+            return self.refuse(message, size);
+        }
+        if !self.overflow.borrow().0.is_empty() || !timed(|| self.encode(message)) {
+            self.overflowed(message.clone(), size);
+        }
+    }
+
+    /// Keeps `message`, of `size` bytes, for when the queue has room; past the bound, refuses it. What settles the JS
+    /// host's work ([`settles`]) has a reserve past it ([`Scripts::settle`]).
+    fn overflowed(&self, message: Down, size: usize) {
+        let mut overflow = self.overflow.borrow_mut();
+        let bound = self.config.limits.inbox * if settles(&message) { 2 } else { 1 };
+        if overflow.1 + size > bound {
+            drop(overflow);
+            self.refuse(&message, size);
+            return;
+        }
+        overflow.1 += size;
+        overflow.0.push_back((message, size));
+    }
+
+    /// Whether what the host sends waits in its overflow: the JS host does not read as fast as the host sends.
+    fn backed_up(&self) -> bool {
+        !self.overflow.borrow().0.is_empty()
+    }
+
+    /// Keeps `guest` to draw its claimed parts again once the queue drained ([`Scripts::drain`]).
+    fn reoffer(&self, guest: &Rc<Guest>) {
+        let mut reoffers = self.reoffers.borrow_mut();
+        if !reoffers.iter().any(|kept| std::ptr::eq(kept.as_ptr(), Rc::as_ptr(guest))) {
+            reoffers.push(Rc::downgrade(guest));
+        }
+    }
+
+    /// Writes what waits in the overflow while the queue takes it. Once nothing waits, the parts the queue refused
+    /// are drawn again, and sent as they are, oldest first.
+    fn drain(&self) {
+        loop {
+            let Some((message, size)) = self.overflow.borrow_mut().0.pop_front() else {
+                let reoffers = self.reoffers.take();
+                reoffers.iter().filter_map(Weak::upgrade).for_each(|guest| guest.reoffer());
+                return;
+            };
+            self.overflow.borrow_mut().1 -= size;
+            if !timed(|| self.encode(&message)) {
+                let mut overflow = self.overflow.borrow_mut();
+                overflow.1 += size;
+                overflow.0.push_front((message, size));
+                return;
+            }
+        }
+    }
+
+    /// Refuses `message`, of `size` bytes, which no queue holds: it is not sent, its sequence goes so the stream has no
+    /// gap (a ping's number is free again, as nothing waits on a question never asked), and a handler's call is answered
+    /// with nothing, as one that asked for nothing. What settles the JS host's work goes still ([`Scripts::settle`]).
+    fn refuse(&self, message: &Down, size: usize) {
+        log::warn!("a message of {size} bytes for the JS host has no room; it is not sent");
+        count(|crossed| crossed.refused_sends += 1);
+        // A claimed part is offered again as the queue drains.
+        if let Down::Claim { id, mount, .. } = message
+            && let Some(guest) = self.guest(id)
+        {
+            guest.claim_refused(mount);
+        }
+        if settles(message) {
+            return self.settle(message, size);
+        }
+        // A snapshot goes as a failed read, in its place: the JS host would keep the value before with no error
+        // (`docs/plugin-abi.md`, "Timing", reads).
+        if let Down::Snapshot { id, activation, key, .. } = message {
+            // Its value was charged as it was pushed: it never reaches the JS host, so its room goes back.
+            if let Some(guest) = self.guest(id) {
+                guest.unpushed(key);
+            }
+            let error = Some(format!("the read's snapshot of {size} bytes does not fit the JS host's queue"));
+            let (id, key, activation) = (id.clone(), key.clone(), *activation);
+            let failed = Down::Snapshot { id, activation, key, value: serde_json::Value::Null, error, parted: false };
+            return self.settle(&failed, 0);
+        }
+        // A ping is only a question, and a full queue answers none: the JS host never saw it, so its number is free
+        // again and no skip takes the room a settlement needs. Its sender asks again, as a settle of a full queue does;
+        // without this, settles that retry pings while the JS host is behind fill the settlement reserve with skips and
+        // end the host (pipe-flakes: 2,288 refused pings filled it, and a deactivation's skip was denied).
+        if let Down::Ping { seq } = message {
+            self.waiting.borrow_mut().remove(seq);
+            if *seq == self.seq.get() {
+                self.seq.set(seq.saturating_sub(1));
+            }
+            return;
+        }
+        let seq = message.seq();
+        if let Some(seq) = seq {
+            // In the message's place: after what waits before it.
+            self.settle(&Down::Skipped { seq }, 0);
+        }
+        let Some(seq) = seq else { return };
+        let waiting = self.waiting.borrow_mut().remove(&seq);
+        // A load or a setup the JS host never reads fails: the JS host runs no skipped sequence, so nothing else would
+        // answer it, and the loader would read it as starting for good.
+        let why = || format!("the JS host has no room for a load of {size} bytes");
+        match waiting {
+            // A key's command the JS host never runs declines its key.
+            Some(Waiting::Call(_)) => self.refused(seq),
+            Some(Waiting::Load(_)) => self.answered_load(seq, Loading::Failed(why())),
+            // After the turn: the activation that asks for the setup is still at work.
+            Some(Waiting::Activate(guest)) => {
+                let why = why();
+                crate::defer(&self.host, move |_| {
+                    if let Some(guest) = guest.upgrade() {
+                        guest.fail(why);
+                    }
+                });
+            }
+            _ => {}
+        }
+    }
+
+    /// Reserve room for replies that settle JS work, even when the normal queue is full. If the reserve fills,
+    /// terminate the host rather than leave a promise unresolved.
+    fn settle(&self, message: &Down, size: usize) {
+        let kept = match message {
+            Down::Call { seq, id, activation, call: Request::Reply { id: reply, .. }, route, .. }
+                if !self.sendable(message) =>
+            {
+                let result = Err(format!("the reply is {size} bytes, more than the JS host takes"));
+                let call = Request::Reply { id: *reply, result };
+                let route = route.clone();
+                Down::Call { seq: *seq, id: id.clone(), activation: *activation, call, route, parted: false }
+            }
+            // A request's ID, a number, is kept: without it the JS host reads an accepted request as refused, which
+            // then runs while its caller retries. A read's value goes, named as dropped: a stored value's text read as
+            // null was an empty key, which a store's update then overwrote.
+            Down::Answered { id, activation, key, results, .. } if !self.sendable(message) => Down::Answered {
+                id: id.clone(),
+                activation: *activation,
+                key: key.clone(),
+                results: results
+                    .iter()
+                    .map(|result| if scalar(result) { result.clone() } else { serde_json::Value::Null })
+                    .collect(),
+                parted: false,
+                dropped: results.iter().enumerate().filter(|(_, result)| !scalar(result)).map(|(at, _)| at).collect(),
+            },
+            other => other.clone(),
+        };
+        // What cannot go even so is never encoded again, which would refuse it again: the JS host ends, which settles
+        // everything it held.
+        if !self.sendable(&kept) {
+            return self.shut("what settles the JS host's work is larger than a frame it takes");
+        }
+        if self.overflow.borrow().0.is_empty() && self.encode(&kept) {
+            return;
+        }
+        let bytes = serde_json::to_vec(&kept).map_or(0, |bytes| bytes.len());
+        let mut overflow = self.overflow.borrow_mut();
+        if overflow.1 + bytes > 2 * self.config.limits.inbox {
+            drop(overflow);
+            return self.shut("the JS host read nothing while its work waited to settle");
+        }
+        overflow.1 += bytes;
+        overflow.0.push_back((kept, bytes));
+    }
+
+    /// Split only if every encoded fragment fits in the remaining backlog.
+    fn admit(&self, message: &Down) -> Option<Vec<Down>> {
+        self.admits(message).then(|| self.split(message)).flatten()
+    }
+
+    /// Whether `message` goes in parts the overflow has room for now ([`Scripts::admit`]), measured without building them.
+    fn admits(&self, message: &Down) -> bool {
+        let Some(parted) = Parted::of(message) else { return false };
+        let envelope = json_len(&parted.part(String::new()));
+        let chunk = self.chunk(envelope);
+        if chunk == 0 {
+            return false;
+        }
+        let json = parted.len();
+        let base64 = |bytes: usize| bytes.div_ceil(3) * 4;
+        let (full, rest) = (json / chunk, json % chunk);
+        let last = if rest == 0 { 0 } else { envelope + base64(rest) };
+        let bytes = full
+            .saturating_mul(envelope + base64(chunk))
+            .saturating_add(last)
+            .saturating_add(json_len(&parted.closing(message)));
+        bytes <= self.config.limits.inbox.saturating_sub(self.overflow.borrow().1)
+    }
+
+    /// The bytes of JSON a part carries at most: what a frame of the queue takes, past its header and the part's
+    /// `envelope` (its JSON with no data), before base64.
+    fn chunk(&self, envelope: usize) -> usize {
+        let header = wire::encode(wire::CONTROL, &[]).len();
+        wire::CONTROL_CAP.min(self.config.limits.queued).saturating_sub(header + envelope) / 4 * 3
+    }
+
+    /// A reply or a read's snapshot as the parts of its JSON, each in a frame of its own, and its message after them,
+    /// which says they are its own. None for any other message, and for a queue too small for a part.
+    fn split(&self, message: &Down) -> Option<Vec<Down>> {
+        let parted = Parted::of(message)?;
+        let chunk = self.chunk(json_len(&parted.part(String::new())));
+        if chunk == 0 {
+            return None;
+        }
+        #[cfg(test)]
+        tests::SPLITS.set(tests::SPLITS.get() + 1);
+        let json = parted.json()?;
+        let mut parts: Vec<Down> =
+            json.chunks(chunk).map(|bytes| parted.part(opencode_plugin_abi::base64::encode(bytes))).collect();
+        parts.push(parted.closing(message));
+        Some(parts)
+    }
+
+    /// Whether `message` goes as one frame: under the queue's bound and the wire's cap, the limits [`Child::send`]
+    /// refuses a frame by.
+    fn sendable(&self, message: &Down) -> bool {
+        self.unsendable(message).is_none()
+    }
+
+    /// The size of `message` when it does not go as one frame ([`Scripts::sendable`]).
+    fn unsendable(&self, message: &Down) -> Option<usize> {
+        let size = json_len(message);
+        (!self.fits(size)).then_some(size)
+    }
+
+    /// The size of `message` when it goes neither as one frame nor in the parts the overflow has room for now
+    /// ([`Scripts::write`]).
+    fn untaken(&self, message: &Down) -> Option<usize> {
+        self.unsendable(message).filter(|_| !self.admits(message))
+    }
+
+    /// Whether a message of `payload` bytes goes as one frame ([`Scripts::sendable`]).
+    fn fits(&self, payload: usize) -> bool {
+        payload <= wire::CONTROL_CAP && wire::encode(wire::CONTROL, &[]).len() + payload <= self.config.limits.queued
+    }
+
+    /// Ends the JS host that runs now, once, after the current turn: a second cause in the same turn is the same end,
+    /// and an end asked for one JS host never ends the one that replaced it.
+    fn shut(&self, why: &str) {
+        let generation = self.generation.get();
+        if self.child.borrow().is_none() || self.ending.replace(generation) == generation {
+            return;
+        }
+        log::error!("{why}");
+        let (this, host, why) = (self.this.clone(), self.host.upgrade(), why.to_owned());
+        if let Some(host) = host {
+            host.app().defer(move |_| {
+                if let Some(scripts) = this.upgrade().filter(|scripts| scripts.generation.get() == generation) {
+                    scripts.ended(why, Blame::Nobody);
+                }
+            });
+        }
+    }
+
+    /// Runs `child` as the JS host, a new generation of it.
+    fn adopt(&self, child: Child) {
+        self.generation.set(self.generation.get() + 1);
+        *self.child.borrow_mut() = Some(child);
+    }
+
+    /// How many bytes wait in the overflow, for the tests.
+    #[doc(hidden)]
+    pub fn overflow_bytes(&self) -> usize {
+        self.overflow.borrow().1
+    }
+
+    /// Queues `message`; false when the queue has no room for it now.
+    fn encode(&self, message: &Down) -> bool {
+        let seq = message.seq();
+        let payload = serde_json::to_vec(message).unwrap_or_default();
+        log::trace!("js host -> {}", String::from_utf8_lossy(&payload));
+        let wait = match message {
+            Down::Load { .. } | Down::Setup { .. } => child::Wait::Setup,
+            // A claimed part's view is owed as a mount's is: one that never returns is a hang.
+            Down::Call { .. } | Down::Ping { .. } | Down::Mount { .. } | Down::Input { .. } | Down::Claim { .. } => {
+                child::Wait::Answer
+            }
+            _ => child::Wait::Ack,
+        };
+        let sent = self.child.borrow().as_ref().map(|child| child.send(wire::CONTROL, &payload, seq, wait));
+        match &sent {
+            Some(Ok(())) => count(|crossed| {
+                crossed.sent += 1;
+                crossed.sent_bytes += payload.len() as u64 + 5;
+            }),
+            Some(Err(child::Refused::Full)) => return false,
+            // `write` sized every message: none is too large here.
+            Some(Err(child::Refused::TooLarge(size))) => {
+                debug_assert!(false, "a message of {size} bytes was not sized before it was sent");
+                self.refuse(message, *size)
+            }
+            None => {}
+        }
+        true
+    }
+
+    /// Whether there is a Bun to run the JS host on, looked for the first time it is asked: a client whose plugins
+    /// never need the JS host never looks, and starts no process.
+    pub fn runtime(&self) -> bool {
+        self.resolved().is_some()
+    }
+
+    /// Whether Bun was looked for yet.
+    #[doc(hidden)]
+    pub fn looked(&self) -> bool {
+        self.config.find.is_none() || self.runtime.get().is_some()
+    }
+
+    /// The configuration the JS host starts with: this one, with the Bun found for it.
+    fn resolved(&self) -> Option<&Config> {
+        let found = self.runtime.get_or_init(|| match &self.config.find {
+            None => Some(self.config.clone()),
+            Some(find) => (find.0)().map(|found| Config {
+                bun: found.bun,
+                opencode: found.opencode,
+                bun_version: found.bun_version,
+                find: None,
+                ..self.config.clone()
+            }),
+        });
+        found.as_ref()
+    }
+
+    /// Starts the JS host when none runs, its stream after sequence `after`; whether one runs.
+    fn started(&self, after: u64) -> bool {
+        if self.child.borrow().is_some() {
+            return true;
+        }
+        let Some(host) = self.host.upgrade() else { return false };
+        match self.spawn(&host) {
+            Ok(child) => {
+                count(|crossed| crossed.started += 1);
+                let theme_mode = theme_mode(&*host);
+                let palette = palette(&*host);
+                *self.theme.borrow_mut() = Some((theme_mode.clone(), host.theme()));
+                let hello = Down::Hello { version: proto::VERSION, after, theme_mode, palette: Some(palette) };
+                let hello = serde_json::to_vec(&hello).unwrap_or_default();
+                // The stream's head goes whatever the queue's bound: a hello lost, as one larger than the bound was,
+                // left the JS host expecting the stream from 0, which a restart's does not start at (pipe-restart).
+                if let Err(refused) = child.send_head(wire::CONTROL, &hello) {
+                    let error = format!("cannot start the JS host: its hello was refused ({refused:?})");
+                    log::error!("{error}");
+                    *self.stopped.borrow_mut() = Some(error);
+                    self.fail_loads();
+                    return false;
+                }
+                self.adopt(child);
+                self.read.set((0, 0));
+                *self.overflow.borrow_mut() = Default::default();
+                self.started.borrow_mut().clear();
+                true
+            }
+            Err(error) => {
+                let bun = self.resolved().map(|config| config.bun.display().to_string()).unwrap_or_default();
+                let error = format!("cannot start the JS host ({bun}): {error}");
+                log::error!("{error}");
+                *self.stopped.borrow_mut() = Some(error);
+                self.fail_loads();
+                false
+            }
+        }
+    }
+
+    fn spawn(&self, host: &Rc<dyn Host>) -> std::io::Result<Child> {
+        let Some(config) = self.resolved() else {
+            return Err(std::io::Error::new(std::io::ErrorKind::NotFound, crate::SKIPPED_NO_BUN));
+        };
+        if self.script.borrow().is_none() {
+            let dir = opencode_util::temp::tempdir()?;
+            std::fs::write(dir.path().join("host.ts"), SOURCE)?;
+            std::fs::write(dir.path().join("compat.js"), COMPAT)?;
+            std::fs::write(dir.path().join("bunfig.toml"), BUNFIG)?;
+            *self.script.borrow_mut() = Some(dir);
+        }
+        let dir = self.script.borrow().as_ref().map(|dir| dir.path().to_path_buf()).unwrap_or_default();
+        Child::spawn(command(config, &dir), self.config.limits, {
+            let proxy = host.app().proxy();
+            let id = self.id;
+            move || post(&proxy, id)
+        })
+    }
+
+    /// Takes what the JS host sent.
+    fn woken(self: &Rc<Self>) {
+        // It read something, which made room.
+        self.drain();
+        let taken = timed(|| self.child.borrow().as_ref().map(|child| (child.take(), child.read())));
+        let Some((events, read)) = taken else { return };
+        let (seen, seen_trees) = self.read.replace(read);
+        count(|crossed| {
+            crossed.received_bytes += read.0.saturating_sub(seen);
+            crossed.tree_bytes += read.1.saturating_sub(seen_trees);
+        });
+        for event in events {
+            log::trace!("js host <- {event:?}");
+            match event {
+                child::Event::Up(up) => {
+                    count(|crossed| crossed.received += 1);
+                    let up = match &mut *self.held.borrow_mut() {
+                        Some(held) => {
+                            held.push(*up);
+                            None
+                        }
+                        None => Some(*up),
+                    };
+                    if let Some(up) = up {
+                        self.up(up);
+                    }
+                }
+                child::Event::Tree(mut tree) => {
+                    match self.tamper.take() {
+                        Some(Tamper::Keep) => *self.kept.borrow_mut() = Some(tree.clone()),
+                        Some(Tamper::Hold) => {
+                            *self.kept.borrow_mut() = Some(tree);
+                            continue;
+                        }
+                        // Its memo table is the keep's alone: only the keep is wrong.
+                        Some(Tamper::UnknownKeep) => {
+                            tree.node = serde_json::json!({ "type": "keep", "key": "no-such" });
+                            tree.memo = 1;
+                        }
+                        None => {}
+                    }
+                    count(|crossed| {
+                        crossed.received += 1;
+                        crossed.trees += 1;
+                    });
+                    match self.guest(&tree.id) {
+                        Some(guest) => guest.tree(tree),
+                        None => count(|crossed| crossed.dropped += 1),
+                    }
+                }
+                // A plugin that flooded the host fails, and nothing else is blamed.
+                child::Event::Gone(why, flooded) => {
+                    self.ended(why, flooded.map_or(Blame::Running, Blame::Plugin));
+                    return;
+                }
+                child::Event::Hung { seq } => {
+                    let limit = self.config.limits.ack.as_millis();
+                    self.ended(
+                        format!("the JS host sent nothing for {limit} ms while event {seq} waited"),
+                        Blame::Running,
+                    );
+                    return;
+                }
+                child::Event::Memory(bytes) => {
+                    let why = format!(
+                        "the JS host used {} MiB, over its budget of {} MiB",
+                        bytes >> 20,
+                        self.config.limits.memory >> 20
+                    );
+                    self.ended(why, Blame::Nobody);
+                    return;
+                }
+            }
+        }
+    }
+
+    fn guest(&self, id: &str) -> Option<Rc<Guest>> {
+        self.guests.borrow().get(id).and_then(Weak::upgrade)
+    }
+
+    fn up(self: &Rc<Self>, up: Up) {
+        // The JS host answers again: a key's command is sent to it again. Not by an acknowledgement or a start, which it
+        // sends as it reads a message, before the handler that stalls it runs.
+        if !matches!(up, Up::Ack { .. } | Up::Started { .. }) {
+            self.stalled.set(false);
+        }
+        match up {
+            Up::Hello { .. } | Up::Ack { .. } => {}
+            Up::Started { seq } => {
+                if self.waiting.borrow().contains_key(&seq) {
+                    self.started.borrow_mut().insert(seq);
+                }
+            }
+            Up::Loaded { seq, id, manifest, holds, effects } => match self.take_waiting(seq) {
+                Some(Waiting::Load(target)) => {
+                    let mut loads = self.loads.borrow_mut();
+                    if let Some(load) =
+                        loads.get_mut(&target).filter(|load| matches!(load.state, Loading::Waiting(at) if at == seq))
+                    {
+                        let loaded = guest::Loaded {
+                            id,
+                            target: target.clone(),
+                            dir: load.dir.clone(),
+                            confined: load.confined,
+                            options: load.options.clone(),
+                            seq,
+                            manifest,
+                            holds,
+                            effects: RefCell::new(Some(effects)),
+                            watches: RefCell::default(),
+                            continues: None,
+                            relay: RefCell::default(),
+                            states: RefCell::default(),
+                        };
+                        (load.state, load.registered) = (Loading::Loaded(Rc::new(loaded)), false);
+                        drop(loads);
+                        self.reconcile();
+                    }
+                }
+                Some(Waiting::Activate(guest)) => {
+                    if let Some(guest) = guest.upgrade() {
+                        guest.activated(manifest, holds, effects);
+                    }
+                }
+                _ => {}
+            },
+            Up::Unsupported { seq, reason } => self.answered_load(seq, Loading::Unsupported(reason)),
+            Up::Described { seq, id } => self.answered_load(seq, Loading::Described(seq, id)),
+            Up::Entered { id } => *self.entered.borrow_mut() = id,
+            Up::Done { seq, effects, mounts, error, declined } => {
+                // A call that threw has no answer for its key: it goes on, as for an end of the JS host.
+                let error_seen = error.is_some();
+                self.started.borrow_mut().remove(&seq);
+                let waiting = self.waiting.borrow_mut().remove(&seq);
+                match waiting {
+                    Some(Waiting::Load(_)) => {
+                        self.answered_load(seq, Loading::Failed(error.unwrap_or_else(|| "setup failed".to_owned())));
+                    }
+                    Some(Waiting::Activate(guest)) => {
+                        if let Some(guest) = guest.upgrade() {
+                            guest.fail(error.unwrap_or_else(|| "setup failed".to_owned()));
+                        }
+                    }
+                    Some(Waiting::Call(call)) => {
+                        // A reload that came before its `Done` handed the JS host's activation on: the guest that runs
+                        // it now applies the call's effects, so what they ask for (a fetch) is answered once.
+                        let replaced =
+                            || self.guest(&call.plugin).filter(|guest| guest.activation() == call.activation);
+                        if let Some(guest) = call.guest.upgrade().filter(|guest| !guest.ended()).or_else(replaced) {
+                            guest.done(seq, &call, effects, mounts, error);
+                        }
+                        // Its hold ends here, once: a declined key comes back, and what it held goes on after the
+                        // effects, which are deferred. A key whose deadline passed went on then.
+                        self.answered(seq, declined || error_seen);
+                    }
+                    Some(Waiting::View(_) | Waiting::Ping) | None => {}
+                }
+            }
+            up @ (Up::Effects { .. }
+            | Up::Watch { .. }
+            | Up::Unwatch { .. }
+            | Up::Fail { .. }
+            | Up::Taking { .. }
+            | Up::Manifest { .. }) => self.from_plugin(up),
+            Up::Pong { seq, waiting, retiring } => {
+                self.retiring.set(retiring);
+                self.take_waiting(seq);
+                self.pong.set(Some((seq, waiting)));
+            }
+            Up::Log { id, level, message } => {
+                let level = match level {
+                    opencode_plugin_abi::Level::Debug => log::Level::Debug,
+                    opencode_plugin_abi::Level::Info => log::Level::Info,
+                    opencode_plugin_abi::Level::Warn => log::Level::Warn,
+                    opencode_plugin_abi::Level::Error => log::Level::Error,
+                };
+                log::log!(level, "plugin {}: {message}", id.as_deref().unwrap_or("(js host)"));
+            }
+            Up::Tree(tree) => match self.guest(&tree.id) {
+                Some(guest) => guest.tree(tree),
+                None => count(|crossed| crossed.dropped += 1),
+            },
+        }
+    }
+
+    /// A message of a plugin's own (effects, a watch, a failure, a manifest), routed by the JS host's activation that
+    /// sent it, not by the plugin's ID alone: to the guest that runs that activation; kept for the guest it becomes
+    /// while it is a load the loader has not registered yet; else dropped, as a version the host replaced or never
+    /// took sent it. A new build's first fetch took the replaced guest's relay and never settled, and its manifest was
+    /// refused as the old guest's, and charged to its reloads.
+    fn from_plugin(self: &Rc<Self>, up: Up) {
+        let Some((id, activation)) = sender(&up) else { return };
+        // An activation that spilled fails as a whole: nothing more of it is applied.
+        if self.spilled_by(&id, activation) {
+            return self.refuse_spilled(up);
+        }
+        let guest = self.guest(&id).filter(|guest| activation == 0 || guest.activation() == activation);
+        let Some(guest) = guest else {
+            if self.candidate(&id, activation) {
+                return self.keep(up);
+            }
+            log::debug!("plugin {id}: a message of its activation {activation}, which the host does not run; dropped");
+            return;
+        };
+        match up {
+            Up::Effects { seq, effects, mount: None, .. } => {
+                guest.effects(&format!("b{seq}"), effects, false, "update")
+            }
+            Up::Effects { seq, effects, mount: Some(mount), .. } => {
+                guest.mount_effects(&format!("b{seq}"), &mount, effects)
+            }
+            Up::Watch { key, request, .. } => guest.watch(key, request),
+            Up::Unwatch { key, .. } => guest.unwatch(&key),
+            Up::Fail { error, .. } => guest.fail(error),
+            Up::Taking { listener, on, .. } => guest.taking(listener, on),
+            Up::Manifest { manifest, holds, .. } => guest.activated(manifest, holds, Vec::new()),
+            _ => {}
+        }
+    }
+
+    /// Whether `activation` of plugin `id` is a load answered and not registered yet, whose messages wait for its guest:
+    /// one that names no activation waits for any.
+    fn candidate(&self, id: &str, activation: u64) -> bool {
+        activation == 0
+            || self.loads.borrow().values().any(|load| {
+                !load.registered
+                    && matches!(&load.state, Loading::Loaded(loaded) if loaded.id == id && loaded.seq == activation)
+            })
+    }
+
+    /// Keeps `up` of a plugin the loader has not registered yet, for its activation. Keeps a message of an activation
+    /// not registered yet, up to [`EARLY`] of them and as many bytes as the JS host may leave unread
+    /// ([`child::Limits::inbox`]): the reader's bound let them go as they came here. The activation that sends more
+    /// spilled, and fails as a whole, before anything it sent is applied: from then on nothing of it is kept or
+    /// applied, a batch of effects of it is answered at once as refused ([`Scripts::refuse_spilled`]), and its setup
+    /// fails instead of registering it, with nothing it sent applied ([`Scripts::spill_load`]). Replaying what fit let
+    /// a fetch leave and then wait for good, or a manifest hand the activation on, and a failure that came after
+    /// missed it.
+    fn keep(&self, up: Up) {
+        let Some((id, activation)) = sender(&up) else { return };
+        if self.spilled_by(&id, activation) {
+            return self.refuse_spilled(up);
+        }
+        let bytes = json_len(&up);
+        let mut early = self.early.borrow_mut();
+        let kept = early.entry(id.clone()).or_default();
+        if kept.0.len() < EARLY && kept.1 + bytes <= self.config.limits.inbox {
+            kept.1 += bytes;
+            return kept.0.push(up);
+        }
+        drop(early);
+        let bound = self.config.limits.inbox;
+        log::warn!("plugin {id}: over {EARLY} messages or {bound} bytes before it was registered; it fails once it is");
+        self.spilled.borrow_mut().insert(id, activation);
+        self.refuse_spilled(up);
+    }
+
+    /// Whether activation `activation` of plugin `id` spilled ([`Scripts::keep`]).
+    pub(crate) fn spilled_by(&self, id: &str, activation: u64) -> bool {
+        self.spilled.borrow().get(id).is_some_and(|spilled| *spilled == 0 || *spilled == activation)
+    }
+
+    /// Refuses `up`, a message of an activation that spilled: a batch of effects is answered as refused, a failure for
+    /// each, to the activation that sent it, so what waits for it settles once; anything else is dropped, as the
+    /// activation fails.
+    fn refuse_spilled(&self, up: Up) {
+        if let Up::Effects { id, activation, seq, effects, .. } = up {
+            let results = vec![serde_json::Value::Null; effects.len()];
+            let (key, dropped) = (format!("b{seq}"), (0..effects.len()).collect());
+            self.settle(&Down::Answered { id, activation, key, results, parted: false, dropped }, 0);
+        }
+    }
+
+    /// What plugin `id` sent before its activation was registered, now its guest's. An activation that spilled is never
+    /// registered ([`Scripts::spill_load`]).
+    fn registered(self: &Rc<Self>, id: &str) {
+        let early = self.early.borrow_mut().remove(id).unwrap_or_default();
+        early.0.into_iter().for_each(|up| self.up(up));
+    }
+
+    /// Ends `loaded`, an activation that spilled, as its setup fails: nothing it sent is applied. What it sent before is
+    /// dropped, and so are the effects its setup asked for in its load, storage writes as much as the rest; the JS host
+    /// deactivates the activation, which settles once, as refused, every answer and reply it still awaits.
+    pub(crate) fn spill_load(&self, loaded: &guest::Loaded) {
+        self.early.borrow_mut().remove(&loaded.id);
+        self.spilled.borrow_mut().remove(&loaded.id);
+        loaded.effects.borrow_mut().take();
+        let seq = self.next();
+        self.send(Down::Deactivate { seq, id: loaded.id.clone(), activation: loaded.seq }, None);
+    }
+
+    /// What `seq` waited for, now answered.
+    fn take_waiting(&self, seq: u64) -> Option<Waiting> {
+        self.started.borrow_mut().remove(&seq);
+        self.waiting.borrow_mut().remove(&seq)
+    }
+
+    /// The load `seq` was answered with `state`.
+    fn answered_load(&self, seq: u64, state: Loading) {
+        self.take_waiting(seq);
+        let mut loads = self.loads.borrow_mut();
+        let Some(load) = loads.values_mut().find(|load| matches!(load.state, Loading::Waiting(at) if at == seq)) else {
+            return;
+        };
+        (load.state, load.registered) = (state, false);
+        drop(loads);
+        self.reconcile();
+    }
+
+    /// Whether a reload of the registrations of the activation that `loaded` set up, now `js`, is taken at `now`: only
+    /// while its load runs as that activation ([`Load::runs`]), and only then charged to the plugin's reloads, so a
+    /// refused one never counts against the build that replaced it.
+    pub(crate) fn admit_reload(&self, loaded: &Rc<guest::Loaded>, js: u64, now: Instant) -> Reload {
+        let current = self.loads.borrow().get(&loaded.target).is_some_and(|load| load.runs(loaded, js));
+        match (current, current && self.reloaded(&loaded.id, now)) {
+            (false, _) => Reload::Stale,
+            (true, true) => Reload::Churning,
+            (true, false) => Reload::Take,
+        }
+    }
+
+    /// Notes a reload of plugin `id`'s registrations at `now`: whether it is past [`RELOADS`] within
+    /// [`RELOAD_WINDOW`]. Counted by the plugin, not by its load, so a new build of it or a restart of the JS host
+    /// does not start the count again within the window. It holds the reloads of the window alone, at most one past
+    /// the limit a plugin, and forgets a plugin with none.
+    pub(crate) fn reloaded(&self, id: &str, now: Instant) -> bool {
+        let mut reloads = self.reloads.borrow_mut();
+        reloads.retain(|_, at| {
+            at.retain(|at| now.duration_since(*at) < RELOAD_WINDOW);
+            !at.is_empty()
+        });
+        let at = reloads.entry(id.to_owned()).or_default();
+        at.push_back(now);
+        while at.len() > RELOADS + 1 {
+            at.pop_front();
+        }
+        at.len() > RELOADS
+    }
+
+    fn reconcile(&self) {
+        let reconcile = self.reconcile.borrow().clone();
+        if let Some(reconcile) = reconcile {
+            let host = self.host.clone();
+            crate::defer(&host, move |_| reconcile());
+        }
+    }
+
+    /// The JS host ended, hung, broke the protocol, was flooded, or went over its budget: it is ended with its process
+    /// group. `blame` names whom: the work it said it started and did not finish (its plugin fails), a plugin that
+    /// flooded it, or nobody (memory). Every other plugin is set up again on a new JS host, and its surfaces keep their
+    /// last trees until new ones come; a restart resets every plugin's JS state, as the process is one. The calls
+    /// the JS host received and did not start are sent again, in order, after the setups: they never ran. One it started
+    /// and did not finish is not: it may have done what it does, so it is never run twice (at most once). Past the limit
+    /// of ends, every plugin on it fails.
+    fn ended(self: &Rc<Self>, why: String, blame: Blame) {
+        drop(self.child.borrow_mut().take());
+        // Its generation is over: an end scheduled for it ends nothing more ([`Scripts::shut`]).
+        self.generation.set(self.generation.get() + 1);
+        *self.overflow.borrow_mut() = Default::default();
+        // What waited for the overflow to drain goes with it: the next JS host is sent each part as it is drawn.
+        self.reoffers.take();
+        log::error!("{why}");
+        // A ping on its way is lost with it: answered, as one a tree waits behind, so its sender asks again.
+        self.pong.set(Some((self.seq.get(), true)));
+        // Its timers went with it.
+        self.retiring.set(false);
+        let started = std::mem::take(&mut *self.started.borrow_mut());
+        let mut waiting: Vec<(u64, Waiting)> = self.waiting.borrow_mut().drain().collect();
+        waiting.sort_by_key(|(seq, _)| *seq);
+        let ran = waiting.iter().find(|(seq, _)| started.contains(seq)).map(|(seq, _)| *seq);
+        // The target whose load ran: the code of its files ran on the host that ended. No load of it goes to the next
+        // host, not even a newer one whose build a later walk answered and which waited behind it: importing the same
+        // files again could do what ended the last host, and would end the next one too (a save that looked like two
+        // builds must not start three hosts).
+        let ran_target = ran.and_then(|seq| {
+            waiting.iter().find(|(known, _)| *known == seq).and_then(|(_, waiting)| match waiting {
+                Waiting::Load(target) => Some(target.clone()),
+                _ => None,
+            })
+        });
+        match blame {
+            Blame::Plugin(id) => {
+                if let Some(guest) = self.guest(&id) {
+                    guest.fail(format!("flooded the host with effects: {why}"));
+                }
+            }
+            Blame::Running => match waiting.iter().find(|(seq, _)| Some(*seq) == ran).map(|(_, waiting)| waiting) {
+                Some(Waiting::Call(call)) => {
+                    if let Some(guest) = call.guest.upgrade() {
+                        guest.fail(format!("{} ended the JS host: {why}", call.export));
+                    }
+                }
+                Some(Waiting::Activate(guest) | Waiting::View(guest)) => {
+                    if let Some(guest) = guest.upgrade() {
+                        guest.fail(format!("setup or a view ended the JS host: {why}"));
+                    }
+                }
+                Some(Waiting::Load(target)) => {
+                    if let Some(load) = self.loads.borrow_mut().get_mut(target) {
+                        (load.state, load.registered) =
+                            (Loading::Failed(format!("setup ended the JS host: {why}")), false);
+                    }
+                    // Its running version cannot be set up again from files whose new version ended the JS host: it
+                    // fails, once, rather than end the next JS host too.
+                    let running =
+                        self.guests.borrow().values().filter_map(Weak::upgrade).find(|guest| guest.target() == target);
+                    if let Some(guest) = running {
+                        guest.fail(format!("its new version ended the JS host: {why}"));
+                    }
+                }
+                Some(Waiting::Ping) => {}
+                // No sequenced work ran: the plugin whose code ran for another message, if any.
+                None => {
+                    let entered = self.entered.borrow().clone().and_then(|id| self.guest(&id));
+                    if let Some(guest) = entered {
+                        guest.fail(format!("its view or cleanup ended the JS host: {why}"));
+                    }
+                }
+            },
+            Blame::Nobody => {}
+        }
+        self.entered.take();
+        self.taking.borrow_mut().clear();
+        // A described load's module is gone with the JS host: it loads again.
+        for load in self.loads.borrow_mut().values_mut() {
+            if matches!(load.state, Loading::Described(..)) {
+                load.digest = 0;
+            }
+        }
+        if let Some(seq) = ran
+            && let Some((_, Waiting::Call(call))) = waiting.iter().find(|(known, _)| *known == seq)
+        {
+            let plugin = call.guest.upgrade().map(|guest| guest.id().to_owned()).unwrap_or_default();
+            log::warn!("{} of plugin {plugin} ran when the JS host ended; it is not run again", call.export);
+        }
+        let mut again = Vec::new();
+        let mut calls = Vec::new();
+        for (seq, waiting) in waiting {
+            match waiting {
+                Waiting::Load(target) if Some(seq) != ran && ran_target.as_ref() != Some(&target) => again.push(target),
+                Waiting::Call(call) if Some(seq) != ran => calls.push(call),
+                _ => {}
+            }
+        }
+        let now = Instant::now();
+        let mut ends = self.ends.borrow_mut();
+        ends.push_back(now);
+        while ends.front().is_some_and(|at| now.duration_since(*at) > self.config.window) {
+            ends.pop_front();
+        }
+        let over = ends.len() >= self.config.ends;
+        drop(ends);
+        // What the JS host held goes on at once, and the key that ran the command it held for, as declined.
+        self.end_holds();
+        if over {
+            let stopped =
+                format!("the JS host ended {} times in {} s: {why}", self.config.ends, self.config.window.as_secs());
+            *self.stopped.borrow_mut() = Some(stopped.clone());
+            let guests: Vec<Rc<Guest>> = self.guests.borrow().values().filter_map(Weak::upgrade).collect();
+            guests.iter().for_each(|guest| guest.fail(stopped.clone()));
+            self.fail_loads();
+            self.reconcile();
+            return;
+        }
+        for target in again {
+            if let Some(load) = self.loads.borrow_mut().get_mut(&target) {
+                load.digest = 0;
+            }
+        }
+        // Every running plugin is set up again on a new JS host, then gets the calls that never ran, in order.
+        let guests: Vec<Rc<Guest>> = self.guests.borrow().values().filter_map(Weak::upgrade).collect();
+        for guest in guests {
+            guest.restart();
+        }
+        for call in calls {
+            // A key's command went on as declined as the JS host ended (`end_holds` above): it is not run again,
+            // as its key reached the host already.
+            if call.key.is_some() {
+                continue;
+            }
+            if let Some(guest) = call.guest.upgrade().filter(|guest| !guest.ended()) {
+                self.call_as(&guest, call.export, call.request, false, call.user, (call.owner, call.mount), call.key);
+            }
+        }
+        self.reconcile();
+    }
+
+    /// Every load that waits fails: the JS host is not started again.
+    fn fail_loads(&self) {
+        let stopped = self.stopped.borrow().clone().unwrap_or_default();
+        for load in self.loads.borrow_mut().values_mut() {
+            if matches!(load.state, Loading::Waiting(_)) {
+                (load.state, load.registered) = (Loading::Failed(stopped.clone()), false);
+            }
+        }
+    }
+
+    /// Runs a call of `guest`: a command, an event, an input event of `owner`'s input owner, or a command of its route
+    /// mount. A command in `holds` holds the keys after it; `key` is the key that ran a command.
+    fn call(
+        self: &Rc<Self>,
+        guest: &Rc<Guest>,
+        export: &'static str,
+        request: opencode_plugin_abi::Request,
+        hold: bool,
+        owner: Owning,
+        key: Option<Keyed>,
+    ) {
+        self.call_as(guest, export, request, hold, crate::behave::user(), owner, key);
+    }
+
+    /// [`Scripts::call`] for the user's input when `user`.
+    #[allow(clippy::too_many_arguments)]
+    fn call_as(
+        self: &Rc<Self>,
+        guest: &Rc<Guest>,
+        export: &'static str,
+        request: opencode_plugin_abi::Request,
+        hold: bool,
+        user: bool,
+        (owner, mount): Owning,
+        key: Option<Keyed>,
+    ) {
+        let seq = self.next();
+        let (id, activation, route) = (guest.id().to_owned(), guest.activation(), guest.unwatched_route());
+        let message = Down::Call { seq, id: id.clone(), activation, call: request.clone(), route, parted: false };
+        let (guest, bound) = (Rc::downgrade(guest), key.clone());
+        let call = Call { guest, plugin: id, activation, export, user, request, owner, mount, key };
+        // The owner is in place before the send: a send refused at once ends it as a refusal, once.
+        let stalled = self.stalled.get();
+        if (hold || bound.is_some()) && !(stalled && bound.is_some()) {
+            self.hold_for(seq, bound.clone());
+        }
+        self.send(message, Some(Waiting::Call(Box::new(call))));
+        // A JS host that cannot start runs nothing: the call is refused now, not at its deadline.
+        if self.stopped.borrow().is_some() && self.waiting.borrow_mut().remove(&seq).is_some() {
+            self.refused(seq);
+        }
+        // The JS host has not answered since a hold ran out: the key goes on at once, as declined, after the turn, and
+        // the input after it waits for it. The command still runs, late, in its order on the JS host; nothing owns its
+        // answer.
+        if stalled && let Some(keyed) = bound {
+            let mut held = self.hold.borrow_mut();
+            held.put_back(keyed);
+            held.settling += 1;
+            drop(held);
+            self.settle_later();
+        }
+    }
+
+    // Hold.
+
+    /// Starts the hold owner `seq` keeps until its first end ([`Hold`]); `bound` is the key that ran it.
+    fn hold_for(self: &Rc<Self>, seq: u64, bound: Option<Keyed>) {
+        let Some(host) = self.host.upgrade() else { return };
+        let weak = Rc::downgrade(self);
+        let timer = host.app().set_timeout(self.config.hold, move |_| {
+            if let Some(scripts) = weak.upgrade() {
+                scripts.ran_out(seq);
+            }
+        });
+        self.hold.borrow_mut().owners.push(Owner { seq, bound, timer: Some(timer) });
+    }
+
+    /// Takes `key` into the hold while one holds; remembers each press for a chord's strokes.
+    fn intercept(&self, key: KeyEvent, consume: impl FnOnce()) {
+        if key.kind != opentui::input::KeyEventKind::Release && !matches!(key.code, opentui::input::KeyCode::Other(_)) {
+            let mut recent = self.recent.borrow_mut();
+            if recent.len() == RECENT {
+                recent.pop_front();
+            }
+            recent.push_back(key);
+        }
+        // The reserved chord cancels the hold and discards buffered input. Its press and release both reach the
+        // host.
+        if let Some(host) = self.host.upgrade()
+            && crate::interact::reserved(&*host, &crate::interact::key_of(&key).0)
+        {
+            if key.kind != opentui::input::KeyEventKind::Release {
+                self.escape();
+            }
+            return;
+        }
+        if self.take(Held::Key(key)) {
+            consume();
+        }
+    }
+
+    /// Keeps `input` behind what the hold keeps, while one holds and nothing is put back now: whether it did. Past
+    /// [`HELD`] the owners end as at their deadline, and the input goes on after the turn, none of it dropped.
+    fn take(&self, input: Held) -> bool {
+        let mut past = self.past();
+        // Input while a plugin's dialog that just opened has not focused its field yet waits for that focus; escape does
+        // not, as it closes the dialog at once.
+        let escape = matches!(&input, Held::Key(key) if key.code == opentui::input::KeyCode::Escape);
+        let opening = {
+            let hold = self.hold.borrow();
+            !escape && !hold.holding() && !hold.replaying
+        };
+        if opening && let Some(host) = self.host.upgrade() {
+            self.await_opening(&*host, true);
+        }
+        let mut hold = self.hold.borrow_mut();
+        if !hold.holding() || hold.replaying {
+            return false;
+        }
+        // Typed where the key that holds was.
+        past.target = hold.owners.iter().rev().find_map(|owner| owner.bound.as_ref()?.past.target.clone());
+        hold.input.push_back((input, past));
+        if hold.input.len() < HELD || hold.owners.is_empty() {
+            return true;
+        }
+        log::warn!("over {HELD} keys and pastes held: the JS host's answers are not waited for");
+        let owners = std::mem::take(&mut hold.owners);
+        let mut timers = Vec::new();
+        for owner in owners.into_iter().rev() {
+            timers.extend(owner.timer);
+            if let Some(keyed) = owner.bound {
+                hold.put_back(keyed);
+            }
+        }
+        hold.settling += 1;
+        drop(hold);
+        self.cancel(timers);
+        self.settle_later();
+        true
+    }
+
+    /// What input taken now goes past if it is put back: the commands the input put back now went past, and where it
+    /// was typed.
+    fn past(&self) -> Past {
+        let replayed = self.replayed.borrow();
+        Past { commands: replayed.commands.clone(), target: replayed.target.clone(), ..Past::default() }
+    }
+
+    /// The reserved chord: every owner ends and what was held goes, so an answer after it puts nothing back.
+    pub(crate) fn escape(&self) {
+        let timers: Vec<TimerId> = {
+            let mut hold = self.hold.borrow_mut();
+            hold.input.clear();
+            let opening = hold.opening.take().map(|(_, timer)| timer);
+            hold.owners.drain(..).filter_map(|owner| owner.timer).chain(opening).collect()
+        };
+        self.cancel(timers);
+    }
+
+    /// Whether the key put back now goes past command `entry` (`<plugin>\0<name>`), which declined it before, or
+    /// past every command of its plugin (`<plugin>\0`, a key its field declined): the command passes it on as it
+    /// runs, rather than leave the keymap's lists.
+    pub(crate) fn stepped_aside(&self, entry: &str) -> bool {
+        self.replayed
+            .borrow()
+            .commands
+            .iter()
+            .any(|command| command == entry || (command.ends_with('\0') && entry.starts_with(command.as_str())))
+    }
+
+    /// Owner `seq` was answered: a declined key comes back, and the input goes on once the call's effects applied,
+    /// after the turn. An answer to no owner (its deadline passed, or the chord dropped it) does nothing.
+    fn answered(&self, seq: u64, declined: bool) {
+        let timer = {
+            let mut hold = self.hold.borrow_mut();
+            let Some(timer) = hold.end(seq, declined) else { return };
+            hold.settling += 1;
+            timer
+        };
+        self.cancel(timer);
+        self.settle_later();
+    }
+
+    /// Owner `seq`'s call never reaches the JS host: it declines its key, which goes on after the turn.
+    fn refused(&self, seq: u64) {
+        let timer = {
+            let mut hold = self.hold.borrow_mut();
+            let Some(timer) = hold.end(seq, true) else { return };
+            hold.settling += 1;
+            timer
+        };
+        self.cancel(timer);
+        self.settle_later();
+    }
+
+    /// One settling end applies after the turn, then the input goes on.
+    fn settle_later(&self) {
+        let (Some(host), this) = (self.host.upgrade(), self.this.clone()) else { return };
+        host.app().defer(move |_| {
+            if let Some(scripts) = this.upgrade() {
+                scripts.hold.borrow_mut().settling -= 1;
+                scripts.release();
+            }
+        });
+    }
+
+    /// Owner `seq`'s deadline passed before its answer: its key goes on as declined, first, then what it held, and the
+    /// log says so once until the JS host answers again. Declined, not handled: the user's key reaches the host in its
+    /// place and none is lost, where a key taken as handled would be lost if the command declines, and put back late
+    /// it would land after the keys typed since (an Enter after more text). A command that answers later still has its
+    /// effects; only its key went on already.
+    fn ran_out(&self, seq: u64) {
+        let bound = {
+            let mut hold = self.hold.borrow_mut();
+            let Some(owner) = hold.owners.iter().find(|owner| owner.seq == seq) else { return };
+            let bound = owner.bound.is_some();
+            hold.end(seq, true);
+            bound
+        };
+        if bound && !self.stalled.replace(true) {
+            log::warn!(
+                "the JS host did not answer a key's command within {} ms: its key went on, and keys are not held \
+                 until it answers",
+                self.config.hold.as_millis()
+            );
+        }
+        self.release();
+    }
+
+    /// The JS host ended: every owner ends, its key back as declined, and the input goes on (after what settles).
+    fn end_holds(&self) {
+        let timers: Vec<TimerId> = {
+            let mut hold = self.hold.borrow_mut();
+            let owners = std::mem::take(&mut hold.owners);
+            let mut timers = Vec::new();
+            for owner in owners.into_iter().rev() {
+                timers.extend(owner.timer);
+                if let Some(keyed) = owner.bound {
+                    hold.put_back(keyed);
+                }
+            }
+            timers
+        };
+        self.cancel(timers);
+        self.release();
+    }
+
+    fn cancel(&self, timers: impl IntoIterator<Item = TimerId>) {
+        let Some(host) = self.host.upgrade() else { return };
+        for timer in timers {
+            host.app().cancel_timer(timer);
+        }
+    }
+
+    /// Puts the held input back in order once nothing holds it. A put-back key that starts a hold keeps the rest held.
+    fn release(&self) {
+        let Some(host) = self.host.upgrade() else { return };
+        if self.await_opening(&*host, false) {
+            return;
+        }
+        loop {
+            let input = {
+                let mut hold = self.hold.borrow_mut();
+                if hold.holding() || hold.replaying {
+                    break;
+                }
+                let Some((input, past)) = hold.input.pop_front() else { break };
+                // Typed where nothing is now: it goes, rather than reach another widget.
+                if past.orphaned() {
+                    continue;
+                }
+                hold.replaying = true;
+                *self.replayed.borrow_mut() = past;
+                input
+            };
+            host.app().dispatch(match input {
+                Held::Key(key) => opentui::prelude::Event::Key(key),
+                Held::Paste(text) => opentui::prelude::Event::Paste(text),
+            });
+            *self.replayed.borrow_mut() = Past::default();
+            self.hold.borrow_mut().replaying = false;
+        }
+    }
+
+    /// Whether the input waits for a plugin's dialog surface on top to show its first tree: one that just opened, whose
+    /// tree and focus come with the JS host's next revisions. It goes on once that tree showed and the focus it asked
+    /// for settled, the dialog's mount ends, or [`crate::interact::OPENING`] passes. `incoming`: input comes now, which the wait takes.
+    fn await_opening(&self, host: &dyn Host, incoming: bool) -> bool {
+        {
+            let hold = self.hold.borrow();
+            if hold.holding() || hold.replaying || (hold.input.is_empty() && !incoming) {
+                return false;
+            }
+        }
+        let Some(owner) = host.router().and_then(|router| router.opening(host)) else { return false };
+        let token = {
+            let mut hold = self.hold.borrow_mut();
+            hold.openings += 1;
+            hold.openings
+        };
+        let timed = self.this.clone();
+        let timer = host.app().set_timeout(crate::interact::OPENING, move |_| {
+            if let Some(scripts) = timed.upgrade() {
+                scripts.opened(token);
+            }
+        });
+        self.hold.borrow_mut().opening = Some((token, timer));
+        let (focused, owner_host) = (self.this.clone(), self.host.clone());
+        owner.when_focused(Box::new(move || {
+            // After the focus applied, in the order of what the effects did.
+            if let Some(host) = owner_host.upgrade() {
+                host.app().defer(move |_| {
+                    if let Some(scripts) = focused.upgrade() {
+                        scripts.opened(token);
+                    }
+                });
+            }
+        }));
+        true
+    }
+
+    /// The wait for an opening dialog `token` ended: the input goes on.
+    fn opened(&self, token: u64) {
+        let timer = self.hold.borrow_mut().opening.take_if(|(waiting, _)| *waiting == token);
+        let Some((_, timer)) = timer else { return };
+        self.cancel([timer]);
+        self.release();
+    }
+}
+
+impl InputHold for Scripts {
+    fn paste(&self, text: &str) -> bool {
+        self.take(Held::Paste(text.to_owned()))
+    }
+
+    fn escape(&self) {
+        Scripts::escape(self);
+    }
+
+    fn heard(&self) -> Heard {
+        match self.hold.borrow().replaying {
+            true => self.replayed.borrow().heard.clone(),
+            false => Heard::Nobody,
+        }
+    }
+}
+
+impl Drop for Scripts {
+    fn drop(&mut self) {
+        if let Some(host) = self.host.upgrade() {
+            for handler in [self._handler.get(), self._walked.get()].into_iter().flatten() {
+                host.app().remove_handler(handler);
+            }
+        }
+        self._intercepts.take().into_iter().for_each(Disposer::dispose);
+    }
+}
+
+/// Posts a [`Woken`], from the reader thread; a full queue is retried on a thread of its own, as a plugin's wake is.
+fn post(proxy: &AppProxy, id: u64) {
+    if proxy.send(Woken(id)) == Err(opentui::app::ProxyError::Full) {
+        let proxy = proxy.clone();
+        let spawned = std::thread::Builder::new().name("js-host-wake".to_owned()).spawn(move || {
+            while proxy.send(Woken(id)) == Err(opentui::app::ProxyError::Full) {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        });
+        if let Err(error) = spawned {
+            log::warn!("failed to start a js-host-wake thread: {error}; wake {id} is not posted");
+        }
+    }
+}
+
+/// The build of a plugin directory: what its files hold ([`tree::Trees`]), or why they cannot be read, and the options.
+/// A save that changes nothing loads nothing, as TS compares a local module's content; Bun loads a changed module
+/// afresh, as a generation of its own.
+fn digest(build: &Result<String, String>, options: Option<&str>) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    build.hash(&mut hasher);
+    options.unwrap_or_default().hash(&mut hasher);
+    hasher.finish()
+}
+
+impl Scripts {
+    /// The approval artifact of the project plugin `dir`, as a walk off the UI thread last found it, or `None` until
+    /// the first walk ended.
+    pub(crate) fn tree(&self, dir: &Path) -> Option<Result<crate::loader::approval::Artifact, String>> {
+        self.trees.artifact(dir)
+    }
+
+    /// Hashes the project plugin `dir` whole again off the UI thread, whatever its stamp says.
+    pub(crate) fn rewalk(&self, dir: &Path) {
+        self.trees.rewalk(dir);
+    }
+
+    /// The copy of the approved `artifact` under `root` that the JS host imports, made off the UI thread, or `None`
+    /// until it is.
+    pub(crate) fn staged(
+        &self,
+        artifact: &crate::loader::approval::Artifact,
+        root: &Path,
+    ) -> Option<Result<PathBuf, String>> {
+        self.trees.staged(artifact, root)
+    }
+
+    /// The bytes of plugin files the walks of the plugins' trees read so far, off the UI thread.
+    #[doc(hidden)]
+    pub fn hashed(&self) -> u64 {
+        self.trees.hashed()
+    }
+
+    /// Whether a walk of a plugin's tree runs, whose end the loader takes in a later turn.
+    #[doc(hidden)]
+    pub fn walking(&self) -> bool {
+        self.trees.walking()
+    }
+}
+
+/// The page theme's colors, which the V2 context's `theme` reads: its tokens, and the steps of its hue scales as
+/// `hue.<name>.<step>` and `categorical.<index>.<step>`, which the context's `theme.hue` and `theme.categorical` are.
+fn palette(host: &dyn Host) -> proto::Palette {
+    let theme = host.theme();
+    let steps = |name: String, scale: &opencode_ui::theme::Scale| {
+        let steps = opencode_ui::theme::STEPS.into_iter().zip(scale.0);
+        steps.map(move |(step, color)| (format!("{name}.{step}"), color)).collect::<Vec<_>>()
+    };
+    let hues = theme.hues().iter().flat_map(|(name, scale)| steps(format!("hue.{name}"), scale));
+    let categorical = theme.categorical().iter().enumerate();
+    let categorical = categorical.flat_map(|(index, scale)| steps(format!("categorical.{index}"), scale));
+    // The raised surfaces' tokens that differ from the page's, as `@dialog.<token>` and `@dialog.footer.<token>`,
+    // which the context's `theme.surface(name)` answers.
+    let page = theme.list();
+    let raised = [
+        (opencode_ui::theme::Surface::Dialog, "@dialog"),
+        (opencode_ui::theme::Surface::DialogFooter, "@dialog.footer"),
+    ]
+    .into_iter()
+    .flat_map(|(surface, prefix)| {
+        let page = page.clone();
+        let tokens = theme.surface(surface).list().into_iter().zip(page);
+        tokens
+            .filter(|((_, color), (_, base))| color != base)
+            .map(move |((token, color), _)| (format!("{prefix}.{token}"), color))
+    });
+    let colors = (page.clone().into_iter().chain(hues).chain(categorical).chain(raised))
+        .map(|(token, color)| (token, format!("#{:02x}{:02x}{:02x}{:02x}", color.r, color.g, color.b, color.a)))
+        .collect();
+    proto::Palette { mode: theme_mode(host), colors }
+}
+
+/// The theme's mode as the setup context names it.
+fn theme_mode(host: &dyn Host) -> String {
+    match host.theme_mode() {
+        opentui::theme::ThemeMode::Light => "light".to_owned(),
+        opentui::theme::ThemeMode::Dark => "dark".to_owned(),
+    }
+}
+
+/// Evaluate the watch as a host read, using the newest live mount for mount-scoped input state.
+pub(crate) fn evaluate(
+    host: &Weak<dyn Host>,
+    id: &str,
+    keys: Vec<String>,
+    owners: Option<Rc<crate::Owners>>,
+    request: &HostRequest,
+) -> serde_json::Value {
+    // The storage keys its manifest declares, which a watched read of storage names.
+    let mut ctx = crate::loader::requests::Ctx::new(host.clone(), id, keys);
+    (ctx.read_only, ctx.owners) = (true, owners);
+    match crate::loader::requests::handle(&mut ctx, request.clone()) {
+        // A stored value is JSON text: its snapshot carries the JSON itself, not the text quoted again, which escaped
+        // each quote and backslash once more and could double its size past what the JS host takes. The layer reads
+        // either.
+        Ok(serde_json::Value::String(text)) if matches!(request, HostRequest::StorageGet { .. }) => {
+            serde_json::from_str(&text).unwrap_or(serde_json::Value::String(text))
+        }
+        Ok(value) => value,
+        Err(error) => {
+            log::warn!("plugin {id}: a watched read failed: {error}");
+            serde_json::Value::Null
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn what_comes_before_registration_is_bounded_by_its_bytes() {
+        let mut config = Config::new("bun".into());
+        config.limits.inbox = 64 << 10;
+        let host: Rc<dyn Host> = crate::tests::host();
+        let scripts = Scripts::new(config, &host);
+        let watch = |index: usize| Up::Watch {
+            id: "p".into(),
+            activation: 1,
+            key: format!("{index}{}", "k".repeat(40 << 10)),
+            request: HostRequest::Route,
+        };
+        scripts.keep(watch(0));
+        assert!(!scripts.spilled_by("p", 1));
+        scripts.keep(watch(1));
+        assert!(scripts.spilled_by("p", 1), "kept past its bytes");
+    }
+
+    #[test]
+    fn a_reply_goes_in_parts_only_while_the_overflow_has_room_for_them() {
+        let mut config = Config::new("bun".into());
+        config.limits.inbox = 1 << 20;
+        let host: Rc<dyn Host> = crate::tests::host();
+        let scripts = Scripts::new(config, &host);
+        let reply = |bytes: usize| Down::Call {
+            seq: 1,
+            id: "p".into(),
+            activation: 1,
+            call: Request::Reply {
+                id: opencode_plugin_abi::RequestId(3),
+                result: Ok(serde_json::json!("r".repeat(bytes))),
+            },
+            route: None,
+            parted: false,
+        };
+        let parts = scripts.admit(&reply(300 << 10)).expect("a reply within the overflow's room goes in parts");
+        assert!(parts.iter().all(|part| scripts.sendable(part)), "a part past a frame");
+        assert!(matches!(parts.last(), Some(Down::Call { parted: true, .. })), "the call goes last");
+        assert_eq!(scripts.admit(&reply(1 << 20)), None, "past the overflow's bound");
+        scripts.overflowed(Down::Ping { seq: 9 }, 800 << 10);
+        assert_eq!(scripts.admit(&reply(300 << 10)), None, "past what the overflow has room for now");
+        assert_eq!(scripts.admit(&reply(16)).map(|parts| parts.len()), Some(2), "a part and its call");
+        assert_eq!(scripts.admit(&Down::Ping { seq: 2 }), None, "only a reply goes in parts");
+    }
+
+    #[test]
+    fn the_reload_limit_counts_a_plugin_across_its_builds() {
+        let host: Rc<dyn Host> = crate::tests::host();
+        let scripts = Scripts::new(Config::new("bun".into()), &host);
+        silent(&scripts, &host);
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let _ = scripts.trees.light(dir.path());
+        while scripts.walking() {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        let build = |options: &str| scripts.step("t", dir.path(), Some(options), false);
+        assert!(matches!(build("{\"build\":1}"), Step::Starting));
+        let now = Instant::now();
+        let at = |millis: u64| now + Duration::from_millis(millis);
+        for index in 0..RELOADS as u64 {
+            assert!(!scripts.reloaded("p", at(index)), "reload {index} is within the limit");
+        }
+        let digest = |scripts: &Scripts| scripts.loads.borrow().get("t").map(|load| load.digest);
+        let first = digest(&scripts);
+        assert!(matches!(build("{\"build\":2}"), Step::Starting));
+        assert_ne!(digest(&scripts), first, "a new build is a new load");
+        assert!(scripts.reloaded("p", at(100)), "a new build started the count again");
+        assert!(!scripts.reloaded("q", at(100)), "another plugin's count");
+        for index in 0..8 {
+            scripts.reloaded("p", at(200 + index));
+        }
+        assert!(scripts.reloads.borrow().values().all(|at| at.len() <= RELOADS + 1), "it grew past the limit");
+        assert!(!scripts.reloaded("p", at(200) + RELOAD_WINDOW), "past the window it starts again");
+        assert_eq!(scripts.reloads.borrow().len(), 1, "a plugin with no reload in the window stays");
+    }
+
+    // Expected: a manifest changes its target's load only while that load is the one the sending activation runs as:
+    // its own, what a reload of it made and the loader has not taken yet, or its own after a restart gave the
+    // activation another sequence; not another build's, loaded or still loading.
+    /// What load `seq` of plugin `p` at target `t` answered.
+    fn loaded(seq: u64) -> Rc<guest::Loaded> {
+        Rc::new(guest::Loaded {
+            id: "p".into(),
+            target: "t".into(),
+            dir: PathBuf::new(),
+            confined: false,
+            options: None,
+            seq,
+            manifest: opencode_plugin_abi::Manifest { id: "p".into(), ..Default::default() },
+            holds: Vec::new(),
+            effects: RefCell::new(None),
+            watches: RefCell::default(),
+            continues: None,
+            relay: RefCell::default(),
+            states: RefCell::default(),
+        })
+    }
+
+    /// A load in `state`, registered.
+    fn load(state: Loading) -> Load {
+        Load { dir: PathBuf::new(), confined: false, options: None, digest: 1, state, registered: true }
+    }
+
+    #[test]
+    fn a_refused_reload_is_not_charged() {
+        let host: Rc<dyn Host> = crate::tests::host();
+        let scripts = Scripts::new(Config::new("bun".into()), &host);
+        let (old, current) = (loaded(3), loaded(5));
+        scripts.loads.borrow_mut().insert("t".into(), load(Loading::Loaded(current.clone())));
+        let now = Instant::now();
+        for _ in 0..100 {
+            assert!(matches!(scripts.admit_reload(&old, 3, now), Reload::Stale));
+        }
+        assert!(scripts.reloads.borrow().is_empty(), "a refused reload was charged");
+        for index in 0..RELOADS {
+            assert!(matches!(scripts.admit_reload(&current, 5, now), Reload::Take), "reload {index}");
+        }
+        assert!(matches!(scripts.admit_reload(&current, 5, now), Reload::Churning));
+    }
+
+    #[test]
+    fn a_manifest_changes_only_the_load_its_activation_runs_as() {
+        let own = loaded(3);
+        assert!(load(Loading::Loaded(own.clone())).runs(&own, 3), "its own");
+        assert!(load(Loading::Loaded(loaded(3))).runs(&own, 3), "what its reload made");
+        assert!(load(Loading::Loaded(own.clone())).runs(&own, 7), "its own after a restart");
+        assert!(!load(Loading::Loaded(loaded(5))).runs(&own, 3), "another build's");
+        assert!(!load(Loading::Waiting(5)).runs(&own, 3), "another build still loading");
+    }
+
+    #[test]
+    fn a_reply_at_the_edge_of_the_overflow_goes_and_one_byte_more_does_not() {
+        let host: Rc<dyn Host> = crate::tests::host();
+        let scripts = Scripts::new(Config::new("bun".into()), &host);
+        // A reply whose result's JSON, `{"Ok":"r…r"}`, is `json` bytes.
+        let reply = |json: usize| Down::Call {
+            seq: 1,
+            id: "p".into(),
+            activation: 1,
+            call: Request::Reply {
+                id: opencode_plugin_abi::RequestId(3),
+                result: Ok(serde_json::json!("r".repeat(json - 9))),
+            },
+            route: None,
+            parted: false,
+        };
+        let built = |json: usize| -> usize {
+            scripts.split(&reply(json)).unwrap().iter().map(|part| serde_json::to_vec(part).unwrap().len()).sum()
+        };
+        let room = scripts.config.limits.inbox;
+        assert_eq!(json_len(&Ok::<_, String>(serde_json::json!("r".repeat(91)))), 100);
+        let (mut fits, mut over) = (1 << 20, 8 << 20);
+        while over - fits > 1 {
+            let mid = (fits + over) / 2;
+            if built(mid) <= room { fits = mid } else { over = mid }
+        }
+        assert!(scripts.admit(&reply(fits)).is_some(), "the largest that fits, {fits} bytes, was refused");
+        assert_eq!(scripts.admit(&reply(fits + 1)), None, "a byte past the edge went");
+        assert!((6_000_000..6 << 20).contains(&fits), "the edge is {fits} bytes, not just under 6 MiB");
+        scripts.overflowed(Down::Ping { seq: 9 }, 1 << 20);
+        // Refused before anything is built: a reply far past the room splits nothing, as one at the edge behind the
+        // backlog does not.
+        let before = SPLITS.get();
+        assert_eq!(scripts.admit(&reply(fits)), None, "behind a backlog");
+        assert_eq!(scripts.admit(&reply(64 << 20)), None);
+        assert_eq!(SPLITS.get(), before, "a refused reply was built");
+    }
+
+    thread_local! {
+        /// The replies [`Scripts::split`] built, on this thread.
+        pub(super) static SPLITS: Cell<usize> = const { Cell::new(0) };
+    }
+
+    #[test]
+    fn a_refused_ping_takes_no_number_and_leaves_no_skip() {
+        let mut config = Config::new("bun".into());
+        config.limits.inbox = 512;
+        let host: Rc<dyn Host> = crate::tests::host();
+        let scripts = Scripts::new(config, &host);
+        let seq = scripts.next();
+        scripts.waiting.borrow_mut().insert(seq, Waiting::Ping);
+        scripts.refuse(&Down::Ping { seq }, 64);
+        assert!(!scripts.pinging(seq), "the refused ping still waits");
+        assert_eq!(scripts.next(), seq, "the refused ping took a number");
+        assert_eq!(scripts.overflow_bytes(), 0, "the refused ping left a skip");
+        // A settle's retries must never fill the reserve a settlement needs: with it at its bound, a refused ping asks
+        // for nothing there.
+        scripts.overflow.borrow_mut().1 = 2 * scripts.config.limits.inbox;
+        scripts.refuse(&Down::Ping { seq }, 64);
+        assert!(scripts.stopped.borrow().is_none(), "a refused ping ended the JS host");
+    }
+
+    #[test]
+    fn what_settles_the_js_hosts_work_waits_past_a_full_overflow() {
+        let mut config = Config::new("bun".into());
+        config.limits.inbox = 512;
+        let host: Rc<dyn Host> = crate::tests::host();
+        let scripts = Scripts::new(config, &host);
+        let bytes = |message: &Down| serde_json::to_vec(message).unwrap().len();
+        let held = Down::Ping { seq: 1 };
+        scripts.overflowed(held.clone(), 512);
+        let cancelled = Down::Cancelled { activation: 1, request: opencode_plugin_abi::RequestId(5) };
+        let answered = Down::Answered {
+            id: "p".into(),
+            activation: 1,
+            key: "c1".into(),
+            results: vec![serde_json::json!(7)],
+            parted: false,
+            dropped: Vec::new(),
+        };
+        let big = serde_json::json!("x".repeat(wire::CONTROL_CAP));
+        let huge = Down::Answered {
+            id: "p".into(),
+            activation: 1,
+            key: "c2".into(),
+            results: vec![big.clone(), big],
+            parted: false,
+            dropped: Vec::new(),
+        };
+        let call = Down::Call {
+            seq: 2,
+            id: "p".into(),
+            activation: 1,
+            call: Request::Command { name: "c".into(), input: None },
+            route: None,
+            parted: false,
+        };
+        // A tree's adoption and its refusal settle what the JS host holds in flight.
+        let mount = opencode_plugin_abi::v2::MountId { surface: "s".into(), key: "k".into(), generation: 1 };
+        let adopted = Down::Adopted { id: "p".into(), mount: mount.clone(), rev: 1 };
+        let refused = Down::Refused { id: "p".into(), mount, rev: 2, adopted: 1, error: "refused".into() };
+        scripts.overflowed(cancelled.clone(), bytes(&cancelled));
+        scripts.overflowed(answered.clone(), bytes(&answered));
+        scripts.overflowed(adopted.clone(), bytes(&adopted));
+        scripts.overflowed(refused.clone(), bytes(&refused));
+        scripts.overflowed(Down::Forget { target: "t".into() }, 64);
+        scripts.overflowed(call, 64);
+        scripts.refuse(&huge, wire::CONTROL_CAP + 1);
+        let failed = Down::Answered {
+            id: "p".into(),
+            activation: 1,
+            key: "c2".into(),
+            results: vec![serde_json::Value::Null; 2],
+            parted: false,
+            dropped: vec![0, 1],
+        };
+        let skipped = Down::Skipped { seq: 2 };
+        let kept: Vec<Down> = scripts.overflow.borrow().0.iter().map(|(message, _)| message.clone()).collect();
+        let expected = [held, cancelled, answered, adopted, refused, skipped, failed];
+        let charged = 512 + expected[1..].iter().map(bytes).sum::<usize>();
+        assert_eq!(kept, expected);
+        assert_eq!(scripts.overflow_bytes(), charged, "a message kept past the bound is charged its bytes");
+    }
+
+    /// A JS host that reads all it gets and says nothing, for `scripts`: a row that sends loads but needs no Bun runs
+    /// where none is installed (GitHub's Windows runner), as no JS host is spawned while one runs.
+    fn silent(scripts: &Rc<Scripts>, host: &Rc<dyn Host>) {
+        let mut command = std::process::Command::new(if cfg!(windows) { "cmd" } else { "sh" });
+        match cfg!(windows) {
+            true => command.args(["/d", "/c", "more > nul"]),
+            false => command.args(["-c", "cat > /dev/null"]),
+        };
+        let proxy = host.app().proxy();
+        let id = scripts.id;
+        scripts.adopt(Child::spawn(command, scripts.config.limits, move || post(&proxy, id)).unwrap());
+    }
+
+    /// A JS host that says hello and reads all it gets, answering nothing, for `scripts`; and its file.
+    #[cfg(unix)]
+    fn quiet(scripts: &Rc<Scripts>, host: &Rc<crate::tests::TestHost>) -> opencode_util::temp::TempDir {
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let file = dir.path().join("hello");
+        let hello = Up::Hello { magic: proto::MAGIC.to_owned(), version: proto::VERSION, pid: 0 };
+        std::fs::write(&file, wire::encode(wire::CONTROL, &serde_json::to_vec(&hello).unwrap())).unwrap();
+        let mut command = std::process::Command::new("sh");
+        command.arg("-c").arg(format!("cat '{}' >&0; cat > /dev/null", file.display()));
+        let proxy = host.app.app().proxy();
+        let id = scripts.id;
+        scripts.adopt(Child::spawn(command, scripts.config.limits, move || post(&proxy, id)).unwrap());
+        dir
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_answer_too_large_for_a_frame_keeps_its_request_ids() {
+        let mut config = Config::new("sh".into());
+        // An overflow too small for its parts, which go when there is room.
+        (config.limits.queued, config.limits.inbox) = (4 << 10, 6 << 10);
+        let host = crate::tests::host();
+        let dynamic: Rc<dyn Host> = host.clone();
+        let scripts = Scripts::new(config, &dynamic);
+        let _dir = quiet(&scripts, &host);
+        let read = serde_json::json!("x".repeat(8 << 10));
+        let results = vec![serde_json::json!(7), read, serde_json::json!(true), serde_json::Value::Null];
+        let answered = Down::Answered {
+            id: "p".into(),
+            activation: 1,
+            key: "c1".into(),
+            results,
+            parted: false,
+            dropped: Vec::new(),
+        };
+        // The read's value goes, named as dropped, so it is not read as null.
+        let reduced = Down::Answered {
+            id: "p".into(),
+            activation: 1,
+            key: "c1".into(),
+            results: vec![
+                serde_json::json!(7),
+                serde_json::Value::Null,
+                serde_json::json!(true),
+                serde_json::Value::Null,
+            ],
+            parted: false,
+            dropped: vec![1],
+        };
+        // Refused behind what waits, it is kept reduced: the fetch's ID 7 and the verb's answer stay.
+        scripts.overflowed(Down::Ping { seq: 1 }, 16);
+        scripts.refuse(&answered, 8 << 10);
+        assert_eq!(scripts.overflow.borrow().0.back().map(|(message, _)| message.clone()), Some(reduced.clone()));
+        *scripts.overflow.borrow_mut() = Default::default();
+        // Sent as it is, it is refused once, reduced once, and goes once.
+        let (sent, refused) = (crossed().sent, crossed().refused_sends);
+        scripts.send(answered, None);
+        assert_eq!((crossed().sent - sent, crossed().refused_sends - refused), (1, 1), "sent once, reduced once");
+        assert!(scripts.overflow.borrow().0.is_empty());
+        assert!(scripts.sendable(&reduced), "the reduced answer goes as one frame");
+        // Scalars past any frame: nothing goes, nothing loops, and the JS host ends once.
+        let ids = Down::Answered {
+            id: "p".into(),
+            activation: 1,
+            key: "c2".into(),
+            results: vec![serde_json::json!(1); 4 << 10],
+            parted: false,
+            dropped: Vec::new(),
+        };
+        let ends = scripts.ends.borrow().len();
+        scripts.send(ids.clone(), None);
+        scripts.send(ids, None);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!(scripts.ends.borrow().len() - ends, 1, "one JS host ended twice");
+        assert!(scripts.pid().is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_scheduled_end_never_ends_the_next_js_host() {
+        let host = crate::tests::host();
+        let dynamic: Rc<dyn Host> = host.clone();
+        let scripts = Scripts::new(Config::new("sh".into()), &dynamic);
+        let _first = quiet(&scripts, &host);
+        scripts.shut("the first");
+        scripts.shut("the first, again");
+        let _second = quiet(&scripts, &host);
+        let pid = scripts.pid();
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!((scripts.ends.borrow().len(), scripts.pid()), (0, pid), "the replacement was ended");
+        scripts.shut("the second");
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!((scripts.ends.borrow().len(), scripts.pid()), (1, None));
+    }
+
+    /// A JS host that says hello, reads nothing for a while, then writes all it reads to `recv`, for `scripts`.
+    #[cfg(unix)]
+    fn recorder(scripts: &Rc<Scripts>, host: &Rc<crate::tests::TestHost>, dir: &Path) {
+        let file = dir.join("hello");
+        let hello = Up::Hello { magic: proto::MAGIC.to_owned(), version: proto::VERSION, pid: 0 };
+        std::fs::write(&file, wire::encode(wire::CONTROL, &serde_json::to_vec(&hello).unwrap())).unwrap();
+        let mut command = std::process::Command::new("sh");
+        let recv = dir.join("recv");
+        command.arg("-c").arg(format!("cat '{}' >&0; sleep 0.3; cat > '{}'", file.display(), recv.display()));
+        let proxy = host.app.app().proxy();
+        let id = scripts.id;
+        // It answers nothing by design, so the hang rule is not what its rows test: under load the transfer outlasted
+        // the second of the default limit, and the JS host was ended with part of the stream unread (pipe-flakes).
+        let hour = Duration::from_secs(3600);
+        let limits = Limits { ack: hour, setup: hour, ..scripts.config.limits };
+        scripts.adopt(Child::spawn(command, limits, move || post(&proxy, id)).unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_queue_keeps_each_message_in_its_place_and_within_both_caps() {
+        let call = |seq: u64, input: usize| Down::Call {
+            seq,
+            id: "p".into(),
+            activation: 1,
+            call: Request::Command { name: "c".into(), input: Some("x".repeat(input)) },
+            route: None,
+            parted: false,
+        };
+        let read = |bytes: usize| serde_json::json!("r".repeat(bytes));
+        let answered = |key: &str, id: u64, bytes: usize| Down::Answered {
+            id: "p".into(),
+            activation: 1,
+            key: key.into(),
+            results: vec![serde_json::json!(id), read(bytes), serde_json::json!(true)],
+            parted: false,
+            dropped: Vec::new(),
+        };
+        let reply = |seq: u64, id: u64, bytes: usize| Down::Call {
+            seq,
+            id: "p".into(),
+            activation: 1,
+            call: Request::Reply { id: opencode_plugin_abi::RequestId(id), result: Ok(read(bytes)) },
+            route: None,
+            parted: false,
+        };
+        let cancelled = |id: u64| Down::Cancelled { activation: 1, request: opencode_plugin_abi::RequestId(id) };
+        let mut failed = Vec::new();
+        for queued in [4 << 10, 1 << 20] {
+            let mut config = Config::new("sh".into());
+            (config.limits.queued, config.limits.inbox) = (queued, 8 << 20);
+            let host = crate::tests::host();
+            let dynamic: Rc<dyn Host> = host.clone();
+            let scripts = Scripts::new(config, &dynamic);
+            let dir = opencode_util::temp::tempdir().unwrap();
+            recorder(&scripts, &host, dir.path());
+            // A backlog first, as large as the OS pipe and the queue hold and more; then the stream behind it.
+            let mut sent: Vec<Down> = (1..=80).map(|seq| call(seq, 2 << 10)).collect();
+            sent.extend([
+                answered("c1", 7, 8 << 10),
+                cancelled(7),
+                reply(81, 9, 16),
+                answered("c2", 8, 300 << 10),
+                reply(82, 8, 300 << 10),
+                cancelled(8),
+                call(83, 300 << 10),
+                Down::Ping { seq: 84 },
+            ]);
+            sent.iter().for_each(|message| scripts.send(message.clone(), None));
+            // Two loads as the loader asks for them, 85 and 86, the second's options past the cap; then two snapshots,
+            // the second a read of 262,131 bytes of JSON, past the frame's cap with its envelope, which goes in parts.
+            scripts.seq.set(84);
+            let plugin = dir.path().join("plugin");
+            std::fs::create_dir_all(&plugin).unwrap();
+            // Its build comes from a walk off the UI thread, which the first ask starts: the loads go after it.
+            let _ = scripts.trees.light(&plugin);
+            while scripts.walking() {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            let loads =
+                [("small", serde_json::json!({ "o": 1 })), ("large", serde_json::json!({ "o": read(300 << 10) }))];
+            for (seq, (target, options)) in (85..).zip(&loads) {
+                assert!(matches!(scripts.step(target, &plugin, Some(&options.to_string()), false), Step::Starting));
+                sent.push(Down::Load {
+                    seq,
+                    target: (*target).to_owned(),
+                    dir: plugin.to_string_lossy().into_owned(),
+                    options: Some(options.clone()),
+                    setup: false,
+                    confined: false,
+                    seed: Default::default(),
+                });
+            }
+            for (key, bytes) in [("k1", 16), ("k2", 262_131 - 2)] {
+                let snapshot = Down::Snapshot {
+                    id: "p".into(),
+                    activation: 1,
+                    key: key.into(),
+                    value: read(bytes),
+                    error: None,
+                    parted: false,
+                };
+                scripts.send(snapshot.clone(), None);
+                sent.push(snapshot);
+            }
+            // The rule, message by message.
+            let fits = |message: &Down| scripts.sendable(message);
+            let expected: Vec<Down> = sent
+                .iter()
+                .flat_map(|message| match message {
+                    _ if fits(message) => vec![message.clone()],
+                    Down::Call { call: Request::Reply { .. }, .. } | Down::Snapshot { .. } | Down::Answered { .. } => {
+                        scripts.split(message).unwrap()
+                    }
+                    other => vec![Down::Skipped { seq: other.seq().unwrap() }],
+                })
+                .collect();
+            let recv = dir.path().join("recv");
+            let read = |bytes: &[u8]| {
+                let mut input = bytes;
+                std::iter::from_fn(|| wire::read(&mut input).ok().flatten()).collect::<Vec<_>>()
+            };
+            let begun = Instant::now();
+            while read(&std::fs::read(&recv).unwrap_or_default()).len() < expected.len()
+                && begun.elapsed() < Duration::from_secs(10)
+            {
+                host.app.advance(Duration::from_millis(1));
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            let frames = read(&std::fs::read(&recv).unwrap_or_default());
+            let over: Vec<usize> =
+                frames.iter().map(|(_, payload)| payload.len()).filter(|len| !scripts.fits(*len)).collect();
+            if !over.is_empty() {
+                failed.push(format!("queued {queued}: frames past a cap: {over:?}"));
+            }
+            let got: Vec<Down> = frames.iter().map(|(_, payload)| serde_json::from_slice(payload).unwrap()).collect();
+            // Each message as its kind and what names it, the stream after the backlog.
+            let brief = |messages: &[Down]| {
+                let brief =
+                    |message: &Down| serde_json::to_string(message).unwrap().chars().take(90).collect::<String>();
+                messages.iter().skip(80).map(brief).collect::<Vec<_>>()
+            };
+            if got != expected {
+                failed.push(format!("queued {queued}: read {:#?}\nthe rule {:#?}", brief(&got), brief(&expected)));
+            }
+            // The parts the JS host read of request 8, joined, are the reply's result, which goes in no other frame.
+            let joined: Vec<u8> = got
+                .iter()
+                .filter_map(|message| match message {
+                    Down::Part { request, data, .. } if request.0 == 8 => opencode_plugin_abi::base64::decode(data),
+                    _ => None,
+                })
+                .flatten()
+                .collect();
+            let whole: Result<serde_json::Value, String> =
+                serde_json::from_slice(&joined).unwrap_or(Err("none".into()));
+            if whole != Ok(serde_json::json!("r".repeat(300 << 10))) {
+                failed.push(format!("queued {queued}: the parts of the reply joined to {} bytes", joined.len()));
+            }
+            // And those of read k2 are its value.
+            let joined: Vec<u8> = got
+                .iter()
+                .filter_map(|message| match message {
+                    Down::SnapshotPart { key, data, .. } if key == "k2" => opencode_plugin_abi::base64::decode(data),
+                    _ => None,
+                })
+                .flatten()
+                .collect();
+            if serde_json::from_slice::<serde_json::Value>(&joined).ok()
+                != Some(serde_json::json!("r".repeat(262_131 - 2)))
+            {
+                failed.push(format!("queued {queued}: the parts of read k2 joined to {} bytes", joined.len()));
+            }
+            // What the loader reads of each load: the one sent waits for its answer, the refused one failed.
+            let stands =
+                loads.map(|(target, options)| match scripts.step(target, &plugin, Some(&options.to_string()), false) {
+                    Step::Starting => "starting".to_owned(),
+                    Step::Failed(error, _) => format!("failed: {error}"),
+                    _ => "other".to_owned(),
+                });
+            let size = serde_json::to_vec(&sent[sent.len() - 3]).unwrap().len();
+            let rule = ["starting".to_owned(), format!("failed: the JS host has no room for a load of {size} bytes")];
+            if stands != rule || scripts.waiting() != 1 {
+                failed.push(format!("queued {queued}: the loads stand {stands:?}, waiting {}", scripts.waiting()));
+            }
+        }
+        assert!(failed.is_empty(), "{}", failed.join("\n"));
+    }
+
+    #[test]
+    fn bun_is_never_the_projects_own() {
+        let root = opencode_util::temp::tempdir().unwrap();
+        let (project, tools) = (root.path().join("work"), root.path().join("tools"));
+        let file = format!("bun{}", std::env::consts::EXE_SUFFIX);
+        for dir in [project.join("bin"), tools.clone()] {
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join(&file), "").unwrap();
+        }
+        let find = |entries: &[&Path], home: Option<&Path>| {
+            find_in("bun", &std::env::join_paths(entries).unwrap(), &project, home)
+        };
+        assert_eq!(find(&[Path::new("bin"), Path::new(""), &tools], None), Some(tools.join(&file)));
+        assert_eq!(find(&[Path::new("bin"), Path::new("")], None), None);
+        assert_eq!(find(&[&project.join("bin")], None), None);
+        assert_eq!(find(&[&project.join("bin")], Some(&project)), Some(project.join("bin").join(&file)));
+    }
+
+    #[test]
+    fn the_js_host_starts_apart_from_the_project() {
+        let vars = |flag: Option<&'static str>, bun: &'static str| {
+            move |name: &str| match name {
+                "OPENCODE_PLUGIN_JS" => flag.map(Into::into),
+                "OPENCODE_BUN" => Some(bun.into()),
+                _ => None,
+            }
+        };
+        let from = |flag, bun| Config::from_vars(vars(flag, bun), PathBuf::from("/work"), &Server::Remote);
+        // An absolute path on this platform: on Windows one without a drive is not.
+        let absolute = if cfg!(windows) { r"C:\bun\bun.exe" } else { "/opt/bun/bin/bun" };
+        for off in [Some("0"), Some("false"), Some("OFF"), Some(" off ")] {
+            assert!(from(off, absolute).is_none(), "{off:?}");
+        }
+        for on in [None, Some("1"), Some("true"), Some(""), Some("yes")] {
+            assert_eq!(from(on, absolute).map(|config| config.bun), Some(PathBuf::from(absolute)), "{on:?}");
+        }
+        assert!(from(Some("1"), "bin/bun").is_none());
+        let config = Config { directory: PathBuf::from("/work"), ..Config::new(PathBuf::from("/opt/bun/bin/bun")) };
+        let dir = Path::new("/private/js-host");
+        let command = command(&config, dir);
+        assert_eq!(command.get_current_dir(), Some(dir));
+        let args: Vec<_> = command.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect();
+        assert_eq!(
+            args[..3],
+            [
+                "--no-env-file".to_owned(),
+                "--no-install".to_owned(),
+                format!("--config={}", dir.join("bunfig.toml").display())
+            ]
+        );
+        let directory = command.get_envs().find(|(name, _)| *name == "OPENCODE_DIRECTORY").and_then(|(_, value)| value);
+        assert_eq!(directory, Some(std::ffi::OsStr::new("/work")));
+        let inherits = |name: &str| inherited(std::ffi::OsStr::new(name));
+        // `BUN_BE_BUN` would make even a compiled host read a project's `bunfig.toml` and `.env`.
+        for name in ["BUN_OPTIONS", "BUN_BE_BUN", "NODE_OPTIONS", "PWN_FROM_ENV"] {
+            assert!(!inherits(name), "{name}");
+        }
+        assert!(inherits("HOME") && inherits("XDG_CONFIG_HOME") && inherits("OPENCODE_CHANNEL"));
+        // What names the terminal, which a plugin reads to detect it.
+        for name in ["TERM", "TERM_PROGRAM", "COLORTERM", "TMUX", "WT_SESSION", "KITTY_WINDOW_ID", "LC_TERMINAL"] {
+            assert!(inherits(name), "{name}");
+        }
+        let be_bun = |config: &Config| {
+            let command = super::command(config, dir);
+            command
+                .get_envs()
+                .find(|(name, _)| *name == "BUN_BE_BUN")
+                .and_then(|(_, value)| value)
+                .map(ToOwned::to_owned)
+        };
+        assert_eq!(be_bun(&config), None);
+        let opencode = Config { opencode: true, ..config.clone() };
+        assert_eq!(be_bun(&opencode), Some("1".into()));
+        assert_eq!(super::command(&opencode, dir).get_current_dir(), Some(dir));
+    }
+
+    #[test]
+    fn a_version_is_bun_s_alone() {
+        assert_eq!(semver("1.4.4"), Some((1, 4, 4)));
+        assert_eq!(semver("1.4.5-canary.20+38afee6c8"), Some((1, 4, 5)));
+        for text in
+            ["2026.10.19 linux-x64 (2026-10-24)", "opencode v0.0.0-dev-202611120832", "v1.4.4", "1.4", "1.4.4.1", ""]
+        {
+            assert_eq!(semver(text), None, "{text}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_js_host_runs_on_the_servers_opencode_else_bun() {
+        let root = opencode_util::temp::tempdir().unwrap();
+        let root = std::fs::canonicalize(root.path()).unwrap();
+        let script = |path: &Path, text: &str| {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            // `sh` writes it: a write descriptor open here could leak into a child another test forks (ETXTBSY).
+            let status = std::process::Command::new("sh")
+                .args(["-c", "printf %s \"$1\" > \"$0\" && chmod 755 \"$0\""])
+                .arg(path)
+                .arg(text)
+                .status()
+                .unwrap();
+            assert!(status.success());
+        };
+        let opencode = |bun: &str| {
+            format!("#!/bin/sh\nif [ \"$BUN_BE_BUN\" = 1 ]; then echo {bun}; else echo opencode v0.0.0-dev; fi\n")
+        };
+        let (server, old, tools, shims) =
+            (root.join("server"), root.join("old"), root.join("tools"), root.join("shims"));
+        let work = root.join("work");
+        script(&server.join("opencode"), &opencode("1.4.4"));
+        script(&old.join("opencode"), &opencode("1.3.9"));
+        let failing = root.join("failing");
+        script(&failing.join("opencode"), "#!/bin/sh\necho 1.4.4\nexit 1\n");
+        script(&work.join("bin/opencode"), &opencode("1.4.4"));
+        script(&work.join("bin/bun"), "#!/bin/sh\necho 1.4.4\n");
+        script(&tools.join("bun"), "#!/bin/sh\necho 1.4.2\n");
+        // `mise`'s shims are links to it: run by the shim's name it runs the tool, by its own it answers for itself.
+        let mise =
+            "#!/bin/sh\ncase \"$0\" in */opencode) echo 1.4.4 ;; *) echo '2026.10.19 linux-x64 (2026-10-24)' ;; esac\n";
+        script(&root.join("mise/mise"), mise);
+        std::fs::create_dir_all(&shims).unwrap();
+        std::os::unix::fs::symlink(root.join("mise/mise"), shims.join("opencode")).unwrap();
+        let with = |server: Server, entries: &[&Path], bun: Option<&str>, bundled: Option<PathBuf>| {
+            let path = std::env::join_paths(entries).unwrap();
+            let var = |name: &str| match name {
+                "OPENCODE_BUN" => bun.map(Into::into),
+                "PATH" => Some(path.clone()),
+                _ => None,
+            };
+            Config::find(var, work.clone(), &server, bundled)
+                .map(|config| (config.bun, config.opencode, config.bun_version))
+        };
+        let from = |server: Server, entries: &[&Path], bun: Option<&str>| with(server, entries, bun, None);
+        let relative = [Path::new("bin"), Path::new("")];
+        let chosen =
+            |bun: &Path, opencode, version: &str| Some((bun.to_path_buf(), opencode, Some(version.to_owned())));
+        let all = [&relative[..], &[&shims, &old, &failing, &server, &tools]].concat();
+        // The server's binary is known.
+        let known = Server::Local(Some(server.join("opencode")));
+        assert_eq!(from(known, &all, None), chosen(&server.join("opencode"), true, "1.4.4"));
+        let too_old = Server::Local(Some(old.join("opencode")));
+        assert_eq!(from(too_old, &all, None), chosen(&tools.join("bun"), false, "1.4.2"));
+        let projects = Server::Local(Some(work.join("bin/opencode")));
+        assert_eq!(from(projects, &all, None), chosen(&tools.join("bun"), false, "1.4.2"));
+        // It is not: the path's first `opencode` that answers, past the shim, the old one and one that fails.
+        assert_eq!(from(Server::Local(None), &all, None), chosen(&server.join("opencode"), true, "1.4.4"));
+        // A remote server's binary is not this machine's.
+        assert_eq!(from(Server::Remote, &all, None), chosen(&tools.join("bun"), false, "1.4.2"));
+        // Nothing outside the project.
+        assert_eq!(from(Server::Local(None), &[&relative[..], &[&shims, &old]].concat(), None), None);
+        // `OPENCODE_BUN` wins, unasked.
+        let named = from(Server::Local(Some(server.join("opencode"))), &all, Some("/opt/bun/bin/bun"));
+        assert_eq!(named, Some((PathBuf::from("/opt/bun/bin/bun"), false, None)));
+        // Expected (the bundled layout): the opencode installed beside the client comes after the server's binary and before
+        // the path, for a remote server too; an old one, or one inside the project, is passed over.
+        let bundle = root.join("bundle");
+        script(&bundle.join("opencode"), &opencode("1.4.5"));
+        let bundled = || Some(bundle.join("opencode"));
+        let ours = chosen(&bundle.join("opencode"), true, "1.4.5");
+        assert_eq!(
+            with(Server::Local(Some(server.join("opencode"))), &all, None, bundled()),
+            chosen(&server.join("opencode"), true, "1.4.4")
+        );
+        assert_eq!(with(Server::Local(Some(old.join("opencode"))), &all, None, bundled()), ours);
+        assert_eq!(with(Server::Local(None), &all, None, bundled()), ours);
+        assert_eq!(with(Server::Remote, &all, None, bundled()), ours);
+        assert_eq!(with(Server::Remote, &[], None, bundled()), ours, "a fresh box: nothing on the path");
+        assert_eq!(
+            with(Server::Remote, &all, None, Some(old.join("opencode"))),
+            chosen(&tools.join("bun"), false, "1.4.2")
+        );
+        assert_eq!(
+            with(Server::Local(None), &all, None, Some(work.join("bin/opencode"))),
+            chosen(&server.join("opencode"), true, "1.4.4")
+        );
+        assert_eq!(with(Server::Local(None), &all, Some("/opt/bun/bin/bun"), bundled()), named);
+    }
+
+    // The hold: rows of the hold's state machine on a host that routes its keys to its keymap as the TUI does
+    // (`route_keys`), and types what nothing took.
+
+    /// A hold, its host, and what reached the end: each key's stroke and each paste, as typed.
+    fn holding() -> (Rc<crate::tests::TestHost>, Rc<Scripts>, Rc<RefCell<Vec<String>>>) {
+        let host = crate::tests::host();
+        let dynamic: Rc<dyn Host> = host.clone();
+        let scripts = Scripts::new(Config::new("sh".into()), &dynamic);
+        let weak = Rc::downgrade(&host);
+        host.app.app().on_key_capture(move |cx, key| {
+            let Some(host) = weak.upgrade() else { return };
+            let result = host.keymap().handle_key(key);
+            if result.handled || result.stop_propagation {
+                cx.stop_propagation();
+            }
+        });
+        let typed = Rc::new(RefCell::new(Vec::new()));
+        let seen = typed.clone();
+        host.app.app().on_key(move |_, key| {
+            if key.kind == opentui::input::KeyEventKind::Press {
+                seen.borrow_mut().push(opentui::keymap::Stroke::from_event(key).to_string());
+            }
+        });
+        let seen = typed.clone();
+        host.app.app().on_paste(move |_, text| seen.borrow_mut().push(format!("paste {text}")));
+        (host, scripts, typed)
+    }
+
+    fn stroke(key: &str) -> KeyEvent {
+        KeyEvent::from_shortcut(key).unwrap()
+    }
+
+    /// The key `key` a command took, with nothing it goes past.
+    fn bound(key: &str) -> Keyed {
+        Keyed { strokes: vec![stroke(key)], past: Past::default() }
+    }
+
+    /// A paste as the router gives it: behind the hold, or on.
+    fn paste(host: &crate::tests::TestHost, scripts: &Scripts, text: &str) {
+        if !InputHold::paste(scripts, text) {
+            host.app.paste(text);
+        }
+    }
+
+    fn typed(typed: &Rc<RefCell<Vec<String>>>) -> Vec<String> {
+        std::mem::take(&mut *typed.borrow_mut())
+    }
+
+    #[test]
+    fn a_refused_call_puts_its_key_back_once() {
+        let (host, scripts, seen) = holding();
+        scripts.hold_for(1, Some(bound("%")));
+        host.app.press("a");
+        scripts.refused(1);
+        host.app.advance(Duration::from_millis(200));
+        scripts.answered(1, true);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!(typed(&seen), ["%", "a"]);
+    }
+
+    #[test]
+    fn an_answer_ends_the_hold_whatever_comes_in_its_turn() {
+        for declined in [true, false] {
+            let (host, scripts, seen) = holding();
+            scripts.hold_for(1, Some(bound("%")));
+            host.app.press("a");
+            scripts.answered(1, declined);
+            scripts.ran_out(1);
+            scripts.end_holds();
+            assert!(typed(&seen).is_empty(), "the input went before the answer's effects");
+            host.app.advance(Duration::from_millis(200));
+            let expected: &[&str] = if declined { &["%", "a"] } else { &["a"] };
+            assert_eq!(typed(&seen), expected, "declined: {declined}");
+        }
+    }
+
+    #[test]
+    fn a_second_hold_never_puts_back_the_first_ones_key() {
+        let (host, scripts, seen) = holding();
+        scripts.hold_for(1, Some(bound("%")));
+        scripts.hold_for(2, None);
+        host.app.press("a");
+        scripts.answered(1, false);
+        host.app.advance(Duration::from_millis(1));
+        assert!(typed(&seen).is_empty(), "the second hold still holds");
+        host.app.advance(Duration::from_millis(200));
+        assert_eq!(typed(&seen), ["a"]);
+    }
+
+    #[test]
+    fn a_paste_waits_behind_the_held_keys() {
+        let (host, scripts, seen) = holding();
+        scripts.hold_for(1, Some(bound("%")));
+        host.app.press("a");
+        paste(&host, &scripts, "bc");
+        host.app.press("d");
+        scripts.answered(1, true);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!(typed(&seen), ["%", "a", "paste bc", "d"]);
+    }
+
+    #[test]
+    fn held_input_past_its_bound_goes_on_whole() {
+        let (host, scripts, seen) = holding();
+        scripts.hold_for(1, Some(bound("shift+a")));
+        host.app.press("shift+b");
+        (0..HELD).for_each(|_| host.app.press("c"));
+        host.app.advance(Duration::from_millis(1));
+        let seen = typed(&seen);
+        assert_eq!(seen.len(), HELD + 2, "{seen:?}");
+        assert_eq!(seen[..3], ["shift+a", "shift+b", "c"]);
+    }
+
+    #[test]
+    fn held_input_goes_with_the_mount_it_was_typed_into() {
+        let (host, scripts, seen) = holding();
+        let mount = Rc::new(());
+        let mut key = bound("x");
+        key.past.target = Some(Rc::downgrade(&mount));
+        scripts.hold_for(1, Some(key));
+        host.app.press("y");
+        paste(&host, &scripts, "z");
+        drop(mount);
+        scripts.answered(1, true);
+        host.app.advance(Duration::from_millis(1));
+        assert!(typed(&seen).is_empty(), "{:?}", typed(&seen));
+    }
+
+    #[test]
+    fn a_fields_declined_key_goes_past_its_plugins_commands() {
+        let (host, scripts, seen) = holding();
+        let ran = Rc::new(Cell::new(0));
+        let (counted, weak) = (ran.clone(), Rc::downgrade(&scripts));
+        let command = opencode_ui::keymap::TuiCommand::new("p.escape", move |_, _| {
+            let Some(scripts) = weak.upgrade() else { return false };
+            if scripts.stepped_aside("p\0escape") {
+                return false;
+            }
+            counted.set(counted.get() + 1);
+            true
+        })
+        .bind(opencode_ui::keymap::Bind::Key("escape".into()));
+        let _layer = host.keymap().layer(opencode_ui::keymap::KeymapLayer::global(vec![command])).unwrap();
+        let key = Keyed::new(stroke("escape"), &scripts, Vec::new(), None, Some("p"));
+        scripts.hold_for(1, Some(key));
+        scripts.answered(1, true);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!((ran.get(), typed(&seen)), (0, vec!["escape".to_owned()]));
+        host.app.press("escape");
+        assert_eq!(ran.get(), 1, "the command takes the key typed after");
+    }
+
+    #[test]
+    fn a_call_that_threw_puts_its_key_back() {
+        let (host, scripts, seen) = holding();
+        let call = Call {
+            guest: Weak::new(),
+            plugin: "p".into(),
+            activation: 1,
+            export: "handle",
+            user: true,
+            request: Request::Command { name: "c".into(), input: None },
+            owner: None,
+            mount: None,
+            key: Some(bound("q")),
+        };
+        scripts.waiting.borrow_mut().insert(1, Waiting::Call(Box::new(call)));
+        scripts.hold_for(1, Some(bound("q")));
+        host.app.press("r");
+        let done =
+            Up::Done { seq: 1, effects: Vec::new(), mounts: Vec::new(), error: Some("threw".into()), declined: false };
+        scripts.up(done);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!(typed(&seen), ["q", "r"]);
+    }
+
+    #[test]
+    fn a_declined_chord_reaches_the_binding_below_it() {
+        let (host, scripts, seen) = holding();
+        let below = Rc::new(Cell::new(0));
+        let (ran, weak) = (below.clone(), Rc::downgrade(&scripts));
+        fn command(id: &str, run: impl Fn(Option<&KeyEvent>) -> bool + 'static) -> opencode_ui::keymap::TuiCommand {
+            opencode_ui::keymap::TuiCommand::new(id, move |_, key| run(key))
+                .bind(opencode_ui::keymap::Bind::Key("<leader>n".into()))
+        }
+        let taking = command("js.chord", move |key| {
+            let Some(scripts) = weak.upgrade() else { return false };
+            if scripts.stepped_aside("p\0c") {
+                return false;
+            }
+            scripts.hold_for(1, key.map(|key| Keyed::chord(*key, &scripts, "p\0c")));
+            true
+        });
+        let lower = command("host.chord", move |_| {
+            ran.set(ran.get() + 1);
+            true
+        });
+        let keymap = host.keymap();
+        let _lower = keymap.layer(opencode_ui::keymap::KeymapLayer::global(vec![lower])).unwrap();
+        let _taking = keymap.layer(opencode_ui::keymap::KeymapLayer::global(vec![taking]).priority(10)).unwrap();
+        host.app.press("ctrl+x");
+        host.app.press("n");
+        assert_eq!(below.get(), 0, "the chord's command did not take it first");
+        scripts.answered(1, true);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!((below.get(), typed(&seen)), (1, Vec::<String>::new()));
+    }
+}

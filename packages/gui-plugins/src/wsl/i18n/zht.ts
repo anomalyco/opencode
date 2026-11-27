@@ -49,4 +49,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} 在 {{timeout}}ms 後逾時",
   "error.failedPort": "無法取得連接埠",
   "menu.remove": "移除",
+  "error.busy": "{{distro}} 正忙於其他工作。請在完成後再試一次。",
 }

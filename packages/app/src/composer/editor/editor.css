@@ -2,8 +2,10 @@
   content: "\200B";
 }
 
+/* Transcript session references match this (packages/session-ui/src/components/markdown.css). */
 [data-component="composer-editor"] [data-mention="session"] {
   color: var(--v2-text-text-muted);
+  font-weight: var(--font-weight-medium);
 }
 
 /* Matches the 16px session title fade. The top fade only covers the editor's 16px top padding until text scrolls
@@ -66,9 +68,12 @@
   );
 }
 
-/* The controls viewport scrolls and clips, so toolbar rings sit inside each control where no edge can cut them. */
+/* Toolbar controls keep their ring inside. Send sits outside the scroller with room for the default outset ring. */
 [data-component="composer"]
-  :is([data-component="button-v2"], [data-component="icon-button-v2"]):is(:focus-visible, [data-state="focus"]) {
+  :is([data-component="button-v2"], [data-component="icon-button-v2"]):not([data-action="composer-submit"]):is(
+    :focus-visible,
+    [data-state="focus"]
+  ) {
   outline-offset: -2px;
 }
 

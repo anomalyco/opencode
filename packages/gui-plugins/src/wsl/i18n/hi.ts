@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} ने {{timeout}}ms के बाद समय-सीमा पार कर दी",
   "error.failedPort": "पोर्ट प्राप्त नहीं किया जा सका",
   "menu.remove": "निकालना",
+  "error.busy": "{{distro}} किसी अन्य कार्य में व्यस्त है। उसके पूरा होने पर पुनः प्रयास करें।",
 }

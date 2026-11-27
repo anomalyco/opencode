@@ -8,8 +8,9 @@ import "./carousel-arrows.css"
 export function CarouselArrows(props: {
   previous: string
   next: string
-  onPrevious: () => void
-  onNext: () => void
+  /** Left out where the carousel handles the presses itself (carousel-nav.ts). */
+  onPrevious?: () => void
+  onNext?: () => void
   atStart?: boolean
   atEnd?: boolean
   controls?: string
@@ -23,7 +24,7 @@ export function CarouselArrows(props: {
         data-tip={props.previous}
         aria-controls={props.controls}
         aria-disabled={props.atStart ? "true" : undefined}
-        onClick={() => !props.atStart && props.onPrevious()}
+        onClick={() => !props.atStart && props.onPrevious?.()}
       >
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
           <path d="M7.5 3L4.5 6L7.5 9" stroke="currentColor" stroke-width="1.25" stroke-linecap="square" />
@@ -35,7 +36,7 @@ export function CarouselArrows(props: {
         data-tip={props.next}
         aria-controls={props.controls}
         aria-disabled={props.atEnd ? "true" : undefined}
-        onClick={() => !props.atEnd && props.onNext()}
+        onClick={() => !props.atEnd && props.onNext?.()}
       >
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
           <path d="M4.5 3L7.5 6L4.5 9" stroke="currentColor" stroke-width="1.25" stroke-linecap="square" />

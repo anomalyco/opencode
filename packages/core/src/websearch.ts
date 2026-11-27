@@ -55,6 +55,7 @@ export class RequestError extends Schema.TaggedError<RequestError>()("WebSearch.
 export type Error = ProviderRequiredError | ProviderNotFoundError | DisabledError | RequestError
 
 export interface Interface extends State.Transformable<Editor> {
+  readonly available: () => Effect.Effect<boolean>
   readonly providers: () => Effect.Effect<readonly Provider[]>
   readonly default: () => Effect.Effect<Provider | undefined, DisabledError>
   readonly select: (selection: Selection) => Effect.Effect<void>
@@ -171,6 +172,10 @@ const layer = Layer.effect(
     return Service.of({
       transform: state.transform,
       reload: state.reload,
+      available: Effect.fn("WebSearch.available")(function* () {
+        if (state.get().providers.size === 0) return false
+        return (yield* selection()) !== false
+      }),
       providers: Effect.fn("WebSearch.providers")(function* () {
         return providers(state.get())
       }),

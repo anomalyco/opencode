@@ -5,6 +5,7 @@ import { optional, statics } from "./schema.js"
 import { Provider } from "./provider.js"
 import { Compatibility, MaxTokensField, MediaInput, ReasoningField } from "./model-compatibility.js"
 import { Money } from "./money.js"
+import { FreeformFormat } from "./tool.js"
 import { ephemeral, inventory } from "./event.js"
 
 export const ID = Schema.String.pipe(Schema.brand("Model.ID"))
@@ -48,10 +49,13 @@ export { Compatibility, MaxTokensField, MediaInput, ReasoningField }
 export const Family = Schema.String.pipe(Schema.brand("Model.Family"))
 export type Family = typeof Family.Type
 
-/** What a model produces, from models.dev. Open-ended: new types keep being added. Only chat models are offered for sessions; an unset type means chat. */
-export type Type = "chat" | "decision" | "image" | (string & {})
+/**
+ * What a model produces, from models.dev. Open-ended: new types keep being added. Only chat models are offered for
+ * sessions; an unset type means chat. Realtime models that answer in speech are offered as voice models.
+ */
+export type Type = "chat" | "decision" | "image" | "video" | "realtime" | "embedding" | "transcription" | (string & {})
 export const Type: Schema.Codec<Type> = Schema.Union([
-  Schema.Literals(["chat", "decision", "image"]),
+  Schema.Literals(["chat", "decision", "image", "video", "realtime", "embedding", "transcription"]),
   Schema.String,
 ]).annotate({ identifier: "Model.Type" })
 
@@ -77,6 +81,8 @@ export const Overlays = {
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
 export const Capabilities = Schema.Struct({
   tools: Schema.Boolean,
+  /** Freeform tool input formats advertised by the selected API. Absent or empty means JSON tools only. */
+  freeform: Schema.Array(FreeformFormat).pipe(optional),
   input: Schema.Array(Schema.String),
   output: Schema.Array(Schema.String),
   /** Whether the model accepts a sampling temperature. Unknown when unset. */
@@ -110,6 +116,20 @@ export const Variant = Schema.Struct({
   settings: VariantSettings.pipe(optional),
 }).annotate({ identifier: "Model.Variant" })
 
+/**
+ * Set on a model that is another model served faster or slower, such as "gpt-5.5-fast" for "gpt-5.5". Clients offer
+ * it as a speed of that model instead of listing it.
+ */
+export interface Speed extends Schema.Schema.Type<typeof Speed> {}
+export const Speed = Schema.Struct({
+  /** The same provider's model at its standard speed. */
+  base: ID,
+  /** The speed's name, such as "fast" or "flex". */
+  id: Schema.String,
+  /** Whether it is faster than the standard speed. A slower speed trades latency for a lower price. */
+  faster: Schema.Boolean,
+}).annotate({ identifier: "Model.Speed" })
+
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID,
@@ -124,6 +144,8 @@ export const Info = Schema.Struct({
   ...Overlays,
   capabilities: Capabilities,
   variants: Schema.Array(Variant),
+  /** Experimental: may change without compatibility guarantees. */
+  experimental: Schema.Struct({ speed: Speed.pipe(optional) }).pipe(optional),
   time: Schema.Struct({
     released: Schema.Finite,
   }),

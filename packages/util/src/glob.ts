@@ -1,5 +1,5 @@
 import { glob, type GlobOptionsWithFileTypesFalse } from "glob"
-import { minimatch } from "minimatch"
+import { Minimatch, minimatch } from "minimatch"
 
 export namespace Glob {
   export interface Options {
@@ -26,7 +26,13 @@ export namespace Glob {
     return glob(pattern, toGlobOptions(options))
   }
 
-  export function match(pattern: string, filepath: string): boolean {
-    return minimatch(filepath, pattern, { dot: true })
+  export function match(pattern: string, filepath: string, options: { dot?: boolean } = {}): boolean {
+    return minimatch(filepath, pattern, { dot: options.dot ?? true })
+  }
+
+  /** `match` for one pattern, compiled on first use and reused for every later path. */
+  export function matcher(pattern: string, options: { dot?: boolean } = {}): (filepath: string) => boolean {
+    let compiled: Minimatch | undefined
+    return (filepath) => (compiled ??= new Minimatch(pattern, { dot: options.dot ?? true })).match(filepath)
   }
 }

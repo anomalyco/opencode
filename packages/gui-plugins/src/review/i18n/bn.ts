@@ -12,4 +12,12 @@ export default {
   noChanges: "কোনো পরিবর্তন নেই",
   "settings.wrapLines.title": "লাইন মোড়ানো",
   "settings.wrapLines.description": "মোবাইল ডিফে অনুভূমিকভাবে স্ক্রল করার বদলে দীর্ঘ লাইন মোড়ান",
+  "menu.count.one": "{{count}}টি ফাইল পরিবর্তিত",
+  "menu.count.other": "{{count}}টি ফাইল পরিবর্তিত",
+  "folder.more": "{{count}} · আরও দেখানো হয়নি",
+  "folder.failed": "পরিবর্তন লোড করা যায়নি",
+  "command.open": "পর্যালোচনা খুলুন",
+  "load.failed": "পরিবর্তন লোড করা যায়নি",
+  "load.timeout": "সার্ভার উত্তর দিতে অনেক বেশি সময় নিয়েছে",
+  offline: "এই সার্ভারে পৌঁছানো যাচ্ছে না",
 }

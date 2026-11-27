@@ -94,10 +94,15 @@ describe("ConfigPolicyPlugin.Plugin", () => {
     }),
   )
 
-  it.effect("organization tool.use policy overrides authored policy", () =>
+  it.effect("matches tool.use file policies without case where file systems ignore it by default", () =>
     Effect.gen(function* () {
-      yield* addPlugin([organizationPolicy([tool("deny", "shell:*")], "Acme"), document(tool("allow", "shell:*"))])
-      expect(yield* evaluate("shell", ["ls"])).toEqual({ effect: "deny", message: "Blocked by Acme's policy" })
+      yield* addPlugin([organizationPolicy([tool("deny", "read:*.env"), tool("deny", "shell:git push*")], "Acme")])
+      const files = process.platform === "darwin" || process.platform === "win32"
+      expect((yield* evaluate("read", ["secrets.ENV"])).effect).toBe(files ? "deny" : "allow")
+      // Commands keep their case outside Windows.
+      expect((yield* evaluate("shell", ["GIT PUSH origin dev"])).effect).toBe(
+        process.platform === "win32" ? "deny" : "allow",
+      )
     }),
   )
 

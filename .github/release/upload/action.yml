@@ -7,6 +7,14 @@ inputs:
   path:
     description: Directory to upload
     required: true
+  retention-days:
+    description: Days to keep the artifact (0 keeps the repository default)
+    required: false
+    default: "0"
+  include-hidden-files:
+    description: Include hidden files (deploy Build Output carries .vite metadata)
+    required: false
+    default: "false"
 outputs:
   digest:
     description: SHA-256 of the artifact's SHA256SUMS
@@ -23,4 +31,6 @@ runs:
       with:
         name: ${{ inputs.name }}
         path: ${{ inputs.path }}
+        retention-days: ${{ inputs.retention-days }}
+        include-hidden-files: ${{ inputs.include-hidden-files }}
         if-no-files-found: error

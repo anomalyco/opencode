@@ -6,7 +6,9 @@ import { TestLLM } from "@opencode/ai/testing"
 import { llmClient } from "@opencode/core/effect/app-node-platform"
 import { makeMemoryDriver } from "@opencode/core/environment/index"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
+import { SharedCache } from "@opencode/core/shared-cache"
 import { WorkspaceDriver } from "@opencode/core/workspace/driver"
+import { EmbeddedHost } from "../src/internal/host"
 import { Plugin } from "@opencode/plugin/effect"
 import { Context, Deferred, Effect, Exit, Layer, Schema, Scope } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
@@ -100,7 +102,10 @@ it.live(
         overrides: [
           llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
           SessionRunnerModel.node.replace(
-            Layer.succeed(SessionRunnerModel.Service, { resolve: () => Effect.succeed(model) }),
+            Layer.succeed(SessionRunnerModel.Service, {
+              select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
+              resolve: () => Effect.succeed(model),
+            }),
           ),
         ],
       }
@@ -193,7 +198,11 @@ it.live(
           overrides: [
             llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
             SessionRunnerModel.node.replace(
-              Layer.succeed(SessionRunnerModel.Service, { resolve: () => Effect.succeed(model) }),
+              Layer.succeed(SessionRunnerModel.Service, {
+                select: (session) =>
+                  Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
+                resolve: () => Effect.succeed(model),
+              }),
             ),
           ],
         },
@@ -299,4 +308,46 @@ it.live(
       expect(released).toEqual(["thread-7:1", "thread-7:2"])
     }),
   15_000,
+)
+
+it.live("closes private SDK instances before releasing Stage-1 host globals", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    const order: string[] = []
+    const host = yield* EmbeddedHost.create(
+      {
+        config: { directory: directory.path, project: false, content: "{}" },
+        models: { fetch: false },
+        fs: { filewatcher: false },
+        instances: {
+          key: (session) => metadata(session.metadata).threadID,
+          configure: () =>
+            Effect.gen(function* () {
+              order.push("instance:acquire")
+              yield* Effect.addFinalizer(() => Effect.sync(() => order.push("instance:release")))
+              return { plugins: [] }
+            }),
+        },
+      },
+      {
+        overrides: [
+          SharedCache.node.replace(
+            SharedCache.node.mapLayer((layer) =>
+              layer.pipe(
+                Layer.tap(() => Effect.addFinalizer(() => Effect.sync(() => order.push("global:SharedCache:release")))),
+              ),
+            ),
+          ),
+        ],
+      },
+    )
+    const session = yield* host.sessions.create({
+      title: "Shutdown order fixture",
+      location: Location.Ref.make({ directory: AbsolutePath.make(directory.path) }),
+      metadata: { threadID: "thread-shutdown" },
+    })
+    yield* host.sessions.prompt({ sessionID: session.id, text: "Hello", resume: false })
+    yield* Effect.promise(() => host.close())
+    expect(order).toEqual(["instance:acquire", "instance:release", "global:SharedCache:release"])
+  }),
 )

@@ -40,8 +40,10 @@ import {
   maxScale,
   panBy,
   viewBox,
+  wheelPixels,
   wheelZoomFactor,
   zoomAt,
+  zoomShortcut,
   type ZoomView,
 } from "./image-zoom"
 import {
@@ -657,7 +659,7 @@ export function ImagePreview(props: ImagePreviewProps) {
       const current = view()
 
       const next = pinch
-        ? zoomAt(current, current.scale * wheelZoomFactor(pixels(event, event.deltaY)), point(event), bounds)
+        ? zoomAt(current, current.scale * wheelZoomFactor(wheelPixels(event, event.deltaY)), point(event), bounds)
         : panBy(current, wheelPan(event), bounds)
 
       follow(next.scale, next.x, next.y)
@@ -682,7 +684,7 @@ export function ImagePreview(props: ImagePreviewProps) {
         return props.video.pause()
       }
 
-      const action = bare ? (event.key === "0" ? "fit" : undefined) : event.altKey ? undefined : shortcut(event.key)
+      const action = bare ? (event.key === "0" ? "fit" : undefined) : event.altKey ? undefined : zoomShortcut(event.key)
 
       if (!action) return
       event.preventDefault()
@@ -895,28 +897,12 @@ function layout(element: HTMLElement, frame: Box, radius: number) {
   element.style.borderRadius = `${radius}px`
 }
 
-function shortcut(key: string) {
-  if (key === "=" || key === "+") return "in"
-
-  if (key === "-" || key === "_") return "out"
-
-  if (key === "0") return "fit"
-}
-
 // A plain wheel pans; Shift turns a vertical wheel sideways.
 function wheelPan(event: WheelEvent) {
   const horizontal = event.shiftKey && event.deltaX === 0
 
   return {
-    x: -pixels(event, horizontal ? event.deltaY : event.deltaX),
-    y: horizontal ? 0 : -pixels(event, event.deltaY),
+    x: -wheelPixels(event, horizontal ? event.deltaY : event.deltaX),
+    y: horizontal ? 0 : -wheelPixels(event, event.deltaY),
   }
-}
-
-function pixels(event: WheelEvent, delta: number) {
-  if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return delta * 16
-
-  if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) return delta * window.innerHeight
-
-  return delta
 }

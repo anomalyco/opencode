@@ -1,6 +1,6 @@
 export * as McpPool from "./pool.js"
 
-import type { OAuthClientProvider } from "@modelcontextprotocol/client"
+import type { AuthProvider } from "@modelcontextprotocol/client"
 import type { Mcp } from "@opencode/schema/mcp"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -8,12 +8,13 @@ import { httpFetch } from "@opencode/util/effect/app-node-platform"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, FiberSet, Layer, Scope, Semaphore } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
+import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { Environment } from "../environment/index.js"
 import { SharedCache } from "../shared-cache.js"
 import type { McpClient } from "./client.js"
 import { McpConnection } from "./connection.js"
 
-export interface Input extends McpConnection.Input {
+export interface Input extends Omit<McpConnection.Input, "endpointLoads"> {
   /**
    * Run once per start: what tells this connection apart from every other one to the same server (see `key`),
    * and the OAuth provider to open it with. Both come from one credential selection, so a slot's key and the
@@ -24,7 +25,7 @@ export interface Input extends McpConnection.Input {
 
 export interface Selection {
   readonly key: string
-  readonly authProvider: Effect.Effect<OAuthClientProvider | undefined>
+  readonly authProvider: Effect.Effect<AuthProvider | undefined>
 }
 
 export interface Interface {
@@ -36,6 +37,8 @@ export interface Interface {
    * and every later start for that key skips straight to that.
    */
   readonly connection: (input: Input) => McpConnection.Connection
+  /** Serializes unshared remote endpoint handshakes across Locations on the same host. */
+  readonly endpointLoads: KeyedMutex.KeyedMutex<string>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/McpPool") {}
@@ -51,9 +54,10 @@ export const key = (input: {
   /** The active OAuth credential's ID, which a token refresh keeps and a sign-in replaces. */
   readonly credential?: string
   readonly clientInfo?: { readonly name: string; readonly version: string }
+  readonly skills?: boolean
 }) => {
   const config = input.config
-  const common = [config.protocol, config.timeout ?? null, input.clientInfo ?? null]
+  const common = [config.protocol, config.timeout ?? null, input.clientInfo ?? null, input.skills ?? false]
   if (config.type === "remote")
     return JSON.stringify([
       "remote",
@@ -88,7 +92,7 @@ function fingerprint(secret: string | Record<string, string> | undefined) {
 // A Location holding a shared connection. The pool reaches Locations only through the holders
 // registered right now, never through the one that opened the connection.
 interface Holder {
-  readonly authProvider: Effect.Effect<OAuthClientProvider | undefined>
+  readonly authProvider: Effect.Effect<AuthProvider | undefined>
   readonly elicitation: McpClient.ElicitationHandler["create"]
   readonly closed: (reason: string) => void
   readonly changed: (kind: McpConnection.Kind) => void
@@ -110,10 +114,10 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const scope = yield* Effect.scope
     const run = yield* FiberSet.makeRuntime<never, void, never>()
-    const driver = Environment.makeLocalDriver(yield* ChildProcessSpawner)
-    const host = Environment.Service.of({ files: Environment.makeFiles(driver), spawner: driver.spawner })
+    const host = Environment.local(yield* ChildProcessSpawner)
     const fetch = yield* FetchHttpClient.Fetch
     const slots = new Map<string, Slot>()
+    const endpointLoads = KeyedMutex.makeUnsafe<string>()
     // Keys whose server negotiated legacy or refused the pooled handshake. Kept for the life of the process.
     const unpoolable = new Set<string>()
     // The subset that negotiated legacy. Their private connections skip the 2026-07-28 probe; a refusal
@@ -132,6 +136,7 @@ export const layer = Layer.effect(
         connection: McpConnection.make({
           name: input.name,
           config: input.config,
+          endpointLoads,
           directory: input.directory,
           shared: true,
           clientInfo: input.clientInfo,
@@ -241,7 +246,12 @@ export const layer = Layer.effect(
       if (unpoolable.has(key)) return "private" as const
       const slot =
         slots.get(key) ??
-        open(key, { name: input.name, config: input.config, directory: input.directory, clientInfo: input.clientInfo })
+        open(key, {
+          name: input.name,
+          config: input.config,
+          directory: input.directory,
+          clientInfo: input.clientInfo,
+        })
       yield* Effect.acquireRelease(
         Effect.sync(() => slot.holders.add(holder)),
         () => release(key, slot, holder),
@@ -266,6 +276,7 @@ export const layer = Layer.effect(
         McpConnection.make({
           ...input,
           config,
+          endpointLoads,
           authProvider: Effect.suspend(() => state.selected?.authProvider ?? input.authProvider),
         })
       const configured = privately(input.config)
@@ -339,6 +350,9 @@ export const layer = Layer.effect(
         get prompts() {
           return live().prompts
         },
+        get skills() {
+          return live().skills
+        },
         start: Effect.gen(function* () {
           if (input.config.type === "local" && input.config.cwd === undefined && !unfixed.has(input.name)) {
             unfixed.add(input.name)
@@ -361,6 +375,7 @@ export const layer = Layer.effect(
           yield* input.events.changed("tools")
           yield* input.events.changed("resources")
           yield* input.events.changed("prompts")
+          yield* input.events.changed("skills")
         }),
         recovering: (client, request) =>
           state.shared
@@ -370,7 +385,7 @@ export const layer = Layer.effect(
       }
     }
 
-    return Service.of({ connection })
+    return Service.of({ connection, endpointLoads })
   }),
 )
 

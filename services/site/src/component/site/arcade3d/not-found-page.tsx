@@ -1,3 +1,5 @@
+// Ahead of the arcade's own stylesheets, as the shell is on other pages.
+import "./not-found-page.css"
 import { Meta, Title } from "@solidjs/meta"
 import { HttpStatusCode } from "@solidjs/start"
 import { createSignal, Match, onMount, Switch } from "solid-js"
@@ -16,6 +18,8 @@ import { ogImage } from "~/lib/og"
  * hydration, so the server's layers markup always hydrates). Phones get the layers stack with its
  * still light and the hybrid's phone flow (arcade/phone.ts), which loads no WebGL there. Each mode's
  * setting comes first in its `when`, so production folds the modes it never shows out of the bundle.
+ * Production's page is plain HTML, and its script renders production's mode again in the browser
+ * (client/islands/arcade.tsx): change both.
  */
 export function NotFoundPage(props: { title: string; status: number }) {
   const [phone, setPhone] = createSignal(false)

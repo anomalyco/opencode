@@ -1,9 +1,6 @@
 /* oxlint-disable */
-import * as Context from "effect/Context"
-import * as Effect from "effect/Effect"
-import * as Exit from "effect/Exit"
-import * as Scope from "effect/Scope"
-import type { SqlClient } from "effect/sql/SqlClient"
+import { Effect } from "effect"
+import { BeginTransaction, type SqlClient } from "effect/sql/SqlClient"
 import type { SqlError } from "effect/sql/SqlError"
 import type { EffectCacheShape } from "drizzle-orm/cache/core/cache-effect"
 import type { WithCacheConfig } from "drizzle-orm/cache/core/types"
@@ -31,8 +28,8 @@ export interface EffectSQLiteQueryEffectHKT extends QueryEffectHKTBase {
 /**
  * A SqlClient whose runtime rejects SQL transaction statements (BEGIN/COMMIT/SAVEPOINT) and
  * manages transactions natively instead — Cloudflare Durable Object SQLite. Producers set
- * `transactionStatements: false` (see `database/sqlite.workerd.ts`) and the session delegates
- * to the client's `withTransaction` rather than issuing transaction statements.
+ * `transactionStatements: false` (see `database/sqlite.workerd.ts`) so callers skip SQLite
+ * pragmas and `BeginTransaction` overrides.
  */
 export interface NativeTransactionSqlClient extends SqlClient {
   readonly transactionStatements: false
@@ -133,96 +130,20 @@ export class EffectSQLiteSession<TRelations extends AnyRelations> extends SQLite
     return Effect.serviceOption(this.client.transactionService).pipe(Effect.map((option) => option._tag === "Some"))
   }
 
-  private executeTransactionStatement(connection: Effect.Success<SqlClient["reserve"]>, query: string) {
-    return connection.executeUnprepared(query, [], undefined).pipe(Effect.asVoid)
-  }
-
-  private withTransaction<A, E, R>(effect: Effect.Effect<A, E, R>, config: SQLiteTransactionConfig | undefined) {
-    if (managesTransactionsNatively(this.client)) return this.client.withTransaction(effect)
-    return Effect.uninterruptibleMask((restore) =>
-      Effect.withFiber<A, E | SqlError, R>((fiber) => {
-        const services = fiber.context
-        const connectionOption = Context.getOption(services, this.client.transactionService)
-        const connection: Effect.Effect<
-          readonly [Scope.Closeable | undefined, Effect.Success<SqlClient["reserve"]>],
-          SqlError
-        > =
-          connectionOption._tag === "Some"
-            ? Effect.succeed([undefined, connectionOption.value[0]] as const)
-            : Scope.make().pipe(
-                Effect.flatMap((scope) =>
-                  Scope.provide(this.client.reserve, scope).pipe(
-                    Effect.map((connection) => [scope, connection] as const),
-                    Effect.catch((error) =>
-                      Scope.close(scope, Exit.fail(error)).pipe(Effect.andThen(Effect.fail(error))),
-                    ),
-                  ),
-                ),
-              )
-        const id = connectionOption._tag === "Some" ? connectionOption.value[1] + 1 : 0
-
-        return connection.pipe(
-          Effect.flatMap(([scope, connection]) => {
-            const transaction = this.executeTransactionStatement(
-              connection,
-              id === 0 ? `begin ${config?.behavior ?? "deferred"}` : `savepoint effect_sql_${id}`,
-            ).pipe(
-              Effect.flatMap(() =>
-                Effect.provideContext(
-                  restore(effect),
-                  Context.add(services, this.client.transactionService, [connection, id]),
-                ).pipe(
-                  Effect.exit,
-                  Effect.flatMap((exit) => {
-                    const finalize = Exit.isSuccess(exit)
-                      ? id === 0
-                        ? this.executeTransactionStatement(connection, "commit").pipe(
-                            // SQLite keeps the transaction open after deferred constraint commit failures.
-                            Effect.catch((error) =>
-                              this.executeTransactionStatement(connection, "rollback").pipe(
-                                Effect.catch(() => Effect.void),
-                                Effect.andThen(Effect.fail(error)),
-                              ),
-                            ),
-                          )
-                        : this.executeTransactionStatement(connection, `release savepoint effect_sql_${id}`)
-                      : id === 0
-                        ? this.executeTransactionStatement(connection, "rollback")
-                        : this.executeTransactionStatement(connection, `rollback to savepoint effect_sql_${id}`).pipe(
-                            Effect.andThen(
-                              this.executeTransactionStatement(connection, `release savepoint effect_sql_${id}`),
-                            ),
-                          )
-
-                    return finalize.pipe(Effect.flatMap(() => exit))
-                  }),
-                ),
-              ),
-            )
-
-            return scope === undefined
-              ? transaction
-              : transaction.pipe(Effect.onExit((exit) => Scope.close(scope, exit)))
-          }),
-        )
-      }),
-    )
-  }
-
+  // The client's own withTransaction serializes sibling savepoints on the transaction's connection, waits for that
+  // connection interruptibly, and skips a rollback once SQLite has already rolled the transaction back itself. Its
+  // default BEGIN is the client's: BEGIN IMMEDIATE, so a writer never fails with SQLITE_BUSY_SNAPSHOT on upgrade.
   override transaction<A, E, R>(
     transaction: (tx: EffectSQLiteTransaction<TRelations>) => Effect.Effect<A, E, R>,
     config?: SQLiteTransactionConfig,
   ): Effect.Effect<A, E | SqlError, R> {
-    const { dialect, relations } = this
-
-    return this.withTransaction(
-      Effect.gen({ self: this }, function* () {
-        const tx = new EffectSQLiteTransaction<TRelations>(dialect, this, relations)
-
-        return yield* transaction(tx)
-      }),
-      config,
-    )
+    const body = Effect.suspend(() => transaction(new EffectSQLiteTransaction(this.dialect, this, this.relations)))
+    if (config?.behavior === undefined || managesTransactionsNatively(this.client)) {
+      return this.client.withTransaction(body)
+    }
+    return this.client
+      .withTransaction(Effect.provideService(body, BeginTransaction, undefined))
+      .pipe(Effect.provideService(BeginTransaction, `BEGIN ${config.behavior.toUpperCase()}`))
   }
 }
 
@@ -232,10 +153,4 @@ export class EffectSQLiteTransaction<TRelations extends AnyRelations> extends SQ
   TRelations
 > {
   static override readonly [entityKind]: string = "EffectSQLiteTransaction"
-
-  override transaction: <A, E, R>(
-    transaction: (
-      tx: SQLiteEffectTransaction<EffectSQLiteQueryEffectHKT, EffectSQLiteRunResult, TRelations>,
-    ) => Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, SqlError | E, R> = (tx) => this.session.transaction(tx)
 }

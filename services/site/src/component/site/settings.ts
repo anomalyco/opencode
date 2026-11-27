@@ -341,7 +341,7 @@ export const filmPosters = ["inverted", "light"] as const
 export const agentButtonCopiedStyles = ["check only", "copied text"] as const
 // How the Brand page's Usage explains one stroke, the unit of its spacing rules.
 export const strokeDiagrams = ["off", "highlight", "ruler", "zoom", "tiles", "animated"] as const
-// The Brand page's badge text: Inter (default), OpenTUI Mono, or uppercase OpenTUI Mono.
+// The Brand page's badge text: Inter (default), OpenMono, or uppercase OpenMono.
 export const badgeFonts = ["sans", "mono", "mono caps"] as const
 // How the Brand page lays out its badges: style tabs over one Light and Dark pair (default), or a row per
 // style.
@@ -824,7 +824,7 @@ function createSchema() {
     consoleClearing: z.number().min(0).max(100).catch(65),
     sidebar: z.enum(sidebarWidths).catch("fifth column"),
     bodyWeight: z.enum(bodyWeights).catch("400"),
-    // The mono stack's first family (mono-fonts.ts): OpenTUI Mono, IBM Plex Mono, or a monospaced
+    // The mono stack's first family (mono-fonts.ts): OpenMono, IBM Plex Mono, or a monospaced
     // font installed on this computer, by its family name.
     monoFont: z
       .string()
@@ -1051,8 +1051,8 @@ function createSchema() {
     consoleCopyColumns: z.enum(sectionColumns).catch("2 columns"),
     docsSwitcher: z.enum(docsSwitchers).catch("lockup"),
     docsSubmenu: z.enum(docsSubmenus).catch("flyout"),
-    docsNav: z.enum(docsNavs).catch("split"),
-    docsVersionNotice: z.enum(docsVersionNotices).catch("frosted top"),
+    docsNav: z.enum(docsNavs).catch("combined"),
+    docsVersionNotice: z.enum(docsVersionNotices).catch("inverted"),
     terminalInstall: z.enum(terminalInstalls).catch("button"),
     carouselPreset: z.enum(carouselPresetNames).catch("four across"),
     carousel: z
@@ -1065,8 +1065,8 @@ function createSchema() {
     arcadeMode: z.enum(arcadeModes).catch("layers"),
     // Marks settings saved after layers became the default mode (see migrateSettings).
     arcadeModeRevision: z.literal(2).catch(2),
-    // Marks settings saved after OpenTUI Mono became the default mono font (see migrateSettings).
-    monoFontRevision: z.literal(2).catch(2),
+    // Marks settings saved after OpenMono became the default mono font (see migrateSettings).
+    monoFontRevision: z.literal(3).catch(3),
     // The locked docs choices these settings last took (migrateSettings applies the ones that changed).
     docsChoicesApplied: z.record(z.string(), z.string()).catch({ ...docsVariantRecommended }),
     arcadeCrt: z.enum(arcadeCrts).catch("subtle"),
@@ -1455,16 +1455,16 @@ export function migrateSettings(saved: unknown, recommended = docsVariantRecomme
     "ditherOrientation" in arcade || !("ditherDirection" in arcade) || arcade.ditherDirection !== "left to right"
       ? arcade
       : { ...arcade, ditherOrientation: "horizontal" }
-  // OpenTUI Mono became the site's mono font for every visitor (Nov 5 2026), replacing a face that
-  // is no longer served: a mono font saved before that resets to it once; one picked after it stays.
+  // OpenMono became the site's mono font for every visitor (Nov 2026), replacing faces that are no
+  // longer served: a mono font saved before that resets to it once; one picked after it stays.
   const dither =
-    "monoFontRevision" in dithered
+    "monoFontRevision" in dithered && dithered.monoFontRevision === 3
       ? dithered
       : {
           ...dithered,
           // A literal, not monoFontDefault: the pre-paint script inlines this function's source.
-          monoFont: "OpenTUI Mono",
-          monoFontRevision: 2,
+          monoFont: "OpenMono",
+          monoFontRevision: 3,
         }
   // The nav list (navConfig, Nov 4 2026) replaces the nav order and the Nav items, Download nav and
   // Console nav options: the saved order, Products unless the items were "current", Models and

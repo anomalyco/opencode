@@ -21,7 +21,8 @@ import {
 } from "./pane-machine"
 import type { TerminalProps } from "./props"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "./runtime-adapters"
-import { consumeTerminalMetaKey, terminalKeyInput } from "./terminal-key-event"
+import { terminalLinkLabel } from "./hover-label"
+import { consumeTerminalMetaKey, terminalKeyInput, terminalLinkTarget } from "./terminal-key-event"
 import { TerminalQuote } from "./quote"
 
 type TerminalColors = {
@@ -156,6 +157,7 @@ export const Terminal = (props: TerminalProps) => {
   const appearance = plugin.appearance
   const keybinds = plugin.keybinds
   const system = plugin.system
+  const links = plugin.links
   const desktop = plugin.desktop
   const theme = useTheme()
   let container!: HTMLDivElement
@@ -307,19 +309,34 @@ export const Terminal = (props: TerminalProps) => {
     focusTerminal(t)
   }
 
-  const handleLinkClick = (t: Term, event: MouseEvent) => {
-    if (!event.shiftKey && !event.ctrlKey && !event.metaKey) return
-
-    if (event.altKey) return
-
-    if (event.button !== 0) return
-
+  const handleLinkClick = async (t: Term, event: MouseEvent) => {
     const text = getHoveredLinkText(t)
+    const target = terminalLinkTarget(event, text)
 
-    if (!text) return
+    if (!text || (!event.ctrlKey && !event.metaKey && !event.shiftKey)) return
 
     event.preventDefault()
     event.stopImmediatePropagation()
+
+    if (!target || target === "blocked") return
+    const session = plugin.sessions.current()
+    const label = terminalLinkLabel(t)
+
+    if (label !== text && !await plugin.dialogs.confirm({title:plugin.t("link.confirm"), description:text, confirm:plugin.t("link.open")})) return
+
+    if (plugin.signal.aborted || session?.key !== plugin.sessions.current()?.key) return
+
+    if (target === "file") {
+      const files = plugin.screen.current()?.file
+      const href = new URL(text).href
+      const path = files?.resolve(href)
+
+      if (path && files && !files.absolute(path) && !path.split(/[\\/]/).includes("..")) links.open({href,session,exact:true})
+
+      return
+    }
+
+    if (target === "app" && links.open({ href: text, session })) return
     system.openExternal(text)
   }
 
@@ -535,6 +552,23 @@ export const Terminal = (props: TerminalProps) => {
     handles.cleanups.push(() => window.removeEventListener("resize", measure))
     void document.fonts.ready.then(measure)
 
+    // The canvas keeps what it drew, so a character drawn before its font file arrived stays a fallback glyph until
+    // its row changes: the icons and the bold and italic styles are files of their own, which load on first use.
+    // When a file of one of the terminal's families arrives, draw every row again.
+    const redraw = (event: FontFaceSetLoadEvent) => {
+      const families = fontFamilies(appearance.font("mono"))
+
+      if (!event.fontfaces.some((face) => fontFamilies(face.family).some((family) => families.includes(family)))) return
+
+      if (!t.renderer || !t.wasmTerm) return
+
+      // The scrollbar fades on the emulator's own frames, so this pass draws none.
+      t.renderer.render(t.wasmTerm, true, t.viewportY, t, 0)
+    }
+
+    document.fonts.addEventListener("loadingdone", redraw)
+    handles.cleanups.push(() => document.fonts.removeEventListener("loadingdone", redraw))
+
     // The container is laid out once the emulator opened in it, so the first size goes out before the socket opens.
     dispatch({ type: "terminal.opened", term: t, initialSize: fit.proposeDimensions() })
   }
@@ -609,7 +643,7 @@ export const Terminal = (props: TerminalProps) => {
         }}
         classList={{
           "select-text": true,
-          "size-full px-6 py-3 relative overflow-hidden": true,
+          "size-full px-6 py-3 relative overflow-hidden outline-none": true,
           [props.class ?? ""]: !!props.class,
         }}
       />
@@ -631,5 +665,15 @@ export const Terminal = (props: TerminalProps) => {
         )}
       </Show>
     </>
+  )
+}
+
+/** The family names of a CSS `font-family` value, without quotes and in lower case, as CSS compares them. */
+function fontFamilies(value: string) {
+  return value.split(",").map((family) =>
+    family
+      .trim()
+      .replace(/^(["'])(.*)\1$/, "$2")
+      .toLowerCase(),
   )
 }

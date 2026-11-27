@@ -22,7 +22,7 @@ export type SiteEvent =
   | { readonly type: "retry" }
   | { readonly type: "load.succeeded"; readonly attempt: number; readonly cookies: number }
   | { readonly type: "load.failed"; readonly attempt: number }
-  | { readonly type: "clear.clicked" }
+  | { readonly type: "clear.clicked" | "clear-cache.clicked" }
   | { readonly type: "clear.succeeded"; readonly attempt: number }
   | { readonly type: "clear.failed"; readonly attempt: number }
   | { readonly type: "timeout"; readonly phase: "loading" | "clearing"; readonly attempt: number }
@@ -31,7 +31,7 @@ export type SiteEvent =
 
 export type SiteEffect =
   | { readonly type: "load"; readonly attempt: number }
-  | { readonly type: "clear"; readonly attempt: number }
+  | { readonly type: "clear" | "clear-cache"; readonly attempt: number }
   | { readonly type: "notify-clear-failed" }
 
 export type SiteTransition = { readonly state: SiteState; readonly effects: readonly SiteEffect[] }
@@ -61,11 +61,12 @@ export function transitionSite(state: SiteState, event: SiteEvent): SiteTransiti
 
       return { state: { status: "failed", attempt: state.attempt }, effects: [] }
     case "clear.clicked":
+    case "clear-cache.clicked":
       if (state.status !== "ready") return unchanged(state)
 
       return {
         state: { status: "clearing", attempt: state.attempt + 1, open: true },
-        effects: [{ type: "clear", attempt: state.attempt + 1 }],
+        effects: [{ type: event.type === "clear-cache.clicked" ? "clear-cache" : "clear", attempt: state.attempt + 1 }],
       }
     case "clear.succeeded":
       return cleared(state, event.attempt, [])

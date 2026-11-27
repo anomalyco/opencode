@@ -15,6 +15,7 @@ import {
   InvalidRequestError,
   RateLimitError,
   UnknownProviderError,
+  type UserMessage,
 } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { AnthropicMessages, OpenAIResponses } from "@opencode/ai/protocols"
@@ -64,7 +65,13 @@ import { Document, Info } from "@opencode/schema/config"
 import { ConfigCompaction } from "@opencode/schema/config/compaction"
 import { Tool } from "@opencode/core/tool"
 import type { Info as ToolInfo } from "@opencode/schema/tool"
-import { InstructionStateTable, SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
+import {
+  InstructionStateTable,
+  SessionInboxTable,
+  SessionMessageTable,
+  SessionPartTable,
+  SessionTable,
+} from "@opencode/core/session/sql"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { SessionStore } from "@opencode/core/session/store"
 import { Instructions } from "@opencode/core/instructions/index"
@@ -77,7 +84,21 @@ import { SessionSystemPrompt } from "@opencode/core/session/system-prompt"
 import { ID, Model } from "@opencode/core/model"
 import { Location } from "@opencode/core/location"
 import { Provider } from "@opencode/core/provider"
-import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream, Tracer } from "effect"
+import {
+  Cause,
+  Context,
+  DateTime,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Queue,
+  Schema,
+  Scope,
+  Stream,
+  Tracer,
+} from "effect"
 import { TestClock } from "effect/testing"
 import { and, asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -333,6 +354,14 @@ const layer = Layer.unwrap(
     )
     const echoNode = makeLocationNode({ name: "test/session-runner-tools", layer: echo, deps: [Tool.node] })
     const models = Layer.mock(SessionRunnerModel.Service)({
+      select: (session) =>
+        Effect.sync(() => {
+          const selected = session.model?.id === "replacement" ? replacementModel : state.currentModel
+          return {
+            info: Model.Info.default(Provider.ID.make(selected.provider), Model.ID.make(selected.id)),
+            variant: session.model?.variant,
+          }
+        }),
       resolve: (session) =>
         state.modelResolveHook.pipe(
           Effect.map(() => {
@@ -376,13 +405,13 @@ const layer = Layer.unwrap(
     const instructionContext = Layer.mock(InstructionDiscovery.Service, {
       project: true,
       global: true,
+      claude: true,
       load: () => Effect.succeed(Instructions.empty),
     })
     const skillInstructions = Layer.mock(SkillInstructions.Service, {
-      load: (permissions) => {
+      load: (policy) => {
         // `setup` tags each agent's ruleset with a `skill` rule naming that agent.
-        const baseline = permissions
-          .filter((rule) => rule.action === "skill")
+        const baseline = Permission.Policy.relevant(policy, "skill")
           .map((rule) => state.skillBaselines.get(Agent.ID.make(rule.resource)))
           .findLast((text) => text !== undefined)
         return Effect.succeed(
@@ -696,9 +725,6 @@ const incompleteStream = () =>
       message: "The provider response ended unexpectedly.",
     }),
   })
-
-const INCOMPLETE_STREAM_CONTINUATION =
-  "The previous response was interrupted. Continue from where you left off without repeating completed content."
 
 const providerRejected = (input: { readonly message: string; readonly classification?: "context-overflow" }) =>
   new AIError({ reason: new InvalidRequestError(input) })
@@ -1149,6 +1175,7 @@ describe("SessionRunnerLLM", () => {
         messageID: expect.stringMatching(/^msg_/),
         id: Tool.CallID.make("call-location"),
         progress: expect.any(Function),
+        cancel: expect.anything(),
       },
     ])
     expect(Array.from(yield* Fiber.join(progressFiber))[0]?.data.metadata).toEqual({ phase: "reading" })
@@ -1176,6 +1203,51 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests[0]?.tools.map((tool) => tool.name)).toContain("renamed_echo")
     expect(s.requests[0]?.tools.map((tool) => tool.name)).not.toContain("echo")
     expect(s.executions).toEqual(["renamed"])
+  })
+
+  scenario("passes stored message metadata to the context hook but not to the model request", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "prompt", (event) =>
+      Effect.sync(() => {
+        event.metadata = { canary: { context: ["CANARY-TOKEN"] } }
+      }),
+    )
+    yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        // Mirrors JavaScript plugins, which edit the payload in place.
+        for (const message of event.messages) {
+          const canary = message.metadata?.canary as { context: string[] } | undefined
+          if (message.role !== "user" || canary === undefined) continue
+          ;(message.content as Array<UserMessage["content"][number]>).unshift(Message.text(canary.context.join("\n")))
+        }
+      }),
+    )
+    yield* s.llm.push(TestLLM.text("Done", "text-done"))
+
+    yield* s.runPrompt("Start")
+
+    expect(s.requests[0]?.messages.at(-1)?.content).toEqual([Message.text("CANARY-TOKEN"), Message.text("Start")])
+    expect(s.requests[0]?.messages.some((message) => Object.hasOwn(message, "metadata"))).toBe(false)
+    const compiled = yield* compileRequest(s.requests[0]!)
+    expect(JSON.stringify(compiled.body)).toContain("CANARY-TOKEN")
+    expect(JSON.stringify(compiled.body)).not.toContain('"metadata"')
+  })
+
+  scenario("keeps context hook edits to messages without stored metadata", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        for (const message of event.messages) {
+          if (message.role !== "user" || message.metadata !== undefined) continue
+          ;(message.content as Array<UserMessage["content"][number]>).unshift(Message.text("EDITED"))
+        }
+      }),
+    )
+    yield* s.llm.push(TestLLM.text("Done", "text-done"))
+
+    yield* s.runPrompt("Start")
+
+    expect(s.requests[0]?.messages.at(-1)?.content).toEqual([Message.text("EDITED"), Message.text("Start")])
   })
 
   for (const resume of [false, true]) {
@@ -2001,6 +2073,220 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Fourth")
 
     expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([defaultSystem, fakeIdentity, "Latest context"])
+    // The surviving "Changed context" update predates the fresh baseline and would contradict it.
+    expect(messageRoles(s.requests.at(-1))).toEqual(["user", "user"])
+    expect((yield* s.context).some((message) => message.type === "system")).toBe(false)
+  })
+
+  scenario("hides an update a revert left behind once the source is removed", function* (s) {
+    s.systemRemoved = true
+    yield* s.runPrompt("First")
+    s.systemRemoved = false
+    s.systemBaseline = "Entered mode"
+    const second = yield* s.runPrompt("Second")
+    s.systemRemoved = true
+    yield* s.runPrompt("Third")
+
+    // The removal is delivered with "Third"; the "Entered mode" update survives before "Second".
+    yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: second.id })
+    yield* s.runPrompt("Fourth")
+
+    const last = s.requests.at(-1)!
+    expect(systemTexts(last)).toEqual([])
+    expect(userTexts(last)).toEqual(["First", "Fourth"])
+    expect(last.system.map((part) => part.text).join("\n")).not.toContain("Entered mode")
+    // Clients still see every message; only the model context hides the stale update.
+    expect((yield* s.messages).filter((message) => message.type === "system")).toMatchObject([{ text: "Entered mode" }])
+  })
+
+  describe("agent instructions", () => {
+    const plan = Agent.ID.make("plan")
+    const build = Agent.ID.make("build")
+    const orchestrator = Agent.ID.make("orchestrator")
+    const leftPlan =
+      "You are no longer the Plan agent. Stop following the instructions you were given as the Plan agent. Keep following anything the user asked for."
+    const enteredPlan = "You are the Plan agent. Follow these instructions while you are the Plan agent:\n\nPlan rules"
+
+    const defineAgents = Effect.fnUntraced(function* (rules = "Plan rules") {
+      const agent = yield* Agent.Service
+      yield* agent.transform((editor) => {
+        editor.update(plan, (item) => {
+          item.name = Agent.Name.make("Plan")
+          item.mode = "primary"
+          item.instructions = rules
+        })
+        editor.update(orchestrator, (item) => {
+          item.name = Agent.Name.make("Orchestrator")
+          item.mode = "primary"
+          item.instructions = "Orchestrator rules"
+        })
+      })
+    })
+    const select = (s: Scenario, agent: Agent.ID) => s.session.switchAgent({ sessionID, agent })
+    const texts = (request: LLMRequest) =>
+      request.messages.flatMap((message) => message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])))
+    const prompt = (request: LLMRequest | undefined) => request?.system.map((part) => part.text).join("\n") ?? ""
+
+    scenario("puts a starting agent's instructions in the system prompt", function* (s) {
+      yield* defineAgents()
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+
+      expect(prompt(s.requests.at(-1))).toContain(enteredPlan)
+      expect(systemTexts(s.requests.at(-1)!)).toEqual([])
+    })
+
+    scenario("adds instructions before the next prompt when switching in, keeping the system prompt", function* (s) {
+      yield* defineAgents()
+      yield* s.runPrompt("First")
+      yield* select(s, plan)
+      yield* s.runPrompt("Second")
+
+      expect(s.requests[1]?.system).toEqual(s.requests[0]?.system)
+      expect(prompt(s.requests[1])).not.toContain("Plan rules")
+      expect(texts(s.requests[1]!)).toEqual(["First", enteredPlan, "Second"])
+    })
+
+    scenario("withdraws instructions when switching to an agent without any", function* (s) {
+      yield* defineAgents()
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* select(s, build)
+      yield* s.runPrompt("Second")
+
+      expect(s.requests[1]?.system).toEqual(s.requests[0]?.system)
+      expect(systemTexts(s.requests[1]!)).toEqual([expect.stringContaining(leftPlan)])
+      expect(messageRoles(s.requests[1])).toEqual(["user", "system", "user"])
+    })
+
+    scenario("sends nothing when switching away and back before the next step", function* (s) {
+      yield* defineAgents()
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* select(s, build)
+      yield* select(s, plan)
+      yield* s.runPrompt("Second")
+
+      expect(systemTexts(s.requests[1]!)).toEqual([])
+    })
+
+    scenario("replaces one agent's instructions with another's in one update", function* (s) {
+      yield* defineAgents()
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* select(s, orchestrator)
+      yield* s.runPrompt("Second")
+
+      const updates = systemTexts(s.requests[1]!)
+      expect(updates).toHaveLength(1)
+      expect(updates[0]).toContain(leftPlan)
+      expect(updates[0]).toContain("Orchestrator rules")
+    })
+
+    scenario("sends changed instructions when a plugin edits the selected agent", function* (s) {
+      yield* defineAgents()
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* defineAgents("New plan rules")
+      yield* s.runPrompt("Second")
+
+      expect(systemTexts(s.requests[1]!)).toEqual([
+        "Your instructions as the Plan agent changed. These replace the previous ones:\n\nNew plan rules",
+      ])
+    })
+
+    scenario("sends an agent's own selected and unselected texts exactly as written", function* (s) {
+      const agent = yield* Agent.Service
+      const define = (unselected: string) =>
+        agent.transform((editor) =>
+          editor.update(plan, (item) => {
+            item.name = Agent.Name.make("Plan")
+            item.mode = "primary"
+            item.instructions = { selected: "Plan rules", unselected }
+          }),
+        )
+      yield* define("Left Plan mode")
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      expect(prompt(s.requests[0])).toContain("Plan rules")
+      expect(prompt(s.requests[0])).not.toContain("You are the Plan agent")
+
+      // Editing only the unselected text sends nothing while the agent is still selected.
+      yield* define("You have left Plan mode")
+      yield* s.runPrompt("Second")
+      expect(systemTexts(s.requests[1]!)).toEqual([])
+
+      yield* select(s, build)
+      yield* s.runPrompt("Third")
+      expect(systemTexts(s.requests[2]!)).toEqual(["You have left Plan mode"])
+
+      // After compaction on build, neither text is shown: unselected is only for the switch itself.
+      yield* s.llm.push(TestLLM.text("## Objective\n- summary", "custom-summary"))
+      yield* s.session.compact({ sessionID })
+      yield* s.resume
+      yield* s.runPrompt("Fourth")
+      expect(prompt(s.requests.at(-1))).not.toContain("Plan rules")
+      expect(prompt(s.requests.at(-1))).not.toContain("left Plan mode")
+      expect(systemTexts(s.requests.at(-1)!)).toEqual([])
+    })
+
+    scenario("sends an agent's new selected text as written when a plugin edits it", function* (s) {
+      const agent = yield* Agent.Service
+      const define = (selected: string) =>
+        agent.transform((editor) =>
+          editor.update(plan, (item) => {
+            item.name = Agent.Name.make("Plan")
+            item.mode = "primary"
+            item.instructions = { selected, unselected: "Left Plan mode" }
+          }),
+        )
+      yield* define("Plan rules")
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* define("New plan rules")
+      yield* s.runPrompt("Second")
+      expect(systemTexts(s.requests[1]!)).toEqual(["New plan rules"])
+    })
+
+    scenario("moves instructions into the system prompt at compaction", function* (s) {
+      yield* defineAgents()
+      yield* s.runPrompt("First")
+      yield* select(s, plan)
+      yield* s.runPrompt("Second")
+      yield* s.llm.push(TestLLM.text("## Objective\n- summary", "agent-summary"))
+      yield* s.session.compact({ sessionID })
+      yield* s.resume
+      yield* s.runPrompt("Third")
+
+      expect(prompt(s.requests.at(-1))).toContain("Plan rules")
+      expect(systemTexts(s.requests.at(-1)!)).toEqual([])
+    })
+
+    scenario("keeps instructions after reverting past the switch into the agent", function* (s) {
+      yield* defineAgents()
+      const first = yield* s.runPrompt("First")
+      yield* select(s, plan)
+      yield* s.runPrompt("Second")
+      yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: first.id })
+      yield* s.runPrompt("Third")
+
+      expect(prompt(s.requests.at(-1))).toContain("Plan rules")
+      expect(texts(s.requests.at(-1)!)).toEqual(["Third"])
+    })
+
+    scenario("drops instructions after reverting between entering and leaving the agent", function* (s) {
+      yield* defineAgents()
+      yield* s.runPrompt("First")
+      yield* select(s, plan)
+      const second = yield* s.runPrompt("Second")
+      yield* select(s, build)
+      yield* s.runPrompt("Third")
+      yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: second.id })
+      yield* s.runPrompt("Fourth")
+
+      expect(prompt(s.requests.at(-1))).not.toContain("Plan rules")
+      expect(texts(s.requests.at(-1)!)).toEqual(["First", "Fourth"])
+    })
   })
 
   scenario("uses the selected model family prompt when the agent does not override it", function* (s) {
@@ -2839,6 +3125,10 @@ describe("SessionRunnerLLM", () => {
       scenario(`preserves the session request prefix during ${reason} compaction (${route.id})`, function* (s) {
         const agents = yield* Agent.Service
         const hooks = yield* PluginHooks.Service
+        const compaction = yield* SessionCompaction.Service
+        // The idle step past the threshold would start a background summary, which keeps the next prompt verbatim
+        // instead of summarizing it; this covers the summary written when compaction is due.
+        yield* compaction.transform((editor) => editor.configure({ background: false }))
         const agentID = Agent.ID.make("reviewer")
         const variant = Model.VariantID.make("test-variant")
         s.currentModel = LanguageModel.make({
@@ -3188,11 +3478,12 @@ describe("SessionRunnerLLM", () => {
   }
 
   scenario("stops after four smaller compaction inputs overflow", function* (s) {
-    // Large enough that the conversation, not the system prompt, is most of the request.
+    // Large enough that the conversation, not the system prompt, is most of the request. Twice what `keep` retains,
+    // so the history before the tail has exchanges left to drop.
     const filler = "context ".repeat(1_000)
-    yield* s.llm.push(...Array.from({ length: 8 }, (_, index) => TestLLM.text(`Answer ${index}`, `answer-${index}`)))
+    yield* s.llm.push(...Array.from({ length: 16 }, (_, index) => TestLLM.text(`Answer ${index}`, `answer-${index}`)))
     yield* Effect.forEach(
-      Array.from({ length: 8 }, (_, index) => index),
+      Array.from({ length: 16 }, (_, index) => index),
       (index) => s.runPrompt(`Request ${index}: ${filler}`),
     )
     s.currentModel = unknownContextModel
@@ -3206,7 +3497,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
 
     expect(s.requests).toHaveLength(5)
-    expect(userTexts(s.requests[2])[0].length).toBeLessThan(userTexts(s.requests[1])[0].length)
+    // The history before the tail goes out unchanged once, then only as ever shorter text.
+    expect(userTexts(s.requests[1])[0]).toBe(`Request 0: ${filler}`)
+    expect(userTexts(s.requests[2])[0]).not.toBe(`Request 0: ${filler}`)
     expect(userTexts(s.requests[3])[0].length).toBeLessThan(userTexts(s.requests[2])[0].length)
     expect(userTexts(s.requests[4])[0].length).toBeLessThan(userTexts(s.requests[3])[0].length)
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "failed" })
@@ -4231,6 +4524,10 @@ describe("SessionRunnerLLM", () => {
     expect(DateTime.toEpochMillis(assistant.time.streamed!) - DateTime.toEpochMillis(assistant.time.created)).toBe(
       5_000,
     )
+    // The tool call was the first output, recorded two seconds after dispatch and before the stream ended.
+    expect(DateTime.toEpochMillis(assistant.time.firstToken!) - DateTime.toEpochMillis(assistant.time.created)).toBe(
+      2_000,
+    )
     expect(assistant.time.completed).toBeUndefined()
     expect(assistant.content).toMatchObject([{ type: "tool", state: { status: "running" } }])
 
@@ -4548,22 +4845,6 @@ describe("SessionRunnerLLM", () => {
       Expected.user("Run once"),
       Expected.assistant({ finish: "stop" }, [Expected.text("Once")]),
     ])
-  })
-
-  scenario("steers an active step with newly recorded prompts", function* (s) {
-    yield* s.admit("Start working")
-
-    yield* s.llm.push(TestLLM.stop(), TestLLM.stop())
-
-    const first = yield* s.resumePaused
-    yield* s.session.prompt({ sessionID, text: "Change direction" })
-    yield* first.finish
-    yield* Effect.yieldNow
-
-    expect(s.requests).toHaveLength(2)
-    expect(userTexts(s.requests[0])).toEqual(["Start working"])
-    expect(userTexts(s.requests[1])).toEqual(["Start working", "Change direction"])
-    expect((yield* s.context).map((message) => message.type)).toEqual(["user", "assistant", "user", "assistant"])
   })
 
   scenario("promotes queued input after continuation ends", function* (s) {
@@ -5011,15 +5292,20 @@ describe("SessionRunnerLLM", () => {
       executed: false,
     })
     yield* s.db
-      .update(SessionMessageTable)
+      .update(SessionPartTable)
       .set({
         data: sql`json_set(
-          ${SessionMessageTable.data},
-          '$.content[0].state.metadata',
+          ${SessionPartTable.data},
+          '$.state.metadata',
           json('{"sessionID":"ses_existing_child","status":"running","internal":"private"}')
         )`,
       })
-      .where(eq(SessionMessageTable.id, assistantMessageID))
+      .where(
+        and(
+          eq(SessionPartTable.message_id, assistantMessageID),
+          eq(SessionPartTable.call_id, "call-interrupted-subagent"),
+        ),
+      )
       .run()
       .pipe(Effect.orDie)
     s.requests.length = 0
@@ -5096,11 +5382,9 @@ describe("SessionRunnerLLM", () => {
     })
     yield* callTool(crashed, "call-running", "subagent")
     yield* s.db
-      .update(SessionMessageTable)
-      .set({
-        data: sql`json_set(${SessionMessageTable.data}, '$.content[1].state.metadata', json('{"sessionID":"ses_child"}'))`,
-      })
-      .where(eq(SessionMessageTable.id, crashed))
+      .update(SessionPartTable)
+      .set({ data: sql`json_set(${SessionPartTable.data}, '$.state.metadata', json('{"sessionID":"ses_child"}'))` })
+      .where(and(eq(SessionPartTable.message_id, crashed), eq(SessionPartTable.call_id, "call-running")))
       .run()
       .pipe(Effect.orDie)
     // An unfinished assistant behind the checkpoint is outside the history the runner settles.
@@ -5222,7 +5506,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
 
     expect(s.requests).toHaveLength(1)
-    expect(messageRoles(s.requests[0])).toEqual(["user", "assistant", "tool"])
+    expect(messageRoles(s.requests[0])).toEqual(["user"])
     expect(yield* s.context).toMatchObject([
       Expected.user("Recover interrupted tool input"),
       Expected.assistant({}, [Expected.failedTool({ id: "call-pending-interrupted" }, {})]),
@@ -5380,6 +5664,37 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push([])
     yield* s.resume
     expect(s.requests).toHaveLength(2)
+  })
+
+  scenario("runs a top-level call to a Code Mode tool and records it as the model sent it", function* (s) {
+    const registry = yield* Tool.Service
+    yield* transformTools(
+      registry,
+      {
+        echo: {
+          name: "echo",
+          description: "Echo text",
+          input: Schema.Struct({ text: Schema.String }),
+          output: Schema.Struct({ text: Schema.String }),
+          execute: ({ text }) => Effect.succeed({ output: { text }, content: text }),
+        },
+      },
+      { namespace: "acme" },
+    )
+    yield* s.admit("Call echo directly")
+    yield* s.llm.push(TestLLM.toolCall("call-echo", "acme.echo", { text: "hi" }), TestLLM.stop())
+    yield* s.resume
+
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Call echo directly"),
+      Expected.assistant({}, [
+        Expected.completedTool(
+          { id: "call-echo", name: "acme.echo" },
+          { input: { text: "hi" }, content: [Expected.text("hi")] },
+        ),
+      ]),
+      { type: "assistant", finish: "stop" },
+    ])
   })
 
   scenario("durably settles local tool failures before continuing", function* (s) {
@@ -5767,7 +6082,20 @@ describe("SessionRunnerLLM", () => {
   scenario("durably fails blocked local tools when interrupted while awaiting settlement", function* (s) {
     yield* s.admit("Interrupt tool settlement")
     const tools = yield* s.blockTools()
-    yield* s.llm.push(TestLLM.toolCall("call-await-interrupt", "echo", { text: "blocked" }))
+    yield* s.llm.push([
+      LLMEvent.stepStart({ index: 0 }),
+      LLMEvent.reasoningStart({ id: "r1" }),
+      LLMEvent.reasoningDelta({ id: "r1", text: "Plan before tool" }),
+      LLMEvent.reasoningEnd({ id: "r1", providerMetadata: { openai: { signature: "sig_tool_interrupt" } } }),
+      LLMEvent.toolCall({
+        id: "call-await-interrupt",
+        name: "echo",
+        input: { text: "blocked" },
+        providerMetadata: { openai: { thoughtSignature: "tool_sig_1" } },
+      }),
+      LLMEvent.stepFinish({ index: 0, reason: { normalized: "tool-calls" } }),
+      LLMEvent.finish({ reason: { normalized: "tool-calls" } }),
+    ])
     const streamed = yield* s.bus.subscribe(SessionEvent.Step.Streamed).pipe(
       Stream.filter((event) => event.data.sessionID === sessionID),
       Stream.runHead,
@@ -5785,6 +6113,7 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.context).toMatchObject([
       Expected.user("Interrupt tool settlement"),
       Expected.assistant({ finish: "error", error: { type: "aborted", message: "Step interrupted" } }, [
+        Expected.reasoning("Plan before tool"),
         Expected.failedTool(
           { id: "call-await-interrupt" },
           { error: { type: "aborted", message: "Tool execution interrupted" } },
@@ -5797,6 +6126,83 @@ describe("SessionRunnerLLM", () => {
     expect(eventTypes).not.toContain("session.step.ended.1")
     expect(eventTypes).not.toContain("session.retry.scheduled.1")
     expect(s.requests).toHaveLength(1)
+
+    yield* s.llm.push(TestLLM.text("Resumed with signatures intact", "resumed"))
+    yield* s.runPrompt("Continue after cancelling tool")
+    expect(s.requests[1]?.messages).toMatchObject([
+      { role: "user", content: [{ type: "text", text: "Interrupt tool settlement" }] },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "Plan before tool",
+            providerMetadata: { openai: { signature: "sig_tool_interrupt" } },
+          },
+          {
+            type: "tool-call",
+            id: "call-await-interrupt",
+            name: "echo",
+            providerMetadata: { openai: { thoughtSignature: "tool_sig_1" } },
+          },
+        ],
+      },
+      { role: "tool", content: [{ type: "tool-result", id: "call-await-interrupt" }] },
+      { role: "user", content: [{ type: "text", text: "Continue after cancelling tool" }] },
+    ])
+  })
+
+  scenario("keeps closed blocks and drops uncalled tool inputs when interrupted mid-stream", function* (s) {
+    yield* s.admit("Interrupt mid-second-tool")
+    const tools = yield* s.blockTools()
+    const streamingSecond = yield* Deferred.make<void>()
+    yield* s.llm.push(
+      Stream.concat(
+        Stream.fromIterable([
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.reasoningStart({ id: "r1" }),
+          LLMEvent.reasoningDelta({ id: "r1", text: "Closed thought" }),
+          LLMEvent.reasoningEnd({ id: "r1", providerMetadata: { openai: { signature: "sig_closed" } } }),
+          LLMEvent.toolCall({
+            id: "call-first",
+            name: "echo",
+            input: { text: "first" },
+            providerMetadata: { openai: { thoughtSignature: "tool_sig_first" } },
+          }),
+          LLMEvent.toolInputStart({ id: "call-second-cut", name: "echo" }),
+          LLMEvent.toolInputDelta({ id: "call-second-cut", name: "echo", text: '{"text":"half' }),
+        ]),
+        Stream.fromEffect(Deferred.succeed(streamingSecond, undefined)).pipe(Stream.flatMap(() => Stream.never)),
+      ),
+    )
+
+    const runner = yield* SessionRunner.Service
+    const run = yield* runner.drain({ sessionID, force: true }).pipe(Effect.forkChild)
+    yield* tools.started
+    yield* Deferred.await(streamingSecond)
+    yield* Fiber.interrupt(run)
+    expect(Exit.isFailure(yield* Fiber.await(run))).toBe(true)
+
+    yield* s.llm.push(TestLLM.text("Continued cleanly", "continued"))
+    yield* s.runPrompt("Proceed without second tool")
+    expect(s.requests[1]?.messages).toMatchObject([
+      { role: "user", content: [{ type: "text", text: "Interrupt mid-second-tool" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Closed thought", providerMetadata: { openai: { signature: "sig_closed" } } },
+          {
+            type: "tool-call",
+            id: "call-first",
+            name: "echo",
+            input: { text: "first" },
+            providerMetadata: { openai: { thoughtSignature: "tool_sig_first" } },
+          },
+        ],
+      },
+      { role: "tool", content: [{ type: "tool-result", id: "call-first" }] },
+      { role: "user", content: [{ type: "text", text: "Proceed without second tool" }] },
+    ])
   })
 
   scenario("forces a text response on an agent's configured final step", function* (s) {
@@ -6321,7 +6727,7 @@ describe("SessionRunnerLLM", () => {
     })
   }
 
-  scenario("continues an incomplete stream after observable text", function* (s) {
+  scenario("retries an incomplete stream cleanly from the prompt when no tool ran", function* (s) {
     const failure = incompleteStream()
     yield* s.admit("Continue partial output")
     yield* s.llm.push(
@@ -6332,7 +6738,7 @@ describe("SessionRunnerLLM", () => {
         LLMEvent.textDelta({ id: "partial-rate-limit", text: "Partial" }),
       ),
     )
-    yield* s.llm.push(TestLLM.text(" continuation", "continued-text"))
+    yield* s.llm.push(TestLLM.text("Recovered", "continued-text"))
 
     const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
@@ -6341,38 +6747,24 @@ describe("SessionRunnerLLM", () => {
     yield* Fiber.join(run)
 
     expect(s.requests).toHaveLength(2)
-    expect(s.requests[1]?.messages.at(-2)).toMatchObject({
-      role: "assistant",
-      content: [{ type: "text", text: "Partial" }],
-    })
-    expect(s.requests[1]?.messages.at(-1)).toMatchObject({
-      role: "user",
-      content: [
-        {
-          type: "text",
-          text: INCOMPLETE_STREAM_CONTINUATION,
-        },
-      ],
-    })
+    expect(s.requests[1]?.messages).toMatchObject([
+      { role: "user", content: [{ type: "text", text: "Continue partial output" }] },
+    ])
     const context = yield* s.context
     expect(context).toMatchObject([
       Expected.user("Continue partial output"),
       Expected.assistant({ finish: "error", error: { type: "provider.invalid-output" } }, [Expected.text("Partial")]),
-      {
-        type: "synthetic",
-        text: INCOMPLETE_STREAM_CONTINUATION,
-      },
-      Expected.assistant({ finish: "stop" }, [Expected.text(" continuation")]),
+      Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
     ])
     const assistants = context.filter((message) => message.type === "assistant")
     expect(new Set(assistants.map((message) => message.id)).size).toBe(2)
-    expect(context.find((message) => message.type === "synthetic")?.description).toBeUndefined()
+    expect(context.some((message) => message.type === "synthetic")).toBe(false)
     expect(yield* recordedEventTypes(sessionID)).toContain("session.retry.scheduled.1")
     yield* replaySessionProjection(sessionID)
     expect(yield* s.context).toMatchObject(context)
   })
 
-  scenario("continues an unknown finish after observable text", function* (s) {
+  scenario("retries an unknown finish cleanly after observable text when no tool ran", function* (s) {
     yield* s.admit("Continue unknown finish")
     yield* s.llm.push([
       LLMEvent.stepStart({ index: 0 }),
@@ -6382,7 +6774,7 @@ describe("SessionRunnerLLM", () => {
       LLMEvent.stepFinish({ index: 0, reason: { normalized: "unknown" } }),
       LLMEvent.finish({ reason: { normalized: "unknown" } }),
     ])
-    yield* s.llm.push(TestLLM.text(" continuation", "unknown-continuation"))
+    yield* s.llm.push(TestLLM.text("Recovered", "unknown-continuation"))
 
     const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
@@ -6391,19 +6783,17 @@ describe("SessionRunnerLLM", () => {
     yield* Fiber.join(run)
 
     expect(s.requests).toHaveLength(2)
-    expect(s.requests[1]?.messages.at(-1)).toMatchObject({
-      role: "user",
-      content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }],
-    })
+    expect(s.requests[1]?.messages).toMatchObject([
+      { role: "user", content: [{ type: "text", text: "Continue unknown finish" }] },
+    ])
     expect(yield* s.context).toMatchObject([
       { type: "user" },
       Expected.assistant({ finish: "error" }, [Expected.text("Partial")]),
-      { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
-      Expected.assistant({ finish: "stop" }, [Expected.text(" continuation")]),
+      Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
     ])
   })
 
-  scenario("continues after a mid-stream rate limit honoring retry-after", function* (s) {
+  scenario("retries after a mid-stream rate limit honoring retry-after without partial text", function* (s) {
     yield* s.admit("Continue after rate limit")
     yield* s.llm.push(
       TestLLM.failAfter(
@@ -6413,7 +6803,7 @@ describe("SessionRunnerLLM", () => {
         LLMEvent.textDelta({ id: "rate-limited-partial", text: "Partial" }),
       ),
     )
-    yield* s.llm.push(TestLLM.text(" continuation", "rate-limit-continuation"))
+    yield* s.llm.push(TestLLM.text("Recovered", "rate-limit-continuation"))
 
     const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
@@ -6424,24 +6814,18 @@ describe("SessionRunnerLLM", () => {
     yield* Fiber.join(run)
 
     expect(s.requests).toHaveLength(2)
-    expect(s.requests[1]?.messages.at(-2)).toMatchObject({
-      role: "assistant",
-      content: [{ type: "text", text: "Partial" }],
-    })
-    expect(s.requests[1]?.messages.at(-1)).toMatchObject({
-      role: "user",
-      content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }],
-    })
+    expect(s.requests[1]?.messages).toMatchObject([
+      { role: "user", content: [{ type: "text", text: "Continue after rate limit" }] },
+    ])
     expect(yield* recordedEventTypes(sessionID)).toContain("session.retry.scheduled.1")
     expect(yield* s.context).toMatchObject([
       Expected.user("Continue after rate limit"),
       Expected.assistant({ finish: "error", error: { type: "provider.rate-limit" } }, [Expected.text("Partial")]),
-      { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
-      Expected.assistant({ finish: "stop" }, [Expected.text(" continuation")]),
+      Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
     ])
   })
 
-  scenario("continues after an unrecognized mid-stream provider failure", function* (s) {
+  scenario("retries after an unrecognized mid-stream provider failure when no tool ran", function* (s) {
     const failure = new AIError({ reason: new UnknownProviderError({ message: "Provider returned error" }) })
     yield* s.admit("Continue after unknown failure")
     yield* s.llm.push(
@@ -6452,7 +6836,7 @@ describe("SessionRunnerLLM", () => {
         LLMEvent.textDelta({ id: "unknown-failure-partial", text: "Partial" }),
       ),
     )
-    yield* s.llm.push(TestLLM.text(" continuation", "unknown-failure-continuation"))
+    yield* s.llm.push(TestLLM.text("Recovered", "unknown-failure-continuation"))
 
     const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
@@ -6461,19 +6845,17 @@ describe("SessionRunnerLLM", () => {
     yield* Fiber.join(run)
 
     expect(s.requests).toHaveLength(2)
-    expect(s.requests[1]?.messages.at(-1)).toMatchObject({
-      role: "user",
-      content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }],
-    })
+    expect(s.requests[1]?.messages).toMatchObject([
+      { role: "user", content: [{ type: "text", text: "Continue after unknown failure" }] },
+    ])
     expect(yield* s.context).toMatchObject([
       Expected.user("Continue after unknown failure"),
       Expected.assistant({ finish: "error", error: { type: "provider.unknown" } }, [Expected.text("Partial")]),
-      { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
-      Expected.assistant({ finish: "stop" }, [Expected.text(" continuation")]),
+      Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
     ])
   })
 
-  scenario("drops interrupted reasoning before continuing an incomplete stream", function* (s) {
+  scenario("drops interrupted reasoning and retries cleanly without continuation prompt", function* (s) {
     yield* s.admit("Continue interrupted reasoning")
     yield* s.llm.push(
       TestLLM.failAfter(
@@ -6491,20 +6873,18 @@ describe("SessionRunnerLLM", () => {
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
-    expect(s.requests[1]?.messages.slice(-2)).toMatchObject([
+    expect(s.requests[1]?.messages).toMatchObject([
       { role: "user", content: [{ type: "text", text: "Continue interrupted reasoning" }] },
-      { role: "user", content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }] },
     ])
     expect(yield* s.context).toMatchObject([
       { type: "user" },
       Expected.assistant({ finish: "error" }, [Expected.reasoning("Partial thought")]),
-      { type: "synthetic" },
       Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
     ])
   })
 
   for (const failure of [streamDisconnected, websocketDisconnected]) {
-    scenario(`continues after ${failure.name} with durable reasoning state`, function* (s) {
+    scenario(`retries cleanly after ${failure.name} during reasoning`, function* (s) {
       yield* s.admit("Recover disconnected reasoning")
       yield* s.llm.push(
         TestLLM.failAfter(
@@ -6528,9 +6908,8 @@ describe("SessionRunnerLLM", () => {
 
       expect(s.requests).toHaveLength(2)
       expect(yield* recordedEventTypes(sessionID)).toContain("session.retry.scheduled.1")
-      expect(s.requests[1]?.messages.slice(-2)).toMatchObject([
+      expect(s.requests[1]?.messages).toMatchObject([
         { role: "user", content: [{ type: "text", text: "Recover disconnected reasoning" }] },
-        { role: "user", content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }] },
       ])
       expect(yield* s.context).toMatchObject([
         { type: "user" },
@@ -6541,13 +6920,12 @@ describe("SessionRunnerLLM", () => {
             native: { itemId: "rs_disconnected", reasoningEncryptedContent: "encrypted-state" },
           },
         ]),
-        { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
         Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
       ])
     })
   }
 
-  scenario("continues an incomplete stream after settling a local tool", function* (s) {
+  scenario("retries an incomplete stream from a settled local tool", function* (s) {
     yield* s.admit("Continue after tool")
     yield* s.llm.push(
       TestLLM.failAfter(
@@ -6565,25 +6943,16 @@ describe("SessionRunnerLLM", () => {
     yield* Fiber.join(run)
 
     expect(s.executions).toEqual(["settled"])
-    expect(s.requests[1]?.messages.slice(-3)).toMatchObject([
+    expect(s.requests[1]?.messages.slice(-2)).toMatchObject([
       {
         role: "assistant",
         content: [{ type: "tool-call", id: "call-before-close", name: "echo", input: { text: "settled" } }],
       },
       { role: "tool", content: [{ type: "tool-result", id: "call-before-close" }] },
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: INCOMPLETE_STREAM_CONTINUATION,
-          },
-        ],
-      },
     ])
   })
 
-  scenario("continues an incomplete stream after settling a local tool defect", function* (s) {
+  scenario("retries an incomplete stream from a settled local tool defect", function* (s) {
     yield* s.admit("Continue after tool defect")
     yield* s.llm.push(
       TestLLM.failAfter(
@@ -6600,7 +6969,7 @@ describe("SessionRunnerLLM", () => {
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
-    expect(messageRoles(s.requests[1])).toEqual(["user", "assistant", "tool", "user"])
+    expect(messageRoles(s.requests[1])).toEqual(["user", "assistant", "tool"])
     expect(yield* s.context).toMatchObject([
       { type: "user" },
       Expected.assistant({}, [
@@ -6609,13 +6978,12 @@ describe("SessionRunnerLLM", () => {
           { error: { type: "unknown", message: "unexpected tool defect" } },
         ),
       ]),
-      { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
       Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
     ])
   })
 
   scenario(
-    "shares retry accounting and assistant identity across transparent retries and partial continuations",
+    "shares retry accounting and assistant identity across transparent retries and retries after output",
     function* (s) {
       const scheduled = yield* subscribeRetries(s)
       yield* s.admit("Mix retry paths")
@@ -6626,7 +6994,7 @@ describe("SessionRunnerLLM", () => {
         LLMEvent.textStart({ id: "mixed-partial" }),
         LLMEvent.textDelta({ id: "mixed-partial", text: "Partial" }),
       )
-      // Alternate transparent failures and partial continuations until the retry allowance is spent.
+      // Alternate transparent failures and failures after output until the retry allowance is spent.
       const outcomes = RETRY_GAPS.map((_, index) => (index % 2 === 0 ? Stream.fail(failure) : partial))
       yield* s.llm.push(...outcomes, partial)
       const run = yield* s.resume.pipe(Effect.forkChild)
@@ -6637,7 +7005,7 @@ describe("SessionRunnerLLM", () => {
       }
       expect(yield* Fiber.join(run).pipe(Effect.flip)).toBe(failure)
       expect(s.requests).toHaveLength(RETRY_GAPS.length + 1)
-      // A transparent retry keeps the assistant identity; a partial continuation starts a new one.
+      // A transparent retry keeps the assistant identity; a retry after output starts a new one.
       for (const [index, identity] of identities.entries()) {
         if (index === 0) continue
         if (index % 2 === 1) expect(identity).toBe(identities[index - 1])
@@ -6646,14 +7014,14 @@ describe("SessionRunnerLLM", () => {
       const partials = outcomes.filter((outcome) => outcome === partial).length
       const messages = yield* s.context
       expect(messages.filter((message) => message.type === "assistant")).toHaveLength(partials + 1)
-      expect(messages.filter((message) => message.type === "synthetic")).toHaveLength(partials)
+      expect(messages.filter((message) => message.type === "synthetic")).toHaveLength(0)
       const events = yield* recordedEventTypes(sessionID)
       expect(events.filter((type) => type === "session.retry.scheduled.1")).toHaveLength(RETRY_GAPS.length)
       expect(events.filter((type) => type === "session.step.failed.1")).toHaveLength(partials + 1)
     },
   )
 
-  scenario("stops incomplete stream continuations once the retry allowance is spent", function* (s) {
+  scenario("stops incomplete stream retries once the retry allowance is spent", function* (s) {
     yield* s.admit("Exhaust partial continuations")
     const failure = incompleteStream()
     yield* s.llm.always(
@@ -6675,7 +7043,14 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(RETRY_GAPS.length + 1)
     const context = yield* s.context
     expect(context.filter((message) => message.type === "assistant")).toHaveLength(RETRY_GAPS.length + 1)
-    expect(context.filter((message) => message.type === "synthetic")).toHaveLength(RETRY_GAPS.length)
+    expect(context.filter((message) => message.type === "synthetic")).toHaveLength(0)
+
+    yield* s.llm.always(TestLLM.text("Continued after exhaustion", "after-exhaustion"))
+    yield* s.runPrompt("Continue please")
+    expect(s.requests.at(-1)?.messages).toMatchObject([
+      { role: "user", content: [{ type: "text", text: "Exhaust partial continuations" }] },
+      { role: "user", content: [{ type: "text", text: "Continue please" }] },
+    ])
   })
 
   scenario("stops once the retry allowance is spent", function* (s) {

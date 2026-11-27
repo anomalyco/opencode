@@ -1,6 +1,7 @@
 import "./product-page.css"
 import { Meta, Title } from "@solidjs/meta"
-import { createAsync, useNavigate } from "@solidjs/router"
+import { useNavigate } from "@solidjs/router"
+import { pageData } from "~/lib/page-data"
 import { For, lazy, onCleanup, onMount, Show, Suspense } from "solid-js"
 import { LocaleLinks } from "~/component/locale-links"
 import { ShareMeta } from "~/component/share-meta"
@@ -55,7 +56,8 @@ export function ProductPage(props: { slug: PageSlug }) {
   }
 
   // The left and right arrow keys step through the products, unless focus is somewhere that
-  // uses them itself (fields, tabs, the carousel, open menus).
+  // uses them itself (fields, tabs, the carousel, open menus). On a static page,
+  // src/client/entry.ts.
   onMount(() => {
     const step = (event: KeyboardEvent) => {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
@@ -77,7 +79,7 @@ export function ProductPage(props: { slug: PageSlug }) {
   useCardShrink(() => props.slug)
 
   // The newest three entries with notes in this product's areas, then a link to the changelog with that filter.
-  const data = createAsync(async () => {
+  const data = pageData(async () => {
     const filter = areas()
     return filter ? productChangelog(filter) : undefined
   })

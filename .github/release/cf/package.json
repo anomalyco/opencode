@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "The pinned cf CLI that deploy-site.sh runs; npm ci --ignore-scripts installs exactly package-lock.json.",
+  "dependencies": {
+    "cf": "1.0.0-beta.12"
+  }
+}

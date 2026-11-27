@@ -19,7 +19,7 @@ import {
   type ThemeColor,
 } from "./v1-migrate.js"
 
-// Temporary V1 migration for the "new-designs" experiment. It lays V1 colors out on the opencode2 steps and
+// Temporary V1 migration for the "new-designs" experiment. It lays V1 colors out on the opencode theme's steps and
 // replaces migrateV1 once the experiment ships.
 export function migrateV1NewDesigns(theme: ThemeV1Json): ThemeDocument {
   const light = resolveV1(theme, "light")
@@ -42,7 +42,7 @@ export function migrateV1NewDesigns(theme: ThemeV1Json): ThemeDocument {
   }
 }
 
-// Light dialogs sit a step below the page like opencode2's, so rows can hover above them.
+// Light dialogs sit a step below the page like the opencode theme's, so rows can hover above them.
 const lightDialog = {
   background: {
     base: "$hue.neutral.800",
@@ -62,7 +62,7 @@ function lightOverrides(definition: ThemeDefinition, theme: Theme): ModeDefiniti
   }
 }
 
-// Mirrors the opencode2 token layout: text at 100/200/300, the page at 900, raised surfaces at 700/600/500,
+// Mirrors the opencode theme's token layout: text at 100/200/300, the page at 900, raised surfaces at 700/600/500,
 // and each V1 color anchored at 400 with quieter steps around it.
 function migrateMode(theme: Theme, mode: Mode): ThemeDefinition {
   const color = (key: ThemeColor) => hex(theme[key])
@@ -140,7 +140,7 @@ function migrateMode(theme: Theme, mode: Mode): ThemeDefinition {
   })
 }
 
-// Step profiles measured from the opencode2 theme. Only lightness and chroma are taken from it; hues and
+// Step profiles measured from the opencode theme. Only lightness and chroma are taken from it; hues and
 // anchors always come from the V1 theme being migrated.
 const profiles = {
   dark: {
