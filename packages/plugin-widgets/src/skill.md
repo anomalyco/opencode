@@ -88,7 +88,7 @@ function view(state, data) {
 **Live API** (`async function main(data)`; `Math.random()` allowed; handlers get only the value and run between your
 awaits): `widget.render(node)` · `widget.draw(key, g)` · `await widget.frame()` → `{ t, dt, width, height, scale,
 pointer, dark }` · `await widget.sleep(ms)` · `widget.now()` (pauses don't count) · `widget.on("key" | "focus" |
-"fullscreen" | "capture" | "resumed", fn)` → unsubscribe · `widget.keys` (held codes) · `widget.pointer` ·
+"fullscreen" | "capture" | "resumed" | "storage", fn)` → unsubscribe · `widget.keys` (held codes) · `widget.pointer` ·
 `await widget.fetch(url, init)` · `widget.submit(v)` / `dismiss()` / `send(v, { wake })` ·
 `widget.capturePointer()` / `releasePointer()`. After `main` returns, the view's handlers keep running. Ask for frames
 only while something moves; render only when the view (or a canvas's `values`) changes.

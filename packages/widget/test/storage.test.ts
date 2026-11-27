@@ -196,3 +196,68 @@ test("values that aren't JSON text read as strings, and a delete reads as undefi
   )
   await widget.stop()
 })
+
+test("the weight tracker's chart follows the history, live changes, pointer inspection and the range switch", async () => {
+  const source = await Bun.file(new URL("./fixtures/weight-tracker.js", import.meta.url)).text()
+  const day = (ago: number) => new Date(Date.now() - ago * 86400000).toISOString()
+  const entry = (ago: number, value: object) => ({
+    key: "entry:" + day(ago) + ":" + Object.keys(value)[0],
+    value: JSON.stringify({ at: day(ago), ...value }),
+  })
+  // The real clock: a render and a draw per change, past the post rate's burst, wait for its tokens.
+  const widget = LiveWidget.start(
+    program(source, "live"),
+    { title: "Tracker" },
+    {
+      ...LIVE,
+      storage: {
+        entries: [entry(2, { kg: 80 }), entry(2, { kcal: 1800 }), entry(1, { kg: 79.6 }), entry(1, { kcal: 2100 })],
+      },
+    },
+  )
+  const size = { t: 0, dt: 1 / 60, width: 360, height: 400, scale: 2, pointer: null, dark: false }
+  await widget.when((current) => current.frameRequested)
+  widget.frame(size)
+  const chart = () => [...widget.drawings.values()][0] ?? []
+  const kinds = () => chart().map((command) => command[0])
+  const summary = () => {
+    const node = children(widget)[1]
+    return node?.type === "text" ? node.text : undefined
+  }
+  const caption = () => {
+    const node = children(widget)[4]
+    return node?.type === "text" ? node.text : undefined
+  }
+  await widget.when(() => kinds().includes("path"))
+  // Two days with calories as bars, a weight line through two points, seven day labels in a week.
+  expect(kinds().filter((kind) => kind === "rrect").length).toBe(2)
+  expect(kinds().filter((kind) => kind === "circle").length).toBe(2)
+  expect(summary()).toBe("Today: 0 kcal · 79.6 kg · 4 entries")
+
+  // A meal logged on another device arrives through on("storage"): the summary and the bars follow.
+  widget.storage("entry:" + day(0) + ":phone", JSON.stringify({ at: day(0), kcal: 600 }))
+  await widget.when(() => summary() === "Today: 600 kcal · 79.6 kg · 5 entries")
+  expect(kinds().filter((kind) => kind === "rrect").length).toBe(3)
+
+  // Tap the last day, then drag to the one before: the caption shows the day under the pointer.
+  const id = (children(widget)[3] as { id: string }).id
+  const pointer = (kind: "down" | "move" | "up", x: number) =>
+    widget.event({ id, type: "pointer", value: { kind, x, y: 100, width: 360, height: 200 } })
+  pointer("down", 300)
+  await widget.when(() => caption()?.endsWith(": 600 kcal") === true)
+  pointer("move", 250)
+  await widget.when(() => caption()?.endsWith(": 2100 kcal · 79.6 kg") === true)
+  pointer("up", 250)
+
+  // Month: thirty days, every fifth labelled, and the pick cleared.
+  const week = chart().filter((command) => command[0] === "text").length
+  const find = (node: Node, label: string): Node | undefined =>
+    "label" in node && node.label === label
+      ? node
+      : ("children" in node ? (node.children as Node[]) : []).map((child) => find(child, label)).find(Boolean)
+  const month = widget.view && find(widget.view, "Month")
+  widget.event({ id: (month as { id: string }).id, type: "press" })
+  await widget.when(() => caption() === "Tap or drag the chart to see a day")
+  expect(chart().filter((command) => command[0] === "text").length).toBe(week - 7 + 6)
+  await widget.stop()
+})
