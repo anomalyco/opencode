@@ -39,3 +39,53 @@ export function fileWatchDirs(file: string) {
   }
   return dirs
 }
+
+/**
+ * Watch a file for changes, following it if it is a symlink. The symlink's directory is always watched.
+ * Whenever either directory reports an event the target is resolved again, so a link created or repointed
+ * while running moves the second watcher to the new target's directory.
+ */
+export function watchFile(file: string, listener: () => void) {
+  const watchers = new Map<string, ReturnType<typeof safeWatch>>()
+  let closed = false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const settle = {
+    refresh: () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => sync(), 100)
+      timer.unref?.()
+    },
+  }
+  const sync = () => {
+    if (closed) return
+    const wanted = new Set(fileWatchDirs(file))
+    for (const [dir, watcher] of watchers) {
+      if (wanted.has(dir)) continue
+      watcher?.close()
+      watchers.delete(dir)
+    }
+    for (const dir of wanted) {
+      if (watchers.has(dir)) continue
+      watchers.set(
+        dir,
+        safeWatch(dir, () => {
+          sync()
+          listener()
+          // Replacing a link is a remove plus a create and can be reported once, before the new link exists.
+          // Resolve again shortly after so the new target is still picked up.
+          settle.refresh()
+        }),
+      )
+    }
+  }
+  sync()
+  return {
+    dirs: () => [...watchers.keys()],
+    close: () => {
+      closed = true
+      clearTimeout(timer)
+      watchers.forEach((watcher) => watcher?.close())
+      watchers.clear()
+    },
+  }
+}
