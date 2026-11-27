@@ -399,10 +399,10 @@ export const content = {
       },
       products: {
         "opencode-console": {
-          name: "OpenCode Console",
-          long: "OpenCode Console 是一款 Web 应用，开发者和团队可以在这里为 OpenCode 及其他编程 agent 购买和管理 AI 模型访问权限。它为前沿模型和开放权重模型提供按量付费的推理服务，按请求从预付额度中扣费，同时提供 OpenCode Go 订阅。团队可以获得带有成员、管理员和所有者角色的工作区，工作区级和单个用户的支出上限，通过 Okta、Microsoft Entra ID 或 Google Workspace 进行单点登录，以及 SCIM。Console 支持 30 多家提供商，团队可以接入已有的提供商账号，其自有推理服务是可选的。访问地址为 opencode.ai/console。",
+          name: "OpenCode 控制台",
+          long: "OpenCode 控制台是一款 Web 应用，开发者和团队可以在这里为 OpenCode 及其他编程 agent 购买和管理 AI 模型访问权限。它为前沿模型和开放权重模型提供按量付费的推理服务，按请求从预付额度中扣费，同时提供 OpenCode Go 订阅。团队可以获得带有成员、管理员和所有者角色的工作区，工作区级和单个用户的支出上限，通过 Okta、Microsoft Entra ID 或 Google Workspace 进行单点登录，以及 SCIM。控制台支持 30 多家提供商，团队可以接入已有的提供商账号，其自有推理服务是可选的。访问地址为 opencode.ai/console。",
           short:
-            "OpenCode Console 是 Anomaly 的 Web 应用，提供按量付费的 AI 模型访问、OpenCode Go 订阅，以及预算和单点登录等团队管控功能。",
+            "OpenCode 控制台是 Anomaly 的 Web 应用，提供按量付费的 AI 模型访问、OpenCode Go 订阅，以及预算和单点登录等团队管控功能。",
         },
         "opencode-go": {
           name: "OpenCode Go",

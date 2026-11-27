@@ -10,6 +10,7 @@ export const dict = {
   "nav.x": "X",
   "nav.enterprise": "企业版",
   "nav.zen": "OpenCode Models",
+  "nav.console": "控制台",
   "nav.login": "登录",
   "nav.free": "下载",
   "nav.home": "首页",
@@ -403,7 +404,7 @@ export const dict = {
   "site.search.group.Actions": "操作",
   "site.heading.copyLink": "复制本节链接",
   "site.download.thisComputer": "这台电脑",
-  "site.nav.console": "Console",
+  "site.nav.console": "控制台",
   "site.nav.models": "模型",
   "site.nav.subscriptions": "订阅",
   "site.footer.community": "社区",
@@ -485,7 +486,7 @@ export const dict = {
   "home.console.body":
     "前沿模型和开放权重模型的高质量推理，低价、额度充裕的订阅，以及帮助团队管理支出、高效协作的工具。",
   "home.console.cta": "免费开始",
-  "home.console.slimHeadline": "Console 提供用 AI 所需的一切",
+  "home.console.slimHeadline": "控制台拥有使用 AI 所需的一切",
   "home.console.sales": "联系销售",
   "home.faq.a1.body":
     "OpenCode 是一个开源编程 agent，帮助你用任意 AI 模型编写和运行代码。它提供桌面应用、终端界面、移动应用和 SDK。",
