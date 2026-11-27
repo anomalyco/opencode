@@ -350,6 +350,24 @@ it.effect("keeps a daemon that answers a ping after one lost reply", () =>
   }),
 )
 
+it.effect("does not start a daemon again for a minute after it failed to start", () =>
+  Effect.gen(function* () {
+    const { root } = yield* temporaryRuntime()
+    let spawns = 0
+    const daemon = yield* makeDaemonTransport(root, "daemon", () => {
+      spawns++
+      return Promise.reject(new Error("no opencode-pty binary"))
+    })
+
+    expect((yield* Effect.flip(daemon.request({ op: "list" }, true))).kind).toBe("spawn")
+    expect((yield* Effect.flip(daemon.request({ op: "list" }, true))).kind).toBe("spawn")
+    expect(spawns).toBe(1)
+    yield* TestClock.adjust("1 minute")
+    yield* Effect.flip(daemon.request({ op: "list" }, true))
+    expect(spawns).toBe(2)
+  }),
+)
+
 // Waits in real time for what a real socket delivers, while the test clock holds the transport's timeouts.
 function live(ready: () => boolean) {
   return TestClock.withLive(
