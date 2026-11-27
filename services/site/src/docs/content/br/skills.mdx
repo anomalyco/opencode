@@ -1,0 +1,246 @@
+---
+title: "Skills"
+description: "Escreva arquivos SKILL.md que dão aos agentes do OpenCode instruções reutilizáveis para uma tarefa, carregadas só quando a tarefa precisa delas."
+---
+
+Crie uma skill para dar a um agente instruções reutilizáveis para uma tarefa específica. Coloque um arquivo `SKILL.md` em `.opencode/skills/<skill-id>` e descreva quando usá-la em `description`.
+
+```markdown title=".opencode/skills/git-release/SKILL.md"
+---
+name: Git Release
+description: Prepare release notes, version bumps, and GitHub releases
+---
+
+## Workflow
+
+1. Read `references/release-policy.md`.
+2. Summarize merged changes since the previous tag.
+3. Propose the version bump before changing files.
+4. Run `scripts/changelog.ts` only after the user approves the version.
+```
+
+O OpenCode apresenta a skill ao modelo quando ela é relevante. Assim, o agente pode carregar as instruções com a ferramenta `skill`, sem incluir todas as skills em todos os prompts.
+
+## Criar
+
+Mantenha scripts, referências e modelos relacionados ao lado de `SKILL.md`:
+
+```text
+.opencode/skills/
+└── git-release/
+    ├── SKILL.md
+    ├── scripts/
+    │   └── changelog.ts
+    └── references/
+        └── release-policy.md
+```
+
+Os caminhos na skill são relativos ao diretório que contém `SKILL.md`. Prefira esse formato porque ele dá aos arquivos de apoio um diretório base próprio.
+
+## Descoberta
+
+O OpenCode busca automaticamente nestes locais:
+
+| Escopo                 | Fontes                                |
+| --------------------- | -------------------------------------- |
+| Global                | `~/.config/opencode/skills`            |
+| Compatibilidade global  | `~/.claude/skills`, `~/.agents/skills` |
+| Projeto               | `.opencode/skills`                     |
+| Compatibilidade de projeto | `.claude/skills`, `.agents/skills`     |
+
+Para fontes de projeto, o OpenCode busca do diretório atual até a raiz do projeto e inclui diretórios correspondentes em todos os níveis.
+
+Cada fonte pode conter qualquer uma das formas:
+
+```text
+skills/
+├── review.md
+└── git-release/
+    └── SKILL.md
+```
+
+- Arquivos Markdown precisam ficar na raiz da fonte, como `skills/review.md`.
+- Arquivos chamados exatamente `SKILL.md` podem ficar aninhados em diretórios de agrupamento, como `skills/git-release/SKILL.md` ou `skills/teams/release/SKILL.md`.
+- Um diretório que contém `SKILL.md` é uma skill. O OpenCode não busca mais skills dentro dele.
+- Arquivos e diretórios ocultos e `node_modules` são ignorados.
+- A busca vai até o sexto nível de subdiretórios a partir da raiz da fonte.
+
+## Fontes
+
+Adicione mais diretórios locais ou catálogos HTTP com o array `skills` em qualquer `opencode.json` ou `opencode.jsonc`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": [
+    "./team-skills",
+    "~/shared/opencode-skills",
+    "/opt/company-skills",
+    "https://example.com/opencode/skills/",
+  ],
+}
+```
+
+| Valor | Resolução |
+| ----- | ---------- |
+| Caminho relativo | A partir do diretório de trabalho ativo do OpenCode, não do arquivo de configuração |
+| Caminho `~/` | A partir do diretório pessoal do usuário atual |
+| Caminho absoluto | Usado como escrito |
+| URL `http://` ou `https://` | Carregada como catálogo HTTP |
+
+Todo arquivo de configuração descoberto contribui com as entradas dele. Os arrays `skills` são combinados, não substituídos.
+
+Um espaço de trabalho conectado ao [OpenCode Console](/console) também pode compartilhar skills.
+
+## Catálogos
+
+Um catálogo HTTP é uma URL base com um arquivo `index.json`:
+
+```json title="index.json"
+{
+  "skills": [
+    {
+      "name": "git-release",
+      "version": "3",
+      "files": ["git-release.md", "references/release-policy.md"]
+    }
+  ]
+}
+```
+
+Para essa entrada, o OpenCode baixa cada arquivo de `<base-url>/git-release/<file>`.
+
+| Regra | Requisito |
+| ---- | ----------- |
+| Caminhos | Precisam ser seguros, relativos e da mesma origem |
+| Arquivo de entrada | Inclua `SKILL.md` ou `<name>.md`, como `git-release.md` |
+| Atualizações | Incremente `version` quando os arquivos mudarem, para que o OpenCode atualize o cache |
+
+Cada diretório de skill baixado vira uma raiz de fonte nomeada como a entrada, então `git-release.md` e `SKILL.md` têm o ID `git-release`.
+
+## Frontmatter
+
+Use frontmatter para nomear a skill e controlar onde ela aparece:
+
+```markdown title="SKILL.md"
+---
+name: Git Release
+description: Prepare a repository release
+metadata:
+  opencode/autoinvoke: false
+---
+
+Prepare the changelog, version bump, tag, and release notes.
+```
+
+| Campo                          | Comportamento                                                          |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `name`                         | Nome de exibição; o padrão é o ID derivado do caminho                     |
+| `description`                  | Resumo usado para mostrar a skill ao modelo                       |
+| `metadata.opencode/autoinvoke` | Defina como `false` para omitir a skill da lista disponível do modelo  |
+| `disable-model-invocation`     | Defina como `true` para o mesmo efeito de `opencode/autoinvoke: false` |
+
+Todo frontmatter é opcional em tempo de execução. Adicione uma `description` clara quando o modelo deve descobrir a skill; skills sem uma não são anunciadas.
+
+`opencode/autoinvoke: false` só oculta a skill da lista disponível do modelo. A skill continua registrada e ainda pode ser carregada explicitamente pelo ID. Quando `disable-model-invocation` e `opencode/autoinvoke` estão definidos, `opencode/autoinvoke` vence. A V2 aceita campos de portabilidade como `license` e `compatibility`, mas não os interpreta.
+
+## IDs
+
+O caminho do arquivo determina o ID da skill. O `name` do frontmatter é apenas um rótulo de exibição.
+
+| Arquivo                              | ID            |
+| --------------------------------- | ------------- |
+| `<source>/git-release.md`         | `git-release` |
+| `<source>/git-release/SKILL.md`   | `git-release` |
+| `<source>/teams/release/SKILL.md` | `release`     |
+
+Os IDs são exatos e diferenciam maiúsculas de minúsculas. Para skills portáveis, use um ID único em kebab-case minúsculo de 1 a 64 caracteres e mantenha-o alinhado com o nome do diretório:
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+A V2 atualmente não impõe esse padrão, a recomendação de 1 a 64 caracteres, uma correspondência entre `name` e o diretório, nem um comprimento máximo de descrição.
+
+## Precedência
+
+As skills são selecionadas por ID. Se duas fontes definem `git-release`, a fonte registrada depois fornece a skill que o OpenCode carrega:
+
+```text
+~/.config/opencode/skills/git-release/SKILL.md  ← lower precedence
+.opencode/skills/git-release/SKILL.md           ← loaded
+```
+
+As fontes são registradas da precedência mais baixa para a mais alta:
+
+1. Skills integradas
+2. `.claude/skills`, primeiro global e depois do ancestral mais distante em direção ao diretório atual
+3. `.agents/skills`, primeiro global e depois do ancestral mais distante em direção ao diretório atual
+4. `~/.config/opencode/skills`
+5. `.opencode/skills` do projeto, da raiz do projeto em direção ao diretório atual
+6. Entradas explícitas de configuração `skills`, na prioridade de configuração e na ordem do array
+
+Evite IDs duplicados, a menos que você queira substituir uma skill anterior.
+
+## Carregamento
+
+Em cada etapa do modelo, o OpenCode lista as skills permitidas que têm descrição e não definem `opencode/autoinvoke` como `false`. A lista inclui apenas o ID, o nome e a descrição, não o corpo Markdown completo.
+
+O modelo carrega uma skill chamando a ferramenta `skill` com o ID exato dela:
+
+```json title="skill tool input"
+{
+  "id": "git-release"
+}
+```
+
+O OpenCode então:
+
+1. Seleciona a definição atual para esse ID.
+2. Verifica a permissão `skill` do agente selecionado.
+3. Adiciona o corpo Markdown, sem frontmatter, à conversa.
+4. Fornece o diretório base da skill e uma amostra de até dez caminhos de arquivos de apoio.
+
+Para carregar uma skill você mesmo, mencione-a no seu prompt como `@skill-id`.
+
+O conteúdo dos arquivos de apoio não é carregado automaticamente. O agente só os lê quando a skill pede. A amostra de arquivos fica disponível para skills em diretórios com `SKILL.md`. Skills definidas em arquivos Markdown avulsos não recebem uma lista de arquivos vizinhos.
+
+## Permissões
+
+Use a ação `skill` e o ID da skill como recurso. As regras rodam em ordem, e a última regra correspondente vence:
+
+```jsonc title="opencode.jsonc"
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "allow" },
+    { "action": "skill", "resource": "internal-*", "effect": "deny" },
+    { "action": "skill", "resource": "experimental-*", "effect": "ask" },
+  ],
+}
+```
+
+| Efeito | Comportamento |
+| ------ | -------- |
+| `allow` | Anuncia e carrega skills correspondentes sem aprovação |
+| `ask` | Anuncia skills correspondentes e pergunta antes de carregá-las |
+| `deny` | Oculta skills correspondentes do modelo e rejeita o carregamento |
+
+Coloque as mesmas regras em `agents.<id>.permissions` para aplicá-las apenas a um agente.
+
+## Solução de problemas
+
+Por exemplo, o ID desta skill é `release`, não o nome do frontmatter dela, `Git Release`:
+
+```text
+.opencode/skills/release/SKILL.md
+                      └─ ID: release
+```
+
+Se uma skill estiver ausente ou carregar o conteúdo errado:
+
+1. Confirme que o arquivo é um `*.md` na raiz ou um arquivo aninhado chamado exatamente `SKILL.md`.
+2. Verifique o ID derivado do caminho, que diferencia maiúsculas de minúsculas, em vez do `name` do frontmatter.
+3. Adicione uma `description` se o modelo deve descobrir a skill.
+4. Verifique `opencode/autoinvoke` e as permissões `skill` do agente selecionado.
+5. Procure uma fonte posterior que defina o mesmo ID.
+6. Para catálogos HTTP, verifique o `index.json`, os caminhos de arquivo da mesma origem e uma `version` alterada.

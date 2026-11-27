@@ -1,0 +1,214 @@
+---
+title: "Aquecimento"
+description: "Envie requisições periódicas que impedem o cache de prompt do provedor de uma sessão de expirar enquanto você pausa entre prompts."
+---
+
+O aquecimento de sessão envia requisições periódicas ao modelo para preservar o cache de prompts do provedor ou outros dados
+de estado de curta duração enquanto você faz uma pausa entre prompts. Ele vem
+desativado por padrão.
+
+Ative o aquecimento em qualquer [arquivo de configuração do OpenCode](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+Com essa configuração, o OpenCode aquece uma sessão que esteve ativa recentemente pouco antes de o cache de prompts expirar:
+quando passa 90% do [`cache.ttl`](/models#cache-lifetime) do modelo, ou a cada quatro minutos se o modelo não definir esse valor.
+O aquecimento continua por até 30 minutos após a última requisição que não foi de aquecimento.
+
+## Opções
+
+Use a forma de objeto para mudar o prompt de aquecimento, o intervalo de ociosidade ou a janela
+ativa:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| Campo | Padrão | Finalidade |
+| --- | --- | --- |
+| `prompt` | Instrução de keep-alive | Acrescentada como mensagem transitória do usuário em cada requisição de aquecimento. O padrão pede ao modelo que não faça trabalho, não use ferramentas e responda com `OK`. |
+| `interval` | `"auto"` | Tempo sem atividade antes da próxima requisição de aquecimento. `"auto"` usa 90% do `cache.ttl` do modelo, ou quatro minutos se não houver esse valor. |
+| `duration` | `"30 minutes"` | Janela de aquecimento medida desde a última requisição de modelo que não foi de aquecimento. |
+
+Campos omitidos do objeto mantêm os padrões. Por exemplo, isto muda apenas o
+intervalo:
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## Intervalo automático
+
+Por padrão, `interval` é `"auto"`, que aquece logo antes de o cache de prompt de cada modelo
+expirar. O OpenCode usa 90% da configuração
+[`cache.ttl`](/models#cache-lifetime) do modelo, então um cache de `"5m"` é aquecido
+a cada 4,5 minutos. Modelos sem `cache.ttl` são aquecidos a cada quatro minutos.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": { "duration": "2 hours" },
+  "providers": {
+    "anthropic": { "settings": { "cache": { "ttl": "1h" } } },
+  },
+}
+```
+
+Um cache que dura mais que `duration`, como `"1h"` com o padrão de 30 minutos,
+não é aquecido, já que sobrevive à janela de aquecimento de qualquer forma. O OpenCode
+registra isso uma vez por sessão. Aumente `duration` para aquecê-lo.
+
+## Por provedor e modelo
+
+Defina `settings.cache.warming` em um provedor ou modelo para aquecer apenas as sessões dele,
+ou para dar a elas um tempo próprio. Aceita os mesmos valores do `warming` de nível superior,
+exceto `prompt`, e o substitui. Uma configuração de modelo substitui a do provedor.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "anthropic": {
+      "settings": { "cache": { "ttl": "5m", "warming": true } },
+      "models": {
+        "claude-haiku-5-5": { "settings": { "cache": { "warming": false } } },
+      },
+    },
+  },
+}
+```
+
+Aqui as sessões da Anthropic são aquecidas a cada 4,5 minutos, exceto no Claude Haiku
+5.5, e outros provedores não são aquecidos. Campos omitidos da forma de objeto vêm
+do `warming` de nível superior e depois dos padrões. Uma configuração inválida registra um
+aviso e recorre ao `warming` de nível superior.
+
+## Durações
+
+`interval` e `duration` aceitam strings de duração. As duas precisam resultar em valores finitos
+maiores que zero, e `interval` precisa ser menor que `duration`;
+caso contrário, o OpenCode pula o aquecimento e registra um aviso.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## Quando o aquecimento ocorre
+
+O aquecimento começa depois de uma requisição de modelo que não foi de aquecimento em uma sessão de nível superior.
+Sessões de subagente não são aquecidas. Cada intervalo conta a partir de quando a última
+requisição ou requisição de aquecimento foi enviada, não de quando a resposta terminou,
+porque a vida útil do cache de um provedor começa quando a requisição chega a ele. Uma
+requisição de aquecimento não estende a janela ativa.
+
+```text
+00:00  normal model request sent
+00:01  response finishes
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+Qualquer atividade nova do modelo que não seja de aquecimento, incluindo compactação, reinicia as duas contagens.
+Um intervalo explícito igual ou maior que a duração é rejeitado com um
+aviso, e um intervalo `"auto"` nesse tamanho pula o aquecimento porque o cache
+sobrevive à janela.
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+O OpenCode nunca envia uma requisição de aquecimento enquanto uma requisição de modelo, incluindo uma
+compactação, está rodando. Se uma ainda estiver rodando quando o intervalo chegar,
+o aquecimento espera ela terminar e então envia na hora, desde que o cache
+dessa requisição não tenha expirado. Se tiver, o aquecimento para até a próxima
+requisição normal.
+
+```text
+00:00  normal model request sent
+00:04  interval due; request still running
+00:04:30  response finishes; warming request
+00:08:30  warming request
+```
+
+## Requisições
+
+Uma requisição de aquecimento usa o modelo, o agente, as instruções e o
+contexto de conversa atuais da sessão. O OpenCode acrescenta o prompt configurado de forma transitória,
+faz uma chamada ao modelo e descarta a resposta.
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+A requisição não admite entrada, não adiciona mensagens ao histórico nem altera o estado durável
+da sessão. O OpenCode não dispara chamadas de ferramentas locais nem continua um loop de ferramentas; o prompt padrão
+também diz ao modelo para não usar ferramentas.
+
+## Falhas
+
+O OpenCode registra as falhas de aquecimento sem interromper nem alterar a sessão. Ele só tenta de novo no próximo intervalo,
+sem reiniciar a contagem da janela ativa.
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+Se uma requisição de aquecimento ler menos do cache do que gravar, isso conta como um cache miss. O aquecimento da sessão
+fica suspenso até a próxima requisição que não seja de aquecimento. Se o provedor não informar o uso do cache,
+o OpenCode não considera a requisição um cache miss.
+
+```text
+00:04  warming request misses the cache; warming stops
+00:10  normal model request; warming resumes
+00:14  warming request
+```
+
+## Custos
+
+As requisições de aquecimento são requisições reais ao provedor. Elas podem consumir tokens, gerar
+custos, contar para os limites de requisições e falhar como outras requisições ao modelo.
+
+- Intervalos mais curtos aumentam o volume de requisições.
+- Durações mais longas permitem mais requisições de aquecimento.
+- Ative o aquecimento apenas quando o benefício do lado do provedor valer o uso extra.
+
+Por exemplo, em um modelo sem `cache.ttl`, os padrões permitem até sete
+tentativas de aquecimento durante uma janela ininterrupta de 30 minutos: nos minutos 4, 8,
+12, 16, 20, 24 e 28.
+
+## Desativar
+
+Defina `warming` como `false` para desativá-lo explicitamente. Omitir o campo também
+deixa o aquecimento desativado.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

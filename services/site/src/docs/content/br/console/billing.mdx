@@ -1,0 +1,95 @@
+---
+title: "Cobrança"
+description: "Adicione créditos, configure a recarga automática, gerencie formas de pagamento e baixe faturas no OpenCode Console."
+---
+
+O Console é grátis para equipes de qualquer tamanho, sem cobrança por usuário. Você paga só pelo uso, com créditos pré-pagos que cobrem
+todo o espaço de trabalho. Proprietários e admins gerenciam a cobrança em **Settings › Billing**.
+
+O uso pelos [seus próprios provedores](/console/providers) é cobrado pelo provedor, não pelo Console.
+
+## Adicionar uma forma de pagamento
+
+1. Abra **Settings › Billing**.
+2. Em **Payment methods**, clique em **Add**.
+3. Escolha uma forma de pagamento e conclua a configuração na Stripe.
+
+Formas de pagamento aceitas:
+
+- Cartão
+- Link
+- Alipay
+- UPI
+- WeChat Pay
+
+Use **⋯ › Make default** para escolher a forma de pagamento das cobranças automáticas. Remover uma forma de pagamento pode interromper a recarga automática e as
+renovações do Go que a usam.
+
+## Adicionar créditos
+
+1. Em **Credits**, clique em **Add credits**.
+2. Escolha $10, $50 ou $100, ou selecione **Other** e informe um valor.
+3. Escolha uma forma de pagamento e clique em **Confirm and pay**.
+
+A taxa de processamento de 4,6% + $0.31 é cobrada à parte. Assim, você paga $52.61 numa compra de $50, e os $50 entram integralmente no
+saldo.
+
+## Recarga automática
+
+A recarga automática compra créditos quando o saldo fica baixo.
+
+1. Em **Auto-recharge**, clique em **Add rule**.
+2. Defina o saldo que dispara uma cobrança e o valor a adicionar.
+3. Clique em **Save**.
+
+O valor da recarga automática, incluindo a taxa de processamento, é cobrado pela forma de pagamento padrão. Se uma cobrança falhar, a recarga automática
+fica desativada até você configurá-la de novo.
+
+## Conferir seu saldo
+
+O cartão **Billing** em **Activity** mostra o saldo para proprietários e admins e abre **Settings › Billing**.
+
+O botão **Billing** no cabeçalho do espaço de trabalho, ou a tecla `B`, abre um painel com os limites do Go, os créditos e o uso em tempo real.
+Proprietários e admins veem o saldo, o uso e a recarga automática do espaço de trabalho; os membros veem apenas o próprio uso e os próprios limites.
+
+## Quando os créditos acabam
+
+As requisições pagas falham com HTTP `402` quando o saldo chega a zero. O saldo nunca fica negativo.
+
+```text
+Upstream request failed: Insufficient account funds
+```
+
+## Faturas
+
+Cada pagamento aparece em **Invoices** com o status e um link para **Download invoice** ou **View receipt**.
+
+| Entrada            | Criada por                               |
+| ---------------- | ---------------------------------------- |
+| Recarga de saldo   | Adição de créditos                           |
+| Recarga automática | Recarga automática                            |
+| Assinatura Go  | Assinatura do Go, Go Plus ou Go Teams  |
+| Renovação do Go       | Renovação mensal do Go                       |
+| Upgrade para Go Plus  | Mudança do Go para o Go Plus                  |
+| Upgrade para Go Teams | Mudança do Go ou Go Plus para o Go Teams      |
+| Membro do Go Teams  | Entrada de um membro em um espaço de trabalho no Go Teams |
+| Uso mensal    | Cobrança por fatura                         |
+
+## Formulários fiscais
+
+Clientes nos EUA podem baixar o [W-9 da Anomaly Innovations Inc.](/assets/anomaly-w9.pdf).
+
+## Cobrança por fatura
+
+Com um contrato de crédito, o espaço de trabalho pode receber uma fatura mensal em vez de comprar créditos antecipadamente. Fale com o suporte para configurar essa modalidade.
+
+- O uso consome um limite de crédito em vez de um saldo pré-pago.
+- A fatura de cada mês é emitida no dia 1 (UTC) e vence 14 dias depois.
+- Faturas em aberto têm um botão **Pay now**.
+- As requisições falham com HTTP `402` quando o limite de crédito é atingido ou uma fatura está vencida.
+
+## Go
+
+As assinaturas do [OpenCode Go](/console/go) usam as mesmas formas de pagamento e aparecem na mesma lista de faturas. Você também pode
+[pagar o Go com crédito](/console/go#pay-with-credit). Ative **Extra Usage** na página **Go** para pagar com
+créditos quando um limite do Go for atingido.

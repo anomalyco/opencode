@@ -1,0 +1,143 @@
+---
+title: "Web"
+description: "Execute o OpenCode no navegador."
+---
+
+O mesmo servidor do OpenCode disponibiliza a TUI e a interface web. A interface web vem ativada por padrão e é protegida por senha.
+
+## Acesso
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+
+  █▀▀▀▀▀█ ...
+```
+
+Ao abrir o link no navegador, você entra com um cookie de sessão e a interface web é carregada. Para conectar o app do OpenCode da
+mesma forma, leia o QR code pelo app ou cole o link no campo de endereço do servidor. As sessões duram 30 dias. Alterar a senha do
+servidor encerra todas as sessões autenticadas.
+
+### Por SSH
+
+Quando o servidor escuta apenas em localhost, configure o encaminhamento da porta a partir da sua máquina e abra nela o link exibido:
+
+```bash
+$ ssh -L 49374:127.0.0.1:49374 my-server
+```
+
+Por padrão, o servidor escuta apenas em localhost. A porta depende da
+plataforma:
+
+| Plataforma              | Porta padrão |
+| --------------------- | ------------ |
+| macOS, Linux e WSL | 49374        |
+| Windows               | 28894        |
+
+O Windows reserva portas a partir de 49152, e a rede espelhada do WSL reserva
+outro bloco abaixo disso. Imprima o endereço atual com
+`opencode service status`:
+
+```bash
+$ opencode service status
+http://127.0.0.1:49374
+```
+
+Você pode mudar esta configuração com o comando `opencode service`.
+
+### Acesso remoto
+
+Para se conectar de qualquer lugar, faça o pareamento por um endereço remoto do
+[OpenTunnel](https://github.com/anomalyco/opentunnel):
+
+```bash
+$ opencode pair --remote
+```
+
+Na primeira vez que ativa o acesso remoto, ele pergunta antes de continuar:
+
+```text
+▲  This will expose your OpenCode server to the internet.
+│  Traffic is end-to-end encrypted, and access requires your server password.
+│  To pair locally instead, run `opencode pair` without the --remote flag.
+│
+◆  Expose your server to the internet?
+│  ● Yes / ○ No
+```
+
+Sem um terminal interativo, o comando falha a menos que você passe `--yes` para
+aceitar. Depois de aceito, execuções posteriores pulam o prompt, mesmo depois de o acesso remoto ter sido
+desativado com `opencode service set remote false`.
+
+## Configurar
+
+Defina qualquer opção com `opencode service set`:
+
+```bash
+# Listen on every network interface
+$ opencode service set hostname 0.0.0.0
+
+# Use a fixed port instead of the channel default
+$ opencode service set port 49374
+
+# Replace the generated password
+$ opencode service set password "a-long-secret"
+
+# Allow a web client served from another origin
+$ opencode service set cors https://app.example.com,https://other.example.com
+
+# Pass an environment variable to the server process
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+Alterar uma configuração interrompe o servidor em segundo plano. Inicie-o de novo para aplicar a nova configuração:
+
+```bash
+$ opencode service start
+```
+
+## Standalone
+
+`opencode serve` roda o mesmo servidor em primeiro plano em vez de pelo
+serviço compartilhado em segundo plano.
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password <password>
+```
+
+Use-o quando quiser:
+
+- Rodar o OpenCode em um host compartilhado, sempre ativo ou remoto, e depois conectar clientes com
+  `opencode --server <url>`.
+- Controlar o hostname, a porta e as origens CORS de um único processo.
+- Rodar sob um supervisor como systemd, Docker ou outro ambiente que espere
+  um processo em primeiro plano.
+- Manter um servidor dedicado em vez do serviço compartilhado em segundo plano.
+
+Conecte um cliente a ele com `--server`:
+
+```bash
+$ opencode --server http://127.0.0.1:4096
+```
+
+### Autenticação
+
+Defina `OPENCODE_PASSWORD` para usar uma senha fixa em vez de uma gerada. A
+mesma variável fornece a senha para `opencode --server`.
+
+```bash
+$ OPENCODE_PASSWORD="a-long-secret" opencode serve --port 4096
+$ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
+```
+
+Outros clientes HTTP usam autenticação básica. O nome de usuário é sempre `opencode`, e apenas
+a senha pode ser alterada.
+
+```bash
+$ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
+```
