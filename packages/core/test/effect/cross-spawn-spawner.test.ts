@@ -477,6 +477,23 @@ describe("cross-spawn spawner", () => {
       }),
     )
 
+    // cmd has no `\"` escape: #64573, where `echo "hello world"` printed `\"hello world\"`.
+    fx.live(
+      "passes a cmd /c command line through with its quotes",
+      Effect.gen(function* () {
+        if (process.platform !== "win32") return
+
+        const run = (args: string[]) =>
+          ChildProcessSpawner.ChildProcessSpawner.use((svc) =>
+            svc.string(ChildProcess.make(process.env.COMSPEC ?? "cmd.exe", args)),
+          ).pipe(Effect.map((out) => out.trim().split(/\r?\n/)))
+        expect(yield* run(["/c", 'echo "hello world"& echo "C:\\a b"'])).toEqual(['"hello world"', '"C:\\a b"'])
+        expect(yield* run(["/c", 'if "a b"=="a b" echo same'])).toEqual(["same"])
+        // Separate arguments still reach cmd as separate words.
+        expect(yield* run(["/d", "/c", "echo", "two words", ""])).toEqual(['"two words" ""'])
+      }),
+    )
+
     fx.effect(
       "runs cmd scripts with spaces on Windows without shell",
       Effect.gen(function* () {

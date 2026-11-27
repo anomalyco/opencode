@@ -48,6 +48,11 @@ const killGroups = () =>
     }
   })
 
+// cmd.exe reads the rest of its command line as written and has no `\"` escape, so the usual argv quoting corrupts
+// every quote in a `/c` command. Arguments to cmd are passed verbatim, quoted only where cmd needs it.
+const isCmd = (file: string) => globalThis.process.platform === "win32" && /(?:^|[\\/])cmd(?:\.exe)?$/i.test(file)
+const cmdArgument = (arg: string) => (arg === "" || /\s/.test(arg) ? `"${arg}"` : arg)
+
 const unwrap = (value: string | Redacted.Redacted<string>): string =>
   Redacted.isRedacted(value) ? Redacted.value(value) : value
 
@@ -386,7 +391,13 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     Effect.callback<Spawned, PlatformError.PlatformError>((resume) => {
       const closed = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const exited = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
-      const proc = launch(file, command.args.map(unwrap), opts)
+      const proc = isCmd(file)
+        ? launch(
+            file,
+            command.args.map((arg) => cmdArgument(unwrap(arg))),
+            { ...opts, windowsVerbatimArguments: true },
+          )
+        : launch(file, command.args.map(unwrap), opts)
       let settle = () => {}
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
