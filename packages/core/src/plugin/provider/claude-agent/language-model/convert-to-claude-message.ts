@@ -24,7 +24,15 @@ export function content(prompt: LanguageModelV3Prompt): ContentBlock[] {
         continue
       }
       if (part.type === "file") {
-        blocks.push(media || index < last ? past(file(part)) : file(part))
+        const block = file(part)
+        if (media || index < last) {
+          blocks.push(past(block, part.filename))
+          continue
+        }
+        // An image block has no field for a name, and Claude Code would call the image "1.png".
+        if (block.type === "image" && part.filename)
+          blocks.push({ type: "text", text: `Attached image: ${part.filename}` })
+        blocks.push(block)
         continue
       }
       if (part.type === "tool-call") {
@@ -45,8 +53,9 @@ export function content(prompt: LanguageModelV3Prompt): ContentBlock[] {
 function file(part: LanguageModelV3FilePart): ContentBlock {
   const type = part.mediaType
   if (type === "application/pdf") {
-    if (part.data instanceof URL) return { type: "document", source: { type: "url", url: part.data.href } }
-    return { type: "document", source: { type: "base64", media_type: type, data: base64(part.data) } }
+    const title = part.filename ? { title: part.filename } : {}
+    if (part.data instanceof URL) return { type: "document", source: { type: "url", url: part.data.href }, ...title }
+    return { type: "document", source: { type: "base64", media_type: type, data: base64(part.data) }, ...title }
   }
   if (type === "image/png" || type === "image/jpeg" || type === "image/gif" || type === "image/webp") {
     if (part.data instanceof URL) return { type: "image", source: { type: "url", url: part.data.href } }
@@ -58,9 +67,10 @@ function file(part: LanguageModelV3FilePart): ContentBlock {
 // Claude Code treats an image block in a user message as one the user just pasted: it saves a copy and adds an
 // "[Image: source: ...]" line after the new prompt, so Claude takes an old image for a new attachment. An image inside a
 // document block reaches Claude as it is.
-function past(block: ContentBlock): ContentBlock {
+function past(block: ContentBlock, filename?: string): ContentBlock {
   if (block.type !== "image") return block
-  return { type: "document", source: { type: "content", content: [block] } }
+  const title = filename ? { title: filename } : {}
+  return { type: "document", source: { type: "content", content: [block] }, ...title }
 }
 
 function base64(data: string | Uint8Array) {
