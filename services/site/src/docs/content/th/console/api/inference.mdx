@@ -1,10 +1,10 @@
 ---
-title: "Inference API"
-description: "เรียกใช้โมเดลที่เข้ากันได้กับ OpenAI, Anthropic และ Gemini ผ่าน Console inference ด้วยเฮดเดอร์ตรวจสอบสิทธิ์เดียว"
+title: "API ประมวลผลโมเดล"
+description: "เรียกใช้โมเดลที่เข้ากันได้กับ OpenAI, Anthropic และ Gemini ผ่านบริการประมวลผลโมเดลของ Console ด้วยเฮดเดอร์ยืนยันตัวตนเดียวกัน"
 ---
 
-Console inference ให้บริการ API ที่เข้ากันได้กับ OpenAI, Anthropic และ Gemini จาก `https://opencode.ai/inference` ส่ง
-คำขอ `POST` แบบ JSON ไปยังเอนด์พอยต์ที่ตรงกับกลุ่ม API ที่โมเดลใช้
+บริการประมวลผลโมเดลของ Console มี API ที่เข้ากันได้กับ OpenAI, Anthropic และ Gemini ที่ `https://opencode.ai/inference`
+ให้ส่งคำขอ `POST` แบบ JSON ไปยังเอนด์พอยต์ของกลุ่ม API ที่โมเดลใช้
 
 ```bash
 curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \

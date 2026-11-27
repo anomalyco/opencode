@@ -24,7 +24,8 @@ anomalyco/opencode-console) ใช้แนวทางเดียวกัน�
 - คำย่อ: MCP, LSP, SDK, CLI, API, TUI, GUI, JSON, JSONC, YAML, HTTP, HTTPS, URL, URI, ZDR, SSO, SCIM, OIDC, SAML,
   OAuth, PKCE, ACP, RPC, IPC, ABI, AST, VCS, PTY, IDE, LLM, AI, CORS, DNS, TLS, mDNS, JWT, CSV, SVG, PDF
 - คำเทคนิคที่คงอังกฤษ: harness, profile, regular expression, Code Mode, Effect, Layer, Scope, Fiber, Stream, Diff (ชื่อ
-  ตัวแสดง), location, schema, registry, plugin RPC, workerd, checkpoints (เมื่อเป็นชื่อฟีเจอร์)
+  ตัวแสดง), location, schema, registry, plugin RPC, workerd, checkpoints (เมื่อเป็นชื่อฟีเจอร์), snake case, mutual TLS,
+  user agent, type guard, async iterable
 - ป้าย UI อังกฤษที่อ้างในตัวหนา: **Settings › Billing**, **Add credits**, **Personal**, **Owner**, **Member**,
   **Admin**, **Enabled**, **New models**, **Free models**, **Extra Usage**, **Invite Members**, **Join workspace**,
   **Send invitations**, **Create Workspace**, **Delete workspace**, **Leave workspace**
@@ -51,6 +52,8 @@ anomalyco/opencode-console) ใช้แนวทางเดียวกัน�
 | prompt | พรอมต์ | |
 | token | โทเคน | ตัวเลขข้างหน้าคงรูป (`1M โทเคน`) |
 | API key | คีย์ API | |
+| bearer token / bearer authentication | โทเคน Bearer / การยืนยันตัวตนด้วยโทเคน Bearer | คง `Bearer` ในเฮดเดอร์และตัวอย่าง |
+| HTTP Basic auth | การยืนยันตัวตนแบบ HTTP Basic | |
 | context | บริบท | |
 | permission | สิทธิ์ | |
 | policy | นโยบาย | |

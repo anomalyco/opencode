@@ -475,7 +475,7 @@ schema ของ V1 ยังรองรับฟิลด์ที่ไม่
 - `server`: ใช้บริการ V2 และตัวเลือกเซิร์ฟเวอร์อย่างชัดเจน API เซิร์ฟเวอร์เป็นการเปลี่ยนแปลงที่ไม่เข้ากันโดยเจตนา
 - `subagent_depth` ระดับบนสุด: ใช้ `experimental.subagent_depth` แทน
 - `compaction.tail_turns` และ `compaction.prune`: V2 ใช้ `compaction.keep.tokens` และการบีบอัดแบบเช็กพอยต์แทน
-- `name` ของเอเจนต์ใน JSON configuration V1
+- `name` ของเอเจนต์ในการกำหนดค่าแบบ JSON ของ V1
 - รายการ MCP V1 ที่เปิดอย่างเดียวโดยไม่มี `type`
 - ฟิลด์ทดลอง V1 `batch_tool`, `openTelemetry`, `primary_tools` และ `continue_loop_on_deny`
 - ฟิลด์ผู้ให้บริการ V1 `id`, `whitelist` และ `blacklist`
@@ -500,7 +500,7 @@ schema ของ V1 ยังรองรับฟิลด์ที่ไม่
 เมื่อแปลง frontmatter เป็นฟิลด์เนทีฟ V2
 
 - เก็บเนื้อหา Markdown เป็นคำแนะนำระบบของเอเจนต์
-- เปลี่ยน `prompt` เป็น `system` เมื่ออยู่ใน JSON configuration เนื้อหาไฟล์ไม่ต้องมีฟิลด์ `system`
+- ในการกำหนดค่าแบบ JSON ให้เปลี่ยน `prompt` เป็น `system` ส่วนเนื้อหาไฟล์ไม่ต้องมีฟิลด์ `system`
 - เปลี่ยน `disable` เป็น `disabled` และ `permission` เป็น `permissions`
 - รวม `model` และ `variant` เป็น `provider/model#variant`
 - ตั้งตัวเลือกการสุ่มตัวอย่างและตัวเลือกของผู้ให้บริการในตัวเลือกย่อยของโมเดล ตาม[ตัวอย่างด้านบน](#agents-and-modes)
@@ -616,7 +616,7 @@ OpenCode 2 มี API เซิร์ฟเวอร์ที่ปรับป�
 
 ### การตรวจสอบสิทธิ์เซิร์ฟเวอร์
 
-เซิร์ฟเวอร์ V2 ยังใช้ HTTP Basic auth โดยมีการเปลี่ยนแปลงเหล่านี้
+เซิร์ฟเวอร์ V2 ยังใช้การยืนยันตัวตนแบบ HTTP Basic แต่มีการเปลี่ยนแปลงดังนี้
 
 - `OPENCODE_PASSWORD` ตั้งรหัสผ่าน `OPENCODE_SERVER_PASSWORD` ยังใช้ได้
 - `OPENCODE_SERVER_USERNAME` ไม่รองรับอีกต่อไป ชื่อผู้ใช้คือ `opencode` เสมอ

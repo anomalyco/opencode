@@ -1403,7 +1403,7 @@ ctx.add(CodeBlock, {
 })
 ```
 
-- `languages` เปรียบเทียบกับคำแรกของ info string ของรั้ว เป็นตัวพิมพ์เล็ก: ` ```CSV title="Q3" `
+- ระบบเทียบ `languages` กับคำแรกหลังเครื่องหมายเปิดบล็อกโค้ด โดยแปลงเป็นตัวพิมพ์เล็ก เช่น ` ```CSV title="Q3" `
   ตรงกับ `csv` โฮสต์ไม่จับคู่นามแฝง จึงต้องระบุทุกชื่อที่รองรับ
 - `render` ได้รับ `code` ของบล็อก `language` และ `session` ที่แสดง คืน `undefined` หรือ `null` เพื่อ
   คงโค้ดที่ไฮไลต์ เช่นเมื่อซอร์สแยกวิเคราะห์ไม่ได้
@@ -2102,7 +2102,7 @@ createKeyed(
 - `builtin` เป็น `true` สำหรับเซิร์ฟเวอร์ของแอปเอง
 - `compatible` เป็น `true` เมื่อเวอร์ชันของเซิร์ฟเวอร์ใช้ได้กับแอปนี้ และ `connected` ขณะการเชื่อมต่ออีเวนต์
   ทำงาน
-- `password` เป็นรหัสผ่าน HTTP basic ที่ผู้ใช้กำหนด หากมี
+- `password` คือรหัสผ่านสำหรับการยืนยันตัวตนแบบ HTTP Basic หากผู้ใช้ตั้งไว้
 - อ่าน `client`, `data` และ `url` จาก `ServerRef` แบบสดทุกครั้ง: เซิร์ฟเวอร์ที่รีสตาร์ตได้ไคลเอนต์ใหม่ใต้
   id เดิม
 - `ctx.servers.list()` คืน id ของเซิร์ฟเวอร์ที่แอปแสดง
@@ -2986,7 +2986,7 @@ function DraftView(props: { readonly session: MountedSession }) {
 - `scope: "global"` ค่าเริ่มต้น เก็บค่าเดียวสำหรับแอป
 - `scope: { server, directory? }` เก็บค่าเดียวต่อเซิร์ฟเวอร์ หรือต่อไดเรกทอรีเวิร์กสเปซบนมัน
 - `scope: { session }` เก็บค่าเดียวต่อเซสชัน เปิดอีกครั้งเมื่อเซสชันย้ายไปไดเรกทอรีใหม่
-- `value` ของ runtime store เป็น `undefined` จนโหลด
+- `value` ของที่เก็บข้อมูลขณะรันไทม์จะเป็น `undefined` จนกว่าจะโหลดข้อมูลเสร็จ
 - `ctx.storage.memory(key, { initial })` เก็บสถานะในหน้าต่างที่อยู่รอดการโหลดปลั๊กอินใหม่แต่ไม่รอดการโหลดหน้าต่างใหม่
 - `ctx.storage.remove(key, { scope, from })` ลบค่า คีย์จึงอ่านเป็น `initial` อีกครั้ง
 
@@ -3289,8 +3289,8 @@ interface Browser {
 
 ## โปรเซสหลัก
 
-บน OpenCode Desktop `main` ของปลั๊กอินทำงานครั้งเดียวในโปรเซสหลักของ Electron เป็นซิงเกิลตันทัวแอป เข้าถึง
-Node.js built-ins, `electron` และ main host API ได้เต็มที่ ส่งให้ `Plugin.define` ใน
+บน OpenCode Desktop `main` ของปลั๊กอินจะทำงานเพียงครั้งเดียวในโปรเซสหลักของ Electron โดยมีอินสแตนซ์เดียวทั้งแอป
+และเข้าถึงโมดูลในตัวของ Node.js, `electron` และ API ของโฮสต์ในโปรเซสหลักได้เต็มที่ ส่งให้ `Plugin.define` ใน
 [ไฟล์ `./gui-experimental`](#define-the-gui-plugin)ของปลั๊กอิน ข้าง `setup` ของหน้าต่างหรือเดี่ยวๆ
 
 ```tsx title="src/gui.tsx"
