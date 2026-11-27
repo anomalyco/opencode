@@ -133,9 +133,8 @@ export function modelUsage(
   info: UsageLimitsInfo,
   model: { readonly id: string; readonly provider: { readonly id: string; readonly integrationID?: string } },
 ): ModelUsage | undefined {
-  const served = model.provider.integrationID === "opencode" && model.provider.id !== "opencode-go"
   const covering = info.budgets.flatMap((budget) => {
-    if (budget.coverage === "all") return served ? [{ budget, spent: budget.spent }] : []
+    if (budget.coverage === "all") return servedByConsole(model) ? [{ budget, spent: budget.spent }] : []
     const entry = budget.models.find((item) => item.providerID === model.provider.id && item.modelID === model.id)
     if (!entry) return []
     return [{ budget, spent: budget.per === "model" ? (entry.spent ?? 0) : budget.spent }]
@@ -146,6 +145,51 @@ export function modelUsage(
     reached: covering.some((entry) => entry.spent >= entry.budget.limit),
     resetsAt: Math.min(...covering.map((entry) => entry.budget.resetsAt)),
   }
+}
+
+/** OpenCode Console serves the model, so the workspace's limits can apply; OpenCode Go bills its own allowance. */
+export function servedByConsole(model: {
+  readonly provider: { readonly id: string; readonly integrationID?: string }
+}) {
+  return model.provider.integrationID === "opencode" && model.provider.id !== "opencode-go"
+}
+
+/** A model as the composer reads its limits: its price per 1M input tokens and its context window. */
+export type LimitedModel = {
+  readonly id: string
+  readonly provider: { readonly id: string; readonly integrationID?: string }
+  readonly cost?: { readonly input: number }
+  readonly limit: { readonly context: number }
+}
+
+/**
+ * `low` means what's left won't cover three requests that fill the model's context, `out` that it won't cover one. Both
+ * depend on the model: a few dollars is plenty for a cheap model and almost nothing for an expensive one.
+ */
+export type UsageLevel = "plenty" | "low" | "out" | "reached"
+
+export function usageLevel(usage: ModelUsage, model: LimitedModel): UsageLevel {
+  if (usage.reached || usage.left <= 0) return "reached"
+  const request = (model.limit.context / 1_000_000) * (model.cost?.input ?? 0)
+  if (usage.left < request) return "out"
+  if (usage.left < request * 3) return "low"
+  return "plenty"
+}
+
+/** What the composer's model trigger says about the model's limits: nothing while there's plenty left. */
+export type ModelBadge = { readonly kind: "free" } | { readonly kind: "left"; readonly left: number }
+
+/** A reached budget shows no badge. */
+export function modelBadge(
+  model: LimitedModel | undefined,
+  context: { readonly free: boolean; readonly info: UsageLimitsInfo | null | undefined },
+): ModelBadge | undefined {
+  if (!model) return undefined
+  if (context.free) return { kind: "free" }
+  const usage = context.info ? modelUsage(context.info, model) : undefined
+  if (!usage) return undefined
+  const level = usageLevel(usage, model)
+  return level === "low" || level === "out" ? { kind: "left", left: usage.left } : undefined
 }
 
 /** The spend a budget's cap compares against: a per-model budget's counter for the current model, when it covers it. */

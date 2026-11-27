@@ -6,6 +6,7 @@ import type { ServerSDK } from "@/runtime/server/client"
 import type { SessionMessageHandoff } from "@/session/handoff"
 import type { ComposerStateTarget } from "./submission-state"
 import type { ComposerModelLabel } from "./model-label"
+import type { ModelBadge } from "@/usage/limits"
 
 export type ComposerControls = {
   agents: {
@@ -20,9 +21,18 @@ export type ComposerControls = {
     providerName?: string
     label?: ComposerModelLabel
     paid: boolean
+    /** What the model trigger says about the selected model's limits. */
+    badge?: ModelBadge
     loading: boolean
     /** While loading, the expected model's names from a catalog already loaded for another Location. */
-    preview?: { provider?: string; model: string; label?: ComposerModelLabel; variant: string; variants: string[] }
+    preview?: {
+      provider?: string
+      model: string
+      label?: ComposerModelLabel
+      badge?: ModelBadge
+      variant: string
+      variants: string[]
+    }
   }
 }
 

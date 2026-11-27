@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { UsageLimitsBudget, UsageLimitsInfo } from "@opencode/client/promise"
-import { modelUsage, usageView } from "./limits"
+import { modelBadge, modelUsage, usageLevel, usageView } from "./limits"
 
 const RESET = Date.UTC(2026, 10, 1)
 
@@ -137,5 +137,42 @@ describe("usageView", () => {
     expect(view.callout).toEqual({ kind: "credits" })
     expect(view.footer).toEqual({ kind: "budgets-reset", resetsAt: RESET })
     expect(usageView(info(), { credits: true }).footer).toEqual({ kind: "credits-only" })
+  })
+})
+
+const opusModel = {
+  id: "claude-opus-5",
+  provider: { id: "opencode", integrationID: "opencode" },
+  cost: { input: 5 },
+  limit: { context: 200_000 },
+}
+
+describe("usageLevel", () => {
+  test("measures what is left in full-context requests on the model", () => {
+    // A full-context request on this model costs $1.
+    expect(usageLevel({ left: 3, reached: false, resetsAt: RESET }, opusModel)).toBe("plenty")
+    expect(usageLevel({ left: 2.5, reached: false, resetsAt: RESET }, opusModel)).toBe("low")
+    expect(usageLevel({ left: 0.5, reached: false, resetsAt: RESET }, opusModel)).toBe("out")
+    expect(usageLevel({ left: 0, reached: true, resetsAt: RESET }, opusModel)).toBe("reached")
+  })
+})
+
+describe("modelBadge", () => {
+  test("names a free model, and what is left only when it covers fewer than three full-context requests", () => {
+    expect(modelBadge(undefined, { free: false, info: undefined })).toBeUndefined()
+    expect(modelBadge(opusModel, { free: true, info: undefined })).toEqual({ kind: "free" })
+    expect(modelBadge(opusModel, { free: false, info: info(budget({ id: "all", spent: 97 })) })).toBeUndefined()
+    expect(modelBadge(opusModel, { free: false, info: info(budget({ id: "all", spent: 98 })) })).toEqual({
+      kind: "left",
+      left: 2,
+    })
+    expect(modelBadge(opusModel, { free: false, info: info(budget({ id: "all", spent: 99.5 })) })).toEqual({
+      kind: "left",
+      left: 0.5,
+    })
+    // A reached budget shows no badge.
+    expect(modelBadge(opusModel, { free: false, info: info(budget({ id: "all", spent: 100 })) })).toBeUndefined()
+    const direct = { ...opusModel, provider: { id: "anthropic" } }
+    expect(modelBadge(direct, { free: false, info: info(budget({ id: "all", spent: 98 })) })).toBeUndefined()
   })
 })

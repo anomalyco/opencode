@@ -35,7 +35,7 @@ for (const direction of ["ltr", "rtl"] as const) {
       await expect(variant).toBeFocused()
 
       const model = composer.locator('[data-action="composer-model"]')
-      await expect(model).toHaveText("Mobile Model A")
+      await expect(model).toHaveText(paid ? "Mobile Model A" : "Mobile Model AFree")
       await expect(model).toHaveAttribute("data-control-type", "drawer")
       await model.click()
       const models = page.getByRole("dialog", { name: "Select model", exact: true })
@@ -88,7 +88,7 @@ for (const direction of ["ltr", "rtl"] as const) {
       await expect(models.getByRole("button", { name: /Mobile Model A/ })).toHaveCount(0)
       await search.press("Enter")
       await expect(models).toBeHidden()
-      await expect(model).toHaveText("Mobile Model B")
+      await expect(model).toHaveText(paid ? "Mobile Model B" : "Mobile Model BFree")
       await expect(composer.getByRole("textbox", { name: "Prompt", exact: true })).toBeFocused()
 
       await model.click()

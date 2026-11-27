@@ -1,6 +1,7 @@
 import { Show, createEffect, createMemo, on, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { ModelSelection } from "@/providers/models/selection"
+import type { ModelBadge } from "@/usage/limits"
 import { STORY_MODEL, emptySessionDocument, pendingAndQueuedDocument } from "@opencode/session-ui/storybook"
 import { Composer } from "./composer"
 import type { ComposerModel } from "./model"
@@ -63,6 +64,7 @@ function ComposerStory(props: {
   manySuggestions?: boolean
   history?: boolean
   many?: boolean
+  badge?: ModelBadge
   /** File search waits for the story's "Return files" button, like a slow server. */
   fileSearch?: boolean
   suggestionBoundary?: () => HTMLElement | undefined
@@ -290,7 +292,14 @@ function ComposerStory(props: {
 
   const model = {
     ...editor,
-    model: { selection: modelSelection, paid: true, loading: false },
+    model: {
+      selection: modelSelection,
+      paid: true,
+      loading: false,
+      get badge() {
+        return props.badge
+      },
+    },
   } satisfies ComposerModel
 
   const suggest = (kind: typeof props.suggestions) => {
@@ -383,6 +392,7 @@ type FlowArgs = {
   suggestions: "command" | "context" | "none"
   alternate: "none" | "queue" | "steer"
   many: boolean
+  badge?: ModelBadge
 }
 
 export default {
@@ -417,6 +427,10 @@ export const PromptHistory = {
     </div>
   ),
 }
+
+export const FreeModel = { args: { badge: { kind: "free" } } }
+
+export const LowBudget = { args: { badge: { kind: "left", left: 2.5 } } }
 
 export const TextDraft = { args: { prompt: text("Explain this change") } }
 

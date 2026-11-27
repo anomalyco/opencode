@@ -74,7 +74,7 @@ export function createActiveSessionRegion(input: {
   const platform = usePlatform()
   const prompt = useComposerState()
   const state = createSessionRequestModel()
-  const controls = createComposerControls()
+  const controls = createComposerControls({ sessionID: () => input.session.identity.params.id })
   let promptRef: HTMLDivElement | undefined
 
   createEffect(

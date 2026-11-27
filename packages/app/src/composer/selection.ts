@@ -6,7 +6,9 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { useProviders } from "@/providers/catalog/providers"
 import { useData } from "@/runtime/server/current"
 import { normalizeAgentList, normalizeProviderList } from "@/runtime/server/global-sync/utils"
-import { useModels } from "@/providers/models/models"
+import { isFreeModel, useModels } from "@/providers/models/models"
+import { modelBadge } from "@/usage/limits"
+import { createUsageLimits } from "@/usage/model"
 import {
   cycleModelVariant,
   durableVariantSelection,
@@ -22,12 +24,13 @@ import { useConfiguredModel } from "@/providers/models/configured"
 import { useGlobal } from "@/runtime/server/runtime"
 import { composerModelLabelKey, composerModelLabels, composerProviderName } from "./model-label"
 
-export function createComposerControls(input: { model?: ModelSelection } = {}) {
+export function createComposerControls(input: { model?: ModelSelection; sessionID?: () => string | undefined } = {}) {
   const local = useLocal()
   const sdk = useWorkspaceLocation()
   const data = useData()
   const providers = useProviders(() => sdk().directory)
   const models = useGlobal().models
+  const usage = createUsageLimits({ model: () => (input.model ?? local.model).current(), sessionID: input.sessionID })
 
   const modelLabels = createMemo(() =>
     composerModelLabels(
@@ -88,6 +91,10 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
       label: composerModelLabels(match.all, match.connected).get(
         composerModelLabelKey(expected.model.providerID, expected.model.modelID),
       ),
+      // Usage limits aren't known yet, but a free model reads as free from the first frame.
+      badge: isFreeModel({ provider: { id: expected.model.providerID }, cost: match.model.cost })
+        ? ({ kind: "free" } as const)
+        : undefined,
       variants,
       variant:
         resolveModelVariant({
@@ -102,6 +109,7 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
   return createMemo<ComposerControls>(() => {
     const selection = input.model ?? local.model
     const key = selection.key()
+    const current = selection.current()
 
     return {
       agents: {
@@ -122,6 +130,7 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
           ),
         label: key && modelLabels().get(composerModelLabelKey(key.providerID, key.modelID)),
         paid: providers.paid().length > 0,
+        badge: modelBadge(current, { free: !!current && isFreeModel(current), info: usage() }),
         // The session's model applies only to its agent, so resolve agents before showing a model.
         loading: loading(),
         preview: preview(),
