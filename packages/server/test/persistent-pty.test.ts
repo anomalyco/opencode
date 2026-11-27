@@ -208,6 +208,60 @@ smoke(
   20_000,
 )
 
+it.live(
+  "opens a session terminal in the configured shell",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* testDirectory()
+      // Any existing executable that is neither `$SHELL` (/bin/sh here) nor the platform default.
+      yield* Effect.promise(() =>
+        fs.writeFile(path.join(fixture.root, "opencode.json"), JSON.stringify({ shell: process.execPath })),
+      )
+      const daemon = yield* fakeDaemon()
+      const server = yield* ServerProcess.start<never, never>({
+        hostname: "127.0.0.1",
+        port: 0,
+        password: "secret",
+        app: { version: "test-version" },
+        database: { path: fixture.database },
+        pty: daemon.options,
+        fs: { filewatcher: false },
+        models: { fetch: false },
+      })
+      const base = HttpServer.formatAddress(server.address)
+      const session = yield* request(base, "POST", "/api/session", { location: { directory: fixture.root } })
+      const sessionID = Schema.decodeUnknownSync(Schema.Struct({ id: Session.ID }))(session.data).id
+      // The configured shell arrives with the location's plugins, and the server answers with what is loaded, so wait
+      // until the shell tool, which resolves it the same way, runs in it.
+      const location = `location%5Bdirectory%5D=${encodeURIComponent(fixture.root)}`
+      yield* Effect.promise(async () => {
+        const deadline = Date.now() + 10_000
+        while (Date.now() < deadline) {
+          const response = await fetch(new URL(`/api/shell?${location}`, base), {
+            method: "POST",
+            headers: { authorization: `Basic ${btoa("opencode:secret")}`, "content-type": "application/json" },
+            body: JSON.stringify({ command: "exit 0", cwd: fixture.root }),
+          })
+          const body: unknown = await response.json()
+          if (isRecord(body) && isRecord(body.data) && body.data.shell === process.execPath) return
+          await Bun.sleep(20)
+        }
+        throw new Error("the configured shell never loaded")
+      })
+
+      yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+        args: [],
+        cwd: fixture.root,
+        title: "configured",
+        env: {},
+      })
+      expect(daemon.requests.find((item) => item.op === "create_pty")).toMatchObject({ program: process.execPath })
+    }),
+  // The configured shell arrives only once the session's Location has booted and its built-in plugins have loaded:
+  // the cold Location graph, about 5s on Windows locally.
+  30_000,
+)
+
 it.live("renames without a feature check and hides unknown terminals", () =>
   Effect.gen(function* () {
     const fixture = yield* testDirectory()

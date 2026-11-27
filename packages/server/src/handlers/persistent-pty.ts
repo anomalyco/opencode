@@ -1,5 +1,8 @@
+import { Instance } from "@opencode/core/instance/service"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { PtyTicket } from "@opencode/core/pty/ticket"
+import { Session } from "@opencode/core/session"
+import { ShellSelect } from "@opencode/core/shell/select"
 import {
   ForbiddenError,
   InvalidRequestError,
@@ -11,12 +14,13 @@ import {
   PTY_CONNECT_TOKEN_HEADER,
   PTY_CONNECT_TOKEN_HEADER_VALUE,
 } from "@opencode/protocol/groups/persistent-pty"
-import { Effect, Queue } from "effect"
+import { Effect, Option, Queue } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
+import { sessionInfo } from "../location"
 import { makeArtifact } from "./artifact"
 import { makeBlobGet } from "./blob"
 import { makeBrowserTunnel } from "./experimental/browser-tunnel"
@@ -33,6 +37,8 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const tickets = yield* PtyTicket.Service
     const cors = yield* CorsConfig
     const pty = yield* PersistentPty.Service
+    const sessions = yield* Session.Service
+    const instances = yield* Instance.Service
     const artifact = yield* makeArtifact
     const job = yield* makeJob
     const space = yield* makeSpace
@@ -43,6 +49,18 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const machineLink = yield* makeMachineLink
     const browserTunnel = yield* makeBrowserTunnel
     const push = yield* makePush
+
+    // Terminals are process-global and the configured shell belongs to a location, so read it in the session's
+    // location, with whatever config is loaded now, to open the shell the shell tool runs. Without the session or its
+    // location the terminal keeps the default shell.
+    const configuredShell = (sessionID: string) =>
+      sessionInfo(sessions, sessionID).pipe(
+        Effect.flatMap((session) =>
+          ShellSelect.Service.use((shell) => shell.resolve({ priority: "config" })).pipe(instances.provide(session)),
+        ),
+        Effect.option,
+        Effect.map(Option.getOrUndefined),
+      )
 
     return handlers
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
@@ -99,7 +117,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
           return {
             data: yield* pty
               .create(ctx.params.sessionID, {
-                command: ctx.payload.command,
+                command: ctx.payload.command ?? (yield* configuredShell(ctx.params.sessionID)),
                 args: ctx.payload.args,
                 cwd: ctx.payload.cwd,
                 title: ctx.payload.title,
