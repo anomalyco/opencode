@@ -55,6 +55,8 @@ pub struct Limits {
     pub memory: u64,
     /// How often the resident set is read.
     pub poll: Duration,
+    /// How long a dropped child may take to end after its input closes before its process group is killed.
+    pub grace: Duration,
 }
 
 impl Default for Limits {
@@ -68,6 +70,7 @@ impl Default for Limits {
             setup: Duration::from_secs(10),
             memory: 512 << 20,
             poll: Duration::from_millis(500),
+            grace: Duration::from_millis(500),
         }
     }
 }
@@ -377,7 +380,7 @@ impl Drop for Child {
         // The child ends when its input does; one that does not is killed. Off the UI thread, as a hang may be why it
         // is dropped.
         let reaped = std::thread::Builder::new().name("js-host-reap".to_owned()).spawn(move || {
-            let deadline = Instant::now() + Duration::from_millis(500);
+            let deadline = Instant::now() + shared.limits.grace;
             while Instant::now() < deadline {
                 let exited = lock(&shared.process).as_mut().is_none_or(exited);
                 if exited {
@@ -1292,7 +1295,10 @@ mod tests {
         // its EOF, so reading `out` blocks until the child ends, with no poll or deadline of the test's.
         let mut command = Command::new("sh");
         command.arg("-c").arg(format!("read _ < '{}'; cat > '{}'", gate.display(), out.display()));
-        let child = Child::spawn(command, Limits { queued: 256 << 10, ..Limits::default() }, || {}).unwrap();
+        // The reaper's grace is the test's, not a deadline: the child may take as long as the machine needs to read
+        // what the host queued before the close.
+        let limits = Limits { queued: 256 << 10, grace: Duration::from_secs(60), ..Limits::default() };
+        let child = Child::spawn(command, limits, || {}).unwrap();
         let payload = vec![b'x'; 1 << 10];
         let mut frames = Vec::new();
         // Its pipe and queue fill: every send it took before the close is one the child must read.
