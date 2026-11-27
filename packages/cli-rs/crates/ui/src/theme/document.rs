@@ -120,6 +120,7 @@ fn tokens(input: &Map<String, Value>, complete: bool) -> Check {
         "border"?: field(input, "border", complete, single)?,
         "scrollbar"?: field(input, "scrollbar", complete, single)?,
         "diff"?: field(input, "diff", complete, |value| diff(value, complete))?,
+        "find"?: field(input, "find", false, find)?,
         "syntax"?: field(input, "syntax", complete, |value| record(value, &SYNTAX, complete))?,
         "markdown"?: field(input, "markdown", complete, |value| record(value, &MARKDOWN, complete))?,
     })
@@ -169,6 +170,16 @@ fn diff(value: &Value, complete: bool) -> Check {
         "background"?: field(input, "background", complete, |value| strict(value, &text[..3], color))?,
         "highlight"?: field(input, "highlight", complete, pair)?,
         "lineNumber"?: field(input, "lineNumber", complete, line_number)?,
+    })
+}
+
+fn find(value: &Value) -> Check {
+    let input = object(value)?;
+    let text = |value: &Value| strict(value, &[("current", false)], color);
+    let background = |value: &Value| strict(value, &[("match", false), ("current", false)], color);
+    Ok(json_object! {
+        "text"?: field(input, "text", false, text)?,
+        "background"?: field(input, "background", false, background)?,
     })
 }
 

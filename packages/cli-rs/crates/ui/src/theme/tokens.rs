@@ -161,6 +161,20 @@ tokens! {
         pub line_number: DiffLineNumber,
     }
 
+    pub struct FindText {
+        pub current: Color,
+    }
+
+    pub struct FindBackground {
+        pub r#match: Color,
+        pub current: Color,
+    }
+
+    pub struct Find {
+        pub text: FindText,
+        pub background: FindBackground,
+    }
+
     pub struct Syntax {
         pub comment: Color,
         pub keyword: Color,
@@ -197,6 +211,7 @@ tokens! {
         pub border: Base,
         pub scrollbar: Base,
         pub diff: Diff,
+        pub find: Find,
         pub syntax: Syntax,
         pub markdown: Markdown,
     }
@@ -259,6 +274,10 @@ macro_rules! visit_tokens {
         f("diff.lineNumber.text", & $($m)* diff.line_number.text);
         f("diff.lineNumber.background.added", & $($m)* diff.line_number.background.added);
         f("diff.lineNumber.background.removed", & $($m)* diff.line_number.background.removed);
+        let find = & $($m)* $tokens.find;
+        f("find.text.current", & $($m)* find.text.current);
+        f("find.background.match", & $($m)* find.background.r#match);
+        f("find.background.current", & $($m)* find.background.current);
         let syntax = & $($m)* $tokens.syntax;
         f("syntax.comment", & $($m)* syntax.comment);
         f("syntax.keyword", & $($m)* syntax.keyword);
