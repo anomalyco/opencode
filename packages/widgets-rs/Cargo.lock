@@ -1484,9 +1484,9 @@ checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 
 [[package]]
 name = "psychoscript"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "214d978331273bcb2b9fece7fac0ef8e0339040a4164d55a29f550da8df548bb"
+checksum = "adb662245d78ec40ac70e21589e0d6c593474d42f5683a97a0578448c7421195"
 dependencies = [
  "fixed_decimal",
  "icu_calendar",
@@ -1497,6 +1497,7 @@ dependencies = [
  "icu_time",
  "idna_adapter",
  "libc",
+ "memchr",
  "num-bigint",
  "num-traits",
  "oxc_allocator",
