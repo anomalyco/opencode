@@ -1,0 +1,104 @@
+---
+title: "TUI"
+description: "Rozpocznij sesję i korzystaj z codziennych procesów w interfejsie terminalowym."
+---
+
+Uruchom OpenCode w swoim projekcie, wpisz żądanie i naciśnij **Enter**.
+
+```bash
+cd ~/code/my-project
+opencode
+```
+
+```text
+Explain how authentication works in this project
+```
+
+Naciśnij **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** lub **Ctrl+J**, aby przejść do nowej linii. Gdy OpenCode pracuje,
+**Enter** steruje aktywną sesją; naciśnij **Ctrl+X**, a następnie **Enter**, aby dodać prompt do kolejki na później.
+
+## Kontekst
+
+Wpisz `@`, aby wyszukać plik, a następnie wybierz go, aby dołączyć do promptu. Pisz dalej po `@`, aby zawęzić wyniki.
+
+```text
+Review @src/auth.ts for error handling problems
+```
+
+Po ścieżce możesz podać linię lub zakres.
+
+```text
+Explain @src/auth.ts#20-45
+```
+
+## Powłoka
+
+Wpisz `!` na początku pustego promptu, aby przejść do trybu powłoki. Wpisz polecenie i naciśnij **Enter**; naciśnij
+**Esc**, aby wyjść z trybu powłoki bez uruchamiania polecenia.
+
+```text
+!git status
+```
+
+Polecenia powłoki działają w katalogu roboczym sesji, a ich dane wyjściowe pozostają w sesji.
+
+## Polecenia
+
+Wpisz `/`, aby wyświetlić polecenia z ukośnikiem. Pisz dalej, aby filtrować listę, a następnie naciśnij **Enter**, aby
+uruchomić wybrane polecenie.
+
+```text
+/models
+```
+
+Typowe polecenia to `/new`, `/sessions`, `/models`, `/agents`, `/undo`, `/redo` i `/editor`. Naciśnij **Ctrl+P**, aby
+otworzyć paletę poleceń ze wszystkimi akcjami dostępnymi w bieżącym widoku.
+
+Po aktualizacji OpenCode raz pokazuje na ekranie głównym nowości w wydaniu. Uruchom `/highlights`, aby zobaczyć je
+ponownie, lub ustaw `"highlights": false` w [`cli.json`](/cli/config#alerts), aby nie otwierały się automatycznie.
+
+## Pytania poboczne
+
+Uruchom `/btw <question>`, aby zadać szybkie pytanie o dotychczasową rozmowę. Odpowiedź korzysta z kontekstu sesji
+i bieżącego modelu, ale nie jest dodawana do rozmowy, więc nie wpływa na późniejsze prompty. Podczas działania w stopce
+promptu widoczny jest wskaźnik `/btw`, a odpowiedź otwiera się w oknie dialogowym; naciśnij **C**, aby ją skopiować.
+
+```text
+/btw why did the test in step 2 fail?
+```
+
+## Modele
+
+Naciśnij **Ctrl+X**, a następnie **M**, aby wybrać model, lub uruchom `/models`. Naciśnij **F2**, aby przełączać się
+między ostatnio używanymi modelami.
+
+Naciśnij **Ctrl+X**, a następnie **A**, aby wybrać agenta, lub uruchom `/agents`. Naciśnij **Shift+Tab**, aby przełączać
+agentów.
+
+## Sesje
+
+Naciśnij **Ctrl+X**, a następnie **N**, aby rozpocząć nową sesję. Naciśnij **Ctrl+X**, a następnie **L**, lub uruchom
+`/sessions`, aby wrócić do istniejącej sesji; **Ctrl+O** otwiera razem ostatnie sesje i projekty.
+
+Karty są domyślnie włączone. Używaj **Ctrl+Tab** i **Ctrl+Shift+Tab**, aby przełączać się między nimi, **Ctrl+X**,
+a następnie **W**, aby zamknąć kartę, i **Ctrl+Shift+T**, aby ponownie otworzyć ostatnio zamkniętą kartę.
+
+## Historia
+
+Naciśnij **Ctrl+X**, a następnie **U**, lub uruchom `/undo`, aby cofnąć ostatnią wiadomość użytkownika i wykonaną po niej
+pracę. Cofnięty prompt wraca do kompozytora, abyś mógł go edytować.
+
+Naciśnij **Ctrl+X**, a następnie **R**, lub uruchom `/redo`, aby przywrócić cofniętą pracę. Wysłanie nowego promptu
+zamiast przywrócenia pracy zatwierdza cofnięcie, a sesja jest kontynuowana od tego miejsca.
+
+## Edytor
+
+Ustaw `VISUAL` lub `EDITOR`, a następnie naciśnij **Ctrl+X**, potem **E**, lub uruchom `/editor`, aby edytować bieżący
+prompt w tym edytorze. Zapisz i wyjdź, aby tekst wrócił do kompozytora, a następnie naciśnij **Enter**, aby go wysłać.
+
+```bash
+export EDITOR="nvim"
+opencode
+```
+
+Klawisz lidera to domyślnie **Ctrl+X**. Zobacz [Skróty klawiszowe](/cli/keybinds), aby zmienić te skróty.

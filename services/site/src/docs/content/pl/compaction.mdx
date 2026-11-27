@@ -1,0 +1,236 @@
+---
+title: "Kompaktowanie"
+description: "Kompaktowanie podsumowuje starszą rozmowę automatycznie lub na żądanie, aby sesja OpenCode mogła trwać po przekroczeniu limitu kontekstu modelu."
+---
+
+Kompaktowanie robi miejsce w długiej sesji, zastępując starszą rozmowę podsumowaniem, aby sesja mogła trwać po
+przekroczeniu limitu kontekstu modelu.
+
+## Jak to działa
+
+Gdy sesja zbliża się do limitu kontekstu modelu, OpenCode podsumowuje całą bieżącą rozmowę. Zachowuje też najnowszą
+rozmowę, domyślnie około 15 000 tokenów, obok podsumowania, aby dokładne ostatnie szczegóły pozostały dostępne.
+
+```text
+before   [ system prompt ][ older conversation ............ ][ recent 15k ][ pending work ]
+request  [ system prompt ][ older conversation ............ ][ recent 15k ][ summary instructions ]
+after    [ system prompt ][ summary of older + recent ][ recent 15k ][ pending work ]
+```
+
+Wysłanie pełnej rozmowy pozwala żądaniu podsumowania ponownie użyć cache promptu zwykłego żądania, gdy dostawca to
+obsługuje. Późniejsze kompaktowania aktualizują istniejące podsumowanie na podstawie rozmowy od tego punktu kontrolnego.
+
+## Uruchamianie
+
+Automatyczne kompaktowanie jest domyślnie włączone:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "keep": { "tokens": 15000 },
+  },
+}
+```
+
+Kompaktowanie jest stratne. Zwiększ `keep.tokens`, gdy dokładne ostatnie szczegóły są ważne, albo sam poproś
+o kompaktowanie przed automatycznym.
+
+## Kompaktowanie ręczne
+
+Poproś o kompaktowanie w dowolnym momencie, nawet przy krótkiej historii:
+
+```sh
+opencode api post /api/session/ses_example/compact --data '{}'
+```
+
+Polecenie `api` odnajduje usługę w tle i uwierzytelnia się w niej. Odpowiedź potwierdza przyjęcie żądania; nie czeka na
+podsumowanie. Śledź zdarzenia `session.compaction.*`, aby dowiedzieć się, kiedy się zakończy. Pełną operację opisuje
+[dokumentacja API](/api).
+
+| Zasada    | Działanie                                                            |
+| --------- | -------------------------------------------------------------------- |
+| Czas      | Działa w następnym bezpiecznym punkcie, przed promptami, które wciąż czekają. |
+| Powtórzenia | Żądania złożone, gdy jedno oczekuje, są z nim łączone.              |
+| Automatyzacja | Działa, gdy `compaction.auto` ma wartość `false`.                 |
+
+Podaj `id`, aby dokładne ponowienie było idempotentne. Ponowne użycie tego ID dla innego żądania zwraca konflikt.
+
+```sh
+opencode api post /api/session/ses_example/compact --data '{"id":"msg_compact_once"}'
+```
+
+## Ustawienia
+
+Dodaj `compaction` do dowolnego [pliku konfiguracji OpenCode](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": false,
+    "keep": { "tokens": 24000 },
+    "buffer": "20%",
+  },
+}
+```
+
+| Pole | Domyślnie | Działanie |
+| --- | ---: | --- |
+| `auto` | `true` | Automatycznie kompaktuje rozmowę w pobliżu limitu kontekstu. Jeśli dostawca odrzuci zbyt długie żądanie, OpenCode wykona jedną próbę ponowienia po kompaktowaniu. Ręczne kompaktowanie zawsze działa. |
+| `background` | `true` | Zapisz podsumowanie z wyprzedzeniem, aby automatyczne kompaktowanie nie musiało na nie czekać. Zobacz [Kompaktowanie w tle](#background-compaction). |
+| `keep.tokens` | `15000` | Przybliżona liczba tokenów ostatniej części rozmowy zachowywanej obok podsumowania. Większe wartości pozwalają zachować więcej szczegółów, ale zostawiają mniej miejsca na dalszą pracę. |
+| `buffer` | `"15%"`, co najmniej 16k | Część okna kontekstu modelu, która ma pozostać wolna. Automatyczne kompaktowanie zaczyna się, gdy rozmowa wypełni pozostałą część okna. Im większy bufor, tym wcześniej zaczyna się kompaktowanie. |
+
+`keep.tokens` przyjmuje nieujemną liczbę całkowitą.
+
+### Bufor
+
+`buffer` to procent okna każdego modelu, więc jedno ustawienie pasuje do wszystkich modeli:
+
+| Okno modelu | `"buffer": "20%"` kompaktuje przy |
+| ---: | ---: |
+| 128k | ~102k |
+| 1M | 800k |
+
+- To miejsce pozostawiane wolne, a nie punkt rozpoczęcia kompaktowania: `"20%"` kompaktuje przy 80% zapełnienia.
+- Przyjmuje od `"1%"` do `"99%"`, w tym ułamki, takie jak `"12.5%"`.
+- Liczba tokenów, taka jak `20000`, też działa. Ta sama liczba to duży udział małego okna i mały udział dużego.
+- Liczba tokenów równa co najmniej oknu modelu jest ignorowana i obowiązuje wartość domyślna.
+
+## Model
+
+Domyślnie OpenCode sam pisze podsumowanie, używając modelu sesji. Ustaw `agents.compaction.model`, aby używać innego
+modelu do podsumowań:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agents": {
+    "compaction": { "model": "anthropic/claude-sonnet-5-5" },
+  },
+}
+```
+
+Jeśli OpenCode nie może odnaleźć wskazanego modelu, używa modelu sesji.
+
+## Kompaktowanie w tle
+
+OpenCode pisze podsumowanie z wyprzedzeniem, gdy sesja trwa, i podmienia je, gdy kompaktowanie jest potrzebne.
+Automatyczne kompaktowanie nie wstrzymuje wtedy sesji na pisanie podsumowania:
+
+```text
+60k tokens before the threshold   summary of the conversation so far starts in the background
+                                  the session keeps going; the summary is held, not applied
+threshold                         the held summary is swapped in; everything since it is kept as is
+```
+
+W małych oknach kontekstu podsumowanie zaczyna się co najwyżej w połowie drogi między pierwszą odpowiedzią po ostatnim
+kompaktowaniu a progiem.
+
+| Zasada | Działanie |
+| --- | --- |
+| Koszt | Żądanie podsumowania ponownie używa cache promptu. Podsumowanie, które nigdy nie zostanie użyte, na przykład gdy sesja zakończy się przed progiem, nadal kosztuje tokeny. |
+| Czekanie | Jeśli podsumowanie wciąż się pisze, gdy kompaktowanie jest potrzebne, sesja czeka na jego zakończenie. |
+| Wycofanie | Kompaktowanie podsumowuje jak zwykle, jeśli rozmowa od zachowanego podsumowania urosła powyżej około 40% progu albo początek rozmowy się zmienił. |
+| Pominięcie | Nie jest używane do kompaktowania natywnego. Zaraz po zmianie modelu lub po przerwie dłuższej niż czas życia cache promptu zaczyna się od następnej odpowiedzi. |
+| Przechowywanie | Zachowane podsumowania żyją w pamięci i giną po restarcie. |
+
+Wyłącz je, aby pisać podsumowanie tylko wtedy, gdy kompaktowanie jest potrzebne:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "background": false,
+  },
+}
+```
+
+## Dostawcy
+
+Niektórzy dostawcy mogą zamiast tego kompaktować rozmowę po swojej stronie. Włącz to dla dostawcy lub modelu przez
+`settings.compaction`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-6.1-sol": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}
+```
+
+Ustawienie modelu zastępuje ustawienie dostawcy. `native` używa kompaktowania dostawcy; `summary` używa własnego
+OpenCode.
+
+Przy kompaktowaniu natywnym OpenCode wysyła rozmowę do endpointu kompaktowania dostawcy. Dostawca zwraca nieprzezroczysty,
+zaszyfrowany element zastępujący starszą rozmowę. Twoje najnowsze wiadomości i załączniki, do `keep.tokens`, są
+zachowywane obok niego:
+
+```text
+before   [ older conversation ........................ ][ recent user messages ]
+after    [ encrypted checkpoint + recent user messages ]
+```
+
+| Temat | Działanie |
+| --- | --- |
+| Obsługa | Modele OpenAI Responses. Obsługa zależy od wdrożenia i modelu. |
+| Próg | Te same ustawienia `auto` i `buffer` co przy kompaktowaniu podsumowaniem. Ręczne żądania też działają. |
+| Przenośność | Zaszyfrowany punkt kontrolny działa tylko z tym samym dostawcą i modelem. Po zmianie modelu sesja kontynuuje od pierwotnej rozmowy. |
+| Zbyt długie | Jeśli dostawca odrzuci kompaktowanie jako zbyt długie, OpenCode ponawia je z mniejszym żądaniem. Nie przełącza się na podsumowanie. |
+
+## Podsumowania
+
+Podsumowanie ma strukturę pozwalającą innemu agentowi przejąć pracę:
+
+```md
+## Objective
+Finish the authentication migration.
+
+## Next Move
+- Update the callback handler.
+- Verify the login flow.
+```
+
+Obejmuje cel i wymagania, decyzje, ukończoną i aktywną pracę, blokery i kolejne kroki oraz powiązane pliki. W zachowanej
+obok najnowszej rozmowie długie dane wyjściowe narzędzi są skracane, a dane załączników zastępowane krótkim opisem.
+
+Po kompaktowaniu bieżące wersje Twoich plików instrukcji stają się punktem odniesienia sesji; zobacz
+[Instrukcje](/instructions).
+
+## Limity
+
+| Limit | Wynik |
+| --- | --- |
+| Model | Kompaktowanie podsumowaniem respektuje `agents.compaction.model`; w przeciwnym razie używa modelu sesji. Kompaktowanie natywne zawsze używa modelu sesji. |
+| Historia | Kompaktowanie potrzebuje starszej rozmowy do zastąpienia. Nie tworzy miejsca, gdy żądanie to głównie stałe instrukcje i schematy narzędzi. |
+| Rozmiar | Jeśli rozmowa do skompaktowania sama jest zbyt długa, OpenCode wysyła skróconą wersję tekstową i może pominąć najstarsze wymiany. |
+| Odzyskiwanie | Żądanie odrzucone jako zbyt długie jest kompaktowane i ponawiane raz. Drugie odrzucenie jest zwracane jako błąd. |
+| Przechowywanie | Wcześniejsze wiadomości pozostają zapisane, nawet gdy nie są już wysyłane do modelu. |
+
+Na przykład tutaj kompaktowanie nie pomoże:
+
+```text
+128k context = 120k fixed instructions and tools + 8k conversation
+```
+
+## Migracja
+
+V1 używał zachowania tail-turn i przycinania. V2 używa podsumowań i `compaction.keep.tokens`:
+
+```jsonc
+{
+  "compaction": {
+    "keep": { "tokens": 15000 }
+  }
+}
+```
+
+Ustawienia i działanie na tej stronie dotyczą V2.

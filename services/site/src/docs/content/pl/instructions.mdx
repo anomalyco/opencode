@@ -1,0 +1,155 @@
+---
+title: "Instrukcje"
+description: "Zapewnij OpenCode stałe wskazówki projektowe plikami AGENTS.md i sprawdź, gdzie obowiązują, w jakiej kolejności się wczytują i jak działa mechanizm zapasowy CLAUDE.md."
+---
+
+Dodaj plik `AGENTS.md`, aby zapewnić OpenCode stałe wskazówki projektowe. Używaj go do poleceń budowania, notatek
+o architekturze, konwencji kodu i wymagań weryfikacji.
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+Commituj pliki instrukcji projektu, aby każdy pracujący w repozytorium otrzymywał te same wskazówki.
+
+## Zakres
+
+Umieść `AGENTS.md` w katalogu, w którym jego wskazówki mają obowiązywać. OpenCode wczytuje plik globalny, a następnie
+każdy `AGENTS.md` od bieżącego katalogu obszaru roboczego w stronę katalogu domowego. W przypadku obszarów roboczych poza
+katalogiem domowym zatrzymuje się na katalogu głównym projektu.
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+W tym przykładzie wczytywane są wszystkie cztery pliki. Są łączone w tej kolejności:
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+Wskazówki obowiązujące wszędzie trzymaj w pliku globalnym. Wskazówki dla całego repozytorium umieść w katalogu głównym
+projektu, a bardziej szczegółowe bliżej kodu, którego dotyczą. OpenCode łączy pliki i nie rozwiązuje konfliktów między
+nimi.
+
+Jeśli obszar roboczy jest poza katalogiem głównym projektu, wczytywany jest tylko plik globalny. Ustaw
+`OPENCODE_DISABLE_PROJECT_CONFIG=1`, aby pominąć odkrywanie projektowych `AGENTS.md` bez wyłączania pliku globalnego.
+
+### Mechanizm zapasowy CLAUDE.md
+
+W każdym katalogu bez `AGENTS.md` OpenCode czyta zamiast niego `CLAUDE.md`. Bez globalnego
+`~/.config/opencode/AGENTS.md` czyta `~/.claude/CLAUDE.md`. `AGENTS.md` w katalogu zawsze wygrywa z jego `CLAUDE.md`,
+więc dowiązanie symboliczne między nimi wczytuje się raz.
+
+Ustaw `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1`, aby pominąć każdy `CLAUDE.md`, lub `OPENCODE_DISABLE_CLAUDE_CODE=1`,
+aby pominąć też skille `.claude`. Serwer odczytuje obie przy starcie. W przypadku usługi w tle zapisz je przez
+`opencode service set env` i uruchom `opencode service restart`.
+
+## Odkrywanie
+
+Pliki instrukcji poniżej obszaru roboczego są odkrywane, gdy agent eksploruje projekt. Odczyt pliku lub wyświetlenie
+katalogu wczytuje wszystkie pliki `AGENTS.md` między tym celem a obszarem roboczym.
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+Zagnieżdżone pliki są wczytywane od najbliższego i deduplikowane, dopóki ich wpis instrukcji pozostaje w historii
+widocznej dla modelu. Ponowny odczyt tego samego obszaru zwykle nie wstrzykuje ich ponownie. Jeśli kompaktowanie lub
+cofnięcie usunie ten wpis, późniejszy odczyt może ponownie wczytać plik.
+
+Zmiany w zagnieżdżonym pliku nie są wykrywane automatycznie po jego wczytaniu. Rozpocznij nową sesję, gdy
+zaktualizowany tekst musi obowiązywać natychmiast.
+
+## Kolejność
+
+Najpierw wysyłany jest prompt systemowy wybranego agenta lub dostawcy. Następnie OpenCode składa początkowe instrukcje
+w tej kolejności:
+
+```text
+1. Agent or provider system prompt
+2. Code Mode tool guidance, when enabled
+3. MCP server, reference, and skill guidance
+4. Global and project AGENTS.md files, then configured instructions
+5. Built-in date and environment context
+6. Session-specific instruction entries supplied through the API
+```
+
+Te źródła są łączone, a nie używane jako nadpisania. Zagnieżdżone pliki `AGENTS.md` odkryte później są dodawane do
+historii sesji w kolejności odkrywania.
+
+## Aktualizacje
+
+Aby zaktualizować wskazówki w trakcie sesji, zmień globalny `AGENTS.md` lub plik znaleziony podczas przeszukiwania katalogów w górę.
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+Przed następnym żądaniem modelu OpenCode wykrywa zmianę i dodaje aktualizację instrukcji przed dostarczeniem
+oczekującego wejścia:
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- Po usunięciu wszystkich automatycznie wczytywanych plików `AGENTS.md` tego typu sesja przestaje stosować dotychczasowe instrukcje z tych plików.
+- Tymczasowy błąd odczytu zachowuje ostatnie znane instrukcje zamiast traktować je jako usunięte.
+- Przeniesienie sesji zachowuje jej stan instrukcji, więc wskazówki w miejscu docelowym są wprowadzane jako aktualizacja.
+- Zatwierdzenie cofnięcia sesji czyści jej stan instrukcji i wczytuje instrukcje ponownie przed następnym promptem.
+
+Treść instrukcji pozostaje chroniona. Aplikacje klienckie widzą, które źródła się zmieniły, ale nie widzą ich zawartości.
+
+## Konfiguracja
+
+Użyj tablicy `instructions`, aby dodać pliki, wzorce glob lub adresy URL HTTP(S) obok odkrytych plików `AGENTS.md`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "CONTRIBUTING.md",
+    "docs/guidelines/*.md",
+    "~/rules/opencode.md",
+    "https://example.com/instructions.md",
+  ],
+}
+```
+
+Skonfigurowane instrukcje wczytują się po plikach `AGENTS.md`, w kolejności wymienienia. Wpisy ze wszystkich dokumentów
+konfiguracji są łączone.
+
+| Wpis                    | Rozwiązywanie                                                          |
+| ----------------------- | ---------------------------------------------------------------------- |
+| Ścieżka względna lub glob | Wyszukiwane w każdym katalogu od obszaru roboczego do katalogu głównego projektu |
+| Ścieżka `~/`            | Rozwiązywane od Twojego katalogu domowego                              |
+| Ścieżka bezwzględna     | Używane bez zmian; nazwa pliku może być wzorcem glob                   |
+| `http://` lub `https://` | Pobierane przy wczytywaniu konfiguracji, z limitem pięciu sekund       |
+
+- Pliki lokalne aktualizują się jak `AGENTS.md` po zmianie. Nowe pliki pasujące do wzorca glob wczytują się przy
+  następnej zmianie konfiguracji.
+- Brakujące pliki są pomijane. URL, którego nie można pobrać, jest pomijany albo zachowuje ostatnio pobraną treść.
+- Przy `OPENCODE_DISABLE_PROJECT_CONFIG=1` lub gdy obszar roboczy jest poza projektem, wpisy względne są rozwiązywane
+  względem globalnego katalogu konfiguracji.
+
+Podłączony obszar roboczy [OpenCode Console](/console) może też udostępniać instrukcje.
+
+Zobacz [Konfiguracja](/config), aby poznać lokalizacje i pierwszeństwo konfiguracji.

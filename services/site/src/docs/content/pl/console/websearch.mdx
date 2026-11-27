@@ -1,0 +1,52 @@
+---
+title: "Wyszukiwanie w internecie w Console"
+description: "Hostowane wyszukiwanie w internecie dla OpenCode przez Console."
+---
+
+Console udostępnia hostowane wyszukiwanie w internecie podłączonym użytkownikom OpenCode. Właściciel lub administrator
+obszaru roboczego włącza je raz dla całego obszaru, bez przekazywania członkom osobnego klucza dostawcy wyszukiwania.
+
+Każde udane wyszukiwanie kosztuje **$0.01**. Opłatę pobieramy z salda obszaru roboczego i wliczamy ją do limitu wydatków członka.
+
+## Włączanie
+
+1. Zaloguj się do [Console](https://opencode.ai/console) jako właściciel lub administrator obszaru roboczego.
+2. Otwórz **Integrations** i kliknij **Set up** przy **Hosted Web Search**.
+3. Kliknij **Enable**.
+
+Następnie każdy członek podłącza OpenCode do obszaru roboczego poleceniem `/connect`.
+
+```text
+/connect
+```
+
+Konfiguracja obszaru roboczego wybiera **OpenCode Web Search** jako domyślnego dostawcę. Członkowie nie muszą ustawiać
+`websearch.provider` ani dodawać klucza API dostawcy. Członek, który ustawi własne `websearch.provider`, zachowuje ten wybór.
+
+## Wyszukiwanie
+
+Poproś OpenCode o aktualne informacje w prompcie. Wyszukiwania są uruchamiane z OpenCode, a nie z interaktywnej strony
+w Console.
+
+```text
+Find the latest Bun release and summarize the changes with source links.
+```
+
+Hostowany dostawca przeszukuje publiczny internet i zwraca do ośmiu wyników. OpenCode używa ich, aby odpowiedzieć
+na prompt i podać źródła.
+
+Zobacz [przewodnik po wyszukiwaniu w internecie](/websearch), aby skonfigurować uprawnienia lub wyłączyć narzędzie.
+
+## Rozliczenia
+
+Console pobiera **$0.01**, gdy wyszukiwanie zwróci prawidłowy zestaw wyników. Nie pobiera opłat za nieudane wyszukiwania
+ani za te odrzucone z powodu limitu zapytań.
+
+Wyszukiwanie w internecie jest pokazywane osobno od użycia modeli w **Activity › Usage**, **Activity › Overview**,
+aktywności członków, fakturach i eksportach CSV. Obowiązujące zasady budżetu obejmujące wszystkie wydatki uwzględniają
+opłaty za wyszukiwanie w internecie.
+
+## Prywatność
+
+Hostowane wyszukiwanie w internecie ma zerową retencję danych. Console i jej hostowany dostawca wyszukiwania przetwarzają
+każde zapytanie i jego wyniki bez zapisywania ich treści.

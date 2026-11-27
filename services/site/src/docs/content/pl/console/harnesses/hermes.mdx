@@ -1,0 +1,64 @@
+---
+title: "Hermes"
+description: "Korzystaj z modeli Console i Go w Hermes Agent."
+---
+
+[Hermes Agent](https://hermes-agent.nousresearch.com) zawiera dostawców OpenCode dla rozliczenia za użycie i Go. Dla
+każdego płatnego modelu lub modelu Go wybiera odpowiednie API. Darmowe modele czatu są dostępne tylko w OpenCode.
+Próba użycia ich w Hermes kończy się błędem HTTP `403`.
+
+<Callout>
+  [Console CLI](/console/harnesses#console-cli) konfiguruje Hermes jednym poleceniem, wraz z zasadami obszaru roboczego,
+  serwerami MCP, skillami i instrukcjami. Uruchom `npx @opencode/console setup hermes`. Poniższe kroki opisują ręczną konfigurację.
+</Callout>
+
+| Dostawca       | Plan              | Zmienna klucza         |
+| -------------- | ----------------- | ---------------------- |
+| `opencode-zen` | Rozliczenie za użycie | `OPENCODE_ZEN_API_KEY` |
+| `opencode-go`  | Go                | `OPENCODE_GO_API_KEY`  |
+
+## Konfiguracja
+
+Uruchom konfigurację modeli i wybierz **OpenCode Zen** dla rozliczenia za użycie albo **OpenCode Go** dla Go.
+
+```bash
+hermes model
+```
+
+Wklej [osobisty klucz API](/console/harnesses#get-an-api-key), a następnie wybierz model. Hermes zapisuje
+klucz w `~/.hermes/.env`, a wybór w `~/.hermes/config.yaml`.
+
+```yaml title="~/.hermes/config.yaml"
+model:
+  provider: opencode-go
+  default: kimi-k3
+```
+
+<Callout>Go wymaga identyfikatora sesji w każdym żądaniu. Hermes v0.21.6 i nowsze wysyłają go automatycznie.</Callout>
+
+## Modele
+
+Używaj identyfikatorów modeli z tabeli [Console](/console/models#endpoints) lub [Go](/console/go#endpoints) bez prefiksu.
+Przełączaj modele w sesji poleceniem `/model` albo wybierz model dla pojedynczego uruchomienia.
+
+```bash
+hermes chat --provider opencode-zen --model claude-sonnet-5-5
+```
+
+## Console MCP
+
+Dodaj serwer [Console MCP](/console/harnesses#console-mcp) z OAuth, a następnie zaloguj się w przeglądarce.
+
+```bash
+hermes mcp add opencode-console --url https://opencode.ai/console/mcp --auth oauth
+hermes mcp login opencode-console
+```
+
+Możesz też dodać go do `~/.hermes/config.yaml` i uruchomić `/reload-mcp` w sesji.
+
+```yaml title="~/.hermes/config.yaml"
+mcp_servers:
+  opencode-console:
+    url: https://opencode.ai/console/mcp
+    auth: oauth
+```

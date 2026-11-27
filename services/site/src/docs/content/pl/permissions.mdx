@@ -1,0 +1,308 @@
+---
+title: "Uprawnienia"
+description: "Kontroluj, co agenci OpenCode mogą robić, za pomocą uporządkowanych reguł allow, deny i ask dopasowywanych do akcji i zasobów, takich jak ścieżki i polecenia."
+---
+
+Uprawnienia kontrolują, czy agent może wykonać akcję na zasobie.
+
+## Konfiguracja
+
+Typowa konfiguracja pyta przed uruchomieniem poleceń powłoki, zezwala na rutynowe sprawdzanie Git i zawsze blokuje
+wypychanie. Dodaj te uporządkowane reguły do `opencode.jsonc`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+    { "action": "shell", "resource": "git diff *", "effect": "allow" },
+    { "action": "shell", "resource": "git push *", "effect": "deny" },
+  ],
+}
+```
+
+Wygrywa ostatnia pasująca reguła, więc szczegółowe wyjątki następują po regule ogólnej.
+
+<Callout type="warning">
+  V1 używa innych nazw pól i akcji. W V2 używaj `permissions`, `shell` i `subagent` zamiast `permission`, `bash`
+  i `task`.
+</Callout>
+
+## Reguły
+
+Każda reguła wymaga trzech pól tekstowych:
+
+| Pole       | Znaczenie                                                                  |
+| ---------- | -------------------------------------------------------------------------- |
+| `action`   | Akcja uprawnień narzędzia                                                  |
+| `resource` | Używana wartość, taka jak ścieżka, polecenie, URL, zapytanie, ID skilla lub ID agenta |
+| `effect`   | `allow`, `deny` lub `ask`                                                  |
+
+```jsonc
+{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "*.env", "effect": "deny" },
+  ],
+}
+```
+
+| Efekt   | Wynik                                |
+| ------- | ------------------------------------ |
+| `allow` | Kontynuuj bez pytania                |
+| `deny`  | Zablokuj operację                    |
+| `ask`   | Czekaj na decyzję klienta            |
+
+Jeśli żadna reguła nie pasuje, OpenCode używa `ask`.
+
+## Dopasowanie
+
+Akcje i zasoby używają prostych symboli wieloznacznych obejmujących całą wartość:
+
+| Wzorzec | Dopasowuje                                  |
+| ------- | ------------------------------------------- |
+| `*`     | Zero lub więcej znaków, w tym `/`           |
+| `?`     | Dokładnie jeden znak                        |
+| Inne    | Znak dosłowny                               |
+
+```jsonc
+{
+  "permissions": [
+    { "action": "edit", "resource": "packages/docs/*.mdx", "effect": "allow" },
+  ],
+}
+```
+
+Ten wzorzec dopasowuje całą znormalizowaną ścieżkę. Ukośniki wsteczne są normalizowane do ukośników, a dopasowanie nie
+rozróżnia wielkości liter w Windows.
+
+Wzorzec powłoki kończący się na ` *` dopasowuje też polecenie bez argumentów:
+
+```jsonc
+{ "action": "shell", "resource": "git status *", "effect": "allow" }
+```
+
+Pasuje to zarówno do `git status`, jak i `git status --short`.
+
+OpenCode łączy reguły po kolei i używa ostatniego dopasowania. Konfiguracja o niższym priorytecie wczytuje się pierwsza,
+następnie dopisywane są reguły globalne, a na końcu reguły agenta.
+
+```jsonc
+{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "secrets/*", "effect": "deny" },
+  ],
+}
+```
+
+Operacje mogą sprawdzać kilka zasobów, na przykład patch dotyczący wielu plików. Każde `deny` blokuje operację;
+w przeciwnym razie każde `ask` powoduje pytanie; w przeciwnym razie operacja jest dozwolona.
+
+## Akcje
+
+Nazwy akcji V2 to ciągi znaków, więc pluginy mogą definiować kolejne akcje. Wbudowane narzędzia używają obecnie tych
+akcji i zasobów:
+
+| Akcja                | Zasób                                                                       |
+| -------------------- | --------------------------------------------------------------------------- |
+| `read`               | Wewnętrzna ścieżka względna lokalizacji lub kanoniczna bezwzględna ścieżka zewnętrzna |
+| `edit`               | Ścieżka docelowa dla `edit`, `write` i `patch`                              |
+| `glob`               | Żądany wzorzec glob                                                         |
+| `grep`               | Żądane wyrażenie regularne, a nie ścieżka wyszukiwania                      |
+| `shell`              | Ciąg polecenia wytworzony przez skaner; polecenia złożone mogą wytworzyć kilka |
+| `subagent`           | ID agenta docelowego                                                        |
+| `skill`              | ID skilla                                                                   |
+| `question`           | `*`                                                                         |
+| `webfetch`           | Żądany URL                                                                  |
+| `websearch`          | Zapytanie wyszukiwania                                                      |
+| `generate_image` | Wybrany model obrazu jako `providerID/modelID`, plus `#variant`, gdy ustawiono |
+| `external_directory` | Kanoniczna granica zewnętrznego katalogu, zwykle kończąca się na `/*`       |
+| `<server>_<tool>`    | `*` dla narzędzia MCP; nieobsługiwane znaki w obu nazwach stają się `_`     |
+| `opencode_list_mcp_resources` | Nazwa serwera MCP                                                  |
+| `opencode_read_mcp_resource`  | `<server>:<uri>`                                                   |
+| `execute`            | `*`; odmowa usuwa Code Mode i wymienia jego narzędzia bezpośrednio, a zagnieżdżone narzędzia egzekwują swoje reguły |
+
+Na przykład zezwól na jeden skill i zabroń wszystkich pozostałych:
+
+```jsonc
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "deny" },
+    { "action": "skill", "resource": "effect", "effect": "allow" },
+  ],
+}
+```
+
+`doom_loop` i `lsp` nie są obecnymi akcjami uprawnień V2 Core.
+
+## Katalogi
+
+Ścieżka poza aktywną lokalizacją i jej niegłównym worktree projektu jest sprawdzana względem `external_directory` przed
+regułami `read` lub `edit`. Domyślna zasada zezwala na `external_directory`, więc zewnętrzne ścieżki nie powodują pytań,
+chyba że dodasz regułę. Aby pytać przed każdym dostępem poza projekt:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "external_directory", "resource": "*", "effect": "ask" },
+  ],
+}
+```
+
+Węższe reguły po niej mogą zezwalać na konkretne katalogi lub ich zabraniać:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "external_directory", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "read", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "edit", "resource": "~/projects/reference/*", "effect": "deny" },
+  ],
+}
+```
+
+Dotyczy to zewnętrznych ścieżek używanych przez `read`, `edit`, `write` i `patch`. Powłoka sprawdza swój zewnętrzny
+katalog roboczy i katalogi wywnioskowane przez skaner przed sprawdzeniem zasobów `shell`.
+
+Dla `external_directory`, `read` i `edit` wiodące `~`, `~/`, `$HOME` lub `$HOME/` jest rozwijane przy wczytywaniu
+konfiguracji:
+
+```jsonc
+{ "action": "read", "resource": "$HOME/reference/*", "effect": "allow" }
+```
+
+Zasoby powłoki pozostają surowym tekstem polecenia i nie są rozwijane względem katalogu domowego.
+
+<Callout type="warning">
+  `shell` działa z uprawnieniami użytkownika hosta do systemu plików, procesów i sieci. Nie zawsze da się ustalić wszystkie
+  katalogi na podstawie treści polecenia, więc stosuj wąską listę dozwolonych poleceń powłoki zamiast wzorców mających
+  rozpoznawać każde niebezpieczne polecenie.
+</Callout>
+
+Względne ścieżki modyfikacji mogą opuszczać aktywną lokalizację, pozostając w worktree jej projektu. Jawne ścieżki
+zewnętrzne są kanonizowane przed dopasowaniem, więc autoryzuj tylko zaufane granice katalogów.
+
+## Skaner
+
+Sprawdzanie uprawnień powłoki używa wbudowanego skanera OpenCode dla Bash, Zsh, POSIX `sh` i PowerShell. Niektórych
+poleceń nie można bezpiecznie przeanalizować, na przykład błędnej składni lub dynamicznego wykonywania, takiego jak
+`eval`. Jeśli obowiązuje jakakolwiek reguła odmowy `shell`, takie polecenie kończy się błędem skanera, ponieważ nie można
+sprawdzić jego podpoleceń względem reguły odmowy. W przeciwnym razie wymaga zatwierdzenia całego polecenia jako jednego
+zasobu `shell` oraz `external_directory` `*`. Tylko reguła zezwalająca na każdy katalog lub użytkownik może udzielić
+drugiego zatwierdzenia, a żadne z zatwierdzeń nie jest zapisywane jako wzorzec.
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [
+    {
+      "permissions": [
+        { "action": "shell", "resource": "git status *", "effect": "allow" },
+        { "action": "shell", "resource": "rm *", "effect": "deny" },
+      ],
+    },
+  ],
+}
+```
+
+OpenCode stosuje reguły uprawnień i zapisane wzorce zatwierdzeń oraz próbuje ustalić katalogi dla każdego wyodrębnionego
+podpolecenia i katalogu docelowego `cd`. Nie ma dodatkowego trybu zatwierdzania ani ogólnego ograniczenia dla nieznanych katalogów.
+
+## Domyślne
+
+Każdy agent, w tym agenci własni, zaczyna od tej uporządkowanej zasady bazowej:
+
+```jsonc
+[
+  { "action": "*", "resource": "*", "effect": "allow" },
+  { "action": "read", "resource": "*.env", "effect": "ask" },
+  { "action": "read", "resource": "*.env.*", "effect": "ask" },
+  { "action": "read", "resource": "*.env.example", "effect": "allow" },
+]
+```
+
+Dostarczani agenci dopisują te zasady:
+
+| Agent        | Dodatkowa zasada                                                               |
+| ------------ | ------------------------------------------------------------------------------ |
+| `build`      | Zezwala na pytania                                                             |
+| `plan`       | Zezwala na pytania; zabrania edycji z wyjątkiem plików w `~/.opencode/plan`    |
+| `general`    | Zabrania pytań i uruchamiania subagentów                                       |
+| `explore`    | Zabrania wszystkiego z wyjątkiem powłoki, odczytów, globów, grep, pobierania z sieci, wyszukiwania w internecie i zewnętrznych katalogów; pyta o odczyt `.env` |
+| `title`      | Zabrania wszystkich akcji                                                      |
+| `summary`    | Zabrania wszystkich akcji                                                      |
+| `compaction` | Zachowuje zasadę bazową                                                        |
+
+Żadna domyślna reguła nie wymaga potwierdzenia dla `external_directory`, więc odczyt i edycja plików poza lokalizacją
+i worktree odbywają się bez pytania. Dodaj dla `external_directory` regułę `ask` lub `deny`, jak pokazano w sekcji
+[Katalogi](#directories), aby wymagać potwierdzenia lub zablokować dostęp zewnętrzny. Późniejsze reguły globalne i reguły
+agenta zastępują te ustawienia domyślne.
+
+## Agenci
+
+Wspólne reguły umieść na najwyższym poziomie, a węższe w `agents.<id>.permissions`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+  ],
+  "agents": {
+    "reviewer": {
+      "description": "Review code without changing it",
+      "mode": "subagent",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+Reguły agenta są dopisywane po regułach globalnych; nie zastępują tablicy globalnej. Własny subagent używa własnych
+uprawnień, a nie podzbioru uprawnień sesji nadrzędnej.
+
+## Zatwierdzenia
+
+Gdy reguła daje wynik `ask`, klienty mogą odpowiedzieć:
+
+| Wybór        | Odpowiedź  | Wynik                                                                |
+| ------------ | ---------- | -------------------------------------------------------------------- |
+| Zezwól raz   | `once`     | Zatwierdź tylko oczekujące żądanie                                   |
+| Zawsze zezwalaj | `always` | Zatwierdź je i zapisz proponowane wzorce narzędzia dla projektu      |
+| Odrzuć       | `reject`   | Odrzuć je i wszystkie inne oczekujące żądania uprawnień w tej sesji  |
+
+Na przykład wybór **Allow always** dla `git status --short` może zapisać prefiks powłoki obejmujący późniejsze polecenia
+`git status`:
+
+```text
+shell: git status * → allow
+```
+
+Zapisane zatwierdzenia to trwałe reguły `allow` w zakresie projektu. Nigdy nie zastępują skonfigurowanego `deny`.
+Narzędzia wybierają proponowany zapisany wzorzec: niektóre proponują `*`, powłoka proponuje prefiksy poleceń, pobieranie
+z sieci proponuje witrynę adresu URL (na przykład `https://opencode.ai/*`), a skille i subagenty proponują swoje ID.
+Przeglądaj szerokie zatwierdzenia i usuwaj te, które nie są już potrzebne.
+
+Klienty mogą dołączyć opinię przy odrzucaniu. Klienty nieinteraktywne muszą zdecydować, jak obsługiwać żądania
+zatwierdzenia; skonfigurowane reguły `deny` zawsze pozostają egzekwowane.
+
+## Zasady
+
+[Zasada](/policies) może bezwarunkowo odmówić dostępu po sprawdzeniu reguł uprawnień i zapisanych zatwierdzeń. Zamienia
+`allow` lub `ask` na `deny` i nigdy nie przyznaje dostępu.
+
+```jsonc
+{
+  "policies": [{ "action": "tool.use", "resource": "shell:sudo *", "effect": "deny" }],
+}
+```
+
+Zasady globalne i zarządzane przez Console zastępują konfigurację projektu, co pozwala organizacji zablokować polecenie,
+na które repozytorium by zezwoliło.

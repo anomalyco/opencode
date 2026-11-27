@@ -1,0 +1,248 @@
+---
+title: "RPC pluginów"
+description: "Udostępniaj własne metody i zdarzenia pluginu innym pluginom i klientom."
+---
+
+Pluginy mogą udostępniać własne metody i zdarzenia działające na serwerze, wywoływane przez inne pluginy lub klienty.
+
+## Definiowanie
+
+Użyj `Rpc.define`, aby wymienić metody, błędy i zdarzenia RPC.
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+        additionalProperties: false,
+      },
+      errors: {
+        not_found: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: {
+        type: "object",
+        properties: {
+          itemID: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["itemID", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+})
+```
+
+### Walidacja
+
+Definicja RPC opisuje kształty wejścia i wyjścia metod, zdarzeń i błędów. Obsługuje dwa formaty schematów:
+
+- JSON Schema, prosty i niewymagający zależności.
+- Dowolny walidator zgodny ze Standard Schema
+  - Zod
+  - Valibot
+  - ArkType
+
+### Wejście i wyjście
+
+Każda metoda może definiować schemat `input` dla argumentu i schemat `output` dla wartości zwracanej. Pomiń odpowiedni
+schemat, jeśli metoda nie przyjmuje argumentu albo nie zwraca wartości.
+
+```ts
+search: {
+  input: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+  },
+  output: {
+    type: "object",
+    properties: { text: { type: "string" } },
+    required: ["text"],
+  },
+}
+```
+
+Wartości JSON Schema mają w TypeScript typ `unknown`, więc zawęź je przed użyciem. Standard Schema wnioskuje typy
+wejścia i wyjścia.
+
+### Błędy
+
+Dodaj mapę `errors` do metody dla oczekiwanych niepowodzeń. Każdy klucz staje się `type` błędu, a jego schemat definiuje
+`data` błędu.
+
+```ts
+errors: {
+  not_found: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+    additionalProperties: false,
+  },
+}
+```
+
+Nazwy błędów zaczynające się od `rpc.` są zarezerwowane przez OpenCode.
+
+### Zdarzenia
+
+Dodaj zdarzenia do głównej mapy `events`. Każde zdarzenie ma schemat danych wysyłanych do subskrybentów.
+
+Dane zdarzenia muszą być obiektem. Użyj schematu pustego obiektu, gdy nie ma danych:
+
+```ts
+events: {
+  refreshed: {
+    schema: { type: "object", additionalProperties: false },
+  },
+}
+```
+
+Skalary, tablice, `null` i `undefined` nie są prawidłowymi danymi zdarzenia.
+
+## Implementacja
+
+Zarejestruj implementację w `setup`:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-plugin",
+  async setup(ctx) {
+    const registration = await ctx.rpc.register(Acme, {
+      search: async (input, context) => {
+        const { query } = input as { query: string }
+        const text = await findText(query, { signal: context.signal })
+        if (!text) return context.error("not_found", "Result not found", { query })
+        return { text }
+      },
+    })
+
+    const acme = ctx.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+
+    await registration.events.emit("updated", { itemID: "item-1", text: "ready" })
+  },
+})
+```
+
+Po zarejestrowaniu RPC ten sam plugin może go wywołać przez `ctx.rpc(Acme)`.
+
+Drugi argument zawiera `signal` do anulowania i `context.error(...)` dla zadeklarowanych błędów. Błąd możesz zwrócić lub
+zgłosić.
+
+Jeden plugin może zarejestrować więcej niż jedno RPC. Zwolnienie rejestracji je usuwa.
+
+## Wywoływanie
+
+Po zarejestrowaniu RPC można je wywołać przez HTTP lub z innego pluginu.
+
+### HTTP
+
+Utwórz klienta OpenCode, a następnie użyj `client.rpc`, aby utworzyć podklienta RPC:
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const acme = client.rpc(Acme)
+const result = await acme.search({ query: "hello" })
+```
+
+### Plugin
+
+Pluginy mają już klienta OpenCode. Na przykład plugin TUI może utworzyć tego samego podklienta RPC z `context.client`:
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode/plugin/tui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  id: "acme-tui",
+  async setup(context) {
+    const acme = context.client.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+    console.log(result)
+  },
+})
+```
+
+[Plugin GUI](/build/plugins/gui) odczytuje klienta serwera własnego aplikacji desktopowej z `ctx.client`:
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  setup(ctx) {
+    ctx.add(Command, {
+      id: "search",
+      title: "Search Acme",
+      run: async () => {
+        const result = await ctx.client.rpc(Acme).search({ query: "hello" })
+        console.log(result)
+      },
+    })
+  },
+})
+```
+
+Odczytuj `ctx.client` w miejscu wywołania: zmienia się po restarcie serwera. Gdy serwer jest nieosiągalny, każde
+wywołanie jest odrzucane.
+
+### Subskrypcja
+
+Użyj `events.on` dla wywołania zwrotnego i anuluj subskrypcję, gdy nasłuch nie jest już potrzebny:
+
+```ts
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+
+unsubscribe()
+```
+
+Aby uzyskać obiekt iterowalny asynchronicznie, użyj `events.subscribe("updated")`:
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+Subskrypcje zdarzeń są tylko na żywo, więc rozłączeni subskrybenci pomijają zdarzenia.
+
+- Subskrybuj lokalną nazwą, taką jak `updated`.
+- Otrzymywany typ jest poprzedzony prefiksem, takim jak `rpc.acme.updated`.
+- Każde zdarzenie zawiera `data` i `location`.
+- Wyładowanie pluginu zamyka jego subskrypcje.
+
+Zewnętrzni klienci otrzymują zdarzenia ze wszystkich lokalizacji, więc w razie potrzeby sprawdzaj `event.location`.
+Plugin serwera nadal musi być skonfigurowany i uruchomiony.
