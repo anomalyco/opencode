@@ -93,6 +93,7 @@ test("defensively syncs advertised Copilot models", async () => {
       ...Model.Info.default(Provider.ID.githubCopilot, Model.ID.make("gpt-5")),
       modelID: Model.ID.make("gpt-5"),
       name: "GPT-5 local",
+      compatibility: { supportsEffortUpdates: true },
     })
     const stale = Model.Info.make({
       ...Model.Info.default(Provider.ID.githubCopilot, Model.ID.make("stale")),
@@ -102,6 +103,8 @@ test("defensively syncs advertised Copilot models", async () => {
     const model = models.get(Model.ID.make("gpt-5"))
 
     expect(model?.name).toBe("GPT-5 local")
+    // Copilot's list has no field for mid-conversation effort changes, so the models.dev model's flag is kept.
+    expect(model?.compatibility).toEqual({ supportsEffortUpdates: true })
     expect(model?.package).toBe("@opencode/ai/providers/openai-compatible-responses")
     expect(model?.settings).toEqual({ baseURL: server.url.origin })
     expect(model?.cost[0]).toMatchObject({ input: 0, output: 0, cache: { read: 0, write: 0 } })
@@ -164,13 +167,4 @@ test("prices cache reads from either token price spelling", async () => {
   } finally {
     await server.stop(true)
   }
-})
-
-test("sends effort switches as configuration updates only for GPT-6 and later on Responses", () => {
-  const root = "https://api.githubcopilot.test"
-  expect(CopilotModels.routeFor("gpt-6.2-sol", "responses", root).effortUpdates).toBe(true)
-  expect(CopilotModels.routeFor("gpt-6-luna", undefined, root).effortUpdates).toBe(true)
-  expect(CopilotModels.routeFor("gpt-5.6-luna", "responses", root).effortUpdates).toBe(false)
-  expect(CopilotModels.routeFor("gpt-6-luna", "chat", root).effortUpdates).toBe(false)
-  expect(CopilotModels.routeFor("grok-4.6", "responses", root).effortUpdates).toBe(false)
 })

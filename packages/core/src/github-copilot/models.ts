@@ -187,7 +187,7 @@ function build(id: Model.ID, remote: UsableModel, baseURL: string, previous?: Mo
     settings: Provider.mergeOverlay(previous?.settings, { baseURL: route.baseURL }),
     headers: previous?.headers,
     body: previous?.body,
-    compatibility: route.effortUpdates ? { supportsEffortUpdates: true } : undefined,
+    compatibility: previous?.compatibility,
     capabilities: {
       tools: remote.capabilities.supports.tool_calls,
       input,
@@ -231,8 +231,6 @@ export function routeFor(modelID: string, advertised: Endpoint | undefined, root
   return {
     endpoint: selected,
     package: PACKAGES[selected],
-    // Like OpenAI's own Responses API, Copilot takes mid-conversation `configuration_update` items from GPT-6 on.
-    effortUpdates: selected === "responses" && gptVersion(modelID) >= 6,
     // Copilot serves Anthropic Messages under /v1 and its OpenAI APIs at the root.
     baseURL: selected === "messages" ? `${root}/v1` : root,
   }
@@ -247,14 +245,10 @@ function endpoint(supported: ReadonlyArray<string> | undefined): Endpoint | unde
 // Without advertised endpoints, Copilot serves GPT-5 and later (except GPT-5 mini), Grok and MAI Code
 // only on /responses, and Gemini and the rest on /chat/completions.
 function fallbackEndpoint(modelID: string): Endpoint {
-  if (gptVersion(modelID) >= 5 && !modelID.startsWith("gpt-5-mini")) return "responses"
+  const gpt = /^gpt-(\d+)/.exec(modelID)
+  if (gpt !== null && Number(gpt[1]) >= 5 && !modelID.startsWith("gpt-5-mini")) return "responses"
   if (modelID.startsWith("grok-") || modelID.startsWith("mai-code-")) return "responses"
   return "chat"
-}
-
-function gptVersion(modelID: string) {
-  const gpt = /^gpt-(\d+)/.exec(modelID)
-  return gpt === null ? 0 : Number(gpt[1])
 }
 
 function variants(remote: UsableModel, messages: boolean): Model.Info["variants"] {
