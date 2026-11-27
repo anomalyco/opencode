@@ -360,7 +360,8 @@ export const dict = {
   "docs.nav.plugins": "Eklentiler",
   "docs.nav.client": "İstemci",
   "docs.nav.workspace": "Çalışma alanı",
-  "docs.lockup.sectionDocs": "{{section}} dokümanları",
+
+  "docs.nav.console": "Console",  "docs.lockup.sectionDocs": "{{section}} dokümanları",
   "docs.lockup.switchLabel": "{{name}}, dokümanları değiştir",
   "docs.lockup.home": "{{name}} ana sayfası",
   "docs.lockup.switch": "Dokümanları değiştir",
