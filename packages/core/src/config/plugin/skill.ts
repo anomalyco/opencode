@@ -133,9 +133,6 @@ export const Plugin = define({
           if (!content) continue
           const parsed = SkillFile.parse(directory, filepath, content)
           if (parsed._tag === "Skipped") {
-            // A skill that fails to load is a configuration error the user has to see: at the default log
-            // level a debug line leaves the skill missing with no explanation. Same level the agent and
-            // command loaders use for the same class of failure.
             yield* Effect.logWarning("skill file skipped", {
               filepath,
               reason: parsed.reason,
