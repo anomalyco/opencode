@@ -59,6 +59,7 @@ export type SshWindowEvent =
       readonly item?: SshItem
       readonly dialog?: boolean
       readonly replace?: boolean
+      readonly port?: "reclaim" | "free"
       readonly onConnected?: Waiter
     }
   | { readonly type: "start.confirmed"; readonly id: string; readonly attempt: number; readonly item?: SshItem }
@@ -96,6 +97,7 @@ export type SshWindowEffect =
       readonly attempt: number
       readonly config: SshConfig
       readonly replace: boolean
+      readonly port?: "reclaim" | "free"
     }
   | {
       readonly type: "rpc.respond"
@@ -415,6 +417,7 @@ function connect(
       effects: [],
     }
   const attempt = state.issued + 1
+  const start = { type: "rpc.start" as const, id, attempt, config: event.config, replace: !!event.replace }
 
   return {
     state: put({ ...state, issued: attempt }, id, {
@@ -425,7 +428,7 @@ function connect(
     }),
     effects: [
       ...(current && isCalling(current) ? [abort(id)] : []),
-      { type: "rpc.start", id, attempt, config: event.config, replace: !!event.replace },
+      event.port ? { ...start, port: event.port } : start,
     ],
   }
 }

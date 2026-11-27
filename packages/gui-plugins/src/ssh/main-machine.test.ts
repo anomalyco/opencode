@@ -49,6 +49,15 @@ function ready() {
 }
 
 describe("ssh main connection", () => {
+  test("a ready server reports its remote service port", () => {
+    const state = replay(createSshMainState([box]), [
+      start({ ...box, background: true }),
+      { type: "attempt.ready", id: box.id, attempt: 1, http, port: 49374 },
+    ]).state
+
+    expect(item(state)).toMatchObject({ stage: "ready", port: 49374 })
+  })
+
   test("an endpoint never outlives the ready tunnel it belongs to", () => {
     const dropped = replay(ready(), [
       { type: "attempt.failed", id: box.id, attempt: 1, code: "connection", detail: "closed" },
@@ -285,8 +294,7 @@ describe("ssh reconnect budget", () => {
     ])
   })
 
-  test("closing stops every connection and retry and answers every waiter", () => {
-    const busy = replay(createSshMainState([box, { ...box, id: "two" }]), [
+  test("closing stops every connection and retry and answers every waiter", () => {    const busy = replay(createSshMainState([box, { ...box, id: "two" }]), [
       start({ ...box, background: true }),
       { type: "resolve.requested", id: box.id, waiter: 1 },
       start({ ...box, id: "two", background: true }),
@@ -331,5 +339,13 @@ describe("ssh reconnect budget", () => {
       { type: "configs.save", configs: [other] },
     ])
     expect(selectSshServers(forgotten.state).map((item) => item.config.id)).toEqual(["other"])
+  })
+
+  test("a port choice reaches the attempt it starts", () => {
+    const result = transitionSshMain(createSshMainState([box]), start({ ...box, port: "free" }, 1))
+
+    expect(result.effects).toEqual([
+      { type: "attempt.start", id: box.id, attempt: 1, config: box, replace: false, port: "free" },
+    ])
   })
 })

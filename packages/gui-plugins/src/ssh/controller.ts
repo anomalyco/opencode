@@ -1,3 +1,4 @@
+import { Hash } from "@opencode/util/hash"
 import { NodeSocketServer } from "@effect/platform-node"
 import {
   Cause,
@@ -47,6 +48,19 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
   const lifetime = yield* Scope.fork(parent)
   const changed = yield* PubSub.unbounded<void>()
   yield* Scope.addFinalizer(lifetime, PubSub.shutdown(changed))
+
+  // One SSH control master per target for the controller's lifetime, so a retry after a
+  // failed port attempt reuses the authenticated connection instead of prompting again.
+  const controlDirectory = yield* fs.makeTempDirectoryScoped({ prefix: "oc-ssh-control-" })
+  const controlHosts = new Map<string, string>()
+  yield* Effect.addFinalizer(() =>
+    Effect.forEach(
+      [...controlHosts],
+      ([control, host]) =>
+        exec({ args: ["-o", `ControlPath=${control}`, "-O", "exit", host], timeout: 2000 }).pipe(Effect.ignore),
+      { discard: true },
+    ),
+  )
 
   const current = { machine: createSshMainState(input.configs) }
   // Handles by attempt, for stopping and answering them only.
@@ -130,7 +144,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
     const fiber = yield* Effect.forEach(previous, (connection) => Fiber.interrupt(connection.fiber), {
       discard: true,
     }).pipe(
-      Effect.andThen(connect(effect.config, effect.attempt, effect.replace)),
+      Effect.andThen(connect(effect.config, effect.attempt, effect.replace, effect.port)),
       Effect.catchCause((cause) => {
         if (Cause.hasInterruptsOnly(cause)) return Effect.void
         const failure = SshFailure.from(Cause.squash(cause))
@@ -153,11 +167,21 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
   const exec = (options: Parameters<typeof runSsh>[0]) =>
     runSsh(options).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner))
 
-  const connect = Effect.fn("Ssh.connect")(function* (config: SshConfig, attempt: number, replace: boolean) {
+  const connect = Effect.fn("Ssh.connect")(function* (
+    config: SshConfig,
+    attempt: number,
+    replace: boolean,
+    portMode?: "reclaim" | "free",
+  ) {
     const id = config.id
     const target = yield* Effect.try({ try: () => parseTarget(config.target), catch: SshFailure.from })
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "oc-ssh-" })
-    const control = path.join(directory, "s")
+
+    // macOS limits Unix socket paths to 104 characters; a short hash keeps the control path well under it.
+    const control = path.join(
+      controlDirectory,
+      Hash.fast([target.host, ...target.args].join("\0")).slice(0, 12),
+    )
 
     const helper =
       input.command && input.command.length > 1 && process.platform !== "win32"
@@ -170,12 +194,8 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
       })
 
     if (process.platform !== "win32") {
-      target.args.unshift("-o", "ControlMaster=auto", "-o", "ControlPersist=60", "-o", `ControlPath=${control}`)
-      // Close only our local SSH master. The remote OpenCode service owns its
-      // own lifetime and must survive disconnect, failure, and app shutdown.
-      yield* Effect.addFinalizer(() =>
-        exec({ args: ["-o", `ControlPath=${control}`, "-O", "exit", target.host], timeout: 2000 }).pipe(Effect.ignore),
-      )
+      controlHosts.set(control, target.host)
+      target.args.unshift("-o", "ControlMaster=auto", "-o", "ControlPersist=300", "-o", `ControlPath=${control}`)
     }
 
     const askpass = yield* createAskpass({
@@ -214,6 +234,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
         development: input.development,
         env: askpass.env,
         replace,
+        port: portMode,
       }).pipe(
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.provideService(HttpClient.HttpClient, httpClient),
@@ -258,7 +279,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
         ),
         Effect.raceFirst(closed),
       )
-      yield* dispatch({ type: "attempt.ready", id, attempt, http })
+      yield* dispatch({ type: "attempt.ready", id, attempt, http, port: remote.port })
       // The tunnel closing fails the attempt, which the machine reads as a ready server that dropped.
       yield* closed
     }).pipe(Effect.raceFirst(askpass.closed))

@@ -90,8 +90,10 @@ export function createSshController(input: {
     const abort = new AbortController()
     tasks.set(id, abort)
 
+    const request = { ...effect.config, replace: effect.replace }
+
     void api
-      .start({ ...effect.config, replace: effect.replace })
+      .start(effect.port ? { ...request, port: effect.port } : request)
       // Observe admission before treating an older disconnected snapshot as the attempt's outcome.
       .then((revision) => input.refresh(revision, AbortSignal.any([abort.signal, lifetime.signal])))
       .then(
@@ -138,12 +140,23 @@ export function createSshController(input: {
       }),
     )
 
-  const resolve = (id: string, signal: AbortSignal, seen?: readonly SshItem[]): Promise<SshHttp> =>
+  const wait = (id: string, signal: AbortSignal, seen?: readonly SshItem[]): Promise<SshHttp> =>
     resolvable(id, seen, signal).then((api) => {
       const items = untrack(input.items)
 
-      return api.resolve({ id }, { signal }).then((http) => http ?? resolve(id, signal, items))
+      return api.resolve({ id }, { signal }).then((http) => http ?? wait(id, signal, items))
     })
+
+  // Opening a session whose server stopped is a request to reconnect: a terminal failure has no background retry,
+  // so waiting alone would never answer. An active attempt joins this one through the window machine.
+  const resolve = (id: string, signal: AbortSignal): Promise<SshHttp> => {
+    const item = current(id)
+
+    if (item && (item.stage === "disconnected" || (item.stage === "failed" && !item.retrying)))
+      dispatch({ type: "connect.requested", config: item.config, ipcActive: !!untrack(input.api), item })
+
+    return wait(id, signal)
+  }
 
   onCleanup(() => {
     lifetime.abort()
@@ -197,7 +210,7 @@ export function createSshController(input: {
     /** `onConnected` runs once the attempt settles, with whether the server is ready. */
     connect: (
       config: SshConfig,
-      options?: { dialog?: boolean; replace?: boolean; onConnected?: (ready: boolean) => void },
+      options?: { dialog?: boolean; replace?: boolean; port?: "reclaim" | "free"; onConnected?: (ready: boolean) => void },
     ) =>
       dispatch({
         type: "connect.requested",
@@ -206,6 +219,7 @@ export function createSshController(input: {
         item: current(config.id),
         dialog: options?.dialog,
         replace: options?.replace,
+        port: options?.port,
         onConnected: options?.onConnected,
       }),
     respond: (id: string, prompt: string, value: string) =>

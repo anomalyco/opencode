@@ -20,6 +20,22 @@ import type { SshController } from "./state"
 
 export { default as css } from "./ssh.css?inline"
 
+/** The message lines of a failure; stack frames, cause braces, and machine markers hide the cause. */
+function failureSummary(detail: string) {
+  const lines = detail.split(/\r?\n/).filter((line) => line.trim())
+
+  const messages = lines.filter(
+    (line) =>
+      line === line.trimStart() &&
+      !/^OPENCODE_[A-Z_]+=/.test(line) &&
+      !/^\[cause\]/.test(line) &&
+      !/^Error: Server process exited with code \d+$/.test(line) &&
+      !/^[}\])]+$/.test(line),
+  )
+
+  return (messages.length > 0 ? messages : lines).slice(0, 6).join("\n")
+}
+
 export function DialogSsh(props: {
   ssh: SshController
   config?: SshConfig
@@ -42,6 +58,8 @@ export function DialogSsh(props: {
     createSshDialogState({ id, config: props.config, promptOnly: props.promptOnly }),
   )
 
+  const [portStatus, setPortStatus] = createSignal<string>()
+
   const snapshot = createMemo(
     (): SshDialogSnapshot => ({
       item: ssh.item(id),
@@ -53,6 +71,8 @@ export function DialogSsh(props: {
   )
 
   const view = createMemo(() => viewSshDialog(dialogState(), snapshot()))
+  // The remote command's message, so an actionable cause is not hidden behind the error code.
+  const detail = createMemo(() => failureSummary(snapshot().item?.detail ?? ""))
   // One key per prompt, so typing a response never remounts and refocuses its field.
   const prompt = createMemo(() => view().prompt, undefined, { equals: (previous, next) => previous?.id === next?.id })
 
@@ -65,7 +85,8 @@ export function DialogSsh(props: {
   }
 
   const run = (effect: SshDialogEffect) => {
-    if (effect.type === "connect") return ssh.connect(effect.config, { dialog: true, replace: effect.replace })
+    if (effect.type === "connect")
+      return ssh.connect(effect.config, { dialog: true, replace: effect.replace, port: effect.port })
 
     if (effect.type === "respond") return ssh.respond(id, effect.prompt, effect.value)
 
@@ -77,8 +98,28 @@ export function DialogSsh(props: {
     if (props.onConnected) queueMicrotask(props.onConnected)
   }
 
-  const submit = () => dispatch({ type: "submitted", snapshot: untrack(snapshot) })
+  const submit = () => {
+    setPortStatus(undefined)
+    dispatch({ type: "submitted", snapshot: untrack(snapshot) })
+  }
+
   const respond = () => dispatch({ type: "responded", snapshot: untrack(snapshot) })
+
+  const retryPort = (mode: "reclaim" | "free") => {
+    const port = /Managed service port (\d+) on/.exec(snapshot().item?.detail ?? "")?.[1]
+
+    setPortStatus(
+      mode === "reclaim"
+        ? port
+          ? plugin.t("port.killing", { port })
+          : plugin.t("port.killingAny")
+        : plugin.t("port.free"),
+    )
+    dispatch({ type: "port.requested", snapshot: untrack(snapshot), mode })
+  }
+
+  // The port action this dialog started is still connecting.
+  const portBusy = () => !!portStatus() && (snapshot().submitting || snapshot().item?.stage === "connecting")
 
   // Follows the attempt in this window and main's state for the server.
   createKeyed(snapshot, (next) => dispatch({ type: "synced", snapshot: next }))
@@ -100,13 +141,39 @@ export function DialogSsh(props: {
   }
 
   const ConnectionError = () => (
-    <Show when={view().error}>
-      {(error) => (
-        <span id="ssh-error" class="settings-server-dialog-error !leading-[var(--line-height-compact)]" role="alert">
-          {plugin.t(error())}
-        </span>
-      )}
-    </Show>
+    <div class="flex w-full min-w-0 flex-col gap-2">
+      <Show when={portBusy()}>
+        <p class="text-13-regular text-v2-text-text-muted" role="status">
+          {portStatus()}
+        </p>
+      </Show>
+      <Show when={view().error}>
+        {(error) => (
+          <div class="flex w-full min-w-0 flex-col gap-2">
+            <span id="ssh-error" class="settings-server-dialog-error !leading-[var(--line-height-compact)]" role="alert">
+              {plugin.t(error())}
+            </span>
+            <Show when={detail()}>
+              {(text) => (
+                <pre class="ssh-error-detail" dir="auto">
+                  {text()}
+                </pre>
+              )}
+            </Show>
+            <Show when={view().error === "error.port" && !portBusy()}>
+              <div class="flex flex-wrap gap-2 pt-1">
+                <Button variant="neutral" disabled={view().primary.disabled} onClick={() => retryPort("free")}>
+                  {plugin.t("action.freePort")}
+                </Button>
+                <Button variant="contrast" disabled={view().primary.disabled} onClick={() => retryPort("reclaim")}>
+                  {plugin.t("action.killPort")}
+                </Button>
+              </div>
+            </Show>
+          </div>
+        )}
+      </Show>
+    </div>
   )
 
   return (

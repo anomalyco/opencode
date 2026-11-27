@@ -3,6 +3,7 @@ export default {
   placeholder: "ssh user@example.com",
   add: "Add SSH server",
   "server.menu.label": "SSH server",
+  "server.port": "Port {{port}}",
   target: "Host or SSH command",
   connect: "Connect",
   connectTo: "Connect to {{host}}",
@@ -26,11 +27,18 @@ export default {
   "error.unpublished":
     "This Desktop version has no published remote server. For development builds, install and start V2 on the host, then retry.",
   "error.service": "SSH connected, but the OpenCode server did not become ready.",
+  "error.port":
+    "The OpenCode service port is already in use. Kill the process holding it and retry, or start on another port.",
   "error.host-key":
     "The host’s identity could not be verified. Verify its fingerprint before updating your SSH known hosts.",
   "error.ssh-missing": "OpenSSH was not found. Install an OpenSSH client and ensure ssh is available on PATH.",
   "error.unavailable": "SSH is unavailable",
   "action.authenticate": "Authenticate",
+  "action.killPort": "Kill server and retry",
+  "action.freePort": "Use another port",
+  "port.killing": "Looking for the process on port {{port}}…",
+  "port.killingAny": "Looking for the process on the service port…",
+  "port.free": "Starting the server on another port…",
   "stage.connecting": "Connecting over SSH…",
   "stage.authentication": "Authentication required",
   "form.name": "Server name (optional)",

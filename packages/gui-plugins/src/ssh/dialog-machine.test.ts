@@ -220,4 +220,21 @@ describe("ssh dialog", () => {
       state,
     )
   })
+
+  test("a port failure offers reclaiming the port or starting on another one", () => {
+    const failed = snapshot({ item: server({ stage: "failed", error: "port" }) })
+
+    const state = replay(adding().state, [
+      { type: "submitted", snapshot: snapshot({}) },
+      { type: "synced", snapshot: failed },
+    ]).state
+
+    expect(viewSshDialog(state, failed).error).toBe("error.port")
+    expect(transitionSshDialog(state, { type: "port.requested", snapshot: failed, mode: "reclaim" }).effects).toEqual([
+      { type: "connect", config: { id: config.id, target: config.target, name: "" }, replace: false, port: "reclaim" },
+    ])
+    expect(transitionSshDialog(state, { type: "port.requested", snapshot: failed, mode: "free" }).effects).toEqual([
+      { type: "connect", config: { id: config.id, target: config.target, name: "" }, replace: false, port: "free" },
+    ])
+  })
 })

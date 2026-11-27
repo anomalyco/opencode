@@ -16,15 +16,178 @@ for file in "\${XDG_STATE_HOME:-$HOME/.local/state}"/opencode/service*.json; do
 done
 `
 
-export const discoverScript = `set -eu
+export function discoverScript(version: string) {
+  const own = binaryPath(version)
+
+  return `set -eu
 ${RemoteCli.discoverScript({ fromPath: true, cache: { directory: ".opencode/desktop-ssh", prefix: "0.0.0-beta-" } })}
+if [ -z "$cli" ] && [ -x "${own}" ]; then cli="${own}"; fi
 if [ -z "$cli" ]; then exit 0; fi
 ${registrationScript}`
+}
 
-export function startScript(version: string, replace = false) {
+export function startScript(version: string, replace = false, mode?: "reclaim" | "free") {
+  const command = replace ? "restart" : "start"
+
+  // A conflict keeps its fixed port when the holder is an OpenCode service recorded by
+  // a registration in this state directory, for example one left behind by a dropped
+  // connection: stop it and start again on the configured port. A foreign or absent
+  // listener (the default port sits inside the Linux ephemeral range) falls back to a
+  // free port. Any other OpenCode service belongs to another profile, so it is left
+  // untouched and the failure is reported.
+  //
+  // A released CLI that predates the port-owner markers only prints the user-facing
+  // message. The dialog turns that into a choice: `reclaim` kills a listening OpenCode
+  // service and retries the same port, `free` starts on another port.
   return `set -eu
+export OPENCODE_SERVICE_PORT_OWNER_MARKER=1
 cli="${binaryPath(version)}"
-"$cli" service ${replace ? "restart" : "start"}
+mode=${quote(mode ?? "")}
+start() { "$cli" service ${command} "$@"; }
+listener() {
+  port=$1
+  pid=
+  if command -v lsof >/dev/null 2>&1; then
+    pid=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -n 1)
+  fi
+  if [ -z "$pid" ] && command -v ss >/dev/null 2>&1; then
+    pid=$(ss -lptn 2>/dev/null | grep -F ":$port " | sed -n 's/.*pid=\\([0-9][0-9]*\\).*/\\1/p' | head -n 1)
+  fi
+  # Linux without lsof or ss: match the listening socket's inode in /proc/*/fd.
+  if [ -z "$pid" ] && [ -r /proc/net/tcp ]; then
+    inode=$(awk -v suffix=":$(printf '%04X' "$port")" '$4 == "0A" && substr($2, length($2) - length(suffix) + 1) == suffix { print $10; exit }' /proc/net/tcp /proc/net/tcp6 2>/dev/null)
+    if [ -n "$inode" ]; then
+      for fd in /proc/[0-9]*/fd/*; do
+        if [ "$(readlink "$fd" 2>/dev/null)" = "socket:[$inode]" ]; then
+          pid=\${fd#/proc/}
+          pid=\${pid%%/*}
+          break
+        fi
+      done
+    fi
+  fi
+  printf '%s' "$pid"
+}
+conflict_port() {
+  printf '%s\\n' "$1" | sed -n 's/.*Managed service port \\([0-9][0-9]*\\) on .*/\\1/p' | head -n 1
+}
+report_port() {
+  printf '%s\\n' "OPENCODE_SERVICE_PORT_IN_USE=$1" >&2
+  printf '%s\\n' "$2" >&2
+  exit 1
+}
+kill_service() {
+  kill "$1" 2>/dev/null || true
+  i=0
+  while kill -0 "$1" 2>/dev/null && [ "$i" -lt 5 ]; do
+    sleep 1
+    i=$((i + 1))
+  done
+  kill -9 "$1" 2>/dev/null || true
+}
+# Only a service recorded by a registration in this state directory is this home's own leftover.
+# The same port can be held by another profile's or XDG_STATE_HOME's service, and stopping that
+# would cut off its sessions and running tools.
+owns() {
+  for file in "\${XDG_STATE_HOME:-$HOME/.local/state}"/opencode/service*.json; do
+    if [ -f "$file" ] && grep -Eq "\\"pid\\"[[:space:]]*:[[:space:]]*$1([^0-9]|$)" "$file"; then
+      return 0
+    fi
+  done
+  return 1
+}
+pick_port() {
+  awk -v seed="$$$1" 'BEGIN { srand(seed); print 20000 + int(rand() * 30000) }'
+}
+# Persists the chosen port, so a later cold start does not fall back to the taken default.
+free_port() {
+  attempt=0
+  output=
+  while [ "$attempt" -lt 20 ]; do
+    port=$(pick_port "$attempt")
+    attempt=$((attempt + 1))
+    if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ":$port "; then continue; fi
+    if ! setout=$("$cli" service set port "$port" 2>&1); then
+      output=$setout
+      continue
+    fi
+    if output=$(start 2>&1); then return 0; fi
+  done
+  report_port "$(conflict_port "$output")" "$output"
+}
+reclaim() {
+  port=$(conflict_port "$1")
+  [ -n "$port" ] || report_port 0 "$1"
+  pid=$(listener "$port")
+  # A port can be unavailable without a listening process (a closed connection or a reserved
+  # port). Killing cannot help there, so name that case instead of retrying the same port.
+  if [ -z "$pid" ]; then
+    report_port "$port" "No process is listening on port $port, so there is nothing to kill. Use \\"Use another port\\" to start the service on a free port."
+  fi
+  command=$(ps -o command= -p "$pid" 2>/dev/null || true)
+  case "$command" in
+    *opencode*serve*--service*) ;;
+    *) report_port "$port" "Port $port is held by PID $pid ($command), which is not an OpenCode service. Use \\"Use another port\\" instead." ;;
+  esac
+  if ! owns "$pid"; then
+    report_port "$port" "Port $port is held by an OpenCode service from another profile (PID $pid). It was not stopped; use \\"Use another port\\" instead."
+  fi
+  if ! kill "$pid" 2>/dev/null; then
+    report_port "$port" "Could not stop PID $pid on port $port. Use \\"Use another port\\" instead."
+  fi
+  i=0
+  while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 5 ]; do
+    sleep 1
+    i=$((i + 1))
+  done
+  kill -9 "$pid" 2>/dev/null || true
+  if ! retry=$(start 2>&1); then report_port "$port" "$retry"; fi
+}
+case "$mode" in
+  free)
+    free_port
+    ;;
+  reclaim)
+    if ! output=$(start 2>&1); then
+      case "$output" in
+        *"is already in use by "*) reclaim "$output" ;;
+        *) printf '%s\\n' "$output" >&2; exit 1 ;;
+      esac
+    fi
+    ;;
+  *)
+    if ! output=$(start 2>&1); then
+      case "$output" in
+        *"OPENCODE_SERVICE_PORT_OWNER=opencode"*)
+          pid=$(printf '%s\\n' "$output" | sed -n 's/^OPENCODE_SERVICE_PORT_OWNER_PID=//p')
+          if owns "$pid"; then
+            verify=$(ps -o command= -p "$pid" 2>/dev/null || true)
+            case "$verify" in
+              *opencode*serve*--service*) kill_service "$pid" ;;
+            esac
+            if ! retry=$(start 2>&1); then
+              printf '%s\\n%s\\n' "$output" "$retry" >&2
+              exit 1
+            fi
+          else
+            port=$(conflict_port "$output")
+            report_port "$port" "Port $port is held by an OpenCode service from another profile (PID $pid). It was not stopped; use another port."
+          fi
+          ;;
+        *"OPENCODE_SERVICE_PORT_OWNER=foreign"*|*"OPENCODE_SERVICE_PORT_OWNER=none"*)
+          if ! retry=$(start --port 0 2>&1); then
+            printf '%s\\n%s\\n' "$output" "$retry" >&2
+            exit 1
+          fi
+          ;;
+        *"is already in use by "*)
+          report_port "$(conflict_port "$output")" "$output"
+          ;;
+        *) printf '%s\\n' "$output" >&2; exit 1 ;;
+      esac
+    fi
+    ;;
+esac
 ${registrationScript}`
 }
 
@@ -79,15 +242,19 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
   development?: boolean
   env: NodeJS.ProcessEnv
   replace?: boolean
+  /** How to resolve a port the remote service cannot bind. */
+  port?: "reclaim" | "free"
 }) {
-  const run = (script: string) =>
+  const run = (script: string, remoteFailure?: SshFailure["code"]) =>
     runSsh({
       args: [...sshArgs(input.target), input.target.host, "sh -l -s"],
       env: input.env,
       stdin: script,
+      remoteFailure,
     })
 
-  const registered = parseRegistration(yield* run(discoverScript))
+  const discover = yield* Effect.try({ try: () => discoverScript(input.version), catch: SshFailure.from })
+  const registered = parseRegistration(yield* run(discover))
 
   if (registered && (input.development || registered.version === input.version))
     return yield* Effect.try({
@@ -108,7 +275,7 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
   const setup = { version, directory: `.opencode/desktop-ssh/${version}` }
 
   if (!staged) {
-    const output = yield* run(RemoteCli.probeScript).pipe(Effect.mapError(() => new SshFailure("platform")))
+    const output = yield* run(RemoteCli.probeScript, "platform")
 
     const target = output
       .split(/\r?\n/)
@@ -146,7 +313,13 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
     )
   }
 
-  const registration = parseRegistration(yield* run(startScript(version, input.replace)))
+  const registration = parseRegistration(
+    yield* run(startScript(version, input.replace, input.port), "service").pipe(
+      Effect.mapError((failure) =>
+        /^OPENCODE_SERVICE_PORT_IN_USE=\d+$/m.test(failure.detail) ? new SshFailure("port", failure.detail) : failure,
+      ),
+    ),
+  )
 
   if (!registration) return yield* Effect.fail(new SshFailure("service"))
 

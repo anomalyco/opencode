@@ -45,8 +45,14 @@ export default function SshRow(props: { row: ServerRow; id: string; ssh: SshCont
                 <Show
                   when={item().stage === "authentication"}
                   fallback={
-                    <Show when={props.row.health()?.version}>
-                      {(version) => <span class="settings-servers-meta">v{version()}</span>}
+                    <Show when={props.row.health()?.version || item().port}>
+                      <span class="settings-servers-meta">
+                        <Show when={props.row.health()?.version}>{(version) => <>v{version()}</>}</Show>
+                        <Show when={props.row.health()?.version && item().port}>{" · "}</Show>
+                        <Show when={item().port}>
+                          {(port) => plugin.t("server.port", { port: String(port()) })}
+                        </Show>
+                      </span>
                     </Show>
                   }
                 >

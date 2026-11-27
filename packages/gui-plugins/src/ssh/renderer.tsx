@@ -88,6 +88,14 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     dialog.open(render)
   }
 
+  // A connect from settings opens the dialog, which shows the cause and the port choices when an attempt fails.
+  const connectWithDialog = (config: SshConfig) => {
+    void boundedDialog().then(
+      (module) => open(module, () => <module.DialogSsh ssh={ssh} config={config} connect />),
+      () => showToast({ variant: "error", title: ctx.t("common.requestFailed") }),
+    )
+  }
+
   const [addState, setAddState] = createSignal(initialSshAdd)
 
   const dispatchAdd = (event: SshAddEvent<DialogModule>) => {
@@ -206,7 +214,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       run: (key) => {
         const item = byKey(key)
 
-        if (item) ssh.connect(item.config)
+        if (item) connectWithDialog(item.config)
       },
     }),
   )

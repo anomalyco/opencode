@@ -37,7 +37,7 @@ export type SshServerPhase =
       readonly resting: SshResting
       readonly prompt: SshPrompt
     }
-  | { readonly status: "ready"; readonly attempt: number; readonly http: SshHttp }
+  | { readonly status: "ready"; readonly attempt: number; readonly http: SshHttp; readonly port?: number }
   | {
       readonly status: "failed"
       readonly code: SshError
@@ -80,7 +80,14 @@ export type SshMainEvent =
       readonly value: string
       readonly owner: number
     }
-  | { readonly type: "attempt.ready"; readonly id: string; readonly attempt: number; readonly http: SshHttp }
+  | {
+      readonly type: "attempt.ready"
+      readonly id: string
+      readonly attempt: number
+      readonly http: SshHttp
+      /** The remote service port, for display. */
+      readonly port?: number
+    }
   /** A connect failed, or the tunnel of a ready server closed. */
   | {
       readonly type: "attempt.failed"
@@ -111,6 +118,8 @@ export type SshMainEffect =
       readonly attempt: number
       readonly config: SshConfig
       readonly replace: boolean
+      /** How a port conflict is resolved; omitted for automatic attempts. */
+      readonly port?: "reclaim" | "free"
     }
   | { readonly type: "attempt.stop"; readonly attempt: number }
   | { readonly type: "attempt.respond"; readonly attempt: number; readonly promptID: string; readonly value: string }
@@ -311,7 +320,7 @@ export function transitionSshMain(state: SshMainState, event: SshMainEvent): Ssh
   const ready = put(state, {
     ...server,
     savedConfig: server.config,
-    phase: { status: "ready", attempt: phase.attempt, http: event.http },
+    phase: { status: "ready", attempt: phase.attempt, http: event.http, port: event.port },
     waiters: [],
   })
 
@@ -333,6 +342,7 @@ export function selectSshServers(state: SshMainState, viewer?: number): SshItem[
       stage: phase.status === "authenticating" ? "authentication" : phase.status,
       // Only a ready server has an endpoint.
       http: phase.status === "ready" ? phase.http : undefined,
+      port: phase.status === "ready" ? phase.port : undefined,
       prompt: phase.status === "authenticating" && phase.owner === viewer ? phase.prompt : undefined,
       authenticatingElsewhere: phase.status === "authenticating" && phase.owner !== viewer,
       retrying: phase.status === "failed" && phase.retry ? true : undefined,
@@ -371,6 +381,7 @@ function start(state: SshMainState, request: SshStart, owner: number | undefined
   if (request.background && (isActive(phase) || phase.status === "ready")) return unchanged(state)
   const attempt = state.issued + 1
   const config = { id, target: request.target.trim(), name: request.name.trim() }
+  const start = { type: "attempt.start" as const, id, attempt, config, replace: !!request.replace }
 
   return {
     state: put(
@@ -390,7 +401,7 @@ function start(state: SshMainState, request: SshStart, owner: number | undefined
         waiters: server?.waiters ?? [],
       },
     ),
-    effects: [...halt(phase), { type: "attempt.start", id, attempt, config, replace: !!request.replace }],
+    effects: [...halt(phase), request.port ? { ...start, port: request.port } : start],
   }
 }
 
@@ -420,7 +431,7 @@ function failed(
   const retry =
     !!server.savedConfig &&
     failures < SSH_RETRY_LIMIT &&
-    !["input", "platform", "unpublished", "host-key", "ssh-missing"].includes(code) &&
+    !["input", "platform", "unpublished", "host-key", "ssh-missing", "port"].includes(code) &&
     !/Permission denied/.test(detail)
 
   if (!retry)

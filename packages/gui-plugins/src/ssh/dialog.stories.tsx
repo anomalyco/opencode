@@ -36,6 +36,16 @@ type FixtureState = {
   timer?: ReturnType<typeof setTimeout>
 }
 
+const SERVICE_FAILURE = `Error: Server process exited with code 1
+Error: Managed service port 49374 on 0.0.0.0 is already in use by another process. Configure another port with \`opencode service set port <port>\` and start the service again.
+    at <anonymous> (/repo/opencode/packages/cli/src/server-process.ts:180:19) {
+  [cause]: ServeError:
+      at onError (/repo/opencode/node_modules/@effect/platform-node/dist/NodeHttpServer.js:151:30)
+      at applyHandlers (node:events:64:20)
+    [cause]: Error: Failed to start server. Is port 49374 in use?
+        at serve (node:_http_server:438:35)
+}`
+
 function Fixture(props: {
   session?: boolean
   settings?: boolean
@@ -45,6 +55,7 @@ function Fixture(props: {
   connectionDelay?: number
   initial?: "connecting" | "challenge" | "failure" | "required"
   responseDelay?: number
+  serviceFailure?: boolean
 }) {
   const state: FixtureState = {
     prompts: [],
@@ -109,6 +120,8 @@ function Fixture(props: {
         if (props.incompatible === "failed-update") return update({ stage: "failed", error: "install" })
 
         if (props.incompatible === "version-mismatch") return update({ stage: "incompatible", error: "version" })
+
+        if (props.serviceFailure) return update({ stage: "failed", error: "service", detail: SERVICE_FAILURE })
 
         if (props.initial === "failure" && state.before?.stage !== "failed")
           return update({ stage: "failed", error: "connection", detail: "Connection refused" })
@@ -326,6 +339,8 @@ export const VerificationCode = { render: () => <Fixture initial="challenge" pro
 export const Confirmation = { render: () => <Fixture initial="challenge" /> }
 
 export const Failure = { render: () => <Fixture initial="failure" /> }
+
+export const FailureService = { render: () => <Fixture initial="failure" serviceFailure /> }
 
 export const AuthenticationFailureRetry = { render: () => <Fixture prompts={["password"]} rejectPassword /> }
 

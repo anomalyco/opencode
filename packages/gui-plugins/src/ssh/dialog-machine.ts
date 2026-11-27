@@ -53,12 +53,22 @@ export type SshDialogEvent =
   | { readonly type: "name.changed"; readonly value: string }
   | { readonly type: "response.changed"; readonly prompt: string; readonly value: string }
   | { readonly type: "submitted"; readonly snapshot: SshDialogSnapshot }
+  | {
+      readonly type: "port.requested"
+      readonly snapshot: SshDialogSnapshot
+      readonly mode: "reclaim" | "free"
+    }
   | { readonly type: "responded"; readonly snapshot: SshDialogSnapshot }
   | { readonly type: "synced"; readonly snapshot: SshDialogSnapshot }
   | { readonly type: "disposed" }
 
 export type SshDialogEffect =
-  | { readonly type: "connect"; readonly config: SshConfig; readonly replace: boolean }
+  | {
+      readonly type: "connect"
+      readonly config: SshConfig
+      readonly replace: boolean
+      readonly port?: "reclaim" | "free"
+    }
   | { readonly type: "respond"; readonly prompt: string; readonly value: string }
   | { readonly type: "cancel" }
   | { readonly type: "complete" }
@@ -129,6 +139,29 @@ export function transitionSshDialog(state: SshDialogState, event: SshDialogEvent
           type: "connect",
           config: { id: state.id, target: state.target, name: state.name },
           replace: event.snapshot.item?.stage === "incompatible",
+        },
+      ],
+    }
+  }
+
+  if (event.type === "port.requested") {
+    if (isBusy(state, event.snapshot) || !state.target.trim()) return unchanged(state)
+
+    return {
+      state: {
+        id: state.id,
+        mode: state.mode,
+        target: state.target,
+        name: state.name,
+        status: "active",
+        prompted: state.status === "active" ? state.prompted : false,
+      },
+      effects: [
+        {
+          type: "connect",
+          config: { id: state.id, target: state.target, name: state.name },
+          replace: false,
+          port: event.mode,
         },
       ],
     }
