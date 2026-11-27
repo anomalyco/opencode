@@ -518,7 +518,14 @@ function stream(hub: Hub) {
       `${member.console.server.replace(/^http/, "ws")}/api/event-watches/stream`,
       { headers: headers.value },
     )
-    const reader = yield* socket.reader.pipe(Effect.option)
+    // workerd's global WebSocket constructor rejects header options with a synchronous TypeError defect;
+    // treat that as "refused" so watches fall back to HTTP long-polling.
+    const reader = yield* socket.reader.pipe(
+      Effect.option,
+      Effect.catchDefect((defect) =>
+        defect instanceof TypeError ? Effect.succeed(Option.none()) : Effect.die(defect),
+      ),
+    )
     if (Option.isNone(reader)) return "refused" as const
     const writer = yield* socket.writer
     const handle = yield* settle(hub, (ids) =>
@@ -644,25 +651,27 @@ const settle = Effect.fnUntraced(function* (
     }).pipe(Effect.catch((cause) => Effect.logWarning("failed to deliver settled watch events", { sessionID, cause })))
   return Effect.fnUntraced(function* (events: ReadonlyArray<WatchEvent>) {
     const now = yield* Clock.currentTimeMillis
-    const ready = yield* Effect.forEach(Map.groupBy(events, (event) => event.sessionID), ([sessionID, batch]) =>
-      Effect.gen(function* () {
-        const held = waiting.get(sessionID)
-        if (batch.every(settles)) {
-          if (held) {
-            held.events.push(...batch)
-            held.last = now
+    const ready = yield* Effect.forEach(
+      Map.groupBy(events, (event) => event.sessionID),
+      ([sessionID, batch]) =>
+        Effect.gen(function* () {
+          const held = waiting.get(sessionID)
+          if (batch.every(settles)) {
+            if (held) {
+              held.events.push(...batch)
+              held.last = now
+              return []
+            }
+            const fresh: Held = { events: [...batch], first: now, last: now }
+            waiting.set(sessionID, fresh)
+            fresh.fiber = yield* wait(sessionID, fresh).pipe(Effect.forkIn(scope, { startImmediately: true }))
             return []
           }
-          const fresh: Held = { events: [...batch], first: now, last: now }
-          waiting.set(sessionID, fresh)
-          fresh.fiber = yield* wait(sessionID, fresh).pipe(Effect.forkIn(scope, { startImmediately: true }))
-          return []
-        }
-        if (!held) return batch
-        waiting.delete(sessionID)
-        if (held.fiber) yield* Fiber.interrupt(held.fiber)
-        return [...held.events, ...batch]
-      }),
+          if (!held) return batch
+          waiting.delete(sessionID)
+          if (held.fiber) yield* Fiber.interrupt(held.fiber)
+          return [...held.events, ...batch]
+        }),
     )
     yield* send(ready.flat())
   })
