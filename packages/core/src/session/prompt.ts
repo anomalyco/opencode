@@ -8,7 +8,6 @@ import type { SessionMessage } from "@opencode/schema/session-message"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Effect, Option, Schema } from "effect"
 import path from "path"
-import { fileURLToPath } from "url"
 import { Database } from "../database/database.js"
 import { Image } from "../image.js"
 import { Mime } from "../mime.js"
@@ -184,7 +183,7 @@ const readFileAttachment = Effect.fn("SessionPrompt.readFileAttachment")(functio
     try: () => {
       url.search = ""
       url.hash = ""
-      return fileURLToPath(url)
+      return FSUtil.fileUrlPath(url)
     },
     catch: () => new AttachmentError({ uri, message: `Invalid file URI: ${uri}` }),
   })

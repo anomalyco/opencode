@@ -11,7 +11,7 @@ import {
 } from "@opencode/ai/effect"
 import type { Model } from "@opencode/schema/model"
 import { Option, Schema } from "effect"
-import { fileURLToPath } from "url"
+import { FSUtil } from "@opencode/util/fs-util"
 import { SessionMessage } from "../message.js"
 import { SessionCompactionBackground } from "../compaction-background.js"
 import { SessionCompactionSubagents } from "../compaction-subagents.js"
@@ -32,7 +32,7 @@ const attachmentLocation = (file: FileAttachment) => {
   const url = URL.parse(file.source.uri)
   if (url?.protocol !== "file:") return undefined
   try {
-    return fileURLToPath(url)
+    return FSUtil.fileUrlPath(url)
   } catch {
     return undefined
   }
