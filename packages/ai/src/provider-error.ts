@@ -21,7 +21,8 @@ const patterns = [
   // Cloudflare Workers AI reports this as HTTP 413.
   /exceeded this model context window limit/i,
   /exceeds the context window/i,
-  /exceeds (?:the )?(?:model'?s )?maximum context length(?: of [\d,]+ tokens?|\s*\([\d,]+\))/i,
+  // Some OpenAI-compatible gateways omit the token count: "Your request exceeds the model's maximum context length."
+  /exceeds (?:the )?(?:model'?s )?maximum context length/i,
   /input token count.*exceeds the maximum/i,
   // Amazon Nova on Bedrock reports this as a mid-stream validationException.
   /number of input tokens exceeds maximum length/i,
@@ -229,9 +230,12 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   // (e.g. overflow phrases nested in a JSON error body) still classify.
   const text = [input.message, body].filter((value) => value.length > 0).join("\n")
   const clientScoped = input.status === undefined || (input.status >= 400 && input.status < 500)
+  // Some gateways wrap an upstream rejection in an HTTP 200 error body, so only a 5xx
+  // contradicts overflow evidence.
+  const overflowScoped = input.status === undefined || input.status < 500
 
   if (
-    clientScoped &&
+    overflowScoped &&
     (codes.includes("context_length_exceeded") ||
       codes.includes("model_context_window_exceeded") ||
       codes.includes("request_too_large") ||

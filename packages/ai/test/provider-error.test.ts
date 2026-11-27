@@ -28,6 +28,32 @@ describe("provider error classification", () => {
     expect(messages.every(isContextOverflow)).toBe(true)
   })
 
+  test("classifies overflow wrapped in an HTTP 200 error body", () => {
+    // An OpenAI-compatible gateway that answers the rejected request with HTTP 200 and omits the token count.
+    const body = {
+      error: {
+        code: "invalid_request_error",
+        message: "Your request exceeds the model's maximum context length. Please shorten your input.",
+        type: "invalid_request_error",
+      },
+    }
+    expect(
+      classifyProviderFailure({ message: body.error.message, status: 200, rawBody: JSON.stringify(body) }),
+    ).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
+    expect(
+      classifyProviderFailure({
+        message: "This model's maximum context length is 400000 tokens. Please reduce the length of the messages.",
+        status: 200,
+        rawBody: JSON.stringify({ error: { code: "context_length_exceeded" } }),
+      }),
+    ).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
+    // A server error still is not treated as overflow.
+    expect(
+      classifyProviderFailure({ message: "Your request exceeds the model's maximum context length.", status: 500 })
+        ._tag,
+    ).toBe("ProviderInternal")
+  })
+
   test("classifies Anthropic request_too_large as recoverable overflow", () => {
     expect(
       classifyProviderFailure({
