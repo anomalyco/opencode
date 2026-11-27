@@ -34,6 +34,8 @@ export type DocsRender = {
   /** The latest docs' page language, and whether its content is translated (a fallback page shows English). */
   locale: Locale
   translated: boolean
+  /** The page (or its English source) says noindex: no robots, no hreflang, no sitemap. */
+  noindex: boolean
   /** The page's head languages: English and each current translation, itself included (render.tsx). */
   alternates: readonly Locale[]
   /** The current section in the page's language, with its pages' titles (render.tsx). */
@@ -116,7 +118,7 @@ export function DocsDocument(props: DocsRender) {
             description={module.frontmatter.description}
             currentSlug={props.slug}
             headings={module.frontmatter.tableOfContents === false ? [] : module.headings}
-            noindex={module.frontmatter.noindex}
+            noindex={props.noindex}
             assets={props.assets}
             locale={props.locale}
             translated={props.translated}

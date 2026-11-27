@@ -5,7 +5,14 @@ import { docsContent, docsTranslations } from "./content"
 import { DocsDocument, docsI18n } from "./document"
 import type { DocsAssets } from "./layouts/DocsLayout"
 import { currentTranslation } from "./lib/heading-structure"
-import { docsHref, docsLanguageAlternates, docsLocaleHref, docsSectionTitles, getDocsSection } from "./lib/navigation"
+import {
+  docsHref,
+  docsLanguageAlternates,
+  docsLocaleHref,
+  docsSectionTitles,
+  docsSections,
+  getDocsSection,
+} from "./lib/navigation"
 import { renderSitemap } from "./lib/sitemap"
 import { latestHref, v1Href, v1Locales, v1Page, v1Section, v1Slug, type V1Locale } from "./lib/v1-navigation"
 
@@ -35,6 +42,9 @@ export async function renderDocsPage(set: DocsSet, slug: string, assets: DocsAss
       : undefined
   const module = translation ?? english
   const translated = translation !== undefined || locale === "en"
+  // A noindex page keeps its translations noindex too, and neither lists alternates nor appears
+  // in the sitemap. V1 sets noindex for the whole set (config.ts).
+  const noindex = Boolean(english?.frontmatter.noindex || translation?.frontmatter.noindex)
   const { locale: v1Locale, page } = v1Page(slug)
   const versions =
     set.id === "v1"
@@ -52,9 +62,9 @@ export async function renderDocsPage(set: DocsSet, slug: string, assets: DocsAss
   // The head lists the sitemap's languages: English and every current translation, the page
   // itself included. A non-English fallback page is not listed for its language and canonicals to
   // English, so its head lists English only.
-  const translations = set.id === "latest" ? await translatedLocales(slug) : []
+  const translations = set.id === "latest" && !noindex ? await translatedLocales(slug) : []
   const alternates =
-    set.id === "latest" ? (translated ? docsLanguageAlternates(translations) : (["en"] as Locale[])) : []
+    set.id === "latest" && !noindex ? (translated ? docsLanguageAlternates(translations) : (["en"] as Locale[])) : []
   const section = v1?.section ?? (await localizedSection(slug, locale))
   return renderToString(() => (
     <DocsDocument
@@ -64,6 +74,7 @@ export async function renderDocsPage(set: DocsSet, slug: string, assets: DocsAss
       assets={assets}
       locale={set.id === "latest" ? locale : "en"}
       translated={translated}
+      noindex={noindex}
       alternates={alternates}
       section={section}
       versions={versions}
@@ -112,22 +123,41 @@ const currentTranslations = new Map<string, Promise<Locale[]>>()
 function translatedLocales(slug: string) {
   const known = currentTranslations.get(slug)
   if (known) return known
-  const promise = Promise.all(
-    [...docsTranslations].map(async ([locale, pages]) => {
-      const load = pages.get(slug)
-      if (!load) return
-      return currentTranslation(await load()) ? locale : undefined
-    }),
-  ).then((locales) => locales.filter((locale): locale is Locale => locale !== undefined))
+  const promise = (async () => {
+    const english = await docsContent.get("latest")!.get(slug)?.()
+    if (english?.frontmatter.noindex) return []
+    const found = await Promise.all(
+      [...docsTranslations].map(async ([locale, pages]) => {
+        const load = pages.get(slug)
+        if (!load) return
+        const module = currentTranslation(await load())
+        return module && !module.frontmatter.noindex ? locale : undefined
+      }),
+    )
+    return found.filter((locale): locale is Locale => locale !== undefined)
+  })()
   currentTranslations.set(slug, promise)
   return promise
 }
 
-/** The latest docs' sitemap, with only the translations that are current (lib/sitemap.ts). */
+/**
+ * The latest docs' sitemap, with only the pages the navigation lists (as before) and only their
+ * current, indexable translations (lib/sitemap.ts). A noindex page is never submitted, in any
+ * language; it keeps noindex and no alternates in its head (DocsLayout.tsx).
+ */
 export async function renderDocsSitemap(site: URL) {
+  const pages: string[] = []
+  for (const slug of [
+    ...new Set(
+      docsSections.flatMap((section) => section.groups.flatMap((group) => group.items.map((item) => item.slug))),
+    ),
+  ]) {
+    const english = await docsContent.get("latest")!.get(slug)?.()
+    if (!english?.frontmatter.noindex) pages.push(slug)
+  }
   const translated = new Map<string, Locale[]>()
-  for (const slug of docsSlugs.latest) translated.set(slug, await translatedLocales(slug))
-  return renderSitemap(site, translated, docsSlugs.latest)
+  for (const slug of pages) translated.set(slug, await translatedLocales(slug))
+  return renderSitemap(site, translated, pages)
 }
 
 /**

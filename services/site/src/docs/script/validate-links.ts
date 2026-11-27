@@ -82,7 +82,7 @@ const linkFailures = (
 const hreflang = await checkHreflang()
 const failures = [...linkFailures, ...hreflang.failures]
 if (failures.length === 0) {
-  console.log(`docs: checked hreflang on ${hreflang.pages} pages`)
+  console.log(`docs: checked hreflang on ${hreflang.pages} pages (${hreflang.noindex} noindex, no alternates)`)
   process.exit(0)
 }
 console.error([...new Set(failures)].sort().join("\n"))
@@ -116,6 +116,7 @@ async function checkHreflang() {
     )
   ).flat()
   const failures: string[] = []
+  let noindex = 0
   for (const file of pages) {
     const html = await Bun.file(file).text()
     const head = html.slice(0, html.indexOf("</head>"))
@@ -123,6 +124,14 @@ async function checkHreflang() {
       .map((link) => `${link[1]} ${link[2]}`)
       .toSorted()
     const page = `/${path.relative(root, file).replace(/index\.html$/, "")}`
+    const shown = path.relative(root, file)
+    // A noindex page is not submitted in any language: it keeps no hreflang and no sitemap entry.
+    if (/<meta name="robots" content="noindex"/.test(head)) {
+      noindex++
+      if (links.length) failures.push(`${shown}: noindex page emits hreflang [${links.join(", ")}]`)
+      if (alternates.has(page)) failures.push(`${shown}: sitemap lists noindex ${page}`)
+      continue
+    }
     const canonical = head.match(/<link rel="canonical" href="([^"]+)"/)?.[1]
     const canonicalPath = canonical ? new URL(canonical).pathname : undefined
     const listed = alternates.get(page)
@@ -135,7 +144,6 @@ async function checkHreflang() {
             .filter((link) => link.startsWith("en ") || link.startsWith("x-default "))
             .join("\n")
         : undefined
-    const shown = path.relative(root, file)
     if (expected === undefined) {
       failures.push(
         `${shown}: no sitemap alternates for ${page}, and ${canonicalPath ?? "no canonical"} is not a listed fallback`,
@@ -147,5 +155,5 @@ async function checkHreflang() {
         `${shown}: head hreflang [${links.join(", ") || "none"}] differs from the sitemap's [${expected.split("\n").join(", ")}]`,
       )
   }
-  return { failures, pages: pages.length }
+  return { failures, pages: pages.length, noindex }
 }

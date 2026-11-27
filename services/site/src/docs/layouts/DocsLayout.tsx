@@ -148,7 +148,7 @@ export function DocsLayout(props: {
             />
           )}
         </For>
-        <Show when={props.set.id === "latest"}>
+        <Show when={props.set.id === "latest" && !props.noindex}>
           <link
             rel="alternate"
             hreflang="x-default"
