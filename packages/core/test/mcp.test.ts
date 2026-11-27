@@ -75,7 +75,11 @@ import { TestClock } from "effect/testing"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
 import { Global } from "@opencode/util/global"
-import { FSUtil } from "@opencode/util/fs-util"
+import { KV } from "@opencode/core/kv"
+import { Database } from "@opencode/core/database/database"
+import { TestDatabase } from "./lib/database"
+import BunSqlite from "bun:sqlite"
+import fsSync from "node:fs"
 import { isRecord } from "@opencode/util/record"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { advance, drain } from "./lib/clock"
@@ -379,7 +383,7 @@ function resourceMcpLayer(
     name?: string
     credentials?: Partial<Credential.Interface>
     bus?: Layer.Layer<Bus.Service>
-    /** Where MCP tool lists are cached; a fresh directory unless given. */
+    /** A directory whose database keeps saved MCP tools across layers; a fresh in-memory one unless given. */
     cache?: string
     /** `OPENCODE_FLAGS`, such as `-machines`. */
     flags?: string
@@ -476,21 +480,39 @@ function resourceMcpLayer(
         }),
         Layer.mock(Credential.Service, { list: () => Effect.succeed([]), ...overrides?.credentials }),
         overrides?.environment ?? hostEnvironmentLayer,
-        cacheLayer(overrides?.cache),
-        LayerNode.compile(FSUtil.node),
+        savedLayer(overrides?.cache),
       ),
     ),
   )
 }
 
-// Each MCP layer caches tool lists in its own directory, so one test's cache never feeds another's startup.
-const cacheLayer = (cache?: string) =>
-  Layer.effect(
-    Global.Service,
-    Effect.promise(async () =>
-      Global.make({ cache: cache ?? (await fs.mkdtemp(path.join(os.tmpdir(), "opencode-mcp-cache-"))) }),
-    ),
-  )
+// Each MCP layer saves tools in its own database unless a test shares a directory, so one test's saved tools never
+// feed another's startup.
+const savedLayer = (cache?: string) =>
+  AppNodeBuilder.build(LayerNode.group([KV.node, Database.node]), [
+    cache
+      ? Database.node.replace(
+          Database.layer({ path: path.join(cache, "opencode.db") }).pipe(
+            Layer.provide(Layer.succeed(Global.Service, Global.make())),
+          ),
+        )
+      : TestDatabase.replacement,
+  ])
+
+// The saved MCP entries in a test's shared database, read without holding it open.
+const savedEntries = (cache: string) =>
+  Effect.sync(() => {
+    const file = path.join(cache, "opencode.db")
+    if (!fsSync.existsSync(file)) return []
+    const database = new BunSqlite(file, { readonly: true })
+    try {
+      return database
+        .query<{ key: string; value: string }, []>("select key, value from kv where key like 'mcp/tools/%'")
+        .all()
+    } finally {
+      database.close()
+    }
+  })
 
 const connect = (server: string, config: typeof ConfigMCP.Server.Type, directory: string) =>
   McpClient.connect({ server, config, directory }).pipe(Effect.provide(hostEnvironmentLayer))
@@ -2211,12 +2233,12 @@ const shutdownIt = testEffect(
       Location.node,
       Flag.node,
       McpPool.node,
-      FSUtil.node,
-      Global.node,
+      KV.node,
+      Database.node,
       Flag.node,
     ]),
     [
-      Global.node.replace(cacheLayer()),
+      TestDatabase.replacement,
       Location.node.replace(
         Layer.succeed(
           Location.Service,
@@ -4298,7 +4320,10 @@ function fakeStdio() {
         exit(1, state.broken)
         return handle
       }
-      const protocol = new Server({ name: "fake", version: "1.0.0" }, { capabilities: { tools: {} } })
+      const protocol = new Server(
+        { name: "fake", version: "1.0.0" },
+        { capabilities: { tools: {} }, instructions: "Call echo to check the server." },
+      )
       protocol.setRequestHandler("tools/list", () =>
         Promise.resolve({ tools: [{ name: "echo", inputSchema: { type: "object" as const, properties: {} } }] }),
       )
@@ -4533,7 +4558,7 @@ describe("MCP reconnect", () => {
           flags: "mcp_resilience",
           cache: cache.path,
         })
-      const files = Effect.promise(() => fs.readdir(path.join(cache.path, "mcp", "tools")).catch((): string[] => []))
+      const files = savedEntries(cache.path)
 
       const listed = yield* Effect.gen(function* () {
         const service = yield* Mcp.Service
@@ -4542,11 +4567,9 @@ describe("MCP reconnect", () => {
         yield* eventually(files, (names) => names.length === 2)
         return yield* service.tools()
       }).pipe(Effect.provide(open(secret)))
-      for (const file of yield* files) {
-        expect(file).not.toContain("do-not-store")
-        expect(
-          yield* Effect.promise(() => fs.readFile(path.join(cache.path, "mcp", "tools", file), "utf8")),
-        ).not.toContain("do-not-store")
+      for (const entry of yield* files) {
+        expect(entry.key).not.toContain("do-not-store")
+        expect(entry.value).not.toContain("do-not-store")
       }
 
       // The same config offers the cached tools before its server answers.
@@ -4556,6 +4579,9 @@ describe("MCP reconnect", () => {
         const service = yield* Mcp.Service
         const cached = yield* eventually(service.tools(), (tools) => tools.length > 0)
         expect(cached).toEqual(listed)
+        expect((yield* service.instructions()).map((item) => item.instructions)).toEqual([
+          "Call echo to check the server.",
+        ])
         expect(yield* server(service)).toEqual({ status: "pending" })
         yield* service.awaitStartup()
         yield* Deferred.succeed(gate, undefined)
@@ -4580,6 +4606,54 @@ describe("MCP reconnect", () => {
     }),
   )
 
+  reconnecting.effect("deletes saved tools no server has saved for 30 days", () =>
+    Effect.gen(function* () {
+      const fake = fakeStdio()
+      const cache = yield* tmpdirScoped()
+      const open = () =>
+        resourceMcpLayer(config, undefined, undefined, {
+          environment: fake.environment,
+          flags: "mcp_resilience",
+          cache: cache.path,
+        })
+      const files = savedEntries(cache.path)
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* eventually(server(service), (status) => status?.status === "connected")
+        yield* eventually(files, (entries) => entries.length === 2)
+      }).pipe(Effect.provide(open()))
+
+      const old = Date.now() - 31 * 24 * 60 * 60 * 1000
+      yield* Effect.sync(() => {
+        const database = new BunSqlite(path.join(cache.path, "opencode.db"))
+        const insert = database.query(
+          "insert into kv (key, value, time_created, time_updated) values (?1, '{}', ?2, ?2)",
+        )
+        insert.run("mcp/tools/removed-server", old)
+        insert.run("mcp/tools/recent-server", Date.now())
+        insert.run("other/old", old)
+        database.close()
+      })
+      // The test clock starts at 0, so move it to now to measure the 30 days against the saved times.
+      yield* TestClock.setTime(Date.now())
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* eventually(files, (entries) => !entries.some((entry) => entry.key === "mcp/tools/removed-server"))
+        yield* eventually(server(service), (status) => status?.status === "connected")
+      }).pipe(Effect.provide(open()))
+      const keys = (yield* files).map((entry) => entry.key)
+      expect(keys).toContain("mcp/tools/recent-server")
+      expect(keys).toHaveLength(3)
+      const other = yield* Effect.sync(() => {
+        const database = new BunSqlite(path.join(cache.path, "opencode.db"), { readonly: true })
+        const row = database.query("select key from kv where key = 'other/old'").get()
+        database.close()
+        return row
+      })
+      expect(other).toEqual({ key: "other/old" })
+    }),
+  )
+
   reconnecting.effect("offers a local server's cached tools in a directory it has not run in yet", () =>
     Effect.gen(function* () {
       const fake = fakeStdio()
@@ -4592,7 +4666,7 @@ describe("MCP reconnect", () => {
           cache: cache.path,
           directory,
         })
-      const files = Effect.promise(() => fs.readdir(path.join(cache.path, "mcp", "tools")).catch((): string[] => []))
+      const files = savedEntries(cache.path)
       const listed = yield* Effect.gen(function* () {
         const service = yield* Mcp.Service
         yield* eventually(server(service), (status) => status?.status === "connected")
@@ -4624,7 +4698,7 @@ describe("MCP reconnect", () => {
           flags: "mcp_resilience",
           cache: cache.path,
         })
-      const files = Effect.promise(() => fs.readdir(path.join(cache.path, "mcp", "tools")).catch((): string[] => []))
+      const files = savedEntries(cache.path)
       const listed = yield* Effect.gen(function* () {
         const service = yield* Mcp.Service
         yield* eventually(server(service), (status) => status?.status === "connected")

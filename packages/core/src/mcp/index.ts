@@ -6,7 +6,7 @@ import { ephemeral } from "@opencode/schema/event"
 import type { Session } from "@opencode/schema/session"
 import type { Transport } from "@modelcontextprotocol/client"
 import { createHash } from "node:crypto"
-import path from "node:path"
+import { and, like, lt } from "drizzle-orm"
 import { isDeepStrictEqual } from "node:util"
 import {
   Clock,
@@ -30,10 +30,11 @@ import {
 import { FetchHttpClient } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { httpFetch } from "@opencode/util/effect/app-node-platform"
-import { FSUtil } from "@opencode/util/fs-util"
-import { Global } from "@opencode/util/global"
 import { Hash } from "@opencode/util/hash"
 import { Credential } from "../credential.js"
+import { Database } from "../database/database.js"
+import { KV } from "../kv.js"
+import { KVTable } from "../kv/sql.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
 import { Flag } from "../flag.js"
@@ -128,10 +129,10 @@ type ServerEntry = {
   // Set when a remote server is registered as an OAuth integration; the credential lives in the global store.
   integrationID?: Integration.ID
   registration?: State.Registration
-  // Tools offered while the connection has none: the last list of a connection that dropped or is reconnecting, or the
-  // disk-cached list of a server still starting. The next connect replaces it; only disabling, removing or
-  // reconfiguring the server drops it.
-  retained?: ReadonlyArray<McpClient.Tool>
+  // Tools and instructions offered while the connection has none: the last of a connection that dropped or is
+  // reconnecting, or the saved ones of a server still starting. The next connect replaces them; only disabling,
+  // removing or reconfiguring the server drops them.
+  retained?: Retained
   // Set while the server is down with its tools kept. The next request that needs the server reconnects, unless a
   // reconnect failed and its backoff has not passed yet. A sign-in that is needed, or an explicit lifecycle operation,
   // clears it.
@@ -154,32 +155,38 @@ const STARTUP_GRACE_MS = 2_000
 const RECONNECT_BACKOFF_MS = 1_000
 const RECONNECT_MAX_BACKOFF_MS = 30_000
 
-// Last listed tools per server, keyed by everything that changes the connection (see `McpPool.key`).
-const CachedTools = Schema.fromJsonString(
-  Schema.Struct({
-    tools: Schema.Array(
-      Schema.Struct({
-        name: Schema.String,
-        title: Schema.optional(Schema.String),
-        description: Schema.optional(Schema.String),
-        inputSchema: Schema.StructWithRest(
-          Schema.Struct({
-            type: Schema.Literal("object"),
-            properties: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-            required: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
-          }),
-          [Schema.Record(Schema.String, Schema.Unknown)],
-        ),
-        outputSchema: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-        annotations: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-        execution: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-        _meta: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-      }),
-    ),
-  }),
-)
-const decodeCachedTools = Schema.decodeUnknownOption(CachedTools)
-const encodeCachedTools = Schema.encodeSync(CachedTools)
+type Retained = { readonly tools: ReadonlyArray<McpClient.Tool>; readonly instructions?: string }
+
+// Saved tools and instructions are deleted once no server with the same connection has connected for this long.
+const SAVED_TTL_MS = 30 * 24 * 60 * 60 * 1000
+const SAVED_PREFIX = "mcp/tools/"
+
+// Last listed tools and instructions per server, keyed by everything that changes the connection (see `McpPool.key`).
+const Saved = Schema.Struct({
+  instructions: Schema.optional(Schema.String),
+  tools: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      title: Schema.optional(Schema.String),
+      description: Schema.optional(Schema.String),
+      inputSchema: Schema.StructWithRest(
+        Schema.Struct({
+          type: Schema.Literal("object"),
+          properties: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+          required: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+        }),
+        [Schema.Record(Schema.String, Schema.Unknown)],
+      ),
+      outputSchema: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+      annotations: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+      execution: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+      _meta: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+    }),
+  ),
+})
+const SavedJson = Schema.toCodecJson(Saved)
+const decodeSaved = Schema.decodeUnknownOption(SavedJson)
+const encodeSaved = Schema.encodeSync(SavedJson)
 
 // Bounds re-listing the tools of an attached connection that takes over the top of its stack.
 const FALLBACK_LIST_TIMEOUT = "5 seconds"
@@ -447,8 +454,8 @@ export const layer = (options?: Options) =>
       const fetch = yield* FetchHttpClient.Fetch
       const pool = yield* McpPool.Service
       const flags = yield* Flag.Service
-      const global = yield* Global.Service
-      const fsutil = yield* FSUtil.Service
+      const kv = yield* KV.Service
+      const db = (yield* Database.Service).db
       const resilient = flags.enabled("mcp_resilience")
       const root = yield* Effect.scope
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
@@ -651,52 +658,60 @@ export const layer = (options?: Options) =>
         )
       })
 
-      // One file per connection identity, so a change to the command, URL, environment, headers or signed-in
-      // account reads a different file. Secrets reach the name only as fingerprints inside a one-way hash. A local
-      // server's tools may depend on the directory it runs in, so its exact file includes that directory, and a second
-      // file without it lets a directory it has not run in yet start from the list another directory saw.
-      const toolsFiles = Effect.fnUntraced(function* (entry: ServerEntry) {
+      // One key per connection identity, so a change to the command, URL, environment, headers or signed-in account
+      // reads a different entry. Secrets reach the key only as fingerprints inside a one-way hash. A local server's tools
+      // may depend on the directory it runs in, so its exact key includes that directory, and a second key without it
+      // lets a directory it has not run in yet start from what another directory saw.
+      const savedKeys = Effect.fnUntraced(function* (entry: ServerEntry) {
         const credential = yield* selectCredential(entry)
         const { McpStdio } = yield* Effect.promise(() => import("./stdio.js"))
-        const file = (cwd: string | undefined) =>
-          path.join(
-            global.cache,
-            "mcp",
-            "tools",
-            `${Hash.sha256(
-              JSON.stringify([
-                location.workspaceID,
-                McpPool.key({ config: entry.config, cwd, credential: credential?.id, clientInfo: options?.clientInfo }),
-              ]),
-            )}.json`,
+        const key = (cwd: string | undefined) =>
+          SAVED_PREFIX +
+          Hash.sha256(
+            JSON.stringify([
+              location.workspaceID,
+              McpPool.key({ config: entry.config, cwd, credential: credential?.id, clientInfo: options?.clientInfo }),
+            ]),
           )
-        if (entry.config.type !== "local") return [file(undefined)]
-        return [file(McpStdio.resolveCwd(location.directory, entry.config.cwd)), file(undefined)]
+        if (entry.config.type !== "local") return [key(undefined)]
+        return [key(McpStdio.resolveCwd(location.directory, entry.config.cwd)), key(undefined)]
       })
 
-      const loadTools = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {
+      const load = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {
         if (entry.config.disabled || !(yield* resilient)) return
-        for (const file of yield* toolsFiles(entry)) {
-          const text = yield* fsutil.readFileStringSafe(file).pipe(Effect.orElseSucceed(() => undefined))
-          const tools = text === undefined ? undefined : Option.getOrUndefined(decodeCachedTools(text))?.tools
-          if (!tools) continue
-          entry.retained = tools
+        for (const key of yield* savedKeys(entry)) {
+          const saved = Option.getOrUndefined(decodeSaved(yield* kv.get(key)))
+          if (!saved) continue
+          entry.retained = saved
           return yield* bus.publish(McpEvent.ToolsChanged, { server: name })
         }
       })
 
-      const saveTools = (entry: ServerEntry) =>
+      // Every connect saves again, so an entry's update time says when a server with its connection last connected.
+      const save = (entry: ServerEntry) =>
         fork(
           Effect.gen(function* () {
             const tools = entry.connection.tools
             if (!tools || !(yield* resilient)) return
-            const text = encodeCachedTools({ tools })
-            yield* Effect.forEach(yield* toolsFiles(entry), (file) => fsutil.writeWithDirs(file, text), {
-              concurrency: "unbounded",
-              discard: true,
-            })
-          }).pipe(Effect.catch((error) => Effect.logWarning("failed to cache MCP tools", { error: error.message }))),
+            const instructions = entry.connection.client?.instructions
+            const value = encodeSaved(instructions ? { tools, instructions } : { tools })
+            yield* Effect.forEach(yield* savedKeys(entry), (key) => kv.set(key, value), { discard: true })
+          }),
         )
+
+      // Drops what no server has saved in a while: removed servers, old configurations and directories.
+      fork(
+        Effect.gen(function* () {
+          if (!(yield* resilient)) return
+          const before = (yield* Clock.currentTimeMillis) - SAVED_TTL_MS
+          yield* db
+            .delete(KVTable)
+            .where(and(like(KVTable.key, `${SAVED_PREFIX}%`), lt(KVTable.time_updated, before)))
+            .run()
+        }).pipe(
+          Effect.catch((error) => Effect.logWarning("failed to prune saved MCP tools", { error: error.message })),
+        ),
+      )
 
       const dropRetained = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {
         // The tagged list may still hold the dropped tools, and `retain` falls back to it.
@@ -706,12 +721,14 @@ export const layer = (options?: Options) =>
         yield* bus.publish(McpEvent.ToolsChanged, { server: name })
       })
 
-      // Keeps offering the connection's last tools while it stops, so a restart or a drop changes nothing the
-      // model sees. Runs under the server lock.
+      // Keeps offering the connection's last tools and instructions while it stops, so a restart or a drop changes
+      // nothing the model sees. Runs under the server lock.
       const retain = Effect.fnUntraced(function* (entry: ServerEntry) {
         if (!(yield* resilient)) return
         // A shared connection has already emptied its catalogs, so fall back to the last list read from it.
-        entry.retained = entry.connection.tools ?? entry.retained ?? entry.tagged?.source
+        const tools = entry.connection.tools ?? entry.retained?.tools ?? entry.tagged?.source
+        const instructions = entry.connection.client?.instructions ?? entry.retained?.instructions
+        entry.retained = tools ? { tools, instructions } : undefined
       })
 
       // Stops and starts the connection again, keeping its tools while it does.
@@ -870,7 +887,7 @@ export const layer = (options?: Options) =>
                 entry.status = { status: "connected" }
                 entry.retained = undefined
                 entry.disconnected = undefined
-                saveTools(entry)
+                save(entry)
                 yield* Effect.logInfo("mcp connected", { server: name, tools: entry.connection.tools?.length })
                 // Announce every list a consumer may read, since each reads them only on these events. A
                 // connection another Location already holds has loaded its prompts, and no later change
@@ -925,7 +942,7 @@ export const layer = (options?: Options) =>
                 return true
               }),
               changed: (kind) => {
-                if (kind === "tools") saveTools(entry)
+                if (kind === "tools") save(entry)
                 return bus.publish(changes[kind], { server: name })
               },
             },
@@ -937,7 +954,7 @@ export const layer = (options?: Options) =>
       // MCP.tools() runs every step and the tool registry compares tools by identity, so tag the
       // connection's list once per listing instead of on every read.
       const serverTools = (name: ServerName, entry: ServerEntry) => {
-        const source = entry.connection.tools ?? entry.retained
+        const source = entry.connection.tools ?? entry.retained?.tools
         if (!source) return []
         if (entry.tagged?.source !== source)
           entry.tagged = {
@@ -989,7 +1006,7 @@ export const layer = (options?: Options) =>
         entries.set(name, entry)
         yield* Effect.gen(function* () {
           yield* register(name, entry)
-          yield* loadTools(name, entry)
+          yield* load(name, entry)
           if (serverConfig.disabled) {
             entry.status = { status: "disabled" }
             yield* bus.publish(McpEvent.StatusChanged, { server: name })
@@ -1118,7 +1135,7 @@ export const layer = (options?: Options) =>
           }
           yield* Effect.forEach(entries, ([name, entry]) => register(name, entry), { discard: true })
           // Read before any connection starts, so the first step already offers the cached tools.
-          yield* Effect.forEach(entries, ([name, entry]) => loadTools(name, entry), {
+          yield* Effect.forEach(entries, ([name, entry]) => load(name, entry), {
             concurrency: "unbounded",
             discard: true,
           })
@@ -1305,7 +1322,7 @@ export const layer = (options?: Options) =>
         instructions: Effect.fn("MCP.instructions")(function* () {
           return Array.from(entries)
             .flatMap(([server, entry]) => {
-              const instructions = entry.connection.client?.instructions
+              const instructions = entry.connection.client?.instructions ?? entry.retained?.instructions
               // A server that offers skills says what it needs to in them. Dynamic skills aren't registered.
               if (!instructions || entry.connection.skills?.some((skill) => skill.resources !== "dynamic")) return []
               return [{ server, instructions }]
@@ -1458,8 +1475,8 @@ export function configured(options?: Options) {
       Integration.node,
       Credential.node,
       Flag.node,
-      Global.node,
-      FSUtil.node,
+      KV.node,
+      Database.node,
       httpFetch,
       McpPool.node,
     ],
