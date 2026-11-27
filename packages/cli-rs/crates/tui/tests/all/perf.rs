@@ -212,6 +212,50 @@ fn resize() {
     probe.finish("resize", 5 * sizes.len() as u64);
 }
 
+/// Find-in-session over a long session with unmounted rows: opens Find, types a query character by
+/// character, steps 20 matches forwards and 5 backwards across the bounded window, and closes Find.
+#[test]
+#[ignore = "performance scenario; run with `bun run perf`"]
+fn find_long() {
+    let info = opencode_local::cli_config::Info {
+        experimental: Some([("session-find".to_owned(), true)].into_iter().collect()),
+        ..support::still()
+    };
+    let deps = Deps {
+        config: support::config(info),
+        route: support::session_route(LONG),
+        ..support::deps(Arc::new(Server::new().long()))
+    };
+    let h = support::mount(120, 40, deps);
+    h.app.set_verify(false);
+    wait_tail(&h, LONG, TURNS);
+    first(&h);
+    h.dispatch("session.last");
+    settle(&h.app);
+    let probe = Probe::start();
+    h.dispatch("session.find");
+    frame(&h.app);
+    let query = "Answer";
+    for ch in query.chars() {
+        h.app.type_text(&ch.to_string());
+        frame(&h.app);
+    }
+    settle(&h.app);
+    for _ in 0..20 {
+        h.app.press("enter");
+        frame(&h.app);
+    }
+    for _ in 0..5 {
+        h.app.press("up");
+        frame(&h.app);
+    }
+    h.app.press("escape");
+    settle(&h.app);
+    let units = 1 + query.len() as u64 + 25 + 1;
+    probe.finish("find_long", units);
+    assert!(!h.app.text().contains("Find in session..."));
+}
+
 #[test]
 #[ignore = "performance scenario; run with `bun run perf`"]
 fn session_list() {

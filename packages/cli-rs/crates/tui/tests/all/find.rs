@@ -6,8 +6,9 @@ use crate::support::{self, DIRECTORY, Harness, Seen, WAIT};
 use std::sync::Arc;
 
 use opencode_api::generated::V2Event;
-use opencode_local::cli_config::{Info, Tabs, TabsMode};
+use opencode_local::cli_config::{Info, Markdown as MarkdownMode, Session as SessionConfig, Tabs, TabsMode};
 use opencode_tui::Deps;
+use opencode_ui::markdown::{CodeBlockRenderers, MarkdownParser};
 use opentui::style::Color;
 use serde_json::{Value, json};
 
@@ -256,4 +257,324 @@ fn table_find_highlights_keep_the_theme_border_color_across_restyle() {
     assert_eq!(corner_fg(&h), switched.border.base);
     assert_eq!(painted_runs(&h, switched.find.background.current), vec!["needle"]);
     assert_eq!(painted_runs(&h, switched.find.background.r#match), vec!["needle"]);
+}
+
+fn mount_session_with(width: u16, height: u16, messages: Vec<Value>, markdown_mode: MarkdownMode) -> Harness {
+    let mut info: Info = opencode_local::cli_config::decode_text(
+        &json!({ "animations": false, "experimental": { "session-find": true } }).to_string(),
+    )
+    .unwrap();
+    info.tabs = Some(Tabs { mode: Some(TabsMode::Off), ..Tabs::default() });
+    info.session = Some(SessionConfig { markdown: Some(markdown_mode), ..SessionConfig::default() });
+    let fake = support::Fake::new(move |seen: &Seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/session/ses_find_test") => (200, json!({ "data": support::session(SESSION, "Find") })),
+        ("GET", "/api/session/ses_find_test/message") => {
+            let mut rev = messages.clone();
+            rev.reverse();
+            (200, json!({ "data": rev, "cursor": {} }))
+        }
+        ("GET", "/api/session/ses_find_test/inbox") => (200, json!({ "data": [] })),
+        _ => support::base(seen, DIRECTORY),
+    });
+    let deps =
+        Deps { config: support::config(info), route: support::session_route(SESSION), ..support::deps(Arc::new(fake)) };
+    support::mount(width, height, deps)
+}
+
+/// Reads the `Find · N of M` (or `No matches`) totals from the rendered Find bar.
+fn find_counter(screen: &str) -> Option<(usize, usize)> {
+    let line = screen.lines().find(|line| line.contains("Find · "))?;
+    let rest = line.split("Find · ").nth(1)?.trim();
+    if rest.starts_with("No matches") {
+        return Some((0, 0));
+    }
+    let mut words = rest.split_whitespace();
+    let current: usize = words.next()?.parse().ok()?;
+    if words.next()? != "of" {
+        return None;
+    }
+    let total: usize = words.next()?.parse().ok()?;
+    Some((current, total))
+}
+
+/// Counts matches using `MarkdownParser` alone (no widgets, no layout), matching the unmounted path.
+fn parser_count(h: &Harness, source: &str, query: &str, conceal: bool, renderers: &CodeBlockRenderers) -> usize {
+    let pattern = opencode_tui::routes::session::find::find_pattern(query);
+    let mut parser = MarkdownParser::new(h.app.app()).unwrap();
+    let syntax = opencode_ui::code::syntax_theme(&h.tui.page());
+    let parsed = parser.parse(h.app.app(), source.trim(), renderers, conceal, &syntax, |spans, icx| {
+        opencode_tui::features::session_links::transform_readonly(&h.tui, spans, icx)
+    });
+    parsed
+        .blocks
+        .iter()
+        .filter_map(|block| block.text())
+        .map(|text| opencode_tui::routes::session::find::find_ranges(text, pattern.as_ref()).len())
+        .sum()
+}
+
+#[test]
+fn unmounted_and_mounted_find_counts_match_across_markdown_corpus() {
+    let u4a: Value = serde_json::from_str(include_str!("../../../../parity/fixtures/U.4a/corpus.json")).unwrap();
+    let u4c: Value = serde_json::from_str(include_str!("../../../../parity/fixtures/U.4c/corpus.json")).unwrap();
+    let p3_msg: Value = serde_json::from_str(include_str!("../../../../parity/fixtures/P.3/message.json")).unwrap();
+    let p3_corpus: Value = serde_json::from_str(include_str!("../../../../parity/fixtures/P.3/corpus.json")).unwrap();
+
+    // Take a sample of P.3 mermaid diagrams wrapped as fenced blocks.
+    let p3_sample: String = p3_corpus["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .take(6)
+        .map(|case| format!("```mermaid\n{}\n```", case["source"].as_str().unwrap()))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    let corpus: Vec<(&str, String, &str)> = vec![
+        ("setext-h1", "Setext **needle** heading\n========================\n\nBody needle.".into(), "needle"),
+        ("setext-h2", "Subheading needle\n-----------------\n\nAfter.".into(), "needle"),
+        ("nested-and-lazy-list", "- first needle\n  - nested **nee**dle\n  - [x] task needle\n- lazy start\nlazy needle continuation\n\n  1. ordered needle".into(), "needle"),
+        ("reference-links", "See [label needle][ref], [ref2][], and [shortcut].\n\n[ref]: https://needle.example.com/hidden\n[ref2]: https://needle.example.com/hidden2\n[shortcut]: https://needle.example.com/hidden3".into(), "needle"),
+        ("autolinks", "Visit <https://needle.example.com> and <needle@example.com> and https://needle.example.org.".into(), "needle"),
+        ("inline-html", "Before <span>needle</span> and <a href=\"https://needle.test\">link</a> and foo<br>needle.".into(), "needle"),
+        ("block-html", "<div>\nneedle in html block\n</div>\n\nParagraph needle.".into(), "needle"),
+        ("table", "| col | needle |\n| --- | --- |\n| **nee**dle | `needle` |".into(), "needle"),
+        ("named-fence-info-hidden", "```needle\nconst x = 1\n```\n\n```ts\nconst needle = 2\n```".into(), "needle"),
+        ("plain-fences", "```\nplain needle\n```\n\n~~~\ntilde needle\n~~~".into(), "needle"),
+        ("nested-plain-fence", "- item needle\n\n  ```\n  nested plain needle\n  ```\n\n> ```\n> quoted plain needle\n> ```".into(), "needle"),
+        ("indented-code-top", "Intro needle.\n\n    const a = needle;\n    const b = `needle`;".into(), "needle"),
+        ("indented-code-in-list", "- list item\n\n      indented in list needle\n      second line".into(), "needle"),
+        ("indented-code-in-quote", "> quote intro\n>\n>     quoted indented needle".into(), "needle"),
+        ("inline-and-display-math", "Formula $x + 1$ and needle.\n\n$$\n\\frac{a}{b}\n$$\n\nAfter needle.".into(), "needle"),
+        ("invalid-latex-fallback", "```latex\n\\undefined_cmd_needle\n```".into(), "needle"),
+        ("invalid-mermaid-fallback", "```mermaid\nnot a valid mermaid needle\n```".into(), "needle"),
+        ("p3-message", p3_msg["message"].as_str().unwrap().to_owned(), "Idea"),
+        ("p3-corpus-diagrams", format!("{p3_sample}\n\nOutside Flowchart"), "Flowchart"),
+        ("u4a-prose", u4a["prose"].as_str().unwrap().to_owned(), "Session"),
+        ("u4a-prose-url", u4a["prose"].as_str().unwrap().to_owned(), "opencode.ai"),
+        ("u4a-fences", u4a["fences"].as_str().unwrap().to_owned(), "return"),
+        ("u4c-table", u4c["table"].as_str().unwrap().to_owned(), "code"),
+    ];
+
+    for (mode_name, mode, conceal) in
+        [("rendered", MarkdownMode::Rendered, true), ("source", MarkdownMode::Source, false)]
+    {
+        for (name, doc, query) in &corpus {
+            // Place the document at msg_000 behind 50 filler messages so it starts UNMOUNTED.
+            let mut messages = vec![assistant_msg("msg_000", doc, 1)];
+            for index in 0..50 {
+                messages.push(user_msg(&format!("fill_{index:03}"), &format!("Filler {index}"), index as u64 + 10));
+            }
+            let h = mount_session_with(100, 30, messages, mode);
+            assert!(h.app.wait_until(WAIT, || h.app.text().contains("Filler 49")), "{mode_name}/{name}");
+            let renderers = opencode_tui::plugins::host::code_blocks(&h.tui);
+            let unmounted = parser_count(&h, doc, query, conceal, &renderers);
+
+            h.app.press("ctrl+x");
+            h.app.press("f");
+            assert!(h.app.wait_until(WAIT, || h.app.text().contains("Find in session...")));
+            h.app.type_text(query);
+            assert!(
+                h.app.wait_until(WAIT, || find_counter(&h.app.text()).is_some()),
+                "{mode_name}/{name}: find counter never appeared:\n{}",
+                h.app.text()
+            );
+            // Let deferred mount + settle finish.
+            h.app.render();
+            h.app.render();
+            let (_, mounted_total) = find_counter(&h.app.text()).unwrap();
+            assert_eq!(
+                unmounted,
+                mounted_total,
+                "{mode_name}/{name} (query={query:?}): unmounted parser count ({unmounted}) != mounted total ({mounted_total})\ndoc:\n{doc}\nscreen:\n{}",
+                h.app.text()
+            );
+        }
+    }
+}
+
+#[test]
+fn long_session_find_navigation_keeps_count_stable_and_visits_every_match_once() {
+    // 110 messages with diverse Markdown constructs at the head, middle, and tail — well beyond
+    // the bounded transcript window (TAIL_ROWS = 40, MARGIN = 60).
+    let mut messages = vec![
+        user_msg("m_000", "U000: alpha needle", 1),
+        assistant_msg(
+            "m_001",
+            "Setext M001 needle\n==================\n\n- lazy item\nlazy M001 needle\n\nSee [ref M001 needle][r]\n\n[r]: https://needle.example.com",
+            2,
+        ),
+        assistant_msg(
+            "m_002",
+            "Inline <span>M002 needle</span> and <https://needle.example.org>\n\n    indented M002 needle",
+            3,
+        ),
+    ];
+    for index in 0..50 {
+        messages.push(user_msg(&format!("f1_{index:03}"), &format!("Early filler {index}"), 10 + index as u64));
+    }
+    messages.push(assistant_msg(
+        "m_mid",
+        "Middle **nee**dle prose\n\n```\nplain mid needle\n```\n\n| k | v |\n| --- | --- |\n| x | table mid needle |",
+        100,
+    ));
+    messages.push(json!({
+        "id": "m_cmp",
+        "type": "compaction",
+        "status": "completed",
+        "reason": "manual",
+        "summary": "Compaction mid needle summary",
+        "time": { "created": 101 }
+    }));
+    for index in 0..50 {
+        messages.push(user_msg(&format!("f2_{index:03}"), &format!("Late filler {index}"), 110 + index as u64));
+    }
+    messages.push(assistant_msg(
+        "m_tail_md",
+        "```mermaid\nflowchart LR\n  A[needle] --> B[end]\n```\n\nTail prose needle",
+        200,
+    ));
+    messages.push(user_msg("m_tail_u", "Last tail needle", 201));
+
+    // Expected exact occurrences in transcript order (TestApp has OSC 8 hyperlinks off, so the
+    // reference link renders its URL in parentheses: "ref M001 needle (https://needle.example.com)"):
+    // m_000: 1 (U000)
+    // m_001: 4 (setext, lazy list, ref link label, ref link URL shown when hyperlinks are off)
+    // m_002: 3 (inline html, autolink, indented code)
+    // m_mid: 3 (concealed bold, plain fence, table cell)
+    // m_cmp: 1 (compaction summary)
+    // m_tail_md: 1 (mermaid diagram claimed -> 0; tail prose -> 1)
+    // m_tail_u: 1 (user prompt)
+    // Total = 14.
+    let expected_total = 14usize;
+    let expected_markers: [&str; 14] = [
+        "U000: alpha",
+        "Setext M001",
+        "lazy M001",
+        "ref M001",
+        "needle.example.com",
+        "M002 needle",
+        "needle.example.org",
+        "indented M002",
+        "Middle needle prose",
+        "plain mid",
+        "table mid",
+        "Compaction mid",
+        "Tail prose",
+        "Last tail",
+    ];
+
+    let h = mount_session_with(100, 30, messages, MarkdownMode::Rendered);
+    assert!(h.app.wait_until(WAIT, || h.app.text().contains("Last tail needle")));
+    assert!(!h.app.text().contains("U000: alpha"));
+
+    h.app.press("ctrl+x");
+    h.app.press("f");
+    assert!(h.app.wait_until(WAIT, || h.app.text().contains("Find in session...")));
+    h.app.type_text("needle");
+
+    let theme = h.tui.page();
+    // Step forwards through all 13 matches and wrap back to 1.
+    for step in 0..=expected_total {
+        let idx = step % expected_total;
+        let expected_label = format!("Find · {} of {expected_total}", idx + 1);
+        let marker = expected_markers[idx];
+        assert!(
+            h.app.wait_until(WAIT, || {
+                let screen = h.app.text();
+                screen.contains(&expected_label) && screen.contains(marker)
+            }),
+            "forward step {step}: expected {expected_label:?} with {marker:?}:\n{}",
+            h.app.text()
+        );
+        assert_eq!(
+            find_counter(&h.app.text()),
+            Some((idx + 1, expected_total)),
+            "count drifted at forward step {step}"
+        );
+        assert_eq!(
+            painted_runs(&h, theme.find.background.current),
+            vec!["needle"],
+            "missing current highlight at forward step {step} ({marker})"
+        );
+        if step < expected_total {
+            h.app.press("enter");
+        }
+    }
+
+    // Step backwards through all 13 matches (starting at 1 -> wraps to 13 -> 12 -> ... -> 1).
+    for back in 0..expected_total {
+        h.app.press("up");
+        let idx = expected_total - 1 - back;
+        let expected_label = format!("Find · {} of {expected_total}", idx + 1);
+        let marker = expected_markers[idx];
+        assert!(
+            h.app.wait_until(WAIT, || {
+                let screen = h.app.text();
+                screen.contains(&expected_label) && screen.contains(marker)
+            }),
+            "backward step {back}: expected {expected_label:?} with {marker:?}:\n{}",
+            h.app.text()
+        );
+        assert_eq!(
+            find_counter(&h.app.text()),
+            Some((idx + 1, expected_total)),
+            "count drifted at backward step {back}"
+        );
+        assert_eq!(
+            painted_runs(&h, theme.find.background.current),
+            vec!["needle"],
+            "missing current highlight at backward step {back} ({marker})"
+        );
+    }
+}
+
+#[test]
+fn consecutive_identical_unmounted_messages_and_session_links_match_mounted_count() {
+    let linked_id = "ses_linkedlinkedlinkedlinkedli";
+    let doc = format!("Same **needle** body linking {linked_id}");
+    let mut messages = vec![assistant_msg("m_0", &doc, 1), assistant_msg("m_1", &doc, 2)];
+    for index in 0..50 {
+        messages.push(user_msg(&format!("fill_{index:03}"), &format!("Filler {index}"), index as u64 + 10));
+    }
+    let mut info: Info = opencode_local::cli_config::decode_text(
+        &json!({ "animations": false, "experimental": { "session-find": true } }).to_string(),
+    )
+    .unwrap();
+    info.tabs = Some(Tabs { mode: Some(TabsMode::Off), ..Tabs::default() });
+    let fake = support::Fake::new(move |seen: &Seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/session/ses_find_test") => (200, json!({ "data": support::session(SESSION, "Find") })),
+        ("GET", "/api/session/ses_linkedlinkedlinkedlinkedli") => {
+            (200, json!({ "data": support::session(linked_id, "Linked needle title") }))
+        }
+        ("GET", "/api/session/ses_find_test/message") => {
+            let mut rev = messages.clone();
+            rev.reverse();
+            (200, json!({ "data": rev, "cursor": {} }))
+        }
+        ("GET", "/api/session/ses_find_test/inbox") => (200, json!({ "data": [] })),
+        _ => support::base(seen, DIRECTORY),
+    });
+    let deps =
+        Deps { config: support::config(info), route: support::session_route(SESSION), ..support::deps(Arc::new(fake)) };
+    let h = support::mount(100, 30, deps);
+    assert!(h.app.wait_until(WAIT, || h.app.text().contains("Filler 49")));
+    // Sync the linked session into the store before opening Find so session_links resolves it.
+    drop(h.tui.data.session_sync(&opencode_api::generated::SessionID(linked_id.into()), false));
+    assert!(h.app.wait_until(WAIT, || {
+        h.tui.data.read(|state| state.session(&opencode_api::generated::SessionID(linked_id.into())).is_some())
+    }));
+
+    h.app.press("ctrl+x");
+    h.app.press("f");
+    assert!(h.app.wait_until(WAIT, || h.app.text().contains("Find in session...")));
+    h.app.type_text("needle");
+    // Each of the two identical messages has 2 matches: "needle" in bold prose + "@Linked needle title".
+    assert!(h.app.wait_until(WAIT, || h.app.text().contains("Find · 1 of 4")));
+    for step in 0..4 {
+        assert_eq!(find_counter(&h.app.text()), Some((step + 1, 4)));
+        h.app.press("enter");
+        h.app.render();
+    }
+    assert_eq!(find_counter(&h.app.text()), Some((1, 4)));
 }
