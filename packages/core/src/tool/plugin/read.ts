@@ -1,7 +1,7 @@
 export * as ReadTool from "./read.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import path, { basename, dirname, extname, isAbsolute, join, relative } from "path"
+import { basename, dirname, extname, isAbsolute, join, relative } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -219,7 +219,7 @@ export const Plugin = {
       )
       if (matches.length !== 1) return
       // The path follows its environment's rules, whatever this server's platform joins with.
-      const rules = target.environment.path ?? path
+      const rules = target.environment.path
       return rules.join(rules.dirname(target.absolute), matches[0].name)
     })
 
