@@ -2825,11 +2825,16 @@ test("deleting from the inbox closes its dialog at once and a slow delete leaves
   expect(remove.requests).toHaveLength(1)
 })
 
-test("opening a working session expands its shelf and still allows manual collapse", async ({ page }) => {
+test("opening a working session expands its shelf, and collapsing it keeps only the selected session", async ({
+  page,
+}) => {
   await openSession(page, {
     name: "WorkingInbox",
-    sessions: [{ id: "ses_working_selected", title: "Selected working session" }],
-    sessionStatus: { ses_working_selected: { type: "running" } },
+    sessions: [
+      { id: "ses_working_selected", title: "Selected working session" },
+      { id: "ses_working_other", title: "Other working session" },
+    ],
+    sessionStatus: { ses_working_selected: { type: "running" }, ses_working_other: { type: "running" } },
     seed: {
       settings: { appearance: { tabLayout: "inbox" } },
       storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: false } },
@@ -2842,20 +2847,25 @@ test("opening a working session expands its shelf and still allows manual collap
 
   const toggle = shelf.getByRole("button", { name: "Working", exact: true })
 
-  const row = shelf.locator('[data-slot="sidebar-inbox-item"]')
+  const rows = shelf.locator('[data-slot="sidebar-inbox-item"]')
+
+  const selected = rows.filter({ hasText: "Selected working session" })
 
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
-  await expect(row).toHaveAttribute("data-state", "active")
+  await expect(rows).toHaveCount(2)
+  await expect(selected).toHaveAttribute("data-state", "active")
   await expect(toggle.locator('[data-component="text-shimmer"]')).toHaveCount(0)
   await toggle.click()
   await expect(toggle).toHaveAttribute("aria-expanded", "false")
-  await expect(row).toHaveCount(0)
+  await expect(rows).toHaveText([/Selected working session/])
+  await expect(selected).toHaveAttribute("data-state", "active")
   await expect(toggle.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true")
   await expectPath(page, sessionHref("ses_working_selected"))
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
   await toggle.press("Enter")
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
-  await expect(row).toHaveAttribute("data-state", "active")
+  await expect(rows).toHaveCount(2)
+  await expect(selected).toHaveAttribute("data-state", "active")
   await expect(toggle.locator('[data-component="text-shimmer"]')).toHaveCount(0)
 })
 

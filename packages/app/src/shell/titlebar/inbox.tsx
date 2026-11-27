@@ -173,13 +173,21 @@ export function SidebarInbox() {
     }
   })
 
+  const selectedWorking = createMemo(() => sections().working.find((entry) => inbox.selected(entry))?.key)
+
+  // Collapsed, Working still shows the selected session, so the open session never drops out of the list.
+  const workingPeek = () => !state.workingExpanded && selectedWorking() !== undefined
+
+  const workingRows = () =>
+    state.workingExpanded ? sections().working : sections().working.filter((entry) => entry.key === selectedWorking())
+
   // The vertical tab strip's shortcuts, over the session rows in the order they show: ⌘1-9, ⌥↑/⌥↓ and ⇧⌥↑/⇧⌥↓.
   const rowRefs = new Map<string, HTMLElement>()
 
   const navigationKeys = () => {
     const visible = sections()
 
-    const working = state.workingExpanded ? visible.working : []
+    const working = workingRows()
 
     return [
       ...visible.current,
@@ -284,8 +292,6 @@ export function SidebarInbox() {
 
     if (index !== -1) tabs.closeTab(index)
   }
-
-  const selectedWorking = createMemo(() => sections().working.find((entry) => inbox.selected(entry))?.key)
 
   // Expand when a working session becomes current, not on each update or manual collapse.
   createEffect(() => {
@@ -435,9 +441,12 @@ export function SidebarInbox() {
       get count() {
         return shelf() ? 0 : sections().working.length
       },
-      rows: () => rows(() => sections().working),
+      rows: () => rows(workingRows),
       get expanded() {
         return state.workingExpanded
+      },
+      get peek() {
+        return workingPeek()
       },
       get shimmer() {
         return !state.workingExpanded
@@ -475,9 +484,12 @@ export function SidebarInbox() {
         get count() {
           return shelf() ? sections().working.length : 0
         },
-        rows: () => rows(() => sections().working),
+        rows: () => rows(workingRows),
         get expanded() {
           return state.workingExpanded
+        },
+        get peek() {
+          return workingPeek()
         },
         onToggle: () => setState("workingExpanded", !state.workingExpanded),
       }}
@@ -556,10 +568,12 @@ export function InboxSessionList(props: {
     /** Named for assistive tech only, without a visible header. */
     unlabeled?: boolean
     expanded?: boolean
+    /** Collapsed, but its rows still render: the section passes only the selected session's row. */
+    peek?: boolean
     shimmer?: boolean
     onToggle?: () => void
   }[]
-  working: { count: number; rows: () => JSX.Element; expanded: boolean; onToggle: () => void }
+  working: { count: number; rows: () => JSX.Element; expanded: boolean; peek?: boolean; onToggle: () => void }
   /** Items for the list's own context menu, opened anywhere outside a card. */
   menu?: () => JSX.Element
 }) {
@@ -575,9 +589,10 @@ export function InboxSessionList(props: {
       () => [
         props.loading,
         props.current.count,
-        ...props.sections.flatMap((section) => [section.count, section.expanded]),
+        ...props.sections.flatMap((section) => [section.count, section.expanded, section.peek]),
         props.working.count,
         props.working.expanded,
+        props.working.peek,
       ],
       () => {
         if (props.loading) return
@@ -684,10 +699,10 @@ export function InboxSessionList(props: {
                             onToggle={section.onToggle}
                           />
                         </Show>
-                        <Show when={section.expanded !== false}>
+                        <Show when={section.expanded !== false || section.peek}>
                           <div class="flex flex-col gap-0.5">{section.rows()}</div>
-                          {section.more?.()}
                         </Show>
+                        <Show when={section.expanded !== false}>{section.more?.()}</Show>
                       </div>
                     </Show>
                   )}
@@ -728,7 +743,7 @@ export function InboxSessionList(props: {
                     shimmer={!props.working.expanded}
                     onToggle={props.working.onToggle}
                   />
-                  <Show when={props.working.expanded}>
+                  <Show when={props.working.expanded || props.working.peek}>
                     <div data-scrollable class="flex min-h-0 flex-col gap-0.5 overflow-y-auto">
                       {props.working.rows()}
                     </div>
