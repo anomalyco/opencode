@@ -14,11 +14,12 @@ import { docsSets, latestDocs, v1Docs, type DocsSet } from "./config"
 import { frontmatterSchema } from "./frontmatter"
 import { headingDepths, sameHeadingStructure } from "./lib/heading-structure"
 import { docsLocaleBase, docsSlug, docsTranslation } from "./lib/navigation"
+import { docsSource } from "./lib/sources"
 import recmaSolid from "./recma-solid"
 import rehypeHeadings, { type DocsHeading } from "./rehype-headings"
 import rehypeShiki from "./rehype-shiki"
 import rehypeTableScroll from "./rehype-table-scroll"
-import remarkDocsLinks from "./remark-links"
+import remarkDocsLinks, { docsLink, type DocsLinks } from "./remark-links"
 import remarkSlots from "./remark-slots"
 import remarkStarlight, { remarkStarlightLinks } from "./remark-starlight"
 
@@ -75,6 +76,16 @@ function setOf(file: string) {
   return docsSets.find((set) => file.startsWith(path.join(repository, set.content) + path.sep))
 }
 
+const pageSlugsCache = new Map<string, ReadonlySet<string>>()
+/** A set's page slugs as a set, for deciding whether a root-relative link points at a docs page. */
+function pageSlugs(set: DocsSet) {
+  const known = pageSlugsCache.get(set.id)
+  if (known) return known
+  const slugs: ReadonlySet<string> = new Set(slugsOf(set))
+  pageSlugsCache.set(set.id, slugs)
+  return slugs
+}
+
 /**
  * A set's page slugs: its MDX files, and the latest docs' API reference (render.tsx). The latest
  * docs' translated pages are not slugs of their own: they share the English page's slug, at
@@ -105,6 +116,7 @@ async function compileMdx(source: string, id: string, set: DocsSet) {
   const translation = set.id === "latest" ? translationOf(id) : undefined
   const base = translation ? docsLocaleBase(translation.locale, set) : set.base
   const english = translation ? await headingsOf(translation.slug) : undefined
+  const pages = pageSlugs(set)
   // A translation that added, removed or reordered headings would reuse the English ids on the
   // wrong sections: it is stale, and the page shows English until it matches again.
   const stale = english ? !sameHeadingStructure(english.depths, headingDepths(source)) : false
@@ -120,7 +132,14 @@ async function compileMdx(source: string, id: string, set: DocsSet) {
     elementAttributeNameCase: "html",
     stylePropertyNameCase: "css",
     remarkPlugins:
-      set.id === "v1" ? v1Plugins(id) : [remarkGfm, remarkSmartypants, [remarkDocsLinks, { base }], remarkSlots],
+      set.id === "v1"
+        ? v1Plugins(id)
+        : [
+            remarkGfm,
+            remarkSmartypants,
+            [remarkDocsLinks, { base, setBase: set.base, pages, files: set.files }],
+            remarkSlots,
+          ],
     rehypePlugins: [rehypeShiki, rehypeTableScroll, [rehypeHeadings, { ids: english?.ids }]],
     recmaPlugins: [recmaSolid],
   })
@@ -131,7 +150,9 @@ async function compileMdx(source: string, id: string, set: DocsSet) {
     `export const headings = ${JSON.stringify(compiled.data.headings ?? [])}`,
     `export const stale = ${stale}`,
     `export const markdown = ${JSON.stringify(
-      `# ${parsed.data.title}\n\n${translation ? localizeMarkdownLinks(markdown, base) : markdown}`,
+      `# ${parsed.data.title}\n\n${
+        translation ? localizeMarkdownLinks(markdown, { base, setBase: set.base, pages, files: set.files }) : markdown
+      }`,
     )}`,
   ].join("\n")
 }
@@ -157,8 +178,12 @@ function headingsOf(slug: string) {
   return promise
 }
 
-async function readHeadings(slug: string): Promise<EnglishHeadings> {
-  const id = path.join(repository, latestDocs.content, `${slug}.mdx`)
+export async function readHeadings(
+  slug: string,
+  folder = path.join(repository, latestDocs.content),
+): Promise<EnglishHeadings> {
+  const id = docsSource(folder, slug)
+  if (!id) throw new Error(`docs: no English page for ${slug} in ${folder}`)
   const source = await readFile(id, "utf8")
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(source)
   const file = new VFile({ path: id, value: match ? source.slice(match[0].length) : source })
@@ -175,11 +200,10 @@ async function readHeadings(slug: string): Promise<EnglishHeadings> {
 }
 
 /**
- * A translated page's Markdown twin links within its own language: its links are docs-root-relative
- * (remark-links.ts prefixes them in the page), so the twin prefixes them too outside fenced code.
+ * A translated page's Markdown twin links as its page does: docs pages in its language, docs files
+ * under the English set base, other paths unchanged (remark-links.ts), outside fenced code.
  */
-function localizeMarkdownLinks(markdown: string, base: string) {
-  const docs = base.replace(/\/$/, "")
+function localizeMarkdownLinks(markdown: string, links: DocsLinks) {
   let fenced = false
   return markdown
     .split("\n")
@@ -189,9 +213,10 @@ function localizeMarkdownLinks(markdown: string, base: string) {
         return line
       }
       if (fenced) return line
-      return line.replace(/\]\((\/(?!\/)[^)\s]*)\)/g, (raw, url: string) =>
-        url === "/docs" || url.startsWith("/docs/") ? raw : `](${docs}${url})`,
-      )
+      return line.replace(/\]\((\/(?!\/)[^)\s]*)\)/g, (raw, url: string) => {
+        const localized = docsLink(url, links)
+        return localized === undefined ? raw : `](${localized})`
+      })
     })
     .join("\n")
 }
