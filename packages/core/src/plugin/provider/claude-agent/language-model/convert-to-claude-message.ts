@@ -6,7 +6,7 @@ import { Fingerprint } from "../sync/fingerprint.js"
 
 export type ContentBlock = Exclude<SDKUserMessage["message"]["content"], string>[number]
 
-// Claude can't be given earlier turns, so their roles become text tags. Attachments stay real content blocks.
+// Claude can't be given earlier turns, so their roles become text tags. Images and PDFs stay real content blocks.
 export function content(prompt: LanguageModelV3Prompt): ContentBlock[] {
   const blocks: ContentBlock[] = []
   // Everything up to the last assistant or tool message is history. User messages after it are being sent now.
@@ -61,7 +61,9 @@ function file(part: LanguageModelV3FilePart): ContentBlock {
     if (part.data instanceof URL) return { type: "image", source: { type: "url", url: part.data.href } }
     return { type: "image", source: { type: "base64", media_type: type, data: base64(part.data) } }
   }
-  throw new Error(`Claude Code does not support ${type} attachments`)
+  // Throwing here would fail every later turn too, because the file stays in OpenCode's history.
+  const name = part.filename ? `${part.filename} (${type})` : type
+  return { type: "text", text: `[${name} was left out: Claude Code cannot read this file type.]` }
 }
 
 // Claude Code treats an image block in a user message as one the user just pasted: it saves a copy and adds an
