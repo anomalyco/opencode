@@ -159,6 +159,19 @@ fn markdown_table_matches_typescript() {
 }
 
 #[test]
+fn markdown_table_grid_lines_use_the_theme_border_color() {
+    let (app, theme) = app(60, 12);
+    let syntax = code::syntax_theme(&theme);
+    let renderers = markdown::CodeBlockRenderers::default();
+    let view = markdown::view(&app, &theme, &syntax, &renderers, true, false)
+        .set_markdown("| name | value |\n| --- | --- |\n| alpha | 1 |");
+    app.root().add(&view);
+    let capture = app.render();
+    let corner = capture.cells.iter().find(|cell| cell.symbol == "┌").expect("table corner");
+    assert_eq!(corner.fg, theme.border.base);
+}
+
+#[test]
 fn markdown_rules_match_typescript() {
     let rules = "Before the rules.\n\n- - -\n\nBetween them.\n\n***\n\nAfter the rules.";
     assert_parity(&markdown_app(rules, true).render(), "U.4c/markdown-rules");
@@ -204,7 +217,7 @@ fn markdown_restyles_as_built_in_the_new_theme() {
     app.root().add(&view);
     app.render();
     let syntax = code::syntax_theme(&new);
-    markdown::restyle(&view, markdown::view_colors(&new, &syntax), &syntax);
+    markdown::restyle(&view, &new, markdown::view_colors(&new, &syntax), &syntax);
     view.append(end);
     let restyled = app.render();
 

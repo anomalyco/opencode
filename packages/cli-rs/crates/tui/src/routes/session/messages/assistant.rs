@@ -1,7 +1,7 @@
 //! Assistant text and streaming Markdown.
 
 use opencode_api::generated::{SessionMessageAssistant, SessionMessageAssistantText};
-use opentui::widget::{Markdown, MarkdownTableOptions, MarkdownTableStyle};
+use opentui::widget::Markdown;
 
 use super::super::find::FindPartId;
 use super::super::find_view::FindMarkdown;
@@ -21,8 +21,7 @@ pub struct TextPart {
 
 impl TextPart {
     pub fn new(cx: &Context<'_>) -> Self {
-        let markdown = opencode_ui::markdown::view(cx.app, cx.theme, cx.syntax, cx.renderers, cx.conceal, true)
-            .table_options(table_options(cx.theme));
+        let markdown = opencode_ui::markdown::view(cx.app, cx.theme, cx.syntax, cx.renderers, cx.conceal, true);
         let links = session_links::attach(cx.tui, &markdown, cx.renderers);
         let root = View::new(cx.app).padding_edge(Edge::Left, 3).shrink(0.0).child(&markdown);
         Self { root, markdown, _links: links, find: FindMarkdown::default(), streaming: Cell::new(true) }
@@ -36,8 +35,7 @@ impl TextPart {
         let colors = opencode_ui::markdown::view_colors(cx.theme, cx.syntax);
         let width = self.markdown.rect().width as u16;
         opencode_plugin::claim::with_fence_width(width, || {
-            opencode_ui::markdown::restyle(&self.markdown, colors, cx.syntax);
-            self.markdown.table_options(table_options(cx.theme));
+            opencode_ui::markdown::restyle(&self.markdown, cx.theme, colors, cx.syntax);
         });
     }
 
@@ -87,14 +85,5 @@ impl TextPart {
         if !text.is_empty() {
             self.find.sync(cx, &self.markdown, &self._links, &message.id.0, FindPartId::Text(ordinal), text);
         }
-    }
-}
-
-fn table_options(theme: &Theme) -> MarkdownTableOptions {
-    MarkdownTableOptions {
-        style: MarkdownTableStyle::Grid,
-        cell_padding_x: Some(1),
-        border_color: Some(theme.border.base),
-        ..MarkdownTableOptions::default()
     }
 }

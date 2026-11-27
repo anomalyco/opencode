@@ -68,7 +68,7 @@ impl Compaction {
 
     pub fn restyle(&self, cx: &Context<'_>) {
         let colors = opencode_ui::markdown::view_colors(cx.theme, cx.syntax);
-        opencode_ui::markdown::restyle(&self.markdown, colors, cx.syntax);
+        opencode_ui::markdown::restyle(&self.markdown, cx.theme, colors, cx.syntax);
         self.stale.set(true);
     }
 

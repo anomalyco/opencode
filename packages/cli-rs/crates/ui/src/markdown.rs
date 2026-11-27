@@ -129,7 +129,7 @@ pub fn view(
         .colors(view_colors(theme, syntax))
         .syntax_theme(syntax.clone())
         .scope_styles(true)
-        .table_options(table(syntax))
+        .table_options(table(theme))
         .conceal(conceal)
         .streaming(streaming);
     for (language, render) in &renderers.blocks {
@@ -154,14 +154,13 @@ pub fn view_colors(theme: &Theme, syntax: &SyntaxTheme) -> MarkdownColors {
 /// stay, and code keeps its highlight, so nothing is parsed again. Plugin fences render again and read the theme
 /// themselves.
 ///
-/// The table options follow the `conceal` scope, which [`crate::code::syntax_theme`] leaves out, so they stay the
-/// same. A new border color would repaint the tables in place.
-pub fn restyle(markdown: &Markdown, colors: MarkdownColors, syntax: &Arc<SyntaxTheme>) {
+/// Updates the table border color to the new theme's `border.base`, repainting tables in place.
+pub fn restyle(markdown: &Markdown, theme: &Theme, colors: MarkdownColors, syntax: &Arc<SyntaxTheme>) {
     // Each style Markdown takes builds its blocks again, and a custom block afresh: the first build is not the last.
     RESTYLING.set(true);
     markdown.colors(colors);
     RESTYLING.set(false);
-    markdown.syntax_theme(syntax.clone()).table_options(table(syntax));
+    markdown.syntax_theme(syntax.clone()).table_options(table(theme));
 }
 
 thread_local! {
@@ -174,13 +173,12 @@ pub fn restyling() -> bool {
     RESTYLING.get()
 }
 
-/// Grid tables with one column of cell padding, bordered in Core's table border: the `conceal` scope's color, else
-/// a gray.
-fn table(syntax: &SyntaxTheme) -> MarkdownTableOptions {
+/// Grid tables with one column of cell padding, bordered in `theme.border.base`.
+fn table(theme: &Theme) -> MarkdownTableOptions {
     MarkdownTableOptions {
         style: MarkdownTableStyle::Grid,
         cell_padding_x: Some(1),
-        border_color: Some(syntax.get("conceal").and_then(|style| style.fg).unwrap_or(Color::hex(0x888888))),
+        border_color: Some(theme.border.base),
         ..MarkdownTableOptions::default()
     }
 }

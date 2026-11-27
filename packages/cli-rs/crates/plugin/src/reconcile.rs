@@ -1996,7 +1996,7 @@ impl Pass<'_, '_> {
             (Node::Markdown { .. }, Extra::Markdown(markdown, shown)) => {
                 if self.restyle {
                     let colors = opencode_ui::markdown::view_colors(env.theme, &syntax);
-                    opencode_ui::markdown::restyle(markdown, colors, &syntax);
+                    opencode_ui::markdown::restyle(markdown, env.theme, colors, &syntax);
                     count(|work| work.set += 1);
                 }
                 if let Some(text) = text.filter(|text| text != shown) {
