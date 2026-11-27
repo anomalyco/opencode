@@ -55,8 +55,8 @@
 }
 
 /* Each changed file is its own accordion, rather than one stacked group, as far from the next
-   as any two rows. */
-[data-timeline="next"] [data-component="accordion"][data-scope="apply-patch"] {
+   as any two rows. A script's changes stay one stacked group, so one call's files read as one block. */
+[data-timeline="next"] [data-component="accordion"][data-scope="apply-patch"]:not([data-script-change] *) {
   gap: var(--timeline-gap-s);
 
   [data-slot="accordion-item"] + [data-slot="accordion-item"] {
@@ -76,14 +76,16 @@
     border-bottom-left-radius: var(--radius-lg);
     border-bottom-right-radius: var(--radius-lg);
   }
+}
 
-  /* A created file is all new, so its code reads plain rather than as one long addition. */
+/* A created file is all new, so its code reads plain rather than as one long addition. */
+[data-timeline="next"]
+  [data-component="accordion"][data-scope="apply-patch"]
   [data-slot="accordion-item"][data-type="add"] {
-    --opencode-diffs-addition-bg: transparent;
-    --opencode-diffs-addition-number-fg: var(--v2-text-text-faint);
-    --opencode-diffs-addition-color: transparent;
-    --diffs-addition-color-override: transparent;
-  }
+  --opencode-diffs-addition-bg: transparent;
+  --opencode-diffs-addition-number-fg: var(--v2-text-text-faint);
+  --opencode-diffs-addition-color: transparent;
+  --diffs-addition-color-override: transparent;
 }
 
 /* A command the user ran is its command and output, always showing, as an agent's command shows once opened. */
