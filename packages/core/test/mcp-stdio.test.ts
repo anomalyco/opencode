@@ -140,6 +140,7 @@ function spawnerLayer(input: {
     Environment.Service.of({
       id: Environment.localID,
       local: true,
+      path,
       files: Environment.makeFiles(driver),
       spawner: ChildProcessSpawner.make(() =>
         Effect.succeed(

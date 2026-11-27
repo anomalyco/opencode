@@ -767,6 +767,7 @@ test("reports a local MCP server as failed when the location has no execution pl
     Environment.Service.of({
       id: Environment.localID,
       local: false,
+      path,
       files: Environment.makeFiles(driver),
       spawner: EnvironmentUnavailable.spawner,
     }),
@@ -878,6 +879,7 @@ test("closes a stdio process that finishes spawning after close", async () => {
     Environment.Service.of({
       id: Environment.localID,
       local: true,
+      path,
       files: Environment.makeFiles(driver),
       spawner: ChildProcessSpawner.make(() =>
         Effect.gen(function* () {

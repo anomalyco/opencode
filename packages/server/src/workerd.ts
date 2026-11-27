@@ -1,6 +1,6 @@
 export * as ServerWorkerd from "./workerd"
 
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect } from "effect"
 import { BlobStore } from "@opencode/core/blob-store"
 import { ConfigPluginSource } from "@opencode/core/config/plugin/source"
 import { Database } from "@opencode/core/database/database"
@@ -115,9 +115,10 @@ export function replacements(options: Options): LayerNode.Replacements {
         onIdleScheduled: (atMs) => Effect.tryPromise(() => options.storage.setAlarm(atMs)),
       }),
     ),
+    // Kept here so ServerWorkerd.replacements stays self-contained when composed outside routes.ts.
     WorkspaceConnector.node.replace(Workspace.connectorNode),
     CrossSpawnSpawner.node.replace(EnvironmentUnavailable.layer),
-    Pty.node.replace(ptyLayer),
+    Pty.node.replace(Pty.unsupportedLayer),
     Npm.node.replace(Npm.unsupportedLayer),
     // Blobs need a local `blobs/` folder, which a Durable Object doesn't have.
     BlobStore.node.replace(BlobStore.unsupportedLayer),
@@ -127,16 +128,3 @@ export function replacements(options: Options): LayerNode.Replacements {
     ConfigPluginSource.node.replace(ConfigPluginSource.empty),
   ]
 }
-
-const ptyLayer = Layer.succeed(
-  Pty.Service,
-  Pty.Service.of({
-    list: () => Effect.succeed([]),
-    get: (ptyID) => Effect.fail(new Pty.NotFoundError({ ptyID })),
-    create: () => Effect.die(new Error("Pty.create is unavailable in the workerd profile")),
-    update: (ptyID) => Effect.fail(new Pty.NotFoundError({ ptyID })),
-    remove: (ptyID) => Effect.fail(new Pty.NotFoundError({ ptyID })),
-    write: (ptyID) => Effect.fail(new Pty.NotFoundError({ ptyID })),
-    attach: (ptyID) => Effect.fail(new Pty.NotFoundError({ ptyID })),
-  }),
-)

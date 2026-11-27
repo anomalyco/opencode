@@ -9,6 +9,7 @@ import { Database } from "@opencode/core/database/database"
 import { Location } from "@opencode/core/location"
 import { Identity } from "@opencode/core/machine/identity"
 import { Project } from "@opencode/core/project"
+import { Pty } from "@opencode/core/pty"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Snapshot } from "@opencode/core/snapshot"
@@ -280,4 +281,19 @@ it.effect("degrades Snapshot, Vcs, and Worktree cleanly on workerd through Envir
       expect(yield* worktrees.create({ projectID }).pipe(Effect.flip)).toBeInstanceOf(Worktree.OperationError)
     }).pipe(Effect.provide(layer))
   }),
+)
+
+it.effect("wires Pty.unsupportedLayer in ServerWorkerd.replacements", () =>
+  Effect.gen(function* () {
+    const pty = yield* Pty.Service
+    const id = Pty.ID.make("pty_workerd")
+    expect(yield* pty.list()).toEqual([])
+    expect(yield* pty.get(id).pipe(Effect.flip)).toEqual(new Pty.NotFoundError({ ptyID: id }))
+    const created = yield* pty.create({}).pipe(Effect.exit)
+    expect(Exit.isFailure(created) && Cause.hasDies(created.cause)).toBe(true)
+    if (Exit.isFailure(created))
+      expect(Cause.pretty(created.cause)).toContain("Pty.create is not supported in this runtime")
+  }).pipe(
+    Effect.provide(AppNodeBuilder.build(Pty.node, ServerWorkerd.replacements({ storage: makeDurableObjectStorage() }))),
+  ),
 )
