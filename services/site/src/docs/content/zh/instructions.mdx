@@ -1,0 +1,139 @@
+---
+title: "指令"
+description: "通过 AGENTS.md 文件为 OpenCode 提供持久的项目指导，并了解它们适用的位置、加载顺序以及 CLAUDE.md 回退的工作方式。"
+---
+
+添加一个 `AGENTS.md` 文件，为 OpenCode 提供持久的项目指导。可用于构建命令、架构说明、代码约定和验证要求。
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+提交项目指令文件，让在仓库中工作的每个人都获得相同的指导。
+
+## 适用范围
+
+把 `AGENTS.md` 放在其指导应当适用的目录中。OpenCode 会先加载全局文件，然后加载从当前工作区目录一直到主目录的每个 `AGENTS.md`。对于主目录之外的工作区，加载会在项目根目录停止。
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+在这个示例中，四个文件都会被加载。它们按以下顺序合并：
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+把适用于所有地方的指导放在全局文件中。把仓库范围的指导放在项目根目录，把更具体的指导放在离它所覆盖的代码更近的位置。OpenCode 会合并这些文件，不会解决它们之间的冲突。
+
+如果工作区位于项目根目录之外，则只加载全局文件。设置 `OPENCODE_DISABLE_PROJECT_CONFIG=1` 可以跳过项目 `AGENTS.md` 的发现，同时不禁用全局文件。
+
+### CLAUDE.md 回退
+
+在任何没有 `AGENTS.md` 的目录中，OpenCode 会改为读取 `CLAUDE.md`。如果没有全局
+`~/.config/opencode/AGENTS.md`，则会读取 `~/.claude/CLAUDE.md`。目录中的 `AGENTS.md` 始终优先于其
+`CLAUDE.md`，因此两者之间的符号链接只会加载一次。
+
+设置 `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1` 可以跳过所有 `CLAUDE.md`，设置 `OPENCODE_DISABLE_CLAUDE_CODE=1` 还会跳过
+`.claude` 技能。服务器在启动时会读取两者。对于后台服务，使用
+`opencode service set env` 持久化它们，然后运行 `opencode service restart`。
+
+## 发现
+
+当代理探索项目时，会发现工作区下方的指令文件。读取文件或列出目录会加载该目标与工作区之间的所有 `AGENTS.md` 文件。
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+嵌套文件会由近及远加载，并在其指令条目仍保留在模型可见的历史中时去重。再次读取同一区域通常不会再次注入它们。如果压缩或回退移除了该条目，之后的读取可以再次加载该文件。
+
+嵌套文件加载后，对它的编辑不会被自动检测。当更新的文本必须立即生效时，请开始一个新会话。
+
+## 顺序
+
+首先发送所选代理或提供商的系统提示词。然后 OpenCode 按以下顺序组装初始指令：
+
+```text
+1. Agent or provider system prompt
+2. Code Mode tool guidance, when enabled
+3. MCP server, reference, and skill guidance
+4. Global and project AGENTS.md files, then configured instructions
+5. Built-in date and environment context
+6. Session-specific instruction entries supplied through the API
+```
+
+这些来源会被合并，而不是作为覆盖使用。之后发现的嵌套 `AGENTS.md` 文件会按发现顺序添加到会话历史中。
+
+## 更新
+
+在会话运行期间编辑全局或向上发现的 `AGENTS.md`，即可更新其指导。
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+在下一次模型请求之前，OpenCode 会检测到更改，并在交付待处理的输入之前添加一条指令更新：
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- 删除所有环境 `AGENTS.md` 会告诉会话，之前的环境指令不再适用。
+- 临时读取失败会保留最后已知的指令，而不是把它们视为已删除。
+- 移动会话会保留其指令状态，因此目标位置的指导会作为更新引入。
+- 提交会话回退会清除其指令状态，并在下一次提示之前重新加载指令。
+
+指令值仍然具有特权。客户端可以看到哪些来源发生了变化，但看不到其内容。
+
+## 配置
+
+使用 `instructions` 数组，在发现的 `AGENTS.md` 文件之外添加文件、glob 模式或 HTTP(S) URL：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "CONTRIBUTING.md",
+    "docs/guidelines/*.md",
+    "~/rules/opencode.md",
+    "https://example.com/instructions.md",
+  ],
+}
+```
+
+配置的指令会在 `AGENTS.md` 文件之后加载，顺序与列出的一致。来自每个配置文档的条目都会被合并。
+
+| 条目                    | 解析方式                                             |
+| ----------------------- | ---------------------------------------------------- |
+| 相对路径或 glob         | 从工作区向上到项目根的每个目录中搜索                 |
+| `~/` 路径               | 从你的主目录解析                                     |
+| 绝对路径                | 按原样使用；文件名可以是 glob                        |
+| `http://` 或 `https://` | 在配置加载时获取，超时时间为五秒                     |
+
+- 本地文件发生变化时会像 `AGENTS.md` 一样更新。匹配 glob 的新文件会在下一次配置变更时加载。
+- 缺失的文件会被跳过。无法获取的 URL 会被跳过，或者保留其最后获取的内容。
+- 使用 `OPENCODE_DISABLE_PROJECT_CONFIG=1` 时，或者工作区位于项目之外时，相对条目会相对于全局配置目录解析。
+
+已连接的 [OpenCode Console](/console) 工作区也可以共享指令。
+
+配置位置和优先级请参见[配置](/config)。

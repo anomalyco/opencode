@@ -1,0 +1,344 @@
+---
+title: 代理
+description: "用 Markdown 或配置定义可复用的代理，每个代理都有自己的系统提示词、模型、权限和模式。"
+---
+
+创建一个 Markdown 文件即可添加可复用的代理。下面的示例添加了一个只读的审查代理，主代理可以启动它来审查代码：
+
+```md title=".opencode/agents/reviewer.md"
+---
+description: Reviews changes for correctness and regressions
+mode: subagent
+model: anthropic/claude-sonnet-5-5#high
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+  - action: shell
+    resource: "*"
+    effect: deny
+---
+
+Review the current changes. List findings in severity order with file and line references.
+```
+
+让主代理使用它：
+
+```text
+Use the reviewer subagent to review my current changes.
+```
+
+代理把系统提示词、模型偏好、权限和显示信息组合成一个具名的助手配置。
+
+## 存放位置
+
+Markdown 代理可以保存在全局目录中供所有项目使用，也可以保存在某个项目内：
+
+```text
+~/.config/opencode/agents/<name>.md
+.opencode/agents/<name>.md
+```
+
+OpenCode 会从当前目录向上直到项目根目录查找项目中的 `.opencode` 目录。嵌套路径会成为代理 ID 的一部分：
+
+```text
+.opencode/agents/team/reviewer.md  →  team/reviewer
+```
+
+## 格式
+
+### Markdown
+
+frontmatter 接受的字段与 `agents` 配置条目相同。Markdown 正文会成为代理的 `system` 提示词：
+
+```md title=".opencode/agents/explainer.md"
+---
+description: Explains code without changing it
+mode: subagent
+---
+
+Explain the relevant code with short examples. Do not edit files.
+```
+
+V1 的 frontmatter 字段已弃用。仍在使用这些字段的文件会如何读取，请参阅[代理文件](/migrate-v1#agent-files)。
+
+### JSONC
+
+在任意 [OpenCode 配置文件](/config)的 `agents` 下定义代理：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agents": {
+    "reviewer": {
+      "description": "Reviews current changes",
+      "mode": "subagent",
+      "system": "Report findings in severity order.",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+## 选择代理
+
+设置会话未选择代理时使用的主代理：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "writer",
+  "agents": {
+    "writer": { "mode": "primary" },
+  },
+}
+```
+
+所选的默认代理必须存在、可见，并且可以作为主代理使用。否则 OpenCode 会使用 `build`，再不行就使用第一个可见且能作为主代理的代理。修改此设置不会替换已有会话中保存的代理。
+
+## 模式
+
+根据代理的运行方式设置 `mode`：
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "mode": "subagent" },
+  },
+}
+```
+
+| 模式 | 行为 |
+| --- | --- |
+| `primary` | 作为会话的主代理运行。这是新建自定义代理的默认值。 |
+| `subagent` | 只能通过 `subagent` 工具在子会话中运行。 |
+| `all` | 既可以作为主代理运行，也可以作为子代理运行。 |
+
+子代理会在自己的子会话中以全新的上下文运行。它们始终在后台运行：子代理空闲时父代理会收到报告，之后每完成一轮工作还会再次收到报告。父代理的 `subagent` 权限决定它可以启动哪些代理；子代理则使用自己配置的权限。
+
+```jsonc
+{
+  "agents": {
+    "orchestrator": {
+      "permissions": [
+        { "action": "subagent", "resource": "*", "effect": "deny" },
+        { "action": "subagent", "resource": "reviewer", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+## 内置代理
+
+OpenCode 内置了以下可见代理：
+
+| 代理 | 模式 | 用途 |
+| --- | --- | --- |
+| **Build** (`build`) | `primary` | 默认的编程代理。默认允许使用所有工具和访问工作区以外的内容；读取敏感的环境变量文件时会请求批准。 |
+| **Plan** (`plan`) | `primary` | 负责探索和规划，不会编辑普通的项目文件。在你要求时，它可以写入 OpenCode 计划文件，shell 命令仍受权限控制。 |
+| **General** (`general`) | `subagent` | 拥有广泛的工具访问权限，负责调研和多步骤任务，但不能再启动其他子代理。 |
+| **Explore** (`explore`) | `subagent` | 搜索并阅读代码或网页资料，不会编辑文件。 |
+
+使用相同的 ID 即可覆盖内置代理：
+
+```jsonc
+{
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git push *", "effect": "ask" },
+      ],
+    },
+  },
+}
+```
+
+隐藏的 `compaction`、`title` 和 `summary` 代理负责执行维护任务，不能直接选择。V2 没有内置的 `scout` 代理。
+
+## 合并规则
+
+代理定义按配置顺序合并。后出现的标量值会替换先前的值，请求映射按键合并，权限规则则依次追加：
+
+```jsonc
+{
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+  ],
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git status", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+全局 `permissions` 会先于代理专属规则应用，因此后面的代理规则可以对其进一步细化。
+
+## 选项
+
+### 描述
+
+`description` 用于说明代理的用途。请为子代理添加此字段，因为模型在决定启动哪个代理时，OpenCode 会把它展示给模型：
+
+```yaml
+description: Reviews database migrations for safety
+```
+
+### 模式
+
+`mode` 可选 `primary`、`subagent` 或 `all`。新建自定义代理时如果省略，默认为 `primary`：
+
+```yaml
+mode: all
+```
+
+### 模型
+
+`model` 使用 `provider/model` 格式，可以附加可选的 `#variant`：
+
+```yaml
+model: anthropic/claude-sonnet-5-5#high
+```
+
+JSON 配置也接受展开形式：
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "model": {
+        "providerID": "anthropic",
+        "model": "claude-sonnet-5-5",
+        "variant": "high",
+      },
+    },
+  },
+}
+```
+
+- 子代理使用自己配置的模型；如果没有配置，则继承父会话的模型。
+- 会话会单独保存所选的模型。按 ID 选择主代理不会改变该模型。
+
+### 系统提示词
+
+`system` 用于设置代理的系统提示词。非空值会替换提供商为该代理提供的基础提示词：
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "system": "Review only. Do not modify files." },
+  },
+}
+```
+
+项目指令、技能、目录引用以及其他指令来源仍会照常添加。在 Markdown 代理中，请把这段文字写在文档正文里，而不是写在 frontmatter 的 `system` 字段中。
+
+### 权限
+
+`permissions` 是一个有序的匹配规则列表：
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "permissions": [
+        { "action": "*", "resource": "*", "effect": "deny" },
+        { "action": "read", "resource": "src/**", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `action` | 工具或权限操作。支持通配符。 |
+| `resource` | 操作所匹配的路径、命令、代理 ID 或其他值。支持通配符。 |
+| `effect` | `allow`、`ask` 或 `deny`。 |
+
+最后一条匹配的规则生效，因此请把宽泛的规则放在例外规则之前。常用的操作包括：
+
+| 操作 | 涵盖范围 |
+| --- | --- |
+| `shell` | Shell 命令 |
+| `edit` | 编辑、写入和补丁工具 |
+| `subagent` | 子代理 |
+| `read`, `glob`, `grep` | 本地查找工具 |
+| `webfetch`, `websearch` | 网络工具 |
+| `skill` | 技能加载 |
+
+对于 `read`、`edit` 和 `external_directory` 的资源，OpenCode 会展开 `~` 和 `$HOME`：
+
+```jsonc
+{ "action": "read", "resource": "~/notes/**", "effect": "allow" }
+```
+
+Shell 资源仍是原始的命令文本，不会展开这些值。
+
+### 步数
+
+`steps` 用于设置模型步数的上限，必须为正数：
+
+```yaml
+steps: 8
+```
+
+在最后一步，OpenCode 会移除所有工具，并要求模型用文字进行总结。新的用户输入会重置步数额度。
+
+### 隐藏
+
+`hidden` 会把代理从常规列表、交互式发现和子代理目录中移除：
+
+```yaml
+hidden: true
+```
+
+这只控制可见性，与安全无关。如需限制代理的行为，请使用权限。
+
+### 颜色
+
+`color` 使用六位十六进制值设置代理在界面中的颜色：
+
+```yaml
+color: "#ff6b6b"
+```
+
+### 禁用
+
+`disabled` 会在配置加载到该位置时移除一个内置或自定义代理：
+
+```jsonc
+{
+  "agents": {
+    "plan": { "disabled": true },
+  },
+}
+```
+
+### 请求
+
+`request` 接受按代理叠加的请求头和 JSON 请求体：
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "request": {
+        "headers": { "x-agent": "reviewer" },
+        "body": { "temperature": 0.1 },
+      },
+    },
+  },
+}
+```
+
+<Callout type="warning">
+  V2 会话运行器会保留这些值，但目前还不会在模型请求中发送它们。请改为在提供商、模型或模型变体上配置实际生效的请求设置。
+</Callout>
+
+在新的 V2 代理配置中，不要使用 `temperature`、`top_p`、`prompt`、`permission`、`tools`、`disable` 或 `maxSteps` 等旧的顶层字段。

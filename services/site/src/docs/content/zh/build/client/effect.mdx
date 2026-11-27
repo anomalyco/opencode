@@ -1,0 +1,138 @@
+---
+title: "Effect 客户端"
+description: "用 @opencode/client/effect 在 Effect 中调用 OpenCode HTTP API，它会返回带类型的 Effect 和 Stream。"
+---
+
+`@opencode/client/effect` 是 OpenCode HTTP API 的 Effect 原生客户端。它返回带类型的 Effect 和 Stream，并将响应解码为 OpenCode 的 schema 值。
+
+```sh
+bun add @opencode/client effect@4.0.1
+```
+
+## 创建客户端
+
+使用服务器 URL 创建客户端，然后调用按 API 资源分组的方法。
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const session = yield* client.session.create({
+    location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+  })
+  yield* client.session.prompt({
+    sessionID: session.id,
+    text: "Review the current changes",
+  })
+  return session
+})
+
+const session = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+## 请求头与请求选项
+
+在传入的 `HttpClient` 上配置默认请求头。原生操作通过常规的 Effect 中断来取消。RPC 方法还支持针对单次调用设置位置、请求头和 signal 选项。
+
+{/* prettier-ignore */}
+```ts
+import { HttpClient, HttpClientRequest } from "effect/http"
+
+const httpClient = yield* HttpClient.HttpClient
+const client = yield* OpenCode.make({ baseUrl: "https://opencode.example.com" }).pipe(
+  Effect.provideService(
+    HttpClient.HttpClient,
+    HttpClient.mapRequest(httpClient, (request) =>
+      HttpClientRequest.setHeaders(request, { authorization: `Bearer ${process.env.OPENCODE_TOKEN}` }),
+    ),
+  ),
+)
+
+const sessions = yield* client.session.list()
+```
+
+## 事件流
+
+`event.subscribe()`、`experimental.session.log()` 等流式操作返回 Effect Stream。
+
+{/* prettier-ignore */}
+```ts
+import { Effect, Stream } from "effect"
+
+yield* client.event
+  .subscribe()
+  .pipe(Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })))
+```
+
+每个客户端的原生事件 Stream 和 RPC 事件 Stream 共享同一个惰性连接。构造 Stream 时不会建立连接，开始消费时才会连接。停止某个消费者不影响其他消费者，最后一个消费者离开时会关闭数据源。数据源遇到 EOF 或失败时，当前订阅随之结束，不会自动重试或重放。后加入的原生消费者会先收到当前的连接标记，再收到实时事件。
+
+## 插件 RPC
+
+使用与 Promise 客户端和服务器插件相同的共享契约：
+
+{/* prettier-ignore */}
+```ts
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = yield* acme.search({ query: "hello" }, { location: { directory: "/workspace" } })
+
+yield* acme.events
+  .subscribe("updated")
+  .pipe(
+    Stream.runForEach((event) =>
+      Effect.logInfo("Plugin event", { type: event.type, location: event.location, text: event.data.text }),
+    ),
+  )
+```
+
+方法的参数和返回结果都从契约推断得出。可选的第二个参数包含 `location`、`signal` 和 `headers`；省略 location 时使用常规的请求默认值。调用会随消费它的 Effect 一起中断。方法的错误映射会推断到 Effect 的错误通道中。已声明的错误按其数据 schema 解码。带类型的子客户端去掉了通用的 HTTP RPC 错误包装；保留的 `rpc.*` 类型用于标识框架层面的故障。
+
+RPC 事件是带类型的 Stream，而不是回调式的 `on` 监听器。它们会接收该 RPC 在所有位置上的事件，每个事件都带有必需的 `location`，以及常规的带前缀类型，例如 `rpc.acme.updated`。这与服务器插件中的句柄不同，后者固定于自身所在的位置。定义、schema、注册以及实时订阅的语义请参阅 [Effect 插件 RPC](/build/plugins/effect/rpc)。
+
+## 本地后台服务
+
+仅支持 Node 的 `@opencode/client/effect/service` 入口以 Effect 的形式发现、启动、认证和停止本地后台服务。
+
+```sh
+bun add @effect/platform-node@4.0.1
+```
+
+为 `Service.ensure()` 确保运行的服务创建一个经过身份验证的客户端。
+
+```ts
+import { NodeFileSystem } from "@effect/platform-node"
+import { OpenCode } from "@opencode/client/effect"
+import { Service } from "@opencode/client/effect/service"
+import { Effect } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const endpoint = yield* Service.ensure()
+  const httpClient = yield* HttpClient.HttpClient
+  const client = yield* OpenCode.make({ baseUrl: endpoint.url }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(httpClient, (request) =>
+        HttpClientRequest.setHeaders(request, Service.headers(endpoint) ?? {}),
+      ),
+    ),
+  )
+  return yield* client.server.info()
+})
+
+const health = await Effect.runPromise(
+  program.pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)),
+)
+```
+
+只发现服务而不启动，或者停止当前注册的那个服务。
+
+{/* prettier-ignore */}
+```ts
+const endpoint = yield* Service.discover()
+yield* Service.stop()
+```

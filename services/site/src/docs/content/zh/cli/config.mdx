@@ -1,0 +1,417 @@
+---
+title: "设置"
+description: "配置 OpenCode CLI 和 TUI 的所有设置。"
+---
+
+CLI 设置只作用于终端客户端，与 `opencode.json(c)` 中的服务器和项目设置相互独立。
+
+按 `Ctrl+P`，然后选择 **Open settings**，即可在 TUI 中修改常用设置。
+
+<img src={`${import.meta.env.BASE_URL}assets/cli/settings.png`} alt="OpenCode TUI 设置对话框" />
+
+## 配置文件
+
+OpenCode 将 CLI 设置保存在一个全局文件中：
+
+```text
+~/.config/opencode/cli.json
+```
+
+如果设置了 `$XDG_CONFIG_HOME`，OpenCode 会使用：
+
+```text
+$XDG_CONFIG_HOME/opencode/cli.json
+```
+
+CLI 设置没有项目级配置文件。添加已发布的 JSON Schema，即可获得校验和自动补全：
+
+```json title="cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json"
+}
+```
+
+OpenCode 在创建或迁移该文件时会自动添加 `$schema`。TUI 运行期间，合法的修改会自动重新加载。
+
+未知设置会被忽略。请保留 `$schema`，这样编辑器会标记无效的值。
+
+## 内联配置
+
+设置 `OPENCODE_CLI_CONFIG_CONTENT`，即可通过内联 JSON 应用 CLI 设置：
+
+```sh
+OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"mode":"off"}}' opencode
+```
+
+OpenCode 会将内联设置合并到全局 `cli.json` 之上。嵌套对象会合并，而环境变量中的数组和标量值会直接替换全局值。只要设置了该变量，内联设置就始终优先。
+
+## 外观
+选择主题、控制界面动效，并覆盖终端光标样式：
+
+```json title="cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  },
+  "animations": true,
+  "cursor": {
+    "style": "block",
+    "blinking": true
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="外观设置" tabIndex={0}>
+
+| 设置项 | 取值 | 说明 |
+| ----------------- | --------------------------------------- | ------------------------------------------------------------------------ |
+| `theme.name`      | 字符串                                  | 选择内置主题、自定义主题或从终端派生的主题。                   |
+| `theme.mode`      | `system`、`dark` 或 `light`            | 跟随终端外观，或将主题锁定为某一种颜色模式。    |
+| `animations`      | 布尔值                                 | 启用界面动画。                                           |
+| `cursor.style`    | `block`、`underline`、`line`、`default` | 设置光标形状。`default` 保留终端自身的光标形状。  |
+| `cursor.blinking` | 布尔值                                 | 控制光标是否闪烁。样式为 `default` 时无效。 |
+
+</div>
+
+选择和创建主题请参阅[主题](/cli/theme)。
+
+## 输入
+
+配置鼠标捕获、滚动、编辑器上下文、粘贴以及输入框中的图片预览：
+
+```json title="cli.json"
+{
+  "mouse": true,
+  "scroll": {
+    "speed": 3,
+    "acceleration": false
+  },
+  "prompt": {
+    "editor": true,
+    "paste": "compact",
+    "image_preview": false
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="输入设置" tabIndex={0}>
+
+| 设置项 | 取值 | 说明 |
+| -------------------------- | ------------------------------- | --------------------------------------------------------------------------- |
+| `mouse`                    | 布尔值                         | 启用终端鼠标捕获。                                             |
+| `scroll.speed`             | 数字，至少为 `0.001`        | 设置每次滚动输入的固定滚动距离。                               |
+| `scroll.acceleration`      | 布尔值                         | 连续滚动时加速。启用后优先于滚动速度设置。 |
+| `prompt.editor`            | 布尔值                         | 将编辑器中当前打开的文件或选中内容作为提示词上下文。             |
+| `prompt.paste`             | `compact` 或 `full`             | 将大段粘贴内容显示为紧凑的占位符或完整文本。                  |
+| `prompt.image_preview`     | 布尔值                         | 在输入框上方显示图片附件预览。                     |
+
+</div>
+
+## 会话
+
+配置全屏 TUI 中会话的展示方式，以及新会话的起始位置：
+
+```json title="cli.json"
+{
+  "session": {
+    "sidebar": "auto",
+    "scrollbar": false,
+    "submit_scroll": "bottom",
+    "thinking": "hide",
+    "grouping": "auto",
+    "image_preview": false,
+    "tps": true,
+    "markdown": "rendered",
+    "new_location": "launch",
+    "permissions": "prompt"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="会话设置" tabIndex={0}>
+
+| 设置项 | 取值 | 说明 |
+| ----------------------- | --------------------------- | ---------------------------------------------------------------------------- |
+| `session.sidebar`       | `auto` 或 `hide`            | 空间允许时显示侧边栏，或始终隐藏。                     |
+| `session.scrollbar`     | 布尔值                     | 显示对话记录的滚动条。                                              |
+| `session.submit_scroll` | `bottom` 或 `keep`          | 发送提示词时跳到最新消息，或保持当前位置。  |
+| `session.thinking`      | `show` 或 `hide`            | 默认显示或隐藏模型的推理过程。                                   |
+| `session.grouping`      | `auto` 或 `none`            | 将相关的对话记录条目分组，或逐条单独渲染。             |
+| `session.image_preview` | 布尔值                     | 在对话记录中显示用户附件和工具结果中的图片。              |
+| `session.tps`           | 布尔值                     | 在助手消息底部显示每秒输出的 token 数。                         |
+| `session.markdown`      | `source` 或 `rendered`      | 显示 Markdown 语法标记，或在渲染后的内容中隐藏它们。          |
+| `session.new_location`  | `launch` 或 `inherit`       | 新会话从 TUI 启动目录开始，或继承当前会话的位置。  |
+| `session.permissions`   | `prompt` 或 `autoaccept`    | 对权限请求逐一询问，或自动允许所有请求。      |
+
+</div>
+
+## 标签页
+
+配置常驻的会话标签栏：
+
+```json title="cli.json"
+{
+  "tabs": {
+    "mode": "auto",
+    "scope": "cwd",
+    "layout": "horizontal",
+    "indicators": "status"
+  }
+}
+```
+
+旧版布尔设置 `tabs.enabled` 仍然受支持：`true` 等同于 `on`，`false` 等同于 `off`。OpenCode 会读取它，但不会改写配置文件。
+
+<div class="docs-table-scroll" role="region" aria-label="标签页设置" tabIndex={0}>
+
+| 设置项 | 取值 | 说明 |
+| ----------------- | --------------------------- | ----------------------------------------------------------------------------- |
+| `tabs.mode`       | `auto`、`on` 或 `off`      | 自动、始终或从不使用标签页。`auto` 模式下在 Herdr 中会隐藏标签页。       |
+| `tabs.scope`      | `cwd` 或 `global`           | 每个工作目录使用独立的标签页，或在全局共享。            |
+| `tabs.layout`     | `horizontal` 或 `vertical`  | 将标签页放在水平标签栏或垂直侧边栏中。                      |
+| `tabs.indicators` | `status` 或 `numbers`       | 显示状态图标，或始终显示标签页编号。                               |
+
+</div>
+
+编号指示器同样保留状态颜色和背景动画。无论使用哪种指示器模式，都可以用 Ctrl+数字快捷键切换标签页。
+
+## 差异
+
+配置差异视图的初始范围和展示方式：
+
+```json title="cli.json"
+{
+  "diffs": {
+    "source": "branch",
+    "wrap": "word",
+    "tree": true,
+    "single": false,
+    "view": "auto"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="差异设置" tabIndex={0}>
+
+| 设置项 | 取值 | 说明 |
+| -------------- | ------------------------------------------- | --------------------------------------------------------- |
+| `diffs.source` | `branch`、`committed`、`working` 或 `turn` | 设置初始的审查范围。                            |
+| `diffs.wrap`   | `word` 或 `none`                            | 长行按单词换行，或不换行。       |
+| `diffs.tree`   | 布尔值                                     | 显示差异文件树。                                 |
+| `diffs.single` | 布尔值                                     | 只显示选中文件的补丁。                       |
+| `diffs.view`   | `auto`、`split` 或 `unified`               | 设置布局。`auto` 会根据可用宽度自动选择。 |
+
+</div>
+
+`branch` 显示 **All**，即分支上的所有提交和本地更改；`committed` 只显示分支上的提交；`working` 显示已暂存、未暂存和未跟踪的更改。`turn` 显示 **Last turn**，即会话在最近一轮中修改过的文件；每当会话完成一轮时都会刷新，如果 `/diff` 不是从会话中打开的，则回退为 `branch`。
+
+在 `/diff` 中，按 `d` 可以切换范围，或在 **Base** 中选择要对比的分支。这些在视图内做出的选择会一直保留到 TUI 退出，且不会修改 `cli.json`。
+
+## 提醒
+
+系统通知和提示音可以分别启用：
+
+```json title="cli.json"
+{
+  "attention": {
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "permission": "/home/me/sounds/permission.wav"
+    }
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="提醒设置" tabIndex={0}>
+
+| 设置项 | 取值 | 说明 |
+| ------------------------ | ---------------------- | -------------------------------------------------------------------------------------------------------- |
+| `attention.notifications` | 布尔值               | 显示系统通知，通常在终端未获得焦点时触发。                                  |
+| `attention.sound`        | 布尔值                | 播放提示音。                                                                                  |
+| `attention.volume`       | `0` 到 `1` 之间的数字 | 设置提示音音量。                                                                                       |
+| `attention.sound_pack`   | 字符串                 | 选择当前使用的音效包 ID。                                                                        |
+| `attention.sounds`       | 对象                 | 为 `default`、`question`、`permission`、`error`、`done` 或 `subagent_done` 覆盖音效文件。    |
+
+</div>
+
+如果覆盖的音效文件无效或无法读取，该事件会回退为内置音效。
+
+更新之后，TUI 会在主屏幕上显示一次新版本的亮点功能。运行 `/highlights` 可以再次查看，也可以关闭该对话框：
+
+```json title="cli.json"
+{
+  "highlights": false
+}
+```
+
+## 终端
+
+配置终端集成：
+
+```json title="cli.json"
+{
+  "terminal": {
+    "title": true,
+    "copy": "select"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="终端设置" tabIndex={0}>
+
+| 设置项 | 取值 | 说明 |
+| ---------------- | -------------------- | -------------------------------------------------------------------------------------------------------- |
+| `terminal.title` | 布尔值              | 更新终端窗口标题。                                                                       |
+| `terminal.copy`  | `manual` 或 `select` | 手动复制，或选中后立即复制。平台默认值在 Windows 上为 `manual`，在其他平台上为 `select`。 |
+
+</div>
+
+## Mini
+
+`mini` 设置组控制 [`opencode mini`](/cli#mini)，即精简交互界面：
+
+```json title="cli.json"
+{
+  "mini": {
+    "thinking": "show",
+    "tools": "hide",
+    "shell_output": "hide",
+    "turn_summary": "show",
+    "footer": "show",
+    "splash": "show",
+    "work_spinner": "block-soft-slide",
+    "mono": false,
+    "replay": true,
+    "replay_limit": 200
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Mini 设置" tabIndex={0}>
+
+| 设置项 | 取值 | 说明 |
+| ------------------- | ------------------------------ | ---------------------------------------------------------------------------------- |
+| `mini.thinking`     | `show` 或 `hide`               | 显示或隐藏模型的推理过程。                                                    |
+| `mini.tools`        | `show` 或 `hide`               | 显示或隐藏工具调用及其之前的助手文本。               |
+| `mini.shell_output` | `show` 或 `hide`               | 显示或隐藏 Shell 工具的原始输出。                                              |
+| `mini.turn_summary` | `show` 或 `hide`               | 在回滚历史中显示或隐藏代理、模型和耗时摘要。               |
+| `mini.footer`       | `show` 或 `hide`               | 显示或隐藏常驻的活动、模型、用量和上下文信息。             |
+| `mini.splash`       | `show` 或 `hide`               | 显示或隐藏进入和退出时的启动横幅。                                      |
+| `mini.work_spinner` | spinner ID                     | 选择底部栏中的工作动画。                                          |
+| `mini.mono`         | 布尔值                        | 使用单色 ASCII 输出。                                                      |
+| `mini.replay`       | 布尔值                        | 恢复会话或调整终端尺寸时重新显示会话历史。                            |
+| `mini.replay_limit` | 正整数               | 限制只回放最新的若干条消息。默认上限为 `200`。                  |
+
+</div>
+
+可用的 spinner ID 如下：
+
+```text
+block-soft-slide  block-soft-sweep  block-low-comet  block-low-duet
+block-shuttle     block-bridge      block-squeeze    small-toggle
+square-toggle     grow-shrink       quadrant-orbit   crosshatch
+density-wave      seed
+```
+
+命令行中的 `mini` 回放参数会在该次调用中覆盖这些设置。
+
+## 快捷键
+
+覆盖某个命令的按键绑定以及 Leader 键超时时间：
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app.exit": ["ctrl+c", "ctrl+d", "<leader>q"],
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "event": "press",
+      "preventDefault": false,
+      "fallthrough": false
+    },
+    "help.show": false
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="快捷键设置" tabIndex={0}>
+
+| 设置项 | 取值 | 说明 |
+| ----------------------- | ------------------------------------------------ | -------------------------------------------------------------------- |
+| `keybinds.leader`       | 绑定值                                    | 设置其他绑定中 `<leader>` 所代表的按键。             |
+| `keybinds.<command>`    | 绑定值                                    | 覆盖某个命令 ID 的绑定。                            |
+| `keybinds.*.key`        | 按键字符串或描述对象                         | 为对象形式的绑定指定按键。                               |
+| `keybinds.*.event`      | `press` 或 `release`                             | 将对象形式的绑定限定为某一种按键事件。                           |
+| `keybinds.*.preventDefault` | 布尔值                                      | 控制是否阻止终端默认的按键行为。  |
+| `keybinds.*.fallthrough` | 布尔值                                         | 允许优先级更低的处理函数接收同一事件。            |
+| `leader.timeout`        | 正整数                                 | 设置按下 Leader 键后等待的毫秒数。             |
+
+</div>
+
+绑定值可以是字符串、由多个备选组成的数组，或者对象。使用 `"none"` 或 `false` 可以禁用某个绑定。可接受的按键语法、所有命令 ID 和所有默认绑定，请参阅[快捷键](/cli/keybinds)。
+
+## 插件
+
+按顺序加载仅用于终端的插件：
+
+```json title="cli.json"
+{
+  "plugins": [
+    "-opencode.notifications",
+    {
+      "package": "./plugins/status",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="插件设置" tabIndex={0}>
+
+| 设置项 | 取值 | 说明 |
+| -------------------- | --------------- | --------------------------------------------------------------- |
+| `plugins`            | 数组           | 按顺序声明启用指令和外部插件。    |
+| `plugins[].package`  | 字符串          | 设置包名、本地路径或文件 URL。                    |
+| `plugins[].options`  | 对象          | 向该插件传递插件专属的选项。                   |
+
+</div>
+
+包的写法、本地发现、通配符和禁用指令，请参阅[插件](/cli/plugins)。
+
+## 调试与实验性功能
+
+启用诊断功能，或选择加入当前可用的实验性功能：
+
+```json title="cli.json"
+{
+  "debug": {
+    "devtools": false,
+    "timing": false,
+    "turn_tokens": "verbose"
+  },
+  "experimental": {}
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="调试与实验性功能设置" tabIndex={0}>
+
+| 设置项 | 取值 | 说明 |
+| ------------------- | ------------------------------- | ----------------------------------------------------------------------------------- |
+| `debug.devtools`    | 布尔值                         | 显示 DevTools 调试栏。                                                       |
+| `debug.timing`      | 布尔值                         | 在调试栏中显示首次绘制耗时诊断。                              |
+| `debug.turn_tokens` | 布尔值或 `verbose`            | 显示每一轮的 token 用量；`verbose` 还会包含工具调用的输入。               |
+| `experimental`      | 功能 ID 到布尔值的映射对象 | 启用或禁用实验性功能，这些功能可能随时变更或移除，恕不另行通知。     |
+
+</div>
+
+只能使用 TUI 的 **Experiments** 对话框中当前列出的功能 ID，未知 ID 不会生效。

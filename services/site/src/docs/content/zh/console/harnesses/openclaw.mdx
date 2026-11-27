@@ -1,0 +1,81 @@
+---
+title: "OpenClaw"
+description: "在 OpenClaw 中使用 Console 和 Go 模型。"
+---
+
+[OpenClaw](https://openclaw.ai) 内置了按量付费和 Go 的 OpenCode 提供商。它会为每个付费或 Go 模型选择正确的 API，并在每个 Go 请求中发送会话 ID。免费层级对话模型只能在 OpenCode 中使用，从 OpenClaw 调用会返回 HTTP `403`。
+
+<Callout>
+  [Console CLI](/console/harnesses#console-cli) 可以用一条命令设置好 OpenClaw，包括团队的策略、MCP 服务器、技能和指令。运行 `npx @opencode/console setup openclaw`，然后运行 `openclaw gateway restart`。以下步骤介绍如何手动设置。
+</Callout>
+
+| 提供商      | 套餐          | 模型前缀      |
+| ------------- | ------------- | ----------------- |
+| `opencode`    | 按量付费 | `opencode/...`    |
+| `opencode-go` | Go            | `opencode-go/...` |
+
+Go 提供商随 OpenClaw 一起提供。按量付费提供商是一个插件；如果 `openclaw models list` 没有显示它，请安装该插件。
+
+```bash
+openclaw plugins install @openclaw/opencode-provider
+```
+
+## 登录
+
+在浏览器中登录，而不是粘贴密钥。这需要 OpenClaw 2026.11.7 或更高版本。
+
+```bash
+openclaw models auth login --provider opencode-go --method oauth
+```
+
+打开 OpenClaw 输出的链接，在 Console 中确认代码，然后选择一个已订阅 [Go](/console/go) 的团队。OpenClaw 会自行保存并刷新登录状态。
+
+每个提供商需要分别登录。按量付费模型也需要登录 `opencode`。
+
+```bash
+openclaw models auth login --provider opencode --method oauth
+```
+
+你也可以在 `openclaw onboard` 期间选择 **OpenCode Go (browser sign-in)**，在聊天中使用 `/login`，或从 **Settings › Models › Add account** 登录。
+
+## 使用 API 密钥
+
+两个提供商都会从 `OPENCODE_API_KEY` 读取同一个密钥。请创建[个人 API 密钥](/console/harnesses#get-an-api-key)，并在引导过程中传入。
+
+```bash
+openclaw onboard --opencode-go-api-key "$OPENCODE_API_KEY"
+```
+
+或在 `~/.openclaw/openclaw.json` 中设置它。
+
+```json5 title="~/.openclaw/openclaw.json"
+{
+  env: { vars: { OPENCODE_API_KEY: "oc_sk_..." } },
+  agents: { defaults: { model: { primary: "opencode-go/kimi-k3" } } },
+}
+```
+
+来自没有 Go 的团队的密钥仍会列出 Go 的模型，但对它们的请求会失败，直到该团队订阅 Go。
+
+## 模型
+
+以 `<provider>/<model-id>` 的形式选择模型，使用 [Console](/console/models#endpoints) 或 [Go](/console/go#endpoints) 表格中的 ID。OpenClaw 会从 Console 读取模型列表，因此新模型无需更新即可出现。
+
+```bash
+openclaw models list --provider opencode-go
+```
+
+为你的代理设置默认模型。
+
+```bash
+openclaw config set agents.defaults.model.primary "opencode-go/kimi-k3"
+```
+
+## Console MCP
+
+通过 OAuth 添加 [Console MCP](/console/harnesses#console-mcp) 服务器，然后在 Gateway 运行时从浏览器登录。
+
+```bash
+openclaw mcp set opencode-console '{"url":"https://opencode.ai/console/mcp","transport":"streamable-http","auth":"oauth"}'
+openclaw mcp login opencode-console
+```

@@ -1,0 +1,97 @@
+---
+title: "Effect SDK"
+description: "用 @opencode/sdk/effect 在 Effect 程序中托管 OpenCode，这是 Effect 原生的嵌入式 SDK。"
+---
+
+`@opencode/sdk/effect` 是 Effect 原生的嵌入式 SDK。各项操作返回带类型的 Effect 和 Stream；关闭所属的 Scope 时，会释放路由器、Location 服务、fiber 和插件注册。
+
+```sh
+bun add @opencode/sdk effect@4.0.1
+```
+
+## 创建宿主
+
+在 `Effect.scoped` 中创建宿主，然后使用它生成的 API 分组或 `sessions` 别名。
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    const opencode = yield* OpenCode.create()
+    const session = yield* opencode.sessions.create({
+      location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+    })
+    yield* opencode.sessions.prompt({
+      sessionID: session.id,
+      text: "Review the current changes",
+    })
+    return session
+  }),
+)
+
+const session = await Effect.runPromise(program)
+```
+
+嵌入式宿主使用的 schema 值、已声明错误、请求选项和 Stream 都与 `@opencode/client/effect` 相同。
+
+```ts
+const info = yield* opencode.server.info()
+const sessions = yield* opencode.sessions.list()
+```
+
+## 事件流
+
+流式端点返回 Effect `Stream` 值。如果消费者需要在后台运行，请把它 fork 到宿主的 Scope 中。
+
+```ts
+import { Effect, Stream } from "effect"
+
+yield* opencode.events.subscribe().pipe(
+  Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })),
+  Effect.forkScoped,
+)
+```
+
+## 自定义
+
+通过注册 Effect 插件来自定义你的 OpenCode 实例。借助嵌入式宿主，你可以自定义代理、模型、工具和其他行为：
+
+```ts
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const agent = ctx.agent
+      yield* agent.transform((agents) => {
+        agents.update("build", (agent) => {
+          agent.description = "Builds features and fixes bugs for our team"
+        })
+      })
+    }),
+})
+
+yield* opencode.plugin(plugin)
+```
+
+插件钩子、转换、工具和完整的插件上下文，请参阅[完整的 Effect 插件文档](/build/plugins/effect)。
+
+## Layer
+
+如果嵌入式宿主需要作为应用服务使用，请使用 `OpenCode.layer()`。
+
+```ts
+import { OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const opencode = yield* OpenCode.Service
+  return yield* opencode.server.info()
+})
+
+const health = await Effect.runPromise(program.pipe(Effect.provide(OpenCode.layer())))
+```

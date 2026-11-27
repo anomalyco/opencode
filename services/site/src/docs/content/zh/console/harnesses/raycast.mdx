@@ -1,0 +1,36 @@
+---
+title: "Raycast"
+description: "在 Raycast AI 中使用 Console 和 Go 模型。"
+---
+
+通过 [OpenCode 扩展](https://www.raycast.com/vimtor/opencode)，你可以在 Raycast AI Chat、Quick AI 和 AI Commands 中使用 Console 和 Go 模型。扩展提供的模型需要 [Raycast Pro](https://www.raycast.com/pro)。
+
+## 配置
+
+扩展会加载团队中已启用的模型，并将费用计入该团队。请选择付费或 Go 模型；免费层级对话模型只能在 OpenCode 中使用，从 Raycast 调用会返回 HTTP `403`。
+
+1. 从 Raycast Store 安装扩展。
+2. 创建[个人 API 密钥](/console/harnesses#get-an-api-key)，并粘贴到扩展的 **API Key** 偏好设置中。
+3. 允许扩展在 Raycast 模型选择器中提供模型。
+
+在 Console 中启用或禁用模型后，运行 **Refresh Models**。
+
+```text
+Refresh Models
+```
+
+## Go
+
+使用来自已订阅 [Go](/console/go) 的团队的密钥。随后扩展会在模型选择器中列出 Go 模型。
+
+## Console MCP
+
+使用 **Install MCP Server** 命令添加 [Console MCP](/console/harnesses#console-mcp) 服务器。
+
+| 字段      | 值                             |
+| ---------- | --------------------------------- |
+| 传输       | HTTP                              |
+| URL        | `https://opencode.ai/console/mcp` |
+| OAuth 类型 | Dynamic                           |
+
+Raycast 会在首次使用该服务器时要求你登录。

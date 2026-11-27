@@ -1,0 +1,1490 @@
+---
+title: "Effect 插件"
+description: "使用 Effect 原生的插件 API 编写服务器插件。"
+---
+
+`@opencode/plugin/effect` 是 OpenCode 插件 API 的 Effect 原生版本。它的上下文操作返回 Effect 或 Stream，回调返回 Effect，插件的生命周期则由 `Scope` 表示。
+
+OpenCode 在加载插件及其 `node_modules` 依赖时，会在运行时提供 `effect`（包括其导出的 `effect/*` 子路径）和 `@opencode/plugin`。请把它们安装为 peer 依赖或开发依赖，仅用于本地类型检查和测试，不要打包进插件。
+
+```sh
+bun add --peer @opencode/plugin effect@4.0.1
+```
+
+从 `.opencode/plugins/` 导出 Effect 插件，OpenCode 就会自动加载它。
+
+```ts title=".opencode/plugins/concise/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "example",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const storage = ctx.storage
+      yield* storage.set("loaded", true)
+    }),
+})
+```
+
+已发布的包，以及位于 `.opencode/plugins/` 之外的插件目录，与其他服务器插件一样通过 `plugins` 配置加载。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-effect-plugin",
+    "opencode-acme-effect-plugin@1.2.0",
+    "@acme/opencode-effect-plugin",
+    "./plugins/local-effect",
+    {
+      "package": "@acme/opencode-effect-plugin",
+      "options": { "agent": "reviewer", "strict": true },
+    },
+  ],
+}
+```
+
+启用方式、包解析和配置优先级请参阅[配置插件](/plugins)。
+
+```ts title="plugins/local-effect/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "local-effect",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      yield* Effect.logInfo("Effect plugin loaded", { version: ctx.app.version })
+    }),
+})
+```
+
+## 生命周期
+
+插件加载时会运行 `effect`。插件重新加载或卸载时，它的作用域随之关闭，注册项、作用域内的 fiber 和终结器（finalizer）会一并释放。
+
+```ts
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "lifecycle",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      yield* Effect.logInfo("loaded", { version: ctx.app.version })
+      yield* Effect.addFinalizer(() => Effect.logInfo("unloaded"))
+    }),
+})
+```
+
+后台任务请使用作用域内的 fiber。插件作用域会在清理时中断这些 fiber。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const storage = ctx.storage
+    yield* Effect.repeat(
+      storage.set("heartbeat", { time: Date.now() }),
+      { schedule: Schedule.spaced("1 minute") },
+    ).pipe(Effect.forkScoped)
+  }),
+```
+
+### 上下文
+
+上下文提供连接到当前 OpenCode 服务器的 Effect 客户端，以及插件专用的转换、钩子、存储、重新加载和选项。它不会暴露 OpenCode 私有的 Core 服务。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const plugins = ctx.plugin
+    const active = yield* plugins.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("active plugins", { count: active.data.length })
+  }),
+```
+
+插件定义和完整上下文的声明如下。
+
+```ts
+interface Context {
+  readonly app: App
+  readonly location: Location.Info
+  readonly options: PluginOptions
+  readonly agent: AgentDomain
+  readonly aisdk: AISDKDomain
+  readonly command: CommandDomain
+  readonly event: EventDomain
+  readonly experimental: {
+    readonly terminal: Pick<ExperimentalApi<unknown>["persistentPty"], "read">
+    readonly generate: GenerateApi<unknown>
+  }
+  readonly integration: IntegrationDomain
+  readonly mcp: MCPDomain
+  readonly model: ModelDomain
+  /** @deprecated Use `experimental.generate.text`. */
+  readonly generate: Pick<ExperimentalGenerateApi<unknown>, "text">
+  readonly permission: PermissionDomain
+  readonly plugin: Pick<PluginApi<unknown>, "list">
+  readonly provider: ProviderDomain
+  readonly reference: ReferenceDomain
+  readonly rpc: RpcDomain
+  readonly session: SessionDomain
+  readonly shell: ShellDomain
+  readonly skill: SkillDomain
+  readonly storage: StorageDomain
+  readonly tool: ToolDomain
+  readonly vcs: VcsDomain
+  readonly websearch: WebSearchDomain
+  readonly worktree: WorktreeDomain
+}
+
+interface Plugin<R = Scope.Scope> {
+  readonly id: string
+  readonly effect: (context: Context) => Effect.Effect<void, never, R>
+}
+```
+
+### 选项
+
+在 `opencode.json(c)` 中使用对象形式传入选项。
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [
+    {
+      "package": "./plugins/company-effect",
+      "options": { "strict": true },
+    },
+  ],
+}
+```
+
+从 `ctx.options` 读取选项。选项值的类型未知，使用前请先收窄类型。
+
+```ts title="plugins/company-effect/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "company",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const strict = ctx.options.strict === true
+      yield* Effect.logInfo("company plugin configured", { strict })
+    }),
+})
+```
+
+## 转换
+
+转换（transform）通过编辑器同步修改状态。在每个领域内，OpenCode 按注册顺序应用转换。来源先提供提供商和不可变的模型定义，随后模型转换再编辑活跃提供商的候选模型。用 `yield*` 执行注册，即可将其保留在插件作用域内。
+
+```ts title="plugins/models-effect/index.ts"
+import { Model, Plugin, Provider } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "company.models",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const providerID = Provider.ID.make("acme")
+      const models = [{ ...Model.Info.default(providerID, Model.ID.make("reasoner")), name: "Acme Reasoner" }]
+      yield* ctx.provider.transform((editor) => {
+        editor.add({
+          info: {
+            ...Provider.Info.empty(providerID),
+            name: "Acme",
+            activation: "enabled",
+            package: "@opencode/ai/providers/openai-compatible",
+            settings: { baseURL: "http://127.0.0.1:8000/v1" },
+          },
+          models,
+        })
+      })
+    }),
+})
+```
+
+模型转换可以对全部活跃提供商的候选模型集合统一实施策略。
+
+```ts title="plugins/model-budget-effect/index.ts"
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.model.transform((editor) => {
+      editor
+        .list()
+        .filter((model) => model.cost.some((tier) => tier.output > 20))
+        .forEach((model) => {
+          editor.remove(model.providerID, model.id)
+        })
+    })
+  }),
+```
+
+当转换所依赖的外部状态发生变化时，调用 `reload`。本例中 `loadFromSource()` 返回 `{ info: Provider.Info, models: readonly Model.Info[] }` 条目；重新加载提供商还会让整个模型结果失效。
+
+```ts title="plugins/models-effect/index.ts"
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const provider = ctx.provider
+    const source = { providers: yield* loadFromSource() }
+
+    yield* provider.transform((editor) => {
+      source.providers.forEach((provider) => editor.add(provider))
+    })
+
+    yield* Effect.repeat(
+      Effect.gen(function* () {
+        source.providers = yield* loadFromSource()
+        yield* provider.reload()
+      }),
+      { schedule: Schedule.spaced("1 minute") },
+    ).pipe(Effect.forkScoped)
+  }),
+```
+
+## API
+
+### 代理
+
+读取所有代理，或按 ID 获取单个代理。客户端响应包含解析后的位置和 schema 数据。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const agent = ctx.agent
+    const agents = yield* agent.list().pipe(Effect.orDie)
+    const build = yield* agent.get({ agentID: Agent.ID.make("build") }).pipe(Effect.orDie)
+    yield* Effect.logInfo("agents", { count: agents.data.length, build: build.data.name })
+  }),
+```
+
+转换或重新加载代理。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const agent = ctx.agent
+    yield* agent.transform((editor) => {
+      editor.default("build")
+      editor.update("build", (item) => (item.description = "Builds features and fixes bugs"))
+      editor.remove("legacy")
+    })
+    yield* agent.reload()
+  }),
+```
+
+Schema：[`Agent.Info`](/api#schema-Agent.Info)。
+
+```ts
+interface AgentEditor {
+  list(): readonly Types.DeepMutable<Agent.Info>[]
+  get(id: string): Types.DeepMutable<Agent.Info> | undefined
+  default(id: string | undefined): void
+  update(id: string, update: (agent: Types.DeepMutable<Agent.Info>) => void): void
+  remove(id: string): void
+}
+
+interface AgentDomain extends AgentApi<unknown> {
+  readonly transform: Transform<AgentEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### 提供商
+
+读取可用的提供商，或按 ID 查看某个提供商的元数据。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const provider = ctx.provider
+    const providers = yield* provider.list().pipe(Effect.orDie)
+    const anthropic = yield* provider.get({ providerID: Provider.ID.make("anthropic") }).pipe(Effect.orDie)
+    yield* Effect.logInfo("providers", {
+      providers: providers.data.length,
+      anthropic: anthropic.data.name,
+    })
+  }),
+```
+
+提供商转换用于编辑提供商设置和来源定义。编辑器读取的结果包含未激活的提供商，返回的定义不可变；`models.update` 编辑的是来源模型的一份独立副本。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.provider.transform((editor) => {
+      editor.update("anthropic", (provider) => {
+        provider.headers = { ...provider.headers, "x-company": "engineering" }
+      })
+      editor.models.update("anthropic", "claude-sonnet-5-5", (model) => (model.name = "Team Sonnet"))
+      editor.models.remove("anthropic", "legacy-model")
+      editor.remove("legacy-provider")
+    })
+  }),
+```
+
+使用 `models.set` 替换某个来源的模型清单，并在其捕获的定义发生变化后重新加载。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const provider = ctx.provider
+    const source = { models: yield* loadModels() }
+    yield* provider.transform((editor) => editor.models.set("acme", source.models))
+    source.models = yield* loadModels()
+    yield* provider.reload()
+  }),
+```
+
+如果模型清单与账号相关，请把加载清单时使用的连接作为 `sourceConnection` 传入。当用户选中其他连接时，OpenCode 会排除该提供商，直到你的插件发布刷新后的清单。
+
+{/* prettier-ignore */}
+```ts
+const connection = yield* ctx.integration.connection.active("acme")
+if (!connection) return
+const inventory = yield* loadInventory(connection)
+yield* ctx.provider.transform((editor) => {
+  editor.add({ info: inventory.provider, models: inventory.models, sourceConnection: connection })
+})
+```
+
+Schema：[`Provider.Info`](/api#schema-Provider.Info)、[`Model.Info`](/api#schema-Model.Info)。
+
+```ts
+interface ProviderRecord {
+  readonly provider: Provider.Info
+  readonly models: ReadonlyMap<string, Model.Info>
+  readonly sourceConnection?: ConnectionInfo
+}
+
+interface ProviderEditor {
+  list(): readonly ProviderRecord[]
+  get(providerID: string): ProviderRecord | undefined
+  add(input: { info: Provider.Info; models: readonly Model.Info[]; sourceConnection?: ConnectionInfo }): void
+  update(providerID: string, update: (provider: Types.DeepMutable<Provider.Info>) => void): void
+  remove(providerID: string): void
+  readonly models: {
+    set(providerID: string, models: readonly Model.Info[]): void
+    update(providerID: string, modelID: string, update: (model: Types.DeepMutable<Model.Info>) => void): void
+    remove(providerID: string, modelID: string): void
+  }
+}
+
+interface ProviderDomain extends ProviderApi<unknown> {
+  readonly transform: Transform<ProviderEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### 模型
+
+读取可用模型和默认选择。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const model = ctx.model
+    const models = yield* model.list().pipe(Effect.orDie)
+    const selected = yield* model.default().pipe(Effect.orDie)
+    yield* Effect.logInfo("models", { count: models.data.length, selected: selected.data?.name })
+  }),
+```
+
+模型转换编辑的是全部活跃提供商的候选模型集合。在所有转换完成之前，已禁用的候选模型仍然可以编辑；`update` 只能在可用的提供商下添加模型。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.model.transform((editor) => {
+      editor.list("anthropic").forEach((model) => {
+        editor.update(model.providerID, model.id, (draft) => {
+          draft.enabled = draft.capabilities.tools
+        })
+      })
+      editor.default.set("anthropic", "claude-sonnet-5-5")
+      editor.remove("anthropic", "legacy-model")
+    })
+  }),
+```
+
+回调编辑的是原始的模型覆盖值。OpenCode 提交结果时会合并一次提供商默认值，没有变化时的读取会复用这个结果。`editor.provider` 读取的是不可变的来源定义（包括未激活的模板），而不是模型转换的输出。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const model = ctx.model
+    yield* model.transform((editor) => {
+      const source = editor.provider.get("anthropic")?.models.get("claude-sonnet-5-5")
+      if (!source) return
+      editor.update("anthropic", source.id, (draft) => {
+        draft.limit.context = Math.min(draft.limit.context, source.limit.context)
+      })
+    })
+    yield* model.reload()
+  }),
+```
+
+Schema：[`Model.Info`](/api#schema-Model.Info)。
+
+```ts
+interface ModelEditor {
+  list(providerID?: string): readonly Types.DeepMutable<Model.Info>[]
+  get(providerID: string, modelID: string): Types.DeepMutable<Model.Info> | undefined
+  update(providerID: string, modelID: string, update: (model: Types.DeepMutable<Model.Info>) => void): void
+  remove(providerID: string, modelID: string): void
+  readonly default: {
+    get(): { providerID: string; modelID: string } | undefined
+    set(providerID: string, modelID: string): void
+  }
+  readonly provider: {
+    list(): readonly ProviderRecord[]
+    get(providerID: string): ProviderRecord | undefined
+  }
+}
+
+interface ModelDomain extends ModelApi<unknown> {
+  readonly transform: Transform<ModelEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### 命令
+
+读取当前位置可用的命令。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const command = ctx.command
+    const commands = yield* command.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("commands", { names: commands.data.map((item) => item.name) })
+  }),
+```
+
+目前命令转换只支持添加。执行函数会收到会话、提示词附件和投递模式。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const command = ctx.command
+    const session = ctx.session
+    yield* command.transform((editor) => {
+      editor.add({
+        name: "security-review",
+        description: "Review changes for security issues",
+        execute: (input) =>
+          session.prompt({
+            ...input.prompt,
+            sessionID: input.sessionID,
+            text: `Review these changes for security issues.\n\n${input.prompt.text}`,
+            delivery: input.delivery,
+          }).pipe(Effect.asVoid),
+      })
+    })
+    yield* command.reload()
+  }),
+```
+
+Schema：[`Command.Info`](/api#schema-Command.Info)、[`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery)。
+
+```ts
+interface CommandInvocation {
+  readonly sessionID: Session.ID
+  readonly prompt: PromptInput.Prompt
+  readonly delivery: SessionInbox.Delivery
+}
+
+interface CommandDefinition {
+  readonly name: string
+  readonly description?: string
+  readonly execute: (input: CommandInvocation) => Effect.Effect<void, unknown>
+}
+
+interface CommandEditor {
+  add(definition: CommandDefinition): void
+}
+
+interface CommandDomain extends Pick<CommandApi<unknown>, "list"> {
+  readonly transform: Transform<CommandEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### 集成
+
+读取集成，并在存在活跃凭据时解析它。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const integration = ctx.integration
+    const integrations = yield* integration.list().pipe(Effect.orDie)
+    const github = yield* integration.get({ integrationID: Integration.ID.make("github") }).pipe(Effect.orDie)
+    const connection = yield* integration.connection.active("github")
+    const credential = connection ? yield* integration.connection.resolve(connection).pipe(Effect.orDie) : undefined
+    yield* Effect.logInfo("integration", {
+      count: integrations.data.length,
+      github: github.data.name,
+      credential: credential?.type,
+    })
+  }),
+```
+
+使用密钥连接，或通过已连接的 API 完成一次 OAuth 授权流程。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const integration = ctx.integration
+    const token = yield* Config.Redacted("GITHUB_TOKEN").pipe(Effect.orDie)
+    yield* integration.connect
+      .key({ integrationID: Integration.ID.make("github"), key: Redacted.value(token) })
+      .pipe(Effect.orDie)
+
+    const attempt = yield* integration.oauth
+      .connect({
+        integrationID: Integration.ID.make("acme"),
+        methodID: Integration.MethodID.make("oauth"),
+      })
+      .pipe(Effect.orDie)
+    const status = yield* integration.oauth
+      .status({
+        integrationID: Integration.ID.make("acme"),
+        attemptID: attempt.data.attemptID,
+      })
+      .pipe(Effect.orDie)
+    yield* Effect.logInfo("OAuth status", { status: status.data })
+  }),
+```
+
+转换集成及其身份验证方式。OAuth 方式的回调是 Effect，可以获取作用域内的资源。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const integration = ctx.integration
+    yield* integration.transform((editor) => {
+      editor.update("acme", (item) => (item.name = "Acme"))
+      editor.method.update({
+        integrationID: "acme",
+        method: { id: "device", type: "oauth", label: "Sign in with Acme" },
+        authorize: () =>
+          Effect.succeed({
+            mode: "code",
+            url: "https://acme.example/device",
+            instructions: "Enter the displayed code",
+            callback: (code) => exchangeCode(code),
+          }),
+      })
+    })
+    yield* integration.reload()
+  }),
+```
+
+Schema：[`Integration.Info`](/api#schema-Integration.Info)、[`Integration.Method`](/api#schema-Integration.Method)、[`Connection.Info`](/api#schema-Connection.Info)、[`Form.Answer`](/api#schema-Form.Answer)。
+
+```ts
+type IntegrationOAuthAuthorization = {
+  readonly url: string
+  readonly instructions: string
+  readonly expiresAt?: number
+} & (
+  | { readonly mode: "auto"; readonly callback: Effect.Effect<Credential.OAuth, unknown> }
+  | { readonly mode: "code"; readonly callback: (code: string) => Effect.Effect<Credential.OAuth, unknown> }
+)
+
+type IntegrationOAuthMethodRegistration = {
+  readonly integrationID: string
+  readonly method: IntegrationOAuthMethod
+  readonly authorize: (answer: Form.Answer) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
+  readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
+  readonly label?: (credential: Credential.OAuth) => string | undefined
+}
+
+interface IntegrationEditor {
+  list(): readonly IntegrationRef[]
+  get(id: string): IntegrationRef | undefined
+  update(id: string, update: (integration: IntegrationRef) => void): void
+  remove(id: string): void
+  readonly method: {
+    list(integrationID: string): readonly IntegrationMethod[]
+    update(input: IntegrationMethodRegistration): void
+    remove(integrationID: string, method: IntegrationMethod): void
+  }
+}
+
+interface IntegrationDomain extends Omit<IntegrationApi<unknown>, "wellknown"> {
+  readonly transform: Transform<IntegrationEditor>
+  readonly reload: () => Effect.Effect<void>
+  readonly connection: {
+    readonly active: (integrationID: string) => Effect.Effect<ConnectionInfo | undefined>
+    readonly resolve: (connection: ConnectionInfo) => Effect.Effect<Credential.Value | undefined, unknown>
+  }
+}
+```
+
+### MCP
+
+列出 MCP 服务器及其当前连接状态。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
+    const servers = yield* mcp.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("MCP servers", { count: servers.data.length })
+  }),
+```
+
+插件只能通过转换管理 MCP 服务器。使用 `editor.set` 添加或替换服务器，使用 `editor.update` 修改其配置，使用 `editor.remove` 移除服务器。使用 `editor.list` 和 `editor.get` 查看配置。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
+    yield* mcp.transform((editor) => {
+      const servers = editor.list()
+      const docs = editor.get("docs")
+      editor.set("docs", { type: "remote", url: "https://mcp.example.com" })
+      editor.update("docs", (server) => (server.disabled = false))
+      editor.remove("legacy")
+    })
+  }),
+```
+
+在转换中设置 `disabled: true` 可以禁用服务器并断开连接，设置 `disabled: false` 则会启用服务器并允许 OpenCode 连接。OpenCode 会根据转换后的配置协调服务器的生命周期。
+
+当转换所依赖的外部状态发生变化后，调用 `reload()` 重新应用转换并协调服务器。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
+    yield* mcp.reload()
+  }),
+```
+
+Schema：[`Mcp.Server`](/api#schema-Mcp.Server)、[`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded)、[`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded)。
+
+```ts
+interface MCPEditor {
+  list(): readonly [string, Types.DeepMutable<Mcp.ServerConfig>][]
+  get(name: string): Types.DeepMutable<Mcp.ServerConfig> | undefined
+  set(name: string, config: Mcp.ServerConfig): void
+  update(name: string, update: (config: Types.DeepMutable<Mcp.ServerConfig>) => void): void
+  remove(name: string): void
+}
+
+interface MCPDomain extends Pick<McpApi<unknown>, "list"> {
+  readonly transform: Transform<MCPEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### 插件
+
+列出当前位置下已激活、加载失败和已解析的插件。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const plugin = ctx.plugin
+    const plugins = yield* plugin.list().pipe(Effect.orDie)
+    yield* Effect.forEach(plugins.data, (item) => Effect.logInfo("plugin", item), { discard: true })
+  }),
+```
+
+如果只关心已激活的插件，可以在 Effect 管道中过滤这些 schema 值。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const plugin = ctx.plugin
+    const active = yield* plugin.list().pipe(
+      Effect.orDie,
+      Effect.map((result) => result.data.filter((item) => item.status === "active")),
+    )
+    yield* Effect.logInfo("active plugin count", { count: active.length })
+  }),
+```
+
+Schema：[`Plugin.Info`](/api#schema-Plugin.Info)、[`Plugin.Source`](/api#schema-Plugin.Source)。
+
+```ts
+interface PluginApi<E = never> {
+  readonly list: PluginListOperation<E>
+}
+
+interface Context {
+  readonly plugin: PluginApi<unknown>
+}
+```
+
+### 目录引用
+
+读取当前位置可用的目录引用。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const reference = ctx.reference
+    const references = yield* reference.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("references", { count: references.data.length })
+  }),
+```
+
+添加或移除本地目录引用和 Git 目录引用，并在外部状态变化后重新加载。`get(name)` 返回当前配置的来源，名称不存在时返回 `undefined`。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const reference = ctx.reference
+    yield* reference.transform((editor) => {
+      editor.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
+      editor.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+      const handbook = editor.get("handbook")
+      editor.remove("legacy")
+    })
+    yield* reference.reload()
+  }),
+```
+
+Schema：[`Reference.Info`](/api#schema-Reference.Info)、[`Reference.LocalSource`](/api#schema-Reference.LocalSource)、[`Reference.GitSource`](/api#schema-Reference.GitSource)。
+
+```ts
+interface ReferenceEditor {
+  add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
+  remove(name: string): void
+  list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+  get(name: string): ReferenceLocalSource | ReferenceGitSource | undefined
+}
+
+interface ReferenceDomain extends ReferenceApi<unknown> {
+  readonly transform: Transform<ReferenceEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### 会话
+
+创建或读取会话，然后选择后续工作要使用的代理和模型。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    const created = yield* session.create({ title: "Review" }).pipe(Effect.orDie)
+    const current = yield* session.get({ sessionID: created.id }).pipe(Effect.orDie)
+    yield* session.switchAgent({ sessionID: current.id, agent: Agent.ID.make("build") }).pipe(Effect.orDie)
+    yield* session
+      .switchModel({
+        sessionID: current.id,
+        model: { providerID: Provider.ID.make("anthropic"), id: Model.ID.make("claude-sonnet-5-5") },
+      })
+      .pipe(Effect.orDie)
+  }),
+```
+
+发送提示词、临时生成请求、命令或合成消息。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    const created = yield* session.create({ title: "Automation" }).pipe(Effect.orDie)
+    yield* session.prompt({ sessionID: created.id, text: "Review the current changes" }).pipe(Effect.orDie)
+    const summary = yield* session
+      .generate({ sessionID: created.id, prompt: "Summarize this project" })
+      .pipe(Effect.orDie)
+    yield* session.command({ sessionID: created.id, command: "review", arguments: "--staged" }).pipe(Effect.orDie)
+    yield* session
+      .synthetic({ sessionID: created.id, text: `Summary generated: ${summary.text}`, resume: false })
+      .pipe(Effect.orDie)
+  }),
+```
+
+使用 `remove` 删除临时会话。删除操作会停止正在进行的执行，并递归删除子会话。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Temporary worker" }).pipe(Effect.orDie)
+    yield* ctx.session.remove({ sessionID: created.id }).pipe(Effect.orDie)
+  }),
+```
+
+使用 `compact` 请求上下文压缩。它返回的是已受理的收件箱条目，而不是压缩完成后的摘要；默认情况下，压缩会在下一个步骤边界运行。如果要保持队列顺序，请传入 `delivery: "queue"`。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Review" }).pipe(Effect.orDie)
+    const compaction = yield* ctx.session.compact({ sessionID: created.id }).pipe(Effect.orDie)
+  }),
+```
+
+Schema：[`Session.Info`](/api#schema-Session.Info)、[`Model.Ref`](/api#schema-Model.Ref)、[`Session.Inbox.User`](/api#schema-Session.Inbox.User)、[`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic)。
+
+```ts
+type SessionDomain = Pick<
+  SessionApi<unknown>,
+  | "create"
+  | "get"
+  | "remove"
+  | "switchAgent"
+  | "switchModel"
+  | "prompt"
+  | "generate"
+  | "command"
+  | "compact"
+  | "synthetic"
+  | "interrupt"
+  | "update"
+  | "move"
+  | "wait"
+  | "context"
+>
+```
+
+### 技能
+
+读取当前位置的技能。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const skill = ctx.skill
+    const skills = yield* skill.list()
+    yield* Effect.logInfo("skills", { ids: skills.data.map((item) => item.id) })
+  }),
+```
+
+转换并重新加载技能。品牌类型（branded）的值请使用重新导出的 Effect schema 构造函数创建。`get(id)` 返回编辑器中的当前条目，技能不存在时返回 `undefined`。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const skill = ctx.skill
+    yield* skill.transform((editor) => {
+      editor.add(Skill.Info.make({
+        id: Skill.ID.make("review"),
+        name: Skill.Name.make("Review"),
+        description: "Review the current changes",
+        path: "/workspace/.opencode/skills/review/SKILL.md",
+        content: "Review the current changes for correctness and missing tests.",
+      }))
+      const review = editor.get("review")
+      editor.update("review", (item) => (item.autoinvoke = true))
+      editor.remove("legacy")
+    })
+    yield* skill.reload()
+  }),
+```
+
+Schema：[`Skill.Info`](/api#schema-Skill.Info)。
+
+```ts
+interface SkillEditor {
+  list(): readonly Types.DeepMutable<Skill.Info>[]
+  get(id: string): Types.DeepMutable<Skill.Info> | undefined
+  add(skill: Skill.Info): void
+  update(id: string, update: (skill: Types.DeepMutable<Skill.Info>) => void): void
+  remove(id: string): void
+}
+
+interface SkillDomain extends SkillApi<unknown> {
+  readonly transform: Transform<SkillEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### 存储
+
+存储、读取和删除持久化的 JSON 值，这些值按插件 ID 隔离。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const storage = ctx.storage
+    yield* storage.set("settings", { strict: true })
+    const settings = yield* storage.get("settings")
+    yield* Effect.logInfo("settings", { settings })
+    yield* storage.remove("settings")
+  }),
+```
+
+按前缀扫描键，并使用游标分页。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const storage = ctx.storage
+    const first = yield* storage.scan({ prefix: "cache/", limit: 100 })
+    const second = first.next
+      ? yield* storage.scan({ prefix: "cache/", after: first.next, limit: 100 })
+      : { entries: [] }
+    yield* Effect.logInfo("cache entries", { count: first.entries.length + second.entries.length })
+  }),
+```
+
+存储接受 Effect 的 JSON 类型，并直接返回 Effect。
+
+```ts
+interface StorageDomain {
+  readonly get: (key: string) => Effect.Effect<Schema.Json | undefined>
+  readonly set: (key: string, value: Schema.Json) => Effect.Effect<void>
+  readonly remove: (key: string) => Effect.Effect<void>
+  readonly scan: (options: StorageScanOptions) => Effect.Effect<StorageScanResult>
+}
+```
+
+### 工具
+
+使用 Effect `Schema` 注册带类型的工具。执行函数接收解码后的输入，返回一个 Effect，其结果包含带类型的输出、展示内容或元数据。
+
+编辑器支持 `add`、`update` 和 `remove`。转换回调是同步的，不能返回 Effect 或 Promise。请在注册或重新加载之前加载好外部数据。OpenCode 会在一个全新的编辑器上按注册顺序重放所有活跃的转换；对于同一个最终工具名，后注册的有效定义会覆盖先注册的定义。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.transform((editor) => {
+      editor.namespace({
+        name: "acme",
+        description: "Customer account tools",
+      })
+      editor.add({
+        name: "greeting",
+        description: "Create a greeting",
+        input: Schema.Struct({ name: Schema.String }),
+        output: Schema.Struct({ greeting: Schema.String }),
+        options: { namespace: "acme", codemode: true },
+        execute: ({ name }, context) =>
+          Effect.gen(function* () {
+            yield* context.progress({ status: "greeting" })
+            return { output: { greeting: `Hello ${name}!` } }
+          }),
+      })
+    })
+  }),
+```
+
+修改回调所捕获的源数据后，调用 `yield* ctx.tool.reload()`。重新加载会按原有顺序重放活跃的转换，但不会重新运行插件的 effect。
+
+工具的 `id` 即其最终名称，该 ID 不存在时 `get()` 返回 `undefined`。调用 `update` 和 `remove` 时，请使用包含命名空间的最终工具名（上例中为 `acme_greeting`）。命名空间中的点号以及工具名中不支持的字符会被替换为 `_`。不存在的名称会被忽略；要创建工具，必须通过 `add` 提供完整定义。更新会保留名称和命名空间。要替换 schema 或选项，请直接赋予新值，不要修改嵌套的值。无效的更新会记录到日志，原有定义保持不变。
+
+```ts
+yield *
+  ctx.tool.transform((editor) => {
+    editor.update("acme_greeting", (tool) => {
+      tool.description = "Greet the user by name"
+    })
+    editor.remove("acme_obsolete")
+  })
+```
+
+更新和移除会与添加操作一起按顺序重放，MCP 工具目录刷新之后也是如此。
+
+`transform` 返回一个作用域内的注册项。执行 `yield* registration.dispose` 会移除该转换，并基于剩余的转换重新构建，从而恢复被它覆盖的较早定义。释放操作是幂等的，关闭插件作用域时也会释放其所有注册项。
+
+每次模型请求都会捕获一份工具快照。重新加载和释放只影响之后的快照，不影响已有请求已经捕获的定义或执行函数。如果执行函数闭包引用了可变的插件数据，它仍然会看到这些数据的变化；如果某个值必须与该定义绑定，请在转换内部捕获它。
+
+Schema：[`Tool.Content`](/api#schema-Tool.Content)、[`Tool.TextContent`](/api#schema-Tool.TextContent)、[`Tool.FileContent`](/api#schema-Tool.FileContent)。
+
+```ts
+interface ToolEditor {
+  list(): readonly (Tool.Info & { readonly id: string })[]
+  get(id: string): (Tool.Info & { readonly id: string }) | undefined
+  namespace(namespace: { name: string; description: string }): void
+  add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
+    tool: Tool.Info<Input, Output>,
+  ): void
+  update(id: string, update: (tool: Types.Mutable<Tool.Info>) => void): void
+  remove(id: string): void
+}
+
+interface ToolDomain {
+  readonly list: () => Effect.Effect<readonly (Tool.Info & { readonly id: string })[]>
+  readonly transform: Transform<ToolEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### VCS
+
+读取仓库信息、工作副本状态或文件差异。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const vcs = ctx.vcs
+    const info = yield* vcs.get().pipe(Effect.orDie)
+    const branches = yield* vcs.branches({ search: "feature", limit: 10 }).pipe(Effect.orDie)
+    const changes = yield* vcs.status().pipe(Effect.orDie)
+    const diff = yield* vcs.diff({ mode: "working", context: 3 }).pipe(Effect.orDie)
+    yield* Effect.logInfo("vcs", { branch: info.data.branch.current, files: changes.data.length })
+  }),
+```
+
+通过作用域内的转换注册一个限定于当前位置的 VCS 提供程序。与检测到的仓库类型匹配的提供程序会被自动选中；如需选择其他提供程序，请使用 `editor.default.set`。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const vcs = ctx.vcs
+    yield* vcs.transform((editor) => {
+      editor.add({
+        id: "custom",
+        name: "Custom VCS",
+        info: () => Effect.succeed({ branch: { current: "feature", default: "main" } }),
+        branches: (input) => readBranches(input),
+        status: (scope) => readStatus(scope.worktree),
+        diff: (input) => readDiff(input),
+      })
+      editor.default.set("custom")
+    })
+  }),
+```
+
+提供程序回调会收到当前位置、工作副本根目录、规范化的项目根目录，以及可选的仓库存储。差异回调还会收到所选模式、请求的上下文行数和输出字节预算。仓库发现仍然使用 OpenCode 内置的 Git 和 Mercurial 检测器。
+
+提供程序可以选择实现 `init(scope)`，用于在 `scope.worktree` 中创建仓库。初始化时按 ID 选择提供程序（默认为 Git），而不是按检测到的仓库类型选择。即使当前位置还没有仓库，也可以注册带 `init` 的提供程序；OpenCode 会在调用前确认目录存在且尚无仓库，调用后再重新发现项目。新的仓库格式除了这个回调之外，仍需要仓库发现机制的支持。
+
+Schema：[`Vcs.Info`](/api#schema-Vcs.Info)、[`Vcs.FileStatus`](/api#schema-Vcs.FileStatus)、[`FileDiff.Info`](/api#schema-FileDiff.Info)。
+
+```ts
+interface VcsEditor {
+  add(definition: VcsDefinition): void
+  readonly default: {
+    get(): string | undefined
+    set(selection: string): void
+  }
+}
+
+interface VcsDomain extends Omit<VcsApi<unknown>, "init"> {
+  readonly transform: Transform<VcsEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+
+interface VcsDefinition {
+  readonly init?: (scope: VcsScope) => Effect.Effect<void, unknown>
+  // Existing info, branches, status, and diff callbacks are required.
+}
+```
+
+### 网页搜索
+
+列出提供商，或通过所选提供商执行查询。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const websearch = ctx.websearch
+    const providers = yield* websearch.providers().pipe(Effect.orDie)
+    const results = yield* websearch
+      .query({ query: "OpenCode plugins", providerID: WebSearch.ID.make("internal") })
+      .pipe(Effect.orDie)
+    yield* Effect.logInfo("websearch", { providers: providers.data.length, results: results.data.results.length })
+  }),
+```
+
+注册一个 Effect 执行函数并选择默认提供商。将默认值设为 `false` 可禁用网页搜索。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const websearch = ctx.websearch
+    yield* websearch.transform((editor) => {
+      editor.add({
+        id: "internal",
+        name: "Internal search",
+        execute: ({ query }) => searchInternal(query),
+      })
+      editor.default.set("internal")
+    })
+    yield* websearch.reload()
+  }),
+```
+
+Schema：[`WebSearch.Provider`](/api#schema-WebSearch.Provider)、[`WebSearch.Result`](/api#schema-WebSearch.Result)。
+
+```ts
+interface WebSearchDefinition {
+  readonly id: string
+  readonly name: string
+  readonly execute: (input: WebSearch.ProviderInput) => Effect.Effect<readonly WebSearch.Result[], unknown>
+}
+
+interface WebSearchEditor {
+  add(definition: WebSearchDefinition): void
+  readonly default: {
+    get(): string | false | undefined
+    set(selection: string | false): void
+  }
+}
+
+interface WebSearchDomain extends WebsearchApi<unknown> {
+  readonly transform: Transform<WebSearchEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### 事件
+
+公共服务器事件订阅是一个 Effect `Stream`。在插件作用域中 fork 它的消费者，即可在清理时自动中断。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const event = ctx.event
+    yield* event.subscribe().pipe(
+      Stream.tap((item) => Effect.logDebug("OpenCode event", { type: item.type })),
+      Stream.runDrain,
+      Effect.forkScoped,
+    )
+  }),
+```
+
+使用 Stream 操作符筛选并处理特定类型的事件。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const event = ctx.event
+    yield* event.subscribe().pipe(
+      Stream.filter((item) => item.type === "config.updated"),
+      Stream.runForEach(() => Effect.logInfo("configuration changed")),
+      Effect.forkScoped,
+    )
+  }),
+```
+
+Schema：[`V2EventEncoded`](/api#schema-V2EventEncoded)。
+
+```ts
+type EventSubscribeOutput = OpenCodeEvent
+type EventSubscribeOperation<E = never> = () => Stream.Stream<EventSubscribeOutput, E>
+
+interface EventApi<E = never> {
+  readonly subscribe: EventSubscribeOperation<E>
+}
+
+interface EventDomain extends Pick<EventApi<unknown>, "subscribe"> {}
+```
+
+## 钩子
+
+钩子用于拦截正在进行的操作。多个插件可以注册同一个钩子；OpenCode 按插件顺序运行它们，后面的钩子能看到前面钩子所做的修改。注册在插件作用域存续期间一直有效。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook("context", () => Effect.void)
+  }),
+```
+
+### 会话
+
+在请求发送给模型之前，修改组装好的系统指令、消息或工具。`context` 在代理循环中运行；`compaction`、`generate` 和 `title` 则在对应的辅助请求中运行。`compaction` 和 `title` 接受 `result`，设置后会跳过模型调用。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook("context", (event) =>
+      Effect.sync(() => {
+        event.system.push({ type: "text", text: "Keep the review focused on correctness." })
+        delete event.tools.write
+      }),
+    )
+    yield* session.hook("compaction", (event) =>
+      Effect.map(summarize(event.messages), (summary) => {
+        event.result = { summary }
+      }),
+    )
+  }),
+```
+
+修改模型请求设置，还可以把钩子限定于某个提供商。事件携带的 `kind` 与下文的 HTTP 钩子相同。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook(
+      "model.request",
+      (event) => Effect.sync(() => (event.headers["x-plugin"] = "review")),
+      { providerID: "anthropic" },
+    )
+  }),
+```
+
+修改原生的提供商请求或响应。它们的 body 是只能读取一次的流，读取前请先克隆或替换 body。会话发出的每个请求都会触发这两个钩子；`event.kind` 取决于发出请求的流程，可能是 `"primary"`、`"compaction"`、`"title"` 或 `"generate"`。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook("http.request", (event) =>
+      Effect.sync(() => {
+        event.request.headers.set("x-session-id", event.sessionID)
+        if (event.kind === "title") event.request.headers.set("x-priority", "background")
+      }),
+    )
+    yield* session.hook("http.response", (event) =>
+      Effect.sync(() => {
+        event.response = new Response(event.response.body, {
+          status: event.response.status,
+          headers: { ...Object.fromEntries(event.response.headers), "x-plugin": "review" },
+        })
+      }),
+    )
+  }),
+```
+
+通过 WebSocket 流式传输的提供商会在每个会话中复用同一个连接，因此 HTTP 钩子看不到这部分流量。实验性的 `experimental.ws.handshake` 钩子会在每次模型调用时、选定连接之前运行一次，并暴露连接的 `url` 和 `headers`；修改其中任何一项都会重新打开 socket。如果 WebSocket 路由回退为 HTTP 请求，HTTP 钩子仍会对这些请求运行。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook(
+      "experimental.ws.handshake",
+      (event) =>
+        Effect.gen(function* () {
+          event.headers.authorization = `Bearer ${yield* mintToken(event.url)}`
+          delete event.headers["api-key"]
+        }),
+      { providerID: "azure" },
+    )
+  }),
+```
+
+`experimental.ws.send` 和 `experimental.ws.receive` 暴露帧本身：`send` 在提供商驱动程序构建出站帧之后运行，`receive` 在驱动程序处理每个入站帧之前运行。钩子返回时 `frame` 中的内容，就是实际发送出去或交给驱动程序的内容；OpenCode 不会校验它。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook(
+      "experimental.ws.send",
+      (event) =>
+        Effect.sync(() => {
+          const body = JSON.parse(event.frame)
+          if (body.type === "response.create") body.metadata = { ...body.metadata, session: event.sessionID }
+          event.frame = JSON.stringify(body)
+        }),
+      { providerID: "openai" },
+    )
+  }),
+```
+
+针对提供商故障覆盖重试决策，或替换以毫秒为单位的延迟。该钩子在 OpenCode 对故障分类并给出重试策略之后、安排任何重试之前运行。它不会暴露 OpenCode 内部如何执行下一次尝试。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook("retry", (event) =>
+      Effect.sync(() => {
+        if (event.error.status === 429) {
+          event.decision = { retry: true, delay: 10_000 }
+          return
+        }
+        if (event.error.type === "provider.invalid-request" && event.attempt === 2) {
+          event.decision = { retry: true, delay: 0 }
+          return
+        }
+        if (event.attempt >= 3) event.decision = { retry: false }
+      }),
+    )
+  }),
+```
+
+初始的 `decision` 就是 OpenCode 的策略，因此钩子既可以让通常不会重试的提供商故障变为可重试，也可以否决拟定的重试。多个钩子按注册顺序运行，后面的钩子能看到当前的决策。内置的最大尝试次数仍是硬性上限。`attempt` 是拟进行的实际尝试序号：初始请求是第 `1` 次尝试，因此第一次重试是第 `2` 次尝试。无效的延迟（`NaN`、无穷大或负值）会回退到计算出的延迟。上下文溢出的恢复机制与此无关，因为它会压缩对话，而不是重试同一个请求。
+
+#### 参考
+
+```ts
+interface SessionHooks {
+  readonly context: SessionContext
+  readonly compaction: SessionCompaction
+  readonly generate: SessionGenerate
+  readonly title: SessionTitle
+  readonly "model.request": SessionModelRequest
+  readonly "http.request": SessionHttpRequest
+  readonly "http.response": SessionHttpResponse
+  readonly "experimental.ws.handshake": SessionWebSocketHandshake
+  readonly "experimental.ws.send": SessionWebSocketSend
+  readonly "experimental.ws.receive": SessionWebSocketReceive
+  readonly retry: SessionRetry
+}
+
+type RetryDecision = { retry: false } | { retry: true; delay: number }
+
+interface SessionRetry {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly error: { type: string; message: string; status?: number }
+  readonly attempt: number
+  decision: RetryDecision
+}
+
+interface SessionHookDomain {
+  readonly hook: ModelHooks<SessionHooks>
+}
+```
+
+### Shell
+
+在执行之前修改 shell 命令、工作目录、超时时间、可执行文件或环境变量。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const shell = ctx.shell
+    yield* shell.hook("create.before", (event) =>
+      Effect.sync(() => {
+        if (event.command === "npm") event.command = "bun"
+        event.timeout = Math.min(event.timeout, 60_000)
+        event.env.COMPANY_ENV = "development"
+      }),
+    )
+  }),
+```
+
+#### 参考
+
+```ts
+interface ShellCreateBefore {
+  command: string
+  cwd: string
+  timeout: number
+  shell: string
+  env: Record<string, string | undefined>
+}
+
+interface ShellHooks {
+  readonly "create.before": ShellCreateBefore
+}
+
+interface ShellHookDomain {
+  readonly hook: Hooks<ShellHooks>
+}
+```
+
+### 工具
+
+前置钩子可以替换输入，或以 `Tool.Error` 失败。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.hook("execute.before", (event) =>
+      event.tool === "write"
+        ? Effect.fail(new Tool.Error({ message: "Writes are disabled" }))
+        : Effect.logDebug("tool input", { tool: event.tool, input: event.input }),
+    )
+  }),
+```
+
+后置钩子可以检查或替换成功结果和失败结果。
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.hook("execute.after", (event) => {
+      if (event.status === "error") return Effect.logWarning("tool failed", { message: event.error.message })
+      return Effect.sync(() => {
+        event.result = { ...event.result, metadata: { observed: true } }
+      })
+    })
+  }),
+```
+
+#### 参考
+
+```ts
+interface ToolHooks {
+  readonly "execute.before": ToolExecuteBefore
+  readonly "execute.after": ToolExecuteAfter
+}
+
+interface ToolFailures extends Record<keyof ToolHooks, unknown> {
+  readonly "execute.before": Tool.Error
+  readonly "execute.after": never
+}
+
+interface ToolHookDomain {
+  readonly hook: Hooks<ToolHooks, ToolFailures>
+}
+```
+
+下面的共享注册类型说明了哪些操作需要插件作用域。
+
+```ts
+interface Registration {
+  readonly dispose: Effect.Effect<void>
+}
+
+type Hooks<Spec, Failures extends Record<keyof Spec, unknown> = Record<keyof Spec, never>> = <Name extends keyof Spec>(
+  name: Name,
+  callback: (input: Spec[Name]) => Effect.Effect<void, Failures[Name]>,
+) => Effect.Effect<Registration, never, Scope.Scope>
+
+type Transform<Input> = (callback: (input: Input) => void) => Effect.Effect<Registration, never, Scope.Scope>
+```
+
+## 发布
+
+以包形式发布的插件使用与本地 Effect 插件相同的默认导出。从主入口导出 Effect 实现，并将 `effect` 声明为 `peerDependency`。
+
+```json title="package.json"
+{
+  "name": "opencode-acme-effect-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "peerDependencies": {
+    "effect": "^4.0.0"
+  }
+}
+```
+
+OpenCode 会把对 `effect`、其导出的 `effect/*` 子路径以及 `@opencode/plugin` 的导入（包括插件 `node_modules` 中依赖的导入）重定向到宿主的运行时实例，让 fiber、日志记录器和 `Schema` 解析器共享同一份运行时副本。
+
+- 不要把 `effect` 打包进发布的插件产物。如果使用打包工具构建，请将 `effect` 和 `effect/*` 标记为 external。
+- 插件及其 `node_modules` 依赖始终使用宿主 OpenCode 版本的 `effect` 实例运行。请使用与目标 OpenCode 版本兼容的 `effect` API 和模块路径；基于其他 `effect` 主版本（例如 Effect 3）构建的依赖同样会拿到宿主的 `effect`，因此不受支持。
+- 只提供公开的 `effect` 子路径。如果插件导入了 Effect 私有的 `internal` 模块，加载会失败，错误信息会指出该路径。
+- 编译后的 OpenCode 二进制文件不包含 Effect HTTP API 文档页面所用的 Scalar 和 Swagger UI 资源；从插件提供这些页面时，只会显示一条提示。
+
+包入口导出带有 `effect` 函数的 `Plugin.define`。
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "acme.published",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const storage = ctx.storage
+      yield* storage.set("installed", true)
+    }),
+})
+```
+
+请使用与目标 OpenCode 版本兼容的依赖版本，并测试实际安装后的包，而不只是测试通过工作区链接的副本。
+
+```sh
+bun pm pack
+bun add ./opencode-acme-effect-plugin-1.0.0.tgz
+```

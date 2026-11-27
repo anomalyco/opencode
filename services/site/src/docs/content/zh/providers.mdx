@@ -1,0 +1,617 @@
+---
+title: 提供商
+description: "将 OpenCode 连接到 OpenCode Go、ChatGPT、Amazon Bedrock、Google Vertex、GitHub Copilot 和 Ollama 等模型提供商，或添加自定义提供商。"
+---
+
+OpenCode 内置了来自 [models.dev](https://models.dev) 的提供商和模型目录。对于大多数提供商，先连接账号，再选择模型即可。
+
+## 设置
+
+运行 `/connect`，选择一个提供商并输入其凭据。然后运行 `/models`，从该提供商的模型中选择一个。
+
+```text
+/connect
+/models
+```
+
+## Go
+
+[OpenCode Go](/console/go) 是一项可选订阅，提供经 OpenCode 团队测试的编程模型。在[控制台](https://opencode.ai/console)中订阅并复制 API 密钥，然后以 **OpenCode Go** 的身份连接。
+
+```text
+/connect
+# Select OpenCode Go, then paste your API key.
+/models
+```
+
+用量限制、端点和隐私等详情请参阅 [Go 指南](/console/go)。
+
+## ChatGPT
+
+使用 ChatGPT Plus 或 Pro 套餐，而不是 OpenAI API 密钥。连接 **OpenAI**，然后选择 **Sign in with ChatGPT** 或某个旧版 **Codex** 登录方式。用量会计入你的套餐，因此这些模型不会显示费用。
+
+```text
+/connect
+/models
+```
+
+### 上下文上限
+
+默认情况下，OpenCode 会把这些登录方式的上下文窗口限制在低于各模型实际上限的水平。上限与 Codex 的默认值一致，因此套餐用量的消耗速度与其他 OpenAI 产品相近。
+
+| 模型                 | 输入上限 |
+| --------------------- | ----------- |
+| GPT-6.1 Sol 及更新模型 | 500,000     |
+| 更早的模型          | 272,000     |
+
+要取消该限制，请在配置中禁用上限插件。`-` 前缀会关闭内置插件，其他插件保持启用。
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["-opencode.provider.openai-context-caps"],
+}
+```
+
+## 自定义提供商
+
+如果某个提供商的 API 不在目录中，可以自行添加。下面这个兼容 OpenAI 的示例同时定义了凭据、运行时包、端点和第一个模型。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "name": "Acme",
+      "env": ["ACME_API_KEY"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.acme.example/v1",
+      },
+      "models": {
+        "qwen3-coder": {
+          "name": "Qwen 3 Coder",
+        },
+      },
+    },
+  },
+}
+```
+
+`providers` 对象以提供商 ID 为键，这个 ID 用于模型引用，例如 `acme/qwen3-coder`。
+
+| 字段 | 用途 |
+| --- | --- |
+| `name` | 显示名称。 |
+| `env` | 可提供凭据的环境变量名，按顺序排列。 |
+| `package` | 提供商的运行时包。 |
+| `canonical` | 内置提供商 ID，当前提供商会继承它的目录默认值。 |
+| `compatibility` | 该提供商所有模型共用的 API 特性。请参阅[兼容性](/models#compatibility)。 |
+| `settings` | 带类型的 OpenCode 控制项，以及传给运行时包的 JSON 选项。 |
+| `headers` | 添加到请求中的字符串类型 HTTP 头。 |
+| `body` | 合并到请求体中的 JSON 字段。 |
+| `models` | 要添加或覆盖的模型，以 OpenCode 模型 ID 为键。 |
+
+## 端点
+
+覆盖 `settings.baseURL`，即可让目录中的提供商通过代理或兼容端点发送请求。它原有的包、模型和连接仍然适用。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "baseURL": "https://llm-proxy.example.com/anthropic",
+      },
+    },
+  },
+}
+```
+
+`settings` 的内容取决于具体的包。只有所选包支持的字段才会生效。
+
+## 请求
+
+使用 `headers` 添加额外的 HTTP 头，使用 `body` 添加需要合并到每个请求体中的 JSON 字段。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+      "body": {
+        "metadata": {
+          "application": "opencode",
+        },
+      },
+    },
+  },
+}
+```
+
+如果只有部分请求需要覆盖，也可以在模型或变体上设置这两个字段。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "headers": { "X-Model-Tier": "coding" },
+          "variants": [
+            {
+              "id": "batch",
+              "body": { "service_tier": "flex" },
+            },
+          ],
+        },
+      },
+    },
+  },
+}
+```
+
+## 超时
+
+HTTP 请求等待响应头的时间最长为五分钟，流式响应中两个数据块之间的等待时间最长为十五分钟。将提供商的 `settings.headerTimeout` 或 `settings.chunkTimeout` 设为毫秒数可以修改对应的上限，设为 `false` 则禁用该上限。`settings.timeout` 还可以限制整个请求从发送到响应完成的总时长，它没有默认值。这些配置作用于整个提供商，不能按模型或变体单独设置。在 WebSocket 传输中，`chunkTimeout` 改为限制两帧之间的间隔，默认值为三十分钟。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "headerTimeout": 600000,
+        "chunkTimeout": false,
+      },
+    },
+  },
+}
+```
+
+超过任一上限的请求都会以传输错误失败。OpenCode 会对超时的请求最多重试三次，然后放弃。
+
+## 请求编码
+
+`settings.encoding` 可以使用 `"zstd"` 或 `"gzip"` 压缩 HTTP 请求体，或者用 `"none"` 发送未压缩的 JSON。它可以设置在提供商、模型或变体上，以最具体的值为准。只有当端点能够解码时才应启用压缩：大多数提供商和网关会拒绝压缩过的请求体。使用 ChatGPT 登录且未配置自定义 `baseURL` 时，OpenAI 默认使用 `"zstd"`；使用 API 密钥时发送未压缩的 JSON。WebSocket 消息不受影响。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "encoding": "none" },
+    },
+  },
+}
+```
+
+## 包
+
+`package` 字段用于选择与提供商通信的运行时。对于实现了 OpenAI 请求格式的 API，请使用兼容运行时。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.acme.example/v1",
+      },
+      "models": {
+        "qwen3-coder": {},
+      },
+    },
+  },
+}
+```
+
+可用的原生包包括：
+
+- `@opencode/ai/providers/openai`
+- `@opencode/ai/providers/openai/chat`
+- `@opencode/ai/providers/openai/responses`
+- `@opencode/ai/providers/openai-compatible`
+- `@opencode/ai/providers/openai-compatible/responses`
+- `@opencode/ai/providers/anthropic`
+- `@opencode/ai/providers/anthropic-compatible`
+- `@opencode/ai/providers/google`
+- `@opencode/ai/providers/google-vertex`
+- `@opencode/ai/providers/google-vertex/gemini`
+- `@opencode/ai/providers/google-vertex/chat`
+- `@opencode/ai/providers/google-vertex/responses`
+- `@opencode/ai/providers/google-vertex/messages`
+- `@opencode/ai/providers/azure`
+- `@opencode/ai/providers/azure/chat`
+- `@opencode/ai/providers/azure/responses`
+- `@opencode/ai/providers/amazon-bedrock`
+- `@opencode/ai/providers/amazon-bedrock/mantle`
+- `@opencode/ai/providers/amazon-bedrock/mantle/chat`
+- `@opencode/ai/providers/amazon-bedrock/mantle/messages`
+- `@opencode/ai/providers/amazon-bedrock/mantle/responses`
+- `@opencode/ai/providers/openrouter`
+- `@opencode/ai/providers/xai`
+
+你也可以使用 npm 包（例如 `@acme/opencode-provider`），或者用绝对 `file://` URL 指向本地包。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "package": "@acme/opencode-provider",
+      "models": { "acme-coder": {} },
+    },
+  },
+}
+```
+
+## 模型
+
+在提供商的 `models` 映射中添加或覆盖模型。映射的键是 OpenCode 使用的模型 ID；`modelID` 用于修改发送给提供商的 ID。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/coding",
+  "providers": {
+    "openai": {
+      "models": {
+        "coding": {
+          "modelID": "gpt-6.1-sol",
+          "name": "GPT-6.1 Sol Coding",
+        },
+      },
+    },
+  },
+}
+```
+
+| 字段 | 用途 |
+| --- | --- |
+| `modelID` | 发送给提供商的模型 ID 或部署 ID。 |
+| `name` | 显示名称。 |
+| `family` | 模型系列，用于对相关模型分组。 |
+| `type` | 模型产出的内容：`chat`、`decision`、`image`、`video`、`realtime`、`embedding` 或 `transcription`。默认为 `chat`，只有对话模型会提供给会话使用。以语音作答的实时模型会提供给语音使用，将其设为 `disabled: true` 则不会提供。 |
+| `releaseDate` | 发布日期，格式为 `YYYY-MM-DD` 或 `YYYY-MM`。 |
+| `package` | 为该模型覆盖运行时。转写模型需指定其转写协议，例如 `@opencode/ai/protocols/openai-transcription`；实时模型无需指定，因为语音会话通过其 API 启动。 |
+| `settings` | 模型级的 OpenCode 控制项，以及特定于包的 JSON 设置。 |
+| `headers` | 额外的字符串类型请求头。 |
+| `body` | 额外的 JSON 请求体字段。 |
+| `capabilities` | 是否支持工具、可接受的输入和输出媒体类型、是否支持 temperature，以及推理控制项。 |
+| `compatibility` | 此模型的 API 特性，会覆盖提供商的设置。请参阅[兼容性](/models#compatibility)。 |
+| `variants` | 命名变体，各自拥有独立的 `settings`、`headers` 和 `body`。 |
+| `cost` | 每百万 token 的输入、输出价格，以及可选的缓存价格。 |
+| `limit` | 上下文、输入和输出的 token 上限。 |
+| `disabled` | 设为 `true` 时，该模型不再出现在可选列表中。 |
+
+模型的选择、默认值、能力、上限、费用和变体请参阅[模型](/models)。
+
+## Azure
+
+Azure 的标准目录端点除了凭据之外，还需要资源名称。设置一次 `settings.resourceName`，然后按照[提供商账号](/cli/providers)中的说明，连接 API 密钥或使用 Azure CLI 中的 Microsoft Entra ID 会话。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "azure": {
+      "settings": {
+        "resourceName": "my-models",
+      },
+    },
+  },
+}
+```
+
+可以在 [Azure 门户](https://portal.azure.com/)或 [Microsoft Foundry](https://ai.azure.com/) 中找到 **Resource name**（资源名称）。它也是 `https://my-models.openai.azure.com/`、`https://my-models.services.ai.azure.com/` 这类端点的第一部分。
+
+```bash
+az cognitiveservices account list \
+  --query "[].{name:name,resourceGroup:resourceGroup}" \
+  --output table
+```
+
+要使用 Entra ID，请安装 [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) 并登录，然后在连接 Azure 时选择 **Microsoft Entra ID (Azure CLI)**。
+
+```bash
+az login
+```
+
+如果配置或环境中尚未提供资源名称，请在连接时输入。随连接保存的资源名称优先于配置；如需修改，请重新连接。
+
+Azure CLI 连接使用 Azure CLI 中当前选中的账号。如果资源位于其他租户或订阅中，请显式选择两者。
+
+```bash
+az login --tenant TENANT_ID
+az account set --subscription NAME_OR_ID
+```
+
+除了配置之外，也可以通过 `AZURE_RESOURCE_NAME` 向 OpenCode 服务器提供资源名称。旧的 `AZURE_COGNITIVE_SERVICES_RESOURCE_NAME` 变量同样有效。
+
+### 部署
+
+Azure 只能通过部署来提供模型，因此 OpenCode 会列出你资源中的部署并显示它们，而不是显示整个 Azure 目录。该列表会在启动后、连接后以及切换账号后在后台加载。如需获取之后新增的部署，请重启 OpenCode 或重新连接。
+
+- 在某个连接的列表加载完成之前，或者加载失败时，整个目录仍然可用。
+- 同一连接重新加载失败时，会保留上一次完整的部署清单。
+- 切换账号后绝不会显示上一个账号的部署清单；新账号会从整个目录开始。
+- 部署会继承其对应目录模型的上限、费用和能力。
+
+部署名称就是它们的模型 ID，并统一为小写，因为 Azure 的名称不区分大小写，例如 `azure/gpt-production`。以模型命名的部署（例如 `gpt-6-luna`）会保留目录中的 ID。添加或删除其他部署时，这些 ID 保持不变。
+
+OpenCode 根据部署所部署的模型将其与目录匹配；如果 Azure 对模型的写法不同，则按部署名称匹配，例如 GPT-4 Turbo 写作 `gpt-4`。如果部署以另一个模型命名，例如名为 `gpt-6.1-sol` 的部署实际部署的是 `gpt-6-luna`，则会显示实际模型的名称、上限和费用。
+
+使用 Azure CLI 时，OpenCode 会通过 Azure 管理 API 列出部署，这需要对资源具有读取权限。如果失败，或者使用的是 API 密钥，则会改用该资源的旧版部署清单。发现过程会读取所有分页后才发布列表。配置了自定义 `settings.baseURL` 时会保留目录。
+
+如果部署的模型不在目录中（例如微调模型），或者你想自己将模型 ID 映射到某个部署，请显式配置该部署。OpenCode 会记录一条警告，列出这类部署的名称。显式配置的模型始终会保留。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "azure": {
+      "models": {
+        "gpt-6-luna": {
+          "modelID": "gpt-production",
+        },
+      },
+    },
+  },
+}
+```
+
+你的身份需要具有以下角色之一：
+
+- **Cognitive Services OpenAI User**，用于 Azure OpenAI 模型。
+- **Cognitive Services User**，用于其他 Foundry 模型。
+
+如果请求使用了来自错误租户的 token，请使用所需的租户重新登录。
+
+```bash
+az login --tenant TENANT_ID
+```
+
+## Bedrock
+
+Amazon Bedrock 使用 AWS 默认凭据链。具名 AWS profile 是最简单、最持久的设置方式；OpenCode 也能识别访问密钥环境变量、Web 身份和容器凭据。
+
+```bash
+aws configure sso --profile work
+aws sso login --profile work
+```
+
+在提供商设置中选择 profile 和区域。配置了 `profile`、`AWS_PROFILE`、`AWS_ACCESS_KEY_ID`、Web 身份 token 文件或容器凭据 URI 时，该提供商才会激活；仅设置区域不会激活。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "amazon-bedrock": {
+      "settings": {
+        "profile": "work",
+        "region": "us-west-2",
+      },
+    },
+  },
+}
+```
+
+如果没有显式指定区域，OpenCode 会依次使用 `AWS_REGION`、`AWS_DEFAULT_REGION`，最后是 `us-east-1`。如需使用私有端点或 VPC 端点，请设置 `baseURL`，同时保留相同的 profile 和区域。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "amazon-bedrock": {
+      "settings": {
+        "profile": "work",
+        "region": "us-west-2",
+        "baseURL": "https://bedrock-runtime.vpce.example.com",
+      },
+    },
+  },
+}
+```
+
+Bedrock API 密钥使用 `AWS_BEARER_TOKEN_BEDROCK`。其他 AWS 变量用于 SigV4 签名，不会作为 OpenCode 的 API 密钥账号保存。
+
+## Vertex
+
+Google Vertex 使用应用默认凭据（ADC），并且需要指定项目后其模型才可用。先创建本地 ADC，然后在提供商设置中设置项目和位置。
+
+```bash
+gcloud auth application-default login
+```
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "google-vertex": {
+      "settings": {
+        "project": "my-project",
+        "location": "us-central1",
+      },
+    },
+  },
+}
+```
+
+OpenCode 也会依次从 `GOOGLE_VERTEX_PROJECT`、`GOOGLE_CLOUD_PROJECT`、`GCP_PROJECT` 或 `GCLOUD_PROJECT` 中解析项目。位置则从 `GOOGLE_VERTEX_LOCATION`、`GOOGLE_CLOUD_LOCATION` 或 `VERTEX_LOCATION` 中解析，默认为 `us-central1`。
+
+```bash
+GOOGLE_CLOUD_PROJECT=my-project GOOGLE_VERTEX_LOCATION=europe-west4 opencode --standalone
+```
+
+服务账号也通过同样的 ADC 方式工作。将 `GOOGLE_APPLICATION_CREDENTIALS` 指向服务账号的 JSON 文件，同时仍需通过设置或上述某个项目变量提供项目。
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS=/secure/vertex.json \
+GOOGLE_CLOUD_PROJECT=my-project \
+opencode --standalone
+```
+
+Gemini、Anthropic 以及兼容 OpenAI 的 Vertex 目录模型统一使用 `google-vertex` 这一个提供商 ID。旧的 `google-vertex-anthropic` 提供商 ID 在 V2 中已不可用。
+
+## Copilot
+
+GitHub Copilot 使用设备 OAuth 授权，不支持手动输入 API 密钥。连接 **GitHub Copilot**，选择 GitHub.com 或 GitHub Enterprise，完成设备授权流程，然后打开 `/models`。
+
+```text
+/connect
+# Select GitHub Copilot, then Login with GitHub Copilot.
+/models
+```
+
+对于 GitHub Enterprise，请在提示时输入部署 URL 或域名。如果 GitHub 返回了 Copilot API 端点，OpenCode 会直接使用；否则会根据企业域名推导端点。
+
+```text
+company.ghe.com
+```
+
+已连接的账号需要拥有 Copilot Chat 访问权限。如果 GitHub 提示没有使用资格，请注册 Copilot Free，或请组织为你分配 Copilot 席位，然后重新连接。登录后以及当前 Copilot 账号变更时，OpenCode 都会获取该账号最新的模型列表。
+
+## Ollama
+
+启动 Ollama 并拉取一个模型。OpenCode 会探测 `http://127.0.0.1:11434`，发现补全模型并将其添加到 `/models` 中，无需连接账号。
+
+```bash
+ollama serve
+ollama pull qwen3:8b
+```
+
+使用 `settings.baseURL` 可以让 OpenCode 指向远程或经过代理的 Ollama 服务器。地址中需要包含 `/v1`，OpenCode 会据此推导出原生的 `/api/tags` 和 `/api/show` 发现路径。`apiKey` 是可选的，会作为 bearer token 随发现请求和模型请求一起发送。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "ollama": {
+      "settings": {
+        "baseURL": "https://ollama.example.com/v1",
+        "apiKey": "{env:OLLAMA_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+发现结果会定期刷新，在临时中断期间会保留上一次成功获取的模型清单。仅支持嵌入的模型不会出现，因为 OpenCode 只添加 Ollama 元数据中包含 `completion` 能力的模型。
+
+## 本地运行时
+
+LM Studio 和 vLLM 同样内置了本地发现功能。它们的默认端点分别是 `http://127.0.0.1:1234/v1` 和 `http://127.0.0.1:8000/v1`。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "lmstudio": {
+      "settings": { "baseURL": "http://gpu-host:1234/v1" },
+    },
+    "vllm": {
+      "settings": { "baseURL": "http://gpu-host:8000/v1" },
+    },
+  },
+}
+```
+
+LM Studio 从 `/api/v1/models` 发现语言模型。vLLM 会先检查 `/health`，再读取 `/v1/models`；它的发现机制无法推断是否支持工具，因此发现的 vLLM 模型默认禁用工具。对于其他兼容 OpenAI 的运行时，请按照[自定义提供商](#custom)的方法显式列出其模型。
+
+## 网关
+
+OpenRouter 使用其原生运行时和目录。向 OpenCode 服务器提供 `OPENROUTER_API_KEY`，或者连接 OpenRouter 账号，然后在提供商前缀之后使用完整的 OpenRouter 模型 ID 引用模型。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openrouter/anthropic/claude-sonnet-5.5",
+}
+```
+
+覆盖 OpenRouter 的端点或通过兼容 OpenRouter 的网关路由时，请保留原生 OpenRouter 包。这样可以保留 OpenRouter 的请求和推理行为。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openrouter": {
+      "settings": {
+        "baseURL": "https://openrouter-gateway.example.com/api/v1",
+      },
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+    },
+  },
+}
+```
+
+如果网关提供兼容 OpenAI 的 API，但有自己的模型清单，请改为定义自定义提供商。配置的键会成为提供商前缀，`models` 中的每个键都会成为可选的模型 ID。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "company/coder",
+  "providers": {
+    "company": {
+      "env": ["COMPANY_GATEWAY_KEY"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://gateway.example.com/v1",
+      },
+      "models": {
+        "coder": { "modelID": "upstream/coder-v2" },
+      },
+    },
+  },
+}
+```
+
+## 错误
+
+提供商和模型的错误信息通常会指出失败的环节。在更换包之前，请先检查服务器进程的环境变量和确切的模型 ID。
+
+| 错误或现象 | 检查项 |
+| --- | --- |
+| `No model is available for session ...` | 当前没有可选的已启用模型。完成对应提供商的设置，然后在 `/models` 中选择模型。 |
+| `Model unavailable: provider/model` | 提供商未激活，模型 ID 不存在或已禁用，或者动态发现不再返回该模型。对于自定义别名，请检查 `models` 映射的键，而不是 `modelID`。 |
+| `Cannot initialize provider/model: NAME is required to resolve the provider endpoint` | `baseURL` 中仍有未替换的 `${NAME}` 占位符。请在 OpenCode 服务器上设置该变量，或将模板替换为完整的端点。 |
+| `Azure resource name is missing` | 设置 `providers.azure.settings.resourceName`、`AZURE_RESOURCE_NAME` 或完整的 `settings.baseURL`。 |
+| Vertex 未出现 | 在提供商设置或支持的项目变量中设置可解析的项目。仅有 ADC 不会激活该提供商。 |
+| Bedrock 未出现 | 提供 profile 或其他受支持的 AWS 凭据链输入。单独设置 `AWS_REGION` 只会选择区域。 |
+| Ollama 没有模型 | 确认服务器在根据 `baseURL` 推导出的路径上提供 `/api/tags` 和 `/api/show`，并且 `/api/show` 报告了 `completion` 能力。 |
+| Copilot 没有模型 | 确认当前 OAuth 账号拥有 Copilot Chat 访问权限。模型同步失败时会记录日志 `failed to sync GitHub Copilot models`。 |
+
+V2 会拒绝已停用的提供商 ID，并给出直接的替代方案。请使用 `azure/<model>` 代替 `azure-cognitive-services/<model>`，使用 `google-vertex/<model>` 代替 `google-vertex-anthropic/<model>`。
+
+## WebSocket
+
+OpenAI、xAI 以及受支持的 Azure Responses 模型可以为每个会话保持一个 WebSocket 连接。连续的步骤会复用未改变的请求前缀，只发送上一次响应之后新增的内容，从而在长会话中减少上传量。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "transport": "http" },
+    },
+  },
+}
+```
+
+WebSocket 的行为遵循以下规则：
+
+- 内置提供商会根据各自的策略为支持的路由启用 WebSocket。
+- 提供商的 `settings.transport: "websocket"` 用于启用，`"http"` 用于禁用。
+- 在没有 WebSocket 通道的路由上设置 `"websocket"` 时，会记录一条警告并回退到 HTTP。
+- OpenAI 提供商的上下文压缩使用同一个连接。
+- xAI 只能从已存储的响应继续。在默认的 `store: false` 下，每个步骤都会通过复用的连接完整发送。
+- 套接字关闭后，会在下一个步骤重新连接。如果无法建立连接，会话会继续通过 HTTP 进行。
+- 带有 `http.request` 或 `http.response` 钩子的提供商插件会保持使用 HTTP，以便每个请求都可被观测。

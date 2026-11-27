@@ -1,0 +1,222 @@
+---
+title: "工具"
+description: "OpenCode 的内置工具可以读写文件、运行 shell 命令、抓取和搜索网页、启动子代理并驱动浏览器。"
+---
+
+直接说出你想要的结果即可。OpenCode 会选择可用的工具，在需要时请求你的批准，然后返回结果。
+
+```text
+Find where request timeouts are configured, change the default to 30 seconds,
+and run the relevant existing tests.
+```
+
+这类任务通常会用到 `grep` 或 `glob`、`read`、某个编辑工具以及 `shell`。如果你希望采用特定的方式，也可以直接点名某个工具。
+
+```text
+Use grep to find every reference to DEFAULT_TIMEOUT, then read the matching files.
+```
+
+## 文件
+
+### Read
+
+`read` 返回文件内容或目录的非递归列表。需要提供 `path`；对于较大的结果，可以使用 `offset` 和 `limit` 分页读取。
+
+```text
+Read src/server.ts starting at line 120 and return at most 80 lines.
+```
+
+读取文本时会带上行号，每页最多 2,000 行、50 KiB。超过 2,000 个字符的单行会被截短。该工具还会将 PNG、JPEG、GIF、WebP 和 PDF 文件传给模型，源数据最多 20 MiB；其他二进制文件会读取失败。支持的媒体类型和图片处理方式请参阅[附件](/attachments)。
+
+权限：`read`，资源为规范化后的路径。
+
+### Glob
+
+`glob` 根据 `**/*.ts` 这类模式查找文件路径。默认在当前目录中搜索，也可以用 `path` 指定其他相对目录；`hidden` 用于包含隐藏条目，`limit` 用于限制结果数量。
+
+```text
+Use glob with **/*.test.ts under packages/core and return at most 50 files.
+```
+
+默认最多返回 100 个文件，搜索超时时间为 30 秒。权限：`glob`，资源为请求的模式。
+
+### Grep
+
+`grep` 搜索文件内容，返回路径、行号和内容预览。除非 `literal` 为 true，否则 `pattern` 使用正则表达式语法。可以用 `path`、`include`、`caseSensitive` 或 `limit` 缩小搜索范围。
+
+```text
+Use grep for the literal text "request timed out" in src, including only *.ts files.
+```
+
+默认最多返回 100 个匹配行，搜索超时时间为 30 秒。权限：`grep`，资源为请求的模式，而不是搜索路径。
+
+### Edit
+
+`edit` 替换现有文件中的文本。需要提供 `path`、`oldString` 和一个与之不同的 `newString`；除非 `replaceAll` 为 true，否则旧文本必须恰好匹配一次。
+
+```text
+In src/config.ts, replace the unique text "timeout: 60" with "timeout: 30".
+```
+
+`edit` 适合做局部修改。写入后，OpenCode 可能会格式化该文件。权限：`edit`，资源为目标路径。
+
+### Write
+
+`write` 根据 `path` 和 `content` 创建或完全覆盖一个文本文件。它会创建缺失的父目录，并可能运行配置的格式化工具。
+
+```text
+Create docs/example.md with a heading and one setup command.
+```
+
+如果只需修改现有文件的一部分，请改用 `edit`。权限：`edit`，资源为目标路径。
+
+### Patch
+
+`patch` 一次应用一个补丁，可以新增、更新、移动或删除多个文件。它的 `patchText` 使用 `*** Add File`、`*** Update File` 和 `*** Delete File` 区块。
+
+```text
+Use patch to rename src/old.ts to src/new.ts and update its exported name.
+```
+
+OpenCode 仅为受支持的 GPT 模型提供 `patch`，其他模型则使用 `edit` 和 `write`。权限：`edit`，每个受影响的路径都是一项资源。
+
+访问当前 Location 或其项目 worktree 之外的路径时，还会按 `external_directory` 检查，而该操作默认允许。路径规范化、规则顺序和已保存的批准请参阅[权限](/permissions)。如果想通过名称访问外部内容，请配置[引用](/references)。
+
+## 命令
+
+### Shell
+
+`shell` 在主机用户的 shell 中执行命令。请设置 `workdir`，而不是在命令中使用 `cd`；如果默认的两分钟前台超时不合适，可以设置 `timeout`（单位为毫秒）。
+
+```text
+Run bun test from packages/core with a five-minute timeout.
+```
+
+对于开发服务器或其他长时间运行的进程，请将 `background` 设为 true。后台调用会立即返回，并在结束时通知会话；除非显式指定，否则没有超时限制。过长的输出会被截短，完整输出会保存在一个托管文件中。
+
+权限：`shell`，扫描器解析出的每条命令都是一项资源。扫描器还会检查外部工作目录，以及能从命令中推断出的目录。Shell 拥有主机用户在文件系统、进程和网络方面的全部权限，因此请在[权限](/permissions)中使用范围尽量窄的规则。
+
+## 网络
+
+### Webfetch
+
+`webfetch` 获取一个 HTTP 或 HTTPS URL，并以 `markdown`、`text` 或 `html` 格式返回。默认格式为 Markdown；`timeout` 最多可设为 120 秒。
+
+```text
+Fetch https://example.com/docs as markdown.
+```
+
+它接受 HTML、纯文本、JSON 和 XML 等文本响应，但不接受图片或其他二进制下载。过长的输出可能会被截短，完整文本会保存在托管存储中。权限：`webfetch`，资源为请求的 URL。
+
+### Websearch
+
+`websearch` 通过所选的集成搜索最新信息。它的输入是搜索词 `query`。
+
+```text
+Search the web for the latest Bun release notes.
+```
+
+权限：`websearch`，资源为搜索词。提供商、选择方式、速率限制以及如何禁用该工具，请参阅[网页搜索](/websearch)。
+
+## 图片
+
+### 图片生成
+
+`generate_image` 根据提示词创建新图片，或编辑已有图片。它是实验性功能，只有在已连接的提供商拥有图片模型时才会出现。要选择其默认模型，请参阅 [`experimental.image_generate`](/config#image-generation)。
+
+```text
+Generate a flat app icon of a paper plane on a blue background and save it to assets/icon.png.
+```
+
+需要提供 `prompt`，还可以提供 `images` 用于编辑或作为参考、指定 `model`，或提供要保存到的 `path`。它在后台运行，图片就绪后会通过保存路径通知会话。
+
+权限：`generate_image`，资源为所选的模型。
+
+## 交互
+
+### Question
+
+`question` 会暂停执行，并向用户提出一个或多个问题。每个问题包含简短的标题、问题描述和选项；`multiple` 允许多选。用户始终可以自由输入答案。
+
+```text
+Before changing the API, ask me to choose between a breaking change and a compatibility layer.
+```
+
+权限：`question`，资源为 `*`。客户端必须支持交互式表单，关闭表单会取消该问题。
+
+### Skill
+
+`skill` 将某个可用技能 ID 对应的指令和附带资源加载到对话中。
+
+```text
+Load the effect skill before changing this Effect code.
+```
+
+该 ID 必须出现在已公布的技能列表中，或由用户明确指定。权限：`skill`，资源为技能 ID。技能的创建、发现和加载规则请参阅[技能](/skills)。
+
+## 自动化
+
+### Subagent
+
+`subagent` 使用已配置的子代理启动一个子会话。需要提供代理 ID、简短的 `description` 和完整的 `prompt`。
+
+```text
+Ask the explore subagent to map the authentication flow and return the key files.
+```
+
+子代理始终在后台运行。调用会立即返回 `sessionID`，子代理空闲时父代理会收到一条 `<subagent>` 消息，之后每完成一轮工作还会再次收到，因此父代理可以继续工作，也可以直接结束本轮而无需等待。传入返回的 `sessionID` 可以继续同一个子会话的对话；对正在运行的子代理追加消息会加入其当前运行。只能使用 subagent 模式的代理，默认嵌套深度为一层。
+
+权限：`subagent`，资源为所选的代理 ID。
+
+### Execute
+
+`execute` 在 Code Mode 中运行 JavaScript，让代理能够调用并组合工具目录中的工具。它适合并行执行相互独立的调用，也适合在不把每个中间结果都放进模型上下文的情况下处理结果。
+
+```text
+Read package.json and README.md in parallel, then return their relevant setup details.
+```
+
+该运行时不能直接访问文件系统，也不支持导入或定时器。它提供 `fetch` 用于 HTTP 请求，其他操作都通过其工具目录中的工具完成。拒绝资源为 `*` 的 `execute` 会移除 Code Mode。此时它原本可以调用的工具（包括来自未设置 `codemode: false` 的服务器的 MCP 工具）会作为直接工具列出，每个请求都会带上它们的完整定义。如果代理不应拥有这些工具，也请一并拒绝。嵌套的内置工具和 MCP 工具仍会执行各自的权限检查，插件工具则执行其声明的权限。
+
+### Sessions
+
+`opencode.session` Code Mode 命名空间包含以下会话工具。没有 Code Mode 时，它们会作为 `opencode_session_rename` 和 `opencode_session_move` 列出。
+
+- `rename` 修改当前会话的标题，或修改由 `sessionID` 指定的其他会话的标题。
+- `move` 将当前会话或另一个指定的会话移动到相对或绝对路径的 `directory`。移动会在安全边界处生效，因此依赖目标目录的操作应放在之后的调用中。
+
+```text
+Rename this session to "Timeout cleanup", then move it to the new worktree.
+```
+
+### Worktrees
+
+`opencode` 命名空间还可以管理会话所属项目的 worktree：
+
+- `worktree_create` 根据 `name` 创建一个 worktree，并返回其 `directory`。目标位置和策略由项目的 worktree 配置决定。
+- `worktree_list` 列出项目的所有 worktree。
+- `worktree_remove` 删除 OpenCode 为该项目记录的 worktree。设置 `force` 会丢弃未提交的更改。
+
+```text
+Create a worktree named "login" and move this session into it.
+```
+
+`worktree_remove` 使用 `edit` 权限，资源为 worktree 目录。其他 worktree 工具不会请求任何内置权限操作。
+
+## 浏览器
+
+`browser` Code Mode 命名空间用于控制 OpenCode 桌面应用所连接的浏览器。先打开一个标签页并保存返回的 `tabID`，之后每次页面操作都显式传入该 ID。
+
+```text
+Open https://example.com, take a snapshot of that tab, and report the main heading.
+```
+
+该命名空间包括标签页和导航命令、页面快照与搜索、点击与表单输入、截图、文件传输、控制台与网络检查、性能追踪、堆检查以及 Lighthouse 审计。截图需要一个获得焦点且可见的标签页。上传路径是服务器本地路径；截取结果也返回服务器本地路径，每次文件传输最多 5 MiB。
+
+页面内容、日志、请求头和响应体都是不可信数据，而不是给代理的指令。资源为 `*` 的 `browser` 拒绝规则会移除整个浏览器工具目录；浏览器操作不会逐个弹出权限请求。
+
+## 扩展
+
+[MCP 服务器](/mcp-servers)会添加工具，其名称和输入由每个已连接的服务器提供。它们的权限操作为 `<server>_<tool>`，资源为 `*`。这些工具不属于固定的内置工具目录。默认情况下，代理会在 `execute` 中通过服务器的命名空间访问这些工具；在服务器上设置 `codemode: false` 可以直接列出其工具。
+
+[技能](/skills)提供的是任务指令，而不是新的可执行工具。[附件](/attachments)将用户选择的内容放入提示词，[引用](/references)则提供具名的外部目录。这些功能是对工具的补充，不会绕过工具的权限检查。

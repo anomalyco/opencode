@@ -1,0 +1,269 @@
+---
+title: "引用"
+description: "为 OpenCode 提供对当前项目之外本地目录和 Git 仓库的具名访问，并把它们附加到提示词中。"
+---
+
+引用让 OpenCode 可以通过名称访问当前项目之外的目录。在 `opencode.json` 或 `opencode.jsonc` 中添加引用，需要时再在客户端中附加它的别名。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+附加 `docs` 后，让代理查看相关路径：
+
+```text
+Read the attached docs reference and summarize api/authentication.md.
+```
+
+引用适用于文档、共享库、示例，或其他仓库中的源代码。
+
+## 本地目录
+
+使用 `path` 指定本地目录：
+
+```jsonc
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when working with components or design tokens",
+    },
+  },
+}
+```
+
+路径的解析规则如下：
+
+- 相对路径从配置文件所在目录开始解析。
+- 支持绝对路径。
+- 支持 `~/docs` 这类相对于用户主目录的路径。
+
+如果不需要其他字段，可以使用字符串简写：
+
+```jsonc
+{
+  "references": {
+    "docs": "../docs",
+    "shared": "~/work/shared",
+  },
+}
+```
+
+<Callout type="note">
+  只有以 `.`、`/` 或 `~` 开头的简写字符串才会被视为本地路径。请写 `./docs`，而不是 `docs`；单独的 `docs` 会被解释为 Git 仓库。
+</Callout>
+
+## Git
+
+使用 `repository` 指定远程 Git 仓库：
+
+```jsonc
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+    "internal-sdk": {
+      "repository": "git@gitlab.example.com:platform/sdk.git",
+      "branch": "release/v2",
+    },
+  },
+}
+```
+
+支持的远程仓库格式包括：
+
+- GitHub 的 `owner/repo` 简写
+- Git URL
+- 主机/路径形式
+- SCP 风格的远程地址
+
+不支持本地 `file:` 仓库。
+
+使用字符串简写时，会跟踪远程仓库的默认分支：
+
+```jsonc
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+    "sdk": "gitlab.com/platform/sdk",
+  },
+}
+```
+
+未设置 `branch` 时，OpenCode 会检出并刷新远程仓库的默认分支。分支名可以包含字母、数字、`/`、`_`、`.` 和 `-`，但不能以 `-` 开头，也不能包含 `..`。
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "release/v2.1",
+    },
+  },
+}
+```
+
+## 存储
+
+OpenCode 会规范化每个远程地址，并在全局数据目录下为每个远程仓库和分支的组合保存一份检出副本。未显式指定分支时，路径格式如下：
+
+```text
+opencode/repos/<host>/<repository-path>
+```
+
+在典型的 Linux 安装中，`Effect-TS/effect` 存储在：
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect
+```
+
+显式指定分支时，会添加经过编码的 `@<branch>` 后缀：
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect@main
+```
+
+## 刷新
+
+缺失的仓库会异步克隆。对于已有的检出副本，OpenCode 会在引用加载或重新加载时，以及其所在 Location 接收新的用户提示词后，在后台检查是否需要刷新。
+
+```text
+Prompt admitted → refresh check starts in background → agent continues
+```
+
+如果检出副本的上次刷新尝试距今已至少 24 小时，或尚无任何刷新记录，就会进行刷新。刷新会拉取远程内容，并重置到配置的分支或远程仓库的默认分支。
+
+```text
+Last attempt: 25 hours ago → eligible
+Last attempt: 2 hours ago  → skipped
+```
+
+刷新遵循以下规则：
+
+- 时间戳在服务重启后仍会保留。
+- 使用同一检出副本的多个 Location 共享同一个时间戳。
+- 失败的尝试会被记录到日志，并同样受 24 小时间隔限制。
+- Location 未被使用时，不会定期轮询。
+- 克隆或刷新失败不会影响其他引用的加载。
+
+提示词不会等待克隆或刷新完成。即使之后的工具读取已经能看到更新后的检出副本，附件中的内容也可能仍是旧的；新的引用也可能在检出副本就绪之前就已出现。
+
+```text
+Attachment created → cached content
+Background refresh completes → later tool read sees newer content
+```
+
+<Callout type="warning">
+  缓存的检出副本是共享的，可能在代理使用过程中发生更新。刷新会重置这些副本，因此请避免编辑它们。
+</Callout>
+
+## 使用指引
+
+`description` 告诉代理何时该使用某个引用。带有描述的引用会连同别名和解析后的路径一起出现在代理指令中。
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+没有描述的引用仍可供客户端使用，但不会被自动告知代理。
+
+```jsonc
+{
+  "references": {
+    "archive": {
+      "path": "../archive",
+    },
+  },
+}
+```
+
+## 可见性
+
+将 `hidden` 设为 `true`，可以在交互式客户端的选择器中隐藏该引用：
+
+```jsonc
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal service behavior",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` 只影响交互界面中的可见性。该引用仍会保留在引用 API 中；如果设置了描述，也仍会出现在代理指令中。
+
+## 使用方法
+
+客户端通过根别名附加引用。附件包含根目录下一级文件和目录的非递归列表。
+
+```text
+Attached alias: docs
+Ask: Inspect docs/guides/deployment.md and explain the deployment steps.
+```
+
+如果需要根目录下更深层的内容，请让代理查看具体路径。
+
+## 权限
+
+引用不会授予额外的工具权限。访问当前 Location 之外的内容仍然遵循常规工具规则和 `external_directory` 权限；编辑还需要相应的编辑权限。
+
+```text
+Read ../product-docs/api.md
+```
+
+只有当前权限允许这次外部读取时，该请求才会成功。
+
+## 字段
+
+| 字段 | 本地 | Git | 说明 |
+| ------------- | -------- | -------- | --------------------------------------------- |
+| `path` | 必填 | 不适用 | 本地目录路径 |
+| `repository` | 不适用 | 必填 | 远程 Git 仓库 |
+| `branch` | 不适用 | 可选 | 要拉取并检出的分支 |
+| `description` | 可选 | 可选 | 说明代理应在何时使用它 |
+| `hidden` | 可选 | 可选 | 在交互式客户端选择器中隐藏 |
+
+完整的 Git 条目可以使用所有适用于 Git 的字段：
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "main",
+      "description": "Use for SDK implementation details",
+      "hidden": false,
+    },
+  },
+}
+```
+
+## 别名
+
+别名不能为空，也不能包含 `/`、`\`、空白字符、反引号或逗号。
+
+```text
+Valid:   docs
+Invalid: product docs
+Invalid: docs/api
+```

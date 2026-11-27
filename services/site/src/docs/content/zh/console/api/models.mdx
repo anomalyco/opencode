@@ -1,0 +1,182 @@
+---
+title: "模型列表 API"
+description: "列出团队可以使用的模型及其上限、价格、能力，以及调用每个模型的 Console URL。"
+---
+
+模型列表有两种。[Console 列表](#console-model-list)返回团队可以使用的所有内容，包括已连接的提供商。[推理列表](#inference-model-lists)以 OpenAI 的列表格式返回公开的 OpenCode Models 和 Go 目录。
+
+| 列表                                                | 返回                                                                                        | 密钥      |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------- |
+| [`/console/api/v1/models`](#console-model-list)     | 调用方可以使用的每个提供商和模型，并已应用团队的修改。               | 必需 |
+| [`/inference/v1/models`](#inference-model-lists)    | OpenCode Models。不带密钥时返回所有公开模型；带密钥时返回其团队可以使用的模型。 | 可选 |
+| [`/inference/go/v1/models`](#inference-model-lists) | [Go](/console/go) 模型，格式相同。                                                  | 可选 |
+
+如果你的客户端需要提供与 OpenCode 相同的模型（包括已连接的提供商），请使用 Console 列表。如果你只需要 OpenCode Models 或 Go，或者还没有密钥、想要公开目录，请使用推理列表。
+
+## Console 模型列表
+
+`GET https://opencode.ai/console/api/v1/models` 返回调用方可以使用的每个提供商，以及每个提供商下可以调用的模型。
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+任何团队成员都可以调用它：通过浏览器会话、OpenCode 登录、[个人 API 密钥](/console/api#personal-api-keys)，或具有 **Models › Read** 的[服务账号密钥](/console/api#service-accounts)。它使用与 OpenCode 生成的配置相同的规则，因此列表与 OpenCode 中 `/models` 显示的一致。响应永远不会被缓存（`Cache-Control: private, no-store`）。
+
+### 提供商
+
+响应是一个以提供商 ID 为键的对象，该 ID 就是 OpenCode 使用的 ID。
+
+| 提供商 ID                 | 提供商                                                                                                                         |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `opencode`                  | [OpenCode Models](/console/models)，从团队额度中付费。                                                                 |
+| `opencode-go`               | [Go](/console/go) 模型。仅在订阅 Go 时出现。                                                                   |
+| `console-<connection slug>` | 团队添加的[连接](/console/providers)，例如 `console-openai`、`console-anthropic` 或 `console-aws-bedrock`。 |
+
+每个提供商都有 `id`、`name` 和 `models`。`name` 是 OpenCode 显示的名称，通常是团队名称后跟提供商名称。`models` 是一个以模型 ID 为键的对象。
+
+### 示例
+
+以下示例裁剪为一个提供商和一个模型：
+
+```json
+{
+  "opencode": {
+    "id": "opencode",
+    "name": "Acme Inc. / OpenCode",
+    "models": {
+      "claude-sonnet-5-5": {
+        "type": "chat",
+        "id": "claude-sonnet-5-5",
+        "canonical_id": "anthropic/claude-sonnet-5-5",
+        "name": "Claude Sonnet 5.5",
+        "description": "Fast Claude model for everyday coding, agents, and knowledge work",
+        "family": "claude-sonnet",
+        "open_weights": false,
+        "knowledge": "2026-06",
+        "release_date": "2026-09-28",
+        "last_updated": "2026-09-28",
+        "modalities": {
+          "input": ["text", "image/jpeg", "image/png", "application/pdf"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": { "supported": true },
+          "reasoning": {
+            "supported": true,
+            "effort": ["low", "medium", "high", "xhigh", "max"]
+          }
+        },
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 2,
+              "cache": { "read": 0.1, "write": 2.5 }
+            },
+            "output": { "price": 10 }
+          }
+        },
+        "api": {
+          "messages": {
+            "base_url": "https://opencode.ai/inference/anthropic/v1",
+            "sdk": {
+              "aisdk": "@ai-sdk/anthropic",
+              "opencodeai": "@opencode/ai/providers/anthropic"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### 字段
+
+每个模型都是 [models.dev](https://models.dev) 的 v2 条目，并已应用团队的修改，因此字段就是 [models.dev 发布的字段](https://models.dev/experimental/v2.0/api.json)。已禁用的模型以及 models.dev 标记为已弃用的模型不会包含在内。
+
+| 字段          | 含义                                                                                                                                                                                                                                                                             |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`         | 模型类型，例如 `chat`、`embedding`、`image` 或 `decision`。                                                                                                                                                                                                             |
+| `id`           | 请求中发送的模型 ID，同时也是 `models` 中的键。                                                                                                                                                   |
+| `name`         | 显示名称。                                                                                                                                                                                                                                                                       |
+| `limit`        | `context` 是上下文窗口。模型设置了输入上限时，`input` 限制请求的输入。`output` 限制响应。                                                                                                                                                                |
+| `cost`         | 每 1M token 的美元价格：`text.input.price`、`text.input.cache.read`、`text.input.cache.write` 和 `text.output.price`。`0` 表示免费。缺少缓存字段表示该模型没有缓存价格。部分模型会添加 `cost.multipliers`，在指定的时段提高价格。 |
+| `capabilities` | 模型能做什么，例如工具调用和推理强度。                                                                                                                                                                                                                     |
+| `modalities`   | 接受的输入类型，例如 `text`、`image/png` 或 `application/pdf`，以及输出类型。                                                                                                                                                                                          |
+| `api`          | 用于该模型的 Console URL 和 SDK。请参阅[模型 API](#model-api)。                                                                                                                                                                                                         |
+
+### 模型 API
+
+`api` 只有一项，以模型所用的协议为键：OpenAI Chat Completions 为 `chat-completions`，OpenAI Responses 为 `responses`，Anthropic Messages 为 `messages`，Gemini 为 `generate-content`，[OpenAI Embeddings](/console/models#embedding-models) 为 `embeddings`。它是该协议在 models.dev 中的条目，将厂商 URL 替换为 Console 的 URL，并省略其他协议。
+
+| 字段            | 含义                                                                                                                                                                                                                                            |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base_url`       | 向该模型发送请求的地址。OpenCode Models 使用 `https://opencode.ai/inference/...`，Go 使用 `https://opencode.ai/inference/go/...`，连接则使用其 Console API URL，即 `https://opencode.ai/inference/custom/<connection_id>`。 |
+| `sdk.aisdk`      | 该协议的 AI SDK 包，与[模型端点](/console/models#endpoints)表格中的相同。                                                                                                                                       |
+| `sdk.opencodeai` | OpenCode 加载的对应提供商模块。                                                                                                                                                                                                       |
+
+你添加的连接上的模型如下所示。请按[提供商 API](/console/api/providers#endpoints)所述追加协议的路径，例如 `/chat/completions` 或 `/responses`。
+
+```json
+"api": {
+  "responses": {
+    "base_url": "https://opencode.ai/inference/custom/conn_...",
+    "sdk": {
+      "aisdk": "@ai-sdk/openai",
+      "opencodeai": "@opencode/ai/providers/openai/responses"
+    }
+  }
+}
+```
+
+## 推理模型列表
+
+`GET https://opencode.ai/inference/v1/models` 列出 OpenCode Models，`GET https://opencode.ai/inference/go/v1/models` 列出 Go 模型。两者都返回 OpenAI 的列表格式。
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+以下示例裁剪为一个模型及其常见字段：
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "claude-sonnet-5-5",
+      "object": "model",
+      "created": 1795006281,
+      "owned_by": "opencode",
+      "name": "Claude Sonnet 5.5",
+      "type": "chat",
+      "limit": { "context": 1000000, "output": 128000 },
+      "cost": {
+        "text": {
+          "input": { "price": 2, "cache": { "read": 0.1, "write": 2.5 } },
+          "output": { "price": 10 }
+        }
+      }
+    }
+  ]
+}
+```
+
+不带密钥时，列表包含所有公开模型。带密钥时，只包含该密钥所在团队可以使用的模型，因此服务账号密钥需要 **Models › Read**。请在 `Authorization: Bearer` 或 `x-api-key` 中发送它。私有或已弃用的模型不会包含在内。
+
+每一项都以 OpenAI 的 `id`、`object`、`created` 和 `owned_by` 开头，然后是 [Console 列表](#fields)使用的相同 models.dev 字段：`name`、`type`、`limit`、`cost`、`capabilities`、`modalities`、`api`、`family`、`release_date` 等。与 Console 列表不同，推理列表不包含团队的连接。如果 models.dev 数据暂时不可用，条目仍会出现，但只包含 OpenAI 的字段，且 `name` 等于 ID。
+
+每个 Go 模型还有 `go`：它在各套餐上的每月用量限额（`monthly_usage`）、是否使用请求进行训练（`training`）、是否不保留你的任何数据（`zdr`），以及是否拒绝某些国家或地区（`limited_regions`）。
+
+## 错误
+
+| 状态 | 含义                                                                                |
+| ------ | -------------------------------------------------------------------------------------- |
+| `401`  | 没有凭据，或密钥已过期、已撤销。                                          |
+| `403`  | 密钥无法列出模型。服务账号和受限密钥需要 **Models › Read**。 |

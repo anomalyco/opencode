@@ -1,0 +1,113 @@
+---
+title: 网页搜索
+description: "让 OpenCode 使用 Exa、Firecrawl、Parallel、Tavily、TinyFish 或你的 Claude 套餐搜索网页，并选择搜索提供商和权限。"
+---
+
+向 OpenCode 询问最新信息时，它可以搜索网页、阅读搜索结果，并在回答中附上来源链接。
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+首次搜索时，OpenCode 会请你允许网页搜索并选择一个提供商。之后的会话会沿用你的选择。
+
+## 提供商
+
+OpenCode 内置五个搜索提供商：
+
+| 提供商 | ID | 环境变量 |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY`（可选） |
+
+在 TUI 中使用 `/connect` 连接账号，或者在启动 OpenCode 之前设置该提供商的环境变量。
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+### Claude Agent
+
+连接 [Claude Agent](/claude-agent) 后，它也会提供一个 ID 为 `claude-agent` 的搜索提供商。它运行 Claude Code 的 WebSearch，因此搜索会计入你的 Claude 套餐，无需搜索 API 密钥。所有模型都可以使用它，而不只是 Claude。
+
+Claude Agent 永远不会被自动选中。请在 `opencode.jsonc` 中选择它：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+WebSearch 返回的页面内容是加密的，因此每次搜索都必须由一个 Claude 模型来运行。Haiku 负责运行，它会先给出结果的简短摘要，然后是链接。搜索使用 Claude Agent 提供商的连接设置，以及你的对话最近使用的账号。
+
+## 选择提供商
+
+在 `opencode.jsonc` 中设置提供商，即可跳过选择提示。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+使用 `"random"` 可自动选择一个可用的提供商。每个会话会一直使用选中的提供商，直到它触发速率限制。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## 速率限制
+
+当提供商返回 HTTP 429 时，随机选择模式会换用另一个可用的提供商重试搜索。被限流的提供商会等待其 `Retry-After` 指定的时长；如果响应中没有有效的时长，则等待 60 秒。
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+如果所有提供商都处于冷却中，搜索会立即失败。移动会话或重启其服务器会清除该会话记住的提供商；冷却状态由同一工作区中的所有会话共享。
+
+## 权限
+
+网页搜索使用 `websearch` 权限操作，并以搜索查询作为资源。对于未被明确允许的搜索，会先询问你。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+规则顺序和匹配方式请参阅[权限](/permissions)。
+
+## 禁用
+
+将 `websearch` 设为 `false`，即可从模型请求中移除网页搜索工具。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

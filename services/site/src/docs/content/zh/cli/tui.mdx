@@ -1,0 +1,90 @@
+---
+title: "TUI"
+description: "开始一个会话，了解终端界面中的日常工作流。"
+---
+
+在项目目录中运行 OpenCode，输入你的需求，然后按 **Enter**。
+
+```bash
+cd ~/code/my-project
+opencode
+```
+
+```text
+Explain how authentication works in this project
+```
+
+按 **Shift+Enter**、**Ctrl+Enter**、**Alt+Enter** 或 **Ctrl+J** 换行。OpenCode 工作期间，按 **Enter** 会把提示词发给正在运行的会话，实时引导它（steer）；先按 **Ctrl+X** 再按 **Enter**，可以把提示词加入队列稍后发送。
+
+## 上下文
+
+输入 `@` 搜索文件，选中后即可将该文件附加到提示词中。在 `@` 后继续输入可以缩小搜索范围。
+
+```text
+Review @src/auth.ts for error handling problems
+```
+
+你还可以在路径后加上行号或行范围。
+
+```text
+Explain @src/auth.ts#20-45
+```
+
+## Shell
+
+在空输入框的开头输入 `!` 进入 Shell 模式。输入命令后按 **Enter** 执行；如果不想执行，按 **Esc** 退出 Shell 模式。
+
+```text
+!git status
+```
+
+Shell 命令在会话的工作目录中运行，输出会保留在会话中。
+
+## 命令
+
+输入 `/` 列出斜杠命令。继续输入可以过滤列表，然后按 **Enter** 运行选中的命令。
+
+```text
+/models
+```
+
+常用命令包括 `/new`、`/sessions`、`/models`、`/agents`、`/undo`、`/redo` 和 `/editor`。按 **Ctrl+P** 打开命令面板，查看当前视图中可用的所有操作。
+
+更新之后，OpenCode 会在主屏幕上显示一次该版本的新功能。运行 `/highlights` 可以再次查看；如果不想让它自动弹出，可以在 [`cli.json`](/cli/config#alerts) 中设置 `"highlights": false`。
+
+## 旁支提问
+
+运行 `/btw <question>` 可以就目前的对话快速提一个问题。回答会使用会话的上下文和当前模型，但不会加入对话，因此不会影响后续的提示词。运行期间，输入框底部会显示 `/btw` 标识，回答会在对话框中打开；按 **C** 可以复制。
+
+```text
+/btw why did the test in step 2 fail?
+```
+
+## 模型
+
+先按 **Ctrl+X** 再按 **M** 选择模型，或运行 `/models`。按 **F2** 在最近使用的模型之间切换。
+
+先按 **Ctrl+X** 再按 **A** 选择代理，或运行 `/agents`。按 **Shift+Tab** 在代理之间切换。
+
+## 会话
+
+先按 **Ctrl+X** 再按 **N** 新建会话。先按 **Ctrl+X** 再按 **L**，或运行 `/sessions`，可以回到已有会话；**Ctrl+O** 会同时列出最近的会话和项目。
+
+标签页默认启用。使用 **Ctrl+Tab** 和 **Ctrl+Shift+Tab** 在标签页之间切换，先按 **Ctrl+X** 再按 **W** 关闭标签页，按 **Ctrl+Shift+T** 重新打开最近关闭的标签页。
+
+## 历史记录
+
+先按 **Ctrl+X** 再按 **U**，或运行 `/undo`，可以撤销最近一条用户消息及其之后的所有工作。被撤销的提示词会回到输入框，方便你修改。
+
+先按 **Ctrl+X** 再按 **R**，或运行 `/redo`，可以恢复被撤销的工作。如果改为发送新的提示词，则视为接受撤销，并从该位置继续。
+
+## 编辑器
+
+设置 `VISUAL` 或 `EDITOR` 后，先按 **Ctrl+X** 再按 **E**，或运行 `/editor`，即可在该编辑器中编辑当前提示词。保存并退出后，文本会回到输入框，再按 **Enter** 发送。
+
+```bash
+export EDITOR="nvim"
+opencode
+```
+
+Leader 键默认为 **Ctrl+X**。如需修改这些快捷键，请参阅[快捷键](/cli/keybinds)。

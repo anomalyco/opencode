@@ -1,0 +1,139 @@
+---
+title: 网络
+description: 配置代理、自定义证书颁发机构和客户端证书。
+---
+
+设置标准代理环境变量，并排除回环地址。OpenCode 的 CLI 与其后台服务之间使用本地 HTTP 连接，因此在 CLI 环境中配置代理时，必须排除回环地址。
+
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+export NO_PROXY=localhost,127.0.0.1,::1
+
+opencode
+```
+
+`HTTP_PROXY` 用于 HTTP 目标地址，`HTTPS_PROXY` 用于 HTTPS 目标地址。两个变量中的代理 URL 本身都可以使用 `http://`。`NO_PROXY` 是以逗号分隔的主机和地址列表，这些地址将直接连接。
+
+## 后台服务
+
+只有当后台服务从 shell 启动时，shell 中导出的变量才会对其生效。请将这些变量持久化到托管服务配置中，以便之后每次启动服务时都使用相同的网络设置。
+
+```bash
+opencode service set env HTTP_PROXY http://proxy.example.com:8080
+opencode service set env HTTPS_PROXY http://proxy.example.com:8080
+opencode service set env NO_PROXY localhost,127.0.0.1,::1
+opencode service start
+```
+
+修改托管环境变量会停止正在运行的服务，`service start` 会使用新的环境重新启动它。如果 CLI 所在的 shell 设置了代理，也要在该 shell 中保留 `NO_PROXY`，因为托管服务变量只作用于服务器进程，而不作用于 CLI 进程。
+
+使用 `service unset env` 删除已持久化的变量：
+
+```bash
+opencode service unset env HTTPS_PROXY
+```
+
+## 身份验证
+
+如果代理支持在 URL 中携带凭据，请在每个需要身份验证的代理 URL 中包含用户名和密码。用户名或密码中的 `@`、`:`、`/` 等字符需要进行百分号编码。
+
+```bash
+export HTTPS_PROXY='http://user:p%40ssword@proxy.example.com:8080'
+```
+
+对于后台服务，请持久化完整的 URL。该值存储在私有服务配置中，并会由 `opencode service get env` 显示出来，因此请勿分享该命令的输出。
+
+```bash
+opencode service set env HTTPS_PROXY 'http://user:p%40ssword@proxy.example.com:8080'
+```
+
+## 证书
+
+如果代理或目标地址使用由私有证书颁发机构签发的证书，请将 `NODE_EXTRA_CA_CERTS` 设置为一个 PEM 文件。进程启动时，这些额外的证书颁发机构会被添加到运行时的信任存储中。
+
+```bash
+export NODE_EXTRA_CA_CERTS=/etc/company/ca.pem
+opencode --standalone
+```
+
+为后台服务持久化该文件路径，然后重启服务：
+
+```bash
+opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
+opencode service start
+```
+
+## 杀毒软件和 HTTPS 检查
+
+杀毒软件的“HTTPS 扫描”或“加密连接扫描”（Kaspersky、Avast、ESET 等）以及企业 SSL 检查代理会用它们自己的证书替换服务器证书。OpenCode 会拒绝该证书，请求会失败并显示类似下面的错误：
+
+```text
+self signed certificate in certificate chain
+SELF_SIGNED_CERT_IN_CHAIN
+CERT_NOT_YET_VALID
+CERT_SIGNATURE_FAILURE
+```
+
+可以通过以下两种方式之一解决：
+
+- 在杀毒软件设置中将 `opencode.ai` 和 `*.opencode.ai` 排除在 HTTPS 扫描之外。如果你直接连接提供商，也请添加提供商的 API 主机，例如 `api.anthropic.com`。
+- 将检查用的证书颁发机构导出为 PEM 文件，并按[证书](#certificates)一节所示，通过 `NODE_EXTRA_CA_CERTS` 信任它。
+
+## 客户端证书
+
+对于要求双向 TLS 的网关，在其提供商上设置 `settings.tls`。该提供商的模型请求会出示证书，并且 TLS 握手只会在服务器要求时发送证书。
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "company": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.company.example/v1",
+        "tls": {
+          "cert": "{file:/etc/company/client.pem}",
+          "key": "{file:/etc/company/client.key}",
+          "passphrase": "{env:CLIENT_KEY_PASSPHRASE}",
+        },
+      },
+    },
+  },
+}
+```
+
+- `cert` 和 `key` 是 PEM 文本。使用 `{file:...}` 从文件中读取。无法读取的文件会使 `tls` 保持未设置状态。
+- 只有加密的密钥才需要 `passphrase`。
+- 适用于 Bun 和 Node 构建。Cloudflare Workers 上的服务器无法通过 `fetch` 出示客户端证书。
+- 携带客户端证书的请求不会跟随重定向，因此证书不会出示给其他主机。
+
+该提供商的每个模型请求都会出示证书：对话、压缩、图片和决策模型。设置了 `tls` 的提供商使用 HTTP 而不是 WebSocket。webfetch、远程 MCP 服务器和插件安装等工具不会出示证书。
+
+## 前台进程
+
+`--standalone` 和 `serve` 使用各自进程的环境变量，`opencode service set env` 不会配置这些进程。
+
+```bash
+HTTP_PROXY=http://proxy.example.com:8080 \
+HTTPS_PROXY=http://proxy.example.com:8080 \
+NO_PROXY=localhost,127.0.0.1,::1 \
+opencode --standalone
+```
+
+对前台服务器使用相同的方式：
+
+```bash
+HTTPS_PROXY=http://proxy.example.com:8080 \
+NO_PROXY=localhost,127.0.0.1,::1 \
+opencode serve
+```
+
+## 验证
+
+应用设置后，检查 CLI 能否连接到后台服务：
+
+```bash
+opencode api get /api/info
+```
+
+成功的健康检查响应可以验证本地客户端与服务之间的连接。再发起一次正常的提供商请求，以验证服务的出站代理和证书路径。

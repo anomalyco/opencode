@@ -1,0 +1,185 @@
+---
+title: "格式化程序"
+description: "在 OpenCode 编辑文件后格式化它们，可使用 Prettier、Biome、gofmt 和 Ruff 等内置格式化程序，也可使用你自己的命令。"
+---
+
+OpenCode 可以在 `write`、`edit` 或 `patch` 工具修改文件后自动格式化这些文件。格式化程序默认处于禁用状态，需要在配置中启用：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+## 启用
+
+将 `formatter` 设为 `true` 即可启用所有内置格式化程序。只有当某个内置格式化程序的可执行文件可用、且满足项目特定的要求时，OpenCode 才会运行它。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+设为对象同样会启用内置格式化程序，同时允许你覆盖它们或添加自定义格式化程序。空对象会保留继承来的格式化程序设置，而 `true` 会将其重置为内置配置。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {},
+}
+```
+
+## 内置格式化程序
+
+OpenCode 内置了以下格式化程序定义。大多数只要求对应的命令可用；带有额外检测规则的定义会在下表中列出。
+
+| 格式化程序 | 扩展名 | 要求 |
+| --- | --- | --- |
+| `gofmt` | `.go` | `gofmt` 命令 |
+| `mix` | `.ex`, `.exs`, `.eex`, `.heex`, `.leex`, `.neex`, `.sface` | `mix` 命令 |
+| `oxfmt` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts` | `package.json` 中有 `oxfmt` 依赖 |
+| `prettier` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts`, `.html`, `.htm`, `.css`, `.scss`, `.sass`, `.less`, `.vue`, `.svelte`, `.json`, `.jsonc`, `.yaml`, `.yml`, `.toml`, `.xml`, `.md`, `.mdx`, `.graphql`, `.gql` | `package.json` 中有 `prettier` 依赖 |
+| `biome` | 与上面的 `prettier` 相同 | 存在 `biome.json` 或 `biome.jsonc`，且已安装 `@biomejs/biome` 二进制文件 |
+| `zig` | `.zig`, `.zon` | `zig` 命令 |
+| `clang-format` | `.c`, `.cc`, `.cpp`, `.cxx`, `.c++`, `.h`, `.hh`, `.hpp`, `.hxx`, `.h++`, `.ino`, `.C`, `.H` | `clang-format` 命令和 `.clang-format` |
+| `ktlint` | `.kt`, `.kts` | `ktlint` 命令 |
+| `ruff` | `.py`, `.pyi` | `ruff` 命令，以及 Ruff 配置或依赖声明 |
+| `air` | `.R` | 自我标识为 R 格式化程序的 `air` 命令 |
+| `uv` | `.py`, `.pyi` | 支持 `uv format` 的 `uv` 命令 |
+| `rubocop` | `.rb`, `.rake`, `.gemspec`, `.ru` | `rubocop` 命令 |
+| `standardrb` | `.rb`, `.rake`, `.gemspec`, `.ru` | `standardrb` 命令 |
+| `htmlbeautifier` | `.erb` | `htmlbeautifier` 命令 |
+| `dart` | `.dart` | `dart` 命令 |
+| `ocamlformat` | `.ml`, `.mli` | `ocamlformat` 命令和 `.ocamlformat` |
+| `terraform` | `.tf`, `.tfvars` | `terraform` 命令 |
+| `latexindent` | `.tex` | `latexindent` 命令 |
+| `gleam` | `.gleam` | `gleam` 命令 |
+| `shfmt` | `.sh`, `.bash` | `shfmt` 命令 |
+| `nixfmt` | `.nix` | `nixfmt` 命令 |
+| `rustfmt` | `.rs` | `rustfmt` 命令 |
+| `pint` | `.php` | `composer.json` 中有 `laravel/pint` |
+| `ormolu` | `.hs` | `ormolu` 命令 |
+| `cljfmt` | `.clj`, `.cljs`, `.cljc`, `.edn` | `cljfmt` 命令 |
+| `dfmt` | `.d` | `dfmt` 命令 |
+
+例如，启用内置格式化程序后，OpenCode 会发现项目本地的 Prettier 依赖，并用它格式化匹配的文件：
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": true,
+}
+```
+
+## 自定义
+
+添加一个具名条目，即可修改内置格式化程序或定义自定义格式化程序。自定义格式化程序必须同时设置 `command` 和 `extensions` 才能运行。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "environment": {
+        "NODE_ENV": "development",
+      },
+      "extensions": [".js", ".ts"],
+    },
+    "deno-markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+| 字段 | 类型 | 行为 |
+| --- | --- | --- |
+| `disabled` | `boolean` | 为 `true` 时移除该格式化程序。 |
+| `command` | `string[]` | 替换内置命令，或定义自定义命令。 |
+| `environment` | `Record<string, string>` | 在保留父进程环境的基础上添加环境变量。 |
+| `extensions` | `string[]` | 替换内置扩展名列表，或定义自定义列表。需包含开头的点号。 |
+
+所有字段都是可选的。内置条目会继承省略的值，而缺少命令或扩展名的新条目无法运行。
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "extensions": [".md", ".mdx"],
+    },
+  },
+}
+```
+
+## 命令
+
+`command` 是参数数组，而不是 shell 命令字符串。OpenCode 会将 `$FILE` 替换为文件的绝对路径，并在当前项目目录中运行该命令。
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "custom": {
+      "command": ["custom-fmt", "--write", "$FILE"],
+      "extensions": [".custom"],
+    },
+  },
+}
+```
+
+## 匹配规则
+
+OpenCode 会将文件的最后一个扩展名与 `extensions` 进行比较。匹配区分大小写；像 `.part.md` 这样的复合扩展名不会匹配 `notes.part.md`，因为该文件的最后一个扩展名是 `.md`。
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+当多个格式化程序都匹配时，OpenCode 会按注册顺序依次尝试，并在第一个命令成功后停止。内置格式化程序保持其内置顺序，自定义条目按对象中的顺序排在其后。如果某个命令以失败状态退出，OpenCode 会记录该失败并尝试下一个匹配项。
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "preferred": {
+      "command": ["preferred-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+    "fallback": {
+      "command": ["fallback-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+  },
+}
+```
+
+## 禁用
+
+如果没有任何配置文件设置 `formatter`，格式化就处于禁用状态。如果优先级较低的配置文件启用了格式化，可以将其设为 `false` 来禁用。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false,
+}
+```
+
+如果只想禁用某一个内置格式化程序而保留其他的，请将它对应的条目标记为禁用。
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "disabled": true,
+    },
+  },
+}
+```

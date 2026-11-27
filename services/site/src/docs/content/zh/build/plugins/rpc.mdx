@@ -1,0 +1,242 @@
+---
+title: "插件 RPC"
+description: "把插件的自定义方法和事件暴露给其他插件和客户端。"
+---
+
+插件可以暴露在服务器上运行的自定义方法和事件，供其他插件或客户端调用。
+
+## 定义
+
+使用 `Rpc.define` 列出 RPC 的方法、错误和事件。
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+        additionalProperties: false,
+      },
+      errors: {
+        not_found: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: {
+        type: "object",
+        properties: {
+          itemID: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["itemID", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+})
+```
+
+### 校验
+
+RPC 定义描述了方法的输入和输出、事件以及错误的数据结构。它支持两种 schema 格式：
+
+- JSON Schema：简单，无需任何依赖。
+- 任何符合 Standard Schema 规范的校验库：
+  - Zod
+  - Valibot
+  - ArkType
+
+### 输入与输出
+
+每个方法都可以定义 `input` schema 描述参数，定义 `output` schema 描述返回值。如果方法不接受参数或没有返回值，省略对应的 schema 即可。
+
+```ts
+search: {
+  input: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+  },
+  output: {
+    type: "object",
+    properties: { text: { type: "string" } },
+    required: ["text"],
+  },
+}
+```
+
+使用 JSON Schema 时，值在 TypeScript 中的类型是 `unknown`，使用前需要先收窄类型。Standard Schema 则会自动推断输入和输出类型。
+
+### 错误
+
+为方法添加 `errors` 映射来声明预期的失败情况。每个键会成为错误的 `type`，对应的 schema 定义错误的 `data`。
+
+```ts
+errors: {
+  not_found: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+    additionalProperties: false,
+  },
+}
+```
+
+以 `rpc.` 开头的错误名称由 OpenCode 保留。
+
+### 事件
+
+在顶层的 `events` 映射中添加事件。每个事件都有一个 schema，用于描述发送给订阅者的数据。
+
+事件数据必须是对象。没有数据时，使用空对象 schema：
+
+```ts
+events: {
+  refreshed: {
+    schema: { type: "object", additionalProperties: false },
+  },
+}
+```
+
+标量、数组、`null` 和 `undefined` 都不是有效的事件数据。
+
+## 实现
+
+在 `setup` 中注册实现：
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-plugin",
+  async setup(ctx) {
+    const registration = await ctx.rpc.register(Acme, {
+      search: async (input, context) => {
+        const { query } = input as { query: string }
+        const text = await findText(query, { signal: context.signal })
+        if (!text) return context.error("not_found", "Result not found", { query })
+        return { text }
+      },
+    })
+
+    const acme = ctx.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+
+    await registration.events.emit("updated", { itemID: "item-1", text: "ready" })
+  },
+})
+```
+
+注册 RPC 后，同一个插件可以通过 `ctx.rpc(Acme)` 调用它。
+
+处理函数的第二个参数包含用于取消操作的 `signal`，以及用于返回已声明错误的 `context.error(...)`。你可以直接返回这个错误，也可以将其抛出。
+
+一个插件可以注册多个 RPC。释放（dispose）注册对象即可移除对应的 RPC。
+
+## 调用
+
+RPC 注册后，可以通过 HTTP 调用，也可以在其他插件中调用。
+
+### HTTP
+
+创建一个 OpenCode 客户端，然后使用 `client.rpc` 为该 RPC 创建子客户端：
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const acme = client.rpc(Acme)
+const result = await acme.search({ query: "hello" })
+```
+
+### 插件
+
+插件本身已经持有一个 OpenCode 客户端。例如，TUI 插件可以通过 `context.client` 创建同样的 RPC 子客户端：
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode/plugin/tui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  id: "acme-tui",
+  async setup(context) {
+    const acme = context.client.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+    console.log(result)
+  },
+})
+```
+
+[GUI 插件](/build/plugins/gui)从 `ctx.client` 读取桌面应用自身服务器的客户端：
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  setup(ctx) {
+    ctx.add(Command, {
+      id: "search",
+      title: "Search Acme",
+      run: async () => {
+        const result = await ctx.client.rpc(Acme).search({ query: "hello" })
+        console.log(result)
+      },
+    })
+  },
+})
+```
+
+请在调用处读取 `ctx.client`：服务器重启后它会变化。服务器不可达期间，所有调用都会被拒绝。
+
+### 订阅
+
+使用 `events.on` 注册回调，不再需要监听时取消订阅：
+
+```ts
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+
+unsubscribe()
+```
+
+如果需要异步可迭代对象，使用 `events.subscribe("updated")`：
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+事件订阅只推送实时事件，订阅者断开连接期间的事件会丢失。
+
+- 订阅时使用本地名称，例如 `updated`。
+- 收到的事件类型带有前缀，例如 `rpc.acme.updated`。
+- 每个事件都包含 `data` 和 `location`。
+- 插件卸载时会关闭它的所有订阅。
+
+外部客户端会收到来自所有位置的事件，因此必要时请检查 `event.location`。此外，服务器端插件仍需完成配置并处于运行状态。

@@ -1,0 +1,118 @@
+---
+title: "企业版"
+description: "控制组织中的成员可以在 OpenCode 中使用哪些模型、提供商和集成。"
+---
+
+使用[策略](/policies)控制 OpenCode 可以在组织机器上使用什么。请将它们放在托管配置中，这样用户和项目就无法更改。
+
+## 部署
+
+将策略放在系统配置文件中：
+
+| 平台 | 文件                                                  |
+| -------- | ----------------------------------------------------- |
+| macOS    | `/Library/Application Support/opencode/opencode.json` |
+| Linux    | `/etc/opencode/opencode.json`                         |
+| Windows  | `%ProgramData%\opencode\opencode.json`                |
+
+在 macOS 上，你也可以通过 MDM 将它们作为 `ai.opencode.managed` 域的托管偏好设置部署。请参阅[配置位置](/config#locations)。
+
+```jsonc title="/etc/opencode/opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+这些文件中的策略优先于用户和项目配置，因此用户或仓库无法允许你拒绝的内容。请参阅[优先级](/policies#precedence)。
+
+## 屏蔽免费模型
+
+拒绝未登录的免费层级。其他功能仍然可用，成员也可以连接自己的提供商和账号。
+
+```jsonc
+{
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+免费层级是没有账号的 `opencode` 集成。已登录的 Console 账号是 `opencode#<account>`，因此该语句不会影响它们。
+
+Console 团队也可以提供免费模型。要屏蔽它们：
+
+- 在你自己的团队中，关闭 Console Models 标签页上的 **Free models**。请参阅 [OpenCode 模型](/console/providers#opencode-models)。
+- 要在每个账号中隐藏免费模型，请在 OpenCode 服务上设置 `OPENCODE_DISABLE_FREE_MODELS=1`。请参阅[免费模型](/models#free-models)。
+
+## 要求使用你的 Console 团队
+
+只允许你组织的 Console 团队。其他任何内容都无法连接或使用。
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}
+```
+
+- `/connect` 只会列出 OpenCode Console，以便成员登录。
+- 仅你的团队可用。免费层级、个人 Console 账号、其他组织、来自环境变量的 API 密钥，以及 `opencode.json` 中的提供商都会被阻止。
+- 你团队的模型、MCP 服务器和网页搜索仍然可用。在 Console 中更改它们即可，无需重新部署策略。
+
+将 `org_01M3CAP8H43Z49CER6NT0Y3ZF1` 替换为你团队的组织 ID。如果还要在团队中屏蔽免费模型，请在 Console 中关闭 **Free models**。
+
+## 只允许已批准的提供商
+
+拒绝所有提供商，然后允许你批准的提供商。以下示例只允许一个内部的 OpenAI 兼容网关。
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+即使有人拥有某个提供商的凭据，被拒绝的提供商也会被移除。请参阅[提供商](/policies#providers)。
+
+## 限制 MCP 服务器和工具
+
+只允许已批准的 MCP 服务器，并阻止你不希望代理运行的工具。
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "read:*/.ssh/*", "effect": "deny" },
+  ],
+}
+```
+
+请参阅 [MCP 服务器、技能和插件](/policies#mcp-servers-skills-and-plugins)和[工具](/policies#tools)。
+
+## 验证是否生效
+
+- 以用户身份运行 `/connect` 和 `/models`，确认只显示你允许的内容。
+- 检查服务器日志中是否有警告。未通过校验的语句会被丢弃，其余语句仍然生效。
+- 被阻止的工具调用会失败并提示 `Blocked by configuration policy`。
+
+## 版本
+
+| 操作                                                                    | 要求 |
+| ------------------------------------------------------------------------- | -------- |
+| `integration.connect`、`integration.use`、`mcp.use`、`skill.use`、`plugin.use` | 2.2.3    |
+| `websearch.use`                                                           | 2.2.6    |
+
+较旧的客户端会忽略这些语句。
