@@ -197,10 +197,10 @@ test("values that aren't JSON text read as strings, and a delete reads as undefi
   await widget.stop()
 })
 
-test("the weight tracker's chart follows the history, live changes, pointer inspection and the range switch", async () => {
+test("the weight tracker logs from inputs and charts the history: live changes, reading a day, the range", async () => {
   const source = await Bun.file(new URL("./fixtures/weight-tracker.js", import.meta.url)).text()
   const day = (ago: number) => new Date(Date.now() - ago * 86400000).toISOString()
-  const entry = (ago: number, value: object) => ({
+  const entry = (ago: number, value: Record<string, number>) => ({
     key: "entry:" + day(ago) + ":" + Object.keys(value)[0],
     value: JSON.stringify({ at: day(ago), ...value }),
   })
@@ -215,49 +215,66 @@ test("the weight tracker's chart follows the history, live changes, pointer insp
       },
     },
   )
-  const size = { t: 0, dt: 1 / 60, width: 360, height: 400, scale: 2, pointer: null, dark: false }
-  await widget.when((current) => current.frameRequested)
-  widget.frame(size)
+  const all = (node: Node | undefined): Node[] =>
+    node ? [node, ...("children" in node ? (node.children as Node[]).flatMap(all) : [])] : []
+  const find = (test: (node: Node) => boolean) => all(widget.view).find(test)
+  const texts = () => all(widget.view).flatMap((node) => (node.type === "text" ? [node.text] : []))
+  const summary = () => texts().find((text) => text.startsWith("Today "))
+  const caption = () =>
+    texts().find((text) => text.includes("chart to read a day") || /^[A-Z][a-z]{2} \d+: /.test(text))
+  const id = (test: (node: Node) => boolean) => (find(test) as { id: string }).id
+  const button = (label: string) => id((node) => node.type === "button" && node.label === label)
   const chart = () => [...widget.drawings.values()][0] ?? []
-  const kinds = () => chart().map((command) => command[0])
-  const summary = () => {
-    const node = children(widget)[1]
-    return node?.type === "text" ? node.text : undefined
+  const count = (kind: string) => chart().filter((command) => command[0] === kind).length
+  // The intro asks for frames until it has drawn the chart in.
+  const intro = async () => {
+    const size = { t: 0, dt: 1 / 60, width: 360, height: 600, scale: 2, pointer: null, dark: false }
+    for (let frames = 0; frames < 200; frames++) {
+      await widget.when((current) => current.frameRequested).catch(() => undefined)
+      if (!widget.frame(size)) break
+      await Bun.sleep(5)
+      if (!widget.frameRequested && frames > 0) {
+        await Bun.sleep(30)
+        if (!widget.frameRequested) break
+      }
+    }
   }
-  const caption = () => {
-    const node = children(widget)[4]
-    return node?.type === "text" ? node.text : undefined
-  }
-  await widget.when(() => kinds().includes("path"))
-  // Two days with calories as bars, a weight line through two points, seven day labels in a week.
-  expect(kinds().filter((kind) => kind === "rrect").length).toBe(2)
-  expect(kinds().filter((kind) => kind === "circle").length).toBe(2)
-  expect(summary()).toBe("Today: 0 kcal · 79.6 kg · 4 entries")
+  await intro()
+  // Two days of calories as bars, two weights on the line, and the legend's two dots.
+  await widget.when(() => count("path") === 1 && count("rrect") === 2)
+  expect(count("circle")).toBe(4)
+  expect(summary()).toBe("Today 0 kcal · 79.6 kg · 4 entries")
 
   // A meal logged on another device arrives through on("storage"): the summary and the bars follow.
   widget.storage("entry:" + day(0) + ":phone", JSON.stringify({ at: day(0), kcal: 600 }))
-  await widget.when(() => summary() === "Today: 600 kcal · 79.6 kg · 5 entries")
-  expect(kinds().filter((kind) => kind === "rrect").length).toBe(3)
+  await widget.when(() => summary() === "Today 600 kcal · 79.6 kg · 5 entries" && count("rrect") === 3)
 
-  // Tap the last day, then drag to the one before: the caption shows the day under the pointer.
-  const id = (children(widget)[3] as { id: string }).id
+  // Logging from the input: a number is stored as an entry; anything else asks for one.
+  const kcal = () => id((node) => node.type === "input" && node.placeholder === "Calories (kcal)")
+  widget.event({ id: kcal(), type: "change", value: "abc" })
+  widget.event({ id: button("Log meal"), type: "press" })
+  await widget.when(() => texts().includes("Enter calories from 1 to 9999 kcal"))
+  widget.event({ id: kcal(), type: "change", value: "450" })
+  widget.event({ id: button("Log meal"), type: "press" })
+  await widget.when(() => summary() === "Today 1050 kcal · 79.6 kg · 6 entries")
+  expect(texts()).toContain("Logged 450 kcal")
+
+  // Press the last day, then drag to the one before: the caption and the tooltip show the day under the pointer.
+  const canvas = id((node) => node.type === "canvas")
   const pointer = (kind: "down" | "move" | "up", x: number) =>
-    widget.event({ id, type: "pointer", value: { kind, x, y: 100, width: 360, height: 200 } })
+    widget.event({ id: canvas, type: "pointer", value: { kind, x, y: 120, width: 360, height: 240 } })
   pointer("down", 300)
-  await widget.when(() => caption()?.endsWith(": 600 kcal") === true)
+  await widget.when(() => caption()?.endsWith(": 1050 kcal") === true)
   pointer("move", 250)
   await widget.when(() => caption()?.endsWith(": 2100 kcal · 79.6 kg") === true)
   pointer("up", 250)
+  await widget.when(() => chart().some((command) => command[0] === "text" && command[3] === "2100 kcal"))
 
-  // Month: thirty days, every fifth labelled, and the pick cleared.
-  const week = chart().filter((command) => command[0] === "text").length
-  const find = (node: Node, label: string): Node | undefined =>
-    "label" in node && node.label === label
-      ? node
-      : ("children" in node ? (node.children as Node[]) : []).map((child) => find(child, label)).find(Boolean)
-  const month = widget.view && find(widget.view, "Month")
-  widget.event({ id: (month as { id: string }).id, type: "press" })
-  await widget.when(() => caption() === "Tap or drag the chart to see a day")
-  expect(chart().filter((command) => command[0] === "text").length).toBe(week - 7 + 6)
+  // The last 30 days: the pick is cleared and the chart animates in again.
+  widget.event({ id: id((node) => node.type === "select"), type: "change", value: "month" })
+  await widget.when(() => caption() === "Press or drag the chart to read a day")
+  await intro()
+  const alt = find((node) => node.type === "canvas") as { alt: string }
+  expect(alt.alt.startsWith("Chart of the last 30 days.")).toBe(true)
   await widget.stop()
 })

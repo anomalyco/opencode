@@ -1,107 +1,141 @@
 // Weight and calorie tracker on widget.storage: one key per entry ("entry:<ISO time>:<random>"), so entries logged on
-// two devices never overwrite each other, and a chart of the history (weight as a line, each day's calories as bars;
-// tap or drag to inspect a day; a week or month range). Days are UTC days, so every device shows the same history.
-const CHART = 200
+// two devices never overwrite each other. Native inputs log a meal or a weight, a select picks the week or the month,
+// and a 2D canvas charts the history: each day's calories as bars, the weight as a line, press or drag to read a day.
+// The chart's drawing is the built-in `chart` template's (widget-templates/chart.js), with a second value axis for the
+// weight, run from a live program: it animates in on frames, then redraws on pointer input and storage changes. Days
+// are UTC days, so every device shows the same history.
+
+const HEIGHT = 240
+const INTRO = 0.65
 const DAY = 86400000
-const PAD = { left: 36, right: 40, top: 14, bottom: 24 }
+const KCAL = "#f59e0b"
+const KG = "accent"
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 async function main(data) {
-  const ui$ = { kcal: 500, kg: 80, range: 7, picked: null, width: 0 }
+  const s = { range: "week", kcal: "", kg: "", note: null, active: null, down: false, width: 0, t: INTRO, intro: 0 }
   const entries = () =>
     widget.storage
       .keys("entry:")
       .map((key) => ({ key, ...widget.storage.get(key) }))
       .filter((entry) => typeof entry.at === "string")
-  const log = async (entry) => {
+  const days = () => history(entries(), s.range === "week" ? 7 : 30)
+  const paint = () => {
+    if (s.width > 0) widget.draw("chart", chart(days(), s.width, s.t, s.active))
+  }
+  // Animates the chart in over INTRO seconds on display frames, which also give its width; a newer intro stops it.
+  const intro = async () => {
+    const run = ++s.intro
+    const start = widget.now()
+    s.t = 0
+    while (s.t < INTRO && run === s.intro) {
+      const frame = await widget.frame()
+      if (run !== s.intro) return
+      s.width = frame.width
+      s.t = Math.min(INTRO, (widget.now() - start) / 1000)
+      paint()
+    }
+  }
+  const log = async (field, text, low, high, unit) => {
+    const value = Number(String(text).replace(",", "."))
+    if (!(value >= low && value <= high)) {
+      s.note = "Enter " + (field === "kcal" ? "calories" : "a weight") + " from " + low + " to " + high + " " + unit
+      return view()
+    }
     const at = new Date().toISOString()
-    await widget.storage.set("entry:" + at + ":" + Math.random().toString(36).slice(2, 6), { at, ...entry })
-    show()
+    s[field] = ""
+    s.note = "Logged " + value + " " + unit
+    await widget.storage.set("entry:" + at + ":" + Math.random().toString(36).slice(2, 6), { at, [field]: value })
+    view()
   }
   const remove = async (key) => {
     await widget.storage.delete(key)
-    show()
-  }
-  const range = (days) => {
-    ui$.range = days
-    ui$.picked = null
-    show()
+    view()
   }
   const onPointer = (pointer) => {
     if (pointer.kind === "wheel") return
-    ui$.width = pointer.width
-    const days = history(entries(), ui$.range)
-    const slot = (pointer.width - PAD.left - PAD.right) / days.length
-    const index = Math.floor((pointer.x - PAD.left) / slot)
-    ui$.picked = index >= 0 && index < days.length ? days[index].day : ui$.picked
-    widget.draw("chart", chart(days, ui$))
-    render(days)
+    s.width = pointer.width
+    const list = days()
+    const hit = locate(layout(list, pointer.width), pointer.x, pointer.y)
+    if (pointer.kind !== "up") {
+      s.active = hit ?? s.active
+      s.down = true
+    } else {
+      s.active = hit
+      s.down = false
+    }
+    view()
   }
-  const render = (days) => {
+  const view = () => {
     const all = entries()
-    const today = days[days.length - 1]
-    const picked = days.find((day) => day.day === ui$.picked)
+    const list = days()
+    const today = list[list.length - 1]
     const weights = all.filter((entry) => entry.kg !== undefined)
-    const last = weights.length ? weights[weights.length - 1].kg + " kg" : "no weight yet"
+    const active = s.active === null ? null : list[s.active]
     widget.render(
       ui.column({ gap: 2, align: "stretch" }, [
         ui.text(data.title ?? "Weight & calories", { style: "title" }),
-        ui.text("Today: " + today.kcal + " kcal · " + last + " · " + all.length + " entries"),
-        ui.row({ gap: 1 }, [
-          ui.button("Week", { variant: ui$.range === 7 ? "primary" : "secondary", onPress: () => range(7) }),
-          ui.button("Month", { variant: ui$.range === 30 ? "primary" : "secondary", onPress: () => range(30) }),
-        ]),
-        ui.canvas({
-          key: "chart",
-          height: CHART,
-          alt: "Chart: weight as a line and daily calories as bars over the last " + ui$.range + " days",
-          onPointer,
-        }),
         ui.text(
-          picked
-            ? label(picked.day) + ": " + picked.kcal + " kcal" + (picked.kg === null ? "" : " · " + picked.kg + " kg")
-            : "Tap or drag the chart to see a day",
-          { style: "caption", tone: picked ? "accent" : "muted" },
+          "Today " +
+            today.kcal +
+            " kcal · " +
+            (weights.length ? weights[weights.length - 1].kg + " kg" : "no weight yet") +
+            " · " +
+            all.length +
+            " entries",
         ),
-        ui.row({ gap: 2 }, [
-          ui.slider({
-            value: ui$.kcal,
-            min: 50,
-            max: 1500,
-            step: 50,
-            onChange: (value) => ((ui$.kcal = value), show()),
-          }),
-          ui.button("Log " + ui$.kcal + " kcal", { onPress: () => log({ kcal: ui$.kcal }) }),
+        ui.row({ gap: 1 }, [
+          ui.input(s.kcal, { placeholder: "Calories (kcal)", onChange: (value) => ((s.kcal = value), view()) }),
+          ui.button("Log meal", { variant: "primary", onPress: () => log("kcal", s.kcal, 1, 9999, "kcal") }),
         ]),
-        ui.row({ gap: 2 }, [
-          ui.slider({ value: ui$.kg, min: 40, max: 150, step: 0.5, onChange: (value) => ((ui$.kg = value), show()) }),
-          ui.button("Log " + ui$.kg + " kg", { onPress: () => log({ kg: ui$.kg }) }),
+        ui.row({ gap: 1 }, [
+          ui.input(s.kg, { placeholder: "Weight (kg)", onChange: (value) => ((s.kg = value), view()) }),
+          ui.button("Log weight", { variant: "primary", onPress: () => log("kg", s.kg, 20, 400, "kg") }),
         ]),
+        s.note && ui.text(s.note, { style: "caption", tone: s.note.startsWith("Logged") ? "success" : "warning" }),
+        ui.select(
+          [
+            { value: "week", label: "Last 7 days" },
+            { value: "month", label: "Last 30 days" },
+          ],
+          {
+            value: s.range,
+            onChange: (value) => {
+              s.range = value
+              s.active = null
+              view()
+              intro()
+            },
+          },
+        ),
+        ui.canvas({ key: "chart", height: HEIGHT, alt: summary(list), onPointer }),
+        ui.text(
+          active
+            ? label(active.day) + ": " + active.kcal + " kcal" + (active.kg === null ? "" : " · " + active.kg + " kg")
+            : "Press or drag the chart to read a day",
+          { style: "caption", tone: active ? "default" : "muted" },
+        ),
         ui.divider(),
+        ui.text("Recent entries", { style: "caption", tone: "muted" }),
         all
           .slice(-5)
           .reverse()
           .map((entry) =>
-            ui.row({ key: entry.key, gap: 2 }, [
+            ui.row({ key: entry.key, gap: 1 }, [
               ui.text(
                 entry.at.slice(5, 16).replace("T", " ") + "  " + (entry.kcal ? entry.kcal + " kcal" : entry.kg + " kg"),
               ),
-              ui.button("Delete", { onPress: () => remove(entry.key) }),
+              ui.button("Delete", { variant: "secondary", onPress: () => remove(entry.key) }),
             ]),
           ),
       ]),
     )
+    paint()
   }
-  // The canvas's width comes from a display frame (the widget's width) until a pointer event gives the canvas's own.
-  const show = () => {
-    const days = history(entries(), ui$.range)
-    render(days)
-    widget.draw("chart", chart(days, ui$))
-  }
-  widget.on("storage", () => show())
-  widget.on("resumed", () => show())
-  render(history(entries(), ui$.range))
-  ui$.width = (await widget.frame()).width
-  show()
+  widget.on("storage", () => view())
+  widget.on("resumed", () => view())
+  view()
+  await intro()
 }
 
 // The last `count` UTC days up to today: each day's calories, and its last weight (null without one).
@@ -120,68 +154,173 @@ function history(entries, count) {
   return days
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 function label(day) {
   return MONTHS[Number(day.slice(5, 7)) - 1] + " " + Number(day.slice(8, 10))
 }
 
-function chart(days, ui$) {
+function chart(days, width, t, active) {
   const g = ui.draw()
-  const width = Math.max(ui$.width, PAD.left + PAD.right + days.length)
-  const plot = { x: PAD.left, y: PAD.top, w: width - PAD.left - PAD.right, h: CHART - PAD.top - PAD.bottom }
-  const slot = plot.w / days.length
-  const kcalMax = Math.max(500, ...days.map((day) => day.kcal))
+  const box = layout(days, width)
+  axes(g, box)
+  bars(g, box, days, t, active)
+  line(g, box, days, t, active)
+  legend(g, box)
+  if (active !== null && t >= INTRO) tooltip(g, box, days[active], active, width)
+  return g
+}
+
+// From chart.js: the plot area, the value ranges (calories on the left, weight on the right) and each day's slot.
+function layout(days, width) {
+  const count = days.length
+  const kcal = nice(0, Math.max(500, ...days.map((day) => day.kcal)))
   const weights = days.filter((day) => day.kg !== null).map((day) => day.kg)
-  const low = weights.length ? Math.floor(Math.min(...weights) - 1) : 70
-  const high = weights.length ? Math.ceil(Math.max(...weights) + 1) : 90
-  const kgY = (kg) => plot.y + plot.h - ((kg - low) / (high - low)) * plot.h
-  // Grid and axes: weight on the left, calories on the right.
-  for (let step = 0; step <= 2; step++) {
-    const y = plot.y + (plot.h * step) / 2
-    g.line(plot.x, y, plot.x + plot.w, y, { stroke: "border", width: 1 })
-    g.text(plot.x - 6, y + 4, String(Math.round(high - ((high - low) * step) / 2)), {
-      size: 10,
-      align: "right",
+  const kg = weights.length ? nice(Math.min(...weights) - 0.5, Math.max(...weights) + 0.5) : nice(70, 90)
+  const left = 12 + 7 * Math.max(...kcal.ticks.map((tick) => compact(tick).length))
+  const right = 12 + 7 * Math.max(...kg.ticks.map((tick) => compact(tick).length))
+  const plot = { x: left, y: 30, w: Math.max(1, width - left - right), h: Math.max(1, HEIGHT - 30 - 26) }
+  return { count, kcal, kg, plot, slot: plot.w / count, labels: days.map((day) => label(day.day)) }
+}
+
+// From chart.js: rounds the range out to 1, 2, 2.5 or 5 times a power of ten, with 3 to 5 gridlines.
+function nice(min, max) {
+  const span = max - min || Math.abs(max) || 1
+  const raw = span / 4
+  const power = Math.pow(10, Math.floor(Math.log10(raw)))
+  const step = power * ([1, 2, 2.5, 5, 10].find((factor) => factor * power >= raw) ?? 10)
+  const low = Math.floor(min / step) * step
+  const high = Math.max(low + step, Math.ceil(max / step) * step)
+  const ticks = []
+  for (let tick = low; tick <= high + step / 2; tick += step) ticks.push(Math.round(tick / step) * step)
+  return { low, high, ticks }
+}
+
+function y(box, range, value) {
+  return box.plot.y + box.plot.h * (1 - (value - range.low) / (range.high - range.low))
+}
+
+function x(box, index) {
+  return box.plot.x + box.slot * (index + 0.5)
+}
+
+function locate(box, px, py) {
+  if (
+    px < box.plot.x - 8 ||
+    px > box.plot.x + box.plot.w + 8 ||
+    py < box.plot.y - 20 ||
+    py > box.plot.y + box.plot.h + 8
+  )
+    return null
+  return Math.max(0, Math.min(box.count - 1, Math.floor((px - box.plot.x) / box.slot)))
+}
+
+function axes(g, box) {
+  const right = box.plot.x + box.plot.w
+  for (const tick of box.kcal.ticks) {
+    const at = y(box, box.kcal, tick)
+    g.line(box.plot.x, at, right, at, { stroke: "border", width: tick === 0 ? 1.5 : 1 })
+    g.text(box.plot.x - 8, at + 4, compact(tick), { size: 11, align: "right", color: "muted" })
+  }
+  for (const tick of box.kg.ticks)
+    g.text(right + 8, y(box, box.kg, tick) + 4, compact(tick), { size: 11, color: "muted" })
+  const widest = Math.max(...box.labels.map((text) => text.length))
+  const every = Math.max(1, Math.ceil((7 * widest + 12) / (box.plot.w / box.count)))
+  for (let index = box.count - 1; index >= 0; index -= every)
+    g.text(x(box, index), box.plot.y + box.plot.h + 18, box.labels[index], {
+      size: 11,
+      align: "center",
       color: "muted",
     })
-    g.text(plot.x + plot.w + 6, y + 4, String(Math.round(kcalMax - (kcalMax * step) / 2)), { size: 10, color: "muted" })
-  }
-  g.text(plot.x - 6, plot.y - 4, "kg", { size: 10, align: "right", color: "accent" })
-  g.text(plot.x + plot.w + 6, plot.y - 4, "kcal", { size: 10, color: "warning" })
-  // The picked day behind everything.
-  const picked = days.findIndex((day) => day.day === ui$.picked)
-  if (picked >= 0) g.rect(plot.x + picked * slot, plot.y, slot, plot.h, { fill: "surface" })
-  // Calories as bars.
+}
+
+// From chart.js: bars grow in one after another; the others dim while a day is read.
+function bars(g, box, days, t, active) {
+  const base = y(box, box.kcal, 0)
+  const w = Math.min(box.slot * 0.72, 28)
   days.forEach((day, index) => {
     if (day.kcal === 0) return
-    const h = (day.kcal / kcalMax) * plot.h
-    const inset = Math.min(slot * 0.2, 6)
-    g.rrect(plot.x + index * slot + inset, plot.y + plot.h - h, slot - inset * 2, h, 2, {
-      fill: index === picked ? "#f59e0bff" : "#f59e0b99",
-    })
+    const grow = ease((t - (0.2 * index) / Math.max(1, box.count - 1)) / (INTRO - 0.2))
+    if (grow <= 0) return
+    const top = base + (y(box, box.kcal, day.kcal) - base) * grow
+    const dim = active !== null && active !== index
+    if (dim) g.save().alpha(0.45)
+    g.rrect(x(box, index) - w / 2, top, w, Math.max(1, base - top), Math.min(4, w / 2), KCAL)
+    if (dim) g.restore()
   })
-  // Weight as a line through the days that have one.
-  const points = days.flatMap((day, index) => (day.kg === null ? [] : [[plot.x + (index + 0.5) * slot, kgY(day.kg)]]))
+}
+
+// From chart.js: the line draws in from the left through the days that have a weight.
+function line(g, box, days, t, active) {
+  const progress = ease(t / INTRO) * Math.max(1, box.count - 1)
+  if (active !== null) g.line(x(box, active), box.plot.y, x(box, active), box.plot.y + box.plot.h, "border")
+  const all = days.flatMap((day, index) => (day.kg === null ? [] : [[index, x(box, index), y(box, box.kg, day.kg)]]))
+  const points = all.filter((point) => point[0] <= progress).map((point) => [point[1], point[2]])
+  const next = all.find((point) => point[0] > progress)
+  const last = all.filter((point) => point[0] <= progress).pop()
+  if (last && next) {
+    const part = (progress - last[0]) / (next[0] - last[0])
+    points.push([last[1] + (next[1] - last[1]) * part, last[2] + (next[2] - last[2]) * part])
+  }
   if (points.length > 1)
     g.path(
       points.map((point, index) => [index === 0 ? "M" : "L", point[0], point[1]]),
-      { stroke: "accent", width: 2 },
+      { stroke: KG, width: 2.5, cap: "round" },
     )
-  points.forEach((point) => g.circle(point[0], point[1], 3, "accent"))
-  // Day labels: every day in a week, every fifth in a month.
-  const every = days.length > 7 ? 5 : 1
-  days.forEach((day, index) => {
-    if ((days.length - 1 - index) % every !== 0) return
-    g.text(plot.x + (index + 0.5) * slot, CHART - 8, days.length > 7 ? label(day.day) : label(day.day).split(" ")[1], {
-      size: 10,
-      align: "center",
-      color: index === picked ? "text" : "muted",
-    })
+  all.forEach((point) => {
+    if (point[0] > progress) return
+    const on = active === point[0]
+    g.circle(point[1], point[2], on ? 5.5 : 3, { fill: on ? KG : "bg", stroke: KG, width: 2 })
   })
-  if (picked >= 0)
-    g.line(plot.x + (picked + 0.5) * slot, plot.y, plot.x + (picked + 0.5) * slot, plot.y + plot.h, {
-      stroke: "text",
-      width: 1,
-    })
-  return g
+}
+
+// From chart.js.
+function legend(g, box) {
+  ;[
+    ["kcal", KCAL],
+    ["kg", KG],
+  ].reduce((left, [text, color]) => {
+    g.circle(left + 4, 12, 4, color)
+    g.text(left + 13, 16, text, { size: 12, color: "muted" })
+    return left + 30 + 7 * text.length
+  }, box.plot.x)
+}
+
+// From chart.js, with both of the day's values.
+function tooltip(g, box, day, index, width) {
+  const title = label(day.day)
+  const kcal = day.kcal + " kcal"
+  const kg = day.kg === null ? "no weight" : day.kg + " kg"
+  const w = 20 + 7 * Math.max(title.length, kcal.length, kg.length)
+  const left = Math.max(2, Math.min(width - w - 2, x(box, index) - w / 2))
+  const top = box.plot.y + 4
+  g.rrect(left, top, w, 62, 8, { fill: "surface", stroke: "border", width: 1 })
+  g.text(left + 10, top + 17, title, { size: 11, color: "muted" })
+  g.text(left + 10, top + 35, kcal, { size: 13, weight: 600, color: KCAL })
+  g.text(left + 10, top + 53, kg, { size: 13, weight: 600, color: KG })
+}
+
+function summary(days) {
+  return (
+    "Chart of the last " +
+    days.length +
+    " days. " +
+    days
+      .map((day) => label(day.day) + " " + day.kcal + " kcal" + (day.kg === null ? "" : " " + day.kg + " kg"))
+      .join(", ")
+  )
+}
+
+// From chart.js.
+function compact(value) {
+  const size = Math.abs(value)
+  const round = (number) => String(Math.round(number * 10) / 10)
+  if (size >= 1e9) return round(value / 1e9) + "B"
+  if (size >= 1e6) return round(value / 1e6) + "M"
+  if (size >= 1e4) return round(value / 1e3) + "k"
+  return String(Math.round(value * 100) / 100)
+}
+
+// From chart.js.
+function ease(p) {
+  const clamped = Math.max(0, Math.min(1, p))
+  return 1 - Math.pow(1 - clamped, 3)
 }
