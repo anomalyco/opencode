@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { SessionInboxInfo } from "@opencode/client/promise"
 import { extractPromptFromMessage } from "@/composer/prompt"
 import { blobDataUrl, setMediaBlobLoader } from "@/runtime/persistence/drafts"
-import { undoQueuedPrompt } from "./queue"
+import { editedPromptInput, undoQueuedPrompt } from "./queue"
 import { queuedPromptAttachments, queuedPromptRows, type SentEdit } from "./queue-machine"
 
 const queued = [
@@ -310,5 +310,84 @@ describe("queuedPromptAttachments", () => {
     } finally {
       setMediaBlobLoader("queue-test", undefined)
     }
+  })
+})
+
+describe("editedPromptInput", () => {
+  const display = "summarize data"
+  const reference = "Attached file: `/repo/confidential.csv`"
+  const review = "The user made the following comment regarding line 2 of /repo/app.ts: check the guard"
+  const attachment = { name: "confidential.csv", mime: "text/plain", path: "/repo/confidential.csv" }
+  const comments = [
+    {
+      path: "/repo/app.ts",
+      comment: "check the guard",
+      selection: { startLine: 2, startChar: 0, endLine: 2, endChar: 0 },
+      origin: "review",
+    },
+  ]
+  const item = {
+    ...queued[0],
+    payload: {
+      text: `${display}\n${reference}\n${review}`,
+      files: [
+        {
+          data: "",
+          mime: "text/plain",
+          source: { type: "uri" as const, uri: "file:///repo/app.ts?start=2&end=2" },
+          name: "app.ts",
+        },
+      ],
+      metadata: { displayText: display, comments, attachments: [attachment] },
+    },
+  } satisfies SessionInboxInfo
+  const editedText = "Use only public data"
+  const typed = [{ type: "text" as const, content: editedText, start: 0, end: editedText.length }]
+
+  test("drops a removed path attachment reference from the replacement text", async () => {
+    const result = await editedPromptInput("ses_1", "/repo", item, typed, editedText)
+
+    expect(result.text).toBe(`${editedText}\n${review}`)
+    expect(result.metadata).toMatchObject({ displayText: editedText, comments, attachments: [] })
+  })
+
+  test("keeps a retained path attachment reference exactly once", async () => {
+    const prompt = [
+      ...typed,
+      { type: "path" as const, id: "file_1", filename: "confidential.csv", mime: "text/plain", path: attachment.path },
+    ]
+    const result = await editedPromptInput("ses_1", "/repo", item, prompt, editedText)
+
+    expect(result.text).toBe(`${editedText}\n${reference}\n${review}`)
+    expect(result.text.split(reference)).toHaveLength(2)
+    expect(result.metadata).toMatchObject({ displayText: editedText, comments, attachments: [attachment] })
+  })
+
+  test("keeps a literal attachment-looking phrase typed by the user as ordinary text", async () => {
+    const text = `${editedText}; Attached file: \`/repo/user-typed.txt\``
+    const result = await editedPromptInput(
+      "ses_1",
+      "/repo",
+      item,
+      [{ type: "text" as const, content: text, start: 0, end: text.length }],
+      text,
+    )
+
+    expect(result.text).toBe(`${text}\n${review}`)
+  })
+
+  test("preserves an opaque suffix from another client", async () => {
+    const external = {
+      ...item,
+      payload: {
+        ...item.payload,
+        text: `${display}\n${reference}`,
+        metadata: { displayText: display, client: "external" },
+      },
+    } satisfies SessionInboxInfo
+    const result = await editedPromptInput("ses_1", "/repo", external, typed, editedText)
+
+    expect(result.text).toBe(`${editedText}\n${reference}`)
+    expect(result.metadata).toMatchObject({ client: "external", displayText: editedText })
   })
 })

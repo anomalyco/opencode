@@ -6,6 +6,8 @@ import type { ComposerStateTarget } from "@/composer/submission-state"
 import type { ImageAttachmentPart, Prompt } from "@/composer/state"
 import { clonePrompt, promptLength } from "@/composer/prompt-parts"
 import { buildPromptRequest } from "@/composer/request"
+import { commentContextItem, readPromptPresentation } from "@/composer/comment-note"
+import { contextItemKey } from "@/composer/schema"
 import { type BlobReference, blobDataUrl } from "@/runtime/persistence/drafts"
 import { pinPromptMedia } from "@/composer/media"
 import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
@@ -523,7 +525,7 @@ function storedFileUri(file: PromptAttachment) {
 // to the original's model-visible text survive. Ambient composer context (open
 // review comments) stays out: it belongs to the next fresh prompt, not to a
 // queued edit.
-async function editedPromptInput(
+export async function editedPromptInput(
   sessionID: string,
   directory: string,
   item: QueuedPrompt | undefined,
@@ -539,7 +541,26 @@ async function editedPromptInput(
   const request = buildPromptRequest({ prompt, context: [], images, text, sessionDirectory: directory })
   const payload = item?.payload
   const display = item ? queuedPromptText(item) : ""
-  const notes = payload && display && payload.text.startsWith(display) ? payload.text.slice(display.length) : ""
+  const presentation = payload ? readPromptPresentation(payload.metadata) : undefined
+  // The hidden suffix mixes review comments with generated path references. When the app owns the presentation,
+  // rebuild only the comment notes so a removed card leaves no reference and a retained card is not duplicated.
+  // An opaque suffix from another client has no presentation to rebuild from, so it is preserved verbatim.
+  const retained = presentation
+    ? buildPromptRequest({
+        prompt: [],
+        context: presentation.comments.map((comment) => {
+          const context = commentContextItem(comment)
+          return { ...context, key: contextItemKey(context) }
+        }),
+        images: [],
+        text: "",
+        sessionDirectory: directory,
+      }).text
+    : payload && display && payload.text.startsWith(display)
+      ? payload.text.slice(display.length)
+      : ""
+  // Generated notes follow the user's own text, so they keep the leading newline the original suffix had.
+  const notes = presentation && retained ? `\n${retained}` : retained
 
   const mention = (value: { start: number; end: number; text: string } | undefined) => {
     if (!value) return undefined
