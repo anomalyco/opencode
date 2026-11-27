@@ -169,14 +169,22 @@ export function make(input: Input): Connection {
   const recovering = <A, E extends Error>(
     client: McpClient.Connection,
     run: (client: McpClient.Connection) => Effect.Effect<A, E>,
-  ) =>
-    run(client).pipe(
+  ) => {
+    // A retry after reconnecting runs on the new client, so a refusal there must end that one.
+    const attempt = (target: McpClient.Connection) =>
+      run(target).pipe(
+        Effect.tapError((error) =>
+          tagged(error, "MCP.NeedsAuthError") ? refused(target, error.message) : Effect.void,
+        ),
+      )
+    return attempt(client).pipe(
       Effect.catchIf(
         (error) => tagged(error, "MCP.SessionExpiredError"),
-        (error) => recover(client).pipe(Effect.flatMap(() => (state.client ? run(state.client) : Effect.fail(error)))),
+        (error) =>
+          recover(client).pipe(Effect.flatMap(() => (state.client ? attempt(state.client) : Effect.fail(error)))),
       ),
-      Effect.tapError((error) => (tagged(error, "MCP.NeedsAuthError") ? refused(client, error.message) : Effect.void)),
     )
+  }
 
   const watch = (client: McpClient.Connection) => {
     const live = whenLive(client)

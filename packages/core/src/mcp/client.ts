@@ -527,9 +527,10 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     // A tool call that relists first can fail with the list's already mapped expiry.
     if (error instanceof SessionExpiredError) return error
     // The server refused the credential even after a refresh, or there is none it would take: only a new login helps.
+    // A 403 for more scope is left to fail the one request: servers ask for it per tool, and a new login asks for the
+    // scope of the first challenge, so ending the connection would only take the server's other tools down with it.
     if (
       error instanceof UnauthorizedError ||
-      error instanceof InsufficientScopeError ||
       (error instanceof SdkHttpError && error.code === SdkErrorCode.ClientHttpAuthentication)
     )
       return new NeedsAuthError({ server, message: describe(error) })

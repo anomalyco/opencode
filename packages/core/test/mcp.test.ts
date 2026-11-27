@@ -1192,37 +1192,44 @@ test("keeps the session when a method the server lacks answers 404 with method-n
   )
 })
 
+// A signed-in credential with no refresh token: a 401 can only end in a new login.
+const signedInLayer = (url: string) => {
+  const credential = (integrationID: Integration.ID) =>
+    new Credential.Info({
+      id: Credential.ID.make("cred_signed"),
+      integrationID,
+      label: "signed",
+      value: {
+        type: "oauth",
+        methodID: Integration.MethodID.make("signed"),
+        access: "signed-in",
+        refresh: "",
+        expires: Date.now() + 3_600_000,
+        metadata: { serverUrl: url, tokenType: "Bearer" },
+      },
+    })
+  return resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url }), undefined, undefined, {
+    credentials: {
+      list: (integrationID) => Effect.succeed([credential(integrationID)]),
+      get: () => Effect.succeed(credential(Integration.ID.make("unused"))),
+    },
+  })
+}
+
+const toolCall = async (request: Request) => {
+  const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
+  return isRecord(body) && body.method === "tools/call" && isRecord(body.params) ? body.params : undefined
+}
+
 test("reports needs_auth when a connected server refuses a tool call's credential (#53942)", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
         const refusing = { tools: false }
         const server = yield* resourceServer({
-          respond: async (request) => {
-            const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
-            if (!refusing.tools || !isRecord(body) || body.method !== "tools/call") return undefined
-            return new Response(null, { status: 401 })
-          },
+          respond: async (request) =>
+            refusing.tools && (await toolCall(request)) ? new Response(null, { status: 401 }) : undefined,
         })
-        // A signed-in credential with no refresh token: a 401 can only end in a new login.
-        const credential = (integrationID: Integration.ID) =>
-          new Credential.Info({
-            id: Credential.ID.make("cred_signed"),
-            integrationID,
-            label: "signed",
-            value: {
-              type: "oauth",
-              methodID: Integration.MethodID.make("signed"),
-              access: "signed-in",
-              refresh: "",
-              expires: Date.now() + 3_600_000,
-              metadata: { serverUrl: server.url, tokenType: "Bearer" },
-            },
-          })
-        const credentials: Partial<Credential.Interface> = {
-          list: (integrationID) => Effect.succeed([credential(integrationID)]),
-          get: () => Effect.succeed(credential(Integration.ID.make("unused"))),
-        }
         yield* Effect.gen(function* () {
           const service = yield* Mcp.Service
           yield* service.callTool({ server: "resources", name: "echo", args: { n: 1 } })
@@ -1237,13 +1244,72 @@ test("reports needs_auth when a connected server refuses a tool call's credentia
           // The refused connection is closed, so later calls don't reach the server.
           yield* service.callTool({ server: "resources", name: "echo", args: { n: 3 } }).pipe(Effect.flip)
           expect(server.state.toolCalls.map((call) => call.arguments)).toEqual([{ n: 1 }])
-        }).pipe(
-          Effect.provide(
-            resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url: server.url }), undefined, undefined, {
-              credentials,
-            }),
-          ),
-        )
+        }).pipe(Effect.provide(signedInLayer(server.url)))
+      }),
+    ),
+  )
+})
+
+test("reports needs_auth when the retry after a reconnect is refused", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const first: { session?: string } = {}
+        const server = yield* resourceServer({
+          // The first session's calls pass to the server, which forgets that session on restart; the next session's
+          // calls are refused.
+          respond: async (request) => {
+            const session = request.headers.get("mcp-session-id")
+            if (session) first.session ??= session
+            return session && session !== first.session && (await toolCall(request))
+              ? new Response(null, { status: 401 })
+              : undefined
+          },
+        })
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 1 } })
+          yield* Effect.promise(server.restart)
+
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 2 } }).pipe(Effect.flip)
+
+          expect(server.state.initializations).toBe(2)
+          expect((yield* service.servers()).find((entry) => entry.name === "resources")?.status).toMatchObject({
+            status: "needs_auth",
+          })
+        }).pipe(Effect.provide(signedInLayer(server.url)))
+      }),
+    ),
+  )
+})
+
+test("keeps the server connected when one tool asks for more scope", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({
+          respond: async (request) => {
+            const call = await toolCall(request)
+            if (!isRecord(call?.arguments) || call.arguments.n !== 2) return undefined
+            return new Response(null, {
+              status: 403,
+              headers: {
+                "WWW-Authenticate": `Bearer error="insufficient_scope", scope="admin", resource_metadata="${new URL(request.url).origin}/prm"`,
+              },
+            })
+          },
+        })
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          const error = yield* service.callTool({ server: "resources", name: "echo", args: { n: 2 } }).pipe(Effect.flip)
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 3 } })
+
+          expect(error).toBeInstanceOf(Mcp.ToolCallError)
+          expect((yield* service.servers()).find((entry) => entry.name === "resources")?.status).toMatchObject({
+            status: "connected",
+          })
+          expect(server.state.toolCalls.map((call) => call.arguments)).toEqual([{ n: 3 }])
+        }).pipe(Effect.provide(signedInLayer(server.url)))
       }),
     ),
   )
