@@ -1,9 +1,8 @@
 import { docsUrl } from "~/lib/docs"
 import { config } from "~/config"
 import type { Translate } from "~/i18n"
-import { joinSentences, rich, sentenceGap } from "~/i18n/rich"
+import { gap, joinSentences, rich, sentenceGap, stop } from "~/i18n/rich"
 import type { RichText } from "~/lib/markdown"
-import { gap, stop } from "~/lib/text"
 
 /**
  * The FAQ in the product pages' download section (lib/download-content.ts). A module of its own, so
