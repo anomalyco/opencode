@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::future::Future;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use futures_util::StreamExt;
@@ -20,6 +21,7 @@ use crate::client::{check, event_type, subscribe};
 use crate::config_option::{Change, Selection, available_commands, config_options};
 use crate::connection::{Connection, Responded};
 use crate::error::Failure;
+use crate::paths::fs_resolve;
 
 /// A session attached to this connection.
 #[derive(Debug)]
@@ -51,12 +53,31 @@ impl Attached {
         }
         previous
     }
+
+    /// Restores the field that `change` switches to its value in `base`.
+    fn restore_field(&self, base: &Selection, change: &Change) {
+        let mut selection = self.lock();
+        match change {
+            Change::Model(_) => selection.model = base.model.clone(),
+            Change::Mode(_) => selection.mode_id = base.mode_id.clone(),
+        }
+    }
 }
 
 struct Entry {
     attached: Arc<Attached>,
     scope: CancellationToken,
     selected: mpsc::UnboundedSender<Change>,
+    /// The selection the server last reported, which a switch to the same value leaves alone without an echo.
+    confirmed: Selection,
+    /// This adapter's switches whose echo has not arrived, oldest first.
+    pending: Vec<(u64, Change)>,
+}
+
+#[derive(Default)]
+struct McpState {
+    servers: HashMap<String, Value>,
+    registered: HashMap<String, Value>,
 }
 
 pub struct Sessions {
@@ -65,7 +86,8 @@ pub struct Sessions {
     catalogs: Arc<Catalogs>,
     entries: Mutex<HashMap<String, Entry>>,
     // Outlives entries so re-attaching does not re-add servers.
-    registered_mcp: Mutex<HashMap<String, HashMap<String, Value>>>,
+    mcp: Mutex<HashMap<String, McpState>>,
+    next_pending: AtomicU64,
     connected: watch::Receiver<bool>,
     scope: CancellationToken,
 }
@@ -79,7 +101,8 @@ impl Sessions {
             connection,
             catalogs,
             entries: Mutex::default(),
-            registered_mcp: Mutex::default(),
+            mcp: Mutex::default(),
+            next_pending: AtomicU64::new(0),
             connected,
             scope: scope.clone(),
         });
@@ -105,27 +128,79 @@ impl Sessions {
                 }
             };
             let data = event.get("data").unwrap_or(&Value::Null);
-            let change = match event_type(&event) {
+            match event_type(&event) {
                 "server.connected" => {
                     connected.send_replace(true);
-                    continue;
                 }
-                "session.model.selected" => data
-                    .get("model")
-                    .and_then(|model| serde_json::from_value::<ModelRef>(model.clone()).ok())
-                    .map(Change::Model),
+                "location.shutdown" => {
+                    let directory =
+                        event.get("location").and_then(|location| location.get("directory")).and_then(Value::as_str);
+                    self.shutdown(directory);
+                }
+                "session.renamed" => {
+                    let Some(session_id) = data.get("sessionID").and_then(Value::as_str) else { continue };
+                    let target = lock(&self.entries).get(session_id).map(|entry| entry.attached.id.clone());
+                    if let (Some(target), Some(title)) = (target, data.get("title").and_then(Value::as_str)) {
+                        let _ = self.connection.session_update(
+                            &target,
+                            &json!({ "sessionUpdate": "session_info_update", "title": title }),
+                        );
+                    }
+                }
+                "session.model.selected" => {
+                    let Some(session_id) = data.get("sessionID").and_then(Value::as_str) else { continue };
+                    let Some(model) =
+                        data.get("model").and_then(|model| serde_json::from_value::<ModelRef>(model.clone()).ok())
+                    else {
+                        continue;
+                    };
+                    self.echoed(session_id, Change::Model(model));
+                }
                 "session.agent.selected" => {
-                    data.get("agent").and_then(Value::as_str).map(|agent| Change::Mode(agent.to_owned()))
+                    let Some(session_id) = data.get("sessionID").and_then(Value::as_str) else { continue };
+                    let Some(agent) = data.get("agent").and_then(Value::as_str) else { continue };
+                    self.echoed(session_id, Change::Mode(agent.to_owned()));
                 }
-                _ => None,
-            };
-            let (Some(change), Some(session_id)) = (change, data.get("sessionID").and_then(Value::as_str)) else {
-                continue;
-            };
-            if let Some(entry) = lock(&self.entries).get(session_id) {
-                let _ = entry.selected.send(change);
+                _ => {}
             }
         }
+    }
+
+    // A Location shutdown drops the MCP servers added to it, so they are added again before the next prompt.
+    fn shutdown(&self, directory: Option<&str>) {
+        let target = directory.map(fs_resolve);
+        let matching: Vec<String> = lock(&self.entries)
+            .iter()
+            .filter(|(_, entry)| target.as_deref().is_none_or(|target| fs_resolve(&entry.attached.cwd) == target))
+            .map(|(session_id, _)| session_id.clone())
+            .collect();
+        let mut mcp = lock(&self.mcp);
+        for session_id in matching {
+            if let Some(state) = mcp.get_mut(&session_id) {
+                state.registered.clear();
+            }
+        }
+    }
+
+    // Echoes arrive in switch order, so a matched echo also settles this adapter's earlier switches of the same kind,
+    // and while one of them is in flight it, not the echo, decides the selection.
+    fn echoed(&self, session_id: &str, change: Change) {
+        let mut entries = lock(&self.entries);
+        let Some(entry) = entries.get_mut(session_id) else { return };
+        entry.confirmed = entry.confirmed.apply(&change);
+        if let Some(index) = entry.pending.iter().position(|(_, item)| same_change(item, &change)) {
+            let mut position = 0;
+            entry.pending.retain(|(_, item)| {
+                let keep = !(position <= index && same_kind(item, &change));
+                position += 1;
+                keep
+            });
+            return;
+        }
+        if entry.pending.iter().any(|(_, item)| same_kind(item, &change)) {
+            return;
+        }
+        let _ = entry.selected.send(change);
     }
 
     pub async fn attach(
@@ -138,16 +213,22 @@ impl Sessions {
         let mut connected = self.connected.clone();
         let _ = connected.wait_for(|connected| *connected).await;
         let current = self.catalogs.get(cwd).await?;
-        let attached = Arc::new(Attached::new(
-            &session.id.0,
-            cwd,
-            Selection { model: session.model.clone(), mode_id: session.agent.as_ref().map(|agent| agent.0.clone()) },
-        ));
+        let initial =
+            Selection { model: session.model.clone(), mode_id: session.agent.as_ref().map(|agent| agent.0.clone()) };
+        let attached = Arc::new(Attached::new(&session.id.0, cwd, initial.clone()));
         let (selected, mut selections) = mpsc::unbounded_channel();
         let scope = self.scope.child_token();
         // Swap at once so concurrent attaches of one ID cannot both keep a scope.
-        let replaced = lock(&self.entries)
-            .insert(attached.id.clone(), Entry { attached: attached.clone(), scope: scope.clone(), selected });
+        let replaced = lock(&self.entries).insert(
+            attached.id.clone(),
+            Entry {
+                attached: attached.clone(),
+                scope: scope.clone(),
+                selected,
+                confirmed: initial,
+                pending: Vec::new(),
+            },
+        );
         if let Some(replaced) = replaced {
             replaced.scope.cancel();
         }
@@ -232,20 +313,23 @@ impl Sessions {
 
     async fn register_mcp(&self, attached: &Attached, servers: &[Value]) -> Result<(), Failure> {
         let additions: Vec<(String, Value)> = {
-            let mut registered = lock(&self.registered_mcp);
-            let registered = registered.entry(attached.id.clone()).or_default();
-            servers
+            let mut mcp = lock(&self.mcp);
+            let state = mcp.entry(attached.id.clone()).or_default();
+            for server in servers {
+                if let Some(name) = server.get("name").and_then(Value::as_str) {
+                    state.servers.insert(name.to_owned(), mcp_config(server));
+                }
+            }
+            let pending: Vec<(String, Value)> = state
+                .servers
                 .iter()
-                .filter_map(|server| {
-                    let name = server.get("name").and_then(Value::as_str)?.to_owned();
-                    let config = mcp_config(server);
-                    if registered.get(&name) == Some(&config) {
-                        return None;
-                    }
-                    registered.insert(name.clone(), config.clone());
-                    Some((name, config))
-                })
-                .collect()
+                .filter(|(name, config)| state.registered.get(*name) != Some(*config))
+                .map(|(name, config)| (name.clone(), config.clone()))
+                .collect();
+            for (name, config) in &pending {
+                state.registered.insert(name.clone(), config.clone());
+            }
+            pending
         };
         let results = futures_util::future::join_all(additions.into_iter().map(|(name, config)| {
             let client = self.client.clone();
@@ -267,13 +351,21 @@ impl Sessions {
         for result in results {
             let Ok((name, result)) = result else { continue };
             if let Err(error) = result {
-                if let Some(registered) = lock(&self.registered_mcp).get_mut(&attached.id) {
-                    registered.remove(&name);
+                if let Some(state) = lock(&self.mcp).get_mut(&attached.id) {
+                    state.registered.remove(&name);
                 }
                 failure.get_or_insert(error);
             }
         }
         failure.map_or(Ok(()), Err)
+    }
+
+    /// Adds the session's MCP servers again after its Location was shut down, which drops them.
+    pub async fn restore_mcp(&self, attached: &Attached) -> Result<(), Failure> {
+        if lock(&self.mcp).contains_key(&attached.id) {
+            self.register_mcp(attached, &[]).await?;
+        }
+        Ok(())
     }
 
     fn remove(&self, session_id: &str, attached: &Arc<Attached>) {
@@ -285,7 +377,7 @@ impl Sessions {
             }
         };
         if let Some(entry) = removed {
-            lock(&self.registered_mcp).remove(session_id);
+            lock(&self.mcp).remove(session_id);
             entry.scope.cancel();
         }
     }
@@ -328,18 +420,86 @@ impl Sessions {
         Ok(())
     }
 
-    // Updates the selection before switching, so the echoed event changes nothing.
-    pub async fn select(&self, attached: &Attached, change: Change) -> Result<(), Failure> {
-        attached.update(Some(&change));
+    // Updates the selection before switching so the echoed event is a no-op, and restores it if the switch fails.
+    pub async fn select(&self, attached: &Arc<Attached>, change: Change) -> Result<(), Failure> {
+        // The server publishes nothing for a switch to its current value, so only a real change waits for an echo.
+        let tracked = {
+            let mut entries = lock(&self.entries);
+            entries.get_mut(&attached.id).filter(|entry| Arc::ptr_eq(&entry.attached, attached)).and_then(|entry| {
+                if holds(&entry.confirmed, &change) {
+                    return None;
+                }
+                let id = self.next_pending.fetch_add(1, Ordering::Relaxed);
+                entry.pending.push((id, change.clone()));
+                Some(id)
+            })
+        };
+        let previous = attached.update(Some(&change));
         let session_id = SessionID(attached.id.clone());
-        check(match change {
+        let result = check(match &change {
             Change::Model(model) => {
-                self.client.session_switch_model(&SessionSwitchModelInput { session_id, model }).await
+                self.client.session_switch_model(&SessionSwitchModelInput { session_id, model: model.clone() }).await
             }
             Change::Mode(agent) => {
-                self.client.session_switch_agent(&SessionSwitchAgentInput { session_id, agent: AgentID(agent) }).await
+                self.client
+                    .session_switch_agent(&SessionSwitchAgentInput { session_id, agent: AgentID(agent.clone()) })
+                    .await
             }
-        })
+        });
+        if let Err(error) = result {
+            let mut entries = lock(&self.entries);
+            let mut entry = entries.get_mut(&attached.id).filter(|entry| Arc::ptr_eq(&entry.attached, attached));
+            if let (Some(entry), Some(id)) = (entry.as_deref_mut(), tracked) {
+                entry.pending.retain(|(pending, _)| *pending != id);
+            }
+            let latest = entry
+                .as_ref()
+                .and_then(|entry| entry.pending.iter().rev().find(|(_, item)| same_kind(item, &change)))
+                .map(|(_, item)| item.clone());
+            match latest {
+                Some(latest) => {
+                    attached.update(Some(&latest));
+                }
+                None => {
+                    let base = entry.as_ref().map_or(&previous, |entry| &entry.confirmed);
+                    attached.restore_field(base, &change);
+                }
+            }
+            return Err(error);
+        }
+        Ok(())
+    }
+}
+
+fn same_kind(a: &Change, b: &Change) -> bool {
+    matches!((a, b), (Change::Model(_), Change::Model(_)) | (Change::Mode(_), Change::Mode(_)))
+}
+
+fn same_change(a: &Change, b: &Change) -> bool {
+    match (a, b) {
+        (Change::Model(a), Change::Model(b)) => same_model(Some(a), Some(b)),
+        (Change::Mode(a), Change::Mode(b)) => a == b,
+        _ => false,
+    }
+}
+
+// Core treats a missing variant as the default one.
+fn same_model(a: Option<&ModelRef>, b: Option<&ModelRef>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => {
+            a.provider_id == b.provider_id
+                && a.id == b.id
+                && a.variant.as_deref().unwrap_or("default") == b.variant.as_deref().unwrap_or("default")
+        }
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+fn holds(selection: &Selection, change: &Change) -> bool {
+    match change {
+        Change::Model(model) => same_model(selection.model.as_ref(), Some(model)),
+        Change::Mode(mode) => selection.mode_id.as_deref() == Some(mode.as_str()),
     }
 }
 

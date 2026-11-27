@@ -49,10 +49,13 @@ export { Compatibility, MaxTokensField, MediaInput, ReasoningField }
 export const Family = Schema.String.pipe(Schema.brand("Model.Family"))
 export type Family = typeof Family.Type
 
-/** What a model produces, from models.dev. Open-ended: new types keep being added. Only chat models are offered for sessions; an unset type means chat. */
-export type Type = "chat" | "decision" | "image" | "video" | (string & {})
+/**
+ * What a model produces, from models.dev. Open-ended: new types keep being added. Only chat models are offered for
+ * sessions; an unset type means chat. Realtime models that answer in speech are offered as voice models.
+ */
+export type Type = "chat" | "decision" | "image" | "video" | "realtime" | "embedding" | "transcription" | (string & {})
 export const Type: Schema.Codec<Type> = Schema.Union([
-  Schema.Literals(["chat", "decision", "image", "video"]),
+  Schema.Literals(["chat", "decision", "image", "video", "realtime", "embedding", "transcription"]),
   Schema.String,
 ]).annotate({ identifier: "Model.Type" })
 

@@ -50,7 +50,11 @@ pub fn config_options(catalog: &Catalog, selection: &Selection) -> Vec<Value> {
             .iter()
             .map(|item| json!({
                 "value": advertised(&item.provider_id.0, &item.id),
-                "name": format!("{}/{}", item.provider_id.0, item.name),
+                "name": format!(
+                    "{} / {}",
+                    catalog.provider_names.get(&item.provider_id).map_or(item.provider_id.0.as_str(), String::as_str),
+                    item.name,
+                ),
             }))
             .collect::<Vec<_>>(),
     })];
@@ -105,6 +109,12 @@ pub fn available_commands(catalog: &Catalog) -> Vec<Value> {
         .chain(
             BUILTIN_COMMANDS.iter().map(|(name, description, _)| json!({ "name": name, "description": description })),
         )
+        .chain(catalog.skills.iter().map(|skill| {
+            json!({
+                "name": skill.id.0,
+                "description": skill.description.clone().unwrap_or_default(),
+            })
+        }))
         .collect()
 }
 

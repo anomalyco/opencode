@@ -304,6 +304,15 @@ import type {
   ExperimentalPushSessionRemoveOutput,
   ExperimentalPushSettingsSetInput,
   ExperimentalPushSettingsSetOutput,
+  ExperimentalSpaceWriteInput,
+  ExperimentalSpaceWriteOutput,
+  ExperimentalSpaceSyncInput,
+  ExperimentalSpaceSyncOutput,
+  ExperimentalSpaceSubscribeInput,
+  ExperimentalSpaceSubscribeOutput,
+  ExperimentalSpaceUnsubscribeInput,
+  ExperimentalSpaceUnsubscribeOutput,
+  ExperimentalSpaceResetOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1980,6 +1989,67 @@ export function make(options: ClientOptions) {
               requestOptions,
             ).then((value) => value.data),
         },
+      },
+      space: {
+        write: (input: ExperimentalSpaceWriteInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSpaceWriteOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/space/write`,
+              body: { changes: input["changes"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        sync: (input: ExperimentalSpaceSyncInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSpaceSyncOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/space/sync`,
+              body: { spaces: input["spaces"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        subscribe: (input: ExperimentalSpaceSubscribeInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSpaceSubscribeOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/space/subscribe`,
+              body: { stream: input["stream"], spaces: input["spaces"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        unsubscribe: (input: ExperimentalSpaceUnsubscribeInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSpaceUnsubscribeOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/space/unsubscribe`,
+              body: { stream: input["stream"], spaces: input["spaces"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        reset: (requestOptions?: RequestOptions) =>
+          request<ExperimentalSpaceResetOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/space/reset`,
+              successStatus: 204,
+              declaredStatuses: [400, 401],
+              empty: true,
+            },
+            requestOptions,
+          ),
       },
       migration: {
         v1: {

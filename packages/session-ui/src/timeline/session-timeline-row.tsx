@@ -50,15 +50,18 @@ import {
   fileRuns,
   runDisclosureKey,
   ScriptChanges,
+  ScriptOutputProvider,
   taskAgentName,
   ToolRegistry,
   type ContextGroupPart,
+  type ScriptOutputPlacement,
 } from "../tools/tool-renderer"
 import { GenericTool } from "../components/basic-tool"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
 import type { TimelineDetail } from "./detail"
 import { scriptFileFact, type FileFact } from "./facts"
+import { scriptOutputLayout } from "./script-output"
 import { diffOpens, placeContent } from "./place"
 import { userMessageRuns, userRunSpring } from "./user-runs"
 import { attached } from "../components/message-file"
@@ -806,8 +809,14 @@ export function createSessionTimelineRowRenderer(input: {
       classList={{
         "min-w-0 w-full max-w-full": true,
         "md:max-w-session md:mx-auto": input.centered?.(),
-        "pt-2": Predicate.isTagged(props.row, "AssistantPart") && props.row.spacing === "tool",
-        "pt-4": Predicate.isTagged(props.row, "AssistantPart") && props.row.spacing === "content",
+        // Blocks stand a step further apart than a script stands from its own changes.
+        "pt-2":
+          Predicate.isTagged(props.row, "AssistantPart") &&
+          props.row.spacing === "tool" &&
+          TimelineRow.scriptChanges(props.row),
+        "pt-4":
+          Predicate.isTagged(props.row, "AssistantPart") &&
+          (props.row.spacing === "content" || (props.row.spacing === "tool" && !TimelineRow.scriptChanges(props.row))),
         "pt-6": Predicate.isTagged(props.row, "Error"),
       }}
     >
@@ -1548,11 +1557,23 @@ export function createSessionTimelineRowRenderer(input: {
     )
   }
 
+  // Where each script's Output row goes, from the rows: after its changes when they are drawn right after it.
+  const scriptOutput = createMemo(() =>
+    scriptOutputLayout(input.projection.rows(), input.projection.messageByID(), data.flag("full_codemode")),
+  )
+
+  const scriptPlacement: ScriptOutputPlacement = {
+    afterChanges: (partID) => scriptOutput().afterChanges.has(partID),
+    outputAfter: (fileID) => scriptOutput().outputAfter.get(fileID),
+  }
+
   function Row(props: { row: Accessor<TimelineRow.TimelineRow>; onSizeChange?: () => void }) {
     return (
-      <Show when={TimelineRow.key(props.row())} keyed>
-        {(_key) => render(props.row, props.onSizeChange)}
-      </Show>
+      <ScriptOutputProvider value={scriptPlacement}>
+        <Show when={TimelineRow.key(props.row())} keyed>
+          {(_key) => render(props.row, props.onSizeChange)}
+        </Show>
+      </ScriptOutputProvider>
     )
   }
 

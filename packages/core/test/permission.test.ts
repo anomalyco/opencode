@@ -650,9 +650,18 @@ describe("Permission", () => {
       const { service, request } = yield* waitForRequest({
         action: "glob",
         resources: ["/project"],
-        metadata: { root: "/project", path: undefined, hidden: undefined, limit: undefined },
+        metadata: {
+          root: "/project",
+          path: undefined,
+          hidden: undefined,
+          limit: undefined,
+          trigger: { type: "at", at: "2026-11-25T12:00:00.000Z", tz: undefined },
+        },
       })
-      expect(request.metadata).toStrictEqual({ root: "/project" })
+      expect(request.metadata).toStrictEqual({
+        root: "/project",
+        trigger: { type: "at", at: "2026-11-25T12:00:00.000Z" },
+      })
       expect(yield* service.forSession(request.sessionID)).toEqual([request])
       // HttpApi encodes JSON success bodies through Schema.toCodecJson, which rejects undefined values in Unknown.
       const encode = Schema.encodeEffect(Schema.toCodecJson(Schema.Struct({ data: Schema.Array(Permission.Request) })))
@@ -663,7 +672,10 @@ describe("Permission", () => {
             sessionID: request.sessionID,
             action: "glob",
             resources: ["/project"],
-            metadata: { root: "/project" },
+            metadata: {
+              root: "/project",
+              trigger: { type: "at", at: "2026-11-25T12:00:00.000Z" },
+            },
           },
         ],
       })

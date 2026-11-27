@@ -31,7 +31,10 @@ export function configOptions(catalog: Catalog, selection: Selection): SessionCo
       currentValue: advertisedModel(model),
       options: catalog.models
         .toSorted((a, b) => Order.String(a.providerID, b.providerID) || a.name.localeCompare(b.name))
-        .map((item) => ({ value: advertisedModel(item), name: `${item.providerID}/${item.name}` })),
+        .map((item) => ({
+          value: advertisedModel(item),
+          name: `${catalog.providerNames.get(item.providerID) ?? item.providerID} / ${item.name}`,
+        })),
     },
     ...(variants.length > 0
       ? [
@@ -71,6 +74,7 @@ export function availableCommands(catalog: Catalog) {
   return [
     ...catalog.commands.map((command) => ({ name: command.name, description: command.description ?? "" })),
     ...Array.from(builtinCommands, ([name, command]) => ({ name, description: command.description })),
+    ...catalog.skills.map((skill) => ({ name: skill.id, description: skill.description ?? "" })),
   ]
 }
 

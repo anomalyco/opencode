@@ -24,8 +24,7 @@ export const ensureMachineClient = Effect.fn("cli.machine.client")(function* () 
       new Error("--standalone starts a server for this command only; a machine needs one that keeps running."),
     )
   const serverFlag = yield* Effect.serviceOption(Server).pipe(Effect.map(Option.flatten))
-  const config = yield* ServiceConfig.read()
-  if (Option.isNone(serverFlag) && config.disabled === true)
+  if (Option.isNone(serverFlag) && (yield* ServiceConfig.read()).disabled === true)
     return yield* Effect.fail(
       new Error("Managing machines requires the background service; run `opencode service unset disabled` first."),
     )

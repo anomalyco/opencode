@@ -92,6 +92,7 @@ export const protocol = Protocol.make({
     from: fromRequest,
   },
   stream: ResponsesHostedTools.stream(adapter, HOSTED_TOOLS),
+  supportsEffortUpdates: OpenResponses.protocol.supportsEffortUpdates,
 })
 
 const compactFlat = ResponsesCompaction.make(adapter, (request) =>

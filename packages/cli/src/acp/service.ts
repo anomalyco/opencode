@@ -1,4 +1,5 @@
 import type { OpenCodeClient } from "@opencode/client/effect"
+import { Project } from "@opencode/schema/project"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -36,6 +37,7 @@ import type {
 import { OPENCODE_VERSION } from "../version"
 import { ACPCapabilities, type Capabilities } from "./capabilities"
 import type { ACPCatalog } from "./catalog"
+import { ACPChild } from "./child"
 import { ACPClient } from "./client"
 import { configOptions, resolveChange } from "./config-option"
 import type { ACPConnection } from "./connection"
@@ -98,9 +100,17 @@ export function make(input: {
   const getSession = Effect.fnUntraced(function* (sessionId: string, cwd: string) {
     const sessionID = yield* ACPClient.decodeSessionID(sessionId)
     const session = yield* input.client.session.get({ sessionID }).pipe(Effect.catch(ACPClient.classify))
-    if (FSUtil.resolve(cwd) !== FSUtil.resolve(session.location.directory))
-      return yield* new ACPError.SessionDirectoryMismatchError({ sessionId, cwd })
-    return session
+    if (FSUtil.resolve(cwd) === FSUtil.resolve(session.location.directory)) return session
+    // A session moved into a worktree keeps the client's original cwd, which names the same project.
+    const location = yield* input.client.location
+      .get({ location: { directory: AbsolutePath.make(cwd) } })
+      .pipe(Effect.catch(ACPClient.classify))
+    if (location.project.id !== Project.ID.global && location.project.id === session.projectID) return session
+    return yield* new ACPError.SessionDirectoryMismatchError({
+      sessionId,
+      cwd,
+      directory: session.location.directory,
+    })
   })
 
   // Clients often open a session and close it without prompting; closing removes those instead of keeping an empty session.
@@ -201,6 +211,17 @@ export function make(input: {
               time: { created: DateTime.toEpochMillis(session.time.created) },
             }),
             updatedAt: DateTime.formatIso(session.time.updated),
+            ...(session.parentID
+              ? {
+                  _meta: {
+                    [ACPChild.MetaKey]: {
+                      id: session.id,
+                      parentID: session.parentID,
+                      ...(session.title ? { title: session.title } : {}),
+                    },
+                  },
+                }
+              : {}),
           }
         }),
         ...(page.cursor.next ? { nextCursor: page.cursor.next } : {}),

@@ -77,19 +77,7 @@ fn resolve(flavor: Flavor, root: &Path, input: &str) -> PathBuf {
 
 /// `FSUtil.mimeType`: `mime-types`' `lookup`, else `application/octet-stream`.
 pub fn mime_type(path: &str) -> &'static str {
-    lookup(Flavor::NATIVE, path).unwrap_or("application/octet-stream")
-}
-
-// `extname("x." + path)`: the extension of the last segment, unless its only dot leads.
-fn lookup(flavor: Flavor, path: &str) -> Option<&'static str> {
-    let base = format!("x.{path}");
-    let base = flavor.basename(&base);
-    let dot = base.rfind('.').filter(|at| *at > 0)?;
-    let extension = base[dot + 1..].to_lowercase();
-    super::mime::TYPES
-        .binary_search_by(|(key, _)| (*key).cmp(extension.as_str()))
-        .ok()
-        .map(|index| super::mime::TYPES[index].1)
+    opencode_util::mime::mime_type(path)
 }
 
 fn is_binary(bytes: &[u8]) -> bool {
@@ -191,7 +179,7 @@ mod tests {
         let w = Flavor::Windows;
         assert_eq!(resolve(w, Path::new("C:\\w\\x"), "../a/./b.txt"), Path::new("C:\\w\\a\\b.txt"));
         assert_eq!(resolve(w, Path::new("C:\\w"), "D:/abs\\c"), Path::new("D:\\abs\\c"));
-        assert_eq!(lookup(w, "C:\\a.b\\Makefile"), None);
-        assert_eq!(lookup(w, "C:\\a\\b.png"), Some("image/png"));
+        assert_eq!(opencode_util::mime::lookup(w, "C:\\a.b\\Makefile"), None);
+        assert_eq!(opencode_util::mime::lookup(w, "C:\\a\\b.png"), Some("image/png"));
     }
 }

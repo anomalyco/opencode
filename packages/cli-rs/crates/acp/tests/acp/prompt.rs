@@ -7,9 +7,9 @@ use tokio_util::sync::CancellationToken;
 
 use crate::wire::{
     Hook, PromptCall, Wire, WireOptions, assert_matches, delivered, durable_event, ephemeral_event, events, failed,
-    file_diff, interrupted, lock, make_session, reasoning_delta, review_command, start_session, start_wire, step_ended,
-    succeeded, text_delta, tokens, tool_called, tool_failed, tool_progress, tool_started, tool_succeeded, trimmed,
-    turn, usage,
+    file_diff, interrupted, json_response, lock, make_session, reasoning_delta, review_command, start_session,
+    start_wire, step_ended, succeeded, text_delta, tokens, tool_called, tool_failed, tool_progress, tool_started,
+    tool_succeeded, trimmed, turn, usage,
 };
 
 fn lost() -> Value {
@@ -304,7 +304,7 @@ async fn attaches_readable_file_links_and_references_unreadable_ones_in_place() 
     )
     .await
     .unwrap();
-    // A line fragment names the line, a resource without a MIME type or a user-only text is left out, as is audio.
+    // A line fragment names the line, a resource without a MIME type infers one, and user-only text or audio is left out.
     assert_matches(
         &acp.server.state().submissions[2],
         &json!({
@@ -312,11 +312,116 @@ async fn attaches_readable_file_links_and_references_unreadable_ones_in_place() 
             "text": "[/src/a.ts:12]\nbody\n[untitled:notes]\nnotes\n[not a uri]\nraw\nhttps://example.com/a",
             "files": [
                 { "uri": "data:application/octet-stream;base64,AAE=", "name": "a.bin" },
+                { "uri": "data:application/octet-stream;base64,AAE=", "name": "b.bin" },
                 { "uri": file, "name": "notes.md" },
                 { "uri": "data:image/png;base64,iVBO", "name": "image" },
             ],
         }),
     );
+}
+
+#[tokio::test]
+async fn reports_a_slash_commands_own_failure_message() {
+    let acp = start_session(
+        WireOptions {
+            fetch: Some(Arc::new(|_, request| {
+                let path = request["path"].as_str().unwrap_or_default();
+                if path.starts_with("/api/session/") && path.ends_with("/command") {
+                    return Some(Box::pin(async {
+                        json_response(
+                            500,
+                            json!({
+                                "_tag": "CommandExecutionError",
+                                "command": "review",
+                                "message": "Usage: /review <target>",
+                            }),
+                        )
+                    }));
+                }
+                None
+            })),
+            ..WireOptions::default()
+        },
+        json!({}),
+    )
+    .await;
+    let error = acp.prompt(&acp.session_id, "/review").await.unwrap_err();
+    assert_eq!(
+        error.json(),
+        json!({
+            "code": -32603,
+            "message": "Internal error: Usage: /review <target>",
+            "data": { "service": "command", "errorName": "CommandExecutionError" },
+        })
+    );
+}
+
+#[tokio::test]
+async fn offers_skills_as_slash_commands_and_attaches_the_skill() {
+    let acp = start_wire(WireOptions::default()).await;
+    acp.server.state().skills = vec![
+        json!({ "id": "aws", "name": "aws", "description": "AWS observability", "path": "/skills/aws/SKILL.md", "content": "" }),
+        json!({ "id": "review", "name": "review", "path": "/skills/review/SKILL.md", "content": "" }),
+    ];
+    acp.initialize(json!({})).await;
+    let session = acp.new_session("/workspace", json!([])).await.unwrap();
+    let session_id = session["sessionId"].as_str().unwrap().to_owned();
+
+    acp.prompt(&session_id, "/aws check the logs").await.unwrap();
+
+    let commands =
+        acp.wait_for_update("commands", |item| item["update"]["sessionUpdate"] == "available_commands_update").await;
+    assert_eq!(
+        commands["update"],
+        json!({
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": [
+                { "name": "review", "description": "Review changes" },
+                { "name": "compact", "description": "Compact the session" },
+                { "name": "aws", "description": "AWS observability" },
+            ],
+        })
+    );
+    assert_matches(
+        &acp.server.state().prompts()[0],
+        &json!({ "text": "/aws check the logs", "skills": [{ "id": "aws" }] }),
+    );
+}
+
+#[tokio::test]
+async fn reports_the_cost_of_a_session_and_its_subagents() {
+    let acp = start_session(
+        WireOptions {
+            on_prompt: Some(events(|call| {
+                turn(&call.session_id, &call.id, vec![step_ended(&call.session_id, "msg_assistant", "stop", tokens(1))])
+            })),
+            ..WireOptions::default()
+        },
+        json!({}),
+    )
+    .await;
+    {
+        let mut state = acp.server.state();
+        let mut root = make_session(&acp.session_id, "/workspace");
+        root["cost"] = json!(4);
+        state.sessions.insert(acp.session_id.clone(), root);
+        let mut child = make_session("ses_child", "/workspace");
+        child["cost"] = json!(100);
+        child["parentID"] = json!(acp.session_id);
+        state.sessions.insert("ses_child".to_owned(), child);
+        let mut grandchild = make_session("ses_grandchild", "/workspace");
+        grandchild["cost"] = json!(0.5);
+        grandchild["parentID"] = json!("ses_child");
+        state.sessions.insert("ses_grandchild".to_owned(), grandchild);
+        let mut other = make_session("ses_other", "/workspace");
+        other["cost"] = json!(1000);
+        state.sessions.insert("ses_other".to_owned(), other);
+    }
+
+    acp.prompt(&acp.session_id, "delegate").await.unwrap();
+
+    let usage = acp.wait_for_update("usage", |item| item["update"]["sessionUpdate"] == "usage_update").await;
+    assert_matches(&usage["update"], &json!({ "cost": { "amount": 104.5, "currency": "USD" } }));
 }
 
 #[tokio::test]
@@ -342,6 +447,47 @@ async fn maps_failures_to_acp_errors() {
             "another execution failure",
             |session| failed(session, json!({ "type": "provider.rate-limit", "message": "slow down" })),
             json!({ "code": -32603, "message": "Internal error: slow down" }),
+        ),
+        (
+            "an execution failure with a provider status and retry delay",
+            |session| {
+                failed(
+                    session,
+                    json!({
+                        "type": "provider.rate-limit",
+                        "message": "Rate limit reached",
+                        "status": 429,
+                        "retryAfterMs": 60_000,
+                    }),
+                )
+            },
+            json!({
+                "code": -32603,
+                "message": "Internal error: Rate limit reached",
+                "data": {
+                    "service": "session",
+                    "errorName": "provider.rate-limit",
+                    "status": 429,
+                    "retryAfterMs": 60_000,
+                },
+            }),
+        ),
+        (
+            "a step failure with a provider status",
+            |session| {
+                durable_event(
+                    "session.step.failed",
+                    json!({
+                        "sessionID": session,
+                        "assistantMessageID": "msg_auth",
+                        "error": { "type": "provider.unavailable", "message": "Overloaded", "status": 503 },
+                    }),
+                )
+            },
+            json!({
+                "code": -32603,
+                "data": { "service": "session", "errorName": "provider.unavailable", "status": 503 },
+            }),
         ),
     ];
     for (name, failure, expected) in rows {

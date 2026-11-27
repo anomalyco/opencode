@@ -342,6 +342,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       history.future = []
     })
     dialog?.showModal()
+    // The dialog takes the focus itself, so no control shows a focus ring (and Close its tooltip) until the keyboard moves.
+    dialog?.focus()
     void loadShareFonts().then(() => setReady(true))
   })
 
@@ -636,6 +638,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   return (
     <dialog
       ref={dialog}
+      tabIndex={-1}
       data-component="share-editor"
       data-customize={customizing() ? "" : undefined}
       style={
@@ -700,23 +703,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   <path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" />
                 </svg>
               </button>
-              {/* Phones only: the settings live in a sheet, opened from here. */}
-              <button
-                type="button"
-                data-slot="sheet-open"
-                aria-expanded={sheet() ? "true" : "false"}
-                aria-controls="share-settings"
-                onClick={() => setSheet(true)}
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                  <g fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M2 4.5h6M12 4.5h2M2 11.5h2M8 11.5h6" />
-                    <circle cx="10" cy="4.5" r="2" />
-                    <circle cx="6" cy="11.5" r="2" />
-                  </g>
-                </svg>
-                <span>{i18n.t("share.settings")}</span>
-              </button>
               <Show when={sheet()}>
                 <div data-slot="sheet-backdrop" aria-hidden="true" onClick={() => setSheet(false)} />
               </Show>
@@ -729,7 +715,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 aria-label={i18n.t("share.settings")}
               >
                 <div data-slot="sheet-head">
-                  <strong>{i18n.t("share.settings")}</strong>
+                  <strong>{i18n.t("share.customize")}</strong>
                   <button type="button" data-slot="sheet-done" onClick={() => setSheet(false)}>
                     {i18n.t("share.done")}
                   </button>
@@ -991,7 +977,15 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   </svg>
                 </button>
                 <Show when={!customizing()}>
-                  <button type="button" data-slot="bar-button" data-variant="customize" onClick={customize}>
+                  <button
+                    type="button"
+                    data-slot="bar-button"
+                    data-variant="customize"
+                    aria-controls="share-settings"
+                    aria-expanded={sheet() ? "true" : "false"}
+                    // On a phone the settings open in the sheet; wider, the editor grows to show them in the bar.
+                    onClick={() => (matchMedia("(max-width: 760px)").matches ? setSheet(true) : customize())}
+                  >
                     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
                       <g fill="none" stroke="currentColor" stroke-width="1.5">
                         <path d="M2 4.5h6M12 4.5h2M2 11.5h2M8 11.5h6" />
@@ -1600,10 +1594,10 @@ function TypeGlyph(props: { format: "video" | "image" | "embed" }) {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
       <Show when={props.format === "video"}>
-        <g fill="none" stroke="currentColor" stroke-width="1.5">
-          <rect x="1.75" y="4.25" width="8.5" height="7.5" />
-          <path d="m10.25 7 4-2.25v6.5l-4-2.25" />
-        </g>
+        {/* On the 20px grid it shows at, every edge on a pixel's centre, the lens a closed shape against the body. */}
+        <svg viewBox="0 0 20 20" width="16" height="16" overflow="visible">
+          <path d="M2.5 5.5h10v9h-10zM12.5 8.5l5-2.5v8l-5-2.5z" fill="none" stroke="currentColor" stroke-width="1.5" />
+        </svg>
       </Show>
       <Show when={props.format === "image"}>
         <g fill="none" stroke="currentColor" stroke-width="1.5">

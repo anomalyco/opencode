@@ -1,4 +1,4 @@
-/* Faces for scripts that OpenTUI Mono, Inter and the mono stand-ins don't cover. Without them the mono
+/* Faces for scripts that OpenMono, Inter and the mono stand-ins don't cover. Without them the mono
    stacks fall through to monospaced system faces (Courier New for Arabic, Ayuthaya for Thai) that
    space the letters far apart. Each unicode-range keeps its face to its own script, so Latin text
    never falls back to it. Neither script has a good monospaced face, so mono text uses these too.

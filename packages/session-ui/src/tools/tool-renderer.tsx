@@ -7,6 +7,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  createContext,
   createUniqueId,
   For,
   Match,
@@ -17,6 +18,7 @@ import {
   Index,
   on,
   untrack,
+  useContext,
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -59,6 +61,7 @@ import type {
 import {
   currentToolError,
   currentToolGroupedRead,
+  currentToolImages,
   currentToolInput,
   currentToolMetadata,
   currentToolOutput,
@@ -89,6 +92,7 @@ import {
   type SubagentRunState,
 } from "./run-machine"
 import { LinkedText } from "../components/linked-text"
+import { ToolResultImages, type ToolImage } from "./tool-result-images"
 
 export function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -383,6 +387,7 @@ export function CurrentContextToolGroup(props: {
   patchGroupKey?: (tools: SessionMessageAssistantTool[]) => string
 }) {
   const i18n = useI18n()
+  const data = useData()
   const tools = createMemo(() => props.parts.filter((part) => part.type === "tool"))
 
   const pending = createMemo(
@@ -430,7 +435,7 @@ export function CurrentContextToolGroup(props: {
       return { text, title: text, before: "", count: undefined, between: "", after: "" }
     }
 
-    return contextGroupLabel(props.parts, i18n)
+    return contextGroupLabel(props.parts, i18n, data.flag("full_codemode"))
   })
 
   const items = createMemo(() =>
@@ -499,7 +504,14 @@ export function CurrentContextToolGroup(props: {
     // Collapsing from the stuck header would leave the viewport far below the group, so keep the header in place.
     // Scroll before collapsing because the shorter content would clamp the scroll position first.
     const trigger = root?.querySelector(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
-    const stuck = !open && root && trigger ? trigger.getBoundingClientRect().top - root.getBoundingClientRect().top : 0
+
+    // The header rests its top margin away from the group's top, above it here. Anything past that is how far it is stuck.
+    const stuck =
+      !open && root && trigger
+        ? trigger.getBoundingClientRect().top -
+          root.getBoundingClientRect().top -
+          parseFloat(getComputedStyle(trigger).marginTop)
+        : 0
 
     if (stuck > 0 && root) scrollParent(root)?.scrollBy({ top: -stuck, behavior: "instant" })
     props.onOpenChange(open)
@@ -611,7 +623,14 @@ export function CurrentContextToolGroup(props: {
                             </Show>
                           }
                         >
-                          {(part) => <div data-slot="context-tool-group-item">{part.render()}</div>}
+                          {(part) => (
+                            <div
+                              data-slot="context-tool-group-item"
+                              data-script-change={part.file.via === "script" ? "" : undefined}
+                            >
+                              {part.render()}
+                            </div>
+                          )}
                         </Show>
                       }
                     >
@@ -787,6 +806,7 @@ export function CurrentContextToolGroup(props: {
           </Index>
         </div>
       </BasicTool>
+      <ToolResultImages images={tools().flatMap(currentToolImages)} onContentRendered={props.onSizeChange} />
     </div>
   )
 }
@@ -1039,6 +1059,31 @@ export function CurrentFileToolGroup(props: {
   )
 }
 
+/**
+ * Where a script's Output row goes, from the timeline's rows (`scriptOutputLayout`): after its last change when its
+ * changes are drawn right after it, else under its steps.
+ */
+export type ScriptOutputPlacement = {
+  afterChanges: (partID: string) => boolean
+  outputAfter: (fileID: string) => SessionMessageAssistantTool | undefined
+}
+
+const ScriptOutputContext = createContext<ScriptOutputPlacement>({
+  afterChanges: () => false,
+  outputAfter: () => undefined,
+})
+
+export const ScriptOutputProvider = ScriptOutputContext.Provider
+
+// What a script returned, shown as its Output row. A failure shows on its failing row instead.
+function scriptOutputText(status: string | undefined, output: string | undefined, metadata: ToolProps["metadata"]) {
+  if (status === "error" || metadata.error === true) return ""
+
+  return stripAnsi(output ?? "")
+    .replace(/\r\n?/g, "\n")
+    .trim()
+}
+
 /** A file group holding a script's changes: each run in order, direct calls drawn as their own group. */
 export function FileChangeRuns(props: {
   runs: readonly FileRun[]
@@ -1093,10 +1138,42 @@ function scriptChangePartID(file: FileFact) {
   return file.id.slice(file.id.indexOf(":") + 1)
 }
 
+// A script change as the patch view draws it, or undefined for one it can't: no diff, past the size cap, binary, a
+// copy or a delete.
+function scriptChangeDiff(file: FileFact): FileDiffInfo | undefined {
+  const value = {
+    file: file.path,
+    patch: file.patch,
+    additions: file.additions ?? 0,
+    deletions: file.deletions ?? 0,
+    status: file.change ?? "modified",
+  }
+
+  return changedFileDiff(value) ? value : undefined
+}
+
+type ScriptChangeRun = { type: "patch"; files: FileFact[] } | { type: "counts"; file: FileFact }
+
+// Changes with a diff that follow one another share one group, as a patch's files do; each other change stands alone.
+function scriptChangeRuns(files: readonly FileFact[]): ScriptChangeRun[] {
+  const runs: ScriptChangeRun[] = []
+
+  for (const file of files) {
+    const last = runs.at(-1)
+
+    if (!scriptChangeDiff(file)) runs.push({ type: "counts", file })
+    else if (last?.type === "patch") last.files.push(file)
+    else runs.push({ type: "patch", files: [file] })
+  }
+
+  return runs
+}
+
 /**
- * The changes a script made, in order, one card each: the same file changed twice is two cards. A change without a
- * diff, past the size cap, to a binary file, a copy or a delete, shows what it did as a patch's file header does. Each
- * card opens by the change's own id.
+ * The changes a script made, in order. Changes with a diff that follow one another share one group, a row per file, as
+ * a patch's files do: a script that changes a file more than once lists it once per change, and the group draws each
+ * of those diffs under the file's one row. A change without a diff shows what it did as a patch's file header does.
+ * Each file opens by the id of its first change.
  */
 export function ScriptChanges(props: {
   files: readonly FileFact[]
@@ -1105,101 +1182,151 @@ export function ScriptChanges(props: {
   onFileOpenChange?: (key: string, open: boolean) => void
   onSizeChange?: () => void
 }) {
-  const i18n = useI18n()
+  const placement = useContext(ScriptOutputContext)
+
+  // The Output row of a script whose last change this is, when its changes are drawn right after it.
+  const outputAfter = (file: FileFact) => {
+    const script = placement.outputAfter(file.id)
+
+    return script
+      ? scriptOutputText(script.state.status, currentToolOutput(script), currentToolMetadata(script))
+      : undefined
+  }
+
+  const runs = createMemo(() => scriptChangeRuns(props.files))
 
   // One wrapper, as a direct patch's files share one, so the turn's gap falls around the list and not between changes.
   return (
     <div data-component="tool-part-wrapper" data-script-changes="">
-      <Index each={props.files}>
-        {(file) => {
-          const diff = createMemo(
-            () => {
-              const value = {
-                file: file().path,
-                patch: file().patch,
-                additions: file().additions ?? 0,
-                deletions: file().deletions ?? 0,
-                status: file().change ?? "modified",
-              }
+      <Index each={runs()}>
+        {(run) => {
+          const group = createMemo(() => {
+            const value = run()
 
-              return changedFileDiff(value) ? value : undefined
-            },
-            undefined,
-            // A progress report reads each change again; the same diff keeps its parsed view.
-            {
-              equals: (previous, next) =>
-                previous === next ||
-                (!!previous &&
-                  !!next &&
-                  previous.file === next.file &&
-                  previous.patch === next.patch &&
-                  previous.additions === next.additions &&
-                  previous.deletions === next.deletions &&
-                  previous.status === next.status),
-            },
-          )
+            return value.type === "patch" ? value.files : undefined
+          })
+
+          const single = createMemo(() => {
+            const value = run()
+
+            return value.type === "counts" ? value.file : undefined
+          })
 
           return (
             <Show
-              when={diff()}
-              fallback={
-                <div
-                  data-component="file-counts"
-                  data-type={file().change}
-                  data-timeline-part-id={scriptChangePartID(file())}
-                >
-                  <FileIcon node={{ path: file().path, type: "file" }} />
-                  <span data-slot="file-counts-name">
-                    <Show when={file().path.includes("/")}>
-                      <span data-slot="file-counts-directory">{`\u202A${displayDirectory(file().path)}\u202C`}</span>
-                    </Show>
-                    <span data-slot="file-counts-filename">{getFilename(file().path)}</span>
-                  </span>
-                  <Switch>
-                    <Match when={file().change === "added"}>
-                      <span data-component="diff-changes" data-appearance="standard">
-                        <span data-slot="diff-changes-additions">{i18n.t("ui.patch.action.created")}</span>
-                      </span>
-                    </Match>
-                    <Match when={file().change === "deleted"}>
-                      <span data-component="diff-changes" data-appearance="standard">
-                        <span data-slot="diff-changes-deletions">{i18n.t("ui.patch.action.deleted")}</span>
-                      </span>
-                    </Match>
-                    <Match when={(file().additions ?? 0) + (file().deletions ?? 0) > 0}>
-                      <DiffChanges
-                        appearance="standard"
-                        markEmpty
-                        changes={{ additions: file().additions ?? 0, deletions: file().deletions ?? 0 }}
-                      />
-                    </Match>
-                  </Switch>
-                </div>
-              }
+              when={group()}
+              fallback={<Show when={single()}>{(file) => <ScriptChangeCounts file={file()} />}</Show>}
             >
-              {(value) => (
-                <div data-script-change="patch" data-timeline-part-id={scriptChangePartID(file())}>
-                  <Dynamic
-                    component={props.render}
-                    tool="patch"
-                    input={{}}
-                    metadata={{ files: [value()] }}
-                    status="completed"
-                    fileOpen={props.fileOpen && (() => props.fileOpen?.(file().id))}
-                    onFileOpenChange={
-                      props.onFileOpenChange &&
-                      ((_: string, open: boolean) => props.onFileOpenChange?.(file().id, open))
-                    }
-                    deferContent
-                    virtualizeDiff={false}
-                    onContentRendered={props.onSizeChange}
-                  />
-                </div>
+              {(files) => (
+                <ScriptChangeGroup
+                  files={files()}
+                  render={props.render}
+                  fileOpen={props.fileOpen}
+                  onFileOpenChange={props.onFileOpenChange}
+                  onSizeChange={props.onSizeChange}
+                />
               )}
             </Show>
           )
         }}
       </Index>
+      <Show when={props.files.at(-1) && outputAfter(props.files.at(-1)!)}>
+        {(value) => (
+          <div data-component="execute-tool-calls" data-execute-layout="flat" data-script-output="">
+            <ExecuteOutputRow output={value()} flat />
+          </div>
+        )}
+      </Show>
+    </div>
+  )
+}
+
+// Changes with a diff that follow one another, drawn as one patch's files are: a row per file, its diffs under it.
+function ScriptChangeGroup(props: {
+  files: readonly FileFact[]
+  render: Component<ToolProps>
+  fileOpen?: (key: string) => boolean | undefined
+  onFileOpenChange?: (key: string, open: boolean) => void
+  onSizeChange?: () => void
+}) {
+  const diffs = createMemo(
+    () =>
+      props.files.flatMap((file) => {
+        const diff = scriptChangeDiff(file)
+
+        return diff ? [diff] : []
+      }),
+    [],
+    {
+      // A progress report reads each change again; the same diffs keep their parsed views.
+      equals: (previous, next) =>
+        previous.length === next.length && previous.every((value, index) => samePatchFile(value, next[index]!)),
+    },
+  )
+
+  // A file's row opens by the id of its first change, so a later change to it keeps the row as it was.
+  const key = (path: string) => props.files.find((file) => file.path === path)?.id ?? path
+
+  return (
+    <div
+      data-script-change="patch"
+      data-timeline-part-id={scriptChangePartID(props.files[0]!)}
+      data-timeline-part-ids={props.files.length > 1 ? props.files.map(scriptChangePartID).join(",") : undefined}
+    >
+      <Dynamic
+        component={props.render}
+        tool="patch"
+        input={{}}
+        metadata={{ files: diffs() }}
+        status="completed"
+        fileOpen={props.fileOpen && ((path: string) => props.fileOpen?.(key(path)))}
+        onFileOpenChange={
+          props.onFileOpenChange && ((path: string, open: boolean) => props.onFileOpenChange?.(key(path), open))
+        }
+        deferContent
+        virtualizeDiff={false}
+        onContentRendered={props.onSizeChange}
+      />
+    </div>
+  )
+}
+
+// A change without a diff, shown as a patch's file header shows what it did.
+function ScriptChangeCounts(props: { file: FileFact }) {
+  const i18n = useI18n()
+
+  return (
+    <div
+      data-component="file-counts"
+      data-type={props.file.change}
+      data-timeline-part-id={scriptChangePartID(props.file)}
+    >
+      <FileIcon node={{ path: props.file.path, type: "file" }} />
+      <span data-slot="file-counts-name">
+        <Show when={props.file.path.includes("/")}>
+          <span data-slot="file-counts-directory">{`\u202A${displayDirectory(props.file.path)}\u202C`}</span>
+        </Show>
+        <span data-slot="file-counts-filename">{getFilename(props.file.path)}</span>
+      </span>
+      <Switch>
+        <Match when={props.file.change === "added"}>
+          <span data-component="diff-changes" data-appearance="standard">
+            <span data-slot="diff-changes-additions">{i18n.t("ui.patch.action.created")}</span>
+          </span>
+        </Match>
+        <Match when={props.file.change === "deleted"}>
+          <span data-component="diff-changes" data-appearance="standard">
+            <span data-slot="diff-changes-deletions">{i18n.t("ui.patch.action.deleted")}</span>
+          </span>
+        </Match>
+        <Match when={(props.file.additions ?? 0) + (props.file.deletions ?? 0) > 0}>
+          <DiffChanges
+            appearance="standard"
+            markEmpty
+            changes={{ additions: props.file.additions ?? 0, deletions: props.file.deletions ?? 0 }}
+          />
+        </Match>
+      </Switch>
     </div>
   )
 }
@@ -1263,6 +1390,8 @@ function currentContextToolTrigger(tool: SessionMessageAssistantTool, i18n: Retu
 // SAFETY: tool input and metadata are open per-tool records. GenericTool shows arbitrary input keys, and
 // renderers decode the fields they read with `toolInput` and `toolMetadata`.
 export interface ToolProps {
+  /** The call's part id, where the timeline passes it. */
+  id?: string
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- see SAFETY above
   input: Record<string, unknown>
   error?: string
@@ -1472,6 +1601,8 @@ export function ToolDisplay(
   props: ToolProps & {
     id: string
     error?: string
+    /** Images the call returned. A group of calls shows its calls' images itself. */
+    images?: readonly ToolImage[]
   },
 ) {
   const data = useData()
@@ -1557,6 +1688,7 @@ export function ToolDisplay(
             <Dynamic component={render()} {...props} />
           </Match>
         </Switch>
+        <ToolResultImages images={props.images ?? []} onContentRendered={props.onContentRendered} />
       </div>
     </Show>
   )
@@ -2043,10 +2175,13 @@ ToolRegistry.register({
   name: "execute",
   render(props) {
     const i18n = useI18n()
+    const data = useData()
     const dialog = useDialog()
     const pending = () => props.status === "streaming" || props.status === "running"
     const count = createMemo(() => executeToolCallCount(props.metadata))
     const subtitle = createMemo(() => executeToolSubtitle(props.metadata))
+    // `full_codemode` draws the flat layout: a static title over steps that always show, Output after its changes.
+    const flat = () => data.flag("full_codemode")
     const code = createMemo(() => (toolInput(props.input).code ?? "").trimEnd())
 
     // A runtime failure shows its output on the failing row; a successful script shows its result below the calls.
@@ -2058,13 +2193,10 @@ ToolRegistry.register({
       return text.replace(/^Error:\s*/, "").trim() || fallback
     })
 
-    const output = createMemo(() =>
-      error()
-        ? ""
-        : stripAnsi(props.output ?? "")
-            .replace(/\r\n?/g, "\n")
-            .trim(),
-    )
+    const output = createMemo(() => scriptOutputText(props.status, props.output, props.metadata))
+    // When its changes are drawn right after it, its Output row follows them: steps, changes, then Output.
+    const placement = useContext(ScriptOutputContext)
+    const outputHere = () => !!output() && !(flat() && props.id && placement.afterChanges(props.id))
 
     // A runtime failure belongs to the call that raised it; scripts can also fail outside any call.
     const owner = createMemo(() => executeToolErrorIndex(props.metadata))
@@ -2093,23 +2225,28 @@ ToolRegistry.register({
     const openDetails = () =>
       dialog.show(() => <ExecuteDetails code={code()} output={output()} error={error()} status={props.status} />)
 
+    // Flat, the title is static and the calls always show under it: the block never collapses, whatever the timeline asks.
     return (
       <BasicTool
         {...props}
         icon="terminal"
         rail={false}
-        hasContent={count() > 0 || !!error() || !!output()}
+        hasContent={count() > 0 || !!error() || outputHere()}
         compact
         allowOpenWhilePending
+        locked={flat() || props.locked}
+        open={flat() ? true : props.open}
+        forceOpen={flat() || props.forceOpen}
+        onOpenChange={flat() ? undefined : props.onOpenChange}
         trigger={(open) => (
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
-              <span data-slot="basic-tool-tool-title">
+              <span data-slot="basic-tool-tool-title" data-execute-title={flat() ? "" : undefined}>
                 <Show when={shimmered()} fallback={i18n.t("ui.tool.execute")}>
                   <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
                 </Show>
               </span>
-              <Show when={!open() && subtitle()}>
+              <Show when={!flat() && !open() && subtitle()}>
                 {(text) => <ShellSubmessage text={text()} animate={sawPending} />}
               </Show>
             </div>
@@ -2130,7 +2267,7 @@ ToolRegistry.register({
           ) : undefined
         }
       >
-        <div data-component="execute-tool-calls">
+        <div data-component="execute-tool-calls" data-execute-layout={flat() ? "flat" : undefined}>
           <Show when={hidden()}>
             {(count) => (
               <button type="button" data-slot="execute-tool-call-more" onClick={reveal}>
@@ -2139,11 +2276,13 @@ ToolRegistry.register({
             )}
           </Show>
           <Index each={visible()}>
-            {(item) => <ExecuteCallRow call={item().call} error={item().index === owner() ? error() : undefined} />}
+            {(item) => (
+              <ExecuteCallRow call={item().call} error={item().index === owner() ? error() : undefined} flat={flat()} />
+            )}
           </Index>
           {/* A failure with no call, or one that belongs to a call still hidden above, shows on its own. */}
-          <Show when={owner() < hidden() && error()}>{(text) => <ExecuteCallRow error={text()} />}</Show>
-          <Show when={output()}>{(value) => <ExecuteOutputRow output={value()} />}</Show>
+          <Show when={owner() < hidden() && error()}>{(text) => <ExecuteCallRow error={text()} flat={flat()} />}</Show>
+          <Show when={outputHere() && output()}>{(value) => <ExecuteOutputRow output={value()} flat={flat()} />}</Show>
         </div>
       </BasicTool>
     )
@@ -2249,12 +2388,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; s
   )
 }
 
-function ExecuteDetailsSection(props: {
-  label: string
-  copy: string
-  copyLabel: string
-  children: JSX.Element
-}) {
+function ExecuteDetailsSection(props: { label: string; copy: string; copyLabel: string; children: JSX.Element }) {
   const i18n = useI18n()
   const copy = createCopyFeedback()
 
@@ -2292,7 +2426,7 @@ function selectsRowText(row: HTMLElement) {
   return row.contains(selection.anchorNode) || row.contains(selection.focusNode)
 }
 
-function ExecuteOutputRow(props: { output: string }) {
+function ExecuteOutputRow(props: { output: string; flat?: boolean }) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
   const text = createMemo(() => formatExecuteOutput(props.output).text)
@@ -2317,9 +2451,11 @@ function ExecuteOutputRow(props: { output: string }) {
           toggle(event)
         }}
       >
-        <span data-slot="execute-tool-call-marker">
-          <span data-slot="execute-tool-call-arrow">›</span>
-        </span>
+        <Show when={!props.flat}>
+          <span data-slot="execute-tool-call-marker">
+            <span data-slot="execute-tool-call-arrow">›</span>
+          </span>
+        </Show>
         <span data-slot="execute-tool-call-name">{i18n.t("ui.tool.execute.output")}</span>
         <span data-slot="execute-tool-call-args">
           {i18n.plural("ui.tool.execute.lines", text().split("\n").length)}
@@ -2334,7 +2470,7 @@ function ExecuteOutputRow(props: { output: string }) {
   )
 }
 
-function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
+function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string; flat?: boolean }) {
   const [open, setOpen] = createSignal(false)
   const args = createMemo(() => (props.call ? executeToolCallArgs(props.call) : []))
   const input = createMemo(() => Object.entries(props.call?.input ?? {}))
@@ -2366,10 +2502,12 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
           toggle(event)
         }}
       >
-        <Show when={failed()} fallback={<span data-slot="execute-tool-call-marker">›</span>}>
-          <span data-slot="execute-tool-call-marker">
-            <Icon name="outline-hexagonal-warning" size="small" />
-          </span>
+        <Show when={!props.flat}>
+          <Show when={failed()} fallback={<span data-slot="execute-tool-call-marker">›</span>}>
+            <span data-slot="execute-tool-call-marker">
+              <Icon name="outline-hexagonal-warning" size="small" />
+            </span>
+          </Show>
         </Show>
         <Show when={props.call}>
           {(call) => (
@@ -2379,6 +2517,12 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
               </Show>
             </span>
           )}
+        </Show>
+        {/* Flat, after the name, so every call's name lines up with the title; a failure without a call leads with it. */}
+        <Show when={props.flat && failed()}>
+          <span data-slot="execute-tool-call-marker">
+            <Icon name="outline-hexagonal-warning" size="small" />
+          </span>
         </Show>
         <Show when={!open() && summary()}>
           {(text) => (

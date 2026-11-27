@@ -2,6 +2,8 @@ import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
 import type { Agent } from "@opencode/schema/agent"
 import type { Command } from "@opencode/schema/command"
 import type { Model } from "@opencode/schema/model"
+import type { Provider } from "@opencode/schema/provider"
+import type { Skill } from "@opencode/schema/skill"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Cause, Deferred, Effect, Exit, Schedule, Semaphore, Stream, SubscriptionRef } from "effect"
 import { ACPError } from "./error"
@@ -16,6 +18,9 @@ export type Catalog = {
   readonly modes: ReadonlyArray<{ id: Agent.ID; name: string; description?: string }>
   readonly defaultModeID: Agent.ID
   readonly commands: ReadonlyArray<Command.Info>
+  /** Skills whose ID no command or built-in command already claims. */
+  readonly skills: ReadonlyArray<Skill.Info>
+  readonly providerNames: ReadonlyMap<Provider.ID, string>
 }
 
 export function findModel(models: ReadonlyArray<Model.Info>, ref: Model.Ref) {
@@ -36,7 +41,13 @@ type Entry = {
   loadedGeneration: number
 }
 
-const reloadOn = new Set<OpenCodeEvent["type"]>(["model.updated", "agent.updated", "command.updated"])
+const reloadOn = new Set<OpenCodeEvent["type"]>([
+  "model.updated",
+  "agent.updated",
+  "command.updated",
+  "skill.updated",
+  "provider.updated",
+])
 
 export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
   const scope = yield* Effect.scope
@@ -138,12 +149,14 @@ const load = Effect.fn("cli.acp.catalog.load")(function* (client: OpenCodeClient
 
 const read = Effect.fnUntraced(function* (client: OpenCodeClient, cwd: string) {
   const location = { directory: cwd }
-  const [modelResult, defaultResult, agentResult, commandResult] = yield* Effect.all(
+  const [modelResult, defaultResult, agentResult, commandResult, skillResult, providerResult] = yield* Effect.all(
     [
       client.model.list({ location }),
       client.model.default({ location }),
       client.agent.list({ location }),
       client.command.list({ location }),
+      client.skill.list({ location }),
+      client.provider.list({ location }),
     ],
     { concurrency: "unbounded" },
   ).pipe(Effect.mapError((cause) => new ACPError.CatalogLoadError({ cause })))
@@ -156,6 +169,8 @@ const read = Effect.fnUntraced(function* (client: OpenCodeClient, cwd: string) {
   // Core lists its resolved default agent first, the same one a new session runs.
   const defaultAgent = agents[0]
   if (!defaultAgent) return yield* new ACPError.CatalogNotReadyError({ reason: "agents" })
+  const commands = commandResult.data.filter((command) => !builtinCommands.has(command.name))
+  const commandNames = new Set(commands.map((command) => command.name))
   return {
     models,
     defaultModel: {
@@ -165,7 +180,9 @@ const read = Effect.fnUntraced(function* (client: OpenCodeClient, cwd: string) {
     },
     modes: agents.map((agent) => ({ id: agent.id, name: agent.name, description: agent.description })),
     defaultModeID: defaultAgent.id,
-    commands: commandResult.data.filter((command) => !builtinCommands.has(command.name)),
+    commands,
+    skills: skillResult.data.filter((skill) => !builtinCommands.has(skill.id) && !commandNames.has(skill.id)),
+    providerNames: new Map(providerResult.data.map((provider) => [provider.id, provider.name])),
   } satisfies Catalog
 })
 

@@ -2,7 +2,7 @@ import { Global } from "@opencode/util/global"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
 import { Hash } from "@opencode/util/hash"
 import { Service } from "@opencode/client/effect/service"
-import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
+import { Effect, FileSystem, Option, Result, Schedule, Schema } from "effect"
 import { randomBytes } from "crypto"
 import path from "path"
 import { selfCommand } from "../util/process"
@@ -28,10 +28,19 @@ export const Info = Schema.Struct({
 })
 export type Info = typeof Info.Type
 
+export class InvalidError extends Schema.TaggedError<InvalidError>()("ServiceConfig.InvalidError", {
+  path: Schema.String,
+  issue: Schema.String,
+}) {
+  override get message() {
+    return `Invalid service config at ${this.path}: ${this.issue}`
+  }
+}
+
 const keys = ["disabled", "remote", "hostname", "port", "password", "cors", "env"] as const
 type Key = (typeof keys)[number]
 
-const decodeInfo = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
+const decodeInfo = Schema.decodeUnknownResult(Schema.fromJsonString(Info))
 // Earlier builds stored remote access as a boolean.
 const decodeLegacy = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Struct({ ...Info.fields, remote: Schema.Boolean })),
@@ -95,21 +104,13 @@ export const migrateConfig = Effect.fnUntraced(function* (legacy: string, file: 
   const fs = yield* FileSystem.FileSystem
   const text = yield* fs.readFileString(legacy).pipe(Effect.option)
   if (Option.isNone(text)) return
-  if (Option.isNone(yield* decodeInfo(text.value).pipe(Effect.option))) return
+  if (Result.isFailure(decodeInfo(text.value))) return
   yield* fs.writeFileString(file, text.value, { flag: "wx", mode: 0o600 }).pipe(Effect.ignore)
 })
 
 function configKey(key: string): Key {
-  if (
-    key === "disabled" ||
-    key === "remote" ||
-    key === "hostname" ||
-    key === "port" ||
-    key === "password" ||
-    key === "cors" ||
-    key === "env"
-  )
-    return key
+  const found = keys.find((candidate) => candidate === key)
+  if (found !== undefined) return found
   throw new Error(`Unknown service config key: ${key}`)
 }
 
@@ -140,11 +141,15 @@ export function processEnv(env: Info["env"]) {
   return rest
 }
 
-export const options = Effect.fnUntraced(function* (input: { readonly checkVersion?: boolean } = {}) {
+export const registrationFile = Effect.fnUntraced(function* () {
   const { file, legacyRegistrationFiles } = yield* paths
   yield* Effect.forEach(legacyRegistrationFiles, (legacy) => migrateRegistration(legacy, file))
+  return file
+})
+
+export const options = Effect.fnUntraced(function* (input: { readonly checkVersion?: boolean } = {}) {
   return {
-    file,
+    file: yield* registrationFile(),
     version: input.checkVersion ? OPENCODE_VERSION : undefined,
     env: processEnv((yield* read()).env),
     command: [...selfCommand(), "serve", "--service"],
@@ -154,12 +159,19 @@ export const options = Effect.fnUntraced(function* (input: { readonly checkVersi
 export const read = Effect.fn("cli.service-config.read")(function* () {
   const { fs, configFile, legacyConfigFile } = yield* paths
   if (legacyConfigFile) yield* migrateConfig(legacyConfigFile, configFile)
-  const text = yield* fs.readFileString(configFile).pipe(Effect.option)
-  if (Option.isNone(text)) return {} as Info
-  const info = yield* decodeInfo(text.value).pipe(Effect.option)
-  if (Option.isSome(info)) return info.value
-  const legacy = decodeLegacy(text.value)
-  if (Option.isNone(legacy)) return {} as Info
+  const text = yield* fs.readFileString(configFile).pipe(
+    Effect.catchIf(
+      (error) => error.reason._tag === "NotFound",
+      () => Effect.undefined,
+    ),
+  )
+  if (text === undefined) return {} satisfies Info
+  const info = decodeInfo(text, { errors: "all" })
+  if (Result.isSuccess(info)) return info.success
+  const legacy = decodeLegacy(text)
+  if (Option.isNone(legacy)) {
+    return yield* new InvalidError({ path: configFile, issue: info.failure.message })
+  }
   // Repair the file in place so every reader sees the same route.
   const { remote: enabled, ...rest } = legacy.value
   const repaired: Info = enabled ? { ...rest, remote: { route: route() } } : rest
@@ -244,7 +256,6 @@ export const get = Effect.fn("cli.service-config.get")(function* (key?: string, 
       return name === undefined ? JSON.stringify(env, null, 2) : (env[name] ?? "")
     }
   }
-  throw new Error(`Unknown service config key: ${key}`)
 })
 
 export const set = Effect.fn("cli.service-config.set")(function* (key: string, value: string, nestedValue?: string) {
@@ -260,9 +271,10 @@ export const set = Effect.fn("cli.service-config.set")(function* (key: string, v
     }
     case "remote": {
       if (value !== "true" && value !== "false") throw new Error("Remote must be true or false")
+      const stopOptions = yield* options()
       // A tunnel that cannot be created leaves remote access off instead of a service that keeps retrying.
       if (value === "true") yield* RemoteTunnel.ensure()
-      yield* Service.stop(yield* options())
+      yield* Service.stop(stopOptions)
       if (value === "true") {
         yield* remote()
         return

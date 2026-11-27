@@ -1,4 +1,4 @@
-use opencode_api::generated::CommandInfo;
+use opencode_api::generated::{CommandInfo, PromptInputSkillAttachment};
 use opencode_api::js::is_whitespace;
 use serde_json::Value;
 
@@ -27,6 +27,8 @@ pub struct Prepared {
     pub synthetic: Vec<String>,
     pub slash: Option<Slash>,
     pub command: Option<CommandInfo>,
+    /// A `/skill` prompt sends its text with the skill attached, as an `@skill` mention does elsewhere.
+    pub skills: Vec<PromptInputSkillAttachment>,
 }
 
 pub async fn prepare(catalog: &Catalog, content: &[Value]) -> Result<Prepared, Failure> {
@@ -78,6 +80,12 @@ pub async fn prepare(catalog: &Catalog, content: &[Value]) -> Result<Prepared, F
         command: slash
             .as_ref()
             .and_then(|slash| catalog.commands.iter().find(|command| command.name == slash.name).cloned()),
+        skills: catalog
+            .skills
+            .iter()
+            .filter(|skill| slash.as_ref().is_some_and(|slash| slash.name == skill.id.0))
+            .map(|skill| PromptInputSkillAttachment { id: skill.id.clone(), mention: None })
+            .collect(),
         slash,
         text,
     })

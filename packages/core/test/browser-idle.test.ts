@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Clock, Context, Duration, Effect, Fiber, Layer, RcMap, Schedule } from "effect"
+import { Clock, Context, Duration, Effect, Fiber, Layer, Schedule } from "effect"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -86,7 +86,7 @@ it.live(
 
       // Real idle cleanup must end the long-lived request, not leave a second registry behind it.
       expect(yield* Fiber.join(pending).pipe(Effect.timeout("10 seconds"))).toMatchObject({ type: "rpc.unavailable" })
-      expect(yield* RcMap.has(locations.rcMap, LocationServiceMap.canonical(ref))).toBe(false)
+      expect(yield* locations.has(LocationServiceMap.canonical(ref))).toBe(false)
       expect(yield* rpc.state(state).pipe(Effect.flip)).toMatchObject({ type: "rpc.unavailable" })
 
       const replacement = yield* locations.contextEffect(ref)
