@@ -8,7 +8,6 @@ import { Context, Effect, Layer, Schema } from "effect"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { Agent } from "../../agent.js"
 import { ModelResolver } from "../../model-resolver.js"
-import { findModelByID } from "../../model-lookup.js"
 import { PluginHooks } from "../../plugin/hooks.js"
 import { SessionSchema } from "../schema.js"
 
@@ -91,7 +90,9 @@ const layer = Layer.effect(
       available: () => Effect.Effect<ReadonlyArray<Model.Info>>,
     ) {
       const find = (ref: Model.Ref) =>
-        available().pipe(Effect.map((models) => findModelByID(models, ref.providerID, ref.id)))
+        available().pipe(
+          Effect.map((models) => models.find((model) => model.providerID === ref.providerID && model.id === ref.id)),
+        )
       if (session.model) {
         const info = yield* find(session.model)
         if (info) return { info, variant: session.model.variant }

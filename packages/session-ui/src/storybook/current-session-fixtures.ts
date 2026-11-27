@@ -607,9 +607,9 @@ export const executeManyCallsDocument = document([
         output: "48",
         metadata: {
           toolCalls: Array.from({ length: 75 }, (_, index) => ({
-            tool: "Bun",
+            tool: "read",
             status: "completed",
-            input: { method: "file", path: `src/session/module-${index}.ts` },
+            input: { path: `src/session/module-${index}.ts` },
           })),
         },
       }),

@@ -5,12 +5,14 @@ import { AppRpcs } from "../../shared/ipc-rpc"
 import { checkAppExists, resolveAppPath } from "../files/apps"
 import { setForceFocus } from "../native/debug"
 import { DesktopLogging, scoped } from "../native/logging"
+import { getSmoothScrollingEnabled, setSmoothScrollingEnabled } from "../native/smooth-scrolling"
 import { getSpellcheckEnabled, setSpellcheckEnabled } from "../native/spellcheck"
 import { setNativeTranslations } from "../native/translations"
 import { IpcPortHandoff } from "../ipc-transport"
 import { ApplicationLifecycle } from "../lifecycle"
 import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "../lifecycle/onboarding"
 import { BackgroundService } from "../service/background-service"
+import { getKeepServiceRunning, setKeepServiceRunning } from "../service/keep-running"
 import { SidecarCredentials } from "../service/sidecar-credentials"
 import { getWindowID, setBackgroundColor } from "../windows"
 import { sender } from "./context"
@@ -44,6 +46,10 @@ export const appHandlers = AppRpcs.toLayer(
       AppSetBackgroundColor: ({ color }) => Effect.sync(() => setBackgroundColor(color)),
       AppGetSpellcheckEnabled: () => Effect.sync(getSpellcheckEnabled),
       AppSetSpellcheckEnabled: ({ enabled }) => Effect.sync(() => setSpellcheckEnabled(enabled)),
+      AppGetSmoothScrollingEnabled: () => Effect.sync(getSmoothScrollingEnabled),
+      AppSetSmoothScrollingEnabled: ({ enabled }) => Effect.sync(() => setSmoothScrollingEnabled(enabled)),
+      AppGetKeepServiceRunning: () => Effect.sync(getKeepServiceRunning),
+      AppSetKeepServiceRunning: ({ enabled }) => Effect.sync(() => setKeepServiceRunning(enabled)),
       AppExportDebugLogs: () => logging.exportDebug,
       AppSetForceFocus: ({ enabled }, context) => promise(() => setForceFocus(sender(handoff, context), enabled)),
       AppRecordFatalRendererError: ({ error }) =>

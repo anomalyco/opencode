@@ -1,14 +1,13 @@
 # O89: an older-history page is not stitched onto a list that changed under it
 
-**TypeScript.** `loadMore` prepends the older page to whatever transcript is current and installs the page's own
-`next` cursor (`packages/client/src/solid/data.ts:1910-1919`). When a latest-page refresh lands while the older
-read is in flight, the page is stitched onto the refreshed list: the messages between the two pages are missing,
-and the old continuation replaces the refreshed cursor. With latest page [2], an older read for [1], and a refresh
-to [3], the transcript is [1, 3] with no more pages.
+**TypeScript.** `loadMore` publishes the older page only while the session's cursor is still the one the read
+continued from (`packages/client/src/solid/data.ts`, `loadMore`). When a latest-page refresh replaced the
+transcript and its cursor while the older read was in flight, the page is dropped and `loadMore` returns without a
+retry; the caller asks again. A refresh that keeps the loaded transcript keeps its cursor, so the page is published.
 
-**Rust.** `load_pages` publishes only while the session's cursor is still the one the read continued from. When a
-refresh replaced it, the fetched pages are dropped and the load starts again from the new cursor, so the example
-ends as [2, 3] with the cursor to [1] kept. When the cursor is gone (no older pages, eviction, or deletion), the
-load publishes nothing.
+**Rust.** `load_pages` publishes only while the session's cursor is still the one the read continued from. A refresh
+that keeps the loaded transcript keeps its cursor, so the page is published. When a refresh replaced the cursor, the
+fetched pages are dropped and the load starts again from the new cursor, so no message is skipped. When the cursor is
+gone (no older pages, eviction, or deletion), the load publishes nothing.
 
-**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations.
+**Reason.** Neither client stitches a page onto a list that changed under it. Rust retries the load itself.

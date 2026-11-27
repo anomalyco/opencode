@@ -27,11 +27,19 @@ export function DialogSessionSearch() {
 
     const load = createServerSessionEntries({
       server: ServerConnection.key(conn),
+      includeArchived: true,
       known: createKnownServerSessions(() => ctx),
       apply: ctx.data.session.apply,
       projects: ctx.projects.list,
+      // Archiving bumps `time.updated`, so one list would let recently archived sessions crowd active matches out of
+      // its limit. Active and archived matches are each their own page, and a failed archived page drops only them.
       load: (search, signal) =>
-        ctx.sdk.api.session.list({ parentID: null, search, archived: false, limit: 50 }, { signal }),
+        Promise.all([
+          ctx.sdk.api.session.list({ parentID: null, search, archived: false, limit: 50 }, { signal }),
+          ctx.sdk.api.session
+            .list({ parentID: null, search, archived: true, limit: 50 }, { signal })
+            .catch(() => ({ data: [] })),
+        ]).then(([active, archived]) => ({ data: [...active.data, ...archived.data] })),
       get: (sessionID, signal) => ctx.sdk.api.session.get({ sessionID }, { signal }),
       untitled: () => language.t("command.session.new"),
       category: () => language.t("command.category.session"),

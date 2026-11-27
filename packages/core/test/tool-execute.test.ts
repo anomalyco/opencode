@@ -4,7 +4,7 @@ import path from "path"
 import { CodeModeDiffs } from "@opencode/core/codemode/diffs"
 import { CodeModeApi } from "@opencode/core/codemode/api"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
-import { ai } from "@opencode/ai/effect"
+import { ai, LanguageModel } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 import { compileRequest } from "@opencode/ai/testing"
 import { Location } from "@opencode/core/location"
@@ -69,11 +69,15 @@ test("execute takes raw code as freeform text, and Code Mode calls freeform tool
 })
 
 test("with full_codemode, raw-text models set execute's timeout and background on a first line", async () => {
+  const base = OpenAI.model("gpt-5.4", { apiKey: "test" })
+  const model = LanguageModel.update(base, {
+    capabilities: { ...base.capabilities, tools: { ...base.capabilities?.tools, freeform: ["text", "lark", "regex"] } },
+  })
   const codeMode = createCodeMode(new Map(), allowAll, codeModeServices(process.cwd()))
   const prepared = await Effect.runPromise(
     compileRequest(
       ai.request({
-        model: OpenAI.model("gpt-5.4", { apiKey: "test" }),
+        model,
         prompt: "Run it.",
         tools: [definition(codeMode)],
       }),
@@ -90,28 +94,13 @@ test("with full_codemode, raw-text models set execute's timeout and background o
   const plain = await Effect.runPromise(
     compileRequest(
       ai.request({
-        model: OpenAI.model("gpt-5.4", { apiKey: "test" }),
+        model,
         prompt: "Run it.",
         tools: [definition(createCodeMode(new Map()))],
       }),
     ),
   )
   expect(plain.body.tools[0]).toMatchObject({ type: "custom", name: "execute", format: { type: "text" } })
-})
-
-test("execute describes invariant Code Mode behavior", () => {
-  expect(createCodeMode(new Map()).description).toBe(
-    [
-      "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
-      "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
-      "Each call is a fresh program; nothing carries over from earlier calls.",
-      "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
-      "Inside `execute`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
-      'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
-      "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
-      "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
-    ].join("\n"),
-  )
 })
 
 test("with full_codemode, execute names Bun's file APIs instead of ruling out filesystem access", () => {
@@ -326,6 +315,29 @@ describe("Bun", () => {
     expect((await fs.readdir(tmp.path)).toSorted()).toEqual(
       ["bytes.bin", "copy.txt", "deep", "log.txt", "notes.txt"].toSorted(),
     )
+  })
+
+  test("Bun.file, Bun.write and Bun.Glob show as read, write and glob calls", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "notes.txt"), "hello")
+    const result = await Effect.runPromise(
+      createCodeMode(new Map(), allowAll, codeModeServices(tmp.path)).execute(
+        {
+          code: `await Bun.file("notes.txt").text()
+          await Bun.write("copy.txt", Bun.file("notes.txt"))
+          await Bun.write("new.txt", "text")
+          new Bun.Glob("*.txt")`,
+        },
+        context,
+      ),
+    )
+    expect(result.output.toolCalls).toEqual([
+      { tool: "read", status: "completed", input: { path: "notes.txt" } },
+      { tool: "read", status: "completed", input: { path: "notes.txt" } },
+      { tool: "write", status: "completed", input: { path: "copy.txt", from: "notes.txt" } },
+      { tool: "write", status: "completed", input: { path: "new.txt" } },
+      { tool: "glob", status: "completed", input: { pattern: "*.txt" } },
+    ])
   })
 
   test("Bun.Glob scans for files, with dot files, folders and absolute paths on request", async () => {
@@ -983,7 +995,7 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
   await Effect.runPromise(
     createCodeMode(new Map(inventory.tools)).execute({ code: 'return await tools.echo({ value: "next" })' }, context),
   )
-  expect(conversions).toBe(2)
+  expect(conversions).toBe(1)
 })
 
 const progressCodeMode = (started: Deferred.Deferred<void>, wait: Effect.Effect<void>) =>

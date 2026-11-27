@@ -439,6 +439,7 @@ export type HostRequest = ({
 } | {
     type: "limits",
 } | {
+    location: LocationRef?,
     type: "providers",
 } | {
     type: "info",
@@ -1034,6 +1035,7 @@ export type Panel = {
     bare: boolean?,
     close: string?,
     height: number?,
+    fit_screen: boolean?,
 }
 
 --- A footer action of a panel.
@@ -1660,6 +1662,10 @@ export type AgentInfo = {
     model: ModelRef?,
     request: ProviderRequest,
     system: string?,
+    instructions: (string | {
+        selected: string,
+        unselected: string,
+    })?,
     description: string?,
     mode: ("subagent" | "primary" | "all"),
     hidden: boolean,
@@ -1987,13 +1993,16 @@ export type ConfigInfoEncoded = {
         artifacts: boolean?,
         console_watches: boolean?,
         recommended_api: boolean?,
-        model_speeds: boolean?,
         full_codemode: boolean?,
+        codemode_agents: boolean?,
         machines: boolean?,
         home_memory: boolean?,
         project_overlay: boolean?,
         opencode_api: boolean?,
+        mcp_skills: boolean?,
+        compaction_jobs: boolean?,
         sqlite_fts: boolean?,
+        browser_stream_tunnel: boolean?,
         video_generate: (boolean | {
             model: (string | {
                 providerID: string,
@@ -2232,6 +2241,25 @@ export type ExperimentalMcpEvent = _Event1<"experimental.mcp.event", {
     data: any,
     cursor: string?,
     truncated: boolean?,
+}>
+
+export type ExperimentalPushUpdated = _Event1<"experimental.push.updated", any>
+
+export type ExperimentalSpaceDeleted = _Event1<"experimental.space.deleted", {
+    space: SpaceName,
+    key: SpaceKey,
+    revision: SpaceRevision,
+}>
+
+export type ExperimentalSpaceResync = _Event1<"experimental.space.resync", {
+    space: SpaceName,
+}>
+
+export type ExperimentalSpaceUpdated = _Event1<"experimental.space.updated", {
+    space: SpaceName,
+    key: SpaceKey,
+    value: SpaceValue,
+    revision: SpaceRevision,
 }>
 
 export type FileDiffInfo = {
@@ -3043,6 +3071,7 @@ export type ModelCompatibility = {
     cacheFormat: ModelCacheFormat?,
     supportsThinkingBlockBinding: boolean?,
     supportsEffortUpdates: boolean?,
+    supportsSystemUpdates: boolean?,
     mediaInput: ModelMediaInput?,
 }
 
@@ -3110,7 +3139,7 @@ export type ModelSpeed = {
     faster: boolean,
 }
 
-export type ModelType = (("chat" | "decision" | "image" | "video") | string)
+export type ModelType = (("chat" | "decision" | "image" | "video" | "realtime" | "embedding" | "transcription") | string)
 
 export type ModelUpdated = _Event1<"model.updated", any>
 
@@ -3480,6 +3509,51 @@ export type PtyTicketConnectToken = {
 export type PtyUpdated = _Event1<"pty.updated", {
     info: Pty,
 }>
+
+export type PushBell = {
+    level: PushLevel,
+    ["until"]: number?,
+}
+
+export type PushDevice = {
+    id: PushDeviceID,
+    name: string,
+    platform: PushPlatform,
+    expiresAt: number,
+    settings: PushDeviceSettings,
+    paused: boolean,
+    sessions: { [string]: PushBell },
+    time: {
+        created: number,
+        updated: number,
+    },
+}
+
+--- A lowercase canonical UUID chosen by the phone
+export type PushDeviceID = string
+
+export type PushDeviceSettings = {
+    default: PushLevel,
+}
+
+export type PushInfo = {
+    settings: PushSettings,
+    devices: { PushDevice },
+    sessions: { [string]: PushBell },
+}
+
+export type PushLevel = ("all" | "attention" | "none")
+
+export type PushPlatform = ("android" | "ios")
+
+export type PushRegistered = {
+    publicKey: string,
+}
+
+export type PushSettings = {
+    paused: boolean,
+    ["until"]: number?,
+}
 
 export type ReferenceGitSource = {
     type: "git",
@@ -4429,6 +4503,58 @@ export type SkillUpdated = _Event1<"skill.updated", any>
 
 export type SnapshotID = string
 
+export type SpaceChange = {
+    key: SpaceKey,
+    value: SpaceValue?,
+}
+
+--- Covers this write and every change before it.
+export type SpaceCursor = string
+
+export type SpaceCursor1 = string
+
+--- Covers every change up to this page; save it to subscribe or sync from.
+export type SpaceCursor2 = string
+
+export type SpaceDelta = {
+    type: "delta",
+    space: SpaceName,
+    epoch: SpaceEpoch,
+    revision: SpaceRevision,
+    entries: { SpaceEntry },
+    cursor: SpaceCursor2,
+    next: SpaceCursor1?,
+    deleted: { SpaceKey },
+}
+
+export type SpaceEntry = {
+    key: SpaceKey,
+    value: SpaceValue,
+}
+
+export type SpaceEpoch = string
+
+export type SpaceKey = string
+
+--- Client-chosen namespace: 1-128 letters, digits, '.', '_' or '-'.
+export type SpaceName = string
+
+export type SpacePage = (SpaceSnapshot | SpaceDelta)
+
+export type SpaceRevision = number
+
+export type SpaceSnapshot = {
+    type: "snapshot",
+    space: SpaceName,
+    epoch: SpaceEpoch,
+    revision: SpaceRevision,
+    entries: { SpaceEntry },
+    cursor: SpaceCursor2,
+    next: SpaceCursor1?,
+}
+
+export type SpaceValue = string
+
 export type TokenUsageInfo = {
     input: number,
     output: number,
@@ -4518,7 +4644,7 @@ export type UsageLimitsMeter = {
     resetsAt: number,
 }
 
-export type V2Event = (LocationShutdown | ModelsDevRefreshed | CredentialUpdated | CredentialSwitched | IntegrationUpdated | ProviderUpdated | ModelUpdated | AgentUpdated | SessionCreated | SessionAgentSelected | SessionModelSelected | SessionMoved | SessionRenamed | SessionMetadataUpdated | SessionPermissions | SessionViewed | SessionArchived | SessionUnarchived | SessionUsageUpdated | SessionDeleted | SessionForked | SessionInboxDelivered | SessionInboxEnqueued | SessionInboxCancelled | SessionInboxDeliveryChanged | SessionExecutionStarted | SessionExecutionSucceeded | SessionExecutionFailed | SessionExecutionInterrupted | SessionInstructionsUpdated | SessionSynthetic | SessionSkillActivated | SessionShellStarted | SessionShellEnded | SessionStepStarted | SessionStepFirstToken | SessionStepStreamed | SessionStepEnded | SessionStepFailed | SessionTextStarted | SessionTextDelta | SessionTextEnded | SessionReasoningStarted | SessionReasoningDelta | SessionReasoningEnded | SessionToolInputStarted | SessionToolInputDelta | SessionToolInputEnded | SessionToolCalled | SessionToolProgress | SessionToolSuccess | SessionToolFailed | SessionRetryScheduled | SessionCompactionStarted | SessionCompactionDelta | SessionCompactionEnded | SessionCompactionFailed | SessionRevertStaged | SessionRevertCleared | SessionRevertCommitted | FilesystemChanged | ReferenceUpdated | PermissionAsked | PermissionReplied | PluginUpdated | ProjectUpdated | WorktreeUpdated | WorktreeResolved | CommandUpdated | ConfigUpdated | SkillUpdated | PtyCreated | PtyUpdated | PtyExited | PtyDeleted | PersistentPtyAdded | PersistentPtyRemoved | PersistentPtyUpdated | ShellCreated | ShellExited | ShellDeleted | ExperimentalJobUpdated | FormCreated | FormReplied | FormCancelled | WebsearchUpdated | ArtifactUpdated | SessionStatusUpdated | SessionIdle | TuiPromptAppend | TuiCommandExecute | TuiToastShow | TuiSessionSelect | InstallationUpdated | InstallationUpdateAvailable | VcsBranchUpdated | McpStatusChanged | McpResourcesChanged | ExperimentalMcpEvent | V2EventRpc | V2EventServerConnected)
+export type V2Event = (LocationShutdown | ModelsDevRefreshed | CredentialUpdated | CredentialSwitched | IntegrationUpdated | ProviderUpdated | ModelUpdated | AgentUpdated | SessionCreated | SessionAgentSelected | SessionModelSelected | SessionMoved | SessionRenamed | SessionMetadataUpdated | SessionPermissions | SessionViewed | SessionArchived | SessionUnarchived | SessionUsageUpdated | SessionDeleted | SessionForked | SessionInboxDelivered | SessionInboxEnqueued | SessionInboxCancelled | SessionInboxDeliveryChanged | SessionExecutionStarted | SessionExecutionSucceeded | SessionExecutionFailed | SessionExecutionInterrupted | SessionInstructionsUpdated | SessionSynthetic | SessionSkillActivated | SessionShellStarted | SessionShellEnded | SessionStepStarted | SessionStepFirstToken | SessionStepStreamed | SessionStepEnded | SessionStepFailed | SessionTextStarted | SessionTextDelta | SessionTextEnded | SessionReasoningStarted | SessionReasoningDelta | SessionReasoningEnded | SessionToolInputStarted | SessionToolInputDelta | SessionToolInputEnded | SessionToolCalled | SessionToolProgress | SessionToolSuccess | SessionToolFailed | SessionRetryScheduled | SessionCompactionStarted | SessionCompactionDelta | SessionCompactionEnded | SessionCompactionFailed | SessionRevertStaged | SessionRevertCleared | SessionRevertCommitted | FilesystemChanged | ReferenceUpdated | PermissionAsked | PermissionReplied | PluginUpdated | ProjectUpdated | WorktreeUpdated | WorktreeResolved | CommandUpdated | ConfigUpdated | SkillUpdated | PtyCreated | PtyUpdated | PtyExited | PtyDeleted | PersistentPtyAdded | PersistentPtyRemoved | PersistentPtyUpdated | ShellCreated | ShellExited | ShellDeleted | ExperimentalJobUpdated | FormCreated | FormReplied | FormCancelled | WebsearchUpdated | ExperimentalPushUpdated | ArtifactUpdated | SessionStatusUpdated | SessionIdle | TuiPromptAppend | TuiCommandExecute | TuiToastShow | TuiSessionSelect | InstallationUpdated | InstallationUpdateAvailable | VcsBranchUpdated | McpStatusChanged | McpResourcesChanged | ExperimentalMcpEvent | ExperimentalSpaceResync | ExperimentalSpaceUpdated | ExperimentalSpaceDeleted | V2EventRpc | V2EventServerConnected)
 
 export type V2EventRpc = {
     id: EventID,
@@ -4529,7 +4655,9 @@ export type V2EventRpc = {
     data: { [string]: any },
 }
 
-export type V2EventServerConnected = _Event4<"server.connected", any>
+export type V2EventServerConnected = _Event4<"server.connected", {
+    stream: string?,
+}>
 
 export type VcsBase = {
     name: string,
@@ -4659,8 +4787,8 @@ export type Read = {
     pending: (self: Read, id: string) -> { SessionInboxInfo },
     --- The models of `location`, or where the TUI works; `nil` while they are not loaded.
     models: (self: Read, location: LocationRef?) -> { ModelInfo }?,
-    --- The providers where the TUI works; `nil` while they are not loaded.
-    providers: (self: Read) -> { ProviderInfo }?,
+    --- The providers of `location`, or where the TUI works; `nil` while they are not loaded.
+    providers: (self: Read, location: LocationRef?) -> { ProviderInfo }?,
     --- The OpenCode Console workspace's usage limits; `nil` while they are not loaded.
     limits: (self: Read) -> UsageLimitsInfo?,
     model: (self: Read) -> ModelRef?,
@@ -4712,8 +4840,8 @@ export type Host = {
     pending: (self: Read, id: string) -> { SessionInboxInfo },
     --- The models of `location`, or where the TUI works; `nil` while they are not loaded.
     models: (self: Read, location: LocationRef?) -> { ModelInfo }?,
-    --- The providers where the TUI works; `nil` while they are not loaded.
-    providers: (self: Read) -> { ProviderInfo }?,
+    --- The providers of `location`, or where the TUI works; `nil` while they are not loaded.
+    providers: (self: Read, location: LocationRef?) -> { ProviderInfo }?,
     --- The OpenCode Console workspace's usage limits; `nil` while they are not loaded.
     limits: (self: Read) -> UsageLimitsInfo?,
     model: (self: Read) -> ModelRef?,
@@ -5001,7 +5129,7 @@ export type Client = {
     },
     event: {
         subscribe: (input: {
-            types: { (("location.shutdown" | "models-dev.refreshed" | "credential.updated" | "credential.switched" | "integration.updated" | "provider.updated" | "model.updated" | "agent.updated" | "session.created" | "session.agent.selected" | "session.model.selected" | "session.moved" | "session.renamed" | "session.metadata.updated" | "session.permissions" | "session.viewed" | "session.archived" | "session.unarchived" | "session.usage.updated" | "session.deleted" | "session.forked" | "session.inbox.delivered" | "session.inbox.enqueued" | "session.inbox.cancelled" | "session.inbox.delivery.changed" | "session.execution.started" | "session.execution.succeeded" | "session.execution.failed" | "session.execution.interrupted" | "session.instructions.updated" | "session.synthetic" | "session.skill.activated" | "session.shell.started" | "session.shell.ended" | "session.step.started" | "session.step.first-token" | "session.step.streamed" | "session.step.ended" | "session.step.failed" | "session.text.started" | "session.text.delta" | "session.text.ended" | "session.reasoning.started" | "session.reasoning.delta" | "session.reasoning.ended" | "session.tool.input.started" | "session.tool.input.delta" | "session.tool.input.ended" | "session.tool.called" | "session.tool.progress" | "session.tool.success" | "session.tool.failed" | "session.retry.scheduled" | "session.compaction.started" | "session.compaction.delta" | "session.compaction.ended" | "session.compaction.failed" | "session.revert.staged" | "session.revert.cleared" | "session.revert.committed" | "filesystem.changed" | "reference.updated" | "permission.asked" | "permission.replied" | "plugin.updated" | "project.updated" | "worktree.updated" | "worktree.resolved" | "command.updated" | "config.updated" | "skill.updated" | "pty.created" | "pty.updated" | "pty.exited" | "pty.deleted" | "persistent-pty.added" | "persistent-pty.removed" | "persistent-pty.updated" | "shell.created" | "shell.exited" | "shell.deleted" | "experimental.job.updated" | "form.created" | "form.replied" | "form.cancelled" | "websearch.updated" | "artifact.updated" | "session.status" | "session.idle" | "tui.prompt.append" | "tui.command.execute" | "tui.toast.show" | "tui.session.select" | "installation.updated" | "installation.update-available" | "vcs.branch.updated" | "mcp.status.changed" | "mcp.resources.changed" | "experimental.mcp.event") | string) }?,
+            types: { (("location.shutdown" | "models-dev.refreshed" | "credential.updated" | "credential.switched" | "integration.updated" | "provider.updated" | "model.updated" | "agent.updated" | "session.created" | "session.agent.selected" | "session.model.selected" | "session.moved" | "session.renamed" | "session.metadata.updated" | "session.permissions" | "session.viewed" | "session.archived" | "session.unarchived" | "session.usage.updated" | "session.deleted" | "session.forked" | "session.inbox.delivered" | "session.inbox.enqueued" | "session.inbox.cancelled" | "session.inbox.delivery.changed" | "session.execution.started" | "session.execution.succeeded" | "session.execution.failed" | "session.execution.interrupted" | "session.instructions.updated" | "session.synthetic" | "session.skill.activated" | "session.shell.started" | "session.shell.ended" | "session.step.started" | "session.step.first-token" | "session.step.streamed" | "session.step.ended" | "session.step.failed" | "session.text.started" | "session.text.delta" | "session.text.ended" | "session.reasoning.started" | "session.reasoning.delta" | "session.reasoning.ended" | "session.tool.input.started" | "session.tool.input.delta" | "session.tool.input.ended" | "session.tool.called" | "session.tool.progress" | "session.tool.success" | "session.tool.failed" | "session.retry.scheduled" | "session.compaction.started" | "session.compaction.delta" | "session.compaction.ended" | "session.compaction.failed" | "session.revert.staged" | "session.revert.cleared" | "session.revert.committed" | "filesystem.changed" | "reference.updated" | "permission.asked" | "permission.replied" | "plugin.updated" | "project.updated" | "worktree.updated" | "worktree.resolved" | "command.updated" | "config.updated" | "skill.updated" | "pty.created" | "pty.updated" | "pty.exited" | "pty.deleted" | "persistent-pty.added" | "persistent-pty.removed" | "persistent-pty.updated" | "shell.created" | "shell.exited" | "shell.deleted" | "experimental.job.updated" | "form.created" | "form.replied" | "form.cancelled" | "websearch.updated" | "experimental.push.updated" | "artifact.updated" | "session.status" | "session.idle" | "tui.prompt.append" | "tui.command.execute" | "tui.toast.show" | "tui.session.select" | "installation.updated" | "installation.update-available" | "vcs.branch.updated" | "mcp.status.changed" | "mcp.resources.changed" | "experimental.mcp.event") | string) }?,
         }?) -> (nil, string?),
     },
     experimental: {
@@ -5090,6 +5218,9 @@ export type Client = {
                 id: string,
             }) -> (string?, string?),
         },
+        browser: {
+            tunnel: (input: {}?) -> (boolean?, string?),
+        },
         config: {
             update: (input: {
                 shell: string?,
@@ -5111,6 +5242,14 @@ export type Client = {
             }) -> ({
                 location: LocationPublicRef,
                 data: FileSystemWrite,
+            }?, string?),
+        },
+        flag: {
+            get: (input: {
+                location: { directory: string? }?,
+            }?) -> ({
+                location: LocationPublicRef,
+                data: { [string]: boolean },
             }?, string?),
         },
         generate: {
@@ -5278,6 +5417,56 @@ export type Client = {
                 title: string?,
             }) -> (PersistentPtyInfo?, string?),
         },
+        push: {
+            device: {
+                register: (input: {
+                    deviceID: string,
+                    callbackURL: string,
+                    expiresAt: number,
+                    publicKey: string,
+                    platform: PushPlatform,
+                    name: string,
+                    settings: PushDeviceSettings?,
+                }) -> (PushRegistered?, string?),
+                remove: (input: {
+                    deviceID: string,
+                }) -> (nil, string?),
+                session: {
+                    remove: (input: {
+                        deviceID: string,
+                        sessionID: string,
+                    }) -> (nil, string?),
+                    set: (input: {
+                        deviceID: string,
+                        sessionID: string,
+                        level: PushLevel,
+                        ["until"]: number?,
+                    }) -> (PushBell?, string?),
+                },
+                update: (input: {
+                    deviceID: string,
+                    paused: boolean?,
+                    settings: PushDeviceSettings?,
+                }) -> (PushDevice?, string?),
+            },
+            get: (input: {}?) -> (PushInfo?, string?),
+            session: {
+                remove: (input: {
+                    sessionID: string,
+                }) -> (nil, string?),
+                set: (input: {
+                    sessionID: string,
+                    level: PushLevel,
+                    ["until"]: number?,
+                }) -> (PushBell?, string?),
+            },
+            settings: {
+                set: (input: {
+                    paused: boolean,
+                    ["until"]: number?,
+                }) -> (PushSettings?, string?),
+            },
+        },
         session: {
             export: (input: {
                 sessionID: string,
@@ -5324,6 +5513,38 @@ export type Client = {
             wait: (input: {
                 sessionID: string,
             }) -> (nil, string?),
+        },
+        skill: {
+            file: (input: {
+                skillID: string,
+                location: { directory: string? }?,
+                path: string,
+            }) -> (string?, string?),
+        },
+        space: {
+            reset: (input: {}?) -> (nil, string?),
+            subscribe: (input: {
+                stream: string,
+                spaces: { {
+                    space: SpaceName,
+                    cursor: SpaceCursor1,
+                } },
+            }) -> (nil, string?),
+            sync: (input: {
+                space: string,
+                cursor: string?,
+            }) -> (SpacePage?, string?),
+            unsubscribe: (input: {
+                stream: string,
+                spaces: { SpaceName },
+            }) -> (nil, string?),
+            write: (input: {
+                space: string,
+                changes: { SpaceChange },
+            }) -> ({
+                revision: SpaceRevision,
+                cursor: SpaceCursor,
+            }?, string?),
         },
         usage: {
             limits: (input: {
@@ -5503,7 +5724,7 @@ export type Client = {
         }?, string?),
         list: (input: {
             location: { directory: string? }?,
-            types: { (("chat" | "decision" | "image" | "video") | string) }?,
+            types: { (("chat" | "decision" | "image" | "video" | "realtime" | "embedding" | "transcription") | string) }?,
         }?) -> ({
             location: LocationPublicRef,
             data: { ModelInfo },

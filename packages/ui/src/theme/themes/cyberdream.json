@@ -1,0 +1,55 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Cyberdream",
+  "id": "cyberdream",
+  "light": {
+    "palette": {
+      "neutral": "#ffffff",
+      "ink": "#16181a",
+      "primary": "#0057d1",
+      "accent": "#a018ff",
+      "success": "#008b0c",
+      "warning": "#997b00",
+      "error": "#d11500",
+      "info": "#008c99",
+      "interactive": "#0057d1",
+      "diffAdd": "#008b0c",
+      "diffDelete": "#d11500"
+    },
+    "overrides": {
+      "text-weak": "#5b6270",
+      "syntax-comment": "#5b6270",
+      "syntax-keyword": "#8b12df",
+      "syntax-string": "#00750a",
+      "syntax-primitive": "#0057d1",
+      "syntax-property": "#00707a",
+      "syntax-type": "#915500",
+      "syntax-constant": "#b80054"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#16181a",
+      "ink": "#ffffff",
+      "primary": "#5ea1ff",
+      "accent": "#bd5eff",
+      "success": "#5eff6c",
+      "warning": "#f1ff5e",
+      "error": "#ff6e5e",
+      "info": "#5ef1ff",
+      "interactive": "#5ea1ff",
+      "diffAdd": "#5eff6c",
+      "diffDelete": "#ff6e5e"
+    },
+    "overrides": {
+      "text-weak": "#8b94a6",
+      "syntax-comment": "#7b8496",
+      "syntax-keyword": "#ffbd5e",
+      "syntax-string": "#5eff6c",
+      "syntax-primitive": "#5ea1ff",
+      "syntax-property": "#5ef1ff",
+      "syntax-type": "#bd5eff",
+      "syntax-constant": "#ff5ea0"
+    }
+  }
+}

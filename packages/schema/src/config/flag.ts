@@ -14,9 +14,9 @@ export const registry = {
   console_watches:
     "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console, and wake sessions when they change.",
   recommended_api: "Use each model's recommended API from models.dev instead of the first API it lists.",
-  model_speeds:
-    "Offer a model's faster and slower service tiers (fast, flex…) as speeds of that model: one entry in the model picker with a speed selector, instead of a separate entry per tier such as gpt-5.5-fast.",
   full_codemode: "Enable the full Code Mode work in progress.",
+  codemode_agents:
+    "Let Code Mode scripts start subagents with agent() and make single model calls with llm(), each optionally returning a value checked against a schema, so one script can fan work out, verify it and combine the results.",
   machines: "Let a tool path name a machine, as in gpu:/work/train.py, and act on that machine's files and processes.",
   home_memory:
     "Give sessions in the home folder a persistent memory/, docs/ and scripts/ workspace the agent can use freely, tidied by a daily maintenance session that reads the day's home-folder conversations.",
@@ -24,10 +24,19 @@ export const registry = {
     "Load a personal config dir for each project from ~/.config/opencode/project/<project-id>/, read like an extra .opencode dir that ranks above the repo's own, and let home memory keep the skills it builds for the user there.",
   opencode_api:
     'Let Code Mode scripts call the OpenCode HTTP API with fetch("opencode:///api/..."), in-process and already signed in, with no permission checks. Only in local and dev builds, and off there until you opt in with OPENCODE_FLAGS=opencode_api or experimental.opencode_api: true.',
+  mcp_skills:
+    "Load skills from MCP servers that offer them (the io.modelcontextprotocol/skills extension), named <server>:<skill>. A server that offers skills no longer has its instructions included.",
+  compaction_jobs:
+    "List a session's subagents, with their session IDs, and its running background jobs in its compaction checkpoints, so the agent can still continue or account for them after compacting.",
   sqlite_fts:
     "Build an SQLite full-text index of session titles and message text in the background, and enable the opencode.session.search and opencode.session.read tools. The index covers every session in the database and starts while any loaded location enables it; SQLite keeps it current from then on, also after this is turned off.",
+  browser_stream_tunnel:
+    "Stream remote desktop browser TCP traffic over one prewarmed, ticket-authenticated binary WebSocket per live browser attachment instead of per-chunk RPC.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
+
+/** Flags the server reports to clients at `GET /api/experimental/flag`, so they can adapt their UI. */
+export const ui: readonly Key[] = ["full_codemode"]
 
 export const optInOnly: ReadonlySet<Key> = new Set(["todo", "opencode_api"])
 

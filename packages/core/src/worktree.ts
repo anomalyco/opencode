@@ -20,8 +20,10 @@ import { WorktreeTable } from "./worktree/sql.js"
 import { canonical, DirectoryUnavailableError } from "./worktree/directory.js"
 import type { EffectDrizzleSqlite } from "./database/drizzle.js"
 import { ProjectTable } from "./project/sql.js"
+import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { AppProcess } from "@opencode/util/process"
-import { ChildProcess } from "effect/process"
+import { ChildProcess, ChildProcessSpawner } from "effect/process"
+import { EnvironmentUnavailable } from "./environment/unavailable.js"
 import { WorktreeStrategies } from "./worktree/strategies.js"
 
 export type { Strategy, Editor } from "./worktree/strategies.js"
@@ -111,7 +113,10 @@ const layer = Layer.effect(
     const db = database.db
     const bus = yield* Bus.Service
     const processService = yield* AppProcess.Service
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const local = spawner !== EnvironmentUnavailable.spawner
     const locations = yield* LocationServiceMap.Service
+    const unavailable = () => new Worktree.OperationError({ message: "Worktrees require a local environment" })
     const project = Effect.fnUntraced(function* (projectID: Project.ID) {
       const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get().pipe(Effect.orDie)
       if (!row) return yield* new Project.NotFoundError({ projectID })
@@ -119,6 +124,7 @@ const layer = Layer.effect(
     })
 
     const load = Effect.fnUntraced(function* (directory: AbsolutePath, current?: WorktreeStrategies.Interface) {
+      if (!local) return yield* unavailable()
       if (!(yield* fs.isDir(directory))) return yield* new DirectoryUnavailableError({ directory })
       if (current?.directory === directory) return current.get()
       const { Plugin } = yield* Effect.promise(() => import("./plugin.js"))
@@ -217,23 +223,20 @@ const layer = Layer.effect(
         worktreeDirectory = AbsolutePath.make(path.join(directory, `${name}-${suffix}`))
       }
 
-      const result = yield* Effect.uninterruptibleMask((restore) =>
-        Effect.gen(function* () {
-          const checkout = selected
-            .create({
-              directory: worktreeDirectory,
-              sourceDirectory,
-              branch: input.branch,
-            })
-            .pipe(Effect.mapError((error) => operationError(selected.id, "create", error)))
-          // Git can write the checkout before returning. Plugin strategies must still receive cancellation.
-          const created = yield* selected === settings.builtinGit ? checkout : restore(checkout)
-          const directory = yield* canonical(fs, created.directory)
-          yield* changed(
-            input.projectID,
-            yield* ops.create(input.projectID, { directory, strategy: selected.id, replace: true }),
-          )
-          return { directory }
+      const created = yield* selected
+        .create({
+          directory: worktreeDirectory,
+          sourceDirectory,
+          branch: input.branch,
+        })
+        .pipe(Effect.mapError((error) => operationError(selected.id, "create", error)))
+      const result = { directory: yield* canonical(fs, created.directory) }
+      yield* changed(
+        input.projectID,
+        yield* ops.create(input.projectID, {
+          directory: result.directory,
+          strategy: selected.id,
+          replace: true,
         }),
       )
       const command = row.commands?.start?.trim()
@@ -259,6 +262,7 @@ const layer = Layer.effect(
 
     const remove = Effect.fn("Worktree.remove")(function* (input: RemoveInput, current?: WorktreeStrategies.Interface) {
       const row = yield* project(input.projectID)
+      if (!local) return yield* unavailable()
       const worktreeDirectory = yield* canonical(fs, input.directory)
       const stored = yield* ops.find(input.projectID, worktreeDirectory)
       if (!stored?.strategy) return yield* new InvalidDirectoryError({ directory: worktreeDirectory })
@@ -344,7 +348,7 @@ const layer = Layer.effect(
 export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.global> = Node.makeGlobalNode({
   service: Service,
   layer,
-  deps: [FSUtil.node, Bus.node, Database.node, AppProcess.node, LocationServiceMap.node],
+  deps: [FSUtil.node, Bus.node, Database.node, AppProcess.node, CrossSpawnSpawner.node, LocationServiceMap.node],
 })
 
 function operationError(strategy: StrategyID, operation: string, error: unknown) {

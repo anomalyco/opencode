@@ -127,7 +127,7 @@ const surfaces: Surface[] = [
           >
             <div class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 px-2">
               <div class="-me-0.5 flex shrink-0 items-center gap-0.5">
-                <IconButton variant="ghost-muted" icon={<Icon name="grid-plus" />} aria-label="Home" class="!w-9" />
+                <IconButton variant="ghost-muted" icon={<Icon name="sessions-stack" />} aria-label="Home" class="!w-9" />
                 <IconButton
                   variant="ghost-muted"
                   icon={<Icon name="magnifying-glass" />}

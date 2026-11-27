@@ -2,7 +2,7 @@ export * as AutomationCode from "./code.js"
 
 import { CodeMode } from "@opencode/codemode"
 import { Automation } from "@opencode/schema/automation"
-import { Array, Context, Effect, Option, Result, Schema } from "effect"
+import { Array, Effect, Option, Result, Schema } from "effect"
 import { Agent } from "../agent.js"
 import { CodeModeTool } from "../codemode/tool.js"
 import { Permission } from "../permission.js"
@@ -57,8 +57,8 @@ export type Outcome =
       readonly ok: false
       readonly error: string
       readonly output?: string
-      /** The program cannot succeed on a retry, e.g. a parse error or an unknown tool. */
-      readonly invalid?: boolean
+      /** A tool the program names is missing from the catalog right now, so the run is skipped. */
+      readonly unavailable?: boolean
     }
 
 type ProgramScan = { readonly tools: ReadonlyArray<string>; readonly actions: ReadonlySet<string> }
@@ -83,24 +83,6 @@ function scanProgram(code: string): Result.Result<ProgramScan, string> {
   return Result.succeed({ tools: scanned.success.tools, actions: extensionActions(scanned.success) })
 }
 
-/** The calling plugin's registry. SDK instances and the host can have separate registries at the same Location. */
-export const FromPlugin = Context.Reference<Plugin.Interface | undefined>("@opencode/AutomationCode/FromPlugin", {
-  defaultValue: () => undefined,
-})
-
-/**
- * Waits for this registry's plugins. A create from a plugin in this same registry is refused instead while it activates:
- * its activation may be waiting on that plugin's setup, and configured permissions are applied by plugins that load later.
- */
-export const awaitPlugins = Effect.gen(function* () {
-  const plugins = yield* Plugin.Service
-  if ((yield* FromPlugin) !== plugins) return yield* plugins.awaitActivation
-  if (yield* plugins.activated) return
-  return yield* Effect.fail(
-    "Plugins in this location are still loading, so configured permissions are not applied yet. Create this automation after plugin setup, for example from an event handler.",
-  )
-})
-
 /**
  * Runs in the creating Session's Location while the user is present: asks once for tool and extension permissions (and for
  * `execute` if none of those needed approval), without saving, so every run can be allowed unattended.
@@ -113,13 +95,15 @@ export const authorize = Effect.fnUntraced(function* (
   invocation?: Invocation,
 ) {
   const scanned = yield* Effect.fromResult(scan(action.code))
-  yield* awaitPlugins
+  yield* Plugin.awaitActivation
   const permission = yield* Permission.Service
   const agents = yield* Agent.Service
   const agent = yield* agents.select(session.agent)
   if (invocation && !matchesAuthor(session, agent.info, invocation))
     return yield* Effect.fail("Create the automation with the session's current agent")
-  const actions = (yield* resolveCapabilities(scanned)).actions
+  const actions = (yield* resolveCapabilities(scanned).pipe(
+    Effect.mapError(({ path }) => `Unknown Code Mode tool: ${path}`),
+  )).actions
   const policy = Permission.Policy.fromRules(agent.info?.permissions ?? [], session.permissions ?? [])
   // A rule scoped to some resources (`vault:*: ask`) must prompt too, not only the catch-all `*`.
   const request = (item: string) => ({
@@ -169,7 +153,7 @@ const resolveCapabilities = Effect.fnUntraced(function* (scanned: ProgramScan) {
     const selected = yield* tools.codeModeTools(scanned.tools)
     for (const path of scanned.tools) {
       const tool = selected.get(path)
-      if (!tool) return yield* Effect.fail(`Unknown Code Mode tool: ${path}`)
+      if (!tool) return yield* Effect.fail({ path })
       actions.add(tool.options?.permission ?? tool.id)
     }
   }
@@ -210,10 +194,11 @@ export const run = Effect.fnUntraced(
     if (!agent.info) return { ok: false as const, error: `Agent not found: ${agent.id}` }
 
     const scanned = scan(action.code)
-    if (Result.isFailure(scanned)) return { ok: false as const, error: scanned.failure, invalid: true }
+    if (Result.isFailure(scanned)) return { ok: false as const, error: scanned.failure }
 
     const resolved = yield* Effect.result(resolveCapabilities(scanned.success))
-    if (Result.isFailure(resolved)) return { ok: false as const, error: resolved.failure, invalid: true }
+    if (Result.isFailure(resolved))
+      return { ok: false as const, error: `${resolved.failure.path} unavailable`, unavailable: true }
 
     const actions = ["execute", ...resolved.success.actions]
     const policy = Permission.Policy.fromRules(agent.info.permissions, session.permissions ?? [])
@@ -258,23 +243,13 @@ export const run = Effect.fnUntraced(
       .pipe(Effect.provideService(Permission.Unattended, unattended))
 
     const output = result.logs?.length ? boundedOutput(result.logs.join("\n")) : undefined
-    if (!result.ok) {
-      const invalid =
-        result.error.kind === "ParseError" ||
-        result.error.kind === "UnsupportedSyntax" ||
-        result.error.kind === "UnknownTool" ||
-        result.error.kind === "InvalidToolInput" ||
-        // A scoped `ask` with nobody present to answer it, in Permission's own wording.
-        result.error.message.includes("needs approval")
-      return { ok: false as const, error: result.error.message, output, ...(invalid ? { invalid: true } : {}) }
-    }
+    if (!result.ok) return { ok: false as const, error: result.error.message, output }
     const decoded = Automation.decodeCodeResult(result.value)
     if (Result.isFailure(decoded)) {
       return {
         ok: false as const,
         error: `An automation must return nothing or { state?, done?, send? }: ${decoded.failure}`,
         output,
-        invalid: true,
       }
     }
     return { ok: true as const, ...decoded.success, output }

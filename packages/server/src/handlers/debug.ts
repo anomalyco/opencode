@@ -2,7 +2,7 @@ import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { InvalidRequestError, UnknownError } from "@opencode/protocol/errors"
 import { Global } from "@opencode/util/global"
 import { HeapSnapshot } from "@opencode/util/heap-snapshot"
-import { Effect, Option, RcMap } from "effect"
+import { Effect, Option } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import path from "node:path"
 import { Api } from "../api"
@@ -41,7 +41,7 @@ export const DebugHandler = HttpApiBuilder.group(Api, "server.debug", (handlers)
         "debug.location",
         Effect.fn(function* () {
           const locations = Option.getOrThrow(yield* Effect.serviceOption(LocationServiceMap.Service))
-          return Array.from(yield* RcMap.keys(locations.rcMap))
+          return yield* locations.keys
         }),
       )
       .handle(

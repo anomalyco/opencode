@@ -12,6 +12,7 @@ import { FileSystemSearch } from "@opencode/core/filesystem/search"
 import { Credential } from "@opencode/core/credential"
 import { Config } from "@opencode/core/config"
 import { PermissionSaved } from "@opencode/core/permission/saved"
+import { BrowserTunnelGateway } from "@opencode/core/experimental/browser-tunnel"
 import { PtyTicket } from "@opencode/core/pty/ticket"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Project } from "@opencode/core/project"
@@ -41,7 +42,11 @@ import { Automation } from "@opencode/core/automation"
 import { PluginUpdate } from "@opencode/core/plugin/update"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { WellKnown } from "@opencode/core/wellknown"
+import { PushList } from "@opencode/core/push/list"
+import { PushSender } from "@opencode/core/push/sender"
+import { PushWatcher } from "@opencode/core/push/watcher"
 import { Workspace } from "@opencode/core/workspace"
+import { WorkspaceConnector } from "@opencode/core/environment/workspace-connector"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { FileWatch } from "@opencode/core/filesystem/file-watch"
 import { HttpEffect, HttpRouter } from "effect/http"
@@ -50,6 +55,7 @@ import { Context, Effect, Layer, Option } from "effect"
 import { Base64 } from "effect/encoding"
 import { Api } from "./api"
 import { ServerAuth } from "./auth"
+import { SpaceStore } from "./space-store"
 import { CorsConfig } from "./cors"
 import { handlers } from "./handlers"
 import { authorizationLayer } from "./middleware/authorization"
@@ -89,9 +95,11 @@ const applicationServiceNodes = [
   PluginUpdate.node,
   PermissionSaved.node,
   PtyTicket.node,
+  BrowserTunnelGateway.node,
   Credential.node,
   WellKnown.node,
   ServerPairing.node,
+  SpaceStore.node,
   LocationServiceMap.node,
   LocationActivity.node,
   SessionRestart.node,
@@ -107,6 +115,9 @@ const applicationServiceNodes = [
   // The home's key, which the link's handshake signs with.
   Identity.node,
   FileWatch.node,
+  PushList.node,
+  PushSender.node,
+  PushWatcher.node,
 ] as const
 const applicationServices = LayerNode.group(applicationServiceNodes)
 
@@ -118,9 +129,7 @@ export function createRoutes(
   return makeRoutes(options.password ? Option.some(options.password) : Option.none(), options, serviceURLs, overrides)
 }
 
-type InstanceNode = (
-  replacements: () => LayerNode.Replacements,
-) => LayerNode.Provider<Instance.Service, never, typeof Node.tags.values.global>
+type InstanceNode = LayerNode.Provider<Instance.Service, never, typeof Node.tags.values.global>
 
 export function createEmbeddedRoutes(
   options: ServerOptions = {},
@@ -162,6 +171,7 @@ function makeRoutes(
       ),
     ),
     Database.node.replace(Database.configured(options.database)),
+    WorkspaceConnector.node.replace(Workspace.connectorNode),
     PersistentPty.node.replace(PersistentPty.configured(options.pty)),
     Bus.node.replace(Bus.configured({ persist: options.events?.persist })),
     App.node.replace(App.configured(options.app)),
@@ -195,15 +205,12 @@ function makeRoutes(
       }),
     ),
   ]
-  const build = (overrides: LayerNode.Replacements) => {
-    const replacements: LayerNode.Replacements = [
+  const build = (overrides: LayerNode.Replacements) =>
+    AppNodeBuilder.build(applicationServices, [
       ...standard,
-      // Private instances resolve this list lazily so they inherit the complete host graph, including the selector.
-      ...(instances ? [Instance.node.replace(instances(() => replacements))] : []),
+      ...(instances ? [Instance.node.replace(instances)] : []),
       ...overrides,
-    ]
-    return AppNodeBuilder.build(applicationServices, replacements)
-  }
+    ])
   const serviceLayer = options.simulation
     ? Layer.unwrap(
         Effect.gen(function* () {

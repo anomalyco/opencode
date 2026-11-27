@@ -6,6 +6,7 @@ export function SectionHeading(props: {
   description?: string
   slot?: string
   action?: JSX.Element
+  share?: JSX.Element
 }) {
   const heading = (
     <h2 data-slot={props.slot ?? "section-title"}>
@@ -15,7 +16,7 @@ export function SectionHeading(props: {
             #
           </span>
           {props.title}
-          {props.description ? "." : ""}
+          {props.description && <span data-slot="heading-stop">.</span>}
         </a>
       </strong>
       {props.description && (
@@ -28,11 +29,19 @@ export function SectionHeading(props: {
   )
   // Read once: every read of a JSX prop renders it again.
   const action = props.action
-  if (!action) return heading
+  const share = props.share
+  if (!action && !share) return heading
   return (
     <div data-slot="section-heading-row">
       {heading}
-      {action}
+      {share ? (
+        <div data-slot="section-actions">
+          {action}
+          {share}
+        </div>
+      ) : (
+        action
+      )}
     </div>
   )
 }

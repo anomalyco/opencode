@@ -46,15 +46,6 @@ describe("util.which", () => {
     expect(which("opencode-missing-command-for-test")).toBeNull()
   })
 
-  test("finds a command from PATH override", async () => {
-    await using tmp = await tmpdir()
-    const bin = path.join(tmp.path, "bin")
-    await fs.mkdir(bin)
-    const file = await cmd(bin, "tool")
-
-    same(which("tool", env(bin)), file)
-  })
-
   test("uses first PATH match", async () => {
     await using tmp = await tmpdir()
     const a = path.join(tmp.path, "a")

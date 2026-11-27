@@ -132,6 +132,7 @@ fn text(value: &Value, complete: bool) -> Check {
         "base"?: field(input, "base", complete, color)?,
         "muted"?: field(input, "muted", complete, color)?,
         "faint"?: field(input, "faint", false, color)?,
+        "selection"?: field(input, "selection", false, color)?,
         "action"?: field(input, "action", complete, |value| actions(value, complete))?,
         "formfield"?: field(input, "formfield", complete, |value| stateful(value, complete))?,
         "feedback"?: field(input, "feedback", complete, |value| feedback(value, complete, feedback_color))?,
@@ -144,6 +145,7 @@ fn background(value: &Value, complete: bool) -> Check {
     let feedback_color = |value: &Value| strict(value, &[("base", complete)], color);
     Ok(json_object! {
         "base"?: field(input, "base", complete, color)?,
+        "selection"?: field(input, "selection", false, color)?,
         "raised"?: field(input, "raised", complete, raised)?,
         "action"?: field(input, "action", complete, |value| actions(value, complete))?,
         "formfield"?: field(input, "formfield", complete, |value| stateful(value, complete))?,

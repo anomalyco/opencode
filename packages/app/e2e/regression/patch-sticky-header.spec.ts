@@ -261,3 +261,60 @@ for (const scenario of scenarios) {
     })
   }
 }
+
+// The header rests 6px above its group's top in both timelines.
+for (const newTimeline of [false, true]) {
+  test(`collapsing a group from its stuck header leaves the header where it was (${newTimeline ? "New" : "current"} timeline)`, async ({
+    page,
+  }) => {
+    await setupTimeline(page, {
+      messages: [
+        userMessage(),
+        assistantMessage([
+          ...Array.from({ length: 80 }, (_, index) =>
+            toolPart(
+              `prt_stuck_shell_${String(index).padStart(2, "0")}`,
+              "shell",
+              "completed",
+              { command: `echo ${index}` },
+              { output: "ok" },
+            ),
+          ),
+          textPart("prt_after_group", "Following explanation.\n\n".repeat(60)),
+        ]),
+      ],
+      settings: { timelineDetail: timelinePresets[2].value, newTimeline },
+      reducedMotion: true,
+      viewport: { width: 1400, height: 900 },
+    })
+
+    const scroller = page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport')
+    const group = page.locator('[data-component="collapsed-tool-group"]')
+    const header = group.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
+    await header.click()
+    await expect(header).toHaveAttribute("aria-expanded", "true")
+
+    // Leave follow-latest mode, then put the group's top above the view so its header sticks.
+    await scroller.hover()
+    await page.mouse.wheel(0, -100)
+    await group.evaluate((element) => {
+      const viewport = element.closest<HTMLElement>(".scroll-view__viewport")!
+      viewport.scrollTop += element.getBoundingClientRect().top - viewport.getBoundingClientRect().top + 300
+    })
+    await expect
+      .poll(() =>
+        header.evaluate(
+          (element) =>
+            element.getBoundingClientRect().top -
+            element.closest('[data-component="collapsed-tool-group"]')!.getBoundingClientRect().top,
+        ),
+      )
+      .toBeGreaterThan(200)
+
+    const top = () => header.evaluate((element) => element.getBoundingClientRect().top)
+    const stuck = await top()
+    await header.click()
+    await expect(header).toHaveAttribute("aria-expanded", "false")
+    await expect.poll(top).toBe(stuck)
+  })
+}

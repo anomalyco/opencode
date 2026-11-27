@@ -8,6 +8,7 @@ import {
   REGISTER_TIMEOUT_MS,
   sessionSupported,
   sessionError,
+  sessionOpenable,
   sessionFailure,
   sessionPending,
   sessionRegistration,
@@ -79,7 +80,7 @@ const attempt = (state: State, sessionKey = key) => {
 
 const attach = (sessionKey = key, located = true): Event[] => [
   { type: "session.attached", sessionKey, serverID: server, located },
-  { type: "session.wake", sessionKey },
+  { type: "session.wake", sessionKey, takes: false },
 ]
 
 const paneState = (state: State, browser: Browser.State | null, error?: string, sessionKey = key): Event => ({
@@ -166,7 +167,7 @@ describe("browser pane machine", () => {
     const evicted = transition(ready(), paneState(ready(), inventory(tab(tabA)), "browser.pane.suspended")).state
     expect(phase(evicted)).toEqual({ status: "suspended", reason: "idle" })
     expect(sessionSettled(evicted, key)).toBe(false)
-    const woken = transition(evicted, { type: "session.wake", sessionKey: key }).state
+    const woken = transition(evicted, { type: "session.wake", sessionKey: key, takes: false }).state
     expect(phase(woken)?.status).toBe("registering")
     expect(sessionSettled(woken, key)).toBe(false)
 
@@ -512,7 +513,7 @@ describe("browser pane machine", () => {
     const start = ready()
     const suspended = transition(start, paneState(start, inventory(tab(tabA)), "browser.pane.suspended")).state
     expect(sessionSuspended(suspended, key)).toBe(true)
-    const woken = transition(suspended, { type: "session.wake", sessionKey: key })
+    const woken = transition(suspended, { type: "session.wake", sessionKey: key, takes: false })
     expect(woken.effects).toContainEqual(
       expect.objectContaining({ type: "open-registration", restore: inventory(tab(tabA)) }),
     )
@@ -529,7 +530,7 @@ describe("browser pane machine", () => {
 
     const later = replay(
       [
-        { type: "session.wake", sessionKey: key },
+        { type: "session.wake", sessionKey: key, takes: false },
         { type: "session.created", sessionKey: key },
       ],
       replaced.state,
@@ -1075,8 +1076,8 @@ describe("browser pane machine", () => {
 
     const woken = replay(
       [
-        { type: "session.wake", sessionKey: key },
-        { type: "session.wake", sessionKey: key },
+        { type: "session.wake", sessionKey: key, takes: false },
+        { type: "session.wake", sessionKey: key, takes: false },
       ],
       suspended.state,
     )
@@ -1163,7 +1164,7 @@ describe("browser pane machine", () => {
 
     const later = replay(
       [
-        { type: "session.wake", sessionKey: key },
+        { type: "session.wake", sessionKey: key, takes: false },
         { type: "register.timed-out", sessionKey: key, attempt: attempt(start) },
       ],
       blocked.state,
@@ -1172,11 +1173,50 @@ describe("browser pane machine", () => {
     expect(later.effects).toEqual([])
   })
 
+  // Another window that opens the session takes its browser. That window may close, and the person may come back to
+  // the session here: its browser must not stay gone for as long as the app runs.
+  test("a session another window took comes back with a wake that takes it, and stays on offer meanwhile", () => {
+    const start = ready()
+    const replaced = transition(start, paneState(start, null, "browser.pane.replaced")).state
+    expect(phase(replaced)).toEqual({ status: "blocked", reason: "replaced" })
+    expect(sessionOpenable(replaced, key)).toBe(true)
+    expect(transition(replaced, { type: "session.wake", sessionKey: key, takes: false }).state).toBe(replaced)
+
+    const taken = transition(replaced, { type: "session.wake", sessionKey: key, takes: true })
+    expect(phase(taken.state)?.status).toBe("registering")
+    expect(sessionFailure(taken.state, key)).toBeUndefined()
+    // Main restores the tabs it saved for the session: the window forgot them with the block.
+    expect(taken.effects).toEqual([
+      { type: "open-registration", sessionKey: key, attempt: attempt(taken.state), restore: undefined },
+      { type: "schedule-register-timeout", sessionKey: key, attempt: attempt(taken.state), delayMs: REGISTER_TIMEOUT_MS },
+    ])
+  })
+
+  test("a session another window took registers again once that window let it go, and an evicted one does not", () => {
+    const start = ready()
+    const replaced = transition(start, paneState(start, null, "browser.pane.replaced")).state
+    expect(types(transition(replaced, { type: "session.released", sessionKey: key }).effects)).toEqual([
+      "open-registration",
+      "schedule-register-timeout",
+    ])
+
+    // Eviction revokes the grant too. A pane the server suspended must not register again by itself and reload the project.
+    const evicted = transition(start, paneState(start, inventory(tab(tabA)), "browser.pane.suspended")).state
+    expect(transition(evicted, { type: "session.released", sessionKey: key }).state).toBe(evicted)
+  })
+
+  test.each(["browser.pane.missing", "browser.pane.unsupported"])("%s is neither on offer nor lifted by a wake that takes", (error) => {
+    const start = replay(attach()).state
+    const blocked = transition(start, paneState(start, null, error)).state
+    expect(sessionOpenable(blocked, key)).toBe(false)
+    expect(transition(blocked, { type: "session.wake", sessionKey: key, takes: true }).state).toBe(blocked)
+  })
+
   test("a missing session waits without an error until the server creates it", () => {
     const start = replay(attach()).state
     const missing = transition(start, paneState(start, null, "browser.pane.missing")).state
     expect(sessionError(missing, key)).toBeUndefined()
-    expect(transition(missing, { type: "session.wake", sessionKey: key }).state).toBe(missing)
+    expect(transition(missing, { type: "session.wake", sessionKey: key, takes: false }).state).toBe(missing)
     expect(types(transition(missing, { type: "session.created", sessionKey: key }).effects)).toEqual([
       "open-registration",
       "schedule-register-timeout",
@@ -1212,7 +1252,7 @@ describe("browser pane machine", () => {
       { type: "close-registration", sessionKey: other, attempt: attempt(start, other) },
       { type: "detach", sessionKey: other },
     ])
-    expect(transition(disposed.state, { type: "session.wake", sessionKey: key }).state).toBe(disposed.state)
+    expect(transition(disposed.state, { type: "session.wake", sessionKey: key, takes: false }).state).toBe(disposed.state)
   })
 
   // The model reconciles the state into its store in place, so an object two attachments share carries one's change

@@ -2,7 +2,7 @@ import { Tool } from "@opencode/schema/tool"
 import type { Rpc } from "@opencode/schema/rpc"
 import type { OpenCodeEvent } from "@opencode/client"
 import type { RpcCallOptions, RpcEventPayload, SelectedEvent, SubscribeOptions } from "@opencode/client/promise/api"
-import { Cause, Effect, Exit, Schema, SchemaAST, Stream } from "effect"
+import { Effect, Schema, SchemaAST, Stream } from "effect"
 import type { Scope } from "effect"
 import { HttpApiEndpoint, HttpApiSchema } from "effect/http-api"
 import { define } from "../effect/plugin.js"
@@ -302,10 +302,9 @@ export function fromPromise(plugin: Plugin) {
         ) => {
           const compiled = compileEndpoint(endpoint)
           return ((input?: unknown, options?: { readonly signal?: AbortSignal }) => {
-            const signal = options?.signal
             // The runner evaluates synchronously before it checks the signal, so an aborted call could start a mutation.
-            if (signal?.aborted) return Promise.reject(signal.reason)
-            return Effect.runPromiseExitWith(runtime)(
+            if (options?.signal?.aborted) return Promise.reject(options.signal.reason)
+            return Effect.runPromiseWith(runtime)(
               Effect.gen(function* () {
                 // Match the generated Promise client, whose request body crosses JSON before endpoint decoding.
                 const normalized = yield* Schema.encodeUnknownEffect(JsonInput)(input ?? {}).pipe(
@@ -316,19 +315,8 @@ export function fromPromise(plugin: Plugin) {
                 if (compiled.noContent) return undefined
                 return yield* compiled.encode(result)
               }),
-              { signal },
-            ).then((exit) => {
-              if (Exit.isSuccess(exit)) return exit.value
-              // Effect records AbortSignal interruptions without an interrupting fiber ID.
-              if (
-                signal?.aborted &&
-                Cause.hasInterruptsOnly(exit.cause) &&
-                exit.cause.reasons.some((reason) => Cause.isInterruptReason(reason) && reason.fiberId === undefined)
-              ) {
-                throw signal.reason
-              }
-              throw Cause.squash(exit.cause)
-            })
+              { signal: options?.signal },
+            )
           }) as PromiseMethod
         }
 
@@ -380,7 +368,9 @@ export function fromPromise(plugin: Plugin) {
             activate: adaptApiMethod(CredentialEndpoints["credential.activate"], host.credential.activate),
           },
           event: {
-            subscribe: <Type extends Exclude<OpenCodeEvent["type"], "server.connected">>(
+            subscribe: <
+              Type extends Exclude<OpenCodeEvent["type"], "server.connected" | `experimental.space.${string}`>,
+            >(
               options?: SubscribeOptions<Type>,
             ) =>
               streams(

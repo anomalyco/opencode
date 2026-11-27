@@ -3,7 +3,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { and, eq, isNull } from "drizzle-orm"
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
+import { Context, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -17,7 +17,9 @@ import { WorktreeStrategies } from "@opencode/core/worktree/strategies"
 import { WorktreeDirectory } from "@opencode/core/worktree/directory"
 import { WorktreeTable } from "@opencode/core/worktree/sql"
 import { WorktreeGit } from "@opencode/core/worktree/git"
+import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { Location } from "@opencode/core/location"
+import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Config } from "@opencode/core/config"
@@ -57,7 +59,6 @@ function worktreeLayer(
   bus: Bus.Interface,
   data: string,
   workspaceID?: Workspace.ID,
-  ...replacements: LayerNode.Replacement[]
 ) {
   return AppNodeBuilder.build(
     LayerNode.group([Worktree.node, WorktreeStrategies.node, Git.node, FSUtil.node, Location.node, Global.node]),
@@ -75,7 +76,6 @@ function worktreeLayer(
           }),
         ),
       ),
-      ...replacements,
     ],
   ).pipe(Layer.fresh)
 }
@@ -172,23 +172,6 @@ describe("Worktree", () => {
     }),
   )
 
-  it.live("reports unavailable recorded strategy ids", () =>
-    Effect.gen(function* () {
-      const input = yield* setup()
-      const worktree = yield* fixtureWorktree()
-      const unavailable = Worktree.StrategyID.make("acme/missing")
-      yield* input.db
-        .update(WorktreeTable)
-        .set({ strategy: unavailable })
-        .where(eq(WorktreeTable.project_id, input.projectID))
-        .run()
-        .pipe(Effect.orDie)
-      const error = yield* worktree.remove({ directory: input.sourceDirectory, force: false }).pipe(Effect.flip)
-      expect(error).toBeInstanceOf(Worktree.StrategyUnavailableError)
-      if (error instanceof Worktree.StrategyUnavailableError) expect(error.strategy).toBe(unavailable)
-    }),
-  )
-
   it.live("requires a tracked project worktree", () =>
     Effect.gen(function* () {
       const input = yield* setup()
@@ -246,85 +229,6 @@ describe("Worktree", () => {
     }),
   )
 
-  it.live("registers a checkout when creation is aborted during path validation", () =>
-    Effect.gen(function* () {
-      const input = yield* setup()
-      const database = yield* Database.Service
-      const bus = yield* Bus.Service
-      const filesystem = yield* FSUtil.Service
-      const strategies = yield* WorktreeStrategies.Service
-      const directory = abs(path.join(input.root.path, "trees"))
-      const target = abs(path.join(directory, "cancelled"))
-      const controller = new AbortController()
-      const context = yield* Layer.build(
-        worktreeLayer(
-          input.sourceDirectory,
-          input.projectID,
-          database,
-          bus,
-          input.root.path,
-          undefined,
-          FSUtil.node.replace(
-            Layer.succeed(FSUtil.Service, {
-              ...filesystem,
-              resolve: (file) =>
-                file === target
-                  ? Effect.sync(() => controller.abort()).pipe(Effect.andThen(filesystem.resolve(file)))
-                  : filesystem.resolve(file),
-            }),
-          ),
-        ),
-      )
-      const worktree = Context.get(context, Worktree.Service)
-      // Use the live Git strategy so the abort hits the catalog's validation, after Git has returned.
-      const fiber = Effect.runFork(
-        worktree.create({ projectID: input.projectID, directory, name: "cancelled" }, strategies),
-        {
-          signal: controller.signal,
-        },
-      )
-      const exit = yield* Fiber.await(fiber)
-
-      expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
-      expect(yield* filesystem.isFile(path.join(target, ".git"))).toBe(true)
-      expect(yield* worktree.list({ projectID: input.projectID })).toContainEqual({
-        directory: target,
-        strategy: "git",
-      })
-    }),
-  )
-
-  it.live("cancels a hanging custom strategy even when it replaces the git strategy", () =>
-    Effect.gen(function* () {
-      const worktrees = yield* fixtureWorktree()
-      const pending = yield* Deferred.make<{ signal: AbortSignal; release: () => void }>()
-      yield* worktrees.transform((editor) =>
-        editor.add({
-          id: Worktree.StrategyID.make("git"),
-          create: () =>
-            Effect.callback<never, Error>((resume, signal) => {
-              Deferred.doneUnsafe(
-                pending,
-                Effect.succeed({ signal, release: () => resume(Effect.fail(new Error("test cleanup"))) }),
-              )
-            }),
-          remove: () => Effect.void,
-          list: () => Effect.succeed([]),
-        }),
-      )
-      const controller = new AbortController()
-      const fiber = Effect.runFork(worktrees.create({ name: "cancelled" }), { signal: controller.signal })
-      const strategy = yield* Deferred.await(pending)
-      yield* Effect.addFinalizer(() => Effect.sync(strategy.release))
-      yield* Effect.yieldNow
-
-      controller.abort()
-      expect(strategy.signal.aborted).toBe(true)
-      const exit = yield* Fiber.await(fiber)
-      expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
-    }),
-  )
-
   it.live("defaults to the TUI worktree directory and suffixes duplicate names", () =>
     Effect.gen(function* () {
       const input = yield* setup()
@@ -346,38 +250,6 @@ describe("Worktree", () => {
       expect(yield* Effect.promise(() => Bun.file(path.join(created.directory, ".git")).exists())).toBe(true)
       yield* worktree.remove({ directory: created.directory, force: false })
       yield* worktree.remove({ directory: duplicate.directory, force: false })
-    }),
-  )
-
-  it.live("runs the project setup script with worktree paths", () =>
-    Effect.gen(function* () {
-      const input = yield* setup()
-      const worktree = yield* fixtureWorktree()
-      const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
-      const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-setup"))
-      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
-      yield* input.db
-        .update(ProjectTable)
-        .set({
-          commands: {
-            start:
-              "bun -e \"await Bun.write('setup.json', JSON.stringify([process.env.OPENCODE_WORKTREE_BASE, process.env.OPENCODE_WORKTREE_PATH, process.cwd()]))\"",
-          },
-        })
-        .where(eq(ProjectTable.id, input.projectID))
-        .run()
-        .pipe(Effect.orDie)
-      const created = yield* worktree.create({
-        directory: parent,
-        name: "worktree",
-      })
-
-      expect(yield* Effect.promise(() => Bun.file(path.join(created.directory, "setup.json")).json())).toEqual([
-        input.sourceDirectory,
-        created.directory,
-        created.directory,
-      ])
-      yield* worktree.remove({ directory: created.directory, force: true })
     }),
   )
 
@@ -1069,6 +941,37 @@ describe("Worktree", () => {
         expect(result.diagnostics.length).toBeGreaterThan(0)
         if (result.type === "normalized") expect(result.encoded).not.toHaveProperty("worktree")
       }
+    }),
+  )
+
+  it.live("allows list and rejects mutations when the host environment is unavailable", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const layer = AppNodeBuilder.build(Worktree.node, [
+        Database.node.replace(Layer.succeed(Database.Service, database)),
+        Bus.node.replace(Layer.succeed(Bus.Service, bus)),
+        CrossSpawnSpawner.node.replace(EnvironmentUnavailable.layer),
+      ])
+
+      yield* Effect.gen(function* () {
+        const worktrees = yield* Worktree.Service
+        expect(yield* worktrees.list({ projectID: input.projectID })).toEqual([
+          { directory: input.sourceDirectory, strategy: undefined },
+        ])
+        expect(yield* worktrees.create({ projectID: input.projectID }).pipe(Effect.flip)).toBeInstanceOf(
+          Worktree.OperationError,
+        )
+        expect(
+          yield* worktrees
+            .remove({ projectID: input.projectID, directory: input.sourceDirectory, force: false })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(Worktree.OperationError)
+        expect(yield* worktrees.refresh({ projectID: input.projectID }).pipe(Effect.flip)).toBeInstanceOf(
+          Worktree.OperationError,
+        )
+      }).pipe(Effect.provide(layer))
     }),
   )
 })

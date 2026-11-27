@@ -7,6 +7,7 @@ mod compaction;
 mod data;
 mod eviction;
 mod fold_oracle;
+mod history;
 mod inbox_race;
 mod jobs;
 mod live;

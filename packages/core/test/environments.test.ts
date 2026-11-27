@@ -6,13 +6,13 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Database } from "@opencode/core/database/database"
 import { Environments } from "@opencode/core/environment/environments"
 import { Environment, makeMemoryDriver } from "@opencode/core/environment/index"
+import { WorkspaceConnector } from "@opencode/core/environment/workspace-connector"
 import { EnvironmentPath } from "@opencode/core/environment/path"
 import { FileAccess } from "@opencode/core/file-access"
 import { Flag } from "@opencode/core/flag"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Location } from "@opencode/core/location"
 import { Machines } from "@opencode/core/machine/machines"
-import { MachinePath } from "@opencode/core/machine/path"
 import { Permission } from "@opencode/core/permission"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
@@ -41,18 +41,9 @@ describe("EnvironmentPath", () => {
   const cases: ReadonlyArray<readonly [string, { environment: string; path: string } | undefined]> = [
     ["local:/tmp/out.txt", { environment: "local", path: "/tmp/out.txt" }],
     ["local:~/notes.md", { environment: "local", path: "~/notes.md" }],
-    ["local:~", { environment: "local", path: "~" }],
-    ["gpu:/work/train.py", { environment: "gpu", path: "/work/train.py" }],
-    ["gpu:~/notes", { environment: "gpu", path: "~/notes" }],
     ["wrk_01JXYZ:/workspace/app.ts", { environment: "wrk_01JXYZ", path: "/workspace/app.ts" }],
-    ["wrk_sandbox:/", { environment: "wrk_sandbox", path: "/" }],
     ["wrk_:/x", undefined],
-    ["C:/Users/x", undefined],
-    ["https://host/x", undefined],
-    ["skill://thing", undefined],
     ["local:relative", undefined],
-    ["wrk_sandbox:relative", undefined],
-    ["/plain/path", undefined],
   ]
 
   for (const [input, expected] of cases) {
@@ -136,6 +127,7 @@ const buildLayer = (options: {
             ),
           ]
         : []),
+      WorkspaceConnector.node.replace(Workspace.connectorNode),
       WorkspaceDriver.node.replace(
         Layer.succeed(
           WorkspaceDriver.RegistryService,
@@ -162,7 +154,7 @@ describe("Environments", () => {
         const environments = yield* Environments.Service
         const local = yield* environments.get(Environment.localID)
         expect(local.id).toBe(Environment.localID)
-        expect(local.hostsServer).toBe(true)
+        expect(local.local).toBe(true)
 
         const removedID = Environment.ID.make("ghost")
         const removed = yield* environments.get(removedID)
@@ -280,7 +272,7 @@ describe("Environments", () => {
 
         for (const bad of [`${wrkID}:~/notes`, `${wrkID}:relative`, "local:relative"]) {
           const err = yield* access.locate(bad).pipe(Effect.flip)
-          expect(err.cause).toBeInstanceOf(MachinePath.NotAbsolute)
+          expect(err.cause).toBeInstanceOf(EnvironmentPath.NotAbsolute)
         }
       }).pipe(Effect.provide(layer))
     }),

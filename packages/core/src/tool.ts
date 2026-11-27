@@ -73,6 +73,8 @@ export interface SnapshotOptions {
   readonly services?: Context.Context<CodeModeTool.Services>
   /** What `opencode://` fetch sends requests through; see the `opencode_api` flag. */
   readonly api?: Context.Context<CodeModeTool.Api>
+  /** With `codemode_agents`, what runs Code Mode's agent() and llm(). */
+  readonly agents?: Context.Context<CodeModeTool.Agents>
   readonly tools?: Policy
 }
 
@@ -346,6 +348,7 @@ const layer = Layer.effect(
                 const inventory = cached?.inventory ?? {
                   tools: new Map(codemodeEntries),
                   namespaces: data.namespaces,
+                  definitions: data.definitions,
                 }
                 const tool = CodeModeTool.create(
                   inventory,
@@ -353,6 +356,7 @@ const layer = Layer.effect(
                   permission,
                   full ? options.services : undefined,
                   options?.api,
+                  options?.agents,
                 )
                 const entry = cached ?? {
                   inventory,
@@ -439,7 +443,7 @@ const layer = Layer.effect(
         const callSeq = yield* Ref.make(0)
         const full = input.services !== undefined && (yield* flags.enabled("full_codemode"))
         return yield* CodeModeTool.check(
-          { tools, namespaces: data.namespaces },
+          { tools, namespaces: data.namespaces, definitions: data.definitions },
           {
             ...input,
             context: { ...input.context, id: Tool.CallID.make(`call_${input.context.messageID}_execute`) },

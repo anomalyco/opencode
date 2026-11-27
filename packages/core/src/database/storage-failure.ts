@@ -33,19 +33,6 @@ export function fromSqlError(error: SqlError) {
   return code === undefined ? undefined : messages.get(code & 0xff)
 }
 
-// Result codes after which SQLite may have rolled the whole transaction back itself
-// (https://www.sqlite.org/lang_transaction.html#response_to_errors_within_a_transaction): SQLITE_FULL, SQLITE_IOERR,
-// SQLITE_BUSY, SQLITE_NOMEM and SQLITE_INTERRUPT.
-const autoRollback = new Set([5, 7, 9, 10, 13])
-
-/** Whether SQLite may have already rolled back the transaction this cause failed, so a rollback has nothing to undo. */
-export function rolledBack(cause: Cause.Cause<unknown>) {
-  return sqlErrors(cause).some((error) => {
-    const code = resultCode(error.reason.cause)
-    return code !== undefined && autoRollback.has(code & 0xff)
-  })
-}
-
 // A failed transaction boundary is a SqlError; a failed query is a query error holding the Cause of its SqlError.
 function sqlErrors(cause: Cause.Cause<unknown>): SqlError[] {
   return cause.reasons.flatMap((reason) => {

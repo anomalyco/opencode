@@ -1,6 +1,7 @@
 export * as Permission from "./permission.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { isRecord } from "@opencode/util/record"
 import { Context, Deferred, Effect, Layer, Schema, Scope } from "effect"
 import { Permission } from "@opencode/schema/permission"
 import type { Tool } from "@opencode/schema/tool"
@@ -246,11 +247,7 @@ const layer = Layer.effect(
         action: input.action,
         resources: input.resources,
         save: input.save,
-        // Tools copy optional inputs straight into metadata; undefined values are not JSON and would
-        // fail the HttpApi response encoder when clients list pending requests.
-        metadata:
-          input.metadata &&
-          Object.fromEntries(Object.entries(input.metadata).filter(([, value]) => value !== undefined)),
+        metadata: input.metadata && withoutUndefined(input.metadata),
         source: row(input.source),
         message,
       }
@@ -411,6 +408,16 @@ const layer = Layer.effect(
     return Service.of({ ask, assert, assertNotDenied, allows, reply, get, forSession, list, nested, close })
   }),
 )
+
+// Tools copy optional inputs straight into metadata, nested objects included; undefined values are not JSON
+// and would fail the HttpApi response encoder when clients list pending requests.
+function withoutUndefined(record: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(record)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => [key, isRecord(value) ? withoutUndefined(value) : value]),
+  )
+}
 
 export const node = makeLocationNode({
   service: Service,

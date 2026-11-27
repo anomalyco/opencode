@@ -4,7 +4,7 @@ export const termsOfService: LegalDocumentContent = {
   path: "/legal/terms-of-service",
   title: "Terms of Use",
   metaTitle: "OpenCode | Terms of Use for the website and hosted services",
-  effective: "Effective date: Nov 8, 2026",
+  effective: "Effective date: Nov 25, 2026",
   description:
     "The rules that govern your use of the OpenCode website, inference product and hosted software, including your account, payments and acceptable use.",
   body: [
@@ -162,11 +162,16 @@ export const termsOfService: LegalDocumentContent = {
         {},
         '"crawls," "scrapes," or "spiders" any page, data, or portion of or relating to the Services or Content (through use of manual or automated means);',
       ],
-      ["li", {}, "copies or stores any significant portion of the Content; or"],
+      ["li", {}, "copies or stores any significant portion of the Content;"],
       [
         "li",
         {},
-        "decompiles, reverse engineers, or otherwise attempts to obtain the source code or underlying ideas or information of or relating to the Services.",
+        "decompiles, reverse engineers, or otherwise attempts to obtain the source code or underlying ideas or information of or relating to the Services; or",
+      ],
+      [
+        "li",
+        {},
+        "resells, sublicenses, or otherwise makes the Services, or any account, API key, credentials, or Credits, available to any third party, except as expressly approved by OpenCode in writing.",
       ],
     ],
     [
@@ -236,7 +241,9 @@ export const termsOfService: LegalDocumentContent = {
       {},
       'Certain of our Services, including OpenCode Models, may be subject to payments now or in the future (the "Paid Services"). Please see our Paid Services page ',
       ["a", { href: "https://opencode.ai/console/models" }, "https://opencode.ai/console/models"],
-      " for a description of the current Paid Services. Please note that any payment terms presented to you in the process of using or signing up for a Paid Service are deemed part of these Terms.",
+      " for a description of the current Paid Services. Please note that any payment terms presented to you in the process of using or signing up for a Paid Service are deemed part of these Terms. Refunds are governed by our Refund Policy at ",
+      ["a", { href: "/legal/refund-policy" }, "opencode.ai/legal/refund-policy"],
+      ", which forms part of these Terms.",
     ],
     ["h3", { id: "billing" }, "Billing"],
     [
@@ -246,7 +253,7 @@ export const termsOfService: LegalDocumentContent = {
       ["a", { href: "https://stripe.com/us/checkout/legal" }, "https://stripe.com/us/checkout/legal"],
       " and their Privacy Policy at ",
       ["a", { href: "https://stripe.com/us/privacy" }, "https://stripe.com/us/privacy"],
-      '. We are not responsible for any error by, or other acts or omissions of, the Payment Processor. By choosing to use Paid Services, you agree to pay us, through the Payment Processor, all charges at the prices then in effect for any use of such Paid Services in accordance with the applicable payment terms, and you authorize us, through the Payment Processor, to charge your chosen payment provider (your "Payment Method"). You agree to make payment using that selected Payment Method. We reserve the right to correct any errors or mistakes that the Payment Processor makes even if it has already requested or received payment.',
+      '. We are not responsible for any error by, or other acts or omissions of, the Payment Processor. By choosing to use Paid Services, you agree to pay us, through the Payment Processor, all charges at the prices then in effect for any use of such Paid Services in accordance with the applicable payment terms, and you authorize us, through the Payment Processor, to charge your chosen payment provider (your "Payment Method"). You agree to make payment using that selected Payment Method. We reserve the right to correct any errors or mistakes that the Payment Processor makes even if it has already requested or received payment. If a payment is disputed or reversed, we may suspend your account and remove Credits corresponding to the disputed amount.',
     ],
     ["h3", { id: "payment-method" }, "Payment Method"],
     [
@@ -270,6 +277,20 @@ export const termsOfService: LegalDocumentContent = {
       ["a", { href: "mailto:help@anoma.ly" }, "help@anoma.ly"],
       ".",
     ],
+    ["h3", { id: "prepaid-credits" }, "Prepaid Credits"],
+    [
+      "p",
+      {},
+      'We may offer the option to prepay for certain Paid Services by purchasing credits ("Credits"). Credits have no cash value and may be used only for the Services in the account for which they were purchased. All purchases of Credits are final and non-refundable, except as stated in our ',
+      ["a", { href: "/legal/refund-policy" }, "Refund Policy"],
+      " or as required by applicable law. Credits may not be sold, transferred, or shared, and any attempt to do so is a violation of these Terms.",
+    ],
+    ["h3", { id: "usage-limits" }, "Usage Limits"],
+    [
+      "p",
+      {},
+      "We may set and adjust limits on your use of the Services, including limits on account balances, purchase amounts, spending, and request rates, based on factors such as your account history. These limits are not guaranteed minimums and may change at any time.",
+    ],
     ["h2", { id: "what-if-i-want-to-stop" }, "What if I want to stop using the Services?"],
     [
       "p",
@@ -281,7 +302,7 @@ export const termsOfService: LegalDocumentContent = {
     [
       "p",
       {},
-      "OpenCode is also free to terminate (or suspend access to) your use of the Services for any reason in our discretion, including your breach of these Terms. OpenCode has the sole right to decide whether you are in violation of any of the restrictions set forth in these Terms.",
+      "OpenCode is also free to terminate (or suspend access to) your use of the Services for any reason in our discretion, including your breach of these Terms. OpenCode has the sole right to decide whether you are in violation of any of the restrictions set forth in these Terms. If we suspend or terminate your access because you violated these Terms or engaged in fraudulent or abusive activity, we may cancel any remaining Credit balance, and you will not be entitled to a refund, except where required by applicable law. If we terminate your access for any other reason, we will refund any unused Credit balance.",
     ],
     [
       "p",

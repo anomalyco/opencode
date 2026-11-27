@@ -7,7 +7,6 @@ import path from "path"
 import { useTuiPaths } from "./runtime"
 import { useArgs } from "./args"
 import { RGBA } from "@opentui/core"
-import { findModelByID, modelAlias } from "@opencode/core/model-lookup"
 import { readJson, writeJsonAtomic } from "../util/persistence"
 import {
   createModelPreferenceRepository,
@@ -46,8 +45,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const models = () => data.location.model.list(location.ref)
     const providers = () => data.location.provider.list(location.ref)
 
+    // Indexed because the model picker looks up every model, and catalogs such as OpenRouter's hold thousands.
+    const modelIndex = createMemo(
+      () =>
+        new Map(
+          (models() ?? []).map((item) => [modelPreferenceKey({ providerID: item.providerID, modelID: item.id }), item]),
+        ),
+    )
+
     function findModel(model: ModelPreferenceModel) {
-      return findModelByID(models(), model.providerID, model.modelID)
+      return modelIndex().get(modelPreferenceKey(model))
     }
 
     function isModelValid(model: ModelPreferenceModel) {
@@ -266,10 +273,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       function preferredSelection(model: ModelPreferenceModel): ModelSelection {
         // A model runs at the speed last used with it.
         const speed = preferences.speed[modelPreferenceKey(model)]
-        const choices = speed ? speeds(model) : []
-        const alias = speed && modelAlias(model.providerID, `${model.modelID}-${speed}`)
-        const remembered =
-          choices.find((item) => item.experimental?.speed?.id === speed) ?? choices.find((item) => item.id === alias)
+        const remembered = speed && speeds(model).find((item) => item.experimental?.speed?.id === speed)
         const target = remembered ? { providerID: model.providerID, modelID: remembered.id } : model
         const configured = agent.current()?.model
         const fallback = configuredModel()
@@ -317,10 +321,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           selectionState.selectionBySessionAgent[sessionID]?.[current.id] ??
           (!session?.agent || session.agent === current.id ? durableSelection(sessionID) : undefined)
         if (selected) {
-          const info = findModel(selected)
+          const info = models()?.find((item) => item.providerID === selected.providerID && item.id === selected.modelID)
           return {
             ...selected,
-            modelID: info?.id ?? selected.modelID,
             variant:
               !info || info.variants.some((variant) => variant.id === selected.variant) ? selected.variant : undefined,
           }
