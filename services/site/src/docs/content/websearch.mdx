@@ -59,7 +59,7 @@ Set a provider in `opencode.jsonc` to skip the selection prompt.
 }
 ```
 
-Use `"random"` to choose an available provider automatically. Each session keeps using its selected provider until that provider is rate limited.
+Use `"random"` to choose an available provider automatically. Each session keeps using its selected provider until that provider fails over.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -72,11 +72,11 @@ Use `"random"` to choose an available provider automatically. Each session keeps
 
 ## Limits
 
-With random selection, a search that hits a rate limit, an exhausted quota or plan limit (HTTP 402, or Tavily's 432), or an error reported by the provider's search service is retried with another available provider. A rate-limited provider (HTTP 429) waits for its `Retry-After` period, or 60 seconds when the response does not include a valid period. Any other provider that failed this way is skipped for an hour. If every provider fails, the search reports the last provider's error. A provider you chose directly never fails over.
+With random selection, a search that hits a rate limit, a used-up quota or plan limit, or an error reported by the provider's search service is retried with another available provider. A rate-limited provider waits for its `Retry-After` period, or 60 seconds when the response does not include one. A provider that failed for any of the other reasons is skipped for an hour. If every provider fails, the search reports the last provider's error. A provider you chose directly never fails over.
 
 ```text
-Exa returns HTTP 429
-→ Exa enters cooldown
+A provider returns HTTP 429
+→ that provider enters cooldown
 → OpenCode retries with another provider
 ```
 

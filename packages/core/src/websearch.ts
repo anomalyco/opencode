@@ -225,15 +225,16 @@ const layer = Layer.effect(
   }),
 )
 
-// Quota, plan-limit and provider-reported failures (402, Tavily's 432, MCP `isError`) rarely clear within a minute, but
-// an `isError` can also be specific to one query, so the provider is skipped for an hour rather than for good.
-// Auth failures (401/403) stay visible instead.
+// Quota and provider-reported failures rarely clear within a minute, but an MCP `isError` can be specific to one query,
+// so those providers are skipped for an hour rather than for good. Auth failures (401/403) stay visible instead.
+const FAILOVER_SKIP_MILLIS = 3_600_000
+
 function failoverUntil(cause: unknown, now: number) {
-  if (Schema.is(WebSearchMcp.ToolError)(cause)) return now + 3_600_000
+  if (Schema.is(WebSearchMcp.ToolError)(cause)) return now + FAILOVER_SKIP_MILLIS
   if (!HttpClientError.isHttpClientError(cause)) return
   const status = cause.response?.status
   if (status === 429) return now + cooldownMillis(cause.response?.headers["retry-after"], now)
-  if (status === 402 || status === 432) return now + 3_600_000
+  if (status === 402 || status === 432) return now + FAILOVER_SKIP_MILLIS
 }
 
 function cooldownMillis(value: string | undefined, now: number) {
