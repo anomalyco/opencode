@@ -1,25 +1,30 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Option, Schema } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Database } from "@opencode/core/database/database"
 import { Environment } from "@opencode/core/environment/index"
 import { Flag } from "@opencode/core/flag"
 import { Instructions } from "@opencode/core/instructions/index"
 import { MachineInstructions } from "@opencode/core/machine/instructions"
+import { Join } from "@opencode/core/machine/join"
 import { Machines } from "@opencode/core/machine/machines"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeWorker } from "./fixture/machine-worker"
 import { it } from "./lib/effect"
 import { readInitial, readUpdate } from "./lib/instructions"
 
-const machine = (name: string) => new Machines.Info({ id: Environment.ID.make(name), online: false, paired: false })
+type Status = Machines.Status
+const machine = (name: string, status: Status = { _tag: "Paired", link: { _tag: "Never" } }) => ({
+  id: Environment.ID.make(name),
+  status,
+})
 
 const flag = (overrides: string) => Flag.node.replace(Flag.testLayer([], { overrides }))
 
-const layer = (overrides: string, list: () => Machines.Info[]) =>
+const layer = (overrides: string, statuses: () => ReturnType<typeof machine>[]) =>
   AppNodeBuilder.build(MachineInstructions.node, [
     flag(overrides),
-    Machines.node.replace(Layer.mock(Machines.Service, { list: () => Effect.succeed(list()) })),
+    Machines.node.replace(Layer.mock(Machines.Service, { statuses: () => Effect.succeed(statuses()) })),
   ])
 
 const load = Effect.gen(function* () {
@@ -40,7 +45,7 @@ describe("MachineInstructions", () => {
     Effect.gen(function* () {
       const instructions = yield* load
       expect(yield* Instructions.read(instructions)).toEqual([
-        { key: Instructions.Key.make("core/machines"), value: Instructions.removed },
+        { key: Instructions.Key.make("core/machines/v2"), value: Instructions.removed },
       ])
 
       const without = yield* readInitial(other)
@@ -58,17 +63,28 @@ describe("MachineInstructions", () => {
     }).pipe(Effect.provide(layer("machines", () => []))),
   )
 
-  it.effect("names the machines, sorted, with the first one in the example path", () =>
+  it.effect("names the usable machines with the first one in the example path, then the ones that need someone", () =>
     Effect.gen(function* () {
       const initialized = yield* load.pipe(Effect.flatMap(readInitial))
-      expect(initialized.values).toEqual({ "core/machines": ["box", "pro"] })
+      expect(initialized.values).toEqual({
+        "core/machines/v2": [
+          { name: "box", availability: "usable" },
+          { name: "lab", availability: "needs-you" },
+          { name: "pro", availability: "usable" },
+        ],
+      })
       expect(initialized.text).toBe(
         [
           "Other machines are available: box, pro.",
           "Name one in a path, as in box:/work/file, for the read, write, edit and patch tools, and as the shell tool's workdir to run a command there. A machine path is absolute or starts with ~/ for that machine's home. grep and glob cannot search another machine; run a search command there with the shell tool instead. A machine may be offline; the tool says so when it is.",
+          "These machines can't be used until someone acts on that machine or this server: lab.",
         ].join("\n"),
       )
-    }).pipe(Effect.provide(layer("machines", () => [machine("pro"), machine("box")]))),
+    }).pipe(
+      Effect.provide(
+        layer("machines", () => [machine("box"), machine("lab", { _tag: "AwaitingJoin" }), machine("pro")]),
+      ),
+    ),
   )
 
   it.effect("announces added and removed machines as deltas, then the removal of the last one", () => {
@@ -78,12 +94,12 @@ describe("MachineInstructions", () => {
 
       machines = [machine("gpu"), machine("pro")]
       const added = yield* readUpdate(yield* load, initialized)
-      expect(added.text).toBe("New machines are available in addition to those previously listed:\npro")
+      expect(added.text).toBe("New machines, in addition to those previously listed:\npro")
 
       machines = [machine("pro")]
       const removed = yield* readUpdate(yield* load, added)
       expect(removed.text).toBe("The following machines are no longer available and must not be used: gpu.")
-      expect(removed.values).toEqual({ "core/machines": ["pro"] })
+      expect(removed.values).toEqual({ "core/machines/v2": [{ name: "pro", availability: "usable" }] })
 
       machines = []
       const instructions = yield* load
@@ -101,11 +117,14 @@ describe("MachineInstructions", () => {
       const machines = yield* Machines.Service
       const pro = yield* machines.add("pro")
       const id = yield* machines.add("gpu")
+      const invite = yield* machines.invite(id, { reach: [{ type: "url", url: "https://home.example" }] })
+      yield* machines.join({ secret: Option.getOrThrow(Join.decode(invite)).secret, key: new Uint8Array(32).fill(9) })
       const initialized = yield* load.pipe(Effect.flatMap(readInitial))
       expect(initialized.text).toBe(
         [
-          "Other machines are available: gpu, pro.",
+          "Other machines are available: gpu.",
           "Name one in a path, as in gpu:/work/file, for the read, write, edit and patch tools, and as the shell tool's workdir to run a command there. A machine path is absolute or starts with ~/ for that machine's home. grep and glob cannot search another machine; run a search command there with the shell tool instead. A machine may be offline; the tool says so when it is.",
+          "These machines can't be used until someone acts on that machine or this server: pro.",
         ].join("\n"),
       )
       const unchanged = { values: initialized.values, text: "", changed: false }
@@ -113,14 +132,14 @@ describe("MachineInstructions", () => {
       const worker = yield* makeWorker({ connect: (connection) => machines.connect(id, connection) })
       yield* worker.restore
       expect(yield* machines.list()).toEqual([
-        new Machines.Info({ id, online: true, paired: false, os: "linux", arch: "x64" }),
+        new Machines.Info({ id, online: true, paired: true, os: "linux", arch: "x64" }),
         new Machines.Info({ id: pro, online: false, paired: false }),
       ])
       expect(yield* readUpdate(yield* load, initialized)).toEqual(unchanged)
 
       yield* worker.cut
       expect(yield* machines.list()).toEqual([
-        new Machines.Info({ id, online: false, paired: false }),
+        new Machines.Info({ id, online: false, paired: true }),
         new Machines.Info({ id: pro, online: false, paired: false }),
       ])
       expect(yield* readUpdate(yield* load, initialized)).toEqual(unchanged)

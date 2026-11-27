@@ -63,7 +63,8 @@ const layer = Layer.effect(
       ready: Effect.fn("Environments.ready")(function* (id: Environment.ID) {
         if (id === Environment.localID) return true
         if (Workspace.isID(id)) return yield* workspaces.connected(id)
-        return true
+        const machine = (yield* machines.statuses()).find((entry) => entry.id === id)
+        return machine !== undefined && Machines.canSend(machine.status)
       }),
     })
   }),
