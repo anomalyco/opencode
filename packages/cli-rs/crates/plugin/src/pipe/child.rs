@@ -158,6 +158,9 @@ struct Shared {
     /// The reader waits for the host to take its trees: what the JS host sent after them is not read, so its silence
     /// is the host's, not the JS host's.
     held: AtomicBool,
+    /// A test holds the frames the host sends the child, as one that reads nothing does: its queue stays full, so the
+    /// host's overflow does not drain behind the test ([`Child::hold_input`]).
+    input_held: AtomicBool,
     /// Bytes read from the child, and of them in trees.
     read: AtomicU64,
     read_trees: AtomicU64,
@@ -227,6 +230,7 @@ impl Child {
             acked: AtomicU64::new(0),
             hello: AtomicBool::new(false),
             held: AtomicBool::new(false),
+            input_held: AtomicBool::new(false),
             read: AtomicU64::new(0),
             read_trees: AtomicU64::new(0),
             closed: AtomicBool::new(false),
@@ -329,6 +333,14 @@ impl Child {
     /// The bytes read from the child so far, and of them in trees.
     pub fn read(&self) -> (u64, u64) {
         (self.shared.read.load(Ordering::Relaxed), self.shared.read_trees.load(Ordering::Relaxed))
+    }
+
+    /// Holds what the host sends the child, as one that reads nothing does, and releases it again: what is queued
+    /// stays queued, so the host's overflow cannot drain behind a test that needs it full.
+    #[doc(hidden)]
+    pub fn hold_input(&self, held: bool) {
+        self.shared.input_held.store(held, Ordering::Release);
+        self.shared.out_ready.notify_all();
     }
 
     /// The last acknowledged sequence.
@@ -468,12 +480,16 @@ fn write(shared: &Shared, mut writer: channel::Writer) {
         let (frame, room) = {
             let mut out = lock(&shared.out);
             loop {
+                if out.closed {
+                    break (None, false);
+                }
+                if shared.input_held.load(Ordering::Acquire) {
+                    out = shared.out_ready.wait(out).unwrap_or_else(|poisoned| poisoned.into_inner());
+                    continue;
+                }
                 if let Some(frame) = out.frames.pop_front() {
                     out.bytes -= frame.len();
                     break (Some(frame), std::mem::take(&mut out.wants_room));
-                }
-                if out.closed {
-                    break (None, false);
                 }
                 out = shared.out_ready.wait(out).unwrap_or_else(|poisoned| poisoned.into_inner());
             }
