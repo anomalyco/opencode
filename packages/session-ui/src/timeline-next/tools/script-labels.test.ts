@@ -178,4 +178,25 @@ describe("script labels", () => {
       expect(stepsNext([running])).not.toContain("Edited")
     })
   })
+
+  test("the New timeline names unknown script steps as one Tool, last", () => {
+    const unknown = storyTool(
+      "exec_9",
+      "execute",
+      "completed",
+      { code: "x" },
+      {
+        metadata: {
+          toolCalls: ["anomaly_slack.slack_search_users", "skill_x", "anomaly_slack.slack_read_thread"].map((tool) => ({
+            tool,
+            status: "completed",
+            input: {},
+          })),
+        },
+      },
+    )
+
+    expect(activityText(activityLabel([unknown], i18n, true))?.text).toBe("Used Tool")
+    expect(activityText(activityLabel([unknown], i18n))?.text).toBe("Ran 1 command")
+  })
 })

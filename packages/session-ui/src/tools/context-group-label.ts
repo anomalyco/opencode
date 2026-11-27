@@ -85,14 +85,22 @@ export function contextGroupLabel(parts: readonly ContextGroupPart[], i18n: UiI1
     facts.flatMap((fact) => (fact.kind === "file" && fact.via === "script" && !shown(fact.by) ? [fact.by] : [])),
   )
 
-  const names = i18n.list([
-    ...new Set(
-      facts.flatMap((fact) => {
-        if (fact.kind === "call") return [toolTitle({ tool: fact.tool, provider: fact.provider }, i18n)]
+  // Counting a script's steps, tools the timeline doesn't know read as one "Tool", after the ones it does.
+  const other = i18n.t("ui.tool.other")
 
-        return fact.kind === "file" && scripts.has(fact.by) ? [toolTitle({ tool: "patch" }, i18n)] : []
-      }),
-    ),
+  const titles = facts.flatMap((fact) => {
+    if (fact.kind === "call") {
+      const title = toolTitle({ tool: fact.tool, provider: fact.provider }, i18n)
+
+      return [scriptSteps && title === fact.tool ? other : title]
+    }
+
+    return fact.kind === "file" && scripts.has(fact.by) ? [toolTitle({ tool: "patch" }, i18n)] : []
+  })
+
+  const names = i18n.list([
+    ...new Set(titles.filter((title) => !scriptSteps || title !== other)),
+    ...(scriptSteps && titles.includes(other) ? [other] : []),
   ])
 
   if (!names && !thoughts) {
