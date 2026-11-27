@@ -307,7 +307,7 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
           )
           return
         }
-        const server = decodeValue(ConfigMCPV1.Info, value, path, diagnostics)
+        const server = decodeValue(ConfigMCPV1.Info, camelCaseLegacyOAuth(value), path, diagnostics)
         if (server !== undefined)
           setOwn(legacyServers, name, canonical(ConfigMCP.Server, ConfigMigrateV1.migrateMcp(server)))
       })
@@ -321,6 +321,29 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
   encoded.mcp = {
     ...(Object.keys(timeout).length ? { timeout } : {}),
     ...(Object.keys(servers).length ? { servers } : {}),
+  }
+}
+
+const LegacyOAuthKeys = new Map([
+  ["client_id", "clientId"],
+  ["client_secret", "clientSecret"],
+  ["callback_port", "callbackPort"],
+  ["redirect_uri", "redirectUri"],
+])
+
+// V1 spelled oauth keys in camelCase, and its schema drops the snake_case ones the current schema and docs use, which
+// leaves a configured client ID unused. A camelCase key wins when both are given.
+function camelCaseLegacyOAuth(value: unknown) {
+  if (!isRecord(value) || !isRecord(value.oauth)) return value
+  const oauth = value.oauth
+  return {
+    ...value,
+    oauth: Object.fromEntries(
+      Object.entries(oauth).map(([key, field]) => {
+        const camel = LegacyOAuthKeys.get(key)
+        return camel && !own(oauth, camel) ? [camel, field] : [key, field]
+      }),
+    ),
   }
 }
 

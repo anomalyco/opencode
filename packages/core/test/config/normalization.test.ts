@@ -465,6 +465,29 @@ describe("ConfigNormalize", () => {
     expect(Schema.decodeUnknownSync(Info)(result.encoded).mcp?.servers?.example?.codemode).toBeUndefined()
   })
 
+  test("reads snake_case oauth keys on legacy remote MCP servers (#55335)", () => {
+    const oauth = (value: Record<string, unknown>) =>
+      Schema.decodeUnknownSync(Info)(
+        normalized({ mcp: { example: { type: "remote", url: "https://example.com/mcp", oauth: value } } }).encoded,
+      ).mcp?.servers?.example
+    expect(
+      oauth({
+        client_id: "client",
+        client_secret: "secret",
+        callback_port: 19876,
+        redirect_uri: "http://127.0.0.1/cb",
+      }),
+    ).toMatchObject({
+      oauth: {
+        client_id: "client",
+        client_secret: "secret",
+        callback_port: 19876,
+        redirect_uri: "http://127.0.0.1/cb",
+      },
+    })
+    expect(oauth({ clientId: "camel", client_id: "snake" })).toMatchObject({ oauth: { client_id: "camel" } })
+  })
+
   test("expands numeric MCP timeouts to every phase", () => {
     const result = normalized({
       mcp: {
