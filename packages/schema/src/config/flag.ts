@@ -17,6 +17,8 @@ export const registry = {
   full_codemode: "Enable the full Code Mode work in progress.",
   codemode_agents:
     "Let Code Mode scripts start subagents with agent() and make single model calls with llm(), each optionally returning a value checked against a schema, so one script can fan work out, verify it and combine the results.",
+  codemode_tools:
+    "Let Code Mode scripts save reusable tools with tool.define() and remove them with tool.delete(). Saved tools are stored per project, or for every project, and called as tools.opencode.<name>. Only in local and dev builds.",
   machines: "Let a tool path name a machine, as in gpu:/work/train.py, and act on that machine's files and processes.",
   home_memory:
     "Give sessions in the home folder a persistent memory/, docs/ and scripts/ workspace the agent can use freely, tidied by a daily maintenance session that reads the day's home-folder conversations.",
@@ -41,4 +43,4 @@ export const ui: readonly Key[] = ["full_codemode"]
 export const optInOnly: ReadonlySet<Key> = new Set(["todo", "opencode_api"])
 
 /** Flags that stay off outside local and dev builds, whatever `OPENCODE_FLAGS` or config say. */
-export const localOnly: ReadonlySet<Key> = new Set(["opencode_api"])
+export const localOnly: ReadonlySet<Key> = new Set(["opencode_api", "codemode_tools"])

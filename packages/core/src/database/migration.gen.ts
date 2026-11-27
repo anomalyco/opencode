@@ -64,6 +64,7 @@ import m61 from "./migration/20261116213417_automation_active_index.js"
 import m62 from "./migration/20261119211416_machine.js"
 import m63 from "./migration/20261120004954_machine-key.js"
 import m64 from "./migration/20261123115523_space.js"
+import m65 from "./migration/20261127153827_codemode-tool.js"
 
 export const migrations = [
   m00,
@@ -131,4 +132,5 @@ export const migrations = [
   m62,
   m63,
   m64,
+  m65,
 ] satisfies DatabaseMigration.Migration[]

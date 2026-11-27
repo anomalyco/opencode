@@ -8,6 +8,7 @@ import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { CodeModeAgents } from "../codemode/agents.js"
 import { CodeModeApi } from "../codemode/api.js"
 import { CodeModeInstructions } from "../codemode/instructions.js"
+import { CodeModeSavedTools } from "../codemode/saved-tools.js"
 import { CodeModeTool } from "../codemode/tool.js"
 import { Database } from "../database/database.js"
 import { Environment } from "../environment/index.js"
@@ -113,6 +114,7 @@ const layer = Layer.effect(
     const services = yield* CodeModeTool.services
     const api = yield* CodeModeApi.Service
     const agentRunner = yield* CodeModeAgents.Service
+    const savedTools = yield* CodeModeSavedTools.Service
     const websearch = yield* WebSearch.Service
 
     const resolveModel = (
@@ -168,13 +170,14 @@ const layer = Layer.effect(
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
       // Session permissions narrow discovery the same way they narrow the tool snapshot.
       const policy = Permission.Policy.fromRules(agent.info.permissions, session.permissions ?? [])
-      const [selected, hasWebSearch, fullCodeMode, opencodeApi, codeModeAgents] = yield* Effect.all(
+      const [selected, hasWebSearch, fullCodeMode, opencodeApi, codeModeAgents, codeModeSavedTools] = yield* Effect.all(
         [
           models.select(session, model.available).pipe(Effect.orElseSucceed(() => undefined)),
           websearch.available(),
           flags.enabled("full_codemode"),
           flags.enabled("opencode_api"),
           flags.enabled("codemode_agents"),
+          flags.enabled("codemode_tools"),
         ],
         { concurrency: "unbounded" },
       )
@@ -186,6 +189,7 @@ const layer = Layer.effect(
           Context.add(Location.Service, location),
         ),
         ...(codeModeAgents ? { agents: Context.make(CodeModeAgents.Service, agentRunner) } : {}),
+        ...(codeModeSavedTools ? { savedTools: Context.make(CodeModeSavedTools.Service, savedTools) } : {}),
         // An agent that can't run `execute` (such as explore) keeps every tool direct, so give it the flag-off policy.
         tools: modelTools({
           model: policyModel,
@@ -216,6 +220,7 @@ const layer = Layer.effect(
         instructions: Instructions.combine([
           CodeModeInstructions.make(tools.codeModeCatalog),
           CodeModeAgents.instructions(codeModeAgents && tools.codeModeCatalog !== undefined),
+          CodeModeSavedTools.instructions(codeModeSavedTools && tools.codeModeCatalog !== undefined),
           loaded.mcp,
           loaded.references,
           loaded.skills,
@@ -274,6 +279,7 @@ export const node = makeLocationNode({
   deps: [
     Agent.node,
     CodeModeAgents.node,
+    CodeModeSavedTools.node,
     CodeModeApi.node,
     Model.node,
     Database.node,
