@@ -3,7 +3,7 @@ title: TUI
 description: Démarrez une session et découvrez les opérations courantes dans l’interface du terminal.
 ---
 
-Lancez OpenCode depuis votre projet, saisissez une demande et appuyez sur **Enter**.
+Lancez OpenCode depuis votre projet, saisissez votre demande et appuyez sur **Enter**.
 
 ```bash
 cd ~/code/my-project
@@ -30,13 +30,13 @@ Appuyez sur **Ctrl+O** pour ouvrir la liste des sessions et des projets récents
 
 ## Contexte
 
-Saisissez `@` pour rechercher un fichier, puis sélectionnez-le pour joindre ce fichier au prompt. Continuez à taper après `@` pour affiner les résultats.
+Saisissez `@` pour rechercher un fichier, puis sélectionnez-le pour le joindre au prompt. Continuez à taper après `@` pour affiner les résultats.
 
 ```text
 Review @src/auth.ts for error handling problems
 ```
 
-Vous pouvez inclure une ligne ou une plage après le chemin.
+Vous pouvez indiquer un numéro de ligne ou une plage de lignes après le chemin.
 
 ```text
 Explain @src/auth.ts#20-45
@@ -60,7 +60,7 @@ Saisissez `/` pour lister les commandes slash. Continuez à taper pour filtrer l
 /models
 ```
 
-Les commandes courantes incluent `/new`, `/sessions`, `/models`, `/agents`, `/undo`, `/redo` et `/editor`. Appuyez sur **Ctrl+P** pour ouvrir la palette de commandes de toutes les actions disponibles dans la vue actuelle.
+Les commandes courantes incluent `/new`, `/sessions`, `/models`, `/agents`, `/undo`, `/redo` et `/editor`. Appuyez sur **Ctrl+P** pour ouvrir la palette de commandes, qui regroupe toutes les actions disponibles dans la vue actuelle.
 
 Après une mise à jour, OpenCode présente une fois les nouveautés de la version sur l’écran d’accueil. Lancez `/highlights` pour les revoir, ou définissez `"highlights": false` dans [`cli.json`](/cli/config#alerts) pour empêcher leur ouverture automatique.
 

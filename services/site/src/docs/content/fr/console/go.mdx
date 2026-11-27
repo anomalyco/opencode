@@ -57,7 +57,7 @@ Les propriétaires et administrateurs peuvent payer Go, y compris les renouvelle
 - Le prix total est déduit de votre solde. Si vous n’avez pas assez de crédits, vous pouvez en ajouter d’abord.
 - Le montant du renouvellement est déduit de votre solde à la fin de la période. Si le solde est insuffisant, Go reste actif et le paiement est retenté 1, 3 et 7 jours après la fin de la période, ainsi que dès que le solde est suffisant. Si la dernière tentative échoue, l’abonnement prend fin.
 - Les espaces de travail en [paiement sur facture](/console/billing#invoiced-billing) ne peuvent pas payer Go avec des crédits.
-- Si un paiement Go effectué avec des crédits est remboursé, les crédits sont recrédités sur votre solde et la période d’abonnement concernée prend fin.
+- Si un paiement Go effectué avec des crédits est remboursé, le montant revient sur votre solde et la période d’abonnement concernée prend fin.
 
 ## Où puis-je l’utiliser ?
 
@@ -69,7 +69,7 @@ Voici les recommandations pour votre client :
 2. S’identifier avec son propre user agent, comme `my-coding-agent/1.0`, plutôt qu’avec un nom générique de SDK ou de bibliothèque HTTP.
 3. Envoyer un ID de session stable dans `x-opencode-session` pour chaque conversation, afin que nous puissions optimiser le routage et la mise en cache des prompts.
 
-Les requêtes de [décision](#decision-models) et d’[embedding](#embedding-models) n’ont pas besoin de `x-opencode-session` : n’importe quel client, comme une bibliothèque RAG, un fournisseur de mémoire ou un script, peut donc les appeler avec votre clé Go.
+Les requêtes de [décision](#decision-models) et d’[embedding](#embedding-models) n’ont pas besoin de `x-opencode-session` : n’importe quel client, comme une bibliothèque RAG, un fournisseur de mémoire ou un script, peut donc les envoyer avec votre clé Go.
 
 Consultez [Harnesses](/console/harnesses) pour configurer Go dans Claude Code, Codex, Hermes, OpenClaw, Pi et Raycast.
 
@@ -135,7 +135,7 @@ Les limites d’utilisation peuvent évoluer en fonction des premières données
 
 ### Utilisation au-delà des limites
 
-Si vous avez aussi des crédits dans votre solde Console, vous pouvez activer **Extra Usage** sur la page **Go**. Une fois activé, Go débite votre [solde de crédits](/console/models#pricing) après avoir atteint vos limites d’utilisation, au lieu de bloquer les requêtes.
+Si vous disposez aussi de crédits dans Console, vous pouvez activer **Extra Usage** sur la page **Go**. Avec cette option, lorsque vous atteignez vos limites d’utilisation, Go débite votre [solde de crédits](/console/models#pricing) au lieu de bloquer les requêtes.
 
 Go Teams démarre avec **Extra Usage** activé, et vous pouvez le désactiver ou le réactiver sur la page **Go**.
 
@@ -253,7 +253,7 @@ La réponse contient un compteur par limite : `rolling` pour la limite de 5 heu
 | --- | --- |
 | `status` | `ok`, ou `rate-limited` une fois la limite épuisée. |
 | `percent` | La part de la limite utilisée, sous forme d’entier de `0` à `100`. |
-| `resetsAt` | Quand la limite se réinitialise, au format ISO 8601. Avant le début de la fenêtre de 5 heures, `rolling` se réinitialise dans cinq heures. |
+| `resetsAt` | Date et heure de réinitialisation de la limite, au format ISO 8601. Si la fenêtre de 5 heures n’a pas encore commencé, la réinitialisation de `rolling` est indiquée à cinq heures après la requête. |
 
 Les requêtes sans clé valide renvoient un HTTP `401`. Les clés que Go ne couvre pas renvoient un HTTP `403` avec un message qui explique pourquoi, par exemple lorsque l’espace de travail n’a pas d’abonnement Go actif.
 
@@ -306,12 +306,12 @@ Vérifiez pour chaque modèle si [vos données servent à l’entraîner](https:
 - **Muse Spark 1.2 Contributor :** Tarif par token fortement réduit en échange de votre autorisation à utiliser vos prompts et les réponses générées pour entraîner de futurs modèles Meta. La disponibilité est limitée aux régions autorisées par la [Politique d’utilisation géographique](https://ai.developer.meta.com/legal/geographic-use-policy) de Meta. [En savoir plus](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Iceman Contributor Free :** Gratuit pour une durée limitée, en échange de l’autorisation d’utiliser vos prompts et les réponses générées pour améliorer le modèle.
 - **HungerG Free :** Gratuit pour une durée limitée. Aucun entraînement sur les données : vos prompts et les réponses générées ne servent pas à entraîner des modèles.
-- **LongCat 2.5 :** Hébergé en Chine. Nécessite les régions **Global** dans les réglages de confidentialité de votre espace de travail.
+- **LongCat 2.5 :** Hébergé en Chine. Sélectionnez **Global** dans les réglages de confidentialité de votre espace de travail pour l’utiliser.
 - **DeepSeek :** L’accord ZDR est renouvelé chaque mois. L’accord actuel est valable jusqu’au 31 décembre 2026.
 
 ## Contexte
 
-Les modèles ouverts sont devenus vraiment bons. Ils atteignent désormais des performances proches des modèles propriétaires pour les tâches de code. Parce que de nombreux fournisseurs peuvent les servir de façon compétitive, ils sont généralement bien moins chers.
+Les modèles ouverts ont beaucoup progressé. En programmation, leurs performances se rapprochent désormais de celles des modèles propriétaires. Comme de nombreux fournisseurs peuvent les proposer à des tarifs compétitifs, ils coûtent généralement bien moins cher.
 
 Cependant, y accéder de manière fiable et avec une faible latence peut être difficile. Les fournisseurs varient en qualité et en disponibilité.
 
@@ -320,8 +320,8 @@ Cependant, y accéder de manière fiable et avec une faible latence peut être d
 Pour corriger cela, nous avons fait plusieurs choses :
 
 1. Nous avons testé un groupe restreint de modèles ouverts et parlé à leurs équipes de la meilleure façon de les exploiter.
-2. Nous avons travaillé avec quelques fournisseurs pour nous assurer qu’ces modèles étaient correctement mis à disposition.
-3. Nous avons évalué la combinaison modèle/fournisseur et établi une liste que pouvons recommander en toute confiance.
+2. Nous avons travaillé avec quelques fournisseurs pour nous assurer qu’ils proposaient ces modèles dans de bonnes conditions.
+3. Nous avons mesuré les performances des différentes associations entre modèles et fournisseurs pour établir une liste que nous pouvons recommander en toute confiance.
 
 Go, Go Plus et Go Teams donnent tous accès à ces modèles ; choisissez l’offre adaptée à votre volume d’utilisation, ou Go Teams pour couvrir toute votre équipe.
 

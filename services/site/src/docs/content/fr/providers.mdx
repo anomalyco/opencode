@@ -37,14 +37,14 @@ Utilisez une offre ChatGPT Plus ou Pro au lieu d’une clé d’API OpenAI. Conn
 
 ### Limites de contexte
 
-Par défaut, OpenCode plafonne la fenêtre de contexte de ces connexions sous la limite réelle de chaque modèle. Les plafonds correspondent aux valeurs par défaut de Codex, afin que votre offre se consomme à un rythme similaire à celui d’autres produits OpenAI.
+Pour ces méthodes de connexion, OpenCode fixe par défaut une fenêtre de contexte inférieure à la limite réelle du modèle. Les plafonds reprennent les valeurs par défaut de Codex pour que vous consommiez le quota de votre offre à un rythme comparable à celui des autres produits OpenAI.
 
 | Modèle | Limite d’entrée |
 | --- | --- |
 | GPT-6.1 Sol et ultérieur | 500 000 |
 | Modèles plus anciens | 272 000 |
 
-Pour refuser ce plafond, désactivez le plugin de plafonnement dans votre configuration. Le préfixe `-` désactive un plugin intégré ; tous les autres plugins restent activés.
+Pour supprimer ce plafond, désactivez le plugin qui l’applique dans votre configuration. Le préfixe `-` désactive un plugin intégré ; tous les autres plugins restent activés.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -82,7 +82,7 @@ L’objet `providers` est indexé par l’ID de fournisseur utilisé dans les r�
 | Champ | Rôle |
 | --- | --- |
 | `name` | Nom d’affichage. |
-| `env` | Noms de variables d’environnement ordonnés pouvant fournir les identifiants. |
+| `env` | Liste ordonnée des noms des variables d’environnement qui peuvent fournir les identifiants. |
 | `package` | Paquet fournisseur d’exécution. |
 | `canonical` | ID de fournisseur intégré dont ce fournisseur hérite des valeurs de catalogue par défaut. |
 | `compatibility` | Particularités d’API partagées par tous les modèles de ce fournisseur. Consultez [Compatibilité](/models#compatibility). |
@@ -173,7 +173,7 @@ Les requêtes HTTP attendent jusqu’à cinq minutes les en-têtes de réponse e
 }
 ```
 
-Une requête qui dépasse l’une ou l’autre limite échoue avec une erreur de transport. OpenCode réessaie une requête expirée jusqu’à trois fois avant d’abandonner.
+Une requête qui dépasse l’une de ces limites échoue avec une erreur de transport. En cas de dépassement du délai, OpenCode renvoie la requête jusqu’à trois fois avant de l’abandonner.
 
 ## Encodage des requêtes
 
@@ -277,7 +277,7 @@ Ajoutez ou remplacez des modèles dans l’objet `models` d’un fournisseur. Po
 | `modelID` | ID de modèle ou de déploiement envoyé au fournisseur. |
 | `name` | Nom d’affichage. |
 | `family` | Famille de modèles utilisée pour regrouper les modèles liés. |
-| `type` | Ce que produit le modèle : `chat`, `decision`, `image`, `video`, `realtime`, `embedding` ou `transcription`. Vaut `chat` par défaut ; seuls les modèles de chat sont proposés pour les sessions. Les modèles temps réel qui répondent en parole sont proposés pour la voix, et ne le sont pas lorsqu’ils sont réglés sur `disabled: true`. |
+| `type` | Ce que produit le modèle : `chat`, `decision`, `image`, `video`, `realtime`, `embedding` ou `transcription`. La valeur par défaut est `chat` : seuls les modèles de chat sont proposés pour les sessions. Les modèles en temps réel qui répondent oralement sont proposés pour les sessions vocales, sauf si `disabled: true` est défini. |
 | `releaseDate` | Date de sortie au format `YYYY-MM-DD` ou `YYYY-MM`. |
 | `package` | Remplacement du runtime pour ce modèle. Un modèle de transcription nomme son protocole de transcription, comme `@opencode/ai/protocols/openai-transcription` ; un modèle temps réel n’en prend aucun, car les sessions vocales démarrent via son API. |
 | `settings` | Contrôles OpenCode au niveau du modèle et réglages JSON propres au paquet. |
@@ -332,14 +332,14 @@ az login --tenant TENANT_ID
 az account set --subscription NAME_OR_ID
 ```
 
-Au lieu de la configuration, `AZURE_RESOURCE_NAME` fournit le nom de ressource au serveur OpenCode. L’ancienne variable `AZURE_COGNITIVE_SERVICES_RESOURCE_NAME` fonctionne aussi.
+Vous pouvez fournir le nom de la ressource au serveur OpenCode via `AZURE_RESOURCE_NAME` plutôt que dans le fichier de configuration. L’ancienne variable `AZURE_COGNITIVE_SERVICES_RESOURCE_NAME` fonctionne aussi.
 
 ### Déploiements
 
 Azure ne sert un modèle que via un déploiement : OpenCode liste donc les déploiements de votre ressource et les affiche au lieu de tout le catalogue Azure. La liste se charge en arrière-plan après le démarrage, après une connexion et après un changement de compte. Pour prendre en compte un déploiement ajouté plus tard, redémarrez OpenCode ou reconnectez-vous.
 
-- Jusqu’au chargement de la liste pour une connexion, ou si elle échoue, tout le catalogue reste disponible.
-- Un rechargement échoué pour la même connexion conserve son dernier inventaire complet.
+- Le catalogue complet reste disponible tant que la liste des déploiements de la connexion n’est pas chargée ou si son chargement échoue.
+- Si l’actualisation échoue pour la même connexion, OpenCode conserve la dernière liste complète.
 - Changer de compte n’affiche jamais l’inventaire du compte précédent ; le nouveau compte repart de tout le catalogue.
 - Les déploiements héritent des limites, coûts et capacités de leurs modèles de catalogue.
 
@@ -449,7 +449,7 @@ OpenCode peut aussi déterminer le projet à partir de `GOOGLE_VERTEX_PROJECT`, 
 GOOGLE_CLOUD_PROJECT=my-project GOOGLE_VERTEX_LOCATION=europe-west4 opencode --standalone
 ```
 
-Les comptes de service passent par le même chemin ADC. Pointez `GOOGLE_APPLICATION_CREDENTIALS` vers le fichier JSON du compte de service et fournissez toujours un projet via les réglages ou l’une des variables de projet ci-dessus.
+Les comptes de service utilisent aussi les ADC. Faites pointer `GOOGLE_APPLICATION_CREDENTIALS` vers le fichier JSON du compte de service et indiquez également le projet dans les réglages ou via l’une des variables de projet ci-dessus.
 
 ```bash
 GOOGLE_APPLICATION_CREDENTIALS=/secure/vertex.json \
@@ -479,7 +479,7 @@ Le compte connecté doit avoir accès à Copilot Chat. Si GitHub signale l’abs
 
 ## Ollama
 
-Démarrez Ollama et récupérez un modèle. OpenCode sonde `http://127.0.0.1:11434`, découvre les modèles de complétion et les ajoute à `/models` sans connexion de compte.
+Démarrez Ollama et récupérez un modèle. OpenCode interroge `http://127.0.0.1:11434`, détecte les modèles de complétion et les ajoute à `/models` sans que vous ayez à associer un compte.
 
 ```bash
 ollama serve

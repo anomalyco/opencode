@@ -21,7 +21,7 @@ Une configuration courante consiste à demander une confirmation avant d’exéc
 }
 ```
 
-La dernière règle correspondante l’emporte, donc les exceptions précises suivent la règle générale.
+La dernière règle qui s’applique l’emporte. Placez donc les exceptions après la règle générale.
 
 <Callout type="warning">
   V1 utilise des noms de champs et d’actions différents. Dans V2, utilisez `permissions`, `shell` et `subagent` au lieu
@@ -136,7 +136,7 @@ Par exemple, autorisez un skill et refusez tous les autres :
 
 ## Répertoires
 
-Un chemin hors de la Location active et de son worktree de projet non racine est vérifié par rapport à `external_directory` avant ses règles `read` ou `edit`. La politique par défaut autorise `external_directory`, donc les chemins externes ne déclenchent pas de demande tant que vous n’ajoutez pas de règle. Pour être sollicité avant tout accès hors du projet :
+Pour un chemin qui se trouve à la fois hors de la Location active et hors du worktree non racine de son projet, OpenCode vérifie `external_directory` avant les règles `read` ou `edit`. La politique par défaut autorise `external_directory` : les chemins externes ne nécessitent donc pas de confirmation, sauf si vous ajoutez une règle. Pour demander une confirmation avant tout accès hors du projet :
 
 ```jsonc
 {
@@ -147,7 +147,7 @@ Un chemin hors de la Location active et de son worktree de projet non racine est
 }
 ```
 
-Des règles plus précises après celle-ci peuvent autoriser ou refuser des répertoires précis :
+Ajoutez ensuite des règles plus ciblées pour autoriser ou refuser l’accès à certains répertoires :
 
 ```jsonc
 {
@@ -171,9 +171,9 @@ Pour `external_directory`, `read` et `edit`, un préfixe `~`, `~/`, `$HOME` ou `
 Les ressources shell restent du texte de commande brut et ne sont pas développées par rapport au répertoire personnel.
 
 <Callout type="warning">
-  `shell` s’exécute avec les droits du système de fichiers, des processus et du réseau de l’utilisateur hôte. La déduction
-  de répertoires à partir du texte de commande est effectuée au mieux : préférez une liste d’autorisation shell étroite
-  plutôt que des motifs censés reconnaître chaque commande dangereuse.
+  `shell` s’exécute avec les droits d’accès de l’utilisateur hôte au système de fichiers, aux processus et au réseau. Le texte
+  d’une commande ne permet pas toujours de déterminer les répertoires utilisés. Préférez une liste restreinte de commandes
+  shell autorisées plutôt que des motifs censés détecter toutes les commandes dangereuses.
 </Callout>
 
 Les chemins de modification relatifs peuvent sortir de la Location active tout en restant dans son worktree de projet. Les chemins externes explicites sont canonicalisés avant la correspondance : n’autorisez donc que des limites de répertoire de confiance.
@@ -196,7 +196,7 @@ Les vérifications d’autorisation shell utilisent le scanner de shell intégr�
 }
 ```
 
-Les règles d’autorisation, les motifs d’approbation enregistrés et la déduction de répertoires au mieux s’appliquent à chaque sous-commande extraite et à chaque cible de `cd`. Il n’existe pas de mode d’approbation supplémentaire ni de restriction globale pour les répertoires inconnus.
+Pour chaque sous-commande extraite et chaque cible de `cd`, OpenCode applique les règles d’autorisation et les motifs d’approbation enregistrés, et tente de déterminer les répertoires utilisés. Il n’existe pas de mode d’approbation supplémentaire ni de restriction globale pour les répertoires inconnus.
 
 ## Valeurs par défaut
 
