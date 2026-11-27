@@ -35,8 +35,12 @@ export function findParts(rows: readonly SessionRow[], message: (messageID: stri
 
 /** Plain, case-insensitive text; surrounding whitespace in the query is ignored. */
 export function findPattern(query: string) {
-  // Lowercased so queries that differ only in case compare equal by source.
-  const text = query.trim().toLowerCase()
+  // Lowercased so queries that differ only in case compare equal by source. A character whose lowercase form is a
+  // different sequence (U+0130 becomes "i" plus a combining dot) is kept as is: the "i" flag already folds it.
+  const text = query.trim().replace(/\p{Lu}/gu, (char) => {
+    const lower = char.toLowerCase()
+    return lower.length === char.length ? lower : char
+  })
   if (!text) return
   return new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu")
 }
