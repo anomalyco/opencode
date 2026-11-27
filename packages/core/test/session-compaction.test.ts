@@ -503,7 +503,8 @@ it.effect("auto compaction estimates current content against the buffered prompt
     const messages = [
       { ...assistant, content: [{ ...tool, state: { status: "completed" as const, input: {}, content: media } }] },
     ]
-    expect(SessionCompaction.estimateContext({ ...grown, messages })).toBe(92_500)
+    // The files dominate; the 3 tokens are the `(no output)` text a blank result is lowered with.
+    expect(SessionCompaction.estimateContext({ ...grown, messages })).toBe(92_503)
     const user = Schema.decodeUnknownSync(SessionMessage.User)({
       id: SessionMessage.ID.create(),
       type: "user",
@@ -511,11 +512,12 @@ it.effect("auto compaction estimates current content against the buffered prompt
       files: media.map((file) => ({ mime: file.mime, data: "a".repeat(100_000), source: { type: "inline" } })),
       time: { created: 0 },
     })
-    expect(SessionCompaction.estimateContext({ ...grown, messages: [...messages, user] })).toBe(96_000)
+    expect(SessionCompaction.estimateContext({ ...grown, messages: [...messages, user] })).toBe(96_003)
+    // Each row differs by the 3 tokens of the `(no output)` text a blank tool result is lowered with.
     for (const [modalities, tokens, fallback] of [
-      [["text", "image"], 92_040, 1_520],
-      [["text", "pdf"], 93_042, 2_021],
-      [["text"], 89_082, 41],
+      [["text", "image"], 92_043, 1_520],
+      [["text", "pdf"], 93_045, 2_021],
+      [["text"], 89_085, 41],
     ] as const) {
       const selected = {
         ...grown,

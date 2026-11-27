@@ -47,7 +47,7 @@ describe("empty tool output", () => {
     expect(result([{ type: "text", text: " padded " }]).result).toEqual({ type: "text", value: " padded " })
   })
 
-  test("a result with an attachment keeps it as is", () => {
+  test("a result whose only text is blank states the absence and keeps the attachment", () => {
     expect(
       result([
         { type: "text", text: "\n" },
@@ -56,7 +56,30 @@ describe("empty tool output", () => {
     ).toEqual({
       type: "content",
       value: [
-        { type: "text", text: "\n" },
+        { type: "text", text: "(no output)" },
+        { type: "file", uri: "file:///tmp/plot.png", mime: "image/png" },
+      ],
+    })
+    // Chat-completions sends only the text parts as the tool message, so a file-only result is empty there too.
+    expect(result([{ type: "file", uri: "file:///tmp/plot.png", mime: "image/png" }]).result).toEqual({
+      type: "content",
+      value: [
+        { type: "text", text: "(no output)" },
+        { type: "file", uri: "file:///tmp/plot.png", mime: "image/png" },
+      ],
+    })
+  })
+
+  test("an attachment next to real output is left untouched", () => {
+    expect(
+      result([
+        { type: "text", text: "saved the plot" },
+        { type: "file", uri: "file:///tmp/plot.png", mime: "image/png" },
+      ]).result,
+    ).toEqual({
+      type: "content",
+      value: [
+        { type: "text", text: "saved the plot" },
         { type: "file", uri: "file:///tmp/plot.png", mime: "image/png" },
       ],
     })

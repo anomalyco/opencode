@@ -120,10 +120,12 @@ const NO_OUTPUT = "(no output)"
 
 const toolOutput = (
   content: SessionMessage.ToolStateCompleted["content"],
-): SessionMessage.ToolStateCompleted["content"] =>
-  content.every((part) => part.type === "text" && part.text.trim() === "")
-    ? [{ type: "text" as const, text: NO_OUTPUT }]
-    : content
+): SessionMessage.ToolStateCompleted["content"] => {
+  if (content.some((part) => part.type === "text" && part.text.trim() !== "")) return content
+  // Chat-completions sends only the text parts of a result, so blank text is an empty tool message there
+  // whether or not the result also carries a file. Keep the files and state the absence once.
+  return [{ type: "text" as const, text: NO_OUTPUT }, ...content.filter((part) => part.type !== "text")]
+}
 
 const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: ProviderMetadata | undefined) => {
   if (tool.state.status === "completed") {
