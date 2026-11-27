@@ -1,4 +1,14 @@
-import { For, Show, createEffect, createMemo, createRenderEffect, createSignal, onCleanup, type Accessor, type JSX } from "solid-js"
+import {
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createRenderEffect,
+  createSignal,
+  onCleanup,
+  type Accessor,
+  type JSX,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createEventListener } from "@solid-primitives/event-listener"
@@ -29,6 +39,7 @@ import { createSessionPanelMenuEntries, type SessionPanelMenuEntry } from "./pan
 import { RegionContent, type Region, type RegionPane } from "./panels"
 import { PluginSlot } from "./render"
 import { createTabStripScroll } from "./tab-strip-scroll"
+import { createTabStripWidths } from "./tab-strip-widths"
 import { closedTabsModifier, type ClosedSideTab } from "./closed-tabs"
 import { ClosedTabsSection, createDeferredMenu, NewTabButton } from "./closed-tabs-view"
 import { selectDeferredMenuOpen } from "./deferred-menu-machine"
@@ -310,6 +321,7 @@ export function PaneTabs(props: {
               capture: true,
             })
             onCleanup(createTabStripScroll({ el, lead: props.pane.lead }))
+            onCleanup(createTabStripWidths(el))
           }}
           onContextMenu={(event: MouseEvent) => {
             const key =
@@ -556,7 +568,8 @@ function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: (ke
   const menu = createDeferredMenu<SessionPanelMenuEntry>({
     onChoose: (entry) => {
       props.onChoose(entry.key)
-      entry.item.run()    },
+      entry.item.run()
+    },
   })
 
   return (
@@ -667,9 +680,7 @@ function LauncherRow(props: { item: SessionPanelMenuItem; onChoose: () => void }
       }}
     >
       <span class="flex min-w-0 items-center gap-2 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px]">
-        <Show when={props.item.icon}>
-          {(icon) => <Icon name={icon()} class="text-v2-icon-icon-muted" />}
-        </Show>
+        <Show when={props.item.icon}>{(icon) => <Icon name={icon()} class="text-v2-icon-icon-muted" />}</Show>
         <span class="shrink-0 text-v2-text-text-base">{props.item.title}</span>
         <Show when={props.item.description}>
           {(description) => <span class="truncate text-v2-text-text-muted">{description()}</span>}
