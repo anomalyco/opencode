@@ -432,7 +432,10 @@ smoke(
         data: { sessionID, terminal: { id: first.id } },
       })
       expect(first.size).toEqual({ cols: 80, rows: 24 })
-      const directories = yield* Effect.promise(() => fs.readdir(fixture.directory))
+      // Beside the daemon's runtime directory sits the log its stderr goes to.
+      const entries = yield* Effect.promise(() => fs.readdir(fixture.directory, { withFileTypes: true }))
+      const directories = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+      expect(entries.filter((entry) => !entry.isDirectory()).map((entry) => entry.name)).toEqual(["opencode-pty.log"])
       expect(directories).toHaveLength(1)
       expect(directories[0]).toMatch(/^[0-9a-f-]{36}$/)
       if (!directories[0]) throw new Error("Missing daemon directory")
