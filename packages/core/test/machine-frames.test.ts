@@ -759,9 +759,16 @@ for (const protocol of [2, 4]) {
         const worker = yield* raw(carrier, { home: paired.home, identity: paired.worker })
         yield* worker.frame(concat(Uint8Array.of(0), text(JSON.stringify({ ...HELLO, protocol }))))
         expect(yield* Fiber.join(serving).pipe(Effect.flip)).toEqual(new Link.Refused())
-        expect(JSON.stringify(logs)).toContain(`uses protocol ${protocol}`)
-        expect(JSON.stringify(logs)).toContain("requires protocol 3")
-        expect(JSON.stringify(logs)).toContain("The worker and the home must be the same version")
+        const reason = `worker speaks protocol ${protocol}, this server needs 3; ${protocol < 3 ? "update opencode-worker on that machine" : "update OpenCode on this server"}`
+        expect(JSON.stringify(logs)).toContain(`Refused machine version-test: ${reason}`)
+        expect((yield* paired.machines.list())[0]).toMatchObject({
+          id: paired.id,
+          online: false,
+          refused: { reason: { _tag: "ProtocolMismatch", worker: protocol, home: 3 } },
+        })
+        expect((yield* paired.machines.home(paired.id).pipe(Effect.flip)).message).toBe(
+          `version-test is offline, command not sent: ${reason}`,
+        )
       }),
     ),
   )

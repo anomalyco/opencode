@@ -21,9 +21,35 @@ const START_GRACE = "15 seconds"
 /** The worker refuses a stdin write larger than 64 KiB. */
 const MAX_STDIN_CHUNK_SIZE = 64 * 1024
 
-export class NotSent extends Schema.TaggedError<NotSent>()("Machine.NotSent", { machine: Environment.ID }) {
+/** Why a worker that proved its key was refused right after, by its hello. */
+export const Refusal = Schema.Union([
+  Schema.TaggedStruct("ProtocolMismatch", { worker: Schema.Int, home: Schema.Int }),
+  Schema.TaggedStruct("InvalidHello", { issue: Schema.String }),
+])
+export type Refusal = typeof Refusal.Type
+
+export class Refused extends Schema.TaggedClass<Refused>()("Refused", {
+  at: Schema.DateTimeUtc,
+  reason: Refusal,
+}) {}
+
+/** The one place a refusal becomes words, for the person or model that has to act on it. */
+export const describeRefusal = (refusal: Refusal) => {
+  switch (refusal._tag) {
+    case "ProtocolMismatch":
+      return `worker speaks protocol ${refusal.worker}, this server needs ${refusal.home}; ${refusal.worker < refusal.home ? "update opencode-worker on that machine" : "update OpenCode on this server"}`
+    case "InvalidHello":
+      return `worker sent a hello this server can't read (${refusal.issue}); update opencode-worker on that machine`
+  }
+}
+
+export class NotSent extends Schema.TaggedError<NotSent>()("Machine.NotSent", {
+  machine: Environment.ID,
+  /** The machine's last connection was refused, and none was served since. */
+  refused: Schema.optionalKey(Refused),
+}) {
   override get message() {
-    return `${this.machine} is offline, command not sent`
+    return `${this.machine} is offline, command not sent${this.refused ? `: ${describeRefusal(this.refused.reason)}` : ""}`
   }
 }
 
@@ -94,6 +120,10 @@ export interface Interface {
   readonly peer: (request: PeerRequest) => Effect.Effect<void, PeerFailed | NotSent | Unknown>
   /** The peer links that are up, as the current connection's hello and messages since report them. */
   readonly links: () => ReadonlySet<PeerLink>
+  /** Remembers that a connection was refused before it was served, until the next one is. */
+  readonly refuse: (refused: Refused) => void
+  /** The last connection's refusal, while no connection has been served since. */
+  readonly refusal: () => Refused | undefined
 }
 
 type Reply = Extract<FromWorker, { type: "fs" }>
@@ -140,7 +170,9 @@ export const make = (id: Environment.ID): Interface => {
   let next = Deferred.makeUnsafe<Link>()
   /** The worker behind the newest connection. Every process in `processes` was started on it. */
   let instance: Instance | undefined
+  let refused: Refused | undefined
   let req = 0
+  const offline = () => new NotSent({ machine: id, ...(refused ? { refused } : {}) })
   const online = Effect.suspend(() => (link ? Effect.succeed(link) : Deferred.await(next)))
   const platform = (method: string) => (cause: Error) =>
     PlatformError.systemError({ _tag: "Unknown", module: "Machine", method, description: cause.message, cause })
@@ -218,6 +250,7 @@ export const make = (id: Environment.ID): Interface => {
         )
       }
       link = current
+      refused = undefined
       Deferred.doneUnsafe(next, Effect.succeed(current))
       next = Deferred.makeUnsafe()
       return connection.messages.pipe(
@@ -356,7 +389,7 @@ export const make = (id: Environment.ID): Interface => {
       // is away: a process still there is forgotten, and stopped when the machine's next hello lists it.
       const live = yield* Effect.acquireRelease(
         Effect.suspend(() => {
-          if (!link) return Effect.fail(platform("spawn")(new NotSent({ machine: id })))
+          if (!link) return Effect.fail(platform("spawn")(offline()))
           processes.set(processID, process)
           link.send(start)
           return Effect.succeed(link)
@@ -381,7 +414,7 @@ export const make = (id: Environment.ID): Interface => {
 
       const write = (data: Uint8Array | null) =>
         Effect.suspend(() => {
-          if (!link) return Effect.fail(new NotSent({ machine: id }))
+          if (!link) return Effect.fail(offline())
           if ([...link.inputs.values()].some((input) => input.id === processID))
             return Effect.fail(new Error("stdin write already pending"))
           const reply = Deferred.makeUnsafe<void, Error>()
@@ -472,7 +505,7 @@ export const make = (id: Environment.ID): Interface => {
   const call = <A, E extends NotFound | WrongKind = never>(path: string, request: Call) =>
     Effect.suspend(() => {
       const current = link
-      if (!current) return Effect.fail(new Failed({ path, cause: new NotSent({ machine: id }) }))
+      if (!current) return Effect.fail(new Failed({ path, cause: offline() }))
       const callID = ++req
       const reply = Deferred.makeUnsafe<Reply, Unknown>()
       current.calls.set(callID, reply)
@@ -494,7 +527,7 @@ export const make = (id: Environment.ID): Interface => {
   const peer = (request: PeerRequest) =>
     Effect.suspend((): Effect.Effect<void, PeerFailed | NotSent | Unknown> => {
       const current = link
-      if (!current) return Effect.fail(new NotSent({ machine: id }))
+      if (!current) return Effect.fail(offline())
       const peerID = ++req
       const reply = Deferred.makeUnsafe<PeerReply, Unknown>()
       current.peers.set(peerID, reply)
@@ -516,6 +549,10 @@ export const make = (id: Environment.ID): Interface => {
     close,
     peer,
     links: () => link?.links ?? new Set(),
+    refuse: (refusal) => {
+      refused = refusal
+    },
+    refusal: () => refused,
     hello: () => link?.hello,
     describe: () => link?.describe?.(),
     environment: Environment.make(
@@ -539,9 +576,7 @@ export const make = (id: Environment.ID): Interface => {
       {
         path: posix,
         shell: "sh",
-        home: Effect.suspend(() =>
-          link ? Effect.succeed(link.hello.home) : Effect.fail(new NotSent({ machine: id })),
-        ),
+        home: Effect.suspend(() => (link ? Effect.succeed(link.hello.home) : Effect.fail(offline()))),
       },
     ),
   }

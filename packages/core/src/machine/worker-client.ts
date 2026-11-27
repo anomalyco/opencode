@@ -227,9 +227,12 @@ export const stdio = Effect.fn("WorkerClient.stdio")(function* (
   const environmentID = Environment.ID.make(id)
   const pull = yield* Stream.toPull(decodeStdioFrames(io.stdout))
   const first = yield* pull.pipe(
-    Effect.flatMap((batch) =>
-      Effect.map(Link.decodeHello(environmentID, batch[0]), (hello) => ({ hello, rest: batch.slice(1) })),
-    ),
+    Effect.flatMap((batch) => {
+      const parsed = Link.parseHello(batch[0])
+      return parsed._tag === "Accepted"
+        ? Effect.succeed({ hello: parsed.hello, rest: batch.slice(1) })
+        : Link.reject(environmentID, parsed.refusal)
+    }),
     Effect.timeout(HELLO_DEADLINE),
     Effect.catchCause(() => Effect.fail(new Link.Refused())),
   )

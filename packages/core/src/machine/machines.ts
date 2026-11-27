@@ -3,7 +3,7 @@ export * as Machines from "./machines.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { createHash, randomBytes } from "node:crypto"
 import { eq } from "drizzle-orm"
-import { Clock, Context, Effect, Layer, Schema } from "effect"
+import { Clock, Context, DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { Environment } from "../environment/index.js"
@@ -31,6 +31,8 @@ export class Info extends Schema.Class<Info>("Machines.Info")({
   os: Schema.optionalKey(Schema.String),
   arch: Schema.optionalKey(Schema.String),
   connection: Schema.optionalKey(Machine.ConnectionInfo),
+  /** The machine's last connection was refused, and it has not connected since. */
+  refused: Schema.optionalKey(Machine.Refused),
 }) {}
 
 export class NotFound extends Schema.TaggedError<NotFound>()("Machines.NotFound", {
@@ -116,6 +118,8 @@ export interface Interface {
    * proved, never one the worker named.
    */
   readonly connect: (id: Environment.ID, connection: Machine.Connection) => Effect.Effect<void, NotFound>
+  /** Remembers that the machine's connection was refused after its handshake, until it next connects. */
+  readonly refuse: (id: Environment.ID, refusal: Machine.Refusal) => Effect.Effect<void>
   /** Prints one join string for this machine, good once and for five minutes. A second invite replaces the first. */
   readonly invite: (
     id: Environment.ID,
@@ -275,6 +279,7 @@ const layer = Layer.effect(
           .sort(([left], [right]) => left.localeCompare(right))
           .map(([id, machine]) => {
             const hello = machine.hello()
+            const refused = machine.refusal()
             const connection = machine.describe()
             return hello
               ? new Info({
@@ -285,7 +290,12 @@ const layer = Layer.effect(
                   arch: hello.arch,
                   ...(connection ? { connection } : {}),
                 })
-              : new Info({ id, online: false, paired: keys.has(id) })
+              : new Info({
+                  id,
+                  online: false,
+                  paired: keys.has(id),
+                  ...(refused ? { refused } : {}),
+                })
           })
       }),
       get: Effect.fn("Machines.get")(function* (id) {
@@ -297,13 +307,20 @@ const layer = Layer.effect(
         const machine = instances.get(id)
         if (!machine) return yield* new NotFound({ machine: id })
         const hello = machine.hello()
-        if (!hello) return yield* new Machine.NotSent({ machine: id })
+        if (!hello) {
+          const refused = machine.refusal()
+          return yield* new Machine.NotSent({ machine: id, ...(refused ? { refused } : {}) })
+        }
         return hello.home
       }),
       connect: Effect.fn("Machines.connect")(function* (id, connection) {
         const machine = instances.get(id)
         if (!machine) return yield* new NotFound({ machine: id })
         yield* machine.connect(connection)
+      }),
+      refuse: Effect.fn("Machines.refuse")(function* (id, reason) {
+        const at = yield* DateTime.now
+        instances.get(id)?.refuse(new Machine.Refused({ at, reason }))
       }),
       invite: Effect.fn("Machines.invite")(function* (id, options) {
         // The two yields come first, so every check and the `set` below run without one between them.

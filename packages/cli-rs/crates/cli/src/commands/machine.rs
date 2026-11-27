@@ -372,6 +372,7 @@ mod tests {
             os: os.map(Into::into),
             arch: arch.map(Into::into),
             connection: None,
+            refused: None,
         };
         let machines = [
             machine("gpu", true, true, Some("linux"), Some("x64")),

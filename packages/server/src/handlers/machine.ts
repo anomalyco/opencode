@@ -9,12 +9,13 @@ import { Identity } from "@opencode/core/machine/identity"
 import { Iroh } from "@opencode/core/machine/iroh"
 import { Join } from "@opencode/core/machine/join"
 import { Link } from "@opencode/core/machine/link"
+import type { Machine } from "@opencode/core/machine/index"
 import { Machines } from "@opencode/core/machine/machines"
 import { AbsolutePath } from "@opencode/core/schema"
 import { ConflictError, ForbiddenError, InvalidRequestError, MachineNotFoundError } from "@opencode/protocol/errors"
-import { isWebSocketUpgrade, type MachineAddPayload } from "@opencode/protocol/groups/machine"
+import { isWebSocketUpgrade, type MachineAddPayload, type MachineInfo } from "@opencode/protocol/groups/machine"
 import { Global } from "@opencode/util/global"
-import { Context, Effect, Latch, Option, Scope, Semaphore } from "effect"
+import { Context, DateTime, Effect, Latch, Option, Scope, Semaphore } from "effect"
 import { HttpMiddleware, type HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiSchema } from "effect/http-api"
 import { Socket } from "effect/socket"
@@ -62,6 +63,18 @@ export const machinesEnabled = Effect.gen(function* () {
     Effect.orElseSucceed(() => false),
   )
 })
+
+const refusal = (reason: Machine.Refusal): NonNullable<MachineInfo["refused"]>["reason"] => {
+  switch (reason._tag) {
+    case "ProtocolMismatch":
+      return { type: "protocol-mismatch", worker: reason.worker, home: reason.home }
+    case "InvalidHello":
+      return { type: "invalid-hello", issue: reason.issue }
+  }
+}
+
+const machineInfo = ({ refused, ...info }: Machines.Info): MachineInfo =>
+  refused ? { ...info, refused: { at: DateTime.toEpochMillis(refused.at), reason: refusal(refused.reason) } } : info
 
 /** Sends the close and drops the connection at once, without the time a machine has to answer it. */
 const drop = (socket: WebSocket) => {
@@ -301,7 +314,7 @@ export const makeMachine = Effect.gen(function* () {
   return {
     list: Effect.fn("MachineHandler.list")(function* () {
       yield* requireEnabled
-      return { data: yield* machines.list() }
+      return { data: (yield* machines.list()).map(machineInfo) }
     }),
     add: Effect.fn("MachineHandler.add")(function* (payload: MachineAddPayload) {
       yield* requireEnabled
