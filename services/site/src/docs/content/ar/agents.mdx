@@ -39,7 +39,7 @@ Use the reviewer subagent to review my current changes.
 .opencode/agents/<name>.md
 ```
 
-يكتشف OpenCode مجلدات `.opencode` في المشروع من المجلد الحالي حتى جذر المشروع. ويصبح المسار المتداخل جزءًا من معرّف الوكيل:
+يبحث OpenCode عن مجلدات `.opencode` الخاصة بالمشروع بدءًا من المجلد الحالي وحتى جذر نظام الملفات. ويصبح المسار المتداخل جزءًا من معرّف الوكيل:
 
 ```text
 .opencode/agents/team/reviewer.md  →  team/reviewer
@@ -343,7 +343,7 @@ color: "#ff6b6b"
 
 <Callout type="warning">
   يحفظ مشغّل جلسات V2 هذه القيم لكنه لا يرسلها بعد مع طلبات النموذج. فاضبط إعدادات الطلب
-  النشطة على المزوّد أو النموذج أو متغيّر النموذج بدلًا من ذلك.
+  النشطة على المزوّد أو النموذج أو صيغة النموذج بدلًا من ذلك.
 </Callout>
 
 لا تستخدم الحقول القديمة في الأعلى مثل `temperature` أو `top_p` أو `prompt` أو `permission` أو `tools` أو `disable` أو `maxSteps` في إعداد وكلاء V2 الجديد.

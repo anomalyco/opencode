@@ -143,3 +143,23 @@ $ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
 ```bash
 $ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
 ```
+
+لا ينطبق `opencode service set password` إلا على الخدمة الخلفية المُدارة. يقرأ `opencode serve` قيمة `OPENCODE_PASSWORD`، وإن لم تُضبط، يولّد كلمة مرور جديدة عند كل تشغيل.
+
+### Docker
+
+تُنشر مع كل إصدار صورة في `ghcr.io/anomalyco/opencode` بوسم يحمل رقم الإصدار. نقطة دخول الصورة هي `opencode`، وهو يشغّل TUI، لذا مرّر `serve` لتشغيل الخادم. اضبط عنوان الاستماع على `0.0.0.0`، إذ لا يمكن الوصول إلى العنوان الافتراضي `127.0.0.1` إلا من داخل الحاوية.
+
+```bash
+$ docker run -d --name opencode -p 4096:4096 \
+    -e OPENCODE_PASSWORD="a-long-secret" \
+    -e ANTHROPIC_API_KEY \
+    -v opencode-data:/root/.local/share/opencode \
+    -v opencode-config:/root/.config/opencode \
+    -v "$PWD":/workspace -w /workspace \
+    ghcr.io/anomalyco/opencode:<version> serve --hostname 0.0.0.0 --port 4096
+```
+
+- اضبط `OPENCODE_PASSWORD` لتظل كلمة المرور ثابتة بعد إعادة التشغيل.
+- اربط مجلد البيانات `/root/.local/share/opencode` بوحدة تخزين. فهو يحتوي على قاعدة بيانات جلساتك، ومن دون هذا الربط ستفقد الجلسات عند إزالة الحاوية. واربط مجلد الإعدادات `/root/.config/opencode` بوحدة تخزين للحفاظ على إعداداتك العامة.
+- تحقّق من جاهزية الخادم بالأمر `curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info`.

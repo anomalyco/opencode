@@ -3,19 +3,17 @@ title: "الشبكة"
 description: "أعدّ الوسائط وجهات إصدار الشهادات المخصّصة وشهادات العميل."
 ---
 
-اضبط متغيّرات الوسيط القياسية واستثنِ عناوين loopback. يستخدم OpenCode اتصالات HTTP محلية بين CLI
-وخدمته الخلفية، لذا يلزم استثناء loopback عندما يكون وسيط مضبوطًا في بيئة CLI.
+اضبط متغيّرات الوسيط القياسية. يستخدم OpenCode اتصالات HTTP محلية بين CLI وخدمته الخلفية، ويستثني CLI عناوين loopback تلقائيًا من المرور عبر الوسيط.
 
 ```bash
 export HTTP_PROXY=http://proxy.example.com:8080
 export HTTPS_PROXY=http://proxy.example.com:8080
-export NO_PROXY=localhost,127.0.0.1,::1
 
 opencode
 ```
 
 يتعامل `HTTP_PROXY` مع وجهات HTTP ويتعامل `HTTPS_PROXY` مع وجهات HTTPS. ويمكن لعنوان الوسيط نفسه استخدام `http://`
-للمتغيّرين. و`NO_PROXY` قائمة مفصولة بفواصل من المضيفين والعناوين التي تتصل مباشرةً.
+للمتغيّرين. عند بدء التشغيل، يضيف CLI العناوين `127.0.0.1` و`localhost` و`::1` إلى كلٍّ من `NO_PROXY` و`no_proxy`. استخدم `NO_PROXY` لسرد المضيفين الآخرين الذين يجب الاتصال بهم مباشرةً، وافصل بينهم بفواصل.
 
 ## الخدمة
 
@@ -25,13 +23,12 @@ opencode
 ```bash
 opencode service set env HTTP_PROXY http://proxy.example.com:8080
 opencode service set env HTTPS_PROXY http://proxy.example.com:8080
-opencode service set env NO_PROXY localhost,127.0.0.1,::1
+opencode service set env NO_PROXY llm.company.example
 opencode service start
 ```
 
 ويؤدي تغيير متغيّر بيئة مُدار إلى إيقاف الخدمة العاملة. ويبدأها `service start` من جديد بالبيئة الجديدة.
-وأبقِ `NO_PROXY` في shell الخاص بـ CLI أيضًا عندما يضبط ذلك shell وسيطًا، لأن متغيّرات الخدمة المُدارة تنطبق على عملية
-الخادم لا على عملية CLI.
+يحتاج shell الذي تشغّل منه CLI إلى متغيّرات وسيط خاصة به، لأن متغيّرات الخدمة المُدارة تنطبق على عملية الخادم، لا على عملية CLI. وتُضاف استثناءات loopback تلقائيًا على الجانبين.
 
 وأزل متغيّرًا محفوظًا بـ `service unset env`:
 
@@ -130,7 +127,6 @@ CERT_SIGNATURE_FAILURE
 ```bash
 HTTP_PROXY=http://proxy.example.com:8080 \
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode --standalone
 ```
 
@@ -138,7 +134,6 @@ opencode --standalone
 
 ```bash
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode serve
 ```
 

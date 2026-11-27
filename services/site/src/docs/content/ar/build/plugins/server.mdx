@@ -193,7 +193,7 @@ const agents = await ctx.agent.list()
 const build = await ctx.agent.get({ agentID: "build" })
 ```
 
-سجّل تحويلًا لفحص الوكلاء أو تحديثهم أو إزالتهم أو اختيار الوكيل الافتراضي.
+سجّل تحويلًا لفحص الوكلاء أو إنشائهم أو تحديثهم أو إزالتهم أو اختيار الوكيل الافتراضي.
 
 ```ts
 await ctx.agent.transform((editor) => {
@@ -205,6 +205,18 @@ await ctx.agent.transform((editor) => {
     agent.description = "Builds features and fixes bugs"
   })
   editor.remove("legacy")
+})
+```
+
+سجّل وكيلًا جديدًا باستخدام `editor.update`. إذا كان المعرّف موجودًا بالفعل، تُعدِّل هذه الطريقة الوكيل المقابل. وإلا فإنها تُنشئ وكيلًا باستخدام `Agent.Info.default(id)` قبل استدعاء دالة رد النداء.
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
 })
 ```
 
@@ -1041,8 +1053,7 @@ await ctx.tool.reload()
 
 واستخدم `list()` و`get()` لفحص الأدوات الموجودة في المحرّر حاليًا. وللأدوات `id` يحتوي اسمها الفعّال،
 ويعيد `get()` القيمة `undefined` عندما يغيب ذلك المعرّف. واستخدم `update` و`remove` باسم الأداة الفعّال،
-بما في ذلك نطاقها (`acme_greeting` أعلاه). والنقاط في
-النطاقات والأحرف غير المدعومة في أسماء الأدوات تصبح `_`. وتُتجاهل الأسماء الغائبة؛ وإنشاء أداة يحتاج
+بما في ذلك نطاقها (`acme_greeting` أعلاه). تُستبدل النقاط في النطاقات بـ`_`. وفي أسماء الأدوات، تبقى الحروف والأرقام و`_` و`-` كما هي، ويُستبدل أي محرف آخر بـ`_`. وتُتجاهل الأسماء الغائبة؛ وإنشاء أداة يحتاج
 `add` بتعريف كامل. وتحفظ التحديثات الاسم والنطاق. وعيّن مخططات أو خيارات جديدة لتستبدلها
 بدل تعديل القيم المتداخلة. وتُسجّل التحديثات غير الصالحة وتُبقي التعريف السابق سليمًا.
 

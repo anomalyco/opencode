@@ -128,6 +128,9 @@
 | error | خطأ | |
 | warning | تحذير | |
 | log | سجل | |
+| telemetry | بيانات القياس عن بُعد | |
+| trace (observability) | تتبّع | الجمع: تتبّعات؛ تُستخدم مع السجلات في OpenTelemetry |
+| collector (OpenTelemetry) | مُجمِّع | مُجمِّع OpenTelemetry |
 | cache | ذاكرة التخزين المؤقت | ثم «الذاكرة المؤقتة» |
 | rules | قواعد | |
 | instructions | التعليمات | `AGENTS.md` كما هي |

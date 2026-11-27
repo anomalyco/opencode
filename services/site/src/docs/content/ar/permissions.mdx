@@ -121,10 +121,12 @@ description: "تحكّم في ما يستطيعه وكلاء OpenCode بقواع
 | `websearch`          | استعلام البحث                                                                |
 | `generate_image` | نموذج الصور المختار بصيغة `providerID/modelID`، مع `#variant` عند ضبطه |
 | `external_directory` | حد المجلد الخارجي الأساسي، وينتهي عادةً بـ `/*`              |
-| `<server>_<tool>`    | `*` لأداة MCP؛ والأحرف غير المدعومة في الاسمين تصبح `_`        |
+| `<server>_<tool>`    | `*` لأداة MCP؛ تبقى الحروف والأرقام و`_` و`-` كما هي في كلا الاسمين، ويُستبدل أي محرف آخر بـ`_` |
 | `opencode_list_mcp_resources` | اسم خادم MCP                                                    |
 | `opencode_read_mcp_resource`  | `<server>:<uri>`                                                   |
 | `execute`            | `*`؛ والرفض يزيل Code Mode ويسرد أدواته مباشرة، بينما تفرض الأدوات المتداخلة قواعدها |
+
+تحتفظ إجراءات MCP بالشرطات، لذا تطابق أدوات خادم اسمه `mcp-atlassian` النمط `mcp-atlassian_*`، لا `mcp_atlassian_*`.
 
 مثلًا، اسمح بمهارة واحدة وارفض كل المهارات الأخرى:
 

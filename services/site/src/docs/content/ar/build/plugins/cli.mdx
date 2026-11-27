@@ -425,10 +425,9 @@ await context.ui.dialog.select({
 - يُتمّ الضغط على Escape أو استدعاء `clear()` أو عرض مربع حوار آخر Promise بالقيمة `undefined`.
 - لا تخصّص `ctrl+n` أو `ctrl+p` لإجراء. فمربع الحوار يحتفظ بهما للتنقّل، وتكون الأولوية لاختصاراته.
 
-ويمكن لمربعات حوار JSX المخصّصة ضبط حجمها وإغلاق نفسها.
+يمكن لمربعات حوار JSX المخصّصة ضبط حجمها وإغلاق نفسها. استدعِ `set` بعد `show`، لأن عرض مربع الحوار يعيد حجمه إلى `medium` ويلغي توسيطه. يبلغ عرض `medium` 60 عمودًا، و`large` 88 عمودًا، و`xlarge` 116 عمودًا.
 
 ```tsx
-context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.show(
   () => (
     <box>
@@ -437,6 +436,7 @@ context.ui.dialog.show(
   ),
   () => console.log("closed"),
 )
+context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.clear()
 ```
 
@@ -645,8 +645,8 @@ const displayPath = context.ui.format.path(context.location?.directory ?? "/home
     "@opencode/plugin": "latest"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.6.6",
-    "@opentui/solid": ">=0.6.6",
+    "@opentui/core": ">=0.8.0",
+    "@opentui/solid": ">=0.8.0",
     "solid-js": ">=1.9.0"
   }
 }

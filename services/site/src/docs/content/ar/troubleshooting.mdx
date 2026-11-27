@@ -112,6 +112,33 @@ grep 'role=server' ~/.local/share/opencode/log/opencode.log
 grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
 ```
 
+## تصدير بيانات القياس عن بُعد
+
+يمكن لـ OpenCode إرسال سجلاته وتتبّعاته إلى مُجمِّع OpenTelemetry أو إلى خدمة APM تقبل OTLP عبر HTTP. اضبط عنوان URL الأساسي للمُجمِّع من دون مسار:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer example-token"
+export OTEL_RESOURCE_ATTRIBUTES="team=platform,host.name=dev-laptop"
+opencode
+```
+
+| المتغيّر                      | السلوك                                                                                                       |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | عنوان URL الأساسي. تُرسل السجلات إلى `<endpoint>/v1/logs` والتتبّعات إلى `<endpoint>/v1/traces`. اتركه دون ضبط لتعطيل التصدير. |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | ترويسات بصيغة `key=value` مفصولة بفواصل، تُرسل مع كل عملية تصدير، مثل مفتاح API. |
+| `OTEL_RESOURCE_ATTRIBUTES`    | سمات بصيغة `key=value` مرمّزة وفق ترميز URL ومفصولة بفواصل، تُضاف إلى كل سجل. إذا كان إدخال واحد غير صالح، تُستبعَد جميع السمات. |
+
+يتضمن كل سجل أيضًا `service.name` (`opencode`) و`service.version` و`deployment.environment.name` (قناة الإصدار) و`opencode.client` و`opencode.run`، وهو معرّف التشغيل نفسه الوارد في ملف السجل.
+
+تعمل الخدمة الخلفية في عملية مستقلة ولا ترث بيئة shell. اضبط المتغيّرات فيها أيضًا لتتبّع استدعاءات النماذج وتشغيل الأدوات:
+
+```bash
+opencode service set env OTEL_EXPORTER_OTLP_ENDPOINT http://localhost:4318
+opencode service set env OTEL_EXPORTER_OTLP_HEADERS "authorization=Bearer example-token"
+opencode service start
+```
+
 ## التقاط لقطة ذاكرة
 
 اكتب لقطة ذاكرة (heap) للخادم الخلفي العامل على أي منصة:

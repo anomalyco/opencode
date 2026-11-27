@@ -96,8 +96,31 @@ export default Plugin.define({
 ويصف `ctx.location` الموقع الذي حُمِّل فيه هذا الملحق. وهو ليس موقع كل جلسة أو حدث
 قد يلاحظه الملحق. فاقرأ بيانات الجلسة أو الحدث عندما يهمّ ذلك التمييز.
 
-ويعرض السياق نطاقات أكثر مما يسرد الجدول، بما في ذلك الكتالوجات والأوامر والتكاملات وخوادم MCP
-والمراجع والمهارات والتخزين وVCS وworktrees والبحث على الويب. راجع [سياق الملحق الكامل](/build/plugins/server#api).
+يتيح السياق نطاقات أخرى غير المذكورة في الجدول، منها الأوامر والتكاملات وخوادم MCP والمراجع والمهارات والتخزين وVCS وworktrees والبحث على الويب. راجع [سياق الملحق الكامل](/build/plugins/server#api).
+
+### ترحيل نطاق الكتالوج
+
+كانت الإصدارات السابقة من الملحقات تنشر المزوّدين والنماذج عبر `ctx.catalog`. يتيح OpenCode الآن `ctx.provider` و`ctx.model` كنطاقين منفصلين، لذا يفشل تحميل أي ملحق يستدعي `ctx.catalog.transform`.
+
+| واجهة API السابقة للكتالوج                   | البديل الحالي |
+| --------------------------------------------- | ---------------------------------------------------------------------------- |
+| `ctx.catalog.transform(draft => …)`           | `ctx.provider.transform(editor => …)` و`ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)`               | `editor.update(id, fn)` في `ctx.provider` |
+| `draft.model.update(providerID, modelID, fn)` | `editor.update(providerID, modelID, fn)` في `ctx.model` |
+| `ctx.catalog.reload()`                        | `ctx.provider.reload()` و`ctx.model.reload()` |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+راجع [المزوّدين](/build/plugins/server#providers) و[النماذج](/build/plugins/server#models) للاطّلاع على واجهات API الكاملة للمحرّرات.
 
 ## تسجيل الخطافات في `setup`
 
