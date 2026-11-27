@@ -39,7 +39,7 @@ export function sentenceGap(text: string) {
 }
 
 /** Text that ends in CJK script or punctuation. */
-const cjk = /[\u3000-\u303f\u3040-\u30ff\u3400-\u9fff]$/
+const cjk = /[\u3000-\u303f\u3040-\u30ff\u3400-\u9fff\uff00-\uffef]$/
 
 /** No space before a link that continues a CJK sentence, a space elsewhere. */
 export function gap(text: string) {
