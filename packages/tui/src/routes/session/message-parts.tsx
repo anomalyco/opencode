@@ -136,7 +136,7 @@ export function ReasoningBody(props: { content: string; streaming: boolean; sour
         streaming={props.streaming}
         syntaxStyle={thinkingSyntax()}
         content={props.content}
-        tableOptions={{ style: "grid", cellPaddingX: 1 }}
+        tableOptions={{ style: "grid", cellPaddingX: 1, borderColor: theme.border.base }}
         conceal={true}
         fg={theme.text.muted}
       />
@@ -227,7 +227,7 @@ export function TextPart(props: {
           renderBlock={plugins.markdown()}
           content={props.part.text.trim()}
           streaming={props.message.time.completed === undefined}
-          tableOptions={{ style: "grid", cellPaddingX: 1 }}
+          tableOptions={{ style: "grid", cellPaddingX: 1, borderColor: theme.border.base }}
           conceal={ctx.markdownMode() === "rendered"}
           fg={theme.markdown.text}
           bg={theme.background.base}
