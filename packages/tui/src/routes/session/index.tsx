@@ -1613,7 +1613,7 @@ export function Session(props: {
           // Keeps the toggled disclosure's header on its viewport row through the next layout.
           if (anchor && !(ending && !isAwayFromBottom())) afterLayout(scroll.anchor(anchor))
           sessionTabs.setGroupExpanded(sessionID, id, expanded)
-          afterLayout(saveScrollAnchor)
+          afterLayout(updateAwayFromBottom)
         },
         get width() {
           return contentWidth()
