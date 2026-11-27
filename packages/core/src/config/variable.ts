@@ -60,7 +60,12 @@ const substituteFiles = Effect.fnUntraced(function* (input: SubstituteInput, tex
     }
 
     const filePath = token.slice("{file:".length, -1)
-    const expandedPath = filePath.startsWith("~/") ? path.join(os.homedir(), filePath.slice(2)) : filePath
+    const expandedPath =
+      filePath === "~"
+        ? os.homedir()
+        : filePath.startsWith("~/") || (process.platform === "win32" && filePath.startsWith("~\\"))
+          ? path.join(os.homedir(), filePath.slice(2))
+          : filePath
     const resolvedPath = path.resolve(configDir, expandedPath)
     input.references?.add(resolvedPath)
     // Like a missing {env:VAR}, a missing or unreadable file substitutes empty so one stale secret

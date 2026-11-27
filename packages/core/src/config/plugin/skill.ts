@@ -8,6 +8,7 @@ import path from "path"
 import { isDeepStrictEqual } from "node:util"
 import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
 import { Config } from "../../config.js"
+import { FileAccess } from "../../file-access.js"
 import { Watcher } from "../../filesystem/watcher.js"
 import { Location } from "../../location.js"
 import { AbsolutePath } from "../../schema.js"
@@ -96,11 +97,10 @@ export const Plugin = define({
           add(Skill.UrlSource.make({ type: "url", url: item }))
           continue
         }
-        const expanded = item.startsWith("~/") ? path.join(global.home, item.slice(2)) : item
         add(
           Skill.DirectorySource.make({
             type: "directory",
-            path: AbsolutePath.make(path.isAbsolute(expanded) ? expanded : path.join(location.directory, expanded)),
+            path: AbsolutePath.make(FileAccess.resolvePath(location.directory, item, global.home)),
           }),
         )
       }
