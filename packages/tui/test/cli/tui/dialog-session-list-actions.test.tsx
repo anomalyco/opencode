@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { InputRenderable, TextareaRenderable } from "@opentui/core"
+import { TextareaRenderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { onMount } from "solid-js"
 import { DialogSessionList } from "../../../src/component/dialog-session-list"
@@ -74,15 +74,19 @@ async function renderSessionList(
         <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
           <StorageProvider>
             <ArgsProvider>
-              <ConfigProvider config={createTuiResolvedConfig({
-                tabs: { mode: "off" },
-                animations: false,
-                experimental: { "new-designs": options.newDesigns ?? false },
-              })}>
+              <ConfigProvider
+                config={createTuiResolvedConfig({
+                  tabs: { mode: "off" },
+                  animations: false,
+                  experimental: { "new-designs": options.newDesigns ?? false },
+                })}
+              >
                 <Keymap.Provider>
                   <ToastProvider>
                     <RouteProvider
-                      initialRoute={options.current ? { type: "session", sessionID: options.current } : { type: "home" }}
+                      initialRoute={
+                        options.current ? { type: "session", sessionID: options.current } : { type: "home" }
+                      }
                     >
                       <ClientProvider api={createApi(calls.fetch)}>
                         <PermissionProvider>
@@ -173,21 +177,6 @@ test("rename after arming delete prefills the session title", async () => {
   expect(await renamed.promise).toMatchObject({ title: "Disposable session" })
 })
 
-test("opens on the current session, so delete arms that session", async () => {
-  const now = Date.now()
-  await using setup = await renderSessionList(
-    ["E", "D", "C", "B", "A"].map((name, index) => session(`ses_${name}`, `session-${name}`, now - index * 1000)),
-    undefined,
-    { current: "ses_C" },
-  )
-  await setup.app.waitForFrame((frame) => frame.includes("session-A"))
-
-  setup.app.mockInput.pressKey("d", { ctrl: true })
-  const frame = await setup.app.waitForFrame((frame) => frame.includes("again to confirm"))
-  expect(frame).not.toContain("session-C")
-  expect(frame).toContain("session-E")
-})
-
 test("a running current session keeps the current marker color on its spinner", async () => {
   const now = Date.now()
   await using setup = await renderSessionList(
@@ -196,10 +185,10 @@ test("a running current session keeps the current marker color on its spinner", 
     { current: "ses_B", running: ["ses_A", "ses_B"], newDesigns: true },
   )
   await setup.app.waitForFrame((frame) => frame.split("\n").filter((line) => line.includes("⋯")).length === 2)
-  await setup.app.waitForFrame(() => setup.app.renderer.currentFocusedRenderable instanceof InputRenderable)
-  // The cursor opens on the current row, so move it away to see that row unselected.
-  setup.app.mockInput.pressArrow("up")
-  await setup.app.waitForFrame((frame) => frame.split("\n").some((line) => line.includes("┃") && line.includes("session-C")))
+  // The cursor opens on the top row, so the current row is drawn unselected.
+  await setup.app.waitForFrame((frame) =>
+    frame.split("\n").some((line) => line.includes("┃") && line.includes("session-C")),
+  )
 
   const spinner = (title: string) =>
     setup.app

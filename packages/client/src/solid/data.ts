@@ -163,7 +163,13 @@ export function locationKey(location: LocationRef) {
   return JSON.stringify([location.directory, location.workspaceID])
 }
 
-const catalogEvents = ["provider.updated", "model.updated", "agent.updated", "command.updated", "skill.updated"] as const
+const catalogEvents = [
+  "provider.updated",
+  "model.updated",
+  "agent.updated",
+  "command.updated",
+  "skill.updated",
+] as const
 type CatalogEvent = (typeof catalogEvents)[number]
 
 function isCatalogEvent(type: string): type is CatalogEvent {

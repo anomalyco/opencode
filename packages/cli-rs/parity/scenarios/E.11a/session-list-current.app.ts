@@ -1,5 +1,5 @@
-// The session list opened from a session that is not the newest (DLG16): the selection starts on the current
-// session, so its actions (delete, rename) apply to the session the reader is in.
+// The session list opened from a session that is not the newest (DLG16): the selection starts on the first row, not
+// on the current session (`focusCurrent={false}`).
 import { assistant, defineApp, HOME_PLACEHOLDER, session, user } from "../../lib/app"
 
 export default defineApp({

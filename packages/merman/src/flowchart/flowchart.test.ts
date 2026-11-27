@@ -1973,12 +1973,12 @@ flowchart LR
 
     expect(output).not.toMatch(/<\/?(?:b|strong)>/)
     for (const label of ["Service A", "Service B"])
-      expect(styled.chunks.some((chunk) => chunk.text.includes(label) && chunk.attributes === TextAttributes.BOLD)).toBe(
-        true,
-      )
-    expect(styled.chunks.some((chunk) => chunk.text.includes("Line 2") && chunk.attributes === TextAttributes.BOLD)).toBe(
-      false,
-    )
+      expect(
+        styled.chunks.some((chunk) => chunk.text.includes(label) && chunk.attributes === TextAttributes.BOLD),
+      ).toBe(true)
+    expect(
+      styled.chunks.some((chunk) => chunk.text.includes("Line 2") && chunk.attributes === TextAttributes.BOLD),
+    ).toBe(false)
   })
 
   test("keeps quoted architecture labels from distorting subgraph routes", () => {
