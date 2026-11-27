@@ -5,6 +5,7 @@ import type { SessionInbox } from "@opencode/schema/session-inbox"
 import type { useConfig } from "../../config"
 import type { ThinkingMode } from "../../context/thinking"
 import type { createTimelineAnchors } from "./anchors"
+import type { FindMatch, FindPart } from "./find"
 import type { GroupKind } from "./grouping/session"
 
 export type PendingAction = "steer" | "queue" | "cancel"
@@ -35,6 +36,15 @@ export const context = createContext<{
   config: ReturnType<typeof useConfig>["data"]
   mutatePending: (action: PendingAction, inboxID: string) => Promise<boolean>
   pendingDelivery: (inboxID: string) => SessionInbox.Delivery | undefined
+  find: {
+    /** Set while Find is open with a query. */
+    pattern: () => RegExp | undefined
+    current: () => FindMatch | undefined
+    /** A rendered part reports how many matches it shows for the pattern. */
+    counted: (part: FindPart, pattern: RegExp, count: number) => void
+    /** A part reports the screen row of the current match, so a pending seek can reach it. */
+    located: (match: FindMatch, row: () => number | undefined) => void
+  }
 }>()
 
 export function use() {

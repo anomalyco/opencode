@@ -8,7 +8,6 @@ import "@/settings/settings.css"
 import "@/settings/general/interface-mode.css"
 import "@/shell/titlebar/pinned-area.css"
 import "@/settings/workspaces/project.css"
-import "@/providers/connect/models.css"
 import "@/shell/palette-menu.css"
 import "@/shell/search-list.css"
 import "@opencode/session-ui/sources/panel"
@@ -1714,45 +1713,6 @@ const surfaces: Surface[] = [
               <Icon name="server" class="shrink-0 text-v2-icon-icon-muted" />
               <span class="max-w-40 truncate">On devbox</span>
             </span>
-          </div>
-        ),
-      },
-      {
-        name: "First models after connecting: keyboard focus only changes the background",
-        failure: "Inconsistent",
-        target: ".connected-model-row",
-        keys: "Connect a provider for the first time, then Tab to a model.",
-        sizing: "Full-width radio rows in a list that clips them.",
-        source: "app/src/providers/connect/dialog.tsx (ConnectionModelList), models.css",
-        fix: "The row draws the shared ring inset (-2px) instead of the hover background, inside the list's clip. A checked row keeps its check, so selection stays distinct.",
-        render: () => (
-          <div data-component="first-provider-models" class="flex w-[360px] flex-col px-2">
-            <SettingsList>
-              <For each={["Claude Sonnet 4.5", "Claude Opus 4.6"]}>
-                {(name, index) => (
-                  <div class="connected-model-row-shell">
-                    <button
-                      type="button"
-                      role="radio"
-                      data-component="settings-row"
-                      aria-checked={index() === 0}
-                      class="connected-model-row text-start"
-                    >
-                      <div data-slot="settings-row-copy">
-                        <div data-slot="settings-row-title">
-                          <span class="min-w-0 truncate">{name}</span>
-                        </div>
-                      </div>
-                      <div data-slot="settings-row-control" class="size-4">
-                        <Show when={index() === 0}>
-                          <Icon name="check" class="shrink-0 text-v2-icon-icon-base" />
-                        </Show>
-                      </div>
-                    </button>
-                  </div>
-                )}
-              </For>
-            </SettingsList>
           </div>
         ),
       },

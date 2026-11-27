@@ -3429,13 +3429,11 @@ describe("SessionRunnerLLM", () => {
         Stream.fail(
           header
             ? new AIError({
-                reason: new TransportError({
-                  message: "Connection closed",
-                  transport: "http",
-                  operation: "read",
+                reason: new RateLimitError({
+                  message: "Slow down",
                   http: new HttpContext({
                     url: "https://example.com",
-                    status: 200,
+                    status: 429,
                     headers: { "x-should-retry": "false" },
                   }),
                 }),
@@ -3449,7 +3447,7 @@ describe("SessionRunnerLLM", () => {
       expect(s.requests).toHaveLength(1)
       expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
         status: "failed",
-        error: { type: header ? "provider.transport" : "provider.invalid-output" },
+        error: { type: header ? "provider.rate-limit" : "provider.invalid-output" },
       })
     })
   }

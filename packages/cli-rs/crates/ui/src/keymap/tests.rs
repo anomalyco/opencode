@@ -98,6 +98,17 @@ fn oracle_invalid_configs_fail_as_typescript_does() {
 }
 
 #[test]
+fn none_inside_an_array_disables_that_entry() {
+    let overrides = serde_json::json!({
+        "session.sidebar.toggle": ["none"],
+        "session.new": ["none", "ctrl+b"],
+    });
+    let keybinds = Keybinds::<u32>::resolve(overrides.as_object().unwrap(), true).unwrap();
+    assert!(keybinds.get("session.sidebar.toggle").is_empty());
+    assert_eq!(keybinds.get("session.new").len(), 1);
+}
+
+#[test]
 fn active_keys_follow_a_mode_condition() {
     let tui = TuiKeymap::<u32>::new(Keybinds::defaults(), Options::default());
     tui.layer(KeymapLayer {

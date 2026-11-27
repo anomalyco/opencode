@@ -7,6 +7,7 @@ import {
   discoverAuthorizationServerMetadata,
   discoverOAuthServerInfo,
   extractWWWAuthenticateParams,
+  IssuerMismatchError,
   OAuthError,
   OAuthErrorCode,
   parseErrorResponse,
@@ -124,6 +125,35 @@ const configuredDiscovery = async (input: {
   }
 }
 
+// RFC 8414 §3.3 compares the issuer with the URL its metadata was discovered at. The SDK forgives only the trailing slash
+// URL parsing adds to that URL, not one the authorization server adds to its issuer (JumpCloud), so that is forgiven here.
+const slashOnly = (error: unknown): error is IssuerMismatchError =>
+  error instanceof IssuerMismatchError &&
+  error.kind === "metadata" &&
+  error.received !== undefined &&
+  error.expected !== undefined &&
+  error.expected.replace(/\/$/, "") === error.received.replace(/\/$/, "")
+
+// Without validation any issuer passes, so the retry holds it to the one the failed check reported.
+const discover = (serverUrl: string, options: { readonly resourceMetadataUrl?: URL; readonly fetchFn: FetchLike }) =>
+  discoverOAuthServerInfo(serverUrl, options).catch(async (error: unknown) => {
+    if (!slashOnly(error)) throw error
+    const info = await discoverOAuthServerInfo(serverUrl, { ...options, skipIssuerMetadataValidation: true })
+    if (info.authorizationServerMetadata?.issuer !== error.received) throw error
+    return info
+  })
+
+const discoverMetadata = (authorizationServer: string, fetchFn: FetchLike) =>
+  discoverAuthorizationServerMetadata(authorizationServer, { fetchFn }).catch(async (error: unknown) => {
+    if (!slashOnly(error)) throw error
+    const metadata = await discoverAuthorizationServerMetadata(authorizationServer, {
+      fetchFn,
+      skipIssuerValidation: true,
+    })
+    if (metadata?.issuer !== error.received) throw error
+    return metadata
+  })
+
 interface Store {
   readonly tokens: () => Promise<StoredOAuthTokens | undefined>
   readonly saveTokens: (tokens: StoredOAuthTokens) => Promise<void>
@@ -181,6 +211,9 @@ const provider = (options: Options): OAuthClientProvider => {
         throw new Error(
           `MCP server "${options.config.url}" returned a ${url.protocol} authorization URL; only http and https are supported`,
         )
+      // Google issues a refresh token only when asked with its own access_type, not the offline_access scope.
+      if (url.hostname === "accounts.google.com" && !url.searchParams.has("access_type"))
+        url.searchParams.set("access_type", "offline")
       return redirect.open(url)
     },
     saveCodeVerifier: (verifier) => options.store.saveCodeVerifier(verifier),
@@ -237,6 +270,24 @@ const memoryStore = (): Store => {
 export const clientFromCredential = (credential: Credential.OAuth) =>
   credential.metadata?.client as StoredOAuthClientInformation | undefined
 
+const redirectUris = (client: StoredOAuthClientInformation) =>
+  "redirect_uris" in client && Array.isArray(client.redirect_uris)
+    ? client.redirect_uris.filter((uri): uri is string => typeof uri === "string")
+    : undefined
+
+// A client without registered redirect URIs (a client ID metadata document) is not tied to one port.
+const coversRedirects = (client: StoredOAuthClientInformation, registered: ReadonlyArray<string>) => {
+  const uris = redirectUris(client)
+  return uris === undefined || registered.every((uri) => uris.includes(uri))
+}
+
+const registeredPort = (client: StoredOAuthClientInformation | undefined, path: string) => {
+  const uri = (client ? (redirectUris(client) ?? []) : [])
+    .flatMap((value) => (URL.canParse(value) ? [new URL(value)] : []))
+    .find((url) => url.hostname === "127.0.0.1" && url.pathname === path && url.port)
+  return uri ? Number(uri.port) : undefined
+}
+
 // Where the login found its authorization server and which resource it named, so a refresh need not discover them.
 const Discovery = Schema.Struct({ authorizationServer: Schema.String, resource: Schema.String })
 const decodeDiscovery = Schema.decodeUnknownOption(Discovery)
@@ -249,6 +300,8 @@ const toCredential = (input: {
   readonly tokens: StoredOAuthTokens
   readonly client: StoredOAuthClientInformation | undefined
   readonly discovery: typeof Discovery.Type | undefined
+  /** The scope requested, kept when the token response leaves `scope` out (RFC 6749 §5.1: then it was granted). */
+  readonly scope?: string
 }) =>
   Credential.OAuth.make({
     type: "oauth",
@@ -260,7 +313,7 @@ const toCredential = (input: {
     metadata: {
       serverUrl: input.serverUrl,
       tokenType: input.tokens.token_type,
-      ...(input.tokens.scope ? { scope: input.tokens.scope } : {}),
+      ...((input.tokens.scope ?? input.scope) ? { scope: input.tokens.scope ?? input.scope } : {}),
       ...(input.tokens.issuer ? { issuer: input.tokens.issuer } : {}),
       ...(input.discovery ? { discovery: input.discovery } : {}),
       ...(input.client ? { client: input.client } : {}),
@@ -380,24 +433,22 @@ const exchange = (input: {
         (saved
           ? {
               authorizationServerUrl: saved.authorizationServer,
-              authorizationServerMetadata: await discoverAuthorizationServerMetadata(saved.authorizationServer, {
-                fetchFn,
-              }),
+              authorizationServerMetadata: await discoverMetadata(saved.authorizationServer, fetchFn),
               resourceMetadata: undefined,
             }
-          : await discoverOAuthServerInfo(input.config.url, {
-              resourceMetadataUrl: input.resourceMetadataUrl,
-              fetchFn,
-            }))
+          : await discover(input.config.url, { resourceMetadataUrl: input.resourceMetadataUrl, fetchFn }))
       const found = server.authorizationServerMetadata?.issuer ?? server.authorizationServerUrl
       const issuer = input.current.metadata?.issuer
       if (typeof issuer === "string" && found.replace(/\/$/, "") !== issuer.replace(/\/$/, ""))
         throw new IssuerChanged({ message: `issued by ${issuer}, but discovery names ${found}` })
       const resource = saved?.resource ?? selectResource(input.config, server.resourceMetadata?.resource).toString()
+      // Some authorization servers (Microsoft Entra ID) refuse a refresh that names no scope.
+      const scope = typeof input.current.metadata?.scope === "string" ? input.current.metadata.scope : oauth?.scope
       const tokens = await refreshAuthorization(server.authorizationServerUrl, {
         metadata: server.authorizationServerMetadata,
         clientInformation: client,
         refreshToken: input.current.refresh,
+        scope,
         resource,
         fetchFn,
       })
@@ -410,6 +461,7 @@ const exchange = (input: {
           issuer: found,
         },
         client: clientFromCredential(input.current),
+        scope,
         // A configured metadata URL is read on every refresh, so changing it applies at once.
         discovery: configured ? undefined : { authorizationServer: server.authorizationServerUrl, resource },
       })
@@ -438,12 +490,8 @@ export const authorize = (input: {
     yield* Effect.logInfo("mcp oauth authorization started", fields)
     const oauth = input.config.oauth || undefined
     const store = memoryStore()
-    // Reuse the client registered by an earlier login; the SDK discards it if the issuer changed.
     const previous = (yield* credentials.list(input.integrationID)).at(-1)?.value
-    if (previous?.type === "oauth") {
-      const client = clientFromCredential(previous)
-      if (client) yield* Effect.promise(() => store.saveClientInformation(client))
-    }
+    const registeredClient = previous?.type === "oauth" ? clientFromCredential(previous) : undefined
     const code = yield* Deferred.make<
       { code: string; iss: string | undefined; host?: string; response?: ServerResponse },
       Error
@@ -496,14 +544,22 @@ export const authorize = (input: {
         response.writeHead(409).end("OAuth callback already received")
     })
 
-    // callback_port, else the port pinned by redirect_uri, else ephemeral; a mismatch strands the browser.
+    // callback_port, else the port pinned by redirect_uri, else the port the earlier login's client was registered
+    // with, else ephemeral; a mismatch strands the browser.
     const redirectPort = Number(redirect?.port) || undefined
-    const port = yield* Effect.callback<number, Error>((resume) => {
-      server.once("error", (error) => resume(Effect.fail(error)))
-      server.listen(oauth?.callback_port ?? redirectPort ?? 0, "127.0.0.1", () => {
-        resume(Effect.succeed((server.address() as AddressInfo).port))
+    const listen = (port: number) =>
+      Effect.callback<number, Error>((resume) => {
+        server.once("error", (error) => resume(Effect.fail(error)))
+        server.listen(port, "127.0.0.1", () => {
+          resume(Effect.succeed((server.address() as AddressInfo).port))
+        })
       })
-    })
+    const pinned = oauth?.callback_port ?? redirectPort
+    const reusable = pinned === undefined ? registeredPort(registeredClient, redirectPath) : undefined
+    // A reused port another process holds now falls back to an ephemeral one and a new registration.
+    const port = yield* listen(pinned ?? reusable ?? 0).pipe(
+      Effect.catch((error) => (pinned === undefined && reusable !== undefined ? listen(0) : Effect.fail(error))),
+    )
     yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))
 
     // The server's 401 names where its resource metadata lives and which scopes it wants; without it
@@ -535,7 +591,7 @@ export const authorize = (input: {
     const discovery = yield* Effect.tryPromise({
       try: async () =>
         (await configuredDiscovery({ config: input.config, fetchFn })) ??
-        discoverOAuthServerInfo(input.config.url, { resourceMetadataUrl, fetchFn }),
+        discover(input.config.url, { resourceMetadataUrl, fetchFn }),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     })
     const cimd =
@@ -551,6 +607,11 @@ export const authorize = (input: {
     // Some authorization servers (Clerk) rewrite a 127.0.0.1 redirect to localhost before sending the browser back,
     // and issue the code for the rewritten URI. Both are registered, and the token exchange repeats the one used.
     const loopback = (host: string) => `http://${host}:${port}${redirectPath}`
+    const registered = oauth?.redirect_uri ? [oauth.redirect_uri] : [loopback("127.0.0.1"), loopback("localhost")]
+    // Reuse the client registered by an earlier login while it lists this login's redirect URIs; the SDK discards it if
+    // the issuer changed. Authorization servers match redirect URIs exactly, so a new port needs a new registration.
+    if (registeredClient && coversRedirects(registeredClient, registered))
+      yield* Effect.promise(() => store.saveClientInformation(registeredClient))
     let reached = "127.0.0.1"
     let authorizationUrl: URL | undefined
     const oauthProvider = provider({
@@ -560,7 +621,7 @@ export const authorize = (input: {
       discovery: { ...discovery, resourceMetadataUrl: resourceMetadataUrl?.toString() },
       redirect: {
         url: () => oauth?.redirect_uri ?? loopback(reached),
-        registered: oauth?.redirect_uri ? [oauth.redirect_uri] : [loopback("127.0.0.1"), loopback("localhost")],
+        registered,
         state,
         open: (url) => {
           authorizationUrl = url
@@ -583,6 +644,7 @@ export const authorize = (input: {
         serverUrl: input.config.url,
         tokens,
         client,
+        scope: authorizationUrl?.searchParams.get("scope") ?? undefined,
         discovery: oauth?.auth_server_metadata_url
           ? undefined
           : {

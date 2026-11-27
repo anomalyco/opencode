@@ -53,19 +53,40 @@ export const Plugin = define({
             .pipe(Effect.asVoid),
       })
       for (const prompt of loaded.prompts) {
+        const name = mcpCommandName(prompt.server, prompt.name)
+        const declared = prompt.arguments ?? []
         editor.add({
-          name: mcpCommandName(prompt.server, prompt.name),
+          name,
           description: prompt.description,
           execute: (input) =>
             Effect.gen(function* () {
               const args = parseArguments(input.prompt.text)
-              const result = yield* mcp.prompt({
-                server: prompt.server,
-                name: prompt.name,
-                args: Object.fromEntries(
-                  (prompt.arguments ?? []).map((argument, index) => [argument.name, args[index] ?? ""]),
-                ),
-              })
+              const missing = declared.filter((argument, index) => argument.required && args[index] === undefined)
+              if (missing.length > 0)
+                return yield* Effect.fail(
+                  new Error(
+                    `/${name} needs ${missing.map((argument) => argument.name).join(", ")}. Usage: /${name} ${declared
+                      .map((argument) => (argument.required ? `<${argument.name}>` : `[${argument.name}]`))
+                      .join(" ")}`,
+                  ),
+                )
+              const result = yield* mcp
+                .prompt({
+                  server: prompt.server,
+                  name: prompt.name,
+                  // Optional arguments the user left out are omitted, not sent as empty strings.
+                  args: Object.fromEntries(
+                    declared.flatMap((argument, index) => {
+                      const value = args[index]
+                      return value === undefined ? [] : [[argument.name, value]]
+                    }),
+                  ),
+                })
+                .pipe(
+                  Effect.mapError(
+                    (error) => new Error(`MCP prompt ${prompt.server}:${prompt.name} failed: ${error.message}`),
+                  ),
+                )
               if (!result) return yield* Effect.fail(new Error(`MCP prompt not found: ${prompt.server}:${prompt.name}`))
               yield* ctx.session.prompt({
                 ...input.prompt,
@@ -93,12 +114,11 @@ function parseArguments(input: string) {
   return (input.match(argsRegex) ?? []).map((argument) => argument.replace(quoteTrimRegex, ""))
 }
 
-function promptMessageText(content: unknown) {
-  if (typeof content === "string") return content
-  if (!content || typeof content !== "object") return ""
-  if (!("type" in content) || content.type !== "text") return ""
-  if (!("text" in content) || typeof content.text !== "string") return ""
-  return content.text
+function promptMessageText(content: Mcp.PromptResult["messages"][number]["content"]) {
+  if (content.type === "text") return content.text
+  // An embedded text resource is part of the prompt; binary resources and media have no text to send.
+  if (content.type === "resource" && "text" in content.resource) return content.resource.text
+  return ""
 }
 
 function mcpCommandName(server: string, prompt: string) {
