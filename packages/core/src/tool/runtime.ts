@@ -166,16 +166,28 @@ const validateStandard = (
     }),
   )
 
+// Tool lists are rebuilt on every config change in every Location, so convert each schema once.
+const inputJsonSchemas = new WeakMap<object, JsonSchema.JsonSchema>()
+const outputJsonSchemas = new WeakMap<object, JsonSchema.JsonSchema>()
+
+const cached = (cache: WeakMap<object, JsonSchema.JsonSchema>, schema: object, make: () => JsonSchema.JsonSchema) => {
+  const hit = cache.get(schema)
+  if (hit) return hit
+  const value = make()
+  cache.set(schema, value)
+  return value
+}
+
 const inputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
   if (schema === undefined || schema === null) return {}
-  if (isStandardSchema(schema)) return standardJsonSchema(schema, "input")
+  if (isStandardSchema(schema)) return cached(inputJsonSchemas, schema, () => standardJsonSchema(schema, "input"))
   if (!Schema.isSchema(schema)) return schema
-  return emptyInputJsonSchema(schema) ?? toJsonSchema(schema)
+  return cached(inputJsonSchemas, schema, () => emptyInputJsonSchema(schema) ?? toJsonSchema(schema))
 }
 
 const outputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
-  if (isStandardSchema(schema)) return standardJsonSchema(schema, "output")
-  return Schema.isSchema(schema) ? toJsonSchema(schema) : schema
+  if (isStandardSchema(schema)) return cached(outputJsonSchemas, schema, () => standardJsonSchema(schema, "output"))
+  return Schema.isSchema(schema) ? cached(outputJsonSchemas, schema, () => toJsonSchema(schema)) : schema
 }
 
 const standardJsonSchema = (schema: StandardSchemaV1<any, any>, io: "input" | "output"): JsonSchema.JsonSchema => {

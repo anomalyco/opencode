@@ -5324,6 +5324,8 @@ pub struct ModelCompatibility {
     pub supports_thinking_block_binding: Option<bool>,
     #[serde(rename = "supportsEffortUpdates", default, skip_serializing_if = "Option::is_none")]
     pub supports_effort_updates: Option<bool>,
+    #[serde(rename = "supportsSystemUpdates", default, skip_serializing_if = "Option::is_none")]
+    pub supports_system_updates: Option<bool>,
     #[serde(rename = "mediaInput", default, skip_serializing_if = "Option::is_none")]
     pub media_input: Option<ModelMediaInput>,
 }
