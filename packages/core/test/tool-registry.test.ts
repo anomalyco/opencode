@@ -715,6 +715,47 @@ describe("Tool", () => {
     }).pipe(Effect.provide(Logger.layer([logger])))
   })
 
+  it.effect("suggests the tools a misspelled name may have meant (#65932)", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* service.transform((editor) => {
+        for (const name of ["project_manager", "resolve_control", "get_resolve_status"])
+          editor.add({ ...make(), name, options: { namespace: "davinci-resolve", codemode: false } })
+        editor.add({
+          ...make(),
+          name: "get_resolve_status",
+          options: { namespace: "davinci-resolve-builtin", codemode: false },
+        })
+        editor.add({ ...make(), name: "lookup", options: { namespace: "docs-site" } })
+      })
+      const snapshot = yield* service.snapshot()
+      const message = (name: string) =>
+        snapshot.execute(call(name)).pipe(
+          Effect.flip,
+          Effect.map((error) => error.message),
+        )
+      expect(yield* message("davinci-resolve-project_manager")).toBe(
+        'No tool named "davinci-resolve-project_manager" is currently available. Did you mean "davinci-resolve_project_manager"? Please use a tool from the available tool list.',
+      )
+      expect(yield* message("davinci-resolve-builtin-get_resolve_status")).toBe(
+        'No tool named "davinci-resolve-builtin-get_resolve_status" is currently available. Did you mean "davinci-resolve-builtin_get_resolve_status"? Please use a tool from the available tool list.',
+      )
+      expect(yield* message("get_resolve_status")).toBe(
+        'No tool named "get_resolve_status" is currently available. Did you mean one of: "davinci-resolve_get_resolve_status", "davinci-resolve-builtin_get_resolve_status"? Please use a tool from the available tool list.',
+      )
+      expect(yield* message("davinci-resolve_resolve_contrl")).toBe(
+        'No tool named "davinci-resolve_resolve_contrl" is currently available. Did you mean "davinci-resolve_resolve_control"? Please use a tool from the available tool list.',
+      )
+      // Tools inside Code Mode also run when called by name.
+      expect(yield* message("docs-site-lookup")).toBe(
+        'No tool named "docs-site-lookup" is currently available. Did you mean "docs-site_lookup"? Please use a tool from the available tool list.',
+      )
+      expect(yield* message("weather")).toBe(
+        'No tool named "weather" is currently available. Please use a tool from the available tool list.',
+      )
+    }),
+  )
+
   it.effect("skipped registrations leave existing tools and scoped cleanup intact", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service

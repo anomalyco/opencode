@@ -17,8 +17,10 @@ type InputField = Exclude<Form.Field, Form.ExternalField>
 type SelectField = Form.StringField | Form.MultiselectField
 
 const QuestionKind = "question"
-// Form mode must not collect secrets; elicit only flows known to be credential-free.
-const ElicitedKind = Schema.Struct({ kind: Schema.Literals([QuestionKind, "websearch.provider"]) })
+// Form mode must not collect secrets: MCP servers must not ask for them in form mode, and fields that look like
+// they would collect one are never elicited.
+const ElicitedKind = Schema.Struct({ kind: Schema.Literals([QuestionKind, "websearch.provider", "mcp-elicitation"]) })
+const McpRequest = Schema.Struct({ kind: Schema.Literal("mcp-elicitation"), message: Schema.String })
 const Credential = /password|passphrase|secret|token|api[_ -]?key|credential|private[_ -]?key/i
 const ToolSource = Schema.Struct({ tool: Schema.Struct({ id: Schema.String }) })
 
@@ -91,7 +93,7 @@ export const ask = Effect.fnUntraced(function* (input: Input) {
     mode: "form",
     sessionId: input.clientSessionID,
     ...(toolCallID ? { toolCallId: ACPChild.toolCallID(input.child, toolCallID) } : {}),
-    message: ACPChild.prefixTitle(input.child, input.form.title),
+    message: ACPChild.prefixTitle(input.child, message(input.form)),
     requestedSchema: input.requestedSchema,
   })
   return answer(input.form, response) ?? "cancel"
@@ -107,6 +109,13 @@ export function respond(input: Input, outcome: Form.Answer | "cancel") {
         Effect.logWarning("ACP form reply failed", cause).pipe(Effect.andThen(cancel(input.client, input.form))),
       ),
     )
+}
+
+// An MCP server's own wording says what it needs; the title only names the server.
+function message(form: AskedForm) {
+  const request = Schema.decodeUnknownOption(McpRequest)(form.metadata)
+  if (Option.isNone(request) || request.value.message.trim() === "") return form.title
+  return `${form.title}: ${request.value.message}`
 }
 
 // A choice can't carry a secret, so a choice worded like one is still asked, without its typed answer.

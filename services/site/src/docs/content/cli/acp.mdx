@@ -287,6 +287,10 @@ includes `toolCallId` when OpenCode sent that tool call as a `session/update` fo
 
 If OpenCode can't show a question, it cancels the question and tells the model to continue without an answer.
 
+The same applies to [input requests from MCP servers](/mcp-servers#input-requests) made during one of the session's
+tool calls. The message starts with the server's name, followed by the server's own message. OpenCode cancels the request
+if the client can't show it, for example a URL request.
+
 ### Compaction
 
 If the client advertises `session.compaction`, OpenCode reports compaction with the `compaction_update` and
