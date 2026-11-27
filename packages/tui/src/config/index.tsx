@@ -5,8 +5,7 @@ import { Vcs } from "@opencode/schema/vcs"
 import { Schema } from "effect"
 import { createContext, createMemo, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { safeWatch } from "../util/watch"
-import path from "path"
+import { fileWatchDirs, safeWatch } from "../util/watch"
 import { TuiKeybind } from "./keybind"
 
 export interface Interface {
@@ -365,15 +364,17 @@ export function ConfigProvider(props: {
     pending = save.catch(() => {})
     return save
   }
-  const watcher = host?.path
-    ? safeWatch(path.dirname(host.path), () => {
-        pending = pending
-          .then(() => host.get())
-          .then(apply)
-          .catch(() => {})
-      })
-    : undefined
-  onCleanup(() => watcher?.close())
+  const watchers = host?.path
+    ? fileWatchDirs(host.path).map((dir) =>
+        safeWatch(dir, () => {
+          pending = pending
+            .then(() => host.get())
+            .then(apply)
+            .catch(() => {})
+        }),
+      )
+    : []
+  onCleanup(() => watchers.forEach((watcher) => watcher?.close()))
   return (
     <ConfigContext.Provider value={{ data: config, path: host?.path, update }}>{props.children}</ConfigContext.Provider>
   )
