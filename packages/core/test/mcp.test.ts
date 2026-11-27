@@ -2006,6 +2006,114 @@ testEffect(Layer.empty).live(
     }),
 )
 
+testEffect(Layer.empty).live("preserves runtime mcp.add and mcp.remove overrides across config reloads", () =>
+  Effect.gen(function* () {
+    const updates = yield* PubSub.unbounded<Payload>()
+    const document = (servers: Record<string, typeof ConfigMCP.Server.Type>) =>
+      new Document({
+        type: "document",
+        info: new Info({
+          mcp: new ConfigMCP.Info({
+            timeout: { startup: 10 },
+            servers,
+          }),
+        }),
+      })
+    let entries = [
+      document({
+        alpha: { type: "local", command: ["config-alpha"], disabled: true },
+        beta: { type: "local", command: ["config-beta"], disabled: true },
+      }),
+    ]
+    const publishUpdate = () =>
+      PubSub.publish(updates, {
+        id: ID.create(),
+        created: 0,
+        type: Event.Updated.type,
+        data: {},
+      } satisfies Payload<typeof Event.Updated>)
+    const runtimeAlpha = {
+      type: "local",
+      command: ["runtime-alpha"],
+      disabled: true,
+      timeout: { catalog: 60 },
+    } satisfies ConfigMCP.Local
+    const runtimeBeta = {
+      type: "local",
+      command: ["runtime-beta"],
+      disabled: true,
+    } satisfies ConfigMCP.Local
+
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* service.add("alpha", runtimeAlpha)
+      yield* service.remove("beta")
+
+      entries = [
+        document({
+          alpha: { type: "local", command: ["reloaded-alpha"], disabled: true },
+          beta: { type: "local", command: ["reloaded-beta"], disabled: true },
+          gamma: { type: "local", command: ["config-gamma"], disabled: true },
+        }),
+      ]
+      yield* publishUpdate()
+      const listed = yield* service.servers().pipe(
+        Effect.filterOrFail(
+          (items) => items.some((item) => item.name === "gamma"),
+          () => new Error("config reload did not add gamma"),
+        ),
+        Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
+      )
+      expect(listed.map((item) => String(item.name)).toSorted()).toEqual(["alpha", "gamma"])
+
+      const check = yield* service.transform((editor) => {
+        expect(editor.get("alpha")).toEqual(runtimeAlpha)
+        expect(editor.get("beta")).toBeUndefined()
+        expect(editor.get("gamma")).toEqual({
+          type: "local",
+          command: ["config-gamma"],
+          disabled: true,
+          timeout: { startup: 10 },
+        })
+      })
+      yield* check.dispose
+
+      yield* service.add("beta", runtimeBeta)
+      entries = [
+        document({
+          alpha: { type: "local", command: ["reloaded-alpha-2"], disabled: true },
+          beta: { type: "local", command: ["reloaded-beta-2"], disabled: true },
+          gamma: { type: "local", command: ["config-gamma"], disabled: true },
+          delta: { type: "local", command: ["config-delta"], disabled: true },
+        }),
+      ]
+      yield* publishUpdate()
+      const restored = yield* service.servers().pipe(
+        Effect.filterOrFail(
+          (items) => items.some((item) => item.name === "delta"),
+          () => new Error("config reload did not add delta"),
+        ),
+        Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
+      )
+      expect(restored.map((item) => String(item.name)).toSorted()).toEqual(["alpha", "beta", "delta", "gamma"])
+      yield* service.transform((editor) => {
+        expect(editor.get("alpha")).toEqual(runtimeAlpha)
+        expect(editor.get("beta")).toEqual(runtimeBeta)
+      })
+    }).pipe(
+      Effect.provide(
+        resourceMcpLayer("https://unused.example", undefined, undefined, {
+          entries: () => Effect.sync(() => entries),
+          subscribe: ((definition?: { readonly type: string }) =>
+            Stream.fromPubSub(updates).pipe(
+              Stream.filter((event) => !definition || event.type === definition.type),
+            )) as Bus.Interface["subscribe"],
+        }),
+      ),
+    )
+  }),
+)
+
 testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true }))).live(
   "manages live MCP servers entirely through scoped transforms",
   () =>
@@ -3405,6 +3513,7 @@ describe("MCP pool", () => {
       localKey(),
     )
     expect(localKey({ clientInfo: { name: "other", version: "1" } })).not.toBe(localKey())
+    expect(key({ skills: true })).not.toBe(key({ skills: false }))
   })
 
   live("keeps a server that negotiates legacy private to each Location", () => {
@@ -3429,6 +3538,76 @@ describe("MCP pool", () => {
       // Once, when the verdict is recorded; the second Location skips straight to its own connection.
       expect(captured.logs).toEqual([
         ["mcp pool ignored: server speaks an older protocol", { server: "resources", version: "2025-11-25" }],
+      ])
+    }).pipe(Effect.provide(captured.layer))
+  })
+
+  live("reconnects and stops cleanly after falling back to a lazy private connection", () => {
+    const captured = poolLogs()
+    return Effect.gen(function* () {
+      const calls: string[] = []
+      const server = yield* Effect.acquireRelease(
+        Effect.promise(async () => {
+          const sessions = new Map<string, { protocol: Server; transport: WebStandardStreamableHTTPServerTransport }>()
+          const http = Bun.serve({
+            port: 0,
+            fetch: async (request) => {
+              const id = request.headers.get("mcp-session-id")
+              if (id && sessions.has(id)) return sessions.get(id)!.transport.handleRequest(request)
+              const protocol = new Server({ name: "legacy-multi", version: "1.0.0" }, { capabilities: { tools: {} } })
+              protocol.setRequestHandler("tools/list", () =>
+                Promise.resolve({ tools: [{ name: "echo", inputSchema: { type: "object", properties: {} } }] }),
+              )
+              protocol.setRequestHandler("tools/call", (req) => {
+                calls.push(req.params.name)
+                return Promise.resolve({ content: [{ type: "text", text: "ok" }] })
+              })
+              const transport = new WebStandardStreamableHTTPServerTransport({
+                sessionIdGenerator: () => crypto.randomUUID(),
+                enableJsonResponse: true,
+                onsessioninitialized: (sessionID) => {
+                  sessions.set(sessionID, { protocol, transport })
+                },
+              })
+              transport.onclose = () => {
+                if (transport.sessionId) sessions.delete(transport.sessionId)
+              }
+              await protocol.connect(transport)
+              return transport.handleRequest(request)
+            },
+          })
+          return {
+            url: http.url.toString(),
+            close: async () => {
+              for (const session of sessions.values()) await session.protocol.close().catch(() => {})
+              await http.stop(true)
+            },
+          }
+        }),
+        (server) => Effect.promise(server.close),
+      )
+
+      const pool = yield* makePool
+      const a = yield* open(pooled(server.url), pool, directories[0])
+      expect(yield* status(a.mcp)).toEqual({ status: "connected" })
+      yield* a.mcp.callTool({ server: "resources", name: "echo" })
+
+      yield* a.mcp.disconnect("resources")
+      expect(yield* status(a.mcp)).toEqual({ status: "disabled" })
+      expect(yield* a.mcp.tools()).toEqual([])
+
+      yield* a.mcp.connect("resources")
+      expect(yield* status(a.mcp)).toEqual({ status: "connected" })
+      yield* a.mcp.callTool({ server: "resources", name: "echo" })
+
+      const b = yield* open(pooled(server.url), pool, directories[1])
+      expect(yield* status(b.mcp)).toEqual({ status: "connected" })
+      yield* a.shutdown
+      yield* b.mcp.callTool({ server: "resources", name: "echo" })
+
+      expect(calls).toEqual(["echo", "echo", "echo"])
+      expect(captured.logs).toEqual([
+        ["mcp pool ignored: server speaks an older protocol", { server: "resources", version: expect.any(String) }],
       ])
     }).pipe(Effect.provide(captured.layer))
   })
@@ -3732,9 +3911,7 @@ describe("MCP pool", () => {
           const scope = yield* Effect.scope
           const run = yield* FiberSet.makeRuntime<never, void, never>()
           const connection = pool.connection({
-            name,
-            config,
-            directory,
+            spec: { name, config, directory },
             authProvider: Effect.undefined,
             elicitation: {
               create: (request) =>

@@ -158,10 +158,7 @@ const isEnded = (error: Error) =>
   error instanceof EventStreamTerminatedError ||
   error instanceof EventsUnavailableError
 
-type Data = {
-  servers: Map<ServerName, Types.DeepMutable<Mcp.ServerConfig>>
-  removed: Set<ServerName>
-}
+type Data = Map<ServerName, Types.DeepMutable<Mcp.ServerConfig>>
 
 export type Editor = {
   list: () => readonly [ServerName, Types.DeepMutable<Mcp.ServerConfig>][]
@@ -674,90 +671,95 @@ export const layer = (options?: Options) =>
           config.pool === true &&
           config.protocol !== "legacy" &&
           (config.type === "remote" || environment.local === true)
-        const share = (input: McpConnection.Input) =>
-          pool.connection({
-            ...input,
-            select: Effect.gen(function* () {
-              if (input.config.type === "remote") {
-                const credential = yield* selectCredential(entry)
-                return {
-                  key: McpPool.key({ ...input, credential: credential?.id }),
-                  authProvider: connectProvider(name, entry, credential),
-                }
-              }
-              // Resolved exactly as the spawn resolves it, `~` included, so the key matches where the server runs.
-              const { McpStdio } = yield* Effect.promise(() => import("./stdio.js"))
-              return {
-                key: McpPool.key({ ...input, cwd: McpStdio.resolveCwd(input.directory, input.config.cwd) }),
-                authProvider: input.authProvider,
-              }
-            }),
-          })
-        const entry: ServerEntry = {
-          config,
-          status: { status: "pending" },
-          startup: Latch.makeUnsafe(),
-          attempt: { started, settled: Latch.makeUnsafe() },
-          connection: (pooled ? share : McpConnection.make)({
+        const base: Omit<McpConnection.Input, "endpointLoads" | "shared"> = {
+          spec: {
             name,
             config,
             directory: location.directory,
             clientInfo: options?.clientInfo,
             skills,
-            authProvider: Effect.suspend(() =>
-              selectCredential(entry).pipe(Effect.flatMap((credential) => connectProvider(name, entry, credential))),
-            ),
-            elicitation,
-            environment,
-            fetch,
-            scope: servers,
-            lock: locks.withLock(name),
-            endpointLoads: pool.endpointLoads,
-            callbacks,
-            fork,
-            events: {
-              connecting: Effect.gen(function* () {
-                // A server still pending from creation keeps the window that started with its entry.
-                if (!entry.attempt || entry.status.status !== "pending")
-                  entry.attempt = { started: yield* Clock.currentTimeMillis, settled: Latch.makeUnsafe() }
-                // Announce the handshake so connect() and credential reconnects don't show a stale
-                // disabled/failed status for the duration of the connection attempt.
-                entry.status = { status: "pending" }
+          },
+          authProvider: Effect.suspend(() =>
+            selectCredential(entry).pipe(Effect.flatMap((credential) => connectProvider(name, entry, credential))),
+          ),
+          elicitation,
+          environment,
+          fetch,
+          scope: servers,
+          lock: locks.withLock(name),
+          callbacks,
+          fork,
+          events: {
+            connecting: Effect.gen(function* () {
+              // A server still pending from creation keeps the window that started with its entry.
+              if (!entry.attempt || entry.status.status !== "pending")
+                entry.attempt = { started: yield* Clock.currentTimeMillis, settled: Latch.makeUnsafe() }
+              // Announce the handshake so connect() and credential reconnects don't show a stale
+              // disabled/failed status for the duration of the connection attempt.
+              entry.status = { status: "pending" }
+              yield* bus.publish(McpEvent.StatusChanged, { server: name })
+            }),
+            connected: Effect.gen(function* () {
+              entry.status = { status: "connected" }
+              yield* Effect.logInfo("mcp connected", { server: name, tools: entry.connection.tools?.length })
+              // Announce every list a consumer may read, since each reads them only on these events. A
+              // connection another Location already holds has loaded its prompts, and no later change
+              // would tell this one; prompts still loading read empty now and announce themselves later.
+              yield* bus.publish(McpEvent.ToolsChanged, { server: name })
+              yield* bus.publish(McpEvent.ResourcesChanged, { server: name })
+              yield* bus.publish(PromptsChanged, { server: name })
+              yield* bus.publish(SkillsChanged, { server: name })
+              yield* bus.publish(McpEvent.StatusChanged, { server: name })
+            }),
+            failed: (failure) =>
+              Effect.gen(function* () {
+                entry.status = failure
+                yield* Effect.logWarning("mcp connect failed", { server: name, status: entry.status })
                 yield* bus.publish(McpEvent.StatusChanged, { server: name })
               }),
-              connected: Effect.gen(function* () {
-                entry.status = { status: "connected" }
-                yield* Effect.logInfo("mcp connected", { server: name, tools: entry.connection.tools?.length })
-                // Announce every list a consumer may read, since each reads them only on these events. A
-                // connection another Location already holds has loaded its prompts, and no later change
-                // would tell this one; prompts still loading read empty now and announce themselves later.
-                yield* bus.publish(McpEvent.ToolsChanged, { server: name })
-                yield* bus.publish(McpEvent.ResourcesChanged, { server: name })
-                yield* bus.publish(PromptsChanged, { server: name })
-                yield* bus.publish(SkillsChanged, { server: name })
+            // Every start runs under the server lock, so the attempt read here is the one it began.
+            settled: Effect.suspend(() => {
+              const attempt = entry.attempt
+              entry.attempt = undefined
+              return (attempt ? attempt.settled.open : Effect.void).pipe(Effect.ensuring(entry.startup.open))
+            }),
+            closed: (reason) =>
+              Effect.gen(function* () {
+                entry.status = { status: "failed", error: reason }
+                yield* entry.connection.stop
                 yield* bus.publish(McpEvent.StatusChanged, { server: name })
               }),
-              failed: (failure) =>
-                Effect.gen(function* () {
-                  entry.status = failure
-                  yield* Effect.logWarning("mcp connect failed", { server: name, status: entry.status })
-                  yield* bus.publish(McpEvent.StatusChanged, { server: name })
+            changed: (kind) => bus.publish(changes[kind], { server: name }),
+          },
+        }
+        const entry: ServerEntry = {
+          config,
+          status: { status: "pending" },
+          startup: Latch.makeUnsafe(),
+          attempt: { started, settled: Latch.makeUnsafe() },
+          connection: pooled
+            ? pool.connection({
+                ...base,
+                select: Effect.gen(function* () {
+                  if (base.spec.config.type === "remote") {
+                    const credential = yield* selectCredential(entry)
+                    return {
+                      key: McpPool.key({ ...base.spec, credential: credential?.id }),
+                      authProvider: connectProvider(name, entry, credential),
+                    }
+                  }
+                  // Resolved exactly as the spawn resolves it, `~` included, so the key matches where the server runs.
+                  const { McpStdio } = yield* Effect.promise(() => import("./stdio.js"))
+                  return {
+                    key: McpPool.key({
+                      ...base.spec,
+                      cwd: McpStdio.resolveCwd(base.spec.directory, base.spec.config.cwd),
+                    }),
+                    authProvider: base.authProvider,
+                  }
                 }),
-              // Every start runs under the server lock, so the attempt read here is the one it began.
-              settled: Effect.suspend(() => {
-                const attempt = entry.attempt
-                entry.attempt = undefined
-                return (attempt ? attempt.settled.open : Effect.void).pipe(Effect.ensuring(entry.startup.open))
-              }),
-              closed: (reason) =>
-                Effect.gen(function* () {
-                  entry.status = { status: "failed", error: reason }
-                  yield* entry.connection.stop
-                  yield* bus.publish(McpEvent.StatusChanged, { server: name })
-                }),
-              changed: (kind) => bus.publish(changes[kind], { server: name }),
-            },
-          }),
+              })
+            : McpConnection.make({ ...base, endpointLoads: pool.endpointLoads }),
         }
         return entry
       }
@@ -934,7 +936,7 @@ export const layer = (options?: Options) =>
       const overrides = new Map<ServerName, Mcp.ServerConfig | false>()
       const reconcileLock = Semaphore.makeUnsafe(1)
       const reconcile = Effect.fnUntraced(function* () {
-        const servers = state.get().servers
+        const servers = state.get()
         if (!booted) {
           booted = true
           const started = yield* Clock.currentTimeMillis
@@ -993,30 +995,32 @@ export const layer = (options?: Options) =>
           .subscribe(Credential.Event.Switched)
           .pipe(Stream.runForEach((event) => Effect.sync(() => fork(reconnect(event.data.integrationID))))),
       )
+      // Runtime `add`/`remove` overrides seed initial state so downstream transforms (codemode defaults,
+      // plugin updates, and managed policy denials) still see and govern runtime-added servers. Skipping
+      // `editor.set` only for runtime-removed names keeps third-party plugin `set` semantics unchanged
+      // while eliminating separate `removed` tombstones from `Data`.
       const state: State.Interface<Data, Editor> = State.create<Data, Editor>({
         name: "mcp",
-        initial: () => ({
-          servers: new Map(
+        initial: () =>
+          new Map(
             Array.from(overrides).flatMap(([name, config]) =>
               config === false ? [] : [[name, cloneConfig(config)] as const],
             ),
           ),
-          removed: new Set(Array.from(overrides).flatMap(([name, config]) => (config === false ? [name] : []))),
-        }),
-        editor: (editor) => ({
-          list: () => Array.from(editor.servers),
-          get: (server) => editor.servers.get(ServerName.make(server)),
+        editor: (servers) => ({
+          list: () => Array.from(servers),
+          get: (server) => servers.get(ServerName.make(server)),
           set: (server, serverConfig) => {
             const name = ServerName.make(server)
-            if (editor.removed.has(name)) return
-            editor.servers.set(name, cloneConfig(serverConfig))
+            if (overrides.get(name) === false) return
+            servers.set(name, cloneConfig(serverConfig))
           },
           update: (server, update) => {
-            const current = editor.servers.get(ServerName.make(server))
+            const current = servers.get(ServerName.make(server))
             if (!current) return
             update(current)
           },
-          remove: (server) => editor.servers.delete(ServerName.make(server)),
+          remove: (server) => servers.delete(ServerName.make(server)),
         }),
         notify: () => State.reconcile(root, fork, () => reconcileLock.withPermit(reconcile())),
       })
