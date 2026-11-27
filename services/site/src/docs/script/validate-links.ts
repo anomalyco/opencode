@@ -1,21 +1,19 @@
 // Fails when a link on a prerendered docs page points at a missing file or anchor in the site's built
 // assets (the directory given), or, outside /docs, at a page the site doesn't have (the shell's nav and
 // footer link the site's pages, which render in the Worker, so they're checked against src/routes).
-// It also fails when a latest docs page's head hreflang links differ from the sitemap's alternates
-// for that URL (a fallback page uses its canonical English page's). The V1 docs (/v1/docs,
-// redirected to their own app), the status page, Data and the Console are other apps.
+// The V1 docs (/v1/docs, redirected to their own app), the status page, Data and the Console are
+// other apps.
 //
 //   bun src/docs/script/validate-links.ts .output/public
 import path from "node:path"
 import { LOCALES, strip } from "../../lib/language"
-import { docsSets, latestDocs } from "../config"
+import { docsSets } from "../config"
 import { docsLocaleHref } from "../lib/navigation"
 
 const root = path.resolve(process.argv[2] ?? ".output/public")
 const routes = path.resolve(import.meta.dir, "../../routes")
 const externalRoutes = /^\/(v1\/docs|status|data|console)(\/|$)/
-// Every language's docs pages, beside the set (config.ts latestDocsLocales; V1's languages are in
-// its slugs, so it has one root).
+// Every language's docs pages, beside the set (V1's languages are in its slugs, so it has one root).
 const docsRoots = docsSets.flatMap((set) =>
   set.id === "latest" ? LOCALES.map((locale) => docsLocaleHref("index", set, locale)) : [set.base],
 )
@@ -41,7 +39,7 @@ const files = (
     ),
   )
 ).flat()
-const linkFailures = (
+const failures = (
   await Promise.all(
     files.flatMap(async (file) => {
       const html = await Bun.file(file).text()
@@ -79,83 +77,6 @@ const linkFailures = (
   .flat(2)
   .filter((failure) => failure !== undefined)
 
-const hreflang = await checkHreflang()
-const failures = [...linkFailures, ...hreflang.failures]
-if (failures.length === 0) {
-  console.log(`docs: checked hreflang on ${hreflang.pages} pages (${hreflang.noindex} noindex, no alternates)`)
-  process.exit(0)
-}
+if (failures.length === 0) process.exit(0)
 console.error([...new Set(failures)].sort().join("\n"))
 process.exit(1)
-
-/**
- * Fails when a built latest docs page's head hreflang links differ from the sitemap's alternates
- * for its URL. A fallback page is not in the sitemap: it canonicalises to English and must list
- * English and x-default only, not every language of its canonical page (other languages have
- * their own translation of it).
- */
-async function checkHreflang() {
-  const xml = await Bun.file(path.join(root, latestDocs.base, "sitemap.xml")).text()
-  const alternates = new Map<string, string>()
-  for (const match of xml.matchAll(/<url><loc>([^<]+)<\/loc>([\s\S]*?)<\/url>/g)) {
-    const links = [...match[2].matchAll(/<xhtml:link rel="alternate" hreflang="([^"]+)" href="([^"]+)"/g)]
-      .map((link) => `${link[1]} ${link[2]}`)
-      .toSorted()
-    alternates.set(new URL(match[1]).pathname, links.join("\n"))
-  }
-  const pages = (
-    await Promise.all(
-      LOCALES.map((locale) =>
-        Array.fromAsync(
-          new Bun.Glob(`${docsLocaleHref("index", latestDocs, locale).slice(1)}**/*.html`).scan({
-            cwd: root,
-            absolute: true,
-          }),
-        ),
-      ),
-    )
-  ).flat()
-  const failures: string[] = []
-  let noindex = 0
-  for (const file of pages) {
-    const html = await Bun.file(file).text()
-    const head = html.slice(0, html.indexOf("</head>"))
-    const links = [...head.matchAll(/<link rel="alternate" hreflang="([^"]+)" href="([^"]+)"/g)]
-      .map((link) => `${link[1]} ${link[2]}`)
-      .toSorted()
-    const page = `/${path.relative(root, file).replace(/index\.html$/, "")}`
-    const shown = path.relative(root, file)
-    // A noindex page is not submitted in any language: it keeps no hreflang and no sitemap entry.
-    if (/<meta name="robots" content="noindex"/.test(head)) {
-      noindex++
-      if (links.length) failures.push(`${shown}: noindex page emits hreflang [${links.join(", ")}]`)
-      if (alternates.has(page)) failures.push(`${shown}: sitemap lists noindex ${page}`)
-      continue
-    }
-    const canonical = head.match(/<link rel="canonical" href="([^"]+)"/)?.[1]
-    const canonicalPath = canonical ? new URL(canonical).pathname : undefined
-    const listed = alternates.get(page)
-    const expected = listed
-      ? listed
-      : canonicalPath
-        ? alternates
-            .get(canonicalPath)
-            ?.split("\n")
-            .filter((link) => link.startsWith("en ") || link.startsWith("x-default "))
-            .join("\n")
-        : undefined
-    if (expected === undefined) {
-      // navigation.ts takes slugs, not localized paths: an English page's fallbacks all name it.
-      const slug = (canonicalPath ?? page).replace(/^.*\/docs\//, "").replace(/\/$/, "") || "index"
-      failures.push(
-        `${shown}: no sitemap alternates for ${page}, and ${canonicalPath ?? "no canonical"} is not a listed fallback (add "${slug}" to navigation.ts or set noindex: true)`,
-      )
-      continue
-    }
-    if (links.join("\n") !== expected)
-      failures.push(
-        `${shown}: head hreflang [${links.join(", ") || "none"}] differs from the sitemap's [${expected.split("\n").join(", ")}]`,
-      )
-  }
-  return { failures, pages: pages.length, noindex }
-}

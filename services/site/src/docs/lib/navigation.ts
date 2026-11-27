@@ -14,8 +14,8 @@ export interface DocsNavItem {
  * page language's dictionary (`docs.nav.*`), while page titles come from the pages themselves.
  */
 export type DocsNavLabel =
-  | "docs.nav.docs"
-  | "docs.nav.build"
+  | "nav.docs"
+  | "docs.section.build"
   | "docs.nav.configure"
   | "docs.nav.plugins"
   | "docs.nav.client"
@@ -39,7 +39,7 @@ export const docsSections: DocsSection[] = [
   {
     key: "docs",
     title: "Docs",
-    titleKey: "docs.nav.docs",
+    titleKey: "nav.docs",
     landingSlug: "index",
     groups: [
       {
@@ -103,7 +103,7 @@ export const docsSections: DocsSection[] = [
   {
     key: "build",
     title: "Build",
-    titleKey: "docs.nav.build",
+    titleKey: "docs.section.build",
     landingSlug: "build",
     groups: [
       {

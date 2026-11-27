@@ -5,7 +5,7 @@ describe("localized docs navigation", () => {
   const section: DocsSection = {
     key: "docs",
     title: "Docs",
-    titleKey: "docs.nav.docs",
+    titleKey: "nav.docs",
     landingSlug: "index",
     groups: [
       {
@@ -20,11 +20,11 @@ describe("localized docs navigation", () => {
     ],
   }
   const labels: Partial<Record<DocsNavLabel, string>> = {
-    "docs.nav.docs": "文档",
+    "nav.docs": "文档",
     "docs.nav.configure": "配置",
   }
   const englishLabels: Partial<Record<DocsNavLabel, string>> = {
-    "docs.nav.docs": "Docs",
+    "nav.docs": "Docs",
     "docs.nav.configure": "Configure",
   }
   const localized = docsSectionTitles(section, new Map([["instructions", "指令"]]), (key) => labels[key] ?? key)

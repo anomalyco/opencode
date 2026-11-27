@@ -9,6 +9,7 @@ import { copyHeadingLinks, copyWithFeedback } from "../component/site/copy-feedb
 import { holdOpenMenu } from "../component/site/menu-hold"
 import { navMenusOnIntent } from "../component/site/nav-intent"
 import { isSearchShortcut } from "../component/site/search-key"
+import { cookie, parseLocale } from "../lib/language"
 import { sectionNavScroll } from "../component/site/site-frame"
 import { startThemeSwitch } from "../component/site/theme-switch"
 
@@ -157,8 +158,8 @@ on("click", (event) => {
   const item = (event.target as Element).closest?.<HTMLElement>(
     "[data-component=language-picker] [data-slot=item][data-locale]",
   )
-  if (item?.dataset.locale)
-    document.cookie = `oc_locale=${encodeURIComponent(item.dataset.locale)}; Path=/; Max-Age=31536000; SameSite=Lax`
+  const locale = parseLocale(item?.dataset.locale)
+  if (locale) document.cookie = cookie(locale)
 })
 
 // Escape closes the section menu (the Contents menu closes itself, contents-spy.ts) and gives focus

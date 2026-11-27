@@ -1,6 +1,6 @@
 import { renderToString } from "solid-js/web"
-import type { Locale } from "~/lib/language"
-import { docsSets, latestDocs, latestDocsLocales, v1Docs, type DocsSet } from "./config"
+import { LOCALES, type Locale } from "~/lib/language"
+import { docsSets, latestDocs, v1Docs, type DocsSet } from "./config"
 import { docsContent, docsTranslations } from "./content"
 import { DocsDocument, docsI18n } from "./document"
 import type { DocsAssets } from "./layouts/DocsLayout"
@@ -30,7 +30,7 @@ export const docsSlugs = Object.fromEntries(
 ) as Record<DocsSet["id"], string[]>
 
 /** Every language the pages are prerendered in, by set: the latest docs' languages, and English for V1 (its slugs carry theirs). */
-export const docsPageLocales: Record<DocsSet["id"], readonly Locale[]> = { latest: latestDocsLocales, v1: ["en"] }
+export const docsPageLocales: Record<DocsSet["id"], readonly Locale[]> = { latest: LOCALES, v1: ["en"] }
 
 /** A docs page as HTML, or undefined when there is no such page. */
 export async function renderDocsPage(set: DocsSet, slug: string, assets: DocsAssets, locale: Locale = "en") {

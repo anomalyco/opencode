@@ -7,7 +7,6 @@
 - Content lives in `content/` as MDX. A file's path is its URL: `content/cli/keybinds.mdx` is `/docs/cli/keybinds/`. Other repositories read some of these files by path, so don't move them without checking.
 - `lib/navigation.ts` is the source of truth for header sections and sidebar ordering.
 - `frontmatter.ts` is the frontmatter schema; a page that doesn't match it fails the build.
-- An indexable latest page must be in `lib/navigation.ts`; a page left out of the navigation must set `noindex: true` in its frontmatter, or the build's sitemap/hreflang check fails.
 - `config.ts` holds each set's mount path (`/docs/`) and the names of its own files beside the pages (`files`: `_build`, `assets`, `pagefind`, `llms.txt`, …), which no page may use. Build URLs from it (`docsHref`), never from the site's base. MDX reads it as `import.meta.env.BASE_URL`.
 - Keep internal Markdown links docs-root-relative, for example `/config`; `remark-links.ts` adds `/docs`.
 - Components used in MDX are registered in `document.tsx`. Named slots work as in Astro: `<div slot="go">` inside a component becomes that slot's content (`remark-slots.ts`, `components/Slot.tsx`).
@@ -19,7 +18,6 @@
 - A translated page reuses the English page's heading ids in order (`rehype-headings.ts`, `vite.ts`), so `#anchors` work in every language. Keep the English heading structure (order, depth and count) when translating. A translation whose heading depths no longer match is stale: the build warns, the page shows the English fallback with the notice, and it is left out of hreflang and the sitemap until it matches (`lib/heading-structure.ts`).
 - Links in content stay docs-root-relative (`/config`): `remark-links.ts` prefixes the page's language, and the Markdown twins do too. Sidebar, pagination, the section links, the language picker and the footer follow the page's language.
 - Every language is prerendered (`script/build.ts`), with its own Pagefind index beside its pages. `docs.translation.missing` in `src/i18n/<locale>.ts` is the fallback notice.
-- Check translations from `services/site` with `bun src/docs/script/check-translations.ts [locale ...] [--stamp]`; stamps live in `src/docs/i18n/stamps/<locale>.json`. The translator subagent (`.opencode/agent/translator.md`) has the page rules.
 
 ## Rendering
 

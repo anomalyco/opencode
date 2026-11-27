@@ -1,5 +1,6 @@
 import { bindings, defineConfig, triggers } from "cf/config"
-import { docsSets, latestDocsLocales } from "./src/docs/config"
+import { docsSets } from "./src/docs/config"
+import { LOCALES } from "./src/lib/language"
 
 // The opencode.ai website (SolidStart). `--mode dev` deploys opencode-site-dev on dev.opencode.ai;
 // any other mode deploys opencode-site-production on opencode.ai. It is the catch-all: more specific
@@ -33,8 +34,7 @@ export default defineConfig(({ mode }) => {
             `${set.base}*`,
             ...set.files.map((file) => `!${set.base}${file}${file.includes(".") ? "" : "/*"}`),
           ]),
-          ...latestDocsLocales
-            .filter((locale) => locale !== "en")
+          ...LOCALES.filter((locale) => locale !== "en")
             .flatMap((locale) => [`/${locale}/docs`, `/${locale}/docs/*`, `!/${locale}/docs/pagefind/*`]),
         ],
       },
@@ -44,7 +44,10 @@ export default defineConfig(({ mode }) => {
       },
       triggers:
         dev || productionOwnsRoot
-          ? [triggers.fetch({ pattern: host, zone: host }), triggers.fetch({ pattern: `${host}/*`, zone: host })]
+          ? [
+              triggers.fetch({ pattern: host, zone: host }),
+              triggers.fetch({ pattern: `${host}/*`, zone: host }),
+            ]
           : [],
       // The bare host is a custom domain (it also supplies the DNS record), and cf detaches any domain
       // not listed here. docs.<host> is the old docs host: the Worker sends its URLs to the same path
