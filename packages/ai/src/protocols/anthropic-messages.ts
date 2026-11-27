@@ -1,9 +1,8 @@
 import { Buffer } from "node:buffer"
 import { Effect, Option, Schema, SchemaGetter } from "effect"
 import { Tool } from "@opencode/schema/tool"
-import { Route } from "../route/client.js"
-import { Auth } from "../route/auth.js"
-import { Endpoint } from "../route/endpoint.js"
+import { Api } from "../api.js"
+import { Capabilities } from "../capabilities.js"
 import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import { Headers } from "effect/http"
@@ -36,7 +35,6 @@ import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "anthropic-messages"
-export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
 export const PATH = "/messages"
 export const DEFAULT_MAX_TOKENS = 32_000
 const MIN_THINKING_BUDGET = 1_024
@@ -668,7 +666,7 @@ const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMReq
     } satisfies AnthropicVideoBlock
   }
   const options = yield* decodeMediaOptions(
-    part.providerMetadata?.[request.model.route.providerMetadataKey ?? request.model.provider] ?? {},
+    part.providerMetadata?.[request.model.metadataKey] ?? {},
   )
   const image = (source: AnthropicImageBlock["source"]): AnthropicImageBlock => ({
     type: "image",
@@ -735,10 +733,10 @@ const lowerToolResultContent = Effect.fnUntraced(function* (part: ToolResultPart
 })
 
 const requireThinkingSignature = (request: LLMRequest) => {
-  if (request.model.compatibility?.requireSignature !== undefined) return request.model.compatibility.requireSignature
+  if (request.model.capabilities?.reasoning?.signature !== undefined) return request.model.capabilities.reasoning.signature
   const provider = request.model.provider.toLowerCase()
   const model = request.model.id.toLowerCase()
-  const baseURL = (request.model.route.endpoint.baseURL ?? "").toLowerCase()
+  const baseURL = (request.model.baseURL ?? "").toLowerCase()
   if (
     provider === "kimi-for-coding" ||
     provider === "moonshotai" ||
@@ -756,7 +754,7 @@ const requireThinkingSignature = (request: LLMRequest) => {
 
 // Opus 4.8 and every Claude 5 model accept mid-conversation system messages; later versions inherit support.
 const supportsNativeSystemUpdates = (request: LLMRequest) => {
-  const override = request.model.capabilities?.systemUpdates
+  const override = request.model.capabilities?.system?.updates
   if (override !== undefined) return override
   const version = claudeVersion(request.model.id)
   if (version === undefined) return false
@@ -833,7 +831,7 @@ const appendToUserTurn = (messages: AnthropicMessage[], block: AnthropicUserBloc
 
 const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoints: Cache.Breakpoints) {
   const messages: AnthropicMessage[] = []
-  const providerMetadataKey = request.model.route.providerMetadataKey ?? request.model.provider
+  const providerMetadataKey = request.model.metadataKey
   // Text updates stay where they are unless a user turn follows them; then they move after the latest
   // user turn, the nearest spot where Anthropic accepts a native system message.
   const holdUpdates = supportsNativeSystemUpdates(request)
@@ -1564,7 +1562,7 @@ const step = (state: ParserState, event: AnthropicEvent) => {
 }
 
 // =============================================================================
-// Protocol And Anthropic Route
+// Protocol And Anthropic API
 // =============================================================================
 /**
  * The Anthropic Messages protocol — request body construction, body schema,
@@ -1582,7 +1580,7 @@ export const protocol = Protocol.make({
     initial: (request) => ({
       provider: request.model.provider,
       compactions: {},
-      providerMetadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
+      providerMetadataKey: request.model.metadataKey,
       tools: ToolStream.empty<number>(),
       reasoningSignatures: {},
       lifecycle: Lifecycle.initial(),
@@ -1648,17 +1646,15 @@ function requiredBetaHeaders(
   return betas
 }
 
-export const route = Route.make({
+/** Anthropic Messages. Every dialect reads inline cache markers. */
+export const api = Api.make({
+  name: "messages",
   id: ADAPTER,
-  provider: "anthropic",
-  providerMetadataKey: "anthropic",
   protocol,
-  endpoint: Endpoint.path((input) => (input.request.model.provider === "anthropic" ? `${PATH}?beta=true` : PATH), {
-    baseURL: DEFAULT_BASE_URL,
-  }),
-  auth: Auth.none,
+  path: (input) => (input.request.model.provider === "anthropic" ? `${PATH}?beta=true` : PATH),
   transport: transport<AnthropicMessagesBody>(),
   headers: () => ({ "anthropic-version": "2023-06-01" }),
+  capabilities: Capabilities.defaults<Capabilities.Messages>({ cache: { markers: true } }),
 })
 
 export * as AnthropicMessages from "./anthropic-messages.js"

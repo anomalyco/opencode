@@ -6,7 +6,8 @@ import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
 
-const meta = Meta.configure({ apiKey: process.env.META_API_KEY ?? "fixture" })
+const settings = { apiKey: process.env.META_API_KEY ?? "fixture" }
+const meta = { image: Meta.media(settings).image, responses: (modelID: string) => Meta.model(modelID, settings) }
 const modelID = "muse-image-1.0"
 const recorded = recordedTests({
   prefix: "meta-images",

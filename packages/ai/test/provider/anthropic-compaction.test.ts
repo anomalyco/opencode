@@ -50,7 +50,7 @@ for (const fixture of [
     Effect.gen(function* () {
       const result = yield* LLMClient.generate(
         ai.request({
-          model: Anthropic.configure({ apiKey: "test" }).model("claude-opus-4-6"),
+          model: Anthropic.model("claude-opus-4-6", { apiKey: "test" }),
           prompt: "hello",
         }),
       )
@@ -60,8 +60,8 @@ for (const fixture of [
 }
 
 for (const model of [
-  Anthropic.configure({ apiKey: "test" }).model("claude-opus-4-6"),
-  GoogleVertexMessages.configure({ accessToken: "test", project: "test" }).model("claude-opus-4-6"),
+  Anthropic.model("claude-opus-4-6", { apiKey: "test" }),
+  GoogleVertexMessages.model("claude-opus-4-6", { accessToken: "test", project: "test" }),
 ]) {
   for (const summary of ["Summary of the conversation", null]) {
     const block = { type: "compaction", content: summary }
@@ -162,7 +162,7 @@ for (const events of [
     () =>
       Effect.gen(function* () {
         const error = yield* LLMClient.generate(
-          ai.request({ model: Anthropic.configure({ apiKey: "test" }).model("claude-opus-4-6"), prompt: "hello" }),
+          ai.request({ model: Anthropic.model("claude-opus-4-6", { apiKey: "test" }), prompt: "hello" }),
         ).pipe(Effect.flip)
         expect(error.reason._tag).toBe("InvalidProviderOutput")
         expect(error.reason.http?.status).toBe(200)

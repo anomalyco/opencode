@@ -8,7 +8,7 @@ import { dynamicResponse, json, observe, type Call } from "./lib/http.js"
 const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
   VideoClient.layer.pipe(Layer.provideMerge(dynamicResponse(handler)))
 
-const model = Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).video("gemini-omni-1.2-flash")
+const model = Google.media({ apiKey: "test", baseURL: "https://google.test/v1beta" }).video("gemini-omni-1.2-flash")
 const id = "v1_abc"
 const started = { id: "v1_abc", status: "in_progress", object: "interaction", model: "gemini-omni-1.2-flash" }
 // "AAAAIGZ0eXBpc29t" is the base64 of an MP4 `ftyp` box header.

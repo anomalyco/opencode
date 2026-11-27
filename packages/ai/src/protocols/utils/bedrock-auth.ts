@@ -5,10 +5,7 @@ import { Auth, type AuthInput } from "../../route/auth.js"
 import { AIError, AuthenticationError } from "../../schema/index.js"
 import { ProviderShared } from "../shared.js"
 
-/**
- * AWS credentials for SigV4 signing. Bedrock also supports Bearer API key auth,
- * which provider facades configure as route auth instead of SigV4.
- */
+/** AWS credentials for SigV4 signing. Bedrock also supports Bearer API key auth, which `resolveAuth` prefers. */
 export interface Credentials {
   readonly region: string
   readonly accessKeyId: string
@@ -84,18 +81,10 @@ const signRequest = (input: {
       ),
   })
 
-/** Sign the exact JSON bytes with SigV4 using credentials configured on the route. */
-export const sigV4 = (
-  source: CredentialSource | undefined,
-  options: { readonly service?: string; readonly name?: string } = {},
-) =>
+/** Sign the exact JSON bytes with SigV4. */
+export const sigV4 = (source: CredentialSource, options: { readonly service?: string; readonly name?: string } = {}) =>
   Auth.custom((input: AuthInput) => {
     return Effect.gen(function* () {
-      if (!source) {
-        return yield* ProviderShared.invalidRequest(
-          `${options.name ?? "Bedrock Converse"} requires either route bearer auth or AWS credentials configured on the route`,
-        )
-      }
       const credentials = Effect.isEffect(source) ? yield* source : source
       const headersForSigning = Headers.set(input.headers, "content-type", "application/json")
       const signed = yield* signRequest({
@@ -109,9 +98,6 @@ export const sigV4 = (
       return Headers.setAll(headersForSigning, signed)
     })
   })
-
-/** Bedrock route auth defaults to SigV4 and expects credentials from route configuration. */
-export const auth = sigV4(undefined)
 
 export const resolveRegion = (input: {
   readonly region?: string

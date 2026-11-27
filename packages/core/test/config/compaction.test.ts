@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { LanguageModel, LLMClient, LLMEvent } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
+import { Auth } from "@opencode/ai/route"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { ConfigCompactionPlugin } from "@opencode/core/config/plugin/compaction"
@@ -28,7 +29,9 @@ import { host } from "../plugin/host"
 const model = LanguageModel.make({
   id: "test-model",
   provider: "test-provider",
-  route: OpenAIChat.route,
+  api: OpenAIChat.api,
+  baseURL: OpenAIChat.DEFAULT_BASE_URL,
+  auth: Auth.none,
 })
 const limit = { context: 100_000, output: 1_000 }
 const resolved = SessionRunnerModel.resolved(model, {

@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 import { Base64 } from "effect/encoding"
-import { Route } from "../route/client.js"
-import { Endpoint } from "../route/endpoint.js"
+import { Api } from "../api.js"
+import { Capabilities } from "../capabilities.js"
 import { Protocol } from "../route/protocol.js"
 import {
   AIError,
@@ -22,7 +22,6 @@ import {
 import { BedrockEventStream } from "./bedrock-event-stream.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { JsonObject, optionalArray, ProviderShared } from "./shared.js"
-import { BedrockAuth } from "./utils/bedrock-auth.js"
 import { BedrockCache } from "./utils/bedrock-cache.js"
 import { warnDropped } from "./utils/cache.js"
 import { BedrockMedia } from "./utils/bedrock-media.js"
@@ -357,7 +356,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
   const documentNames = new Set<string>()
   // Mistral can reject replay IDs even when they satisfy Converse's broader ID syntax.
   const normalizeID = request.model.id.includes("mistral.") ? MistralToolID.normalizer(request) : (id: string) => id
-  const providerMetadataKey = request.model.route.providerMetadataKey ?? request.model.provider
+  const providerMetadataKey = request.model.metadataKey
   const hoistImages = !keepToolImagesInline(request.model.id)
   // Bedrock expects parallel tool results before any images hoisted beside them.
   const pendingImages: BedrockMedia.ImageBlock[] = []
@@ -937,7 +936,7 @@ const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> => {
 }
 
 // =============================================================================
-// Protocol And Bedrock Route
+// Protocol And API
 // =============================================================================
 /**
  * The Bedrock Converse protocol — request body construction, body schema, and
@@ -952,7 +951,7 @@ export const protocol = Protocol.make({
   stream: {
     event: BedrockEventStream.Frame.pipe(Schema.decodeTo(BedrockEvent)),
     initial: (request) => ({
-      providerMetadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
+      providerMetadataKey: request.model.metadataKey,
       tools: ToolStream.empty<number>(),
       finishReason: undefined,
       usage: undefined,
@@ -966,19 +965,16 @@ export const protocol = Protocol.make({
   },
 })
 
-export const route = Route.make({
+/** Bedrock Converse. Every model reads inline cache markers. */
+export const api = Api.make({
+  name: "converse",
   id: ADAPTER,
-  provider: "bedrock",
-  providerMetadataKey: "bedrock",
   protocol,
-  // Bedrock's URL embeds the region in the route endpoint host and the
-  // validated modelId in the path. We read the validated body so the URL
-  // matches the body that gets signed.
-  endpoint: Endpoint.path<BedrockConverseBody>(
-    ({ body }) => `/model/${encodeURIComponent(body.modelId)}/converse-stream`,
-  ),
-  auth: BedrockAuth.auth,
+  // Bedrock's URL embeds the validated modelId in the path. We read the validated body so the URL matches the body
+  // that gets signed.
+  path: ({ body }) => `/model/${encodeURIComponent(body.modelId)}/converse-stream`,
   framing,
+  capabilities: Capabilities.defaults<Capabilities.Messages>({ cache: { markers: true } }),
 })
 
 export * as BedrockConverse from "./bedrock-converse.js"

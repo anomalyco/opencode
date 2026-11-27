@@ -15,7 +15,7 @@ import { AI } from "../src/index.js"
 import { Gemini } from "../src/protocols/gemini.js"
 import { TestLLM } from "../src/testing.js"
 import { Auth } from "../src/route.js"
-import { compileRequest } from "../src/route/client.js"
+import { compileRequest, prepareTransport } from "../src/route/client.js"
 import { AnthropicMessages } from "../src/protocols/anthropic-messages.js"
 import { OpenAIChat } from "../src/protocols/openai-chat.js"
 import { OpenAIResponses } from "../src/protocols/openai-responses.js"
@@ -24,6 +24,7 @@ import { GoogleVertexMessages, OpenAI } from "../src/providers.js"
 import { planToolUpdates, type ToolUpdate } from "../src/tool-updates.js"
 import { it, testEffect } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
+import { apiModel } from "./lib/model.js"
 
 const defineTool = (name: string, description = `${name} tool`) =>
   ToolDefinition.make({ name, description, inputSchema: { type: "object" } })
@@ -44,25 +45,32 @@ const ALL: ReadonlyArray<ToolUpdate> = ["add", "remove", "replace"]
 const updates = (list: ReadonlyArray<ToolUpdate>) => ({ tools: { updates: list } })
 
 const anthropic = (id: string, list?: ReadonlyArray<ToolUpdate>) =>
-  AnthropicMessages.route
-    .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
-    .model({ id, capabilities: list === undefined ? undefined : updates(list) })
+  apiModel(AnthropicMessages.api, id, {
+    provider: "anthropic",
+    baseURL: "https://api.anthropic.test/v1/",
+    auth: Auth.header("x-api-key", "test"),
+    capabilities: list === undefined ? undefined : updates(list),
+  })
 
 const openai = (id: string, list?: ReadonlyArray<ToolUpdate>) =>
-  OpenAIResponses.route
-    .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-    .model({ id, capabilities: list === undefined ? undefined : updates(list) })
-
-const chat = OpenAIChat.route
-  .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-  .model({ id: "gpt-4.1-mini", capabilities: updates(ALL) })
-
-const gemini = Gemini.route
-  .with({
-    endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
-    auth: Auth.header("x-goog-api-key", "test"),
+  apiModel(OpenAIResponses.api, id, {
+    baseURL: "https://api.openai.test/v1/",
+    auth: Auth.bearer("test"),
+    capabilities: list === undefined ? undefined : updates(list),
   })
-  .model({ id: "gemini-3.5-flash", capabilities: updates(ALL) })
+
+const chat = apiModel(OpenAIChat.api, "gpt-4.1-mini", {
+  baseURL: "https://api.openai.test/v1/",
+  auth: Auth.bearer("test"),
+  capabilities: updates(ALL),
+})
+
+const gemini = apiModel(Gemini.api, "gemini-3.5-flash", {
+  baseURL: "https://generativelanguage.test/v1beta/",
+  provider: "google",
+  auth: Auth.header("x-goog-api-key", "test"),
+  capabilities: updates(ALL),
+})
 
 const opus5 = anthropic("claude-opus-5", ALL)
 const astra = openai("gpt-6-astra", ALL)
@@ -314,8 +322,10 @@ describe("protocol wrappers", () => {
     })
     expect(wrapped.toolUpdates).toBe(AnthropicMessages.protocol.toolUpdates)
 
-    const vertex = GoogleVertexMessages.configure({ accessToken: "test", location: "global", project: "test" })
-    expect(vertex.model("claude-opus-5").route.toolUpdates).toBe(AnthropicMessages.protocol.toolUpdates)
+    const vertexSettings = { accessToken: "test", location: "global", project: "test" }
+    expect(GoogleVertexMessages.model("claude-opus-5", vertexSettings).api.protocol.toolUpdates).toBe(
+      AnthropicMessages.protocol.toolUpdates,
+    )
   })
 })
 
@@ -518,7 +528,7 @@ describe("Anthropic Messages tool updates", () => {
       ] as const) {
         const request = ai.request({ model: opus5, tools: [read, edit], messages })
         const compiled = yield* compileRequest(request)
-        const prepared = yield* AnthropicMessages.route.prepareTransport(compiled.body, request)
+        const prepared = yield* prepareTransport(compiled.body, request)
         expect(prepared.request.headers["anthropic-beta"]!.split(",").includes("inline-tools-2026-09-15")).toBe(
           expected,
         )

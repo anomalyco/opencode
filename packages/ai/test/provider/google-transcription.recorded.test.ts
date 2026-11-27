@@ -5,7 +5,7 @@ import { Google } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { TRANSCRIPT, audio, audioRecording, dialog } from "./transcription-recording.js"
 
-const model = Google.configure({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" }).transcription(
+const model = Google.media({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" }).transcription(
   "gemini-3.5-transcribe",
 )
 

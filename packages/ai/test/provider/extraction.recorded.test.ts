@@ -19,7 +19,7 @@ describe("Extraction recorded", () => {
   cloudflareWorkersAI.effect("extracts invoice fields", () =>
     Effect.gen(function* () {
       const response = yield* Extraction.generate({
-        model: CloudflareWorkersAI.configure({
+        model: CloudflareWorkersAI.media({
           accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
           apiKey: process.env.CLOUDFLARE_API_KEY ?? "fixture",
         }).experimental.extraction("@cf/cloudflare/clairic"),

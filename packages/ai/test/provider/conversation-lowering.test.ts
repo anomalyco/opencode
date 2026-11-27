@@ -9,7 +9,7 @@ it.effect("conversation lowering excludes generation settings and tool definitio
   Effect.gen(function* () {
     const body = yield* OpenResponses.lowerConversation(
       ai.request({
-        model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
+        model: OpenAI.openai.with({ apiKey: "test" }).model("fixture"),
         system: "Keep the context",
         messages: [Message.user("hello"), Message.assistant("hi")],
         maxTokens: 100,

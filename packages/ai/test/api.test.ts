@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Headers } from "effect/http"
+import { Api } from "../src/api.js"
 import { Capabilities } from "../src/capabilities.js"
 import { LLM } from "../src/llm.js"
 import { OpenAIChat } from "../src/protocols/openai-chat.js"
@@ -8,42 +9,43 @@ import { OpenAIResponses } from "../src/protocols/openai-responses.js"
 import { Provider } from "../src/provider.js"
 import { Auth } from "../src/route/auth.js"
 import { canCompact, compileRequest } from "../src/route/client.js"
-import { LLMRequest } from "../src/schema/index.js"
+import type { LLMRequest } from "../src/schema/index.js"
 
 const compile = (model: LLMRequest["model"]) =>
   Effect.runPromise(compileRequest(LLM.request({ model, prompt: "hi", maxTokens: 10 })))
 
 const authHeaders = (model: LLMRequest["model"]) =>
   Effect.runPromise(
-    Auth.toEffect(model.route.auth)({
-      request: {},
-      method: "POST",
-      url: "https://x.test",
-      body: "",
-      headers: Headers.empty,
-    }),
+    Auth.toEffect(model.auth)({ request: {}, method: "POST", url: "https://x.test", body: "", headers: Headers.empty }),
   )
 
 const example = Provider.make({
   id: "example",
+  baseURL: "https://api.example.test/v1",
   auth: Provider.apiKey("EXAMPLE_API_KEY"),
-  apis: {
-    chat: OpenAIChat.api.at("https://chat.example.test/v1", {
+  apis: [
+    OpenAIChat.api.configure({
       capabilities: { output: { maxTokensField: "max_tokens" } },
-      guess: (id) =>
-        id.startsWith("big-") ? { capabilities: { reasoning: { field: "reasoning_content" } } } : undefined,
+      models: {
+        "big-*": { reasoning: { field: "reasoning_content" } },
+        "big-2*": { reasoning: { field: "reasoning" } },
+      },
     }),
-    responses: OpenAIResponses.api.at("https://responses.example.test/v1", { compact: { trigger: false } }),
-  },
+    OpenAIResponses.api.configure({
+      baseURL: "https://responses.example.test/v1",
+      capabilities: { compaction: { trigger: false } },
+    }),
+  ],
 }).with({ apiKey: "fixture" })
 
 describe("Provider.model", () => {
   test("uses the first API unless one is named", () => {
-    expect(example.model("m").route.protocol).toBe("openai-chat")
-    expect(example.model("m", { api: "responses" }).route.protocol).toBe("openai-responses")
-    expect(example.model("m").route.endpoint.baseURL).toBe("https://chat.example.test/v1")
+    expect(example.model("m").api.name).toBe("chat-completions")
+    expect(example.model("m", { api: "responses" }).api.name).toBe("responses")
+    expect(example.model("m").baseURL).toBe("https://api.example.test/v1")
+    expect(example.model("m", { api: "responses" }).baseURL).toBe("https://responses.example.test/v1")
     expect(example.model("m").provider).toBe("example")
-    expect(example.model("m").route.providerMetadataKey).toBe("example")
+    expect(example.model("m").metadataKey).toBe("example")
   })
 
   test("rejects an API the provider does not serve", () => {
@@ -51,17 +53,24 @@ describe("Provider.model", () => {
     expect(() => example.model("m", { api: "messages" })).toThrow("does not serve a messages API")
   })
 
-  test("layers capabilities: API default, model-name guess, host facts, then the caller", () => {
-    expect(example.model("small").compatibility).toMatchObject({ maxTokensField: "max_tokens" })
-    expect(example.model("small").compatibility?.reasoningField).toBeUndefined()
-    expect(example.model("big-1").compatibility).toMatchObject({
-      maxTokensField: "max_tokens",
-      reasoningField: "reasoning_content",
-    })
+  test("rejects an API listed twice", () => {
+    const apis = [OpenAIChat.api, OpenAIChat.api.configure({ baseURL: "https://other.test" })]
+    expect(() => Provider.make({ id: "twice", auth: Provider.keyless, apis })).toThrow(
+      "lists API chat-completions twice",
+    )
+  })
+
+  test("layers capabilities: API default, model patterns in order, host facts, then the caller", () => {
+    expect(example.model("small").capabilities).toEqual({ output: { maxTokensField: "max_tokens" } })
+    expect(example.model("BIG-1").capabilities?.reasoning?.field).toBe("reasoning_content")
+    expect(example.model("big-2").capabilities?.reasoning?.field).toBe("reasoning")
     const passed = example.model("big-1", {
-      capabilities: { output: { maxTokensField: "max_completion_tokens" }, reasoning: { field: "reasoning" } },
+      capabilities: { output: { maxTokensField: "max_completion_tokens" }, reasoning: { field: "custom" } },
     })
-    expect(passed.compatibility).toMatchObject({ maxTokensField: "max_completion_tokens", reasoningField: "reasoning" })
+    expect(passed.capabilities).toEqual({
+      output: { maxTokensField: "max_completion_tokens" },
+      reasoning: { field: "custom" },
+    })
   })
 
   test("sends the capabilities on the wire", async () => {
@@ -72,10 +81,17 @@ describe("Provider.model", () => {
     ).toMatchObject({ max_completion_tokens: 10 })
   })
 
-  test("drops compaction mechanisms the host turns off", () => {
+  test("compaction follows the host's capabilities", () => {
     const model = example.model("m", { api: "responses" })
     expect(canCompact(model)).toBe(true)
     expect(canCompact(model, { mechanism: "trigger" })).toBe(false)
+    expect(canCompact(example.model("m"))).toBe(false)
+  })
+
+  test("needs a base URL", () => {
+    const bare = Provider.make({ id: "bare", auth: Provider.keyless, apis: [OpenAIChat.api] })
+    expect(() => bare.model("m")).toThrow("needs a baseURL")
+    expect(bare.with({ baseURL: "https://x.test" }).model("m").baseURL).toBe("https://x.test")
   })
 })
 
@@ -86,8 +102,8 @@ describe("Provider.with", () => {
       body: { extra: true },
     })
     const model = patched.model("m", { api: "responses" })
-    expect(model.route.endpoint.baseURL).toBe("https://proxy.test")
-    expect(model.route.endpoint.query).toEqual({ v: "1" })
+    expect(model.baseURL).toBe("https://proxy.test")
+    expect(model.query).toEqual({ v: "1" })
     expect(model.options?.headers).toEqual({ a: "1", b: "2" })
     expect(model.options?.http?.body).toEqual({ extra: true })
   })
@@ -97,7 +113,12 @@ describe("Provider.with", () => {
     expect((await authHeaders(example.with({ apiKey: false }).model("m"))).authorization).toBeUndefined()
     const custom = example.with({ auth: Auth.headers({ "x-key": "custom" }) }).model("m")
     expect((await authHeaders(custom))["x-key"]).toBe("custom")
-    const keyless = Provider.make({ id: "local", auth: Provider.keyless, apis: example.apis })
+    const keyless = Provider.make({
+      id: "local",
+      baseURL: "http://localhost",
+      auth: Provider.keyless,
+      apis: example.apis,
+    })
     expect(keyless.auth.kind).toBe("none")
     expect((await authHeaders(keyless.model("m"))).authorization).toBeUndefined()
   })
@@ -107,6 +128,7 @@ describe("Provider.entrypoint", () => {
   test("splits flat settings into connection settings, provider keys and provider options", () => {
     const provider = Provider.make({
       id: "example",
+      baseURL: "https://api.example.test/v1",
       auth: Provider.apiKey("EXAMPLE_API_KEY"),
       apis: example.apis,
       settings: { keys: ["team"], patch: (values) => ({ headers: { "x-team": String(values.team) } }) },
@@ -119,8 +141,8 @@ describe("Provider.entrypoint", () => {
       team: "core",
       reasoningEffort: "high",
     })
-    expect(model.route.protocol).toBe("openai-responses")
-    expect(model.route.endpoint.baseURL).toBe("https://proxy.test")
+    expect(model.api.name).toBe("responses")
+    expect(model.baseURL).toBe("https://proxy.test")
     expect(model.options?.headers).toEqual({ "x-team": "override" })
     expect(model.options?.http?.body).toEqual({ extra: true })
     expect(model.options?.providerOptions).toMatchObject({ reasoningEffort: "high" })
@@ -129,49 +151,42 @@ describe("Provider.entrypoint", () => {
 })
 
 describe("Api.extend", () => {
-  test("inherits the parent's codec rules and wraps its body builder", async () => {
+  test("inherits the parent's codec rules and name, and wraps its body builder", async () => {
     const Dialect = OpenAIResponses.api.extend({
       id: "dialect-responses",
       body: (request, base) => base(request).pipe(Effect.map((body) => ({ ...body, dialect: true }))),
     })
+    expect(Dialect.name).toBe("responses")
     expect(Dialect.protocol.toolUpdates).toBe(OpenAIResponses.api.protocol.toolUpdates)
     expect(Dialect.protocol.supportsEffortUpdates).toBe(OpenAIResponses.api.protocol.supportsEffortUpdates)
     expect(Dialect.compact).toBe(OpenAIResponses.api.compact)
     const model = Provider.make({
       id: "dialect",
+      baseURL: "https://dialect.test/v1",
       auth: Provider.keyless,
-      apis: { responses: Dialect.at("https://dialect.test/v1") },
-    }).model("m")
-    expect(model.route.protocol).toBe("dialect-responses")
+      apis: [Dialect],
+    }).model("m", { api: "responses" })
+    expect(model.api.id).toBe("dialect-responses")
     expect((await compile(model)).body).toMatchObject({ dialect: true, store: false })
   })
 })
 
 describe("Capabilities", () => {
-  test("merges later layers over earlier ones, keeping explicit false", () => {
+  test("merges later layers over earlier ones, keeping explicit false and dropping unset fields", () => {
     expect(
       Capabilities.merge(
         { reasoning: { updates: true, effort: ["low", "high"] }, system: { updates: true } },
         { reasoning: { effort: ["medium"] }, system: { updates: false } },
         undefined,
+        { output: { maxTokensField: undefined } },
       ),
     ).toEqual({ reasoning: { updates: true, effort: ["medium"] }, system: { updates: false } })
     expect(Capabilities.merge({ cache: { implicit: true } }, { cache: false })).toEqual({ cache: false })
+    expect(Capabilities.merge({ output: { maxTokensField: undefined } })).toBeUndefined()
   })
 
-  test("round-trips today's split capabilities and compatibility records", () => {
-    const caps: Capabilities.Any = {
-      tools: { strict: false, sanitizer: "gemini", stream: true, updates: ["add"] },
-      reasoning: { updates: true, field: "reasoning", required: false, signature: true, thinkingBlockBinding: true },
-      cache: { implicit: true, format: "alibaba", promptCacheKey: true },
-      output: { maxTokensField: "max_tokens", streamUsage: false, requireFinishReason: false, structured: true },
-      sampling: { temperature: false },
-      system: { updates: true },
-      messages: { requireAssistantAfterTool: true },
-      store: false,
-    }
-    expect(Capabilities.fromProjection(Capabilities.project(caps))).toEqual(caps)
-    expect(Capabilities.project(undefined)).toEqual({})
-    expect(Capabilities.project({ store: true })).toEqual({ capabilities: { store: true } })
+  test("model patterns match case-insensitively with * globs", () => {
+    expect(Api.modelCapabilities({ "a.b-*": { store: true } }, "A.B-1")).toEqual({ store: true })
+    expect(Api.modelCapabilities({ "a.b-*": { store: true } }, "axb-1")).toBeUndefined()
   })
 })

@@ -1,6 +1,5 @@
 import { Effect, Schema, SchemaGetter } from "effect"
-import { Route } from "../route/client.js"
-import { Endpoint } from "../route/endpoint.js"
+import { Api } from "../api.js"
 import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import { LLMEvent, Usage, type FinishReasonDetails, type LLMRequest } from "../schema/index.js"
@@ -9,7 +8,6 @@ import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "cohere-chat"
-export const DEFAULT_BASE_URL = "https://api.cohere.com/v2"
 
 const Options = Schema.Struct({
   thinking: Schema.optional(
@@ -342,12 +340,11 @@ export const protocol = Protocol.make({
     terminal: (event) => event.type === "message-end",
   },
 })
-export const route = Route.make({
+export const api = Api.make({
+  name: "cohere-chat",
   id: ADAPTER,
-  provider: "cohere",
-  providerMetadataKey: "cohere",
   protocol,
-  endpoint: Endpoint.path("/chat", { baseURL: DEFAULT_BASE_URL }),
+  path: "/chat",
   framing: Framing.sse,
 })
 export * as CohereChat from "./cohere-chat.js"

@@ -1,7 +1,7 @@
 import { ai } from "../../src/effect.js"
 import { Azure } from "../../src/providers.js"
 
-const model = Azure.configure({ resourceName: "example" }).responses("deployment")
+const model = Azure.responsesModel("deployment", { resourceName: "example" })
 
 ai.request({ model, prompt: "Hello", providerOptions: { store: false } })
 

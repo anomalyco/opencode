@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/http"
 import { ai, Auth, LLMClient, Message, ReasoningPart, ToolDefinition } from "../../src/effect.js"
-import { Moonshot } from "../../src/providers.js"
+import { Moonshot } from "../../src/providers/moonshot.js"
 import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -13,22 +13,24 @@ import { sseEvents } from "../lib/sse.js"
 
 it.effect("Moonshot composes shared protocols with explicit endpoints and bearer authentication", () =>
   Effect.gen(function* () {
-    const moonshot = Moonshot.configure()
-    expect(moonshot.model).toBe(moonshot.chat)
-    expect(moonshot.messages("kimi-k3").route.body).toBe(AnthropicMessages.protocol.body)
-    expect(moonshot.responses("kimi-k3").route.body).toBe(OpenResponses.protocol.body)
+    expect(Moonshot.model("kimi-k3").api.name).toBe("chat-completions")
+    expect(Moonshot.messagesModel("kimi-k3").api.protocol.body).toBe(AnthropicMessages.protocol.body)
+    expect(Moonshot.responsesModel("kimi-k3").api.protocol.body).toBe(OpenResponses.protocol.body)
     for (const item of [
-      { model: moonshot.chat("kimi-k3"), path: "/v1/chat/completions" },
-      { model: moonshot.messages("kimi-k3"), path: "/anthropic/v1/messages" },
-      { model: moonshot.responses("kimi-k3"), path: "/v1/responses" },
+      { model: Moonshot.model("kimi-k3"), path: "/v1/chat/completions" },
+      { model: Moonshot.messagesModel("kimi-k3"), path: "/anthropic/v1/messages" },
+      { model: Moonshot.responsesModel("kimi-k3"), path: "/v1/responses" },
     ]) {
       const request = ai.request({ model: item.model, prompt: "Hello" })
       const compiled = yield* compileRequest(request)
-      const url = Endpoint.render(item.model.route.endpoint, { request, body: compiled.body }).toString()
+      const url = Endpoint.render(
+        { baseURL: item.model.baseURL, path: item.model.api.path, query: item.model.query },
+        { request, body: compiled.body },
+      ).toString()
       expect(url).toBe(`https://api.moonshot.ai${item.path}`)
-      expect(item.model.provider).toBe("moonshotai")
-      expect(item.model.route.providerMetadataKey).toBe("moonshot")
-      const headers = yield* item.model.route.auth.apply({
+      expect(item.model.provider as string).toBe("moonshotai")
+      expect(item.model.metadataKey).toBe("moonshot")
+      const headers = yield* item.model.auth.apply({
         request,
         method: "POST",
         url,
@@ -48,12 +50,12 @@ it.effect("Moonshot composes shared protocols with explicit endpoints and bearer
 
 it.effect("Moonshot preserves default reasoning across model IDs on custom endpoints", () =>
   Effect.gen(function* () {
-    const moonshot = Moonshot.configure({
+    const moonshot = Moonshot.moonshot.with({
       baseURL: "https://gateway.example/v1",
       auth: Auth.header("x-api-key", "fixture"),
     })
     for (const id of ["kimi-k2.6", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k3", "future-model"]) {
-      const model = moonshot.chat(id)
+      const model = moonshot.model(id)
       const request = ai.request({ model, prompt: "Hello", maxTokens: 100 })
       const compiled = yield* compileRequest(request)
       expect(compiled.body).toMatchObject({ model: id, max_tokens: 100, stream: true })
@@ -61,8 +63,8 @@ it.effect("Moonshot preserves default reasoning across model IDs on custom endpo
       expect(compiled.body.store).toBeUndefined()
       expect(compiled.body.thinking).toBeUndefined()
       expect(compiled.body.reasoning_effort).toBeUndefined()
-      expect(model.route.endpoint.baseURL).toBe("https://gateway.example/v1")
-      const headers = yield* model.route.auth.apply({
+      expect(model.baseURL).toBe("https://gateway.example/v1")
+      const headers = yield* model.auth.apply({
         request,
         method: "POST",
         url: "https://gateway.example/v1/chat/completions",
@@ -78,7 +80,7 @@ it.effect("Moonshot preserves default reasoning across model IDs on custom endpo
 it.effect("Moonshot honors fallback credentials and final HTTP body overlays", () =>
   LLMClient.generate(
     ai.request({
-      model: Moonshot.configure({ providerOptions: { reasoningEffort: "high" } }).responses("kimi-k3"),
+      model: Moonshot.responsesModel("kimi-k3", { reasoningEffort: "high" }),
       prompt: "Hello",
       providerOptions: { reasoningEffort: "low" },
       http: { body: { reasoning: { effort: "max" }, future_option: true } },
@@ -101,24 +103,35 @@ it.effect("Moonshot honors fallback credentials and final HTTP body overlays", (
 
 it.effect("Moonshot lowers API-specific reasoning options without adding unrelated controls", () =>
   Effect.gen(function* () {
-    const moonshot = Moonshot.configure({ apiKey: "fixture" })
     for (const thinking of [{ type: "disabled" }, { type: "enabled", keep: "all" }, { type: "enabled", keep: null }]) {
       const result = yield* compileRequest(
-        ai.request({ model: moonshot.chat("kimi-k2.6"), prompt: "Hello", providerOptions: { thinking } }),
+        ai.request({
+          model: Moonshot.model("kimi-k2.6", { apiKey: "fixture" }),
+          prompt: "Hello",
+          providerOptions: { thinking },
+        }),
       )
       expect(result.body.thinking).toEqual(thinking)
       expect(result.body.reasoning_effort).toBeUndefined()
     }
     for (const effort of ["low", "high", "max", "future-effort"]) {
       const chat = yield* compileRequest(
-        ai.request({ model: moonshot.chat("kimi-k3"), prompt: "Hello", providerOptions: { reasoningEffort: effort } }),
+        ai.request({
+          model: Moonshot.model("kimi-k3", { apiKey: "fixture" }),
+          prompt: "Hello",
+          providerOptions: { reasoningEffort: effort },
+        }),
       )
       const messages = yield* compileRequest(
-        ai.request({ model: moonshot.messages("kimi-k3"), prompt: "Hello", providerOptions: { effort } }),
+        ai.request({
+          model: Moonshot.messagesModel("kimi-k3", { apiKey: "fixture" }),
+          prompt: "Hello",
+          providerOptions: { effort },
+        }),
       )
       const responses = yield* compileRequest(
         ai.request({
-          model: moonshot.responses("kimi-k3"),
+          model: Moonshot.responsesModel("kimi-k3", { apiKey: "fixture" }),
           prompt: "Hello",
           providerOptions: { reasoningEffort: effort },
         }),
@@ -135,10 +148,9 @@ it.effect("Moonshot lowers API-specific reasoning options without adding unrelat
 
 it.effect("Moonshot validates native Chat thinking options", () =>
   Effect.gen(function* () {
-    const invalid = Moonshot.configure({ apiKey: "fixture" })
-      .chat("kimi-k2.6")
-      .route.with({ providerOptions: { thinking: { type: "enabled", keep: 42 } } })
-      .model({ id: "kimi-k2.6" })
+    const invalid = Moonshot.moonshot
+      .with({ apiKey: "fixture", providerOptions: { thinking: { type: "enabled", keep: 42 } } })
+      .model("kimi-k2.6")
     const failure = yield* compileRequest(ai.request({ model: invalid, prompt: "Hello" })).pipe(Effect.flip)
     expect(failure.reason._tag).toBe("InvalidRequest")
     expect(failure.message).toContain("keep")
@@ -149,7 +161,7 @@ it.effect("Moonshot retains unsigned and signed Messages reasoning and projects 
   Effect.gen(function* () {
     const compiled = yield* compileRequest(
       ai.request({
-        model: Moonshot.configure({ apiKey: "fixture" }).messages("kimi-k3"),
+        model: Moonshot.messagesModel("kimi-k3", { apiKey: "fixture" }),
         messages: [
           Message.user("Hello"),
           Message.assistant([
@@ -199,7 +211,7 @@ it.effect("Moonshot retains unsigned and signed Messages reasoning and projects 
 
 it.effect("Moonshot Responses uses HTTP even with a WebSocket executor", () =>
   LLMClient.generate(
-    ai.request({ model: Moonshot.configure({ apiKey: "fixture" }).responses("kimi-k3"), prompt: "Hello" }),
+    ai.request({ model: Moonshot.responsesModel("kimi-k3", { apiKey: "fixture" }), prompt: "Hello" }),
     {
       webSocket: { execute: () => Effect.die("Unexpected WebSocket request") },
     },

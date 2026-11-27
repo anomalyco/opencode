@@ -39,7 +39,7 @@ for (const item of [
     () =>
       Effect.gen(function* () {
         const request = ai.request({
-          model: Venice.configure({ apiKey }).chat(item.model),
+          model: Venice.model(item.model, { apiKey }),
           system:
             "Use the provided tool for private data. After receiving the result, give only the requested number; do not call the tool again.",
           prompt:
@@ -136,7 +136,7 @@ recorded.effect.with(
   () =>
     Effect.gen(function* () {
       const request = ai.request({
-        model: Venice.configure({ apiKey }).chat("gemini-3-8-flash"),
+        model: Venice.model("gemini-3-8-flash", { apiKey }),
         prompt:
           "Look up private rates for both ZEBRA and MOOSE using two calls to lookup_rate. Then add the rates and multiply by 7. Use parallel calls if possible.",
         tools: [lookup],
@@ -210,7 +210,7 @@ recorded.effect.with(
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: Venice.configure({ apiKey }).chat("qwen3-6-27b"),
+          model: Venice.model("qwen3-6-27b", { apiKey }),
           prompt: "What is 23 multiplied by 17 plus 9? Reply with just the number.",
           providerOptions: { reasoning: { enabled: false } },
           maxTokens: 4096,
@@ -225,7 +225,7 @@ recorded.effect.with(
 recorded.effect.with("surfaces Venice model errors", { tags: ["error"] }, () =>
   Effect.gen(function* () {
     const result = yield* LLMClient.generate(
-      ai.request({ model: Venice.configure({ apiKey }).chat("no-such-model-xyz"), prompt: "Hello" }),
+      ai.request({ model: Venice.model("no-such-model-xyz", { apiKey }), prompt: "Hello" }),
     ).pipe(Effect.result)
     expect(result._tag).toBe("Failure")
     if (result._tag === "Failure") {

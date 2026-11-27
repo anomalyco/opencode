@@ -1,7 +1,7 @@
 import { ai } from "../../src/effect.js"
 import { CloudflareWorkersAI } from "../../src/providers.js"
 
-const model = CloudflareWorkersAI.configure({ accountId: "account", apiKey: "test" }).model("model")
+const model = CloudflareWorkersAI.model("model", { accountId: "account", apiKey: "test" })
 
 ai.request({ model, prompt: "Hello", promptCacheKey: "cache" })
 

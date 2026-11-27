@@ -80,7 +80,7 @@ export const layer = Layer.effect(
         messages: [Message.user(input.text)],
       })
       if (prepared.event.result !== undefined) return prepared.event.result
-      const metadataKey = prepared.request.model.route.providerMetadataKey ?? prepared.request.model.provider
+      const metadataKey = prepared.request.model.metadataKey
       yield* llm.stream(prepared.request, prepared.options).pipe(
         Stream.runForEach((event) => {
           // Responses can classify a text block only when it ends; filter after the stream completes.

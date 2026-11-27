@@ -5,7 +5,6 @@ import {
   CompactionCheckpointResponse,
   CompactionPart,
   CompactionResponse,
-  LanguageModel,
   LLMClient,
   LLMEvent,
   type LLMRequest,
@@ -18,9 +17,10 @@ import { OpenAIChat } from "../src/protocols/openai-chat.js"
 import { TestLLM } from "../src/testing.js"
 import { Effect, Fiber, Latch, Stream } from "effect"
 import { testEffect } from "./lib/effect.js"
+import { apiModel } from "./lib/model.js"
 
 const request = ai.request({
-  model: LanguageModel.make({ id: "fictional-model", provider: "fixture", route: OpenAIChat.route }),
+  model: apiModel(OpenAIChat.api, "fictional-model", { provider: "fixture", baseURL: "https://api.openai.com/v1" }),
   prompt: "Say hello",
 })
 const it = testEffect(TestLLM.testLayer())
@@ -29,7 +29,7 @@ describe("TestLLM first-class client", () => {
   it.effect("returns scripted checkpoints only for trigger compaction", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
-      const request = ai.request({ model: OpenAI.configure().responses("fixture"), prompt: "hello" })
+      const request = ai.request({ model: OpenAI.openai.model("fixture"), prompt: "hello" })
       const checkpoint = new CompactionCheckpointResponse({
         checkpoint: { type: "compaction", provider: ProviderID.make("openai"), encrypted: "opaque" },
         responseID: "resp_fixture",
@@ -55,7 +55,7 @@ describe("TestLLM first-class client", () => {
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
       const request = ai.request({
-        model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
+        model: OpenAI.openai.with({ apiKey: "test" }).model("fixture"),
         prompt: "hello",
       })
       yield* client.push(TestLLM.stop(), new CompactionResponse({ replacement: [] }))
@@ -72,7 +72,7 @@ describe("TestLLM first-class client", () => {
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
       const request = ai.request({
-        model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
+        model: OpenAI.openai.with({ apiKey: "test" }).model("fixture"),
         prompt: "hello",
       })
       const compacted = new CompactionResponse({

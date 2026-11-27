@@ -2,16 +2,8 @@ import { Effect, Schema } from "effect"
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { ProviderShared } from "../protocols/shared.js"
-import type { ProviderAuthOption } from "../route/auth-options.js"
-import { Route } from "../route/client.js"
-import { Endpoint } from "../route/endpoint.js"
-import { Protocol } from "../route/protocol.js"
-import { ProviderID, type ModelID, type LLMRequest, type RequestOptions } from "../schema/index.js"
+import { Provider } from "../provider.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
-import { bearerRouteDefaults, toConfig } from "./settings.js"
-
-export const id = ProviderID.make("groq")
-const baseURL = "https://api.groq.com/openai/v1"
 
 export type ProviderOptions = Pick<OpenAIProviderOptionsInput, "reasoningEffort"> & {
   /** Controls visible reasoning on GPT-OSS; other models always use parsed reasoning. */
@@ -20,12 +12,6 @@ export type ProviderOptions = Pick<OpenAIProviderOptionsInput, "reasoningEffort"
   readonly serviceTier?: "on_demand" | "flex" | "auto" | "performance" | (string & {})
   readonly user?: string
 }
-
-export type Config = Omit<RequestOptions, "providerOptions"> &
-  ProviderAuthOption<"optional"> & {
-    readonly baseURL?: string
-    readonly providerOptions?: ProviderOptions
-  }
 
 export type Settings = ProviderPackage.Settings &
   ProviderOptions & {
@@ -38,61 +24,38 @@ const Options = Schema.Struct({
   user: Schema.optional(Schema.String),
 })
 
-export const protocol = Protocol.make({
-  id: "groq-chat",
-  body: {
-    schema: Schema.Struct({
-      ...OpenAIChat.bodyFields,
-      reasoning_format: Schema.optional(Schema.Literal("parsed")),
-      include_reasoning: Schema.optional(Schema.Boolean),
-      user: Schema.optional(Schema.String),
-    }),
-    from: Effect.fn("Groq.fromRequest")(function* (request: LLMRequest) {
-      const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(
-        request.providerOptions ?? {},
-      )
-      const gptOSS = request.model.id.startsWith("openai/gpt-oss-")
-      return {
-        ...(yield* OpenAIChat.fromRequest(request)),
-        reasoning_format: gptOSS ? undefined : ("parsed" as const),
-        include_reasoning: gptOSS ? options.includeReasoning : undefined,
-        user: options.user,
-      }
-    }),
-  },
-  stream: OpenAIChat.protocol.stream,
-})
-
-export const route = Route.make({
-  id: "groq-chat",
-  provider: id,
-  providerMetadataKey: "groq",
-  protocol,
-  endpoint: Endpoint.path("/chat/completions", { baseURL }),
-  framing: OpenAIChat.framing,
-})
-
-export const configure = (input: Config = {}) => {
-  const configured = route.with(bearerRouteDefaults(input, "GROQ_API_KEY", baseURL))
-  return {
-    id,
-    model: (modelID: string | ModelID) =>
-      configured.model<ProviderOptions>({
-        id: modelID,
-        compatibility: {
-          maxTokensField: "max_completion_tokens",
-          reasoningField: "reasoning",
-          requireReasoning: false,
-        },
-        capabilities: { tools: { strict: false } },
+export const chatCompletions = OpenAIChat.api
+  .extend({
+    id: "groq-chat",
+    body: (request, base) =>
+      Effect.gen(function* () {
+        const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(
+          request.providerOptions ?? {},
+        )
+        const gptOSS = request.model.id.startsWith("openai/gpt-oss-")
+        return {
+          ...(yield* base(request)),
+          reasoning_format: gptOSS ? undefined : ("parsed" as const),
+          include_reasoning: gptOSS ? options.includeReasoning : undefined,
+          user: options.user,
+        }
       }),
-    configure,
-  }
-}
+  })
+  .configure({
+    capabilities: {
+      output: { maxTokensField: "max_completion_tokens" },
+      reasoning: { field: "reasoning", required: false },
+      tools: { strict: false },
+    },
+  })
 
-export const provider = configure()
+export const groq = Provider.make({
+  id: "groq",
+  baseURL: "https://api.groq.com/openai/v1",
+  auth: Provider.apiKey("GROQ_API_KEY"),
+  apis: [chatCompletions],
+})
 
-export const model: ProviderPackage.Model<Settings, ProviderOptions> = (modelID, settings) =>
-  configure(toConfig(settings)).model(modelID)
+export const model = Provider.entrypoint<Settings, ProviderOptions>(groq)
 
 export * as Groq from "./groq.js"

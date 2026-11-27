@@ -6,14 +6,13 @@ import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
 import { Auth } from "../../src/route/auth.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
+import { apiModel } from "../lib/model.js"
 
-for (const route of [OpenAIChat.route, OpenAIResponses.route]) {
-  const model = route
-    .with({ endpoint: { baseURL: "https://api.openai.test/v1" }, auth: Auth.bearer("test") })
-    .model({ id: "gpt-4.1-mini" })
-  const chat = route.id === "openai-chat"
+for (const api of [OpenAIChat.api, OpenAIResponses.api]) {
+  const model = apiModel(api, "gpt-4.1-mini", { baseURL: "https://api.openai.test/v1", auth: Auth.bearer("test") })
+  const chat = api.id === "openai-chat"
 
-  it.effect(`${route.id} serializes schema-valid undefined historical tool input as an empty object`, () =>
+  it.effect(`${api.id} serializes schema-valid undefined historical tool input as an empty object`, () =>
     Effect.gen(function* () {
       const message = Schema.decodeUnknownSync(Message)({
         role: "assistant",
@@ -47,7 +46,7 @@ for (const route of [OpenAIChat.route, OpenAIResponses.route]) {
     }),
   )
 
-  it.effect(`${route.id} preserves defined historical tool inputs`, () =>
+  it.effect(`${api.id} preserves defined historical tool inputs`, () =>
     Effect.gen(function* () {
       for (const [input, encoded] of [
         [null, "null"],

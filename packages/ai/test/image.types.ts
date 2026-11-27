@@ -42,7 +42,7 @@ ai.image.generate({
   providerOptions: { imageSize: "2K", thinkingLevel: "HIGH", futureOption: true },
 })
 
-const googleProvider = Google.configure({ apiKey: "test" }).image("any-model-id")
+const googleProvider = Google.media({ apiKey: "test" }).image("any-model-id")
 ai.image.generate({
   model: googleProvider,
   prompt: "A lighthouse",
@@ -113,9 +113,9 @@ OpenAI.imageGeneration({ partialImages: "2" })
 ai.image.generate({ model: google, prompt: "A lighthouse", providerOptions: { imageSize: "8K" } })
 
 // @ts-expect-error Language models cannot be used for image requests.
-ai.image.generate({ model: Anthropic.configure({ apiKey: "test" }).model("claude-sonnet-4-5"), prompt: "A lighthouse" })
+ai.image.generate({ model: Anthropic.model("claude-sonnet-4-5", { apiKey: "test" }), prompt: "A lighthouse" })
 
-const xai = XAI.configure({ apiKey: "test" }).image("any-model-id")
+const xai = XAI.media({ apiKey: "test" }).image("any-model-id")
 // @ts-expect-error Image generation options are request-scoped, not provider configuration.
 XAI.configure({ image: { providerOptions: { responseFormat: "b64_json" } } })
 ai.image.generate({
@@ -140,7 +140,7 @@ ai.image.generate({ model: xai, prompt: "A lighthouse", n: "2" })
 // @ts-expect-error Known xAI string options retain their value kind.
 ai.image.generate({ model: xai, prompt: "A lighthouse", providerOptions: { responseFormat: 2 } })
 
-const zai = ZAI.configure({ apiKey: "test" }).image("any-model-id")
+const zai = ZAI.media({ apiKey: "test" }).image("any-model-id")
 // @ts-expect-error Image generation options are request-scoped, not provider configuration.
 ZAI.configure({ image: { providerOptions: { quality: "hd" } } })
 ai.image.generate({

@@ -1,9 +1,14 @@
 import { ai } from "../../src/effect.js"
 import { Alibaba } from "../../src/providers.js"
 
-const provider = Alibaba.configure({ region: "ap-southeast-1" })
-Alibaba.configure({ baseURL: "https://gateway.example/v1" })
-Alibaba.configure({ region: "eu-central-1", workspaceID: "llm-workspace" })
+const location = { region: "ap-southeast-1" }
+const provider = {
+  chat: (id: string) => Alibaba.model(id, location),
+  messages: (id: string) => Alibaba.messagesModel(id, location),
+  responses: (id: string) => Alibaba.responsesModel(id, location),
+}
+Alibaba.model("qwen3.8-max", { baseURL: "https://gateway.example/v1" })
+Alibaba.model("qwen3.8-max", { region: "eu-central-1", workspaceID: "llm-workspace" })
 ai.request({
   model: provider.chat("qwen3.8-max"),
   prompt: "Hello",
@@ -25,7 +30,7 @@ ai.request({
   providerOptions: { reasoningEffort: "low", enableThinking: true, store: true, previousResponseId: "resp_previous" },
 })
 // @ts-expect-error Region or complete base URL is required.
-Alibaba.configure({ apiKey: "fixture" })
+Alibaba.model("qwen3.8-max", { apiKey: "fixture" })
 ai.request({
   model: provider.chat("qwen3.8-max"),
   prompt: "Hello",

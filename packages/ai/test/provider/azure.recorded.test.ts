@@ -7,25 +7,25 @@ import { recordedTests } from "../recorded-test.js"
 
 const resourceName = process.env.AZURE_OPENAI_RESOURCE_NAME ?? "aiden-azury-group"
 
-const chatModel = Azure.configure({
+const chatModel = Azure.chatModel("gpt-5.6-luna", {
   resourceName,
   apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
-}).chat("gpt-5.6-luna")
+})
 
-const responsesModel = Azure.configure({
+const responsesModel = Azure.responsesModel("gpt-5.6-luna", {
   resourceName,
   apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
-}).responses("gpt-5.6-luna")
+})
 
-const messagesModel = Azure.configure({
+const messagesModel = Azure.messagesModel("claude-haiku-4-5", {
   resourceName,
   apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
-}).messages("claude-haiku-4-5")
+})
 
-const foundryChatModel = Azure.configure({
+const foundryChatModel = Azure.chatModel("Kimi-K2.5", {
   baseURL: `https://${resourceName}.services.ai.azure.com/models`,
   apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
-}).chat("Kimi-K2.5")
+})
 
 const lookupWeather = ToolDefinition.make({
   name: "lookup_weather",

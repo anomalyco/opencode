@@ -1,5 +1,7 @@
 import { Effect, Schema } from "effect"
 import { Base64 } from "effect/encoding"
+import { Api } from "../api.js"
+import { Capabilities } from "../capabilities.js"
 import { Protocol } from "../route/protocol.js"
 import { AssistantMessage, LLMEvent, type LLMRequest, ToolResultPart } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
@@ -60,7 +62,7 @@ const adapter = {
 } satisfies OpenResponses.ProviderAdapter
 
 const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: LLMRequest) {
-  const key = request.model.route.providerMetadataKey ?? String(request.model.provider)
+  const key = request.model.metadataKey
   const body = yield* OpenResponses.fromRequestWithAdapter(
     {
       ...request,
@@ -246,5 +248,16 @@ export const protocol = Protocol.make({
 })
 
 export const httpTransport = OpenResponses.httpTransport
+
+export const api = Api.make({
+  name: "responses",
+  id: ADAPTER,
+  protocol,
+  path: OpenResponses.PATH,
+  // Meta Responses does not support WebSocket upgrades; always use HTTP/SSE.
+  transport: httpTransport,
+  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+  capabilities: Capabilities.defaults<Capabilities.Responses>(),
+})
 
 export * as MetaResponses from "./meta-responses.js"

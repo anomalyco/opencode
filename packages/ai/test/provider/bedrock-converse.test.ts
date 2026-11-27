@@ -7,7 +7,7 @@ import { HttpClientRequest } from "effect/http"
 import {
   ai,
   CacheHint,
-  type LanguageModel,
+  LanguageModel,
   LLMEvent,
   Media,
   Message,
@@ -134,10 +134,10 @@ const captureHeaders = (target: LanguageModel) =>
     return seen[0]!
   })
 
-const model = AmazonBedrock.configure({
+const model = AmazonBedrock.model("anthropic.claude-sonnet-4-5-20250929-v1:0", {
   baseURL: "https://bedrock-runtime.test",
   apiKey: "test-bearer",
-}).model("anthropic.claude-sonnet-4-5-20250929-v1:0")
+})
 
 const baseRequest = ai.request({
   id: "req_1",
@@ -647,9 +647,10 @@ describe("Bedrock Converse route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer" }).model(
-            "global.openai.gpt-6-sol",
-          ),
+          model: AmazonBedrock.model("global.openai.gpt-6-sol", {
+            baseURL: "https://bedrock-runtime.test",
+            apiKey: "test-bearer",
+          }),
           messages: [
             Message.user("What is in this image?"),
             Message.assistant([ToolCallPart.make({ id: "tool_1", name: "read", input: {} })]),
@@ -700,9 +701,7 @@ describe("Bedrock Converse route", () => {
       ]) {
         const prepared = yield* compileRequest(
           ai.request({
-            model: AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer" }).model(
-              id,
-            ),
+            model: AmazonBedrock.model(id, { baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer" }),
             messages: [
               Message.assistant([ToolCallPart.make({ id: "tool_1", name: "read", input: {} })]),
               Message.tool({
@@ -732,9 +731,7 @@ describe("Bedrock Converse route", () => {
       Effect.gen(function* () {
         const prepared = yield* compileRequest(
           ai.request({
-            model: AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer" }).model(
-              id,
-            ),
+            model: AmazonBedrock.model(id, { baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer" }),
             messages: [
               Message.assistant([ToolCallPart.make({ id: "tool_1", name: "read", input: {} })]),
               Message.tool({
@@ -770,9 +767,10 @@ describe("Bedrock Converse route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer" }).model(
-            "global.openai.gpt-6-sol",
-          ),
+          model: AmazonBedrock.model("global.openai.gpt-6-sol", {
+            baseURL: "https://bedrock-runtime.test",
+            apiKey: "test-bearer",
+          }),
           messages: [
             Message.assistant([
               ToolCallPart.make({ id: "tool_1", name: "first", input: {} }),
@@ -1338,7 +1336,7 @@ describe("Bedrock Converse route", () => {
 
   it.effect("round-trips reassigned provider reasoning and usage metadata in its own namespace", () =>
     Effect.gen(function* () {
-      const compatible = model.route.with({ provider: "custom-bedrock" }).model({ id: model.id })
+      const compatible = LanguageModel.update(model, { provider: "custom-bedrock", metadataKey: "custom-bedrock" })
       const redactedData = "cmVkYWN0ZWQtdGhpbmtpbmc="
       const response = yield* LLMClient.generate({ ...baseRequest, model: compatible }).pipe(
         Effect.provide(
@@ -1745,10 +1743,10 @@ describe("Bedrock Converse route", () => {
 
   it.effect("fails with an authentication error when the default chain cannot resolve credentials", () =>
     Effect.gen(function* () {
-      const unsignedModel = AmazonBedrock.configure({
+      const unsignedModel = AmazonBedrock.model("anthropic.claude-3-5-sonnet-20240620-v1:0", {
         baseURL: "https://bedrock-runtime.test",
         profile: "opencode-test-missing-profile",
-      }).model("anthropic.claude-3-5-sonnet-20240620-v1:0")
+      })
       const error = yield* LLMClient.generate({ ...baseRequest, model: unsignedModel }).pipe(
         Effect.provide(fixedBytes(eventStreamBody(["messageStop", { stopReason: "end_turn" }]))),
         Effect.flip,
@@ -1761,7 +1759,7 @@ describe("Bedrock Converse route", () => {
 
   it.effect("signs with static credentials using the configured region for the SigV4 scope", () =>
     Effect.gen(function* () {
-      const signed = AmazonBedrock.configure({
+      const signed = AmazonBedrock.model("anthropic.claude-3-5-sonnet-20240620-v1:0", {
         baseURL: "https://bedrock-runtime.test",
         region: "eu-west-1",
         credentials: {
@@ -1769,7 +1767,7 @@ describe("Bedrock Converse route", () => {
           accessKeyId: "AKIAIOSFODNN7EXAMPLE",
           secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
         },
-      }).model("anthropic.claude-3-5-sonnet-20240620-v1:0")
+      })
       const headers = yield* captureHeaders(signed)
 
       expect(headers.get("authorization")).toContain("Credential=AKIAIOSFODNN7EXAMPLE/")
@@ -1780,9 +1778,10 @@ describe("Bedrock Converse route", () => {
 
   it.effect("resolves SigV4 credentials through the AWS default chain on every request", () =>
     Effect.gen(function* () {
-      const chained = AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", region: "us-west-2" }).model(
-        "anthropic.claude-3-5-sonnet-20240620-v1:0",
-      )
+      const chained = AmazonBedrock.model("anthropic.claude-3-5-sonnet-20240620-v1:0", {
+        baseURL: "https://bedrock-runtime.test",
+        region: "us-west-2",
+      })
       const headers = yield* captureHeaders(chained)
 
       expect(headers.get("authorization")).toContain("Credential=AKIACHAINEXAMPLE/")
@@ -1800,9 +1799,10 @@ describe("Bedrock Converse route", () => {
 
   it.effect("re-resolves rotated chain credentials on the next request without rebuilding the model", () =>
     Effect.gen(function* () {
-      const chained = AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", region: "us-west-2" }).model(
-        "anthropic.claude-3-5-sonnet-20240620-v1:0",
-      )
+      const chained = AmazonBedrock.model("anthropic.claude-3-5-sonnet-20240620-v1:0", {
+        baseURL: "https://bedrock-runtime.test",
+        region: "us-west-2",
+      })
       const first = yield* captureHeaders(chained)
       const second = yield* captureHeaders(chained).pipe(
         withProcessEnv({ AWS_ACCESS_KEY_ID: "AKIAROTATEDEXAMPLE", AWS_SECRET_ACCESS_KEY: "rotated-secret" }),
@@ -1821,9 +1821,9 @@ describe("Bedrock Converse route", () => {
 
   it.effect("prefers AWS_BEARER_TOKEN_BEDROCK over the credential chain", () =>
     Effect.gen(function* () {
-      const bearer = AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test" }).model(
-        "anthropic.claude-3-5-sonnet-20240620-v1:0",
-      )
+      const bearer = AmazonBedrock.model("anthropic.claude-3-5-sonnet-20240620-v1:0", {
+        baseURL: "https://bedrock-runtime.test",
+      })
       const headers = yield* captureHeaders(bearer)
 
       expect(headers.get("authorization")).toBe("Bearer env-bearer-token")
@@ -1837,22 +1837,19 @@ describe("Bedrock Converse route", () => {
     ),
   )
 
-  it.effect("auth: sigv4 ignores an ambient bearer token from configure and settings", () =>
+  it.effect("auth: sigv4 ignores an ambient bearer token", () =>
     Effect.gen(function* () {
-      const configured = AmazonBedrock.configure({ auth: "sigv4", baseURL: "https://bedrock-runtime.test" }).model(
-        "anthropic.claude-3-5-sonnet-20240620-v1:0",
+      const headers = yield* captureHeaders(
+        AmazonBedrock.model("anthropic.claude-3-5-sonnet-20240620-v1:0", {
+          auth: "sigv4",
+          baseURL: "https://bedrock-runtime.test",
+        }),
       )
-      const fromSettings = AmazonBedrock.model("anthropic.claude-3-5-sonnet-20240620-v1:0", {
-        auth: "sigv4",
-        baseURL: "https://bedrock-runtime.test",
-      })
-
-      for (const target of [configured, fromSettings]) {
-        const headers = yield* captureHeaders(target)
-        expect(headers.get("authorization")).toContain("Credential=AKIACHAINEXAMPLE/")
-        expect(headers.get("authorization")).toContain("/ap-southeast-2/bedrock/aws4_request")
-      }
-      expect(() => AmazonBedrock.configure({ auth: "sigv4", apiKey: "k" })).toThrow(
+      expect(headers.get("authorization")).toContain("Credential=AKIACHAINEXAMPLE/")
+      expect(headers.get("authorization")).toContain("/ap-southeast-2/bedrock/aws4_request")
+      expect(() =>
+        AmazonBedrock.model("anthropic.claude-3-5-sonnet-20240620-v1:0", { auth: "sigv4", apiKey: "k" }),
+      ).toThrow(
         expect.objectContaining({
           _tag: "ProviderConfiguration",
           provider: "amazon-bedrock",
@@ -1872,13 +1869,13 @@ describe("Bedrock Converse route", () => {
 
   it.effect("derives the endpoint region from AWS_REGION then AWS_DEFAULT_REGION", () =>
     Effect.gen(function* () {
-      const fromRegion = AmazonBedrock.configure({ apiKey: "k" }).model("anthropic.claude-3-5-sonnet-20240620-v1:0")
-      expect(fromRegion.route.endpoint.baseURL).toBe("https://bedrock-runtime.eu-central-1.amazonaws.com")
+      const fromRegion = AmazonBedrock.model("anthropic.claude-3-5-sonnet-20240620-v1:0", { apiKey: "k" })
+      expect(fromRegion.baseURL).toBe("https://bedrock-runtime.eu-central-1.amazonaws.com")
 
       const fromDefault = yield* Effect.sync(() =>
-        AmazonBedrock.configure({ apiKey: "k" }).model("anthropic.claude-3-5-sonnet-20240620-v1:0"),
+        AmazonBedrock.model("anthropic.claude-3-5-sonnet-20240620-v1:0", { apiKey: "k" }),
       ).pipe(withProcessEnv({ AWS_REGION: undefined }))
-      expect(fromDefault.route.endpoint.baseURL).toBe("https://bedrock-runtime.us-gov-west-1.amazonaws.com")
+      expect(fromDefault.baseURL).toBe("https://bedrock-runtime.us-gov-west-1.amazonaws.com")
     }).pipe(withProcessEnv({ ...noAmbientAWS, AWS_REGION: "eu-central-1", AWS_DEFAULT_REGION: "us-gov-west-1" })),
   )
 
@@ -2431,7 +2428,7 @@ describe("Bedrock Converse route", () => {
 const RECORDING_REGION = process.env.BEDROCK_RECORDING_REGION ?? "us-east-1"
 
 const recordedModel = () =>
-  AmazonBedrock.configure({
+  AmazonBedrock.model(process.env.BEDROCK_MODEL_ID ?? "us.amazon.nova-micro-v1:0", {
     // Most newer Anthropic models on Bedrock require a cross-region inference
     // profile (`us.` prefix). Nova does not require an Anthropic use-case form
     // and is on-demand-throughput accessible by default for most accounts.
@@ -2441,7 +2438,7 @@ const recordedModel = () =>
       secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "fixture",
       sessionToken: process.env.AWS_SESSION_TOKEN,
     },
-  }).model(process.env.BEDROCK_MODEL_ID ?? "us.amazon.nova-micro-v1:0")
+  })
 
 const recorded = recordedTests({
   prefix: "bedrock-converse",

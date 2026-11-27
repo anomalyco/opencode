@@ -13,10 +13,12 @@ import * as TestToolRuntime from "./lib/tool-runtime.js"
 import { dynamicResponse, scriptedResponses } from "./lib/http.js"
 import { deltaChunk, finishChunk, toolCallChunk } from "./lib/openai-chunks.js"
 import { sseEvents } from "./lib/sse.js"
+import { apiModel } from "./lib/model.js"
 
-const model = OpenAIChat.route
-  .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-  .model({ id: "gpt-4o-mini" })
+const model = apiModel(OpenAIChat.api, "gpt-4o-mini", {
+  baseURL: "https://api.openai.test/v1/",
+  auth: Auth.bearer("test"),
+})
 const Json = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(Json)
 
@@ -607,9 +609,11 @@ describe("LLMClient tools", () => {
       yield* TestToolRuntime.runTools({
         request: {
           ...baseRequest,
-          model: AnthropicMessages.route
-            .with({ auth: Auth.header("x-api-key", "test") })
-            .model({ id: "claude-sonnet-4-5" }),
+          model: apiModel(AnthropicMessages.api, "claude-sonnet-4-5", {
+            baseURL: "https://api.anthropic.com/v1",
+            provider: "anthropic",
+            auth: Auth.header("x-api-key", "test"),
+          }),
         },
         tools: [get_weather],
       }).pipe(Stream.runCollect, Effect.provide(layer))
@@ -683,9 +687,10 @@ describe("LLMClient tools", () => {
 
       yield* TestToolRuntime.runTools({
         request: ai.request({
-          model: OpenAIResponses.route
-            .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-            .model({ id: "gpt-5.5" }),
+          model: apiModel(OpenAIResponses.api, "gpt-5.5", {
+            baseURL: "https://api.openai.test/v1/",
+            auth: Auth.bearer("test"),
+          }),
           prompt: "Use the tool.",
           providerOptions: { store: false, include: ["reasoning.encrypted_content"] },
         }),
@@ -872,9 +877,11 @@ describe("LLMClient tools", () => {
         yield* TestToolRuntime.runTools({
           request: {
             ...baseRequest,
-            model: AnthropicMessages.route
-              .with({ auth: Auth.header("x-api-key", "test") })
-              .model({ id: "claude-sonnet-4-5" }),
+            model: apiModel(AnthropicMessages.api, "claude-sonnet-4-5", {
+              baseURL: "https://api.anthropic.com/v1",
+              provider: "anthropic",
+              auth: Auth.header("x-api-key", "test"),
+            }),
           },
           tools: [],
         }).pipe(Stream.runCollect, Effect.provide(layer)),

@@ -1,8 +1,11 @@
 import { Effect, Schema } from "effect"
+import { Api } from "../api.js"
+import { Capabilities } from "../capabilities.js"
 import { Protocol } from "../route/protocol.js"
 import type { CompactOperation } from "../route/client.js"
 import type { LLMRequest } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
+import { OpenResponsesChannel } from "./open-responses-channel.js"
 import { JsonObject, optionalNull, ProviderShared } from "./shared.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 import { ResponsesCompaction } from "./utils/responses-compaction.js"
@@ -10,6 +13,7 @@ import { OpenAIFreeform } from "./openai-freeform.js"
 
 const ADAPTER = "xai-responses"
 const NAME = "xAI Responses"
+const WEBSOCKET_ROTATE_AFTER_MS = 24 * 60 * 1000
 
 const XAIResponsesHostedToolItem = Schema.Union([
   Schema.StructWithRest(
@@ -62,7 +66,7 @@ const fromRequest = Effect.fn("XAIResponses.fromRequest")(function* (request: LL
     return yield* ProviderShared.unsupportedOperation({
       operation: "in-band-compaction",
       provider: request.model.provider,
-      route: request.model.route.id,
+      route: request.model.api.id,
       message: "xAI requires explicit compaction through ai.compact; automatic context management is not supported",
     })
   const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(request.providerOptions ?? {})
@@ -103,5 +107,24 @@ const compactFlat = ResponsesCompaction.make(adapter, (request) =>
 // past calls to namespaced tools then carry the same names as on those steps, and /compact reads the prefix they cached.
 export const compact: CompactOperation = (request, executor, options) =>
   compactFlat(ProviderShared.flattenRequest(request), executor, options)
+
+export const api = Api.make({
+  name: "responses",
+  id: ADAPTER,
+  protocol,
+  path: OpenResponses.PATH,
+  transport: OpenResponsesChannel.transport<typeof Body.Type>({
+    id: ADAPTER,
+    name: NAME,
+    rotateAfterMs: WEBSOCKET_ROTATE_AFTER_MS,
+    // xAI continues a chain only from stored responses: with `store: false` (the default) `previous_response_id`
+    // fails with "Response with id=… not found", so those steps are sent in full over the reused connection. It also
+    // rejects `instructions` next to `previous_response_id` and keeps the instructions of the response it continues.
+    continuation: ({ instructions: _instructions, ...request }) => (request.store === false ? undefined : request),
+  }),
+  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+  capabilities: Capabilities.defaults<Capabilities.Responses>(),
+  compact: { endpoint: compact },
+})
 
 export * as XAIResponses from "./xai-responses.js"

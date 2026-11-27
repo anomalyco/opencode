@@ -237,7 +237,7 @@ describe("Decision", () => {
   it.effect("places media in the OpenRouter state and downloads URL media first", () =>
     ai.decision
       .generate({
-        model: OpenRouter.configure({ apiKey: "openrouter-key", baseURL: "https://openrouter.test/api/v1" }).decision(
+        model: OpenRouter.media({ apiKey: "openrouter-key", baseURL: "https://openrouter.test/api/v1" }).decision(
           "cloudflare/clef-omni",
         ),
         input: [
@@ -295,7 +295,7 @@ describe("Decision", () => {
   it.effect("sends PDFs as file parts and audio by its OpenRouter format name in the OpenRouter state", () =>
     ai.decision
       .generate({
-        model: OpenRouter.configure({ apiKey: "openrouter-key", baseURL: "https://openrouter.test/api/v1" }).decision(
+        model: OpenRouter.media({ apiKey: "openrouter-key", baseURL: "https://openrouter.test/api/v1" }).decision(
           "google/gemini-decision-1",
         ),
         input: [
@@ -322,7 +322,7 @@ describe("Decision", () => {
   it.effect("returns a System One host's refusals as per-question errors", () =>
     ai.decision
       .generate({
-        model: OpenRouter.configure({ apiKey: "openrouter-key", baseURL: "https://openrouter.test/api/v1" }).decision(
+        model: OpenRouter.media({ apiKey: "openrouter-key", baseURL: "https://openrouter.test/api/v1" }).decision(
           "openai/gpt-6-luna-decisions",
         ),
         input: [{ type: "text", text: "hello" }],
@@ -356,7 +356,7 @@ describe("Decision", () => {
   it.effect("puts media in a user message inside the Baseten state", () =>
     ai.decision
       .generate({
-        model: Baseten.configure({ apiKey: "baseten-key" }).decision("decision-models/baseten-mammoth-27b-latest"),
+        model: Baseten.media({ apiKey: "baseten-key" }).decision("decision-models/baseten-mammoth-27b-latest"),
         input: [
           { type: "text", text: "Photo:" },
           { type: "media", media: png },
@@ -396,7 +396,7 @@ describe("Decision", () => {
   it.effect("decides through OpenAI Decisions", () =>
     ai.decision
       .generate({
-        model: OpenAI.configure({
+        model: OpenAI.media({
           apiKey: "openai-key",
           baseURL: "https://openai.test/v1",
           queryParams: { api: "v1" },
@@ -500,7 +500,7 @@ describe("Decision", () => {
   it.effect("returns OpenAI refusals as per-question errors", () =>
     ai.decision
       .generate({
-        model: OpenAI.configure({ apiKey: "openai-key" }).decision("gpt-6-luna"),
+        model: OpenAI.media({ apiKey: "openai-key" }).decision("gpt-6-luna"),
         input: [{ type: "text", text: "hello" }],
         questions: [
           { name: "greeting", type: "predicate", instructions: "Is this a greeting?" },
@@ -539,7 +539,7 @@ describe("Decision", () => {
     Effect.gen(function* () {
       const error = yield* ai.decision
         .generate({
-          model: OpenAI.configure({ apiKey: "openai-key" }).decision("gpt-6-luna"),
+          model: OpenAI.media({ apiKey: "openai-key" }).decision("gpt-6-luna"),
           input: [{ type: "media", media: Media.base64("AAAA", "audio/wav") }],
           questions: [{ name: "speech", type: "predicate", instructions: "Is someone speaking?" }],
         })
@@ -552,7 +552,7 @@ describe("Decision", () => {
   it.effect("decides through Google Decisions with every media kind", () =>
     ai.decision
       .generate({
-        model: Google.configure({
+        model: Google.media({
           apiKey: "google-key",
           baseURL: "https://google.test/v1beta",
           http: { query: { trace: "1" } },
@@ -643,7 +643,7 @@ describe("Decision", () => {
   it.effect("sends an ultra_high resolution to Google Decisions images but not video", () =>
     ai.decision
       .generate({
-        model: Google.configure({ apiKey: "google-key" }).decision("gemini-decision-1"),
+        model: Google.media({ apiKey: "google-key" }).decision("gemini-decision-1"),
         input: [
           { type: "media", media: png },
           { type: "media", media: Media.url("https://assets.test/clip.mp4", { mediaType: "video/mp4" }) },
@@ -668,7 +668,7 @@ describe("Decision", () => {
     Effect.gen(function* () {
       const error = yield* ai.decision
         .generate({
-          model: Google.configure({ apiKey: "google-key" }).decision("gemini-decision-1"),
+          model: Google.media({ apiKey: "google-key" }).decision("gemini-decision-1"),
           input: [{ type: "text", text: "blocked" }],
           questions: [{ name: "safe", type: "predicate", instructions: "Is this safe?" }],
         })
@@ -697,7 +697,7 @@ describe("Decision", () => {
 
   it.effect("rejects media Google Decisions can't read before network I/O", () =>
     Effect.gen(function* () {
-      const model = Google.configure({ apiKey: "google-key" }).decision("gemini-decision-1")
+      const model = Google.media({ apiKey: "google-key" }).decision("gemini-decision-1")
       const question = [{ name: "readable", type: "predicate", instructions: "Is it readable?" }] as const
       const csv = yield* ai.decision
         .generate({ model, input: [{ type: "media", media: Media.base64("YSxi", "text/csv") }], questions: question })
@@ -725,7 +725,7 @@ describe("Decision", () => {
   it.effect("decides through Vercel AI Gateway's OpenAI Decisions endpoint", () =>
     ai.decision
       .generate({
-        model: VercelAIGateway.configure({ apiKey: "gateway-key", baseURL: "https://gateway.test/v1/" }).decision(
+        model: VercelAIGateway.media({ apiKey: "gateway-key", baseURL: "https://gateway.test/v1/" }).decision(
           "typesafe-ai/jev",
         ),
         input: [{ type: "text", text: "refund" }],
@@ -797,7 +797,7 @@ describe("Decision", () => {
   it.effect("appends predicate criteria to OpenAI Decisions instructions", () =>
     ai.decision
       .generate({
-        model: OpenAI.configure({ apiKey: "openai-key" }).decision("gpt-6-luna"),
+        model: OpenAI.media({ apiKey: "openai-key" }).decision("gpt-6-luna"),
         input: [{ type: "text", text: "I returned the sweater because I prefer green." }],
         questions: [defect, { ...defect, name: "only_true", criteria: { true: "The product is broken." } }],
       })
@@ -834,7 +834,7 @@ describe("Decision", () => {
   it.effect("puts media in Clef's top-level lists on Cloudflare Run", () =>
     ai.decision
       .generate({
-        model: CloudflareWorkersAI.configure({ accountId: "test-account", apiKey: "cloudflare-key" }).decision(
+        model: CloudflareWorkersAI.media({ accountId: "test-account", apiKey: "cloudflare-key" }).decision(
           "@cf/cloudflare/clef-omni",
         ),
         input: [
@@ -874,7 +874,7 @@ describe("Decision", () => {
   it.effect("surfaces Cloudflare Run errors", () =>
     ai.decision
       .generate({
-        model: CloudflareWorkersAI.configure({ accountId: "test-account", apiKey: "cloudflare-key" }).decision(
+        model: CloudflareWorkersAI.media({ accountId: "test-account", apiKey: "cloudflare-key" }).decision(
           "@cf/cloudflare/clef",
         ),
         input: [{ type: "text", text: "refund" }],
@@ -916,7 +916,7 @@ describe("Decision", () => {
   it.effect("fails the call when an answer picks an option that wasn't offered", () =>
     ai.decision
       .generate({
-        model: OpenAI.configure({ apiKey: "openai-key" }).decision("gpt-6-luna"),
+        model: OpenAI.media({ apiKey: "openai-key" }).decision("gpt-6-luna"),
         input: [{ type: "text", text: "refund" }],
         questions: [{ name: "tone", type: "choice", instructions: "Tone?", choices: [{ value: "calm" }] }],
       })

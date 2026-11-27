@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { LanguageModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
+import { Auth } from "@opencode/ai/route"
 import { Effect, Fiber, Layer, Ref, Stream } from "effect"
 import { Integration } from "@opencode/core/integration"
 import { Credential } from "@opencode/core/credential"
@@ -61,7 +62,15 @@ describe("Provider and Model", () => {
               : undefined,
             {
               loadAISDK: () =>
-                Effect.succeed(LanguageModel.make({ id: modelID, provider: providerID, route: OpenAIChat.route })),
+                Effect.succeed(
+                  LanguageModel.make({
+                    id: modelID,
+                    provider: providerID,
+                    api: OpenAIChat.api,
+                    baseURL: OpenAIChat.DEFAULT_BASE_URL,
+                    auth: Auth.none,
+                  }),
+                ),
             },
           )
 

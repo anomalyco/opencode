@@ -7,11 +7,13 @@ import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
-const cohere = Cohere.configure({ apiKey: "fixture" })
+const cohere = Cohere.cohere.with({ apiKey: "fixture" })
 
 test("Cohere exposes native and compatible endpoints without Core remapping", () => {
-  expect(cohere.model("command-a-03-2025").route.endpoint.baseURL).toBe("https://api.cohere.com/v2")
-  expect(cohere.chat("command-a-03-2025").route.endpoint.baseURL).toBe("https://api.cohere.ai/compatibility/v1")
+  expect(cohere.model("command-a-03-2025").baseURL).toBe("https://api.cohere.com/v2")
+  expect(cohere.model("command-a-03-2025", { api: "chat-completions" }).baseURL).toBe(
+    "https://api.cohere.ai/compatibility/v1",
+  )
   expect(
     Cohere.model("command-a-03-2025", { apiKey: "fixture", headers: { "X-Test": "yes" }, body: { temperature: 0 } })
       .options?.http,
@@ -68,7 +70,7 @@ it.effect("Cohere compatibility omits unsupported OpenAI fields", () =>
   Effect.gen(function* () {
     const prepared = yield* compileRequest(
       ai.request({
-        model: cohere.chat("command-a-reasoning-08-2025"),
+        model: cohere.model("command-a-reasoning-08-2025", { api: "chat-completions" }),
         prompt: "Hello",
         providerOptions: { reasoningEffort: "high" },
         maxTokens: 64,

@@ -4,9 +4,11 @@ import { ai } from "../src/effect.js"
 import { AnthropicMessages, Gemini, OpenAIChat, OpenAIResponses } from "../src/protocols.js"
 import { ToolSchemaProjection } from "../src/protocols/utils/tool-schema.js"
 import { toDefinitions, tool } from "../src/tool.js"
+import type { Capabilities } from "../src/capabilities.js"
 import { Auth } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import { it } from "./lib/effect.js"
+import { apiModel } from "./lib/model.js"
 
 const Token = Schema.Struct({ token: Schema.String })
 const token = {
@@ -128,14 +130,18 @@ describe("tool schema projections", () => {
 
   for (const scenario of [
     {
-      route: OpenAIChat.route,
+      api: OpenAIChat.api,
+      provider: "openai",
+      baseURL: "https://api.openai.com/v1",
       tools: schemas.map((parameters, index) => ({
         type: "function",
         function: { name: names[index], parameters },
       })),
     },
     {
-      route: OpenAIResponses.route,
+      api: OpenAIResponses.api,
+      provider: "openai",
+      baseURL: "https://api.openai.com/v1",
       tools: schemas.map((parameters, index) => ({
         type: "function",
         name: names[index],
@@ -143,14 +149,18 @@ describe("tool schema projections", () => {
       })),
     },
     {
-      route: AnthropicMessages.route,
+      api: AnthropicMessages.api,
+      provider: "anthropic",
+      baseURL: "https://api.anthropic.com/v1",
       tools: schemas.map((input_schema, index) => ({
         name: names[index],
         input_schema,
       })),
     },
     {
-      route: Gemini.route,
+      api: Gemini.api,
+      provider: "google",
+      baseURL: "https://generativelanguage.googleapis.com/v1beta",
       tools: [
         {
           functionDeclarations: schemas.map((parametersJsonSchema, index) => ({
@@ -161,11 +171,15 @@ describe("tool schema projections", () => {
       ],
     },
   ]) {
-    it.effect(`${scenario.route.id} prepares empty Effect Struct tools alongside nonempty and raw schemas`, () =>
+    it.effect(`${scenario.api.id} prepares empty Effect Struct tools alongside nonempty and raw schemas`, () =>
       Effect.gen(function* () {
         const prepared = yield* compileRequest(
           ai.request({
-            model: scenario.route.with({ auth: Auth.bearer("test") }).model({ id: "test-model" }),
+            model: apiModel(scenario.api, "test-model", {
+              provider: scenario.provider,
+              baseURL: scenario.baseURL,
+              auth: Auth.bearer("test"),
+            }),
             prompt: "Use a tool.",
             tools: [
               tool({
@@ -286,11 +300,13 @@ describe("tool schema projections", () => {
 
   it.effect("declares every tool schema root as an object", () =>
     Effect.gen(function* () {
-      const route = OpenAIChat.route.with({
-        endpoint: { baseURL: "https://api.openai.test/v1/" },
-        auth: Auth.bearer("test"),
-      })
-      const parameters = (inputSchema: Record<string, unknown>, model = route.model({ id: "gpt-6-luna" })) =>
+      const chat = (id: string, capabilities?: Capabilities.ChatCompletions) =>
+        apiModel(OpenAIChat.api, id, {
+          baseURL: "https://api.openai.test/v1/",
+          auth: Auth.bearer("test"),
+          capabilities,
+        })
+      const parameters = (inputSchema: Record<string, unknown>, model = chat("gpt-6-luna")) =>
         compileRequest(
           ai.request({
             model,
@@ -330,10 +346,10 @@ describe("tool schema projections", () => {
       expect(yield* parameters(union)).toEqual({ type: "object", ...union })
       expect(yield* parameters(exclusive)).toEqual({ type: "object", ...exclusive })
       expect(yield* parameters(object)).toEqual(object)
-      expect(yield* parameters({}, route.model({ id: "gpt-6-luna", compatibility: { sanitizer: "none" } }))).toEqual({
+      expect(yield* parameters({}, chat("gpt-6-luna", { tools: { sanitizer: "none" } }))).toEqual({
         type: "object",
       })
-      expect(yield* parameters({ properties: { mode: { enum: ["fast"] } } }, route.model({ id: "kimi-k3" }))).toEqual({
+      expect(yield* parameters({ properties: { mode: { enum: ["fast"] } } }, chat("kimi-k3"))).toEqual({
         type: "object",
         properties: { mode: { type: "string", enum: ["fast"] } },
       })
@@ -342,16 +358,18 @@ describe("tool schema projections", () => {
 
   it.effect("selects tool schema handling from the model name unless compatibility is explicit", () =>
     Effect.gen(function* () {
-      const route = OpenAIChat.route.with({
-        endpoint: { baseURL: "https://api.openai.test/v1/" },
-        auth: Auth.bearer("test"),
-      })
+      const chat = (id: string, capabilities?: Capabilities.ChatCompletions) =>
+        apiModel(OpenAIChat.api, id, {
+          baseURL: "https://api.openai.test/v1/",
+          auth: Auth.bearer("test"),
+          capabilities,
+        })
       const original = {
         type: "object",
         required: ["mode", "missing"],
         properties: { mode: { enum: ["fast", "safe"] } },
       }
-      const parameters = (model: ReturnType<typeof route.model>) =>
+      const parameters = (model: ReturnType<typeof chat>) =>
         compileRequest(
           ai.request({
             model,
@@ -362,29 +380,23 @@ describe("tool schema projections", () => {
       const gemini = { ...original, required: ["mode"] }
       const moonshot = { ...original, properties: { mode: { type: "string", enum: ["fast", "safe"] } } }
 
-      expect(yield* parameters(route.model({ id: "google/Gemini-3.8-Flash" }))).toEqual(gemini)
-      expect(
-        yield* parameters(route.model({ id: "my-tuned-endpoint", compatibility: { sanitizer: "gemini" } })),
-      ).toEqual(gemini)
-      expect(
-        yield* parameters(route.model({ id: "google/gemini-3.8-flash", compatibility: { sanitizer: "moonshot" } })),
-      ).toEqual(moonshot)
-      expect(yield* parameters(route.model({ id: "moonshotai/Kimi-K3" }))).toEqual(moonshot)
-      expect(
-        yield* parameters(route.model({ id: "google/gemini-3.8-flash", compatibility: { sanitizer: "none" } })),
-      ).toEqual(original)
-      expect(
-        yield* parameters(route.model({ id: "moonshotai/Kimi-K3", compatibility: { sanitizer: "none" } })),
-      ).toEqual(original)
-      expect(yield* parameters(route.model({ id: "gpt-6-luna" }))).toEqual(original)
+      expect(yield* parameters(chat("google/Gemini-3.8-Flash"))).toEqual(gemini)
+      expect(yield* parameters(chat("my-tuned-endpoint", { tools: { sanitizer: "gemini" } }))).toEqual(gemini)
+      expect(yield* parameters(chat("google/gemini-3.8-flash", { tools: { sanitizer: "moonshot" } }))).toEqual(moonshot)
+      expect(yield* parameters(chat("moonshotai/Kimi-K3"))).toEqual(moonshot)
+      expect(yield* parameters(chat("google/gemini-3.8-flash", { tools: { sanitizer: "none" } }))).toEqual(original)
+      expect(yield* parameters(chat("moonshotai/Kimi-K3", { tools: { sanitizer: "none" } }))).toEqual(original)
+      expect(yield* parameters(chat("gpt-6-luna"))).toEqual(original)
     }),
   )
 
   it.effect("applies model compatibility without changing schema semantics", () =>
     Effect.gen(function* () {
-      const model = OpenAIChat.route
-        .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-        .model({ id: "kimi-k2", compatibility: { sanitizer: "moonshot" } })
+      const model = apiModel(OpenAIChat.api, "kimi-k2", {
+        baseURL: "https://api.openai.test/v1/",
+        auth: Auth.bearer("test"),
+        capabilities: { tools: { sanitizer: "moonshot" } },
+      })
       const prepared = yield* compileRequest(
         ai.request({
           model,

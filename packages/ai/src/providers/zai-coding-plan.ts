@@ -1,86 +1,32 @@
-import type { ProviderPackage } from "../provider-package.js"
-import { AnthropicMessages } from "../protocols/anthropic-messages.js"
-import { OpenAIChat } from "../protocols/openai-chat.js"
-import { OpenResponses } from "../protocols/open-responses.js"
-import { ZAIChat } from "../protocols/zai-chat.js"
-import { ZAIMessages } from "../protocols/zai-messages.js"
-import type { ProviderAuthOption } from "../route/auth-options.js"
-import { Route } from "../route/client.js"
-import { Endpoint } from "../route/endpoint.js"
-import { Framing } from "../route/framing.js"
-import { ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
-import { bearerRouteDefaults, toConfig } from "./settings.js"
+import { Provider } from "../provider.js"
+import { chatCompletions } from "./zai-coding-plan/chat.js"
+import { messages } from "./zai-coding-plan/messages.js"
+import { responses } from "./zai-coding-plan/responses.js"
+import {
+  shared,
+  type ChatOptionsInput,
+  type MessagesOptionsInput,
+  type ResponsesOptionsInput,
+  type Settings,
+} from "./zai-coding-plan/shared.js"
 
-export const id = ProviderID.make("zai-coding-plan")
+export type {
+  ChatOptionsInput,
+  MessagesOptionsInput,
+  ResponsesOptionsInput,
+  Settings,
+} from "./zai-coding-plan/shared.js"
 
-export type ChatOptionsInput = ZAIChat.OptionsInput
-export type MessagesOptionsInput = ZAIMessages.OptionsInput
-export type ResponsesOptionsInput = { readonly reasoningEffort?: ZAIChat.ReasoningEffort }
+export const zaiCodingPlan = Provider.make({ ...shared, apis: [chatCompletions, messages, responses] })
 
-export type Config = Omit<RequestOptions, "providerOptions"> &
-  ProviderAuthOption<"optional"> & {
-    /** Overrides the selected API's complete base URL. */
-    readonly baseURL?: string
-    readonly providerOptions?: ChatOptionsInput | MessagesOptionsInput | ResponsesOptionsInput
-  }
-
-export type Settings<Options = ChatOptionsInput> = ProviderPackage.Settings &
-  Options & {
-    readonly apiKey?: string | false
-    readonly baseURL?: string
-  }
-
-const chatRoute = Route.make({
-  id: "zai-coding-chat",
-  provider: id,
-  providerMetadataKey: "zai",
-  protocol: ZAIChat.protocol,
-  endpoint: Endpoint.path("/chat/completions", { baseURL: "https://api.z.ai/api/coding/paas/v4" }),
-  framing: OpenAIChat.framing,
-})
-const messagesRoute = Route.make({
-  id: "zai-coding-messages",
-  provider: id,
-  providerMetadataKey: "zai",
-  protocol: ZAIMessages.protocol,
-  endpoint: Endpoint.path("/messages", { baseURL: "https://api.z.ai/api/anthropic/v1" }),
-  framing: AnthropicMessages.framing,
-  headers: () => ({ "anthropic-version": "2023-06-01" }),
-})
-const responsesRoute = Route.make({
-  id: "zai-coding-responses",
-  provider: id,
-  providerMetadataKey: "zai",
-  protocol: OpenResponses.protocol,
-  endpoint: Endpoint.path("/responses", { baseURL: "https://api.z.ai/api/v1" }),
-  framing: Framing.sse,
-})
-
-export const routes = [chatRoute, messagesRoute, responsesRoute]
-
-export const configure = (input: Config = {}) => {
-  const defaults = bearerRouteDefaults(input, "ZAI_API_KEY")
-  const chat = (modelID: string | ModelID) =>
-    chatRoute.with(defaults).model<ChatOptionsInput>({
-      id: modelID,
-      compatibility: ZAIChat.compatibility,
-      capabilities: ZAIChat.capabilities,
-    })
-  const messages = (modelID: string | ModelID) =>
-    messagesRoute
-      .with(defaults)
-      .model<MessagesOptionsInput>({ id: modelID, compatibility: { requireSignature: false } })
-  const responses = (modelID: string | ModelID) =>
-    responsesRoute.with(defaults).model<ResponsesOptionsInput>({ id: modelID })
-  return { id, model: chat, chat, messages, responses, configure }
-}
-
-export const provider = configure()
-export const chat = provider.chat
-export const messages = provider.messages
-export const responses = provider.responses
-
-export const model: ProviderPackage.Model<Settings, ChatOptionsInput> = (modelID, settings) =>
-  configure(toConfig(settings)).model(modelID)
+export const model = Provider.entrypoint<Settings, ChatOptionsInput>(zaiCodingPlan)
+export const messagesModel = Provider.entrypoint<Settings<MessagesOptionsInput>, MessagesOptionsInput>(
+  zaiCodingPlan,
+  "messages",
+)
+export const responsesModel = Provider.entrypoint<Settings<ResponsesOptionsInput>, ResponsesOptionsInput>(
+  zaiCodingPlan,
+  "responses",
+)
 
 export * as ZAICodingPlan from "./zai-coding-plan.js"

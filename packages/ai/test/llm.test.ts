@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { ai, CacheHint, GENERATION_KEYS, LLMEvent, LLMResponse, ToolEntry, ToolNamespace } from "../src/effect.js"
+import type { AnyApi } from "../src/api.js"
 import { OpenAI } from "../src/providers.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import * as OpenAIResponses from "../src/protocols/openai-responses.js"
+import { Auth } from "../src/route/auth.js"
 import {
   Message,
   LanguageModel,
@@ -15,15 +17,16 @@ import {
   UserMessage,
 } from "../src/schema/index.js"
 import { fixedResponse } from "./lib/http.js"
+import { apiModel } from "./lib/model.js"
 import { sseEvents } from "./lib/sse.js"
 
-const chatRoute = OpenAIChat.route
-const responsesRoute = OpenAIResponses.route
+const fake = (api: AnyApi = OpenAIChat.api) =>
+  LanguageModel.make({ id: "fake-model", provider: "fake", api, baseURL: "https://api.openai.com/v1", auth: Auth.none })
 
 describe("llm constructors", () => {
   test("normalizes recursive tool namespaces", () => {
     const request = ai.request({
-      model: LanguageModel.make({ id: "fake-model", provider: "fake", route: responsesRoute }),
+      model: fake(OpenAIResponses.api),
       prompt: "Hello",
       tools: [
         {
@@ -71,7 +74,7 @@ describe("llm constructors", () => {
   test("normalizes ergonomic input into a plain request", () => {
     const request = ai.request({
       id: "req_1",
-      model: LanguageModel.make({ id: "fake-model", provider: "fake", route: chatRoute }),
+      model: fake(),
       system: "You are concise.",
       prompt: "Say hello.",
     })
@@ -88,7 +91,7 @@ describe("llm constructors", () => {
   test("edits requests with a spread or by passing them back to ai.request", () => {
     const base = ai.request({
       id: "req_1",
-      model: LanguageModel.make({ id: "fake-model", provider: "fake", route: chatRoute }),
+      model: fake(),
       prompt: "Say hello.",
     })
     const updated = {
@@ -126,17 +129,15 @@ describe("llm constructors", () => {
     ])
   })
 
-  test("keeps request options separate from route defaults", () => {
+  test("keeps request options separate from model defaults", () => {
     const request = ai.request({
-      model: LanguageModel.make({
-        id: "fake-model",
-        provider: "fake",
-        route: chatRoute.with({
+      model: LanguageModel.update(fake(), {
+        options: {
           maxTokens: 100,
           temperature: 1,
           providerOptions: { store: false, metadata: { model: true } },
           http: { body: { metadata: { model: true } }, headers: { "x-shared": "model" }, query: { model: "1" } },
-        }),
+        },
       }),
       prompt: "Say hello.",
       temperature: 0,
@@ -153,46 +154,38 @@ describe("llm constructors", () => {
   })
 
   test("updates canonical models from the model datatype", () => {
-    const base = LanguageModel.make({
-      id: "fake-model",
-      provider: "fake",
-      route: chatRoute,
-    })
+    const base = fake()
     const updated = LanguageModel.update(base, {
-      route: responsesRoute,
       options: { maxTokens: 20 },
-      compatibility: { sanitizer: "gemini", requireFinishReason: false },
+      capabilities: { tools: { sanitizer: "gemini" }, output: { requireFinishReason: false } },
     })
-    const updatedInput = LanguageModel.input(updated)
 
     expect(updated).toBeInstanceOf(LanguageModel)
     expect(String(updated.id)).toBe("fake-model")
-    expect(updated.route).toBe(responsesRoute)
+    expect(String(updated.provider)).toBe("fake")
+    expect(updated.api).toBe(base.api)
     expect(updated.options?.maxTokens).toBe(20)
-    expect(updated.compatibility).toEqual({ sanitizer: "gemini", requireFinishReason: false })
-    expect(updatedInput.options).toBe(updated.options)
-    expect(updatedInput.compatibility).toBe(updated.compatibility)
-    expect(String(updatedInput.provider)).toBe("fake")
+    expect(updated.capabilities).toEqual({ tools: { sanitizer: "gemini" }, output: { requireFinishReason: false } })
     expect(LanguageModel.update(updated, {})).toBe(updated)
   })
 
-  test("carries model defaults and compatibility through route model selection", () => {
-    const model = chatRoute.model({
-      id: "kimi-k2",
+  test("carries model defaults and capabilities through provider model selection", () => {
+    const model = apiModel(OpenAIChat.api, "kimi-k2", {
+      baseURL: "https://api.openai.com/v1",
       options: {
         maxTokens: 1_024,
         stop: ["END"],
         providerOptions: { parallelToolCalls: false },
         http: { body: { extra_body: true } },
       },
-      compatibility: { sanitizer: "moonshot" },
+      capabilities: { tools: { sanitizer: "moonshot" } },
     })
     const request = ai.request({ model, prompt: "Say hello." })
 
     expect(request.model.options).toMatchObject({ maxTokens: 1_024, stop: ["END"] })
     expect(request.model.options?.providerOptions).toEqual({ parallelToolCalls: false })
     expect(request.model.options?.http).toEqual({ body: { extra_body: true } })
-    expect(request.model.compatibility).toEqual({ sanitizer: "moonshot" })
+    expect(request.model.capabilities).toEqual({ tools: { sanitizer: "moonshot" } })
     expect(request.maxTokens).toBeUndefined()
     expect(request.providerOptions).toBeUndefined()
     expect(request.http).toBeUndefined()
@@ -213,11 +206,7 @@ describe("llm constructors", () => {
     expect(ToolChoice.make("required")).toEqual(new ToolChoice({ type: "required" }))
     expect(
       ai.request({
-        model: LanguageModel.make({
-          id: "fake-model",
-          provider: "fake",
-          route: chatRoute,
-        }),
+        model: fake(),
         prompt: "Use tools if needed.",
         toolChoice: "required",
       }).toolChoice,
@@ -239,7 +228,7 @@ describe("llm constructors", () => {
       { type: "text", text: "Use parameterized SQL.", cache: new CacheHint({ type: "ephemeral" }) },
     ])
     const request = ai.request({
-      model: LanguageModel.make({ id: "fake-model", provider: "fake", route: chatRoute }),
+      model: fake(),
       system: "Initial operator prompt.",
       messages: [Message.user("Review this."), update],
     })
@@ -254,7 +243,9 @@ describe("llm constructors", () => {
   })
 
   test("generates and streams from input or a prebuilt request", async () => {
-    const model = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" }).chat("gpt-4o-mini")
+    const model = OpenAI.openai
+      .with({ apiKey: "test", baseURL: "https://openai.test/v1" })
+      .model("gpt-4o-mini", { api: "chat-completions" })
     const layer = fixedResponse(
       sseEvents({ choices: [{ delta: { content: "Hello" } }] }, { choices: [{ delta: {}, finish_reason: "stop" }] }),
     )

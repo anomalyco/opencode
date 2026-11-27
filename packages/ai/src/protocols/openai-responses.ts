@@ -428,7 +428,9 @@ const compact = {
   trigger: ResponsesCheckpoint.make(checkpointBody),
 }
 
+/** OpenAI Responses. */
 export const api = Api.make({
+  name: "responses",
   id: ADAPTER,
   protocol,
   path: PATH,
@@ -437,7 +439,5 @@ export const api = Api.make({
   capabilities: Capabilities.defaults<Capabilities.Responses>(),
   compact,
 })
-
-export const route = Api.route(api.at(DEFAULT_BASE_URL), { provider: "openai" })
 
 export * as OpenAIResponses from "./openai-responses.js"

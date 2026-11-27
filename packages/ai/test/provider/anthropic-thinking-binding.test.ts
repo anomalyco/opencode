@@ -1,8 +1,8 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
 import { ai } from "../../src/effect.js"
-import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
-import { compileRequest } from "../../src/route/client.js"
+import { Anthropic } from "../../src/providers/anthropic.js"
+import { compileRequest, prepareTransport } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 
 for (const [id, enabled] of [
@@ -22,12 +22,12 @@ for (const [id, enabled] of [
   it.effect(`thinking-binding defaults for ${id}`, () =>
     Effect.gen(function* () {
       const request = ai.request({
-        model: AnthropicMessages.route.model({ id }),
+        model: Anthropic.model(id, { apiKey: "test" }),
         prompt: "Hello",
         headers: { "anthropic-beta": "existing-beta" },
       })
       const compiled = yield* compileRequest(request)
-      const prepared = yield* AnthropicMessages.route.prepareTransport(compiled.body, request)
+      const prepared = yield* prepareTransport(compiled.body, request)
       expect(compiled.body.thinking).toEqual(
         enabled ? { type: "adaptive", block_binding: { prefix_mismatch_behavior: "drop_block" } } : undefined,
       )
@@ -48,12 +48,12 @@ it.effect("preserves explicit thinking settings and combines required beta heade
       { type: "adaptive", block_binding: { prefix_mismatch_behavior: "error" } },
     ] as const) {
       const request = ai.request({
-        model: AnthropicMessages.route.model({ id: "claude-fable-5-1" }),
+        model: Anthropic.model("claude-fable-5-1", { apiKey: "test" }),
         prompt: "Hello",
         providerOptions: { thinking, contextManagement: { edits: [{ type: "compact_20260112" }] } },
       })
       const compiled = yield* compileRequest(request)
-      const prepared = yield* AnthropicMessages.route.prepareTransport(compiled.body, request)
+      const prepared = yield* prepareTransport(compiled.body, request)
       expect(compiled.body.thinking).toEqual(thinking)
       expect(prepared.request.headers["anthropic-beta"]).toBe(
         thinking.type === "disabled" || thinking.type === "between_tools"

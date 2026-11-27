@@ -5,7 +5,7 @@ import { OpenRouter } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { queuedPoll } from "./queued-recording.js"
 
-const model = OpenRouter.configure({
+const model = OpenRouter.media({
   apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
 }).video("x-ai/grok-imagine-video-1.5-lite")
 

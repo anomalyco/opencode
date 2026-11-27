@@ -20,7 +20,7 @@ import {
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { AnthropicMessages, OpenAIResponses } from "@opencode/ai/protocols"
 import { TestLLM, compileRequest } from "@opencode/ai/testing"
-import { RequestExecutor } from "@opencode/ai/route"
+import { RequestExecutor, Auth } from "@opencode/ai/route"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Database } from "@opencode/core/database/database"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -141,9 +141,16 @@ const testLLM = Layer.unwrap(
 type ModelLimit = { readonly context: number; readonly input?: number; readonly output: number }
 const defaultModelLimit = { context: 200_000, output: 32_000 }
 const modelLimits = new Map<string, ModelLimit>()
-const testModel = (id: string, limit: ModelLimit = defaultModelLimit) => {
+const testModel = (id: string, limit: ModelLimit = defaultModelLimit): LanguageModel => {
   modelLimits.set(id, limit)
-  return LanguageModel.make({ id, provider: "fake", route: OpenAIChat.route })
+  return LanguageModel.make({
+    id,
+    provider: "fake",
+    api: OpenAIChat.api,
+    baseURL: OpenAIChat.DEFAULT_BASE_URL,
+    auth: Auth.none,
+    metadataKey: "openai",
+  })
 }
 const model = testModel("fake-model")
 const defaultSystem = SessionSystemPrompt.make([])
@@ -2124,7 +2131,9 @@ describe("SessionRunnerLLM", () => {
     })
     const select = (s: Scenario, agent: Agent.ID) => s.session.switchAgent({ sessionID, agent })
     const texts = (request: LLMRequest) =>
-      request.messages.flatMap((message) => message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])))
+      request.messages.flatMap((message) =>
+        message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])),
+      )
     const prompt = (request: LLMRequest | undefined) => request?.system.map((part) => part.text).join("\n") ?? ""
 
     scenario("puts a starting agent's instructions in the system prompt", function* (s) {
@@ -2290,7 +2299,13 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("uses the selected model family prompt when the agent does not override it", function* (s) {
-    s.currentModel = LanguageModel.make({ id: "gpt-5", provider: "openai", route: OpenAIChat.route })
+    s.currentModel = LanguageModel.make({
+      id: "gpt-5",
+      provider: "openai",
+      api: OpenAIChat.api,
+      baseURL: OpenAIChat.DEFAULT_BASE_URL,
+      auth: Auth.none,
+    })
     yield* s.admit("First")
 
     yield* s.llm.push(TestLLM.text("Done", "text-provider-prompt"))
@@ -2304,7 +2319,13 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("uses the selected model family prompt when the agent system override is empty", function* (s) {
-    s.currentModel = LanguageModel.make({ id: "gpt-5", provider: "openai", route: OpenAIChat.route })
+    s.currentModel = LanguageModel.make({
+      id: "gpt-5",
+      provider: "openai",
+      api: OpenAIChat.api,
+      baseURL: OpenAIChat.DEFAULT_BASE_URL,
+      auth: Auth.none,
+    })
     const agent = yield* Agent.Service
     yield* agent.transform((editor) =>
       editor.update(Agent.ID.make("build"), (agent) => {
@@ -2618,7 +2639,14 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("records a same-model effort switch as a cache-preserving effort update", function* (s) {
-    s.currentModel = LanguageModel.make({ id: "claude-opus-5", provider: "anthropic", route: AnthropicMessages.route })
+    s.currentModel = LanguageModel.make({
+      id: "claude-opus-5",
+      provider: "anthropic",
+      api: AnthropicMessages.api,
+      baseURL: "https://api.anthropic.com/v1",
+      auth: Auth.none,
+      capabilities: AnthropicMessages.api.capabilities,
+    })
     const model = { id: ID.make("claude-opus-5"), providerID: Provider.ID.make("anthropic") }
     yield* s.bus.publish(SessionEvent.ModelSelected, {
       sessionID,
@@ -3120,9 +3148,9 @@ describe("SessionRunnerLLM", () => {
     })
   })
 
-  for (const route of [OpenAIChat.route, OpenAIResponses.route, AnthropicMessages.route]) {
+  for (const api of [OpenAIChat.api, OpenAIResponses.api, AnthropicMessages.api]) {
     for (const reason of ["manual", "auto"] as const) {
-      scenario(`preserves the session request prefix during ${reason} compaction (${route.id})`, function* (s) {
+      scenario(`preserves the session request prefix during ${reason} compaction (${api.id})`, function* (s) {
         const agents = yield* Agent.Service
         const hooks = yield* PluginHooks.Service
         const compaction = yield* SessionCompaction.Service
@@ -3132,9 +3160,12 @@ describe("SessionRunnerLLM", () => {
         const agentID = Agent.ID.make("reviewer")
         const variant = Model.VariantID.make("test-variant")
         s.currentModel = LanguageModel.make({
-          id: route === AnthropicMessages.route ? "claude-sonnet-4-6" : "gpt-5",
-          provider: route === AnthropicMessages.route ? "anthropic" : "openai",
-          route,
+          id: api === AnthropicMessages.api ? "claude-sonnet-4-6" : "gpt-5",
+          provider: api === AnthropicMessages.api ? "anthropic" : "openai",
+          api,
+          baseURL: api === AnthropicMessages.api ? "https://api.anthropic.com/v1" : OpenAIChat.DEFAULT_BASE_URL,
+          auth: Auth.none,
+          capabilities: api.capabilities,
         })
         yield* agents.transform((editor) =>
           editor.update(agentID, (agent) => {
@@ -3223,7 +3254,7 @@ describe("SessionRunnerLLM", () => {
         // Compare wire content without the cache breakpoints that move to the new final message.
         const before = yield* compileRequest({ ...normal, cache: "none" })
         const after = yield* compileRequest({ ...compact, cache: "none" })
-        const key = route === OpenAIResponses.route ? "input" : "messages"
+        const key = api === OpenAIResponses.api ? "input" : "messages"
         const input = Schema.decodeUnknownSync(Schema.Array(Schema.Unknown))
         const prefix = input(before.body[key])
         expect(input(after.body[key]).slice(0, prefix.length)).toEqual([...prefix])
@@ -3890,7 +3921,13 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("automatically persists native windows, retains earlier users, and waits for fresh usage", function* (s) {
-    s.currentModel = LanguageModel.make({ id: "native", provider: "openai", route: OpenAIResponses.route })
+    s.currentModel = LanguageModel.make({
+      id: "native",
+      provider: "openai",
+      api: OpenAIResponses.api,
+      baseURL: OpenAIResponses.DEFAULT_BASE_URL,
+      auth: Auth.none,
+    })
     modelLimits.set("native", { context: 11_000, output: 1_000 })
     s.compaction = { type: "native" }
     const agents = yield* Agent.Service
@@ -3942,7 +3979,13 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("recovers an overflowing native window with another native compaction", function* (s) {
-    s.currentModel = LanguageModel.make({ id: "native", provider: "openai", route: OpenAIResponses.route })
+    s.currentModel = LanguageModel.make({
+      id: "native",
+      provider: "openai",
+      api: OpenAIResponses.api,
+      baseURL: OpenAIResponses.DEFAULT_BASE_URL,
+      auth: Auth.none,
+    })
     modelLimits.set("native", { context: 11_000, output: 1_000 })
     s.compaction = { type: "native" }
     const checkpoint = (encrypted: string) =>

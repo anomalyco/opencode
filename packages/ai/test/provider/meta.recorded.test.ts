@@ -6,7 +6,11 @@ import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
 
-const meta = Meta.configure({ apiKey: process.env.META_API_KEY ?? "fixture" })
+const settings = { apiKey: process.env.META_API_KEY ?? "fixture" }
+const meta = {
+  responses: (modelID: string) => Meta.model(modelID, settings),
+  chat: (modelID: string) => Meta.chatModel(modelID, settings),
+}
 const modelID = "muse-spark-1.3"
 const weather = ToolDefinition.make({
   name: "lookup_weather",

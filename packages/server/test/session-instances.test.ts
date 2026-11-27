@@ -24,6 +24,7 @@ import { Context, Duration, Effect, Layer, LayerMap, Schema } from "effect"
 import { HttpEffect, HttpRouter, HttpServer } from "effect/http"
 import { LanguageModel, LLMClient } from "../../ai/src/effect"
 import { OpenAIChat } from "../../ai/src/protocols/openai-chat"
+import { Auth } from "../../ai/src/route"
 import { TestLLM } from "../../ai/src/testing"
 import { tempGlobalLayer } from "../../core/test/fixture/global"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
@@ -44,7 +45,13 @@ it.live(
       const commands: Session.ID[] = []
       const llm = yield* TestLLM.Test.pipe(Effect.provide(TestLLM.testLayer()))
       const model = SessionRunnerModel.resolved(
-        LanguageModel.make({ id: "instance-model", provider: "test", route: OpenAIChat.route }),
+        LanguageModel.make({
+          id: "instance-model",
+          provider: "test",
+          api: OpenAIChat.api,
+          baseURL: OpenAIChat.DEFAULT_BASE_URL,
+          auth: Auth.none,
+        }),
         {
           capabilities: { tools: true, input: ["text"], output: ["text"] },
           cost: [],
@@ -61,7 +68,10 @@ it.live(
         Watcher.node.replace(Watcher.configured({ enabled: false })),
         llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
         SessionRunnerModel.node.replace(
-          Layer.succeed(SessionRunnerModel.Service, { select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })), resolve: () => Effect.succeed(model) }),
+          Layer.succeed(SessionRunnerModel.Service, {
+            select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
+            resolve: () => Effect.succeed(model),
+          }),
         ),
         Instance.node.replace(
           makeGlobalNode({
@@ -216,7 +226,9 @@ it.live(
 
       for (const config of configs) {
         yield* llm.push(TestLLM.text(`generated ${config.id}`, config.tool))
-        expect((yield* sessions.generate({ sessionID: config.id, prompt: "summarize" })).text).toBe(`generated ${config.id}`)
+        expect((yield* sessions.generate({ sessionID: config.id, prompt: "summarize" })).text).toBe(
+          `generated ${config.id}`,
+        )
         yield* sessions.command({ sessionID: config.id, command: "instance-check", text: "" })
         expect(yield* sessions.inbox(config.id)).toMatchObject([
           { type: "user", payload: { text: `command ${config.tool} [${config.tool}]` } },

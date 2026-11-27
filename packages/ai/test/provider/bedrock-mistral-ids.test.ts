@@ -3,10 +3,11 @@ import { Effect, Schema } from "effect"
 import { ai, Message, ToolCallPart } from "../../src/effect.js"
 import { AmazonBedrock } from "../../src/providers.js"
 import { BedrockConverse } from "../../src/protocols/bedrock-converse.js"
+import { Auth } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 
-const bedrock = AmazonBedrock.configure({ baseURL: "https://bedrock.test", apiKey: "test-key" })
+const bedrock = AmazonBedrock.amazonBedrock.with({ baseURL: "https://bedrock.test", auth: Auth.bearer("test-key") })
 const history = (ids: string[]) => [
   Message.user("Read every label"),
   Message.assistant(ids.map((id, index) => ToolCallPart.make({ id, name: "lookup", input: { label: index } }))),

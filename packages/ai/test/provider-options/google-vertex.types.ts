@@ -1,7 +1,7 @@
 import { ai } from "../../src/effect.js"
 import { GoogleVertex } from "../../src/providers.js"
 
-const model = GoogleVertex.provider.configure({ apiKey: "test" }).model("gemini-2.5-pro")
+const model = GoogleVertex.model("gemini-2.5-pro", { apiKey: "test" })
 
 ai.request({
   model,

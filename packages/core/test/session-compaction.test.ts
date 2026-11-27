@@ -10,6 +10,7 @@ import {
   type LLMRequest,
 } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
+import { Auth } from "@opencode/ai/route"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { llmClient } from "@opencode/core/effect/app-node-platform"
@@ -60,7 +61,9 @@ let reject: ((request: LLMRequest) => boolean) | undefined
 const model = LanguageModel.make({
   id: "summary-model",
   provider: "test",
-  route: OpenAIChat.route,
+  api: OpenAIChat.api,
+  baseURL: OpenAIChat.DEFAULT_BASE_URL,
+  auth: Auth.none,
 })
 const cost = [
   {
@@ -1705,7 +1708,13 @@ const runningShell = (sessionID: Session.ID, shellID: string, command = `run ${s
 
 /** Keeps a background subagent job for `childSessionID` running until the test ends. */
 const runningSubagent = (parentSessionID: Session.ID, childSessionID: Session.ID) =>
-  runningJob(childSessionID, { kind: "subagent", parentSessionID, childSessionID, agent: "explore", description: "Run" })
+  runningJob(childSessionID, {
+    kind: "subagent",
+    parentSessionID,
+    childSessionID,
+    agent: "explore",
+    description: "Run",
+  })
 
 const runningJob = (id: string, recovery: Job.Recovery) =>
   Effect.gen(function* () {

@@ -15,7 +15,7 @@ describe("Alibaba Images", () => {
   it.effect("generates through the Model Studio multimodal generation API", () =>
     Effect.gen(function* () {
       const response = yield* ai.image.generate({
-        model: Alibaba.configure({
+        model: Alibaba.media({
           region: "cn-beijing",
           workspaceID: "llm-fixture",
           apiKey: "test",
@@ -118,10 +118,12 @@ describe("Alibaba Images", () => {
         { region: "us-east-1" },
         { baseURL: "https://token-plan.example/api/v1" },
       ])
-        yield* ai.image.generate({
-          model: Alibaba.configure({ ...config, apiKey: "test" }).image("qwen-image-2.0"),
-          prompt: "test",
-        }).pipe(Effect.provide(layer))
+        yield* ai.image
+          .generate({
+            model: Alibaba.media({ ...config, apiKey: "test" }).image("qwen-image-2.0"),
+            prompt: "test",
+          })
+          .pipe(Effect.provide(layer))
 
       expect(urls).toEqual([
         "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
@@ -133,16 +135,14 @@ describe("Alibaba Images", () => {
 
   it.effect("rejects provider refs and unsupported common fields before sending", () =>
     Effect.gen(function* () {
-      const model = Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).image("qwen-image-2.0")
+      const model = Alibaba.media({ region: "ap-southeast-1", apiKey: "test" }).image("qwen-image-2.0")
       const layer = ImageClient.layer.pipe(Layer.provide(fixedResponse(result, json)))
-      const ref = yield* ai.image.generate({ model, prompt: "test", images: [Media.ref("alibaba", "file-1")] }).pipe(
-        Effect.provide(layer),
-        Effect.flip,
-      )
-      const tooLarge = yield* ai.image.generate({ model, prompt: "test", aspect: "1:1", resolution: "4K" }).pipe(
-        Effect.provide(layer),
-        Effect.flip,
-      )
+      const ref = yield* ai.image
+        .generate({ model, prompt: "test", images: [Media.ref("alibaba", "file-1")] })
+        .pipe(Effect.provide(layer), Effect.flip)
+      const tooLarge = yield* ai.image
+        .generate({ model, prompt: "test", aspect: "1:1", resolution: "4K" })
+        .pipe(Effect.provide(layer), Effect.flip)
 
       expect(ref.reason._tag).toBe("InvalidRequest")
       expect(tooLarge.reason).toMatchObject({
@@ -156,7 +156,7 @@ describe("Alibaba Images", () => {
 
   it.effect("rejects invalid response structures", () =>
     Effect.gen(function* () {
-      const model = Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).image("qwen-image-2.0")
+      const model = Alibaba.media({ region: "ap-southeast-1", apiKey: "test" }).image("qwen-image-2.0")
       const payloads = [
         {},
         { output: { choices: [] } },
@@ -176,22 +176,27 @@ describe("Alibaba Images", () => {
 
   it.effect("surfaces Model Studio error messages", () =>
     Effect.gen(function* () {
-      const error = yield* ai.image.generate({
-        model: Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).image("qwen-image-2.0"),
-        prompt: "test",
-      }).pipe(
-        Effect.provide(
-          ImageClient.layer.pipe(
-            Layer.provide(
-              fixedResponse(JSON.stringify({ code: "InvalidParameter", message: "Model not exist.", request_id: "r" }), {
-                status: 400,
-                ...json,
-              }),
+      const error = yield* ai.image
+        .generate({
+          model: Alibaba.media({ region: "ap-southeast-1", apiKey: "test" }).image("qwen-image-2.0"),
+          prompt: "test",
+        })
+        .pipe(
+          Effect.provide(
+            ImageClient.layer.pipe(
+              Layer.provide(
+                fixedResponse(
+                  JSON.stringify({ code: "InvalidParameter", message: "Model not exist.", request_id: "r" }),
+                  {
+                    status: 400,
+                    ...json,
+                  },
+                ),
+              ),
             ),
           ),
-        ),
-        Effect.flip,
-      )
+          Effect.flip,
+        )
 
       expect([error.reason._tag, error.reason.message]).toEqual(["InvalidRequest", "Model not exist."])
     }),

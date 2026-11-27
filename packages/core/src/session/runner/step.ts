@@ -96,7 +96,7 @@ export const make = Effect.gen(function* () {
       assistantMessageID: input.assistantMessageID,
       agent: input.agent,
       model: input.model.ref,
-      providerMetadataKey: input.model.model.route.providerMetadataKey ?? input.model.model.provider,
+      providerMetadataKey: input.model.model.metadataKey,
       pendingSnapshot: Fiber.join(pendingStartSnapshot),
       started,
     })

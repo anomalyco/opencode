@@ -1,6 +1,8 @@
 import { Effect, Schema } from "effect"
+import { Api } from "../api.js"
+import { Capabilities } from "../capabilities.js"
+import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
-import type { LanguageModelCompatibility, Capabilities } from "../schema/index.js"
 import { OpenAIChat } from "./openai-chat.js"
 import { JsonObject, ProviderShared } from "./shared.js"
 import { cacheControl } from "./utils/cache.js"
@@ -38,14 +40,6 @@ const Options = Schema.Struct({
   ),
 })
 export type OptionsInput = typeof Options.Type
-
-export const compatibility = {
-  maxTokensField: "max_completion_tokens",
-  reasoningField: "reasoning_content",
-  zaiToolStream: false,
-} satisfies LanguageModelCompatibility
-
-export const capabilities = { tools: { strict: false } } satisfies Capabilities
 
 export const protocol = Protocol.make({
   id: "alibaba-chat",
@@ -90,6 +84,19 @@ export const protocol = Protocol.make({
     }),
   },
   stream: OpenAIChat.protocol.stream,
+})
+
+export const api = Api.make({
+  name: "chat-completions",
+  id: "alibaba-chat",
+  protocol,
+  path: OpenAIChat.PATH,
+  framing: Framing.sse,
+  capabilities: Capabilities.defaults<Capabilities.ChatCompletions>({
+    tools: { strict: false, stream: false },
+    reasoning: { field: "reasoning_content" },
+    output: { maxTokensField: "max_completion_tokens" },
+  }),
 })
 
 export * as AlibabaChat from "./alibaba-chat.js"

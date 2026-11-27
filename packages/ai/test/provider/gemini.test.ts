@@ -12,27 +12,19 @@ import {
   ToolDefinition,
   Usage,
 } from "../../src/effect.js"
-import { Auth, LLMClient } from "../../src/route.js"
+import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
-import * as Gemini from "../../src/protocols/gemini.js"
 import { Google } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents, sseRaw } from "../lib/sse.js"
 
-const model = Gemini.route
-  .with({
-    endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
-    auth: Auth.header("x-goog-api-key", "test"),
-  })
-  .model({ id: "gemini-2.5-flash" })
+const model = Google.model("gemini-2.5-flash", { apiKey: "test", baseURL: "https://generativelanguage.test/v1beta/" })
 
-const gemini3 = Gemini.route
-  .with({
-    endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
-    auth: Auth.header("x-goog-api-key", "test"),
-  })
-  .model({ id: "gemini-3-flash-preview" })
+const gemini3 = Google.model("gemini-3-flash-preview", {
+  apiKey: "test",
+  baseURL: "https://generativelanguage.test/v1beta/",
+})
 
 const request = ai.request({
   id: "req_1",
@@ -303,12 +295,10 @@ describe("Gemini route", () => {
       const legacy = yield* compileRequest(ai.request({ model, messages }))
       const older = yield* compileRequest(
         ai.request({
-          model: Gemini.route
-            .with({
-              endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
-              auth: Auth.header("x-goog-api-key", "test"),
-            })
-            .model({ id: "gemini-1.5-flash" }),
+          model: Google.model("gemini-1.5-flash", {
+            apiKey: "test",
+            baseURL: "https://generativelanguage.test/v1beta/",
+          }),
           messages,
         }),
       )
@@ -337,12 +327,7 @@ describe("Gemini route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: Gemini.route
-            .with({
-              endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
-              auth: Auth.header("x-goog-api-key", "test"),
-            })
-            .model({ id: "gemma-3-27b-it" }),
+          model: Google.model("gemma-3-27b-it", { apiKey: "test", baseURL: "https://generativelanguage.test/v1beta/" }),
           messages: [
             Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
             Message.tool({ id: "call_1", name: "lookup", result: "done", resultType: "text" }),
@@ -639,7 +624,7 @@ describe("Gemini route", () => {
 
       const interactions = yield* compileRequest(
         ai.request({
-          model: Google.configure({ apiKey: "test" }).interactions("gemini-3-flash-preview"),
+          model: Google.google.with({ apiKey: "test" }).model("gemini-3-flash-preview", { api: "interactions" }),
           messages,
         }),
       )
@@ -2016,12 +2001,7 @@ describe("Gemini route", () => {
 
 describe("Gemini response continuation", () => {
   const continuedRequest = ai.request({
-    model: Gemini.route
-      .with({
-        endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
-        auth: Auth.header("x-goog-api-key", "test"),
-      })
-      .model({ id: "gemini-test" }),
+    model: Google.model("gemini-test", { apiKey: "test", baseURL: "https://generativelanguage.test/v1beta/" }),
     prompt: "Count.",
     tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
   })

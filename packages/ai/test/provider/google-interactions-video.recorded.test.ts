@@ -5,7 +5,7 @@ import { Google } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { queuedPoll } from "./queued-recording.js"
 
-const model = Google.configure({
+const model = Google.media({
   apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture",
 }).video("gemini-omni-1.2-flash")
 

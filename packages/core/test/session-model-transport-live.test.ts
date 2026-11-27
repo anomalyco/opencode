@@ -7,7 +7,7 @@ import {
   type ChannelObservation,
   type WebSocketChannelExchange,
 } from "@opencode/ai/route"
-import { configure } from "@opencode/ai/providers/openai"
+import { OpenAI } from "@opencode/ai/providers"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { WebSocketConstructor } from "@opencode/core/effect/websocket-constructor"
 import { Session } from "@opencode/schema/session"
@@ -108,10 +108,10 @@ describe("SessionModelTransport local WebSocket server", () => {
         Effect.gen(function* () {
           const transport = yield* SessionModelTransport.Service
           const executor = transport.bind(sessionID)
-          const model = configure({
+          const model = OpenAI.model("gpt-5.2", {
             baseURL: server.url.replace(/^ws/, "http").replace(/responses$/, ""),
             apiKey: "local",
-          }).responses("gpt-5.2")
+          })
           const client = LLMClient.Service
           const layer = LLMClient.layer.pipe(
             Layer.provide(
@@ -188,10 +188,10 @@ describe("SessionModelTransport local WebSocket server", () => {
         Effect.gen(function* () {
           const transport = yield* SessionModelTransport.Service
           const executor = transport.bind(sessionID)
-          const model = configure({
+          const model = OpenAI.model("gpt-5.2", {
             baseURL: server.url.replace(/^ws/, "http").replace(/responses$/, ""),
             apiKey: "local",
-          }).responses("gpt-5.2")
+          })
           const layer = LLMClient.layer.pipe(
             Layer.provide(
               Layer.succeed(

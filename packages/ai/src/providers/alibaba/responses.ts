@@ -1,3 +1,9 @@
-import type { Alibaba } from "../alibaba.js"
-export { responsesModel as model } from "../alibaba.js"
-export type Settings = Alibaba.Settings<Alibaba.ResponsesOptionsInput>
+import { AlibabaResponses } from "../../protocols/alibaba-responses.js"
+import { Provider } from "../../provider.js"
+import { paths, provider, type Settings as LocatedSettings } from "./shared.js"
+
+export type Settings = LocatedSettings<AlibabaResponses.OptionsInput>
+
+export const responses = AlibabaResponses.api
+
+export const model = Provider.entrypoint<Settings, AlibabaResponses.OptionsInput>(provider(responses, paths.compatible))

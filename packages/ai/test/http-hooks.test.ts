@@ -11,14 +11,15 @@ import { handlerLayer } from "./lib/http.js"
 // Adding a method to the client fails "lists every method" until it is listed here: as a provider call, with a way to
 // call it, or as a local helper.
 
-const openai = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" })
-const video = XAI.configure({ apiKey: "test", baseURL: "https://xai.test/v1" }).video("grok-imagine-video-1.5")
+const openai = OpenAI.openai.with({ apiKey: "test", baseURL: "https://openai.test/v1" })
+const openaiMedia = OpenAI.media({ apiKey: "test", baseURL: "https://openai.test/v1" })
+const video = XAI.media({ apiKey: "test", baseURL: "https://xai.test/v1" }).video("grok-imagine-video-1.5")
 const transcription = AssemblyAI.configure({ apiKey: "test", baseURL: "https://assemblyai.test" }).transcription(
   "universal-2",
 )
 const audio = Media.bytes(Uint8Array.from([0x49, 0x44, 0x33, 1, 2, 3]), "audio/mpeg")
-const image = openai.image("gpt-image-2")
-const chat = { model: openai.chat("gpt-4o-mini"), prompt: "Hello" }
+const image = openaiMedia.image("gpt-image-2")
+const chat = { model: openai.model("gpt-4o-mini", { api: "chat-completions" }), prompt: "Hello" }
 
 type Client = ReturnType<typeof AI.make>
 type Call = (ai: Client, http: HttpMiddleware) => Promise<unknown> | AsyncIterable<unknown>
@@ -27,7 +28,7 @@ const providerCalls: Record<string, Call> = {
   generate: (ai, http) => ai.generate(chat, { http }),
   stream: (ai, http) => ai.stream(chat, { http }),
   loop: (ai, http) => ai.loop(chat, { http }),
-  compact: (ai, http) => ai.compact(ai.request({ model: openai.responses("gpt-5"), prompt: "Hello" }), { http }),
+  compact: (ai, http) => ai.compact(ai.request({ model: openai.model("gpt-5"), prompt: "Hello" }), { http }),
   "image.generate": (ai, http) => ai.image.generate({ model: image, prompt: "A lighthouse" }, { http }),
   "image.stream": (ai, http) => ai.image.stream({ model: image, prompt: "A lighthouse" }, { http }),
   "image.start": (ai, http) => ai.image.start({ model: image, prompt: "A lighthouse" }, { http }),
@@ -37,22 +38,22 @@ const providerCalls: Record<string, Call> = {
   "decision.generate": (ai, http) =>
     ai.decision.generate(
       {
-        model: openai.decision("gpt-6-luna"),
+        model: openaiMedia.decision("gpt-6-luna"),
         input: "Is this a greeting? hello",
         questions: [{ name: "greeting", type: "choice", instructions: "Greeting?", choices: [{ value: true }] }],
       },
       { http },
     ),
   "embedding.generate": (ai, http) =>
-    ai.embedding.generate({ model: openai.embedding("text-embedding-3-small"), values: ["hello"] }, { http }),
+    ai.embedding.generate({ model: openaiMedia.embedding("text-embedding-3-small"), values: ["hello"] }, { http }),
   "video.start": (ai, http) => ai.video.start({ model: video, prompt: "A balloon" }, { http }),
   "video.status": (ai, http) => ai.video.status(video, "job", { http }),
   "video.result": (ai, http) => ai.video.result(video, "job", { http }),
   "video.cancel": (ai, http) => ai.video.cancel(video, "job", { http }),
   "experimental.speech.generate": (ai, http) =>
-    ai.experimental.speech.generate({ model: openai.speech("gpt-4o-mini-tts"), text: "Hello" }, { http }),
+    ai.experimental.speech.generate({ model: openaiMedia.speech("gpt-4o-mini-tts"), text: "Hello" }, { http }),
   "experimental.speech.stream": (ai, http) =>
-    ai.experimental.speech.stream({ model: openai.speech("gpt-4o-mini-tts"), text: "Hello" }, { http }),
+    ai.experimental.speech.stream({ model: openaiMedia.speech("gpt-4o-mini-tts"), text: "Hello" }, { http }),
   "experimental.transcription.generate": (ai, http) =>
     ai.experimental.transcription.generate({ model: transcription, audio }, { http }),
   "experimental.transcription.stream": (ai, http) =>

@@ -2,14 +2,14 @@ import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
 import { ai } from "../src/effect.js"
 import { Auth, LLMClient } from "../src/route.js"
-import { AnthropicMessages } from "../src/protocols/anthropic-messages.js"
+import { Anthropic } from "../src/providers/anthropic.js"
 import { it } from "./lib/effect.js"
 import { fixedResponse } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
 
-const model = AnthropicMessages.route
-  .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
-  .model({ id: "claude-sonnet-4-5" })
+const model = Anthropic.anthropic
+  .with({ baseURL: "https://api.anthropic.test/v1/", auth: Auth.header("x-api-key", "test") })
+  .model("claude-sonnet-4-5")
 
 const frames = [
   { type: "message_start", message: { usage: { input_tokens: 5 } } },

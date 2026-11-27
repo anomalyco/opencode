@@ -70,7 +70,7 @@ const fixture = Effect.gen(function* () {
     const resolver = yield* ModelResolver.Service
     const resolved = yield* resolver.resolve(Model.Ref.make({ providerID, id: modelID }))
     if (!resolved) throw new Error("Expected Poe model")
-    expect(resolved.model.route.id).toBe("openai-compatible-chat")
+    expect(resolved.model.api.id).toBe("openai-compatible-chat")
     return yield* LLMClient.stream(ai.request({ model: resolved.model, prompt: "Hello" })).pipe(
       Stream.runCollect,
       Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer), Layer.fresh)),

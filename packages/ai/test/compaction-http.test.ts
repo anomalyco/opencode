@@ -69,9 +69,9 @@ testEffect(runtimeLayer(FetchHttpClient.layer)).live("compaction and a tool loop
       ),
       (server) => Effect.sync(() => server.stop(true)),
     )
-    const model = OpenAI.configure({ apiKey: "fixture", baseURL: `http://127.0.0.1:${server.port}/v1` }).responses(
-      "fixture",
-    )
+    const model = OpenAI.openai
+      .with({ apiKey: "fixture", baseURL: `http://127.0.0.1:${server.port}/v1` })
+      .model("fixture")
     const request = ai.request({
       model,
       prompt: "original",

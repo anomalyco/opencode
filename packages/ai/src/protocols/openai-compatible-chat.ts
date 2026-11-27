@@ -1,22 +1,9 @@
-import { Route } from "../route/client.js"
-import { Endpoint } from "../route/endpoint.js"
-import * as OpenAIChat from "./openai-chat.js"
-
-const ADAPTER = "openai-compatible-chat"
+import { OpenAIChat } from "./openai-chat.js"
 
 /**
- * Route for non-OpenAI providers that expose an OpenAI Chat-compatible
- * `/chat/completions` endpoint. Reuses `OpenAIChat.protocol` end-to-end and
- * overrides only the route id so providers can be resolved per-family without
- * colliding with native OpenAI. Provider helpers configure the route endpoint
- * before model selection.
+ * OpenAI Chat as non-OpenAI hosts serve it at `/chat/completions`. Reuses the OpenAI Chat protocol end-to-end
+ * with its own id, so diagnostics tell it apart from native OpenAI.
  */
-export const route = Route.make({
-  id: ADAPTER,
-  providerMetadataKey: "openai",
-  protocol: OpenAIChat.protocol,
-  endpoint: Endpoint.path("/chat/completions"),
-  framing: OpenAIChat.framing,
-})
+export const api = OpenAIChat.api.extend({ id: "openai-compatible-chat" })
 
 export * as OpenAICompatibleChat from "./openai-compatible-chat.js"

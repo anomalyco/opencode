@@ -7,7 +7,9 @@ import { LLMClient, RequestExecutor } from "../../src/route.js"
 import { recordedTests } from "../recorded-test.js"
 import { weatherTool } from "../recorded-scenarios.js"
 
-const model = Google.configure({ apiKey: process.env.GEMINI_API_KEY ?? "fixture" }).interactions("gemini-3.8-flash")
+const model = Google.google
+  .with({ apiKey: process.env.GEMINI_API_KEY ?? "fixture" })
+  .model("gemini-3.8-flash", { api: "interactions" })
 const recorded = recordedTests({
   prefix: "google-interactions",
   provider: "google",

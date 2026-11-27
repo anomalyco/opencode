@@ -1,13 +1,9 @@
-import { configure } from "../google.js"
-import type { ProviderPackage } from "../../provider-package.js"
-import type { GoogleInteractions } from "../../protocols/google-interactions.js"
-import { toConfig } from "../settings.js"
+import { GoogleInteractions } from "../../protocols/google-interactions.js"
+import { Provider } from "../../provider.js"
+import { shared, type ConnectionSettings } from "./shared.js"
 
-export type Settings = ProviderPackage.Settings &
-  GoogleInteractions.ProviderOptionsInput & {
-    readonly apiKey?: string | false
-    readonly baseURL?: string
-  }
+export type Settings = ConnectionSettings & GoogleInteractions.ProviderOptionsInput
 
-export const model: ProviderPackage.Model<Settings, GoogleInteractions.ProviderOptionsInput> = (modelID, settings) =>
-  configure(toConfig(settings)).interactions(modelID)
+export const model = Provider.entrypoint<Settings, GoogleInteractions.ProviderOptionsInput>(
+  Provider.make({ ...shared, apis: [GoogleInteractions.api] }),
+)

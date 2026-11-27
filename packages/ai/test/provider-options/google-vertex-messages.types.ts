@@ -1,7 +1,7 @@
 import { ai } from "../../src/effect.js"
 import { GoogleVertexMessages } from "../../src/providers.js"
 
-const model = GoogleVertexMessages.configure({ accessToken: "test", project: "project" }).model("claude")
+const model = GoogleVertexMessages.model("claude", { accessToken: "test", project: "project" })
 
 ai.request({ model, prompt: "Hello", providerOptions: { effort: "medium" } })
 

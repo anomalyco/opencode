@@ -1,4 +1,4 @@
-import { Api, type Binding, type CapabilitiesOf, type CompactOf } from "./api.js"
+import { Api, type AnyApi, type CapabilitiesOf, type CompactOf } from "./api.js"
 import { Capabilities } from "./capabilities.js"
 import type { ProviderPackage } from "./provider-package.js"
 import { Auth } from "./route/auth.js"
@@ -8,6 +8,7 @@ import {
   LanguageModel,
   mergeProviderOptions,
   mergeRequestOptions,
+  ProviderConfigurationError,
   ProviderID,
   type ProviderOptions,
   type RequestOptions,
@@ -53,29 +54,47 @@ export interface SettingsHook {
   readonly patch: (values: Readonly<Record<string, unknown>>) => Patch
 }
 
-export interface Input<Apis extends Record<string, Binding>> {
+export interface Input<Apis extends ReadonlyArray<AnyApi>> {
   readonly id: string
+  /** Shared by every API unless one's `configure({ baseURL })` says otherwise. */
+  readonly baseURL?: string
   readonly auth: Authentication
-  /** The APIs this provider serves. The first one is the default. */
+  /** The APIs this provider serves. The first one is the default. Names must be unique. */
   readonly apis: Apis
   readonly settings?: SettingsHook
 }
 
-export interface ModelOptions<A extends Binding> {
-  readonly capabilities?: CapabilitiesOf<A["api"]>
+export type ApiName<Apis extends ReadonlyArray<AnyApi>> = Apis[number]["name"]
+
+type ApiNamed<Apis extends ReadonlyArray<AnyApi>, Name> = Extract<Apis[number], { readonly name: Name }>
+
+/** The first name listed twice, or never. */
+type Duplicate<Apis extends ReadonlyArray<AnyApi>, Seen extends string = never> = Apis extends readonly [
+  infer Head extends AnyApi,
+  ...infer Rest extends ReadonlyArray<AnyApi>,
+]
+  ? Head["name"] extends Seen
+    ? Head["name"]
+    : Duplicate<Rest, Seen | Head["name"]>
+  : never
+
+export interface ModelOptions<Apis extends ReadonlyArray<AnyApi>, Name> {
+  readonly api?: Name
+  readonly capabilities?: CapabilitiesOf<ApiNamed<Apis, Name>>
   readonly options?: RequestOptions
 }
 
-export interface Definition<Apis extends Record<string, Binding> = Record<string, Binding>> {
+export interface Definition<Apis extends ReadonlyArray<AnyApi> = ReadonlyArray<AnyApi>> {
   readonly id: ProviderID
+  readonly baseURL?: string
   readonly auth: Authentication
   readonly apis: Apis
   readonly settings?: SettingsHook
-  /** A model on one of the provider's APIs: `api` when given, otherwise the first one listed. */
-  readonly model: <const Name extends keyof Apis & string = keyof Apis & string>(
+  /** A language model on `api` when given, otherwise on the first API listed. */
+  readonly model: <const Name extends ApiName<Apis> = Apis[0]["name"]>(
     modelID: string,
-    options?: ModelOptions<Apis[Name]> & { readonly api?: Name },
-  ) => LanguageModel<ProviderOptions, CompactOf<Apis[Name]["api"]>>
+    options?: ModelOptions<Apis, Name>,
+  ) => LanguageModel<ProviderOptions, CompactOf<ApiNamed<Apis, Name>>>
   readonly with: (patch: Patch) => Definition<Apis>
 }
 
@@ -83,35 +102,57 @@ export interface Definition<Apis extends Record<string, Binding> = Record<string
 // oxlint-disable-next-line typescript-eslint/no-explicit-any
 export type AnyProvider = Definition<any>
 
-export const make = <const Apis extends Record<string, Binding>>(input: Input<Apis>): Definition<Apis> =>
-  build(input, {})
+export const make = <const Apis extends ReadonlyArray<AnyApi>>(
+  input: Input<Apis> &
+    ([Duplicate<Apis>] extends [never] ? unknown : { readonly apis: `API ${Duplicate<Apis>} is listed twice` }),
+): Definition<Apis> => {
+  const names = input.apis.map((api) => api.name)
+  const twice = names.find((name, index) => names.indexOf(name) !== index)
+  if (twice !== undefined) throw new Error(`Provider ${input.id} lists API ${twice} twice`)
+  return build(input, {})
+}
 
-const build = <Apis extends Record<string, Binding>>(input: Input<Apis>, connection: Patch): Definition<Apis> => ({
-  id: ProviderID.make(input.id),
-  auth: input.auth,
-  apis: input.apis,
-  settings: input.settings,
-  model: (modelID, options = {}) => {
-    const name = options.api ?? Object.keys(input.apis)[0]
-    const binding = input.apis[name]
-    if (binding === undefined) throw new Error(`Provider ${input.id} does not serve a ${name} API`)
-    const guess = binding.guess?.(modelID)
-    const capabilities = Capabilities.merge(
-      binding.api.capabilities,
-      guess?.capabilities,
-      binding.capabilities,
-      options.capabilities,
-    )
-    return Api.route(binding, {
-      provider: input.id,
-      baseURL: connection.baseURL,
-      query: connection.query,
-      auth: authentication(input.auth, connection),
-      options: mergeRequestOptions(guess?.options, requestOptions(connection)),
-    }).model({ id: modelID, ...Capabilities.project(capabilities), options: options.options })
-  },
-  with: (patch) => build(input, mergePatch(connection, patch)),
-})
+const build = <Apis extends ReadonlyArray<AnyApi>>(input: Input<Apis>, connection: Patch): Definition<Apis> => {
+  const id = ProviderID.make(input.id)
+  return {
+    id,
+    baseURL: input.baseURL,
+    auth: input.auth,
+    apis: input.apis,
+    settings: input.settings,
+    model: (modelID, options = {}) => {
+      const api = options.api === undefined ? input.apis[0] : input.apis.find((item) => item.name === options.api)
+      if (api === undefined) throw new Error(`Provider ${input.id} does not serve a ${options.api} API`)
+      const host = api.host
+      const baseURL = connection.baseURL ?? host.baseURL ?? input.baseURL
+      if (baseURL === undefined)
+        throw new ProviderConfigurationError({ provider: id, message: `${input.id} needs a baseURL for ${api.name}` })
+      const query = merged(host.query, connection.query)
+      return LanguageModel.make({
+        id: modelID,
+        provider: id,
+        api,
+        baseURL,
+        ...(query === undefined ? {} : { query }),
+        auth: authentication(input.auth, connection),
+        metadataKey: host.metadataKey,
+        options: mergeRequestOptions(
+          api.options,
+          typeof host.options === "function" ? host.options(modelID) : host.options,
+          requestOptions(connection),
+          options.options,
+        ),
+        capabilities: Capabilities.merge(
+          api.capabilities,
+          Api.modelCapabilities(host.models, modelID),
+          host.capabilities,
+          options.capabilities,
+        ),
+      }) as never
+    },
+    with: (patch) => build(input, mergePatch(connection, patch)),
+  }
+}
 
 /**
  * The `model(modelID, settings)` function a per-API package entrypoint exports. Settings are flat: `apiKey`,

@@ -18,7 +18,6 @@ export {
   GENERATION_KEYS,
   ReasoningEfforts,
   ReasoningEffort,
-  LanguageModelCompatibility,
   LanguageModel,
   LanguageModelSchema,
   CacheTTL,

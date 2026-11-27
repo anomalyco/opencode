@@ -20,6 +20,7 @@ import { it } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
 import { deltaChunk } from "./lib/openai-chunks.js"
 import { sseEvents } from "./lib/sse.js"
+import { apiModel } from "./lib/model.js"
 
 const TargetJson = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(TargetJson)
@@ -50,18 +51,19 @@ describe("request option precedence", () => {
     })
   })
 
-  it.effect("compiles bodies with route defaults, model defaults, and call options in order", () =>
+  it.effect("compiles bodies with host defaults, model defaults, and call options in order", () =>
     Effect.gen(function* () {
-      const route = OpenAIChat.route.with({
-        endpoint: { baseURL: "https://api.openai.test/v1/" },
-        auth: Auth.bearer("test"),
-        maxTokens: 10,
-        temperature: 1,
-        stop: ["route"],
-        providerOptions: { store: false, reasoningEffort: "low" },
+      const api = OpenAIChat.api.configure({
+        options: {
+          maxTokens: 10,
+          temperature: 1,
+          stop: ["route"],
+          providerOptions: { store: false, reasoningEffort: "low" },
+        },
       })
-      const model = route.model({
-        id: "gpt-4o-mini",
+      const model = apiModel(api, "gpt-4o-mini", {
+        baseURL: "https://api.openai.test/v1/",
+        auth: Auth.bearer("test"),
         options: {
           maxTokens: 20,
           temperature: 0.5,
@@ -98,7 +100,7 @@ describe("request option precedence", () => {
   it.effect("keeps the last tool definition for duplicate names", () =>
     Effect.gen(function* () {
       const request = ai.request({
-        model: OpenAIChat.route.model({ id: "gpt-4o-mini" }),
+        model: apiModel(OpenAIChat.api, "gpt-4o-mini", { baseURL: "https://api.openai.com/v1" }),
         prompt: "Use a tool.",
       })
       const prepared = yield* compileRequest({
@@ -127,7 +129,7 @@ describe("request option precedence", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: OpenAIResponses.route.model({ id: "gpt-5.4" }),
+          model: apiModel(OpenAIResponses.api, "gpt-5.4", { baseURL: "https://api.openai.com/v1" }),
           prompt: "Hello",
           tools: [
             ToolDefinition.make({ name: "crm", description: "Top-level CRM tool", inputSchema: {} }),
@@ -181,26 +183,24 @@ describe("request option precedence", () => {
   it.effect("forces a namespaced tool under its flattened name on flat protocols", () =>
     Effect.forEach(
       [
-        AnthropicMessages,
-        BedrockConverse,
-        CohereChat,
-        Gemini,
-        GoogleInteractions,
-        MistralChat,
-        OpenAIChat,
-        OpenAICompatibleResponses,
-      ],
-      (protocol) =>
+        [AnthropicMessages.api, "anthropic"],
+        [BedrockConverse.api, "bedrock"],
+        [CohereChat.api, "cohere"],
+        [Gemini.api, "google"],
+        [GoogleInteractions.api, "google"],
+        [MistralChat.api, "mistral"],
+        [OpenAIChat.api, "openai"],
+        [OpenAICompatibleResponses.api, "custom"],
+      ] as const,
+      ([api, provider]) =>
         Effect.gen(function* () {
           const prepared = yield* compileRequest(
             ai.request({
-              model: protocol.route
-                .with({
-                  provider: protocol.route.provider ?? "custom",
-                  endpoint: { baseURL: protocol.route.endpoint.baseURL ?? "https://example.invalid/v1" },
-                  auth: Auth.bearer("unused"),
-                })
-                .model({ id: "test-model" }),
+              model: apiModel(api, "test-model", {
+                provider,
+                baseURL: "https://example.invalid/v1",
+                auth: Auth.bearer("unused"),
+              }),
               prompt: "Look up a customer",
               tools: [
                 ToolNamespace.make({
@@ -225,7 +225,7 @@ describe("request option precedence", () => {
       const choose = (name: string) =>
         compileRequest(
           ai.request({
-            model: OpenAIChat.route.model({ id: "gpt-4o-mini" }),
+            model: apiModel(OpenAIChat.api, "gpt-4o-mini", { baseURL: "https://api.openai.com/v1" }),
             prompt: "Hi",
             tools: [
               ToolDefinition.make({ name: "foo_bar", description: "Top level", inputSchema: {} }),
@@ -252,9 +252,12 @@ describe("request option precedence", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: AnthropicMessages.route
-            .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.bearer("unused") })
-            .model({ id: "claude-opus-5", capabilities: { tools: { updates: ["add", "remove", "replace"] } } }),
+          model: apiModel(AnthropicMessages.api, "claude-opus-5", {
+            baseURL: "https://api.anthropic.test/v1/",
+            provider: "anthropic",
+            auth: Auth.bearer("unused"),
+            capabilities: { tools: { updates: ["add", "remove", "replace"] } },
+          }),
           messages: [
             Message.user("Hi"),
             Message.tools({
@@ -279,7 +282,7 @@ describe("request option precedence", () => {
     Effect.gen(function* () {
       const body = yield* OpenAIChat.protocol.body.from(
         ai.request({
-          model: OpenAIChat.route.model({ id: "gpt-4o-mini" }),
+          model: apiModel(OpenAIChat.api, "gpt-4o-mini", { baseURL: "https://api.openai.com/v1" }),
           tools: [
             ToolNamespace.make({
               name: "crm",
@@ -308,7 +311,7 @@ describe("request option precedence", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: OpenAIChat.route.model({ id: "gpt-4o-mini" }),
+          model: apiModel(OpenAIChat.api, "gpt-4o-mini", { baseURL: "https://api.openai.com/v1" }),
           messages: [
             Message.assistant(ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })),
             Message.user("Continue."),
@@ -327,18 +330,20 @@ describe("request option precedence", () => {
   it.effect("applies model HTTP defaults before request HTTP overlays", () =>
     LLMClient.generate(
       ai.request({
-        model: OpenAIChat.route
-          .with({
-            endpoint: { baseURL: "https://api.openai.test/v1/" },
-            auth: Auth.bearer("fresh-key"),
-            headers: { "x-route": "route", "x-shared": "route" },
-            http: {
-              body: { metadata: { route: true, shared: "route" }, value: "route" },
-              query: { route: "1", shared: "route" },
+        model: apiModel(
+          OpenAIChat.api.configure({
+            options: {
+              headers: { "x-route": "route", "x-shared": "route" },
+              http: {
+                body: { metadata: { route: true, shared: "route" }, value: "route" },
+                query: { route: "1", shared: "route" },
+              },
             },
-          })
-          .model({
-            id: "gpt-4o-mini",
+          }),
+          "gpt-4o-mini",
+          {
+            baseURL: "https://api.openai.test/v1/",
+            auth: Auth.bearer("fresh-key"),
             options: {
               headers: { "x-model": "model", "x-shared": "model" },
               http: {
@@ -346,7 +351,8 @@ describe("request option precedence", () => {
                 query: { model: "1", shared: "model" },
               },
             },
-          }),
+          },
+        ),
         prompt: "Say hello.",
         headers: { "x-request": "request" },
         http: { body: { metadata: { request: true }, value: null }, query: { request: "1" } },
@@ -378,9 +384,10 @@ describe("request option precedence", () => {
   it.effect("transforms the final HTTP request after serialization and authentication", () =>
     LLMClient.generate(
       ai.request({
-        model: OpenAIChat.route
-          .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("fresh-key") })
-          .model({ id: "gpt-4o-mini" }),
+        model: apiModel(OpenAIChat.api, "gpt-4o-mini", {
+          baseURL: "https://api.openai.test/v1/",
+          auth: Auth.bearer("fresh-key"),
+        }),
         prompt: "Say hello.",
       }),
       {
@@ -419,9 +426,10 @@ describe("request option precedence", () => {
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: OpenAIChat.route
-            .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-            .model({ id: "gpt-4o-mini" }),
+          model: apiModel(OpenAIChat.api, "gpt-4o-mini", {
+            baseURL: "https://api.openai.test/v1/",
+            auth: Auth.bearer("test"),
+          }),
           prompt: "Say hello.",
         }),
         {
@@ -458,9 +466,10 @@ describe("request option precedence", () => {
       const attempts = yield* Ref.make(0)
       const response = yield* LLMClient.generate(
         ai.request({
-          model: OpenAIChat.route
-            .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("stale") })
-            .model({ id: "gpt-4o-mini" }),
+          model: apiModel(OpenAIChat.api, "gpt-4o-mini", {
+            baseURL: "https://api.openai.test/v1/",
+            auth: Auth.bearer("stale"),
+          }),
           prompt: "Say hello.",
         }),
         {
@@ -494,9 +503,10 @@ describe("request option precedence", () => {
   it.effect("sanitizes outbound JSON without an HTTP overlay", () =>
     LLMClient.generate(
       ai.request({
-        model: OpenAIChat.route
-          .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-          .model({ id: "gpt-4o-mini" }),
+        model: apiModel(OpenAIChat.api, "gpt-4o-mini", {
+          baseURL: "https://api.openai.test/v1/",
+          auth: Auth.bearer("test"),
+        }),
         prompt: "hello \uD800 \u{1F600}",
       }),
     ).pipe(
@@ -518,9 +528,10 @@ describe("request option precedence", () => {
   it.effect("sanitizes unpaired surrogates throughout outbound JSON", () =>
     LLMClient.generate(
       ai.request({
-        model: OpenAIChat.route
-          .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-          .model({ id: "gpt-4o-mini" }),
+        model: apiModel(OpenAIChat.api, "gpt-4o-mini", {
+          baseURL: "https://api.openai.test/v1/",
+          auth: Auth.bearer("test"),
+        }),
         system: "system \uD800 \u{1F600}",
         messages: [
           Message.user("user \uDC00"),
@@ -561,9 +572,10 @@ describe("request option precedence", () => {
   it.effect("applies raw body overlays after protocol lowering", () =>
     LLMClient.generate(
       ai.request({
-        model: OpenAIChat.route
-          .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-          .model({ id: "gpt-4o-mini" }),
+        model: apiModel(OpenAIChat.api, "gpt-4o-mini", {
+          baseURL: "https://api.openai.test/v1/",
+          auth: Auth.bearer("test"),
+        }),
         prompt: "Say hello.",
         http: { body: { model: "gpt-5", messages: [], tools: [] } },
       }),
@@ -583,11 +595,11 @@ describe("request option precedence", () => {
 
   it.effect("uses the Anthropic default before call maxTokens", () =>
     Effect.gen(function* () {
-      const route = AnthropicMessages.route.with({
-        endpoint: { baseURL: "https://api.anthropic.test/v1/" },
+      const model = apiModel(AnthropicMessages.api, "claude-sonnet-4-5", {
+        provider: "anthropic",
+        baseURL: "https://api.anthropic.test/v1/",
         auth: Auth.header("x-api-key", "test"),
       })
-      const model = route.model({ id: "claude-sonnet-4-5" })
       const withoutMaxTokens = yield* compileRequest(ai.request({ model, prompt: "Say hello.", cache: "none" }))
       const withMaxTokens = yield* compileRequest(
         ai.request({ model, prompt: "Say hello.", cache: "none", maxTokens: 8_000 }),

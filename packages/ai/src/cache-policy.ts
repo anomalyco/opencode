@@ -10,6 +10,7 @@
 //
 // Manual `cache: CacheHint` placements on individual parts are preserved and
 // count against the four-breakpoint budget; auto only fills remaining slots.
+import type { Capabilities } from "./capabilities.js"
 import { CacheHint, type CachePolicy, type CachePolicyObject, type CacheTTL } from "./schema/options.js"
 import {
   AssistantMessage,
@@ -57,38 +58,20 @@ const isAuto = (policy: CachePolicy | undefined) =>
 /** The requested cache lifetime, for routes that send it as a request-level option instead of on markers. */
 export const requestTTL = (request: LLMRequest) => (typeof request.cache === "object" ? request.cache.ttl : undefined)
 
-// Protocols whose wire format ignores inline cache markers (OpenAI's implicit
-// prefix caching, Gemini's implicit + out-of-band CachedContent). Skip the
-// whole policy pass for these — emitting hints would be harmless but pointless.
-const RESPECTS_INLINE_HINTS = new Set([
-  "alibaba-chat",
-  "alibaba-messages",
-  "anthropic-messages",
-  "anthropic-compatible-messages",
-  "bedrock-mantle-messages",
-  "cloudflare-ai-gateway-messages",
-  "google-vertex-messages",
-  "meta-messages",
-  "minimax-messages",
-  "moonshot-messages",
-  "vercel-ai-gateway-messages",
-  "zai-coding-messages",
-  "bedrock-converse",
-  "openrouter",
-  "digitalocean",
-])
-
-// OpenRouter and Vercel AI Gateway upstreams other than Anthropic and Alibaba Qwen cache without breakpoints.
-// Gemini uses only the last breakpoint, so a conversation-tail breakpoint writes a new cache every step and costs
-// more than none. Qwen ignores breakpoints on tool definitions and caches tools with the system prompt.
+// Qwen ignores breakpoints on tool definitions and caches tools with the system prompt.
 const QWEN: CachePolicyObject = { system: true, messages: { tail: 1 } }
-const gatewayPolicy = (modelID: string): CachePolicyObject => {
-  // `~anthropic/claude-sonnet-latest` style IDs are OpenRouter aliases for the latest model in a family.
-  const id = modelID.replace(/^~/, "")
-  if (id.startsWith("anthropic/")) return AUTO
-  if (id.startsWith("qwen/") || id.startsWith("alibaba/qwen")) return QWEN
-  return NONE
-}
+
+/**
+ * `models` patterns for gateways that forward cache markers. Upstreams other than Anthropic and Alibaba Qwen cache
+ * without breakpoints; Gemini uses only the last breakpoint, so a conversation-tail breakpoint would write a new
+ * cache every step. `~anthropic/…` IDs are OpenRouter aliases for the latest model in a family.
+ */
+export const gatewayModels = {
+  "anthropic/*": { cache: { markers: true } },
+  "~anthropic/*": { cache: { markers: true } },
+  "qwen/*": { cache: { format: "alibaba" } },
+  "alibaba/qwen*": { cache: { format: "alibaba" } },
+} as const satisfies Record<string, Capabilities.Any>
 
 const makeHint = (ttl: CacheTTL | undefined): CacheHint =>
   ttl !== undefined ? new CacheHint({ type: "ephemeral", ttl }) : new CacheHint({ type: "ephemeral" })
@@ -234,16 +217,13 @@ export const placesMarkers = (request: LLMRequest) => {
   return Boolean(policy.tools || policy.system || policy.messages)
 }
 
-// A declared cache format overrides the route allowlist and its model-ID heuristics.
+// A declared cache format overrides whether the endpoint reads markers.
 const selectPolicy = (request: LLMRequest): CachePolicyObject => {
-  const format = request.model.compatibility?.cacheFormat
-  const route = request.model.route.id
+  const cache = request.model.capabilities?.cache
+  if (cache === false || cache === undefined) return NONE
   const auto = isAuto(request.cache)
-  if (format === "alibaba") return auto ? QWEN : { ...resolve(request.cache), tools: false }
-  if (format === "anthropic") return resolve(request.cache)
-  if (!RESPECTS_INLINE_HINTS.has(route)) return NONE
-  if (!auto) return resolve(request.cache)
-  if (route === "openrouter" || route === "vercel-ai-gateway-messages") return gatewayPolicy(request.model.id)
-  if (route === "alibaba-chat") return request.model.id.toLowerCase().startsWith("qwen") ? QWEN : NONE
-  return AUTO
+  if (cache.format === "alibaba") return auto ? QWEN : { ...resolve(request.cache), tools: false }
+  if (cache.format === "anthropic") return resolve(request.cache)
+  if (!cache.markers) return NONE
+  return auto ? AUTO : resolve(request.cache)
 }

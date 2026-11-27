@@ -5,7 +5,7 @@ import { Google } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { TEXT, collectSpeech } from "./speech-recording.js"
 
-const google = Google.configure({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" })
+const google = Google.media({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" })
 
 const recorded = recordedTests({
   prefix: "google-speech",

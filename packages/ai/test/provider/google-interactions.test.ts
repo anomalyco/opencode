@@ -8,9 +8,9 @@ import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
-const model = Google.configure({ apiKey: "test", baseURL: "https://generativelanguage.test/v1beta" }).interactions(
-  "gemini-3.8-flash",
-)
+const model = Google.google
+  .with({ apiKey: "test", baseURL: "https://generativelanguage.test/v1beta" })
+  .model("gemini-3.8-flash", { api: "interactions" })
 
 const generate = (...events: ReadonlyArray<unknown>) =>
   LLMClient.generate(ai.request({ model, prompt: "Hi" })).pipe(Effect.provide(fixedResponse(sseEvents(...events))))
@@ -30,16 +30,18 @@ describe("Google Interactions", () => {
           )
         }),
       )
-      const configured = Google.configure({
-        apiKey: "test",
-        baseURL: "https://generativelanguage.test/v1beta",
-        providerOptions: {
-          safetySettings: [
-            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_LOW_AND_ABOVE" },
-            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
-          ],
-        },
-      }).interactions("gemini-3.8-flash")
+      const configured = Google.google
+        .with({
+          apiKey: "test",
+          baseURL: "https://generativelanguage.test/v1beta",
+          providerOptions: {
+            safetySettings: [
+              { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_LOW_AND_ABOVE" },
+              { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+            ],
+          },
+        })
+        .model("gemini-3.8-flash", { api: "interactions" })
       yield* LLMClient.generate(ai.request({ model: configured, prompt: "Hi" })).pipe(Effect.provide(layer))
 
       expect(bodies).toHaveLength(1)

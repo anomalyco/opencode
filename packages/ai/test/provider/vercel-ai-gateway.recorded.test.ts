@@ -6,7 +6,14 @@ import { VercelAIGateway } from "../../src/providers/vercel-ai-gateway.js"
 import { recordedTests } from "../recorded-test.js"
 import { expectWeatherToolLoop, goldenWeatherToolLoopRequest, runWeatherToolLoop } from "../recorded-scenarios.js"
 
-const gateway = VercelAIGateway.configure({ apiKey: process.env.AI_GATEWAY_API_KEY ?? "fixture" })
+const models = (settings: VercelAIGateway.Settings = {}) => ({
+  model: (id: string) => VercelAIGateway.model(id, settings),
+  messages: (id: string) => VercelAIGateway.messagesModel(id, settings),
+  responses: (id: string) => VercelAIGateway.responsesModel(id, settings),
+  chat: (id: string) => VercelAIGateway.chatModel(id, settings),
+})
+
+const gateway = models({ apiKey: process.env.AI_GATEWAY_API_KEY ?? "fixture" })
 const recorded = recordedTests({
   prefix: "vercel-native",
   provider: "vercel-ai-gateway",
@@ -86,7 +93,7 @@ recorded.effect(
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(
         ai.request({
-          model: VercelAIGateway.configure({ apiKey: "invalid-gateway-key" }).messages("anthropic/claude-sonnet-5.5"),
+          model: models({ apiKey: "invalid-gateway-key" }).messages("anthropic/claude-sonnet-5.5"),
           prompt: "Hello",
           maxTokens: 32,
         }),

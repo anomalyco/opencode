@@ -8,7 +8,7 @@ import { sseEvents } from "../lib/sse.js"
 
 const checkpoint = { type: "compaction", id: "cmp_1", encrypted_content: "opaque" }
 const request = ai.request({
-  model: OpenAI.configure({ apiKey: "fixture" }).responses("fixture"),
+  model: OpenAI.openai.with({ apiKey: "fixture" }).model("fixture"),
   prompt: "hello",
 })
 const trigger = { mechanism: "trigger" } as const
@@ -135,7 +135,7 @@ testEffect(
 ).effect("keeps explicit verbosity on a trigger checkpoint for prompt cache reuse", () =>
   ai.compact(
     ai.request({
-      model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
+      model: OpenAI.openai.with({ apiKey: "fixture" }).model("gpt-5.5"),
       prompt: "Hello.",
       providerOptions: { textVerbosity: "low" },
       http: { body: { text: { format: { type: "json_object" } } } },
@@ -158,7 +158,7 @@ testEffect(
 ).effect("keeps the effective body-overlay verbosity and text formatting", () =>
   ai.compact(
     ai.request({
-      model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
+      model: OpenAI.openai.with({ apiKey: "fixture" }).model("gpt-5.5"),
       prompt: "Hello.",
       maxTokens: 20_000,
       providerOptions: { textVerbosity: "low" },
@@ -183,7 +183,7 @@ testEffect(
     const error = yield* ai
       .compact(
         ai.request({
-          model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
+          model: OpenAI.openai.with({ apiKey: "fixture" }).model("gpt-5.5"),
           prompt: "Hello.",
           maxTokens: 128,
         }),
@@ -281,12 +281,11 @@ testEffect(dynamicResponse(() => Effect.die("Must reject before sending"))).effe
     Effect.gen(function* () {
       const client = yield* LLMClient.Service
       const unsupported = ai.request({
-        model: Azure.configure({ resourceName: "fixture" }).responses("fixture"),
+        model: Azure.model("fixture", { resourceName: "fixture" }),
         prompt: "Hello",
       })
       expect(ai.canCompact(unsupported)).toBe(true)
       expect(ai.canCompact(unsupported, trigger)).toBe(false)
-      // @ts-expect-error Exercise untyped consumers; the service must reject before sending.
       const serviceError = yield* client.compact(unsupported, trigger).pipe(Effect.flip)
       expect(serviceError.reason._tag).toBe("UnsupportedOperation")
       // @ts-expect-error Exercise an unknown mechanism supplied by JavaScript.

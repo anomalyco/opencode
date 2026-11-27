@@ -7,14 +7,14 @@ import { ProviderConfigurationError } from "../../src/schema/index.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 
-const workers = CloudflareWorkersAI.configure({ accountId: "test-account", apiKey: "test" })
+const workers = CloudflareWorkersAI.media({ accountId: "test-account", apiKey: "test" })
 
 describe("Cloudflare Workers AI Images", () => {
   test("derives the Run API base only from an /ai/v1 base", () => {
     expect(CloudflareWorkersAI.runBaseURL({ baseURL: "https://proxy.test/client/v4/accounts/a/ai/v1" })).toBe(
       "https://proxy.test/client/v4/accounts/a/ai/run",
     )
-    const gateway = CloudflareWorkersAI.configure({
+    const gateway = CloudflareWorkersAI.media({
       baseURL: "https://gateway.ai.cloudflare.com/v1/a/g/workers-ai/v1",
       apiKey: "test",
     })

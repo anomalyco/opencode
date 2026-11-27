@@ -39,7 +39,7 @@ describe("Azure Messages", () => {
   it.effect("uses a configured baseURL as is", () =>
     Effect.gen(function* () {
       const request = yield* send(
-        Azure.configure({ baseURL: "https://gateway.example/anthropic/v1/", apiKey: "key" }).messages("claude"),
+        Azure.messagesModel("claude", { baseURL: "https://gateway.example/anthropic/v1/", apiKey: "key" }),
       )
 
       expect(request.url).toBe("https://gateway.example/anthropic/v1/messages")

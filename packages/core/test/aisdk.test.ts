@@ -151,8 +151,7 @@ it.effect("uses canonical names and metadata without merging connection cache pa
 
     const resolved = yield* aisdk.model(input)
     expect(resolved).toMatchObject({ id: "api-model", provider: "openai" })
-    expect(resolved.route).toMatchObject({ provider: "openai", providerMetadataKey: "openai" })
-    expect(resolved.route.model({ id: "another-model" })).toMatchObject({ provider: "openai" })
+    expect(resolved.metadataKey).toBe("openai")
     const prepared = yield* compileRequest(ai.request({ model: resolved, prompt: "Hello" }))
     expect(prepared.body.providerOptions).toEqual({ openai: { reasoningEffort: "high" } })
   }),
@@ -497,7 +496,7 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
     })
 
     const resolved = yield* aisdk.model(model("@ai-sdk/anthropic"))
-    expect(resolved.route.providerMetadataKey).toBe("anthropic")
+    expect(resolved.metadataKey).toBe("anthropic")
     const prepared = yield* compileRequest(
       ai.request({
         model: resolved,

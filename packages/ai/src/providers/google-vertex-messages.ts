@@ -1,11 +1,10 @@
 import { Effect, Schema, Struct } from "effect"
 import type { ProviderPackage } from "../provider-package.js"
+import { Api } from "../api.js"
+import { Capabilities } from "../capabilities.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
-import { Auth } from "../route/auth.js"
-import { Route } from "../route/client.js"
-import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
-import { ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
+import { Provider } from "../provider.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 
 export type AnthropicOptionsInput = AnthropicMessages.OptionsInput
@@ -13,17 +12,6 @@ export type AnthropicProviderOptionsInput = AnthropicMessages.ProviderOptionsInp
 export type AnthropicThinkingInput = AnthropicMessages.ThinkingInput
 
 const VERSION = "vertex-2023-10-16" as const
-const HEADER_VERSION = "2023-06-01" as const
-
-export const id = ProviderID.make("google-vertex")
-
-export type Config = RequestOptions &
-  GoogleVertexShared.OAuthOptions & {
-    readonly baseURL?: string
-    readonly location?: string
-    readonly project?: string
-    readonly providerOptions?: AnthropicMessages.ProviderOptionsInput
-  }
 
 export type Settings = ProviderPackage.Settings &
   AnthropicMessages.ProviderOptionsInput & {
@@ -34,10 +22,10 @@ export type Settings = ProviderPackage.Settings &
     readonly project?: string
   }
 
-const route = Route.make({
+// Vertex takes the model from the URL and the Anthropic version in the body instead.
+export const messages = Api.make({
+  name: "messages",
   id: "google-vertex-messages",
-  provider: id,
-  providerMetadataKey: "vertex",
   protocol: Protocol.make({
     id: AnthropicMessages.protocol.id,
     body: {
@@ -57,43 +45,22 @@ const route = Route.make({
     supportsEffortUpdates: AnthropicMessages.protocol.supportsEffortUpdates,
     toolUpdates: AnthropicMessages.protocol.toolUpdates,
   }),
-  endpoint: Endpoint.path(({ request }) => `/${request.model.id}:streamRawPredict`),
-  auth: Auth.none,
+  path: ({ request }) => `/${request.model.id}:streamRawPredict`,
   transport: AnthropicMessages.transport<
     Omit<AnthropicMessages.AnthropicMessagesBody, "model"> & { readonly anthropic_version: typeof VERSION }
   >(),
-  headers: () => ({ "anthropic-version": HEADER_VERSION }),
-})
+  headers: () => ({ "anthropic-version": "2023-06-01" }),
+  capabilities: Capabilities.defaults<Capabilities.Messages>({ cache: { markers: true } }),
+}).configure({ metadataKey: "vertex" })
 
-export const routes = [route]
-
-const configuredRoute = (input: Config) =>
-  GoogleVertexShared.oauthRoute(
-    route,
+export const googleVertexMessages = Provider.make({
+  ...GoogleVertexShared.shared,
+  apis: [messages],
+  settings: GoogleVertexShared.oauthSettings(
     "Messages",
-    input,
     (project, location) =>
       `https://${GoogleVertexShared.host(location)}/v1/projects/${project}/locations/${location}/publishers/anthropic/models`,
-  )
+  ),
+})
 
-export const configure = (input: Config = {}) => {
-  const route = configuredRoute(input)
-  return {
-    id,
-    model: (modelID: string | ModelID) => route.model<AnthropicMessages.ProviderOptionsInput>({ id: modelID }),
-    configure,
-  }
-}
-
-export const provider = {
-  id,
-  configure,
-}
-
-export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOptionsInput> = (
-  modelID,
-  settings = {},
-) =>
-  configure(GoogleVertexShared.oauthSettings<AnthropicMessages.ProviderOptionsInput>("Messages", settings)).model(
-    modelID,
-  )
+export const model = Provider.entrypoint<Settings, AnthropicMessages.ProviderOptionsInput>(googleVertexMessages)

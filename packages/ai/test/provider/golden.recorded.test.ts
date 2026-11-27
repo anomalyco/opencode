@@ -15,65 +15,71 @@ import * as OpenRouter from "../../src/providers/openrouter.js"
 import * as XAI from "../../src/providers/xai.js"
 import { describeRecordedGoldenScenarios } from "../recorded-golden.js"
 
-const openAI = OpenAI.configure({
+const openAI = OpenAI.openai.with({
   apiKey: process.env.OPENAI_API_KEY ?? "fixture",
 })
-const openAIChat = openAI.chat("gpt-4o-mini")
-const openAIResponses = openAI.responses("gpt-5.5")
-const anthropic = Anthropic.configure({
+const openAIChat = openAI.model("gpt-4o-mini", { api: "chat-completions" })
+const openAIResponses = openAI.model("gpt-5.5")
+const anthropic = Anthropic.anthropic.with({
   apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",
 })
 const anthropicHaiku = anthropic.model("claude-haiku-4-5-20251001")
 const anthropicOpus = anthropic.model("claude-opus-4-7")
-const minimax = AnthropicCompatible.configure({
+const minimax = AnthropicCompatible.model("MiniMax-M3", {
   apiKey: process.env.MINIMAX_API_KEY ?? "fixture",
   baseURL: "https://api.minimax.io/anthropic/v1",
   provider: "minimax",
-}).model("MiniMax-M3")
-const google = Google.configure({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" })
-const gemini = google.model("gemini-2.5-flash")
-const xai = XAI.configure({ apiKey: process.env.XAI_API_KEY ?? "fixture" })
+})
+const googleSettings = { apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" }
+const gemini = Google.model("gemini-2.5-flash", googleSettings)
+const xai = XAI.xai.with({ apiKey: process.env.XAI_API_KEY ?? "fixture" })
 const xaiBasic = xai.model("grok-3-mini")
 const xaiFlagship = xai.model("grok-4.3")
-const cloudflareAIGateway = CloudflareAIGateway.configure({
+const cloudflareAIGatewaySettings = {
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
   gatewayId:
     process.env.CLOUDFLARE_GATEWAY_ID && process.env.CLOUDFLARE_GATEWAY_ID !== process.env.CLOUDFLARE_ACCOUNT_ID
       ? process.env.CLOUDFLARE_GATEWAY_ID
       : undefined,
   gatewayApiKey: process.env.CLOUDFLARE_API_TOKEN ?? "fixture",
-})
-const cloudflareWorkers = CloudflareWorkersAI.configure({
-  accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
+}
+const cloudflareWorkers = CloudflareWorkersAI.cloudflareWorkersAI.with({
+  baseURL: CloudflareWorkersAI.baseURL({ accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account" }),
   apiKey: process.env.CLOUDFLARE_API_KEY ?? "fixture",
 })
-const cloudflareAIGatewayWorkers = cloudflareAIGateway.model("workers-ai/@cf/meta/llama-3.1-8b-instruct")
-const cloudflareAIGatewayWorkersTools = cloudflareAIGateway.model("workers-ai/@cf/openai/gpt-oss-20b")
-const cloudflareAIGatewayClaude = cloudflareAIGateway.model("anthropic/claude-haiku-4.5")
-const cloudflareAIGatewayOpenAI = cloudflareAIGateway.model("openai/gpt-5-nano")
+const cloudflareAIGatewayWorkers = CloudflareAIGateway.model(
+  "workers-ai/@cf/meta/llama-3.1-8b-instruct",
+  cloudflareAIGatewaySettings,
+)
+const cloudflareAIGatewayWorkersTools = CloudflareAIGateway.model(
+  "workers-ai/@cf/openai/gpt-oss-20b",
+  cloudflareAIGatewaySettings,
+)
+const cloudflareAIGatewayClaude = CloudflareAIGateway.model("anthropic/claude-haiku-4.5", cloudflareAIGatewaySettings)
+const cloudflareAIGatewayOpenAI = CloudflareAIGateway.model("openai/gpt-5-nano", cloudflareAIGatewaySettings)
 const cloudflareWorkersAI = cloudflareWorkers.model("@cf/meta/llama-3.1-8b-instruct")
 const cloudflareWorkersAITools = cloudflareWorkers.model("@cf/openai/gpt-oss-20b")
-const deepseek = DeepSeek.configure({ apiKey: process.env.DEEPSEEK_API_KEY ?? "fixture" }).model("deepseek-chat")
-const together = TogetherAI.configure({
+const deepseek = DeepSeek.model("deepseek-chat", { apiKey: process.env.DEEPSEEK_API_KEY ?? "fixture" })
+const together = TogetherAI.model("meta-llama/Llama-3.3-70B-Instruct-Turbo", {
   apiKey: process.env.TOGETHER_API_KEY ?? process.env.TOGETHER_AI_API_KEY ?? "fixture",
-}).model("meta-llama/Llama-3.3-70B-Instruct-Turbo")
-const cerebras = Cerebras.configure({ apiKey: process.env.CEREBRAS_API_KEY ?? "fixture" }).model("gpt-oss-120b")
+})
+const cerebras = Cerebras.model("gpt-oss-120b", { apiKey: process.env.CEREBRAS_API_KEY ?? "fixture" })
 // These older cassettes exercise generic Chat compatibility. Native Groq request
 // shaping and reasoning are covered by groq.recorded.test.ts.
-const groq = OpenAICompatible.configure({
+const groq = OpenAICompatible.model("llama-3.3-70b-versatile", {
   provider: "groq",
   baseURL: "https://api.groq.com/openai/v1",
   apiKey: process.env.GROQ_API_KEY ?? "fixture",
-}).model("llama-3.3-70b-versatile")
-const deepInfra = DeepInfra.configure({ apiKey: process.env.DEEPINFRA_API_KEY ?? "fixture" }).model(
-  "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-)
-const openRouter = OpenRouter.configure({ apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" })
+})
+const deepInfra = DeepInfra.model("meta-llama/Llama-3.3-70B-Instruct-Turbo", {
+  apiKey: process.env.DEEPINFRA_API_KEY ?? "fixture",
+})
+const openRouter = OpenRouter.openrouter.with({ apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" })
 const openrouter = openRouter.model("openai/gpt-4o-mini")
 const openrouterGpt55 = openRouter.model("openai/gpt-5.5")
-const openrouterOpus = OpenRouter.configure({
+const openrouterOpus = OpenRouter.model("anthropic/claude-opus-4.7", {
   apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
-}).model("anthropic/claude-opus-4.7")
+})
 
 const redactCloudflareURL = (url: string) =>
   url

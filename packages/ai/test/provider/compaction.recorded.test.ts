@@ -16,12 +16,12 @@ for (const provider of [
   {
     id: "openai",
     key: "OPENAI_API_KEY",
-    model: OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).responses("gpt-5.3-codex"),
+    model: OpenAI.openai.with({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).model("gpt-5.3-codex"),
   },
   {
     id: "xai",
     key: "XAI_API_KEY",
-    model: XAI.configure({ apiKey: process.env.XAI_API_KEY ?? "fixture" }).responses("grok-4.6"),
+    model: XAI.model("grok-4.6", { apiKey: process.env.XAI_API_KEY ?? "fixture" }),
   },
 ]) {
   recordedTests({ prefix: `${provider.id}-compaction`, provider: provider.id, requires: [provider.key] }).effect(
@@ -52,9 +52,7 @@ recordedTests({
   "automatically compacts and continues after a pause",
   () =>
     Effect.gen(function* () {
-      const model = Anthropic.configure({ apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture" }).model(
-        "claude-sonnet-4-6",
-      )
+      const model = Anthropic.model("claude-sonnet-4-6", { apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture" })
       const request = ai.request({
         model,
         messages: [

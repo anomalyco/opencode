@@ -12,9 +12,9 @@ const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
   TranscriptionClient.layer.pipe(Layer.provideMerge(dynamicResponse(handler)))
 
 const audio = Media.bytes(Uint8Array.from([0x49, 0x44, 0x33, 1, 2, 3]), "audio/mpeg")
-const openai = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" })
+const openaiMedia = OpenAI.media({ apiKey: "test", baseURL: "https://openai.test/v1" })
 const deepgram = Deepgram.configure({ apiKey: "test", baseURL: "https://deepgram.test" }).transcription("nova-3")
-const google = Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).transcription(
+const google = Google.media({ apiKey: "test", baseURL: "https://google.test/v1beta" }).transcription(
   "gemini-3.5-transcribe",
 )
 /**
@@ -44,15 +44,23 @@ describe("Transcription", () => {
     Effect.gen(function* () {
       const errors = yield* Effect.all(
         [
-          Transcription.generate({ model: openai.transcription("gpt-4o-mini-transcribe"), audio, diarize: true }),
-          Transcription.generate({ model: openai.transcription("gpt-4o-mini-transcribe"), audio, timestamps: "word" }),
-          Transcription.generate({ model: openai.transcription("gpt-4o-transcribe-diarize"), audio, prompt: "Names" }),
+          Transcription.generate({ model: openaiMedia.transcription("gpt-4o-mini-transcribe"), audio, diarize: true }),
+          Transcription.generate({
+            model: openaiMedia.transcription("gpt-4o-mini-transcribe"),
+            audio,
+            timestamps: "word",
+          }),
+          Transcription.generate({
+            model: openaiMedia.transcription("gpt-4o-transcribe-diarize"),
+            audio,
+            prompt: "Names",
+          }),
           Transcription.generate({ model: deepgram, audio, prompt: "OpenCode" }),
           Transcription.generate({ model: google, audio, speakers: 2 }),
           Transcription.start({ model: deepgram, audio }),
           Transcription.generate({ model: deepgram, audio, http: { body: { callback: "https://hook.test" } } }),
           Transcription.generate({
-            model: openai.transcription("gpt-transcribe"),
+            model: openaiMedia.transcription("gpt-transcribe"),
             audio: Media.url("https://a.test/x.mp3"),
           }),
           Transcription.start({
@@ -60,11 +68,11 @@ describe("Transcription", () => {
             audio: Media.ref("file_1", { provider: "openai", mediaType: "audio/mpeg" }),
           }),
           Transcription.generate({
-            model: openai.transcription("gpt-transcribe"),
+            model: openaiMedia.transcription("gpt-transcribe"),
             audio: Media.bytes(Uint8Array.from([1, 2, 3]), "audio/x-unknown"),
           }),
           Transcription.generate({
-            model: Google.configure({ apiKey: "test" }).transcription("gemini-3.6-flash"),
+            model: Google.media({ apiKey: "test" }).transcription("gemini-3.6-flash"),
             audio,
           }),
         ].map((effect) => Effect.flip(effect)),
@@ -100,7 +108,7 @@ describe("Transcription", () => {
         ),
         sse(`{"type":"transcript.text.delta","delta":"Hi"}`, failure),
       ]
-      const model = openai.transcription("gpt-4o-mini-transcribe")
+      const model = openaiMedia.transcription("gpt-4o-mini-transcribe")
       const program = Effect.gen(function* () {
         const events = Array.from(yield* Stream.runCollect(Transcription.stream({ model, audio })))
         const error = yield* Stream.runCollect(Transcription.stream({ model, audio })).pipe(Effect.flip)
@@ -126,7 +134,7 @@ describe("Transcription", () => {
     Effect.gen(function* () {
       const bodies: Array<string> = []
       const events = Array.from(
-        yield* Stream.runCollect(Transcription.stream({ model: openai.transcription("whisper-1"), audio })).pipe(
+        yield* Stream.runCollect(Transcription.stream({ model: openaiMedia.transcription("whisper-1"), audio })).pipe(
           Effect.provide(
             layer((input) =>
               Effect.sync(() => {
@@ -158,7 +166,7 @@ describe("Transcription", () => {
       )
       const events = Array.from(
         yield* Stream.runCollect(
-          Transcription.stream({ model: openai.transcription("gpt-4o-transcribe-diarize"), audio, diarize: true }),
+          Transcription.stream({ model: openaiMedia.transcription("gpt-4o-transcribe-diarize"), audio, diarize: true }),
         ).pipe(
           Effect.provide(
             layer((input) =>
@@ -198,7 +206,7 @@ describe("Transcription", () => {
     Effect.gen(function* () {
       const calls: Array<Call> = []
       const response = yield* Transcription.generate({
-        model: openai.transcription("whisper-1"),
+        model: openaiMedia.transcription("whisper-1"),
         audio,
         timestamps: "segment",
       }).pipe(
@@ -245,7 +253,10 @@ describe("Transcription", () => {
   it.effect("fails an OpenAI stream that ends without transcript.text.done as incomplete", () =>
     Effect.gen(function* () {
       const events: Array<TranscriptionEvent> = []
-      const error = yield* Transcription.stream({ model: openai.transcription("gpt-4o-mini-transcribe"), audio }).pipe(
+      const error = yield* Transcription.stream({
+        model: openaiMedia.transcription("gpt-4o-mini-transcribe"),
+        audio,
+      }).pipe(
         Stream.runForEach((event) => Effect.sync(() => events.push(event))),
         Effect.flip,
         Effect.provide(

@@ -1,21 +1,14 @@
 import type { ProviderPackage } from "../provider-package.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
+import { Provider } from "../provider.js"
 import { Auth } from "../route/auth.js"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import { ProviderConfigurationError, ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID } from "../schema/index.js"
 
 export type AnthropicOptionsInput = AnthropicMessages.OptionsInput
 export type AnthropicProviderOptionsInput = AnthropicMessages.ProviderOptionsInput
 export type AnthropicThinkingInput = AnthropicMessages.ThinkingInput
 
 export const id = ProviderID.make("anthropic-compatible")
-
-export type Config = RequestOptions &
-  ProviderAuthOption<"optional"> & {
-    readonly provider?: string
-    readonly baseURL: string
-    readonly providerOptions?: AnthropicMessages.ProviderOptionsInput
-  }
 
 export type Settings = ProviderPackage.Settings &
   AnthropicMessages.ProviderOptionsInput &
@@ -27,54 +20,43 @@ export type Settings = ProviderPackage.Settings &
     readonly provider?: string
   }
 
-const compatibleRoute = AnthropicMessages.route.with({ id: "anthropic-compatible-messages", provider: id })
-export const routes = [compatibleRoute]
+/** Anthropic's own Messages hosts: an `x-api-key` key, or an `authToken` sent as a bearer token. */
+export const shared = {
+  auth: (env: ReadonlyArray<string>) => Provider.apiKey(env, (credential) => credential.header("x-api-key")),
+  settings: {
+    keys: ["authToken"],
+    patch: (values: Pick<Settings, "authToken">) =>
+      values.authToken === undefined ? {} : { auth: Auth.bearer(values.authToken) },
+  },
+  api: AnthropicMessages.api,
+}
 
-const auth = (input: ProviderAuthOption<"optional">) => AuthOptions.apiKey(input, [], Auth.header("x-api-key"))
-
-export const configure = (input: Config) => {
-  const provider = input.provider ?? "anthropic-compatible"
-  if (!input.baseURL)
+/** Fails like Anthropic when both an API key and an auth token are given. */
+export const requireOneCredential = (
+  provider: string,
+  settings: Pick<Settings, "apiKey" | "authToken">,
+  name: string,
+) => {
+  if (settings.apiKey !== undefined && settings.authToken !== undefined)
     throw new ProviderConfigurationError({
       provider: ProviderID.make(provider),
-      message: "Anthropic-compatible providers require a baseURL",
+      message: `${name} apiKey cannot be combined with authToken`,
     })
-  const { provider: _, baseURL, apiKey: _apiKey, auth: _auth, ...rest } = input
-  const route = (provider === "anthropic" ? AnthropicMessages.route : compatibleRoute).with({
-    ...rest,
-    provider,
-    endpoint: { baseURL },
-    auth: auth(input),
-  })
-  return {
-    id: ProviderID.make(provider),
-    model: (modelID: string | ModelID) => route.model<AnthropicMessages.ProviderOptionsInput>({ id: modelID }),
-    configure,
-  }
 }
 
-export const provider = {
-  id,
-  configure,
-}
-
-export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOptionsInput> = (
+export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOptionsInput, undefined> = (
   modelID,
-  { apiKey, authToken, baseURL, body, headers, provider, ...providerOptions },
+  { provider, ...settings },
 ) => {
-  if (apiKey !== undefined && authToken !== undefined)
+  requireOneCredential(provider ?? id, settings, "Anthropic-compatible")
+  if (!settings.baseURL)
     throw new ProviderConfigurationError({
       provider: ProviderID.make(provider ?? id),
-      message: "Anthropic-compatible apiKey cannot be combined with authToken",
+      message: "Anthropic-compatible providers require a baseURL",
     })
-  return configure({
-    ...(authToken === undefined ? { apiKey: apiKey } : { auth: Auth.bearer(authToken) }),
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    provider,
-    providerOptions,
-  }).model(modelID)
+  return Provider.entrypoint<ProviderPackage.Settings, AnthropicMessages.ProviderOptionsInput, undefined>(
+    Provider.make({ id: provider ?? id, auth: shared.auth([]), apis: [shared.api], settings: shared.settings }),
+  )(modelID, settings)
 }
 
 export * as AnthropicCompatible from "./anthropic-compatible.js"

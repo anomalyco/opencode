@@ -1,1 +1,11 @@
-export { model, type Settings } from "../alibaba.js"
+import { AlibabaChat } from "../../protocols/alibaba-chat.js"
+import { Provider } from "../../provider.js"
+import { paths, provider, type Settings as LocatedSettings } from "./shared.js"
+
+export type Settings = LocatedSettings<AlibabaChat.OptionsInput>
+
+export const chatCompletions = AlibabaChat.api.configure({ models: { "qwen*": { cache: { format: "alibaba" } } } })
+
+export const model = Provider.entrypoint<Settings, AlibabaChat.OptionsInput>(
+  provider(chatCompletions, paths.compatible),
+)

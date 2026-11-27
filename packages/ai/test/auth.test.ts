@@ -4,12 +4,12 @@ import { Headers } from "effect/http"
 import { ai } from "../src/effect.js"
 import { Auth } from "../src/route/auth.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
-import { LanguageModel } from "../src/schema/index.js"
 import { it } from "./lib/effect.js"
+import { apiModel } from "./lib/model.js"
 
 const request = ai.request({
   id: "req_auth",
-  model: LanguageModel.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route }),
+  model: apiModel(OpenAIChat.api, "fake-model", { provider: "fake", baseURL: "https://api.openai.com/v1" }),
   prompt: "hello",
 })
 

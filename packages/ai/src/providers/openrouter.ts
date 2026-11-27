@@ -1,8 +1,9 @@
 import { Effect, Schema } from "effect"
-import { Route } from "../route/client.js"
-import { Endpoint } from "../route/endpoint.js"
+import { Api } from "../api.js"
+import { Capabilities } from "../capabilities.js"
+import { gatewayModels } from "../cache-policy.js"
+import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { Protocol } from "../route/protocol.js"
-import type { ProviderAuthOption } from "../route/auth-options.js"
 import {
   mergeTransport,
   ProviderID,
@@ -12,24 +13,24 @@ import {
   type RequestOptions,
 } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
+import { Provider } from "../provider.js"
 import { SystemOne } from "../protocols/system-one.js"
 import { OpenAIEmbeddings } from "../protocols/openai-embeddings.js"
 import { OpenAIImages, type OpenAIImageSizing } from "../protocols/openai-images.js"
 import { OpenRouterVideo } from "../protocols/openrouter-video.js"
 import { MediaRoute } from "../route/media.js"
-import { HttpTransport } from "../route/transport/index.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
-import { OpenResponses } from "../protocols/open-responses.js"
 import { cacheControl } from "../protocols/utils/cache.js"
 import { isRecord, JsonObject, lenient, ProviderShared } from "../protocols/shared.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
-import { bearerRouteDefaults, toConfig } from "./settings.js"
+import { responses } from "./openrouter/responses.js"
+import { SharedOptions, sharedOptions, shared } from "./openrouter/shared.js"
+import { toConfig } from "./settings.js"
 
+export { model as responsesModel } from "./openrouter/responses.js"
 export type { OpenRouterVideoOptions } from "../protocols/openrouter-video.js"
 
 export const id = ProviderID.make("openrouter")
-const baseURL = "https://openrouter.ai/api/v1"
-const ADAPTER = "openrouter"
 
 export interface OpenRouterProviderRouting {
   readonly [key: string]: unknown
@@ -104,6 +105,7 @@ export interface OpenRouterEmbeddingOptions {
   readonly user?: string
 }
 
+/** Connection settings for OpenRouter's media models. Language models come from `openrouter`. */
 export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
@@ -115,14 +117,6 @@ export type Settings<Options = OpenRouterProviderOptionsInput> = ProviderPackage
     readonly apiKey?: string | false
     readonly baseURL?: string
   }
-
-const SharedOptions = Schema.Struct({
-  models: lenient(Schema.Array(Schema.String)),
-  provider: lenient(JsonObject),
-  plugins: lenient(Schema.Array(JsonObject)),
-  debug: lenient(JsonObject),
-  user: lenient(Schema.String),
-})
 
 const Options = Schema.Struct({
   ...SharedOptions.fields,
@@ -142,7 +136,7 @@ const OpenRouterBody = Schema.StructWithRest(
 )
 export type OpenRouterBody = Schema.Schema.Type<typeof OpenRouterBody>
 
-export const protocol = Protocol.make({
+const protocol = Protocol.make({
   id: "openrouter-chat",
   body: {
     schema: OpenRouterBody,
@@ -198,6 +192,22 @@ const bodyOptions = (body: OpenAIChat.OpenAIChatBody, input: unknown, maxTokens:
   }
 }
 
+export const chatCompletions = Api.make({
+  name: "chat-completions",
+  id: "openrouter",
+  protocol,
+  path: OpenAIChat.PATH,
+  framing: OpenAIChat.framing,
+  capabilities: Capabilities.defaults<Capabilities.ChatCompletions>(),
+}).configure({
+  capabilities: { cache: { promptCacheKey: true } },
+  models: { "*": { cache: { markers: false } }, ...gatewayModels },
+})
+
+export const openrouter = Provider.make({ ...shared, apis: [chatCompletions, responses] })
+
+export const model = Provider.entrypoint<Settings, OpenRouterProviderOptionsInput>(openrouter)
+
 const IMAGE_RESOLUTIONS = new Set(["512", "768", "1K", "1.5K", "2K", "4K"])
 
 // A pixel `size` renders at the upstream's own tier (Gemini 2K comes back as 4K) and FLUX 3 rejects it, so sizing goes
@@ -213,136 +223,62 @@ const imageSizing: OpenAIImageSizing = (request) => {
   }
 }
 
-const sharedOptions = (known: typeof SharedOptions.Type) => ({
-  ...(known.models !== undefined ? { models: known.models } : {}),
-  ...(known.provider !== undefined ? { provider: known.provider } : {}),
-  ...(known.plugins !== undefined ? { plugins: known.plugins } : {}),
-  ...(known.debug !== undefined ? { debug: known.debug } : {}),
-  ...(known.user !== undefined ? { user: known.user } : {}),
-})
-
-const OpenRouterResponsesBody = Schema.Struct({
-  ...OpenResponses.OpenResponsesBody.fields,
-  ...SharedOptions.fields,
-})
-type OpenRouterResponsesBody = Schema.Schema.Type<typeof OpenRouterResponsesBody>
-
-const responsesProtocol = Protocol.make({
-  id: "openrouter-responses",
-  body: {
-    schema: OpenRouterResponsesBody,
-    from: (request) =>
-      OpenResponses.fromRequest(request).pipe(
-        Effect.map((body) => ({ ...body, ...sharedOptions(decodeOptions(request.providerOptions ?? {})) })),
-      ),
-  },
-  stream: OpenResponses.protocol.stream,
-  supportsEffortUpdates: OpenResponses.protocol.supportsEffortUpdates,
-})
-
-export const route = Route.make({
-  id: ADAPTER,
-  provider: id,
-  providerMetadataKey: "openrouter",
-  protocol,
-  endpoint: Endpoint.path("/chat/completions", { baseURL }),
-  framing: OpenAIChat.framing,
-})
-
-const responsesRoute = Route.make({
-  id: "openrouter-responses",
-  provider: id,
-  providerMetadataKey: "openrouter",
-  protocol: responsesProtocol,
-  endpoint: Endpoint.path("/responses", { baseURL }),
-  transport: HttpTransport.sseJson.with<OpenRouterResponsesBody>(),
-  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
-})
-
-export const routes = [route, responsesRoute]
-
-export const configure = (input: Config = {}) => {
-  const options = bearerRouteDefaults(input, "OPENROUTER_API_KEY", baseURL)
-  const chatRoute = route.with(options)
-  const configuredResponses = responsesRoute.with(options)
+export const media = (input: Config = {}) => {
+  const auth = AuthOptions.bearer(input, "OPENROUTER_API_KEY")
+  const endpoint = { baseURL: input.baseURL ?? shared.baseURL }
   const decisionRoute = SystemOne.route.with({
     provider: id,
     providerMetadataKey: "openrouter",
-    endpoint: options.endpoint,
-    auth: options.auth,
+    endpoint,
+    auth,
     ...mergeTransport(input),
   })
-  const media = MediaRoute.deployment({ ...input, baseURL: options.endpoint.baseURL }, options.auth)
-  const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
-    OpenAIImages.model({
-      ...media,
-      id: modelID,
-      provider: id,
-      providerOptions,
-      sizing: imageSizing,
-      imageInput: "references",
-    })
-  const video = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
-    OpenRouterVideo.model({ ...media, id: modelID, providerOptions })
-  const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
-    decisionRoute.model<OpenRouterDecisionOptions>({
-      id: modelID,
-      compatibility: { mediaInput: "state" },
-      providerOptions,
-    })
-  const embeddingRoute = OpenAIEmbeddings.route.with({
-    provider: id,
-    endpoint: options.endpoint,
-    auth: options.auth,
-    ...mergeTransport(input),
-  })
-  const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
-    embeddingRoute.model<OpenRouterEmbeddingOptions>({ id: modelID, providerOptions })
-  const chat = (modelID: string | ModelID) =>
-    chatRoute.model<OpenRouterProviderOptionsInput>({ id: modelID, capabilities: { promptCacheKey: true } })
+  const deployment = MediaRoute.deployment({ ...input, baseURL: endpoint.baseURL }, auth)
+  const embeddingRoute = OpenAIEmbeddings.route.with({ provider: id, endpoint, auth, ...mergeTransport(input) })
   return {
-    id,
-    model: chat,
-    chat,
-    responses: (modelID: string | ModelID) =>
-      configuredResponses.model<OpenRouterResponsesProviderOptionsInput>({ id: modelID }),
-    image,
-    video,
-    decision,
-    embedding,
-    configure,
+    image: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+      OpenAIImages.model({
+        ...deployment,
+        id: modelID,
+        provider: id,
+        providerOptions,
+        sizing: imageSizing,
+        imageInput: "references",
+      }),
+    video: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+      OpenRouterVideo.model({ ...deployment, id: modelID, providerOptions }),
+    decision: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+      decisionRoute.model<OpenRouterDecisionOptions>({
+        id: modelID,
+        compatibility: { mediaInput: "state" },
+        providerOptions,
+      }),
+    embedding: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+      embeddingRoute.model<OpenRouterEmbeddingOptions>({ id: modelID, providerOptions }),
   }
 }
 
-export const provider = configure()
-export const decision = provider.decision
-export const embedding = provider.embedding
-export const image = provider.image
-export const video = provider.video
-export const chat = provider.chat
-export const responses = provider.responses
-export const model: ProviderPackage.Model<Settings, OpenRouterProviderOptionsInput> = (modelID, settings) =>
-  configure(toConfig(settings)).model(modelID)
-export const responsesModel: ProviderPackage.Model<
-  Settings<OpenRouterResponsesProviderOptionsInput>,
-  OpenRouterResponsesProviderOptionsInput
-> = (modelID, settings) => configure(toConfig(settings)).responses(modelID)
+const defaultMedia = media()
+
+export const decision = defaultMedia.decision
+export const embedding = defaultMedia.embedding
+export const image = defaultMedia.image
+export const video = defaultMedia.video
 export const imageModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
-  return configure(input).image(modelID, input.providerOptions)
+  return media(input).image(modelID, input.providerOptions)
 }
 export const videoModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
-  return configure(input).video(modelID, input.providerOptions)
+  return media(input).video(modelID, input.providerOptions)
 }
 export const decisionModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
-  return configure(input).decision(modelID, input.providerOptions)
+  return media(input).decision(modelID, input.providerOptions)
 }
-
 export const embeddingModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
-  return configure(input).embedding(modelID, input.providerOptions)
+  return media(input).embedding(modelID, input.providerOptions)
 }
 
 export * as OpenRouter from "./openrouter.js"

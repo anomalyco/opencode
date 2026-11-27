@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
-import { ToolDefinition } from "@opencode/ai/effect"
+import { LanguageModel, ToolDefinition } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
+import { Auth } from "@opencode/ai/route"
 import { Agent } from "@opencode/schema/agent"
 import { Money } from "@opencode/schema/money"
 import { Session } from "@opencode/schema/session"
@@ -29,11 +30,20 @@ const session = Session.Info.make({
   time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
   location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
 })
-const model = SessionRunnerModel.resolved(OpenAIChat.route.model({ id: "gpt-5.5", provider: "test" }), {
-  capabilities: { tools: true, input: ["text"], output: ["text"] },
-  cost: [],
-  limit: { context: 200_000, output: 32_000 },
-})
+const model = SessionRunnerModel.resolved(
+  LanguageModel.make({
+    id: "gpt-5.5",
+    provider: "test",
+    api: OpenAIChat.api,
+    baseURL: OpenAIChat.DEFAULT_BASE_URL,
+    auth: Auth.none,
+  }),
+  {
+    capabilities: { tools: true, input: ["text"], output: ["text"] },
+    cost: [],
+    limit: { context: 200_000, output: 32_000 },
+  },
+)
 const transport = SessionModelTransport.Service.of({
   bind: () => ({ execute: () => Effect.die("unused WebSocket execution") }),
   close: () => Effect.void,
@@ -244,12 +254,21 @@ describe("SessionModelRequest HTTP hooks", () => {
       const prepared = yield* requests.primary({
         session,
         agent: Agent.ID.make("build"),
-        model: SessionRunnerModel.resolved(OpenAIChat.route.model({ id: "gpt-5.5", provider: "test" }), {
-          capabilities: { tools: true, input: ["text"], output: ["text"] },
-          cost: [],
-          limit: { context: 200_000, output: 32_000 },
-          transport: "websocket",
-        }),
+        model: SessionRunnerModel.resolved(
+          LanguageModel.make({
+            id: "gpt-5.5",
+            provider: "test",
+            api: OpenAIChat.api,
+            baseURL: OpenAIChat.DEFAULT_BASE_URL,
+            auth: Auth.none,
+          }),
+          {
+            capabilities: { tools: true, input: ["text"], output: ["text"] },
+            cost: [],
+            limit: { context: 200_000, output: 32_000 },
+            transport: "websocket",
+          },
+        ),
         system: [],
         messages: [],
         webSocket: "session",

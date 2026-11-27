@@ -1,3 +1,4 @@
+import { Capabilities } from "../capabilities.js"
 import { Tool } from "@opencode/schema/tool"
 import { Effect, Option, Predicate, Schema, SchemaGetter, SchemaTransformation } from "effect"
 import { Headers, HttpClientRequest } from "effect/http"
@@ -115,7 +116,7 @@ export const OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH = 64
 // Body-level `prompt_cache_key` is off when caching is disabled or the model
 // explicitly rejects the field. Header-based affinity is unaffected.
 export const sendsPromptCacheKey = (request: LLMRequest) =>
-  request.cache !== "none" && request.model.capabilities?.promptCacheKey !== false
+  request.cache !== "none" && Capabilities.cache(request.model.capabilities)?.promptCacheKey !== false
 
 // OpenAI limits `prompt_cache_key` to 64 chars; DeepSeek and Zai inherit the same
 // limit via their OpenAI-compatible APIs. Clamp with unicode-aware slicing.

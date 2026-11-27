@@ -3,8 +3,12 @@ import { ai, tool } from "../src/effect.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import { Auth } from "../src/route.js"
 import { AI } from "../src/index.js"
+import { apiModel } from "./lib/model.js"
 
-const model = OpenAIChat.route.with({ auth: Auth.bearer("fixture") }).model({ id: "gpt-4o-mini" })
+const model = apiModel(OpenAIChat.api, "gpt-4o-mini", {
+  baseURL: "https://api.openai.com/v1",
+  auth: Auth.bearer("fixture"),
+})
 
 const add = AI.tool({
   name: "add",

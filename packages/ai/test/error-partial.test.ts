@@ -9,8 +9,9 @@ import { TestLLM } from "../src/testing.js"
 import { testEffect } from "./lib/effect.js"
 import { handlerLayer } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
+import { apiModel } from "./lib/model.js"
 
-const model = LanguageModel.make({ id: "fictional-model", provider: "fixture", route: OpenAIChat.route })
+const model = apiModel(OpenAIChat.api, "fictional-model", { provider: "fixture", baseURL: "https://api.openai.com/v1" })
 const it = testEffect(TestLLM.testLayer())
 const overloaded = new AIError({ reason: new ProviderInternalError({ message: "Overloaded" }) })
 
@@ -130,7 +131,10 @@ describe("AIError.partial from the promise client", () => {
     })
 
     const error = await client
-      .generate({ model: OpenAI.configure({ apiKey: "test" }).chat("gpt-4o-mini"), prompt: "Hello" })
+      .generate({
+        model: OpenAI.openai.with({ apiKey: "test" }).model("gpt-4o-mini", { api: "chat-completions" }),
+        prompt: "Hello",
+      })
       .catch((error: unknown) => error)
 
     expect(error).toBeInstanceOf(AIError)

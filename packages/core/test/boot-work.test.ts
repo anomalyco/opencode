@@ -9,6 +9,7 @@ import { Effect, Layer } from "effect"
 import { ChildProcessSpawner } from "effect/process"
 import { LanguageModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
+import { Auth } from "@opencode/ai/route"
 import { TestLLM } from "@opencode/ai/testing"
 import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -125,7 +126,13 @@ const it = testEffect(
           resolve: () =>
             Effect.succeed(
               SessionRunnerModel.resolved(
-                LanguageModel.make({ id: "boot", provider: "test", route: OpenAIChat.route }),
+                LanguageModel.make({
+                  id: "boot",
+                  provider: "test",
+                  api: OpenAIChat.api,
+                  baseURL: OpenAIChat.DEFAULT_BASE_URL,
+                  auth: Auth.none,
+                }),
                 {
                   capabilities: { tools: true, input: ["text"], output: ["text"] },
                   cost: [],

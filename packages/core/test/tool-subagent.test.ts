@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect"
 import { AIError, InvalidRequestError, LanguageModel, LLMEvent } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
+import { Auth } from "@opencode/ai/route"
 import { TestLLM } from "@opencode/ai/testing"
 import path from "path"
 import { Money } from "@opencode/schema/money"
@@ -169,7 +170,13 @@ const completionIt = testEffect(
           resolve: () =>
             Effect.succeed(
               SessionRunnerModel.resolved(
-                LanguageModel.make({ id: "child", provider: "test", route: OpenAIChat.route }),
+                LanguageModel.make({
+                  id: "child",
+                  provider: "test",
+                  api: OpenAIChat.api,
+                  baseURL: OpenAIChat.DEFAULT_BASE_URL,
+                  auth: Auth.none,
+                }),
                 {
                   capabilities: { tools: true, input: ["text"], output: ["text"] },
                   cost: [],

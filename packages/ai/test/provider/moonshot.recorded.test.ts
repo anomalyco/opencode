@@ -1,12 +1,13 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, type LLMResponse, Message, ToolDefinition } from "../../src/effect.js"
-import { Moonshot } from "../../src/providers.js"
+import { Moonshot } from "../../src/providers/moonshot.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
 
 const apiKey = process.env.MOONSHOT_API_KEY ?? process.env.MOONSHOTAI_API_KEY ?? "fixture"
+const apis = { chat: "chat-completions", messages: "messages", responses: "responses" } as const
 const requires = [process.env.MOONSHOT_API_KEY ? "MOONSHOT_API_KEY" : "MOONSHOTAI_API_KEY"]
 
 for (const api of ["chat", "messages", "responses"] as const) {
@@ -19,10 +20,9 @@ for (const api of ["chat", "messages", "responses"] as const) {
       () =>
         Effect.gen(function* () {
           const request = ai.request({
-            model: Moonshot.configure({
-              apiKey,
-              providerOptions: api === "messages" ? { effort } : { reasoningEffort: effort },
-            })[api]("kimi-k3"),
+            model: Moonshot.moonshot
+              .with({ apiKey, providerOptions: api === "messages" ? { effort } : { reasoningEffort: effort } })
+              .model("kimi-k3", { api: apis[api] }),
             prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
             maxTokens: 4096,
           })
@@ -67,7 +67,7 @@ for (const item of [
       Effect.gen(function* () {
         const response = yield* LLMClient.generate(
           ai.request({
-            model: Moonshot.configure({ apiKey, providerOptions: { thinking: item.thinking } }).chat(item.model),
+            model: Moonshot.model(item.model, { apiKey, thinking: item.thinking }),
             prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
             maxTokens: 4096,
           }),
@@ -107,7 +107,9 @@ for (const item of [
     () =>
       Effect.gen(function* () {
         const request = ai.request({
-          model: Moonshot.configure({ apiKey, providerOptions: item.options })[item.api](item.model),
+          model: Moonshot.moonshot
+            .with({ apiKey, providerOptions: item.options })
+            .model(item.model, { api: apis[item.api] }),
           prompt:
             "Use get_weather to look up the current weather in Paris. After receiving the result, report the weather in one short sentence.",
           tools: [weather],

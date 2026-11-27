@@ -1,7 +1,7 @@
 import { ai } from "../../src/effect.js"
 import { AmazonBedrock } from "../../src/providers.js"
 
-const model = AmazonBedrock.provider.model("us.anthropic.claude-sonnet-4-6")
+const model = AmazonBedrock.model("us.anthropic.claude-sonnet-4-6")
 
 ai.request({
   model,

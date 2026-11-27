@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schedule } from "effect"
 import { ai, type VideoModel, type VideoStatus } from "../../src/effect.js"
-import { MiniMax } from "../../src/providers.js"
+import { MiniMax } from "../../src/providers/minimax.js"
 import { recordedTests } from "../recorded-test.js"
 import { queuedPoll } from "./queued-recording.js"
 
-const minimax = MiniMax.configure({ apiKey: process.env.MINIMAX_API_KEY ?? "fixture" })
+const minimax = MiniMax.media({ apiKey: process.env.MINIMAX_API_KEY ?? "fixture" })
 
 const recorded = recordedTests({
   prefix: "minimax-video",

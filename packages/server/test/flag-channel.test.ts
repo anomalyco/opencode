@@ -18,6 +18,7 @@ import { Context, Effect, Layer } from "effect"
 import { HttpServer } from "effect/http"
 import { LanguageModel, LLMClient } from "../../ai/src/effect"
 import { OpenAIChat } from "../../ai/src/protocols/openai-chat"
+import { Auth } from "../../ai/src/route"
 import { TestLLM } from "../../ai/src/testing"
 import { tempGlobalLayer } from "../../core/test/fixture/global"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
@@ -34,7 +35,13 @@ const runChannel = (channel: "dev" | "latest") =>
     const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
     const llm = yield* TestLLM.Test.pipe(Effect.provide(TestLLM.testLayer()))
     const model = SessionRunnerModel.resolved(
-      LanguageModel.make({ id: "flag-channel-model", provider: "test", route: OpenAIChat.route }),
+      LanguageModel.make({
+        id: "flag-channel-model",
+        provider: "test",
+        api: OpenAIChat.api,
+        baseURL: OpenAIChat.DEFAULT_BASE_URL,
+        auth: Auth.none,
+      }),
       {
         capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
         cost: [],
@@ -55,7 +62,10 @@ const runChannel = (channel: "dev" | "latest") =>
           Global.node.replace(tempGlobalLayer),
           llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
           SessionRunnerModel.node.replace(
-            Layer.succeed(SessionRunnerModel.Service, { select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })), resolve: () => Effect.succeed(model) }),
+            Layer.succeed(SessionRunnerModel.Service, {
+              select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
+              resolve: () => Effect.succeed(model),
+            }),
           ),
           Image.node.replace(imagePassthrough),
         ],
@@ -89,16 +99,8 @@ const runChannel = (channel: "dev" | "latest") =>
     })
     yield* sessions.wait(session.id)
 
-    const blobs = yield* db
-      .select({ hash: BlobTable.hash })
-      .from(BlobTable)
-      .all()
-      .pipe(Effect.orDie)
-    const rows = yield* db
-      .select()
-      .from(SessionMessageTable)
-      .all()
-      .pipe(Effect.orDie)
+    const blobs = yield* db.select({ hash: BlobTable.hash }).from(BlobTable).all().pipe(Effect.orDie)
+    const rows = yield* db.select().from(SessionMessageTable).all().pipe(Effect.orDie)
     const userRow = rows.find((row) => row.id === admitted.id)
 
     return {

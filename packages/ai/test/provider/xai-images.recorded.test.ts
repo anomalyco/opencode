@@ -5,7 +5,7 @@ import { XAI } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
 
-const model = XAI.configure({
+const model = XAI.media({
   apiKey: process.env.XAI_API_KEY ?? "fixture",
 }).image("grok-imagine-image")
 

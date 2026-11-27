@@ -12,10 +12,10 @@ const RECORDING_REGION = process.env.BEDROCK_RECORDING_REGION ?? "us-east-1"
 // doesn't reliably surface `cacheRead`/`cacheWrite` in usage, so the second
 // call wouldn't deterministically prove cache mapping works. Override with
 // BEDROCK_CACHE_MODEL_ID if your account has access elsewhere.
-const model = AmazonBedrock.configure({
+const model = AmazonBedrock.model(process.env.BEDROCK_CACHE_MODEL_ID ?? "us.anthropic.claude-haiku-4-5-20251001-v1:0", {
   apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK ?? "fixture",
   region: RECORDING_REGION,
-}).model(process.env.BEDROCK_CACHE_MODEL_ID ?? "us.anthropic.claude-haiku-4-5-20251001-v1:0")
+})
 
 const cacheRequest = ai.request({
   id: "recorded_bedrock_cache",

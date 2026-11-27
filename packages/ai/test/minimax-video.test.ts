@@ -1,14 +1,14 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Media, VideoClient, ai } from "../src/effect.js"
-import { MiniMax } from "../src/providers.js"
+import { MiniMax } from "../src/providers/minimax.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json, observe, type Call } from "./lib/http.js"
 
 const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
   VideoClient.layer.pipe(Layer.provideMerge(dynamicResponse(handler)))
 
-const minimax = MiniMax.configure({ apiKey: "test", baseURL: "https://minimax.test" })
+const minimax = MiniMax.media({ apiKey: "test", baseURL: "https://minimax.test" })
 const h3 = minimax.video("MiniMax-H3-Lite")
 const hailuo = minimax.video("MiniMax-Hailuo-02")
 const id = "task_1"
@@ -199,7 +199,7 @@ describe("MiniMax Video / Hailuo start", () => {
     Effect.gen(function* () {
       const requests = yield* sent(
         ["https://api.minimax.cn/v1", "https://api.minimax.cn/v1/", "https://api.minimax.cn/"].flatMap((baseURL) => {
-          const shared = MiniMax.configure({ apiKey: "test", baseURL })
+          const shared = MiniMax.media({ apiKey: "test", baseURL })
           return [{ model: shared.video("MiniMax-H3") }, { model: shared.video("MiniMax-Hailuo-2.3") }]
         }),
       )

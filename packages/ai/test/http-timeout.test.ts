@@ -10,8 +10,8 @@ import { deltaChunk, finishChunk } from "./lib/openai-chunks.js"
 import { sseEvents, sseRaw } from "./lib/sse.js"
 import { it } from "./lib/effect.js"
 
-const openai = OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" })
-const model = openai.chat("gpt-4.1-mini")
+const openai = OpenAI.openai.with({ baseURL: "https://api.openai.test/v1/", apiKey: "test" })
+const model = openai.model("gpt-4.1-mini", { api: "chat-completions" })
 const video = BytePlus.configure({ baseURL: "https://api.byteplus.test/v3", apiKey: "test" }).video("seedance-1-5")
 const SSE = { headers: { "content-type": "text/event-stream" } }
 
@@ -179,7 +179,12 @@ describe("HTTP transport timeouts", () => {
   it.effect("applies provider-configured timeouts to every API method", () =>
     Effect.gen(function* () {
       const timeout = { headers: 1_000 }
-      const timedOpenAI = OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test", timeout })
+      const timedOpenAI = OpenAI.openai.with({
+        baseURL: "https://api.openai.test/v1/",
+        apiKey: "test",
+        options: { timeout },
+      })
+      const timedOpenAIMedia = OpenAI.media({ baseURL: "https://api.openai.test/v1/", apiKey: "test", timeout })
       const timedVideo = BytePlus.configure({ baseURL: "https://api.byteplus.test/v3", apiKey: "test", timeout }).video(
         "seedance-1-5",
       )
@@ -189,8 +194,8 @@ describe("HTTP transport timeouts", () => {
         timeout,
       }).transcription("universal-2")
       const audio = Media.bytes(Uint8Array.from([0x49, 0x44, 0x33, 1, 2, 3]), "audio/mpeg")
-      const image = timedOpenAI.image("gpt-image-2")
-      const chat = { model: timedOpenAI.chat("gpt-4.1-mini"), prompt: "Hello" }
+      const image = timedOpenAIMedia.image("gpt-image-2")
+      const chat = { model: timedOpenAI.model("gpt-4.1-mini", { api: "chat-completions" }), prompt: "Hello" }
       const drain = <A, E, R>(stream: Stream.Stream<A, E, R>) => Stream.runDrain(stream)
 
       // Every callable method on `ai` must be listed here (as a provider call or a local helper), so a new method
@@ -199,7 +204,7 @@ describe("HTTP transport timeouts", () => {
         generate: ai.generate(chat),
         stream: drain(ai.stream(chat)),
         loop: drain(ai.loop(chat)),
-        compact: ai.compact(ai.request({ model: timedOpenAI.responses("gpt-5"), prompt: "Hello" })),
+        compact: ai.compact(ai.request({ model: timedOpenAI.model("gpt-5"), prompt: "Hello" })),
         "image.generate": ai.image.generate({ model: image, prompt: "A kite" }),
         "image.stream": drain(ai.image.stream({ model: image, prompt: "A kite" })),
         "image.start": ai.image.start({ model: image, prompt: "A kite" }),
@@ -207,12 +212,12 @@ describe("HTTP transport timeouts", () => {
         "image.result": ai.image.result(image, "job"),
         "image.cancel": ai.image.cancel(image, "job"),
         "decision.generate": ai.decision.generate({
-          model: timedOpenAI.decision("gpt-6-luna"),
+          model: timedOpenAIMedia.decision("gpt-6-luna"),
           input: "hello",
           questions: [{ name: "greeting", type: "choice", instructions: "Greeting?", choices: [{ value: true }] }],
         }),
         "embedding.generate": ai.embedding.generate({
-          model: timedOpenAI.embedding("text-embedding-3-small"),
+          model: timedOpenAIMedia.embedding("text-embedding-3-small"),
           values: ["hello"],
         }),
         "video.start": ai.video.start({ model: timedVideo, prompt: "A kite" }),
@@ -220,11 +225,11 @@ describe("HTTP transport timeouts", () => {
         "video.result": ai.video.result(timedVideo, "job"),
         "video.cancel": ai.video.cancel(timedVideo, "job"),
         "experimental.speech.generate": ai.experimental.speech.generate({
-          model: timedOpenAI.speech("gpt-4o-mini-tts"),
+          model: timedOpenAIMedia.speech("gpt-4o-mini-tts"),
           text: "Hello",
         }),
         "experimental.speech.stream": drain(
-          ai.experimental.speech.stream({ model: timedOpenAI.speech("gpt-4o-mini-tts"), text: "Hello" }),
+          ai.experimental.speech.stream({ model: timedOpenAIMedia.speech("gpt-4o-mini-tts"), text: "Hello" }),
         ),
         "experimental.transcription.generate": ai.experimental.transcription.generate({
           model: timedTranscription,

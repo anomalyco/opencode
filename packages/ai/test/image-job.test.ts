@@ -177,7 +177,7 @@ describe("ai.image.start / status / result / cancel", () => {
 
   it.effect("every job call fails with UnsupportedOperation on an inline route before sending", () =>
     Effect.gen(function* () {
-      const inline = Google.configure({ apiKey: "test" }).image("gemini-3.1-flash-image")
+      const inline = Google.media({ apiKey: "test" }).image("gemini-3.1-flash-image")
       const errors = yield* Effect.all(
         [
           ai.image.start({ model: inline, prompt: "A lighthouse" }),

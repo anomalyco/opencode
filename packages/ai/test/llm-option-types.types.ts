@@ -2,13 +2,14 @@ import { Effect, Schema, Stream } from "effect"
 import {
   ai,
   type Finish,
-  type LanguageModel,
+  LanguageModel,
   type LanguageModelProviderOptions,
   type LLMClientService,
   type ProviderOptions,
 } from "../src/effect.js"
 import { AI } from "../src/index.js"
 import { OpenAIChat } from "../src/protocols.js"
+import { Auth } from "../src/route.js"
 
 interface ExampleOptions {
   readonly [key: string]: unknown
@@ -17,9 +18,13 @@ interface ExampleOptions {
 
 type ExampleProviderOptions = ProviderOptions & ExampleOptions
 
-const model = OpenAIChat.route
-  .with({ endpoint: { baseURL: "https://example.com/v1" } })
-  .model<ExampleProviderOptions>({ id: "example" })
+const model = LanguageModel.make<ExampleProviderOptions>({
+  id: "example",
+  provider: "openai",
+  api: OpenAIChat.api,
+  baseURL: "https://example.com/v1",
+  auth: Auth.none,
+})
 
 type Requirements<T> = T extends Effect.Effect<infer _A, infer _E, infer R> ? R : never
 type Success<T> = T extends Effect.Effect<infer A, infer _E, infer _R> ? A : never

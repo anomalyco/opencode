@@ -1,7 +1,7 @@
 import { Effect, Schema, Stream } from "effect"
-import { Route, type RouteBody, type TriggerCompactOperation } from "../../route/client.js"
-import { Protocol } from "../../route/protocol.js"
-import { CompactionCheckpointResponse, LLMEvent, type LLMRequest } from "../../schema/index.js"
+import { prepareTransport, streamPrepared, type TriggerCompactOperation } from "../../route/client.js"
+import { Protocol, type ProtocolBody } from "../../route/protocol.js"
+import { CompactionCheckpointResponse, LanguageModel, LLMEvent, type LLMRequest } from "../../schema/index.js"
 import { OpenResponses } from "../open-responses.js"
 import { ProviderShared } from "../shared.js"
 
@@ -44,14 +44,14 @@ const onOutputItem = Effect.fnUntraced(function* (state: State, input: OpenRespo
 })
 
 /** Collect a trigger response before acknowledging transport completion. No generation output escapes. */
-export const make = <Body>(body: RouteBody<Body>): TriggerCompactOperation =>
+export const make = <Body>(body: ProtocolBody<Body>): TriggerCompactOperation =>
   Effect.fn("ResponsesCheckpoint.execute")(function* (request, executor, options) {
-    const source = request.model.route
+    const source = request.model.api
     let result: CompactionCheckpointResponse | undefined
     // Route registries erase the frame type. The codec validates that boundary before parsing.
     const event: Schema.Codec<OpenResponses.Event, unknown> = OpenResponses.protocol.stream.event
     const protocol = Protocol.make({
-      id: source.protocol,
+      id: source.protocol.id,
       body,
       stream: {
         event,
@@ -96,18 +96,10 @@ export const make = <Body>(body: RouteBody<Body>): TriggerCompactOperation =>
         }),
       },
     })
-    const route = Route.make({
-      id: source.id,
-      provider: source.provider,
-      providerMetadataKey: source.providerMetadataKey,
-      protocol,
-      endpoint: source.endpoint,
-      auth: source.auth,
-      transport: source.transport,
-    })
+    const scoped = { ...request, model: LanguageModel.make({ ...request.model, api: { ...source, protocol } }) }
     const native = yield* body.from(request)
-    const prepared = yield* route.prepareTransport(native, request, options)
-    yield* route.streamPrepared(prepared, request, { http: executor }, options).pipe(Stream.runDrain)
+    const prepared = yield* prepareTransport(native, scoped, options)
+    yield* streamPrepared(prepared, scoped, { http: executor }, options).pipe(Stream.runDrain)
     if (!result) return yield* ProviderShared.eventError(source.id, "Compaction response ended without a checkpoint")
     return result
   })

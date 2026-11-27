@@ -6,7 +6,14 @@ import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
 
-const alibaba = Alibaba.configure({ region: "ap-southeast-1", apiKey: process.env.ALIBABA_API_KEY ?? "fixture" })
+const provider = Alibaba.alibaba({ region: "ap-southeast-1" }).with({
+  apiKey: process.env.ALIBABA_API_KEY ?? "fixture",
+})
+const alibaba = {
+  chat: (id: string) => provider.model(id, { api: "chat-completions" }),
+  messages: (id: string) => provider.model(id, { api: "messages" }),
+  responses: (id: string) => provider.model(id, { api: "responses" }),
+}
 const record = (api: "chat" | "messages" | "responses") =>
   recordedTests({
     prefix: `alibaba-${api}`,

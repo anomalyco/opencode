@@ -1,4 +1,7 @@
 import { Effect, Schema } from "effect"
+import { Api } from "../api.js"
+import { Capabilities } from "../capabilities.js"
+import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, ProviderShared } from "./shared.js"
@@ -82,6 +85,15 @@ export const protocol = Protocol.make({
     )
   }),
   supportsEffortUpdates: OpenResponses.protocol.supportsEffortUpdates,
+})
+
+export const api = Api.make({
+  name: "responses",
+  id: adapter.id,
+  protocol,
+  path: OpenResponses.PATH,
+  framing: Framing.sse,
+  capabilities: Capabilities.defaults<Capabilities.Responses>(),
 })
 
 export * as AlibabaResponses from "./alibaba-responses.js"

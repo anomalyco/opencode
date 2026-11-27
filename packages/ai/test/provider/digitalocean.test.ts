@@ -23,18 +23,18 @@ describe("DigitalOcean", () => {
 
   it.effect("prepares DigitalOcean models with default endpoint and auth", () =>
     Effect.gen(function* () {
-      const model = DigitalOcean.configure({ apiKey: "test-key" }).model("anthropic-claude-fable-5.1")
+      const model = DigitalOcean.model("anthropic-claude-fable-5.1", { apiKey: "test-key" })
 
       expect(model).toMatchObject({
         id: "anthropic-claude-fable-5.1",
         provider: "digitalocean",
-        route: { id: "digitalocean" },
+        api: { id: "digitalocean" },
       })
-      expect(model.route.endpoint.baseURL).toBe("https://inference.do-ai.run/v1")
+      expect(model.baseURL).toBe("https://inference.do-ai.run/v1")
 
       const prepared = yield* compileRequest(ai.request({ model, prompt: "Say hello.", cache: "none" }))
 
-      expect(prepared.route).toBe("digitalocean")
+      expect(prepared.api).toBe("digitalocean")
       expect(prepared.body).toMatchObject({
         model: "anthropic-claude-fable-5.1",
         messages: [{ role: "user", content: "Say hello." }],
@@ -47,7 +47,7 @@ describe("DigitalOcean", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: DigitalOcean.configure({ apiKey: "test-key" }).model("anthropic-claude-fable-5.1"),
+          model: DigitalOcean.model("anthropic-claude-fable-5.1", { apiKey: "test-key" }),
           system: [
             { type: "text", text: "Base agent", cache: new CacheHint({ type: "ephemeral", ttl: "1h" }) },
             { type: "text", text: "Project instructions" },
@@ -79,7 +79,7 @@ describe("DigitalOcean", () => {
 
   it.effect("parses DigitalOcean cache usage fields into AI.Usage", () =>
     Effect.gen(function* () {
-      const model = DigitalOcean.configure({ apiKey: "test-key" }).model("anthropic-claude-fable-5.1")
+      const model = DigitalOcean.model("anthropic-claude-fable-5.1", { apiKey: "test-key" })
       const response = yield* LLMClient.generate(ai.request({ model, prompt: "Say OK" })).pipe(
         Effect.provide(
           fixedResponse(

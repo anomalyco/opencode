@@ -2,9 +2,6 @@ import type { ProviderPackage } from "../../provider-package.js"
 import { Provider } from "../../provider.js"
 import { openAIDefaultOptions, type OpenAIProviderOptionsInput } from "../openai-options.js"
 
-export const id = "openai"
-export const baseURL = "https://api.openai.com/v1"
-
 export type Settings = ProviderPackage.Settings &
   OpenAIProviderOptionsInput & {
     readonly apiKey?: string | false
@@ -14,8 +11,10 @@ export type Settings = ProviderPackage.Settings &
     readonly queryParams?: Readonly<Record<string, string>>
   }
 
+/** What every OpenAI API shares. Each per-API entrypoint builds a provider from it with only its own API. */
 export const shared = {
-  id,
+  id: "openai",
+  baseURL: "https://api.openai.com/v1",
   auth: Provider.apiKey("OPENAI_API_KEY"),
   settings: {
     keys: ["organization", "project", "queryParams"],
@@ -24,13 +23,10 @@ export const shared = {
         ...(values.organization === undefined ? {} : { "OpenAI-Organization": values.organization }),
         ...(values.project === undefined ? {} : { "OpenAI-Project": values.project }),
       }
-      return {
-        headers: Object.keys(headers).length === 0 ? undefined : headers,
-        query: values.queryParams,
-      }
+      return { headers: Object.keys(headers).length === 0 ? undefined : headers, query: values.queryParams }
     },
   },
-} satisfies Omit<Provider.Input<{}>, "apis">
+} satisfies Omit<Provider.Input<[]>, "apis">
 
 /** Stateless defaults, plus reasoning summaries and encrypted reasoning for GPT-5 family models. */
-export const guess = (modelID: string) => ({ options: { providerOptions: openAIDefaultOptions(modelID) } })
+export const options = (modelID: string) => ({ providerOptions: openAIDefaultOptions(modelID) })
