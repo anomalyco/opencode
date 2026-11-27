@@ -426,10 +426,10 @@ await context.ui.dialog.select({
 - Escape, `clear()` หรือการแสดงกล่องโต้ตอบอื่นจะคืน `undefined`
 - อย่าผูก `ctrl+n` หรือ `ctrl+p` กล่องโต้ตอบสงวนไว้สำหรับการนำทาง และการผูกของมันเองมีลำดับเหนือกว่า
 
-กล่องโต้ตอบ JSX กำหนดเองกำหนดขนาดและปิดตัวเองได้
+คุณกำหนดขนาดให้กล่องโต้ตอบ JSX แบบกำหนดเองได้ และกล่องโต้ตอบก็ปิดตัวเองได้ ให้เรียก `set` หลัง `show` เพราะเมื่อแสดงกล่องโต้ตอบ
+ระบบจะรีเซ็ตขนาดเป็น `medium` และไม่จัดให้อยู่กึ่งกลาง ขนาด `medium`, `large` และ `xlarge` กว้าง 60, 88 และ 116 คอลัมน์ตามลำดับ
 
 ```tsx
-context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.show(
   () => (
     <box>
@@ -438,6 +438,7 @@ context.ui.dialog.show(
   ),
   () => console.log("closed"),
 )
+context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.clear()
 ```
 
@@ -644,8 +645,8 @@ const displayPath = context.ui.format.path(context.location?.directory ?? "/home
     "@opencode/plugin": "latest"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.6.6",
-    "@opentui/solid": ">=0.6.6",
+    "@opentui/core": ">=0.8.0",
+    "@opentui/solid": ">=0.8.0",
     "solid-js": ">=1.9.0"
   }
 }

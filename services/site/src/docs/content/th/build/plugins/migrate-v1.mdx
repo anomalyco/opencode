@@ -95,8 +95,33 @@ export default Plugin.define({
 `ctx.location` อธิบายตำแหน่งที่อินสแตนซ์ปลั๊กอินนี้โหลด ไม่ใช่ตำแหน่งของทุกเซสชันหรืออีเวนต์
 ที่ปลั๊กอินอาจเห็น ให้อ่านข้อมูลเซสชันหรืออีเวนต์เมื่อความต่างนี้สำคัญ
 
-บริบทเปิดโดเมนมากกว่าที่ตารางระบุ รวมถึงแคตตาล็อก คำสั่ง การเชื่อมต่อ เซิร์ฟเวอร์ MCP
-การอ้างอิง สกิล ที่เก็บข้อมูล VCS เวิร์กทรี และการค้นหาเว็บ ดู[บริบทปลั๊กอินทั้งหมด](/build/plugins/server#api)
+บริบทปลั๊กอินมีโดเมนอื่นนอกเหนือจากที่ระบุในตาราง เช่น คำสั่ง การเชื่อมต่อกับระบบอื่น เซิร์ฟเวอร์ MCP การอ้างอิง
+สกิล ที่เก็บข้อมูล VCS เวิร์กทรี และการค้นหาเว็บ ดู[บริบทปลั๊กอินทั้งหมด](/build/plugins/server#api)
+
+### ย้ายจากโดเมนแคตตาล็อก
+
+ปลั๊กอินรุ่นก่อนเผยแพร่ผู้ให้บริการและโมเดลผ่าน `ctx.catalog` ตอนนี้ OpenCode แยกเป็นสองโดเมนคือ `ctx.provider` และ
+`ctx.model` ดังนั้นปลั๊กอินที่เรียก `ctx.catalog.transform` จะโหลดไม่สำเร็จ
+
+| API แคตตาล็อกเดิม | API ที่ใช้แทนในปัจจุบัน |
+| --------------------------------------------- | ---------------------------------------------------------------------------- |
+| `ctx.catalog.transform(draft => …)`           | `ctx.provider.transform(editor => …)` และ `ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)`               | `editor.update(id, fn)` บน `ctx.provider` |
+| `draft.model.update(providerID, modelID, fn)` | `editor.update(providerID, modelID, fn)` บน `ctx.model` |
+| `ctx.catalog.reload()`                        | `ctx.provider.reload()` และ `ctx.model.reload()` |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+ดู API ของตัวแก้ไขแบบครบถ้วนในหัวข้อ [ผู้ให้บริการ](/build/plugins/server#providers) และ [โมเดล](/build/plugins/server#models)
 
 ## ลงทะเบียนฮุกใน `setup`
 

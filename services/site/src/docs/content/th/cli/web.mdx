@@ -139,3 +139,27 @@ $ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
 ```bash
 $ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
 ```
+
+`opencode service set password` มีผลเฉพาะกับบริการเบื้องหลังแบบมีการจัดการ ส่วน `opencode serve` จะอ่าน
+`OPENCODE_PASSWORD` หากไม่ได้ตั้งตัวแปรนี้ ระบบจะสร้างรหัสผ่านใหม่ทุกครั้งที่เริ่มทำงาน
+
+### Docker
+
+แต่ละรุ่นมีอิมเมจที่เผยแพร่ไปยัง `ghcr.io/anomalyco/opencode` พร้อมแท็กเวอร์ชัน อิมเมจใช้ `opencode` เป็นคำสั่งเริ่มต้น
+ซึ่งจะเปิด TUI ให้ระบุ `serve` เพื่อรันเซิร์ฟเวอร์แทน แล้วให้เซิร์ฟเวอร์รับการเชื่อมต่อที่ `0.0.0.0` เพราะที่อยู่เริ่มต้น
+`127.0.0.1` เข้าถึงได้จากในคอนเทนเนอร์เท่านั้น
+
+```bash
+$ docker run -d --name opencode -p 4096:4096 \
+    -e OPENCODE_PASSWORD="a-long-secret" \
+    -e ANTHROPIC_API_KEY \
+    -v opencode-data:/root/.local/share/opencode \
+    -v opencode-config:/root/.config/opencode \
+    -v "$PWD":/workspace -w /workspace \
+    ghcr.io/anomalyco/opencode:<version> serve --hostname 0.0.0.0 --port 4096
+```
+
+- ตั้ง `OPENCODE_PASSWORD` เพื่อให้ใช้รหัสผ่านเดิมเมื่อเริ่มทำงานใหม่
+- เมานต์ไดเรกทอรีข้อมูล `/root/.local/share/opencode` ซึ่งเก็บฐานข้อมูลเซสชันของคุณ หากไม่เมานต์ เซสชันจะหายไปพร้อมคอนเทนเนอร์
+  เมานต์ไดเรกทอรี `/root/.config/opencode` เพื่อเก็บการกำหนดค่าส่วนกลาง
+- ตรวจสอบว่าเซิร์ฟเวอร์พร้อมใช้งานด้วย `curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info`

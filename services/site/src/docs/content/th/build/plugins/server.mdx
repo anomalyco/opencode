@@ -187,7 +187,7 @@ const agents = await ctx.agent.list()
 const build = await ctx.agent.get({ agentID: "build" })
 ```
 
-ลงทะเบียนการแปลงเพื่อตรวจ อัปเดต นำออก หรือเลือกเอเจนต์เริ่มต้น
+ลงทะเบียนการแปลงเพื่อตรวจดู สร้าง อัปเดต หรือนำเอเจนต์ออก หรือเพื่อเลือกเอเจนต์เริ่มต้น
 
 ```ts
 await ctx.agent.transform((editor) => {
@@ -199,6 +199,19 @@ await ctx.agent.transform((editor) => {
     agent.description = "Builds features and fixes bugs"
   })
   editor.remove("legacy")
+})
+```
+
+ลงทะเบียนเอเจนต์ใหม่ด้วย `editor.update` หากมี ID นี้แล้ว ระบบจะอัปเดตเอเจนต์เดิม หากยังไม่มี ระบบจะสร้างเอเจนต์ด้วย
+`Agent.Info.default(id)` ก่อนเรียกคอลแบ็ก
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
 })
 ```
 
@@ -1032,10 +1045,10 @@ editor.add({
 await ctx.tool.reload()
 ```
 
-ใช้ `list()` และ `get()` เพื่อตรวจเครื่องมือที่อยู่ในตัวแก้ไขปัจจุบัน เครื่องมือมี `id` ที่มีชื่อที่มีผล
-และ `get()` คืน `undefined` เมื่อไม่มี ID นั้น ใช้ `update` และ `remove` กับชื่อเครื่องมือที่มีผล
-รวมถึงเนมสเปซ (`acme_greeting` ข้างต้น) จุดใน
-เนมสเปซและอักขระที่ไม่รองรับในชื่อเครื่องมือกลายเป็น `_` ชื่อที่ขาดจะถูกเพิกเฉย การสร้างเครื่องมือต้องใช้
+ใช้ `list()` และ `get()` เพื่อตรวจดูเครื่องมือที่อยู่ในตัวแก้ไข ค่า `id` ของเครื่องมือคือชื่อที่ระบบใช้จริง
+และ `get()` จะคืน `undefined` หากไม่พบ ID นั้น เมื่อเรียก `update` หรือ `remove` ให้ใช้ชื่อที่ระบบใช้จริงซึ่งรวมเนมสเปซด้วย
+(เช่น `acme_greeting` ข้างต้น) ระบบจะแทนจุดในเนมสเปซด้วย `_` และแทนอักขระในชื่อเครื่องมือด้วย `_` หากไม่ใช่ตัวอักษร ตัวเลข `_` หรือ `-`
+ระบบจะข้ามชื่อที่ไม่พบ หากต้องการสร้างเครื่องมือ ให้ใช้
 `add` พร้อมคำจำกัดความที่สมบูรณ์ การอัปเดตจะคงชื่อและเนมสเปซไว้ ให้แทนที่ด้วย schema หรือตัวเลือกใหม่
 แทนการแก้ไขค่าที่ซ้อน การอัปเดตที่ไม่ถูกต้องจะถูกบันทึกและคงคำจำกัดความก่อนหน้าไว้
 

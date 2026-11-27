@@ -112,6 +112,36 @@ grep 'role=server' ~/.local/share/opencode/log/opencode.log
 grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
 ```
 
+## ส่งออกข้อมูลเทเลเมทรี
+
+OpenCode ส่งบันทึกและเทรซไปยังตัวรวบรวม OpenTelemetry หรือระบบ APM ที่รองรับ OTLP ผ่าน HTTP ได้ ให้ตั้งค่า base URL
+ของตัวรวบรวมโดยไม่ต้องใส่พาธ
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer example-token"
+export OTEL_RESOURCE_ATTRIBUTES="team=platform,host.name=dev-laptop"
+opencode
+```
+
+| ตัวแปร | การทำงาน |
+| --- | --- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | base URL ระบบส่งบันทึกไปยัง `<endpoint>/v1/logs` และส่งเทรซไปยัง `<endpoint>/v1/traces` หากไม่ตั้งตัวแปรนี้ ระบบจะไม่ส่งออกข้อมูล |
+| `OTEL_EXPORTER_OTLP_HEADERS` | รายการเฮดเดอร์ในรูป `key=value` คั่นด้วยจุลภาค ระบบจะส่งเฮดเดอร์เหล่านี้ไปด้วยทุกครั้งที่ส่งออกข้อมูล เช่น เฮดเดอร์คีย์ API |
+| `OTEL_RESOURCE_ATTRIBUTES` | รายการแอตทริบิวต์ในรูป `key=value` ที่เข้ารหัสแบบ URL และคั่นด้วยจุลภาค ระบบจะเพิ่มแอตทริบิวต์เหล่านี้ในทุกระเบียน หากมีรายการใดผิดรูปแบบ ระบบจะไม่เพิ่มแอตทริบิวต์จากตัวแปรนี้เลย |
+
+ทุกระเบียนยังมี `service.name` (`opencode`), `service.version`, `deployment.environment.name` (ช่องทางเผยแพร่รุ่น),
+`opencode.client` และ `opencode.run` ซึ่งเป็น ID การรันเดียวกับในไฟล์บันทึก
+
+บริการเบื้องหลังทำงานเป็นอีกโปรเซสหนึ่ง จึงไม่รับตัวแปรจากเชลล์ของคุณ ให้ตั้งตัวแปรสำหรับบริการนี้ด้วย
+เพื่อให้มีเทรซของการเรียกโมเดลและการทำงานของเครื่องมือ
+
+```bash
+opencode service set env OTEL_EXPORTER_OTLP_ENDPOINT http://localhost:4318
+opencode service set env OTEL_EXPORTER_OTLP_HEADERS "authorization=Bearer example-token"
+opencode service start
+```
+
 ## เก็บสแนปช็อตฮีป
 
 เขียนสแนปช็อตหน่วยความจำ (ฮีป) ของเซิร์ฟเวอร์เบื้องหลังที่กำลังทำงานบนแพลตฟอร์มใดก็ได้
