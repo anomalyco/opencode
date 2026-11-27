@@ -61,9 +61,9 @@ fn resolve_name(name: &str, env: impl Fn(&str) -> Option<String>) -> Result<Mani
     if name == "1" {
         return Ok(Manifest::defaults());
     }
-    let directory = env("DRIVE_REGISTRY_DIR").map(PathBuf::from).unwrap_or_else(|| {
-        let state = env("XDG_STATE_HOME")
-            .map(PathBuf::from)
+    let set = |key: &str| env(key).filter(|value| !value.is_empty()).map(PathBuf::from);
+    let directory = set("DRIVE_REGISTRY_DIR").unwrap_or_else(|| {
+        let state = set("XDG_STATE_HOME")
             .unwrap_or_else(|| Path::new(&env("HOME").unwrap_or_default()).join(".local").join("state"));
         state.join("opencode-drive").join("instances")
     });
@@ -200,5 +200,31 @@ mod tests {
 
         let registry = resolve(env(&[("OPENCODE_DRIVE", "good"), ("DRIVE_REGISTRY_DIR", instances.to_str().unwrap())]));
         assert_eq!(registry.unwrap().unwrap(), good);
+
+        let home = opencode_util::temp::tempdir().unwrap();
+        let home_instances = home.path().join(".local").join("state").join("opencode-drive").join("instances");
+        std::fs::create_dir_all(&home_instances).unwrap();
+        std::fs::write(
+            home_instances.join("good.json"),
+            r#"{"endpoints":{"ui":"ws://127.0.0.1:4100","backend":"ws://127.0.0.1:4101"},"viewport":{"cols":80,"rows":24},"recording":{"timeline":"/tmp/t.json"}}"#,
+        )
+        .unwrap();
+        let home_dir = home.path().to_str().unwrap();
+        assert_eq!(resolve(env(&[("OPENCODE_DRIVE", "good"), ("HOME", home_dir)])).unwrap().unwrap(), good);
+        assert_eq!(
+            resolve(env(&[("OPENCODE_DRIVE", "good"), ("HOME", home_dir), ("XDG_STATE_HOME", "")])).unwrap().unwrap(),
+            good
+        );
+        assert_eq!(
+            resolve(env(&[
+                ("OPENCODE_DRIVE", "good"),
+                ("HOME", home_dir),
+                ("XDG_STATE_HOME", ""),
+                ("DRIVE_REGISTRY_DIR", ""),
+            ]))
+            .unwrap()
+            .unwrap(),
+            good
+        );
     }
 }
