@@ -3,13 +3,13 @@ import { createStore } from "solid-js/store"
 import { TimelineQuote } from "./quote"
 
 const docs = `### Overview
-The toolbar over text selected in the session timeline. **Quote** attaches the selection to the composer and opens its comment editor (see Composer/QuoteComment); Alt+click attaches it without opening the editor.
+The toolbar over text selected in the session timeline. **Quote** attaches the selection to the composer and opens its comment editor (see App/Quotes/Quote comment); Alt+click attaches it without opening the editor.
 
 A selection longer than a quote can carry shows **Selection too long** and disables Quote.
 `
 
 export default {
-  title: "Session/TimelineQuote",
+  title: "App/Quotes/Timeline quote",
   id: "session-timeline-quote",
   parameters: { docs: { description: { component: docs } } },
 }

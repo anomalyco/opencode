@@ -14,7 +14,7 @@ The browser pane, file viewer and review diff offer the same two actions on thei
 `
 
 export default {
-  title: "Composer/QuoteComment",
+  title: "App/Quotes/Quote comment",
   id: "composer-quote-comment",
   parameters: { docs: { description: { component: docs } } },
 }

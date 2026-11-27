@@ -30,7 +30,7 @@ type Case = {
 }
 
 export default {
-  title: "OpenCode/Conversation/Prompt quotes",
+  title: "App/Quotes/Prompt quotes",
   id: "current-prompt-quotes",
   parameters: { layout: "fullscreen" },
   args: { width: 480, scheme: "lab", direction: "ltr", fold: false, touch: false },
