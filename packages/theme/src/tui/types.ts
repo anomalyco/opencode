@@ -67,6 +67,10 @@ export type ResolvedThemeTokens = {
       readonly background: { readonly added: RGBA; readonly removed: RGBA }
     }
   }
+  readonly find: {
+    readonly text: { readonly current: RGBA }
+    readonly background: { readonly match: RGBA; readonly current: RGBA }
+  }
   readonly syntax: Readonly<Record<SyntaxToken, RGBA>>
   readonly markdown: Readonly<Record<MarkdownToken, RGBA>>
 }

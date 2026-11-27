@@ -400,6 +400,12 @@ export function useNewDesigns() {
   return () => config.data.experimental?.["new-designs"] !== false
 }
 
+/** Reactive accessor for the temporary "session-find" experiment. */
+export function useSessionFindExperiment() {
+  const config = useConfig()
+  return () => config.data.experimental?.["session-find"] === true
+}
+
 /** Reactive accessor for the temporary "client-mcp" experiment. */
 export function useClientMcpExperiment() {
   const config = useConfig()
