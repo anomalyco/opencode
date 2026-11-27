@@ -426,10 +426,9 @@ await context.ui.dialog.select({
 - Escape, `clear()` или показ другого диалога разрешает `undefined`.
 - Не привязывайте `ctrl+n` или `ctrl+p`. Диалог оставляет их для навигации, и его собственные привязки имеют приоритет.
 
-Пользовательские JSX-диалоги могут задавать размер и закрываться сами.
+Пользовательские диалоговые окна на JSX могут задавать свой размер и закрываться самостоятельно. Вызывайте `set` после `show`: при открытии диалога размер сбрасывается до `medium`, а центрирование отключается. Размеры `medium`, `large` и `xlarge` соответствуют ширине 60, 88 и 116 столбцов.
 
 ```tsx
-context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.show(
   () => (
     <box>
@@ -438,6 +437,7 @@ context.ui.dialog.show(
   ),
   () => console.log("closed"),
 )
+context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.clear()
 ```
 
@@ -646,8 +646,8 @@ const displayPath = context.ui.format.path(context.location?.directory ?? "/home
     "@opencode/plugin": "latest"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.6.6",
-    "@opentui/solid": ">=0.6.6",
+    "@opentui/core": ">=0.8.0",
+    "@opentui/solid": ">=0.8.0",
     "solid-js": ">=1.9.0"
   }
 }

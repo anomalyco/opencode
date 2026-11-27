@@ -96,8 +96,32 @@ export default Plugin.define({
 `ctx.location` описывает локацию, в которой загрузился этот экземпляр плагина. Это не локация каждой сессии или события,
 которые плагин может наблюдать. Читайте данные сессии или события, когда это различие важно.
 
-Контекст предоставляет гораздо больше доменов, чем перечислено в таблице, включая каталоги, команды, интеграции, MCP-серверы,
+Контекст предоставляет гораздо больше доменов, чем перечислено в таблице, включая команды, интеграции, MCP-серверы,
 референсы, навыки, хранилище, VCS, worktree и веб-поиск. См. [полный контекст плагина](/build/plugins/server#api).
+
+### Переход с домена каталога
+
+В прежних сборках плагины публиковали провайдеров и модели через `ctx.catalog`. Теперь в OpenCode для них есть отдельные домены `ctx.provider` и `ctx.model`, поэтому плагин, который вызывает `ctx.catalog.transform`, не загрузится.
+
+| Прежний API каталога                          | Текущий эквивалент                                                            |
+| --------------------------------------------- | ---------------------------------------------------------------------------- |
+| `ctx.catalog.transform(draft => …)`           | `ctx.provider.transform(editor => …)` и `ctx.model.transform(editor => …)`  |
+| `draft.provider.update(id, fn)`               | `editor.update(id, fn)` в `ctx.provider`                                     |
+| `draft.model.update(providerID, modelID, fn)` | `editor.update(providerID, modelID, fn)` в `ctx.model`                       |
+| `ctx.catalog.reload()`                        | `ctx.provider.reload()` и `ctx.model.reload()`                              |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+Полный API редакторов см. в разделах [Провайдеры](/build/plugins/server#providers) и [Модели](/build/plugins/server#models).
 
 ## Регистрация хуков в `setup`
 

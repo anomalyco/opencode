@@ -3,17 +3,16 @@ title: "Сеть"
 description: "Настройте прокси, собственные удостоверяющие центры и клиентские сертификаты."
 ---
 
-Задайте стандартные переменные прокси и исключите loopback-адреса. OpenCode использует локальные HTTP-соединения между CLI и фоновым сервисом, поэтому при настроенном прокси в окружении CLI исключение loopback обязательно.
+Задайте стандартные переменные окружения для прокси. OpenCode использует локальные HTTP-соединения между CLI и фоновым сервисом, а CLI автоматически исключает loopback-адреса из проксирования.
 
 ```bash
 export HTTP_PROXY=http://proxy.example.com:8080
 export HTTPS_PROXY=http://proxy.example.com:8080
-export NO_PROXY=localhost,127.0.0.1,::1
 
 opencode
 ```
 
-`HTTP_PROXY` обрабатывает адреса HTTP, а `HTTPS_PROXY` — адреса HTTPS. Сам URL прокси может использовать `http://` для обеих переменных. `NO_PROXY` — разделённый запятыми список хостов и адресов, которые подключаются напрямую.
+`HTTP_PROXY` задаёт прокси для HTTP-запросов, а `HTTPS_PROXY` — для HTTPS-запросов. В обеих переменных URL самого прокси может начинаться с `http://`. При запуске CLI добавляет `127.0.0.1`, `localhost` и `::1` в обе переменные: `NO_PROXY` и `no_proxy`. Укажите в `NO_PROXY` через запятую другие хосты, к которым нужно подключаться напрямую.
 
 ## Сервис
 
@@ -22,11 +21,11 @@ opencode
 ```bash
 opencode service set env HTTP_PROXY http://proxy.example.com:8080
 opencode service set env HTTPS_PROXY http://proxy.example.com:8080
-opencode service set env NO_PROXY localhost,127.0.0.1,::1
+opencode service set env NO_PROXY llm.company.example
 opencode service start
 ```
 
-Изменение управляемой переменной окружения останавливает работающий сервис. `service start` запускает его снова с новым окружением. Держите `NO_PROXY` и в shell CLI, если этот shell задаёт прокси: управляемые переменные сервиса применяются к процессу сервера, а не к процессу CLI.
+Изменение переменной окружения управляемого сервиса останавливает его, если он запущен. `service start` запускает его снова с новым окружением. Задайте переменные прокси и в оболочке, из которой запускается CLI: настройки управляемого сервиса действуют на процесс сервера, а не на процесс CLI. Loopback-адреса автоматически исключаются с обеих сторон.
 
 Удалите сохранённую переменную с помощью `service unset env`:
 
@@ -116,7 +115,6 @@ CERT_SIGNATURE_FAILURE
 ```bash
 HTTP_PROXY=http://proxy.example.com:8080 \
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode --standalone
 ```
 
@@ -124,7 +122,6 @@ opencode --standalone
 
 ```bash
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode serve
 ```
 
