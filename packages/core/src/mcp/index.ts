@@ -1039,7 +1039,22 @@ export const layer = (options?: Options) =>
         add: Effect.fn("MCP.add")(function* (server, config) {
           const name = ServerName.make(server)
           overrides.set(name, config)
-          yield* state.reload()
+          // Before the first reconcile, let the normal boot include the new server.
+          if (!booted) return yield* state.reload()
+          // Connect this server under its own lock instead of through a global reconcile. An ACP client
+          // passes several servers at once, and one slow handshake must not hold up the others. Reading the
+          // projected state still applies registered transforms (such as integration policy denials).
+          state.invalidate()
+          const resolved = state.get().servers.get(name)
+          yield* Effect.suspend(() => {
+            const entry = entries.get(name)
+            if (!resolved) {
+              if (!entry) return Effect.void
+              return removeServer(name, entry)
+            }
+            if (entry && isDeepStrictEqual(entry.config, resolved)) return Effect.void
+            return replaceServer(name, resolved)
+          }).pipe(locks.withLock(name))
         }),
         connect: Effect.fn("MCP.connect")(function* (server) {
           const name = ServerName.make(server)

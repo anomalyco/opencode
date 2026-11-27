@@ -2506,6 +2506,58 @@ test("serializes concurrent MCP lifecycle operations", async () => {
   )
 })
 
+test("connects servers added together without waiting for each other's handshake", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const slow = yield* resourceServer({
+          respond: async (request) => {
+            if (request.method !== "POST") return undefined
+            const body: unknown = await request.clone().json()
+            if (typeof body !== "object" || body === null || !("method" in body) || body.method !== "initialize")
+              return undefined
+            await Effect.runPromise(Deferred.succeed(entered, undefined))
+            await Effect.runPromise(Deferred.await(release))
+            return undefined
+          },
+        })
+        const fast = yield* resourceServer()
+
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          // Boot first, so the adds take the reconcile path rather than the asynchronous first boot.
+          yield* service.reload()
+
+          const adding = yield* service
+            .add("slow", new ConfigMCP.Remote({ type: "remote", url: slow.url, oauth: false }))
+            .pipe(Effect.forkChild({ startImmediately: true }))
+          yield* Deferred.await(entered)
+
+          // A shared reconcile permit would make this wait for the slow server's handshake.
+          yield* service
+            .add("fast", new ConfigMCP.Remote({ type: "remote", url: fast.url, oauth: false }))
+            .pipe(Effect.timeout("5 seconds"))
+
+          yield* Deferred.succeed(release, undefined)
+          yield* Fiber.join(adding)
+          expect((yield* service.servers()).map((item) => item.name).toSorted()).toEqual(["fast", "seed", "slow"])
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(
+              new ConfigMCP.Remote({ type: "remote", url: "http://127.0.0.1:1", oauth: false, disabled: true }),
+              undefined,
+              undefined,
+              { name: "seed" },
+            ),
+          ),
+        )
+      }),
+    ),
+  )
+})
+
 const awaitStatus = (service: Mcp.Interface, status: Mcp.Status["status"]) =>
   service.servers().pipe(
     Effect.map((servers) => servers.find((server) => server.name === "resources")?.status),
