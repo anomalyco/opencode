@@ -1,54 +1,32 @@
-export const LOCALES = [
-  "en",
-  "zh",
-  "zht",
-  "ko",
-  "de",
-  "es",
-  "fr",
-  "it",
-  "da",
-  "ja",
-  "pl",
-  "ru",
-  "uk",
-  "ar",
-  "no",
-  "br",
-  "th",
-  "tr",
-] as const
+import {
+  LOCALE_HEADER,
+  detectFromAcceptLanguage,
+  fromPathname,
+  localeFromCookieHeader,
+  parseLocale,
+  strip,
+  tag,
+  type Locale,
+} from "@opencode/locale"
 
-export type Locale = (typeof LOCALES)[number]
+export {
+  LOCALES,
+  LOCALE_COOKIE,
+  LOCALE_HEADER,
+  clearCookie,
+  cookie,
+  detectFromAcceptLanguage,
+  detectFromLanguages,
+  dir,
+  fromPathname,
+  label,
+  localeFromCookieHeader,
+  parseLocale,
+  strip,
+  tag,
+} from "@opencode/locale"
 
-export const LOCALE_COOKIE = "oc_locale" as const
-export const LOCALE_HEADER = "x-opencode-locale" as const
-
-function fix(pathname: string) {
-  if (pathname.startsWith("/")) return pathname
-  return `/${pathname}`
-}
-
-const LABEL = {
-  en: "English",
-  zh: "简体中文",
-  zht: "繁體中文",
-  ko: "한국어",
-  de: "Deutsch",
-  es: "Español",
-  fr: "Français",
-  it: "Italiano",
-  da: "Dansk",
-  ja: "日本語",
-  pl: "Polski",
-  ru: "Русский",
-  uk: "Українська",
-  ar: "العربية",
-  no: "Norsk",
-  br: "Português (Brasil)",
-  th: "ไทย",
-  tr: "Türkçe",
-} satisfies Record<Locale, string>
+export type { Locale } from "@opencode/locale"
 
 // The language's name in English, shown beside its own name for readers who can't read the page.
 const ENGLISH = {
@@ -72,47 +50,6 @@ const ENGLISH = {
   tr: "Turkish",
 } satisfies Record<Locale, string>
 
-const TAG = {
-  en: "en",
-  zh: "zh-Hans",
-  zht: "zh-Hant",
-  ko: "ko",
-  de: "de",
-  es: "es",
-  fr: "fr",
-  it: "it",
-  da: "da",
-  ja: "ja",
-  pl: "pl",
-  ru: "ru",
-  uk: "uk",
-  ar: "ar",
-  no: "no",
-  br: "pt-BR",
-  th: "th",
-  tr: "tr",
-} satisfies Record<Locale, string>
-
-export function parseLocale(value: unknown): Locale | null {
-  if (typeof value !== "string") return null
-  if ((LOCALES as readonly string[]).includes(value)) return value as Locale
-  return null
-}
-
-export function fromPathname(pathname: string) {
-  return parseLocale(fix(pathname).split("/")[1])
-}
-
-export function strip(pathname: string) {
-  const locale = fromPathname(pathname)
-  if (!locale) return fix(pathname)
-
-  const next = fix(pathname).slice(locale.length + 1)
-  if (!next) return "/"
-  if (next.startsWith("/")) return next
-  return `/${next}`
-}
-
 /**
  * True for an address that takes a locale prefix. The docs (English only, at /docs, with the V1
  * docs at /v1/docs and the V2 docs' old /v2), other apps on the domain (the Console, the old
@@ -129,10 +66,6 @@ export function route(locale: Locale, pathname: string) {
   if (locale === "en" || !localized(next)) return next
   if (next === "/") return `/${locale}`
   return `/${locale}${next}`
-}
-
-export function label(locale: Locale) {
-  return LABEL[locale]
 }
 
 // The Console serves its marketing pages at /<locale>/console/... and keeps the guides and app
@@ -163,7 +96,6 @@ export function consoleRoute(locale: Locale, pathname: string) {
   if (locale === "en" || !consoleMarketingPath(next)) return next
   return `/${locale}${next}`
 }
-
 export function english(locale: Locale) {
   return ENGLISH[locale]
 }
@@ -174,95 +106,7 @@ export function english(locale: Locale) {
  */
 export function displayName(locale: Locale, page: Locale) {
   if (page === "en") return ENGLISH[locale]
-  return new Intl.DisplayNames([TAG[page]], { type: "language" }).of(TAG[locale]) ?? ENGLISH[locale]
-}
-
-export function tag(locale: Locale) {
-  return TAG[locale]
-}
-
-export function dir(locale: Locale) {
-  if (locale === "ar") return "rtl"
-  return "ltr"
-}
-
-function match(input: string): Locale | null {
-  const value = input.trim().toLowerCase()
-  if (!value) return null
-
-  if (value.startsWith("zh")) {
-    if (value.includes("hant") || value.includes("-tw") || value.includes("-hk") || value.includes("-mo")) return "zht"
-    return "zh"
-  }
-
-  if (value.startsWith("ko")) return "ko"
-  if (value.startsWith("de")) return "de"
-  if (value.startsWith("es")) return "es"
-  if (value.startsWith("fr")) return "fr"
-  if (value.startsWith("it")) return "it"
-  if (value.startsWith("da")) return "da"
-  if (value.startsWith("ja")) return "ja"
-  if (value.startsWith("pl")) return "pl"
-  if (value.startsWith("ru")) return "ru"
-  if (value.startsWith("uk")) return "uk"
-  if (value.startsWith("ar")) return "ar"
-  if (value.startsWith("tr")) return "tr"
-  if (value.startsWith("th")) return "th"
-  if (value.startsWith("pt")) return "br"
-  if (value.startsWith("no") || value.startsWith("nb") || value.startsWith("nn")) return "no"
-  if (value.startsWith("en")) return "en"
-  return null
-}
-
-export function detectFromLanguages(languages: readonly string[]) {
-  for (const language of languages) {
-    const locale = match(language)
-    if (locale) return locale
-  }
-  return "en" satisfies Locale
-}
-
-export function detectFromAcceptLanguage(header: string | null) {
-  if (!header) return "en" satisfies Locale
-
-  const items = header
-    .split(",")
-    .map((raw) => raw.trim())
-    .filter(Boolean)
-    .map((raw) => {
-      const parts = raw.split(";").map((x) => x.trim())
-      const lang = parts[0] ?? ""
-      const q = parts
-        .slice(1)
-        .find((x) => x.startsWith("q="))
-        ?.slice(2)
-      return {
-        lang,
-        q: q ? Number.parseFloat(q) : 1,
-      }
-    })
-    .sort((a, b) => b.q - a.q)
-
-  for (const item of items) {
-    if (!item.lang || item.lang === "*") continue
-    const locale = match(item.lang)
-    if (locale) return locale
-  }
-
-  return "en" satisfies Locale
-}
-
-export function localeFromCookieHeader(header: string | null) {
-  if (!header) return null
-
-  const raw = header
-    .split(";")
-    .map((x) => x.trim())
-    .find((x) => x.startsWith(`${LOCALE_COOKIE}=`))
-    ?.slice(`${LOCALE_COOKIE}=`.length)
-
-  if (!raw) return null
-  return parseLocale(decodeURIComponent(raw))
+  return new Intl.DisplayNames([tag(page)], { type: "language" }).of(tag(locale)) ?? ENGLISH[locale]
 }
 
 export function localeFromRequest(request: Request) {
@@ -280,17 +124,5 @@ export function localeFromRequest(request: Request) {
 
 export function pageLocale(request: Request) {
   const pathname = new URL(request.url).pathname
-  return (
-    parseLocale(request.headers.get(LOCALE_HEADER)) ??
-    fromPathname(pathname) ??
-    ("en" satisfies Locale)
-  )
-}
-
-export function cookie(locale: Locale) {
-  return `${LOCALE_COOKIE}=${encodeURIComponent(locale)}; Path=/; Max-Age=31536000; SameSite=Lax`
-}
-
-export function clearCookie() {
-  return `${LOCALE_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`
+  return parseLocale(request.headers.get(LOCALE_HEADER)) ?? fromPathname(pathname) ?? ("en" satisfies Locale)
 }

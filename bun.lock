@@ -311,6 +311,7 @@
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode/data-core": "workspace:*",
+        "@opencode/locale": "workspace:*",
         "@opencode/nav-menus": "workspace:*",
         "@opencode/ui": "workspace:*",
         "@resvg/resvg-wasm": "2.6.2",
@@ -505,6 +506,15 @@
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
         "@typescript/native": "catalog:",
+      },
+    },
+    "packages/locale": {
+      "name": "@opencode/locale",
+      "version": "2.4.1",
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@typescript/native": "catalog:",
+        "typescript": "catalog:",
       },
     },
     "packages/merman": {
@@ -939,6 +949,7 @@
       "dependencies": {
         "@ibm/plex": "6.4.1",
         "@kitlangton/rolling-number": "0.4.1",
+        "@opencode/locale": "workspace:*",
         "@opencode/nav-menus": "workspace:*",
         "@opencode/ui": "workspace:*",
         "@solidjs/meta": "catalog:",
@@ -1876,6 +1887,8 @@
     "@opencode/latex": ["@opencode/latex@workspace:packages/latex"],
 
     "@opencode/legacy": ["@opencode/legacy@workspace:services/legacy"],
+
+    "@opencode/locale": ["@opencode/locale@workspace:packages/locale"],
 
     "@opencode/merman": ["@opencode/merman@workspace:packages/merman"],
 
