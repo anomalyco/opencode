@@ -4,7 +4,6 @@ import { useQueries } from "@tanstack/solid-query"
 import { createEffect, createMemo } from "solid-js"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
-import { useSettings } from "@/settings/model"
 import { useLayout } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
 
@@ -15,11 +14,9 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
     const servers = useServers()
     const layout = useLayout()
     const tabs = useTabs()
-    const settings = useSettings()
 
-    // With the setting off, nothing is synced or polled, so every entry point stays hidden.
     const connections = createMemo(() =>
-      (settings.general.automations() ? servers.visible : []).flatMap((conn) => {
+      servers.visible.flatMap((conn) => {
         const server = ServerConnection.key(conn)
         const ctx = global.serverCtx(server)
 
@@ -67,7 +64,7 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
 
         if (!directories.length && ctx.sync.data.path.home) directories.push(ctx.sync.data.path.home)
 
-        return [{ server, ctx, directories, serverLabel: servers.label(conn) }]
+        return [{ server, ctx, directories }]
       }),
     )
 
@@ -123,9 +120,6 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
     return {
       enabled,
       entries,
-      // Only the experimental setting hides the view; an empty server just shows no automations.
-      available: () => settings.general.automations(),
-      multiServer: () => connections().length > 1,
       loading: () => queries.some((query) => query.isPending),
       failed: () =>
         queries.some(

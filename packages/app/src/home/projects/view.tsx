@@ -81,7 +81,7 @@ export type HomeProjectsViewProps = {
   onHideProject: (server: ServerConnection.Any, project: LocalProject) => void
   onOpenSettings: () => void
   onOpenHelp: () => void
-  /** Opens Automations; the entry shows only while it is available. */
+  /** Opens Automations; surfaces without it (stories) leave the entry out. */
   automations?: HomeAutomationsEntry
   /** With `dropdown`, opens the panel from a compact picker at the end of Home's search field. */
   scope?: boolean
@@ -141,9 +141,7 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
                 <bdi class="truncate">{label()}</bdi>
                 <Show when={props.servers.length > 1 && !scopedServer() && server()}>
                   {(server) => (
-                    <bdi class="truncate text-v2-text-text-muted opacity-70">
-                      {props.serverLabel(server())}
-                    </bdi>
+                    <bdi class="truncate text-v2-text-text-muted opacity-70">{props.serverLabel(server())}</bdi>
                   )}
                 </Show>
               </span>
@@ -389,7 +387,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
   )
 }
 
-export type HomeAutomationsEntry = { available: () => boolean; open: () => void }
+export type HomeAutomationsEntry = { open: () => void }
 
 export function HomeUtilityNav(props: {
   class?: string
@@ -404,7 +402,7 @@ export function HomeUtilityNav(props: {
       class={`${props.class ?? ""} min-w-0 flex-row justify-between gap-1 lg:flex-col lg:justify-start lg:pr-3 [&>button]:w-auto lg:[&>button]:w-full`}
       classList={props.classList}
     >
-      <Show when={props.automations?.available()}>
+      <Show when={props.automations}>
         <HomeProjectNavButton
           type="button"
           data-action="home-automations"
@@ -528,7 +526,9 @@ function HomeServerRow(props: {
             class="flex min-w-0 flex-1 items-center gap-1"
             classList={{ "opacity-60": !healthy() && !incompatible() }}
           >
-            <span class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{props.serverLabel(props.server)}</span>
+            <span class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+              {props.serverLabel(props.server)}
+            </span>
             <Show when={props.server.label}>
               {(label) => (
                 <span

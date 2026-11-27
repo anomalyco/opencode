@@ -1,8 +1,9 @@
 import { Button } from "@opencode/ui/button"
+import { Icon } from "@opencode/ui/icon"
 import { Predicate } from "effect"
 import { createMemo, For, Show, type JSX } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
-import { formatDate, relativeTime, statusLabel } from "./format"
+import { formatDate, relativeTime, shortDuration, statusLabel } from "./format"
 import type { AutomationItem } from "./model"
 
 export function AutomationListRow(props: {
@@ -15,13 +16,19 @@ export function AutomationListRow(props: {
   const row = () => props.entry.row
 
   const note = () => {
-    if (row().status === "paused" && row().lastOutcome === "failed") return language.t("automations.note.failed")
+    if (row().status === "paused" && row().lastOutcome === "failed")
+      return { tone: "danger", icon: "warning", text: language.t("automations.note.failed") } as const
 
-    if (row().status === "done" && row().lastOutcome === "expired") return language.t("automations.status.expired")
+    if (row().status === "done" && row().lastOutcome === "expired")
+      return { tone: "muted", icon: "clock", text: language.t("automations.note.ended") } as const
 
-    const next = row().status === "active" ? row().nextDueAt : undefined
+    if (row().status !== "active") return
 
-    if (next) return relativeTime(next, language)
+    if (row().trigger.type === "event") return { tone: "live", text: language.t("automations.note.live") } as const
+
+    const next = row().nextDueAt
+
+    if (next) return { tone: "muted", text: shortDuration(next, language) } as const
   }
 
   return (
@@ -29,17 +36,30 @@ export function AutomationListRow(props: {
       type="button"
       aria-pressed={props.selected}
       onClick={props.onSelect}
-      class="flex w-full flex-col gap-0.5 rounded-[7px] px-2.5 py-2 text-start hover:bg-v2-overlay-simple-overlay-hover aria-pressed:bg-v2-background-bg-layer-02"
+      class="flex w-full items-center gap-3 rounded-[7px] px-2.5 py-2 text-start hover:bg-v2-overlay-simple-overlay-hover aria-pressed:bg-v2-background-bg-layer-02"
     >
-      <span class="flex w-full min-w-0 items-baseline gap-3">
-        <bdi class="min-w-0 flex-1 truncate text-[13px] leading-5 font-medium text-v2-text-text-base">{row().name}</bdi>
-        <Show when={note()}>
-          {(text) => <span class="shrink-0 text-[12px] leading-5 text-v2-text-text-muted">{text()}</span>}
-        </Show>
+      <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+        <bdi class="truncate text-[13px] leading-5 font-medium text-v2-text-text-base">{row().name}</bdi>
+        <span class="truncate text-[12px] leading-4 text-v2-text-text-faint">
+          <Parts items={[props.entry.trigger, ...props.context]} />
+        </span>
       </span>
-      <span class="w-full truncate text-[12px] leading-4 text-v2-text-text-faint">
-        <Parts items={[...props.context, props.entry.trigger]} />
-      </span>
+      <Show when={note()}>
+        {(note) => (
+          <span
+            data-tone={note().tone}
+            class="flex h-6 min-w-10 shrink-0 items-center justify-center gap-1 rounded-full border border-v2-border-border-base px-2 text-[12px] leading-4 font-medium tabular-nums text-v2-text-text-muted data-[tone=danger]:border-v2-state-border-danger data-[tone=danger]:text-v2-state-fg-danger data-[tone=live]:border-v2-state-border-success data-[tone=live]:text-v2-state-fg-success"
+          >
+            <Show when={note().tone === "live"}>
+              <span class="size-1.5 rounded-full bg-current motion-safe:animate-pulse" aria-hidden="true" />
+            </Show>
+            <Show when={"icon" in note() && note().icon}>
+              {(icon) => <Icon name={icon()} size="small" class="shrink-0" />}
+            </Show>
+            {note().text}
+          </span>
+        )}
+      </Show>
     </button>
   )
 }
@@ -100,7 +120,7 @@ export function AutomationInspector(props: {
             ? language.rich("automations.do.prompt", {
                 session: link(
                   () => session,
-                  () => props.entry.recipient ?? session,
+                  () => props.entry.recipient ?? t("automations.session.unknown"),
                 ),
               })
             : t("automations.do.subagent", { agent: value.to.subagent ?? "" }),
@@ -205,16 +225,13 @@ export function AutomationInspector(props: {
             {row().directory}
           </bdi>
         </Row>
-        <Show when={row().sessionID}>
-          {(id) => (
+        <Show when={row().sessionID && props.entry.creator}>
+          {(name) => (
             <Row label={t("automations.creator")} muted>
-              {link(id, () => props.entry.creator ?? id())}
+              {link(() => row().sessionID!, name)}
             </Row>
           )}
         </Show>
-        <Row label={t("automations.runsOn")} muted>
-          <bdi>{props.entry.serverLabel}</bdi>
-        </Row>
       </dl>
     </article>
   )
