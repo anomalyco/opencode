@@ -23690,6 +23690,9 @@
           "supportsEffortUpdates": {
             "type": "boolean"
           },
+          "supportsSystemUpdates": {
+            "type": "boolean"
+          },
           "mediaInput": {
             "$ref": "#/components/schemas/Model.MediaInput"
           }

@@ -74,6 +74,9 @@ const SourceApi = Schema.Struct({
     Schema.Struct({
       // Format names this version doesn't know are skipped when the route is built.
       tools: Schema.optional(Schema.Struct({ freeform: Schema.optional(Schema.Array(Schema.String)) })),
+      // Mid-conversation changes the API takes without breaking the prompt cache.
+      effort_updates: Schema.optional(Schema.Boolean),
+      system_updates: Schema.optional(Schema.Boolean),
     }),
   ),
   sdk: Schema.optional(
@@ -413,6 +416,10 @@ function route(
     ...(api.compatibility?.reasoning_field ? { reasoningField: api.compatibility.reasoning_field } : {}),
     ...(maxTokensField ? { maxTokensField } : {}),
     ...(mediaInput ? { mediaInput } : {}),
+    // Only a tested yes on this API turns one on. Unset or false keeps the protocol's own model-ID detection, and a
+    // model-wide flag isn't read: it can describe another API, such as Chat Completions developer messages.
+    ...(api.capabilities?.effort_updates === true ? { supportsEffortUpdates: true } : {}),
+    ...(api.capabilities?.system_updates === true ? { supportsSystemUpdates: true } : {}),
   }
   return {
     protocol,

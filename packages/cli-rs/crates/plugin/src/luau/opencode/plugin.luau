@@ -3071,6 +3071,7 @@ export type ModelCompatibility = {
     cacheFormat: ModelCacheFormat?,
     supportsThinkingBlockBinding: boolean?,
     supportsEffortUpdates: boolean?,
+    supportsSystemUpdates: boolean?,
     mediaInput: ModelMediaInput?,
 }
 
