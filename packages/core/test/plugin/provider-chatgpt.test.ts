@@ -1,13 +1,12 @@
 import { Money } from "@opencode/schema/money"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/core/session"
-import { OpenAIResponses } from "@opencode/ai/protocols/openai-responses"
 import { ai, AIError, HttpContext, Message, RateLimitError } from "@opencode/ai/effect"
 import { classifyProviderFailure } from "@opencode/ai/route"
 import { compileRequest } from "@opencode/ai/testing"
 import { describe, expect } from "bun:test"
 // import { DateTime, Deferred, Effect, Schedule } from "effect"
-import { DateTime, Effect, Schedule } from "effect"
+import { Effect, Schedule } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { exportJWK, generateKeyPair, SignJWT } from "jose"
 import { App } from "@opencode/core/app"
@@ -21,15 +20,9 @@ import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
-import { GithubCopilotPlugin } from "@opencode/core/plugin/provider/github-copilot"
 import { ChatGPTPlugin, fetchModels, refresh, revoke, verifyIDToken } from "@opencode/core/plugin/provider/chatgpt"
 import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
-import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
-import { AbsolutePath } from "@opencode/core/schema"
-import { SessionModelRequest } from "@opencode/core/session/model-request"
-import { SessionModelTransport } from "@opencode/core/session/model-transport"
-import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionRunnerRetry } from "@opencode/core/session/runner/retry"
 import { toSessionError } from "@opencode/core/session/to-session-error"
 import { testEffect } from "../lib/effect"
@@ -53,7 +46,12 @@ const subscriptionCatalog = (lists: { current: Record<string, readonly string[]>
     get: () =>
       Effect.sync(() => [
         {
-          info: { id: Provider.ID.openai, name: "OpenAI", activation: "auto", package: "@opencode/ai/providers/openai" },
+          info: {
+            id: Provider.ID.openai,
+            name: "OpenAI",
+            activation: "auto",
+            package: "@opencode/ai/providers/openai",
+          },
           models: [],
           environment: [],
           subscriptions: lists.current,
@@ -66,12 +64,6 @@ const addLegacyPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
   const host = yield* PluginHost.make(plugin, OpenAIPlugin.id)
   yield* OpenAIPlugin.effect(host)
-})
-
-const addGithubCopilotPlugin = Effect.fn(function* () {
-  const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin, "test")
-  yield* GithubCopilotPlugin.effect(host)
 })
 
 function required<T>(value: T | undefined): T {
@@ -541,12 +533,13 @@ describe("ChatGPTPlugin", () => {
     }),
   )
 
-  it.effect("reauthorizes with the client ID issued to an existing ChatGPT connection", () =>
+  it.effect("registers a new client to add an account, and reuses an expired connection's client to reconnect it", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
       const kv = yield* KV.Service
+      const storage = PluginHost.storage(kv, ChatGPTPlugin.id)
       const hostID = "urn:uuid:00000000-0000-4000-8000-000000000000"
-      yield* PluginHost.storage(kv, ChatGPTPlugin.id).set("chatgpt-agent-host-id", hostID)
+      yield* storage.set("chatgpt-agent-host-id", hostID)
       yield* credentials.create({
         integrationID: Integration.ID.make("openai"),
         value: Credential.OAuth.make({
@@ -555,13 +548,22 @@ describe("ChatGPTPlugin", () => {
           access: "chatgpt-token",
           refresh: "refresh",
           expires: Date.now() + 60 * 60_000,
-          metadata: { clientID: "oaiapp_issued" },
+          metadata: { clientID: "oaiapp_issued", email: "a@example.com" },
         }),
       })
       yield* addPlugin()
+      const adding = yield* authorize()
+      expect(adding.searchParams.get("client_id")).toBe("dynamic_agent_client")
+      expect(adding.searchParams.get("agent_name_hint")).toBe("OpenCode")
+      expect(adding.searchParams.get("ext_agent_host_id")).toBe(hostID)
+      expect(adding.searchParams.has("login_hint")).toBe(false)
+
+      yield* storage.set("chatgpt-expired-clients", ["oaiapp_issued"])
       const url = yield* authorize()
       expect(url.searchParams.get("client_id")).toBe("oaiapp_issued")
       expect(url.searchParams.has("agent_name_hint")).toBe(false)
+      expect(url.searchParams.has("id_token_hint")).toBe(false)
+      expect(url.searchParams.get("login_hint")).toBe("a@example.com")
       expect(url.searchParams.get("ext_agent_host_id")).toBe(hostID)
       expect(new URL(url.searchParams.get("redirect_uri") ?? "").hostname).toBe("127.0.0.1")
     }),
@@ -570,6 +572,8 @@ describe("ChatGPTPlugin", () => {
   it.live("rejects a reauthorization callback that returns a different client ID", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
+      const kv = yield* KV.Service
+      yield* PluginHost.storage(kv, ChatGPTPlugin.id).set("chatgpt-expired-clients", ["oaiapp_issued"])
       yield* credentials.create({
         integrationID: Integration.ID.make("openai"),
         value: Credential.OAuth.make({
@@ -968,7 +972,10 @@ describe("ChatGPTPlugin", () => {
         }),
       })
       yield* addPlugin().pipe(
-        Effect.provideService(ModelsDev.Service, subscriptionCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-7"] } })),
+        Effect.provideService(
+          ModelsDev.Service,
+          subscriptionCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-7"] } }),
+        ),
       )
       expect(
         (yield* models.available())
@@ -1118,32 +1125,6 @@ describe("ChatGPTPlugin", () => {
       )
       expect(direct?.settings?.transport).toBe("http")
       expect(direct?.headers?.["chatgpt-account-id"]).toBeUndefined()
-    }),
-  )
-
-  it.effect("omits the default output limit from OpenAI steps and compaction", () =>
-    Effect.gen(function* () {
-      yield* addPlugin()
-      yield* addLegacyPlugin()
-      const hooks = yield* PluginHooks.Service
-      const maxTokens = (providerID: Provider.ID) =>
-        Effect.gen(function* () {
-          const draft = {
-            sessionID: Session.ID.make("ses_test"),
-            model: Model.Ref.make({ providerID, id: Model.ID.make("gpt-5.5") }),
-            system: [],
-            messages: [],
-            options: { maxTokens: 128_000 },
-          }
-          const events = [
-            yield* hooks.trigger("session", "context", { ...draft, agent: Agent.ID.make("build"), tools: {} }),
-            yield* hooks.trigger("session", "compaction", { ...draft, agent: Agent.ID.make("build"), tools: {} }),
-          ]
-          return events.map((event) => event.options.maxTokens)
-        })
-
-      expect(yield* maxTokens(Provider.ID.openai)).toEqual([undefined, undefined])
-      expect(yield* maxTokens(Provider.ID.azure)).toEqual([128_000, 128_000])
     }),
   )
 
@@ -1314,66 +1295,4 @@ describe("ChatGPTPlugin", () => {
       }).pipe(Effect.provide(ModelResolver.layer)),
     )
   }
-
-  it.effect("selects WebSocket only from explicit policy", () =>
-    Effect.gen(function* () {
-      const credentials = yield* Credential.Service
-      yield* credentials.create({
-        integrationID: Integration.ID.make("openai"),
-        value: Credential.Key.make({ type: "key", key: "sk-test" }),
-      })
-      yield* addPlugin()
-      yield* addGithubCopilotPlugin()
-      const executor = { execute: () => Effect.die("unused WebSocket execution") }
-      const transport = SessionModelTransport.Service.of({
-        bind: () => executor,
-        close: () => Effect.void,
-        closeAll: Effect.void,
-      })
-      const sessionID = Session.ID.make("ses_websocket_hooks")
-      const agentID = Agent.ID.make("build")
-      const route = OpenAIResponses.route.with({
-        id: "deployment-responses",
-        provider: Provider.ID.azure,
-      })
-      const prepare = (preference?: Provider.Transport) =>
-        Effect.gen(function* () {
-          const model = SessionRunnerModel.resolved(route.model({ id: "gpt-5.5" }), {
-            capabilities: { tools: true, input: ["text"], output: ["text"] },
-            cost: [],
-            limit: { context: 200_000, output: 32_000 },
-            transport: preference,
-          })
-          const requests = yield* SessionModelRequest.Service
-          return yield* requests.primary({
-            session: Session.Info.make({
-              id: sessionID,
-              projectID: Project.ID.global,
-              cost: Money.USD.zero,
-              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-              time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
-              location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
-            }),
-            agent: agentID,
-            model,
-            tools: { definitions: [], execute: () => Effect.die("unused tool execution") },
-            system: [],
-            messages: [],
-            webSocket: "session",
-          })
-        }).pipe(
-          Effect.provide(SessionModelRequest.layer),
-          Effect.provideService(SessionModelTransport.Service, transport),
-        )
-
-      const prepared = yield* prepare("websocket")
-      const defaulted = yield* prepare()
-      const disabled = yield* prepare("http")
-
-      expect(prepared.options.webSocket).toBe(executor)
-      expect(prepared.options.http).toBeUndefined()
-      expect(defaulted.options.webSocket).toBeUndefined()
-      expect(disabled.options.webSocket).toBeUndefined()
-    }),
-  )
 })

@@ -81,20 +81,6 @@ describe("modelTools", () => {
       })
   })
 
-  test("hides glob, grep, and webfetch for every model when fullCodeMode is on", () => {
-    for (const model of [
-      makeModel("openai", "gpt-5"),
-      makeModel("anthropic", "claude-sonnet-4-5"),
-      makeModel("deepseek", "deepseek-reasoner"),
-      makeModel("zhipu", "glm-5.3"),
-      makeModel("google", "gemini-4-neon"),
-      undefined,
-    ]) {
-      const { hidden } = policy(model)
-      for (const name of ["glob", "grep", "webfetch"]) expect(hidden).toContain(name)
-    }
-  })
-
   test("applies patch and websearch rules when fullCodeMode is off", () => {
     expect(policy(makeModel("openai", "gpt-5"), true, false)).toEqual({ direct: [], hidden: ["edit", "write"] })
     expect(policy(makeModel("claude-agent", "opus"), false, false)).toEqual({

@@ -9,6 +9,8 @@ import { SidebarOnboarding } from "../../src/feature-plugins/sidebar/footer"
 function context(options?: {
   dismissed?: boolean
   integrations?: Array<{ connections: unknown[] }>
+  providers?: Array<{ id: string }>
+  models?: Array<{ providerID: string; status: string }>
   dispatched?: string[]
 }) {
   const color = RGBA.fromInts(200, 200, 200)
@@ -41,6 +43,8 @@ function context(options?: {
       },
       location: {
         integration: { list: () => options?.integrations },
+        provider: { list: () => options?.providers ?? [] },
+        model: { list: () => options?.models ?? [] },
         vcs: { info: () => undefined },
       },
     },
@@ -94,15 +98,24 @@ test("sidebar shows onboarding without a connected integration", async () => {
   }
 })
 
-test("sidebar hides onboarding after an integration is connected or the card is dismissed", async () => {
+test("sidebar hides onboarding after an integration is connected, a provider is configured or the card is dismissed", async () => {
   const connected = await render(context({ integrations: [{ connections: [{}] }] }))
+  const configured = await render(
+    context({
+      integrations: [],
+      providers: [{ id: "ollama" }],
+      models: [{ providerID: "ollama", status: "active" }],
+    }),
+  )
   const dismissed = await render(context({ integrations: [], dismissed: true }))
 
   try {
     expect(connected.captureCharFrame()).not.toContain("Getting started")
+    expect(configured.captureCharFrame()).not.toContain("Getting started")
     expect(dismissed.captureCharFrame()).not.toContain("Getting started")
   } finally {
     connected.renderer.destroy()
+    configured.renderer.destroy()
     dismissed.renderer.destroy()
   }
 })

@@ -406,12 +406,12 @@ const lowerTool = (
   custom: OpenAIFreeform.Custom | undefined,
 ): OpenAIChatTool => {
   if (custom) {
-    const grammar = OpenAIFreeform.grammar(custom.format)
+    const grammar = OpenAIFreeform.grammar(custom)
     return {
       type: "custom",
       custom: {
         name: tool.name,
-        description: tool.description,
+        description: OpenAIFreeform.description(tool, custom),
         format: grammar ? { type: "grammar", grammar } : { type: "text" },
       },
       cache_control: options.cacheControl?.(tool.cache),
@@ -450,7 +450,10 @@ const lowerToolCall = (part: ToolCallPart, options: MessageLoweringOptions): Ope
     return {
       id: options.toolCallID?.(part.id) ?? part.id,
       type: "custom",
-      custom: { name: part.name, input: OpenAIFreeform.toRaw(custom, part.input) },
+      custom: {
+        name: part.name,
+        input: OpenAIFreeform.toRaw(custom, part.input, part.providerMetadata?.[options.providerMetadataKey]?.header),
+      },
     }
   return {
     id: options.toolCallID?.(part.id) ?? part.id,
@@ -947,8 +950,12 @@ const mapFinishReason = Effect.fnUntraced(function* (event: OpenAIChatEvent, rea
     case "end":
       return "stop" as const
     case "length":
+    // Z.AI stops with this when the prompt plus the generated output fill the context window.
+    case "model_context_window_exceeded":
       return "length" as const
     case "content_filter":
+    // Z.AI ends a response its safety review blocked with "sensitive".
+    case "sensitive":
       return "content-filter" as const
     case "function_call":
     case "tool_calls":
@@ -1288,7 +1295,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       !incompleteTools &&
       state.finishReason === undefined &&
       Object.keys(tools).length > 0
-        ? yield* finishTools(tools, customCalls)
+        ? yield* finishTools(state, tools, customCalls)
         : undefined
 
     return [
@@ -1317,8 +1324,12 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
   })
 
 // Custom calls close their JSON fragment before every pending call finishes.
-const finishTools = Effect.fnUntraced(function* (tools: ParserState["tools"], customCalls: ReadonlySet<number>) {
-  const closed = OpenAIFreeform.close(tools, customCalls)
+const finishTools = Effect.fnUntraced(function* (
+  state: ParserState,
+  tools: ParserState["tools"],
+  customCalls: ReadonlySet<number>,
+) {
+  const closed = OpenAIFreeform.close(tools, customCalls, state.custom, state.providerMetadataKey)
   const finished = yield* ToolStream.finishAll(ADAPTER, closed.tools)
   return { tools: finished.tools, events: [...closed.events, ...finished.events] }
 })
@@ -1335,7 +1346,7 @@ export const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
   const events: LLMEvent[] = []
   const toolCallEvents =
     state.finishReason === undefined && Object.keys(state.tools).length > 0
-      ? (yield* finishTools(state.tools, state.customCalls)).events
+      ? (yield* finishTools(state, state.tools, state.customCalls)).events
       : state.toolCallEvents
   const hasToolCalls = toolCallEvents.length > 0
   const reason = state.finishReason

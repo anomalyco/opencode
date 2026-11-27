@@ -81,7 +81,12 @@ export const appended = (target: FileAccess.Target, status: Status, text: string
       : { file: target.resource, status, additions: lines(text), deletions: 0 },
   )
 
-const lines = (text: string) => (text === "" ? 0 : text.split("\n").length - Number(text.endsWith("\n")))
+const lines = (text: string) => {
+  if (text === "") return 0
+  let count = 1
+  for (let index = text.indexOf("\n"); index !== -1; index = text.indexOf("\n", index + 1)) count++
+  return count - Number(text.endsWith("\n"))
+}
 
 const ChangedFile = Schema.Struct({
   file: Schema.String,

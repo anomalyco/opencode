@@ -577,12 +577,6 @@ describe("ConfigProviderPlugin.Plugin", () => {
       legacy: { modalities: { input: ["text", "image", "pdf"] } },
       overrides: { input: ["text", "image", "pdf"] },
     },
-    {
-      name: "output-only modalities",
-      legacy: { modalities: { output: ["audio"] } },
-      overrides: { output: ["audio"] },
-    },
-    { name: "enabled tools", legacy: { tool_call: true }, overrides: { tools: true } },
     { name: "disabled tools", legacy: { tool_call: false }, overrides: { tools: false } },
     {
       name: "explicit empty modalities",

@@ -1,13 +1,36 @@
 //! Syntax highlighting and numbered code views.
 
+use std::cell::RefCell;
+use std::sync::Arc;
+
 use opentui::prelude::*;
 use opentui::syntax::SyntaxTheme;
 use opentui::widget::{Code, LineNumbers};
 
 use crate::theme::{Paints, Theme, contrast};
 
-/// Maps theme tokens to capture styles for code, Markdown and the prompt.
-pub fn syntax_theme(theme: &Theme) -> SyntaxTheme {
+/// Maps theme tokens to capture styles for code, Markdown and the prompt. Shared: every call in an equal theme
+/// returns a clone of one `Arc`, which OpenTUI's views keep instead of a copy each.
+pub fn syntax_theme(theme: &Theme) -> Arc<SyntaxTheme> {
+    SHARED.with_borrow_mut(|shared| {
+        if let Some((_, syntax)) = shared.iter().find(|(kept, _)| kept == theme) {
+            return syntax.clone();
+        }
+        let syntax = Arc::new(styles(theme));
+        // A few at once: each surface (page, dialog) is a theme of its own.
+        if shared.len() == 4 {
+            shared.remove(0);
+        }
+        shared.push((theme.clone(), syntax.clone()));
+        syntax
+    })
+}
+
+thread_local! {
+    static SHARED: RefCell<Vec<(Theme, Arc<SyntaxTheme>)>> = const { RefCell::new(Vec::new()) };
+}
+
+fn styles(theme: &Theme) -> SyntaxTheme {
     let syntax = &theme.syntax;
     let markdown = &theme.markdown;
     let feedback = &theme.text.feedback;
@@ -129,7 +152,7 @@ fn paste_text(theme: &Theme) -> Color {
 /// Read-only code in the theme's text color, highlighted as `filetype` (`<code conceal={false} fg={text.base}>`).
 /// It shows all its lines, wraps at a word as Core's `<code>` does, and takes no focus, as in the transcript. Its
 /// text is final, so it keeps no parse tree for appends: a caller with new text builds a new view.
-pub fn view(app: &App, theme: &Theme, syntax: &SyntaxTheme, filetype: Option<&str>, content: &str) -> Code {
+pub fn view(app: &App, theme: &Theme, syntax: &Arc<SyntaxTheme>, filetype: Option<&str>, content: &str) -> Code {
     crate::grammars::register();
     Code::new(app)
         .fg(theme.text.base)

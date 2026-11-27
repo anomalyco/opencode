@@ -1,6 +1,7 @@
 //! Transcript Markdown with syntax-theme styles for markup spans.
 
 use std::rc::Rc;
+use std::sync::Arc;
 
 use opentui::prelude::*;
 use opentui::syntax::SyntaxTheme;
@@ -112,7 +113,7 @@ pub fn colors(theme: &Theme) -> MarkdownColors {
 pub fn view(
     app: &App,
     theme: &Theme,
-    syntax: &SyntaxTheme,
+    syntax: &Arc<SyntaxTheme>,
     renderers: &CodeBlockRenderers,
     conceal: bool,
     streaming: bool,
@@ -149,7 +150,7 @@ pub fn view_colors(theme: &Theme, syntax: &SyntaxTheme) -> MarkdownColors {
 ///
 /// The table options follow the `conceal` scope, which [`crate::code::syntax_theme`] leaves out, so they stay the
 /// same. A new border color would repaint the tables in place.
-pub fn restyle(markdown: &Markdown, colors: MarkdownColors, syntax: &SyntaxTheme) {
+pub fn restyle(markdown: &Markdown, colors: MarkdownColors, syntax: &Arc<SyntaxTheme>) {
     // Each style Markdown takes builds its blocks again, and a custom block afresh: the first build is not the last.
     RESTYLING.set(true);
     markdown.colors(colors);

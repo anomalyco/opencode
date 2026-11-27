@@ -286,6 +286,10 @@ export function createTimelineVirtualizer(input: Input) {
   const touchDragEvent = { type: "touch.drag" as const, overflow: false }
   let reportOffset: ((offset: number, scrolling: boolean) => void) | undefined
   let reportRect: ((rect: { width: number; height: number }) => void) | undefined
+  // TanStack corrects the scroll position once for every row it resizes above the view, and each native write forces a
+  // layout. While a batch of sizes is applied, a request replaces the one before it, and the last is written once.
+  let scrollHeld = false
+  let heldScroll: (() => void) | undefined
   const [headerHeight, setHeaderHeight] = createSignal(48)
 
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
@@ -383,8 +387,13 @@ export function createTimelineVirtualizer(input: Input) {
       touchAdjustment = 0
       setRendering("scrollAdjustment", 0)
 
-      if (virtualContent) virtualContent.style.height = `${instance.getTotalSize()}px`
-      elementScroll(offset, options, instance)
+      const write = () => {
+        if (virtualContent) virtualContent.style.height = `${instance.getTotalSize()}px`
+        elementScroll(offset, options, instance)
+      }
+
+      if (!scrollHeld) return write()
+      heldScroll = write
     },
     get getItemKey() {
       return getItemKey()
@@ -415,6 +424,13 @@ export function createTimelineVirtualizer(input: Input) {
   const resizeItem = virtualizer.resizeItem
   const pendingSizes = new Map<number, { key: string; size: number }>()
   let resizeScheduled = false
+
+  const flushHeldScroll = () => {
+    const write = heldScroll
+    heldScroll = undefined
+    write?.()
+  }
+
   // Read the whole measurement delivery before committing reactive row sizes.
   // Otherwise each row can render and force layout before the next is measured.
   virtualizer.resizeItem = (index, size) => {
@@ -451,25 +467,36 @@ export function createTimelineVirtualizer(input: Input) {
       // not a layout-forcing scroll adjustment for every measured row.
       dispatchCold(SIZES_FLUSHING)
       batch(() => {
-        sizes.forEach(([index, value]) => {
-          const row = rows()[index]
+        scrollHeld = true
 
-          if (!row || TimelineRow.key(row) !== value.key) return
-          resizeItem(index, value.size)
+        try {
+          sizes.forEach(([index, value]) => {
+            const row = rows()[index]
 
-          // TanStack recalculates its range after each resize. Advance the
-          // logical fold before deciding whether the next row needs anchoring.
-          if (!touchAdjustment) return
-          const delta = touchAdjustment
-          touchAdjustment = 0
+            if (!row || TimelineRow.key(row) !== value.key) return
+            resizeItem(index, value.size)
 
-          // A delta deferred under momentum that has since ended is dropped rather than translating the rows.
-          if (!defersAdjustments(input.follow.peek())) return
-          setRendering("scrollAdjustment", (value) => value + delta)
-          const root = listRoot()
+            // TanStack recalculates its range after each resize. Advance the
+            // logical fold before deciding whether the next row needs anchoring.
+            if (!touchAdjustment) return
+            const delta = touchAdjustment
+            touchAdjustment = 0
 
-          if (root) reportOffset?.(root.scrollTop, virtualizer.isScrolling)
-        })
+            // A delta deferred under momentum that has since ended is dropped rather than translating the rows.
+            if (!defersAdjustments(input.follow.peek())) return
+            setRendering("scrollAdjustment", (value) => value + delta)
+            const root = listRoot()
+
+            if (!root) return
+            // The native offset is read next, so it has to include any correction still held.
+            flushHeldScroll()
+            reportOffset?.(root.scrollTop, virtualizer.isScrolling)
+          })
+        } finally {
+          scrollHeld = false
+          // Inside the batch, so what reacts to the new sizes reads the corrected offset, as it did with one write a row.
+          flushHeldScroll()
+        }
       })
       dispatchCold(SIZES_FLUSHED)
       pinAnchor()
@@ -1085,6 +1112,11 @@ export function createTimelineVirtualizer(input: Input) {
       // Its observer reads the current index and delivers any actual size change.
       onCleanup(() => {
         if (contentMeasureFrame !== undefined) cancelAnimationFrame(contentMeasureFrame)
+
+        // A row that leaves the mounted range takes its focused control with it, and Chromium then leaves focus on
+        // <body>. The focus rescue would move it to a control in another row, and focusing that scrolls the timeline
+        // to it. The viewport takes focus instead, without scrolling, so the scroll keys keep working.
+        if (element.contains(document.activeElement)) listRoot()?.focus({ preventScroll: true })
         queueMicrotask(() => virtualizer.measureElement(null))
       })
 

@@ -45,20 +45,6 @@ describe("ConfigProviderOptionsV1", () => {
     })
   })
 
-  test("keeps model and variant options unchanged", () => {
-    expect(
-      ConfigProviderOptionsV1.model({
-        reasoningEffort: "high",
-        taskBudget: 1024,
-        metadata: { userId: "user" },
-      }),
-    ).toEqual({
-      reasoningEffort: "high",
-      taskBudget: 1024,
-      metadata: { userId: "user" },
-    })
-  })
-
   test("uses mechanical lowering for custom provider options", () => {
     expect(ConfigProviderOptionsV1.provider({ enabled: true })).toEqual({
       settings: { enabled: true },

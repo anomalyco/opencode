@@ -11,7 +11,7 @@ import type { SessionMessage } from "../session/message.js"
 import type { SessionSchema } from "../session/schema.js"
 import { Tool } from "../tool.js"
 import { McpTool } from "../tool/mcp.js"
-import { Wildcard } from "../util/wildcard.js"
+
 import { type Invocation, matchesAuthor } from "./author.js"
 import type { AutomationEvent } from "./event.js"
 
@@ -43,6 +43,7 @@ const FORBIDDEN_TOOLS = new Set([
 ])
 
 export interface RunInput {
+  readonly automationID: Automation.ID
   readonly messageID: SessionMessage.ID
   readonly state: Schema.Json
   readonly now: number
@@ -56,8 +57,8 @@ export type Outcome =
       readonly ok: false
       readonly error: string
       readonly output?: string
-      /** The program cannot succeed on a retry, e.g. a parse error or an unknown tool. */
-      readonly invalid?: boolean
+      /** A tool the program names is missing from the catalog right now, so the run is skipped. */
+      readonly unavailable?: boolean
     }
 
 type ProgramScan = { readonly tools: ReadonlyArray<string>; readonly actions: ReadonlySet<string> }
@@ -100,14 +101,16 @@ export const authorize = Effect.fnUntraced(function* (
   const agent = yield* agents.select(session.agent)
   if (invocation && !matchesAuthor(session, agent.info, invocation))
     return yield* Effect.fail("Create the automation with the session's current agent")
-  const actions = (yield* resolveCapabilities(scanned)).actions
-  const rules = Permission.merge(agent.info?.permissions ?? [], session.permissions ?? [])
+  const actions = (yield* resolveCapabilities(scanned).pipe(
+    Effect.mapError(({ path }) => `Unknown Code Mode tool: ${path}`),
+  )).actions
+  const policy = Permission.Policy.fromRules(agent.info?.permissions ?? [], session.permissions ?? [])
   // A rule scoped to some resources (`vault:*: ask`) must prompt too, not only the catch-all `*`.
   const request = (item: string) => ({
     action: item,
     resources: Array.dedupe([
       "*",
-      ...scopedRules(rules, item).flatMap((rule) => (rule.effect === "ask" ? [rule.resource] : [])),
+      ...Permission.Policy.scopedRules(policy, item).flatMap((rule) => (rule.effect === "ask" ? [rule.resource] : [])),
     ]),
     ...(invocation ?? { sessionID: session.id, agent: agent.id }),
   })
@@ -127,11 +130,6 @@ export const authorize = Effect.fnUntraced(function* (
     { discard: true },
   )
 })
-
-/** Rules for `action` that name specific resources rather than `*`, in order. */
-function scopedRules(rules: Permission.Ruleset, action: string) {
-  return rules.filter((rule) => rule.resource !== "*" && Wildcard.match(action, rule.action))
-}
 
 const bunFileReadMembers = new Set([
   "name",
@@ -155,7 +153,7 @@ const resolveCapabilities = Effect.fnUntraced(function* (scanned: ProgramScan) {
     const selected = yield* tools.codeModeTools(scanned.tools)
     for (const path of scanned.tools) {
       const tool = selected.get(path)
-      if (!tool) return yield* Effect.fail(`Unknown Code Mode tool: ${path}`)
+      if (!tool) return yield* Effect.fail({ path })
       actions.add(tool.options?.permission ?? tool.id)
     }
   }
@@ -196,18 +194,19 @@ export const run = Effect.fnUntraced(
     if (!agent.info) return { ok: false as const, error: `Agent not found: ${agent.id}` }
 
     const scanned = scan(action.code)
-    if (Result.isFailure(scanned)) return { ok: false as const, error: scanned.failure, invalid: true }
+    if (Result.isFailure(scanned)) return { ok: false as const, error: scanned.failure }
 
     const resolved = yield* Effect.result(resolveCapabilities(scanned.success))
-    if (Result.isFailure(resolved)) return { ok: false as const, error: resolved.failure, invalid: true }
+    if (Result.isFailure(resolved))
+      return { ok: false as const, error: `${resolved.failure.path} unavailable`, unavailable: true }
 
     const actions = ["execute", ...resolved.success.actions]
-    const rules = Permission.merge(agent.info.permissions, session.permissions ?? [])
+    const policy = Permission.Policy.fromRules(agent.info.permissions, session.permissions ?? [])
     // Unattended rules come after the configured ones and the last match wins, so restate every scoped rule after the
     // grant: the approval stands in for the catch-all `*` only, and a scoped `ask` still needs a person.
     const unattended: Permission.Ruleset = actions.flatMap((item) => [
       { action: item, resource: "*", effect: "allow" as const },
-      ...scopedRules(rules, item),
+      ...Permission.Policy.scopedRules(policy, item),
     ])
 
     // A deny added to config after creation still wins.
@@ -230,7 +229,7 @@ export const run = Effect.fnUntraced(
         code: action.code,
         tools: scanned.success.tools,
         bindings: { ...bindings, input: bindings },
-        permissions: rules,
+        policy,
         limits: CODE_LIMITS,
         services: yield* CodeModeTool.services,
         context: {
@@ -238,28 +237,19 @@ export const run = Effect.fnUntraced(
           agent: agent.id,
           messageID: input.messageID,
           progress: () => Effect.void,
+          automation: { id: input.automationID },
         },
       })
       .pipe(Effect.provideService(Permission.Unattended, unattended))
 
     const output = result.logs?.length ? boundedOutput(result.logs.join("\n")) : undefined
-    if (!result.ok) {
-      const invalid =
-        result.error.kind === "ParseError" ||
-        result.error.kind === "UnsupportedSyntax" ||
-        result.error.kind === "UnknownTool" ||
-        result.error.kind === "InvalidToolInput" ||
-        // A scoped `ask` with nobody present to answer it, in Permission's own wording.
-        result.error.message.includes("needs approval")
-      return { ok: false as const, error: result.error.message, output, ...(invalid ? { invalid: true } : {}) }
-    }
+    if (!result.ok) return { ok: false as const, error: result.error.message, output }
     const decoded = Automation.decodeCodeResult(result.value)
     if (Result.isFailure(decoded)) {
       return {
         ok: false as const,
         error: `An automation must return nothing or { state?, done?, send? }: ${decoded.failure}`,
         output,
-        invalid: true,
       }
     }
     return { ok: true as const, ...decoded.success, output }

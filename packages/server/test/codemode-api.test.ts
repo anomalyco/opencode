@@ -40,7 +40,11 @@ it.live("sends Code Mode opencode:// requests to the server's own router with th
         new Request("http://opencode.local/api/session", {
           method: "POST",
           headers: { "content-type": "application/json", authorization: `Basic ${btoa("opencode:secret")}` },
-          body: JSON.stringify({ location: { directory } }),
+          // opencode:// asks as the opencode api command, so the session allows it without a prompt.
+          body: JSON.stringify({
+            location: { directory },
+            permissions: [{ action: "*", resource: "*", effect: "allow" }],
+          }),
         }),
       ).then((response) => response.json()),
     )

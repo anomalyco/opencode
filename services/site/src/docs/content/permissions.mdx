@@ -288,7 +288,8 @@ shell: git status * → allow
 
 Saved approvals are durable, project-scoped `allow` rules. They never override
 a configured `deny`. Tools choose the proposed saved pattern: some propose `*`,
-shell proposes command prefixes, and skills and subagents propose their IDs.
+shell proposes command prefixes, web fetches propose the URL's site (such as
+`https://opencode.ai/*`), and skills and subagents propose their IDs.
 Review broad approvals and remove those no longer needed.
 
 Clients may attach feedback when rejecting. Non-interactive clients must decide

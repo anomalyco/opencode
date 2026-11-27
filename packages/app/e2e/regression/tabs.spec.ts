@@ -334,6 +334,7 @@ for (const [tabLayout, direction, label] of [
     await tabB.click({ button: "right" })
     await expect(menu.getByRole("menuitem")).toHaveText([
       "Rename",
+      "Copy",
       "Export…",
       "Close tab",
       "Close other tabs",
@@ -494,6 +495,73 @@ test("⌘⇧S archives the open session and moves to the next tab", async ({ pag
   await expectPath(page, sessionHref(b.id))
   await expect(page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"])`)).toHaveCount(0)
   await expect(page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)).toBeVisible()
+})
+
+test("⌘⇧S toggles archive on the open session, and Unarchive session has its own command", async ({ page }) => {
+  const archived = { ...a, time: { created: Date.now(), archived: Date.now() } }
+
+  const workspace = await mockWorkspace(page, {
+    name: "UnarchiveShortcut",
+    sessions: [archived, b],
+    seed: { tabs: [a.id, b.id] },
+  })
+
+  await page.goto(sessionHref(a.id))
+  await expectSessionTitle(page, a.title)
+
+  const update = () =>
+    page.waitForRequest(
+      (request) => request.method() === "PATCH" && new URL(request.url()).pathname === `/api/session/${a.id}`,
+    )
+
+  // The mock doesn't announce updates, so send the server's event once the request lands.
+  const unarchived = () =>
+    workspace.push([
+      {
+        id: "evt_unarchived",
+        type: "session.unarchived",
+        created: Date.now(),
+        location: { directory: workspace.directory },
+        durable: { aggregateID: a.id, seq: 1, version: 1 },
+        data: { sessionID: a.id },
+      } satisfies Extract<OpenCodeEvent, { type: "session.unarchived" }>,
+    ])
+
+  const prompt = page.getByRole("textbox", { name: "Prompt", exact: true })
+
+  // ⌘⇧S on an archived session unarchives it and keeps it open.
+  const shortcut = update()
+  await prompt.click()
+  await page.keyboard.press("ControlOrMeta+Shift+s")
+  expect((await shortcut).postDataJSON()).toMatchObject({ archived: false })
+  await expectPath(page, sessionHref(a.id))
+  unarchived()
+
+  // Unarchived now, so the same shortcut archives it, and Unarchive session is no longer offered.
+  await prompt.click()
+  await page.keyboard.press("ControlOrMeta+Shift+p")
+  const dialog = page.getByRole("dialog")
+  await dialog.getByRole("combobox").fill("archive session")
+  await expect(dialog.getByRole("option", { name: /^Archive session/ })).toBeVisible()
+  await expect(dialog.getByRole("option", { name: /^Unarchive session/ })).toHaveCount(0)
+  await page.keyboard.press("Escape")
+
+  const archive = update()
+  await prompt.click()
+  await page.keyboard.press("ControlOrMeta+Shift+s")
+  expect((await archive).postDataJSON()).toMatchObject({ archived: true })
+  await expectPath(page, sessionHref(b.id))
+
+  // From the palette on an archived session.
+  await page.goto(sessionHref(a.id))
+  await expectSessionTitle(page, a.title)
+  await prompt.click()
+  await page.keyboard.press("ControlOrMeta+Shift+p")
+  await dialog.getByRole("combobox").fill("unarchive session")
+  const command = update()
+  await dialog.getByRole("option", { name: /^Unarchive session/ }).click()
+  expect((await command).postDataJSON()).toMatchObject({ archived: false })
+  await expectPath(page, sessionHref(a.id))
 })
 
 test("option arrows move to the previous or next tab, and with shift to the next unread one", async ({ page }) => {
@@ -719,8 +787,9 @@ test("an unread tab whose run failed shows the failed dot, as the inbox does", a
   await tab(c.id).locator("[data-titlebar-tab-link]").click({ button: "right" })
   await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText([
     "Rename",
-    "Export…",
     "Mark as unread",
+    "Copy",
+    "Export…",
     "Close tab",
     "Close other tabs",
     "Close tabs to the right",
@@ -744,6 +813,32 @@ test("an unread tab whose run failed shows the failed dot, as the inbox does", a
   await tab(a.id).locator("[data-titlebar-tab-link]").click()
   await expectPath(page, sessionHref(a.id))
   await expect(tab(c.id).locator('[data-mark="unread"]')).toBeHidden()
+})
+
+test("the tab menu copies the session ID, title and project ID", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"])
+
+  const workspace = await mockWorkspace(page, { name: "CopyTabs", sessions: [a, b] })
+
+  await page.goto(sessionHref(a.id))
+
+  const link = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"]) [data-titlebar-tab-link]`)
+
+  const copy = async (item: string) => {
+    await link.click({ button: "right" })
+    await page.getByRole("menuitem", { name: "Copy", exact: true }).hover()
+    await page.getByRole("menu").last().getByRole("menuitem", { name: item, exact: true }).click()
+    await expect(page.getByRole("menu")).toHaveCount(0)
+  }
+
+  const clipboard = () => page.evaluate(() => navigator.clipboard.readText())
+
+  await copy("Session ID")
+  await expect.poll(clipboard).toBe(b.id)
+  await copy("Session title")
+  await expect.poll(clipboard).toBe(b.title)
+  await copy("Project ID")
+  await expect.poll(clipboard).toBe(workspace.projectID)
 })
 
 test("Recent and Pinned rows show the side tabs' status dots and shortcuts for sessions that aren't open as tabs", async ({
@@ -2045,6 +2140,33 @@ test("the Windows menu shares the vertical sidebar's icon lane", async ({ page }
   await expect.poll(async () => [(await menu.boundingBox())?.x, (await home.boundingBox())?.x]).toEqual([19, 19])
 })
 
+// #65864: Linux hides the top titlebar in vertical tabs and Inbox, so the app menu moves into the sidebar header.
+test("the Linux app menu renders in the vertical sidebar header without duplicating", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "LinuxMenu",
+    sessions: [],
+    seed: { settings: { appearance: { tabLayout: "inbox" } } },
+  })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER, os: "linux" })}`)
+
+  const button = page
+    .locator('[data-slot="sidebar-header"]')
+    .getByRole("button", { name: "OpenCode menu", exact: true })
+
+  const home = page.locator('[data-action="vertical-tabs-home"] svg')
+  await expect(home).toBeVisible()
+  await expect(button).toBeVisible()
+  await expect(page.locator('[data-component="desktop-icon-button"]')).toHaveCount(1)
+  await expect
+    .poll(async () => [(await button.locator("svg").boundingBox())?.x, (await home.boundingBox())?.x])
+    .toEqual([19, 19])
+
+  await button.click()
+  await page.getByRole("menuitem", { name: "File", exact: true }).click()
+  await page.getByRole("menuitem", { name: /^Settings/ }).click()
+  await expect(page.getByRole("heading", { name: "General" })).toBeVisible()
+})
+
 for (const row of [
   { name: "left tabs", width: 1280, settings: { appearance: { tabLayout: "vertical" } }, position: { x: 20, y: 25 } },
   { name: "top tabs", width: 1280, settings: { appearance: { tabLayout: "horizontal" } }, position: { x: 14, y: 15 } },
@@ -2279,6 +2401,7 @@ test("opening a session from the inbox keeps the list's scroll position and rows
   const target = items.filter({ hasText: "Inbox session 14" })
   await expect(items).toHaveCount(10)
   await expect(items).toContainText(Array.from({ length: 10 }, (_, index) => `Inbox session ${23 - index}`))
+  await expect(list.getByRole("group", { name: "Recent", exact: true })).toBeVisible()
   await expect(list.getByText("Recent", { exact: true })).toBeVisible()
   await list.evaluate((element) => element.scrollTo(0, element.scrollHeight))
   await expect(target).toBeInViewport({ ratio: 1 })
@@ -2331,18 +2454,70 @@ test("renaming an inbox card updates the same session on Home", async ({ page })
   await expect(home).toContainText("Renamed inbox title")
 })
 
-test("the inbox Archived dialog searches only archived sessions and restores the selected session", async ({
-  page,
-}) => {
+test("archiving the open inbox session opens the row below it, not the next tab", async ({ page }) => {
+  const sessions = ["First", "Second", "Third", "Fourth"].map((name, index) => ({
+    id: `ses_inbox_next_${index}`,
+    title: `${name} inbox row`,
+    time: { created: T0, updated: T0, idle: T0 - index, viewed: T0 + 100 },
+  }))
+
+  const [first, second, third, fourth] = sessions
+
+  // The tab order differs from the inbox's, so the tab next to each archived session is another row.
+  await mockWorkspace(page, {
+    name: "ArchiveInboxNext",
+    sessions,
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [second.id, fourth.id, first.id, third.id],
+    },
+  })
+  await page.goto(sessionHref(second.id))
+  await expectSessionTitle(page, second.title)
+
+  const items = page.locator('[data-slot="sidebar-inbox"] [data-slot="sidebar-inbox-item"]')
+  const row = (session: { title: string }) => items.filter({ hasText: session.title })
+  await expect(items).toContainText(sessions.map((session) => session.title))
+  await expect(row(second)).toHaveAttribute("data-state", "active")
+
+  await row(second).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Archive", exact: true }).click()
+
+  await expectPath(page, sessionHref(third.id))
+  await expect(row(third)).toHaveAttribute("data-state", "active")
+  await expect(items).toContainText([first, third, fourth].map((session) => session.title))
+
+  await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+Shift+s")
+
+  await expectPath(page, sessionHref(fourth.id))
+  await expect(row(fourth)).toHaveAttribute("data-state", "active")
+  await expect(items).toContainText([first, fourth].map((session) => session.title))
+  await expect(page.getByRole("heading", { name: fourth.title, exact: true })).toBeVisible()
+
+  // The last row has nothing below it, so the row above opens.
+  await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+Shift+s")
+
+  await expectPath(page, sessionHref(first.id))
+  await expect(row(first)).toHaveAttribute("data-state", "active")
+})
+
+test("the inbox lists archived sessions in a collapsed section and pins sessions at the top of Recent", async ({ page }) => {
   await page.clock.install({ time: T0 + 41 * 60_000 })
   await mockWorkspace(page, {
     name: "ArchivedInbox",
     sessions: [
       { id: "ses_archive_active", title: "Active inbox session", time: { created: T0, updated: T0, idle: T0 } },
+      {
+        id: "ses_archive_older",
+        title: "Older inbox session",
+        time: { created: T0 - 200, updated: T0 - 200, idle: T0 - 200 },
+      },
       ...["First archived session", "Second archived session"].map((title, index) => ({
         id: `ses_archive_${index}`,
         title,
-        time: { created: T0 - 100, updated: T0 + index, idle: index ? T0 - 100 : T0, archived: T0 + 10 },
+        time: { created: T0 - 100, updated: T0 + index, idle: T0 - 100, archived: T0 + 10 + index },
       })),
     ],
     seed: {
@@ -2359,43 +2534,317 @@ test("the inbox Archived dialog searches only archived sessions and restores the
 
   const rows = inbox.locator('[data-slot="sidebar-inbox-item"]')
 
-  await expect(rows).toHaveCount(1)
-  await expect(rows).toContainText("Active inbox session")
+  await expect(rows).toHaveText([/Active inbox session/, /Older inbox session/])
+  await expect(archived).toHaveAttribute("aria-expanded", "false")
+  await archived.click()
+  await expect(archived).toHaveAttribute("aria-expanded", "true")
+  await expect(rows).toHaveText([
+    /Active inbox session/,
+    /Older inbox session/,
+    /Second archived session/,
+    /First archived session/,
+  ])
+
+  await rows.filter({ hasText: "Older inbox session" }).click({ button: "right" })
+  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText([
+    "Rename",
+    "Pin",
+    "Mark as read",
+    "Copy",
+    "Export…",
+    "Archive",
+    "Delete…",
+  ])
+  // One separator before Copy and Export, and one before Archive and Delete.
+  await expect(page.getByRole("menu").getByRole("separator")).toHaveCount(2)
+  await page.getByRole("menuitem", { name: "Pin", exact: true }).click()
+
+  const recent = inbox.getByRole("group", { name: "Recent", exact: true }).locator('[data-slot="sidebar-inbox-item"]')
+
+  const pinIcon = 'use[href="#opencode-v2-icon-pin"]'
+
+  const pin = inbox.locator(pinIcon)
+
+  await expect(recent).toHaveText([/Older inbox session/, /Active inbox session/])
+  await expect(recent.filter({ hasText: "Older inbox session" }).locator(pinIcon)).toHaveCount(1)
+  await expect(pin).toHaveCount(1)
+  await expect(rows).toHaveText([
+    /Older inbox session/,
+    /Active inbox session/,
+    /Second archived session/,
+    /First archived session/,
+  ])
+
+  await rows.filter({ hasText: "Older inbox session" }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Unpin", exact: true }).click()
+  await expect(pin).toHaveCount(0)
+  await expect(recent).toHaveText([/Active inbox session/, /Older inbox session/])
+})
+
+test("an archived session that asks a question joins Needs attention and goes back to Archived once answered", async ({
+  page,
+}) => {
+  await page.clock.install({ time: T0 + 10 * 60_000 })
+
+  const workspace = await mockWorkspace(page, {
+    name: "ArchivedQuestion",
+    sessions: [
+      { id: "ses_asking_read", title: "Read inbox session", time: { created: T0, updated: T0, idle: T0, viewed: T0 } },
+      {
+        id: "ses_asking_archived",
+        title: "Clean email inbox",
+        time: { created: T0, updated: T0 + 1, busy: T0 + 60_000, archived: T0 + 10 },
+      },
+    ],
+    sessionStatus: { ses_asking_archived: { type: "running" } },
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [],
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
+    },
+  })
+
+  await page.goto("/")
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const list = inbox.locator('[data-slot="sidebar-inbox-scroll"]')
+
+  const needs = inbox
+    .getByRole("group", { name: "Needs attention", exact: true })
+    .locator('[data-slot="sidebar-inbox-item"]')
+
+  const archived = inbox.getByRole("button", { name: "Archived", exact: true })
+
+  await expect(list.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([/Read inbox session/])
   await expect(archived).toBeVisible()
-  await archived.focus()
-  await archived.press("Enter")
 
-  const dialog = page.getByRole("dialog")
+  workspace.push([
+    {
+      id: "evt_archived_question",
+      type: "form.created",
+      created: T0 + 9 * 60_000,
+      location: { directory: workspace.directory },
+      data: {
+        form: {
+          id: "form_archived_question",
+          sessionID: "ses_asking_archived",
+          title: "Unsubscribe from these?",
+          metadata: { kind: "question" },
+          fields: [{ key: "answer", type: "string", title: "Answer" }],
+        },
+      },
+    } satisfies Extract<OpenCodeEvent, { type: "form.created" }>,
+  ])
 
-  const search = dialog.getByRole("combobox")
+  await expect(needs).toHaveText([/Clean email inbox/])
+  await expect(needs.first()).not.toHaveClass(/opacity-50/)
+  // It was the only archived session, so Archived has nothing left to show.
+  await expect(archived).toHaveCount(0)
 
-  await expect(search).toBeFocused()
-  await expect(search).toHaveAttribute("placeholder", "Search sessions")
-  await expect(dialog.getByText("Archived sessions", { exact: true })).toBeVisible()
-  await expect(dialog.getByRole("option")).toHaveCount(2)
-  await expect(dialog.getByRole("option", { name: /First archived session/ })).toBeVisible()
-  await expect(dialog.getByRole("option", { name: /Second archived session/ })).toBeVisible()
-  await search.fill("Active inbox session")
-  await expect(dialog.getByText("No results found", { exact: true })).toBeVisible()
-  await search.fill("First archived")
-  await expect(dialog.getByRole("option")).toHaveCount(1)
-  const option = dialog.getByRole("option", { name: /First archived session/ })
-  await expect(option).toHaveAttribute("aria-selected", "true")
+  // Still archived: the menu offers to unarchive it.
+  await needs.first().click({ button: "right" })
+  await expect(page.getByRole("menuitem", { name: "Unarchive", exact: true })).toBeVisible()
+  await page.keyboard.press("Escape")
 
-  // A second Enter while the restore is in flight restores and opens the session once.
-  const restore = await holdRoute(page, /\/api\/session\/ses_archive_0(\?|$)/, { method: "PATCH" })
-  await search.press("Enter")
-  await restore.arrived
-  await expect(option).toHaveAttribute("aria-busy", "true")
-  await expect(option.getByRole("img", { name: "Loading", exact: true })).toBeVisible()
-  await search.press("Enter")
-  await expect(dialog).toBeVisible()
-  restore.release()
-  await expect(dialog).toHaveCount(0)
-  expect(restore.requests).toHaveLength(1)
-  await expectPath(page, sessionHref("ses_archive_0"))
-  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
-  await expect(rows.filter({ hasText: "First archived session" })).toHaveAttribute("data-state", "active")
+  workspace.push([
+    {
+      id: "evt_archived_question_replied",
+      type: "form.replied",
+      created: T0 + 10 * 60_000,
+      location: { directory: workspace.directory },
+      data: { sessionID: "ses_asking_archived", id: "form_archived_question", answer: { answer: "yes" } },
+    } satisfies Extract<OpenCodeEvent, { type: "form.replied" }>,
+  ])
+
+  await expect(needs).toHaveCount(0)
+  await expect(archived).toBeVisible()
+  await archived.click()
+  await expect(list.locator('[data-slot="sidebar-inbox-item"]').filter({ hasText: "Clean email inbox" })).toHaveClass(
+    /opacity-50/,
+  )
+})
+
+test("in the inbox, ⌘1-9 and option arrows move through sessions in the order the list shows", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "InboxShortcuts",
+    sessions: [
+      {
+        id: "ses_keys_first",
+        title: "First read session",
+        time: { created: T0, updated: T0 + 3, idle: T0 + 3, viewed: T0 + 3 },
+      },
+      { id: "ses_keys_unread", title: "Unread session", time: { created: T0, updated: T0 + 2, idle: T0 + 2 } },
+      {
+        id: "ses_keys_second",
+        title: "Second read session",
+        time: { created: T0, updated: T0 + 1, idle: T0 + 1, viewed: T0 + 1 },
+      },
+      {
+        id: "ses_keys_archived",
+        title: "Archived session",
+        time: { created: T0, updated: T0 + 4, idle: T0 + 4, viewed: T0 + 4, archived: T0 + 10 },
+      },
+    ],
+    seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
+  })
+  await page.goto("/")
+
+  const rows = page.locator('[data-slot="sidebar-inbox"] [data-slot="sidebar-inbox-item"]')
+
+  await expect(rows).toHaveText([/First read session/, /Unread session/, /Second read session/])
+
+  await page.keyboard.press("ControlOrMeta+1")
+  await expectPath(page, sessionHref("ses_keys_first"))
+
+  await page.keyboard.press("Alt+ArrowDown")
+  await expectPath(page, sessionHref("ses_keys_unread"))
+
+  await page.keyboard.press("Alt+ArrowDown")
+  await expectPath(page, sessionHref("ses_keys_second"))
+
+  // Past the last row it wraps to the first, skipping the collapsed Archived section.
+  await page.keyboard.press("Alt+ArrowDown")
+  await expectPath(page, sessionHref("ses_keys_first"))
+
+  await page.keyboard.press("Shift+Alt+ArrowDown")
+  await expectPath(page, sessionHref("ses_keys_unread"))
+
+  await page.keyboard.press("ControlOrMeta+3")
+  await expectPath(page, sessionHref("ses_keys_second"))
+
+  await page.keyboard.press("Alt+ArrowUp")
+  await expectPath(page, sessionHref("ses_keys_unread"))
+})
+
+test("the inbox list's own menu moves Working between the bottom shelf and above Archived", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "WorkingPlacement",
+    sessions: [
+      { id: "ses_place_read", title: "Read inbox session", time: { created: T0, updated: T0, idle: T0, viewed: T0 } },
+      { id: "ses_place_working", title: "Working inbox session", time: { created: T0, updated: T0 + 1, busy: T0 } },
+      {
+        id: "ses_place_archived",
+        title: "Archived inbox session",
+        time: { created: T0, updated: T0, idle: T0, archived: T0 + 10 },
+      },
+    ],
+    sessionStatus: { ses_place_working: { type: "running" } },
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [],
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true, archivedExpanded: true } },
+    },
+  })
+  await page.goto("/")
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const list = inbox.locator('[data-slot="sidebar-inbox-scroll"]')
+
+  const shelf = inbox.locator('[data-slot="sidebar-inbox-working"]')
+
+  await expect(shelf.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([/Working inbox session/])
+  await expect(list.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([
+    /Read inbox session/,
+    /Archived inbox session/,
+  ])
+
+  // A card's own menu stays the card's.
+  await list.locator('[data-slot="sidebar-inbox-item"]').filter({ hasText: "Read inbox session" }).click({ button: "right" })
+  await expect(page.getByRole("menuitemradio")).toHaveCount(0)
+  await page.keyboard.press("Escape")
+
+  await inbox.getByRole("button", { name: "Archived", exact: true }).click({ button: "right" })
+  await expect(page.getByRole("menuitemradio")).toHaveCount(0)
+  await page.getByRole("menuitem", { name: "Working sessions", exact: true }).click()
+  await expect(page.getByRole("menuitemradio", { name: "Pinned to the bottom" })).toBeChecked()
+  await page.getByRole("menuitemradio", { name: "Above archived" }).click()
+
+  await expect(shelf).toHaveCount(0)
+  await expect(list.getByRole("group", { name: "Working", exact: true })).toBeVisible()
+  await expect(list.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([
+    /Read inbox session/,
+    /Working inbox session/,
+    /Archived inbox session/,
+  ])
+
+  await page.reload()
+  await expect(list.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([
+    /Read inbox session/,
+    /Working inbox session/,
+    /Archived inbox session/,
+  ])
+  await inbox.getByRole("button", { name: "Working", exact: true }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Working sessions", exact: true }).click()
+  await page.getByRole("menuitemradio", { name: "Pinned to the bottom" }).click()
+  await expect(shelf.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([/Working inbox session/])
+})
+
+test("a working session finishing in the inbox shelf leaves the list where it was", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 480 })
+
+  const workspace = await mockWorkspace(page, {
+    name: "InboxFinish",
+    sessions: [
+      ...Array.from({ length: 12 }, (_, index) => ({
+        id: `ses_finish_read_${String(index).padStart(2, "0")}`,
+        title: `Read session ${index}`,
+        time: { created: T0, updated: T0 + 100 - index, idle: T0 + 100 - index, viewed: T0 + 200 },
+      })),
+      { id: "ses_finish_working", title: "Working session", time: { created: T0, updated: T0 + 150, busy: T0 } },
+    ],
+    sessionStatus: { ses_finish_working: { type: "running" } },
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [],
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true, recentExpanded: true } },
+    },
+  })
+
+  await page.goto("/")
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+  const list = inbox.locator('[data-slot="sidebar-inbox-scroll"]')
+  const shelf = inbox.locator('[data-slot="sidebar-inbox-working"]')
+  const recent = list.getByRole("group", { name: "Recent", exact: true }).locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(shelf.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([/Working session/])
+  await expect(recent).toHaveCount(12)
+  expect(await list.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+
+  // Open the first session, then move focus down the list to the working card without opening it.
+  await recent.first().click()
+  await expectPath(page, sessionHref("ses_finish_read_00"))
+  await expect(recent.first()).toBeFocused()
+  await page.keyboard.press("End")
+  await expect(shelf.locator('[data-slot="sidebar-inbox-item"]')).toBeFocused()
+  await list.evaluate((element) => element.scrollTo(0, 0))
+  expect(await list.evaluate((element) => element.scrollTop)).toBe(0)
+
+  // The mock serves these records, so the session's next load sees the run's end.
+  const working = workspace.sessions.find((session) => session.id === "ses_finish_working")
+
+  if (!working) throw new Error("Unknown session ses_finish_working")
+  Object.assign(working, { time: { ...working.time, updated: T0 + 300, idle: T0 + 300 } })
+  await workspace.push([
+    {
+      id: "evt_finish_succeeded",
+      created: T0 + 300,
+      type: "session.execution.succeeded",
+      location: { directory: workspace.directory },
+      durable: { aggregateID: "ses_finish_working", seq: 1, version: 1 },
+      data: { sessionID: "ses_finish_working" },
+    } satisfies Extract<OpenCodeEvent, { type: "session.execution.succeeded" }>,
+  ])
+
+  // The finished run is the newest unread result, at the top of Recent, and the list stays at the top to show it.
+  await expect(shelf).toHaveCount(0)
+  await expect(recent.first()).toContainText("Working session")
+  await expect(recent.first()).toHaveAttribute("data-status", "done")
+  await expect(recent.first()).toBeFocused()
+  await expect(recent.first()).toBeInViewport({ ratio: 1 })
+  expect(await list.evaluate((element) => element.scrollTop)).toBe(0)
 })
 
 test("deleting from the inbox closes its dialog at once and a slow delete leaves the next dialog open", async ({
@@ -2442,11 +2891,16 @@ test("deleting from the inbox closes its dialog at once and a slow delete leaves
   expect(remove.requests).toHaveLength(1)
 })
 
-test("opening a working session expands its shelf and still allows manual collapse", async ({ page }) => {
+test("opening a working session expands its shelf, and collapsing it keeps only the selected session", async ({
+  page,
+}) => {
   await openSession(page, {
     name: "WorkingInbox",
-    sessions: [{ id: "ses_working_selected", title: "Selected working session" }],
-    sessionStatus: { ses_working_selected: { type: "running" } },
+    sessions: [
+      { id: "ses_working_selected", title: "Selected working session" },
+      { id: "ses_working_other", title: "Other working session" },
+    ],
+    sessionStatus: { ses_working_selected: { type: "running" }, ses_working_other: { type: "running" } },
     seed: {
       settings: { appearance: { tabLayout: "inbox" } },
       storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: false } },
@@ -2459,20 +2913,25 @@ test("opening a working session expands its shelf and still allows manual collap
 
   const toggle = shelf.getByRole("button", { name: "Working", exact: true })
 
-  const row = shelf.locator('[data-slot="sidebar-inbox-item"]')
+  const rows = shelf.locator('[data-slot="sidebar-inbox-item"]')
+
+  const selected = rows.filter({ hasText: "Selected working session" })
 
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
-  await expect(row).toHaveAttribute("data-state", "active")
+  await expect(rows).toHaveCount(2)
+  await expect(selected).toHaveAttribute("data-state", "active")
   await expect(toggle.locator('[data-component="text-shimmer"]')).toHaveCount(0)
   await toggle.click()
   await expect(toggle).toHaveAttribute("aria-expanded", "false")
-  await expect(row).toHaveCount(0)
+  await expect(rows).toHaveText([/Selected working session/])
+  await expect(selected).toHaveAttribute("data-state", "active")
   await expect(toggle.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true")
   await expectPath(page, sessionHref("ses_working_selected"))
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
   await toggle.press("Enter")
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
-  await expect(row).toHaveAttribute("data-state", "active")
+  await expect(rows).toHaveCount(2)
+  await expect(selected).toHaveAttribute("data-state", "active")
   await expect(toggle.locator('[data-component="text-shimmer"]')).toHaveCount(0)
 })
 
@@ -2540,22 +2999,27 @@ test("sessions opened from Home and Search get a temporary Current session row w
   await expect(rows).toHaveCount(10)
 })
 
-test("the inbox keeps every unread result separate from expandable Recent, including never-run sessions", async ({
+test("the inbox lists unread results in Recent by when they settled, and reading one keeps its place", async ({
   page,
 }) => {
   await mockWorkspace(page, {
     name: "InboxSections",
     sessions: [
-      ...Array.from({ length: 12 }, (_, index) => ({
+      ...Array.from({ length: 6 }, (_, index) => ({
         id: `ses_unread_${index}`,
         title: `Unread result ${index}`,
         outcome: index === 0 ? "failed" : "succeeded",
-        time: { created: T0, updated: T0 + index, idle: T0 + index },
+        time: { created: T0, updated: T0 + 2 * index + 1, idle: T0 + 2 * index + 1 },
       })),
-      ...Array.from({ length: 12 }, (_, index) => ({
+      ...Array.from({ length: 6 }, (_, index) => ({
         id: `ses_read_${index}`,
         title: index === 0 ? "Never-run session" : `Read session ${index}`,
-        time: { created: T0, updated: T0 + 100 - index, idle: index ? T0 + 100 - index : undefined, viewed: T0 + 200 },
+        time: {
+          created: T0,
+          updated: index ? T0 + 2 * index : T0 + 12,
+          idle: index ? T0 + 2 * index : undefined,
+          viewed: T0 + 200,
+        },
       })),
     ],
     seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
@@ -2564,47 +3028,65 @@ test("the inbox keeps every unread result separate from expandable Recent, inclu
 
   const inbox = page.locator('[data-slot="sidebar-inbox"]')
 
-  const unread = inbox.getByRole("group", { name: "Unread", exact: true }).locator('[data-slot="sidebar-inbox-item"]')
-
   const recent = inbox.getByRole("group", { name: "Recent", exact: true }).locator('[data-slot="sidebar-inbox-item"]')
 
-  await expect(unread).toContainText(Array.from({ length: 12 }, (_, index) => `Unread result ${11 - index}`))
-  await expect(unread.filter({ hasText: "Unread result 0" })).toHaveAttribute("data-status", "failed")
-  await expect(recent).toContainText([
+  const order = [
     "Never-run session",
-    ...Array.from({ length: 9 }, (_, index) => `Read session ${index + 1}`),
-  ])
+    "Unread result 5",
+    "Read session 5",
+    "Unread result 4",
+    "Read session 4",
+    "Unread result 3",
+    "Read session 3",
+    "Unread result 2",
+    "Read session 2",
+    "Unread result 1",
+    "Read session 1",
+    "Unread result 0",
+  ]
+
+  await expect(recent).toContainText(order.slice(0, 10))
   await expect(recent).toHaveCount(10)
+  await expect(inbox.getByRole("group", { name: "Unread", exact: true })).toHaveCount(0)
+  await expect(recent.filter({ hasText: "Unread result 5" })).toHaveAttribute("data-status", "done")
+  await expect(recent.filter({ hasText: "Read session 5" })).toHaveAttribute("data-status", "ready")
   await expect(inbox.locator('[data-slot="sidebar-inbox-item"][tabindex="0"]')).toHaveCount(1)
 
-  await unread.filter({ hasText: "Unread result 11" }).focus()
+  await recent.filter({ hasText: "Never-run session" }).focus()
   await page.keyboard.press("ArrowDown")
-  await expect(unread.filter({ hasText: "Unread result 10" })).toBeFocused()
+  await expect(recent.filter({ hasText: "Unread result 5" })).toBeFocused()
   await page.keyboard.press("End")
-  await expect(recent.filter({ hasText: "Read session 9" })).toBeFocused()
+  await expect(recent.filter({ hasText: "Unread result 1" })).toBeFocused()
   await page.keyboard.press("Home")
-  await expect(unread.filter({ hasText: "Unread result 11" })).toBeFocused()
+  await expect(recent.filter({ hasText: "Never-run session" })).toBeFocused()
 
   await inbox.getByRole("button", { name: "Show more", exact: true }).click()
   await expect(recent).toHaveCount(12)
-  await expect(recent.filter({ hasText: "Read session 11" })).toHaveCount(1)
-  await expect(unread).toHaveCount(12)
+  await expect(recent).toContainText(order)
+  await expect(recent.filter({ hasText: "Unread result 0" })).toHaveAttribute("data-status", "failed")
   await page.reload()
   await expect(recent).toHaveCount(12)
   await inbox.getByRole("button", { name: "Show less", exact: true }).click()
   await expect(recent).toHaveCount(10)
-  await expect(unread).toHaveCount(12)
 
-  const marked = page.getByText("Read session 1", { exact: true })
+  // Reading or unreading a session changes its mark, not its place.
+  const read = recent.nth(3)
 
-  await recent.filter({ has: marked }).click({ button: "right" })
-  await page.getByRole("menuitem", { name: "Mark as unread", exact: true }).click()
-  await expect(unread.filter({ has: marked })).toHaveCount(1)
-  await expect(recent.filter({ has: marked })).toHaveCount(0)
-  await unread.filter({ has: marked }).click({ button: "right" })
+  await expect(read).toContainText("Unread result 4")
+  await read.click({ button: "right" })
   await page.getByRole("menuitem", { name: "Mark as read", exact: true }).click()
-  await expect(recent.filter({ has: marked })).toHaveCount(1)
-  await expect(unread.filter({ has: marked })).toHaveCount(0)
+  await expect(read).toHaveAttribute("data-status", "ready")
+  await expect(read).toContainText("Unread result 4")
+  await expect(recent).toContainText(order.slice(0, 10))
+
+  const unread = recent.nth(8)
+
+  await expect(unread).toContainText("Read session 2")
+  await unread.click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Mark as unread", exact: true }).click()
+  await expect(unread).toHaveAttribute("data-status", "done")
+  await expect(unread).toContainText("Read session 2")
+  await expect(recent).toContainText(order.slice(0, 10))
 })
 
 test("the inbox waits for initial requests and orders attention by waiting age rather than last update", async ({

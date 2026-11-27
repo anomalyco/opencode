@@ -767,13 +767,24 @@ fn a_save_waits_for_a_lock_held_briefly() {
         .truncate(false)
         .open(project.store().with_file_name(format!("{}.lock", approval::FILE)))
         .unwrap();
-    lock.lock().unwrap();
+    let (held, holding) = std::sync::mpsc::channel();
+    let (release, released) = std::sync::mpsc::channel();
     let holder = std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        lock.lock().unwrap();
+        held.send(()).unwrap();
+        released.recv().unwrap();
         drop(lock);
     });
-    approvals.decide(&artifact(std::path::Path::new("/p/plugin.so"), "aa"), approval::Decision::Approved).unwrap();
+    holding.recv().unwrap();
+    // The lock is let go only once the save has found it held, so the save makes the wait this test names.
+    let _handshake = approval::on_wait({
+        let release = release.clone();
+        move || release.send(()).unwrap()
+    });
+    let decided = approvals.decide(&artifact(std::path::Path::new("/p/plugin.so"), "aa"), approval::Decision::Approved);
+    let _ = release.send(());
     holder.join().unwrap();
+    decided.unwrap();
 }
 
 #[test]
@@ -786,6 +797,9 @@ fn a_typescript_plugins_artifact_is_its_files() {
     std::fs::write(dir.join("src/a.ts"), "export const a = 1\n").unwrap();
     std::fs::write(dir.join("node_modules/dep/index.js"), "module.exports = 1\n").unwrap();
     let hash = || approval::Artifact::tree(&dir).unwrap().sha256;
+    // The clock the racy windows read is this test's, fixed before any file this test writes: every entry is racy
+    // however long the test takes.
+    let racy = approval::at(std::time::UNIX_EPOCH + approval::RACY);
     let first = hash();
     let artifact = approval::Artifact::tree(&dir).unwrap();
     assert_eq!(artifact.path, std::fs::canonicalize(&dir).unwrap());
@@ -800,9 +814,22 @@ fn a_typescript_plugins_artifact_is_its_files() {
     assert_ne!(changed, first, "a changed file kept the hash");
     std::fs::rename(dir.join("src/a.ts"), dir.join("src/b.ts")).unwrap();
     assert_ne!(hash(), changed, "a moved file kept the hash");
-    let moved = hash();
-    std::fs::write(dir.join("node_modules/dep/index.js"), "module.exports = 2\n").unwrap();
-    assert_ne!(hash(), moved, "a dependency changed in place, at its size, kept the hash");
+    // Older than the window, the entries vouch for the tree: a rewrite at the same size and time is not read.
+    drop(racy);
+    let dep = dir.join("node_modules/dep/index.js");
+    let written = fs::metadata(&dep).unwrap().modified().unwrap();
+    // A century past every entry's time: each is older than the window, so the entries vouch for the tree.
+    let settled_clock = approval::at(std::time::UNIX_EPOCH + std::time::Duration::from_secs(100 * 365 * 24 * 60 * 60));
+    let settled = hash();
+    fs::write(&dep, "module.exports = 2\n").unwrap();
+    fs::File::options().write(true).open(&dep).unwrap().set_modified(written).unwrap();
+    assert_eq!(hash(), settled, "a settled tree was read again for entries that kept their size and time");
+    // Within the window an entry's time cannot vouch for it: the next call reads the bytes and sees that rewrite.
+    drop(settled_clock);
+    let _racy = approval::at(std::time::UNIX_EPOCH + approval::RACY);
+    fs::write(&dep, "module.exports = 3\n").unwrap();
+    fs::File::options().write(true).open(&dep).unwrap().set_modified(written).unwrap();
+    assert_ne!(hash(), settled, "a dependency changed in place, at its size and time, kept the hash");
     assert!(approval::Artifact::tree(&dir.join("tui.ts")).is_err());
 }
 

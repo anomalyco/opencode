@@ -104,8 +104,14 @@ export interface Interface {
   ) => Effect.Effect<Info, InvalidError | DisabledError | Session.NotFoundError | Permission.Error>
   /** Oldest first, leaving out automations whose directory has automations off. */
   readonly list: (input?: ListInput) => Effect.Effect<Info[], InvalidError | DisabledError | Session.NotFoundError>
-  /** These fail with DisabledError when the automation's directory has automations off. */
-  readonly get: (id: ID) => Effect.Effect<Info, NotFoundError | DisabledError>
+  /**
+   * These fail with DisabledError when the automation's directory has automations off. `get` with a `projectID`
+   * treats an automation in another project as missing, whatever its directory's config.
+   */
+  readonly get: (
+    id: ID,
+    options?: { readonly projectID?: ProjectID },
+  ) => Effect.Effect<Info, NotFoundError | DisabledError>
   readonly pause: (id: ID) => Effect.Effect<Info, NotFoundError | DisabledError>
   readonly resume: (id: ID) => Effect.Effect<Info, NotFoundError | DisabledError>
   readonly remove: (id: ID) => Effect.Effect<void, NotFoundError | DisabledError>
@@ -137,9 +143,6 @@ const LEADER_TTL = 2 * MAX_SLEEP
 const DISABLED_RETRY = HOUR
 /** How long an automation whose prompt failed waits before trying again. */
 const FAILED_RETRY = 5 * MINUTE
-/** How long an automation whose code failed waits before trying again, up to MAX_CODE_FAILURES. */
-const CODE_FAILED_RETRY = MINUTE
-const MAX_CODE_FAILURES = 3
 const TICK_CONCURRENCY = 4
 
 const duration = (value: string) =>
@@ -316,10 +319,15 @@ const layer = Layer.effect(
         Effect.catchTag("FileSystem.DirectoryNotFoundError", () => Effect.succeed(true)),
       )
 
-    /** The row of an automation callers may manage: it exists and its directory has automations on. */
-    const findVisible = (id: ID) =>
+    /**
+     * The row of an automation callers may manage: it exists, is in `projectID` when given, and its directory has
+     * automations on. Ownership is checked first so another project's config is never read.
+     */
+    const findVisible = (id: ID, projectID?: ProjectID) =>
       Effect.gen(function* () {
         const row = yield* find(id)
+        if (projectID !== undefined && row.project_id !== projectID)
+          return yield* new NotFoundError({ automationID: id })
         if (!(yield* visible(row.directory))) return yield* new DisabledError()
         return row
       })
@@ -426,35 +434,19 @@ const layer = Layer.effect(
       row: Row,
       now: number,
       outcome: Extract<AutomationCode.Outcome, { ok: false }>,
+      event?: AutomationEvent.Message,
     ) {
       const ended = yield* Clock.currentTimeMillis
-      const strikes = row.failures + 1
       // Preserve the diagnostic even when logs alone would fill the budget.
       const reason = outcome.output === undefined ? outcome.error : `${outcome.error}\n${outcome.output}`
-      const output = (prefix = "") => AutomationCode.boundedOutput(prefix + reason)
-      if (row.trigger.type === "event") return yield* pauseWith(row, now, output())
-      if (!outcome.invalid && strikes < MAX_CODE_FAILURES) {
-        return yield* settle(row, {
-          failures: strikes,
-          last_outcome: "failed",
-          last_output: output(),
-          retry_at: ended + CODE_FAILED_RETRY,
-          time_updated: ended,
-        })
-      }
-      return yield* settle(
-        row,
-        {
-          status: "paused",
-          failures: strikes,
-          last_run_at: now,
-          last_outcome: "failed",
-          last_output: output(outcome.invalid ? "Paused: " : `Paused after ${strikes} failed runs: `),
-          retry_at: null,
-          time_updated: ended,
-        },
-        { evenIfPaused: true },
-      )
+      return yield* settle(row, {
+        failures: row.failures + 1,
+        last_outcome: "failed",
+        last_output: AutomationCode.boundedOutput(reason),
+        retry_at: null,
+        ...advance(row, ended, false, event),
+        time_updated: ended,
+      })
     })
 
     const runShell = Effect.fnUntraced(function* (
@@ -607,13 +599,22 @@ const layer = Layer.effect(
             "The session that authorized this automation's tools moved to another project",
           )
         const outcome = yield* AutomationCode.run(owner, action, {
+          automationID: row.id,
           messageID: SessionMessage.ID.make(id),
           state: row.state,
           now,
           runs: row.run_count,
           ...(event && { event: AutomationEvent.input(event) }),
         }).pipe(inDirectory(row.directory))
-        if (!outcome.ok) return yield* codeFailed(row, now, outcome)
+        if (!outcome.ok && outcome.unavailable)
+          return yield* settle(row, {
+            last_outcome: "skipped",
+            last_output: `skipped: ${outcome.error}`,
+            retry_at: null,
+            ...advance(row, yield* Clock.currentTimeMillis, false, event),
+            time_updated: now,
+          })
+        if (!outcome.ok) return yield* codeFailed(row, now, outcome, event)
 
         const values = {
           ...(outcome.state !== undefined && { state: outcome.state }),
@@ -636,13 +637,11 @@ const layer = Layer.effect(
           ),
           Effect.result,
         )
-        if (Result.isFailure(sent))
-          return yield* codeFailed(row, now, {
-            ok: false,
-            output: outcome.output,
-            error: sent.failure.message,
-            invalid: sent.failure instanceof InvalidError || sent.failure instanceof FileSystem.DirectoryNotFoundError,
-          })
+        if (Result.isFailure(sent)) {
+          const error = sent.failure
+          if (error instanceof InvalidError || error instanceof FileSystem.DirectoryNotFoundError) return yield* error
+          return yield* codeFailed(row, now, { ok: false, output: outcome.output, error: error.message }, event)
+        }
       },
       (effect, row, now, _event?: AutomationEvent.Message) =>
         effect.pipe(Effect.catchTag("Automation.InvalidError", (error) => pauseWith(row, now, error.reason))),
@@ -894,7 +893,19 @@ const layer = Layer.effect(
                 })
                 return true
               }
-              yield* runAction(current, at, update)
+              yield* runAction(current, at, update).pipe(
+                Effect.catchIf(
+                  (error) => !(error instanceof FileSystem.DirectoryNotFoundError),
+                  (error) =>
+                    settle(current, {
+                      last_outcome: "failed",
+                      last_output: AutomationCode.boundedOutput(error.message),
+                      retry_at: null,
+                      ...advance(current, at, false, update),
+                      time_updated: at,
+                    }),
+                ),
+              )
               return (yield* find(id)).status === "active"
             }, delivery.withPermit),
           ),
@@ -1030,7 +1041,7 @@ const layer = Layer.effect(
           if (Option.isNone(at)) return yield* new InvalidError({ reason: `Invalid time: ${trigger.at}` })
           if (at.value <= now) return yield* new InvalidError({ reason: `Time is in the past: ${trigger.at}` })
           const stored: Trigger = RELATIVE.test(trigger.at.trim())
-            ? { type: "at", at: new Date(at.value).toISOString(), tz: trigger.tz }
+            ? { ...trigger, at: new Date(at.value).toISOString() }
             : trigger
           return { trigger: stored, due: at.value }
         }
@@ -1215,8 +1226,8 @@ const layer = Layer.effect(
         )
         return matching.filter((row) => shown.has(row.directory)).map(toInfo)
       }),
-      get: Effect.fn("Automation.get")(function* (id) {
-        return toInfo(yield* findVisible(id))
+      get: Effect.fn("Automation.get")(function* (id, options) {
+        return toInfo(yield* findVisible(id, options?.projectID))
       }),
       pause: Effect.fn("Automation.pause")(function* (id) {
         const row = yield* findVisible(id)

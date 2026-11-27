@@ -73,12 +73,19 @@ export const make = Effect.fnUntraced(function* (
                   ),
                 ),
             }).pipe(Effect.provideService(Job.BlockingParent, id), Effect.interruptible, Effect.exit)
-            yield* Deferred.done(result, exit)
+            // With one text part, bounding the result gives the same text as bounding the body, so the full output
+            // is saved once and the step's own truncation keeps the bounded result.
+            const single =
+              Exit.isSuccess(exit) &&
+              exit.value.metadata?.truncated === undefined &&
+              exit.value.content.filter((part) => part.type === "text").length === 1
+            const bounded = single ? Exit.succeed(yield* output.truncate(exit.value)) : exit
+            yield* Deferred.done(result, bounded)
             if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause)
-            const text = Exit.isFailure(exit)
-              ? Cause.pretty(exit.cause)
-              : exit.value.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
-            const body = yield* truncate(text)
+            const text = Exit.isFailure(bounded)
+              ? Cause.pretty(bounded.cause)
+              : bounded.value.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+            const body = single ? text : yield* truncate(text)
             if (Exit.isFailure(exit) || exit.value.metadata?.error === true) return yield* Effect.fail(new Error(body))
             return body
           }),

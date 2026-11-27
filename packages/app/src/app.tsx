@@ -59,6 +59,10 @@ function BodyTypography() {
   return null
 }
 
+// Prod crashes reach Sentry only when someone clicks Report; other channels send them as they happen.
+// Builds that set no channel, such as the web app's, count as prod.
+const CAPTURES_CRASHES = ["local", "dev", "beta"].includes(import.meta.env.VITE_OPENCODE_CHANNEL ?? "")
+
 export function AppBaseProviders(
   props: ParentProps<{
     locale?: Locale
@@ -77,7 +81,8 @@ export function AppBaseProviders(
           <UiI18nBridge>
             <ErrorBoundary
               fallback={(error) => {
-                void import("@sentry/solid").then(({ captureException }) => captureException(error))
+                if (CAPTURES_CRASHES)
+                  void import("@sentry/solid").then(({ captureException }) => captureException(error))
 
                 return <ErrorPage error={error} />
               }}

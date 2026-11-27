@@ -1,0 +1,55 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Modus",
+  "id": "modus",
+  "light": {
+    "palette": {
+      "neutral": "#ffffff",
+      "ink": "#000000",
+      "primary": "#0031a9",
+      "accent": "#531ab6",
+      "success": "#006800",
+      "warning": "#6f5500",
+      "error": "#a60000",
+      "info": "#005e8b",
+      "interactive": "#0031a9",
+      "diffAdd": "#006800",
+      "diffDelete": "#a60000"
+    },
+    "overrides": {
+      "text-weak": "#595959",
+      "syntax-comment": "#595959",
+      "syntax-keyword": "#531ab6",
+      "syntax-string": "#3548cf",
+      "syntax-primitive": "#721045",
+      "syntax-property": "#005e8b",
+      "syntax-type": "#005f5f",
+      "syntax-constant": "#0000b0"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#000000",
+      "ink": "#ffffff",
+      "primary": "#2fafff",
+      "accent": "#b6a0ff",
+      "success": "#44bc44",
+      "warning": "#d0bc00",
+      "error": "#ff5f59",
+      "info": "#00d3d0",
+      "interactive": "#2fafff",
+      "diffAdd": "#44bc44",
+      "diffDelete": "#ff5f59"
+    },
+    "overrides": {
+      "text-weak": "#989898",
+      "syntax-comment": "#989898",
+      "syntax-keyword": "#b6a0ff",
+      "syntax-string": "#79a8ff",
+      "syntax-primitive": "#feacd0",
+      "syntax-property": "#00d3d0",
+      "syntax-type": "#6ae4b9",
+      "syntax-constant": "#00bcff"
+    }
+  }
+}

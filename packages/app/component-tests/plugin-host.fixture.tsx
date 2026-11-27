@@ -9,6 +9,7 @@ import {
   type App,
   type Keybinds,
   type MountedSession,
+  type PanelSidebar,
   type Router,
   type Servers,
   type SessionScreen,
@@ -598,7 +599,15 @@ export function mountSessionRegion(input: {
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
   const screen = route as unknown as SessionScreen
 
-  const sidebar = { opened: () => false, width: () => 0, transition: () => false, resize() {}, toggle() {} }
+  const sidebar: PanelSidebar = {
+    opened: () => false,
+    width: () => 0,
+    transition: () => false,
+    resize() {},
+    toggle() {},
+    side: () => "start",
+    move() {},
+  }
 
   function Region() {
     const host = usePluginHost()

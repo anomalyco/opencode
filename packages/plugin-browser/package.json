@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/plugin-browser",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "OpenCode's desktop browser plugin",
   "type": "module",
   "license": "MIT",
@@ -21,7 +21,9 @@
     "./rpc": "./src/rpc.ts",
     "./workspace": "./src/workspace.ts",
     "./preview-path": "./src/preview-path.ts",
-    "./proxy": "./src/proxy.ts"
+    "./proxy": "./src/proxy.ts",
+    "./experimental/stream": "./src/stream.ts",
+    "./experimental/tunnel-host": "./src/tunnel-host.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

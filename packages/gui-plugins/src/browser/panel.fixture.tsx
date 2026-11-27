@@ -421,7 +421,15 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       placement: () => "side",
       reserve: () => false,
       animate: () => false,
-      sidebar: { opened: () => false, width: () => 0, transition: () => false, resize() {}, toggle() {} },
+      sidebar: {
+        opened: () => false,
+        width: () => 0,
+        transition: () => false,
+        resize() {},
+        toggle() {},
+        side: () => "start",
+        move() {},
+      },
       open: () => [],
     }
 
@@ -1810,7 +1818,15 @@ export function mountBrowserRegion(input: RegionHost) {
                     placement: () => "side",
                     reserve: () => false,
                     animate: () => false,
-                    sidebar: { opened: () => false, width: () => 0, transition: () => false, resize() {}, toggle() {} },
+                    sidebar: {
+                      opened: () => false,
+                      width: () => 0,
+                      transition: () => false,
+                      resize() {},
+                      toggle() {},
+                      side: () => "start",
+                      move() {},
+                    },
                     open: () => [tabID],
                   }}
                 >

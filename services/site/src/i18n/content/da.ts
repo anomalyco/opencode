@@ -412,7 +412,7 @@ export const content = {
       badges: {
         body: "Sæt et badge i din README, dokumentation eller på dit website, og link det til opencode.ai. Vælg den lyse eller mørke fil til din baggrund (HTML'en skifter selv), og ændr ikke farverne eller teksten.",
         sizes: "Alle stilarter findes i 20, 32 og 44px (Shields kun i 20px), som SVG og som PNG i 2×.",
-        mono: "Hver fil findes også med tekst i OpenTUI Mono. Tilføj -mono før filtypen, som i opencode-works-with-a-light-20-mono.svg, eller -mono-caps for OpenTUI Mono med versaler.",
+        mono: "Hver fil findes også med tekst i OpenMono. Tilføj -mono før filtypen, som i opencode-works-with-a-light-20-mono.svg, eller -mono-caps for OpenMono med versaler.",
         groups: {
           "works-with": {
             title: "Virker med",

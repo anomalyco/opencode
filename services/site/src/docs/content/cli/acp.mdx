@@ -122,15 +122,21 @@ including its models, agents, commands, skills, instructions, plugins, and MCP s
 
 - `cwd` must be an absolute path. OpenCode rejects a relative `cwd` with an invalid params error.
 - `session/load` replays the saved messages. `session/resume` and `session/fork` don't replay them.
-- To load, resume, or fork a session, the client must pass that session's directory as `cwd`. OpenCode rejects a
-  different `cwd` with an invalid params error.
-- `session/list` returns up to 100 sessions per page. It accepts a `cwd` filter and a `cursor`.
+- To load, resume, or fork a session, the client must pass that session's directory as `cwd`, or another directory of
+  the same project, such as the main checkout of a session that moved into a worktree. OpenCode rejects any other
+  `cwd` with an invalid params error whose `data.directory` is the session's directory.
+- `session/list` returns up to 100 sessions per page. It accepts a `cwd` filter and a `cursor`. Each subagent
+  session carries `_meta["opencode/child-session"]` with its `id`, `parentID`, and `title`.
+- When OpenCode renames a session, for example after it generates a title, it sends `session_info_update` with the new
+  `title`.
 - `session/close` interrupts active work and detaches the session from the ACP process. OpenCode keeps the saved
   session.
 - `session/delete` ends an active prompt like `session/cancel`, then removes the session. Deleting a session that
   doesn't exist succeeds.
 - A session runs one prompt at a time. OpenCode returns an error for a second `session/prompt` while the first is
   active.
+- If a prompt fails, the error's `data` has the failure's `errorName`. It also has `status` and `retryAfterMs` when
+  the provider sent them.
 
 ### Cancellation
 
@@ -166,7 +172,8 @@ New sessions use the directory's default model and primary agent. The responses 
 | `effort` | `thought_level` | The model's variants and `default`. Present only for models with variants.    |
 | `mode`   | `mode`          | Visible primary agents.                                                       |
 
-`session/set_config_option` takes string values:
+Each `model` option is named after its provider's display name and the model's name, such as
+`Anthropic / Claude Sonnet 5.5`. `session/set_config_option` takes string values:
 
 ```json
 { "sessionId": "ses_123", "configId": "model", "value": "anthropic/claude-sonnet-5-5" }
@@ -188,8 +195,8 @@ other blocks like this:
 | `image` with `data`                                   | Attaches it to the prompt.                                                             |
 | `image` with only `uri`                               | Handles it as a resource link.                                                         |
 | `resource` with `text`                                | Inlines the text after the resource's path or URI.                                     |
-| `resource` with `blob`                                | Attaches it if it has a `mimeType`. Drops it otherwise.                                |
-| `resource_link` to a `file://` URI                    | Attaches the file. Sends a Markdown link instead if the file is missing or unreadable. |
+| `resource` with `blob`                                | Attaches it. Without a `mimeType`, infers it from the URI's file name.                 |
+| `resource_link` to a `file:` URI                      | Attaches the file. Sends a Markdown link instead if the file is missing or unreadable. |
 | `resource_link` to a `zed://` URI with a `path` query | Attaches the file at `path`.                                                           |
 | `resource_link` to another URI                        | Sends a Markdown link such as `[spec](https://example.com/spec.md)`.                   |
 
@@ -203,7 +210,8 @@ This block is context for the model only:
 ### Commands
 
 After `session/new`, `session/load`, `session/resume`, or `session/fork`, OpenCode sends `available_commands_update`
-with the directory's commands and the built-in `compact` command. It sends another update when the commands change.
+with the directory's commands, the built-in `compact` command, and the directory's skills. It sends another update
+when the commands or skills change.
 
 ```json
 {
@@ -213,20 +221,25 @@ with the directory's commands and the built-in `compact` command. It sends anoth
 ```
 
 If a prompt starts with `/` and the name of an available command, OpenCode runs that command with the rest of the text
-as arguments. OpenCode sends other text that starts with `/` as a normal prompt. `/compact` runs
-[compaction](/compaction).
+as arguments. If it starts with `/` and a skill's ID, OpenCode sends the prompt with that skill attached. OpenCode sends
+other text that starts with `/` as a normal prompt. `/compact` runs [compaction](/compaction). A skill
+whose ID matches a command isn't listed.
+
+If a command fails, the prompt fails with the command's own message, such as its usage, and `data.service` set to
+`command`.
 
 ### MCP servers
 
 The client can pass stdio and HTTP MCP servers on `session/new`, `session/load`, `session/resume`, and `session/fork`.
 OpenCode adds them to the session's directory for the life of the `opencode acp` process, so other sessions in that
-directory can use them. OpenCode passes HTTP headers through and doesn't use OAuth for these servers. It doesn't
+directory can use them. If OpenCode unloads an idle directory, it adds them again before the session's next prompt.
+OpenCode passes HTTP headers through and doesn't use OAuth for these servers. It doesn't
 advertise MCP over SSE, and it doesn't support MCP over ACP.
 
-| Case                             | Behavior                                                            |
-| -------------------------------- | ------------------------------------------------------------------- |
+| Case                             | Behavior                                                           |
+| -------------------------------- | ------------------------------------------------------------------ |
 | Same name as a configured server | The client's server replaces the configured one in that directory. |
-| [Policies](/policies)            | `integration.use` rules still apply.                                |
+| [Policies](/policies)            | `integration.use` rules still apply.                               |
 
 ```json
 { "type": "http", "name": "docs", "url": "https://mcp.example.com", "headers": [] }
@@ -265,7 +278,8 @@ includes `toolCallId` when OpenCode sent that tool call as a `session/update` fo
 }
 ```
 
-- OpenCode never sends forms that might collect secrets.
+- OpenCode never sends forms that might collect secrets. A choice worded like one, such as "Which API token should I
+  use?", is still sent, without its typed answer.
 - If a field accepts a typed answer next to its options, the schema adds an optional `<key>_custom` string property.
   For a single choice, a non-empty custom answer replaces the selected option. For a multiple choice, OpenCode adds it
   to the selected options.
@@ -302,7 +316,7 @@ RFD, which is a draft. `usage` sums the prompt's model calls in this session. It
 
 Before the response, OpenCode sends `usage_update` from the
 [session usage](https://agentclientprotocol.com/rfds/session-usage) RFD. It sends it only if the prompt used tokens and
-OpenCode knows the model's context size. `cost` is the session's total cost in USD.
+OpenCode knows the model's context size. `cost` is the total cost in USD of the session and its child sessions.
 
 ```json
 { "sessionUpdate": "usage_update", "used": 1540, "size": 200000, "cost": { "amount": 0.012, "currency": "USD" } }

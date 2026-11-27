@@ -28,19 +28,11 @@ impl State {
     }
 
     pub(crate) fn on_job_updated(&mut self, info: &JobInfo) {
-        let running = info.status() == Some(&JobStatus::Running);
-        for read in self.sessions.iter_mut().filter_map(|session| session.job_read.as_mut()) {
-            read.record(info.id(), running.then(|| info.clone()));
+        if info.status() != Some(&JobStatus::Running) {
+            return self.end_job(info.id());
         }
-        if !running {
-            if self.jobs.shift_remove(info.id()).is_none() {
-                return;
-            }
-            for members in self.sessions.iter_mut().filter_map(|session| session.job_tree.as_mut()) {
-                members.remove(info.id());
-            }
-            self.log_job(info);
-            return;
+        for read in self.sessions.iter_mut().filter_map(|session| session.job_read.as_mut()) {
+            read.record(info.id(), Some(info.clone()));
         }
         self.jobs.insert(info.id().to_owned(), info.clone());
         let roots: Vec<SessionKey> = self
@@ -53,6 +45,32 @@ impl State {
             self.sessions[root].job_tree.get_or_insert_default().insert(info.id().to_owned());
         }
         self.log_job(info);
+    }
+
+    /// A subagent job runs one busy period of its child, so the child's execution ending ends the job too. A server
+    /// without `experimental.job.updated` lists the job but never says it ended.
+    pub(crate) fn end_subagent_jobs(&mut self, child: &SessionID) {
+        let ended: Vec<String> = self
+            .jobs
+            .values()
+            .filter(|job| matches!(job, JobInfo::Subagent(job) if job.child_session_id == *child))
+            .map(|job| job.id().to_owned())
+            .collect();
+        for id in ended {
+            self.end_job(&id);
+        }
+    }
+
+    /// Drops a settled job, also from the list reads in flight.
+    fn end_job(&mut self, id: &str) {
+        for read in self.sessions.iter_mut().filter_map(|session| session.job_read.as_mut()) {
+            read.record(id, None);
+        }
+        let Some(job) = self.jobs.shift_remove(id) else { return };
+        for members in self.sessions.iter_mut().filter_map(|session| session.job_tree.as_mut()) {
+            members.remove(id);
+        }
+        self.log_job(&job);
     }
 
     /// Forgets a tree's jobs (its session was removed).

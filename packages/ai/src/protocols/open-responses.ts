@@ -30,7 +30,7 @@ import {
   withUntypedFrames,
 } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
-import { effortUpdate } from "../effort-updates.js"
+import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
 import { toolsUpdate } from "../tool-updates.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
@@ -496,11 +496,11 @@ export const lowerTool = Effect.fnUntraced(function* (protocolName: string, tool
 })
 
 export const lowerCustomTool = (tool: ToolDefinition, custom: OpenAIFreeform.Custom) => {
-  const grammar = OpenAIFreeform.grammar(custom.format)
+  const grammar = OpenAIFreeform.grammar(custom)
   return {
     type: "custom" as const,
     name: tool.name,
-    description: tool.description,
+    description: OpenAIFreeform.description(tool, custom),
     format: grammar ? { type: "grammar" as const, ...grammar } : { type: "text" as const },
   }
 }
@@ -560,7 +560,7 @@ const lowerToolCall = (
       ...(id === undefined ? {} : { id }),
       call_id: part.id,
       name: part.name,
-      input: OpenAIFreeform.toRaw(custom, part.input),
+      input: OpenAIFreeform.toRaw(custom, part.input, part.providerMetadata?.[providerMetadataKey]?.header),
     }
   return {
     type: "function_call",
@@ -653,10 +653,17 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
 
 const DEFAULT_EFFORT = "medium"
 
+// A call's output only follows the whole assistant turn, and Meta's Muse models, directly or through a gateway,
+// reject a commentary message replayed while a call is waiting for it. Text after a call keeps its place without
+// the phase there; other providers accept it and keep the phase.
+const rejectsPendingCommentary = (request: LLMRequest) =>
+  request.model.provider === "meta" || /(?:^|\/)muse-/i.test(request.model.id)
+
 export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
   const input: OpenResponsesInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
   const custom = OpenAIFreeform.tools(request)
+  const pendingCommentaryRejected = rejectsPendingCommentary(request)
   const customTool = (part: ToolCallPart | ToolResultPart) =>
     part.namespace === undefined ? custom.get(part.name) : undefined
 
@@ -701,6 +708,7 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
       const content: TextPart[] = []
       const reasoningItems: Record<string, OpenResponsesReasoningInput> = {}
       const hostedToolItems = new Set<string>()
+      let calledTool = false
       const flushText = () => {
         if (content.length === 0) return
         const groups = content.reduce<
@@ -709,7 +717,8 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
           const partMetadata = part.providerMetadata?.[providerMetadataKey]
           const id = itemID(part.providerMetadata, providerMetadataKey) ?? metadata?.itemId
           const partPhase = messagePhase(partMetadata?.phase)
-          const phase = partPhase === undefined ? metadata?.phase : partPhase
+          const declared = partPhase === undefined ? metadata?.phase : partPhase
+          const phase = calledTool && declared === "commentary" && pendingCommentaryRejected ? undefined : declared
           const group = groups.at(-1)
           if (group && group.id === id && group.phase === phase) group.parts.push(part)
           else groups.push({ id, phase, parts: [part] })
@@ -761,6 +770,7 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
           flushText()
           if (part.providerExecuted === true) continue
           input.push(lowerToolCall(part, providerMetadataKey, customTool(part)))
+          calledTool = true
           continue
         }
         if (part.type === "tool-result" && part.providerExecuted === true) {
@@ -894,9 +904,10 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
   const definitions = ProviderShared.flattenTools(request.tools)
   const options = OpenResponsesOptions.resolve(request)
   const custom = OpenAIFreeform.tools(request)
+  const updates = resolveEffortUpdates(request, options.reasoningEffort)
   return {
-    ...(yield* lowerConversation(request, adapter)),
-    ...lowerGeneration(request, options),
+    ...(yield* lowerConversation(updates.request, adapter)),
+    ...lowerGeneration(request, { ...options, reasoningEffort: updates.effort }),
     tools: definitions.length === 0 ? undefined : yield* lowerTools(definitions, adapter, custom),
     tool_choice:
       allowedToolChoice(options, custom) ??
@@ -1337,19 +1348,25 @@ const onOutputItemDone = Effect.fnUntraced(function* (state: ParserState, item: 
     if (!item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
     const custom = item.type === "custom_tool_call"
     const metadata = providerMetadata(state, OpenAIFreeform.metadata(item.id, custom))
-    const final = { custom: state.custom.get(item.name), raw: rawInput(item) }
-    const input = custom ? OpenAIFreeform.fromRaw(final.custom, final.raw) : item.arguments
     const registered = state.tools[item.id] !== undefined
-    const closed = custom ? OpenAIFreeform.close(state.tools, [item.id], final) : undefined
-    const tools = registered
-      ? (closed?.tools ?? state.tools)
+    const started = registered
+      ? state.tools
       : ToolStream.start(state.tools, item.id, {
           id: item.call_id,
           name: item.name,
           namespace: item.namespace,
           providerMetadata: metadata,
         })
-    const result = yield* ToolStream.finish(state.id, tools, item.id, input)
+    // A custom call's final raw text sets its input, so it finishes without an override.
+    const closed = custom
+      ? OpenAIFreeform.close(started, [item.id], state.custom, state.providerMetadataKey, rawInput(item))
+      : undefined
+    const result = yield* ToolStream.finish(
+      state.id,
+      closed?.tools ?? started,
+      item.id,
+      custom ? undefined : item.arguments,
+    )
     const events: LLMEvent[] = []
     const finished = [...(closed?.events ?? []), ...(result.events ?? [])]
     // A done-only call never streamed a start event, so open its lifecycle here.
@@ -1441,7 +1458,16 @@ const onResponseFinish = Effect.fnUntraced(function* (state: ParserState, event:
       events.push(...emitted)
     }
     // Some compatible providers omit output_item.done even after completing the response.
-    const pending = yield* ToolStream.finishAll(current.id, current.tools)
+    const open = OpenAIFreeform.close(
+      current.tools,
+      Object.keys(current.tools).filter(
+        (key) => current.tools[key]?.providerMetadata?.[current.providerMetadataKey]?.custom === true,
+      ),
+      current.custom,
+      current.providerMetadataKey,
+    )
+    events.push(...open.events)
+    const pending = yield* ToolStream.finishAll(current.id, open.tools)
     current = {
       ...current,
       tools: pending.tools,
@@ -1614,6 +1640,8 @@ export const protocol = Protocol.make({
     step: (state: ParserState, event: Event) => step(state, normalize(state, event)),
     terminal,
   },
+  // Not every Open Responses server accepts `configuration_update`, so only models that opt in get it.
+  supportsEffortUpdates: (request) => request.model.capabilities?.reasoning?.updates === true,
 })
 
 export const httpTransport = HttpTransport.sseJson.with<OpenResponsesBody>()

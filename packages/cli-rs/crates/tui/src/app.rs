@@ -521,6 +521,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     app.root().add(&shell);
     let toasts = Toasts::new(app, page.clone(), &shell);
     let dialogs = Dialogs::new(app, keymap.clone(), page.clone());
+    dialogs.set_scroll(crate::dialogs::scroll_config(&deps.config.info));
     let plugin_overlays = View::new(app)
         .absolute()
         .z_index(2500)
@@ -870,6 +871,8 @@ fn app_commands() -> Vec<String> {
             "agent.cycle",
             "variant.cycle",
             "variant.list",
+            "speed.cycle",
+            "speed.list",
             "agent.cycle.reverse",
             "provider.connect",
             "opencode.highlights",
@@ -1029,6 +1032,8 @@ fn app_theme(theme: &Theme) -> opentui::theme::Theme {
         background: theme.background.base,
         foreground: theme.text.base,
         muted: theme.text.muted,
+        selection_bg: theme.background.selection,
+        selection_fg: theme.text.selection,
         ..opentui::theme::Theme::default()
     }
 }

@@ -22,7 +22,10 @@ const args = parseArgs({
       default: process.env.FRESH_ASSETS_DIR ?? path.join(import.meta.dir, "../../../../../fresh-assets"),
     },
     surface: { type: "string", multiple: true, default: ["terminal"] },
-    font: { type: "string", default: process.env.CAPTURE_FONT ?? "OpenTUI Mono" },
+    // An installed family. OpenMono Nerd is the terminal one: it has the symbols the TUI draws, each one cell wide
+    // (in OpenMono the arrows and the ellipsis take two cells, and the status marks come from another font). VHS
+    // draws each cell on its own, so no family shows code ligatures.
+    font: { type: "string", default: process.env.CAPTURE_FONT ?? "OpenMono Nerd" },
     // TUI experiments to turn on in the capture's cli.json, e.g. --experiment new-designs (the
     // muted-blue dialogs with the left key line on dev).
     experiment: { type: "string", multiple: true, default: [] },

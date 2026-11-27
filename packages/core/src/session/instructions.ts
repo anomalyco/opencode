@@ -120,7 +120,7 @@ function describePath(root: string, path: string) {
 }
 
 export const node = makeLocationNode({
-  name: "session-instructions",
+  service: Service,
   layer,
   deps: [Bus.node, Database.node, FSUtil.node, Location.node],
 })

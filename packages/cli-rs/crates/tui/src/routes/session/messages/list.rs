@@ -1,12 +1,17 @@
 //! Window the transcript from the tail. A store update refreshes the rows owned by changed messages; scrolling toward
 //! the head loads older pages.
 //!
+//! The window is bounded on both sides: a move that mounts rows on one side of the view drops the rows more than
+//! [`MARGIN`] past the other side, so memory follows the rows near the view, not every row the reader passed.
+//! What the reader opened in a row stays in [`Toggles`], so a dropped row comes back as they left it.
+//!
 //! What the transcript remembers is one [`Model`]. A render plans over the model and the store, applies the plan to
 //! the widgets with the model not borrowed, so a widget callback that re-enters finds no borrow, then commits it.
 
 use std::collections::HashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::Range;
+use std::sync::Arc;
 
 use opencode_api::generated::{
     AgentInfo, ModelInfo, ModelRef, SessionInboxInfo, SessionInfo, SessionMessageAssistant,
@@ -22,7 +27,7 @@ use opencode_ui::theme::ThemeMode;
 use opencode_ui::tool_info::ToolKind;
 use opentui::input::MouseEventKind;
 use opentui::syntax::SyntaxTheme;
-use opentui::widget::ScrollEdge;
+use opentui::widget::{ScrollCause, ScrollEdge};
 
 use super::super::tools;
 use super::{assistant, background, compaction, errors, footer, reasoning, revert, shell, skill, user};
@@ -31,6 +36,8 @@ use crate::routes::session::grouping;
 
 pub const TAIL_ROWS: usize = 40;
 pub const BACKFILL_CHUNK: usize = 60;
+/// The rows, by weight, the window keeps past the edge of the view it moves away from.
+pub const MARGIN: usize = BACKFILL_CHUNK;
 
 #[derive(Clone)]
 pub struct Transcript(Rc<Inner>);
@@ -84,6 +91,7 @@ struct Inner {
     renderers: CodeBlockRenderers,
     claims: ToolClaims,
     groups: Rc<grouping::Settings>,
+    toggles: Toggles,
     model: RefCell<Model>,
     look: RefCell<Look>,
     /// The mounted rows by key: a render's plan builds and drops them.
@@ -110,6 +118,7 @@ impl Drop for Inner {
             if let Some(id) = hooks.resize.take() {
                 tui.app.remove_handler(id);
             }
+            crate::features::release::dropped(&tui.app, self.rows.get_mut().len());
         }
     }
 }
@@ -140,11 +149,21 @@ struct Model {
     /// The rows of each message, by index in the specs.
     refs: HashMap<MessageKey, Vec<usize>>,
     start: Start,
-    /// Where the mounted window ends, by row index, when it stops before the newest row
-    /// (`visibleRowsEnd`): `session.first` mounts the head only.
-    end: Option<usize>,
-    /// Set when rows mount above the window or the terminal resizes, so the reader's rows stay in place.
+    /// Where the mounted window ends when it stops before the newest row (`visibleRowsEnd`): `session.first` mounts
+    /// the head only, and a move up drops the rows far below the view.
+    end: Option<End>,
+    /// Set when rows mount above the window, so the reader's rows stay in place.
     pin: Option<Pin>,
+    /// Set when the terminal resizes away from the bottom, holding the reader's top row through layout and refit.
+    resize: Option<ResizePin>,
+    /// Monotonic counter identifying the active [`ResizePin`] across `after_layout` callbacks.
+    resize_gen: u64,
+    /// The height of the rows dropped since the last layout, and the frame number then. The content's rect still
+    /// counts them, so a pin set before the next layout takes them off.
+    dropped: Option<(u64, f32)>,
+    /// The height of the rows dropped above the view since the last layout, and the frame number then, so a same-frame
+    /// resize anchors against the kept rows' future positions.
+    dropped_above: Option<(u64, f32)>,
     /// An older page is loading.
     loading: bool,
     /// Message navigation or its slack holds the view, so the bottom it reaches is not the tail.
@@ -201,10 +220,56 @@ impl Events {
     }
 }
 
+/// What the reader opened in the session's rows, by a key each widget takes from what it shows, so that a row the
+/// window drops and builds again opens as they left it. Groups keep theirs in [`grouping::Settings`].
+#[derive(Clone, Default)]
+pub struct Toggles(Rc<RefCell<HashSet<String>>>);
+
+impl Toggles {
+    /// A closed switch, until it has a key the reader opened.
+    pub fn switch(&self) -> Switch {
+        Switch { toggles: self.clone(), key: RefCell::default() }
+    }
+}
+
+/// One widget's open state in [`Toggles`].
+pub struct Switch {
+    toggles: Toggles,
+    key: RefCell<String>,
+}
+
+impl Switch {
+    /// Names what the widget shows, once it knows: a tool call's ID, a message's, with what it opens.
+    pub fn key(&self, key: String) {
+        if *self.key.borrow() != key {
+            *self.key.borrow_mut() = key;
+        }
+    }
+
+    pub fn get(&self) -> bool {
+        let key = self.key.borrow();
+        !key.is_empty() && self.toggles.0.borrow().contains(key.as_str())
+    }
+
+    /// Opens a closed switch or closes an open one, and returns whether it is open. A switch without a key stays shut.
+    pub fn flip(&self) -> bool {
+        let key = self.key.borrow();
+        if key.is_empty() {
+            return false;
+        }
+        let mut open = self.toggles.0.borrow_mut();
+        if open.remove(key.as_str()) {
+            return false;
+        }
+        open.insert(key.clone());
+        true
+    }
+}
+
 struct Paint {
     theme: Theme,
-    syntax: SyntaxTheme,
-    thinking_syntax: SyntaxTheme,
+    syntax: Arc<SyntaxTheme>,
+    thinking_syntax: Arc<SyntaxTheme>,
     /// The categorical colors at step 400, each once: an agent without a color of its own takes one by position.
     palette: Vec<Color>,
 }
@@ -218,25 +283,80 @@ impl Paint {
                 palette.push(color);
             }
         }
-        Self { thinking_syntax: thinking_syntax(&syntax, theme.text.muted), syntax, theme, palette }
+        Self { thinking_syntax: Arc::new(thinking_syntax(&syntax, theme.text.muted)), syntax, theme, palette }
     }
 }
 
-/// The content height before rows mounted above, and the frame it is from. A terminal resize away from the bottom
-/// pins the reader's row instead (`ScrollBox.anchor`): through the resize's layout and the rebuild's after it, a row
-/// above it that rewraps scrolls the view by as much. A row taller than the view keeps its top; its own content may
-/// still move as it rewraps.
+/// The content height before rows mounted above, and the frame it is from.
 struct Pin {
     height: f32,
     frame: u64,
-    /// The mounted rows above the reader's, while a resize holds it.
-    above: Option<HashSet<RowKey>>,
 }
 
 impl Pin {
-    /// Whether the frames that lay out the change are still to come or running.
+    /// Whether the frame that lays out the new rows is still to come or running.
     fn live(&self, frame: u64) -> bool {
-        frame <= self.frame + if self.above.is_some() { 2 } else { 1 }
+        frame <= self.frame + 1
+    }
+}
+
+/// The row held at the top of the view through a terminal resize (`ScrollBox.anchor`).
+///
+/// The resize's layout and the deferred `refit` after it rewrap rows above and at the anchor; `ScrollBox` clamps the
+/// offset to the new content height before child resize handlers run, so holding the anchor scrolls to its absolute
+/// target rather than applying incremental deltas.
+struct ResizePin {
+    anchor: RowKey,
+    /// `anchor` top minus `scroll_top` before the resize: `>= 0` when the row starts at or below the viewport top,
+    /// `< 0` when scrolled `-screen_y` rows into the row.
+    screen_y: f64,
+    /// `anchor`'s height before the resize, to keep proportional position when a mid-row scroll rewraps.
+    height: f32,
+    /// `anchor`'s latest `y` in `content`, snapped on `anchor`'s resize and shifted by height changes of rows above.
+    y: f64,
+    /// `anchor`'s latest height, paired with `y` when a row above changes without `anchor` itself resizing.
+    current_height: f32,
+    /// Mounted rows above `anchor`, for `refit` frames where a row above changes height without `anchor` resizing.
+    above: HashSet<RowKey>,
+    frame: u64,
+    generation: u64,
+}
+
+impl ResizePin {
+    /// Whether the resize's layout and deferred `refit` frames are still to come or running.
+    fn live(&self, frame: u64) -> bool {
+        frame <= self.frame + 2
+    }
+
+    /// Scroll offset that keeps `anchor` at its pre-resize viewport row, scaling a mid-row scroll proportionally when
+    /// the anchor row itself rewraps.
+    fn target(&self, y: f64, height: f32) -> f64 {
+        let offset = if self.screen_y < 0.0 && self.height > 0.0 && height != self.height {
+            let into = (-self.screen_y * f64::from(height) / f64::from(self.height)).round();
+            -into.min(f64::from((height - 1.0).max(0.0)))
+        } else {
+            self.screen_y
+        };
+        (y - offset).max(0.0)
+    }
+}
+
+/// The end of a window that stops before the newest row. It follows its last row by key, since an older page or a
+/// regrouping moves the rows' indices.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum End {
+    /// Before the row at this index of the rows the next render plans.
+    Index(usize),
+    /// After this row; the index after it at the last render stands in while the row is gone.
+    After(RowKey, usize),
+}
+
+impl End {
+    fn index(self, specs: &[Spec]) -> usize {
+        match self {
+            Self::Index(index) => index,
+            Self::After(key, index) => specs.iter().position(|spec| spec.key() == key).map_or(index, |at| at + 1),
+        }
     }
 }
 
@@ -282,6 +402,7 @@ impl Transcript {
             renderers: crate::plugins::host::code_blocks(tui),
             claims: crate::plugins::host::tool_claims(tui),
             groups: grouping::Settings::new(&tui.settings.info()),
+            toggles: Toggles::default(),
             model: RefCell::new(Model { settings: RowSettings::read(&tui.config()), ..Model::default() }),
             look: RefCell::new(Look { paint: Rc::new(Paint::new(theme)), keys: (u64::MAX, Rc::default()) }),
             rows: RefCell::default(),
@@ -299,6 +420,7 @@ impl Transcript {
         if self.0.model.borrow().session.as_ref() != Some(session) {
             self.0.model.borrow_mut().session = Some(session.clone());
             *self.0.groups.expanded.borrow_mut() = tui.tabs.expanded_groups(&session.0);
+            self.0.toggles.0.borrow_mut().clear();
         }
         self.0.locate(tui, session);
         // The rows read the location's agents and models, what the local selection reads, and, a shell's rows, its
@@ -328,25 +450,15 @@ impl Transcript {
         self.0.render(tui, |message| force || changed.contains(&message));
     }
 
+    /// Near the top of the mounted rows, mounts older ones, or loads an older page, and drops the rows far below the
+    /// view.
     pub fn reveal_older(&self, tui: &Tui) -> bool {
         let inner = &self.0;
         let (_, top) = inner.scroll.scroll_position();
         if top > f64::from(inner.scroll.rect().height) {
             return false;
         }
-        let model = inner.model.borrow();
-        let start = model.window_start();
-        let start = (start > 0).then(|| match grouping::rows_before(&model.weights, start, BACKFILL_CHUNK) {
-            0 => Start::Top,
-            next => Start::Row(model.specs[next].key()),
-        });
-        let end = model.end;
-        drop(model);
-        let Some(start) = start else { return inner.load_older(tui) };
-        inner.scroll.sticky(false);
-        inner.show(tui, start, end);
-        inner.scroll.sticky(true);
-        true
+        inner.grow(tui, false) || inner.load_older(tui)
     }
 
     /// Publishes the transcript with `scroll` as its mover. Its moves, whatever moved it, and its resizes run the
@@ -400,11 +512,30 @@ impl Transcript {
         }
     }
 
+    /// Whether a terminal resize anchor is currently holding the view.
+    pub fn resizing(&self) -> bool {
+        self.0.resizing()
+    }
+
+    /// Releases any active resize anchor when the reader explicitly moves the view.
+    pub fn clear_resize_pin(&self) {
+        if self.0.model.borrow().resize.is_none() {
+            return;
+        }
+        let restore = {
+            let mut model = self.0.model.borrow_mut();
+            model.resize.take().is_some() && model.at_end() && !model.navigating
+        };
+        if restore {
+            self.0.scroll.sticky(true);
+        }
+    }
+
     /// Pins or follows the window after the view moved (`updateAwayFromBottom`).
     pub fn follow(&self, tui: &Tui, down: bool) {
         let inner = &self.0;
         // Newly mounted rows contribute to content size only after layout.
-        if inner.pinned(|pin| pin.above.is_none()) {
+        if inner.mount_pinned() {
             return;
         }
         let (_, top) = inner.scroll.scroll_position();
@@ -422,48 +553,74 @@ impl Transcript {
         inner.show(tui, next, end);
     }
 
-    pub fn mount_all(&self, tui: &Tui) {
-        if self.0.model.borrow().start == Start::Top && self.0.model.borrow().end.is_none() {
-            return;
-        }
-        self.0.show(tui, Start::Top, None);
-    }
-
     /// Mounts the oldest [`BACKFILL_CHUNK`] rows only, after `session.first` loaded the history; newer
     /// rows mount as the reader scrolls down.
     pub fn mount_head(&self, tui: &Tui) {
-        self.0.show(tui, Start::Top, Some(BACKFILL_CHUNK));
-        let mut model = self.0.model.borrow_mut();
-        if model.specs.len() <= BACKFILL_CHUNK {
-            model.end = None;
+        self.clear_resize_pin();
+        self.0.show(tui, Start::Top, Some(End::Index(BACKFILL_CHUNK)));
+    }
+
+    /// Mounts [`BACKFILL_CHUNK`] rows on each side of the first row of message `id`, unless that row is mounted
+    /// already, for a jump to it. Returns whether the message has a row.
+    pub fn mount_message(&self, tui: &Tui, id: &str) -> bool {
+        self.clear_resize_pin();
+        let inner = &self.0;
+        // Use the store's rows even if the next sync has yet to paint them.
+        inner.render(tui, |_| false);
+        let Some(session) = self.session() else { return false };
+        let Some(key) = tui.data.read(|state| state.transcript(&session)?.key(id)) else { return false };
+        let window = {
+            let model = inner.model.borrow();
+            let index = model.specs.iter().position(|spec| {
+                let mut shows = false;
+                spec.messages(&mut |message| shows |= message == key);
+                shows
+            });
+            let Some(index) = index else { return false };
+            let start = model.window_start();
+            let mounted = start <= index && index < model.window_end();
+            (!mounted).then(|| {
+                let start = grouping::rows_before(&model.weights, index, BACKFILL_CHUNK);
+                let end = grouping::rows_after(&model.weights, index, BACKFILL_CHUNK);
+                let start = if start == 0 { Start::Top } else { Start::Row(model.specs[start].key()) };
+                (start, (end < model.specs.len()).then_some(End::Index(end)))
+            })
+        };
+        if let Some((start, end)) = window {
+            inner.scroll.sticky(false);
+            inner.show(tui, start, end);
         }
+        true
+    }
+
+    /// Mounts [`BACKFILL_CHUNK`] more rows below the window, or above it, dropping the rows far on the other side of
+    /// the view, for a message navigation that found nothing among the mounted rows. Returns whether there were rows
+    /// to mount.
+    pub fn extend(&self, tui: &Tui, down: bool) -> bool {
+        self.0.grow(tui, down)
     }
 
     pub fn to_tail(&self, tui: &Tui) {
+        self.clear_resize_pin();
         self.0.show(tui, Start::Tail, None);
         self.0.scroll.sticky(true);
         self.0.scroll.scroll_to_bottom();
-    }
-
-    pub fn all_mounted(&self) -> bool {
-        let model = self.0.model.borrow();
-        model.window_start() == 0 && model.at_end()
     }
 
     pub fn at_end(&self) -> bool {
         self.0.model.borrow().at_end()
     }
 
+    /// Near the bottom of the mounted rows, mounts newer ones and drops the rows far above the view.
     pub fn reveal_newer(&self, tui: &Tui) -> bool {
         let inner = &self.0;
         let (_, top) = inner.scroll.scroll_position();
         let viewport = f64::from(inner.scroll.rect().height);
         let content = f64::from(inner.scroll.content_view().rect().height);
-        let rows = inner.model.borrow().specs.len();
-        if inner.model.borrow().end.is_none_or(|end| end >= rows) || top + viewport < content - viewport {
+        if top + viewport < content - viewport {
             return false;
         }
-        self.mount_newer(tui)
+        inner.grow(tui, true)
     }
 
     /// Mounted rows with their message and content y, top to bottom (`anchors.messagePositions`
@@ -514,6 +671,7 @@ impl Transcript {
     /// Mounts [`BACKFILL_CHUNK`] rows on each side of the anchor's row (`restoreScrollPosition`). Returns whether
     /// the row exists.
     pub fn mount_around(&self, tui: &Tui, anchor: &ScrollAnchor) -> bool {
+        self.clear_resize_pin();
         // Use the store's rows even if the next sync has yet to paint them.
         self.0.render(tui, |_| false);
         let Some(key) = self.row(tui, anchor) else { return false };
@@ -523,7 +681,7 @@ impl Transcript {
                 let start = grouping::rows_before(&model.weights, index, BACKFILL_CHUNK);
                 let end = grouping::rows_after(&model.weights, index, BACKFILL_CHUNK);
                 let start = if start == 0 { Start::Top } else { Start::Row(model.specs[start].key()) };
-                (start, (end < model.specs.len()).then_some(end))
+                (start, (end < model.specs.len()).then_some(End::Index(end)))
             })
         };
         let Some((start, end)) = window else { return false };
@@ -531,11 +689,15 @@ impl Transcript {
         true
     }
 
+    /// Mounts [`BACKFILL_CHUNK`] more rows below the window and keeps the rest, for a restore or an alignment whose
+    /// view must reach past the window's end before it can move. Returns whether there were rows to mount.
     pub fn mount_newer(&self, tui: &Tui) -> bool {
         let model = self.0.model.borrow();
-        let Some(end) = model.end else { return false };
-        let next = grouping::rows_after(&model.weights, end, BACKFILL_CHUNK);
-        let (start, end) = (model.start, (next < model.specs.len()).then_some(next));
+        if model.at_end() {
+            return false;
+        }
+        let next = grouping::rows_after(&model.weights, model.window_end(), BACKFILL_CHUNK);
+        let (start, end) = (model.start, (next < model.specs.len()).then_some(End::Index(next)));
         drop(model);
         self.0.show(tui, start, end);
         true
@@ -560,8 +722,13 @@ impl Model {
         window_start(&self.start, &self.specs, &self.weights)
     }
 
+    /// The row after the last mounted one.
+    fn window_end(&self) -> usize {
+        window_end(self.end.map(|end| end.index(&self.specs)), self.window_start(), self.specs.len())
+    }
+
     fn at_end(&self) -> bool {
-        self.end.is_none_or(|end| end >= self.specs.len())
+        self.end.is_none() || self.window_end() >= self.specs.len()
     }
 
     fn content_width(&self, tui: &Tui) -> u16 {
@@ -577,6 +744,23 @@ impl Model {
             },
             start => start,
         }
+    }
+
+    /// Bumps the generation of a live [`ResizePin`], optionally extending its frame window, and returns the new
+    /// generation.
+    fn rearm_resize(&mut self, frame: u64, extend: bool) -> Option<u64> {
+        if !self.resize.as_ref().is_some_and(|pin| pin.live(frame)) {
+            return None;
+        }
+        self.resize_gen += 1;
+        let generation = self.resize_gen;
+        if let Some(pin) = self.resize.as_mut() {
+            if extend {
+                pin.frame = frame;
+            }
+            pin.generation = generation;
+        }
+        Some(generation)
     }
 
     /// The rows of the visible messages, and the window over them. `layout` is the content's height and the frame
@@ -605,17 +789,15 @@ impl Model {
         let weights: Vec<usize> =
             specs.iter().map(|spec| groups.weight(spec, self.settings.hide_thinking, &lookup)).collect();
         let start = window_start(&self.start, &specs, &weights);
-        let window = start..window_end(self.end, start, specs.len());
+        let window = start..window_end(self.end.map(|end| end.index(&specs)), start, specs.len());
         let wanted: HashSet<RowKey> = specs[window.clone()].iter().map(Spec::key).collect();
         // Rows mounting above the first mounted one would push the reader's rows down; the next layout scrolls by
-        // what they add (`pinAbove`), in place of a resize's pin.
+        // what they add (`pinAbove`).
         let first = self.mounted.iter().find(|key| wanted.contains(key));
         let above = first.is_some_and(|first| specs[start].key() != *first);
-        let pin = (above && self.pin.as_ref().is_none_or(|pin| pin.above.is_some())).then(|| Pin {
-            height: layout.0,
-            frame: layout.1,
-            above: None,
-        });
+        let dropped = self.dropped.filter(|(frame, _)| *frame == layout.1).map_or(0.0, |(_, height)| height);
+        let pin = (above && !self.pin.as_ref().is_some_and(|pin| pin.live(layout.1)))
+            .then_some(Pin { height: layout.0 - dropped, frame: layout.1 });
         Plan { specs, weights, legacy: legacy(lookup.visible), window, wanted, pin }
     }
 
@@ -637,6 +819,10 @@ impl Model {
         if plan.pin.is_some() {
             self.pin = plan.pin;
         }
+        // The end follows its last row from now on; a window that reaches the newest row follows new ones.
+        let end = plan.window.end;
+        self.end =
+            self.end.filter(|_| end > 0 && end < plan.specs.len()).map(|_| End::After(plan.specs[end - 1].key(), end));
         // The specs' box is reused unless a row update still holds it.
         match Rc::get_mut(&mut self.specs) {
             Some(specs) => *specs = plan.specs,
@@ -657,7 +843,7 @@ impl Inner {
                 // shrinks would move the rows below it on screen (`pinAbove` for a change in place). A resize's pin
                 // already holds the reader's row.
                 let away = self.model.borrow().start != Start::Tail && top < self.scroll.rect().screen_y;
-                if away && !self.pinned(|pin| pin.above.is_some()) {
+                if away && !self.resizing() {
                     self.scroll.scroll_by(0.0, f64::from(grown));
                 }
             }
@@ -697,10 +883,101 @@ impl Inner {
         (rect.height > 0.0).then(|| rect.screen_y - self.scroll.content_view().rect().screen_y)
     }
 
-    /// Whether a live [`Pin`] holds the view and matches `matches`.
-    fn pinned(&self, matches: impl Fn(&Pin) -> bool) -> bool {
-        let Some(tui) = self.tui.upgrade() else { return false };
-        self.model.borrow().pin.as_ref().is_some_and(|pin| pin.live(tui.app.frame_number()) && matches(pin))
+    /// Whether a live mount-above [`Pin`] holds the view.
+    fn mount_pinned(&self) -> bool {
+        let model = self.model.borrow();
+        let Some(pin) = model.pin.as_ref() else { return false };
+        self.tui.upgrade().is_some_and(|tui| pin.live(tui.app.frame_number()))
+    }
+
+    /// Whether a live [`ResizePin`] holds the reader's row across a resize.
+    fn resizing(&self) -> bool {
+        let model = self.model.borrow();
+        let Some(pin) = model.resize.as_ref() else { return false };
+        self.tui.upgrade().is_some_and(|tui| pin.live(tui.app.frame_number()))
+    }
+
+    /// The first laid-out mounted row that overlaps the viewport (or the first laid-out row if all start below), with
+    /// its content `y`, its viewport offset `y - top`, and its height. Subtracts rows dropped above in `frame` so a
+    /// same-frame resize anchors against the kept rows' future positions.
+    fn resize_anchor(&self, frame: u64) -> Option<(RowKey, f64, f64, f32)> {
+        let (_, top) = self.scroll.scroll_position();
+        let origin = self.scroll.content_view().rect().screen_y;
+        let model = self.model.borrow();
+        let dropped = model.dropped_above.filter(|(at, _)| *at == frame).map_or(0.0, |(_, height)| f64::from(height));
+        let rows = self.rows.borrow();
+        let mut first = None;
+        for key in model.mounted.iter() {
+            let Some(rect) = rows.get(key).map(|row| row.wrapper.rect()).filter(|rect| rect.height > 0.0) else {
+                continue;
+            };
+            let y = rect.screen_y - origin - dropped;
+            let item = (*key, y, y - top, rect.height);
+            if y + f64::from(rect.height) > top {
+                return Some(item);
+            }
+            first.get_or_insert(item);
+        }
+        first
+    }
+
+    /// Scrolls directly to `target` during a resize. While `!at_end`, stops one cell shy of `max_y` so OpenTUI does
+    /// not record an `INFINITY` end-target that would jump past rows mounted by [`Self::reanchor`].
+    fn scroll_to_resize(&self, target: f64, at_end: bool) {
+        let content = f64::from(self.scroll.content_view().rect().height);
+        let viewport = f64::from(self.scroll.rect().height);
+        let max_y = (content - viewport).max(0.0).floor();
+        let y = if !at_end && target >= max_y { (max_y - 1.0).max(0.0) } else { target };
+        self.scroll.scroll_to(0.0, y);
+    }
+
+    /// Re-anchors the reader's row after a resize's layout settles, mounting newer rows if the resized viewport would
+    /// otherwise clamp against the artificial end of the bounded window.
+    fn reanchor(&self, tui: &Tui, generation: u64) {
+        crate::routes::session::scroll::after_layout(
+            &tui.app,
+            bind!(self.this, |inner| {
+                let Some(tui) = inner.tui.upgrade() else { return };
+                let (target, at_end, navigating) = {
+                    let model = inner.model.borrow();
+                    let Some(pin) = model.resize.as_ref().filter(|pin| pin.generation == generation) else {
+                        return;
+                    };
+                    let (at_end, navigating) = (model.at_end(), model.navigating);
+                    let Some(y) = inner.row_y(&pin.anchor) else {
+                        drop(model);
+                        inner.model.borrow_mut().resize = None;
+                        if at_end && !navigating {
+                            inner.scroll.sticky(true);
+                        }
+                        return;
+                    };
+                    let height = inner
+                        .rows
+                        .borrow()
+                        .get(&pin.anchor)
+                        .map_or(pin.current_height, |row| row.wrapper.rect().height);
+                    (pin.target(y, height), at_end, navigating)
+                };
+                let content = f64::from(inner.scroll.content_view().rect().height);
+                let viewport = f64::from(inner.scroll.rect().height);
+                let max_y = (content - viewport).max(0.0).floor();
+                if target > max_y && !at_end && Transcript(inner.clone()).mount_newer(&tui) {
+                    if let Some(pin) =
+                        inner.model.borrow_mut().resize.as_mut().filter(|pin| pin.generation == generation)
+                    {
+                        pin.frame = tui.app.frame_number();
+                    }
+                    inner.reanchor(&tui, generation);
+                    return;
+                }
+                inner.scroll_to_resize(target, at_end);
+                inner.model.borrow_mut().resize = None;
+                if at_end && !navigating {
+                    inner.scroll.sticky(true);
+                }
+            }),
+        );
     }
 
     /// Reads the session's location once its info is known, with the location's agents and models, whose names and
@@ -762,25 +1039,34 @@ impl Inner {
                 }
             }));
         }));
-        // Before the layout, while the rows have their old places: away from the bottom, the rows above the reader's
-        // hold it (see `Pin`). A resize while one holds extends it.
+        // Before the layout, while the rows have their old places: away from the bottom (or before the window reaches
+        // the newest row), anchor the reader's top row through layout and refit (see `ResizePin`). A resize while one
+        // holds extends it without losing the original anchor.
         let resize = tui.app.on_resize(bind!(self.this, |inner, cx, _, _| {
+            let Some(tui) = inner.tui.upgrade() else { return };
             let frame = cx.app().frame_number();
-            if let Some(pin) =
-                inner.model.borrow_mut().pin.as_mut().filter(|pin| pin.above.is_some() && pin.live(frame))
-            {
-                pin.frame = frame;
+            if let Some(generation) = inner.model.borrow_mut().rearm_resize(frame, true) {
+                inner.scroll.sticky(false);
+                inner.reanchor(&tui, generation);
                 return;
             }
             let (_, top) = inner.scroll.scroll_position();
             let (content, viewport) = (inner.scroll.content_view().rect().height, inner.scroll.rect().height);
-            if top >= f64::from((content - viewport).max(0.0)).floor() {
+            if top >= f64::from((content - viewport).max(0.0)).floor() && inner.model.borrow().at_end() {
                 return;
             }
-            let Some((anchor, _)) = inner.anchor() else { return };
-            let mut model = inner.model.borrow_mut();
-            let above = model.mounted.iter().take_while(|key| **key != anchor).copied().collect();
-            model.pin = Some(Pin { height: content, frame, above: Some(above) });
+            let Some((anchor, y, screen_y, height)) = inner.resize_anchor(frame) else { return };
+            let generation = {
+                let mut model = inner.model.borrow_mut();
+                model.resize_gen += 1;
+                let generation = model.resize_gen;
+                let above = model.mounted.iter().take_while(|key| **key != anchor).copied().collect();
+                model.resize =
+                    Some(ResizePin { anchor, screen_y, height, y, current_height: height, above, frame, generation });
+                generation
+            };
+            inner.scroll.sticky(false);
+            inner.reanchor(&tui, generation);
         }));
         self.hooks.borrow_mut().resize = Some(resize);
         let weak = self.this.clone();
@@ -791,15 +1077,17 @@ impl Inner {
             if !pin.live(cx.app().frame_number()) {
                 return;
             }
-            // A resize's rows move the view themselves (`Inner::hold`).
-            if pin.above.is_some() {
-                model.pin = Some(pin);
-                return;
-            }
             drop(model);
             let grown = rect.height - pin.height;
             if grown > 0.0 {
                 inner.scroll.scroll_by(0.0, f64::from(grown));
+            }
+        }));
+        // Explicit user moves via scrollbar or box keys release any active resize anchor.
+        let weak = self.this.clone();
+        self.scroll.on_scroll(bind!(weak, |inner, _, event| {
+            if matches!(event.cause, ScrollCause::Wheel | ScrollCause::Key | ScrollCause::Pointer) {
+                Transcript(inner).clear_resize_pin();
             }
         }));
         // The wheel moves the view before this runs, so the window checks after it.
@@ -810,6 +1098,9 @@ impl Inner {
                 MouseEventKind::ScrollDown => false,
                 _ => return,
             };
+            if let Some(inner) = weak.upgrade() {
+                Transcript(inner).clear_resize_pin();
+            }
             cx.set_timeout(
                 Duration::ZERO,
                 bind!(weak, |inner, _| {
@@ -967,6 +1258,7 @@ impl Inner {
     /// messages `changed`, and orders them. `mounted` holds the children's keys before and after.
     fn apply(&self, cx: &Context<'_>, plan: &Plan, changed: impl Fn(MessageKey) -> bool, mounted: &mut Vec<RowKey>) {
         let mut rows = self.rows.borrow_mut();
+        let before = rows.len();
         rows.retain(|key, row| {
             let keep = plan.wanted.contains(key);
             if !keep {
@@ -974,6 +1266,7 @@ impl Inner {
             }
             keep
         });
+        crate::features::release::dropped(cx.app, before - rows.len());
         mounted.retain(|key| plan.wanted.contains(key));
         let window = &plan.specs[plan.window.clone()];
         for spec in window {
@@ -1043,17 +1336,20 @@ impl Inner {
     fn refit(&self, tui: &Tui) {
         let current = tui.synced() && {
             let model = self.model.borrow();
-            let start = model.window_start();
-            let window = &model.specs[start..window_end(model.end, start, model.specs.len())];
+            let window = &model.specs[model.window_start()..model.window_end()];
             model.mounted.iter().copied().eq(window.iter().map(Spec::key))
         };
         if !current {
-            return self.render(tui, |_| true);
+            self.render(tui, |_| true);
+        } else {
+            for stop in self.each_row(tui, Row::update, true) {
+                stop.run(tui);
+            }
+            self.complete_group_boundary(tui);
         }
-        for stop in self.each_row(tui, Row::update, true) {
-            stop.run(tui);
+        if let Some(generation) = self.model.borrow_mut().rearm_resize(tui.app.frame_number(), false) {
+            self.reanchor(tui, generation);
         }
-        self.complete_group_boundary(tui);
     }
 
     /// Runs `each` on every mounted row, then updates the trailing hint and banner; with `check`, runs the limit checks
@@ -1129,6 +1425,7 @@ impl Inner {
             conceal: view.conceal,
             hide_thinking: view.hide_thinking,
             groups: &self.groups,
+            toggles: &self.toggles,
             tps: view.tps,
             verbose_tokens: view.turn_tokens == Some(TurnTokens::Verbose),
             mode: tui.theme.borrow().mode(),
@@ -1167,24 +1464,204 @@ impl Inner {
         );
     }
 
-    /// While a resize's pin holds the reader's row, a row above it that changes height scrolls the view by as much
-    /// (`pinAbove`). Its own geometry is current in its resize, which the content's is not.
+    /// While a [`ResizePin`] holds the reader's row, updates the scroll target from `anchor`'s own settled geometry or
+    /// shifts it when a row above changes height during `refit`, scrolling to the absolute target so an earlier clamp
+    /// by `ScrollBox` never double-shifts the view.
     fn hold(&self, wrapper: &View, key: RowKey) {
         let laid = Cell::new(None);
-        wrapper.on_resize(bind!(self.this, |inner, _, rect| {
-            let Some(before) = laid.replace(Some(rect.height)).filter(|before| *before != rect.height) else { return };
-            if inner.pinned(|pin| pin.above.as_ref().is_some_and(|above| above.contains(&key))) {
-                inner.scroll.scroll_by(0.0, f64::from(rect.height - before));
+        wrapper.on_resize(bind!(self.this, |inner, cx, rect| {
+            let before = laid.replace(Some(rect.height));
+            if inner.model.borrow().resize.is_none() {
+                return;
+            }
+            let frame = cx.app().frame_number();
+            let target = {
+                let mut model = inner.model.borrow_mut();
+                let Some(pin) = model.resize.as_mut().filter(|pin| pin.live(frame)) else { return };
+                if pin.anchor == key && rect.height > 0.0 {
+                    let y = rect.screen_y - inner.scroll.content_view().rect().screen_y;
+                    pin.y = y;
+                    pin.current_height = rect.height;
+                    Some(pin.target(y, rect.height))
+                } else if pin.above.contains(&key)
+                    && let Some(before) = before.filter(|before| *before != rect.height)
+                {
+                    pin.y += f64::from(rect.height - before);
+                    Some(pin.target(pin.y, pin.current_height))
+                } else {
+                    None
+                }
+            };
+            if let Some(target) = target {
+                let at_end = inner.model.borrow().at_end();
+                inner.scroll_to_resize(target, at_end);
             }
         }));
     }
 
     /// Moves the window to start at `start` and end at `end`.
-    fn show(&self, tui: &Tui, start: Start, end: Option<usize>) {
+    fn show(&self, tui: &Tui, start: Start, end: Option<End>) {
         let mut model = self.model.borrow_mut();
         (model.start, model.end) = (start, end);
         drop(model);
         self.render(tui, |_| false);
+    }
+
+    /// Mounts [`BACKFILL_CHUNK`] more rows past the window's end (`down`) or before its start, and drops the rows more
+    /// than [`MARGIN`] past the view on the other side. Returns false when the window already reaches the last loaded
+    /// row that way.
+    fn grow(&self, tui: &Tui, down: bool) -> bool {
+        let model = self.model.borrow();
+        if if down { model.at_end() } else { model.window_start() == 0 } {
+            return false;
+        }
+        drop(model);
+        if down {
+            let above = self.drop_above(tui);
+            let model = self.model.borrow();
+            let next = grouping::rows_after(&model.weights, model.window_end(), BACKFILL_CHUNK);
+            let start = above.map_or(model.start, |(start, _)| start);
+            let end = (next < model.specs.len()).then_some(End::Index(next));
+            drop(model);
+            self.scroll.sticky(false);
+            self.show(tui, start, end);
+            // The rows on screen move up by what dropped above them; the next frame's layout takes it with the move
+            // that asked for the rows.
+            if let Some((_, height)) = above {
+                self.scroll.scroll_by(0.0, -f64::from(height));
+                self.dropped(tui, height);
+                self.dropped_above(tui, height);
+            }
+            if end.is_none() {
+                self.restore_sticky_after_layout(tui);
+            }
+            return true;
+        }
+        let model = self.model.borrow();
+        let start = match grouping::rows_before(&model.weights, model.window_start(), BACKFILL_CHUNK) {
+            0 => Start::Top,
+            next => Start::Row(model.specs[next].key()),
+        };
+        let end = model.end;
+        drop(model);
+        self.scroll.sticky(false);
+        self.show(tui, start, end);
+        self.drop_below_later(tui);
+        true
+    }
+
+    /// Re-enables sticky scrolling once the newly mounted rows are laid out, so OpenTUI's `sticky(true)` edge check
+    /// sees the updated `max_y` instead of sticking against the pre-mount bottom.
+    fn restore_sticky_after_layout(&self, tui: &Tui) {
+        crate::routes::session::scroll::after_layout(
+            &tui.app,
+            bind!(self.this, |inner| {
+                let model = inner.model.borrow();
+                if model.at_end() && !model.navigating && !inner.resizing() {
+                    drop(model);
+                    inner.scroll.sticky(true);
+                }
+            }),
+        );
+    }
+
+    /// Drops the rows far below the view once the rows mounted above are laid out. The rows mounted above hold the
+    /// view by how much the content grows (`Pin`); rows dropped below in the same frame would take from that, and
+    /// could cancel it out.
+    fn drop_below_later(&self, tui: &Tui) {
+        crate::routes::session::scroll::after_layout(
+            &tui.app,
+            bind!(self.this, |inner| {
+                let Some(tui) = inner.tui.upgrade() else { return };
+                let Some((end, height)) = inner.drop_below(&tui) else {
+                    let model = inner.model.borrow();
+                    if model.at_end() && !model.navigating && !inner.resizing() {
+                        drop(model);
+                        inner.scroll.sticky(true);
+                    }
+                    return;
+                };
+                inner.model.borrow_mut().end = Some(end);
+                inner.render(&tui, |_| false);
+                inner.dropped(&tui, height);
+            }),
+        );
+    }
+
+    /// The window's start once the rows more than [`MARGIN`] above the view drop, and the height they take with them;
+    /// None when no row is that far, or while the rows must stay (see [`Self::visible`]).
+    fn drop_above(&self, tui: &Tui) -> Option<(Start, f32)> {
+        let visible = self.visible(tui)?;
+        let model = self.model.borrow();
+        let (start, keep) = (model.window_start(), grouping::rows_before(&model.weights, visible.start, MARGIN));
+        if keep <= start {
+            return None;
+        }
+        // Both rows were laid out in an earlier frame: only rows past the window's end are new. Either may be empty,
+        // with no height, and still has its place.
+        let top = |index: usize| {
+            let content = self.scroll.content_view().rect().screen_y;
+            Some(self.rows.borrow().get(&model.specs[index].key())?.wrapper.rect().screen_y - content)
+        };
+        let height = top(keep)? - top(start)?;
+        Some((Start::Row(model.specs[keep].key()), height as f32))
+    }
+
+    /// The window's end once the rows more than [`MARGIN`] below the view drop, and the height they take with them;
+    /// None when no row is that far, or while the rows must stay (see [`Self::visible`]).
+    fn drop_below(&self, tui: &Tui) -> Option<(End, f32)> {
+        let visible = self.visible(tui)?;
+        let model = self.model.borrow();
+        let (end, keep) = (model.window_end(), grouping::rows_after(&model.weights, visible.end, MARGIN));
+        if keep >= end {
+            return None;
+        }
+        let bottom = |index: usize| {
+            let rect = self.rows.borrow().get(&model.specs[index].key())?.wrapper.rect();
+            Some(rect.screen_y + f64::from(rect.height))
+        };
+        let height = bottom(end - 1)? - bottom(keep - 1)?;
+        Some((End::After(model.specs[keep - 1].key(), keep), height as f32))
+    }
+
+    /// Notes rows of `height` dropped before the next layout (see `Model::dropped`).
+    fn dropped(&self, tui: &Tui, height: f32) {
+        let frame = tui.app.frame_number();
+        let mut model = self.model.borrow_mut();
+        let before = model.dropped.filter(|(at, _)| *at == frame).map_or(0.0, |(_, before)| before);
+        model.dropped = Some((frame, before + height));
+    }
+
+    /// Notes rows of `height` dropped above the kept rows before the next layout (see `Model::dropped_above`).
+    fn dropped_above(&self, tui: &Tui, height: f32) {
+        let frame = tui.app.frame_number();
+        let mut model = self.model.borrow_mut();
+        let before = model.dropped_above.filter(|(at, _)| *at == frame).map_or(0.0, |(_, before)| before);
+        model.dropped_above = Some((frame, before + height));
+    }
+
+    /// The mounted rows on screen, as a range of the rows, while rows may drop. They may not before the rows are laid
+    /// out, while a resize or rows mounted above hold the view, or while the reader selects text: the selection holds
+    /// its rows until it clears, which any key does.
+    fn visible(&self, tui: &Tui) -> Option<Range<usize>> {
+        if self.mount_pinned() || self.resizing() || tui.app.is_selecting() || tui.app.selected_text().is_some() {
+            return None;
+        }
+        let (_, top) = self.scroll.scroll_position();
+        let bottom = top + f64::from(self.scroll.rect().height);
+        let model = self.model.borrow();
+        let start = model.window_start();
+        let rows = self.rows.borrow();
+        let mut visible: Option<Range<usize>> = None;
+        for (offset, key) in model.mounted.iter().enumerate() {
+            let Some(y) = self.row_y(key) else { continue };
+            let height = f64::from(rows.get(key).map_or(0.0, |row| row.wrapper.rect().height));
+            if y + height > top && y < bottom {
+                let index = start + offset;
+                visible = Some(visible.map_or(index, |visible| visible.start)..index + 1);
+            }
+        }
+        visible
     }
 
     fn load_older(&self, tui: &Tui) -> bool {
@@ -1203,7 +1680,10 @@ impl Inner {
                 inner.hint.visible(false);
                 let Some(tui) = inner.tui.upgrade() else { return };
                 match result {
-                    Ok(_) => inner.complete_group_boundary(&tui),
+                    Ok(_) => {
+                        inner.complete_group_boundary(&tui);
+                        inner.drop_below_later(&tui);
+                    }
                     Err(error) => tui.toasts.error(error.tui_message()),
                 }
             }),
@@ -1384,9 +1864,9 @@ pub struct Context<'a> {
     pub session: &'a SessionID,
     pub app: &'a App,
     pub theme: &'a Theme,
-    pub syntax: &'a SyntaxTheme,
+    pub syntax: &'a Arc<SyntaxTheme>,
     /// Syntax theme for reasoning text, with all tokens muted.
-    pub thinking_syntax: &'a SyntaxTheme,
+    pub thinking_syntax: &'a Arc<SyntaxTheme>,
     /// The categorical colors agents take by position.
     pub palette: &'a [Color],
     pub renderers: &'a CodeBlockRenderers,
@@ -1396,6 +1876,7 @@ pub struct Context<'a> {
     /// `session.thinking` is `hide`.
     pub hide_thinking: bool,
     pub groups: &'a Rc<grouping::Settings>,
+    pub toggles: &'a Toggles,
     pub tps: bool,
     /// `debug.turn_tokens` is `verbose`.
     pub verbose_tokens: bool,

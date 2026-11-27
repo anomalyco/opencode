@@ -119,8 +119,8 @@ batch applied on another thread meanwhile waits for the call. Over the ABI each 
 | Read | What |
 | --- | --- |
 | `session`, `family`, `messages`, `message(session, id)` | a session, its family, its messages, one message. Over the ABI `message` copies one message where `messages` copies the list |
-| `models`, `mcp_servers`, `integrations`, `vcs` | a location's catalogs |
-| `model`, `variants`, `limits`, `providers` | the next prompt's model, its variants, usage limits, providers |
+| `models`, `providers`, `mcp_servers`, `integrations`, `vcs` | a location's catalogs |
+| `model`, `variants`, `limits` | the next prompt's model, its variants, usage limits |
 | `info` | the version, the terminal size, the working directory, the failed plugin count, the user's locale |
 | `utc_offset(at)`, `measure(text)` | the host's zone at an instant; a text's cells and graphemes as the host draws them |
 | `route`, `interactive` | the route, and whether the session pane owns the input |
@@ -198,7 +198,9 @@ the terminal, runs the program, waits, and sets the terminal up again.
   `key` it is a [rich select](#rich-selects).
 - **`Panel { key, size, title, subtitle, body, actions, binds, bleed, centered, bare }`**: changes in place while its
   key is open and keeps its scroll. `size` is `medium`, `large` or `xlarge`; `bare` is only the frame around the
-  body; `close` labels the header's close; a `height` with no actions has no footer row. `Close { key }` closes it.
+  body; `close` labels the header's close; a `height` with no actions has no footer row; `fit_screen` keeps the
+  body above the screen's bottom (at least 3 rows) instead of the default 60% of the screen (at least 8).
+  `Close { key }` closes it.
 - **`Confirm { title, message, label, action }`**: Confirm runs the action with `true`, Cancel and escape with
   `false`; a dialog that replaces it runs nothing.
 - **`Alert { title, message, action }`**: the action runs once after it closes, by enter, escape or another dialog.

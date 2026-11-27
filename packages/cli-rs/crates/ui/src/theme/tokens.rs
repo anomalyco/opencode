@@ -110,6 +110,7 @@ tokens! {
         pub base: Color,
         pub muted: Color,
         pub faint: Color,
+        pub selection: Color,
         pub action: Actions,
         pub formfield: Stateful,
         pub feedback: Feedback<TextFeedback>,
@@ -123,6 +124,7 @@ tokens! {
 
     pub struct Background {
         pub base: Color,
+        pub selection: Color,
         pub raised: Raised,
         pub action: Actions,
         pub formfield: Stateful,
@@ -224,6 +226,7 @@ macro_rules! visit_tokens {
         f("text.base", & $($m)* text.base);
         f("text.muted", & $($m)* text.muted);
         f("text.faint", & $($m)* text.faint);
+        f("text.selection", & $($m)* text.selection);
         visit_actions!("text.action", & $($m)* text.action, f, $($m)*);
         visit_stateful!("text.formfield", & $($m)* text.formfield, f, $($m)*);
         for (kind, feedback) in [("error", & $($m)* text.feedback.error), ("warning", & $($m)* text.feedback.warning), ("success", & $($m)* text.feedback.success), ("info", & $($m)* text.feedback.info)] {
@@ -232,6 +235,7 @@ macro_rules! visit_tokens {
         }
         let background = & $($m)* $tokens.background;
         f("background.base", & $($m)* background.base);
+        f("background.selection", & $($m)* background.selection);
         f("background.raised.base", & $($m)* background.raised.base);
         f("background.raised.high", & $($m)* background.raised.high);
         f("background.raised.max", & $($m)* background.raised.max);

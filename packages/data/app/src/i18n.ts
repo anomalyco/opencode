@@ -1,4 +1,4 @@
-import { type Locale } from "./lib/language"
+import { tag, type Locale } from "./lib/language"
 import { dict as ar } from "./i18n/ar"
 import { dict as br } from "./i18n/br"
 import { dict as da } from "./i18n/da"
@@ -268,6 +268,145 @@ const en = {
   "methodology.retention": "The share of a model's users in one week who use it again the next week.",
   "methodology.citeLabel": "Citation",
   "methodology.cite": "Cite OpenCode Data (opencode.ai/data) with the update time shown at the top of the page.",
+  // The share cards (share/sections.ts, share/card.ts), drawn on a canvas 1080px wide or more: headlines wrap to at
+  // most four lines, eyebrows, captions and labels keep to one. A word after {{count|...}} agrees with the count.
+  "share.title.retention": "Weekly Retention",
+  "share.title.comparison": "Model Comparison",
+  "share.range.past7Days": "Past 7 days",
+  "share.range.yesterday": "Yesterday",
+  "share.range.pastDays": "Past {{count}} {{count|one:day|other:days}}",
+  "share.range.pastWeeks": "Past {{count}} {{count|one:week|other:weeks}}",
+  "share.range.past2Months": "Past 2 months",
+  "share.range.weekOf": "Week of {{date}}",
+  "share.range.weekOverWeek": "Week over week",
+  "share.range.perSession": "Average per session",
+  "share.range.outputPrice": "USD per 1M output tokens",
+  "share.range.inputShare": "Share of input tokens",
+  // {{when}} in the headlines and captions below.
+  "share.when.past7Days": "in the past 7 days",
+  "share.when.yesterday": "yesterday",
+  "share.when.pastDays": "in the past {{count}} {{count|one:day|other:days}}",
+  "share.when.pastWeeks": "in the past {{count}} {{count|one:week|other:weeks}}",
+  "share.when.day": "on {{date}}",
+  "share.when.week": "in the week of {{date}}",
+  // The line under a chart: {{label}} is All models or All labs.
+  "share.total.allModels": "All models",
+  "share.total.allLabs": "All labs",
+  "share.total.date": "{{label}}, {{date}}",
+  "share.total.pastDays": "{{label}}, past {{count}} {{count|one:day|other:days}}",
+  "share.total.pastWeeks": "{{label}}, past {{count}} {{count|one:week|other:weeks}}",
+  "share.other": "Other",
+  "share.new": "New",
+  // Each card's headline, then the caption under its big number, which starts with a capital on the card.
+  "share.led.headline": "{{name}} led OpenCode usage {{when}}, with {{value}} tokens",
+  "share.led.stat": "tokens for {{name}}, {{when}}",
+  "share.total.headline": "OpenCode handled {{value}} tokens {{when}}",
+  "share.total.stat": "tokens on OpenCode, {{when}}",
+  "share.users.headline": "{{name}} had the most OpenCode users {{when}}, with {{value}}",
+  "share.users.stat": "OpenCode users on {{name}}, {{when}}",
+  "share.retention.headline": "{{name}} kept {{rate}} of its OpenCode users from one week to the next",
+  "share.retention.stat": "of {{name}} users came back the next week",
+  "share.sessionCost.headline": "An OpenCode session with {{name}} costs {{cost}} on average",
+  "share.sessionCost.stat": "average cost of an OpenCode session with {{name}}",
+  "share.tokenCost.headline": "{{name}} has the lowest output price on OpenCode, at {{price}} per 1M tokens",
+  "share.tokenCost.stat": "per 1M output tokens for {{name}}",
+  "share.cache.headline": "{{name}} served {{ratio}} of its input tokens from cache",
+  "share.cache.stat": "of {{name}} input tokens came from cache",
+  "share.market.headline": "{{lab}} served {{share}} of OpenCode tokens {{when}}",
+  "share.market.stat": "of OpenCode tokens went to {{lab}} models, {{when}}",
+  "share.geo.headline": "{{country}} sent the most OpenCode tokens in the past 2 months, {{share}} of the total",
+  "share.geo.stat": "of OpenCode tokens came from {{country}}",
+  // {{ratio}} is a multiple such as 4.2x.
+  "share.comparison.headline": "{{first}} served {{ratio}} the tokens of {{second}} on OpenCode in the past 7 days",
+  "share.comparison.stat": "the tokens of {{second}}, for {{first}}",
+  // The comparison's measures, set in capitals round the radar: keep them short.
+  "share.comparison.tokens": "Tokens, past 7 days",
+  "share.comparison.dailyUsers": "Daily users",
+  "share.comparison.retention": "Weekly retention",
+  "share.comparison.sessionCost": "Cost per session",
+  "share.comparison.outputPrice": "Output, per 1M tokens",
+  "share.comparison.cache": "Input from cache",
+  // The closing slide's line, very large: two short lines.
+  "share.card.outro": "The largest inference\nin the world",
+  "share.card.tokens": "Tokens",
+  "share.card.versus": "vs",
+  "share.card.updated": "Updated {{date}}",
+  "share.embed.missing": "This embed doesn't exist.",
+  "share.embed.open": "{{title}} on OpenCode Data",
+  // The share editor (share/share.tsx). The bar's labels and tooltips are a word or two; its buttons hold the
+  // option's name beside an icon in a narrow, fixed width.
+  "share.open": "Share",
+  "share.openSection": "Share {{title}}",
+  "share.close": "Close",
+  "share.settings": "Settings",
+  "share.customize": "Customize",
+  "share.done": "Done",
+  // A dropdown's accessible name: the setting, then its value.
+  "share.option": "{{label}}: {{value}}",
+  "share.type": "Type",
+  "share.type.video": "Video",
+  "share.type.image": "Image",
+  "share.type.embed": "Embed",
+  "share.date": "Date",
+  "share.lead": "Lead with",
+  "share.lead.top": "Top model",
+  "share.lead.total": "Total",
+  "share.chart": "Chart",
+  "share.chart.bars": "Bars",
+  "share.chart.race": "Race",
+  "share.chart.list": "List",
+  "share.chart.dots": "Dots",
+  "share.layout": "Layout",
+  "share.layout.headline": "Headline",
+  "share.layout.number": "Number",
+  "share.layout.title": "Title",
+  // Sizes for where the card goes: a feed post, a square post, a story, a wide (landscape) post.
+  "share.size": "Size",
+  "share.size.feed": "Feed",
+  "share.size.square": "Square",
+  "share.size.story": "Story",
+  "share.size.wide": "Wide",
+  "share.style": "Style",
+  "share.style.dark": "Dark",
+  "share.style.light": "Light",
+  // The style that colours the card in the winner's colour.
+  "share.style.top": "Top",
+  // An embed shows the latest data, or keeps the numbers it was made with.
+  "share.data": "Data",
+  "share.data.live": "Live data",
+  "share.data.fixed": "Fixed data",
+  "share.music": "Music",
+  "share.music.none": "No music",
+  "share.music.mute": "Mute music",
+  "share.mute": "Mute",
+  "share.unmute": "Unmute",
+  "share.shuffle": "Shuffle",
+  // A track with explicit lyrics: the badge, its one-letter form where the name would be cut off, and its tooltip.
+  "share.explicit": "Explicit",
+  "share.explicit.short": "E",
+  "share.explicit.title": "Explicit lyrics",
+  "share.export": "Save",
+  "share.export.image": "Save image",
+  "share.export.video": "Save video",
+  "share.export.cancel": "Cancel saving",
+  "share.cancel": "Cancel",
+  "share.copied": "Copied",
+  "share.copyEmbed": "Copy embed code",
+  "share.position": "Video position",
+  "share.previous": "Previous",
+  "share.next": "Next",
+  "share.saved.image": "PNG saved",
+  "share.saved.video": "Video saved",
+  "share.error.generic": "Something went wrong",
+  "share.error.copy": "Couldn't copy the embed code",
+  "share.error.empty": "Nothing to share",
+  "share.error.canvas": "Canvas is not available",
+  "share.error.image": "Could not make the image",
+  "share.error.video": "This browser can't record video",
+  "share.calendar.label": "Choose a date",
+  "share.calendar.previous": "Previous month",
+  "share.calendar.next": "Next month",
+  "share.calendar.wholeRange": "Whole range",
 } as const
 
 export type Key = keyof typeof en
@@ -301,9 +440,22 @@ export function dict(locale: Locale) {
 export function translate(locale: Locale, key: Key, params?: Record<string, string | number>) {
   const text = dictionaries[locale][key]
   if (!params) return text
-  return text.replace(/\{\{(\w+)\}\}/g, (raw, key) => {
-    const value = params[key]
-    if (value === undefined || value === null) return raw
-    return String(value)
-  })
+  return (
+    text
+      // A word that agrees with a count, in the forms the locale's plural rules ask for, other being the fallback:
+      // {{count|one:day|other:days}}.
+      .replace(/\{\{(\w+)\|([^}]*)\}\}/g, (raw, key: string, forms: string) => {
+        const value = params[key]
+        if (typeof value !== "number") return raw
+        const choices = new Map(
+          forms.split("|").map((form) => [form.slice(0, form.indexOf(":")), form.slice(form.indexOf(":") + 1)]),
+        )
+        return choices.get(new Intl.PluralRules(tag(locale)).select(value)) ?? choices.get("other") ?? raw
+      })
+      .replace(/\{\{(\w+)\}\}/g, (raw, key) => {
+        const value = params[key]
+        if (value === undefined || value === null) return raw
+        return String(value)
+      })
+  )
 }
