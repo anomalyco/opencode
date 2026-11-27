@@ -672,7 +672,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, විවෘත මූලාශ්‍ර කේතකරණ නියෝජිතයා",
   "settings.about.trademark": "OpenCode යනු Anomaly Innovations, Inc. හි ලියාපදිංචි වෙළඳ ලකුණකි.",
-  "settings.about.typeset": "Inter සහ IBM Plex Mono අකුරුවලින් සකසා ඇත",
+  "settings.about.typeset": "Inter සහ OpenMono අකුරුවලින් සකසා ඇත",
   "settings.about.tagline": "ඔබ නොමැතිව AI හට විශිෂ්ට මෘදුකාංග තැනිය නොහැක",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "ව්‍යාපෘතිය සංස්කරණය කරන්න",

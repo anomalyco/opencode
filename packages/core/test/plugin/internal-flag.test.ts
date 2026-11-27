@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Duration, Effect, Layer, LayerMap, Stream } from "effect"
+import { Duration, Effect, Layer, Stream } from "effect"
 import { App } from "@opencode/core/app"
 import { ConfigPluginSource } from "@opencode/core/config/plugin/source"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -29,7 +29,7 @@ const unexpected = (pkg: string) =>
 const instances = Layer.effect(
   LocationServiceMap.Service,
   Effect.gen(function* () {
-    const map = yield* LayerMap.make(
+    const map = yield* LocationServiceMap.make(
       (ref: Location.Ref) => Instance.layer(ref, { discovery: false, replacements: bindings }),
       { idleTimeToLive: Duration.infinity },
     )

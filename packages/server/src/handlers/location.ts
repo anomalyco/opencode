@@ -20,8 +20,8 @@ export const LocationHandler = HttpApiBuilder.group(Api, "server.location", (han
         }),
       )
       .handle("location.reload", () =>
-        LocationServiceMap.reload().pipe(
-          Effect.provideService(LocationServiceMap.Service, locations),
+        locations.reload.pipe(
+          Effect.withSpan("LocationServiceMap.reload"),
           Effect.catchCause((cause) =>
             Cause.hasInterruptsOnly(cause)
               ? Effect.failCause(Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)))

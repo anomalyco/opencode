@@ -41,9 +41,12 @@ const layer = (ref: Ref) =>
     }),
   )
 
+// What every bound Location stands on, whatever its directory.
+export const dependencies = [CrossSpawnSpawner.node, FSUtil.node, Project.node] as const
+
 export const boundNode = (ref: Ref) =>
   makeLocationNode({
     service: Service,
     layer: layer(ref),
-    deps: [CrossSpawnSpawner.node, FSUtil.node, Project.node],
+    deps: dependencies,
   })

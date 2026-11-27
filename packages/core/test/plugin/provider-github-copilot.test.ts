@@ -608,6 +608,11 @@ describe("GithubCopilotPlugin", () => {
           model.modelID = Model.ID.make("gpt-5-mini")
           model.package = "@opencode/ai/providers/openai-compatible"
         })
+        // models.dev marks effort updates on Copilot's Responses API for this model.
+        editor.models.update(Provider.ID.githubCopilot, Model.ID.make("gpt-6-luna"), (model) => {
+          model.package = "@opencode/ai/providers/openai/responses"
+          model.compatibility = { supportsEffortUpdates: true }
+        })
       })
       yield* addPlugin()
       const route = Effect.fn(function* (id: string) {
@@ -635,6 +640,12 @@ describe("GithubCopilotPlugin", () => {
         required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gemini-3.8-flash"))),
       )
       expect(resolved.route.id).toBe("openai-compatible-chat")
+
+      const luna = yield* ModelResolver.fromCatalogModel(
+        required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-6-luna"))),
+      )
+      expect(luna.route.id).toBe("openai-compatible-responses")
+      expect(luna.capabilities?.reasoning?.updates).toBe(true)
     }),
   )
 

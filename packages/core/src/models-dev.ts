@@ -74,6 +74,9 @@ const SourceApi = Schema.Struct({
     Schema.Struct({
       // Format names this version doesn't know are skipped when the route is built.
       tools: Schema.optional(Schema.Struct({ freeform: Schema.optional(Schema.Array(Schema.String)) })),
+      // Mid-conversation changes the API takes without breaking the prompt cache.
+      effort_updates: Schema.optional(Schema.Boolean),
+      system_updates: Schema.optional(Schema.Boolean),
     }),
   ),
   sdk: Schema.optional(
@@ -135,9 +138,9 @@ const SourceProvider = Schema.Struct({
   models: Schema.Record(Schema.String, Schema.Unknown),
 })
 
-// The model types opencode keeps. Only chat models are offered for sessions; the others are listed on request,
-// realtime ones as voice models.
-const TYPES: readonly string[] = ["chat", "decision", "image", "video", "realtime"]
+// The model types opencode keeps. Only chat models are offered for sessions; the others are listed by type, realtime
+// ones that answer in speech also as voice models.
+const TYPES: readonly string[] = ["chat", "decision", "image", "video", "realtime", "embedding", "transcription"]
 
 const ContextCondition = Schema.Struct({ gt: Schema.optional(Schema.Finite), gte: Schema.optional(Schema.Finite) })
 const decodeModel = Schema.decodeUnknownResult(SourceModel)
@@ -187,7 +190,8 @@ const decodeSubscription = Schema.decodeUnknownOption(Subscription)
 
 type Route = {
   readonly protocol: string
-  readonly package: string
+  /** Unset for a realtime model: a voice session starts through its API, not a package. */
+  readonly package?: string
   readonly freeform?: Model.Capabilities["freeform"]
   readonly baseURL?: string
   readonly compatibility?: Model.Compatibility
@@ -251,9 +255,10 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
     if (sources.length === 0) return []
     // v2 lists APIs per model, so the provider defaults are what most of its models use. A model that
     // builds its own URL would inherit a provider baseURL, so then every model carries its own instead.
-    const packageName = mostCommon(sources.map((source) => source.route.package))
+    const packaged = sources.filter((source) => source.route.package !== undefined)
+    const packageName = mostCommon(packaged.map((source) => source.route.package))
     if (!packageName) return []
-    const urls = sources.map((source) => source.route.baseURL)
+    const urls = packaged.map((source) => source.route.baseURL)
     const baseURL = urls.every((url) => url !== undefined) ? mostCommon(urls) : undefined
     const info = {
       id: providerID,
@@ -267,6 +272,7 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
       const baseCost = cost(source.model.cost)
       const id = Model.ID.make(source.model.id)
       const base = modelInfo(providerID, { packageName, baseURL }, id, source, { cost: baseCost })
+      if (source.route.package === undefined) return [base]
       const variants = Variant.resolve(
         { ...base, package: source.route.package },
         Variant.supports(source.model.capabilities.reasoning),
@@ -359,13 +365,35 @@ function entries<A>(record: Record<string, unknown> | undefined, decode: (input:
   )
 }
 
-function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>, recommended: boolean) {
+function route(
+  providerID: Provider.ID,
+  model: SourceModel,
+  unknown: Set<string>,
+  recommended: boolean,
+): Route | undefined {
   // A chat model uses its first API with a package. Other types (image, decision…) only run through the
   // opencode entrypoint for their type (`providers/<P>/images`) that this build can load, and are skipped
   // without one: a chat entrypoint loads a chat model, which can't generate images or decisions.
   const apis = entries(model.api, decodeApi).map(
     ([protocol, entry]) => [protocol, entry, loadable(entry.sdk?.opencodeai, unknown)] as const,
   )
+  // A voice session starts through the model's first API, by the API's name, with no package.
+  if (model.type === "realtime") {
+    const [protocol, api] = apis[0] ?? []
+    if (!protocol || !api) return undefined
+    return { protocol, ...(api.base_url ? { baseURL: api.base_url } : {}) }
+  }
+  // A transcription model names the transcription protocol of its `transcriptions` API
+  // (`protocols/openai-transcription`), which isn't a provider package: it's kept for the model's caller to load.
+  if (model.type === "transcription") {
+    const api = apis.find(([protocol, entry]) => protocol === "transcriptions" && entry.sdk?.opencodeai)?.[1]
+    if (!api?.sdk?.opencodeai) return undefined
+    return {
+      protocol: "transcriptions",
+      package: api.sdk.opencodeai,
+      ...(api.base_url ? { baseURL: api.base_url } : {}),
+    }
+  }
   const eligible = ([, entry, opencodeai]: (typeof apis)[number]) =>
     model.type === "chat" ? opencodeai || entry.sdk?.aisdk : opencodeai?.endsWith(`/${model.type}s`)
   const preferred = recommended ? apis.find((api) => api[0] === model.recommended_api && eligible(api)) : undefined
@@ -388,6 +416,10 @@ function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>
     ...(api.compatibility?.reasoning_field ? { reasoningField: api.compatibility.reasoning_field } : {}),
     ...(maxTokensField ? { maxTokensField } : {}),
     ...(mediaInput ? { mediaInput } : {}),
+    // Only a tested yes on this API turns one on. Unset or false keeps the protocol's own model-ID detection, and a
+    // model-wide flag isn't read: it can describe another API, such as Chat Completions developer messages.
+    ...(api.capabilities?.effort_updates === true ? { supportsEffortUpdates: true } : {}),
+    ...(api.capabilities?.system_updates === true ? { supportsSystemUpdates: true } : {}),
   }
   return {
     protocol,
@@ -604,7 +636,7 @@ function modelInfo(
     ...(source.route.baseURL !== undefined && source.route.baseURL !== provider.baseURL
       ? { baseURL: source.route.baseURL }
       : {}),
-    ...(COMPATIBLE.has(source.route.package) ? { provider: providerID } : {}),
+    ...(source.route.package && COMPATIBLE.has(source.route.package) ? { provider: providerID } : {}),
     ...input.request?.settings,
   }
   return {
@@ -697,10 +729,11 @@ const bundledSnapshot = (recommended: boolean) =>
         )
   })
 
-// Versioned so an entry cached for another catalog query is never read: v1 was the v1 API, v2 had no realtime models.
+// Versioned so an entry cached for another catalog query is never read: v1 was the v1 API, v2 had no realtime models,
+// v3 no embedding or transcription models.
 function cacheKey(source: string) {
-  if (source === defaultSource) return "models-dev:v3:catalog"
-  return `models-dev:v3:catalog:${Hash.fast(source)}`
+  if (source === defaultSource) return "models-dev:v4:catalog"
+  return `models-dev:v4:catalog:${Hash.fast(source)}`
 }
 
 export function bodyDigest(text: string) {
@@ -732,7 +765,7 @@ export const layer = (options?: Options) =>
       const lock = Semaphore.makeUnsafe(1)
       // Free the multi-MB rows cached under earlier keys.
       yield* Effect.forEach(
-        ["models-dev:", "models-dev:v2:"].map((prefix) => key.replace("models-dev:v3:", prefix)),
+        ["models-dev:", "models-dev:v2:", "models-dev:v3:"].map((prefix) => key.replace("models-dev:v4:", prefix)),
         (old) => Effect.andThen(kv.remove(old), kv.remove(`${old}:meta`)),
         { discard: true },
       )

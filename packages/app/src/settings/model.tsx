@@ -38,25 +38,22 @@ export function projectSettingsKey(scope: ServerScope, projectID: string | undef
   return projectID ? ScopedKey.from(scope, projectID) : undefined
 }
 
-export const monoDefault = "IBM Plex Mono"
+export const monoDefault = "OpenMono"
 
 export const sansDefault = "Inter"
 
-export const terminalDefault = "JetBrainsMono Nerd Font Mono"
+export const terminalDefault = "OpenMono"
 
 const monoFallback =
-  '"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+  '"OpenMono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 
 const sansFallback = '"Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
-
-const terminalFallback =
-  '"JetBrainsMono Nerd Font Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 
 const monoBase = monoFallback
 
 const sansBase = sansFallback
 
-const terminalBase = terminalFallback
+const terminalBase = monoFallback
 
 function input(font: string | undefined) {
   return font ?? ""
@@ -139,6 +136,8 @@ const generalSchema = Persistence.struct({
   newTimeline: Persistence.optional(Schema.Boolean),
   // Browser-style session tab grouping across vertical and horizontal tabs.
   tabGroups: Persistence.optional(Schema.Boolean),
+  // The Automations view in the sidebar and Home, off in releases until it ships.
+  automations: Persistence.optional(Schema.Boolean),
   // One side panel open state for every session tab, instead of one per tab.
   sharedSidePanel: Persistence.optional(Schema.Boolean),
   // "projects" is retired; `resolveSidebarOrganize` moves it to its replacement.
@@ -471,6 +470,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setTabGroups(value: boolean) {
           setStore("general", "tabGroups", value)
+        },
+        automations: withFallback(
+          () => store.general?.automations,
+          import.meta.env.DEV && import.meta.env.VITE_OPENCODE_TEST_FIXTURES !== "1",
+        ),
+        setAutomations(value: boolean) {
+          setStore("general", "automations", value)
         },
         sharedSidePanel: withFallback(() => store.general?.sharedSidePanel, false),
         setSharedSidePanel(value: boolean) {

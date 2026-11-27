@@ -1,6 +1,6 @@
 //! Per-directory catalogs update on server events.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -9,7 +9,7 @@ use futures_util::StreamExt;
 use opencode_api::client::Client;
 use opencode_api::generated::{
     AgentInfoMode, AgentListInput, CommandInfo, CommandListInput, LocationQueryInput, ModelDefaultInput, ModelInfo,
-    ModelListInput, ModelRef, PluginListInput,
+    ModelListInput, ModelRef, PluginListInput, ProviderID, ProviderListInput, SkillInfo, SkillListInput,
 };
 use opencode_util::lock;
 use serde_json::Value;
@@ -48,6 +48,9 @@ pub struct Catalog {
     pub modes: Vec<Mode>,
     pub default_mode_id: String,
     pub commands: Vec<CommandInfo>,
+    /// Skills whose ID no command or built-in command already claims.
+    pub skills: Vec<SkillInfo>,
+    pub provider_names: HashMap<ProviderID, String>,
 }
 
 pub fn find_model<'a>(models: &'a [ModelInfo], model: &ModelRef) -> Option<&'a ModelInfo> {
@@ -106,7 +109,10 @@ impl Catalogs {
                 connected.send_replace(true);
                 continue;
             }
-            if !matches!(kind, "model.updated" | "agent.updated" | "command.updated") {
+            if !matches!(
+                kind,
+                "model.updated" | "agent.updated" | "command.updated" | "skill.updated" | "provider.updated"
+            ) {
                 continue;
             }
             let directory =
@@ -242,17 +248,23 @@ async fn read(client: &Client, cwd: &str) -> Result<Catalog, Failure> {
     let default_input = ModelDefaultInput { location: location() };
     let agent_input = AgentListInput { location: location() };
     let command_input = CommandListInput { location: location() };
-    let (models, default, agents, commands) = tokio::join!(
+    let skill_input = SkillListInput { location: location() };
+    let provider_input = ProviderListInput { location: location() };
+    let (models, default, agents, commands, skills, providers) = tokio::join!(
         client.model_list(&model_input),
         client.model_default(&default_input),
         client.agent_list(&agent_input),
         client.command_list(&command_input),
+        client.skill_list(&skill_input),
+        client.provider_list(&provider_input),
     );
     let load = |error| Failure::CatalogLoad(Arc::new(error));
     let models: Vec<ModelInfo> = models.map_err(load)?.data.into_iter().filter(|model| model.enabled).collect();
     let preferred = default.map_err(load)?.data;
     let agents = agents.map_err(load)?.data;
     let commands = commands.map_err(load)?.data;
+    let skills = skills.map_err(load)?.data;
+    let providers = providers.map_err(load)?.data;
     // The parallel default read can name a model missing from this list.
     let default_model = match &preferred {
         Some(preferred) => find_model(
@@ -270,6 +282,13 @@ async fn read(client: &Client, cwd: &str) -> Result<Catalog, Failure> {
     // Core lists its resolved default agent first, the same one a new session runs.
     let default_mode_id =
         modes.first().map(|mode| mode.id.clone()).ok_or(Failure::CatalogNotReady(NotReady::Agents))?;
+    let commands: Vec<CommandInfo> = commands.into_iter().filter(|command| builtin(&command.name).is_none()).collect();
+    let command_names: HashSet<&str> = commands.iter().map(|command| command.name.as_str()).collect();
+    let skills = skills
+        .into_iter()
+        .filter(|skill| builtin(&skill.id.0).is_none() && !command_names.contains(skill.id.0.as_str()))
+        .collect();
+    let provider_names = providers.into_iter().map(|provider| (provider.id, provider.name)).collect();
     Ok(Catalog {
         default_model: ModelRef {
             id: default_model.id.clone(),
@@ -283,6 +302,8 @@ async fn read(client: &Client, cwd: &str) -> Result<Catalog, Failure> {
         models,
         modes,
         default_mode_id,
-        commands: commands.into_iter().filter(|command| builtin(&command.name).is_none()).collect(),
+        commands,
+        skills,
+        provider_names,
     })
 }

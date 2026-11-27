@@ -4,8 +4,8 @@
   "id": "poimandres",
   "light": {
     "palette": {
-      "neutral": "#f4f7fb",
-      "ink": "#1b1e28",
+      "neutral": "#e8f0fa",
+      "ink": "#182436",
       "primary": "#1a6fb5",
       "accent": "#a83b72",
       "success": "#137a65",
@@ -17,14 +17,14 @@
       "diffDelete": "#b5386c"
     },
     "overrides": {
-      "text-weak": "#525d73",
-      "syntax-comment": "#5a667d",
-      "syntax-keyword": "#1a6fb5",
-      "syntax-string": "#10735e",
-      "syntax-primitive": "#1f6a8c",
-      "syntax-property": "#3f5875",
-      "syntax-type": "#734696",
-      "syntax-constant": "#a83b72"
+      "text-weak": "#475973",
+      "syntax-comment": "#50627d",
+      "syntax-keyword": "#1463a8",
+      "syntax-string": "#0d6b57",
+      "syntax-primitive": "#186182",
+      "syntax-property": "#364f6b",
+      "syntax-type": "#6b3e8f",
+      "syntax-constant": "#9e3368"
     }
   },
   "dark": {

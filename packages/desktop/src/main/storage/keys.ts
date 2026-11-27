@@ -10,8 +10,14 @@ export const SPELLCHECK_ENABLED_KEY = "spellcheckEnabled"
 
 export const SPELLCHECK_LANGUAGES_KEY = "spellcheckLanguages"
 
+export const SMOOTH_SCROLLING_ENABLED_KEY = "smoothScrollingEnabled"
+
 export const BACKGROUND_COLOR_KEY = "backgroundColor"
 
 export const WINDOW_IDS_KEY = "windowIds"
 
 export const BUNDLED_CLI_VERSION_KEY = "bundledCliVersion"
+
+export const KEEP_SERVICE_RUNNING_KEY = "keepServiceRunning"
+
+export const BACKGROUND_NOTICE_SHOWN_KEY = "backgroundNoticeShown"

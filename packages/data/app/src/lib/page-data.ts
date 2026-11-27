@@ -86,10 +86,15 @@ export async function loadModelPage(labParam: string, modelParam: string) {
   const lab = entry?.lab ?? labParam
   const model = entry?.slug ?? modelParam
   const stats = lab && model ? await runStatsEffect(getStatsModelData(model, lab)) : null
+  const stealthKey = statModel(stats?.model ?? modelParam, undefined)
   return {
     catalog: {
       entry,
-      stealthSpecs: entry ? null : (catalog.stealthSpecs[statModel(stats?.model ?? modelParam, undefined)] ?? null),
+      stealthSpecs: entry
+        ? null
+        : Object.hasOwn(catalog.stealthSpecs, stealthKey)
+          ? catalog.stealthSpecs[stealthKey]
+          : null,
       labs: catalog.labs.map((item) => ({ id: item.id, name: item.name })),
       labModels:
         catalog.labs

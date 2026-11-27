@@ -81,6 +81,7 @@ export const protocol = Protocol.make({
       ),
     )
   }),
+  supportsEffortUpdates: OpenResponses.protocol.supportsEffortUpdates,
 })
 
 export * as AlibabaResponses from "./alibaba-responses.js"

@@ -14913,6 +14913,344 @@
         }
       }
     },
+    "/api/experimental/space/write": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.space.write",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "spaces": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "space": {
+                            "$ref": "#/components/schemas/Space.Name"
+                          },
+                          "revision": {
+                            "$ref": "#/components/schemas/Space.Revision"
+                          },
+                          "cursor": {
+                            "$ref": "#/components/schemas/Space.Cursor"
+                          }
+                        },
+                        "required": ["space", "revision", "cursor"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["spaces"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Commit 1 to 1024 changes, across any spaces, in one transaction, their values at most 1 MiB of UTF-8 in total. A string value sets the space's key, replacing any previous value; null deletes it, and deleting an unset key changes nothing. In request order, each change that changes a key takes its space's next revision and goes to that space's subscribers as its own experimental.space.updated or experimental.space.deleted event, so a key that appears twice keeps its last value. Values are client-defined, such as JSON text, and sent back unchanged. Returns each space's revision after the write, in the order the spaces first appear. To follow a space, a client opens /api/event and reads its stream ID from server.connected, syncs with experimental.space.sync until no space has a `next` or is left without a page, then subscribes the stream with the saved cursor through experimental.space.subscribe and applies the stream's events in order. On experimental.space.resync it syncs and subscribes that space again; after a reconnect it subscribes again with its latest cursor. Experimental: may change without compatibility guarantees.",
+        "summary": "Write values",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "changes": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Space.Change"
+                    },
+                    "minItems": 1,
+                    "maxItems": 1024
+                  }
+                },
+                "required": ["changes"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/space/sync": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.space.sync",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "pages": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Space.Page"
+                      }
+                    }
+                  },
+                  "required": ["pages"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read one page for each of 1 to 100 distinct spaces, in request order, with at most 500 keys across all pages: a snapshot page, or a delta of the keys changed and deleted since the cursor. A delta whose deletions were purged comes back as a snapshot. Apply a delta page at once; apply a snapshot page's entries at once, and remove the keys none of the snapshot's pages held after its last one, the page without `next` or the one before a delta. Once the 500 keys are used up, the remaining spaces get no page: sync them again with the same cursor, together with the `next` of the pages that have one. To follow a space, a client opens /api/event and reads its stream ID from server.connected, syncs with experimental.space.sync until no space has a `next` or is left without a page, then subscribes the stream with the saved cursor through experimental.space.subscribe and applies the stream's events in order. On experimental.space.resync it syncs and subscribes that space again; after a reconnect it subscribes again with its latest cursor. Experimental: may change without compatibility guarantees.",
+        "summary": "Sync spaces",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "spaces": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "space": {
+                          "$ref": "#/components/schemas/Space.Name"
+                        },
+                        "cursor": {
+                          "$ref": "#/components/schemas/Space.Cursor_1"
+                        }
+                      },
+                      "required": ["space"],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 100
+                  }
+                },
+                "required": ["spaces"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/space/subscribe": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.space.subscribe",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Send 1 to 100 distinct spaces' changes to an open event stream, replacing any earlier subscription of those spaces on it: first the changes since each cursor as experimental.space.updated and experimental.space.deleted events in revision order, then every later change the same way, none missed or repeated. The catch-ups read at most 500 changes together, in request order: a space whose changes do not fit what is left, every space after they are used up, and one whose cursor is unusable get experimental.space.resync instead. To follow a space, a client opens /api/event and reads its stream ID from server.connected, syncs with experimental.space.sync until no space has a `next` or is left without a page, then subscribes the stream with the saved cursor through experimental.space.subscribe and applies the stream's events in order. On experimental.space.resync it syncs and subscribes that space again; after a reconnect it subscribes again with its latest cursor. Experimental: may change without compatibility guarantees.",
+        "summary": "Subscribe stream",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "stream": {
+                    "type": "string",
+                    "description": "The stream ID from the stream's server.connected event."
+                  },
+                  "spaces": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "space": {
+                          "$ref": "#/components/schemas/Space.Name"
+                        },
+                        "cursor": {
+                          "$ref": "#/components/schemas/Space.Cursor_1"
+                        }
+                      },
+                      "required": ["space", "cursor"],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 100
+                  }
+                },
+                "required": ["stream", "spaces"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/space/unsubscribe": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.space.unsubscribe",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Stop sending these 1 to 100 distinct spaces' changes to an open event stream, including a catch-up still going out. Spaces it does not follow are ignored. To follow a space, a client opens /api/event and reads its stream ID from server.connected, syncs with experimental.space.sync until no space has a `next` or is left without a page, then subscribes the stream with the saved cursor through experimental.space.subscribe and applies the stream's events in order. On experimental.space.resync it syncs and subscribes that space again; after a reconnect it subscribes again with its latest cursor. Experimental: may change without compatibility guarantees.",
+        "summary": "Unsubscribe stream",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "stream": {
+                    "type": "string",
+                    "description": "The stream ID from the stream's server.connected event."
+                  },
+                  "spaces": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Space.Name"
+                    },
+                    "minItems": 1,
+                    "maxItems": 100
+                  }
+                },
+                "required": ["stream", "spaces"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/space/reset": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.space.reset",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Replace the epoch, so every client's saved cursor becomes unusable and its next sync starts from a snapshot. A restored backup brings back its old epoch, and cursors issued after the backup would then get wrong deltas: after restoring one, call this before clients reconnect, and do not serve writes or subscribers until it has run. To follow a space, a client opens /api/event and reads its stream ID from server.connected, syncs with experimental.space.sync until no space has a `next` or is left without a page, then subscribes the stream with the saved cursor through experimental.space.subscribe and applies the stream's events in order. On experimental.space.resync it syncs and subscribes that space again; after a reconnect it subscribes again with its latest cursor. Experimental: may change without compatibility guarantees.",
+        "summary": "Reset revisions"
+      }
+    },
     "/api/shell": {
       "get": {
         "tags": ["shell"],
@@ -23047,6 +23385,9 @@
           "supportsEffortUpdates": {
             "type": "boolean"
           },
+          "supportsSystemUpdates": {
+            "type": "boolean"
+          },
           "mediaInput": {
             "$ref": "#/components/schemas/Model.MediaInput"
           }
@@ -23291,7 +23632,7 @@
         "anyOf": [
           {
             "type": "string",
-            "enum": ["chat", "decision", "image", "video"]
+            "enum": ["chat", "decision", "image", "video", "realtime", "embedding", "transcription"]
           },
           {
             "type": "string"
@@ -27322,6 +27663,154 @@
       "Snapshot.ID": {
         "type": "string"
       },
+      "Space.Change": {
+        "type": "object",
+        "properties": {
+          "space": {
+            "$ref": "#/components/schemas/Space.Name"
+          },
+          "key": {
+            "$ref": "#/components/schemas/Space.Key"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Space.Value"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["space", "key", "value"],
+        "additionalProperties": false
+      },
+      "Space.Cursor": {
+        "type": "string",
+        "description": "Covers this write and every change of the space before it."
+      },
+      "Space.Cursor_1": {
+        "type": "string"
+      },
+      "Space.Cursor_2": {
+        "type": "string",
+        "description": "Covers every change up to this page; save it to subscribe or sync from."
+      },
+      "Space.Delta": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["delta"]
+          },
+          "space": {
+            "$ref": "#/components/schemas/Space.Name"
+          },
+          "epoch": {
+            "$ref": "#/components/schemas/Space.Epoch"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/Space.Revision"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Space.Entry"
+            }
+          },
+          "cursor": {
+            "$ref": "#/components/schemas/Space.Cursor_2"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Space.Cursor_1"
+          },
+          "deleted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Space.Key"
+            }
+          }
+        },
+        "required": ["type", "space", "epoch", "revision", "entries", "cursor", "deleted"],
+        "additionalProperties": false
+      },
+      "Space.Entry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/Space.Key"
+          },
+          "value": {
+            "$ref": "#/components/schemas/Space.Value"
+          }
+        },
+        "required": ["key", "value"],
+        "additionalProperties": false
+      },
+      "Space.Epoch": {
+        "type": "string"
+      },
+      "Space.Key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "Space.Name": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]{1,128}$",
+        "description": "Client-chosen namespace: 1-128 letters, digits, '.', '_' or '-'."
+      },
+      "Space.Page": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Space.Snapshot"
+          },
+          {
+            "$ref": "#/components/schemas/Space.Delta"
+          }
+        ]
+      },
+      "Space.Revision": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "Space.Snapshot": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["snapshot"]
+          },
+          "space": {
+            "$ref": "#/components/schemas/Space.Name"
+          },
+          "epoch": {
+            "$ref": "#/components/schemas/Space.Epoch"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/Space.Revision"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Space.Entry"
+            }
+          },
+          "cursor": {
+            "$ref": "#/components/schemas/Space.Cursor_2"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Space.Cursor_1"
+          }
+        },
+        "required": ["type", "space", "epoch", "revision", "entries", "cursor"],
+        "additionalProperties": false
+      },
+      "Space.Value": {
+        "type": "string"
+      },
       "TokenUsage.Info": {
         "type": "object",
         "properties": {
@@ -27921,6 +28410,15 @@
             "$ref": "#/components/schemas/experimental.mcp.event"
           },
           {
+            "$ref": "#/components/schemas/experimental.space.resync"
+          },
+          {
+            "$ref": "#/components/schemas/experimental.space.updated"
+          },
+          {
+            "$ref": "#/components/schemas/experimental.space.deleted"
+          },
+          {
             "$ref": "#/components/schemas/V2Event.rpc"
           },
           {
@@ -27992,9 +28490,21 @@
             "enum": ["server.connected"]
           },
           "data": {
-            "not": {
-              "type": "null"
-            }
+            "type": "object",
+            "properties": {
+              "stream": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "This stream's random ID, which addresses it, e.g. in experimental.space.subscribe."
+              }
+            },
+            "additionalProperties": false
           }
         },
         "required": ["id", "type", "data"],
@@ -28777,6 +29287,120 @@
             "not": {
               "type": "null"
             }
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.space.deleted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.space.deleted"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "space": {
+                "$ref": "#/components/schemas/Space.Name"
+              },
+              "key": {
+                "$ref": "#/components/schemas/Space.Key"
+              },
+              "revision": {
+                "$ref": "#/components/schemas/Space.Revision"
+              }
+            },
+            "required": ["space", "key", "revision"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.space.resync": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.space.resync"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "space": {
+                "$ref": "#/components/schemas/Space.Name"
+              }
+            },
+            "required": ["space"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.space.updated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.space.updated"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "space": {
+                "$ref": "#/components/schemas/Space.Name"
+              },
+              "key": {
+                "$ref": "#/components/schemas/Space.Key"
+              },
+              "value": {
+                "$ref": "#/components/schemas/Space.Value"
+              },
+              "revision": {
+                "$ref": "#/components/schemas/Space.Revision"
+              }
+            },
+            "required": ["space", "key", "value", "revision"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "created", "type", "data"],

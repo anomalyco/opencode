@@ -1,13 +1,11 @@
 export * as PluginInternal from "./internal.js"
 
-import { LLMClient } from "@opencode/ai/effect"
 import type { Plugin } from "@opencode/plugin/effect/plugin"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import type { Generation } from "./service.js"
 import { httpClient, httpFetch } from "@opencode/util/effect/app-node-platform"
 import { AppProcess } from "@opencode/util/process"
 import { Context, Effect, Scope } from "effect"
-import { FetchHttpClient, HttpClient } from "effect/http"
 import { Agent } from "../agent.js"
 import { App } from "../app.js"
 import { Artifact } from "../artifact.js"
@@ -136,76 +134,9 @@ import { VerbosityPlugin } from "./verbosity.js"
 import { WarmingPlugin } from "./warming.js"
 import { WellKnownPlugin } from "../wellknown/plugin.js"
 
-const services = [
-  Agent.Service,
-  // Activation clears the ambient context, so built-ins see the configured build channel only through this.
-  App.Service,
-  FetchHttpClient.Fetch,
-  Artifact.Service,
-  AppProcess.Service,
-  BrowserTunnelGateway.Service,
-  BlobStore.Service,
-  CodeModeAgents.Service,
-  Provider.Service,
-  Model.Service,
-  Command.Service,
-  Config.Service,
-  Credential.Service,
-  Bus.Service,
-  Environment.Service,
-  FileAccess.Service,
-  FileMutation.Service,
-  FileWrite.Service,
-  Flag.Service,
-  Formatter.Service,
-  Generate.Service,
-  LocationWatcherPolicy.Service,
-  FileSystem.Service,
-  FSUtil.Service,
-  Global.Service,
-  HttpClient.HttpClient,
-  Image.Service,
-  InstructionDiscovery.Service,
-  Integration.Service,
-  Job.Service,
-  KV.Service,
-  LLMClient.Service,
-  Location.Service,
-  Machines.Service,
-  ModelsDev.Service,
-  Mcp.Service,
-  Npm.Service,
-  Permission.Service,
-  Form.Service,
-  Reference.Service,
-  WebSearch.Service,
-  Ripgrep.Service,
-  Automation.Service,
-  Session.Service,
-  SessionCompaction.Service,
-  SessionInstructions.Service,
-  SessionSearch.Service,
-  SessionSearchBuild.Service,
-  SubagentJob.Service,
-  SharedCache.Service,
-  Shell.Service,
-  ShellSelect.Service,
-  Snapshot.Service,
-  Skill.Service,
-  SkillDiscovery.Service,
-  Tool.Service,
-  ToolOutput.Service,
-  Watcher.Service,
-  WellKnown.Service,
-  VideoGeneration.Service,
-  Worktree.Service,
-  WorktreeStrategies.Service,
-] as const
-
-export type Requirements = Context.Service.Identifier<(typeof services)[number]>
-
-export const requirements = LayerNode.group([
+const nodes = [
   Agent.node,
+  // Activation clears the ambient context, so built-ins see the configured build channel only through this.
   App.node,
   Artifact.node,
   AppProcess.node,
@@ -235,7 +166,6 @@ export const requirements = LayerNode.group([
   InstructionDiscovery.node,
   Integration.node,
   Job.node,
-  Shell.daemonNode,
   KV.node,
   llmClient,
   Location.node,
@@ -268,7 +198,12 @@ export const requirements = LayerNode.group([
   VideoGeneration.node,
   Worktree.node,
   WorktreeStrategies.node,
-])
+] as const
+
+// Built-in plugins see exactly these nodes' services, each declared with its `service` so it can be picked.
+export const requirements = LayerNode.group(nodes)
+
+export type Requirements = LayerNode.Output<typeof requirements>
 
 export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
@@ -351,7 +286,7 @@ export const guarded: ReadonlySet<string> = new Set([OpencodePlugin.id, ConfigPo
 
 export const list = Effect.fn("PluginInternal.list")(function* () {
   // Capture only services; activation supplies the child Scope and batching context.
-  const context = Context.pick(...services)(yield* Effect.context<Requirements>())
+  const context = Context.pick(...nodes.map((node) => node.service))(yield* Effect.context<Requirements>())
   const gateway = Context.get(context, BrowserTunnelGateway.Service)
   const flags = Context.get(context, Flag.Service)
   const browserContext = Context.add(
