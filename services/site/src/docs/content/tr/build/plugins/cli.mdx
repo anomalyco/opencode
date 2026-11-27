@@ -1,0 +1,681 @@
+---
+title: "TUI eklentileri geliştirme"
+description: "Terminal arayüzü için bir OpenCode eklentisinin TUI parçasını @opencode/plugin/tui ile geliştirin."
+---
+
+TUI eklentileri terminal arayüzünü komutlar, rotalar, yuvalar, Markdown render edicileri, bildirimler ve yerel durumla
+genişletir. Bir TUI eklentisi bir [eklenti paketinin](/build/plugins) `./tui` parçasıdır; genellikle bir
+[sunucu parçasının](/build/plugins/server) yanındadır.
+
+```ts title="src/tui.tsx"
+import { Plugin } from "@opencode/plugin/tui"
+
+export default Plugin.define({
+  id: "acme.cli",
+  setup(context) {
+    context.ui.toast.show({ message: "TUI plugin loaded", variant: "success" })
+  },
+})
+```
+
+`@opencode/plugin/tui` paketini doğrudan içe aktarın. OpenCode bu içe aktarmayı çalışma zamanında çözer; bu nedenle yerel
+TUI eklentileri bir OpenCode checkout'una mutlak yol gerektirmez.
+
+## Bağlam
+
+`setup` yapılandırmayı, uygulama üst verisini, geçerli konumu, OpenCode istemcisini, önbelleğe alınmış verileri, tema
+token'larını, OpenTUI render edicisini ve aşağıda belgelenen arayüz API'lerini alır.
+
+```ts
+setup(context) {
+  const compact = context.options.compact === true
+  const location = context.location ?? context.data.location.default()
+  const version = context.app.version
+  const channel = context.app.channel
+  const client = context.client
+  const renderer = context.renderer
+  const theme = context.theme
+}
+```
+
+Eklentinin sahip olduğu kaynaklar için bir temizleme işlevi döndürün.
+
+```ts
+setup(context) {
+  const stop = context.data.on("session.execution.succeeded", () => {})
+  return () => stop()
+}
+```
+
+## İstemci
+
+`context.client`, oluşturulmuş OpenCode istemcisidir ve uzak bir sunucu dahil bağlı sunucuyu çağırabilir.
+
+```ts
+const response = await context.client.plugin.list({
+  location: context.location ?? context.data.location.default(),
+})
+const plugins = response.data
+```
+
+## Olaylar
+
+Tek bir tipli olay için `data.on`, her sunucu olayı için `data.listen` kullanın; ikisi de bir abonelik iptal işlevi
+döndürür.
+
+```ts
+const stopPermission = context.data.on("permission.asked", (event) => {
+  context.ui.toast.show({ message: `Permission ${event.data.id}` })
+})
+const stopAll = context.data.listen(({ details }) => console.log(details.type))
+
+return () => {
+  stopPermission()
+  stopAll()
+}
+```
+
+## Oturumlar
+
+Oturum verileri listeleme, arama, hiyerarşi, maliyet, durum, eşitleme ve geçersiz kılma sunar.
+
+```ts
+const sessions = context.data.session.list()
+const session = context.data.session.get(sessionID)
+const rootID = context.data.session.root(sessionID)
+const familyIDs = context.data.session.family(sessionID)
+const cost = context.data.session.cost(sessionID)
+const status = context.data.session.status(sessionID)
+await context.data.session.sync(sessionID)
+context.data.session.invalidate(sessionID)
+```
+
+Bekleyen gelen kutusu öğeleri ve mesajlar listeleme, arama, eşitleme ve geçersiz kılma API'lerine sahiptir.
+
+```ts
+await context.data.session.pending.sync(sessionID)
+const pending = context.data.session.pending.list(sessionID)
+context.data.session.pending.invalidate(sessionID)
+
+await context.data.session.message.sync(sessionID)
+const messages = context.data.session.message.list(sessionID)
+const message = context.data.session.message.get(sessionID, messageID)
+context.data.session.message.invalidate(sessionID)
+```
+
+İzin istekleri bir oturum için okunabilir ve yenilenebilir.
+
+```ts
+await context.data.session.permission.sync(sessionID)
+const requests = context.data.session.permission.list(sessionID) ?? []
+context.data.session.permission.invalidate(sessionID)
+```
+
+Formlar bir konumda listelenebilir, yenilenebilir, yanıtlanabilir veya iptal edilebilir.
+
+```ts
+import type { SessionFormCancelInput, SessionFormReplyInput } from "@opencode/client"
+
+async function handleForm(reply: SessionFormReplyInput, cancel: SessionFormCancelInput) {
+  const location = context.location
+  await context.data.session.form.sync(sessionID, location)
+  const forms = context.data.session.form.list(sessionID, location) ?? []
+  await context.data.session.form.reply(reply, location)
+  await context.data.session.form.cancel(cancel, location)
+  context.data.session.form.invalidate(sessionID, location)
+}
+```
+
+## Projeler ve kabuklar
+
+Projeler ve kaydedilmiş izinler listeleme, arama, eşitleme ve geçersiz kılma işlemlerini destekler.
+
+```ts
+await context.data.project.sync()
+const projects = context.data.project.list()
+const project = context.data.project.get(projectID)
+context.data.project.invalidate()
+
+await context.data.project.permission.sync(projectID)
+const saved = context.data.project.permission.list(projectID) ?? []
+context.data.project.permission.invalidate(projectID)
+```
+
+Kabuk verileri konum kapsamlı listeleme, arama, eşitleme ve geçersiz kılma işlemlerini destekler.
+
+```ts
+await context.data.shell.sync(context.location)
+const shells = context.data.shell.list(context.location)
+const shell = context.data.shell.get(shellID)
+context.data.shell.invalidate(context.location)
+```
+
+## Konum verileri
+
+Konum durumu varsayılan konumu ve yenileme kontrollerini sunar.
+
+```ts
+const location = context.data.location.default()
+await context.data.location.sync(location)
+context.data.location.invalidate(location)
+```
+
+Sürüm kontrol durumu bir konumdaki depo bilgilerini sunar.
+
+```ts
+await context.data.location.vcs.sync(context.location)
+const vcs = context.data.location.vcs.info(context.location)
+const branch = vcs?.branch.current
+context.data.location.vcs.invalidate(context.location)
+```
+
+Agent'lar, komutlar, entegrasyonlar, modeller, sağlayıcılar, referanslar, skill'ler ve MCP verileri `list`, `sync` ve
+`invalidate` yöntemlerini paylaşır.
+
+```ts
+const location = context.location
+await Promise.all([
+  context.data.location.agent.sync(location),
+  context.data.location.command.sync(location),
+  context.data.location.integration.sync(location),
+  context.data.location.model.sync(location),
+  context.data.location.provider.sync(location),
+  context.data.location.reference.sync(location),
+  context.data.location.skill.sync(location),
+  context.data.location.mcp.server.sync(location),
+  context.data.location.mcp.resource.sync(location),
+])
+
+const agents = context.data.location.agent.list(location) ?? []
+const commands = context.data.location.command.list(location) ?? []
+const integrations = context.data.location.integration.list(location) ?? []
+const models = context.data.location.model.list(location) ?? []
+const providers = context.data.location.provider.list(location) ?? []
+const references = context.data.location.reference.list(location) ?? []
+const skills = context.data.location.skill.list(location) ?? []
+const servers = context.data.location.mcp.server.list(location) ?? []
+const resources = context.data.location.mcp.resource.list(location) ?? []
+
+context.data.location.model.invalidate(location)
+```
+
+## Dikkat
+
+Dikkat istekleri terminal odağına göre bir sistem bildirimi gösterebilir, yapılandırılmış bir ses çalabilir veya ikisini
+birden yapabilir.
+
+```ts
+const result = await context.attention.notify({
+  title: "OpenCode",
+  message: "Session done",
+  notification: { when: "blurred" },
+  sound: { name: "done", volume: 0.5, when: "always" },
+})
+console.log(result.ok, result.notification, result.sound, result.skipped)
+```
+
+## Tema ve render edici
+
+OpenTUI öğeleriyle anlamsal tema token'larını kullanın ve render ediciye özgü yardımcılar için `context.renderer` iletin.
+
+```tsx
+const Status = () => <text fg={context.theme.text.base}>Ready</text>
+const renderer = context.renderer
+```
+
+Render edicinin çizdiği bir OpenTUI kaynağının sahibi olarak `context.renderer.nativeScene` gerekir. Örneğin `<markdown>`
+ve `<code>` bir `SyntaxStyle` gerektirir. Kaynağı, onu çizen son kareden sonra render edici boştayken yok edin.
+
+```tsx
+import { SyntaxStyle } from "@opentui/core"
+
+const style = SyntaxStyle.fromStyles({ default: { fg: context.theme.text.base } }, context.renderer.nativeScene)
+context.ui.slot({ append: "home.footer", render: () => <markdown content="Ready" syntaxStyle={style} /> })
+return () => context.renderer.idle().then(() => style.destroy())
+```
+
+Bir render edilebilirin düzen stilini okumak için yöntemi Yoga Node alıcısının adıyla çağırın, örneğin
+`box.getPadding(Yoga.Edge.Bottom)` veya `box.getMaxWidth()`. Ana bilgisayar render edilebilirleri eklenti API'sinin parçası
+değildir. Yapıları ve stilleri her sürümde değişebilir.
+
+### OpenTUI 0.5 için geliştirilmiş eklentiler
+
+OpenCode eklentileri kendi OpenTUI'siyle çalıştırır. OpenTUI 0.6'dan bu yana:
+
+- `SyntaxStyle.create()`, `SyntaxStyle.fromStyles()`, `SyntaxStyle.fromTheme()`, `TextBuffer.create()` ve
+  `EditBuffer.create()` son argüman olarak bir sahip alır. `OptimizedBuffer.create()` bunu `owner` seçeneğinde alır.
+  `context.renderer.nativeScene` iletin. OpenTUI 0.5 ek argümanı yok sayar; bu nedenle eklenti daha eski OpenCode
+  sürümlerinde de çalışır.
+- `@opencode/theme/tui` içindeki `generateSyntax()` sahibi ikinci argüman olarak alır:
+  `generateSyntax(context.theme, context.renderer.nativeScene)`. Eski `@opencode/theme` sürümleri stili sahibi olmadan
+  oluşturur; bu nedenle paketi de güncelleyin.
+- `getLayoutNode()` kaldırıldı. OpenTUI 0.6.5 veya üstünde `getLayoutNode().getMaxWidth()` ve diğer stil alıcılarını
+  aynı adlı render edilebilir yöntemiyle değiştirin. `getComputedLayout()` ve diğer hesaplanmış konum ve boyut
+  alıcılarını `getLayout()` ile, `markDirty()` yöntemini `invalidateIntrinsicSize()` ile değiştirin. Hesaplanmış dolgu,
+  kenar boşluğu ve kenarlığın karşılığı yoktur ve `getPadding(edge)` yalnızca o kenar için ayarlanmış dolguyu okur. Bir
+  alıcının ayarlanmamış (`Unit.Undefined`) olarak bildirdiği stili geri yüklemek için OpenTUI 0.6.6 veya üstünde
+  özelliğe `undefined` atayın.
+
+[OpenTUI 0.6.0 sürüm notları](https://opentui.com/docs/releases/0.6.0) tüm değişiklikleri listeler.
+
+## Solid bileşenleri
+
+Bir rota, iletişim kutusu veya yuva tarafından render edilen JSX içinde geçerli bağlama erişmek için `usePlugin` kullanın.
+
+```tsx
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>{context.app.version}</text>
+}
+```
+
+## Markdown
+
+Bir dilin Markdown kod bloklarını görüntüleyen bir renderer kaydedin. Döndürülen işlev kaydı kaldırır.
+
+```ts
+const unregister = context.markdown.registerCodeBlockRenderer("acme", (_token, render) => render.defaultRender())
+return unregister
+```
+
+## Komutlar ve tuş eşlemeleri
+
+Palet, eğik çizgi ve klavye komutlarını tepkisel bir tuş eşlemesi katmanında kaydedin.
+
+```ts
+context.keymap.layer(() => ({
+  mode: "global",
+  priority: 10,
+  commands: [
+    {
+      id: "acme.status",
+      title: "Show Acme status",
+      group: "Acme",
+      bind: "ctrl+g",
+      palette: true,
+      slash: { name: "acme", aliases: ["status"], arguments: true },
+      enabled: () => true,
+      suggested: true,
+      run: async (input) => context.ui.toast.show({ message: input ?? "Ready" }),
+    },
+  ],
+  bindings: ["acme.status"],
+}))
+```
+
+`layer` yöntemini `setup` içinden, bir `await` sonrası dahil, veya bir bileşenden çağırın. Her katman şunlardan ilkinde
+kaldırılır:
+
+- Eklenti devre dışı bırakılır, yeniden yüklenir veya kurulumu başarısız olur.
+- Onu oluşturan bileşen veya tepkisel hesaplama, örneğin bir yuva, rota veya iletişim kutusu, elden çıkarılır.
+
+Katmanı oluşturan işlev yan etkisiz olmalıdır. OpenCode, ilk komut yapısını doğrulamak için işlevi önce bağımlılıkları izlemeden bir kez, ardından reaktif olarak değerlendirir. Komut paleti komutunun kimliğinin eksik olması gibi ilk doğrulama hatalarını `layer()` çağrısı fırlatır. Tuş atamalarını ayrıştırırken oluşan hataları OpenTUI, sonraki reaktif güncellemelerdeki hataları ise Solid yönetir.
+
+```ts
+async setup(context) {
+  const settings = await loadSettings()
+  context.keymap.layer(() => ({
+    mode: "global",
+    commands: [{ id: "acme.sync", title: "Sync Acme", palette: true, run: () => sync(settings) }],
+  }))
+}
+```
+
+Bir katman tek bir OpenTUI render edilebilirini hedefleyebilir ve klavye gönderimini sürdürmek için bir komuttan `false`
+döndürebilir.
+
+```ts
+context.keymap.layer(() => ({
+  target: () => panel,
+  commands: [{ bind: "escape", run: (_input, event) => (event ? false : undefined) }],
+}))
+```
+
+Komutları gönderin, kısayolları ve komut durumunu inceleyin veya geçici bir girdi modu açın.
+
+```ts
+context.keymap.dispatch("acme.status", "verbose")
+const shortcuts = context.keymap.shortcuts("acme.status")
+const commands = context.keymap.commands()
+const pending = context.keymap.pending()
+const active = context.keymap.active()
+const currentMode = context.keymap.mode.current()
+const popMode = context.keymap.mode.push("acme-search")
+popMode()
+```
+
+## Depolama
+
+Kalıcı depolama JSON'u yeniden başlatmalar arasında korur ve TUI örnekleri arasında eşitler.
+
+```ts
+const [settings, updateSettings] = context.storage.store("settings", {
+  initial: { compact: false },
+})
+await updateSettings((draft) => {
+  draft.compact = true
+})
+```
+
+Bellek depolaması eklenti yeniden yüklemelerinde yaşar ancak TUI çıktığında atılır.
+
+```ts
+const [state, updateState] = context.storage.memory("state", {
+  initial: { count: 0 },
+})
+updateState((draft) => {
+  draft.count++
+})
+```
+
+## İletişim kutuları ve bildirimler
+
+Uyarılar, onaylar, metin girdisi ve seçim için Promise tabanlı iletişim kutuları kullanın.
+
+```ts
+await context.ui.dialog.alert({ title: "Acme", message: "Ready" })
+const confirmed = await context.ui.dialog.confirm({
+  title: "Continue?",
+  message: "Run the Acme action?",
+  label: { confirm: "Run", cancel: "Cancel" },
+})
+const name = await context.ui.dialog.prompt({ title: "Name", placeholder: "release" })
+const mode = await context.ui.dialog.select({
+  title: "Mode",
+  current: "safe",
+  options: [
+    { title: "Safe", value: "safe", description: "Ask before changes" },
+    { title: "Fast", value: "fast", disabled: false, category: "Advanced" },
+  ],
+})
+```
+
+### Seçim araması
+
+Eşleşmeleri ve sonuçların sırasını kendiniz belirlemek için `search` işlevini iletin. İşlev, boş sorgu dahil her sorguda çalışır ve yalnızca etkin seçenekleri alır. Sonuçlar döndürüldükleri sırayla listelenir; her kategori listenin içinde gösterilir.
+
+```ts
+const project = await context.ui.dialog.select({
+  title: "Projects",
+  options: [
+    { title: "Alpha", value: "alpha", category: "Recent" },
+    { title: "Beta", value: "beta", category: "Pinned" },
+  ],
+  search: (query, options) =>
+    options
+      .filter((option) => option.title.toLowerCase().includes(query.toLowerCase()))
+      .toSorted((left, right) => right.title.localeCompare(left.title)),
+})
+```
+
+### Seçim eylemleri
+
+Eylemler altbilgide görünür ve klavye bağlamalarından, tıklamayla veya Tab odağının ardından Enter ile çalışır. Varsayılan
+olarak seçili değeri alır ve seçim olmadan kullanılamaz. Seçim gerektirmeyen eylemler için `selection: "none"` kullanın.
+
+```ts
+await context.ui.dialog.select({
+  title: "Projects",
+  options: [{ title: "Alpha", value: "alpha" }],
+  actions: [
+    { bind: "ctrl+o", title: "Inspect", onTrigger: (value) => context.ui.toast.show({ message: value }) },
+    { bind: "ctrl+a", title: "Close", side: "right", selection: "none", onTrigger: () => context.ui.dialog.clear() },
+  ],
+})
+```
+
+- Bir eylem iletişim kutusunu kapatmaz veya Promise'i sonuçlandırmaz.
+- Enter veya bir seçeneğe tıklamak seçili değeri çözer.
+- Escape, `clear()` veya başka bir iletişim kutusu göstermek `undefined` çözer.
+- `ctrl+n` veya `ctrl+p` bağlamayın. İletişim kutusu bunları gezinme için ayırır ve kendi bağlamaları önceliklidir.
+
+Özel JSX iletişim kutuları boyutlarını ayarlayabilir ve kendilerini kapatabilir.
+
+```tsx
+context.ui.dialog.set({ size: "large", centered: true })
+context.ui.dialog.show(
+  () => (
+    <box>
+      <text>Acme</text>
+    </box>
+  ),
+  () => console.log("closed"),
+)
+context.ui.dialog.clear()
+```
+
+Bildirimler başlık, mesaj, varyant ve süre destekler.
+
+```ts
+context.ui.toast.show({
+  title: "Acme",
+  message: "Saved",
+  variant: "success",
+  duration: 3000,
+})
+```
+
+## Rotalar ve sekmeler
+
+Bir JSX rotası kaydedin, geçerli rotayı inceleyin ve ana sayfaya, bir oturuma veya eklenti sayfasına gidin.
+
+```tsx
+const unregister = context.ui.router.register({
+  name: "dashboard",
+  render: ({ data }) => <text>{String(data?.title ?? "Acme")}</text>,
+})
+const current = context.ui.router.current()
+context.ui.router.navigate({ type: "plugin", name: "dashboard", data: { title: "Status" } })
+context.ui.router.navigate({ type: "session", sessionID })
+context.ui.router.navigate({ type: "home" })
+return unregister
+```
+
+Oturum sekmeleri etkinken sekmeler listelenebilir, açılabilir, odaklanabilir, taşınabilir ve kapatılabilir. `open` odağı
+değiştirmeden bırakır; `focus` gerektiğinde sekmeyi açar.
+
+```ts
+if (context.ui.tabs.enabled()) {
+  context.ui.tabs.open(backgroundSessionID)
+  context.ui.tabs.focus(sessionID)
+  const tabs = context.ui.tabs.list()
+  context.ui.tabs.move(backgroundSessionID, tabs.length - 1)
+  context.ui.tabs.close(sessionID)
+  context.ui.tabs.close()
+}
+```
+
+## Model
+
+Promptun seçili modelini okuyun ve varyantını değiştirin. Solid hesaplamasında okunduğunda `current()` ve `variant.list()`
+tepkiseldir. `variant` değeri `undefined` olduğunda modelin varsayılan varyantı kullanılır.
+
+```ts
+const selected = context.ui.model.current()
+const variants = context.ui.model.variant.list()
+context.ui.model.variant.set("high")
+context.ui.model.variant.set(undefined)
+```
+
+`variant.set`, hiçbir model seçili değilse veya modelde böyle bir varyant yoksa `false` döndürür. Yerleşik varyant
+döngüsünün yerini almak için onu bir komuta bağlayın, örneğin model varsayılanını atlamak için:
+
+```ts
+context.keymap.layer(() => ({
+  commands: [
+    {
+      id: "acme.variant.cycle",
+      title: "Cycle variants",
+      bind: "tab",
+      run() {
+        const variants = context.ui.model.variant.list()
+        if (variants.length === 0) return
+        const index = variants.indexOf(context.ui.model.current()?.variant ?? "")
+        context.ui.model.variant.set(variants[(index + 1) % variants.length])
+      },
+    },
+  ],
+}))
+```
+
+## Yuvalar
+
+Yuvalar `app`, `home.footer`, `home.footer.status`, `prompt.footer`, `prompt.footer.status`, `prompt.footer.file`,
+`session.composer.top`, `sidebar.content` veya `sidebar.footer` konumuna JSX ekler veya değiştirir.
+
+```tsx
+return context.ui.slot({
+  append: "sidebar.content",
+  render: ({ sessionID }) => <text>{context.data.session.get(sessionID)?.title}</text>,
+})
+```
+
+Yerleşim için `prepend`, `append`, `before`, `after` veya `replace` kullanın.
+
+```tsx
+context.ui.slot({ prepend: "home.footer", render: () => <text>Before footer content</text> })
+context.ui.slot({ append: "home.footer", render: () => <text>After footer content</text> })
+context.ui.slot({ before: "home.footer", render: () => <text>Before footer slot</text> })
+context.ui.slot({ after: "home.footer", render: () => <text>After footer slot</text> })
+context.ui.slot({ replace: "home.footer", render: () => <text>New footer</text> })
+```
+
+Yerleşik altbilgi satırının yerini almadan ona içerik eklemek için `home.footer.status` kullanın. Durum katkıları
+OpenCode'un sağlık göstergelerinden sonra ve sürümden önce görünür.
+
+```tsx
+context.ui.slot({ append: "home.footer.status", render: () => <text>SYNCED</text> })
+```
+
+### Oturum panelleri
+
+`session.panel` için bir katkı kaydedin, ardından paneli bir komuttan açın. Boyutlandırma, odak ve tam ekran sunumu ana
+bilgisayara aittir; içeriği eklentiye aittir. Seçilen ad her katkıya `panel.name` olarak iletilir ve her katkı render
+edip etmeyeceğine kendisi karar verir.
+
+```tsx
+import { Show } from "solid-js"
+
+context.ui.slot({
+  append: "session.panel",
+  render: (panel) => (
+    <Show when={panel.name === "acme.review"}>
+      <ReviewPanel panel={panel} />
+    </Show>
+  ),
+})
+
+context.ui.slot({
+  append: "app",
+  render: () => {
+    context.keymap.layer(() => ({
+      mode: "global",
+      commands: [
+        {
+          id: "acme.review",
+          title: "Open review",
+          slash: { name: "review" },
+          run: () => {
+            context.ui.panel.open("acme.review")
+          },
+        },
+      ],
+    }))
+    return null
+  },
+})
+```
+
+- Bir oturum dışında açmak `false` döndürür.
+- Bu sıradan bir yuvadır: beş yerleşimin tamamı ve mevcut değiştirme sırası kuralları geçerlidir.
+- Bağımsız olarak seçilebilen katkılar için `append` kullanın; böylece bir arada bulunabilirler. `replace` yuvayı yine
+  devralır.
+- Adlar ayrı ayrı kaydedilmez; tüm katkılar aynı seçim değerlerini paylaşır. Çakışmaları önlemek için `acme.review` örneğindeki gibi eklenti öneki içeren bir ad kullanın. Seçilen adla eşleşen bir renderer yoksa yuva boş kalır.
+- Sunumu değiştirmek bağlı katkıları korur. Paneli kapatmak onları elden çıkarır; bir eklentiyi devre dışı bırakmak
+  katkılarını normal yuva temizliğiyle kaldırır.
+- Klavye katmanları ve girdi modları yalnızca panel girdinin sahibiyken etkindir.
+
+Yuva tepkisel `name`, `sessionID`, `width`, `presentation` ve `focused` özelliklerini, ayrıca `focus`, `close` ve
+`toggleFullscreen` eylemlerini alır. Ana bilgisayar dar terminalleri tam ekranda tutar; yan panel için yeterli yer
+olana kadar `toggleFullscreen` etkisizdir.
+
+```tsx
+import type { PanelInput } from "@opencode/plugin/tui/context"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function ReviewPanel(props: { panel: PanelInput }) {
+  const context = usePlugin()
+  context.keymap.layer(() => ({
+    commands: [
+      {
+        id: "acme.review.fullscreen",
+        bind: "f",
+        run: props.panel.toggleFullscreen,
+      },
+    ],
+  }))
+  return <text>Reviewing {props.panel.sessionID}</text>
+}
+```
+
+Başlangıçta tam ekran sunum isteyebilir, etkin panelinizi inceleyebilir veya başka bir eklentinin panelini etkilemeden
+kapatabilirsiniz.
+
+```ts
+context.ui.panel.open("acme.review", { presentation: "fullscreen" })
+const current = context.ui.panel.current()
+context.ui.panel.close()
+```
+
+## Biçimlendirme
+
+Dosya sistemi yollarını görüntüleme için, ana dizin kısaltması dahil, biçimlendirin.
+
+```ts
+const displayPath = context.ui.format.path(context.location?.directory ?? "/home/me/project")
+```
+
+## Yayımlama ve yükleme
+
+TUI eklentisini `./tui` üzerinden sunun; eklenti JSX render ediyorsa OpenTUI eş bağımlılıklarını ekleyin.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.6.6",
+    "@opentui/solid": ">=0.6.6",
+    "solid-js": ">=1.9.0"
+  }
+}
+```
+
+Otomatik yükleme için `./tui` dosyasını bir [sunucu parçasının](/build/plugins/server) veya
+[GUI parçasının](/build/plugins/gui) yanında dışa aktarın.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "acme.server",
+  setup() {},
+})
+```
+
+Yalnızca TUI içeren bir paketi [`cli.json`](/cli/plugins) içinde yapılandırın; böylece uzak sunuculara karşı etkin kalır.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-plugin"]
+}
+```

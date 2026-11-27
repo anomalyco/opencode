@@ -1,0 +1,78 @@
+---
+title: "Claude Code"
+description: "Console ve Go modellerini Claude Code'dan kullanın."
+---
+
+Claude Code, Anthropic Messages API'sini kullanır. İki ortam değişkeniyle Claude Code'u Console'a yönlendirerek GPT, Gemini ve açık modeller dahil olmak üzere herhangi bir ücretli modeli veya Go modelini kullanabilirsiniz. Console, Anthropic Messages biçimini desteklemeyen modeller için isteği uygun biçime dönüştürür.
+
+<Callout>
+  [Console CLI](/console/harnesses#console-cli) Claude Code'u tek komutla, çalışma alanının politikaları, MCP sunucuları,
+  skill'leri ve talimatları dahil kurar. `npx @opencode/console setup claude-code` çalıştırın. Aşağıdaki adımlar elle
+  kurulum içindir.
+</Callout>
+
+```bash
+export ANTHROPIC_BASE_URL="https://opencode.ai/inference/anthropic"
+export ANTHROPIC_AUTH_TOKEN="oc_sk_..."
+claude --model claude-sonnet-5-5
+```
+
+`oc_sk_...` yerine bir [kişisel API anahtarı](/console/harnesses#get-an-api-key) koyun.
+
+## Yapılandırma
+
+Her oturumda Console'u kullanmak için değişkenleri `~/.claude/settings.json` içinde ayarlayın. `/model` ve arka plan
+görevlerinin onları kullanması için `opus`, `sonnet` ve `haiku` takma adlarını Console modellerine eşleyin.
+
+```json title="~/.claude/settings.json"
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://opencode.ai/inference/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "oc_sk_...",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5-5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-5-5"
+  }
+}
+```
+
+Claude Code, base URL'nin sonuna `/v1/messages` yolunu kendisi ekler; bu yolu ayrıca yazmayın. Doğru base URL'nin ve token'ın kullanıldığını doğrulamak için `/status` komutunu çalıştırın.
+
+<Callout>
+  `ANTHROPIC_API_KEY` değil `ANTHROPIC_AUTH_TOKEN` kullanın. Bir Claude hesabında oturum açtıysanız Claude Code o
+  oturumu Console'a göndermesin diye önce `/logout` çalıştırın.
+</Callout>
+
+## Go
+
+Go base URL'sini ve [Go](/console/go) aboneliği olan bir çalışma alanından alınan anahtarı kullanın.
+
+```json title="~/.claude/settings.json"
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://opencode.ai/inference/go/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "oc_sk_...",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "minimax-m3",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-5-5"
+  }
+}
+```
+
+## Modeller
+
+[Console](/console/models#endpoints) veya [Go](/console/go#endpoints) tablosundaki herhangi bir model kimliğini kullanın.
+Bir oturumda `/model` ile model değiştirin ya da tek bir çalıştırma için bir tane seçin.
+
+```bash
+claude --model gpt-6.1-sol
+```
+
+## Console MCP
+
+Tüm projeleriniz için [Console MCP](/console/harnesses#console-mcp) sunucusunu ekleyin.
+
+```bash
+claude mcp add --transport http --scope user opencode-console https://opencode.ai/console/mcp
+```
+
+Claude Code'da `/mcp` çalıştırın, `opencode-console` seçin ve tarayıcıdan oturum açın.

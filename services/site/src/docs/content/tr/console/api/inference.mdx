@@ -1,0 +1,171 @@
+---
+title: "Inference API"
+description: "OpenAI, Anthropic ve Gemini uyumlu modelleri tek bir kimlik doğrulama başlığıyla Console inference üzerinden çağırın."
+---
+
+Console inference, OpenAI, Anthropic ve Gemini uyumlu API'leri `https://opencode.ai/inference` adresinden sunar. Modelin
+API ailesine uygun endpoint'e bir JSON `POST` isteği gönderin.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kimi-k3",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## Kimlik doğrulama
+
+`<token>` yerine bir [kişisel API anahtarı](/console/api#personal-api-keys) veya [hizmet hesabı anahtarı](/console/api#service-accounts) girin. Her iki anahtarı da [Console'da](https://opencode.ai/console) oluşturabilirsiniz. Bu başlık ücretli modeller için zorunludur. Ücretsiz sohbet modelleri yalnızca OpenCode içinden kullanılabilir; diğer istemciler API anahtarıyla bile HTTP `403` alır.
+Diğer istemcilerden ücretli modeller veya bir [Go](/console/go) aboneliği kullanın.
+
+```text
+Authorization: Bearer <token>
+```
+
+## Endpoint'ler
+
+| API                     | Yol                                                       |
+| ----------------------- | --------------------------------------------------------- |
+| OpenAI Chat Completions | `/inference/openai/v1/chat/completions`                   |
+| OpenAI Responses        | `/inference/openai/v1/responses`                          |
+| Anthropic Messages      | `/inference/anthropic/v1/messages`                        |
+| Gemini                  | `/inference/google/v1beta/models/<model>:generateContent` |
+| System One (kararlar)   | `/inference/systemone/v1/systemone`                       |
+| OpenAI Decisions        | `/inference/openai/v1/decisions`                          |
+| OpenAI Embeddings       | `/inference/openai/v1/embeddings`                         |
+
+Her model bir API ailesi üzerinden sunulur. [Model endpoint'leri](/console/models#endpoints) tablosuna bakın veya güncel listeyi API'den alın:
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+[Model listesi API'si](/console/api/models) yanıttaki her alanı ve bağladığınız sağlayıcıları içeren Console listesini
+açıklar.
+
+### OpenAI Chat Completions
+
+`kimi-k3`, `glm-5.3`, `minimax-m3` gibi açık modeller ve ücretsiz modeller Chat Completions API'sini kullanır.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-5.3",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### OpenAI Responses
+
+GPT modelleri Responses API'sini kullanır.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-6.1-sol",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Messages
+
+Claude ve Qwen modelleri Messages API'sini kullanır. `max_tokens` zorunludur.
+
+```bash
+curl -X POST "https://opencode.ai/inference/anthropic/v1/messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Gemini
+
+Gemini modellerinde model adı ve yöntem, istek yolunun parçasıdır. Yanıtı akış olarak almak için `:generateContent` yerine `:streamGenerateContent` kullanın.
+
+```bash
+curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-4-argon:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+### System One
+
+`jev-1.14`, `gemini-decision-1` ve `gpt-6-luna-decision` gibi karar modelleri metin üretmek yerine bir `state` hakkında
+tipli soruları yanıtlar. Soru türleri ve medya girdileri için [karar modellerine](/console/models#jev) bakın.
+
+```bash
+curl -X POST "https://opencode.ai/inference/systemone/v1/systemone" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.14",
+    "state": "My card was charged twice and I need a refund today",
+    "questions": { "urgent": { "type": "noul", "instructions": "Is this request urgent?" } }
+  }'
+```
+
+Aynı modeller OpenAI'nin Decisions biçimini `/inference/openai/v1/decisions` adresinde de kabul eder.
+
+### OpenAI Embeddings
+
+`text-embedding-3-small` ve `qwen3-embedding-8b` gibi gömme modelleri Embeddings API'sini kullanır. Tüm modeller ve
+seçenekler için [gömme modellerine](/console/models#embedding-models) bakın.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/embeddings" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen3-embedding-8b",
+    "input": "How do I reset my password?"
+  }'
+```
+
+[Go](/console/go#endpoints), içerdiği karar ve gömme modellerini `/inference/go` altındaki aynı yollarda sunar.
+
+## Maliyet
+
+Her yanıt, API'sinin zaten döndürdüğü kullanımın yanında isteğin size maliyetini bildirir: OpenAI ve Anthropic'te
+`usage`, Gemini'de `usageMetadata` içinde. Akışlar bunu son kullanımı taşıyan olayda bildirir: `stream_options.include_usage`
+ile Chat Completions için son kullanım parçası, Responses için `response.completed`, Messages için `message_delta` ve
+Gemini için son parça.
+
+```json
+"usage": {
+  "prompt_tokens": 1200,
+  "completion_tokens": 300,
+  "cost": 0.00412,
+  "opencode": {
+    "billing_source": "balance",
+    "list_cost": 0.00412,
+    "tokens": { "input": 1200, "output": 300, "reasoning": 120, "cache_read": 8000, "cache_write_5m": 0, "cache_write_1h": 0 }
+  }
+}
+```
+
+| Alan                      | Anlamı                                                                                                                       |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `cost`                    | Bakiyenizden tahsil edilen ABD doları. Ücretsiz modellerde ve [Go](/console/go) kullanımında limitleri içinde `0`. Kendi sağlayıcı anahtarınızla, sağlayıcınızın kendi tutarını bildirmediği sürece onun ücretlendireceği tahmini tutar; modelin fiyatı yoksa bulunmaz. |
+| `opencode.billing_source` | `free`, `balance`, `go`, `go-plus` veya `byok` (kendi sağlayıcı anahtarınız).                                              |
+| `opencode.list_cost`      | Modelin fiyatından ABD doları, yoğun saatler ve uzun bağlam fiyatlandırması dahil.                                           |
+| `opencode.estimated`      | `cost` OpenCode'un tahsil ettiği bir tutar değil modelin fiyatından bir tahmin olduğunda `true`. Yalnızca kendi sağlayıcı anahtarınızla ayarlanır. |
+| `opencode.allowance`      | Yalnızca Go: isteğin [kullanım limitlerinize](/console/go#usage-limits) ne kadar sayıldığı, planın aylık limitinin doları cinsinden. |
+| `opencode.tokens`         | Faturalandırıldığınız token'lar. `input` önbellek okumalarını ve yazmalarını içermez; `output` `reasoning` içerir.            |
+
+Görsel oluşturma aynı alanları yanıtta ve bir akışın tamamlanan her görselinde o ana kadarki maliyetle bildirir. Maliyet,
+bakiyeniz veya Go kullanımınız güncellenmeden önce yanıt bittiğinde bilinir. Bir istek sırasında bakiyeniz veya Go
+limitleriniz tükenirse bildirilenden az ücretlendirilebilirsiniz, asla fazla değil.

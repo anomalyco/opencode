@@ -1,0 +1,3864 @@
+---
+title: "GUI"
+description: "Bir OpenCode eklentisinin GUI parçasını OpenCode Desktop için @opencode/plugin/gui ile geliştirin."
+---
+
+Bir GUI eklentisi, GUI eklenti SDK'sı `@opencode/plugin/gui` ile OpenCode Desktop'a paneller, komutlar, ayar sayfaları
+ve yerel entegrasyonlar ekler. Bir [eklenti paketinin](/build/plugins) `./gui-experimental` parçasıdır; tek başına ya da
+bir [sunucu parçasının](/build/plugins/server) ve bir [TUI parçasının](/build/plugins/cli) yanında bulunur.
+
+<Callout type="note">
+  GUI eklenti API'si deneyseldir ve sürümler arasında değişebilir. `-experimental` dışa aktarma adı bunu paketinizde
+  belirtir.
+</Callout>
+
+`./gui-experimental` dosyası, sunucu ve TUI parçaları gibi `Plugin.define` varsayılan dışa aktarımını yapar:
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+import { Acme } from "./rpc"
+
+export default Plugin.define({
+  i18n: { en: { "command.open": "Open Acme" } },
+  setup(ctx) {
+    ctx.add(Command, () => ({
+      id: "open",
+      title: ctx.t("command.open"),
+      run: () => void ctx.client.rpc(Acme).open({}),
+    }))
+  },
+  main(ctx) {
+    ctx.log.write("info", "acme started")
+  },
+})
+```
+
+Bir GUI eklentisi iki süreçte çalışabilir:
+
+- **`setup`** her masaüstü uygulaması penceresinde çalışır. Paneller, komutlar, ayar sayfaları, yuvalar, sunucu
+  kaynakları, bağlantı işleyicileri ve stiller katkı olarak verir. Bkz. [Pencere](#the-window).
+- **`main`** bir kez, Electron ana sürecinde çalışır. Tipli `Ipc` sözleşmeleri, yerel menü öğeleri, `WebContentsView`
+  gömmeleri ve Node ile Electron entegrasyonları sunar. Bkz. [Ana süreç](#the-main-process).
+
+## Paketleme
+
+Bir eklenti paketi sunucu, TUI ve GUI kodunu tek bir npm paketinden gönderebilir. `./tui` yanına bir
+`./gui-experimental` dışa aktarımı ekleyin; OpenCode Desktop onu her eklenti için kendi arka plan sunucusunda yükler.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./gui-experimental": "./dist/gui-experimental.cjs"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "devDependencies": {
+    "solid-js": "^1.9.0",
+    "vite": "^7.0.0",
+    "vite-plugin-solid": "^2.11.0"
+  }
+}
+```
+
+Kullanıcılar onu diğer eklentiler gibi kurar; ayrı bir GUI kurulum adımı yoktur.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["opencode-acme-plugin"],
+}
+```
+
+GUI ayrı bir kimlik bildirmez; eklentinin kimliğini kullanır. Bu kimlik, sunucu parçasının `id` değeri veya sunucu parçası yoksa paket adıdır. `name` alanı olmayan yerel eklentilerde dizin adı kullanılır. Kimliği `ctx.id` üzerinden okuyun.
+
+### Tek dosya, iki süreç
+
+Her süreç `./gui-experimental` dosyasının tamamını değerlendirir ve varsayılan dışa aktarımını okur. Pencereler `setup`,
+masaüstü uygulamasının ana süreci `main` çalıştırır.
+
+```tsx title="src/gui.tsx"
+import { shell } from "electron"
+import { Plugin } from "@opencode/plugin/gui"
+
+export default Plugin.define({
+  setup(ctx) {
+    // Window code: Solid components, ctx.layout, ctx.add(Command, …).
+  },
+  main(ctx) {
+    // Main code: electron, Node built-ins, ctx.windows.
+    ctx.windows.on("open", () => shell.beep())
+  },
+})
+```
+
+İki süreç de aynı dosyayı değerlendirdiği için her biri diğer sürecin modülleri yerine etkisiz yer tutucular kullanır:
+
+- **Bir pencerede** `electron` ve Node yerleşikleri etkisiz yer tutuculardır.
+- **Ana süreçte** Solid ve yalnızca pencereye özgü modüller etkisiz yer tutuculardır.
+
+Bir yer tutucu modül kapsamında her özellik okumasını, çağrıyı veya oluşturmayı kabul eder; örneğin Solid'in yukarı
+taşınmış şablonları veya bir paketleyicinin yukarı taşınmış `require` çağrıları. Her sürecin kodunu kendi kurulumu içinde
+tutun: yanlış süreçte çalışan kod çalışan değerler yerine yer tutucular alır.
+
+`Plugin.define` ve sözleşme yardımcıları iki süreçte de tek bir SDK'dan gelir. Ana süreçte `@opencode/plugin/gui` ana
+SDK'ya çözümlenir; o da aynı `Plugin`, `Store`, `Ipc`, `Contract` ve `Registry` değerlerini dışa aktarır. Tek bir tanım
+iki sürece de hizmet eder. `Command`, `bindPlugin` ve `createKeyed` gibi yalnızca pencereye özgü dışa aktarımları ana
+süreçte `undefined` olur; bu nedenle onları yalnızca `setup` içinde kullanın.
+
+## Paketi derleme
+
+`./gui-experimental` önceden derlenmiş tek bir CommonJS dosyası olmalıdır. Onu `@opencode/plugin/gui/vite` paketindeki
+Vite ön ayarıyla derleyin:
+
+```ts title="vite.config.ts"
+import { defineConfig } from "vite"
+import { gui } from "@opencode/plugin/gui/vite"
+
+export default defineConfig({ plugins: [gui()] })
+```
+
+```bash
+vite build
+```
+
+Ön ayar şunları yapar:
+
+- Solid JSX'i `vite-plugin-solid` ile derler.
+- Tek bir CommonJS dosyası üretir ve her dinamik `import()` çağrısını satır içine alır; çünkü uygulama ikinci bir parça
+  yükleyemez.
+- Uygulamanın [paylaşılan modüllerini](#shared-modules), Electron ve Node yerleşiklerini external tutar ve diğer her
+  bağımlılığı paketler.
+- Diğer herhangi bir `effect/*`, `solid-js/*` veya `@opencode/*` modülünde derlemeyi başarısız kılar. Uygulama onu
+  sağlamaz ve paketlenmiş bir kopya uygulamanın örneğini paylaşmaz.
+
+```text
+effect/Schema is not a module the OpenCode app provides to plugin GUIs: effect, @opencode/plugin/gui, …
+```
+
+Bunun yerine paylaşılan girişten içe aktarın, örneğin `import { Schema } from "effect"`.
+
+### Ön ayar seçenekleri
+
+Girişi veya çıktı dosyasını değiştirmek için `gui()` istemcisine seçenekler iletin.
+
+```ts title="vite.config.ts"
+export default defineConfig({ plugins: [gui({ entry: "src/desktop.tsx", outFile: "dist/desktop.cjs" })] })
+```
+
+- `entry`, `Plugin.define` varsayılan dışa aktarımını yapan dosyadır. Varsayılan olarak `src/gui.tsx` olur.
+- `outFile`, `./gui-experimental` dışa aktarımının işaret ettiği pakettir. Varsayılan olarak `dist/gui-experimental.cjs`
+  olur.
+
+#### Referans
+
+```ts
+function gui(options?: GuiOptions): Plugin[]
+
+interface GuiOptions {
+  entry?: string
+  outFile?: string
+}
+```
+
+### Bağımlılıklar
+
+Derleme araçlarını devDependencies olarak ekleyin. Uygulama `@opencode/plugin/gui` paketini çalışma zamanında sağlar;
+bu nedenle paketin yalnızca `@opencode/plugin` bağımlılığından gelen türlerine ihtiyacı vardır.
+
+```bash
+bun add -d vite vite-plugin-solid solid-js
+```
+
+`main` içindeki Electron ve Node türleri için `electron` ve `@types/node` paketlerini de ekleyin:
+
+```bash
+bun add -d electron @types/node
+```
+
+### Paylaşılan modüller
+
+Her süreç bu modülleri pakete sağlar. İki sürecin de sağlamadığı bir modülü istemek eklentinin GUI'sini başarısız kılar.
+
+```ts
+import { Schema } from "effect" // Both processes
+import { createSignal } from "solid-js" // Windows; an inert placeholder in the main process
+import { readFile } from "node:fs/promises" // The main process; an inert placeholder in windows
+```
+
+- **İki süreç:** `effect`, `@opencode/plugin/gui`, `@opencode/plugin/gui/main`, `@opencode/plugin/rpc`,
+  `@opencode/schema/rpc`, `@opencode/client` ve `@opencode/client/effect`.
+- **Yalnızca pencereler:** `solid-js`, `solid-js/web`, `solid-js/store`, `@opencode/client/solid` ve
+  `@opencode/plugin/gui/{file,review,browser}`. Ana süreç etkisiz yer tutucular alır.
+- **Yalnızca ana süreç:** `electron` ve `node:fs` gibi Node yerleşikleri. Pencereler etkisiz yer tutucular alır.
+
+## GUI girişlerinin yüklendiği yer
+
+OpenCode Desktop GUI girişlerini, yapılandırmanızdaki eklentileri zaten yükleyen kendi arka plan sunucusundan yükler;
+böylece hiçbir zaman yeni bir kod kaynağı eklemezler. GUI'sinin her pencerede kullanılabilir olması için eklentiyi genel
+`opencode.json(c)` dosyasında yapılandırın.
+
+<Callout type="note">
+  TUI eklentilerini `cli.json` dosyasından okur, ancak masaüstü uygulaması yalnızca `opencode.json(c)` okur. Yalnızca TUI
+  parçası gönderen ve kullanıcıların `cli.json` içinde listelediği bir paket, `./gui-experimental` eklediğinde
+  `opencode.json(c)` içinde de listelenmelidir.
+</Callout>
+
+Masaüstü uygulamasının ana süreci eklentileri listeler ve paketlerini, yalnızca kendisinin sahip olduğu bir kimlik
+bilgisiyle kendi sunucusundan okur ve pencerelere aynı kümeyi gönderir. Bir pencere ana süreç kodu sağlayamaz.
+
+Sunucu parçası yüklenemeyen bir eklentinin GUI'si olmaz.
+
+## Yeniden yükleme ve güncellemeler
+
+Eklentiyi yerel dizininden yükleyin ve her değişiklikte yeniden derleyin:
+
+```bash
+vite build --watch
+```
+
+- `package.json` dosyasında `name` ve `exports` olan yerel bir dizin `./gui-experimental` değerini bunlar üzerinden
+  çözer. Bunlar yoksa kökünde `gui-experimental.cjs` (veya `.js`) yükler. Giriş `.cjs` veya `.js` olmalıdır; diğer her
+  dosya yok sayılır.
+- Her yeniden derleme eklentinin GUI'sini her pencerede ve ana süreçte yeniden yükler. Sunucu girişi yeniden başlamaz.
+- Kurulu bir paketin GUI'si yalnızca sürümüyle değişir.
+- Eklentinin `options` değerini `opencode.json(c)` içinde değiştirmek eklentiyi yeniden yükler.
+- `opencode plugin update` güncelleme bittiğinde bir paketin GUI'sini değiştirir.
+- [**Settings > Extensions > Plugins**](/plugins#desktop) eklentiyi, GUI'sini kapatan bir anahtarla listeler. Kaldırmak
+  için `opencode.json(c)` içinden kaldırın veya `opencode plugin remove <package>` çalıştırın.
+
+<Callout type="note">
+  Yerleşik eklenti kimlikleri ayrılmıştır. Eklentinizin kimliği yerleşik bir kimlikle aynıysa, `.` ile ayrılmış bir alt kimlik olarak onun altında veya üst kimlik olarak onun üstünde yer alıyorsa ya da `opencode` ad alanındaysa GUI yüklenmez. **Settings > Extensions > Plugins**, eklentinin yüklenmediğini gösterir.
+</Callout>
+
+## GUI eklentisini tanımlama
+
+`Plugin.define` eklentinin çalıştığı sistemleri, saklanan pencere durumunu, simgelerini ve metinlerini bildirir. Ana
+bilgisayar bu bildirimleri iki kurulumdan önce okur.
+
+```ts title="src/gui/definition.ts"
+import { Schema } from "effect"
+import { Plugin, Store } from "@opencode/plugin/gui"
+
+export const definition = Plugin.define({
+  os: ["macos", "linux"],
+  stores: {
+    prefs: Store.global(Schema.Struct({ enabled: Schema.Boolean }), { enabled: true }),
+  },
+  i18n: {
+    en: { title: "Acme", "command.open": "Open Acme" },
+    de: { title: "Acme", "command.open": "Acme öffnen" },
+  },
+})
+```
+
+- Ana bilgisayar eklentiye kimliğini verir, `ctx.id`: sunucu parçasının `id` değeri veya sunucu parçası olmayan bir paket
+  için paket adı (bir `name` içermeyen yerel dizin için dizin adı). Eklentinin oluşturduğu her kimliğin başına onu ekler:
+  komutlar (`<id>.<command>`), panel anahtarları (`<id>:<tab>`), saklanan anahtarlar (`plugin.<id>.<key>`) ve sağladığı
+  [sözleşmelerin ve Ipc'lerin](#contracts-and-tokens) kimlikleri.
+- `os`, eklentiyi belirli işletim sistemleriyle sınırlar. Eklentinin tüm işletim sistemlerinde çalışması için bu alanı belirtmeyin. Geçerli işletim sistemi `os` listesinde yoksa eklenti çalışmaz; **Settings > Extensions > Plugins** listesindeki satırında "Not available on this system." yazar.
+- `stores` pencereler için [saklanan durumu](#stored-state) bildirir. Bunu `ctx.stores.<key>` olarak okuyun.
+- `icons` eklentinin [kendi simgelerini](#icons), her biri bir SVG dosyasının metni olarak bildirir. Bir simgenin adını
+  `ctx.icons.<name>` olarak okuyun.
+- `i18n` yerel ayara göre metin tutar. Her yerel ayarı satır içinde yazın; İngilizce, bir yerel ayarın eksik bıraktığı
+  her anahtarı doldurur. Bunu `ctx.t(key, params)` ve `ctx.plural(key, count)` ile okuyun. Bir pencerede `ctx.t` ayrıca
+  uygulamanın `common.*` gibi paylaşılan anahtarlarını okur. `main` içinde eksik bir anahtar anahtarın kendisini
+  döndürür.
+- `setup`, `main` veya ikisini birden tanımlayın. İkisi de olmayan bir GUI yüklenemez.
+- Kurulumlar olmadan `Plugin.define`, bildirimleri bir `Plugin.Declarations` olarak döndürür; böylece başka dosyalardaki
+  kurulumlar bunlardan tiplenebilir. `Plugin.Definition`, tam tanımın türüdür.
+- Bir eklenti sağladığı veya kullandığı sözleşmeleri bildirmez. Onları çalışma zamanında sağlar ve okur; bkz.
+  [Sözleşmeler ve token'lar](#contracts-and-tokens).
+
+#### Referans
+
+```ts
+interface Declarations {
+  os?: ("macos" | "windows" | "linux")[]
+  stores?: Record<string, StoreDeclaration>
+  icons?: Record<string, string>
+  i18n?: { en: Messages; [locale: string]: Messages }
+}
+
+interface Definition extends Declarations {
+  setup?(ctx: SetupContext<this>): Cleanup | void
+  main?(ctx: MainContext): Cleanup | void | Promise<Cleanup | void>
+}
+
+type Messages = Record<string, string>
+
+type Cleanup = () => void | Promise<void>
+```
+
+### Dosyalara bölme
+
+Küçük bir GUI eklentisi `src/gui.tsx` içine sığar. Daha büyük bir eklenti için eklentiyi `definition.ts` içinde bildirin,
+paylaşılan token'ları `contract.ts` içine koyun, her kurulumu kendi dosyasına yazın ve bunları `src/gui.tsx` içinde
+birleştirin.
+
+```text
+src/
+├── index.ts            Server part: Plugin.define from @opencode/plugin
+├── rpc.ts              RPC contract between the server part and its clients
+├── gui.tsx             ./gui-experimental entry: export default Plugin.define({ ...definition, setup, main })
+└── gui/
+    ├── definition.ts   Plugin.define: os, stores, icons, i18n
+    ├── contract.ts     Tokens other code may import: Ipc, Contract, Registry
+    ├── window.tsx      Window setup: Plugin.Setup<typeof definition>
+    ├── main.ts         Main setup: Plugin.MainSetup (desktop only)
+    ├── page.tsx        Components that panels and pages render
+    ├── icons/logo.svg  The plugin's own icons
+    └── i18n/en.ts      English copy
+```
+
+`./gui-experimental` dosyasının tamamı bir pencere açıldığında değerlendirilir; bu nedenle modül kapsamını ve `setup`
+bölümünü hafif tutun. Katkıları orada kaydedin ve pahalı işleri bileşenler, `createKeyed` veya `createLatest` içinde
+yapın.
+
+Daha büyük bir eklenti için önce eklentiyi bildirin, her kurulumu bildirimlerden tiplendirin, ardından eklentiyi onlarla
+tanımlayın.
+
+```ts title="src/gui/definition.ts"
+import { Schema } from "effect"
+import { Plugin, Store } from "@opencode/plugin/gui"
+
+export const definition = Plugin.define({
+  stores: { notes: Store.global(Schema.Struct({ count: Schema.Number }), { count: 0 }) },
+})
+```
+
+```tsx title="src/gui/window.tsx"
+import type { Plugin } from "@opencode/plugin/gui"
+import { Notes } from "./contract"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.provide(Notes, { count: () => ctx.stores.notes.value.count })
+}
+```
+
+```ts title="src/gui/main.ts"
+import type { Plugin } from "@opencode/plugin/gui"
+
+export const main: Plugin.MainSetup = (ctx) => {
+  ctx.log.write("info", "acme started")
+}
+```
+
+```tsx title="src/gui.tsx"
+import { Plugin } from "@opencode/plugin/gui"
+import { definition } from "./gui/definition"
+import { main } from "./gui/main"
+import { setup } from "./gui/window"
+
+export default Plugin.define({ ...definition, setup, main })
+```
+
+- `Plugin.Setup<typeof definition>` bir pencere kurulumunun türüdür. `ctx.stores` değerini bildirilen store'lardan,
+  `ctx.icons` değerini bildirilen simgelerden tiplendirir.
+- `Plugin.MainSetup` bir ana kurulumun türüdür ve `Plugin.Cleanup`, iki kurulumun da döndürebileceği temizleme işlevinin
+  türüdür.
+- `Command`, `SettingsPage`, `Panel`, `Slot`, `Contract`, `Ipc`, `Registry`, `Store`, `createKeyed`, `usePlugin` ve
+  `bindPlugin` gibi kayıt defterlerini, token'ları ve yardımcıları `@opencode/plugin/gui` paketinden içe aktarın.
+- `MenubarItem` gibi yalnızca ana sürece özgü kayıt defterlerini `@opencode/plugin/gui/main` paketinden içe aktarın.
+
+## Paylaşılan bağlam
+
+İki kurulum da eklentinin seçeneklerini, OpenCode sunucusu için bir istemciyi ve uygulama üst verisini, sunucu ve TUI
+parçaları gibi alır.
+
+### Seçenekler
+
+`ctx.options`, eklentinin `opencode.json(c)` girdisindeki `options` değerini tutar: sunucu parçasının aldığı aynı
+değerler.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [{ "package": "opencode-acme-plugin", "options": { "team": "core" } }],
+}
+```
+
+```ts
+setup(ctx) {
+  const team = ctx.options.team
+}
+```
+
+- Seçenekleri değiştirmek eklentiyi yeniden yükler.
+
+### Sunucu istemcisi
+
+`ctx.client`, eklentiyi çalıştıran sunucunun, yani masaüstü uygulamasının kendi sunucusunun OpenCode istemcisidir.
+Sunucu parçanızı [RPC](/build/plugins/rpc) üzerinden çağırmak için kullanın.
+
+```ts
+import { Command } from "@opencode/plugin/gui"
+import { Acme } from "./rpc"
+
+ctx.add(Command, () => ({
+  id: "search",
+  title: ctx.t("command.search"),
+  run: async () => {
+    const result = await ctx.client.rpc(Acme).search({ query: "todo" })
+    console.log(result)
+  },
+}))
+```
+
+- `ctx.client` değerini çağrı yaptığınız yerde okuyun. Sunucu yeniden başlatıldığında istemci değişir.
+- Sunucuya ulaşılamadığında tüm çağrılar reddedilir.
+
+### Uygulama üst verisi
+
+`ctx.app` çalışan uygulamayı açıklar.
+
+```ts
+if (!ctx.app.packaged) console.log(`Acme on ${ctx.app.name} ${ctx.app.version} (${ctx.app.channel})`)
+```
+
+- `name`, bir sunucu eklentisinin `ctx.app.name` değerinde olduğu gibi `"opencode"`dur.
+- `platform`, Electron uygulamasında ve `main` içinde `"desktop"`, bir tarayıcı sekmesinde `"web"` olur.
+- `packaged`, masaüstü uygulaması paketlenmiş olarak çalıştığında `true` olur. Web'de her zaman `false`dur.
+- Sunucu eklentileri `name`, `version` ve `channel` alır; TUI eklentileri `version` ve `channel` alır.
+
+#### Referans
+
+```ts
+interface App {
+  name: string
+  version: string
+  channel: "local" | "dev" | "beta" | "prod"
+  platform: "web" | "desktop"
+  packaged: boolean
+}
+```
+
+## Sözleşmeler ve token'lar
+
+Token'lar, GUI eklentilerinin birbirlerinin çalışma zamanı kodunu içe aktarmadan süreçler arasında ve birbirleriyle
+konuşmasını sağlar. Her token'ı `contract.ts` içine koyun. Bir token yalnızca türünü ve kimliğini, ayrıca bir `Ipc`'nin
+şemalarını tutar; böylece diğer eklentiler onu çalışma zamanı kodunuz olmadan içe aktarabilir.
+
+- `ctx.provide(token, impl)` kendi token'larınızdan birini sağlar: pencere kurulumundan bir `Contract` veya `main`
+  içinden bir `Ipc`.
+- `ctx.use(token)` başka bir eklentinin sağladığı bir sözleşmeyi veya `Ipc`'yi izler. Bir
+  [`Live`](#live-dependencies-and-failure-handling) erişimcisi döndürür.
+- `ctx.main(ipc)` kendi `main` bölümünüzün sağladığı bir `Ipc` için istemci döndürür.
+
+Bir eklenti yalnızca kimliği kendi kimliği olan veya onunla başlayan token'ları, `<id>.<name>` biçiminde sağlar.
+`ctx.provide` diğer her kimlik için, `ctx.main` ise kimliğinizin dışındaki bir `Ipc` için hata fırlatır. Bu sayfadaki
+örnekler `acme` eklenti kimliğini kullanır; bu nedenle token kimlikleri `acme.` ile başlar.
+
+```ts
+Contract.define<AcmeBadge, "acme.badge">("acme.badge") // Plugin acme can provide it.
+Contract.define<AcmeBadge, "badge">("badge") // ctx.provide throws in plugin acme.
+```
+
+### Sözleşmeler
+
+Bir eklentinin pencere kurulumu diğer eklentilerin pencere kurulumlarına bir API veya Solid bileşeni sunduğunda
+`Contract.define` kullanın.
+
+```ts title="src/gui/contract.ts"
+import type { JSX } from "solid-js"
+import { Contract } from "@opencode/plugin/gui"
+
+export interface AcmeBadge {
+  Badge(props: { readonly label: string }): JSX.Element
+  count(): number
+}
+
+export const AcmeBadge = Contract.define<AcmeBadge, "acme.badge">("acme.badge")
+```
+
+Onu pencere kurulumundan `ctx.provide` ile sağlayın. Sözleşme bir bileşen tutuyorsa kurulum sırasında `bindPlugin` ile
+sarın. Ardından içindeki `usePlugin()`, tüketicinin değil sağlayıcının bağlamını okur.
+
+```tsx title="src/gui.tsx"
+import { bindPlugin, Plugin } from "@opencode/plugin/gui"
+import { AcmeBadge } from "./gui/contract"
+
+export default Plugin.define({
+  i18n: { en: { title: "Acme" } },
+  setup(ctx) {
+    ctx.provide(AcmeBadge, {
+      Badge: bindPlugin((props: { readonly label: string }) => (
+        <span>
+          {ctx.t("title")}: {props.label}
+        </span>
+      )),
+      count: () => 42,
+    })
+  },
+})
+```
+
+- `bindPlugin` ile sardığınız bir bileşenin prop'larını `bindPlugin((props: FileTreeProps) => ...)` gibi açıkça
+  belirtin. TypeScript bunları `ctx.provide` içinde çıkaramaz.
+- `count` gibi veri yöntemlerini sarmadan bırakın.
+- `ctx.provide`, sözleşmeyi erken geri çeken bir işlev döndürür. Ana bilgisayar onu geçerli sahiple, o yoksa eklenti
+  durduğunda da geri çeker.
+
+### Başka bir eklentinin sözleşmesini kullanma
+
+`contract.ts` dosyasını paketinizden, örneğin `./contract` olarak dışa aktarın; böylece diğer eklentiler token'larını içe
+aktarabilir. Başka bir eklenti sözleşmeyi `ctx.use(token)` ile izler. Erişimcinin değeri sağlayıcı başladıkça, durdukça
+ve yeniden başladıkça değişir; bu nedenle onu kullandığınız yerde okuyun.
+
+```tsx title="src/gui.tsx"
+import { Plugin, Slot } from "@opencode/plugin/gui"
+import { AcmeBadge } from "opencode-acme-plugin/contract"
+
+export default Plugin.define({
+  setup(ctx) {
+    const badge = ctx.use(AcmeBadge)
+
+    const count = () => {
+      const live = badge()
+
+      return live.status === "active" ? live.value.count() : 0
+    }
+
+    ctx.add(Slot, { at: "window.bottom", render: () => <span>{count()}</span> })
+  },
+})
+```
+
+- `ctx.use`, token'la yapılan her çağrı için aynı erişimciyi döndürür.
+- Tüketici, sağlayıcı kapalıyken çalışmaya devam eder. Bkz.
+  [Canlı bağımlılıklar ve hata işleme](#live-dependencies-and-failure-handling).
+
+### Ana süreç ile pencereler arasında IPC
+
+`main` ile `setup` arasında tipli bir köprü tanımlamak için Effect `Schema` kodekleriyle `Ipc.define` kullanın. `main` onu
+`ctx.provide` ile uygular ve pencere `ctx.main` üzerinden çağırır.
+
+```ts title="src/gui/contract.ts"
+import { Schema } from "effect"
+import { Ipc } from "@opencode/plugin/gui"
+
+export const KeepAwake = Ipc.define({
+  id: "acme.awake",
+  methods: {
+    screenActive: { output: Schema.Boolean },
+    setScreenActive: { input: Schema.Boolean },
+  },
+})
+```
+
+```ts
+const awake = ctx.main(KeepAwake)
+
+await awake.setScreenActive(true)
+```
+
+- Diğer eklentiler `Ipc`'nizi bir sözleşme gibi `ctx.use(KeepAwake)` ile izler.
+- Durum, olaylar ve sağlayıcı için [Bir Ipc tanımlama ve sağlama](#define-and-provide-an-ipc) bölümüne bakın.
+
+### Eklentinizin sahip olduğu kayıt defterleri
+
+Eklentinizin sahip olduğu bir liste için `Registry.define` kullanın. Diğer eklentiler `ctx.add` ile öğe katkı olarak
+verir ve eklentiniz onları `ctx.list` ile okur.
+
+```ts title="src/gui/contract.ts"
+import { Registry } from "@opencode/plugin/gui"
+
+export interface Exporter {
+  readonly id: string
+  readonly title: string
+  run(text: string): void
+}
+
+export const Exporter = Registry.define<Exporter>("acme.exporter")
+```
+
+```tsx
+// Another plugin contributes an item.
+ctx.add(Exporter, () => ({ id: "gist", title: ctx.t("exporter.gist"), run: (text) => upload(text) }))
+
+// The owner lists every contribution. Reactive: read it in render or in a memo.
+const exporters = () => ctx.list(Exporter)
+```
+
+## Pencere
+
+Bir eklentinin `setup` bölümü her masaüstü uygulaması penceresinde çalışır. Onu eklentinin
+[`./gui-experimental` dosyasında](#define-the-gui-plugin) `@opencode/plugin/gui` paketinden `Plugin.define` istemcisine
+iletin. `setup` eşzamanlıdır ve bir temizleme işlevi döndürebilir; bkz.
+[Ömürler ve temizlik](#lifetimes-and-cleanup).
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+
+export default Plugin.define({
+  i18n: { en: { open: "Open Acme" } },
+  setup(ctx) {
+    ctx.add(Command, () => ({
+      id: "open",
+      title: ctx.t("open"),
+      run: () => ctx.system.openExternal("https://acme.example"),
+    }))
+  },
+})
+```
+
+## Bileşenler
+
+Solid bileşenleri içinde, `setup` bölümünün aldığı aynı bağlam nesnesi için `usePlugin<typeof definition>()` çağırın.
+Bunu kendi dosyalarındaki bildirimlerden tiplendirin ([dosyalara bölme](#split-across-files)); böylece bileşen ve tanım
+birbirini içe aktarmaz.
+
+```tsx title="src/gui/window.tsx"
+import { Slot, usePlugin, type Plugin } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+function StatusLabel() {
+  const ctx = usePlugin<typeof definition>()
+
+  return <span>{ctx.t("title")}</span>
+}
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.add(Slot, { at: "window.bottom", render: () => <StatusLabel /> })
+}
+```
+
+`usePlugin` bir eklenti katkısının dışında hata fırlatır. Başka bir eklentinin render ettiği bir bileşende o eklentinin
+bağlamını döndürür; bu nedenle bir sözleşme üzerinde sağladığınız bileşeni `bindPlugin` ile sarın; bkz.
+[Sözleşmeler](#contracts).
+
+## Simgeler
+
+SDK'nın her `icon` alanı ve `ctx.ui.Icon`, bir `IconName` alır: uygulamanın kendi simgelerinden birinin veya eklentinizin
+bildirdiği bir simgenin adı. Diğer her dize derlenmez.
+
+```ts
+ctx.add(TitlebarItem, () => ({ id: "sync", label: ctx.t("sync"), icon: "server", run: () => sync() }))
+```
+
+### Kendi simgelerinizi bildirme
+
+Uygulamanın sahip olmadığı görseller, örneğin ürününüzün işareti için SVG dosyasını paketinizde tutun ve `icons` içinde
+bildirin. Dosyayı `?raw` ile içe aktarın; `gui()` ön ayarı onu metin olarak paketler.
+
+```ts title="src/gui/definition.ts"
+import { Plugin } from "@opencode/plugin/gui"
+import logo from "./icons/logo.svg?raw"
+
+export const definition = Plugin.define({
+  icons: { logo },
+})
+```
+
+Ardından bir `IconName` gereken her yerde simgenin adını `ctx.icons` üzerinden iletin.
+
+```tsx title="src/gui/window.tsx"
+import { ComposerPill, Slot, type Plugin } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.add(ComposerPill, {
+    id: "sync",
+    show: () => ({ label: ctx.t("synced"), icon: ctx.icons.logo, tone: "success" }),
+  })
+
+  ctx.add(Slot, { at: "window.bottom", render: () => <ctx.ui.Icon name={ctx.icons.logo} size="small" /> })
+}
+```
+
+- `ctx.icons`, bildirdiğiniz her simge için bir ad içerir. Bildirmediğiniz bir ad derlenmez.
+- Ana bilgisayar simgelerinizi `setup` çalışmadan önce kaydeder ve eklenti ortadan kalktığında geri çeker.
+- SVG belgesi olmayan bir değer, eklentiyi başladığında başarısız kılar.
+- `?raw` içe aktarımının tür denetiminden geçmesi için `tsconfig.json` dosyanızda `types` listesine `"vite/client"`
+  ekleyin.
+
+### Simge çizme
+
+Ana bilgisayar simgenizi kendi simgelerini çizdiği gibi çizer: onu gösteren yerin boyutunda ve renginde.
+
+```xml title="src/gui/icons/logo.svg"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+  <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
+  <path d="M5 8.5 7 10.5 11 6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
+```
+
+- `viewBox` çizimi çerçeveler, o yoksa `width` ve `height` çerçeveler. Ana bilgisayar onu 14, 16 veya 20 piksele
+  ölçekler; bu nedenle 16 piksellik bir ızgara üzerinde çizin.
+- `currentColor` ile çizin. Simge böylece bulunduğu yerin rengini alır, örneğin bir pill'in `tone` değerini veya bir menü
+  satırının soluk simge rengini.
+- Çizimdeki bir `id` tüm pencereye aittir. Kimlikleri benzersiz tutun veya hiç koymayın.
+
+### Simge animasyonu
+
+Bir simge hareket edebilir, örneğin bir işin sürdüğünü göstermek için. Dosya içinde `animate` ve `animateTransform` gibi
+SVG animasyon öğelerini kullanın.
+
+```xml title="src/gui/icons/working.svg"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+  <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
+  <circle cx="8" cy="8" r="2" fill="currentColor">
+    <animate attributeName="r" values="2;4.5;2" dur="2.4s" repeatCount="indefinite" />
+  </circle>
+</svg>
+```
+
+- Animasyon, simgenin göründüğü tüm yerlerde eşzamanlı ilerler.
+- Uygulama, simgeyi gösteren öğeyi yeniden oluşturduğunda da animasyon kaldığı yerden sürer. Örneğin bir pill'in `show` işlevi yeniden çalıştığında animasyon başa dönmez.
+- Kullanıcı hareketi azaltma ayarını açtıysa uygulama her simgeyi ilk karesinde sabit tutar. İlk karede simgenin hareketsiz hâlini gösterin.
+- Hiçbir yerin göstermediği bir simgenin maliyeti yoktur.
+
+### Saklanan simge adları
+
+Bir simgenin adı bir dizedir, `<plugin id>:<name>`; bu nedenle ana bilgisayar onu kendi simgelerinden birinin adı gibi
+saklar. Bir [giriş alanı notu veya alıntısı](#attach-to-the-composer) onu taslakla ve gönderilen mesajla, bir
+[kapatılmış sekme](#reopen-closed-tabs) ise oturumun düzeniyle birlikte tutar.
+
+```ts
+ctx.screen.current()?.composer.attach({
+  type: "note",
+  origin: ctx.id,
+  commentID: crypto.randomUUID(),
+  label: "button#submit",
+  icon: ctx.icons.logo,
+  subject: 'element <button id="submit">Save</button>',
+  comment: "",
+})
+```
+
+- Eklentiniz etkin değilken simge hiçbir şey çizmez ve boyutunu korur.
+- Adı kullandığınız yerde `ctx.icons` üzerinden okuyun. Elle yazılmış bir ad derlenmez.
+
+#### Referans
+
+```ts
+type IconName = AppIconName | PluginIconName
+
+// One of the app's own icons, such as "folder", "github" or "terminal".
+type AppIconName = string
+
+// The name of an icon the plugin declared, from ctx.icons.
+type PluginIconName = string
+
+interface Declarations {
+  icons?: Record<string, string>
+}
+
+interface SetupContext<D> extends Context {
+  icons: Record<string, PluginIconName>
+}
+```
+
+## Kayıt defterleri
+
+Pencere kabuğuna katkı vermek için `ctx.add` istemcisine bir kayıt defteri token'ı ve bir öğe iletin. Öğe dil gibi
+tepkisel durumu izliyorsa onu bir işlev olarak iletin, `() => item | undefined`. Okuduğu şey değiştiğinde ana bilgisayar
+işlevi yeniden çalıştırır. İşlev yeniden bir öğe döndürene kadar öğeyi geri çekmek için `undefined` döndürün.
+
+```ts
+ctx.add(Command, () => ({ id: "open", title: ctx.t("command.open"), run: () => open() }))
+```
+
+- Etiketleri işlev içinde `ctx.t` ile okuyun. Sabit bir öğede bir kez okunan etiket, okunduğu dili korur.
+- Öğede `hidden: true`, bir `section`, bir `icon` veya bir menü adı gibi değişmez türde bir alan varsa işlevin dönüş
+  türünü belirtin: `(): Command => ({ ... })`. Aksi halde TypeScript alanı `string` veya `boolean` olarak genişletir ve
+  hiçbir aşırı yükleme eşleşmez.
+- Hiç değişmeyen bir öğe için sabit öğe iletin, örneğin bir [stil](#styles).
+- Ana bilgisayar bazı nesneleri kararlı tutar: bir panelin `list` ile döndürdüğü sekmeler ve paneller ile ayar sayfaları
+  gibi `render` içeren öğeler. Etiketlerini alıcılardan okuyun, örneğin `get title() { return ctx.t("title") }`.
+- `ctx.add` öğeyi erken geri çeken bir işlev döndürür.
+
+### Komutlar
+
+`Command` komut paletine, **Settings > Shortcuts** bölümüne ve isteğe bağlı olarak giriş alanının `/` menüsüne bir eylem
+ekler. Ana bilgisayar komutu `<plugin id>.<command id>` olarak yayımlar.
+
+```ts
+import { Command } from "@opencode/plugin/gui"
+
+ctx.add(
+  Command,
+  (): Command => ({
+    id: "toggle",
+    title: ctx.t("command.toggle"),
+    keywords: "notes scratch",
+    group: ctx.t("command.category.view"),
+    section: "terminal",
+    bind: "ctrl+`",
+    slash: { name: "notes", after: "open" },
+    featured: true,
+    enabled: !!ctx.sessions.current(),
+    run: () => {
+      const session = ctx.sessions.current()
+
+      if (session) ctx.layout.toggle(`${ctx.id}:main`, session)
+    },
+  }),
+)
+```
+
+- `title` palet etiketidir, `description` ikinci satırıdır ve `group` çevrilmiş metin olarak kategorisidir.
+- `keywords`, paletin eşleştirdiği ek sözcükleri boşlukla ayrılmış olarak tutar.
+- `section`, **Settings > Shortcuts** bölümüdür. Varsayılan olarak `general` olur.
+- `bind` varsayılan tuş atamasıdır, örneğin `mod+shift+t`. Kullanıcılar onu değiştirebilir.
+- `slash` komutu `/` menüsünde de sunar. `arguments: true` ile adın ardından gelen metin `run(input)` işlevine gider.
+- `hidden` komutu paletten uzak tutar, ancak tuş ataması yine çalışır.
+- `suggested` komut etkinken **Suggested** altında da listeler. `featured` palet sorgusuz açıldığında listeler.
+- `enabled: false` komutu paletten çıkarır ve tuş atamasını kapatır. Tepkiseldir.
+- `scope`, atamanın geçerli olması için klavye odağının içinde olması gereken bir CSS seçicisidir. `editable` ile atama
+  bir metin alanı odaktayken de tetiklenir.
+- Bir komutu kendi kodunuzdan çalıştırmak için `ctx.commands.run` kullanın; bkz. [Komutları çalıştırma](#run-commands).
+
+Komut bir tuş atamasıyla çağrıldığında `run`, tuş olayını işlememek için `false` döndürebilir. Olay bu durumda komutun tuş ataması yokmuş gibi asıl hedefine gider. Aşağıdaki komut, kullanıcı boş bir prompt'ta Enter'a bastığında oturumu sürdürür; diğer Enter basışlarını giriş alanına bırakır:
+
+```ts
+ctx.add(Command, () => ({
+  id: "continue",
+  title: ctx.t("command.continue"),
+  bind: "enter",
+  editable: true,
+  hidden: true,
+  run: () => {
+    const composer = ctx.screen.current()?.composer
+    const session = ctx.sessions.current()
+
+    if (!composer?.focused() || composer.text().trim() || !session) return false
+    void session.server.client.session.prompt({ sessionID: session.id, text: ctx.t("continue") })
+  },
+}))
+```
+
+- `false` değerini eşzamanlı olarak döndürün. Promise döndürürseniz tuş olayı işlenmiş sayılır.
+- Palette veya eğik çizgi komutunda `false` başka bir şey yapmaz.
+
+#### Referans
+
+```ts
+interface Command {
+  id: string
+  title: string
+  description?: string
+  keywords?: string
+  group?: string
+  section?: "general" | "session" | "navigation" | "model" | "terminal" | "prompt"
+  bind?: string
+  slash?: { name: string; arguments?: true; after?: string }
+  hidden?: true
+  suggested?: boolean
+  featured?: true
+  enabled?: boolean
+  scope?: string
+  editable?: true
+  run(input?: string): void | false | Promise<void>
+}
+```
+
+### Paneller
+
+`Panel`, bir oturumun yan bölgesine (`region: "side"`) sekmeler katkı olarak verir. Kullanıcı bir sekmeyi zaman
+çizelgesinin altındaki alt bölmeye sürükleyebilir.
+
+```tsx
+import { Panel, type PanelTab } from "@opencode/plugin/gui"
+
+const mainTab: PanelTab = {
+  id: "main",
+  get title() {
+    return ctx.t("panel.title")
+  },
+  closable: "compact",
+  fallback: true,
+}
+
+ctx.add(Panel, {
+  id: "main",
+  region: "side",
+  mobile: {
+    get title() {
+      return ctx.t("panel.title")
+    },
+    order: 45,
+    kind: "menu",
+    icon: "file-tree",
+  },
+  list: (input) => (input.open.includes("main") ? [mainTab] : []),
+  render: (props) => <NotesView session={props.session} screen={props.screen} tab={props.tab} />,
+})
+```
+
+Tüm panel geri çağırmaları (`list`, `render`, `focus`, `enter`, `close`, `closed`, `restore`, `normalize`) tek bir girdi
+nesnesi alır:
+
+- `props.session` ve `props.tab` değerlerini kullandığınız yerde tepkisel alıcılar olarak okuyun. `render` başında onları
+  asla parçalara ayırmayın: kullanıcı oturum A'dan B'ye geçtiğinde panel bağlı kalır ve `props.session` yerinde
+  güncellenir.
+- `props.screen`, paneli barındıran ve değişmeyen `SessionScreen` nesnesidir (`file`, `comment`, `composer`). Eylemleri her zaman geçerli rotadaki oturumu hedefler.
+- Bir sekme değişmediği sürece `list` işlevinden aynı `PanelTab` nesnesini döndürün; böylece ana bilgisayar tetikleyicisini
+  yeniden bağlamaz. Etiketlerini alıcılardan okuyun; böylece yeni bir nesne olmadan dili izlerler.
+
+Bir panelin geri çağırmaları:
+
+- `list` gösterilecek sekmeleri döndürür. `input.open`, bu eklentinin oturumda saklanan sekme kimliklerini tutar.
+  Tepkiseldir.
+- `render` bir sekmenin içeriğini bir kez render eder.
+- `focus` bir sekme seçildiğinde çalışır. `restored`, bölgenin bağlandığı seçim için `true` olur.
+- `enter`, kullanıcı yan bölgeyi anahtarıyla sekmede açtığında, sekme ekranda olduğunda çalışır. Klavye odağını sekmenin
+  kendi hedefine, örneğin bir metin alanına taşıyın. Odak hâlâ bölgenin dışındaysa ana bilgisayar bölgeye odaklanır.
+- `close`, ana bilgisayar bir sekmeyi kaldırdıktan sonra çalışır.
+- `closed` ve `restore`, kullanıcının kapatılmış bir sekmeyi yeniden açmasını sağlar; bkz.
+  [Kapatılmış sekmeleri yeniden açma](#reopen-closed-tabs).
+- `normalize`, birden fazla şekilde saklanabilecek bir sekme kimliğinin kurallı biçimini döndürür.
+
+Bir panelin seçenekleri:
+
+- `mobile` panele dar ekran görünümü ekler. `cached: true` ile kullanıcı başka bir görünüm gösterirken görünüm bağlı
+  kalır. Varsayılan olarak görünüm her gösterildiğinde bağlanır.
+- `wide`, yan bölge açıkken oturumun daha geniş asgari genişliğini ister.
+- `width` panele kendi yan bölge genişliğini verir; bkz. [Panel genişliği](#panel-width).
+- `transient` panellerin sekmeleri geri yüklenmez.
+
+#### Panel genişliği
+
+Varsayılan olarak yan bölgedeki her sekme konuşmanın genişliğini paylaşır. Paneliniz bir inceleme veya tarayıcıdan daha az
+veya daha çok yere ihtiyaç duyuyorsa `width` ayarlayın. CSS pikseli veya bölgenin gittiği en dar değer için `"narrow"`
+iletin.
+
+```ts
+ctx.add(Panel, {
+  id: "quota",
+  region: "side",
+  width: "narrow",
+  list: (input) => (input.open.includes("quota") ? [tab] : []),
+  render: () => <Quota />,
+})
+```
+
+- Genişlik, yan bölme panelin sekmelerinden birini gösterirken uygulanır. Diğer sekmeler konuşmanın genişliğini korur.
+- Kullanıcı panelin sekmelerinden birinde ayırıcıyı sürüklediğinde ana bilgisayar o genişliği panel için, `width` yerine,
+  uygulama genelinde saklar.
+- Ana bilgisayar konuşmayı asgari genişliğinde ve bölgeyi en az `"narrow"` değerinde tutar.
+- `ctx.layout.side.width(panel)` saklanan genişliği okur ve `ctx.layout.side.resize(panel, width)` bir sürükleme gibi
+  genişlik saklar. Saklanan genişlik `width` içermeyen bir panele bile uygulanır.
+
+Bir sekmenin seçenekleri:
+
+- `id` sekme kimliğidir; ana bilgisayar anahtarı `<plugin id>:<id>` olur. `title` erişilebilir adıdır ve `label` özel
+  tetikleyici içeriği render eder.
+- `pinned` sekmeler açılmadan listelenir, önce gelir ve asla kapatılmaz veya sürüklenmez.
+- `draggable` kullanıcının sekmeyi yeniden sıralamasına izin verir. Varsayılan olarak `true` olur.
+- `closable` kapatma düğmesinin görünümünü belirler: `"compact"`, `"hover"` veya hiçbiri için `false`.
+- `transient`, sonraki önizlemenin değiştireceği bir başlatıcı sekmesini, örneğin **Open file**, işaretler.
+- `fallback`, saklanan seçim eksik olduğunda yedek seçime izin verir.
+- Bir `group` içindeki sekmeler bağlı kalan tek bir render paylaşır.
+- `missing` sekmeyi üstü çizili gösterir, örneğin artık var olmayan bir dosya için.
+- `hidden`, geri yüklenen bir sekmeyi, içeriği henüz bilinmezken listelenmiş ve seçilebilir ama çizilmemiş tutar.
+- `file` sekmenin gösterdiği çalışma alanı yoludur ve oturumun açık dosyalarından biri olarak listelenir.
+- `tabbable` odaklanabilir öğesi olmayan içerik için sekme panelini sekme sırasına koyar.
+
+#### Referans
+
+```ts
+interface Panel {
+  id: string
+  region: "side"
+  mobile?: MobileView
+  wide?: boolean
+  width?: number | "narrow"
+  transient?: boolean
+  list(input: { session: MountedSession; screen: SessionScreen; open: string[] }): PanelTab[]
+  render(props: PanelProps): JSX.Element
+  focus?(input: PanelProps & { restored: boolean }): void
+  enter?(input: PanelProps): void
+  close?(input: PanelProps): void
+  closed?(input: PanelProps): ClosedPanelTab | false | undefined
+  restore?(input: { session: MountedSession; screen: SessionScreen; id: string; data?: string }): void
+  normalize?(input: { id: string; session: MountedSession; screen: SessionScreen }): string
+}
+
+interface PanelProps {
+  tab: PanelTab
+  session: MountedSession
+  screen: SessionScreen
+}
+
+interface PanelTab {
+  id: string
+  title: string
+  label?(state: { active: boolean; preview: boolean; session: MountedSession }): JSX.Element
+  pinned?: boolean
+  draggable?: boolean
+  closable?: "compact" | "hover" | false
+  transient?: boolean
+  fallback?: boolean
+  group?: string
+  missing?: boolean
+  hidden?: boolean
+  file?: string
+  tabbable?: boolean
+}
+
+interface MobileView {
+  title: string
+  order: number
+  kind: "tab" | "menu" | "drawer"
+  icon?: IconName
+  cached?: boolean
+}
+```
+
+### Kapatılmış sekmeleri yeniden açma
+
+Ana bilgisayar, kullanıcının kapattığı her yan sekme için bir girdi tutar. Odak yan bölgedeyken ⌘⇧T en yenisini yeniden
+açar. Yan bölgenin **New tab** görünümü, bir `file` gösteren kapatılmış sekmeleri **Recently closed** altında listeler.
+Bir sekmenin orada nasıl okunacağını ve nasıl geri geleceğini denetlemek için `closed` ve `restore` ekleyin.
+
+```tsx
+ctx.add(Panel, {
+  id: "page",
+  region: "side",
+  list: (input) => input.open.map(pageTab),
+  render: (props) => <PageView tab={props.tab} />,
+  closed: (input) => {
+    const url = pages.get(input.tab.id)
+
+    return url ? { icon: "globe", detail: new URL(url).host, data: url } : false
+  },
+  restore: (input) => {
+    if (input.data) openPage(input.session, input.data)
+  },
+})
+```
+
+- `closed`, kullanıcı bir sekmeyi kapatırken çalışır. Yeniden açmanın ihtiyaç duyduğunu şimdi yakalayın: satırın nasıl
+  okunacağını ve `restore` işlevinin ihtiyaç duyduğu `data` değerini döndürün veya sekme geri gelemeyecekse `false`
+  döndürün.
+- `title` varsayılan olarak sekmenin başlığı, `icon` panelin mobil simgesidir. `file` içeren bir sekme dosya simgesini ve
+  klasörünü `detail` olarak gösterir.
+- Ana bilgisayar girdiyi saklar; bu nedenle `data` değerini küçük tutun, örneğin bir URL.
+- `restore`, kapatılan sekmenin `id` değerini ve `closed` işlevinin döndürdüğü `data` değerini alır. `restore` yoksa ana
+  bilgisayar aynı anahtarı yeniden açar.
+- `closed` yoksa `transient` olmayan bir sekme başlığı altında listelenir ve aynı anahtar altında yeniden açılır.
+
+#### Referans
+
+```ts
+interface ClosedPanelTab {
+  title?: string
+  icon?: IconName
+  detail?: string
+  data?: string
+}
+```
+
+### Ayar sayfaları
+
+`SettingsPage`, **Settings** bölümüne bir sayfa, bir ana bilgisayar sayfasında bir bölüm (`page: "general"` veya
+`page: "servers"`) veya ana bilgisayarın General bölümünde satırlar (`page: "general", section: "general"`) katkı olarak
+verir.
+
+```tsx
+import { SettingsPage } from "@opencode/plugin/gui"
+import { AcmeSettings } from "./settings"
+
+ctx.add(SettingsPage, {
+  id: "acme",
+  icon: "server",
+  get title() {
+    return ctx.t("title")
+  },
+  get entries() {
+    return [{ id: "sync", title: ctx.t("settings.sync"), keywords: "sync remote" }]
+  },
+  render: (input) => <AcmeSettings highlight={input.target} />,
+})
+```
+
+- `id`, sayfanın ayar sekmesi değeridir (`/settings?tab=<id>`) ve `ctx.layout.settings` için argümandır.
+- `page`, sayfa yerine bir ana bilgisayar sayfasına bölüm ekler. `section: "general"` ile o sayfanın General bölümüne
+  satırlar ekler.
+- `title` ve `icon`, sayfanın gezinme etiketi ve simgesidir.
+- `entries`, sayfayı bağlamadan dizinlenen arama üst verisidir. Arama bir girdiyi ortaya çıkardığında `render`, onun
+  kimliğini `target` olarak alır.
+- Bir ayar sayfasının `render` değeri vardır; bu nedenle ana bilgisayar onu kararlı tutar. Etiketlerini ve girdilerini
+  alıcılardan okuyun.
+
+Sayfayı uygulamanın ayar bileşenleriyle render edin; böylece uygulamanın kendi sayfaları gibi görünür ve arama satırlarını
+ortaya çıkarabilir:
+
+```tsx
+const ui = ctx.ui
+
+const AcmeSettings = () => (
+  <ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")}>
+    <ui.SettingsSection title={ctx.t("settings.section")}>
+      <ui.SettingsRow id="sync" title={ctx.t("settings.sync")} description={ctx.t("settings.sync.description")}>
+        <ui.Switch label={ctx.t("settings.sync")} hideLabel checked={sync()} onChange={setSync} />
+      </ui.SettingsRow>
+    </ui.SettingsSection>
+  </ui.SettingsLayout>
+)
+```
+
+- Kendi sayfanız `SettingsLayout`, bir ana bilgisayar sayfasındaki bölüm (`page`) `SettingsSection` ve bir ana bilgisayar
+  bölümündeki satırlar (`section`) `SettingsRow` render eder.
+- Bir satırın `id` değeri, onu ortaya çıkaran `SettingEntry.id` değeridir: arama satıra kaydırır ve onu vurgular.
+- Prop'ları için [Ayar bileşenleri](#settings-components) bölümüne bakın.
+
+#### Referans
+
+```ts
+interface SettingsPage {
+  id: string
+  page?: "general" | "servers"
+  section?: "general"
+  title: string
+  icon?: IconName
+  entries?: SettingEntry[]
+  render(input: { target?: string }): JSX.Element
+}
+
+interface SettingEntry {
+  id: string
+  title: string
+  description?: string
+  keywords?: string
+}
+```
+
+### Yuvalar
+
+`Slot` arayüzü dört pencere yuvasından birine render eder.
+
+```tsx
+import { Slot } from "@opencode/plugin/gui"
+
+ctx.add(Slot, {
+  at: "session.header",
+  order: 10,
+  render: (input) => <UsageRing session={input.session} active={input.active} />,
+})
+```
+
+- `window.bottom`, pencerenin altında, bildirimlerin üzerinde tam genişlikte bir şerittir.
+- `session.header`, oturum zaman çizelgesinin başlık satırıdır. Önbelleğe alınmış bir zaman çizelgesi gizliyken, `active`
+  `false` ile bağlı kalır.
+- `session.location.menu`, proje menüsüne konum ayrıntılarından sonra öğeler ekler.
+- `session.panel.end`, yan bölgenin sekme şeridinin sonunda eylemler tutar.
+- `order`, bir yuvadaki öğeleri sıralar.
+
+`session.location.menu`, proje menüsü açıkken `true` olan `shown` değerini alır. Konum verilerine yalnızca `true` olduğu
+sürece abone olun:
+
+```tsx
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => <BranchStatus session={input.session} screen={input.screen} shown={input.shown} />,
+})
+```
+
+Proje menüsü bir ana bilgisayar menüsüdür: satırlarını `ctx.ui.MenuItem`, `MenuSub`, `MenuGroup` ve `MenuSeparator` ile
+render edin; böylece klavyeyle gezinilir ve menü ana bilgisayarın satırları gibi kapanır. Bkz.
+[Menü satırları](#menu-rows).
+
+```tsx
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => <ctx.ui.MenuItem label={ctx.t("usage")} icon="status" onSelect={() => openUsage(input.session)} />,
+})
+```
+
+#### Referans
+
+```ts
+type Slot = {
+  [At in keyof SlotMap]: { at: At; order?: number; render(input: SlotMap[At]): JSX.Element }
+}[keyof SlotMap]
+
+interface SlotMap {
+  "window.bottom": Record<string, never>
+  "session.header": { screen: SessionScreen; session: MountedSession; active: boolean }
+  "session.location.menu": { screen: SessionScreen; session: MountedSession; shown: boolean }
+  "session.panel.end": { screen: SessionScreen; session: MountedSession }
+}
+```
+
+### Menü öğeleri
+
+`MenuItem`, yan panelin **+** menüsüne (`"session.panel"`), **Add server** menüsüne (`"server.add"`) veya Settings
+bölümündeki her sunucunun satır menüsüne (`"server.row"`) bir girdi ekler.
+
+```ts
+import { MenuItem } from "@opencode/plugin/gui"
+
+ctx.add(MenuItem, (): MenuItem => {
+  const session = ctx.sessions.current()
+
+  return {
+    menu: "session.panel",
+    id: "open",
+    title: ctx.t("menu.open"),
+    icon: "folder",
+    keybind: `${ctx.id}.open`,
+    opened: !!session && ctx.layout.state(`${ctx.id}:main`, session) !== "closed",
+    run: () => {
+      if (session) ctx.layout.open(`${ctx.id}:main`, session)
+    },
+  }
+})
+```
+
+- `order` öğeleri artan sırada sıralar. Varsayılan olarak `0` olur.
+- Bir `server.row` öğesinin `run` işlevi satırın sunucu anahtarını alır. `when` öğeyi yalnızca bazı satırlarda listeler ve
+  `enabled` diğerlerinde devre dışı gösterir.
+
+`session.panel` öğesi aynı zamanda bir başlatıcıdır. Kullanıcı yan bölgeyi sekme yokken açtığında veya hiçbir öğe
+`primary` değilken **+** düğmesine tıkladığında ana bilgisayar başlatıcıları listeleyen bir **New tab** görünümü
+gösterir.
+
+- `icon` öğenin simgesidir ve `keybind`, kısayolunu öğenin gösterdiği yayımlanmış bir komut kimliğidir.
+- `description`, bir başlatıcı satırında başlıktan sonra gelen kısa ve soluk ayrıntıdır, örneğin bir sayı.
+- `opened: true`, öğenin açtığı sekmenin zaten açık olduğu anlamına gelir. Başlatıcı listeleri öğeyi dışarıda bırakır,
+  **+** menüsü yine listeler.
+- `primary: true`, **+** düğmesinin başlatıcıları göstermek yerine öğeyi doğrudan çalıştırmasını sağlar. `order`
+  içindeki ilk primary öğe kazanır. Yan bölgeyi sekme yokken açmak yine, primary olmayan ve açık olmayan öğeleri
+  listeleyen **New tab** görünümünü gösterir.
+- `ctx.layout.side.menu()`, kendi başlatıcınız için her eklentinin `session.panel` öğelerini listeler; bkz.
+  [Düzen](#layout).
+
+#### Referans
+
+```ts
+type MenuItem = SessionPanelMenuItem | ServerAddMenuItem | ServerRowMenuItem
+
+interface SessionPanelMenuItem {
+  menu: "session.panel"
+  id: string
+  title: string
+  order?: number
+  icon?: IconName
+  keybind?: string
+  description?: string
+  opened?: boolean
+  primary?: true
+  run(): void
+}
+
+interface ServerAddMenuItem {
+  menu: "server.add"
+  id: string
+  title: string
+  order?: number
+  run(): void
+}
+
+interface ServerRowMenuItem {
+  menu: "server.row"
+  id: string
+  title: string
+  order?: number
+  when?(server: string): boolean
+  enabled?(server: string): boolean
+  run(server: string): void
+}
+```
+
+### Başlık çubuğu öğeleri
+
+`TitlebarItem`, pencere başlık çubuğunda veya sekmeler altbilgisinde bir pill düğmesi render eder. Etiketi üzerine
+gelindiğinde görünür.
+
+```ts
+import { TitlebarItem } from "@opencode/plugin/gui"
+
+ctx.add(TitlebarItem, (): TitlebarItem | undefined =>
+  syncing() ? { id: "sync", label: ctx.t("syncing"), icon: "server", busy: true, run: () => sync() } : undefined,
+)
+```
+
+- `title`, `label` değerinden farklı olduğunda erişilebilir addır.
+- `busy` bir spinner gösterir ve pill'i devre dışı bırakır. `pressed` onu basılı gösterir.
+- `run` tıklamada çalışır. Yalnızca gösteren bir öğe için atlayın.
+
+#### Referans
+
+```ts
+interface TitlebarItem {
+  id: string
+  label: string
+  title?: string
+  icon?: IconName
+  busy?: boolean
+  pressed?: boolean
+  run?(): void
+}
+```
+
+### Giriş alanı pill'leri
+
+`ComposerPill`, bir oturumun giriş alanının üstündeki satıra, uygulamanın arka plan işi ve yapılacaklar pill'lerinin
+yanına bir pill ekler. Kullanıcının çalıştığı oturuma ait durumlar için kullanın, örneğin dalının pull request'leri.
+Pill'ler zaman çizelgesinin üzerinde yüzer; bu nedenle gelen giden bir pill giriş alanını asla yeniden boyutlandırmaz.
+Satır kullanıcının arka plan etkinliği hizalamasını izler ve bir subagent'ın oturumunda görünmez.
+
+`show` bir oturum için pill'i, orada hiçbirini göstermemek için `undefined` döndürür. Ana bilgisayar onu bağlı her giriş
+alanı için ve okuduğu şey değiştiğinde yeniden çalıştırır. Bu eklenti, her oturum dizininin açık pull request'lerini
+sunucu parçasının [RPC](/build/plugins/rpc) özelliğiyle listeler ve tek bir pill olarak gösterir:
+
+```tsx
+import { createStore } from "solid-js/store"
+import { ComposerPill, createKeyed } from "@opencode/plugin/gui"
+import { GitHub, type Pull } from "./rpc"
+
+const [pulls, setPulls] = createStore<Record<string, readonly Pull[]>>({})
+
+createKeyed(
+  () => ctx.sessions.current()?.directory,
+  (directory) =>
+    void ctx.client
+      .rpc(GitHub)
+      .pulls({ directory })
+      .then((list) => setPulls(directory, list)),
+)
+
+ctx.add(ComposerPill, {
+  id: "pulls",
+  show: (input) => {
+    const list = pulls[input.session.directory] ?? []
+
+    if (list.length === 0) return undefined
+
+    return {
+      icon: "github",
+      label: ctx.plural("pulls", list.length),
+      tone: list.some((pull) => pull.checks === "failure") ? "danger" : undefined,
+      title: ctx.t("pulls.title"),
+      rows: list.map((pull) => ({
+        id: String(pull.number),
+        label: `#${pull.number} ${pull.title}`,
+        icon: pull.checks === "failure" ? "circle-x" : "circle-check",
+        tone: pull.checks === "failure" ? "danger" : "success",
+        detail: pull.branch,
+        run: () => ctx.system.openExternal(pull.url),
+      })),
+    }
+  },
+})
+```
+
+- `label` pill'in metnidir ve uzun olduğunda kısaltılır. `icon` isteğe bağlıdır.
+- `tone` simgeyi renklendirir: `"success"`, `"warning"` veya `"danger"`.
+- Uygulamanın sahip olmadığı bir glif için, örneğin hareket eden bir durum işareti,
+  [kendi simgenizi bildirin](#icons) ve `ctx.icons.<name>` iletin. Her simge gibi `tone` değerini alır ve `show` yeniden
+  çalıştığı sürece animasyonu devam eder.
+- `rows`, pill'in `title` başlığı altında, o yoksa `label` altında bir menü açmasını sağlar. Her satırın kendi `icon`,
+  `tone` ve soluk `detail` değeri vardır ve seçildiğinde `run` çalıştırır; `run` içermeyen bir satır yalnızca gösterir.
+- `rows` yoksa pill tıklamada `run` çalıştırır.
+- `title`, `label` değerinden farklı olduğunda pill'in erişilebilir adıdır.
+- `order` pill'lerinizi diğer eklentilerin pill'leri arasında, en düşük önce olacak şekilde sıralar. Uygulamanın kendi
+  pill'leri önce gelir.
+- Hata fırlatan bir `show` yalnızca eklentinizin katkısını başarısız kılar.
+
+#### Referans
+
+```ts
+interface ComposerPill {
+  id: string
+  order?: number
+  show(input: ComposerPillProps): ComposerPillView | undefined
+}
+
+interface ComposerPillProps {
+  session: MountedSession
+  screen: SessionScreen
+}
+
+interface ComposerPillView {
+  label: string
+  icon?: IconName
+  tone?: ComposerPillTone
+  title?: string
+  rows?: ComposerPillRow[]
+  run?(): void
+}
+
+interface ComposerPillRow {
+  id: string
+  label: string
+  icon?: IconName
+  tone?: ComposerPillTone
+  detail?: string
+  run?(): void
+}
+
+type ComposerPillTone = "success" | "warning" | "danger"
+```
+
+### Kod blokları
+
+`CodeBlock`, listelediğiniz dillerin çitli kod bloklarını, vurgulanmış kod yerine kendi arayüzünüz olarak render eder.
+Kaynak olarak okunmaktan çok çizilerek okunan içerikler için kullanın, örneğin bir ` ```csv ` tablosu veya bir
+` ```latex ` formülü:
+
+```tsx
+import { For } from "solid-js"
+import { CodeBlock } from "@opencode/plugin/gui"
+
+ctx.add(CodeBlock, {
+  languages: ["csv"],
+  render: (props) => {
+    const rows = props.code.split("\n").map((line) => line.split(","))
+
+    if (rows.length < 2) return undefined
+
+    return (
+      <table>
+        <tbody>
+          <For each={rows}>
+            {(row) => (
+              <tr>
+                <For each={row}>{(cell) => <td>{cell}</td>}</For>
+              </tr>
+            )}
+          </For>
+        </tbody>
+      </table>
+    )
+  },
+})
+```
+
+- `languages`, çitin bilgi dizesinin ilk sözcüğüyle, küçük harfe çevrilerek karşılaştırılır: ` ```CSV title="Q3" `
+  `csv` ile eşleşir. Ana bilgisayar takma ad çözmez; bu nedenle kabul ettiğiniz her adı listeleyin.
+- `render`, bloğun `code` değerini, `language` değerini ve onu gösteren `session` değerini alır. Vurgulanmış kodu
+  korumak için, örneğin kaynak ayrıştırılamadığında, `undefined` veya `null` döndürün.
+- Hata fırlatan bir render hatayı eklentinizin altında kaydeder ve blok kodunu gösterir. Diğer katkılarınız çalışmaya
+  devam eder.
+- Birkaç eklenti bir dili listelediğinde ilk katkı onu render eder. `mermaid` listelediğinizde render ediciniz
+  uygulamanın kendi Mermaid diyagramının yerini de alır.
+
+#### Akış
+
+Uygulama, kod bloğunu ancak kapanış işaretçisi geldiğinde eklentinizin arayüzüyle gösterir. Blok akış hâlindeyken veya mesaj blok tamamlanmadan kesilirse kullanıcı sözdizimi vurgulanmış kodu görür. Tamamlanan kodun yerini arayüzünüz alır. Renderer'ınıza hiçbir zaman yarım blok verilmez.
+
+#### Geçerli olduğu yerler
+
+| Yüzey                                                          | Kod bloğu içeriği |
+| -------------------------------------------------------------- | ------------------ |
+| Zaman çizelgesi: asistan metni ve araç çıktısı                 | Evet               |
+| Oturum ekranındaki yan paneller, örneğin Markdown önizlemesi   | Evet               |
+| Oturum ekranında render edilen `ctx.ui.Markdown`               | Evet               |
+| `ctx.ui.Code` ve kendi `CodeBlock` render'ınızın içindeki Markdown | Hayır          |
+| Ayar sayfaları, iletişim kutuları ve ekran dışındaki diğer yüzeyler | Hayır          |
+
+#### Düzen ve performans
+
+- Hiçbir eklentinin listelemediği dillerin bloklarının maliyeti yoktur; yalnızca listelenen bir dilin bloğu ve yalnızca
+  zaman çizelgesi satırı ekrandayken arayüzünüzü render eder.
+- Blok arayüzünüzle büyür ve küçülür. Eşzamansız içeriğe asgari bir yükseklik verin; böylece geldiğinde zaman çizelgesi
+  daha az kayar.
+- Blok, kaynağı kopyalayan Copy düğmesini ve `CodeBlockAction` düğmelerinizi üst köşesinde tutar.
+
+### Kod bloğu eylemleri
+
+`CodeBlockAction`, listelediğiniz dillerin kod bloklarının Copy düğmesinin yanına bir düğme ekler. `run`, bir `CodeBlock`
+render'ının aldığı aynı bloğu alır:
+
+```ts
+import { CodeBlockAction } from "@opencode/plugin/gui"
+
+ctx.add(CodeBlockAction, {
+  id: "run",
+  languages: ["sh", "bash", "shell", "zsh"],
+  icon: "terminal",
+  get title() {
+    return ctx.t("run")
+  },
+  run: (input) => runInTerminal(input.code, input.session),
+})
+```
+
+- Düğme, bloğun kapanış çiti geldiğinde görünür; böylece yarım bir komut üzerinde asla işlem yapmaz.
+- Düğmeler Copy ile birlikte üzerine gelme veya klavye odağında, Copy'den önce, artan `order` ile görünür.
+- Yerel ayarı izlemesi için `title` değerini bir alıcıdan okuyun.
+- Hata fırlatan veya reddeden bir `run`, eklentinizin altında günlüğe yazılır ve başka hiçbir şeyi değiştirmez.
+
+#### Referans
+
+```ts
+interface CodeBlock {
+  languages: string[]
+  render(props: CodeBlockProps): JSX.Element | undefined
+}
+
+interface CodeBlockAction {
+  id: string
+  languages: string[]
+  icon: IconName
+  title: string
+  order?: number
+  run(input: CodeBlockProps): void | Promise<void>
+}
+
+interface CodeBlockProps {
+  code: string
+  language: string
+  session?: MountedSession
+}
+```
+
+### Bağlantı işleyicileri
+
+`LinkHandler`, kullanıcıların mesajlarda veya giriş alanı çiplerinde tıkladığı yerel dosya veya özel bağlantıları açar.
+`match` değeri true döndüren en yüksek `priority` değerine sahip işleyici bağlantıyı açar.
+
+```ts
+import { LinkHandler } from "@opencode/plugin/gui"
+
+ctx.add(LinkHandler, {
+  priority: 10,
+  match: (link) => link.href.endsWith(".acme"),
+  open: (link) => openAcmeFile(link.href, link.session),
+  exists: (link) => acmeFileExists(link.href),
+})
+```
+
+- `href` hedeftir: bir yol, bir URL veya bir `file://` bağlantısı.
+- `origin`, bağlantılı öğeyi üreten eklentidir.
+- `exact`, yolun metinden bir tahmin değil bilinen bir çalışma alanı dosyası olduğu anlamına gelir.
+- `background` bir bağlantı dar ekran görünümünü değiştirmemelidir.
+- `base`, bağlantının yazıldığı çalışma alanına göreli dizindir.
+- `exists` yoksa `ctx.links.exists` `false` yanıtı verir; böylece metin asla işleyicinin açamayacağı bir bağlantı gibi
+  görünmez.
+
+#### Referans
+
+```ts
+interface LinkHandler {
+  priority?: number
+  match(link: Link): boolean
+  open(link: Link): void
+  exists?(link: Link): boolean | Promise<boolean>
+}
+
+interface Link {
+  href: string
+  origin?: string
+  exact?: boolean
+  background?: boolean
+  base?: string
+  session?: SessionRef
+}
+```
+
+### Sunucular
+
+`Server`, eklentinizin diğer makinelerde başlattığı sunucular gibi sunucu bağlantılarından oluşan bir liste katkı olarak
+verir.
+
+```ts
+import { Server } from "@opencode/plugin/gui"
+
+ctx.add(
+  Server,
+  (): Server => ({
+    ready: loaded(),
+    entries: machines().map((machine) => ({
+      id: machine.id,
+      name: machine.name,
+      label: "Acme",
+      state: machine.url ? "ready" : "starting",
+      http: machine.url ? { url: machine.url } : undefined,
+    })),
+  }),
+)
+```
+
+- Başlatma her kaynağın `ready` olmasını bekler. Hazır bir kaynağın girdileri onun eksiksiz envanteridir.
+- `order` kaynakları artan sırada sıralar.
+- Her girdinin anahtarı `<plugin id>:<id>` biçimindedir. `label`, `name` değerinin yanındaki kısa bir rozettir.
+- `auth`, sunucunun kullanıcının oturum açmasını beklediği; `incompatible` ise bu uygulamanın desteklemediği bir sürümü
+  çalıştırdığı anlamına gelir.
+- `listed: false` girdiyi uygulamanın sunucu listesinden uzak tutar. Settings yine gösterir.
+- `http`, sunucu `ready` durumuna geldiğinde endpoint'i belirtir.
+- `reconnect`, bağlantısı kesilen endpoint'i yeniden çözümler. `connect`, hazır olmayan sunucuyu hazırlar. `remove`, sunucu kaydı kaldırılmadan önce çalışır.
+- `row` sunucunun ayar satırını render eder ve `cover`, sunucu hazır değilken yönlendirilmiş oturumu kaplar.
+- Bir `row`, ana bilgisayarın durum `Indicator` değerini, son `health()` denetimini ve satırın `server.row` menü
+  `Items` değerini alır. `remove()` işlevi girdinin `remove` işlevini çalıştırır, ardından sunucunun sekmelerini
+  kapatır.
+
+#### Referans
+
+```ts
+interface Server {
+  ready: boolean
+  order?: number
+  entries: ServerEntry[]
+}
+
+interface ServerEntry {
+  id: string
+  name: string
+  label?: string
+  state: "stopped" | "starting" | "auth" | "ready" | "failed" | "incompatible"
+  listed?: boolean
+  http?: { url: string; password?: string }
+  reconnect?(signal: AbortSignal): Promise<{ url: string; password?: string }>
+  connect?(): Promise<boolean>
+  remove?(): Promise<void>
+  row?(row: ServerRow): JSX.Element
+  cover?(input: { tab: string }): JSX.Element
+}
+
+interface ServerRow {
+  key: string
+  health(): ServerHealth | undefined
+  Indicator(props: { health?: ServerHealth; connecting?: boolean; auth?: boolean }): JSX.Element
+  remove(): Promise<void>
+  Items(): JSX.Element
+}
+
+interface ServerHealth {
+  healthy: boolean
+  version?: string
+  incompatible?: boolean
+  checking?: boolean
+}
+```
+
+### Stiller
+
+`Style`, katkı etkinken belgeye bir CSS dizesi enjekte eder.
+
+```ts
+import { Style } from "@opencode/plugin/gui"
+import css from "./panel.css?inline"
+
+ctx.add(Style, css)
+```
+
+### Temalar
+
+`Theme`, Settings › Appearance › Theme bölümüne bir renk teması ekler. Uygulamanın kendi tema dosyalarıyla aynı biçimi
+kullanır; bu nedenle bir tema dosyası olduğu gibi içe aktarılır.
+
+```ts
+import { Theme } from "@opencode/plugin/gui"
+import midnight from "./midnight.json"
+
+ctx.add(Theme, midnight)
+```
+
+Bir tema dosyası kendini adlandırır ve bir açık, bir koyu varyant verir. Her varyant `palette` veya `seeds` ile başlar,
+asla ikisiyle birden değil, ve `overrides` ile tek token'ları sabitleyebilir.
+
+```json
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Midnight",
+  "id": "midnight",
+  "light": {
+    "palette": {
+      "neutral": "#eceff4",
+      "ink": "#2e3440",
+      "primary": "#5e81ac",
+      "success": "#8fbcbb",
+      "warning": "#d08770",
+      "error": "#bf616a",
+      "info": "#81a1c1"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#1b1f27",
+      "ink": "#e5e9f0",
+      "primary": "#88c0d0",
+      "success": "#a3be8c",
+      "warning": "#d08770",
+      "error": "#bf616a",
+      "info": "#81a1c1"
+    },
+    "overrides": { "syntax-keyword": "#88c0d0" }
+  }
+}
+```
+
+- Seçici, eklenti temalarını uygulamanın temaları arasında `name` değerine göre alfabetik olarak listeler.
+- Ana bilgisayar her temayı `<plugin id>:<theme id>` olarak anahtarlar; böylece uygulama temasının veya başka bir
+  eklentinin temasının yerini asla almaz.
+- Temayı geri çekmek veya eklentiyi devre dışı bırakmak onu seçiciden çıkarır. Onu seçmiş bir kullanıcı seçimini korur:
+  tema geri gelene kadar pencere varsayılan temayı gösterir.
+- Başlangıçta pencere, eklenti temayı yeniden katkı olarak verene kadar son çalıştırmadan önbelleğe alınmış renkleri
+  gösterir.
+
+## Ana bilgisayar API'leri
+
+Ana bilgisayar API'leri `ctx` özellikleridir. Hiçbiri uygulama arayüzü bağlanmadan önce hata fırlatmaz: okumalar
+belgelenmiş varsayılanlarını döndürür ve `ctx.layout.open`, `ctx.dialogs.open` ve store güncellemeleri gibi erken
+yazmalar bekleyip ilk rota render edildiğinde çağrı sırasına göre uygulanır.
+
+```ts
+ctx.add(Command, () => ({
+  id: "copy-directory",
+  title: ctx.t("command.copyDirectory"),
+  run: () => {
+    const session = ctx.sessions.current()
+
+    if (session) void ctx.system.copy(session.directory)
+  },
+}))
+```
+
+Aşağıdaki bölümler her API'yi kapsar. `ctx.options`, `ctx.client` ve `ctx.app`
+[paylaşılan bağlamdır](#shared-context); `ctx.provide`, `ctx.use` ve `ctx.main`
+[sözleşmeler ve token'larla](#contracts-and-tokens) çalışır; `ctx.stores` eklentinin
+[bildirdiği](#define-the-gui-plugin) store'ları tutar ve `ctx.icons` bildirdiği [simgelerin](#icons) adlarını tutar.
+
+#### Referans
+
+```ts
+interface SetupContext<D> extends Context {
+  stores: Record<string, Persisted<unknown> | ((session: SessionRef) => Persisted<unknown>)>
+  icons: Record<string, PluginIconName>
+}
+
+interface Context {
+  id: string
+  options: PluginOptions
+  client: OpenCodeClient
+  app: App
+  signal: AbortSignal
+  add<T>(registry: Registry<T>, item: () => T | undefined): Cleanup
+  add<T>(registry: Registry<T>, item: T): Cleanup
+  list<T>(registry: Registry<T>): T[]
+  provide<T>(token: Contract<T>, impl: T): Cleanup
+  use<T>(token: Contract<T>): () => Live<T>
+  use<S extends IpcSpec>(token: Ipc<S>): () => Live<IpcClient<S>>
+  main<S extends IpcSpec>(token: Ipc<S>): IpcClient<S>
+  t(key: string, params?: Record<string, string | number | boolean>): string
+  plural(key: string, count: number, params?: Record<string, string | number | boolean>): string
+  layout: Layout
+  sessions: Sessions
+  screen: Screen
+  servers: Servers
+  storage: Storage
+  dialogs: Dialogs
+  toast: Toasts
+  attention: Attention
+  tabs: Tabs
+  keybinds: Keybinds
+  commands: Commands
+  links: Links
+  embeds: Embeds
+  ui: Ui
+  system: System
+  desktop: Desktop | undefined
+  locale: Locale
+  appearance: Appearance
+  router: Router
+  workspaces: Workspaces
+}
+```
+
+### Düzen
+
+`ctx.layout.open(key, session, options?)` bir panel sekmesini anahtarıyla, `<plugin id>:<tab id>` olarak açar. Bağlı
+olmayan oturumlar için de çalışır.
+
+```ts
+const session = ctx.sessions.current()
+
+if (session) ctx.layout.open(`${ctx.id}:main`, session, { tab: "select", background: true })
+```
+
+- `tab: "open"` (varsayılan) sekmeyi önizleme yuvasında seçer. `"preview"` onu yeni önizleme yapar, `"append"` seçmeden
+  ekler ve `"select"` ekleyip seçer, önizlemeyi korur.
+- `background: true` dar ekranlarda mevcut görünümü korur ve yan bölgeyi açar; kullanıcının panelden başlatmadığı bir
+  eylem için.
+- `close(key, session)` sekmeyi kaldırır ve panelinin `close` işlevini çağırır. `toggle(key, session)` görünür bir
+  sekmeyi kapatır, değilse açar.
+- `hide(key, session)` görünür bir sekmeyi gösteren bölmeyi, sekmeyi kapatmadan gizler: yan bölgeyi veya kullanıcının
+  oraya taşıdığı bir sekme için alt bölmeyi. Sekmeyi yeniden açmak bölmesini gösterir.
+- `state(key, session)` sekme şeritte değilken `"closed"`, şeritteyken ama bölmesi başka bir sekmeyi gösterirken
+  `"open"`, bölmesi onu gösterirken ama bölme gizliyken (yan bölge kapalı veya alt bölme gizli) `"active"` ve ekrandayken
+  `"visible"` olur.
+- `stored(session)` bu eklentinin oturumun yan şeridinde saklanan sekme kimlikleridir.
+- `ready()` saklanan düzen yüklendiğinde, `narrow()` ise görüntü alanı 768 pikselin altındayken `true` olur.
+- `side.opened(session)` yan bölge açıkken `true` olur ve `side.toggle(session)` onu açar veya kapatır.
+- `side.menu()` kendi başlatıcınız için her eklentinin `session.panel` [menü öğelerini](#menu-items) `order` sırasına
+  göre listeler.
+- `side.width(panel)` ve `side.resize(panel, width)` panellerinizden birinin yan bölge genişliğini okur ve saklar; bkz.
+  [Panel genişliği](#panel-width).
+- `sidebar.opened()`, her yan panelin paylaştığı iç kenar çubuğu tercihidir.
+- `scroll` kaydırma uzaklıklarını oturum ve anahtar başına saklar.
+- `settings(page?)` Settings bölümünü açar. `project(server, title)` bir projenin dizin seçicisini ve yeni bir taslak
+  açar.
+- `draft({ server, directory, prompt })` yeni bir taslak oturumu kendi sekmesinde, prompt kullanıcının gözden geçirip
+  göndermesi için doldurulmuş olarak açar.
+
+```ts
+const session = ctx.sessions.current()
+const launchers = () => ctx.layout.side.menu().filter((item) => !item.primary && !item.opened)
+
+if (session) {
+  ctx.layout.draft({ server: session.server.id, directory: session.directory, prompt: ctx.t("setup.prompt") })
+}
+```
+
+#### Referans
+
+```ts
+interface Layout {
+  open(key: string, session: SessionRef, options?: OpenOptions): void
+  close(key: string, session: SessionRef): void
+  toggle(key: string, session: SessionRef): void
+  hide(key: string, session: SessionRef): void
+  state(key: string, session: SessionRef): PanelState
+  stored(session: SessionRef): string[]
+  ready(): boolean
+  narrow(): boolean
+  side: {
+    opened(session: SessionRef): boolean
+    toggle(session: SessionRef): void
+    menu(): SessionPanelMenuItem[]
+    width(panel: string): number | undefined
+    resize(panel: string, width: number): void
+  }
+  sidebar: {
+    opened(): boolean
+  }
+  scroll: {
+    get(session: SessionRef, key: string): { x: number; y: number } | undefined
+    set(session: SessionRef, key: string, value: { x: number; y: number }): void
+  }
+  settings(page?: string): void
+  project(server: string, title: string): void
+  draft(input: { server: string; directory: string; prompt: string }): void
+}
+
+type PanelState = "closed" | "open" | "active" | "visible"
+
+interface OpenOptions {
+  tab?: "open" | "preview" | "append" | "select"
+  background?: boolean
+}
+```
+
+### Oturumlar ve oturum ekranı
+
+`ctx.sessions.current()` yönlendirilmiş oturumdur ve `ctx.screen.current()` onun ekranıdır. İkisi de Home'da ve bir
+taslakta `undefined` olur. Onları eylem yaptığınız yerde okuyun, asla `setup` içinde bir kez okumayın.
+
+```ts
+const session = ctx.sessions.current()
+const file = ctx.screen.current()?.file
+
+if (session && file) void file.sync("README.md")
+```
+
+- `key`, sunucular arasında benzersiz olan `<server id>\n<session id>` biçimindedir. Oturum başına durumu bununla
+  anahtarlayın.
+- `tab`, oturumun sahibi olan kabuk sekmesinin anahtarıdır. `pending`, sunucu onu hâlâ oluştururken `true` olur.
+- `directory` oturumun çalışma alanı dizinidir ve o proje kökü olduğunda `local` `true` olur.
+- `listedProject`, oturumun ait olduğu kenar çubuğu projesidir.
+- `visit`, oturum her yönlendirildiğinde yeni bir nesnedir.
+- `background` oturumun çalışan subagent'larını ve kabuk komutlarını listeler.
+- `ctx.sessions.list()` açık kabuk sekmelerinin oturumlarını döndürür.
+- Ekranın `file` değeri çalışma alanının dosyalarını okur ve `comment` sonraki promptun satır yorumlarını tutar.
+  `composer` sonraki prompttur: metni, ekli parçaları ve modeli; bkz.
+  [Giriş alanına ekleme](#attach-to-the-composer).
+- `file.sync(path)` bir dosyayı yükler ve sunucudan değişiklikleri izlemesini ister. Dosyanın sekmesi kapandığında
+  `file.unwatch(path)` çağırın.
+
+#### Referans
+
+```ts
+interface Sessions {
+  list(): SessionRef[]
+  current(): MountedSession | undefined
+}
+
+interface SessionRef {
+  key: string
+  id: string
+  tab: string
+  server: ServerRef
+  pending: boolean
+  location: LocationRef | undefined
+}
+
+interface MountedSession extends SessionRef {
+  visit: object
+  project: Project | undefined
+  listedProject: { worktree: string; name?: string; icon?: Project["icon"] } | undefined
+  directory: string
+  local: boolean
+  background: BackgroundTask[]
+}
+
+interface Screen {
+  current(): SessionScreen | undefined
+}
+
+interface SessionScreen {
+  file: Files
+  comment: Comments
+  composer: Composer
+}
+
+interface Files {
+  root: string
+  ready(): boolean
+  resolve(path: string): string
+  absolute(path: string): boolean
+  get(path: string): FileState | undefined
+  missing(path: string): boolean
+  sync(path: string, options?: { force?: boolean; silent?: boolean }): Promise<void>
+  unwatch(path: string): void
+  exists(path: string): Promise<boolean>
+  search(query: string, options?: { kind?: "file" | "any"; limit?: number; signal?: AbortSignal }): Promise<string[]>
+  selection: {
+    get(path: string): LineRange | null | undefined
+    set(path: string, range: LineRange | null): void
+  }
+  scroll: {
+    get(path: string): { top?: number; left?: number }
+    set(path: string, value: { top?: number; left?: number }): void
+  }
+  tree: {
+    list(path: string): FileNode[]
+    state(path: string): { expanded: boolean; loaded?: boolean; loading?: boolean; error?: string } | undefined
+    sync(path: string, options?: { force?: boolean }): Promise<void>
+    expand(path: string, options?: { list?: boolean }): void
+    collapse(path: string): void
+  }
+}
+
+interface Comments {
+  list(file?: string): Comment[]
+  add(input: Omit<Comment, "id" | "time">): Comment
+  update(id: string, comment: string): void
+  remove(id: string): void
+  focus: {
+    current(): { file: string; id: string } | null
+    set(value: { file: string; id: string } | null): void
+  }
+  active: {
+    current(): { file: string; id: string } | null
+    set(value: { file: string; id: string } | null): void
+  }
+}
+```
+
+### Giriş alanına ekleme
+
+Bir dosyayı, notu veya alıntıyı kullanıcının sonraki promptuna eklemek için bir olay işleyicisinde veya komutta
+`ctx.screen.current()?.composer` kullanın.
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+composer?.attach({
+  type: "note",
+  origin: ctx.id,
+  commentID: crypto.randomUUID(),
+  label: "button#submit",
+  icon: "globe",
+  subject: 'element <button id="submit">Save</button>',
+  comment: "Make this button primary and disable it while saving.",
+  href: "http://localhost:3000/settings",
+})
+```
+
+- `attach` klavye odağını olduğu yerde bırakır. Onu prompta taşımak için `focus()` çağırın.
+- `update(commentID, { comment?, preview? })` ekli bir parçayı değiştirir; bir not veya alıntı yalnızca yeni bir
+  `comment` alır.
+- `detach(commentID)` ekli bir parçayı kaldırır.
+- Bir notun `live` değeri, not bu uygulama sürecinde kaldığı sürece `subject` ve `href` değerlerinin yerini alır;
+  yalnızca bu sürecin çözebileceği referanslar için, örneğin bir sayfa öğesi. Saklanan bir taslak onu düşürür; bir geri
+  alma veya fork'un geri getirdiği gönderilmiş bir mesaj da öyle.
+
+Alıntı, kullanıcının eklentinizin gösterdiği bir şeyden, örneğin günlük çıktısından alıntıladığı, isteğe bağlı yorumlu
+metindir. Oturum zaman çizelgesindeki bir alıntı gibi, kaynağın simgesi ve etiketi altında render edilir. Önce
+`quotable()` denetleyin: giriş alanı olmayan bir subagent oturumunda ve giriş alanı kabuk komutları çalıştırırken
+`false` olur.
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+if (composer?.quotable()) {
+  const commentID = crypto.randomUUID()
+
+  composer.attach({
+    type: "quote",
+    commentID,
+    text: selection,
+    source: { label: ctx.t("source.label"), icon: "console", subject: "the Acme log" },
+  })
+  composer.focus(commentID)
+}
+```
+
+- `source.subject`, kaynağı model için adlandırır, örneğin `the terminal`. Yerelleştirilmez.
+- Kullanıcının çipten bir tane eklemesine izin vermek için `comment` alanını atlayın.
+- `focus(commentID)` ekli bir alıntının yorum düzenleyicisini açar. Giriş alanı gösterilmiyorken, örneğin bir panel
+  gösteren dar ekranda, düzenleyici giriş alanı gösterildiğinde açılır.
+- Model `The user quoted the following from <subject>:` metnini, ardından her satırı `> ` önekli metni, ardından varsa
+  yorumu okur.
+
+#### Referans
+
+```ts
+interface ComposerFile {
+  type: "file"
+  path: string
+  selection?: { startLine: number; endLine: number; startChar: number; endChar: number }
+  preview?: string
+  comment?: string
+  commentID?: string
+  commentOrigin?: "review" | "file"
+}
+
+interface ComposerNote {
+  type: "note"
+  origin: string
+  commentID: string
+  label: string
+  icon: IconName
+  subject: string
+  comment: string
+  href?: string
+  live?: { subject: string; href?: string }
+}
+
+interface ComposerQuote {
+  type: "quote"
+  commentID: string
+  text: string
+  comment?: string
+  source: { label: string; icon: IconName; subject: string }
+}
+```
+
+### Promptu okuma ve yazma
+
+Kullanıcının yazdığını `text()` ile ve yazıp yazmadığını `focused()` ile okuyun:
+
+```ts
+const composer = ctx.screen.current()?.composer
+const empty = !composer?.text().trim()
+```
+
+- `text()` promptun düz metnidir: bir anma `@` metni olarak okunur ve ekler ile ekli parçalar dışarıda bırakılır. Kabuk
+  modunda kabuk komutudur. Oturumun taslağı yüklenene kadar ve giriş alanı olmayan bir subagent oturumunda `""` olur.
+  Tepkiseldir.
+- `focused()` klavye odağı prompttayken `true` olur. Tepkisel değildir; bu nedenle onu eylem yaptığınız yerde, örneğin
+  bir komutun `run` işlevinde okuyun.
+
+`insert(text)`, kullanıcının gözden geçirip gönderebilmesi için prompt'a metin ekler. Giriş alanı API'sindeki hiçbir işlem prompt'u göndermez.
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+composer?.insert(`Explain ${path}`)
+composer?.focus()
+```
+
+- `insert` metni kullanıcının promptta en son bıraktığı imleç konumuna, o yoksa sona ekler ve imleci metnin ardına taşır.
+  Seçili metnin yerini almaz.
+- Metin ayrıştırılmaz: `@path` anma değil metin olarak kalır.
+- `setText(text)` promptun metnini, anmalar dahil, değiştirir. Ekler ve ekli parçalar kalır. `setText("")` metni
+  temizler.
+- İkisi de klavye odağını olduğu yerde bırakır. Onu prompta taşımak için `focus()` çağırın.
+- Oturumun kayıtlı taslağı yüklenmeden önce yapılan yazma çağrıları (`insert`, `setText`, `attach`, `update` veya `detach`) taslak yüklenene kadar bekler. Ardından çağrı sırasıyla, çağrı anında rotada açık olan oturuma uygulanır. Hiçbiri kayıtlı taslağı tümüyle değiştirmez.
+- Giriş alanı olmayan bir subagent oturumunda yazmalar hiçbir şey yapmaz.
+
+### Model seçme
+
+`model()` sonraki promptun gönderileceği modeldir ve `setModel`, model seçicinin yaptığı gibi birini seçer:
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+if (composer && !composer.setModel({ providerID: "anthropic", modelID: "claude-sonnet-4-5", variant: "high" })) {
+  ctx.toast.show({ variant: "error", title: ctx.t("model.unavailable") })
+}
+```
+
+- `model()` yönlendirilmiş oturum için kullanıcının seçimidir, o yoksa agent'ın varsayılanı, o da yoksa uygulamanın
+  varsayılanıdır. Model kataloğu yüklenirken, bağlı hiçbir sağlayıcı modeli sunmadığında ve bir subagent oturumunda
+  `undefined` olur. Tepkiseldir.
+- `setModel`, modeli oturum için seçer ve son kullanılan modeller listesinin başına taşır. `variant` belirtilmezse model seçicide gösterilen varyant korunur.
+- `setVariant(variant)` geçerli modelin bir varyantını seçer. `undefined`, modelin varsayılan varyantını seçer.
+- `setModel`, katalog yüklenirken, bağlı hiçbir sağlayıcı modeli sunmadığında veya modelde böyle bir varyant yoksa
+  `false` döndürür ve hiçbir şeyi değiştirmez.
+- `setVariant`, geçerli model yoksa veya modelde böyle bir varyant yoksa `false` döndürür ve hiçbir şeyi değiştirmez.
+- İkisi de bir subagent oturumunda `false` döndürür.
+
+#### Referans
+
+```ts
+interface Composer {
+  text(): string
+  insert(text: string): void
+  setText(text: string): void
+  model(): ComposerModel | undefined
+  setModel(model: ComposerModel): boolean
+  setVariant(variant: string | undefined): boolean
+  attach(part: ComposerFile | ComposerNote | ComposerQuote): void
+  quotable(): boolean
+  focus(commentID?: string): void
+  update(id: string, patch: { comment?: string; preview?: string }): void
+  detach(id: string): void
+  focused(): boolean
+}
+
+interface ComposerModel {
+  providerID: string
+  modelID: string
+  variant?: string
+}
+```
+
+### Sunucular ve sunucu olayları
+
+`ctx.servers.get(id)` canlı bir `ServerRef` döndürür. Eklentinizi çalıştıran masaüstü uygulamasının kendi sunucusunun
+kimliği `"sidecar"`dır. Olaylarına `data.on` ile tepki verin:
+
+```ts
+import { onCleanup } from "solid-js"
+import { createKeyed } from "@opencode/plugin/gui"
+
+createKeyed(
+  () => ctx.servers.get("sidecar")?.data,
+  (data) => onCleanup(data.on("session.created", (event) => console.log(event))),
+)
+```
+
+- `id`, ana bilgisayar anahtarıdır: `"sidecar"`, bir http URL'si veya bir [katkı sunucusu](#servers) için
+  `<plugin id>:<id>`.
+- `data` sunucunun eşitlenmiş verisidir, örneğin oturumlar ve projeler, ve `on(type, handler)` olayları içindir.
+  Tepkiseldir.
+- `builtin`, uygulamanın kendi sunucusu için `true` olur.
+- `compatible`, sunucunun sürümü bu uygulamayla çalıştığında ve `connected`, olay bağlantısı ayaktayken `true` olur.
+- `password`, kullanıcının yapılandırdığı HTTP basic parolasıdır, varsa.
+- `client`, `data` ve `url` değerlerini her seferinde canlı `ServerRef` üzerinden okuyun: yeniden başlatılan bir sunucu
+  aynı kimlik altında yeni bir istemci alır.
+- `ctx.servers.list()` uygulamanın listelediği sunucuların kimliklerini döndürür.
+
+#### Referans
+
+```ts
+interface Servers {
+  list(): string[]
+  get(id: string): ServerRef | undefined
+}
+
+interface ServerRef {
+  id: string
+  name: string
+  url: string
+  password?: string
+  client: OpenCodeClient
+  data: Data
+  local: boolean
+  builtin: boolean
+  compatible: boolean
+  connected: boolean
+}
+```
+
+### İletişim kutuları
+
+`ctx.dialogs.open(render, { replace? })` açık olanların üzerine bir iletişim kutusu açar ve `close()` işlevi onu kapatan
+bir tanıtıcı döndürür. İletişim kutusu, sahibi olan kapsam bittiğinde de kapanır.
+
+```tsx
+const handle = ctx.dialogs.open((dialog) => <ConfirmDialog onDone={dialog.close} />)
+```
+
+- `replace: true` önce açık her iletişim kutusunu, ana bilgisayarın ve diğer eklentilerin kutuları dahil, kapatır.
+- `ctx.dialogs.active()` herhangi bir iletişim kutusu açıkken `true` olur.
+- İçeriği uygulamanın iletişim kutusu çerçevesi için `ctx.ui.Dialog` içinde render edin; bkz.
+  [Uygulama bileşenleri](#app-components).
+
+### Kullanıcıya sorma
+
+`confirm`, `alert`, `prompt` ve `select` uygulamanın kendi iletişim kutularında sorar; böylece eklentinizin kendi
+iletişim kutusu arayüzüne ihtiyacı olmaz. Her biri yanıtın bir promise'ini döndürür.
+
+```ts
+const ok = await ctx.dialogs.confirm({ title: ctx.t("end.title"), confirm: ctx.t("end"), danger: true })
+```
+
+- `confirm` yalnızca kullanıcı onayladığında `true` çözer. `danger` onay düğmesini yıkıcı olarak biçimlendirir ve odağı
+  Cancel üzerinde başlatır.
+- Her iletişim kutusu `open` gibi açılır ve soran sahiple, o yoksa eklentinizle kapanır.
+- Kullanıcı iptal ettiğinde, Escape'e bastığında veya kutunun dışına tıkladığında, başka bir iletişim kutusu onun yerini aldığında ya da ilgili kapsam sona erdiğinde `confirm` sonucu `false`, `prompt` ve `select` sonuçları ise `undefined` olur.
+
+`alert` kullanıcıya onaylaması gereken bir şeyi tek düğmeyle söyler. Nasıl kapanırsa kapansın, iletişim kutusu
+kapandığında çözer:
+
+```ts
+await ctx.dialogs.alert({ title: ctx.t("export.done"), description: path })
+```
+
+`prompt`, tek satırlık metin ister. İlk `value` seçili gelir, böylece kullanıcı yazmaya başladığında metin değişir. Sonuç hiçbir zaman boş dize olmaz; alan boşken gönderme işlemi sonuç vermez. `secret: true`, parola veya token gibi girilen metni gizler:
+
+```ts
+const token = await ctx.dialogs.prompt({ title: ctx.t("token.title"), placeholder: "ghp_…", secret: true })
+```
+
+`select` seçenekleri komut paleti gibi aranabilir bir listede listeler ve seçilen seçeneğin `value` değerini çözer:
+
+```ts
+const url = await ctx.dialogs.select({
+  title: ctx.t("links.title"),
+  options: links.map((link) => ({ title: link.title, description: link.url, value: link.url, group: link.host })),
+})
+
+if (url) ctx.system.openExternal(url)
+```
+
+- Arama her seçeneğin `title` ve `description` değerleriyle eşleşir.
+- Aynı `group` değerine sahip seçenekler o başlık altında birlikte listelenir.
+- `current`, ilk vurgulanacak seçeneğin değeridir.
+
+#### Referans
+
+```ts
+interface Dialogs {
+  open(render: (dialog: DialogHandle) => JSX.Element, options?: { replace?: boolean }): DialogHandle
+  confirm(options: ConfirmOptions): Promise<boolean>
+  alert(options: AlertOptions): Promise<void>
+  prompt(options: PromptOptions): Promise<string | undefined>
+  select<T>(options: SelectOptions<T>): Promise<T | undefined>
+  active(): boolean
+}
+
+interface DialogHandle {
+  close(): void
+}
+
+interface ConfirmOptions {
+  title: string
+  description?: string
+  confirm?: string
+  cancel?: string
+  danger?: boolean
+}
+
+interface AlertOptions {
+  title: string
+  description?: string
+  ok?: string
+}
+
+interface PromptOptions {
+  title: string
+  description?: string
+  placeholder?: string
+  value?: string
+  secret?: boolean
+  submit?: string
+}
+
+interface SelectOptions<T> {
+  title: string
+  placeholder?: string
+  options: { title: string; value: T; description?: string; group?: string }[]
+  current?: T
+}
+```
+
+### Uygulama bileşenleri
+
+Bir eklenti paketi `@opencode/ui` paketini içe aktaramaz; bu nedenle `ctx.ui` ona uygulamanın kendi bileşenlerini verir.
+Kullanıcının temasında, yazı tiplerinde ve dilinde render edilirler; böylece eklentinizin arayüzü uygulamanınki gibi
+görünür ve davranır.
+
+```tsx
+import { Show } from "solid-js"
+import { createLatest, Panel } from "@opencode/plugin/gui"
+
+const ui = ctx.ui
+const summary = createLatest(
+  () => ctx.sessions.current()?.directory,
+  (directory, signal) => fetchSummary(directory, signal),
+)
+
+ctx.add(Panel, {
+  id: "summary",
+  region: "side",
+  list: () => [summaryTab],
+  render: () => (
+    <div>
+      <ui.Tooltip value={ctx.t("copy")}>
+        <ui.IconButton icon="copy" label={ctx.t("copy")} onClick={() => void ctx.system.copy(summary.latest ?? "")} />
+      </ui.Tooltip>
+      <Show when={summary.latest} fallback={<ui.Loader size="large" />}>
+        {(text) => <ui.Markdown text={text()} />}
+      </Show>
+    </div>
+  ),
+})
+```
+
+- `Icon`, `Button` ve `IconButton`, SDK'nın her `icon` alanı gibi herhangi bir `IconName` alır: uygulamanın
+  simgelerinden biri veya `ctx.icons` içindeki [kendi simgelerinizden](#icons) biri. Bir `IconButton`'ın `label` değeri
+  erişilebilir adıdır; üzerine gelindiğinde göstermek için onu `Tooltip` ile sarın.
+- Bir düğmede `busy`, simgesini yükleme göstergesiyle değiştirir ve yeniden `false` olana kadar düğmeyi devre dışı
+  bırakır.
+- AI'ın çalışması dışındaki her yükleme durumu için, örneğin bir bölme, bir arama veya yüklenen bir bağlantı,
+  `Loader` kullanın.
+- `Menu` bir `items` listesi açar: eylemler, `{ type: "separator" }` ve `{ type: "group", label, items }`.
+- `Switch` ve `TextInput` durum tutmaz: `onChange` veya `onInput` değerini `checked` ya da `value` olarak geri iletin.
+- `Keybind` tuşları çipler olarak gösterir, örneğin `ctx.keybinds.keybind(command)`.
+- `Markdown`, zaman çizelgesinin bir mesajı render ettiği gibi render eder ve `Code` vurgulanmış, salt okunur bir kod
+  bloğu gösterir. İkisi de bağlandıktan kısa süre sonra dolar.
+
+`Dialog` uygulamanın iletişim kutusu çerçevesidir: bir başlık, içerik ve düğmeler. Onu `ctx.dialogs.open` içinden render
+edin; başka yerde işe yarar bir şey render etmez.
+
+```tsx
+const ui = ctx.ui
+
+ctx.dialogs.open((dialog) => (
+  <ui.Dialog
+    title={ctx.t("rename.title")}
+    footer={
+      <ui.Button variant="contrast" onClick={dialog.close}>
+        {ctx.t("done")}
+      </ui.Button>
+    }
+  >
+    <ui.TextInput label={ctx.t("rename.label")} value={name()} onInput={setName} onSubmit={dialog.close} autofocus />
+  </ui.Dialog>
+))
+```
+
+- `size` varsayılan olarak `"fit"` olur: 480 piksel genişliğinde ve içeriği kadar yüksek. `"normal"`, `"large"` ve
+  `"x-large"` sabit boyutlardır.
+- Escape ve dışına tıklama iletişim kutusunu kapatır. `closable: false` başlığın kapatma düğmesini gizler.
+
+#### Menü satırları
+
+`MenuItem`, `MenuSub`, `MenuGroup` ve `MenuSeparator`, ana bilgisayarın render ettiği bir menü için satırlardır, örneğin
+`session.location.menu` yuvası. Klavyeyle gezinirler, ana bilgisayarın soluk simgelerini ve kısayol çiplerini gösterir
+ve seçimde menüyü kapatırlar.
+
+```tsx
+import { For } from "solid-js"
+
+const ui = ctx.ui
+
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => (
+    <>
+      <ui.MenuItem
+        label={ctx.t("usage")}
+        icon="status"
+        keys={["Ctrl", "U"]}
+        onSelect={() => openUsage(input.session)}
+      />
+      <ui.MenuSub label={ctx.t("openIn")} icon="outline-share">
+        <For each={apps()}>{(app) => <ui.MenuItem label={app.name} onSelect={() => launch(app, input.session)} />}</For>
+      </ui.MenuSub>
+    </>
+  ),
+})
+```
+
+- `MenuItem`, `Menu`'nün `items` girdisiyle aynı alanları alır.
+- `MenuSub` alt öğelerini satırın yanındaki bir alt menüde açar. `onOpenChange` ne zaman olduğunu söyler; böylece
+  satırlarını yalnızca açıkken yükleyebilirsiniz.
+- `MenuGroup` satırları bir başlık altına koyar ve `MenuSeparator` satırlar arasına çizgi çizer.
+- `MenuItem`, `MenuSub` ve `MenuGroup` bir menü dışında hata fırlatır: ana bilgisayar hatayı kaydeder ve o katkıdan
+  hiçbir şey render etmez.
+
+#### Seçimler
+
+`Select` bir seçenek listesinden birini seçer, tıpkı uygulamanın ayar satırlarının dil seçmesi gibi. Değeri bir dizedir;
+`options` türü onu daraltır.
+
+```tsx
+const [period, setPeriod] = createSignal<"day" | "month">("day")
+
+<ui.Select
+  label={ctx.t("period")}
+  options={[
+    { value: "day", label: ctx.t("period.day") },
+    { value: "month", label: ctx.t("period.month") },
+  ]}
+  value={period()}
+  onChange={setPeriod}
+/>
+```
+
+- `label` seçicinin erişilebilir adıdır; gösterdiği şey seçili seçeneğin `label` değeridir.
+- Hiçbir seçeneğin sahip olmadığı bir `value` `placeholder` gösterir. Seçili seçeneği yeniden seçmek `onChange`
+  çağırmaz.
+
+#### Ayar bileşenleri
+
+`SettingsLayout`, `SettingsSection` ve `SettingsRow`, bir [ayar sayfasını](#settings-pages) uygulamanın kendi sayfalarını
+render ettiği gibi render eder: sayfa başlığı, kenarlıklı listelerin üstünde başlıklı bölümler ve başlık, açıklama ve
+sonda bir denetim içeren satırlar.
+
+```tsx
+<ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")} actions={<HelpButton />}>
+  <ui.SettingsSection title={ctx.t("section.display")} footer={<Show when={error()}>{ctx.t("error")}</Show>}>
+    <ui.SettingsRow id="acme-period" title={ctx.t("period")} description={ctx.t("period.description")}>
+      <ui.Select label={ctx.t("period")} options={periods()} value={period()} onChange={setPeriod} />
+    </ui.SettingsRow>
+  </ui.SettingsSection>
+</ui.SettingsLayout>
+```
+
+- Kendi sayfanız için `SettingsLayout`, bir ana bilgisayar sayfasındaki bölüm için `SettingsSection` ve bir ana bilgisayar
+  bölümündeki satırlar için tek başına `SettingsRow` kullanın. Satırlar her durumda ana bilgisayarın satırlarıyla hizalanır.
+- Bir satırdaki `id`, onu ortaya çıkaran `SettingEntry.id` değeridir. Sayfanın kendi kimliğini ortaya çıkaran arama
+  başlığı vurgular.
+- `actions` başlık satırının sonunda durur. Bir bölümün `footer` değeri listesinin altında, kenarlığın dışında durur.
+- Görünümlerini Settings ekranının stillerinden alırlar; bu nedenle onları bir `SettingsPage` içinden render edin.
+
+#### Referans
+
+```ts
+interface Ui {
+  Icon(props: UiIconProps): JSX.Element
+  Button(props: UiButtonProps): JSX.Element
+  IconButton(props: UiIconButtonProps): JSX.Element
+  Tooltip(props: UiTooltipProps): JSX.Element
+  Menu(props: UiMenuProps): JSX.Element
+  MenuItem(props: UiMenuItem): JSX.Element
+  MenuSeparator(): JSX.Element
+  MenuGroup(props: UiMenuGroupProps): JSX.Element
+  MenuSub(props: UiMenuSubProps): JSX.Element
+  Loader(props: UiLoaderProps): JSX.Element
+  Dialog(props: UiDialogProps): JSX.Element
+  Switch(props: UiSwitchProps): JSX.Element
+  TextInput(props: UiTextInputProps): JSX.Element
+  Select<T extends string>(props: UiSelectProps<T>): JSX.Element
+  Keybind(props: UiKeybindProps): JSX.Element
+  Markdown(props: UiMarkdownProps): JSX.Element
+  Code(props: UiCodeProps): JSX.Element
+  SettingsLayout(props: UiSettingsLayoutProps): JSX.Element
+  SettingsSection(props: UiSettingsSectionProps): JSX.Element
+  SettingsRow(props: UiSettingsRowProps): JSX.Element
+}
+
+interface UiIconProps {
+  name: IconName
+  size?: "small" | "normal" | "large"
+  class?: string
+}
+
+interface UiButtonProps {
+  children: JSX.Element
+  onClick?: (event: MouseEvent) => void
+  variant?: "neutral" | "contrast" | "ghost" | "ghost-muted" | "danger"
+  size?: "small" | "normal" | "large"
+  icon?: IconName
+  disabled?: boolean
+  busy?: boolean
+  type?: "button" | "submit"
+  autofocus?: boolean
+  class?: string
+}
+
+interface UiIconButtonProps {
+  icon: IconName
+  label: string
+  onClick?: (event: MouseEvent) => void
+  variant?: "neutral" | "ghost" | "ghost-muted"
+  size?: "small" | "normal" | "large"
+  disabled?: boolean
+  pressed?: boolean
+  busy?: boolean
+  class?: string
+}
+
+interface UiTooltipProps {
+  value: JSX.Element
+  keys?: string[]
+  placement?: "top" | "bottom" | "left" | "right"
+  children: JSX.Element
+}
+
+interface UiMenuProps {
+  label: string
+  items: UiMenuEntry[]
+  trigger?: "icon" | "button"
+  icon?: IconName
+  placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"
+  disabled?: boolean
+}
+
+type UiMenuEntry = UiMenuItem | UiMenuSeparator | UiMenuGroup
+
+interface UiMenuItem {
+  type?: "item"
+  label: string
+  icon?: IconName
+  keys?: string[]
+  disabled?: boolean
+  onSelect(): void
+}
+
+interface UiMenuSeparator {
+  type: "separator"
+}
+
+interface UiMenuGroup {
+  type: "group"
+  label: string
+  items: UiMenuItem[]
+}
+
+interface UiMenuGroupProps {
+  label: string
+  children: JSX.Element
+}
+
+interface UiMenuSubProps {
+  label: string
+  icon?: IconName
+  disabled?: boolean
+  onOpenChange?: (open: boolean) => void
+  children: JSX.Element
+}
+
+interface UiLoaderProps {
+  size?: "small" | "normal" | "large"
+  class?: string
+}
+
+interface UiDialogProps {
+  title: string
+  description?: string
+  children?: JSX.Element
+  footer?: JSX.Element
+  size?: "fit" | "normal" | "large" | "x-large"
+  closable?: boolean
+}
+
+interface UiSwitchProps {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  label: string
+  hideLabel?: boolean
+  description?: string
+  disabled?: boolean
+}
+
+interface UiTextInputProps {
+  value: string
+  onInput: (value: string) => void
+  label: string
+  placeholder?: string
+  onSubmit?: (value: string) => void
+  type?: "text" | "password" | "search" | "url"
+  size?: "normal" | "large"
+  disabled?: boolean
+  invalid?: boolean
+  autofocus?: boolean
+  class?: string
+}
+
+interface UiKeybindProps {
+  keys: string[]
+  class?: string
+}
+
+interface UiMarkdownProps {
+  text: string
+  class?: string
+}
+
+interface UiCodeProps {
+  content: string
+  language?: string
+  class?: string
+}
+
+interface UiSelectProps<T extends string> {
+  options: UiSelectOption<T>[]
+  value: T | undefined
+  onChange: (value: T) => void
+  label: string
+  placeholder?: string
+  disabled?: boolean
+  invalid?: boolean
+  placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"
+  class?: string
+}
+
+interface UiSelectOption<T extends string> {
+  value: T
+  label: string
+}
+
+interface UiSettingsLayoutProps {
+  title: string
+  description?: string
+  actions?: JSX.Element
+  children: JSX.Element
+}
+
+interface UiSettingsSectionProps {
+  title?: string
+  children: JSX.Element
+  footer?: JSX.Element
+}
+
+interface UiSettingsRowProps {
+  title: JSX.Element
+  description?: JSX.Element
+  id?: string
+  children?: JSX.Element
+}
+```
+
+### Bildirimler
+
+`ctx.toast.show` pencerenin köşesinde kısa bir mesaj gösterir ve `dismiss()` işlevi onu kapatan bir tanıtıcı döndürür.
+
+```ts
+ctx.toast.show({ variant: "success", title: ctx.t("invite.copied") })
+```
+
+- `variant` `"default"`, `"success"`, `"error"` veya `"loading"` olur. `success` bir bildirim, siz `icon` ayarlamadıkça
+  bir onay simgesi gösterir.
+- `duration` bildirimin milisaniye olarak ne kadar gösterileceğidir. Varsayılan olarak 5 saniye olur.
+- `persistent: true` bildirimi kullanıcı veya `dismiss()` kapatana kadar tutar ve `duration` değerini yok sayar.
+- Hâlâ gösterilen bir bildirimle aynı olan bir bildirim, kopya yığmak yerine onun yerini alır.
+- Eklentinizin bildirimleri eklenti durduğunda kapanır; böylece hiçbir düğme çalıştırdığı kodun ömrünü aşmaz. Bir
+  bildirim, onu gösteren bileşen veya `createKeyed` çalışmasıyla kapanmaz.
+
+İş sürerken bir `loading` bildirimi gösterin ve iş bitince kapatın:
+
+```ts
+const saving = ctx.toast.show({ variant: "loading", title: ctx.t("saving"), persistent: true })
+await save()
+saving.dismiss()
+```
+
+`actions` düğmeler ekler. Tıklama eylemi çalıştırır ve bildirimi kapatır:
+
+```ts
+ctx.toast.show({
+  variant: "error",
+  title: ctx.t("sync.failed"),
+  actions: [{ label: ctx.t("retry"), run: () => void sync() }],
+})
+```
+
+#### Referans
+
+```ts
+interface Toasts {
+  show(options: ToastOptions): ToastHandle
+}
+
+interface ToastHandle {
+  dismiss(): void
+}
+
+interface ToastOptions {
+  title: string
+  description?: string
+  variant?: "default" | "success" | "error" | "loading"
+  icon?: IconName
+  duration?: number
+  persistent?: boolean
+  actions?: ToastAction[]
+}
+
+interface ToastAction {
+  label: string
+  run(): void
+}
+```
+
+### Dikkat bildirimleri
+
+`ctx.attention.notify`, kullanıcı başka yere bakarken dikkatini çeker: uygulamanın kendi bildirimleriyle aynı kurallarla
+bir sistem bildirimi ve bir ses.
+
+```ts
+const session = ctx.sessions.current()
+
+if (session) {
+  void ctx.attention.notify({
+    title: ctx.t("tests.done"),
+    message: ctx.t("tests.summary", { failed: 0 }),
+    session: { server: session.server.id, id: session.id },
+    id: run.id,
+  })
+}
+```
+
+- Sistem bildirimi yalnızca hiçbir uygulama penceresi odakta değilken gösterilir. Ses her durumda çalar.
+- İkisi de **Settings > Notifications** ayarlarını izler. `variant: "default"` **Agent** satırlarını ve `variant: "error"`
+  **Errors** satırlarını izler. İkisi için masaüstü bildirimleri varsayılan olarak kapalıdır; sesleri açıktır.
+- `sound: false` asla ses çalmaz.
+- Bildirime tıklamak uygulamayı öne getirir ve bir `session` verdiyseniz onu açar.
+- Her uygulama penceresi eklentinizin kendi kopyasını çalıştırır. Yalnızca onu gönderen ilk pencerenin bildirim
+  göstermesi ve ses çalması için olayın bir `id` değerini, örneğin bir çalışmanın kimliğini iletin. `id` olmadan her
+  çağrı bildirim gösterir.
+- Uygulama arayüzü bağlanmadan önce `notify` onu bekler.
+
+`notify` çağrısının Promise'i hiçbir zaman reddedilmez; sonuç, hangi işlemlerin yapıldığını gösterir. Uygulama sistemden bildirimi göstermesini istediğinde `notification` değeri `true` olur. Ses çalmaya başladığında `sound` değeri `true` olur.
+
+```ts
+const result = await ctx.attention.notify({ title: ctx.t("deploy.failed"), variant: "error" })
+
+if (!result.notification) ctx.toast.show({ variant: "error", title: ctx.t("deploy.failed") })
+```
+
+- Kullanıcı bildirimi kapattığında, bir uygulama penceresi odaktayken veya başka bir pencere `id` değerini zaten
+  gönderdiğinde `notification` `false` olur. Sistem, uygulamanın göstermesini istediği bir bildirimi yine gizleyebilir,
+  örneğin kullanıcı bir tarayıcının iznini reddettiğinde.
+
+#### Referans
+
+```ts
+interface Attention {
+  notify(options: NotifyOptions): Promise<NotifyResult>
+}
+
+interface NotifyOptions {
+  title: string
+  message?: string
+  variant?: "default" | "error"
+  session?: { server: string; id: string }
+  sound?: boolean
+  id?: string
+}
+
+interface NotifyResult {
+  notification: boolean
+  sound: boolean
+}
+```
+
+### Kullanım verileri
+
+Bir oturumun token, maliyet ve plan rakamları sunucusunun verisindedir; başlıktaki "28k · $0.28" için uygulamanın
+okuduğu aynı tepkisel store'dur. Bunları opencode'un veritabanından değil oradan okuyun.
+
+```ts
+import { lastAssistantWithUsage } from "@opencode/client/solid"
+
+const data = session.server.data
+const info = () => data.session.get(session.id)
+
+const tokens = () => info()?.tokens // this session's tokens by kind
+const cost = () => data.session.cost(session.id) // USD, with subagent sessions
+const step = () => lastAssistantWithUsage(data.session.message.list(session.id), info()?.revert?.messageID)
+const limits = () => (session.location ? data.location.usage.limits(session.location) : undefined)
+```
+
+- `step()`, bağlam penceresini şu anda dolduran token'lara sahip asistan adımıdır; uygulamanın bağlam halkasının
+  kullandığı gibi. `tokens` değerini `data.location.model.list` içindeki modelin `limit.context` değeriyle karşılaştırın.
+- `limits()`, `data.location.usage.sync(location)` bunları yükledikten sonra OpenCode Console bütçelerini ve Go plan
+  kotasını tutar. Sunucu hiçbirini bildirmediğinde `null` olur.
+
+### Sekmeler
+
+`ctx.tabs` kabuğun sekme şeridini okur ve değiştirir: sekmeler olarak açık oturumlar ve taslaklar. Bu, çalışması
+bittiğinde bir oturumun sekmesini öne taşır:
+
+```ts
+import { onCleanup } from "solid-js"
+import { createKeyed } from "@opencode/plugin/gui"
+
+createKeyed(
+  () => ctx.servers.get("sidecar")?.data,
+  (data) =>
+    onCleanup(
+      data.on("session.execution.succeeded", (event) => {
+        const tab = ctx.tabs.list().find((item) => item.session?.id === event.data.sessionID)
+
+        if (tab) ctx.tabs.move(tab.key, 0)
+      }),
+    ),
+)
+```
+
+- `list()` açık sekmeleri şerit sırasıyla döndürür. Tepkiseldir. Bir taslak için sekmenin `session` değeri `undefined`
+  olur ve ekrandaki sekme için `active` `true` olur.
+- `open({ server, id }, { focus? })`, oturumu sekme şeridinin sonuna ekler. `focus` değeri `true` değilse sekme arka planda açılır. Oturum zaten açıksa mevcut sekmesi korunur. Bir subagent zaten üst oturumun sekmesinde gösteriliyorsa o sekmede kalır.
+- `focus(key)` bir sekmeyi gösterir, `move(key, index)` taşır ve `close(key)` kullanıcının yaptığı gibi kapatır.
+- Hiçbir açık sekmenin sahip olmadığı bir anahtar hiçbir şey yapmaz. Uygulama arayüzü bağlanmadan önce yapılan yazmalar
+  onu bekler.
+
+#### Referans
+
+```ts
+interface Tabs {
+  list(): ShellTab[]
+  open(session: { server: string; id: string }, options?: { focus?: boolean }): void
+  focus(key: string): void
+  move(key: string, index: number): void
+  close(key: string): void
+}
+
+interface ShellTab {
+  key: string
+  session: SessionRef | undefined
+  active: boolean
+}
+```
+
+### Tuş atamaları
+
+`ctx.keybinds` yayımlanmış bir komut kimliği için kullanıcının kısayolunu okur.
+
+```ts
+const label = ctx.keybinds.keybind(`${ctx.id}.open`)
+const chord = ctx.keybinds.keys("mod+k")
+const pressed = (event: KeyboardEvent) => ctx.keybinds.matches(`${ctx.id}.open`, event)
+```
+
+- `keybind(command)` komutun etkin tuş atamasının görüntüleme parçalarını döndürür, örneğin `["Ctrl", "K"]`. Komut
+  bağlı değilse boştur.
+- `keys(bind)`, uygulamanın yönetmediği bir tuş kombinasyonunu görüntülemek için gereken parçaları döndürür. Örneğin bir sayfanın kendi kısayolu için kullanın.
+- `matches(command, event)` olay komutun etkin tuş atamasıyla eşleştiğinde `true` olur.
+
+#### Referans
+
+```ts
+interface Keybinds {
+  keybind(command: string): string[]
+  keys(bind: string): string[]
+  matches(command: string, event: KeyboardEvent): boolean
+}
+```
+
+### Komutları çalıştırma
+
+`ctx.commands.run(id)` bir komutu komut paletinde seçmek gibi çalıştırır. Komut çalışamadığında `false` döndürür:
+
+```ts
+if (!ctx.commands.run("terminal.toggle")) ctx.toast.show({ title: ctx.t("terminal.unavailable") })
+```
+
+- `id`, herhangi bir eklentinin yayımlanmış eklenti komutu `<plugin id>.<command id>` veya uygulamanın kendi
+  komutlarından biridir, örneğin `command.palette`.
+- Uygulamanın komut kimlikleri kararlı bir API değildir ve sürümler arasında değişebilir.
+- `run`, kimliğe sahip etkin bir komut yoksa `false` döndürür. Listelenmiş ama devre dışı bir komut çalışmaz.
+- Uygulama arayüzü bağlanmadan önce hiçbir komut kayıtlı değildir; bu nedenle `run` `false` döndürür.
+- `run`, bir komutun eşzamansız işini beklemez.
+
+#### Referans
+
+```ts
+interface Commands {
+  run(id: string): boolean
+}
+```
+
+### Sistem ve ortam
+
+`ctx.system` her platformda çalışır. `ctx.desktop` yalnızca masaüstüne özgü yetenekler ekler ve web'de `undefined` olur.
+
+```ts
+const show = async (path: string) => {
+  if (ctx.desktop && (await ctx.desktop.reveal(path))) return
+  await ctx.system.copy(path)
+}
+```
+
+- `system.save` masaüstünde bir kaydetme iletişim kutusu, web'de indirme gösterir. Kullanıcı iletişim kutusunu iptal
+  ettiğinde `false` döndürür.
+- `system.openExternal` bir URL'yi sistem tarayıcısında açar. Uygulama içindeki bağlantılar için, bir `Link` bağlantısını
+  [bağlantı işleyicisine](#link-handlers) yönlendiren `ctx.links.open` kullanın.
+- `desktop.launch(path, app?)` bir yolu bir uygulamayla veya varsayılan uygulamayla açar. `desktop.reveal(path)` onu
+  dosya yöneticisinde gösterir.
+- `ctx.embeds` ana süreçteki bir web görünümünü bir pencerede render eder; bkz.
+  [Gömülü web görünümleri](#embedded-web-views).
+- `ctx.locale` arayüz dilini ve yazma yönünü okur. `ctx.appearance.font("mono")` kullanıcının terminal yazı tipinin CSS
+  yazı tipi ailesidir.
+- `ctx.router` geçerli rota yolunu ve bir rota geçişinin sürüp sürmediğini okur.
+- `ctx.workspaces.on("remove", handler)` kullanıcı bir çalışma alanı dizinini sunucudan kaldırdığında çalışır; böylece ona
+  kapsamlı store'ları temizleyebilirsiniz.
+
+`desktop.pick(options)` kullanıcıdan sistemin açma iletişim kutusuyla dosya veya klasör ister ve mutlak yollarını çözer:
+
+```ts
+const [folder] = (await ctx.desktop?.pick({ directory: true, title: ctx.t("pick.folder") })) ?? []
+
+if (folder) await ctx.client.rpc(Acme).index({ directory: folder })
+```
+
+- `directory: true` dosya yerine klasör seçer ve `multiple: true` kullanıcının birden fazla seçmesine izin verir.
+- `extensions` sunulan dosyaları noktasız olarak sınırlar, örneğin `["json"]`. Klasörler bunu yok sayar.
+- `title` iletişim kutusunun başlığıdır. Her sistem göstermez.
+- Kullanıcı iptal ettiğinde yollar boştur. İletişim kutusu açılamadığında `pick` reddeder.
+- `pick` yalnızca masaüstündedir: bir tarayıcı sayfaya seçilen dosyanın nerede olduğunu asla söylemez.
+
+`ctx.appearance.mode()` arayüzün gösterdiği renk şemasıdır, `"light"` veya `"dark"`. Tepkiseldir:
+
+```ts
+const background = () => (ctx.appearance.mode() === "dark" ? "#000" : "#fff")
+```
+
+- **Settings > Appearance** bölümündeki kullanıcı seçimini izler; **System**, sistemin geçerli şemasına çözümlenir.
+- Uygulama arayüzü bağlanmadan önce sistemin şemasıdır.
+
+#### Referans
+
+```ts
+interface System {
+  copy(text: string): Promise<void>
+  save(file: { name: string; content: string }): Promise<boolean>
+  openExternal(url: string): void
+}
+
+interface Desktop {
+  os: "macos" | "windows" | "linux"
+  zoom(): number
+  launch(path: string, app?: string): Promise<void>
+  reveal(path: string): Promise<boolean>
+  installed(app: string): Promise<boolean>
+  pick(options?: PickOptions): Promise<string[]>
+}
+
+interface PickOptions {
+  directory?: boolean
+  multiple?: boolean
+  title?: string
+  extensions?: string[]
+}
+
+interface Links {
+  open(link: Link): boolean
+  exists(link: Link): boolean | Promise<boolean>
+}
+
+interface Locale {
+  locale(): string
+  direction(): "ltr" | "rtl"
+}
+
+interface Appearance {
+  font(kind: "mono"): string
+  mode(): "light" | "dark"
+}
+
+interface Router {
+  path(): string
+  routing(): boolean
+}
+
+interface Workspaces {
+  on(event: "remove", handler: (value: { server: string; directory: string }) => void): Cleanup
+}
+```
+
+## Saklanan durum
+
+Masaüstü pencereleri saklanan durumu IPC üzerinden yükler, web ise `localStorage` değerini hemen okur. Store'ları
+`Plugin.define({ stores })` içinde bildirin; böylece ana bilgisayar onları sizin için yükler.
+
+- **`Store.global`** uygulama için tek bir değer tutar. `setup` çalışmadan önce yüklenir; bu nedenle
+  `ctx.stores.name.value` asla `undefined` olmaz.
+- **`Store.session`** oturum başına bir değer tutar. Oturum bağlandığında yüklenir; o zamana kadar
+  `ctx.stores.name(session).value` `undefined` olur.
+
+Bildirilen store'lar pencereler içindir. `main`, durumunu eşzamanlı okuyan `ctx.storage.store` ile açar; bkz.
+[Ana süreç bağlamı](#main-context).
+
+Bir değeri `update(draft => …)` ile yerinde değiştirin; hiçbir şey döndürmemelidir. Veya `set(next)` ile değiştirin:
+
+```ts
+const enabled = ctx.stores.prefs.value.enabled
+
+ctx.stores.prefs.update((draft) => {
+  draft.enabled = !draft.enabled
+})
+```
+
+- `ready()`, değer yüklendiğinde `true` olur. Ondan önce yapılan yazmalar bekler ve çağrı sırasına göre uygulanır.
+- `from`, store hiçbir değer tutmazken değeri bir kez içe aktaracağı diğer saklanan anahtarları adlandırır, örneğin
+  yeniden adlandırdığınız bir store'un anahtarını: `"plugin.acme.settings"`. Birkaç anahtarı denemek için en yeniden
+  başlayarak bir liste iletin. Diğer anahtar, store kaldırılana kadar kendi kopyasını korur.
+
+```ts
+stores: {
+  prefs: Store.global(Prefs, { enabled: true }, ["plugin.acme.settings.v2", "plugin.acme.settings"]),
+}
+```
+
+#### Referans
+
+```ts
+const Store: {
+  global(schema: Schema, initial: T, from?: string | string[]): StoreDeclaration
+  session(schema: Schema, initial: T, from?: string | string[]): StoreDeclaration
+}
+
+interface Persisted<T, V = T | undefined> {
+  value: V
+  ready(): boolean
+  update(mutate: (draft: T) => undefined): void
+  set(next: T): void
+}
+```
+
+### Çalışma zamanı store'ları
+
+`ctx.storage.store(key, options)` yalnızca çalışma zamanında bilinen bir anahtar için bir store açar. `scope` sunucu,
+dizin veya oturum başına bir değer tutar.
+
+```tsx
+import { Schema } from "effect"
+import { usePlugin, type MountedSession } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+function DraftView(props: { readonly session: MountedSession }) {
+  const ctx = usePlugin<typeof definition>()
+
+  const draft = ctx.storage.store("draft", {
+    schema: Schema.Struct({ text: Schema.String }),
+    initial: { text: "" },
+    scope: { server: props.session.server.id, directory: props.session.directory },
+  })
+
+  return <p>{draft.value?.text}</p>
+}
+```
+
+- Varsayılan `scope: "global"` uygulama için tek bir değer tutar.
+- `scope: { server, directory? }` sunucu başına veya onun üzerindeki çalışma alanı dizini başına bir değer tutar.
+- `scope: { session }` oturum başına bir değer tutar ve oturum yeni bir dizine taşındığında yeniden açılır.
+- Bir çalışma zamanı store'unun `value` değeri yüklenene kadar `undefined` olur.
+- `ctx.storage.memory(key, { initial })` eklenti yeniden yüklemelerinde yaşayan ama pencere yeniden yüklemelerinde
+  yaşamayan pencere yerel durumunu tutar.
+- `ctx.storage.remove(key, { scope, from })` değeri siler; böylece anahtar yeniden `initial` olarak okunur.
+
+#### Referans
+
+```ts
+interface Storage {
+  store(key: string, options: StoreOptions): Persisted<T>
+  memory(key: string, options: { initial: T }): [Store<T>, (mutation: (draft: T) => void) => void]
+  remove(key: string, options?: { scope?: StorageScope; from?: string | string[] }): void
+}
+
+interface StoreOptions {
+  schema: Schema
+  initial: T
+  scope?: StorageScope
+  from?: string | string[]
+}
+
+type StorageScope = "global" | { server: string; directory?: string } | { session: SessionRef }
+```
+
+## Tepkisel ilkeller
+
+Ham `createEffect`, `createRenderEffect` ve `createComputed` yerine bu yardımcıları tercih edin. Bir eklentinin ömrünü ve
+bağımlılıklarının yeniden başlamalarını izlerler; elle yazılmış effect'ler bunları genellikle yanlış yapar.
+
+### createKeyed
+
+`createKeyed(source, fn, { otherwise?, equals? })` her anahtar için `fn` işlevini yeni bir sahipte çalıştırır: bir
+`ctx.use` erişimcisinin her etkin kuşağı veya düz bir erişimcinin her değeri. `fn` içinde kaydedilen her şey o
+çalışmayla sona erer.
+
+```tsx
+import { onCleanup } from "solid-js"
+import { createKeyed, usePlugin, type SessionScreen } from "@opencode/plugin/gui"
+import { Changes } from "@opencode/plugin/gui/review"
+
+function ChangedFiles(props: { readonly screen: SessionScreen }) {
+  const ctx = usePlugin()
+
+  // Each active generation of Changes keeps this view's changes loaded; the watch ends with it.
+  createKeyed(ctx.use(Changes), (changes) => onCleanup(changes.watch(props.screen, "files")))
+
+  return <FileMarkers screen={props.screen} />
+}
+```
+
+- `otherwise`, kaynağın anahtarı yokken çalışır: etkin olmayan bir `Live` erişimcisi veya değeri `undefined`, `null`
+  ya da `false` olan düz bir erişimci.
+- `equals`, düz bir erişimcinin yeni değerinin aynı anahtar olup olmadığına karar verir; böylece `fn` yeniden çalışmaz.
+  Kaynak her seferinde yeni bir nesne oluşturduğunda kullanın. Bir `Live` erişimcisi her zaman kuşağa göre anahtarlar.
+
+#### Referans
+
+```ts
+function createKeyed<T>(
+  source: () => Live<T> | T,
+  fn: (value: T) => void,
+  options?: { otherwise?(): void; equals?(previous: T, next: T): boolean },
+): void
+```
+
+### createLatest
+
+`createLatest(source, (value, signal) => promise)` her `source` değiştiğinde getirir, eskimiş istekleri iptal eder ve
+asla askıya almaz.
+
+```ts
+const summary = createLatest(
+  () => ctx.sessions.current()?.directory,
+  (directory, signal) => fetchSummary(directory, signal),
+)
+const text = () => summary.latest ?? ""
+```
+
+- `latest` son sonuçtur ve daha yeni bir istek çalışırken korunur. İlkinden önce `undefined` olur.
+- `loading`, geçerli değere ait istek sürdüğü sürece `true` olur.
+- `error`, geçerli istek reddedilmişse reddedilme nedenidir.
+
+#### Referans
+
+```ts
+function createLatest<S, T>(
+  source: () => Live<S> | S,
+  fetch: (value: S, signal: AbortSignal) => Promise<T>,
+): { latest: T | undefined; loading: boolean; error: unknown }
+```
+
+### createVisitState
+
+`createVisitState(initial)` kullanıcı oturumdan ayrılıp her döndüğünde sıfırlanan bir `[value, setValue]` sinyali
+oluşturur.
+
+```ts
+const [expanded, setExpanded] = createVisitState(false)
+```
+
+#### Referans
+
+```ts
+function createVisitState<T>(initial: T): [value: () => T, set: (next: T) => void]
+```
+
+### usePanel ve useDrawer
+
+`usePanel()` çevreleyen panel çerçevesini okur ve bir panel render'ı dışında hata fırlatır. `useDrawer()` bir katkının
+çevresindeki mobil çekmeceyi veya bir çekmecenin dışında `undefined` döndürür.
+
+```ts
+const panel = usePanel()
+const drawer = useDrawer()
+const compact = () => panel.placement() === "mobile"
+const close = () => drawer?.close()
+```
+
+- `placement()` yan bölgede `"side"` ve dar ekran görünümünde `"mobile"` olur.
+- `visible()`, bölge açıkken ve bu sekme seçiliyken `true` olur. `present()`, bölge kapanma animasyonu yaparken `true`
+  kalır.
+- `reserve()` bir başlığın sonunda ana bilgisayarın bölge anahtarı için yer bırakmanızı ister.
+- `sidebar`, her yan panelin paylaştığı iç kenar çubuğu tercihidir. Kenar çubuğu olan bir panel kendi anahtarını render
+  eder.
+- `drawer.open(view)` çekmecenin görünümü yerine bir geri denetimiyle içerik gösterir.
+
+#### Referans
+
+```ts
+function usePanel(): PanelFrame
+function useDrawer(): { close(): void; open(view: DrawerView): void } | undefined
+
+interface PanelFrame {
+  visible(): boolean
+  present(): boolean
+  placement(): "side" | "mobile"
+  reserve(): boolean
+  animate(): boolean
+  open(): string[]
+  sidebar: {
+    opened(): boolean
+    width(): number
+    transition(): boolean
+    resize(width: number): void
+    toggle(): void
+  }
+}
+
+interface DrawerView {
+  title: string
+  content: JSX.Element
+  trigger: HTMLElement
+}
+```
+
+## Uygulama sözleşmeleri
+
+Uygulama bu sözleşmeleri her eklentiye sağlar. Birini `ctx.use(token)` ile izleyin ve `active` olmadığı sürece, diğer
+eklentilerin sözleşmelerinde olduğu gibi ele alın. Örneğin `Browser` web'de `inactive` olur.
+
+### Dosyalar
+
+`@opencode/plugin/gui/file`, uygulamanın dosya ağacını, **Open in** düğmesini ve `FileViewer` kayıt defterini dışa
+aktarır.
+
+```tsx
+import { bindPlugin } from "@opencode/plugin/gui"
+import { FileViewer, type FileViewerProps } from "@opencode/plugin/gui/file"
+
+// A viewer for a kind of file the file view does not render itself.
+ctx.add(FileViewer, {
+  kinds: ["document"],
+  View: bindPlugin((props: FileViewerProps) => <AcmeDoc bytes={props.bytes} onError={props.onError} />),
+})
+```
+
+- **`FileTree`** bir sözleşmedir. `Tree` ve `List`, değişiklik işaretleriyle çalışma alanı dosyalarının sanallaştırılmış
+  bir ağacını veya listesini render eder. Onu `ctx.use(FileTree)` ile okuyun. Bir ağacın `labels` değeri bir klasörün
+  adından sonra metin ekler, örneğin kaç girdisi olduğunu.
+- **`OpenInApp`** bir sözleşmedir. `Button`, bir oturumun çalışma alanı için masaüstü **Open in** düğmesidir.
+- **`FileViewer`** bir kayıt defteridir. Bir görüntüleyici render ettiği `kinds` değerlerini listeler, baytları
+  `problem` ile reddedebilir ve `onDetails` ve `onError` bildiren bir `View` render eder.
+
+#### Referans
+
+```ts
+interface FileTree {
+  Tree(props: FileTreeProps): JSX.Element
+  List(props: FileListProps): JSX.Element
+}
+
+interface FileTreeProps {
+  screen: SessionScreen
+  session: MountedSession
+  allowed: string[]
+  kinds?: Map<string, ChangeKind>
+  labels?: Map<string, string>
+  active?: string
+  onFileClick(path: string): void
+}
+
+interface FileListProps {
+  screen: SessionScreen
+  session: MountedSession
+  files: string[]
+  kinds?: Map<string, ChangeKind>
+  active?: string
+  highlighted?: string
+  onFileClick(path: string): void
+}
+
+interface OpenInApp {
+  Button(props: { screen: SessionScreen; session: MountedSession }): JSX.Element
+}
+
+interface FileViewer {
+  kinds: ArtifactKind[]
+  problem?(bytes: Uint8Array): string | undefined
+  View: Component<FileViewerProps>
+}
+
+interface FileViewerProps {
+  bytes: Uint8Array
+  onDetails(details: string[]): void
+  onError(reason?: string): void
+}
+```
+
+### Değişiklikleri inceleme
+
+`@opencode/plugin/gui/review`, uygulamanın bir oturumun değişikliklerine bakışı olan `Changes` ile `ChangeKind`
+(`"add"`, `"del"` veya `"mix"`) değerlerini dışa aktarır.
+
+```ts
+import { Changes } from "@opencode/plugin/gui/review"
+
+const changes = ctx.use(Changes)
+
+const count = () => {
+  const live = changes()
+  const session = ctx.sessions.current()
+
+  return live.status === "active" && session ? live.value.diffs(session).length : 0
+}
+```
+
+- `diffs(session)` geçerli inceleme modunun diff'leridir ve `ready(session)` bunlar yüklendiğinde `true` olur. İkisi de
+  tepkiseldir. Yalnızca yönlendirilmiş oturumun değişiklikleri vardır; diğer oturumlar boş okunur.
+- `kinds(session)` her değişen dosyayı ve dizini `ChangeKind` değeriyle eşler.
+- `active(session)` inceleme panelinin gösterdiği dosyadır.
+- `details(session)`, inceleme modundan bağımsız olarak oturum dizinindeki henüz commit edilmemiş değişiklikleri verir.
+- `focus(session, path)` bir dosyayı inceleme panelinde gösterir ve `open(session)` tüm değişiklikleri gösterir.
+- `watch(screen, source)` bir görünümün değişikliklerini, görünümün oturum geçişleri boyunca, onları gösterdiği sürece
+  yüklü tutar. Sahibi olan ekranı panel veya yuva girdisinden iletin. İzlemeyi durduran bir işlev döndürür; bkz.
+  [createKeyed](#createkeyed).
+- `tree` izlemesi kalıcı bir değişiklik listesidir: yan bölgeyi açmak onu yeniler. `details` izlemesi
+  `details(session)` yükler.
+
+#### Referans
+
+```ts
+interface Changes {
+  diffs(session: SessionRef): FileDiffInfo[]
+  ready(session: SessionRef): boolean
+  kinds(session: SessionRef): Map<string, ChangeKind>
+  active(session: SessionRef): string | undefined
+  details(session: SessionRef): FileDiffInfo[] | undefined
+  focus(session: SessionRef, path: string): void
+  open(session: SessionRef): void
+  watch(screen: SessionScreen, source: "tree" | "files" | "details"): () => void
+}
+
+type ChangeKind = "add" | "del" | "mix"
+```
+
+### Tarayıcı
+
+`@opencode/plugin/gui/browser`, bir oturumun masaüstü tarayıcı bölmesi olan `Browser` değerini dışa aktarır.
+
+```ts
+import { Browser } from "@opencode/plugin/gui/browser"
+
+const session = ctx.sessions.current()
+const live = ctx.use(Browser)()
+const url = "http://localhost:3000"
+
+if (session && live.status === "active" && live.value.canOpen(session, url)) live.value.open(session, url)
+```
+
+- `attached(session)` oturumun tarayıcı bölmesi olduğunda `true` olur.
+- `canOpen(session, path?)` bir çalışma alanı dosyası veya http(s) URL'si bölmede açılabildiğinde `true` olur.
+- `open(session, url)` bir URL'yi oturumun yan panelinde tarayıcı sekmesi olarak açar.
+- `openFile(session, path)` bir çalışma alanı dosyasını `file://` sekmesi olarak açar.
+
+#### Referans
+
+```ts
+interface Browser {
+  attached(session: SessionRef): boolean
+  canOpen(session: SessionRef, path?: string): boolean
+  open(session: SessionRef, url: string): void
+  openFile(session: SessionRef, path: string): void
+}
+```
+
+## Ana süreç
+
+OpenCode Desktop'ta bir eklentinin `main` kurulumu Electron ana sürecinde uygulama genelinde tek bir örnek olarak bir kez
+çalışır. Node.js yerleşiklerine, `electron` paketine ve ana bilgisayar API'lerine tam erişimi vardır. Onu eklentinin
+[`./gui-experimental` dosyasında](#define-the-gui-plugin) pencere `setup` bölümünün yanında veya tek başına
+`Plugin.define` istemcisine iletin.
+
+```tsx title="src/gui.tsx"
+import { Schema } from "effect"
+import { powerSaveBlocker } from "electron"
+import { Plugin } from "@opencode/plugin/gui"
+import { KeepAwake } from "./gui/contract"
+
+export default Plugin.define({
+  main(ctx) {
+    const stored = ctx.storage.store("keepScreenActive", { schema: Schema.Boolean, initial: false })
+    let blockerId: number | undefined
+
+    const release = () => {
+      if (blockerId === undefined) return
+      powerSaveBlocker.stop(blockerId)
+      blockerId = undefined
+    }
+
+    const setActive = (enabled: boolean) => {
+      if (enabled && blockerId === undefined) blockerId = powerSaveBlocker.start("prevent-display-sleep")
+      if (!enabled) release()
+      stored.set(enabled)
+    }
+
+    if (stored.value) setActive(true)
+
+    ctx.provide(KeepAwake, {
+      screenActive: () => blockerId !== undefined && powerSaveBlocker.isStarted(blockerId),
+      setScreenActive: (enabled) => setActive(enabled),
+    })
+
+    return release
+  },
+})
+```
+
+Bir pencerede `electron` etkisiz bir yer tutucudur; bu nedenle paylaşılan `./gui-experimental` dosyasında içe aktarmak
+güvenlidir. Bkz. [Tek dosya, iki süreç](#one-file-two-processes).
+
+## Ana süreç bağlamı
+
+`main` bir `MainContext` alır. Pencere `setup` bölümünden farklı olarak `main` `async` olabilir ve bir temizleme işlevi
+döndürebilir veya ona çözümlenebilir.
+
+```ts
+main(ctx) {
+  ctx.log.write("info", "acme started", { version: ctx.app.version })
+}
+```
+
+- `ctx.options`, `ctx.client` ve `ctx.app` [paylaşılan bağlamdır](#shared-context). `main` içinde `ctx.app.platform` her
+  zaman `"desktop"` olur.
+- `ctx.storage.store(key, { schema, initial })` eklentinin ad alanında eşzamanlı bir store açar. `value` her zaman
+  tanımlıdır ve her `set` veya `update` dönmeden önce veritabanına ulaşır. `ctx.storage.remove(key)` değeri siler.
+- `ctx.signal`, eklenti devre dışı bırakıldığında, yeniden yüklendiğinde veya kaldırıldığında ya da uygulama
+  kapandığında iptal olur. `ctx.onCleanup(fn)` o anda `fn` çalıştırır; bkz.
+  [Ömürler ve temizlik](#lifetimes-and-cleanup).
+- `ctx.provide` eklentinin kimliği altında bir `Ipc` uygular; bkz. [Bir Ipc tanımlama ve sağlama](#define-and-provide-an-ipc).
+- `ctx.add` [`MenubarItem`](#native-app-menu) gibi ana süreç kayıt defterlerine katkı verir.
+- `ctx.windows` uygulamanın pencerelerini listeler ve biri açıldığında veya kapandığında bildirir.
+- `ctx.embeds` bir `WebContentsView` öğesini bir pencerenin düzenine yerleştirir; bkz.
+  [Gömülü web görünümleri](#embedded-web-views).
+- `ctx.serverEndpoints.get(id)` bir sunucunun URL'sini ve kimlik bilgilerini döndürür. Masaüstü uygulamasının kendi
+  sunucusu `"sidecar"`dır.
+- `ctx.cli` masaüstü uygulamasının çalıştırdığı OpenCode CLI'yı açıklar.
+- `ctx.log.write` masaüstü günlük dosyasına yazar.
+
+#### Referans
+
+`@opencode/plugin/gui/main`, aşağıdaki `MainStorage` ve `MainEmbeds` değerlerini `Storage` ve `Embeds` olarak dışa
+aktarır.
+
+```ts
+interface MainContext {
+  id: string
+  options: PluginOptions
+  client: OpenCodeClient
+  app: App
+  signal: AbortSignal
+  onCleanup(fn: Cleanup): void
+  storage: MainStorage
+  provide<S extends IpcSpec>(token: Ipc<S>, impl: IpcImpl<S>): IpcProvider<S>
+  add<T>(registry: Registry<T>, item: () => T | undefined): Cleanup
+  add<T>(registry: Registry<T>, item: T): Cleanup
+  list<T>(registry: Registry<T>): T[]
+  t(key: string, params?: Record<string, string | number | boolean>): string
+  plural(key: string, count: number, params?: Record<string, string | number | boolean>): string
+  windows: Windows
+  embeds: MainEmbeds
+  serverEndpoints: { get(id: string): ServerEndpoint | undefined }
+  cli: { version: string; command: string[]; binary?: string; development: boolean }
+  log: { write(level: "debug" | "info" | "warn" | "error", message: string, data?: Record<string, unknown>): void }
+}
+
+interface MainStorage {
+  store(key: string, options: { schema: Schema; initial: T }): Persisted<T, T>
+  remove(key: string): void
+}
+
+interface Windows {
+  get(id: number): BrowserWindow | undefined
+  list(): BrowserWindow[]
+  focused(): BrowserWindow | undefined
+  on(event: "open" | "close", handler: (window: BrowserWindow) => void): Cleanup
+}
+
+interface ServerEndpoint {
+  id: string
+  url: string
+  headers: Record<string, string>
+  sameMachine: boolean
+  password?: string
+}
+```
+
+## Bir Ipc tanımlama ve sağlama
+
+Bir `Ipc` belirtimi pencere başına `state`, çağrılabilir `methods` ve itilen `events` bildirebilir. Effect `Schema`
+köprüden geçen her değeri doğrular ve kodlar.
+
+```ts title="src/gui/contract.ts"
+import { Schema } from "effect"
+import { Ipc } from "@opencode/plugin/gui"
+
+export const Counter = Ipc.define({
+  id: "acme.counter",
+  state: Schema.Struct({ count: Schema.Number }),
+  methods: {
+    increment: {
+      input: Schema.Number,
+      output: Schema.Number,
+    },
+    reset: {},
+  },
+  events: {
+    overflow: Schema.Struct({ limit: Schema.Number }),
+  },
+})
+```
+
+- Kimlik eklentinizin kimliğidir veya onunla başlar, örneğin `acme.counter`. `main` içindeki `ctx.provide` ve bir
+  penceredeki `ctx.main` diğer her kimlik için hata fırlatır.
+- Argüman almayan bir yöntem için `input`, hiçbir şey döndürmeyen bir yöntem için `output` alanını atlayın.
+
+#### Referans
+
+```ts
+interface IpcSpec {
+  id: string
+  state?: Schema
+  methods: Record<string, { input?: Schema; output?: Schema }>
+  events?: Record<string, Schema>
+}
+```
+
+### Sağlayıcıyı main içinde uygulama
+
+Her yöntem çözülmüş girdiyi ve bir `Caller` (`{ window, signal }`) alır. `state` değiştiğinde yeni anlık görüntüyü abone
+pencerelere itmek için `provider.changed(window?)`, bir olay göndermek için `provider.emit(name, payload, window?)`
+çağırın.
+
+```ts title="src/gui/main.ts"
+import type { Plugin } from "@opencode/plugin/gui"
+import { Counter } from "./contract"
+
+export const main: Plugin.MainSetup = (ctx) => {
+  const counts = new Map<number, number>()
+
+  const provider = ctx.provide(Counter, {
+    state: (window: number) => ({ count: counts.get(window) ?? 0 }),
+    increment: (step, caller) => {
+      const next = (counts.get(caller.window) ?? 0) + step
+      counts.set(caller.window, next)
+      provider.changed(caller.window)
+
+      if (next > 100) provider.emit("overflow", { limit: 100 }, caller.window)
+
+      return next
+    },
+    reset: (_input, caller) => {
+      counts.set(caller.window, 0)
+      provider.changed(caller.window)
+    },
+  })
+}
+```
+
+- `state` içeren bir belirtim uygulamada `state(window)` da gerektirir. Main onu bir pencere abone olduğunda ve her
+  `changed` çağrısında okur.
+- Hata fırlatan bir yöntem pencerenin çağrısını reddeder.
+- `window` alanını atladığınızda `changed` ve `emit` her pencereye ulaşır.
+- `dispose()` `Ipc`'yi erken geri çeker. Eklenti onu yeniden sağlayana veya durana kadar pencereler onu `pending` görür
+  ve `ctx.main` çağrıları bekler. Ana bilgisayar onu eklenti durduğunda da geri çeker.
+
+#### Referans
+
+```ts
+type IpcImpl<S extends IpcSpec> = {
+  [Name in keyof S["methods"]]: (input: Input<Name>, caller: Caller) => Output<Name> | Promise<Output<Name>>
+} & { state(window: number): State }
+
+interface Caller {
+  window: number
+  signal: AbortSignal
+}
+
+interface IpcProvider<S extends IpcSpec> {
+  changed(window?: number): void
+  emit(name: keyof S["events"], data: EventData, window?: number): void
+  dispose(): void
+}
+```
+
+### Ipc'yi bir pencerede kullanma
+
+Bir pencerede `ctx.main(Counter)`, `main` bölümünüzün sağladığı `Ipc`'nin istemcisini döndürür. `input` şeması olmayan
+bir yöntem yalnızca isteğe bağlı `{ signal }` çağrı seçenekleri alır. İlk argümanı olarak `undefined` iletmeyin.
+
+```tsx title="src/gui/window.tsx"
+import { Command, type Plugin } from "@opencode/plugin/gui"
+import { Counter } from "./contract"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  const counter = ctx.main(Counter)
+
+  // Follows main across restarts; removed when the plugin stops.
+  counter.on("overflow", (data) => console.log(`Counter exceeded ${data.limit}`))
+
+  ctx.add(Command, () => ({
+    id: "increment",
+    title: ctx.t("command.increment"),
+    enabled: ctx.app.platform === "desktop",
+    run: async () => {
+      await counter.increment(1, { signal: ctx.signal })
+      await counter.reset({ signal: ctx.signal })
+    },
+  }))
+}
+```
+
+- Bir çağrı `main` başlarken bekler. `main` yanıt veremediğinde reddeder: web'de, eklentinin `main` bölümü kapalıyken
+  veya başarısız olduğunda ya da yöntem hata fırlattığında. Kullanıcının geri bildirime ihtiyaç duyduğu yerde reddi
+  yakalayın.
+- `state()` ve `on()` `main` bölümünü yeniden başlatmalar boyunca izler. Dinleyici geçerli sahiple, o yoksa eklentiyle
+  sona erer.
+- `ctx.main`, token'la yapılan her çağrı için aynı istemciyi döndürür.
+
+Bu pencerenin `state` değerini `client.state()` ile okuyun. İlk anlık görüntü gelene kadar `undefined` olur ve `main`
+her `changed` çağırdığında güncellenir.
+
+```tsx
+const count = () => ctx.main(Counter).state()?.count ?? 0
+```
+
+#### Referans
+
+```ts
+type IpcClient<S extends IpcSpec> = {
+  [Name in keyof S["methods"]]: S["methods"][Name] extends { input: Schema }
+    ? (input: Input<Name>, options?: { signal?: AbortSignal }) => Promise<Output<Name>>
+    : (options?: { signal?: AbortSignal }) => Promise<Output<Name>>
+} & {
+  state(): State | undefined
+  on(name: keyof S["events"], listener: (data: EventData) => void): Cleanup
+}
+```
+
+Eklentiyi `src/gui.tsx` içinde iki kurulumla tanımlayın: `Plugin.define({ ...definition, setup, main })`.
+
+### Diğer eklentiler
+
+Başka bir eklenti `Ipc`'nizi bir sözleşmeyi izlediği gibi `ctx.use(Counter)` ile izler. `active` olduğu sürece değeri
+aynı `IpcClient` olur.
+
+```ts
+const counter = ctx.use(Counter)
+
+const count = () => {
+  const live = counter()
+
+  return live.status === "active" ? (live.value.state()?.count ?? 0) : 0
+}
+```
+
+- Her `Ipc` web'de, hiçbir ana süreç çalışmadığı için `inactive` olur.
+
+## Yerel uygulama menüsü
+
+`main`, yerel menülere (macOS uygulama menüsü, File, Edit, View, Go, Window ve Help) ve Windows ile Linux'ta uygulama içi
+menüye `@opencode/plugin/gui/main` paketindeki `MenubarItem` ile öğeler ekler:
+
+```ts
+import { MenubarItem } from "@opencode/plugin/gui/main"
+
+ctx.add(
+  MenubarItem,
+  (): MenubarItem => ({
+    menu: "help",
+    id: "diagnostics",
+    after: "logs.export",
+    label: ctx.t("menu.diagnostics"),
+    enabled: () => true,
+    run: (focusedWindow) => {
+      focusedWindow?.webContents.focus()
+    },
+  }),
+)
+```
+
+- `after`, izlediği öğeyi adlandırır: bu eklentinin öğelerinden birini kimliğiyle veya yerleşik bir öğeyi komutuyla,
+  o yoksa eylemiyle, o da yoksa rolüyle, örneğin `logs.export`, `edit.copy` veya `about`. Hiçbiri eşleşmezse öğe menünün
+  sonuna gider.
+- `app` öğeleri yalnızca macOS'ta görünür.
+- `run` varsa odaklanmış pencereyi alır.
+- Main menüyü her oluşturduğunda işlevi okur; böylece etiket dili izler.
+
+#### Referans
+
+```ts
+interface MenubarItem {
+  menu: "app" | "file" | "edit" | "view" | "go" | "window" | "help"
+  id: string
+  label: string
+  after?: string
+  enabled?(): boolean
+  run(window: BrowserWindow | undefined): void
+}
+```
+
+## Gömülü web görünümleri
+
+Bir panele yalıtılmış bir `WebContentsView` gömmek için onu `main` içinde oluşturun ve kutusunu pencereden render edin.
+
+```ts title="src/gui/main.ts"
+import { type BrowserWindow, WebContentsView } from "electron"
+import type { Plugin } from "@opencode/plugin/gui"
+
+export const main: Plugin.MainSetup = (ctx) => {
+  const attach = (window: BrowserWindow) => {
+    const view = new WebContentsView()
+    const embed = ctx.embeds.create(view, window)
+    void view.webContents.loadURL("https://acme.example")
+    embed.show(true)
+    // Send embed.id to the window over your Ipc.
+  }
+  ctx.windows.list().forEach(attach)
+  ctx.windows.on("open", attach)
+}
+```
+
+```tsx title="src/gui/pane.tsx"
+<ctx.embeds.View id={embedId} visible radius={8} />
+```
+
+- `"open"` yalnızca sonradan açılan pencereler için tetiklenir; bu nedenle önce `ctx.windows.list()` listesine bağlanın.
+- Pencere, gömülü görünümün `id` değerini `ctx.embeds.View` ve `ctx.embeds.capture` API'lerine iletir.
+- `show(visible)`, görünürlüğü sayfa tarafından yönetir. Gömülü görünüm ancak pencere onu düzenine yerleştirdiğinde ve `show(true)` ile görünürlüğe izin verildiğinde görünür.
+- `on("visible", handler)` görünüm ekrana geldiğinde veya çıktığında, pencere onun yerine bir durağan kare çizdiğinde
+  de dahil, çalışır.
+- `capture()` sayfanın bir durağan karesini veya gizliyken `undefined` döndürür.
+- `dispose()` görünümü pencereden kaldırır ama sayfasını kapatmaz; onunla işiniz bittiğinde `view.webContents.close()`
+  çağırın. Ana bilgisayar gömeyi eklenti ortadan kalktığında da elden çıkarır.
+- Pencerede `View` kutusunu gömmeyle doldurur. Ana bilgisayar görünümün sınırlarını, yakınlaştırmasını, yuvarlatılmış
+  köşelerini ve iletişim kutusu gizlemesini uyum içinde tutar ve pencere gizliyken veya bir iletişim kutusu açıkken onu
+  gizler.
+- `frozen` canlı görünümün yerine bir durağan kare çizer; böylece DOM içeriği onun üzerinde yüzebilir. `radius` alt
+  köşeleri yuvarlar ve `background` köşelerin gösterdiği renktir.
+- `page` gömmenin gösterdiği şeydir, örneğin URL'si. Panel taşınırken ana bilgisayar gömmenin yerine bir durağan kare
+  çizer ve `page` başka bir değere sahipken alınmış bir durağan kareyi düşürür.
+- Pencerenin `capture(id)` işlevi bir JPEG durağan kare veya gömme gizliyken ve web'de her zaman `undefined` döndürür.
+
+#### Referans
+
+```ts
+interface MainEmbeds {
+  create(view: WebContentsView, window: BrowserWindow): Embed
+}
+
+interface Embed {
+  id: string
+  show(visible: boolean): void
+  on(event: "visible", handler: (visible: boolean) => void): Cleanup
+  capture(): Promise<NativeImage | undefined>
+  dispose(): void
+}
+
+interface Embeds {
+  View(props: EmbedProps): JSX.Element
+  capture(id: string): Promise<Uint8Array | undefined>
+}
+
+interface EmbedProps {
+  id: string | undefined
+  visible: boolean
+  frozen?: boolean
+  page?: string
+  radius?: number
+  background?: string
+  class?: string
+  children?: JSX.Element
+}
+```
+
+## Canlı bağımlılıklar ve hata işleme
+
+`ctx.use(token)` tepkisel bir `Live<T>` erişimcisi döndürür: token'ı sağlayan eklentinin durumu. Sağlayıcı kapalıyken
+eklentiniz çalışmaya devam eder; bu nedenle `active` olmayan durumları ele alın. Hiçbir denetim ölü olmamalı ve hiçbir
+spinner sonsuza kadar dönmemelidir.
+
+```ts
+import { Browser } from "@opencode/plugin/gui/browser"
+
+const browser = ctx.use(Browser)
+
+ctx.add(Command, () => {
+  const live = browser()
+  const session = ctx.sessions.current()
+
+  return {
+    id: "preview",
+    title: ctx.t("command.preview"),
+    enabled: live.status === "active" && !!session,
+    run: () => {
+      if (live.status === "active" && session) live.value.open(session, "http://localhost:3000")
+    },
+  }
+})
+```
+
+- **`pending`:** sağlayıcı henüz başlamadı, örneğin eklentisi yüklenirken veya yeniden başlarken. Bir yükleme durumu
+  gösterin veya isteğe bağlı denetimleri gizleyin.
+- **`active`:** sağlayıcı çalışıyor ve `value` onun sözleşmesi veya `Ipc` istemcisidir. `generation` etkinleşmeleri
+  sayar; böylece yeniden başlayan bir sağlayıcı yeni bir kuşakla geri gelir.
+- **`inactive`, `disabled`:** sağlayıcı kapatıldı, yok veya bu platformda kullanılamıyor; web'de her `Ipc` gibi.
+  Kullanılamaz bir durum gösterin veya denetimi atlayın.
+- **`inactive`, `failed`:** sağlayıcının kurulumu hata fırlattı. Kullanılamaz bir durum gösterin.
+- Eklentinizin kendi `main` işlevi için `Live` durumu yoktur. [`ctx.main`](#use-the-ipc-in-a-window) üzerinden yapılan çağrılar, ana süreç kurulumu başlatılırken bekler; yanıt alınamıyorsa reddedilir.
+
+#### Referans
+
+```ts
+type Live<T> =
+  | { status: "pending" }
+  | { status: "active"; value: T; generation: number }
+  | { status: "inactive"; reason: "disabled" | "failed" }
+```
+
+## Ömürler ve temizlik
+
+`ctx` üzerinden kaydedilen her şey (`ctx.add`, `ctx.provide`, `ctx.dialogs.open`, `ctx.embeds.create` ve `Ipc` olay
+dinleyicileri), sahibi olan kapsam bittiğinde geri çekilir:
+
+- Bir bileşen veya `createKeyed` geri çağırması içinde kayıtlar, o bileşen veya `createKeyed` çalışması elden
+  çıkarıldığında sona erer.
+- `setup` üst düzeyinde kayıtlar, eklenti devre dışı bırakıldığında, yeniden yüklendiğinde veya kaldırıldığında ya da
+  penceresi kapandığında sona erer.
+- `main` içinde kayıtlar, eklenti devre dışı bırakıldığında, yeniden yüklendiğinde veya kaldırıldığında ya da uygulama
+  kapandığında sona erer. Bir gömme, penceresi kapandığında da sona erer.
+
+Zamanlayıcılar veya soketler gibi diğer kaynaklar için kurulumdan bir temizleme işlevi döndürün. Aynı anda çalışır.
+
+- **Pencere `setup`** `async` olamaz; çünkü bir Solid sahibi altında çalışır. Bir temizleme işlevi döndürün veya
+  `onCleanup` ya da `ctx.signal` kullanın.
+- **`main`** `async` olabilir. Bir temizleme işlevini doğrudan ya da Promise sonucu olarak döndürün veya `ctx.onCleanup(fn)` kullanın.
+
+### Pencere kurulumu
+
+Pencere `setup` eşzamanlı olmalıdır. Eşzamansız işleri `createKeyed` veya `createLatest` içinde başlatın.
+
+```tsx title="src/gui.tsx"
+import { Command, createKeyed, Plugin } from "@opencode/plugin/gui"
+import { Changes } from "@opencode/plugin/gui/review"
+
+export default Plugin.define({
+  i18n: { en: { changes: "Show changes" } },
+  setup(ctx) {
+    // Runs once per active generation of Changes; the command is withdrawn with it.
+    createKeyed(ctx.use(Changes), (changes) => {
+      ctx.add(Command, () => ({
+        id: "changes",
+        title: ctx.t("changes"),
+        run: () => {
+          const session = ctx.sessions.current()
+
+          if (session) changes.open(session)
+        },
+      }))
+    })
+
+    const timer = setInterval(() => console.log("still here"), 60_000)
+
+    return () => clearInterval(timer)
+  },
+})
+```
+
+### Ana süreç kurulumu
+
+`main` `async` olabilir. Açtığı kaynaklar için temizleme işlevini doğrudan veya Promise sonucu olarak döndürün ya da `ctx.onCleanup(fn)` ile kaydedin.
+
+```ts
+async main(ctx) {
+  const socket = await connect(ctx.options)
+
+  ctx.onCleanup(() => socket.close())
+}
+```
+
+- `ctx.onCleanup`, işlevlerini eklenti devre dışı bırakıldığında, yeniden yüklendiğinde veya kaldırıldığında ya da
+  uygulama kapandığında, en son kaydedilen önce olacak şekilde çalıştırır. Eklenti zaten gitmişse bir işlevi hemen
+  çalıştırır.
+- Bir `await` sonrasında, bir şey kaydetmeden veya değiştirmeden önce `ctx.signal` iptal olduysa dönün.
+- `async` bir temizlik, sonuçlanana kadar çıkışı geciktirir; en fazla 3 saniye.

@@ -1,0 +1,96 @@
+---
+title: "Giriş"
+description: "Açık kaynaklı kodlama agent'ı OpenCode'u CLI, masaüstü uygulaması, web uygulaması veya Docker imajı olarak kurun, ardından bir model sağlayıcısı bağlayın."
+---
+
+OpenCode açık kaynaklı bir kodlama agent'ıdır. Terminal arayüzü, masaüstü uygulaması veya web uygulaması olarak kullanabilirsiniz.
+
+
+## CLI
+
+<CodeTabs
+  id="install"
+  label="Install method"
+  tabs={[
+    { label: "curl", code: "curl -fsSL https://opencode.ai/v2/install | bash" },
+    { label: "homebrew", code: "brew install anomalyco/tap/opencode-v2" },
+    { label: "npm", code: "npm install -g @opencode/cli" },
+    { label: "bun", code: "bun install -g --trust @opencode/cli" },
+    { label: "pnpm", code: "pnpm add -g --allow-build=@opencode/cli @opencode/cli" },
+    { label: "yarn", code: "yarn global add @opencode/cli" },
+    { label: "vite+", code: "vp install -g @opencode/cli" },
+    { label: "aur", code: "paru -S opencode-beta" },
+    { label: "mise", code: "mise use -g opencode" },
+  ]}
+/>
+
+npm paketi, platformunuz için yerel `opencode` ikili dosyasını seçmek üzere bir postinstall betiği kullanır. Bun ve pnpm komutları
+gerekli betiğe açıkça izin verir; Vite+ ek bir bayrak gerektirmez. mise komutu mise 2026.10.9 veya üstünü gerektirir;
+eski sürümler OpenCode 1'i kurar.
+
+Windows paket yöneticileri desteklenmez.
+
+
+Platformunuz için bağımsız bir CLI ikili dosyası indirin.
+
+- **macOS:** [Apple silicon](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-arm64.zip) · [Intel](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64.zip) · [Intel (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64-baseline.zip)
+- **Windows:** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-arm64.zip) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64.zip) · [x64 (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64-baseline.zip)
+- **Linux (glibc):** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-arm64.tar.gz) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64.tar.gz) · [x64 (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-baseline.tar.gz)
+- **Linux (musl):** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-arm64-musl.tar.gz) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-musl.tar.gz) · [x64 (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-baseline-musl.tar.gz)
+
+## Desktop
+
+Platformunuz için en son OpenCode Desktop sürümünü indirin.
+
+- **macOS:** [Apple silicon](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-mac-arm64.dmg) · [Intel](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-mac-x64.dmg)
+- **Windows:** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-win-x64.exe) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-win-arm64.exe)
+- **Linux (.deb):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-amd64.deb) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-arm64.deb)
+- **Linux (.rpm):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-x86_64.rpm) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-aarch64.rpm)
+- **Linux (AppImage):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-x86_64.AppImage) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-arm64.AppImage)
+
+
+## Web
+
+OpenCode web arayüzüne `opencode pair` komutuyla erişin.
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+```
+
+## Docker
+
+Docker imajları sürümlü etiketler kullanır, örneğin `ghcr.io/anomalyco/opencode:2.0.0`.
+
+---
+
+## Bağlanma
+
+OpenCode birçok LLM sağlayıcısını yerleşik olarak destekler. Bunlara `/connect` ile doğrudan
+[TUI içinden](/cli/providers) bağlanabilirsiniz.
+
+Özel sağlayıcıları yapılandırmak için [Sağlayıcılar](/providers) sayfasına bakın.
+
+En iyi kodlama modellerine kolayca erişmek isterseniz
+[OpenCode Console](/console) ürününü deneyebilirsiniz.
+
+En iyi kodlama modellerine erişim sağlayan aylık 10 dolarlık [OpenCode Go](/console/go) aboneliğini de deneyebilirsiniz.
+
+---
+
+## Kişiselleştirme
+
+[OpenCode config](/config) dosyasını düzenleyerek, [eklenti yükleyerek](/plugins), [MCP
+sunucuları bağlayarak](/mcp-servers) veya [komutlar oluşturarak](/commands) OpenCode'u kendinize göre uyarlayın. Terminal arayüzü temaları ve tuş atamaları için
+[CLI ayarlarına](/cli/config) bakın.
+
+---
+
+## Öğrenme
+
+OpenCode hakkında kapsamlı bir kurs isterseniz Boot.dev, ekibimize danışarak mükemmel bir
+[OpenCode ile AI Kodlama](https://www.boot.dev/courses/learn-ai-coding) kursu hazırladı. Kurstaki tüm bilgiler
+ücretsiz okunabilir ve izlenebilir; ancak bazı etkileşimli özellikler ücretli olabilir.

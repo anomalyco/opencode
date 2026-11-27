@@ -1,0 +1,429 @@
+---
+title: "Ayarlar"
+description: "OpenCode CLI ve TUI ayarlarının tamamını yapılandırın."
+---
+
+CLI ayarları yalnızca terminal istemcilerini denetler. `opencode.json(c)` içindeki sunucu ve proje ayarlarından ayrıdır.
+
+Ortak ayarları TUI'dan değiştirmek için `Ctrl+P` tuşlarına basın, ardından **Open settings** seçeneğini seçin.
+
+<img src={`${import.meta.env.BASE_URL}assets/cli/settings.png`} alt="OpenCode TUI settings dialog" />
+
+## Yapılandırma dosyası
+
+OpenCode CLI ayarlarını tek bir genel dosyada saklar:
+
+```text
+~/.config/opencode/cli.json
+```
+
+`$XDG_CONFIG_HOME` ayarlıysa OpenCode şunu kullanır:
+
+```text
+$XDG_CONFIG_HOME/opencode/cli.json
+```
+
+Projeye özel bir CLI ayar dosyası yoktur. Doğrulama ve otomatik tamamlama için yayımlanan JSON Schema belgesini ekleyin:
+
+```json title="cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json"
+}
+```
+
+OpenCode bu dosyayı oluşturduğunda veya taşıdığında `$schema` ekler. Geçerli düzenlemeler TUI çalışırken yeniden yüklenir.
+
+Bilinmeyen ayarlar yok sayılır. Düzenleyicinizin geçersiz değerleri işaretlemesi için `$schema` alanını koruyun.
+
+## Satır içi yapılandırma
+
+CLI ayarlarını satır içi JSON'dan uygulamak için `OPENCODE_CLI_CONFIG_CONTENT` ayarlayın:
+
+```sh
+OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"mode":"off"}}' opencode
+```
+
+OpenCode satır içi ayarları genel `cli.json` üzerine birleştirir. İç içe nesneler birleşir; ortamdan gelen diziler ve skaler
+değerler genel değerlerin yerini alır. Değişken ayarlı olduğu sürece satır içi ayarlar geçerliliğini korur.
+
+## Görünüm
+Bir tema seçin, arayüz hareketini denetleyin ve terminal imlecini geçersiz kılın:
+
+```json title="cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  },
+  "animations": true,
+  "cursor": {
+    "style": "block",
+    "blinking": true
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Appearance settings" tabIndex={0}>
+
+| Ayar              | Değerler                                | Açıklama                                                               |
+| ----------------- | --------------------------------------- | ---------------------------------------------------------------------- |
+| `theme.name`      | dize                                    | Yerleşik, özel veya terminalden türetilen bir tema seçer.             |
+| `theme.mode`      | `system`, `dark` veya `light`           | Terminal görünümünü izler veya temayı tek bir renk moduna sabitler.    |
+| `animations`      | boolean                                 | Arayüz animasyonlarını etkinleştirir.                                  |
+| `cursor.style`    | `block`, `underline`, `line`, `default` | İmleç biçimini ayarlar. `default` terminalin imleç biçimini korur.     |
+| `cursor.blinking` | boolean                                 | İmleç yanıp sönmesini denetler. Biçim `default` olduğunda etkisi yoktur. |
+
+</div>
+
+Tema seçimi ve oluşturma için [Tema](/cli/theme) sayfasına bakın.
+
+## Girdi
+
+Fare yakalamayı, kaydırmayı, düzenleyici bağlamını, yapıştırmaları ve prompt görsel önizlemelerini yapılandırın:
+
+```json title="cli.json"
+{
+  "mouse": true,
+  "scroll": {
+    "speed": 3,
+    "acceleration": false
+  },
+  "prompt": {
+    "editor": true,
+    "paste": "compact",
+    "image_preview": false
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Input settings" tabIndex={0}>
+
+| Ayar                    | Değerler                        | Açıklama                                                                   |
+| ----------------------- | ------------------------------- | --------------------------------------------------------------------------- |
+| `mouse`                 | boolean                         | Terminal fare yakalamayı etkinleştirir.                                     |
+| `scroll.speed`          | sayı, en az `0.001`             | Her kaydırma girdisi adımı için sabit mesafeyi ayarlar.                     |
+| `scroll.acceleration`   | boolean                         | Yinelenen kaydırmayı hızlandırır. Etkinleştirildiğinde hızın önüne geçer.   |
+| `prompt.editor`         | boolean                         | Etkin düzenleyici dosyasını veya seçimini prompt bağlamı olarak ekler.      |
+| `prompt.paste`          | `compact` veya `full`           | Büyük yapıştırmaları kısa yer tutucular veya tam metin olarak gösterir.     |
+| `prompt.image_preview`  | boolean                         | Prompt girdisinin üzerinde görsel eki önizlemeleri gösterir.                |
+
+</div>
+
+## Oturumlar
+
+Tam ekran TUI oturumlarının nasıl sunulduğunu ve yeni oturumların nerede başladığını yapılandırın:
+
+```json title="cli.json"
+{
+  "session": {
+    "sidebar": "auto",
+    "scrollbar": false,
+    "submit_scroll": "bottom",
+    "thinking": "hide",
+    "grouping": "auto",
+    "image_preview": false,
+    "tps": true,
+    "markdown": "rendered",
+    "new_location": "launch",
+    "permissions": "prompt"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Session settings" tabIndex={0}>
+
+| Ayar                    | Değerler                    | Açıklama                                                                    |
+| ----------------------- | --------------------------- | ---------------------------------------------------------------------------- |
+| `session.sidebar`       | `auto` veya `hide`          | Yer olduğunda kenar çubuğunu gösterir veya her zaman gizler.                 |
+| `session.scrollbar`     | boolean                     | Konuşma dökümü kaydırma çubuğunu gösterir.                                   |
+| `session.submit_scroll` | `bottom` veya `keep`        | Prompt gönderdiğinizde son mesaja atlar veya konumunuzu korur.               |
+| `session.thinking`      | `show` veya `hide`          | Model akıl yürütmesini varsayılan olarak gösterir veya gizler.              |
+| `session.grouping`      | `auto` veya `none`          | İlgili döküm öğelerini gruplar veya her öğeyi ayrı render eder.              |
+| `session.image_preview` | boolean                     | Kullanıcı eki ve araç sonucu görsellerini dökümde gösterir.                  |
+| `session.tps`           | boolean                     | Asistan altbilgilerinde saniye başına çıktı token'ını gösterir.              |
+| `session.markdown`      | `source` veya `rendered`    | Markdown sözdizimi işaretlerini gösterir veya render edilmiş içerikte gizler. |
+| `session.new_location`  | `launch` veya `inherit`     | TUI başlatma dizininde başlar veya etkin oturum konumunu devralır.           |
+| `session.permissions`   | `prompt` veya `autoaccept`  | İzin istekleri için onay ister veya her isteği otomatik kabul eder.          |
+
+</div>
+
+## Sekmeler
+
+Kalıcı oturum sekme şeridini yapılandırın:
+
+```json title="cli.json"
+{
+  "tabs": {
+    "mode": "auto",
+    "scope": "cwd",
+    "layout": "horizontal",
+    "indicators": "status"
+  }
+}
+```
+
+Eski boolean `tabs.enabled` ayarı desteklenmeye devam eder: `true` `on`, `false` `off` anlamına gelir. OpenCode bunu
+yapılandırma dosyasını yeniden yazmadan okur.
+
+<div class="docs-table-scroll" role="region" aria-label="Tab settings" tabIndex={0}>
+
+| Ayar              | Değerler                    | Açıklama                                                                     |
+| ----------------- | --------------------------- | ----------------------------------------------------------------------------- |
+| `tabs.mode`       | `auto`, `on` veya `off`     | Sekmeleri otomatik, her zaman veya asla kullanır. Otomatik, Herdr içinde gizler. |
+| `tabs.scope`      | `cwd` veya `global`         | Çalışma dizini başına ayrı sekmeler tutar veya bunları genel olarak paylaşır. |
+| `tabs.layout`     | `horizontal` veya `vertical` | Sekmeleri yatay bir şeride veya dikey bir kenar çubuğuna yerleştirir.        |
+| `tabs.indicators` | `status` veya `numbers`     | Durum simgelerini gösterir veya her zaman sekme numaralarını gösterir.       |
+
+</div>
+
+Numara göstergeleri durum renklerini ve arka plan animasyonlarını korur. Ctrl+sayı kısayolları her iki gösterge modunda da
+sekmeleri değiştirir.
+
+## Diff'ler
+
+Başlangıç diff kapsamını ve sunumunu yapılandırın:
+
+```json title="cli.json"
+{
+  "diffs": {
+    "source": "branch",
+    "wrap": "word",
+    "tree": true,
+    "single": false,
+    "view": "auto"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Diff settings" tabIndex={0}>
+
+| Ayar           | Değerler                                    | Açıklama                                                  |
+| -------------- | ------------------------------------------- | --------------------------------------------------------- |
+| `diffs.source` | `branch`, `committed`, `working` veya `turn` | Başlangıç inceleme kapsamını ayarlar.                     |
+| `diffs.wrap`   | `word` veya `none`                          | Uzun satırları sözcüklerden sarar veya sarmadan bırakır.   |
+| `diffs.tree`   | boolean                                     | Diff dosya ağacını gösterir.                               |
+| `diffs.single` | boolean                                     | Yalnızca seçili dosya yamasını gösterir.                   |
+| `diffs.view`   | `auto`, `split` veya `unified`              | Düzeni ayarlar. `auto` kullanılabilir genişlikten seçer.   |
+
+</div>
+
+`branch`, **All** görünümünde daldaki ve yereldeki tüm değişiklikleri gösterir. `committed` yalnızca daldaki commit'leri,
+`working` ise stage'e alınmış ve alınmamış değişikliklerle izlenmeyen dosyaları gösterir. `turn` **Last turn** görünümünü, yani oturumun son turunda değiştirdiği
+dosyaları gösterir; oturum bir turu bitirdiğinde yenilenir ve `/diff` bir oturumdan açılmadığında `branch` değerine geri
+döner.
+
+`/diff` içinde kapsamı değiştirmek için `d` tuşuna basın veya **Base** listesinden bir karşılaştırma dalı seçin. Görünüm
+içindeki bu seçimler TUI çıkana kadar geçerli olur ve `cli.json` dosyasını değiştirmez.
+
+## Uyarılar
+
+Sistem bildirimlerini ve dikkat seslerini birbirinden bağımsız etkinleştirin:
+
+```json title="cli.json"
+{
+  "attention": {
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "permission": "/home/me/sounds/permission.wav"
+    }
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Alert settings" tabIndex={0}>
+
+| Ayar                     | Değerler                | Açıklama                                                                                                 |
+| ------------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------- |
+| `attention.notifications` | boolean                | Sistem bildirimlerini, normalde terminal odakta değilken gösterir.                                      |
+| `attention.sound`        | boolean                 | Dikkat seslerini çalar.                                                                                  |
+| `attention.volume`       | `0` ile `1` arası sayı  | Ses düzeyini ayarlar.                                                                                    |
+| `attention.sound_pack`   | dize                    | Etkin ses paketi kimliğini seçer.                                                                        |
+| `attention.sounds`       | nesne                   | `default`, `question`, `permission`, `error`, `done` veya `subagent_done` için ses dosyalarını geçersiz kılar. |
+
+</div>
+
+Özel ses ayarı geçersizse veya dosya okunamıyorsa o olay için yerleşik ses kullanılır.
+
+Bir güncellemeden sonra TUI yeni sürümün öne çıkanlarını ana ekranda bir kez gösterir. Yeniden görmek için `/highlights`
+çalıştırın veya iletişim kutusunu kapatın:
+
+```json title="cli.json"
+{
+  "highlights": false
+}
+```
+
+## Terminal
+
+Terminal entegrasyonunu yapılandırın:
+
+```json title="cli.json"
+{
+  "terminal": {
+    "title": true,
+    "copy": "select"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Terminal settings" tabIndex={0}>
+
+| Ayar             | Değerler             | Açıklama                                                                                                 |
+| ---------------- | -------------------- | -------------------------------------------------------------------------------------------------------- |
+| `terminal.title` | boolean              | Terminal penceresi başlığını günceller.                                                                  |
+| `terminal.copy`  | `manual` veya `select` | Elle veya seçimden hemen sonra kopyalar. Platform varsayılanı Windows'ta `manual`, diğerlerinde `select` olur. |
+
+</div>
+
+## Mini
+
+`mini` grubu, minimal etkileşimli arayüz olan [`opencode mini`](/cli#mini) komutunu denetler:
+
+```json title="cli.json"
+{
+  "mini": {
+    "thinking": "show",
+    "tools": "hide",
+    "shell_output": "hide",
+    "turn_summary": "show",
+    "footer": "show",
+    "splash": "show",
+    "work_spinner": "block-soft-slide",
+    "mono": false,
+    "replay": true,
+    "replay_limit": 200
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Mini settings" tabIndex={0}>
+
+| Ayar                | Değerler                       | Açıklama                                                                          |
+| ------------------- | ------------------------------ | ---------------------------------------------------------------------------------- |
+| `mini.thinking`     | `show` veya `hide`             | Model akıl yürütmesini gösterir veya gizler.                                      |
+| `mini.tools`        | `show` veya `hide`             | Araç çağrılarını ve onlardan önce gelen asistan metnini gösterir veya gizler.     |
+| `mini.shell_output` | `show` veya `hide`             | Ham kabuk aracı çıktısını gösterir veya gizler.                                    |
+| `mini.turn_summary` | `show` veya `hide`             | Kaydırma geçmişinde agent, model ve süre özetini gösterir veya gizler.            |
+| `mini.footer`       | `show` veya `hide`             | Kalıcı etkinlik, model, kullanım ve bağlam ayrıntılarını gösterir veya gizler.    |
+| `mini.splash`       | `show` veya `hide`             | Giriş ve çıkış açılış afişlerini gösterir veya gizler.                            |
+| `mini.work_spinner` | spinner kimliği                | Altbilgideki çalışma animasyonunu seçer.                                          |
+| `mini.mono`         | boolean                        | Tek renkli ASCII çıktı kullanır.                                                   |
+| `mini.replay`       | boolean                        | Devam ettirirken ve terminal boyutu değiştiğinde oturum geçmişini geri yükler.    |
+| `mini.replay_limit` | pozitif tam sayı               | Yeniden oynatmayı en yeni mesajlarla sınırlar. Varsayılan sınır `200`dur.          |
+
+</div>
+
+Kullanılabilir spinner kimlikleri şunlardır:
+
+```text
+block-soft-slide  block-soft-sweep  block-low-comet  block-low-duet
+block-shuttle     block-bridge      block-squeeze    small-toggle
+square-toggle     grow-shrink       quadrant-orbit   crosshatch
+density-wave      seed
+```
+
+Komut satırındaki `mini` yeniden oynatma bayrakları o çağrı için bu ayarları geçersiz kılar.
+
+## Tuş atamaları
+
+Bir komut atamasını ve öncü tuş zaman aşımını geçersiz kılın:
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app.exit": ["ctrl+c", "ctrl+d", "<leader>q"],
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "event": "press",
+      "preventDefault": false,
+      "fallthrough": false
+    },
+    "help.show": false
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Keybind settings" tabIndex={0}>
+
+| Ayar                    | Değerler                                         | Açıklama                                                             |
+| ----------------------- | ------------------------------------------------ | --------------------------------------------------------------------- |
+| `keybinds.leader`       | atama değeri                                     | Diğer atamalarda `<leader>` ile başvurulan tuşu ayarlar.             |
+| `keybinds.<command>`    | atama değeri                                     | Bir komut kimliğinin atamasını geçersiz kılar.                        |
+| `keybinds.*.key`        | tuş dizesi veya tanımlayıcı                      | Nesne ataması için tuşu seçer.                                        |
+| `keybinds.*.event`      | `press` veya `release`                           | Nesne atamasını tek bir tuş olayıyla sınırlar.                        |
+| `keybinds.*.preventDefault` | boolean                                      | Terminalin varsayılan tuş davranışının engellenip engellenmeyeceğini denetler. |
+| `keybinds.*.fallthrough` | boolean                                        | Daha düşük öncelikli işleyicilerin aynı olayı almasına izin verir.     |
+| `leader.timeout`        | pozitif tam sayı                                 | Öncü tuştan sonra kaç milisaniye bekleneceğini ayarlar.               |
+
+</div>
+
+Bir atama değeri dize, alternatif dizisi veya nesne olabilir. Bir atamayı devre dışı bırakmak için `"none"` veya `false`
+kullanın. Kabul edilen tuş sözdizimi, tüm komut kimlikleri ve tüm varsayılan atamalar için [Tuş atamaları](/cli/keybinds)
+sayfasına bakın.
+
+## Eklentiler
+
+Yalnızca terminale özel eklentileri sırayla yükleyin:
+
+```json title="cli.json"
+{
+  "plugins": [
+    "-opencode.notifications",
+    {
+      "package": "./plugins/status",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Plugin settings" tabIndex={0}>
+
+| Ayar                | Değerler      | Açıklama                                                     |
+| ------------------- | ------------- | --------------------------------------------------------------- |
+| `plugins`           | dizi          | Sıralı etkinleştirme yönergelerini ve harici eklentileri bildirir. |
+| `plugins[].package` | dize          | Bir paket adı, yerel yol veya dosya URL'si ayarlar.           |
+| `plugins[].options` | nesne         | Eklentiye özgü seçenekleri o eklentiye iletir.                |
+
+</div>
+
+Paket biçimleri, yerel keşif, joker karakterler ve devre dışı bırakma yönergeleri için [Eklentiler](/cli/plugins) sayfasına
+bakın.
+
+## Hata ayıklama ve deneysel
+
+Tanılamayı etkinleştirin veya şu anda kullanılabilir bir deneyi etkinleştirin:
+
+```json title="cli.json"
+{
+  "debug": {
+    "devtools": false,
+    "timing": false,
+    "turn_tokens": "verbose"
+  },
+  "experimental": {}
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Debug and experimental settings" tabIndex={0}>
+
+| Ayar                | Değerler                        | Açıklama                                                                             |
+| ------------------- | ------------------------------- | ------------------------------------------------------------------------------------- |
+| `debug.devtools`    | boolean                         | DevTools hata ayıklama çubuğunu gösterir.                                             |
+| `debug.timing`      | boolean                         | Hata ayıklama çubuğunda ilk çizime kadar geçen süre tanılamasını gösterir.            |
+| `debug.turn_tokens` | boolean veya `verbose`          | Tur başına token kullanımını gösterir; `verbose` araç çağrısı girdilerini de ekler.   |
+| `experimental`      | özellik kimliklerinden boolean'lara nesne | Önceden bildirilmeden değişebilecek veya kaldırılabilecek deneyleri etkinleştirir ya da kapatır. |
+
+</div>
+
+Yalnızca TUI'nin **Experiments** iletişim kutusunda listelenen özellik kimliklerini kullanın. Bilinmeyen kimliklerin etkisi
+yoktur.

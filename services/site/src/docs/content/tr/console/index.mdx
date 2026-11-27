@@ -1,0 +1,32 @@
+---
+title: "Console'a giriş"
+description: "OpenCode Console; ekip çalışma alanları, model inference, bütçeler, politikalar ve barındırılan web araması ekleyen isteğe bağlı bir hizmettir."
+---
+
+[OpenCode Console](https://opencode.ai/console), OpenCode'u ister tek başınıza ister ekibinizle kullanırken ek olanaklar sunan isteğe bağlı bir hizmettir.
+
+- [Çalışma alanları](/console/workspaces) aracılığıyla [ekibinizle](/console/members) erişim paylaşma
+- Hem tescilli hem de açık kaynak modeller için [inference](/console/models)
+- Console ağ geçidi üzerinden kendi sağlayıcı hesaplarınızı bağlamak için [sağlayıcılar](/console/providers)
+- Kullanım takibi ve [bütçe](/console/budgets) kontrolleri
+- OpenCode'un davranışını yönetmek için ekibin tamamına uygulanan politikalar yayımlama
+- [Web araması](/console/websearch)
+- Console modellerini Claude Code, Codex ve diğer agent'lardan kullanmak için [harness'ler](/console/harnesses)
+- Açık kaynak modellere erişim için [OpenCode Go, Go Plus ve Go Teams](/console/go) abonelikleri (sırasıyla aylık $10, $40 ve üye başına $20)
+
+## Başlangıç
+
+Console'u kullanmak için bir ekibe ihtiyacınız yok. Her hesap, tek üyesinin siz olduğunuz bir **Personal** çalışma alanıyla başlar.
+
+1. [Console'da](https://opencode.ai/console) oturum açın.
+2. [Go](/console/go) aboneliği başlatın, [kredi](/console/billing#add-credits) ekleyin veya bir [sağlayıcı](/console/providers) bağlayın.
+3. OpenCode'da `/connect` komutunu çalıştırın ve çalışma alanını seçin.
+4. İsteğe bağlı olarak [ekibinizi davet edin](/console/members#invite-members).
+
+```text
+/connect
+```
+
+## Politikalar
+
+Policies sayfasındaki Providers ve Tools kuralları, çalışma alanına bağlı tüm OpenCode istemcilerine uygulanır. [Politika](/policies#console) olarak iletilen bu kurallar, üyenin kullanıcı ve proje yapılandırmalarından önceliklidir ve yaklaşık bir dakika içinde devreye girer. Yönetilen tercihler ve sistem yapılandırma dosyası ise çalışma alanı politikalarından önceliklidir. Ayrıntılar için [öncelik sırasına](/policies#precedence) bakın.

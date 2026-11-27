@@ -1,0 +1,414 @@
+---
+title: "Tuş atamaları"
+description: "OpenCode CLI tuş atamalarını cli.json içinde özelleştirin ve her komutun kimliğine ve varsayılan atamasına bakın."
+---
+
+Atamaları `cli.json` içinde özelleştirin:
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "command.palette.show": "ctrl+k",
+    "app.exit": ["ctrl+c", "ctrl+d"],
+    "app.debug": false
+  },
+  "leader": {
+    "timeout": 1500
+  }
+}
+```
+
+Tek bir tuş için dize kullanın:
+
+```json
+{
+  "keybinds": {
+    "command.palette.show": "ctrl+k"
+  }
+}
+```
+
+Alternatifleri virgülle ayırın:
+
+```json
+{
+  "keybinds": {
+    "app.exit": "ctrl+c,ctrl+d"
+  }
+}
+```
+
+Bir atamayı `"none"` veya `false` ile devre dışı bırakın:
+
+```json
+{
+  "keybinds": {
+    "app.debug": "none",
+    "help.show": false
+  }
+}
+```
+
+Olay davranışı için nesne kullanın:
+
+```json
+{
+  "keybinds": {
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "preventDefault": false
+    }
+  }
+}
+```
+
+`leader` varsayılan olarak `ctrl+x` olur. Başka bir atamadaki `<leader>` o tuşa başvurur.
+
+```json
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "model.list": "<leader>m"
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+Bilinmeyen komut kimlikleri yok sayılır.
+
+## Uygulama
+
+| Kimlik                     | Varsayılan                | Açıklama                            |
+| -------------------------- | ------------------------- | ----------------------------------- |
+| `leader`                   | `ctrl+x`                  | Tuş ataması birleşimleri için öncü tuş |
+| `app.exit`                 | `ctrl+c,ctrl+d,<leader>q` | Uygulamadan çık                     |
+| `app.debug`                | `none`                    | Hata ayıklama panelini aç/kapat     |
+| `app.console`              | `none`                    | Konsolu aç/kapat                    |
+| `app.scrap`                | `none`                    | Scrap ekranını aç                  |
+| `app.toggle.animations`    | `none`                    | Animasyonları aç/kapat              |
+| `app.toggle.file_context`  | `none`                    | Dosya bağlamını aç/kapat            |
+| `app.toggle.diffwrap`      | `none`                    | Diff sarmayı aç/kapat               |
+| `app.toggle.paste_summary` | `none`                    | Yapıştırma özetini aç/kapat         |
+| `command.palette.show`     | `ctrl+p`                  | Kullanılabilir komutları listele    |
+| `help.show`                | `none`                    | Yardım iletişim kutusunu aç         |
+| `docs.open`                | `none`                    | Belgeleri aç                        |
+| `opencode.settings`        | `none`                    | Ayarları aç                         |
+| `server.pair`              | `none`                    | Cihazı eşleştir                     |
+| `service.restart`          | `none`                    | Hizmeti yeniden başlat              |
+| `location.reload`          | `none`                    | Yapılandırmayı yeniden yükle        |
+
+## Mini
+
+`app.clear` komutu yalnızca [`opencode mini`](/cli) içinde çalışır. Görünür ekranı temizlemek ve promptu yeniden çizmek için `ctrl+l` tuşlarına basın. Terminal kaydırma geçmişini korur.
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "app.clear": "ctrl+l"
+  }
+}
+```
+
+| Kimlik      | Varsayılan | Açıklama       |
+| ----------- | ---------- | -------------- |
+| `app.clear` | `ctrl+l`   | Ekranı temizle |
+
+## Diff görüntüleyici
+
+**All**, **Committed**, **Uncommitted** veya (bir oturum içinde) **Last turn** seçmek için `d` (`diff.switch_source`) tuşuna basın veya karşılaştırma dalını değiştirmek için **Base** seçeneğini seçin. Seçimler TUI çıkana kadar hatırlanır. Başlangıç kapsamını [`cli.json` içindeki `diffs.source`](/cli/config#diffs) ile ayarlayın.
+
+Kaydırma, sayfalama ve başlangıç/son kısayolları her zaman diff'i denetler. Klavye odağı değiştirme yoktur: dosyaları açmak için tıklayın, klasörleri genişletmek veya daraltmak için tıklayın ve dosya ağacında kaydırmak için fare tekerleğini kullanın.
+
+Dosyalar arasında geçmek için `n` / `p` veya `alt+down` / `alt+up` (macOS'ta Option) kullanın. Diff görüntüleyici içinde Alt kısayolları oturum sekmeleri yerine dosyalar arasında gezinir.
+
+Bir dosyayı incelendi olarak işaretlemek ve yama gövdesini daraltmak için `m` tuşuna basın. Tüm dosyalar görünümünde işareti kaldırmak ve yamayı yeniden açmak için `m` tuşuna tekrar basın. Tek dosya görünümü, incelendi olarak işaretlerken otomatik olarak sonraki dosyaya geçer, ancak başa dönmek yerine son dosyada kalır. Bir dosyanın işaretini kaldırmak asla ilerlemez.
+
+**Mark complete** (veya **Mark incomplete**) için kenar çubuğundaki bir dosyaya veya onun diff başlığına sağ tıklayın. Bu, `m` ile aynı incelendi durumunu değiştirir. Menüsünden farklı bir dosyayı tamamlamak o dosyayı seçmez ve okunmakta olan dosyada ilerlemez.
+
+`diff.help` için Shift içeren alternatifler, `?` tuşuna bastığınızda Shift'i de bildiren terminalleri destekler.
+
+| Kimlik                   | Varsayılan          | Açıklama                                 |
+| ------------------------ | ------------------- | ---------------------------------------- |
+| `diff.open`              | `none`              | Diff görüntüleyiciyi aç                  |
+| `diff.close`             | `escape,q`          | Diff görüntüleyiciyi kapat               |
+| `diff.down`              | `j,down`            | Diff görüntüleyicide aşağı git           |
+| `diff.up`                | `k,up`              | Diff görüntüleyicide yukarı git          |
+| `diff.page.down`         | `pagedown,ctrl+f`   | Diff görüntüleyicide bir sayfa aşağı     |
+| `diff.page.up`           | `pageup,ctrl+b`     | Diff görüntüleyicide bir sayfa yukarı    |
+| `diff.half_page.down`    | `ctrl+d`            | Diff görüntüleyicide yarım sayfa aşağı kaydır |
+| `diff.half_page.up`      | `ctrl+u`            | Diff görüntüleyicide yarım sayfa yukarı kaydır |
+| `diff.first`             | `gg,home`           | Diff'in başına git                      |
+| `diff.last`              | `shift+g,end`       | Diff'in sonuna git                      |
+| `diff.next_hunk`         | `]`                 | Sonraki diff hunk'ına atla              |
+| `diff.previous_hunk`     | `[`                 | Önceki diff hunk'ına atla               |
+| `diff.next_file`         | `n,alt+down`        | Sonraki diff dosyasına atla             |
+| `diff.previous_file`     | `p,alt+up`          | Önceki diff dosyasına atla              |
+| `diff.toggle_file_tree`  | `b`                 | Diff görüntüleyici dosya ağacını aç/kapat |
+| `diff.single_patch`      | `s`                 | Tek yama görünümünü aç/kapat            |
+| `diff.switch_source`     | `d`                 | Diff inceleme kapsamını seç             |
+| `diff.toggle_view`       | `v`                 | Diff görüntüleyici bölünmüş veya birleşik görünümünü aç/kapat |
+| `diff.toggle_fullscreen` | `f`                 | Diff görüntüleyiciyi tam ekran yap     |
+| `diff.mark_reviewed`     | `m`                 | Seçili diff dosyasının incelendi durumunu aç/kapat |
+| `diff.help`              | `?,shift+?,shift+/` | Daha fazla diff görüntüleyici kısayolu göster |
+
+Kullanımdan kaldırılmış `diff.toggle`, `diff.expand`, `diff.expand_all`, `diff.collapse` ve `diff.switch_focus` yapılandırma
+girdileri hâlâ kabul edilir, ancak artık kısayol kaydetmez.
+
+## Görünüm ve gezinme
+
+| Kimlik                     | Varsayılan      | Açıklama                                 |
+| -------------------------- | --------------- | ---------------------------------------- |
+| `prompt.editor`            | `<leader>e`     | Harici düzenleyiciyi aç                  |
+| `theme.switch`             | `none`          | Kullanılabilir temaları listele          |
+| `theme.switch_mode`        | `none`          | Açık ve koyu tema modu arasında geçiş yap |
+| `theme.mode.lock`          | `none`          | Tema modunu kilitle veya kilidini aç     |
+| `session.sidebar.toggle`   | `<leader>b`     | Kenar çubuğunu aç/kapat                  |
+| `pane.focus.left`          | `<leader>left`  | Oturum bölmesine odaklan                 |
+| `pane.focus.right`         | `<leader>right` | Sağ bölmeye odaklan                      |
+| `terminal.select`          | `<leader>down`  | Terminal seç                             |
+| `terminal.toggle`          | `<leader>t`     | Terminal bölmesini aç/kapat              |
+| `terminal.close`           | `<leader>up`    | Terminal bölmesini kapat                 |
+| `session.toggle.scrollbar` | `none`          | Oturum kaydırma çubuğunu aç/kapat        |
+| `opencode.status`          | `<leader>s`     | Durumu görüntüle                         |
+| `opencode.debug`           | `none`          | Hata ayıklama bilgilerini görüntüle      |
+
+## Oturumlar
+
+| Kimlik                                | Varsayılan              | Açıklama                                 |
+| ------------------------------------- | ----------------------- | ---------------------------------------- |
+| `session.export`                      | `<leader>x`             | Oturumu düzenleyiciye aktar              |
+| `session.copy`                        | `none`                  | Oturum dökümünü kopyala                  |
+| `session.copy.id`                     | `none`                  | Oturum kimliğini kopyala                 |
+| `session.move`                        | `none`                  | Oturumu taşı                             |
+| `session.new`                         | `<leader>n`             | Yeni oturum oluştur                      |
+| `session.list`                        | `<leader>l`             | Tüm oturumları listele                   |
+| `open.menu`                           | `ctrl+o`                | Son oturumları ve projeleri aç           |
+| `session.tab.next`                    | `ctrl+tab,alt+down`     | Sonraki açık oturum sekmesine geç         |
+| `session.tab.previous`                | `ctrl+shift+tab,alt+up` | Önceki açık oturum sekmesine geç         |
+| `session.tab.history.back`            | `none`                  | Oturum sekmesi geçmişinde geri git       |
+| `session.tab.history.forward`         | `ctrl+i`                | Oturum sekmesi geçmişinde ileri git      |
+| `session.tab.next_unread`             | `alt+shift+down`        | Sonraki okunmamış oturum sekmesine geç   |
+| `session.tab.previous_unread`         | `alt+shift+up`          | Önceki okunmamış oturum sekmesine geç    |
+| `session.tab.close`                   | `<leader>w`             | Geçerli oturum sekmesini kapat           |
+| `session.tab.reopen`                  | `ctrl+shift+t`          | Son kapatılan oturum sekmesini yeniden aç |
+| `session.timeline`                    | `<leader>g`             | Oturum zaman çizelgesini göster          |
+| `session.fork`                        | `none`                  | Oturumu mesajdan fork'la                 |
+| `session.rename`                      | `ctrl+r`                | Oturumu yeniden adlandır                 |
+| `session.delete`                      | `ctrl+d`                | Oturumu sil                              |
+| `session.interrupt`                   | `escape`                | Geçerli oturumu kes                     |
+| `session.background`                  | `ctrl+b`                | Oturumu engelleyen araçları arka plana al |
+| `session.compact`                     | `<leader>c`             | Oturumu sıkıştır                         |
+| `session.aside`                       | `none`                  | Yan soru sor                              |
+| `session.cd`                          | `none`                  | Çalışma dizinini değiştir                |
+| `session.queued_prompts`              | `<leader>q`             | Kuyruktaki promptları yönet              |
+| `queued_prompt.undo`                  | `ctrl+u`                | Kuyruktaki promptu geri al               |
+| `queued_prompt.delete`                | `ctrl+d`                | Kuyruktaki promptu sil                   |
+| `session.toggle.exploration_grouping` | `none`                  | İlgili araç çağrısı gruplamasını aç/kapat |
+| `session.verbosity.cycle`             | `none`                  | Konuşma dökümünün ayrıntı düzeyleri arasında geçiş yap |
+| `session.child.first`                 | `down`                  | Subagent seçiciyi aç/kapat               |
+| `session.child.next`                  | `right`                 | Sonraki alt oturuma git                  |
+| `session.child.previous`              | `left`                  | Önceki alt oturuma git                   |
+| `session.parent`                      | `up`                    | Üst oturuma git                          |
+| `session.pin.toggle`                  | `ctrl+f`                | Oturumu oturum listesinde sabitle veya çöz |
+| `session.quick_switch.1`              | `<leader>1`             | Hızlı yuva 1'deki oturuma geç            |
+| `session.quick_switch.2`              | `<leader>2`             | Hızlı yuva 2'deki oturuma geç            |
+| `session.quick_switch.3`              | `<leader>3`             | Hızlı yuva 3'teki oturuma geç            |
+| `session.quick_switch.4`              | `<leader>4`             | Hızlı yuva 4'teki oturuma geç            |
+| `session.quick_switch.5`              | `<leader>5`             | Hızlı yuva 5'teki oturuma geç            |
+| `session.quick_switch.6`              | `<leader>6`             | Hızlı yuva 6'daki oturuma geç            |
+| `session.quick_switch.7`              | `<leader>7`             | Hızlı yuva 7'deki oturuma geç            |
+| `session.quick_switch.8`              | `<leader>8`             | Hızlı yuva 8'deki oturuma geç            |
+| `session.quick_switch.9`              | `<leader>9`             | Hızlı yuva 9'daki oturuma geç            |
+| `session.tab.select.1`                | `<leader>1,ctrl+1`      | Oturum sekmesi 1'e geç                   |
+| `session.tab.select.2`                | `<leader>2,ctrl+2`      | Oturum sekmesi 2'ye geç                  |
+| `session.tab.select.3`                | `<leader>3,ctrl+3`      | Oturum sekmesi 3'e geç                   |
+| `session.tab.select.4`                | `<leader>4,ctrl+4`      | Oturum sekmesi 4'e geç                   |
+| `session.tab.select.5`                | `<leader>5,ctrl+5`      | Oturum sekmesi 5'e geç                   |
+| `session.tab.select.6`                | `<leader>6,ctrl+6`      | Oturum sekmesi 6'ya geç                  |
+| `session.tab.select.7`                | `<leader>7,ctrl+7`      | Oturum sekmesi 7'ye geç                  |
+| `session.tab.select.8`                | `<leader>8,ctrl+8`      | Oturum sekmesi 8'e geç                   |
+| `session.tab.select.9`                | `<leader>9,ctrl+9`      | Oturum sekmesi 9'a geç                   |
+| `session.tab.select.10`               | `<leader>0,ctrl+0`      | Oturum sekmesi 10'a geç                  |
+
+## Modeller ve agent'lar
+
+| Kimlik                         | Varsayılan  | Açıklama                              |
+| ------------------------------ | ----------- | ------------------------------------- |
+| `stash.delete`                 | `ctrl+d`    | Stash girdisini sil                   |
+| `model.dialog.provider`        | `ctrl+a`    | Model iletişim kutusundan sağlayıcı listesini aç |
+| `model.dialog.favorite`        | `ctrl+f`    | Modelin favori durumunu aç/kapat      |
+| `model.dialog.usage`           | `ctrl+u`    | Model iletişim kutusundan kullanım limitlerini aç |
+| `model.list`                   | `<leader>m` | Kullanılabilir modelleri listele      |
+| `model.cycle_recent`           | `f2`        | Sonraki son kullanılan model          |
+| `model.cycle_recent_reverse`   | `shift+f2`  | Önceki son kullanılan model           |
+| `model.cycle_favorite`         | `none`      | Sonraki favori model                  |
+| `model.cycle_favorite_reverse` | `none`      | Önceki favori model                   |
+| `mcp.list`                     | `none`      | MCP sunucularını listele              |
+| `usage.show`                   | `none`      | Kullanım limitlerini görüntüle        |
+| `provider.connect`             | `none`      | Entegrasyon bağla                     |
+| `agent.list`                   | `<leader>a` | Agent'ları listele                    |
+| `agent.cycle`                  | `shift+tab` | Sonraki agent                         |
+| `agent.cycle.reverse`          | `none`      | Önceki agent                          |
+| `variant.cycle`                | `ctrl+t`    | Model varyantları arasında geçiş yap |
+| `variant.list`                 | `none`      | Model varyantlarını listele           |
+| `speed.cycle`                  | `none`      | Model hızları arasında geçiş yap |
+| `speed.list`                   | `none`      | Model hızlarını listele               |
+
+## Oturum gezinmesi
+
+| Kimlik                          | Varsayılan             | Açıklama                              |
+| ------------------------------- | ---------------------- | ------------------------------------- |
+| `session.page.up`               | `pageup,ctrl+alt+b`    | Mesajları bir sayfa yukarı kaydır     |
+| `session.page.down`             | `pagedown,ctrl+alt+f`  | Mesajları bir sayfa aşağı kaydır      |
+| `session.line.up`               | `ctrl+alt+y`           | Mesajları bir satır yukarı kaydır     |
+| `session.line.down`             | `ctrl+alt+e`           | Mesajları bir satır aşağı kaydır      |
+| `session.half.page.up`          | `ctrl+alt+u`           | Mesajları yarım sayfa yukarı kaydır   |
+| `session.half.page.down`        | `ctrl+alt+d`           | Mesajları yarım sayfa aşağı kaydır    |
+| `session.first`                 | `ctrl+g,home,alt+home` | İlk mesaja git                        |
+| `session.last`                  | `ctrl+alt+g,end`       | Son mesaja git                        |
+| `session.message.next`          | `none`                 | Sonraki mesaja git                    |
+| `session.message.previous`      | `none`                 | Önceki mesaja git                     |
+| `session.message.user.next`     | `none`                 | Sonraki kullanıcı mesajına git        |
+| `session.message.user.previous` | `none`                 | Önceki kullanıcı mesajına git         |
+| `session.messages_last_user`    | `alt+end`              | Son kullanıcı mesajına git            |
+| `messages.copy`                 | `<leader>y`            | Mesajı kopyala                        |
+| `session.undo`                  | `<leader>u`            | Mesajı geri al                        |
+| `session.redo`                  | `<leader>r`            | Mesajı yinele                         |
+| `session.toggle.thinking`       | `none`                 | Düşünme bloklarının görünürlüğünü aç/kapat |
+
+## Prompt komutları
+
+| Kimlik                        | Varsayılan       | Açıklama               |
+| ----------------------------- | ---------------- | ---------------------- |
+| `prompt.submit`               | `none`           | Promptu gönder         |
+| `prompt.queue`                | `<leader>return` | Promptu kuyruğa al     |
+| `prompt.editor_context.clear` | `none`           | Düzenleyici bağlamını temizle |
+| `prompt.images.view`          | `<leader>i`      | Görsel eklerini görüntüle |
+| `prompt.skills`               | `none`           | Skill seçiciyi aç      |
+| `prompt.stash`                | `none`           | Promptu stash'e al     |
+| `prompt.stash.pop`            | `none`           | Stash'teki promptu çıkar |
+| `prompt.stash.list`           | `none`           | Stash'teki promptları listele |
+
+## Girdi düzenleme
+
+| Kimlik                          | Varsayılan                                                                    | Açıklama                                |
+| ------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------- |
+| `prompt.clear`                  | `ctrl+c`                                                                      | Girdi alanını temizle                   |
+| `prompt.paste`                  | `{"key":"ctrl+v","preventDefault":false}` (`ctrl+v`; `preventDefault: false`) | Panodan yapıştır                        |
+| `input.submit`                  | `return`                                                                      | Girdiyi gönder                          |
+| `input.newline`                 | `shift+return,ctrl+return,alt+return,ctrl+j`                                  | Girdiye yeni satır ekle                 |
+| `input.move.left`               | `left,ctrl+b`                                                                 | İmleci girdide sola taşı                |
+| `input.move.right`              | `right,ctrl+f`                                                                | İmleci girdide sağa taşı                |
+| `input.move.up`                 | `up`                                                                          | İmleci girdide yukarı taşı              |
+| `input.move.down`               | `down`                                                                        | İmleci girdide aşağı taşı               |
+| `input.select.left`             | `shift+left`                                                                  | Girdide sola doğru seç                  |
+| `input.select.right`            | `shift+right`                                                                 | Girdide sağa doğru seç                  |
+| `input.select.up`               | `shift+up`                                                                    | Girdide yukarı doğru seç                |
+| `input.select.down`             | `shift+down`                                                                  | Girdide aşağı doğru seç                 |
+| `input.line.home`               | `ctrl+a`                                                                      | Girdide satır başına git                |
+| `input.line.end`                | `ctrl+e`                                                                      | Girdide satır sonuna git                |
+| `input.select.line.home`        | `ctrl+shift+a`                                                                | Girdide satır başına kadar seç          |
+| `input.select.line.end`         | `ctrl+shift+e`                                                                | Girdide satır sonuna kadar seç          |
+| `input.visual.line.home`        | `alt+a`                                                                       | Girdide görsel satır başına git         |
+| `input.visual.line.end`         | `alt+e`                                                                       | Girdide görsel satır sonuna git         |
+| `input.select.visual.line.home` | `alt+shift+a`                                                                 | Girdide görsel satır başına kadar seç   |
+| `input.select.visual.line.end`  | `alt+shift+e`                                                                 | Girdide görsel satır sonuna kadar seç   |
+| `input.buffer.home`             | `none`                                                                        | Girdide tampon başına git               |
+| `input.buffer.end`              | `none`                                                                        | Girdide tampon sonuna git               |
+| `input.select.buffer.home`      | `shift+home`                                                                  | Girdide tampon başına kadar seç         |
+| `input.select.buffer.end`       | `shift+end`                                                                   | Girdide tampon sonuna kadar seç         |
+| `input.delete.line`             | `ctrl+shift+d`                                                                | Girdide satırı sil                      |
+| `input.delete.to.line.end`      | `ctrl+k`                                                                      | Girdide satır sonuna kadar sil          |
+| `input.delete.to.line.start`    | `ctrl+u`                                                                      | Girdide satır başına kadar sil          |
+| `input.backspace`               | `backspace,shift+backspace`                                                   | Girdide geri sil                        |
+| `input.delete`                  | `ctrl+d,delete,shift+delete`                                                  | Girdide karakter sil                    |
+| `input.undo`                    | `ctrl+-,super+z`                                                              | Girdide geri al                         |
+| `input.redo`                    | `ctrl+.,super+shift+z`                                                        | Girdide yinele                          |
+| `input.word.forward`            | `alt+f,alt+right,ctrl+right`                                                  | Girdide sözcük ileri git                |
+| `input.word.backward`           | `alt+b,alt+left,ctrl+left`                                                    | Girdide sözcük geri git                 |
+| `input.select.word.forward`     | `alt+shift+f,alt+shift+right`                                                 | Girdide sözcük ileri seç                |
+| `input.select.word.backward`    | `alt+shift+b,alt+shift+left`                                                  | Girdide sözcük geri seç                 |
+| `input.delete.word.forward`     | `alt+d,alt+delete,ctrl+delete`                                                | Girdide sözcüğü ileri sil               |
+| `input.delete.word.backward`    | `ctrl+w,ctrl+backspace,alt+backspace`                                         | Girdide sözcüğü geri sil                |
+| `input.select.all`              | `super+a`                                                                     | Girdide tümünü seç                      |
+| `prompt.history.previous`       | `up`                                                                          | Önceki geçmiş öğesi                     |
+| `prompt.history.next`           | `down`                                                                        | Sonraki geçmiş öğesi                    |
+
+## Giriş alanı
+
+| Kimlik                        | Varsayılan | Açıklama            |
+| ----------------------------- | ---------- | ------------------- |
+| `composer.subagent.up`        | `up`       | Önceki subagent     |
+| `composer.subagent.down`      | `down`     | Sonraki subagent    |
+| `composer.subagent.select`    | `return`   | Subagent'a git      |
+| `composer.subagent.interrupt` | `ctrl+d`   | Subagent'ı kes      |
+| `composer.shell.up`           | `up`       | Önceki kabuk        |
+| `composer.shell.down`         | `down`     | Sonraki kabuk       |
+| `composer.shell.select`       | `return`   | Kabuk çıktısını görüntüle |
+| `composer.shell.kill`         | `ctrl+d`   | Kabuk komutunu sonlandır |
+| `composer.terminal.up`        | `up,k`     | Önceki terminal     |
+| `composer.terminal.down`      | `down,j`   | Sonraki terminal    |
+| `composer.terminal.select`    | `return`   | Terminal seç        |
+
+**Shell** sekmesinde çalışan bir komutu seçip yakalanan stdout ve stderr'i görüntülemek için **Enter** tuşuna basın veya komuta tıklayın.
+Kaydırmak için **↑/↓**, **Page Up/Down** veya **Home**, yeni çıktıyı izlemek için **End**, komutu durdurmadan dönmek için **Esc** kullanın.
+Görüntüleyici son çıktıyı gösterir ve çıkıştan sonra açık kalır; bir dosyaya yönlendirilen çıktı dahil edilmez.
+
+## İletişim kutuları ve otomatik tamamlama
+
+| Kimlik                         | Varsayılan    | Açıklama                            |
+| ------------------------------ | ------------- | ----------------------------------- |
+| `dialog.select.prev`           | `up,ctrl+p`   | Önceki iletişim kutusu öğesine git  |
+| `dialog.select.next`           | `down,ctrl+n` | Sonraki iletişim kutusu öğesine git |
+| `dialog.select.page_up`        | `pageup`      | İletişim kutusunda bir sayfa yukarı |
+| `dialog.select.page_down`      | `pagedown`    | İletişim kutusunda bir sayfa aşağı  |
+| `dialog.select.home`           | `home`        | İlk iletişim kutusu öğesine git     |
+| `dialog.select.end`            | `end`         | Son iletişim kutusu öğesine git     |
+| `dialog.select.submit`         | `return`      | Seçili iletişim kutusu öğesini gönder |
+| `dialog.prompt.submit`         | `return`      | İletişim kutusu promptunu gönder    |
+| `dialog.integration.rename`    | `ctrl+r`      | Entegrasyon hesabını yeniden adlandır |
+| `dialog.integration.delete`    | `ctrl+d`      | Entegrasyon hesabını sil            |
+| `dialog.integration.copy`      | `tab`         | Yetkilendirme bağlantısını kopyala  |
+| `dialog.worktree.generate`     | `tab`         | Worktree adı oluştur                |
+| `dialog.move_session.new`      | `ctrl+a`      | Yeni worktree                       |
+| `dialog.move_session.move`     | `ctrl+m`      | Oturumu worktree'ye taşı            |
+| `dialog.move_session.delete`   | `ctrl+d`      | Worktree'yi sil                     |
+| `dialog.move_session.refresh`  | `ctrl+r`      | Worktree'leri yenile                |
+| `prompt.autocomplete.prev`     | `up,ctrl+p`   | Önceki otomatik tamamlama öğesine git |
+| `prompt.autocomplete.next`     | `down,ctrl+n` | Sonraki otomatik tamamlama öğesine git |
+| `prompt.autocomplete.hide`     | `escape`      | Otomatik tamamlamayı gizle          |
+| `prompt.autocomplete.select`   | `return`      | Otomatik tamamlama öğesini seç      |
+| `prompt.autocomplete.complete` | `tab`         | Otomatik tamamlama öğesini tamamla  |
+| `permission.prompt.fullscreen` | `ctrl+f`      | İzin istemini tam ekran yap         |
+| `plugins.toggle`               | `return`      | Eklentiyi aç/kapat                  |
+| `dialog.mcp.toggle`            | `space`       | MCP sunucusunu aç/kapat             |
+| `dialog.plugins.error`         | `space`       | Eklenti hatasını görüntüle          |
+| `dialog.plugins.update`        | `ctrl+u`      | Eklentiyi eklenti iletişim kutusundan güncelle |
+| `dialog.plugins.check`         | `ctrl+r`      | Eklenti güncellemelerini denetle    |
+
+## Terminal ve eklentiler
+
+| Kimlik                  | Varsayılan | Açıklama                 |
+| ----------------------- | ---------- | ------------------------ |
+| `terminal.suspend`      | `ctrl+z`   | Terminali askıya al      |
+| `terminal.title.toggle` | `none`     | Terminal başlığını aç/kapat |
+| `plugins.list`          | `none`     | Eklenti yöneticisi iletişim kutusunu aç |
+
+## Which-Key
+
+| Kimlik                     | Varsayılan                 | Açıklama                          |
+| -------------------------- | -------------------------- | --------------------------------- |
+| `which-key.toggle`         | `ctrl+alt+k`               | Which-key panelini aç/kapat       |
+| `which-key.layout.toggle`  | `ctrl+alt+shift+k`         | Which-key düzenini değiştir       |
+| `which-key.pending.toggle` | `ctrl+alt+shift+p`         | Which-key bekleyen önizlemesini aç/kapat |
+| `which-key.group.previous` | `ctrl+alt+left,ctrl+alt+[` | Önceki which-key grubu            |
+| `which-key.group.next`     | `ctrl+alt+right,ctrl+alt+]` | Sonraki which-key grubu           |
+| `which-key.scroll.up`      | `ctrl+alt+up,ctrl+alt+p`   | Which-key'i yukarı kaydır         |
+| `which-key.scroll.down`    | `ctrl+alt+down,ctrl+alt+n` | Which-key'i aşağı kaydır          |
+| `which-key.page.up`        | `ctrl+alt+pageup`          | Which-key'de bir sayfa yukarı     |
+| `which-key.page.down`      | `ctrl+alt+pagedown`        | Which-key'de bir sayfa aşağı      |
+| `which-key.home`           | `ctrl+alt+home`            | İlk which-key atamasına git       |
+| `which-key.end`            | `ctrl+alt+end`             | Son which-key atamasına git       |

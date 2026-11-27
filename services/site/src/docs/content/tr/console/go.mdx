@@ -1,0 +1,372 @@
+---
+title: "Go"
+description: "Tek bir kişi veya tüm ekip için üç planla açık kodlama modellerine güvenilir erişim."
+---
+
+OpenCode Go, popüler açık kodlama modellerine güvenilir erişim sunar. Aylık üç abonelik seçeneği vardır:
+
+| Plan         | Fiyat                                  | Dahil kullanım                                                              |
+| ------------ | -------------------------------------- | -------------------------------------------------------------------------- |
+| **Go**       | **Ayda $10**                           | Aşağıdaki modellere daha düşük maliyetli erişim                            |
+| **Go Plus**  | **Ayda $40**                           | Aşağıdaki modellerde daha yüksek kullanım limitleri                        |
+| **Go Teams** | **Üye başına ayda $20**, en az 2 üye   | Her üye kendi limitlerini alır; her modelde Go'dan ayda $5 daha yüksek     |
+
+Go, OpenCode'daki diğer sağlayıcılar gibi çalışır. OpenCode Go'ya abone olur ve API anahtarınızı alırsınız. **Tamamen
+isteğe bağlıdır** ve OpenCode'u kullanmak için gerekli değildir.
+
+Hizmet öncelikli olarak uluslararası kullanıcılar için tasarlanmıştır ve istikrarlı küresel erişim sağlar.
+
+## Nasıl çalışır
+
+1. [OpenCode Console'da](https://opencode.ai/console) oturum açın, Go, Go Plus veya Go Teams'e abone olun, faturalandırma
+   bilgilerinizi ekleyin ve API anahtarınızı kopyalayın.
+2. TUI'da `/connect` çalıştırın, **OpenCode Go** seçin ve API anahtarınızı yapıştırın.
+
+   ```text
+   /connect
+   ```
+
+3. Go üzerinden kullanılabilir bir model seçmek için `/models` çalıştırın.
+
+   ```text
+   /models
+   ```
+
+<Callout>
+  Go ve Go Plus, abone olan üyeyi ve çalışma alanının API anahtarlarını kapsar. Davet ettiğiniz diğer üyeler ücretsiz modelleri veya çalışma alanı bakiyesini kullanır. Her iki aboneliği de istediğiniz zaman Go Teams'e yükseltebilirsiniz; o ayın kullanılmamış kotası kredi olarak bakiyenize eklenir. Go Teams, üye başına aylık $20 karşılığında çalışma alanındaki tüm üyeleri kapsar. En az 2 üyelik ücret alınır (ayda $40). Çalışma alanına katılan bir sonraki üye, önceden ödenen ikinci üyelikten ek ücret olmadan yararlanır. Sonrasında dönem ortasında katılan her üye için $20 alınır ve üye tam aylık kotadan yararlanır. Hizmet hesapları Go Teams'e dahil değildir.
+</Callout>
+
+[Güncel model listesine](https://opencode.ai/console/go#models) bakın. Test edip yeni modeller ekledikçe değişebilir.
+
+### Kısıtlı modelleri etkinleştirme
+
+Çalışma alanı gizlilik ayarları Go için de geçerlidir. Varsayılan olarak istek verileri üzerinde eğitim yapan ücretli uç
+noktalar engellenir ve izin verilen bölgeler **Europe & United States** olur. Kaydedilmiş gizlilik ayarı olmayan çalışma
+alanları, Çin'den gelen istekler için **Global** bölgesine de izin verir.
+
+**Settings › Privacy** bölümünde bir sahip veya yönetici şunları etkinleştirebilir:
+
+- **DeepSeek V4.1 Flash ve V4 Pro:** **Regions** altında **Global** seçin.
+- **LongCat 2.5:** **Regions** altında **Global** seçin.
+- **Muse Spark 1.3 Contributor ve Muse Spark 1.2 Contributor:** **Allow paid endpoints that train on request data**
+  seçeneğini açın.
+
+Her modelin eğitim ve saklama koşulları için [Gizlilik](#privacy) bölümüne bakın.
+
+## Krediyle ödeme
+
+Sahipler ve yöneticiler Go için, yenilemeler ve yükseltmeler dahil, çalışma alanının kredisinden ödeme yapabilir. Abone
+olurken veya daha sonra **Manage subscription** bölümünde ödeme yöntemi olarak **Credit** seçin. Bu, limitlerinizi aşan
+kullanım için ödeme yapan [Ek Kullanım](#usage-beyond-limits) ayarından ayrıdır.
+
+- Tam fiyat kredi bakiyenizden düşer. Bakiye yetersizse önce kredi ekleyebilirsiniz.
+- Yenileme ücreti, dönem sonunda kredi bakiyenizden düşülür. Bakiye yetersizse Go etkin kalır; yenileme dönem sonundan sonraki 1., 3. ve 7. günlerde ve yeterli kredi eklenir eklenmez yeniden denenir. Son deneme de başarısız olursa Go aboneliği sona erer.
+- [Faturalı ödeme](/console/billing#invoiced-billing) kullanan çalışma alanları Go için krediyle ödeme yapamaz.
+- Krediyle yaptığınız bir Go ödemesi iade edilirse tutar kredi bakiyenize eklenir ve ilgili Go abonelik dönemi sona erer.
+
+## Nerede kullanabilirim?
+
+OpenCode Go, [OpenCode](https://opencode.ai) ve benzer türde istekler gönderen diğer kodlama agent'ları için tasarlanmıştır.
+Trafik, diğer kullanıcıların deneyimini bozan kötüye kullanım açısından izlenir.
+
+İstemcinizi şu şekilde yapılandırın:
+
+1. Kodlama agent'larına özgü istekler gönderin.
+2. İstemciyi genel bir SDK veya HTTP kitaplığı adıyla değil, `my-coding-agent/1.0` gibi kendine özgü bir user agent değeriyle tanıtın.
+3. Yönlendirmeyi ve prompt önbelleğini iyileştirebilmemiz için aynı konuşmaya ait tüm isteklerde `x-opencode-session` başlığıyla aynı oturum kimliğini gönderin.
+
+[Karar](#decision-models) ve [gömme](#embedding-models) istekleri `x-opencode-session` gerektirmez; bu nedenle RAG
+kitaplığı, bellek sağlayıcısı veya betik gibi herhangi bir istemci onları Go anahtarınızla çağırabilir.
+
+Go'yu Claude Code, Codex, Hermes, OpenClaw, Pi ve Raycast içinde kurmak için [Harness'ler](/console/harnesses) bölümüne
+bakın.
+
+### Doğrulanmış istemciler
+
+OpenCode'un yanı sıra şu istemcilerin OpenCode Go ile düzgün çalıştığı doğrulanmıştır; ancak gelecekte çalışmaya devam
+edeceklerini garanti etmiyoruz.
+
+| İstemci           | Oturum desteği                                                                                                                                                                                                                              |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hermes**        | Ana ve yardımcı OpenCode isteklerinde başlığı gönderen **v0.21.6 veya üstüne** güncelleyin ([PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864)).                                                                     |
+| **Claude Code**   | Go onun yerel oturum başlığını tanır. Özel başlık sarmalayıcısı gerekmez.                                                                                                                                                                    |
+| **Codex**         | Go onun yerel oturum başlığını tanır. Bazı sürümler ve proxy kurulumları onu hâlâ atlar; istekleri iletirken oturum başlığını koruyun.                                                                                                       |
+| **ZCode**         | Go onun yerel oturum başlığını tanır. [`x-opencode-session` talebimiz](https://github.com/zai-org/feedback/issues/492) açık, ancak artık o belirli başlığı göndermek gerekmiyor.                                                          |
+| **Pi**            | Güncel derlemeler OpenCode için oturum bilgisi gönderir. Daha eski kurulumları güncelleyin.                                                                                                                                                  |
+| **jcode**         | [Oturum başlığı düzeltmesini](https://github.com/1jehuang/jcode/issues/1167) içeren **v0.81.6 veya üstüne** güncelleyin.                                                                                                                   |
+| **OpenClaw**      | Güncel derlemeler Go isteklerinde `x-opencode-session` gönderir. Tarayıcı oturum açma **2026.11.7 veya üstünü** gerektirir.                                                                                                                  |
+| **Kilo Code CLI** | [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) içeren derlemeler OpenCode oturum başlıklarını geri getirir. Bu düzeltme CLI'yı kapsar, VS Code uzantısını değil. Bkz. [issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723). |
+
+### Sorunlu olduğu bilinen istemciler
+
+Bu istemcilerde incelediğimiz sürümlerde oturum desteği eksik veya yetersiz. Bağlantılı raporlar düzeltmeleri ve geçici
+çözümleri izler.
+
+| İstemci                 | Durum ve takip                                                                                                                                                                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DeepSeek Harness**    | Oturum bilgisi bazı model yollarında geliyor, bazılarında eksik. Yerel başlığını tanıyoruz; kalan iş onu tüm bağdaştırıcılarda göndermek. [Discussion #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495).                        |
+| **GitHub Copilot Chat** | Otomatik oturum başlığı desteği [VS Code issue #334186](https://github.com/microsoft/vscode/issues/334186) içinde talep edildi.                                                                                                                        |
+| **Kimi Code**           | [Issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506) içindeki oturum başlığı talebi planlanmadı olarak kapatıldı.                                                                                                                        |
+| **MiMo Code**           | [Issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) kapalı ve [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327) birleştirilmeden kapatıldı.                                                                                   |
+
+## Kullanım limitleri
+
+Go'da kullandığınız ücretli modeller tek bir kotayı paylaşır. Go Teams'te her üyenin modeller genelinde kendi kotası
+vardır.
+
+- **5 saatlik limit**, aylık kotanızın %20'sidir. Bu süre kotanızı ilk kullandığınızda başlar ve beş saat sürer.
+- **Haftalık limit** aylık kotanızın %50'sidir. Pazartesi 00:00 UTC'de sıfırlanır.
+- **Aylık kotanız** yeni bir ücretli dönem başladığında sıfırlanır.
+
+Model değiştirmek aynı kotadan düşer. Bir limite ulaşırsanız ücretsiz bir model kullanabilir veya tekrar kotanız
+olana kadar Console kredilerinizi kullanmak için [Ek Kullanım](#usage-beyond-limits) seçeneğini açabilirsiniz.
+
+Her modelin [aylık limiti](https://opencode.ai/console/go#limits), ay boyunca yalnızca o modeli kullanırsanız planınızın
+ne kadar kullanımı kapsadığını gösterir. Örneğin $15 limitli bir modelde $1,50 kullanım aylık kotanızın %10'unu kullanır.
+$60 limitli bir modelde $6 da öyle. Go yanıtları her isteğin ne kadar sayıldığını
+[`opencode.allowance`](/console/api/inference#cost) içinde bildirir.
+
+[Token fiyatları](https://opencode.ai/console/go#pricing) 1M token başına olup Go, Go Plus ve Go Teams için aynıdır.
+
+[Karar](#decision-models) ve [gömme](#embedding-models) modelleri liste fiyatıyla gelir ve Go indirimi yoktur: aylık
+limitleri ödediğiniz tutarla eşleşir, Go'da $10 ve Go Plus'ta $40. Go Teams'te her modelde olduğu gibi Go'dan $5 yüksek
+olarak $15'tir.
+
+**Beam Free:** Sınırlı bir süre ücretsiz. Angola, Belarus, Kamboçya, Çin (Hong Kong ve Makao dahil), Küba, Demokratik
+Kongo Cumhuriyeti, Ekvator Ginesi, İran, Irak, Laos, Libya, Nijerya, Kuzey Kore, Rusya, Suriye, Türkmenistan, Özbekistan,
+Venezuela veya Ukrayna'nın Kırım, Donetsk ve Luhansk bölgelerinde kullanılamaz.
+
+**Gemini 4 Argon:** %50 indirim 30 Kasım 2026'ya kadar geçerlidir.
+
+**HungerG Free:** Sınırlı bir süre ücretsiz.
+
+### Tahmini istekler
+
+Console'un Go sayfası, tipik Go kullanım desenlerine göre her model için
+[5 saat başına istekleri tahmin eder](https://opencode.ai/console/go#limits). Gerçek kullanım değişir.
+
+Güncel kullanımınızı [Console](https://opencode.ai/console) üzerinden veya [kullanım endpoint'inden](#usage) izleyebilirsiniz.
+
+<Callout type="tip">Kullanım limitine ulaşırsanız ücretsiz modelleri kullanmaya devam edebilirsiniz.</Callout>
+
+Erken kullanımdan ve geri bildirimlerden öğrendikçe kullanım limitleri değişebilir.
+
+---
+
+### Limitlerin ötesinde kullanım
+
+Console'da kredi bakiyeniz varsa **Go** sayfasında **Extra Usage** seçeneğini açabilirsiniz. Bu ayar açıkken Go, kullanım limitlerinize ulaştığınızda istekleri engellemek yerine ücretleri [kullandıkça öde bakiyenizden](/console/models#pricing) düşer.
+
+Go Teams **Extra Usage** açık olarak başlar ve **Go** sayfasında onu kapatıp yeniden açabilirsiniz.
+
+### Bazı modellerde kullanım neden daha düşük?
+
+Go'da dahil edilen aylık kullanım modele göre değişir.
+
+Çoğu modelde bunu toplu indirimler ve ayrılmış GPU kapasitesiyle sağlıyoruz. Bu tasarrufları size daha yüksek aylık
+kullanım olarak aktarıyoruz.
+
+Bazı modellerde indirim pazarlama veya onları daha düşük maliyetle barındırma fırsatımız olmadı; çünkü model yeni ya da
+kamuya açık fiyatlandırması zaten indirimli.
+
+Bu modellerde yine de model sağlayıcılarına doğrudan ödeme yapmanızdan biraz daha fazlasını alırsınız; dahil edilen aylık
+kullanımlarının daha düşük olmasının nedeni budur.
+
+## Endpoint'ler
+
+Go modellerine `https://opencode.ai/inference/go` adresindeki API üzerinden de erişebilirsiniz. Her modelin
+[kimliğine, yoluna ve AI SDK paketine](https://opencode.ai/console/go#api) bakın. Her model yerel API'siyle listelenir,
+ancak her metin modeli Console'un çevirdiği diğer API'ler üzerinden de çalışır. Tam küme için
+[Base URL'ler](/console/harnesses#base-urls) bölümüne bakın.
+
+Bu AI SDK paketleri Go'yu doğrudan çağıran uygulamalar içindir. Go'yu OpenCode'da kullanmak için `/connect` ile bağlanın
+ve [modeli](/models) `opencode-go/<model-id>` biçimiyle ayarlayın:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode-go/kimi-k3",
+}
+```
+
+### Modeller
+
+Kullanılabilir modellerin tam listesini ve üst verilerini model endpoint'inden alın:
+
+```bash
+curl https://opencode.ai/inference/go/v1/models
+```
+
+Go'nun aylık kullanım limitleri dahil yanıttaki her alan için [model listesi API'sine](/console/api/models) bakın.
+
+### Karar modelleri
+
+Karar modelleri metin üretmek yerine bir `state` hakkında tipli soruları yanıtlar. Go anahtarınızla
+[Console modellerinde](/console/models#jev) olduğu gibi aynı System One isteğini
+`https://opencode.ai/inference/go/systemone/v1/systemone` adresine gönderin:
+
+```bash
+curl https://opencode.ai/inference/go/systemone/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.14",
+    "state": "My payments have failed for three days and I am losing sales.",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this request require urgent attention?"
+      }
+    }
+  }'
+```
+
+| Model                               | Model kimliği       | Girdi  | Çıktı | Önbellek okuma | Önbellek yazma |
+| ----------------------------------- | ------------------- | ------ | ------ | ----------- | ------------ |
+| Jev 1.14                            | jev-1.14            | $0,042 | Free     | -         | -            |
+| Gemini Decision 1                   | gemini-decision-1   | $0,10  | Free     | -         | -            |
+| GPT 6 Luna Decision (≤ 272K token)  | gpt-6-luna-decision | $0,10  | Free     | $0,01     | $0,125       |
+| GPT 6 Luna Decision (> 272K token)  | gpt-6-luna-decision | $0,20  | Free     | $0,02     | $0,25        |
+
+- Fiyatlar 1M token başınadır.
+- OpenAI'nin Decisions biçimindeki istekler `https://opencode.ai/inference/go/openai/v1/decisions` adresinde çalışır.
+- Soru türleri için [Jev](/console/models#jev), `state` içinde görseller, ses, video ve PDF'ler için
+  [GPT 6 Luna Decision ve Gemini Decision 1](/console/models#gpt-6-luna-decision-and-gemini-decision-1) bölümüne bakın.
+
+### Gömme modelleri
+
+Gömme modelleri metni vektörlere dönüştürür. Onları OpenAI'nin Embeddings API'sinde
+`https://opencode.ai/inference/go/openai/v1/embeddings` adresinde Go anahtarınızla çağırın:
+
+```bash
+curl https://opencode.ai/inference/go/openai/v1/embeddings \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "text-embedding-3-small",
+    "input": ["hello world", "goodbye"]
+  }'
+```
+
+| Model                  | Model kimliği          | Girdi  |
+| ---------------------- | ---------------------- | ------ |
+| text-embedding-3-small | text-embedding-3-small | $0,02  |
+| Qwen3 Embedding 8B     | qwen3-embedding-8b     | $0,01  |
+| Gemini Embedding 2     | gemini-embedding-2     | $0,20  |
+
+- Fiyatlar 1M girdi token'ı başınadır.
+- İstek ayrıca `dimensions` ve `encoding_format` kabul eder. Bkz. [Gömme modelleri](/console/models#embedding-models).
+
+### Kullanım
+
+[Kullanım limitlerinizin](#usage-limits) ne kadarını kullandığınızı denetleyin; örneğin kendi istemcinizde göstermek için:
+
+```bash
+curl https://opencode.ai/inference/go/v1/usage \
+  -H "Authorization: Bearer <token>"
+```
+
+Go için kullandığınız anahtarın aynısını kullanın. Go ve Go Plus'ta bu, abonenin
+[kişisel API anahtarı](/console/api#personal-api-keys) veya bir [hizmet hesabı anahtarıdır](/console/api#service-accounts).
+Go Teams'te herhangi bir üyenin kişisel API anahtarıdır.
+
+Yanıtta her limit için bir ölçer vardır: 5 saatlik limit için `rolling`, `weekly` ve `monthly`.
+
+```json
+{
+  "usage": {
+    "rolling": { "status": "ok", "percent": 30, "resetsAt": "2026-11-21T15:00:00.000Z" },
+    "weekly": { "status": "rate-limited", "percent": 100, "resetsAt": "2026-11-23T00:00:00.000Z" },
+    "monthly": { "status": "ok", "percent": 50, "resetsAt": "2026-12-01T00:00:00.000Z" }
+  }
+}
+```
+
+| Alan       | Anlamı                                                                                                     |
+| ---------- | ---------------------------------------------------------------------------------------------------------- |
+| `status`   | `ok` veya limit tükendiğinde `rate-limited`.                                                               |
+| `percent`  | Limitin ne kadarının kullanıldığı, `0` ile `100` arası tam sayı.                                           |
+| `resetsAt` | Limitin sıfırlanma zamanı, ISO 8601. 5 saatlik pencere başlamadan önce `rolling`, şu andan beş saat sonra sıfırlanır. |
+
+Geçerli anahtarı olmayan istekler HTTP `401` döndürür. Go'nun kapsamadığı anahtarlar, örneğin çalışma alanında etkin Go
+aboneliği yoksa, nedenini açıklayan bir mesajla HTTP `403` döndürür.
+
+```json
+{ "type": "error", "error": { "type": "EntitlementError", "message": "OpenCode Go subscription required." } }
+```
+
+## Gizlilik
+
+Her modelin [verileriniz üzerinde eğitim yapıp yapmadığına](https://opencode.ai/console/go#privacy) bakın.
+
+| Model                      | Veri saklama |
+| -------------------------- | ------------ |
+| Grok 4.7                   | 30 gün       |
+| GPT 6 Luna                 | 30 gün       |
+| GPT 5.6 Luna               | 30 gün       |
+| Claude Haiku 5.5           | 30 gün       |
+| Gemini 4 Argon             | 55 gün       |
+| GLM-5.3-Flash              | 0 gün        |
+| GLM-5.3                    | 0 gün        |
+| Kimi K3.1 Pro              | 0 gün        |
+| Kimi K3                    | 0 gün        |
+| Kimi K2.7 Code             | 0 gün        |
+| LongCat 2.5                | 0 gün        |
+| MiMo-V2.6-Pro              | 0 gün        |
+| MiMo-V2.6-Flash            | 0 gün        |
+| Qwen4 Max                  | 0 gün        |
+| Qwen3.8 Max                | 0 gün        |
+| Qwen3.8 Flash              | 0 gün        |
+| Qwen3.7 Plus               | 0 gün        |
+| MiniMax M3.1 Flash         | 0 gün        |
+| MiniMax M3                 | 0 gün        |
+| Muse Spark 1.3 Contributor | ZDR değil    |
+| Muse Spark 1.2 Contributor | ZDR değil    |
+| DeepSeek V4.1 Flash        | 0 gün\*      |
+| DeepSeek V4 Pro            | 0 gün\*      |
+| Hy4                        | 0 gün        |
+| Hy4 preview                | 0 gün        |
+| Hy3                        | 0 gün        |
+| Step 5 Preview             | 0 gün        |
+| Beam Free                  | 30 gün       |
+| Iceman Contributor Free    | ZDR değil    |
+| Hy4 flash Free             | 0 gün        |
+
+- **Grok 4.7:** ZDR, saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır; bunlar arasında durum bilgisi tutan Responses API, Files and Collections ve Batch API bulunur. [Daha fazla bilgi](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
+- **GPT 6 Luna / GPT 5.6 Luna:** Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır. [Daha fazla bilgi](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
+- **Claude Haiku 5.5:** İstekler [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage) uyarınca 30 gün saklanır.
+- **Gemini 4 Argon:** İstekler, [Google'ın Gemini API Koşulları](https://ai.google.dev/gemini-api/terms) uyarınca kötüye kullanım izlemesi için 55 güne kadar saklanır.
+- **Muse Spark 1.3 Contributor:** Prompt'larınızın ve model yanıtlarının gelecekteki Meta modellerini eğitmek için kullanılmasına izin verirseniz token'ları büyük indirimle kullanabilirsiniz. Model yalnızca Meta'nın [Geographic Use Policy](https://ai.developer.meta.com/legal/geographic-use-policy) belgesinde izin verilen bölgelerde kullanılabilir. [Daha fazla bilgi](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
+- **Muse Spark 1.2 Contributor:** Prompt'larınızın ve model yanıtlarının gelecekteki Meta modellerini eğitmek için kullanılmasına izin verirseniz token'ları büyük indirimle kullanabilirsiniz. Model yalnızca Meta'nın [Geographic Use Policy](https://ai.developer.meta.com/legal/geographic-use-policy) belgesinde izin verilen bölgelerde kullanılabilir. [Daha fazla bilgi](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
+- **Iceman Contributor Free:** Prompt'larınızın ve model yanıtlarının modeli iyileştirmek için kullanılmasına izin verirseniz model sınırlı bir süre ücretsizdir.
+- **HungerG Free:** Sınırlı bir süre ücretsizdir. Prompt'larınız ve model yanıtları eğitimde kullanılmaz.
+- **LongCat 2.5:** Çin'de barındırılır. Çalışma alanı gizlilik ayarlarınızda **Global** bölgeleri gerektirir.
+- **DeepSeek:** ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 31 Aralık 2026 tarihine kadar geçerlidir.
+
+## Arka plan
+
+Açık modeller gerçekten çok iyileşti. Kodlama görevlerinde artık tescilli modellere yakın performansa ulaşıyorlar. Birçok
+sağlayıcı onları rekabetçi biçimde sunabildiği için genellikle çok daha ucuzlar.
+
+Ancak onlara güvenilir ve düşük gecikmeli erişim zor olabilir. Sağlayıcılar kalite ve kullanılabilirlik açısından
+farklılık gösterir.
+
+<Callout type="tip">OpenCode ile iyi çalışan seçili bir model ve sağlayıcı grubunu test ettik.</Callout>
+
+Bunu düzeltmek için birkaç şey yaptık:
+
+1. Seçili bir açık model grubunu test ettik ve en iyi nasıl çalıştırılacakları konusunda ekipleriyle konuştuk.
+2. Bunların doğru sunulduğundan emin olmak için birkaç sağlayıcıyla çalıştık.
+3. Model ve sağlayıcı kombinasyonunu benchmark ettik ve güvenle önerebileceğimiz bir liste oluşturduk.
+
+Go, Go Plus ve Go Teams bu modellere erişim sağlar; onları ne kadar kullandığınıza uyan planı seçin veya tüm ekibinizi
+kapsamak için Go Teams'i seçin.
+
+## Hedefler
+
+OpenCode Go'yu şunun için oluşturduk:
+
+1. Düşük maliyetli bir abonelikle AI kodlamayı daha fazla kişi için **erişilebilir** kılmak.
+2. En iyi açık kodlama modellerine **güvenilir** erişim sağlamak.
+3. Kodlama agent'larıyla kullanılmak üzere **test edilmiş ve performansı ölçülmüş** modeller seçmek.
+4. OpenCode ile başka herhangi bir sağlayıcıyı da kullanmanıza izin vererek **bağımlılık yaratmamak**.

@@ -1,0 +1,106 @@
+---
+title: "TUI"
+description: "Bir oturum başlatın ve terminal arayüzündeki günlük iş akışlarını kullanın."
+---
+
+OpenCode'u projenizden çalıştırın, bir istek yazın ve **Enter** tuşuna basın.
+
+```bash
+cd ~/code/my-project
+opencode
+```
+
+```text
+Explain how authentication works in this project
+```
+
+Yeni satır için **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** veya **Ctrl+J** tuşlarına basın. OpenCode çalışırken **Enter**
+etkin oturumu yönlendirir; promptu sonrası için kuyruğa almak üzere **Ctrl+X** ardından **Enter** tuşlarına basın.
+
+## Bağlam
+
+Bir dosya aramak için `@` yazın, ardından dosyayı prompta eklemek için seçin. Sonuçları daraltmak için `@` sonrasında
+yazmaya devam edin.
+
+```text
+Review @src/auth.ts for error handling problems
+```
+
+Yoldan sonra bir satır veya aralık ekleyebilirsiniz.
+
+```text
+Explain @src/auth.ts#20-45
+```
+
+## Kabuk
+
+Kabuk moduna girmek için boş bir promptun başında `!` yazın. Bir komut girin ve **Enter** tuşuna basın; komut çalıştırmadan
+kabuk modundan çıkmak için **Esc** tuşuna basın.
+
+```text
+!git status
+```
+
+Kabuk komutları oturumun çalışma dizininde çalışır ve çıktıları oturumda kalır.
+
+## Komutlar
+
+Eğik çizgi komutlarını listelemek için `/` yazın. Listeyi filtrelemek için yazmaya devam edin, ardından seçili komutu
+çalıştırmak için **Enter** tuşuna basın.
+
+```text
+/models
+```
+
+Yaygın komutlar arasında `/new`, `/sessions`, `/models`, `/agents`, `/undo`, `/redo` ve `/editor` bulunur. Geçerli görünümde
+kullanılabilir her eylem için komut paletini açmak üzere **Ctrl+P** tuşlarına basın.
+
+Bir güncellemeden sonra OpenCode, sürümdeki yenilikleri ana ekranda bir kez gösterir. Yeniden görmek için `/highlights`
+çalıştırın veya otomatik açılmasını durdurmak için [`cli.json`](/cli/config#alerts) içinde `"highlights": false` ayarlayın.
+
+## Yan sorular
+
+Şimdiye kadarki konuşma hakkında kısa bir soru sormak için `/btw <question>` çalıştırın. OpenCode, oturumun bağlamı ve
+geçerli modeliyle yanıt verir. Yanıt konuşmaya eklenmediği için sonraki promptları etkilemez. Yanıt hazırlanırken giriş
+alanının altında `/btw` göstergesi görünür. Yanıt bir iletişim kutusunda açılır; kopyalamak için **C** tuşuna basın.
+
+```text
+/btw why did the test in step 2 fail?
+```
+
+## Modeller
+
+Model seçmek için **Ctrl+X** ardından **M** tuşlarına basın veya `/models` çalıştırın. Son kullanılan modeller arasında
+dönmek için **F2** tuşuna basın.
+
+Agent seçmek için **Ctrl+X** ardından **A** tuşlarına basın veya `/agents` çalıştırın. Agent'lar arasında dönmek için
+**Shift+Tab** tuşlarına basın.
+
+## Oturumlar
+
+Yeni bir oturum başlatmak için **Ctrl+X** ardından **N** tuşlarına basın. Var olan bir oturuma dönmek için **Ctrl+X**
+ardından **L** tuşlarına basın veya `/sessions` çalıştırın; **Ctrl+O** son oturumları ve projeleri birlikte açar.
+
+Sekmeler varsayılan olarak etkindir. Aralarında geçmek için **Ctrl+Tab** ve **Ctrl+Shift+Tab**, birini kapatmak için
+**Ctrl+X** ardından **W**, son kapatılan sekmeyi yeniden açmak için **Ctrl+Shift+T** kullanın.
+
+## Geçmiş
+
+Son kullanıcı mesajını ve ardından gelen çalışmayı geri almak için **Ctrl+X** ardından **U** tuşlarına basın veya `/undo`
+çalıştırın. Geri alınan prompt düzenleyebilmeniz için giriş alanına döner.
+
+Geri alınan çalışmayı geri yüklemek için **Ctrl+X** ardından **R** tuşlarına basın veya `/redo` çalıştırın. Bunun yerine
+yeni bir prompt göndermek geri almayı kabul eder ve o noktadan devam eder.
+
+## Düzenleyici
+
+`VISUAL` veya `EDITOR` ayarlayın, ardından **Ctrl+X** sonra **E** tuşlarına basın veya `/editor` çalıştırarak geçerli
+promptu o düzenleyicide düzenleyin. Metni giriş alanına döndürmek için kaydedip çıkın, ardından göndermek için **Enter**
+tuşuna basın.
+
+```bash
+export EDITOR="nvim"
+opencode
+```
+
+Öncü tuş varsayılan olarak **Ctrl+X**'tir. Bu kısayolları değiştirmek için [Tuş atamaları](/cli/keybinds) sayfasına bakın.

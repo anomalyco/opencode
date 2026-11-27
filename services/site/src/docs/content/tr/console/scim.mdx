@@ -1,0 +1,91 @@
+---
+title: "Dizin eşitleme"
+description: "Çalışma alanı üyelerini Okta, Microsoft Entra ID veya herhangi bir SCIM 2.0 kimlik sağlayıcısından otomatik olarak ekleyin ve kaldırın."
+---
+
+Dizin eşitleme (SCIM 2.0), kimlik sağlayıcınızda atadığınız kişileri çalışma alanına ekler. Atamayı kaldırdığınızda bu kişilerin erişimi de iptal edilir. Rolleri ise Console'dan yönetmeye devam edersiniz.
+
+```text
+https://opencode.ai/console/scim/v2
+```
+
+## Başlamadan önce
+
+- Çalışma alanı için [SSO](/console/sso) ayarlayın.
+- Kişilerinizin oturum açtığı her e-posta alan adını [doğrulayın](/console/sso#verify-email-domains). Dizin eşitleme
+  yalnızca doğrulanmış bir alan adındaki kişileri ekler; diğer herkesi [Üyeler](/console/members) bölümünden davet edin.
+
+## Token oluşturma
+
+Dizin eşitlemeyi yalnızca çalışma alanı sahipleri ayarlayabilir ya da token'larını oluşturup iptal edebilir.
+
+1. **Settings › Security** bölümünü açın ve **Directory sync** altında **Set up** düğmesine tıklayın.
+2. **SCIM base URL** değerini ve token'ı kopyalayın. Token yalnızca bir kez gösterilir; bir gizli bilgi yöneticisinde saklayın.
+
+Kimlik sağlayıcınız token'ı her istekte gönderir.
+
+```text
+Authorization: Bearer <token>
+```
+
+## Kimlik sağlayıcınızı bağlama
+
+### Okta
+
+1. **SCIM 2.0 Test App (Header Auth)** uygulamasını ekleyin.
+2. Base URL'yi ayarlayın. **API Token** alanına `Bearer ` yazın ve token'ı bunun hemen ardından girin.
+3. **Create Users**, **Update User Attributes** ve **Deactivate Users** seçeneklerini etkinleştirin. **Import Groups** ve
+   parola eşitlemeyi kapalı bırakın.
+
+### Microsoft Entra ID
+
+1. Kurumsal uygulamanızda **Provisioning** bölümünü açın ve modu **Automatic** yapın.
+2. Base URL'yi **Tenant URL** alanına, token'ı **Secret Token** alanına girin.
+3. Kullanıcıları ve grupları atayın, ardından hesap sağlama işlemini başlatın.
+
+### Diğer sağlayıcılar
+
+İstek başlığındaki token ile kimlik doğrulayan bir SCIM 2.0 uygulaması kullanın ve uygulamayı base URL'ye yönlendirin. Console, `/Users` ve `/Groups` endpoint'lerini destekler.
+
+Önce bir test kişisi atayın. İlk istekten sonra **Directory sync** **Connected to your identity provider** gösterir.
+
+## Neler eşitlenir
+
+| Kimlik sağlayıcınızda     | Console'da                                                                        |
+| ------------------------- | --------------------------------------------------------------------------------- |
+| Bir kişi atama            | **Member** olarak eklenir. Mevcut üyeler rollerini korur.                          |
+| Ad güncelleme             | Profil güncellenir.                                                               |
+| Atamayı kaldırma veya devre dışı bırakma | Erişim askıya alınır ve **Deactivated** olarak gösterilir. Oluşturdukları API anahtarları iptal edilir. |
+| Yeniden atama             | Erişim geri yüklenir. İptal edilen anahtarlar iptal kalır.                        |
+| Silme                     | Çalışma alanından kaldırılır. Hesapları ve diğer çalışma alanları etkilenmez.     |
+
+- Roller ve e-posta adresleri dizin eşitleme tarafından değiştirilmez.
+- Son sahip devre dışı bırakılamaz veya silinemez.
+- [Go](/console/go) aboneliği olan çalışma alanları dizin eşitleme yoluyla üye ekleyemez.
+
+## Gruplar
+
+Üyelerini etiketlemek için grupları gönderin, örneğin Okta **Push Groups** veya Entra grup atamasıyla. Gruplarını
+göndermeden önce kişileri atayın.
+
+```text
+Platform Admins  →  platform-admins
+```
+
+Her grup üyelerini grubun adını taşıyan bir etiketle etiketler. **Settings › Security › Group tags** bölümünde bir
+etiketin adını değiştirebilir, birkaç grubu tek bir etikete yönlendirebilir veya bir grubu etiketlemeyi durdurabilirsiniz.
+Gruptan ayrılmak etiketini kaldırır.
+
+## Token'ı yenileme
+
+1. **New token** düğmesine tıklayın ve token'ı kimlik sağlayıcınıza kurun.
+2. Yeni token'ın son kullanım zamanı görünene kadar bekleyin.
+3. Eski token'ı iptal edin.
+
+Bir token'ı iptal etmek gelecekteki güncellemeleri durdurur ancak mevcut üyeleri değiştirmez. SSO bağlantısını silmek tüm
+token'ları iptal eder.
+
+## SSO ve dizin eşitleme
+
+Bir çalışma alanı token yayımladıktan sonra SSO artık [üyeleri otomatik olarak eklemez](/console/sso#automatic-membership).
+Token daha sonra iptal edilse bile çalışma alanı üyeliğini dizin belirler.
