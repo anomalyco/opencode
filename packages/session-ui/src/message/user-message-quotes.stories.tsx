@@ -6,9 +6,8 @@ import { CurrentSessionProviders } from "../storybook/current-session-story"
 import { CURRENT_SESSION_ID, STORY_MODEL, STORY_TIME } from "../storybook/current-session-fixtures"
 
 /*
- * A prompt's quotes, file comments and notes: as cards below the text (Cards, what beta and prod show), and inline in
- * the bubble after the text (Inline, `inlineQuotes`, on in local and dev builds). Every case renders the shipped
- * CurrentUserMessageDisplay both ways.
+ * A prompt's quotes, file comments and notes, inline in the bubble after the text. Every case renders the shipped
+ * CurrentUserMessageDisplay.
  */
 
 type Quote = Extract<SessionUserComment, { type: "quote" }>
@@ -196,7 +195,7 @@ const cases = {
       quote("The collapse chevron rotates 90 degrees."),
     ],
   },
-  withCards: {
+  withComments: {
     name: "Quotes with file and note comments",
     description:
       "Quotes, file-line and page-element comments share one blockquote style, in the order they were added.",
@@ -548,7 +547,7 @@ type Args = {
 export const AllCases = {
   render: (args: Args) => (
     <Page args={args}>
-      <For each={Object.values(cases)}>{(item) => <Compare case={item} args={args} />}</For>
+      <For each={Object.values(cases)}>{(item) => <Example case={item} args={args} />}</For>
     </Page>
   ),
 }
@@ -566,7 +565,7 @@ export const AllCasesRtl = {
   args: { direction: "rtl" },
   render: (args: Args) => (
     <Page args={args}>
-      <For each={Object.values(rtlCases)}>{(item) => <Compare case={item} args={args} />}</For>
+      <For each={Object.values(rtlCases)}>{(item) => <Example case={item} args={args} />}</For>
     </Page>
   ),
 }
@@ -576,7 +575,7 @@ export const AllCasesCollapsed = { ...AllCases, args: { fold: true } }
 const single = (item: Case) => ({
   render: (args: Args) => (
     <Page args={args}>
-      <Compare case={item} args={args} />
+      <Example case={item} args={args} />
     </Page>
   ),
 })
@@ -607,7 +606,7 @@ export const Source = single(cases.source)
 
 export const Overflow = { ...single(cases.overflow), args: { fold: true } }
 
-export const WithCards = single(cases.withCards)
+export const WithComments = single(cases.withComments)
 
 export const References = single(cases.references)
 
@@ -667,7 +666,7 @@ function Page(props: { args: Args; children: JSX.Element }) {
   )
 }
 
-function Compare(props: { case: Case; args: Args }) {
+function Example(props: { case: Case; args: Args }) {
   const fold = () => props.case.fold ?? props.args.fold
 
   return (
@@ -678,53 +677,37 @@ function Compare(props: { case: Case; args: Args }) {
           {props.case.description}
         </p>
       </header>
-      <div class="flex items-start gap-6">
-        <For each={[false, true]}>
-          {(inline) => (
-            <Column label={inline ? "Inline" : "Cards"} width={props.args.width} direction={props.args.direction}>
-              {/* The timeline puts 4px between the bubbles of a run. */}
-              <div class="flex flex-col gap-1">
-                <Show when={props.case.run}>
-                  <CurrentUserMessageDisplay
-                    sessionID={CURRENT_SESSION_ID}
-                    message={{
-                      id: "msg_quotes_run_start",
-                      type: "user",
-                      text: "",
-                      time: { created: STORY_TIME },
-                      files: [],
-                    }}
-                    text="tidy the sidebar spacing"
-                    agent="build"
-                    model={STORY_MODEL}
-                    run={{ above: false, below: true }}
-                  />
-                </Show>
-                <Message case={props.case} fold={fold()} inline={inline} />
-              </div>
-            </Column>
-          )}
-        </For>
+      {/* Only the timeline area takes the direction; the story's headings stay put. */}
+      <div
+        class="flex shrink-0 flex-col gap-1 rounded-[8px] px-4 py-4"
+        style={{ width: `${props.args.width}px` }}
+        data-story-surface
+        dir={props.args.direction}
+      >
+        {/* The timeline puts 4px between the bubbles of a run. */}
+        <Show when={props.case.run}>
+          <CurrentUserMessageDisplay
+            sessionID={CURRENT_SESSION_ID}
+            message={{
+              id: "msg_quotes_run_start",
+              type: "user",
+              text: "",
+              time: { created: STORY_TIME },
+              files: [],
+            }}
+            text="tidy the sidebar spacing"
+            agent="build"
+            model={STORY_MODEL}
+            run={{ above: false, below: true }}
+          />
+        </Show>
+        <Message case={props.case} fold={fold()} />
       </div>
     </article>
   )
 }
 
-// Only the timeline area takes the direction; the story's headings and column order stay put for comparison.
-function Column(props: { label: string; width: number; direction: Args["direction"]; children: JSX.Element }) {
-  return (
-    <div class="flex shrink-0 flex-col gap-2" style={{ width: `${props.width}px` }}>
-      <span class="text-[12px] leading-4 [font-weight:530]" data-story-faint>
-        {props.label}
-      </span>
-      <div class="rounded-[8px] px-4 py-4" data-story-surface dir={props.direction}>
-        {props.children}
-      </div>
-    </div>
-  )
-}
-
-function Message(props: { case: Case; fold: boolean; inline: boolean }) {
+function Message(props: { case: Case; fold: boolean }) {
   const status = props.case.status
 
   return (
@@ -736,7 +719,6 @@ function Message(props: { case: Case; fold: boolean; inline: boolean }) {
       model={STORY_MODEL}
       comments={props.case.comments}
       fold={props.fold}
-      inlineQuotes={props.inline}
       voice={props.case.voice}
       run={props.case.run ? { above: true, below: false } : undefined}
       actions={{
@@ -769,10 +751,6 @@ const STORY_CSS = `
 
 [data-story-muted] {
   color: var(--v2-text-text-muted);
-}
-
-[data-story-faint] {
-  color: var(--v2-text-text-faint);
 }
 
 [data-story-surface] {
