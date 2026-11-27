@@ -77,7 +77,7 @@ export const layer = Layer.effect(
         return yield* effect.pipe(
           Effect.catchCause((cause) =>
             Effect.gen(function* () {
-              if (Cause.hasInterruptsOnly(cause)) return yield* Effect.failCause(cause)
+              if (Cause.hasInterrupts(cause)) return yield* Effect.failCause(cause)
               const current = yield* store.get(sessionID).pipe(Effect.exit)
               if (Exit.isSuccess(current) && current.value === undefined) return
               return yield* Effect.failCause(cause)
@@ -147,7 +147,7 @@ export const layer = Layer.effect(
         instances.provide(session),
         Effect.catchCause((cause) =>
           Effect.gen(function* () {
-            if (Cause.hasInterruptsOnly(cause)) return yield* Effect.failCause(cause)
+            if (Cause.hasInterrupts(cause)) return yield* Effect.failCause(cause)
             const current = yield* store.get(sessionID).pipe(Effect.exit)
             if (Exit.isSuccess(current) && current.value === undefined) return SessionRunner.DrainResult.Complete()
             yield* Effect.logError("Failed to drain Session", cause).pipe(Effect.annotateLogs({ sessionID }))
@@ -208,13 +208,8 @@ export const layer = Layer.effect(
               sessionID,
               publishTerminal(bus, sessionID, outcome, () => commitForSession(sessionID, settlement.commit())),
             )
-            if (!published) {
-              // Even without a terminal event, settle the deleted child's Job and outbox.
-              yield* db.transaction(() => settlement.commit(), { behavior: "immediate" }).pipe(Effect.orDie)
-            }
-            // Post-commit delivery is best effort: a retained outbox marker is recovered on the
-            // next restart, and a delivery defect must not fail the settled hook.
-            yield* settlement.deliver.pipe(
+            // A retained outbox marker is recovered on restart if delivery or cleanup fails.
+            yield* (published ? settlement.deliver : settlement.discard).pipe(
               Effect.ignoreCause({ log: "Error", message: "Subagent report delivery failed" }),
             )
           }),
