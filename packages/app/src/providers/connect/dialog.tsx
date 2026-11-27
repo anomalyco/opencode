@@ -1025,7 +1025,6 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
 
     return (
       <div class={STEP_CLASS}>
-        {/* Names the sign-in method, which the user never saw when it was the only one. */}
         <Show when={connect().method?.label}>
           {(label) => <p class="font-[530] text-v2-text-text-base">{label()}</p>}
         </Show>
