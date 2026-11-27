@@ -1156,18 +1156,17 @@ type ScriptChangeRun = { type: "patch"; files: FileFact[] } | { type: "counts"; 
 
 // Changes with a diff that follow one another share one group, as a patch's files do; each other change stands alone.
 function scriptChangeRuns(files: readonly FileFact[]): ScriptChangeRun[] {
-  return files.reduce<ScriptChangeRun[]>((runs, file) => {
+  const runs: ScriptChangeRun[] = []
+
+  for (const file of files) {
     const last = runs.at(-1)
 
-    if (!scriptChangeDiff(file)) return [...runs, { type: "counts", file }]
+    if (!scriptChangeDiff(file)) runs.push({ type: "counts", file })
+    else if (last?.type === "patch") last.files.push(file)
+    else runs.push({ type: "patch", files: [file] })
+  }
 
-    if (last?.type === "patch") {
-      last.files.push(file)
-      return runs
-    }
-
-    return [...runs, { type: "patch", files: [file] }]
-  }, [])
+  return runs
 }
 
 /**
