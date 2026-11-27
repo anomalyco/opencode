@@ -1452,6 +1452,8 @@ export const dict = {
   "settings.permissions.tool.shell.description": "Run shell commands",
   "settings.permissions.tool.task.title": "Task",
   "settings.permissions.tool.task.description": "Launch sub-agents",
+  "settings.permissions.tool.subagent.title": "Subagent",
+  "settings.permissions.tool.subagent.description": "Launch sub-agents",
   "settings.permissions.tool.skill.title": "Skill",
   "settings.permissions.tool.skill.description": "Load a skill by name",
   "settings.permissions.tool.lsp.title": "LSP",
