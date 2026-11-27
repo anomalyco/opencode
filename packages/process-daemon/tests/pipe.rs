@@ -82,8 +82,8 @@ fn alive(pid: i32) -> bool {
     unsafe { libc::kill(pid, 0) == 0 }
 }
 
-fn wait_dead(pid: i32) {
-    let deadline = Instant::now() + Duration::from_secs(5);
+fn wait_dead(pid: i32, timeout: Duration) {
+    let deadline = Instant::now() + timeout;
     while alive(pid) {
         assert!(Instant::now() < deadline, "process {pid} is still running");
         std::thread::sleep(Duration::from_millis(10));
@@ -150,11 +150,16 @@ fn sigpipe_is_not_inherited_as_ignored() {
 #[test]
 fn reports_the_signal_that_ended_the_process() {
     let service = TerminalService::default();
-    let (info, file) = start(&service, "kill -TERM $$");
+    let (info, file) = start(
+        &service,
+        "sleep 30 >/dev/null 2>&1 & echo $!; kill -TERM $$",
+    );
     let finished = run(&service, info.id, &file);
+    let sleeper = KillOnDrop(finished.output.trim().parse().unwrap());
     assert_eq!(finished.exit.exit_code, None);
     assert_eq!(finished.exit.signal.as_deref(), Some("SIGTERM"));
     service.terminate(info.id).unwrap();
+    assert!(alive(sleeper.0));
 }
 
 #[test]
@@ -185,11 +190,15 @@ fn a_descendant_holding_the_pipe_delays_the_exit_by_at_most_the_drain() {
         "{:?}",
         finished.elapsed
     );
-    let sleeper: i32 = finished.output.lines().next().unwrap().parse().unwrap();
-    assert!(alive(sleeper));
-    // Terminate kills the rest of the process group.
+    let sleeper = KillOnDrop(finished.output.lines().next().unwrap().parse().unwrap());
+    assert!(alive(sleeper.0));
+    // The leader has already been reaped, but its record can still be read.
+    assert!(!alive(info.pid.unwrap() as i32));
+    assert_eq!(service.list(ProcessMode::Pipe).unwrap()[0].id, info.id);
+    service.signal(info.id, ProcessSignal::Kill).unwrap();
     service.terminate(info.id).unwrap();
-    wait_dead(sleeper);
+    assert!(service.list(ProcessMode::Pipe).unwrap().is_empty());
+    assert!(alive(sleeper.0));
 }
 
 /// Kills a test descendant even when an assertion fails first.
@@ -218,17 +227,15 @@ fn terminate_does_not_wait_for_a_descendant_that_left_the_group() {
 }
 
 #[test]
-fn an_exited_process_is_kept_until_terminate() {
+fn a_failed_command_stops_its_background_processes_at_exit() {
     let service = TerminalService::default();
-    let (info, file) = start(&service, "exit 0");
-    run(&service, info.id, &file);
-    let pid = info.pid.unwrap() as i32;
-    // The zombie keeps the PID and process group reserved.
-    assert!(alive(pid));
-    assert_eq!(service.list(ProcessMode::Pipe).unwrap().len(), 1);
-    service.terminate(info.id).unwrap();
-    assert!(!alive(pid));
-    assert!(service.list(ProcessMode::Pipe).unwrap().is_empty());
+    let (info, file) = start(&service, "sleep 30 & echo $!; exit 3");
+    let finished = run(&service, info.id, &file);
+    assert_eq!(finished.exit.exit_code, Some(3));
+    wait_dead(
+        finished.output.trim().parse().unwrap(),
+        Duration::from_secs(1),
+    );
 }
 
 #[test]
@@ -237,7 +244,7 @@ fn terminate_kills_the_process_group() {
     let (info, file) = start(&service, "sleep 30 & echo $!; wait");
     let child: i32 = first_line(&file).parse().unwrap();
     service.terminate(info.id).unwrap();
-    wait_dead(child);
+    wait_dead(child, Duration::from_secs(5));
     assert!(!alive(info.pid.unwrap() as i32));
 }
 
@@ -537,7 +544,7 @@ fn signal_stops_a_process_and_keeps_its_record() {
             signal: Some("SIGTERM".into())
         }
     );
-    // Nothing is left in the group (macOS reports ESRCH); still fine.
+    // While its record exists, a late signal succeeds.
     service.signal(info.id, ProcessSignal::Kill).unwrap();
     service.terminate(info.id).unwrap();
     assert!(service.signal(info.id, ProcessSignal::Kill).is_err());
@@ -574,7 +581,7 @@ fn signal_reaches_a_backgrounded_child_in_the_group() {
     let child: i32 = first_line(&file).parse().unwrap();
     // Not SIGINT: a non-interactive shell starts background jobs ignoring it.
     service.signal(info.id, ProcessSignal::Term).unwrap();
-    wait_dead(child);
+    wait_dead(child, Duration::from_secs(5));
     let exit = service.wait(info.id).unwrap().recv().unwrap();
     assert!(exit.signal.is_some() || exit.exit_code.is_some());
     assert_eq!(service.list(ProcessMode::Pipe).unwrap().len(), 1);
@@ -582,15 +589,20 @@ fn signal_reaches_a_backgrounded_child_in_the_group() {
 }
 
 #[test]
-fn signal_after_exit_reaches_leftover_group_members() {
+fn a_failed_commands_background_process_that_ignores_term_is_killed() {
     let service = TerminalService::default();
-    let (info, file) = start(&service, "sleep 30 & echo $!");
-    let exit = run(&service, info.id, &file);
-    let sleeper = KillOnDrop(exit.output.trim().parse().unwrap());
-    assert!(alive(sleeper.0));
-    service.signal(info.id, ProcessSignal::Kill).unwrap();
-    wait_dead(sleeper.0);
+    // The sleeper inherits SIG_IGN even if the leader exits before it execs.
+    let (info, file) = start(
+        &service,
+        "trap '' TERM; sleep 30 >/dev/null 2>&1 & echo $!; exit 1",
+    );
+    let finished = run(&service, info.id, &file);
+    let pid = finished.output.trim().parse().unwrap();
+    assert!(!alive(info.pid.unwrap() as i32));
     service.terminate(info.id).unwrap();
+    // Forgetting the record neither kills the sleeper nor cancels escalation.
+    assert!(alive(pid));
+    wait_dead(pid, Duration::from_secs(5));
 }
 
 #[test]

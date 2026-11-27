@@ -9,8 +9,9 @@ import type {
   Live,
   SessionRef,
   SessionScreen,
+  SetupContext,
 } from "@opencode/plugin/gui"
-import type { BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
+import type { BuiltinContext, BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import type { Bridge, BridgeMessage, EnableState, Installed } from "@opencode/plugin/gui/host"
 import type { JSHandle } from "@playwright/test"
 import type { mountCodeBlocks, mountThemes } from "./plugin-host.fixture"
@@ -751,7 +752,7 @@ story(
 
       const read = () => ({
         state: reads.state?.(),
-        font: reads.font?.().startsWith('"JetBrainsMono Nerd Font Mono"') ? "default mono" : reads.font?.(),
+        font: reads.font?.().startsWith('"OpenMono"') ? "default mono" : reads.font?.(),
         prefs: reads.prefs?.value?.count,
         ready: reads.prefs?.ready(),
         writes: [...host.writes],
@@ -1259,6 +1260,34 @@ story(
   },
 )
 
+story("a scoped contract binds the consuming instance, not the plugin that happens to call a saved method", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { Contract, mountPlugins, until } = await import(fixture)
+    const token: Contract<() => string> = Contract.define("provider.scoped")
+    const reads = new Map<string, () => Live<() => string>>()
+
+    const host = mountPlugins({ definitions: [
+      { id: "provider", windowEntry: async () => ({ default: (ctx: BuiltinContext) =>
+        ctx.provideFor(token, (consumer) => () => consumer) }) },
+      ...["one", "two"].map(id => ({ id, windowEntry: async () => ({ default: (ctx: Context) => { reads.set(id, ctx.use(token)) } }) })),
+    ] })
+
+    await until(() => ["one", "two"].every(id => reads.get(id)?.().status === "active"))
+
+    const owners = ["one", "two"].map(id => {
+      const value = reads.get(id)?.()
+
+      return value?.status === "active" && value.value()
+    })
+
+    host.unmount()
+
+    return owners
+  }, fixture)
+
+  expect(result).toEqual(["one", "two"])
+})
+
 story("a contract component reads its provider context and preserves reactive props", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { bindPlugin, createComponent, createSignal, Contract, mountPlugins, Slot, until, usePlugin } = await import(
@@ -1736,7 +1765,7 @@ story(
 
     expect(result).toEqual({
       // Alphabetical among the app's themes, not appended after them.
-      neighbors: ["Mercury", "Midnight", "Monokai"],
+      neighbors: ["Mercury", "Midnight", "Modus"],
       withdrawn: { listed: false, selected: "oc-2", stored: "acme:midnight" },
       restored: "acme:midnight",
     })
@@ -2041,7 +2070,7 @@ story("composer pills show per session, open their rows, and fail only their own
   await expect(page.locator("body")).toHaveAttribute("data-picked", "12")
 })
 
-story("a composer pill with a menu opens the plugin's content under the host's heading", async ({ page }) => {
+story("a composer pill with a menu opens only the plugin's content, named by the view", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountComposerPills, until, ComposerPill } = await import(fixture)
 
@@ -2077,7 +2106,9 @@ story("a composer pill with a menu opens the plugin's content under the host's h
 
   await pill.click()
   const popover = page.locator('[data-slot="session-plugin-pill-popover"]')
-  await expect(popover.getByText("Ship the release")).toBeVisible()
+  // The popover is the plugin's alone: the title names it but the host draws no heading.
+  await expect(popover).toHaveAttribute("aria-label", "Ship the release")
+  await expect(popover.getByText("Ship the release")).toHaveCount(0)
   await expect(popover.locator('[data-slot="session-plugin-pill-row"]')).toHaveCount(0)
   await expect(popover.getByTestId("goal-pause")).toHaveText("Pause /repo")
 
@@ -2088,6 +2119,100 @@ story("a composer pill with a menu opens the plugin's content under the host's h
   await pill.click()
   await expect(page.getByTestId("goal-pause")).toBeVisible()
 })
+
+story(
+  "a plugin's declared icons draw by name in SDK fields and in the app, move, and leave with the plugin",
+  async ({ page }) => {
+    await page.evaluate(async (fixture) => {
+      const { mountComposerPills, until, ComposerPill, createSignal } = await import(fixture)
+      const [round, setRound] = createSignal(1)
+      document.body.addEventListener("next-round", () => setRound(round() + 1))
+
+      const host = mountComposerPills({
+        definitions: [
+          {
+            id: "acme",
+            // Its core pulses; the first frame is the resting drawing.
+            icons: {
+              goal: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="6.5" stroke="currentColor"/>
+              <circle data-testid="goal-core" cx="8" cy="8" r="2" fill="currentColor">
+                <animate attributeName="r" values="2;5;2" dur="0.4s" repeatCount="indefinite"/>
+              </circle>
+            </svg>`,
+            },
+            windowEntry: async () => ({
+              default: (ctx: SetupContext<{ readonly icons: { readonly goal: string } }>) =>
+                void ctx.add(ComposerPill, {
+                  id: "goal",
+                  show: () => ({ label: `Round ${round()}`, icon: ctx.icons.goal, tone: "warning" }),
+                }),
+            }),
+          },
+          // A declared icon that is not an SVG document fails its own plugin before setup.
+          {
+            id: "broken",
+            icons: { bad: "not an svg" },
+            windowEntry: async () => ({ default: () => void (document.body.dataset.brokenSetup = "ran") }),
+          },
+        ],
+      })
+
+      document.body.addEventListener("leave", () => host.unmount())
+      await until(() => host.status("acme") === "active" && host.status("broken") === "failed")
+      document.body.dataset.broken = host.failure("broken")?.error
+    }, fixture)
+
+    await expect(page.locator("body")).toHaveAttribute("data-broken", /Icon "broken:bad" is not an SVG document/)
+    expect(await page.evaluate(() => document.body.dataset.brokenSetup)).toBeUndefined()
+
+    const pill = page.getByTestId("composer-pills").locator('[data-slot="session-plugin-pill"]')
+    await expect(pill).toHaveText("Round 1")
+    // The host draws it as it draws its own icons, in the pill's tone.
+    await expect(pill.locator("svg")).toHaveClass(/text-v2-state-fg-warning/)
+
+    const href = (await pill.locator("use").getAttribute("href")) ?? ""
+    const symbol = page.locator(`symbol${href}`)
+    await expect(symbol).toHaveAttribute("viewBox", "0 0 16 16")
+    await expect(symbol.locator("circle")).toHaveCount(2)
+
+    const radius = () => symbol.getByTestId("goal-core").evaluate((core: SVGCircleElement) => core.r.animVal.value)
+
+    const clock = () =>
+      symbol.evaluate((element: SVGSymbolElement) => ({
+        paused: element.ownerSVGElement?.animationsPaused(),
+        time: element.ownerSVGElement?.getCurrentTime(),
+      }))
+
+    await page.evaluate(() => document.documentElement.setAttribute("data-motion", "full"))
+    await expect.poll(radius).toBeGreaterThan(2)
+
+    // The pill's view runs again. The artwork stays where it is, so its animation goes on.
+    await symbol.evaluate((element) => element.setAttribute("data-kept", ""))
+    await page.evaluate(() => document.body.dispatchEvent(new Event("next-round")))
+    await expect(pill).toHaveText("Round 2")
+    await expect(symbol).toHaveAttribute("data-kept", "")
+
+    // Under reduced motion the host holds every icon on its first frame.
+    await page.evaluate(() => document.documentElement.setAttribute("data-motion", "reduce"))
+    await expect.poll(clock).toEqual({ paused: true, time: 0 })
+    await expect.poll(radius).toBe(2)
+
+    // The app's own icon component, outside every plugin, draws the artwork by the same name.
+    await page.evaluate(async (fixture) => {
+      const { mountAppIcon } = await import(fixture)
+
+      mountAppIcon("acme:goal")
+    }, fixture)
+    await expect(page.getByTestId("app-icon").locator("use")).toHaveAttribute("href", href)
+
+    // The plugin goes away. The app's icon still names the artwork, and now draws nothing.
+    await page.evaluate(() => document.body.dispatchEvent(new Event("leave")))
+    await expect(pill).toHaveCount(0)
+    await expect(page.getByTestId("app-icon").locator("use")).toHaveAttribute("href", href)
+    await expect(symbol).toHaveCount(0)
+  },
+)
 
 story("code block content replaces complete blocks of its languages, and actions sit beside Copy", async ({ page }) => {
   const host = await page.evaluateHandle(async (fixture) => {
@@ -2175,10 +2300,14 @@ story("code block content replaces complete blocks of its languages, and actions
     status: "active",
   })
 
-  // Only the shell block gets the action, before its Copy button; the TypeScript block is untouched.
+  // Only the shell block gets the action, before its Wrap and Copy buttons; the TypeScript block is untouched.
   await expect(root.locator('[data-slot="markdown-code-actions"]')).toHaveCount(1)
   const shell = blocks.nth(3)
-  await expect(shell.locator('[data-slot="markdown-code-actions"] + [data-slot="markdown-copy-button"]')).toHaveCount(1)
+  await expect(
+    shell.locator(
+      '[data-slot="markdown-code-toolbar"] > [data-slot="markdown-code-actions"]:first-child + [data-slot="markdown-wrap-button"] + [data-slot="markdown-copy-button"]',
+    ),
+  ).toHaveCount(1)
   await shell.hover()
   await shell.getByRole("button", { name: "Run in terminal" }).click()
   await expect(page.locator("body")).toHaveAttribute("data-ran", "echo hi in /repo")

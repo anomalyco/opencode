@@ -106,6 +106,8 @@ describe("SkillTool", () => {
           })
           const skills = Layer.mock(Skill.Service, {
             get: (id) => Effect.succeed(current.find((skill) => skill.id === id)),
+            resolve: (id) => Effect.succeed(current.find((skill) => skill.id === id)),
+            instructions: (id) => Effect.succeed(current.find((skill) => skill.id === id)?.content ?? ""),
             files: () => Effect.undefined,
             list: () => Effect.succeed(current),
           })
@@ -139,7 +141,7 @@ describe("SkillTool", () => {
               }),
             ).toEqual({
               status: "completed",
-              output: { name: "Effect", directory, output: Skill.toModelOutput(info, [reference]) },
+              output: { directory, content: Skill.toModelOutput(info, [reference]) },
               content: [{ type: "text", text: Skill.toModelOutput(info, [reference]) }],
               metadata: { name: "Effect", directory },
             })

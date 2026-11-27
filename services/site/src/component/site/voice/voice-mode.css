@@ -359,8 +359,8 @@
       grid-row: span 2;
       /* Square like the product list tiles: black behind Hex's rounded artwork fills the corners. */
       border-radius: 0;
-      background: #000;
-      outline: 1px solid light-dark(transparent, hsl(0, 0%, 26%));
+      background: var(--media-black);
+      outline: 1px solid light-dark(transparent, var(--border-strong));
       outline-offset: -1px;
       filter: grayscale(1);
     }
@@ -558,8 +558,8 @@
     place-items: center;
     width: 28px;
     height: 28px;
-    background: #000;
-    color: #fff;
+    background: var(--media-black);
+    color: var(--fixed-white);
 
     svg {
       width: 15px;

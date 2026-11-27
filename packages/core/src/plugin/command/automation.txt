@@ -1,0 +1,7 @@
+Manage this project's automations.
+
+Request: $ARGUMENTS
+
+Use the `automation` tools: `tools.automation.create` to add one, and `list`, `pause`, `resume` or `delete` to manage them (find ids with `list`). Their descriptions explain triggers and actions. If the request is empty, list the automations with their name, trigger, status and next run.
+
+Reply in one line: what changed and when it runs.

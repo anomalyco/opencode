@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "Suivant",
   "releaseNotes.action.hideFuture": "Ne plus afficher à l'avenir",
   "releaseNotes.media.alt": "Aperçu de la version",
+  "action.reload": "Recharger pour mettre à jour",
+  "action.reloading": "Rechargement…",
+  "web.ready.title": "Mise à jour prête",
+  "web.ready.message":
+    "Une nouvelle version d’OpenCode est prête. Rechargez pour l’utiliser dans toutes les fenêtres ouvertes.",
+  "web.reload": "Recharger",
+  "web.reset.title": "Recharger depuis le serveur",
+  "web.reset.description": "Effacer la copie enregistrée de l’application et charger la version actuelle du serveur",
+  "web.reset.action": "Recharger depuis le serveur",
 }

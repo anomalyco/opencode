@@ -79,7 +79,7 @@
     width: 16px;
     height: 16px;
     translate: -50% -50%;
-    color: #fff;
+    color: var(--fixed-white);
     opacity: 0;
     pointer-events: none;
     filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.5));
@@ -171,7 +171,7 @@
     height: var(--disc);
     translate: -50% -50%;
     border-radius: 50%;
-    background: light-dark(#000, #0f0f0f);
+    background: light-dark(var(--media-black), var(--fixed-dark));
     box-shadow:
       inset 0 0 0 1px light-dark(transparent, rgb(255 255 255 / 0.14)),
       0 1px 2px light-dark(rgb(0 0 0 / calc(0.12 * var(--shadow))), rgb(0 0 0 / calc(0.7 * var(--shadow)))),

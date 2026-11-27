@@ -325,11 +325,16 @@
   transition: box-shadow 120ms ease;
 }
 
-.project-settings-color:focus-visible,
+/* Selection is a neutral ring and focus the shared blue outline, so a focused swatch and the selected one stay distinct. */
 .project-settings-color--selected {
   box-shadow:
     0 0 0 2px var(--v2-background-bg-layer-01),
-    0 0 0 4px var(--v2-border-border-focus);
+    0 0 0 4px var(--v2-border-border-inverse);
+}
+
+.project-settings-color:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 2px;
 }
 
 @media (hover: hover) {

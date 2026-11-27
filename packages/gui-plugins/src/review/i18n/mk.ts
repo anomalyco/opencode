@@ -12,4 +12,12 @@ export default {
   noChanges: "Нема промени",
   "settings.wrapLines.title": "Пренесување на редови",
   "settings.wrapLines.description": "Завиткајте долги линии во мобилни разлики наместо хоризонтално лизгање",
+  "menu.count.one": "{{count}} променета датотека",
+  "menu.count.other": "{{count}} променети датотеки",
+  "folder.more": "{{count}} · има уште што не се прикажани",
+  "folder.failed": "Промените не можеа да се вчитаат",
+  "command.open": "Отвори преглед",
+  "load.failed": "Промените не можеа да се вчитаат",
+  "load.timeout": "Серверот одговара предолго",
+  offline: "Серверот не е достапен",
 }

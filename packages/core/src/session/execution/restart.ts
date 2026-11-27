@@ -3,14 +3,21 @@ export * as SessionRestart from "./restart.js"
 import { Cause, Context, Effect, Layer, Option, Schema } from "effect"
 import { isReadonlyArrayNonEmpty } from "effect/Array"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
-import { Shell as ShellSchema } from "@opencode/schema/shell"
+import { ID } from "@opencode/schema/shell"
+import { FSUtil } from "@opencode/util/fs-util"
+import { BlobStore } from "../../blob-store.js"
 import { Bus } from "../../bus.js"
 import { Database } from "../../database/database.js"
+import { Environment } from "../../environment/index.js"
 import { Instance } from "../../instance/service.js"
 import { Job } from "../../job.js"
+import { CodeModeAgents } from "../../codemode/agents.js"
+import { CodeModeJob } from "../../codemode/job.js"
 import { Session } from "../../session.js"
 import { Shell } from "../../shell.js"
 import { ShellTool } from "../../tool/plugin/shell.js"
+import { VideoGenerateTool } from "../../tool/plugin/video-generate.js"
+import { VideoGeneration } from "../../video-generation.js"
 import { SessionEvent } from "../event.js"
 import { SessionExecution } from "../execution.js"
 import { SessionHistory } from "../history.js"
@@ -117,6 +124,7 @@ export const layer = (options?: Options) =>
       })
 
       const restartMessage = (background: Job.Background, recovery: Exclude<Job.Recovery, { kind: "subagent" }>) => {
+        if (recovery.kind === "codemode") return CodeModeJob.notice(background)
         const state = background.status === "running" ? "cancelled" : background.status
         if (recovery.kind === "shell") {
           const text =
@@ -138,6 +146,21 @@ export const layer = (options?: Options) =>
             }),
           }
         }
+        if (recovery.kind === "video") {
+          const body =
+            background.status === "running"
+              ? `Video request for ${recovery.path} couldn't be saved after the server restarted: its project folder no longer exists.`
+              : state === "completed"
+                ? (background.output ?? `Video request finished. Saved video: ${recovery.path}.`)
+                : state === "error"
+                  ? (background.error ?? `Video request failed for ${recovery.path}.`)
+                  : `Video request for ${recovery.path} was cancelled.`
+          return {
+            description: "Video generation",
+            text: VideoGenerateTool.notice({ id: background.id, state, body }),
+            metadata: { source: VideoGenerateTool.name, jobID: background.id, state, path: recovery.path },
+          }
+        }
         const body =
           background.status === "running"
             ? `Image request for ${recovery.path} was cancelled because the server restarted.`
@@ -150,7 +173,7 @@ export const layer = (options?: Options) =>
           description: "Image generation",
           text: ImageNotice.text({ id: background.id, state, body }),
           metadata: {
-            source: "experimental_image_generate",
+            source: "generate_image",
             jobID: background.id,
             state,
             path: recovery.path,
@@ -199,6 +222,44 @@ export const layer = (options?: Options) =>
         yield* jobs.completeBackground(background.notificationID)
       })
 
+      // The video service keeps polling a running video itself, here or in another server, so the tool's wait, copy and
+      // notice just continue. Without the session's Location it is reported as lost.
+      const recoverVideoJob = Effect.fnUntraced(function* (
+        background: Job.Background,
+        recovery: Extract<Job.Recovery, { kind: "video" }>,
+        notices: Notices,
+      ) {
+        if (background.status !== "running") return yield* recoverToolJob(background, recovery)
+        const session = yield* store.get(recovery.sessionID)
+        const services = session
+          ? yield* Effect.all([
+              Effect.serviceOption(VideoGeneration.Service),
+              Effect.serviceOption(BlobStore.Service),
+              Effect.serviceOption(FSUtil.Service),
+              Effect.serviceOption(Environment.Service),
+            ]).pipe(
+              Effect.map((found) => Option.all(found)),
+              instances.provide(session),
+              Effect.catchTag("FileSystem.DirectoryNotFoundError", () => Effect.succeed(Option.none())),
+            )
+          : Option.none()
+        if (Option.isNone(services)) return yield* recoverToolJob(background, recovery)
+        const [videos, blobs, fs, environment] = services.value
+        yield* VideoGenerateTool.track({
+          jobs,
+          sessions: notices,
+          videos,
+          blobs,
+          fs,
+          files: environment.files,
+          scope,
+          notificationID: background.notificationID,
+          sessionID: recovery.sessionID,
+          videoID: recovery.videoID,
+          path: recovery.path,
+        })
+      })
+
       // The Shell of a session's Location, booted so it takes back the commands the daemon still runs for it.
       const shellOf = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
         const session = yield* store.get(sessionID)
@@ -221,7 +282,7 @@ export const layer = (options?: Options) =>
       ) {
         const shell = background.status === "running" ? yield* shellOf(recovery.sessionID) : undefined
         const info =
-          shell && Schema.is(ShellSchema.ID)(recovery.shellID)
+          shell && Schema.is(ID)(recovery.shellID)
             ? yield* shell.get(recovery.shellID).pipe(Effect.option)
             : Option.none()
         if (!shell || Option.isNone(info)) return yield* recoverToolJob(background, recovery)
@@ -296,7 +357,7 @@ export const layer = (options?: Options) =>
         }).pipe(
           // A deleted parent owes nothing to the report; clear its row.
           Effect.catchTag("Session.NotFoundError", () => jobs.completeBackground(notificationID)),
-          // Retain the formatted outbox row for the next boot: the notification ID is
+          // Retain the outbox row for the next boot: the notification ID is
           // already owned by another item, so deleting it would lose the report.
           Effect.catchTag("Session.SyntheticConflictError", (error) =>
             Effect.logWarning("Failed to admit recovered subagent notification due to ID conflict", {
@@ -339,7 +400,7 @@ export const layer = (options?: Options) =>
         }
 
         if (background.status !== "running") {
-          // The outbox row already holds the formatted result; replay it without touching the child.
+          // Replay the settled report using the work captured with it.
           yield* deliverSubagentSafe(notices, background.notificationID, recovery, background)
           return false
         }
@@ -354,7 +415,7 @@ export const layer = (options?: Options) =>
           })
           return false
         }
-        // Defer the start until every suspended root has counted its attempt; a fast
+        // Defer the start until every suspended session has counted its attempt; a fast
         // resumed child settling in Phase 1 would wake its parent past that budget.
         return true
       })
@@ -368,11 +429,23 @@ export const layer = (options?: Options) =>
         resumeSuspendedSessions: Effect.gen(function* () {
           const active = yield* execution.active
           const pending = yield* jobs.pendingBackground
-          const children = pending.flatMap((background) =>
-            background.status === "running" && background.recovery.kind === "subagent"
-              ? [background.recovery.childSessionID]
-              : [],
+          const children = new Set(
+            pending.flatMap((background) =>
+              background.status === "running" && background.recovery.kind === "subagent"
+                ? [background.recovery.childSessionID]
+                : [],
+            ),
           )
+          yield* store.releaseOrphanedChildClaims()
+          // Job.cancel persists the cancellation before interrupting the execution. A crash
+          // in between leaves its claim behind. Settlement writes an error to the
+          // outbox atomically with release; such an older report can coexist with a new claim.
+          for (const { status, recovery, error } of pending) {
+            if (status !== "cancelled" || recovery.kind !== "subagent" || error !== undefined) continue
+            if (!active.has(recovery.childSessionID) && !children.has(recovery.childSessionID)) {
+              yield* store.release(recovery.childSessionID)
+            }
+          }
           // Early notices wait for recovery's accounting, including Sessions that exhaust their budget.
           const suspended = new Set(
             [...(yield* store.listSuspended()), ...children].filter((sessionID) => !active.has(sessionID)),
@@ -386,7 +459,7 @@ export const layer = (options?: Options) =>
               suspended.clear()
             }),
           )
-          // Hold notice wakes until every suspended root has counted its attempt, so a woken
+          // Hold notice wakes until every suspended session has counted its attempt, so a woken
           // child cannot settle mid-sweep and wake its parent past that budget.
           const notices: Notices = {
             synthetic: (input) =>
@@ -400,7 +473,6 @@ export const layer = (options?: Options) =>
                 Effect.uninterruptible,
               ),
           }
-          yield* store.releaseChildClaims(children)
           const recoverable = Effect.fnUntraced(function* (background: Job.Background) {
             return (yield* jobs.get(background.id))?.status !== "running"
           })
@@ -413,6 +485,7 @@ export const layer = (options?: Options) =>
               const recovery = background.recovery
               if (recovery.kind === "subagent" || !(yield* recoverable(background))) return
               if (recovery.kind === "shell") return yield* recoverShellJob(background, recovery, notices, reattached)
+              if (recovery.kind === "video") return yield* recoverVideoJob(background, recovery, notices)
               yield* recoverToolJob(background, recovery)
             }),
             { discard: true },
@@ -438,12 +511,26 @@ export const layer = (options?: Options) =>
             { discard: true },
           )
 
-          // Count every suspended root's attempt before a resumed child can settle and wake it.
+          // A directly driven child can also settle and wake its parent. Account for every
+          // claimed execution before starting any of them, leaving running jobs to SubagentJob.
           const resumed = yield* execution.active
-          yield* Effect.forEach(
-            (yield* store.listSuspended()).filter((sessionID) => !resumed.has(sessionID)),
+          const direct = yield* Effect.filter(
+            (yield* store.listSuspended()).filter((sessionID) => !resumed.has(sessionID) && !children.has(sessionID)),
             Effect.fnUntraced(function* (sessionID) {
-              if (!(yield* prepareResume(sessionID))) return
+              // Code Mode scripts do not suspend/resume yet, so an agent() child whose script died on restart has
+              // nobody awaiting it; release its claim instead of reviving an orphan run.
+              const session = yield* store.get(sessionID)
+              if (session && CodeModeAgents.sessionMarker(session.id, session.metadata) !== undefined) {
+                suspended.delete(sessionID)
+                yield* store.release(sessionID)
+                return false
+              }
+              return yield* prepareResume(sessionID)
+            }),
+          )
+          yield* Effect.forEach(
+            direct,
+            Effect.fnUntraced(function* (sessionID) {
               suspended.delete(sessionID)
               yield* execution.resume(sessionID).pipe(Effect.ignore, Effect.forkIn(scope))
             }),

@@ -29,7 +29,7 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionProjector.node, Session.node, LocationServiceMap.node]),
+    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionInbox.node, Session.node, LocationServiceMap.node]),
     [
       Bus.node.replace(Bus.configured({ persist: true })),
       Global.node.replace(tempGlobalLayer),

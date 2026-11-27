@@ -1,4 +1,4 @@
-import { For, Show, createMemo, onCleanup, onMount } from "solid-js"
+import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { ModelSelection } from "@/providers/models/selection"
 import { STORY_MODEL } from "@opencode/session-ui/storybook"
@@ -22,6 +22,7 @@ const states = [
   { id: "shell", name: "Shell command" },
   { id: "sending", name: "Sending" },
   { id: "suggestions", name: "Slash suggestions open" },
+  { id: "context", name: "Context suggestions open" },
 ] as const
 
 type State = (typeof states)[number]["id"]
@@ -37,6 +38,7 @@ const drafts: Record<State, string> = {
   shell: "bun test composer",
   sending: "Ship it",
   suggestions: "",
+  context: "",
 }
 
 const selectedModel = {
@@ -75,6 +77,7 @@ const context: ComposerSuggestion[] = [
   {
     id: "file:src/composer/editor/editor.tsx",
     kind: "file",
+    recent: true,
     label: "src/composer/editor/editor.tsx",
     path: "src/composer/editor/editor.tsx",
     mention: {
@@ -191,7 +194,11 @@ function TouchComposer(props: { state: State }) {
 
   const model = { ...editor, model: { selection, paid: true, loading: false } } satisfies ComposerModel
 
-  onMount(() => props.state === "suggestions" && editor.openCommands())
+  onMount(() => {
+    if (props.state === "suggestions") editor.openCommands()
+
+    if (props.state === "context") editor.openContext()
+  })
 
   return (
     <>
@@ -227,6 +234,13 @@ function TouchComposer(props: { state: State }) {
 
 function TouchStates(props: { state: State }) {
   const [view, setView] = createStore({ state: props.state, generation: 0 })
+  createEffect(
+    on(
+      () => props.state,
+      (state) => setView("state", state),
+      { defer: true },
+    ),
+  )
   const touch = matchMedia("(hover: none) and (pointer: coarse)")
   const [device, setDevice] = createStore({ touch: touch.matches })
   const sync = () => setDevice("touch", touch.matches)

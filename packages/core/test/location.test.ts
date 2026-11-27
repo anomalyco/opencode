@@ -43,4 +43,17 @@ describe("Location", () => {
       })
     }),
   )
+
+  it.effect("does not probe host git metadata when binding a remote workspace location", () =>
+    Effect.gen(function* () {
+      const remoteRef = { directory: AbsolutePath.make(import.meta.dir), workspaceID }
+      const location = yield* Location.Service.pipe(Effect.provide(AppNodeBuilder.build(Location.boundNode(remoteRef))))
+
+      expect(location.directory).toBe(remoteRef.directory)
+      expect(location.workspaceID).toBe(workspaceID)
+      expect(location.project.directory).toBe(remoteRef.directory)
+      expect(location.project.canonical).toBe(remoteRef.directory)
+      expect(location.vcs).toBeUndefined()
+    }),
+  )
 })

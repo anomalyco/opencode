@@ -85,6 +85,12 @@ export class CompactionConflictError extends Schema.TaggedError<CompactionConfli
   },
 ) {}
 
+/** Experimental: a requested session cwd that cannot be used, such as a missing directory or an unknown machine. */
+export class CwdError extends Schema.TaggedError<CwdError>()("Session.CwdError", {
+  cwd: Schema.String,
+  message: Schema.String,
+}) {}
+
 export class BusyError extends Schema.TaggedError<BusyError>()("Session.BusyError", {
   sessionID: SessionSchema.ID,
 }) {}

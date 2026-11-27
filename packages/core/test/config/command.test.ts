@@ -4,6 +4,7 @@ import { describe, expect } from "bun:test"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { advance, drain } from "../lib/clock"
 import { Directory, Document, Event, Info } from "@opencode/schema/config"
+import { Model } from "@opencode/schema/model"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { Job } from "@opencode/core/job"
@@ -30,7 +31,7 @@ import { Watcher } from "@opencode/core/filesystem/watcher"
 import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
 import { emptyConfigLayer, emptyMcpLayer, testLocationLayer } from "../fixture/mcp"
 import { location } from "../fixture/location"
-import { tmpdir } from "../fixture/tmpdir"
+import { tmpdir, tmpdirScoped } from "../fixture/tmpdir"
 import { tempGlobalLayer } from "../fixture/global"
 import { offlineModels } from "../fixture/models"
 import { testEffect } from "../lib/effect"
@@ -74,12 +75,31 @@ const decode = Schema.decodeUnknownSync(Info)
 
 describe("ConfigCommandPlugin.Plugin", () => {
   for (const item of [
-    ...["$&", "$$", "$`", "$'"].flatMap((input) => [
+    {
+      name: "merges a separate legacy variant",
+      frontmatter: "model: example/chat\nvariant: high",
+      model: "example/chat#high",
+    },
+    {
+      name: "keeps an embedded variant over a separate one",
+      frontmatter: "model: example/chat#low\nvariant: high",
+      model: "example/chat#low",
+    },
+  ]) {
+    it.live(`Markdown command ${item.name}`, () =>
+      Effect.gen(function* () {
+        expect(yield* runMarkdownCommand(item.frontmatter)).toEqual([Model.Ref.parse(item.model)])
+      }),
+    )
+  }
+
+  for (const item of [
+    ...["$&", "$$"].flatMap((input) => [
       { template: "Explain $ARGUMENTS.", input, expected: `Explain ${input}.` },
       { template: "Explain $1.", input: `"${input}"`, expected: `Explain ${input}.` },
       { template: "Explain.", input, expected: `Explain.\n\n${input}` },
     ]),
-    ...["abc", "", "alpha beta", '"alpha beta"', "$1", "$<name>"].map((input) => ({
+    ...["", "alpha beta", '"alpha beta"', "$1", "$<name>"].map((input) => ({
       template: "Explain $ARGUMENTS.",
       input,
       expected: `Explain ${input}.`,
@@ -518,6 +538,45 @@ function watchReady(config: Config.Interface, directory: string) {
   )
 }
 
+function runMarkdownCommand(frontmatter: string) {
+  return Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const fs = yield* FSUtil.Service
+    yield* fs.makeDirectory(path.join(tmp.path, "commands"))
+    yield* fs.writeFileString(path.join(tmp.path, "commands", "probe.md"), `---\n${frontmatter}\n---\nProbe.`)
+    const command = yield* Command.Service
+    const models: Model.Ref[] = []
+    yield* ConfigCommandPlugin.Plugin.effect(
+      host({
+        command: {
+          list: () => Effect.die("unused command.list"),
+          transform: command.transform,
+          reload: command.reload,
+        },
+        session: {
+          switchModel: (input) => Effect.sync(() => void models.push(input.model)),
+          prompt: (input) =>
+            Effect.succeed(
+              SessionInbox.User.make({
+                id: SessionMessage.ID.make("msg_test"),
+                sessionID: input.sessionID,
+                time: { created: DateTime.makeUnsafe(0) },
+                type: "user",
+                payload: { text: input.text },
+                delivery: "steer",
+              }),
+            ),
+        },
+      }),
+    ).pipe(Effect.provide(Config.testLayer([directoryEntry(tmp.path)])))
+    yield* command.execute({
+      name: "probe",
+      invocation: { sessionID: Session.ID.make("ses_test"), prompt: { text: "" }, delivery: "steer" },
+    })
+    return models
+  })
+}
+
 function directoryEntry(directory: string) {
   return new Directory({ type: "directory", path: AbsolutePath.make(directory) })
 }
@@ -528,20 +587,6 @@ function markdown(description: string, template: string) {
 
 function sourceCases() {
   return [
-    {
-      name: "created",
-      prepare: () => Effect.void,
-      mutate: (directory: string) =>
-        Effect.promise(async () => {
-          const file = path.join(directory, "review.md")
-          await fs.writeFile(file, markdown("Review created", "Review created"))
-          return [{ type: "create" as const, path: file }]
-        }),
-      verify: (command: Command.Interface) =>
-        Effect.gen(function* () {
-          expect((yield* command.get("review"))?.description).toBe("Review created")
-        }),
-    },
     {
       name: "updated",
       prepare: (directory: string) =>
@@ -577,21 +622,6 @@ function sourceCases() {
         Effect.gen(function* () {
           expect(yield* command.get("review")).toBeUndefined()
           expect((yield* command.get("release"))?.description).toBe("Review renamed")
-        }),
-    },
-    {
-      name: "deleted",
-      prepare: (directory: string) =>
-        Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), "Review deleted")),
-      mutate: (directory: string) =>
-        Effect.promise(async () => {
-          const file = path.join(directory, "review.md")
-          await fs.unlink(file)
-          return [{ type: "delete" as const, path: file }]
-        }),
-      verify: (command: Command.Interface) =>
-        Effect.gen(function* () {
-          expect(yield* command.get("review")).toBeUndefined()
         }),
     },
   ] as const

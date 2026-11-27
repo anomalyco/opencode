@@ -41,6 +41,8 @@ export type Beat =
       input: Record<string, JsonValue>
       output?: string
       metadata?: Record<string, JsonValue>
+      /** Files the call returned to the model, such as the screenshots a script read. */
+      files?: { uri: string; mime: string; name: string }[]
       error?: string
       /** Still running when the next beat arrives, such as a command the user interrupts. */
       hold?: boolean
@@ -664,6 +666,17 @@ const backgroundWork: Beat[] = [
   },
   {
     kind: "tool",
+    name: "subagent",
+    input: {
+      sessionID: "session_child_docs",
+      agent: "explore",
+      description: "Check the migration guide",
+      prompt: "Include the migration guide in your review.",
+    },
+    metadata: { sessionID: "session_child_docs", status: "running" },
+  },
+  {
+    kind: "tool",
     name: "shell",
     input: { command: "bun run dev", description: "Start the dev server", background: true },
     output: "Command moved to the background (shell ID: shell_dev).",
@@ -725,13 +738,13 @@ const backgroundWork: Beat[] = [
   {
     kind: "report",
     source: "subagent",
-    state: "completed",
+    state: "cancelled",
     description: "Review the toggle",
     agent: "review",
     childID: "session_child_toggle",
-    body: "The toggle reads the scheme in an effect, which is right.",
+    body: "The review was stopped.",
   },
-  { kind: "say", text: "Both checks pass: the docs are accurate and the toggle reads the scheme correctly." },
+  { kind: "say", text: "The docs are accurate. The toggle review was stopped before it finished." },
   { kind: "idle" },
   { kind: "report", source: "shell", state: "cancelled", description: "bun run dev", shellID: "shell_dev" },
 ]
@@ -783,13 +796,83 @@ const encryptedThinking: Beat[] = [
   { kind: "idle" },
 ]
 
+// A mock capture of a settings screen, so the story needs no files or server to show a script's screenshots.
+function screenshot(title: string, accent: string) {
+  const svg = [
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">',
+    '<rect width="1200" height="800" fill="#161616"/>',
+    '<rect x="0" y="0" width="260" height="800" fill="#1e1e1e"/>',
+    `<rect x="40" y="60" width="180" height="20" rx="4" fill="${accent}"/>`,
+    '<rect x="40" y="110" width="140" height="14" rx="4" fill="#3a3a3a"/>',
+    '<rect x="40" y="150" width="160" height="14" rx="4" fill="#3a3a3a"/>',
+    `<text x="320" y="110" font-family="sans-serif" font-size="44" fill="#fafafa">${title}</text>`,
+    '<rect x="320" y="170" width="800" height="120" rx="12" fill="#242424"/>',
+    `<rect x="1010" y="215" width="70" height="32" rx="16" fill="${accent}"/>`,
+    '<rect x="320" y="320" width="800" height="120" rx="12" fill="#242424"/>',
+    '<rect x="320" y="470" width="520" height="120" rx="12" fill="#242424"/>',
+    "</svg>",
+  ].join("")
+
+  return `data:image/svg+xml;base64,${btoa(svg)}`
+}
+
+const shots = [
+  { name: "/workspace/.shots/settings-light.png", uri: screenshot("Appearance: light", "#3b5cf6") },
+  { name: "/workspace/.shots/settings-dark.png", uri: screenshot("Appearance: dark", "#a2bcff") },
+  { name: "/workspace/.shots/settings-system.png", uri: screenshot("Appearance: system", "#6bd586") },
+]
+
+// With every tool behind Code Mode, a script reads the screenshots it took, and the model sees them in its result.
+const codeModeScreenshots: Beat[] = [
+  { kind: "user", text: "Screenshots of the new appearance setting, please." },
+  {
+    kind: "tool",
+    name: "execute",
+    input: {
+      code: 'await tools.shell({ command: "bun shot.ts" })\nfor (const scheme of ["light", "dark", "system"]) await tools.read({ path: `.shots/settings-${scheme}.png` })\nreturn "3 screenshots"',
+    },
+    output: "3 screenshots",
+    metadata: {
+      toolCalls: [
+        { tool: "shell", status: "completed", input: { command: "bun shot.ts" } },
+        ...shots.map((shot) => ({ tool: "read", status: "completed", input: { path: shot.name } })),
+      ],
+    },
+    files: shots.map((shot) => ({ ...shot, mime: "image/svg+xml" })),
+  },
+  { kind: "step" },
+  { kind: "say", text: "Here are the three schemes. The toggle keeps its accent in each one." },
+  { kind: "idle" },
+]
+
+const subagentBetweenTools: Beat[] = [
+  { kind: "user", text: "Check the theme store, ask for a review, then run its tests." },
+  { kind: "tool", name: "read", input: { path: "/workspace/src/theme/scheme.ts" }, output: schemeBefore },
+  {
+    kind: "tool",
+    name: "subagent",
+    input: { agent: "review", description: "Review the theme store", prompt: "Review it." },
+    metadata: { sessionID: "session_child_store", status: "running" },
+  },
+  {
+    kind: "tool",
+    name: "shell",
+    input: { command: "bun test src/theme", description: "Run the theme tests" },
+    output: "4 pass, 0 fail",
+  },
+  { kind: "say", text: "The theme tests pass. The store review is running." },
+  { kind: "idle" },
+]
+
 export const scenarios = {
   "Feature work": featureWork,
   "Every tool": everyTool,
   "Background work": backgroundWork,
+  "Subagent between tools": subagentBetweenTools,
   "Thinking only": thinkingOnly,
   "Thinking after tools": thinkingAfterTools,
   "Encrypted thinking": encryptedThinking,
+  "Code Mode screenshots": codeModeScreenshots,
 } as const
 
 export type ScenarioName = keyof typeof scenarios
@@ -994,7 +1077,10 @@ function tool(
     state: {
       status: "completed",
       input: beat.input,
-      content: [{ type: "text", text: beat.output ?? "Done" }],
+      content: [
+        { type: "text", text: beat.output ?? "Done" },
+        ...(beat.files ?? []).map((file) => ({ type: "file" as const, ...file })),
+      ],
       metadata: beat.metadata,
     },
     time: { created: time, ran: time + 100, completed: time + 900 },

@@ -153,9 +153,9 @@ export const content = {
       body: "讓代理使用你真正的瀏覽器。",
       title: "OpenCode | Browse，為編碼代理準備的真正瀏覽器",
       description:
-        "Browse 讓 OpenCode 和其他 MCP 用戶端使用你真正的瀏覽器。代理透過 Playwright 操作背景分頁，並把登入和雙重驗證交還給你。",
+        "Browse 讓 OpenCode 和其他 MCP 用戶端使用你真正的瀏覽器。代理會閱讀頁面、點擊、輸入、擷取螢幕畫面、錄製分頁，並把登入和雙重驗證交還給你。",
       intro:
-        "一個 MCP 伺服器加上一個 Chromium 擴充功能，讓你的代理使用真正的瀏覽器，包括你的分頁、登入狀態和擴充功能。代理透過 Playwright 開啟並操作分頁、擷取螢幕畫面和錄製螢幕，這些分頁都在背景分組，不會打擾你。輪到你操作時，例如登入、雙重驗證或付款，代理會把分頁交還給你，你按下「繼續」後它再接著工作。",
+        "一個 MCP 伺服器加上一個 Chromium 擴充功能，讓你的代理使用真正的瀏覽器，包括你的分頁、登入狀態和擴充功能。代理在背景開啟分頁，分組收好，不打擾你，並閱讀頁面、點擊、輸入、擷取螢幕畫面和錄製分頁。輪到你操作時，例如登入、雙重驗證或付款，代理會把分頁交還給你，你按下「繼續」後它再接著工作。",
       features: {
         "your-real-browser": {
           title: "真正的瀏覽器",
@@ -164,7 +164,7 @@ export const content = {
         "out-of-your-way": { title: "不打擾你", body: "代理的分頁在背景開啟，並收進摺疊的群組中。" },
         handoffs: { title: "交接", body: "自己完成登入或雙重驗證，然後按下「繼續」。" },
         "lend-a-tab": { title: "借出分頁", body: "按一下工具列按鈕，把已開啟的分頁交給代理。" },
-        "record-and-capture": { title: "錄製與擷取", body: "螢幕截圖、螢幕錄影，以及 HAR 格式的網路流量。" },
+        "record-and-capture": { title: "錄製與擷取", body: "螢幕截圖、分頁錄製和網路流量。" },
         "any-mcp-client": {
           title: "任何 MCP 用戶端",
           body: "OpenCode、Claude Code、Cursor、Codex、Zed 等眾多用戶端。",
@@ -173,7 +173,7 @@ export const content = {
           title: "沿用你的所有登入",
           body: "代理直接使用你已登入的網站。無需金鑰，無需設定。",
         },
-        allowlists: { title: "允許清單", body: "將工作階段的分頁限制在你指定的網站內。" },
+        "allowed-sites": { title: "允許的網站", body: "讓代理的分頁只停留在你指定的網站。" },
       },
       install:
         "請先安裝 [Chrome 擴充功能]，它會引導你完成其餘步驟。如需直接安裝 CLI（通常不需要），可使用以下任一指令。",
@@ -250,7 +250,7 @@ export const content = {
     },
     colors: {
       title: "色彩",
-      body: "Logo 和字標使用同一種墨色的三種不透明度，深色背景則使用較淺的墨色。下方數值是該墨色疊在白色或 #0B0B0B 上的效果，與標準檔案一致。點一下數值即可複製。",
+      body: "Logo 和字標使用同一種墨色的三種不透明度，深色背景則使用較淺的墨色。下方數值是標準檔案中的色彩。這些色彩僅用於 Logo 和字標，請勿用於其他文字或背景。點一下數值即可複製。",
       palettes: {
         light: {
           name: "淺色",
@@ -335,7 +335,7 @@ export const content = {
       badges: {
         body: "在 README、文件或網站中放上徽章，並連結到 opencode.ai。依背景選擇淺色或深色檔案（HTML 會自動切換），不要更改顏色或文字。",
         sizes: "每種樣式都提供 20、32 和 44px（Shields 僅有 20px），格式為 SVG 和 2 倍 PNG。",
-        mono: "每個檔案也有使用 OpenTUI Mono 字型的版本，在副檔名前加上 -mono，例如 opencode-works-with-a-light-20-mono.svg；加上 -mono-caps 則為大寫 OpenTUI Mono。",
+        mono: "每個檔案也有使用 OpenMono 字型的版本，在副檔名前加上 -mono，例如 opencode-works-with-a-light-20-mono.svg；加上 -mono-caps 則為大寫 OpenMono。",
         groups: {
           "works-with": { title: "相容", alt: "相容 OpenCode", body: "適用於搭配 OpenCode 執行的外掛、供應商和工具。" },
           "built-with": { title: "打造於", alt: "以 OpenCode 打造", body: "適用於用 OpenCode 製作的專案。" },

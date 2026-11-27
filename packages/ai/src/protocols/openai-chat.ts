@@ -406,12 +406,12 @@ const lowerTool = (
   custom: OpenAIFreeform.Custom | undefined,
 ): OpenAIChatTool => {
   if (custom) {
-    const grammar = OpenAIFreeform.grammar(custom.format)
+    const grammar = OpenAIFreeform.grammar(custom)
     return {
       type: "custom",
       custom: {
         name: tool.name,
-        description: tool.description,
+        description: OpenAIFreeform.description(tool, custom),
         format: grammar ? { type: "grammar", grammar } : { type: "text" },
       },
       cache_control: options.cacheControl?.(tool.cache),
@@ -450,7 +450,10 @@ const lowerToolCall = (part: ToolCallPart, options: MessageLoweringOptions): Ope
     return {
       id: options.toolCallID?.(part.id) ?? part.id,
       type: "custom",
-      custom: { name: part.name, input: OpenAIFreeform.toRaw(custom, part.input) },
+      custom: {
+        name: part.name,
+        input: OpenAIFreeform.toRaw(custom, part.input, part.providerMetadata?.[options.providerMetadataKey]?.header),
+      },
     }
   return {
     id: options.toolCallID?.(part.id) ?? part.id,
@@ -577,6 +580,9 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
   const opaque = reasoningOpaque(reasoning, options.providerMetadataKey)
   const reasoningText =
     reasoning.length === 0 || (opaque !== undefined && text === "") ? (requireReasoning ? "" : undefined) : text
+  // A model that declares a different reasoning field reads reasoning there, so structured details and opaque values
+  // from earlier turns (including another model served under the same provider metadata key) must not be replayed.
+  const replaysStructured = configuredField === undefined || configuredField === "reasoning_details"
   const result = {
     role: "assistant" as const,
     content: (() => {
@@ -585,10 +591,11 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
       return content.map((part) => part.text).join("")
     })(),
     ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
-    ...(details !== undefined ? { reasoning_details: details } : {}),
-    ...(opaque !== undefined ? { reasoning_opaque: opaque } : {}),
+    ...(details !== undefined && replaysStructured ? { reasoning_details: details } : {}),
+    ...(opaque !== undefined && replaysStructured ? { reasoning_opaque: opaque } : {}),
   }
-  if (field === undefined || reasoningText === undefined) return result
+  // `reasoning_details` is the structured list itself, so scalar text must not be written over it.
+  if (field === undefined || reasoningText === undefined || field === "reasoning_details") return result
   return { ...result, [field]: reasoningText }
 })
 
@@ -862,6 +869,7 @@ const lowerOptions = (request: LLMRequest, supportsStore: boolean, hasActiveTool
   }
 }
 
+/** Expects tool namespaces already flattened, as `protocol.body.from` passes it; otherwise run `ProviderShared.flattenRequest` first. */
 export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   request: LLMRequest,
   options: LoweringOptions = {},
@@ -873,7 +881,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
     return yield* ProviderShared.invalidRequest(
       `OpenAI Chat reasoning field conflicts with reserved field ${reasoningField}`,
     )
-  const flattened = ProviderShared.flattenToolRequest(request)
+  const definitions = ProviderShared.flattenTools(request.tools)
   const provider = request.model.provider
   const baseURL = request.model.route.endpoint.baseURL
   const detectedMaxTokensField = detectMaxTokensField(provider, baseURL)
@@ -883,18 +891,18 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   const zaiToolStream =
     request.model.compatibility?.zaiToolStream ?? detectZaiToolStream(provider, baseURL, request.model.id)
   const hasHistory = hasToolHistory(request.messages)
-  const hasActiveTools = flattened.tools.length > 0
+  const hasActiveTools = definitions.length > 0
   const custom = OpenAIFreeform.tools(request)
   const lowering = { ...options, cacheControl: options.cacheControl ?? declaredCacheControl(request), custom }
   return {
     model: request.model.id,
-    messages: yield* lowerMessages(flattened.request, lowering),
+    messages: yield* lowerMessages(request, lowering),
     tools:
-      flattened.tools.length === 0
+      definitions.length === 0
         ? hasHistory
           ? []
           : undefined
-        : flattened.tools.map((tool) => lowerTool(tool, lowering, supportsStrictMode, custom.get(tool.name))),
+        : definitions.map((tool) => lowerTool(tool, lowering, supportsStrictMode, custom.get(tool.name))),
     tool_choice: hasActiveTools && request.toolChoice ? yield* lowerToolChoice(request.toolChoice, custom) : undefined,
     stream: true as const,
     ...((request.model.capabilities?.streamUsage ?? true) ? { stream_options: { include_usage: true } } : {}),
@@ -942,8 +950,12 @@ const mapFinishReason = Effect.fnUntraced(function* (event: OpenAIChatEvent, rea
     case "end":
       return "stop" as const
     case "length":
+    // Z.AI stops with this when the prompt plus the generated output fill the context window.
+    case "model_context_window_exceeded":
       return "length" as const
     case "content_filter":
+    // Z.AI ends a response its safety review blocked with "sensitive".
+    case "sensitive":
       return "content-filter" as const
     case "function_call":
     case "tool_calls":
@@ -1283,7 +1295,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       !incompleteTools &&
       state.finishReason === undefined &&
       Object.keys(tools).length > 0
-        ? yield* finishTools(tools, customCalls)
+        ? yield* finishTools(state, tools, customCalls)
         : undefined
 
     return [
@@ -1312,8 +1324,12 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
   })
 
 // Custom calls close their JSON fragment before every pending call finishes.
-const finishTools = Effect.fnUntraced(function* (tools: ParserState["tools"], customCalls: ReadonlySet<number>) {
-  const closed = OpenAIFreeform.close(tools, customCalls)
+const finishTools = Effect.fnUntraced(function* (
+  state: ParserState,
+  tools: ParserState["tools"],
+  customCalls: ReadonlySet<number>,
+) {
+  const closed = OpenAIFreeform.close(tools, customCalls, state.custom, state.providerMetadataKey)
   const finished = yield* ToolStream.finishAll(ADAPTER, closed.tools)
   return { tools: finished.tools, events: [...closed.events, ...finished.events] }
 })
@@ -1330,7 +1346,7 @@ export const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
   const events: LLMEvent[] = []
   const toolCallEvents =
     state.finishReason === undefined && Object.keys(state.tools).length > 0
-      ? (yield* finishTools(state.tools, state.customCalls)).events
+      ? (yield* finishTools(state, state.tools, state.customCalls)).events
       : state.toolCallEvents
   const hasToolCalls = toolCallEvents.length > 0
   const reason = state.finishReason

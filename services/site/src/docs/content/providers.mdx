@@ -1,5 +1,6 @@
 ---
 title: "Providers"
+description: "Connect OpenCode to model providers such as OpenCode Go, ChatGPT, Amazon Bedrock, Google Vertex, GitHub Copilot, and Ollama, or add a custom one."
 ---
 
 OpenCode includes a provider and model catalog from [models.dev](https://models.dev). For most providers, connect an
@@ -293,9 +294,9 @@ ID sent to the provider.
 | `modelID` | Model or deployment ID sent to the provider. |
 | `name` | Display name. |
 | `family` | Model family used for grouping related models. |
-| `type` | What the model produces, such as `chat`, `image` or `decision`. Defaults to `chat`; only chat models are offered for sessions. |
+| `type` | What the model produces: `chat`, `decision`, `image`, `video`, `realtime`, `embedding` or `transcription`. Defaults to `chat`; only chat models are offered for sessions. Realtime models that answer in speech are offered for voice, and set to `disabled: true` they aren't. |
 | `releaseDate` | Release date as `YYYY-MM-DD` or `YYYY-MM`. |
-| `package` | Runtime override for this model. |
+| `package` | Runtime override for this model. A transcription model names its transcription protocol, such as `@opencode/ai/protocols/openai-transcription`; a realtime model takes none, since voice sessions start through its API. |
 | `settings` | Model-level OpenCode controls and package-specific JSON settings. |
 | `headers` | Additional string-valued request headers. |
 | `body` | Additional JSON request body fields. |

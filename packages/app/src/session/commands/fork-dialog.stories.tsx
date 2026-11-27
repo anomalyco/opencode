@@ -4,8 +4,11 @@ import { onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ForkDialog } from "./fork-dialog"
 
-function ForkDialogStory() {
+type Args = { messageCount: number; forking: boolean }
+
+function ForkDialogStory(props: Args) {
   const dialog = useDialog()
+
   const [store, setStore] = createStore({ selected: "No message selected" })
 
   const messages = [
@@ -28,7 +31,9 @@ function ForkDialogStory() {
   const open = () =>
     dialog.show(() => (
       <ForkDialog
-        messages={messages}
+        messages={messages.slice(0, props.messageCount)}
+        disabled={props.forking && props.messageCount > 0}
+        pendingMessageID={props.forking && props.messageCount > 0 ? messages[0].id : undefined}
         onSelect={(messageID) => {
           setStore("selected", messageID)
           dialog.close()
@@ -51,8 +56,13 @@ function ForkDialogStory() {
 export default {
   title: "App/Dialogs/Fork Session",
   id: "app-dialog-fork-session",
+  args: { messageCount: 8, forking: false } satisfies Args,
+  argTypes: { messageCount: { control: { type: "range", min: 0, max: 8, step: 1 } } },
+  render: (args: Args) => <ForkDialogStory {...args} />,
 }
 
-export const Default = {
-  render: () => <ForkDialogStory />,
-}
+export const Default = {}
+
+export const NoMessages = { args: { messageCount: 0 } }
+
+export const Forking = { args: { forking: true } }

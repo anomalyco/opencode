@@ -187,9 +187,9 @@ export const content = {
       body: "에이전트가 실제 브라우저를 쓰게 하세요.",
       title: "OpenCode | Browse, 코딩 에이전트를 위한 실제 브라우저",
       description:
-        "Browse는 OpenCode와 다른 MCP 클라이언트가 실제 브라우저를 쓰게 합니다. 에이전트는 Playwright로 백그라운드 탭을 조작하고, 로그인과 2FA는 사용자에게 넘깁니다.",
+        "Browse는 OpenCode와 다른 MCP 클라이언트가 실제 브라우저를 쓰게 합니다. 에이전트는 페이지를 읽고, 클릭하고, 입력하고, 스크린샷을 찍고, 탭을 녹화하며, 로그인과 2FA는 사용자에게 넘깁니다.",
       intro:
-        "MCP 서버와 Chromium 확장 프로그램으로, 에이전트가 내 탭, 내 로그인, 내 확장 프로그램이 있는 실제 브라우저를 쓰게 합니다. 에이전트는 Playwright로 탭을 열고 조작하며, 스크린샷을 찍고 화면을 녹화합니다. 이 탭들은 방해되지 않게 백그라운드에서 그룹으로 묶입니다. 로그인, 2FA, 결제처럼 내가 직접 해야 할 때가 오면 탭을 넘겨주고, 내가 계속을 클릭하면 다시 이어 갑니다.",
+        "MCP 서버와 Chromium 확장 프로그램으로, 에이전트가 내 탭, 내 로그인, 내 확장 프로그램이 있는 실제 브라우저를 쓰게 합니다. 에이전트는 탭을 백그라운드에서 그룹으로 묶어 열고, 페이지를 읽고, 클릭하고, 입력하고, 스크린샷을 찍고, 탭을 녹화합니다. 로그인, 2FA, 결제처럼 내가 직접 해야 할 때가 오면 탭을 넘겨주고, 내가 계속을 클릭하면 다시 이어 갑니다.",
       features: {
         "your-real-browser": {
           title: "실제 브라우저",
@@ -198,7 +198,7 @@ export const content = {
         "out-of-your-way": { title: "방해 없이", body: "에이전트 탭은 접힌 그룹으로 백그라운드에서 열립니다." },
         handoffs: { title: "작업 넘기기", body: "로그인이나 2FA는 직접 처리하고, 계속을 클릭하세요." },
         "lend-a-tab": { title: "탭 빌려주기", body: "툴바 버튼을 클릭해 열려 있는 탭을 에이전트에게 넘기세요." },
-        "record-and-capture": { title: "녹화와 캡처", body: "스크린샷, 화면 녹화, 네트워크 트래픽을 HAR로." },
+        "record-and-capture": { title: "녹화와 캡처", body: "스크린샷, 탭 녹화, 네트워크 트래픽." },
         "any-mcp-client": {
           title: "모든 MCP 클라이언트",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed 등 다양한 클라이언트.",
@@ -207,7 +207,7 @@ export const content = {
           title: "모든 로그인 그대로",
           body: "에이전트가 이미 로그인한 사이트를 그대로 사용합니다. 키도, 설정도 필요 없습니다.",
         },
-        allowlists: { title: "허용 목록", body: "세션의 탭을 지정한 사이트로만 제한하세요." },
+        "allowed-sites": { title: "허용된 사이트", body: "에이전트의 탭을 지정한 사이트에만 유지하세요." },
       },
       install:
         "먼저 [Chrome 확장 프로그램]을 설치하세요. 나머지 단계는 확장 프로그램이 안내합니다. CLI를 직접 설치하려면(보통은 필요 없습니다) 아래 명령 중 하나를 사용하세요.",
@@ -290,7 +290,7 @@ export const content = {
     },
     colors: {
       title: "색상",
-      body: "로고와 워드마크는 한 가지 잉크를 세 가지 불투명도로 쓰며, 어두운 배경에는 더 밝은 잉크를 씁니다. 아래 값은 표준 파일과 같이 그 잉크를 흰색 또는 #0B0B0B 위에 올린 결과입니다. 값을 클릭하면 복사됩니다.",
+      body: "로고와 워드마크는 한 가지 잉크를 세 가지 불투명도로 쓰며, 어두운 배경에는 더 밝은 잉크를 씁니다. 아래 값은 표준 파일의 색상입니다. 이 색상은 로고와 워드마크에만 사용하고 다른 텍스트나 배경에는 사용하지 마세요. 값을 클릭하면 복사됩니다.",
       palettes: {
         light: {
           name: "라이트",
@@ -375,7 +375,7 @@ export const content = {
       badges: {
         body: "README, 문서, 웹사이트에 배지를 넣고 opencode.ai로 링크하세요. 배경에 맞춰 라이트 또는 다크 파일을 고르고(HTML은 자동으로 전환됩니다), 색상이나 텍스트는 바꾸지 마세요.",
         sizes: "모든 스타일은 20, 32, 44px(Shields는 20px만)로 제공되며, SVG와 2배 PNG 형식입니다.",
-        mono: "각 파일에는 OpenTUI Mono 텍스트 버전도 있습니다. opencode-works-with-a-light-20-mono.svg처럼 확장자 앞에 -mono를 붙이고, 대문자 OpenTUI Mono는 -mono-caps를 붙이세요.",
+        mono: "각 파일에는 OpenMono 텍스트 버전도 있습니다. opencode-works-with-a-light-20-mono.svg처럼 확장자 앞에 -mono를 붙이고, 대문자 OpenMono는 -mono-caps를 붙이세요.",
         groups: {
           "works-with": {
             title: "호환",

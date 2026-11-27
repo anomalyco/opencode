@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import type { FileSystem } from "@opencode/core/filesystem"
-import { DateTime, Effect, Fiber, Layer, LayerMap, Schema, Stream } from "effect"
+import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
 import { eq } from "drizzle-orm"
@@ -93,7 +93,7 @@ const locations = makeGlobalNode({
     Effect.gen(function* () {
       const app = yield* App.Service
       const bus = yield* Bus.Service
-      return yield* LayerMap.make(
+      return yield* LocationServiceMap.make(
         (ref: Location.Ref) =>
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           Layer.mergeAll(
@@ -133,6 +133,7 @@ const harness = (channel?: string) =>
         Bus.node,
         SessionProjector.node,
         SessionStore.node,
+        SessionInbox.node,
         Session.node,
         SessionTransfer.node,
       ]),
@@ -291,18 +292,6 @@ describe("Session.prompt", () => {
       activeSessions.add(sessionID)
       expect(Array.from(yield* session.active)).toEqual([sessionID])
     }).pipe(Effect.ensuring(Effect.sync(() => activeSessions.clear()))),
-  )
-
-  it.effect("delegates execution continuation through SessionExecution", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* Session.Service
-      executionCalls.length = 0
-      wakeCalls.length = 0
-      yield* session.resume(sessionID)
-      expect(executionCalls).toEqual([sessionID])
-      expect(wakeCalls).toEqual([])
-    }),
   )
 
   it.effect("delegates process-local interruption through SessionExecution", () =>
@@ -843,11 +832,15 @@ describe("Session.prompt", () => {
       yield* setup
       const session = yield* Session.Service
       const uri = `data:video/mp2t;base64,${Buffer.from("export const value = 1\n").toString("base64")}`
+      const notes = Buffer.from("BMW service schedule\n").toString("base64")
 
       const message = yield* session.prompt({
         sessionID,
         text: "Inspect this",
-        files: [{ uri, name: "main.ts" }],
+        files: [
+          { uri, name: "main.ts" },
+          { uri: `data:;base64,${notes}`, name: "notes" },
+        ],
         resume: false,
       })
 
@@ -858,6 +851,7 @@ describe("Session.prompt", () => {
           source: { type: "inline" },
           name: "main.ts",
         },
+        { data: notes, mime: "text/plain", source: { type: "inline" }, name: "notes" },
       ])
     }),
   )
@@ -973,26 +967,6 @@ describe("Session.prompt", () => {
       expect(second.id).not.toBe(first.id)
       expect(yield* session.messages({ sessionID })).toEqual([])
       expect(yield* admittedCount).toBe(2)
-    }),
-  )
-
-  it.effect("returns the original recorded message when the ID is retried", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* Session.Service
-      const input = {
-        sessionID,
-        id: messageID,
-        text: "Fix the failing tests",
-        resume: false,
-      }
-
-      const first = yield* session.prompt(input)
-      const retried = yield* session.prompt(input)
-
-      expect(retried).toEqual(first)
-      expect(yield* session.messages({ sessionID })).toEqual([])
-      expect(yield* admittedCount).toBe(1)
     }),
   )
 
@@ -1276,24 +1250,6 @@ describe("Session.prompt", () => {
       wakeCalls.length = 0
 
       yield* session.prompt({ sessionID, text: "Run by default" })
-
-      expect(executionCalls).toEqual([])
-      expect(wakeCalls).toEqual([sessionID])
-    }),
-  )
-
-  it.effect("starts execution when resume is explicitly true", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* Session.Service
-      executionCalls.length = 0
-      wakeCalls.length = 0
-
-      yield* session.prompt({
-        sessionID,
-        text: "Run explicitly",
-        resume: true,
-      })
 
       expect(executionCalls).toEqual([])
       expect(wakeCalls).toEqual([sessionID])

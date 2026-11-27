@@ -26,7 +26,9 @@ const sshServer: PromptServer = {
   label: "SSH",
 }
 
-function LocationDialogStory(props: { multipleServers?: boolean }) {
+type LocationScenario = { multipleServers?: boolean; worktrees?: boolean }
+
+function LocationDialogStory(props: LocationScenario) {
   const [store, setStore] = createStore<{
     directory: string
     worktree?: string
@@ -89,7 +91,7 @@ function LocationDialogStory(props: { multipleServers?: boolean }) {
     onDone: () => {},
   })
 
-  const open = () => openLocation()
+  const open = () => openLocation(props.worktrees ? { project: project.selected() } : undefined)
 
   onMount(open)
 
@@ -105,18 +107,16 @@ export default {
   id: "app-dialog-new-session-location",
 }
 
-export const Default = {
+const story = (scenario: LocationScenario = {}) => ({
   render: () => (
     <DialogStoryRuntime>
-      <LocationDialogStory />
+      <LocationDialogStory {...scenario} />
     </DialogStoryRuntime>
   ),
-}
+})
 
-export const MultipleServers = {
-  render: () => (
-    <DialogStoryRuntime>
-      <LocationDialogStory multipleServers />
-    </DialogStoryRuntime>
-  ),
-}
+export const Default = story()
+
+export const MultipleServers = story({ multipleServers: true })
+
+export const Worktrees = story({ worktrees: true })

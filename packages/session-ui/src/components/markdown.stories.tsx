@@ -1,5 +1,6 @@
 import { markdown } from "@opencode/ui/storybook/fixtures"
-import { createSignal, onCleanup } from "solid-js"
+import { createEffect, createSignal, onCleanup } from "solid-js"
+import { MarkdownProvider } from "../context/markdown"
 import { Markdown } from "./markdown"
 
 export default {
@@ -17,21 +18,62 @@ export default {
 }
 
 export const CompleteResponse = {
-  render: () => (
+  args: { text: markdown },
+  render: (args: { text: string }) => (
     <div class="mx-auto max-w-[760px] rounded-lg border border-border-weak-base bg-background-base px-5 py-4">
-      <Markdown text={markdown} />
+      <Markdown text={args.text} />
     </div>
   ),
 }
 
 export const CompactResult = {
-  render: () => (
+  args: { text: "Updated the Session status and verified it.\n\n- **12 tests passed**\n- `bun typecheck` passed" },
+  render: (args: { text: string }) => (
     <div class="mx-auto max-w-[560px] rounded-lg border border-border-weak-base bg-background-base px-5 py-4">
-      <Markdown
-        text={"Updated the Session status and verified it.\n\n- **12 tests passed**\n- `bun typecheck` passed"}
-      />
+      <Markdown text={args.text} />
     </div>
   ),
+}
+
+const longCode = [
+  "Reproduce it with:",
+  "",
+  "```sh",
+  'NODE_OPTIONS="--max-old-space-size=4096 --enable-source-maps" bun install --frozen-lockfile --filter "@opencode/session-ui" && bun run --cwd packages/session-ui typecheck:tsc',
+  "```",
+  "",
+  "The failing line:",
+  "",
+  "```ts",
+  "export const resolveCodeBlockPreference = (settings: Settings, block: MarkdownCodeBlock, override?: boolean) => override ?? settings.general.wrapCodeBlocks()",
+  "return resolveCodeBlockPreference(settings, block)",
+  "```",
+  "",
+  "A short block never overflows, so it has no Wrap button:",
+  "",
+  "```sh",
+  "bun typecheck",
+  "```",
+].join("\n")
+
+export const LongCodeLines = {
+  render: () => {
+    const [wrap, setWrap] = createSignal(false)
+
+    return (
+      <div class="mx-auto flex max-w-[560px] flex-col gap-3">
+        <label class="flex items-center gap-2 text-13-regular">
+          <input type="checkbox" checked={wrap()} onChange={(event) => setWrap(event.currentTarget.checked)} />
+          Wrap code blocks setting
+        </label>
+        <div class="rounded-lg border border-border-weak-base bg-background-base px-5 py-4">
+          <MarkdownProvider codeWrap={wrap()}>
+            <Markdown text={longCode} />
+          </MarkdownProvider>
+        </div>
+      </div>
+    )
+  },
 }
 
 export const Table = {
@@ -56,54 +98,79 @@ export const Table = {
 const streamed =
   "Streaming Markdown now keeps existing elements alive while each newly arriving word fades into the response."
 
-function StreamingMarkdown() {
-  const words = streamed.match(/\S+\s*/g) ?? []
-  const [count, setCount] = createSignal(1)
-  const timer = setInterval(() => setCount((value) => Math.min(value + 1, words.length)), 180)
-  onCleanup(() => clearInterval(timer))
+const playback = {
+  args: { playback: "live" },
+  argTypes: { playback: { options: ["live", "partial", "complete"] } },
+}
 
-  return <Markdown text={words.slice(0, count()).join("")} streaming={count() < words.length} />
+function StreamingMarkdown(props: { playback: string; chunks: string[]; interval: number; loop?: boolean }) {
+  const [count, setCount] = createSignal(1)
+
+  createEffect(() => {
+    const length = props.chunks.length
+
+    if (props.playback === "complete") return setCount(length)
+
+    if (props.playback === "partial") return setCount(Math.ceil(length / 2))
+    setCount(1)
+
+    const timer = setInterval(
+      () =>
+        setCount((value) => {
+          if (value < length) return value + 1
+
+          if (props.loop) return 1
+          clearInterval(timer)
+
+          return length
+        }),
+      props.interval,
+    )
+
+    onCleanup(() => clearInterval(timer))
+  })
+
+  return (
+    <Markdown
+      text={props.chunks.slice(0, count()).join("")}
+      streaming={count() < props.chunks.length || (props.loop && props.playback === "live")}
+    />
+  )
 }
 
 export const StreamingResponse = {
-  render: () => (
+  ...playback,
+  render: (args: { playback: string }) => (
     <div class="mx-auto max-w-[760px] rounded-lg border border-border-weak-base bg-background-base px-5 py-4">
-      <StreamingMarkdown />
+      <StreamingMarkdown playback={args.playback} chunks={streamed.match(/\S+\s*/g) ?? []} interval={180} />
     </div>
   ),
 }
 
-function StreamingInlineCodeMarkdown() {
-  const chunks = [
-    "Updated ",
-    "`apps/cloud",
-    "flare/src/",
-    "editor/Cloud",
-    "Auth.ts:29",
-    "-43` and ",
-    "`packages/",
-    "session-ui/src/",
-    "components/markdown",
-    "-solid.tsx`, ",
-    "then verified ",
-    "the changes with ",
-    "`bun type",
-    "check` and ",
-    "`bun te",
-    "st`.",
-  ]
-
-  const [count, setCount] = createSignal(1)
-  const timer = setInterval(() => setCount((value) => (value >= chunks.length ? 1 : value + 1)), 220)
-  onCleanup(() => clearInterval(timer))
-
-  return <Markdown text={chunks.slice(0, count()).join("")} streaming />
-}
+const inlineCodeChunks = [
+  "Updated ",
+  "`apps/cloud",
+  "flare/src/",
+  "editor/Cloud",
+  "Auth.ts:29",
+  "-43` and ",
+  "`packages/",
+  "session-ui/src/",
+  "components/markdown",
+  "-solid.tsx`, ",
+  "then verified ",
+  "the changes with ",
+  "`bun type",
+  "check` and ",
+  "`bun te",
+  "st`.",
+]
 
 export const StreamingInlineCode = {
-  render: () => (
+  ...playback,
+  render: (args: { playback: string }) => (
     <div class="mx-auto max-w-[760px] rounded-lg border border-border-weak-base bg-background-base px-5 py-4">
-      <StreamingInlineCodeMarkdown />
+      <StreamingMarkdown playback={args.playback} chunks={inlineCodeChunks} interval={220} loop />
     </div>
   ),
 }
@@ -122,32 +189,11 @@ const externalLinkChunks = [
   ": No third-party request.",
 ]
 
-function StreamingExternalLinks() {
-  const [count, setCount] = createSignal(1)
-
-  const timer = setInterval(() => {
-    setCount((value) => {
-      if (value === externalLinkChunks.length) {
-        clearInterval(timer)
-
-        return value
-      }
-
-      return value + 1
-    })
-  }, 380)
-
-  onCleanup(() => clearInterval(timer))
-
-  return (
-    <Markdown text={externalLinkChunks.slice(0, count()).join("")} streaming={count() < externalLinkChunks.length} />
-  )
-}
-
 export const ExternalLinksStreaming = {
-  render: () => (
+  ...playback,
+  render: (args: { playback: string }) => (
     <div class="mx-auto max-w-[680px] rounded-lg border border-border-weak-base bg-background-base px-5 py-4">
-      <StreamingExternalLinks />
+      <StreamingMarkdown playback={args.playback} chunks={externalLinkChunks} interval={380} />
     </div>
   ),
 }

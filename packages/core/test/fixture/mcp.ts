@@ -1,4 +1,4 @@
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { Config } from "@opencode/core/config"
 import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
@@ -24,7 +24,14 @@ export const emptyMcp = Mcp.Service.of({
   resourceCatalog: () => Effect.succeed(Mcp.ResourceCatalog.make({ resources: [], templates: [] })),
   resources: () => Effect.succeed(Mcp.ResourceCatalog.make({ resources: [], templates: [] })),
   readResource: () => Effect.undefined,
+  skills: () => Effect.succeed([]),
+  readSkill: () => Effect.die("unused mcp.readSkill"),
+  getSkill: () => Effect.die("unused mcp.getSkill"),
   events: () => Effect.undefined,
+  follow: () => Stream.die("unused Mcp.follow"),
+  subscribe: () => Effect.die("unused Mcp.subscribe"),
+  unsubscribe: () => Effect.void,
+  subscriptions: () => Effect.succeed([]),
 })
 
 export const emptyMcpLayer = Layer.succeed(Mcp.Service, emptyMcp)

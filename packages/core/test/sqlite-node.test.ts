@@ -10,7 +10,7 @@ const node = Bun.which("node")
 
 // Skipped on Windows for the same Bun.build panic as sqlite-bundle.test.ts.
 describe.skipIf(process.platform === "win32" || !node)("node sqlite client", () => {
-  test("boots migrations, commits drizzle transactions and types constraint errors", async () => {
+  test("boots migrations, commits drizzle transactions and types constraint and storage errors", async () => {
     const dir = await mkdtemp(join(tmpdir(), "sqlite-node-"))
     try {
       const build = await Bun.build({
@@ -42,6 +42,7 @@ describe.skipIf(process.platform === "win32" || !node)("node sqlite client", () 
         raw: 1,
         leakedTransaction: [],
         leakedReserve: [],
+        storageFailure: { full: "Storage is full", constraint: null },
       })
     } finally {
       await rm(dir, { recursive: true, force: true })

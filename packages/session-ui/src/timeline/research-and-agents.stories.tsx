@@ -1,5 +1,6 @@
 import type { SessionMessageAssistant, SessionMessageAssistantTool } from "@opencode/client/promise"
 import { createMemo } from "solid-js"
+import { Dynamic } from "solid-js/web"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"
 import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
@@ -14,7 +15,7 @@ import {
   webResearchDocument,
 } from "../storybook/current-session-fixtures"
 import { storyDocument, storyPatchFile, storyTool } from "../storybook/current-session-scenarios"
-import { timelinePresets } from "./detail"
+import { timelinePresets, type TimelinePlacement } from "./detail"
 import { SessionTimeline } from "./session-timeline"
 
 export default {
@@ -103,13 +104,16 @@ const delegationDocument = storyDocument([
     { agent: "general", description: "Run the focused timeline tests", prompt: "Run the timeline tests." },
     { output: "All timeline tests pass.", metadata: { sessionID: "session_child_general" } },
   ),
-  { type: "text", text: "Each delegated task keeps its own row while the reads and searches between them stay grouped." },
+  {
+    type: "text",
+    text: "Each delegated task keeps its own row while the reads and searches between them stay grouped.",
+  },
 ])
 
 export const DelegateBetweenTools = {
   args: { subagents: "separate" },
-  argTypes: { subagents: { control: { type: "inline-radio" }, options: ["separate", "grouped"] } },
-  render: (args: { subagents: "separate" | "grouped" }) => (
+  argTypes: { subagents: { control: { type: "inline-radio" }, options: ["separate", "grouped", "hidden"] } },
+  render: (args: { subagents: TimelinePlacement }) => (
     <section class="mx-auto min-h-screen w-full max-w-[720px] bg-v2-background-bg-base p-6">
       <CurrentSessionProviders document={delegationDocument}>
         <SessionTimeline
@@ -152,9 +156,8 @@ function CodebaseExplorationStory() {
             agent: "build",
             model: STORY_MODEL,
             content: [tool("read", state.read), tool("glob", state.glob)],
-            time: state.read && state.glob
-              ? { created: STORY_TIME, completed: STORY_TIME + 300 }
-              : { created: STORY_TIME },
+            time:
+              state.read && state.glob ? { created: STORY_TIME, completed: STORY_TIME + 300 } : { created: STORY_TIME },
           } satisfies SessionMessageAssistant,
         ],
         status: { type: state.read && state.glob ? "idle" : "busy" },
@@ -452,8 +455,7 @@ const researchScenarios = {
 export const AgentResearch = {
   args: { scenario: "workflow" },
   argTypes: { scenario: { control: "select", options: Object.keys(researchScenarios) } },
-  render: (args: { scenario: string }) =>
-    Object.entries(researchScenarios)
-      .find(([name]) => name === args.scenario)?.[1]
-      .render() ?? researchScenarios.workflow.render(),
+  render: (args: { scenario: keyof typeof researchScenarios }) => (
+    <Dynamic component={researchScenarios[args.scenario]?.render ?? researchScenarios.workflow.render} />
+  ),
 }

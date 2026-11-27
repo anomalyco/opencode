@@ -12,4 +12,12 @@ export default {
   noChanges: "Ingen ændringer",
   "settings.wrapLines.title": "Ombryd linjer",
   "settings.wrapLines.description": "Ombryd lange linjer i mobile diffs i stedet for at rulle vandret",
+  "menu.count.one": "{{count}} fil ændret",
+  "menu.count.other": "{{count}} filer ændret",
+  "folder.more": "{{count}} · flere vises ikke",
+  "folder.failed": "Kunne ikke indlæse ændringer",
+  "command.open": "Åbn gennemgang",
+  "load.failed": "Kunne ikke indlæse ændringer",
+  "load.timeout": "Serveren var for længe om at svare",
+  offline: "Kan ikke nå denne server",
 }

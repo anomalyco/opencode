@@ -174,6 +174,11 @@ function init(container: () => HTMLElement | undefined) {
     let ref: HTMLDivElement | undefined
     let dispose = () => {}
 
+    // Kobalte's scroll lock stays on touch devices, where it also stops a touch from scrolling the page behind the
+    // dialog. With a mouse or trackpad the shell's own lock is enough (its body does not scroll), and Kobalte's reads
+    // layout as the dialog opens and puts a non-passive wheel listener on the document.
+    const touch = window.matchMedia("(hover: none) and (pointer: coarse)").matches
+
     const node = runWithOwner(effect.request.owner, () =>
       createRoot((d: () => void) => {
         dispose = d
@@ -182,6 +187,7 @@ function init(container: () => HTMLElement | undefined) {
         return (
           <Kobalte
             modal={modal()}
+            preventScroll={touch}
             open={!closing()}
             onOpenChange={(open: boolean) => {
               if (!open) dispatch({ type: "layer.dismiss", attempt })
@@ -190,6 +196,8 @@ function init(container: () => HTMLElement | undefined) {
             <Kobalte.Portal mount={container()}>
               <Kobalte.Overlay
                 data-component="dialog-overlay"
+                data-floating-overlay
+                data-dialog-backdrop={selectLayerIndex(machine(), attempt)}
                 style={{ "z-index": zIndex() }}
                 onClick={() => dispatch({ type: "backdrop.click", attempt })}
               />
@@ -243,8 +251,20 @@ function init(container: () => HTMLElement | undefined) {
     active: () => selectTopDialog(machine()),
     /** Stacked dialogs render under the owner of the dialog below, so they see the same context. */
     base: () => layers().at(-1)?.owner,
-    open: (mode: "show" | "push", request: DialogRequest, id: string | undefined, aborted: boolean) =>
-      dispatch({ type: "open", mode, id: id ?? uuid(), aborted, focus: captureFocus(), request }),
+    open: (mode: "show" | "push", request: DialogRequest, id: string | undefined, aborted: boolean) => {
+      const focus = captureFocus()
+
+      const state = untrack(machine)
+
+      const first = state.status === "active" ? state.entries[0] : undefined
+
+      // A new open can happen during the exit animation, after the user is already back in the opener and has moved
+      // its caret.
+      const refreshFocus =
+        first?.status === "closing" && focus?.range !== undefined && focus.element === first.focus?.element
+
+      return dispatch({ type: "open", mode, id: id ?? uuid(), aborted, focus, refreshFocus, request })
+    },
     layers,
   }
 }
@@ -278,6 +298,7 @@ function returnFocus(focus: FocusReturn | undefined, layer: HTMLElement | undefi
 
   // Something outside the closed dialog already has focus, for example because the dialog's onClose moved it.
   if (active && active !== document.body && !layer?.contains(active)) return
+
   focus.element.focus({ preventScroll: true, focusVisible: focus.visible })
 
   if (!focus.range || !focus.element.contains(focus.range.commonAncestorContainer)) return

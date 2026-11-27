@@ -5,6 +5,7 @@ import { Schema } from "effect"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
+import { createTwoFilesPatch } from "diff"
 import { tmpdir } from "../fixture/tmpdir"
 import {
   delivered,
@@ -276,6 +277,100 @@ describe("acp prompt turns over the wire", () => {
     })
   })
 
+  test("reports a slash command's own failure message (#65715)", async () => {
+    await using acp = await startSession({
+      fetch: (request) =>
+        /^\/api\/session\/[^/]+\/command$/.test(request.path)
+          ? Response.json(
+              { _tag: "CommandExecutionError", command: "review", message: "Usage: /review <target>" },
+              { status: 500 },
+            )
+          : undefined,
+    })
+
+    expect(await rpcError(acp.prompt(acp.sessionId, "/review"))).toEqual({
+      code: -32603,
+      message: "Internal error: Usage: /review <target>",
+      data: { service: "command", errorName: "CommandExecutionError" },
+    })
+  })
+
+  test("offers skills as slash commands and attaches the skill a prompt names (#60434)", async () => {
+    await using acp = await startWire()
+    acp.server.catalog.skills = [
+      { id: "aws", name: "aws", description: "AWS observability", path: "/skills/aws/SKILL.md", content: "" },
+      { id: "review", name: "review", path: "/skills/review/SKILL.md", content: "" },
+    ]
+    await acp.initialize()
+    const session = await acp.newSession()
+
+    await acp.prompt(session.sessionId, "/aws check the logs")
+
+    expect(
+      (await acp.waitForUpdate((item) => item.update.sessionUpdate === "available_commands_update")).update,
+    ).toEqual({
+      sessionUpdate: "available_commands_update",
+      availableCommands: [
+        { name: "review", description: "Review changes" },
+        { name: "compact", description: "Compact the session" },
+        { name: "aws", description: "AWS observability" },
+      ],
+    })
+    expect(acp.server.prompts).toEqual([
+      expect.objectContaining({ text: "/aws check the logs", skills: [{ id: "aws" }] }),
+    ])
+  })
+
+  test("reports the cost of a session and its subagents (#65616)", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) => turn(sessionID, id, stepEnded(sessionID, "msg_assistant")),
+    })
+    acp.server.sessions.set(acp.sessionId, makeSession(acp.sessionId, { cost: 4 }))
+    acp.server.sessions.set("ses_child", makeSession("ses_child", { cost: 100, parentID: acp.sessionId }))
+    acp.server.sessions.set("ses_grandchild", makeSession("ses_grandchild", { cost: 0.5, parentID: "ses_child" }))
+    acp.server.sessions.set("ses_other", makeSession("ses_other", { cost: 1000 }))
+
+    await acp.prompt(acp.sessionId, "delegate")
+
+    expect((await acp.waitForUpdate((item) => item.update.sessionUpdate === "usage_update")).update).toMatchObject({
+      cost: { amount: 104.5, currency: "USD" },
+    })
+  })
+
+  test("completes an edit whose recorded patch cannot be parsed (#54831)", async () => {
+    await using dir = await tmpdir()
+    await Bun.write(path.resolve(dir.path, "notes.txt"), "world\n")
+    // A newline in a file name breaks the patch header the same way.
+    const patch = createTwoFilesPatch("notes.txt\nx", "notes.txt\nx", "hello\n", "world\n")
+    await using acp = await startWire({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          toolStarted(sessionID, "call_edit", "edit"),
+          toolCalled(sessionID, "call_edit", { path: "notes.txt", oldString: "hello", newString: "world" }),
+          toolSucceeded(
+            sessionID,
+            "call_edit",
+            { files: [{ file: "notes.txt", patch, additions: 1, deletions: 1, status: "modified" }] },
+            "edited",
+          ),
+        ),
+    })
+    await acp.initialize()
+    const session = await acp.newSession(dir.path)
+
+    expect((await acp.prompt(session.sessionId, "edit")).stopReason).toBe("end_turn")
+    expect(
+      turnUpdates(acp.updates).find(
+        (item) => item.update.sessionUpdate === "tool_call_update" && item.update.status === "completed",
+      )?.update,
+    ).toMatchObject({
+      toolCallId: "call_edit",
+      content: [{ type: "content", content: { type: "text", text: "edited" } }],
+    })
+  })
+
   test("attaches readable file links and references unreadable ones in place", async () => {
     await using dir = await tmpdir()
     const file = pathToFileURL(path.join(dir.path, "notes.md")).href
@@ -351,6 +446,31 @@ describe("acp prompt turns over the wire", () => {
       "another execution failure",
       (sessionID) => failed(sessionID, { type: "provider.rate-limit", message: "slow down" }),
       { code: -32603, message: expect.stringContaining("slow down") },
+    ],
+    [
+      "an execution failure with a provider status and retry delay (#65520)",
+      (sessionID) =>
+        failed(sessionID, {
+          type: "provider.rate-limit",
+          message: "Rate limit reached",
+          status: 429,
+          retryAfterMs: 60_000,
+        }),
+      {
+        code: -32603,
+        message: "Internal error: Rate limit reached",
+        data: { service: "session", errorName: "provider.rate-limit", status: 429, retryAfterMs: 60_000 },
+      },
+    ],
+    [
+      "a step failure with a provider status (#65520)",
+      (sessionID) =>
+        durableEvent("session.step.failed", {
+          sessionID,
+          assistantMessageID: "msg_auth",
+          error: { type: "provider.unavailable", message: "Overloaded", status: 503 },
+        }),
+      { code: -32603, data: { service: "session", errorName: "provider.unavailable", status: 503 } },
     ],
   ])("maps %s to an ACP error", async (_, failure, expected) => {
     await using acp = await startSession({

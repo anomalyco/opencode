@@ -35,4 +35,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "سرور اضافه کنید",
   "menu.delete": "حذف",
+  "error.unavailable": "SSH در دسترس نیست",
 }

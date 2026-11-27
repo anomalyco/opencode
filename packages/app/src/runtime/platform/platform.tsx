@@ -48,17 +48,28 @@ type PlatformBase = {
   /** Open a local path in a local app (desktop only) */
   openPath?(path: string, app?: string): Promise<void>
 
-  /** Open a local file URL in its default app (desktop only) */
-  openLocalFile?(url: string): void
-
   /** Reveal a local path in the system file manager; false when the path does not exist (desktop only) */
   revealPath?(path: string): Promise<boolean>
 
   /** Restart the app  */
   restart(): Promise<void>
 
-  /** Send a system notification */
-  notify(title: string, description?: string, onClick?: () => void): Promise<void>
+  /**
+   * Send a system notification. `options.tag` names it so a later one with the same tag replaces it and
+   * `dismissNotification` can take it back; `options.detail` is a second line saying what it is about.
+   */
+  notify(
+    title: string,
+    description?: string,
+    onClick?: () => void,
+    options?: { tag?: string; detail?: string },
+  ): Promise<void>
+
+  /** Take back the system notification sent with this tag, when it is still shown (desktop only) */
+  dismissNotification?(tag: string): void
+
+  /** Draw the user to a window in the background, as a flashing taskbar button on Windows (desktop only) */
+  requestAttention?(): Promise<void>
 
   /** Open a native attachment picker and read selected files sequentially (desktop only) */
   openAttachmentPickerDialog?<Value>(
@@ -72,8 +83,23 @@ type PlatformBase = {
   /** Resolve the native source path for a desktop File. */
   getPathForFile?(file: File): string
 
+  /**
+   * Start a system drag of a local file, so it drops into other apps as the file itself (Windows desktop only).
+   * Resolves once the drag ends; false when none started.
+   */
+  startFileDrag?(path: string): Promise<boolean>
+
+  /**
+   * Observe `opencode://` links opened with the app (desktop only). Links that arrived before the first listener
+   * are delivered to it at once.
+   */
+  onDeepLinks?(listener: (urls: string[]) => void): () => void
+
   /** Observe native drag cancellation that does not reach the renderer event loop. */
   onDragCancel?(callback: () => void): () => void
+
+  /** Observe the machine waking from sleep, when server event streams may be dead without knowing it (desktop only) */
+  onSystemResume?(callback: () => void): () => void
 
   /** Open a native save file dialog and write content to the selected path (desktop only) */
   saveFile?(opts: SaveFilePickerOptions, content: string): Promise<boolean>
@@ -113,6 +139,18 @@ type PlatformBase = {
 
   /** Turn the native spellchecker on or off (desktop only) */
   setSpellcheckEnabled?(enabled: boolean): Promise<void>
+
+  /** Get whether mouse-wheel scrolling animates; read at launch (desktop on Linux only) */
+  getSmoothScrollingEnabled?(): Promise<boolean>
+
+  /** Save whether mouse-wheel scrolling animates; applies after a relaunch (desktop on Linux only) */
+  setSmoothScrollingEnabled?(enabled: boolean): Promise<void>
+
+  /** Get whether the background service keeps running after the app quits (desktop only) */
+  getKeepServiceRunning?(): Promise<boolean>
+
+  /** Keep the background service running after the app quits, or stop it on quit (desktop only) */
+  setKeepServiceRunning?(enabled: boolean): Promise<void>
 
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void

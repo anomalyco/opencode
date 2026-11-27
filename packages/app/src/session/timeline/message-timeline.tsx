@@ -4,6 +4,7 @@ import { abort } from "@opencode/util/abort"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import type { SessionUserActions } from "@opencode/session-ui/actions"
+import { useData } from "@opencode/session-ui/context"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -29,19 +30,20 @@ import { containsDirectory } from "@opencode/util/path"
 import { isWorkspaceDirectory } from "@/workspaces/paths"
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
 import { parseVoiceDelegation } from "./voice-delegation"
+import { inlineQuotes } from "./inline-quotes"
 import { useCommand } from "@/shell/commands/command"
 import { usePluginScoped } from "@/runtime/plugin/commands"
 import {
   SessionAncestorTrail,
   SessionHeaderLayout,
   SessionLocation,
+  SessionHeaderFade,
   SessionTitleHeader,
 } from "../session-identity-header"
 import { SessionHeaderSpacer } from "@/session/header/session-header"
 import { SessionHeaderGap } from "@/session/header/drag-area"
 import { SessionWorkingIndicator } from "@/session/header/session-working-indicator"
-
-type BlockingTask = { type: "shell"; partID: string; id?: string; label?: string; started: number }
+import type { BlockingTask } from "@/session/requests/background"
 
 type SessionBackground = {
   blocking: Accessor<BlockingTask[]>
@@ -83,6 +85,7 @@ type MessageTimelineProps = {
   actions?: SessionUserActions
   scroll: { overflow: boolean; jump: boolean }
   onResumeScroll: (behavior?: ScrollBehavior) => void
+  focusComposer?: () => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
   onScheduleScrollState: (el: HTMLDivElement) => void
   follow: TimelineFollow
@@ -90,6 +93,7 @@ type MessageTimelineProps = {
   onHistoryScroll: () => void
   centered: boolean
   reserveReviewToggle: boolean
+  reviewToggle?: JSX.Element
   onContentResize: () => void
   bottomInset?: number
   setVisibleRef?: (el: HTMLDivElement | undefined) => void
@@ -113,10 +117,13 @@ export function MessageTimeline(props: MessageTimelineProps) {
 }
 
 function MountedTimeline(props: MessageTimelineProps & { next: boolean }) {
+  const data = useData()
+
   const controller = createTimelineController({
     session: props.session,
     active: () => props.active !== false,
     next: props.next,
+    scriptDiffs: () => data.flag("full_codemode"),
   })
 
   const tail = props.follow.following() ? controller.data.projection.rows().at(-1) : undefined
@@ -156,6 +163,8 @@ function MessageTimelineView(
   const sessionID = props.data.sessionID
   const sessionStatus = props.data.status
   const parentID = props.data.parentID
+
+  let titleButton: HTMLButtonElement | undefined
   const parentTitle = props.data.parentTitle
   const childTitle = props.data.childTitle
   const projection = props.data.projection
@@ -194,6 +203,15 @@ function MessageTimelineView(
   const showHeader = createMemo(() => !props.hideHeader && (props.data.showHeader() || workspaceSession()))
   const messageByID = projection.messageByID
 
+  const laneSpacing = createMemo(() => {
+    if (!props.next) return
+    const active = projection.activeMessageID()
+
+    if (!active) return
+
+    return laneGap(projection.rows(), active, messageByID())
+  })
+
   const virtualized = createTimelineVirtualizer({
     active: () => props.active !== false,
     sessionKey: () => `${server.key}/${props.data.sessionID()}`,
@@ -205,9 +223,12 @@ function MessageTimelineView(
     follow: props.follow,
     scroll: () => props.scroll,
     onResumeScroll: props.onResumeScroll,
+    focusComposer: props.focusComposer,
     setScrollRef: props.setScrollRef,
     onContentResize: props.onContentResize,
     bottomInset: () => props.bottomInset ?? 0,
+    // The status line's gap above it (--timeline-gap-* in timeline-next.css) past the old lane's 16px.
+    tailExtra: () => ({ s: 0, m: 4, l: 16 })[laneSpacing() ?? "s"],
     setVisibleRef: props.setVisibleRef,
     onScheduleScrollState: props.onScheduleScrollState,
     onUserScroll: props.onUserScroll,
@@ -246,6 +267,10 @@ function MessageTimelineView(
         )
       }
 
+      // Finished thoughts one after another start closed like one thought, and open as their first does.
+      if (Predicate.isTagged(row, "AssistantPart") && row.group.type === "thought")
+        return !disclosure[row.group.refs[0]!.partID]
+
       if (!Predicate.isTagged(row, "AssistantPart") || row.group.type !== "part") return false
       const message = messageByID().get(row.group.ref.messageID)
 
@@ -280,10 +305,21 @@ function MessageTimelineView(
             id: "session.rename",
             category: language.t("command.category.session"),
             title: language.t("command.session.rename"),
+            description: language.t("command.session.rename.description"),
             keybind: "ctrl+r",
+            slash: "rename",
+            slashArguments: true,
             disabled: !sessionID() || !!parentID() || title().editing,
             skip: (event) => pluginScoped(event.target),
-            onSelect: props.title.edit,
+            onSelect: (source, input) => (source === "slash" ? props.title.set(input ?? "") : props.title.edit()),
+          },
+          {
+            id: "session.title.generate",
+            category: language.t("command.category.session"),
+            title: language.t("command.session.title.generate"),
+            description: language.t("command.session.title.generate.description"),
+            disabled: !sessionID() || !!parentID() || title().editing || props.title.generating(),
+            onSelect: () => props.title.set(""),
           },
           {
             id: "session.delete",
@@ -303,6 +339,7 @@ function MessageTimelineView(
 
   const rowInput = {
     foldUserMessages: settings.general.foldUserMessages,
+    inlineQuotes: () => inlineQuotes,
     sessionID: () => sessionID()!,
     status: sessionStatus,
     projection,
@@ -327,14 +364,16 @@ function MessageTimelineView(
     revealPart: virtualized.revealPart,
   }
 
-  const rowRenderer = props.next
-    ? createNextTimelineRowRenderer(rowInput)
-    : createSessionTimelineRowRenderer({
-        ...rowInput,
-        reasoningMode: props.data.reasoningMode,
-        shellToolDefaultOpen: props.data.shellToolPartsExpanded,
-        editToolDefaultOpen: props.data.editToolPartsExpanded,
-      })
+  const nextRenderer = props.next ? createNextTimelineRowRenderer(rowInput) : undefined
+
+  const rowRenderer =
+    nextRenderer ??
+    createSessionTimelineRowRenderer({
+      ...rowInput,
+      reasoningMode: props.data.reasoningMode,
+      shellToolDefaultOpen: props.data.shellToolPartsExpanded,
+      editToolDefaultOpen: props.data.editToolPartsExpanded,
+    })
 
   const blockingPartID = createMemo(() => {
     const blocking = new Set(props.background.blocking().map((task) => task.partID))
@@ -475,15 +514,6 @@ function MessageTimelineView(
     return projection.rows().some((row) => Predicate.isTagged(row, "Thinking") && row.userMessageID === active)
   })
 
-  const laneSpacing = createMemo(() => {
-    if (!props.next) return
-    const active = projection.activeMessageID()
-
-    if (!active) return
-
-    return laneGap(projection.rows(), active, messageByID())
-  })
-
   const working = () => {
     if (!props.next) return showWorking()
     const status = nextStatus()
@@ -513,7 +543,7 @@ function MessageTimelineView(
   // The lane keeps its height while empty, so Working and the hint come and go without moving the rows around it.
   // The bottom lane also keeps its height while live status moves into the Activity row, so the tail the activity pill
   // floats in never closes and a pinned timeline does not shift when input waits.
-  const activity = (live: () => boolean) => (
+  const activity = (live: () => boolean, inRow = false) => (
     <div
       classList={{
         "min-w-0 w-full max-w-full": true,
@@ -538,6 +568,7 @@ function MessageTimelineView(
         <StatusLane
           class={turnPadding()}
           spacing={laneSpacing()}
+          inRow={inRow}
           label={live() && working() ? language.t(`session.timeline.status.${nextStatus() ?? "working"}`) : undefined}
           collapsed={live() && liveThought() && !working() && !backgroundHintPresence.present()}
         >
@@ -567,13 +598,25 @@ function MessageTimelineView(
             // row: Working hides and returns several times in one step, and each change would move that input 36px.
             const shown = createMemo((was) => was || working() || backgroundHintPresence.present(), false)
 
-            return <Show when={shown()}>{activity(() => true)}</Show>
+            // In the New timeline the row above holds a row's gap. A waiting message brings a turn gap for that;
+            // a queued compaction has none, so this row holds its gap, whether or not live status shows.
+            return (
+              <div data-timeline={nextRenderer && "next"} data-timeline-gap={nextRenderer?.gap(row())}>
+                <Show when={shown()}>{activity(() => true, true)}</Show>
+              </div>
+            )
           }}
         </Show>
       )}
+      headerInset={
+        <Show when={!props.hideHeader}>
+          <div data-slot="session-header-inset" aria-hidden="true" class="h-16" />
+          <SessionHeaderFade />
+        </Show>
+      }
       header={
         <Show when={!props.hideHeader}>
-          <SessionTitleHeader>
+          <SessionTitleHeader separateFade>
             <SessionHeaderLayout
               title={title().editing ? title().draft : childTitle()}
               location={
@@ -627,6 +670,7 @@ function MessageTimelineView(
                         }}
                       />
                       <SessionHeaderSpacer visible={props.reserveReviewToggle} />
+                      {props.reviewToggle}
                     </>
                   )}
                 </Show>
@@ -650,13 +694,19 @@ function MessageTimelineView(
                 <Show
                   when={title().editing}
                   fallback={
-                    <h1
-                      data-slot="session-title-child"
-                      class="truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base w-fit rounded-[6px] px-1 py-1.5 hover:bg-v2-overlay-simple-overlay-hover"
-                      classList={{ "max-w-[45%] shrink-0": !!parentID() }}
-                      onClick={props.title.edit}
-                    >
-                      {childTitle()}
+                    <h1 class="session-title-rename w-fit text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base">
+                      <button
+                        ref={titleButton}
+                        type="button"
+                        dir="auto"
+                        data-slot="session-title-child"
+                        class="truncate hover:bg-v2-overlay-simple-overlay-hover"
+                        onClick={props.title.edit}
+                      >
+                        <Show when={props.title.generating()} fallback={childTitle()}>
+                          <TextShimmer text={childTitle() ?? ""} active />
+                        </Show>
+                      </button>
                     </h1>
                   }
                 >
@@ -687,6 +737,7 @@ function MessageTimelineView(
                       if (event.key === "Escape") {
                         event.preventDefault()
                         props.title.cancel()
+                        titleButton?.focus({ preventScroll: true })
                       }
                     }}
                     onBlur={props.title.submit}

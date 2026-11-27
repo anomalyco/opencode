@@ -306,9 +306,9 @@ export const content = {
       body: "Deixe agentes usarem seu navegador de verdade.",
       title: "OpenCode | Browse, seu navegador real para agentes de programação",
       description:
-        "Browse deixa o OpenCode e outros clientes MCP usarem seu navegador de verdade. Agentes controlam abas em segundo plano com Playwright e devolvem logins e 2FA a você.",
+        "Browse deixa o OpenCode e outros clientes MCP usarem seu navegador de verdade. Agentes leem, clicam, digitam, tiram capturas, gravam abas e devolvem logins e 2FA a você.",
       intro:
-        "Um servidor MCP e uma extensão do Chromium que deixam seus agentes usarem seu navegador de verdade, com suas abas, seus logins e suas extensões. Eles abrem e controlam abas com Playwright, tiram capturas de tela e gravam a tela, em abas de segundo plano agrupadas fora do seu caminho. Quando é a sua vez, para um login, um código 2FA ou um pagamento, eles devolvem a aba a você e continuam quando você clica em Continue.",
+        "Um servidor MCP e uma extensão do Chromium que deixam seus agentes usarem seu navegador de verdade, com suas abas, seus logins e suas extensões. Eles abrem abas em segundo plano, agrupadas fora do seu caminho, e leem páginas, clicam, digitam, tiram capturas de tela e gravam abas. Quando é a sua vez, para um login, um código 2FA ou um pagamento, eles devolvem a aba a você e continuam quando você clica em Continue.",
       features: {
         "your-real-browser": {
           title: "Seu navegador real",
@@ -328,7 +328,7 @@ export const content = {
         },
         "record-and-capture": {
           title: "Grave e capture",
-          body: "Capturas de tela, gravações de tela e tráfego de rede em HAR.",
+          body: "Capturas de tela, gravações de abas e tráfego de rede.",
         },
         "any-mcp-client": {
           title: "Todo cliente MCP",
@@ -338,9 +338,9 @@ export const content = {
           title: "Todos os seus logins",
           body: "Os agentes usam os sites em que você já está conectado. Sem chaves, sem configuração.",
         },
-        allowlists: {
-          title: "Lista de sites",
-          body: "Limite as abas de uma sessão aos sites que você escolher.",
+        "allowed-sites": {
+          title: "Sites permitidos",
+          body: "Mantenha a aba de um agente nos sites que você indicar.",
         },
       },
       install:
@@ -508,7 +508,7 @@ export const content = {
     },
     colors: {
       title: "Cores",
-      body: "O logo e o logotipo usam uma tinta em três opacidades, com uma tinta mais clara para fundos escuros. Os valores abaixo são essa tinta sobre branco ou #0B0B0B, como os arquivos padrão a mostram. Clique em um valor para copiá-lo.",
+      body: "O logo e o logotipo usam uma tinta em três opacidades, com uma tinta mais clara para fundos escuros. Os valores abaixo são as cores nos arquivos padrão. Use-as apenas no logo e no logotipo, não em outros textos ou fundos. Clique em um valor para copiá-lo.",
       palettes: {
         light: {
           name: "Claro",
@@ -680,7 +680,7 @@ export const content = {
       badges: {
         body: "Coloque um selo no seu README, docs ou site com link para opencode.ai. Escolha o arquivo claro ou escuro para o seu fundo (o HTML alterna sozinho) e não mude as cores nem o texto.",
         sizes: "Todo estilo vem em 20, 32 e 44px (Shields só em 20px), em SVG e em PNG a 2×.",
-        mono: "Cada arquivo também vem com texto em OpenTUI Mono. Adicione -mono antes da extensão, como em opencode-works-with-a-light-20-mono.svg, ou -mono-caps para OpenTUI Mono em maiúsculas.",
+        mono: "Cada arquivo também vem com texto em OpenMono. Adicione -mono antes da extensão, como em opencode-works-with-a-light-20-mono.svg, ou -mono-caps para OpenMono em maiúsculas.",
         groups: {
           "works-with": {
             title: "Funciona com",

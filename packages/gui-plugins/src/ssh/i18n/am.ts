@@ -33,4 +33,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "አገልጋይ አክል",
   "menu.delete": "ሰርዝ",
+  "error.unavailable": "SSH አይገኝም",
 }

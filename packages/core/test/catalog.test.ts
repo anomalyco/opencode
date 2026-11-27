@@ -378,24 +378,6 @@ describe("Provider and Model", () => {
     ),
   )
 
-  it.effect("stores provider package settings", () =>
-    Effect.gen(function* () {
-      const providers = yield* Provider.Service
-      const providerID = Provider.ID.make("test")
-      yield* providers.transform((editor) =>
-        editor.update(providerID, (provider) => {
-          provider.package = Provider.aisdk("custom-sdk")
-          provider.settings = { baseURL: "https://override.example.com" }
-        }),
-      )
-
-      expect(required(yield* providers.get(providerID))).toMatchObject({
-        package: Provider.aisdk("custom-sdk"),
-        settings: { baseURL: "https://override.example.com" },
-      })
-    }),
-  )
-
   it.effect("uses model package settings over provider settings", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service

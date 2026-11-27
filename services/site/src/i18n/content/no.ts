@@ -215,9 +215,9 @@ export const content = {
       body: "La agenter bruke den ekte nettleseren din.",
       title: "OpenCode | Browse, den ekte nettleseren din for kodeagenter",
       description:
-        "Browse lar OpenCode og andre MCP-klienter bruke den ekte nettleseren din. Agenter styrer faner i bakgrunnen med Playwright og gir innlogging og 2FA tilbake til deg.",
+        "Browse lar OpenCode og andre MCP-klienter bruke den ekte nettleseren din. Agenter leser, klikker, skriver, tar skjermbilder, tar opp faner og gir innlogging og 2FA tilbake til deg.",
       intro:
-        "En MCP-server og en Chromium-utvidelse som lar agentene dine bruke den ekte nettleseren din, med fanene, innloggingene og utvidelsene dine. De åpner og styrer faner med Playwright, tar skjermbilder og tar opp skjermen, i bakgrunnsfaner som er gruppert og ute av veien. Når det er din tur, for en innlogging, en 2FA-forespørsel eller en betaling, gir de fanen tilbake til deg og fortsetter når du klikker på Continue.",
+        "En MCP-server og en Chromium-utvidelse som lar agentene dine bruke den ekte nettleseren din, med fanene, innloggingene og utvidelsene dine. De åpner faner i bakgrunnen, gruppert og ute av veien, og leser sider, klikker, skriver, tar skjermbilder og tar opp faner. Når det er din tur, for en innlogging, en 2FA-forespørsel eller en betaling, gir de fanen tilbake til deg og fortsetter når du klikker på Continue.",
       features: {
         "your-real-browser": {
           title: "Din ekte nettleser",
@@ -231,7 +231,7 @@ export const content = {
         },
         "record-and-capture": {
           title: "Ta opp og lagre",
-          body: "Skjermbilder, skjermopptak og nettverkstrafikk som HAR.",
+          body: "Skjermbilder, opptak av faner og nettverkstrafikk.",
         },
         "any-mcp-client": {
           title: "Alle MCP-klienter",
@@ -241,7 +241,7 @@ export const content = {
           title: "Alle innloggingene dine",
           body: "Agenter bruker nettstedene du allerede er logget inn på. Ingen nøkler, ingen oppsett.",
         },
-        allowlists: { title: "Hvitelister", body: "Begrens fanene til en sesjon til nettstedene du oppgir." },
+        "allowed-sites": { title: "Tillatte nettsteder", body: "Hold fanen til en agent på nettstedene du oppgir." },
       },
       install:
         "Installer [Chrome-utvidelsen] først. Den guider deg gjennom resten av stegene. Vil du installere CLI-en direkte (det skal du ikke trenge), bruk en av disse.",
@@ -324,7 +324,7 @@ export const content = {
     },
     colors: {
       title: "Farger",
-      body: "Logoen og ordmerket bruker én farge i tre opasiteter, med en lysere farge for mørke bakgrunner. Verdiene under er fargen over hvitt eller #0B0B0B, slik standardfilene viser den. Klikk på en verdi for å kopiere den.",
+      body: "Logoen og ordmerket bruker én farge i tre opasiteter, med en lysere farge for mørke bakgrunner. Verdiene under er fargene i standardfilene. Bruk dem bare til logoen og ordmerket, ikke til annen tekst eller bakgrunner. Klikk på en verdi for å kopiere den.",
       palettes: {
         light: {
           name: "Lys",
@@ -412,7 +412,7 @@ export const content = {
       badges: {
         body: "Sett et merke i README-en, dokumentasjonen eller på nettstedet ditt, og lenk det til opencode.ai. Velg den lyse eller mørke filen for bakgrunnen din (HTML-en bytter av seg selv), og ikke endre fargene eller teksten.",
         sizes: "Alle stiler finnes i 20, 32 og 44px (Shields bare i 20px), som SVG og som PNG i 2×.",
-        mono: "Hver fil finnes også med tekst i OpenTUI Mono. Legg til -mono før filtypen, som i opencode-works-with-a-light-20-mono.svg, eller -mono-caps for OpenTUI Mono med store bokstaver.",
+        mono: "Hver fil finnes også med tekst i OpenMono. Legg til -mono før filtypen, som i opencode-works-with-a-light-20-mono.svg, eller -mono-caps for OpenMono med store bokstaver.",
         groups: {
           "works-with": {
             title: "Virker med",

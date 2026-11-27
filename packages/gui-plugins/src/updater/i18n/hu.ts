@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "Következő",
   "releaseNotes.action.hideFuture": "Ne mutasd ezeket a jövőben",
   "releaseNotes.media.alt": "Kiadás előnézete",
+  "action.reload": "Újratöltés a frissítéshez",
+  "action.reloading": "Újratöltés…",
+  "web.ready.title": "A frissítés kész",
+  "web.ready.message": "Az OpenCode új verziója készen áll. Töltse újra, hogy minden megnyitott ablakban használhassa.",
+  "web.reload": "Újratöltés",
+  "web.reset.title": "Újratöltés a szerverről",
+  "web.reset.description": "Az alkalmazás mentett példányának törlése és a szerver aktuális verziójának betöltése",
+  "web.reset.action": "Újratöltés a szerverről",
 }

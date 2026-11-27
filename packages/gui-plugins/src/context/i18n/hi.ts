@@ -5,7 +5,6 @@ export default {
   "usage.usage": "उपयोग",
   "usage.cost": "लागत",
   "usage.view": "कॉन्टेक्स्ट उपयोग देखें",
-  "systemPrompt.title": "सिस्टम प्रॉम्प्ट",
   "rawMessages.title": "मूल संदेश",
   "export.session": "सेशन निर्यात करें",
   "stats.session": "सेशन",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "सेशन को {{filename}} में सहेजा गया",
   "export.failed.title": "सेशन निर्यात करने में विफल",
   "export.failed.description": "सेशन निर्यात करते समय एक त्रुटि हुई",
+  "usage.toggle": "सेशन कॉन्टेक्स्ट टॉगल करें",
 }

@@ -1,0 +1,215 @@
+import type { JsonValue } from "@opencode/client/promise"
+import { describe, expect, test } from "bun:test"
+import { storyTool } from "../storybook/current-session-scenarios"
+import { factsOf, placeFactOf, sameFileFact, summarize, type FileFact } from "./facts"
+import { categoryOf } from "./place"
+
+describe("timeline facts", () => {
+  test("names facts by stable ids", () => {
+    const part = { ...storyTool("p1", "edit", "completed", { path: "/repo/a.ts" }), messageID: "msg_1" }
+
+    expect(factsOf([part]).map((fact) => fact.id)).toEqual(["msg_1:p1", "msg_1:p1:file:/repo/a.ts"])
+  })
+
+  test("names calls by their current tool and mode", () => {
+    const facts = factsOf([
+      storyTool("b1", "bash", "completed", { command: "ls" }),
+      storyTool("t1", "task", "running", { description: "look" }),
+      storyTool("p1", "apply_patch", "completed", {}, { metadata: { files: [{ file: "/repo/z.ts", additions: 2 }] } }),
+      storyTool("x1", "custom", "error", {}),
+    ])
+
+    expect(
+      facts.map((fact) => (fact.kind === "call" ? [fact.name, fact.mode, fact.background, fact.failed] : fact.kind)),
+    ).toEqual([
+      ["shell", "run", false, false],
+      ["subagent", "tool", true, false],
+      ["patch", "edit", false, false],
+      "file",
+      ["custom", "tool", false, true],
+    ])
+    expect(facts.map(categoryOf)).toEqual(["shell", "subagents", "edit", "edit", "tools"])
+    expect(facts[3]).toMatchObject({ path: "/repo/z.ts", additions: 2, by: "p1", via: "direct" })
+  })
+
+  test("counts each file and read once", () => {
+    const summary = summarize(
+      factsOf([
+        storyTool("r1", "read", "completed", { path: "/repo/a.ts" }),
+        storyTool("r2", "read", "completed", { path: "/repo/a.ts", offset: 4 }),
+        storyTool("e1", "edit", "completed", { path: "/repo/a.ts" }),
+        storyTool("e2", "write", "completed", { path: "/repo/a.ts" }),
+        storyTool("k1", "skill", "completed", { name: "review" }),
+        { type: "reasoning", id: "t1", text: "hmm" },
+      ]),
+    )
+
+    expect(summary).toMatchObject({
+      calls: 5,
+      reads: 1,
+      readFiles: ["/repo/a.ts"],
+      files: ["/repo/a.ts"],
+      skills: 1,
+      thoughts: 1,
+      modes: { explore: 3, edit: 2, run: 0, tool: 0 },
+    })
+  })
+
+  test("counts a script's steps in place of the script with scriptSteps", () => {
+    const step = (tool: string, input: Record<string, JsonValue>) => ({ tool, status: "completed", input })
+
+    const script = storyTool(
+      "x1",
+      "execute",
+      "completed",
+      {},
+      {
+        metadata: {
+          toolCalls: [
+            step("read", { path: "/repo/a.ts" }),
+            step("read", { path: "/repo/b.ts" }),
+            step("shell", { command: "ls" }),
+            step("edit", { path: "/repo/c.ts" }),
+            step("Bun", { method: "write", path: "/repo/c.ts" }),
+            step("Bun", { method: "file", path: "/repo/a.ts" }),
+            step("Bun", { method: "other", path: "/repo/d.ts" }),
+          ],
+          files: [{ file: "/repo/c.ts", additions: 1 }],
+        },
+      },
+    )
+
+    const facts = factsOf([script], true, true)
+
+    expect(facts.flatMap((fact) => (fact.kind === "call" ? [[fact.tool, fact.mode]] : []))).toEqual([
+      ["read", "explore"],
+      ["read", "explore"],
+      ["shell", "run"],
+      ["edit", "edit"],
+      ["edit", "edit"],
+      ["read", "explore"],
+    ])
+    expect(summarize(facts)).toMatchObject({
+      calls: 6,
+      reads: 2,
+      commands: 1,
+      files: ["/repo/c.ts"],
+      modes: { explore: 3, edit: 2, run: 1, tool: 0 },
+    })
+    expect(summarize(factsOf([script], true, false))).toMatchObject({
+      calls: 1,
+      reads: 0,
+      commands: 1,
+      files: ["/repo/c.ts"],
+      toolNames: [{ tool: "execute" }],
+    })
+
+    const direct = [
+      storyTool("r1", "read", "completed", { path: "/repo/a.ts" }),
+      storyTool("e1", "edit", "completed", { path: "/repo/c.ts" }),
+    ]
+
+    expect(factsOf(direct, true, true)).toEqual(factsOf(direct))
+  })
+
+  test("counts live Bun steps as recorded", () => {
+    const script = storyTool(
+      "x1",
+      "execute",
+      "completed",
+      {},
+      {
+        metadata: {
+          toolCalls: [
+            { tool: "read", status: "completed", input: { path: "/repo/a.ts" } },
+            { tool: "write", status: "completed", input: { path: "/repo/b.ts" } },
+            { tool: "glob", status: "completed", input: { pattern: "src/**/*.ts" } },
+          ],
+          files: [{ file: "/repo/b.ts" }],
+        },
+      },
+    )
+
+    expect(summarize(factsOf([script], true, true))).toMatchObject({
+      calls: 3,
+      reads: 1,
+      searches: 1,
+      commands: 0,
+      files: ["/repo/b.ts"],
+      modes: { explore: 2, edit: 1, run: 0, tool: 0 },
+    })
+  })
+
+  test("follows a part updated in place", () => {
+    const part = storyTool("s1", "shell", "running", { command: "false" })
+    const before = summarize(factsOf([part]))
+    Object.assign(part, storyTool("s1", "shell", "error", { command: "false" }))
+
+    expect(before.failed).toBe(0)
+    expect(summarize(factsOf([part])).failed).toBe(1)
+  })
+
+  test("reads a script's calls, a search's matches and a provider each on its own", () => {
+    const [script] = factsOf([
+      storyTool(
+        "x1",
+        "execute",
+        "completed",
+        { code: "1" },
+        {
+          metadata: {
+            toolCalls: [
+              { tool: "read", status: "completed" },
+              { tool: "edit", status: "completed" },
+            ],
+            provider: "exa",
+            matches: 3,
+          },
+        },
+      ),
+    ])
+
+    expect(script).toMatchObject({ kind: "call", toolCalls: 2, provider: "exa", matches: 3 })
+  })
+
+  const liveFiles = [
+    { file: "/repo/a.ts", status: "modified", additions: 1, deletions: 0, patch: "@@ -1 +1,2 @@\n a\n+b\n" },
+  ]
+
+  const scriptFiles = (status: "running" | "error" | "completed", metadata: Record<string, JsonValue>) =>
+    factsOf([storyTool("x", "execute", status, { code: "1" }, { metadata })]).filter(
+      (fact): fact is FileFact => fact.kind === "file",
+    )
+
+  test("a stopped or declined script keeps the changes it made, though it could have moved to the background", () => {
+    expect(scriptFiles("error", { background: true, files: liveFiles }).map((fact) => fact.path)).toEqual([
+      "/repo/a.ts",
+    ])
+    expect(scriptFiles("running", { background: true, files: liveFiles })).toHaveLength(1)
+    expect(scriptFiles("completed", { background: true, files: liveFiles })).toEqual([])
+    expect(scriptFiles("error", { jobID: "cm_1", files: liveFiles })).toEqual([])
+  })
+
+  test("a progress report that only adds calls reads each change the same, so its card stays", () => {
+    const [before] = scriptFiles("running", { toolCalls: [], files: liveFiles })
+    const [after] = scriptFiles("running", { toolCalls: [{ tool: "shell", status: "running" }], files: liveFiles })
+
+    expect(before).not.toBe(after)
+    expect(sameFileFact(before!, after!)).toBe(true)
+    expect(sameFileFact(before!, scriptFiles("completed", { files: liveFiles })[0]!)).toBe(false)
+  })
+
+  test("a script's changes show and count only with full_codemode, and a direct edit's always do", () => {
+    const script = storyTool("s1", "execute", "completed", { code: "…" }, { metadata: { files: liveFiles } })
+    const edit = storyTool("e1", "edit", "completed", { path: "/repo/b.ts" })
+    const kinds = (facts: ReturnType<typeof factsOf>) => facts.map((fact) => fact.kind)
+
+    expect(kinds(factsOf([script, edit], true))).toEqual(["call", "file", "call", "file"])
+    expect(summarize(factsOf([script, edit], true)).files).toEqual(["/repo/a.ts", "/repo/b.ts"])
+    expect(placeFactOf(script, script.id, true).changes).toBe(1)
+
+    expect(kinds(factsOf([script, edit], false))).toEqual(["call", "call", "file"])
+    expect(summarize(factsOf([script, edit], false)).files).toEqual(["/repo/b.ts"])
+    expect(placeFactOf(script, script.id, false).changes).toBe(0)
+  })
+})

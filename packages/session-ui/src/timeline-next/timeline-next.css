@@ -37,11 +37,21 @@
   }
 }
 
-/* A stretch of thoughts alone lists them without a group around them. */
-[data-timeline="next"] [data-component="thought-rows"] {
+/* Thoughts one after another read as one, a paragraph apart. */
+[data-timeline="next"] [data-slot="reasoning-part-run"] {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+}
+
+/* A script's changes, each its own card, keep the spacing of a direct patch's files. */
+[data-timeline="next"] [data-script-change="patch"] + [data-script-change="patch"] {
+  margin-top: var(--timeline-gap-s);
+}
+
+/* A script's Output row after its last change sits as far below it as its changes sit from each other. */
+[data-timeline="next"] [data-script-changes] > [data-script-output] {
+  margin-top: var(--timeline-gap-s);
 }
 
 /* Each changed file is its own accordion, rather than one stacked group, as far from the next
@@ -76,106 +86,12 @@
   }
 }
 
-/* Cut output shows its last lines, fading out at the top where it is cut. */
-[data-timeline="next"] [data-component="clamped-content"] {
-  &[data-clamped] {
-    max-height: var(--clamped-content-height, 96px);
-    overflow: hidden;
-  }
-
-  /* The fade is the code's own background, so the cut lines fade into the block rather than through it. */
-  &[data-overflow] {
-    position: relative;
-
-    &::after {
-      content: "";
-      position: absolute;
-      inset-inline: 0;
-      top: 0;
-      height: 20px;
-      background: linear-gradient(var(--clamped-content-fade), transparent);
-      pointer-events: none;
-    }
-  }
-}
-
-/* A command the user ran is its command and output, always showing, with the output cut to four lines. */
-[data-timeline="next"] [data-component="shell-tool"] {
-  [data-slot="shell-tool-writing"] {
-    display: block;
-    font-size: 13px;
-    line-height: var(--line-height-compact);
-    color: var(--v2-text-text-muted);
-  }
-
-  [data-component="bash-output"][data-clamp] {
-    [data-slot="bash-scroll"] {
-      max-height: none;
-    }
-
-    [data-component="clamped-content"] {
-      grid-area: 1 / 1;
-      /* The 12px top padding and four 20px lines of output, as a plain length the clamp can read back. */
-      --clamped-content-height: 92px;
-      --clamped-content-fade: var(--bash-section-background);
-    }
-  }
-}
-
-/* The output's toggle sits at the end of the command line, so neither block's text is a click target. */
-[data-timeline="next"] [data-component="shell-tool"] [data-slot="bash-command"] {
-  /* How the command ended and the output's toggle, above the command, which shares their grid cell and comes later,
-     so paints over it. The inset matches the file header's toggle. */
-  [data-slot="bash-actions"] {
-    position: relative;
-    z-index: 1;
-    grid-area: 1 / 1;
-    justify-self: end;
-    align-self: center;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-inline-end: 8px;
-  }
-
-  [data-slot="bash-outcome"] {
-    font-family: var(--v2-font-family-sans);
-    font-size: 13px;
-    font-weight: 440;
-    line-height: var(--line-height-compact);
-    letter-spacing: -0.04px;
-    white-space: nowrap;
-    color: var(--v2-text-text-muted);
-
-    &[data-tone="danger"] {
-      color: var(--v2-state-fg-danger);
-    }
-  }
-
-  [data-slot="bash-toggle-button"] {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: inherit;
-    cursor: default;
-
-    &:focus-visible {
-      outline: 1px solid var(--v2-text-text-accent);
-      outline-offset: 2px;
-      border-radius: 2px;
-    }
-  }
-
-  &:has([data-slot="bash-toggle"]) [data-slot="bash-pre"] {
-    padding-inline-end: 40px;
-  }
-
-  &:has([data-slot="bash-outcome"]) [data-slot="bash-pre"] {
-    padding-inline-end: 120px;
-  }
+/* A command the user ran is its command and output, always showing, as an agent's command shows once opened. */
+[data-timeline="next"] [data-component="shell-tool"] [data-slot="shell-tool-writing"] {
+  display: block;
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+  color: var(--v2-text-text-muted);
 }
 
 /* A file's change counts follow its name, showing only the side that changed; its change bars are quieter; and its
@@ -323,13 +239,20 @@
 }
 
 /* An event row opens to the subagents and shells it counts, each read like a nested row and leading to its session or
-   to the call that ran it. */
+   to the call that ran it. An opened activity group lists the ones it started or heard back from the same way. */
 [data-timeline="next"] [data-component="timeline-event-list"] {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding-top: 4px;
+}
 
+[data-timeline="next"]
+  :is(
+    [data-component="timeline-event-list"],
+    [data-slot="context-tool-group-item"],
+    [data-component="timeline-subagent"]
+  ) {
   [data-slot="timeline-event-item"] {
     display: flex;
     align-items: center;
@@ -348,16 +271,10 @@
       pointer-events: none;
     }
 
-    &:hover [data-slot="timeline-event-item-title"] {
-      text-decoration: underline;
-      text-decoration-color: color-mix(in oklch, currentColor 40%, transparent);
-      text-underline-offset: 2px;
-    }
-
     &:focus-visible {
-      outline: 1px solid var(--v2-text-text-accent);
+      outline: 2px solid var(--v2-border-border-focus);
       outline-offset: 2px;
-      border-radius: 2px;
+      border-radius: 4px;
     }
   }
 
@@ -365,6 +282,7 @@
   [data-slot="timeline-event-item-name"] {
     flex-shrink: 0;
     color: var(--v2-text-text-muted);
+    white-space: nowrap;
     text-transform: capitalize;
   }
 
@@ -376,14 +294,56 @@
     color: var(--v2-text-text-base);
   }
 
-  [data-component="tag"] {
+  [data-slot="timeline-event-item"] [data-component="tag"] {
     flex-shrink: 0;
+  }
+
+  /* A subagent's status: a bar and word, in the state's color, say what happened, so no status word follows the
+     title. Updated is info blue softened toward muted; the others use their state colors as they are. */
+  [data-slot="timeline-event-item-status"] {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    font-weight: 530;
+    white-space: nowrap;
+
+    &::before {
+      content: "";
+      flex-shrink: 0;
+      width: 3px;
+      height: 10px;
+      border-radius: 999px;
+      background: currentColor;
+    }
+
+    &[data-state="started"] {
+      color: var(--v2-text-text-faint);
+    }
+
+    &[data-state="updated"] {
+      color: color-mix(in srgb, var(--v2-state-fg-info) 70%, var(--v2-text-text-muted));
+    }
+
+    &[data-state="completed"] {
+      color: var(--v2-state-fg-success);
+    }
+
+    &[data-state="failed"] {
+      color: var(--v2-state-fg-danger);
+    }
+
+    &[data-state="stopped"] {
+      color: var(--v2-text-text-muted);
+    }
   }
 }
 
 /* Rows are spaced by block: rows that continue a block sit the small gap below the one above, and a
    row starting a block (the user's message, the agent's work in reply, an interruption) sits the large gap below.
-   The gap is the frame's only space above its content; rows add none of their own. */
+   The row directly above holds the gap, below its content: the turn gap before a turn's first row, else the row
+   before. It is a frame's only space; rows add none of their own. A gap above a row's content would grow that row
+   when the row before it loads, and move the rows on screen. */
 [data-timeline="next"] {
   --timeline-gap-s: 16px;
   --timeline-gap-m: 20px;
@@ -391,40 +351,30 @@
 }
 
 [data-timeline="next"][data-timeline-gap="s"] {
-  padding-top: var(--timeline-gap-s);
+  padding-bottom: var(--timeline-gap-s);
 }
 
 [data-timeline="next"][data-timeline-gap="m"] {
-  padding-top: var(--timeline-gap-m);
+  padding-bottom: var(--timeline-gap-m);
 }
 
 [data-timeline="next"][data-timeline-gap="l"] {
-  padding-top: var(--timeline-gap-l);
-}
-
-/* The user's message actions show in the large gap below it rather than adding to it, above the row that follows so
-   they stay reachable. */
-[data-timeline="next"][data-timeline-row="UserMessage"] {
-  position: relative;
-  z-index: 1;
-
-  [data-component="user-message"] {
-    position: relative;
-  }
-
-  [data-slot="user-message-copy-wrapper"] {
-    position: absolute;
-    inset-inline: 0;
-    top: 100%;
-    height: 20px;
-    margin-top: 8px;
-  }
+  padding-bottom: var(--timeline-gap-l);
 }
 
 /* Rows are as tall as their text, so the gaps between them are the gaps that show. A row's 28px click area stays: 6px of
    padding above and below, taken back by margins of the same size, so neighbouring click areas meet without overlapping.
    An open row's header ends the small gap above its first nested row. */
 [data-timeline="next"] {
+  [data-component="timeline-subagent"] {
+    display: grid;
+
+    > [data-slot="timeline-event-item"] {
+      gap: 8px;
+    }
+  }
+
+  [data-component="timeline-subagent"] > [data-slot="timeline-event-item"],
   [data-component="collapsible"].tool-collapsible > [data-slot="collapsible-trigger"],
   [data-component="card"][data-kind="tool-error-card"]
     > [data-component="collapsible"]
@@ -436,7 +386,7 @@
 
   [data-component="collapsed-tool-group"] > [data-component="collapsible"].tool-collapsible {
     --tool-content-gap: var(--timeline-gap-s);
-    gap: 0;
+    row-gap: 0;
 
     > [data-slot="collapsible-trigger"] {
       height: calc(var(--line-height-compact) + 12px);
@@ -488,15 +438,10 @@
     margin-top: 0;
   }
 
-  /* The agent's last words in a turn keep their actions in the large gap below them, as the user's message does. */
-  [data-component="text-part"]:has(> [data-slot="text-part-copy-wrapper"]) {
-    position: relative;
-
-    > [data-slot="text-part-copy-wrapper"] {
-      position: absolute;
-      inset-inline: 0;
-      top: 100%;
-    }
+  /* A reply's footer sits below the line box, as in the current timeline, so its last line keeps the bottom half-leading. */
+  [data-component="text-part"]:has(> [data-slot="text-part-footer"], > [data-slot="text-part-copy-wrapper"])
+    [data-component="markdown"] {
+    text-box: trim-start text;
   }
 
   [data-component="context-tool-group-list"],
@@ -505,7 +450,15 @@
     padding-top: 0;
   }
 
+  /* An opened group spaces its items as the timeline spaces blocks; a script's changes stay by the script. */
+  [data-component="context-tool-group-list"]
+    > [data-slot="context-tool-group-item"]
+    + [data-slot="context-tool-group-item"]:not([data-script-change]) {
+    margin-top: calc(var(--timeline-gap-m) - var(--timeline-gap-s));
+  }
+
   [data-component="context-tool-group-list"] [data-slot="context-tool-group-item"],
+  [data-component="context-tool-group-list"] [data-slot="timeline-event-item"],
   [data-component="timeline-event-list"] [data-slot="timeline-event-item"] {
     min-height: var(--line-height-compact);
   }
@@ -522,7 +475,7 @@
 
   /* An open row's nested content starts the small gap below its header. */
   [data-component="collapsible"].tool-collapsible:has(> [data-slot="collapsible-content"]) {
-    gap: 0;
+    row-gap: 0;
 
     > [data-slot="collapsible-trigger"][aria-expanded="true"] {
       margin-bottom: 0;
@@ -530,11 +483,71 @@
       height: calc(var(--line-height-compact) + 6px + var(--timeline-gap-s));
     }
   }
-}
 
-[data-timeline="next"][data-timeline-row="AssistantPart"]:has([data-slot="text-part-copy-wrapper"]) {
-  position: relative;
-  z-index: 1;
+  /* An open group's header stands as far above its first item as blocks stand apart (after the rule above, which
+     would give it the small gap). */
+  [data-component="collapsed-tool-group"]
+    > [data-component="collapsible"].tool-collapsible
+    > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+    height: calc(var(--line-height-compact) + 6px + var(--timeline-gap-m));
+    padding-bottom: var(--timeline-gap-m);
+  }
+
+  /* A script's static title's text sits above its first call's text as far as one call's text sits above the next:
+     the calls' 6px gap, plus half of how much taller a call's line is than the title's. The title sits on its own line,
+     not the taller line of the row around it. */
+  [data-component="collapsible"].tool-collapsible:has(
+      > [data-slot="collapsible-content"] > [data-component="execute-tool-calls"][data-execute-layout="flat"]
+    )
+    > [data-slot="collapsible-trigger"][data-locked] {
+    --execute-title-gap: calc(6px + (var(--line-height-base) - var(--line-height-compact)) / 2);
+    margin-bottom: 0;
+    padding-bottom: var(--execute-title-gap);
+    height: calc(var(--line-height-compact) + 6px + var(--execute-title-gap));
+
+    [data-slot="basic-tool-tool-info"] {
+      line-height: var(--line-height-compact);
+    }
+  }
+
+  /* Answers are spaced by the row gaps and trimmed to their text, as the agent's text is. */
+  [data-component="question-answers"] {
+    gap: var(--timeline-gap-s);
+    padding: 0;
+    line-height: var(--line-height-base);
+
+    [data-slot="question-answer-item"] {
+      gap: 4px;
+    }
+
+    [data-slot="question-text"],
+    [data-slot="answer-text"] {
+      text-box: trim-both text;
+    }
+  }
+
+  /* A row's action is as tall as its line, so its button never makes the row taller. It sits at the top, on the line
+     of text, because an open header also holds the gap below it. */
+  [data-slot="basic-tool-action"] {
+    align-self: flex-start;
+    height: var(--line-height-compact);
+
+    [data-component="icon-button-v2"] {
+      width: 20px;
+      height: 20px;
+    }
+  }
+
+  /* The quiet compaction draws the same line as the other dividers. */
+  [data-component="session-compaction-message"][data-quiet] {
+    [data-slot="session-compaction-line"]::before {
+      background: var(--v2-border-border-base);
+    }
+
+    [data-slot="session-compaction-summary"] {
+      padding-bottom: 0;
+    }
+  }
 }
 
 /* The live thought sits where the row it settles into will, which its frame spaces like any other row. */
@@ -570,9 +583,19 @@
     --timeline-status-space: var(--timeline-gap-l);
   }
 
+  /* The background hint's 24px button is centred on the 16px line and reaches 4px past it. A row clips at its own
+     height, so in a row the lane keeps that room below the line, whether or not the hint shows, so the input waiting
+     below does not move when it comes and goes. */
+  &[data-in-row] {
+    --timeline-status-hint-overflow: calc((24px - var(--line-height-compact)) / 2);
+    height: calc(var(--line-height-compact) + var(--timeline-status-space) + var(--timeline-status-hint-overflow));
+    padding-bottom: var(--timeline-status-hint-overflow);
+  }
+
   &[data-collapsed] {
     height: 0;
     padding-top: 0;
+    padding-bottom: 0;
     overflow: hidden;
   }
 
@@ -637,16 +660,26 @@
   overflow: clip visible;
 }
 
-/* Keyboard focus marks the row's line of text, rounded, inside its click area. The trigger itself also holds that
-   area and, open, the gap below the row, so filling it would paint a band across the gap. */
+/* Keyboard focus rings the row's line of text, rounded, inside its click area. The trigger itself also holds that area
+   and, open, the gap below the row, so a ring on it would take in the gap. */
 [data-timeline="next"] [data-slot="collapsible-trigger"]:focus-visible {
-  background-color: transparent;
+  outline: none;
 
   > [data-component="tool-trigger"] {
     border-radius: 4px;
-    background-color: var(--surface-raised-base-hover);
-    box-shadow: 0 0 0 4px var(--surface-raised-base-hover);
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: 2px;
   }
+}
+
+/* An open group's sticky header ends the gap above its first row and would paint over that row's ring. Its last 4px,
+   the width of a ring outside its row, stay unpainted, so the ring shows there and a row scrolling under the header
+   still passes beneath it. */
+[data-timeline="next"]
+  [data-component="collapsed-tool-group"]
+  > [data-component="collapsible"].tool-collapsible
+  > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+  clip-path: inset(-8px -8px min(4px, var(--tool-content-gap)) -8px);
 }
 
 /* A command set in its monospace face sits on the line's top rather than its baseline, so the row stays one line tall
