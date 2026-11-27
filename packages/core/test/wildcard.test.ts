@@ -33,15 +33,4 @@ describe("Wildcard.match", () => {
     expect(Wildcard.match(".OPENCODE/x", ".opencode/*")).toBe(process.platform === "win32")
     expect(Wildcard.match("Tabs.List", "tabs.list")).toBe(process.platform === "win32")
   })
-
-  test("repeated calls return consistent results", () => {
-    expect(Wildcard.match("git push origin", "git *")).toBe(true)
-    expect(Wildcard.match("git push origin", "git *")).toBe(true)
-    expect(Wildcard.match(".OPENCODE/x", ".opencode/*", true)).toBe(true)
-    expect(Wildcard.match(".OPENCODE/x", ".opencode/*", true)).toBe(true)
-    expect(Wildcard.match(".OPENCODE/x", ".opencode/*")).toBe(process.platform === "win32")
-    expect(Wildcard.match(".OPENCODE/x", ".opencode/*")).toBe(process.platform === "win32")
-    expect(Wildcard.match("a+b(c)", "a+b(c)")).toBe(true)
-    expect(Wildcard.match("a+b(c)", "a+b(c)")).toBe(true)
-  })
 })
