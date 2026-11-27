@@ -39,24 +39,36 @@ const all = [kimi, pickle, opus, sonnet, gemini]
 const sections = (input: { favorites?: (typeof all)[number][]; searching?: boolean } = {}) =>
   pickerSections({ groups, all, favorites: input.favorites ?? [], recent: [], searching: input.searching ?? false })
 
-test("lists the workspace's providers together and the free models last, in a group of their own", () => {
+test("lists the workspace's providers together, OpenCode's own then Go's first, and the free models last", () => {
   const list = sections()
-  expect(list.map((section) => section.key)).toEqual(["opencode-go", "opencode", "console-google", "anthropic", "free"])
-  expect(list[1].items).toEqual([opus])
+  expect(list.map((section) => section.key)).toEqual(["opencode", "opencode-go", "console-google", "anthropic", "free"])
+  expect(list.map((section) => section.workspace)).toEqual(["lead", "sub", "sub", undefined, undefined])
+  expect(list[0].items).toEqual([opus])
   expect(list[4]).toEqual({ key: "free", list: "free", items: [pickle] })
+})
+
+test("the workspace's first listed provider heads its group when OpenCode has no paid models left", () => {
+  const list = pickerSections({ groups, all, favorites: [opus], recent: [], searching: false })
+  expect(list.map((section) => [section.key, section.workspace])).toEqual([
+    ["favorite", undefined],
+    ["opencode-go", "lead"],
+    ["console-google", "sub"],
+    ["anthropic", undefined],
+    ["free", undefined],
+  ])
 })
 
 test("a favorite free model leaves the Free group, which stays last while searching", () => {
   expect(sections({ favorites: [pickle] }).map((section) => section.key)).toEqual([
     "favorite",
-    "opencode-go",
     "opencode",
+    "opencode-go",
     "console-google",
     "anthropic",
   ])
   expect(sections({ favorites: [pickle], searching: true }).map((section) => section.key)).toEqual([
-    "opencode-go",
     "opencode",
+    "opencode-go",
     "console-google",
     "anthropic",
     "free",

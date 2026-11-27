@@ -13,6 +13,7 @@ function makeModel(input: {
   name: string
   providerID: string
   providerName: string
+  integrationID?: string
   family: string
   inputCost: number
   outputCost: number
@@ -48,6 +49,7 @@ function makeModel(input: {
     provider: {
       id: input.providerID,
       name: input.providerName,
+      integrationID: input.integrationID,
       source: "custom",
       env: [],
       options: {},
@@ -115,10 +117,54 @@ const manyModels: StoryModel[] = [
   ),
 ]
 
+// A Console workspace's catalog, its free model, a paid model of OpenCode's own and its Go models, beside Anthropic.
+const workspaceModels: StoryModel[] = [
+  ...[
+    { id: "big-pickle", name: "Big Pickle", family: "pickle", inputCost: 0, outputCost: 0 },
+    { id: "claude-opus-5-5", name: "Claude Opus 5.5", family: "claude-opus", inputCost: 5, outputCost: 25 },
+  ].map((model) =>
+    makeModel({ ...model, providerID: "opencode", providerName: "Personal / OpenCode", integrationID: "opencode" }),
+  ),
+  ...[
+    { id: "kimi-k3", name: "Kimi K3", family: "kimi" },
+    { id: "glm-5", name: "GLM-5", family: "glm" },
+  ].map((model) =>
+    makeModel({
+      ...model,
+      providerID: "opencode-go",
+      providerName: "Personal / OpenCode Go",
+      integrationID: "opencode",
+      inputCost: 1,
+      outputCost: 3,
+    }),
+  ),
+  ...models.filter((model) => model.provider.id === "anthropic"),
+]
+
+const consoleAccounts = (...labels: string[]) => [
+  {
+    id: "opencode",
+    name: "OpenCode Console",
+    methods: [{ type: "oauth" as const, id: "console", label: "OpenCode Console account" }],
+    connections: labels.map((label) => ({
+      type: "credential" as const,
+      id: `cred_${label.toLowerCase()}`,
+      method: "oauth" as const,
+      label,
+    })),
+  },
+]
+
 const keyOf = (model: StoryModel) => `${model.provider.id}:${model.id}`
 
-function SelectorStory(props: { favorite?: boolean; provider?: string; empty?: boolean; many?: boolean }) {
-  const all = props.many ? manyModels : models
+function SelectorStory(props: {
+  favorite?: boolean
+  provider?: string
+  empty?: boolean
+  many?: boolean
+  workspace?: boolean
+}) {
+  const all = props.workspace ? workspaceModels : props.many ? manyModels : models
 
   const dialog = useDialog()
 
@@ -220,6 +266,24 @@ export const NoModels = {
   render: () => (
     <DialogStoryRuntime>
       <SelectorStory empty />
+    </DialogStoryRuntime>
+  ),
+}
+
+/** Signed in to a Console workspace with Go, with another OpenCode account to switch to. */
+export const Workspace = {
+  render: () => (
+    <DialogStoryRuntime integrations={consoleAccounts("Personal", "Acme")}>
+      <SelectorStory workspace />
+    </DialogStoryRuntime>
+  ),
+}
+
+/** The workspace's only OpenCode account names it, without a menu. */
+export const WorkspaceOneAccount = {
+  render: () => (
+    <DialogStoryRuntime integrations={consoleAccounts("Personal")}>
+      <SelectorStory workspace />
     </DialogStoryRuntime>
   ),
 }

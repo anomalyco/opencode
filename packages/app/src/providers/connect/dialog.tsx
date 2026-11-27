@@ -64,6 +64,8 @@ export const DialogConnectProvider: Component<{
   controller?: ReturnType<typeof useProviderConnectController>
   /** Opened for one provider from another flow, with no way back to the provider list. */
   standalone?: boolean
+  /** Opens the selected provider at its accounts when it has any, as picking it from the provider list does. */
+  accounts?: boolean
   selection?: ModelSelection
   onDone?: () => void
   onConnected?: (provider: string) => void
@@ -84,6 +86,7 @@ export const DialogConnectProvider: Component<{
     // A sign-in belongs to the Location where it began, even if the route changes underneath it.
     directory: props.defaultLocation ? undefined : (props.directory ?? decode64(params.dir)),
     standalone: !!props.standalone,
+    accounts: !!props.accounts,
     selected: external.selected,
     onSelect: external.select,
     selection: props.selection,
