@@ -2,9 +2,13 @@
 // P-COMP fixtures for the settings and experiments dialogs (packages/tui/src/component/dialog-config.tsx,
 // dialog-experiments.tsx): crates/tui/tests/all/settings.rs. The harness has no config service, so a changed value is
 // shown by starting from a config that already holds it.
-import { DialogConfig } from "../../../tui/src/component/dialog-config"
+import { DialogConfig, settings as settingsRegistry } from "../../../tui/src/component/dialog-config"
 import { DialogExperiments, experiments as registry } from "../../../tui/src/component/dialog-experiments"
 import { renderComponent } from "../lib/component"
+
+// Record the settings available in the native client (parity/deviations/E14-sidebar-position.md).
+const sidebarPosition = settingsRegistry.findIndex((setting) => setting.path.join(".") === "session.sidebar_position")
+if (sidebarPosition >= 0) settingsRegistry.splice(sidebarPosition, 1)
 
 const settings = { width: 80, height: 30, dialog: () => <DialogConfig />, ready: (f: string) => f.includes("esc") && f.includes("Scroll") }
 

@@ -239,6 +239,31 @@ test.each([
   },
 )
 
+test("settings move the visible session sidebar and save its position", async () => {
+  await using state = await tmpdir()
+  await using setup = await createSessionFixture(state.path, {
+    session: { sidebar: "auto" },
+    keybinds: { "opencode.settings": "f7" },
+  })
+  await ready(setup)
+  expect(node(setup, "session-sidebar").x).toBe(118)
+
+  setup.mockInput.pressKey("F7")
+  await setup.waitForFrame(
+    (frame) => frame.includes("Settings") && setup.renderer.currentFocusedRenderable instanceof InputRenderable,
+  )
+  await setup.mockInput.typeText("Sidebar position")
+  await setup.waitForFrame((frame) => /Sidebar position\s+right/.test(frame))
+
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => /Sidebar position\s+left/.test(frame) && node(setup, "session-sidebar").x === 0)
+  expect(setup.config().session).toEqual({ sidebar: "auto", sidebar_position: "left" })
+
+  setup.mockInput.pressArrow("right")
+  await setup.waitForFrame((frame) => /Sidebar position\s+right/.test(frame) && node(setup, "session-sidebar").x === 118)
+  expect(setup.config().session).toEqual({ sidebar: "auto", sidebar_position: "right" })
+})
+
 test("opening the diff replaces the left sidebar with a right-hand panel", async () => {
   await using state = await tmpdir()
   await using setup = await createSessionFixture(state.path, {

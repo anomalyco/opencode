@@ -66,6 +66,14 @@ export const settings: Setting[] = [
     keywords: ["side panel"],
   },
   {
+    title: "Sidebar position",
+    category: "Session",
+    path: ["session", "sidebar_position"],
+    description: "Which side of the session shows the sidebar",
+    default: "right",
+    values: ["left", "right"],
+  },
+  {
     title: "Scrollbar",
     category: "Session",
     path: ["session", "scrollbar"],

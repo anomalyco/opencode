@@ -2,10 +2,12 @@
 // packages/tui/src/component/dialog-config.tsx as JSON, every field the Rust `SETTINGS` copies. `format` becomes
 // its output at min, min + step, the default, and max. Run it from parity/ so the TUI preloads apply.
 const { settings } = await import("../../../tui/src/component/dialog-config.tsx")
+// See parity/deviations/E14-sidebar-position.md.
+const sharedSettings = settings.filter((setting) => setting.path.join(".") !== "session.sidebar_position")
 
 console.log(
   JSON.stringify(
-    settings.map((setting: Record<string, any>) => ({
+    sharedSettings.map((setting: Record<string, any>) => ({
       title: setting.title,
       category: setting.category,
       path: setting.path,
