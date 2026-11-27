@@ -177,6 +177,10 @@ export const Info = Schema.Struct({
       markdown: Schema.optional(Schema.Literals(["source", "rendered"])).annotate({
         description: "Show Markdown syntax markers or conceal them in rendered transcript content",
       }),
+      user_markdown: Schema.optional(Schema.Literals(["plain", "source", "rendered"])).annotate({
+        description:
+          "Show user messages as plain text, as styled Markdown with syntax markers visible, or as rendered Markdown with markers concealed",
+      }),
       new_location: Schema.optional(Schema.Literals(["launch", "inherit"])).annotate({
         description: "Start new sessions in the TUI launch directory or inherit the active session location",
       }),

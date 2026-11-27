@@ -104,6 +104,15 @@ export const settings: Setting[] = [
     keywords: ["syntax", "concealment", "rendering"],
   },
   {
+    title: "User markdown",
+    category: "Session",
+    path: ["session", "user_markdown"],
+    description: "Whether your messages are shown as plain text, styled markdown source, or rendered markdown",
+    default: "plain",
+    values: ["plain", "source", "rendered"],
+    keywords: ["syntax", "concealment", "rendering", "prompt", "user messages"],
+  },
+  {
     title: "Tool grouping",
     category: "Session",
     path: ["session", "grouping"],
