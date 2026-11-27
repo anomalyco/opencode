@@ -408,8 +408,8 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
   })
 
   // The side panel's New tab page draws the browser bar across its top, and under its launchers the pages the agent
-  // named in this session and the pages the browser showed last. Only once the desktop's pane answers, and still while another window holds the session's browser:
-  // opening a page here takes it back.
+  // showed the person in this session and the pages the browser showed last. Only once the desktop's pane answers, and
+  // still while another window holds the session's browser: opening a page here takes it back.
   const NewTabBar = lazy(() => import("./new-tab").then((module) => ({ default: module.NewTabBar })))
   const NewTabPages = lazy(() => import("./new-tab").then((module) => ({ default: module.NewTabPages })))
   onCleanup(onIdle(() => void NewTabBar.preload()))

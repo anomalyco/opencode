@@ -1,14 +1,12 @@
 import type { SessionMessageInfo } from "@opencode/client/promise"
 import { Option, Schema } from "effect"
-import { loopback } from "./address"
-import { artifactLink } from "./artifact-link"
+import { artifactAddress, artifactLink } from "./artifact-link"
 
 type Assistant = Extract<SessionMessageInfo, { type: "assistant" }>
 
 /**
- * A page the agent named: a web page or an artifact by address, or a workspace file the agent showed in the browser by
- * its path. `key` tells repeats apart: a web page's address without its query and fragment, so the same page opened
- * with other parameters, as a dev server's or a story's, lists once with its newest address.
+ * A page the agent meant the person to see: a web page or an artifact by address, or an HTML or PDF file of the
+ * workspace the agent showed in the browser, by its path. `key` tells repeats apart (see `linkKey`).
  */
 export type SessionLink =
   | { readonly type: "page"; readonly key: string; readonly url: string }
@@ -20,10 +18,13 @@ export const SESSION_LINKS = 10
 /** How many of a session's last replies are read for its pages: a fixed ceiling, however long the session. */
 const REPLIES = 50
 
-/** Calls whose input names, as `url` or `path`, a page the agent opens or reads: tools, and calls of a code-mode program. */
-const PAGE_CALLS: readonly string[] = ["webfetch", "fetch", "browser.tabs.open", "browser.navigate"]
+/**
+ * Calls that put a page, by `url` or `path`, in front of the person in the browser: as tools, and as calls of a
+ * code-mode program. Reading a page for the agent itself, as `webfetch` or `fetch` does, is not showing it.
+ */
+const SHOWING: readonly string[] = ["browser.tabs.open", "browser.navigate"]
 
-/** Tools whose result names the page they published: an artifact's link. */
+/** Tools whose result names the page they published for the person: an artifact's link. */
 const PUBLISHING: readonly string[] = ["artifact_create", "artifact_update"]
 
 /** The input of a call that names a page. */
@@ -44,12 +45,18 @@ const TEXT_ADDRESS = /(?:https?:\/\/|artifact:\/\/|(?<![\w/])\/api\/experimental
 /** Hosts kept for examples in writing (RFC 2606), which a reply names to explain, never as a page to open. */
 const EXAMPLE_HOST = /(?:^|\.)example(?:\.(?:com|org|net))?$/i
 
+/** Code in a reply: fenced blocks, then inline spans. An address there is a command, a setting or an example. */
+const CODE = /```[\s\S]*?```|`[^`\n]*`/g
+
+/** Files the browser shows: pages and PDFs. Others open in the file panel. */
+const SHOWN_FILE = /\.(?:html?|pdf)$/i
+
 /** Punctuation that ends the sentence or the emphasis around an address, not the address. */
 const TRAILING = /[.,;:!?*_~]+$/
 
 /**
- * The pages the agent's finished replies name in a session, newest first and without repeats: what it read, opened or
- * published, what its text links to, and the local servers its commands printed. Reads replies from the newest and
+ * The pages the agent's finished replies show the person in a session, newest first and without repeats: what it
+ * opened in the browser, what it published, and what its text links to outside code. Reads replies from the newest and
  * stops at `limit` pages or after `REPLIES` replies, and reads each finished reply once for as long as the returned
  * function lives, so a long session costs no more than its last replies.
  */
@@ -81,14 +88,14 @@ export function createSessionLinks() {
   }
 }
 
-/** The pages one reply names, newest first: its last part first, and the end of a text before its start. */
+/** The pages one reply shows, newest first: its last part first, and the end of a text before its start. */
 export function messageLinks(message: Assistant, server: string): readonly SessionLink[] {
   const found = message.content.flatMap((part): SessionLink[] => {
-    if (part.type === "text") return addresses(part.text, server)
+    if (part.type === "text") return addresses(part.text.replace(CODE, " "), server)
 
     if (part.type !== "tool" || part.state.status !== "completed") return []
     const state = part.state
-    const own = PAGE_CALLS.includes(part.name) ? Option.toArray(Schema.decodeUnknownOption(PageInput)(state.input)) : []
+    const own = SHOWING.includes(part.name) ? Option.toArray(Schema.decodeUnknownOption(PageInput)(state.input)) : []
 
     // A code-mode program records each call it made, with its input.
     const nested = Option.match(Schema.decodeUnknownOption(ProgramCalls)(state.metadata), {
@@ -96,21 +103,17 @@ export function messageLinks(message: Assistant, server: string): readonly Sessi
       onSome: (program) =>
         program.toolCalls.flatMap((call) =>
           Option.toArray(Schema.decodeUnknownOption(ProgramCall)(call)).flatMap((decoded) =>
-            PAGE_CALLS.includes(decoded.tool) && decoded.input ? [decoded.input] : [],
+            SHOWING.includes(decoded.tool) && decoded.input ? [decoded.input] : [],
           ),
         ),
     })
 
-    const results = state.content.flatMap((content) => (content.type === "text" ? [content.text] : []))
+    // A published artifact's link.
+    const published = PUBLISHING.includes(part.name)
+      ? state.content.flatMap((content) => (content.type === "text" ? addresses(content.text, server) : []))
+      : []
 
-    // A published artifact's link, and the local servers a command printed, such as a dev server's address.
-    const printed = PUBLISHING.includes(part.name)
-      ? results.flatMap((text) => addresses(text, server))
-      : part.name === "shell"
-        ? results.flatMap((text) => addresses(text, server)).filter((link) => link.type === "page" && local(link.url))
-        : []
-
-    return [...[...own, ...nested].flatMap((input) => inputLinks(input, server)), ...printed]
+    return [...[...own, ...nested].flatMap((input) => inputLinks(input, server)), ...published]
   })
 
   return found.toReversed()
@@ -121,32 +124,51 @@ function addresses(text: string, server: string) {
   return [...text.matchAll(TEXT_ADDRESS)].flatMap((match) => page(match[0].replace(TRAILING, ""), server))
 }
 
-/** A call's page: its web address, else the workspace file it showed. */
+/** A call's page: its web address, else the workspace file it showed, when the browser shows that file. */
 function inputLinks(input: typeof PageInput.Type, server: string): SessionLink[] {
   if (input.url !== undefined) return page(input.url, server)
 
-  return input.path ? [{ type: "file", key: `file:${input.path}`, path: input.path }] : []
+  return input.path && SHOWN_FILE.test(input.path) ? [{ type: "file", key: `file:${input.path}`, path: input.path }] : []
 }
 
 /** An address the browser opens: an artifact on the session's server by its own address, or a web page. */
 function page(value: string, server: string): SessionLink[] {
-  const artifact = value.startsWith("artifact://") ? value : artifactLink(value, server)
+  if (value.startsWith("artifact://")) {
+    const item = artifactAddress(value)
 
-  if (artifact) return [{ type: "page", key: artifact, url: artifact }]
+    return item ? [artifactPage(`artifact://${item.id}/${item.path}`)] : []
+  }
+
+  const artifact = artifactLink(value, server)
+
+  if (artifact) return [artifactPage(artifact)]
   const url = URL.canParse(value) ? new URL(value) : undefined
 
   return url && (url.protocol === "https:" || url.protocol === "http:") && !EXAMPLE_HOST.test(url.hostname)
-    ? [{ type: "page", key: `${url.origin}${url.pathname}`, url: url.href }]
+    ? [{ type: "page", key: linkKey(url.href), url: url.href }]
     : []
+}
+
+function artifactPage(url: string): SessionLink {
+  return { type: "page", key: url, url }
+}
+
+/**
+ * What tells one listed page from another: a web page's address without its scheme's `www.`, its trailing slash, its
+ * query and its fragment, so the same page opened with other parameters, as a dev server's or a story's, lists once.
+ * The pages the browser showed last compare by it too, so a page is never listed twice. Any other address is its own.
+ */
+export function linkKey(address: string) {
+  const url = URL.canParse(address) ? new URL(address) : undefined
+
+  if (!url || (url.protocol !== "https:" && url.protocol !== "http:")) return address
+
+  return `${url.protocol}//${url.host.replace(/^www\./i, "")}${url.pathname.replace(/\/+$/, "")}`
 }
 
 /** A path from the filesystem's root, as the agent may pass to `browser.tabs.open({ path })`, rather than the workspace's. */
 export function absolutePath(path: string) {
   return /^(?:\/|[a-zA-Z]:[\\/])/.test(path)
-}
-
-function local(url: string) {
-  return URL.canParse(url) && loopback(new URL(url).hostname)
 }
 
 function remember(read: WeakMap<Assistant, readonly SessionLink[]>, message: Assistant, server: string) {

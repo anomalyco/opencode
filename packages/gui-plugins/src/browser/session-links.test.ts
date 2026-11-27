@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { JsonValue, SessionMessageInfo } from "@opencode/client/promise"
 import { uuid } from "@opencode/util/uuid"
-import { createSessionLinks } from "./session-links"
+import { createSessionLinks, linkKey } from "./session-links"
 
 type Assistant = Extract<SessionMessageInfo, { type: "assistant" }>
 
@@ -34,65 +34,75 @@ const tool = (
   time: { created: 1, completed: 2 },
 })
 
+// A code-mode program that made these calls.
+const program = (...calls: { tool: string; input?: Record<string, string> }[]) =>
+  tool("execute", { code: "..." }, { toolCalls: calls.map((call) => ({ status: "completed", ...call })) })
+
 const server = "http://127.0.0.1:3084"
 
-// What a session lists, by the key that tells its pages apart.
-const listed = (messages: SessionMessageInfo[], limit = 5) => createSessionLinks()(messages, limit, server).map((link) => link.key)
+// What a session lists, by the address or path each row opens.
+const listed = (messages: SessionMessageInfo[], limit = 5) =>
+  createSessionLinks()(messages, limit, server).map((link) => (link.type === "page" ? link.url : link.path))
 
 describe("session links", () => {
-  test("lists what the agent read, opened and linked, newest first and without repeats", () => {
-    const messages: SessionMessageInfo[] = [
-      reply([tool("webfetch", { url: "https://docs.github.com/guide" })]),
-      reply([
-        text("See [the guide](https://docs.github.com/guide) and https://bun.com/docs."),
-        tool("execute", { code: "..." }, {
-          toolCalls: [
-            { tool: "browser.tabs.open", status: "completed", input: { url: "http://localhost:4399" } },
-            { tool: "fetch", status: "completed", input: { method: "GET", url: "https://api.github.com/repos" } },
-            { tool: "browser.tabs.list", status: "completed" },
-          ],
-        }),
-      ]),
-    ]
-
-    expect(listed(messages)).toEqual([
-      "https://api.github.com/repos",
-      "http://localhost:4399/",
-      "https://bun.com/docs",
-      "https://docs.github.com/guide",
-    ])
-  })
-
-  test("lists artifacts by their own address, the files the agent showed, and the local servers its commands printed", () => {
+  test("lists what the agent opened in the browser, published, and linked in its text, newest first", () => {
     const messages: SessionMessageInfo[] = [
       reply([tool("artifact_create", { title: "Report" }, {}, "Published Report (art_1a via local): /api/experimental/artifacts/art_1a/view/")]),
       reply([
-        tool("shell", { command: "bun dev" }, {}, "Fetching https://registry.npmjs.org/vite\n  Local: http://localhost:5173/"),
-        tool("execute", { code: "..." }, { toolCalls: [{ tool: "browser.tabs.open", status: "completed", input: { path: "report.html" } }] }),
-        text("Open [the report](/api/experimental/artifacts/art_2b/view/index.html)."),
+        program({ tool: "browser.tabs.open", input: { url: "http://localhost:5173" } }, { tool: "browser.navigate", input: { path: "report.pdf" } }),
+        text("The PR is https://github.com/anomalyco/opencode/pull/1 and the page is [here](/api/experimental/artifacts/art_2b/view/index.html)."),
       ]),
     ]
 
     expect(listed(messages)).toEqual([
       "artifact://art_2b/index.html",
-      "file:report.html",
+      "https://github.com/anomalyco/opencode/pull/1",
+      "report.pdf",
       "http://localhost:5173/",
       "artifact://art_1a/",
     ])
   })
 
-  test("lists a page opened with other parameters once, at its newest address", () => {
-    const links = createSessionLinks()
-
+  test("leaves out what the agent only read, and what it printed or wrote as code", () => {
     const messages: SessionMessageInfo[] = [
-      reply([text("http://127.0.0.1:6017/?id=story&scenario=Polling")]),
-      reply([text("http://127.0.0.1:6017/?id=story&scenario=Failures and http://127.0.0.1:6017/docs")]),
+      reply([
+        tool("webfetch", { url: "https://docs.github.com/rest" }),
+        program({ tool: "fetch", input: { method: "GET", url: "https://api.github.com/repos" } }),
+        tool("shell", { command: "bun dev" }, {}, "Local: http://localhost:5173/"),
+        text("Run `curl https://api.github.com/user` or:\n```sh\nopen https://bun.com/docs\n```"),
+      ]),
     ]
 
-    expect(links(messages, 5, server).map((link) => (link.type === "page" ? link.url : link.path))).toEqual([
+    expect(listed(messages)).toEqual([])
+  })
+
+  test("lists only the files the browser shows, and only artifact addresses that name an artifact", () => {
+    const messages: SessionMessageInfo[] = [
+      reply([
+        program(
+          { tool: "browser.tabs.open", input: { path: "README.md" } },
+          { tool: "browser.tabs.open", input: { path: "shot.png" } },
+          { tool: "browser.tabs.open", input: { path: "site/index.html" } },
+        ),
+        text("See artifact://not-an-artifact and artifact://art_3c/a.html."),
+      ]),
+    ]
+
+    expect(listed(messages)).toEqual(["artifact://art_3c/a.html", "site/index.html"])
+  })
+
+  test("lists a page once, at its newest address, however it was written", () => {
+    const messages: SessionMessageInfo[] = [
+      reply([text("http://127.0.0.1:6017/?id=story&scenario=Polling and https://www.github.com/anomalyco/")]),
+      reply([text("http://127.0.0.1:6017/?id=story&scenario=Failures, https://github.com/anomalyco and http://127.0.0.1:6017/docs")]),
+    ]
+
+    expect(listed(messages)).toEqual([
       "http://127.0.0.1:6017/docs",
+      "https://github.com/anomalyco",
       "http://127.0.0.1:6017/?id=story&scenario=Failures",
     ])
+    expect(linkKey("https://www.github.com/anomalyco/?tab=repos#top")).toBe(linkKey("https://github.com/anomalyco"))
   })
 
   test("stops at the limit, and never reads older replies to get there", () => {
@@ -110,7 +120,7 @@ describe("session links", () => {
     expect(listed([older, newest], 2)).toEqual(["https://b.dev/", "https://a.dev/"])
   })
 
-  test("reads no more than the session's last 50 replies, however few pages they name", () => {
+  test("reads no more than the session's last 50 replies, however few pages they show", () => {
     const quiet = Array.from({ length: 50 }, () => reply([text("Done.")]))
 
     expect(listed([reply([text("https://older.dev/")]), ...quiet])).toEqual([])

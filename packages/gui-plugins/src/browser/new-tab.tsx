@@ -7,7 +7,7 @@ import { AddressField, BrowserNavigation, PageRow, type AddressControls } from "
 import { bare } from "./history/page"
 import type definition from "./index"
 import type { Model } from "./model"
-import { absolutePath, SESSION_LINKS, type createSessionLinks, type SessionLink } from "./session-links"
+import { absolutePath, linkKey, SESSION_LINKS, type createSessionLinks, type SessionLink } from "./session-links"
 
 // The New tab page has no tab: its field shows a blank page, and what the person enters opens in a new tab.
 const BLANK: AddressPage = { tabID: undefined, url: "", loading: false, generation: 0, error: undefined }
@@ -65,8 +65,8 @@ export function NewTabBar(props: {
 }
 
 /**
- * The side panel's New tab page lists under its launchers the pages the agent named in this session, then the pages the
- * browser showed last that are not among them.
+ * The side panel's New tab page lists under its launchers the pages the agent showed the person in this session, then
+ * the pages the browser showed last that are not among them.
  */
 export function NewTabPages(props: {
   session: SessionRef
@@ -99,7 +99,7 @@ export function NewTabPages(props: {
 
     return props.model
       .visits()
-      .filter((visit) => !listed.has(visit.url))
+      .filter((visit) => !listed.has(linkKey(visit.url)))
       .slice(0, ADDRESS_SUGGESTIONS)
   })
 
