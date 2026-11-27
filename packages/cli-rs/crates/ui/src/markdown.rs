@@ -365,7 +365,10 @@ impl MarkdownParser {
                         None => spans,
                     };
                     let spans = inline(spans, &cx);
-                    let text: String = spans.iter().map(|span| span.span.content.as_ref()).collect();
+                    let mut text = String::with_capacity(spans.iter().map(|span| span.span.content.len()).sum());
+                    for span in &spans {
+                        text.push_str(span.span.content.as_ref());
+                    }
                     if table_cell {
                         let row_block = block.parent_index as usize;
                         let row = current_row.get(row_block).copied().unwrap_or(0);
