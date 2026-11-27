@@ -64,6 +64,11 @@ export const Plugin = define({
   }),
 })
 
+export const info = Effect.fn("VcsHg.info")(function* (proc: AppProcess.Interface, worktree: string) {
+  const hg = makeHg(proc, worktree)
+  return { branch: { current: yield* hg.branch(), default: "default" } } satisfies Info
+})
+
 /**
  * Mercurial adapter for the Vcs service. `hg diff --git` emits git-format
  * patches for tracked changes; untracked (`?`) and missing (`!`) files never
@@ -118,9 +123,7 @@ function make(
   })
 
   return {
-    info: Effect.fn("VcsHg.info")(function* () {
-      return { branch: { current: yield* hg.branch(), default: "default" } } satisfies Info
-    }),
+    info: () => info(proc, input.worktree),
     branches: Effect.fn("VcsHg.branches")(function* () {
       return []
     }),

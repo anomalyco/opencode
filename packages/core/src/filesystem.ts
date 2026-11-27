@@ -133,6 +133,18 @@ const toStreamError = (target: string, cause: Environment.NotFound | Environment
     cause,
   })
 
+export const localRoot = Effect.fnUntraced(function* (fs: FSUtil.Interface, directory: AbsolutePath) {
+  return yield* fs.realPath(directory).pipe(
+    // Linux realpath succeeds on an unreadable directory, so probe readability explicitly.
+    Effect.tap((real) => fs.access(real, { readable: true })),
+    Effect.catch((cause): Effect.Effect<never, DirectoryNotFoundError | DirectoryAccessDeniedError> => {
+      if (cause.reason._tag === "NotFound") return Effect.fail(new DirectoryNotFoundError({ directory, cause }))
+      if (FSUtil.isAccessDenied(cause)) return Effect.fail(new DirectoryAccessDeniedError({ directory, cause }))
+      return Effect.die(cause)
+    }),
+  )
+})
+
 const baseLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -148,19 +160,7 @@ const baseLayer = Layer.effect(
     // placements keep boot realpath canonicalization and symlink containment;
     // remote reads enforce lexical containment while isolation lives at the
     // remote sandbox or worker boundary.
-    const root = environment.local
-      ? yield* fs.realPath(location.directory).pipe(
-          // Linux realpath succeeds on an unreadable directory, so probe readability explicitly.
-          Effect.tap((real) => fs.access(real, { readable: true })),
-          Effect.catch((cause): Effect.Effect<never, DirectoryNotFoundError | DirectoryAccessDeniedError> => {
-            if (cause.reason._tag === "NotFound")
-              return Effect.fail(new DirectoryNotFoundError({ directory: location.directory, cause }))
-            if (FSUtil.isAccessDenied(cause))
-              return Effect.fail(new DirectoryAccessDeniedError({ directory: location.directory, cause }))
-            return Effect.die(cause)
-          }),
-        )
-      : location.directory
+    const root = environment.local ? yield* localRoot(fs, location.directory) : location.directory
 
     const confine = Effect.fnUntraced(function* (input: RelativePath) {
       if (input.includes("\u0000")) return yield* new NotFoundError({ path: input })

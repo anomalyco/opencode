@@ -1,3 +1,5 @@
+import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
+import { FileSystem } from "@opencode/core/filesystem"
 import { Vcs } from "@opencode/core/vcs"
 import { Project } from "@opencode/core/project"
 import { Worktree } from "@opencode/core/worktree"
@@ -6,16 +8,28 @@ import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { ConflictError, InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { VcsInitNotSupportedError } from "@opencode/protocol/groups/vcs"
-import { Effect } from "effect"
+import { FSUtil } from "@opencode/util/fs-util"
+import { AppProcess } from "@opencode/util/process"
+import { Effect, Option } from "effect"
+import { ChildProcessSpawner } from "effect/process"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Api } from "../api"
-import { response } from "../location"
+import { locationErrors, requestRef, response } from "../location"
 
 export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
   Effect.gen(function* () {
     const project = yield* Project.Service
     const bus = yield* Bus.Service
     const locations = yield* LocationServiceMap.Service
+    const fs = yield* FSUtil.Service
+    const processes = yield* AppProcess.Service
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const info = response(
+      Effect.gen(function* () {
+        const vcs = yield* Vcs.Service
+        return yield* vcs.info()
+      }),
+    )
     return handlers
       .handle("vcs.init", (ctx) =>
         Effect.gen(function* () {
@@ -52,12 +66,29 @@ export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
           return HttpApiSchema.NoContent.make()
         }),
       )
-      .handle("vcs.get", () =>
-        response(
+      .handle("vcs.get", (ctx) =>
+        Effect.scoped(
           Effect.gen(function* () {
-            const vcs = yield* Vcs.Service
-            return yield* vcs.info()
-          }),
+            const ref = LocationServiceMap.canonical(requestRef(ctx.request))
+            const existing = yield* locations.contextEffectOption(ref)
+            if (Option.isSome(existing)) return yield* info.pipe(Effect.provideContext(existing.value))
+
+            if (spawner !== EnvironmentUnavailable.spawner)
+              yield* FileSystem.localRoot(fs, ref.directory).pipe(
+                Effect.catchTag("FileSystem.DirectoryAccessDeniedError", Effect.die),
+              )
+            const resolved = yield* project.resolve(ref.directory, { persist: false })
+            const provider = resolved.vcs?.type
+            if (provider === "git") {
+              const { VcsGitPlugin } = yield* Effect.promise(() => import("@opencode/core/plugin/vcs/git"))
+              return { location: ref, data: { provider, ...(yield* VcsGitPlugin.info(processes, ref.directory)) } }
+            }
+            if (provider === "hg") {
+              const { VcsHgPlugin } = yield* Effect.promise(() => import("@opencode/core/plugin/vcs/hg"))
+              return { location: ref, data: { provider, ...(yield* VcsHgPlugin.info(processes, resolved.directory)) } }
+            }
+            return { location: ref, data: { branch: {} } }
+          }).pipe(locationErrors),
         ),
       )
       .handle("vcs.base", () =>
