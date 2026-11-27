@@ -46,6 +46,11 @@ export function setDockIcon(path: Path.Path, paths: DesktopPaths.Resolved) {
   if (!icon.isEmpty()) app.dock?.setIcon(icon)
 }
 
+/** The small channel icon the notification area draws. */
+export function trayIconPath(path: Path.Path, paths: DesktopPaths.Resolved) {
+  return path.join(iconsDir(path, paths), "32x32.png")
+}
+
 export function setBackgroundColor(color: string) {
   // The renderer reports its theme background on every boot; electron-store rewrites and fsyncs the
   // settings file on each set, so only persist a change.

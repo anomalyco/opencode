@@ -1,3 +1,4 @@
+import { desktopCloseChoices } from "@opencode/app/desktop-close"
 import { desktopZoomLevels } from "@opencode/app/desktop-menu"
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/rpc"
@@ -34,6 +35,14 @@ export const WindowGetPinchZoomEnabled = Rpc.make("WindowGetPinchZoomEnabled", {
 
 export const WindowSetPinchZoomEnabled = Rpc.make("WindowSetPinchZoomEnabled", {
   payload: { enabled: Schema.Boolean },
+})
+
+export const WindowGetCloseAction = Rpc.make("WindowGetCloseAction", {
+  success: Schema.Literals(desktopCloseChoices),
+})
+
+export const WindowSetCloseAction = Rpc.make("WindowSetCloseAction", {
+  payload: { choice: Schema.Literals(desktopCloseChoices) },
 })
 
 export const WindowSetTitlebar = Rpc.make("WindowSetTitlebar", {
@@ -80,6 +89,8 @@ export const WindowRpcs = RpcGroup.make(
   WindowSetZoomLevel,
   WindowGetPinchZoomEnabled,
   WindowSetPinchZoomEnabled,
+  WindowGetCloseAction,
+  WindowSetCloseAction,
   WindowSetTitlebar,
   WindowSetTrafficLightsPosition,
   WindowSetTaskbarBadge,

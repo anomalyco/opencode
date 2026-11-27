@@ -269,6 +269,14 @@ export function createSettingsSearchCatalog() {
     }),
   )
 
+  // Flag-gated results need the selected Location even when Settings is the first route in the window.
+  createEffect(() => {
+    const key = surface.server()?.key
+    const context = key ? global.serverCtx(key) : undefined
+
+    if (context) void context.data.location.sync()
+  })
+
   return createMemo(() =>
     settingsSearchIndex({
       servers: inventory(),
@@ -277,6 +285,12 @@ export function createSettingsSearchCatalog() {
       linux: platform.platform === "desktop" && platform.os === "linux",
       browser: platform.platform === "desktop",
       mobile: mobile(),
+      flag: (key) => {
+        const server = inventory().find((item) => item.connected)
+        const context = server ? global.serverCtx(server.key) : undefined
+
+        return context?.data.location.flag(key) === true
+      },
       translate: language.t,
       plugins: surface.plugins.items(),
     }),

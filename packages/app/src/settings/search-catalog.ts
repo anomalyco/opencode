@@ -13,6 +13,8 @@ type Entry<Tab> = {
   section?: Label
   subtab?: "mcps" | "plugins" | "skills" | "lsps"
   available?: "desktop" | "linux" | "browser" | "mobile"
+  /** A server feature flag that must be on for this row to exist. */
+  flag?: string
 }
 
 export const clientSettings: Entry<SettingsRootTab>[] = [
@@ -68,6 +70,15 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     label: "settings.general.row.questionSubmitKey.title",
     target: "settings-question-submit-key",
     keywords: "question answer enter shift submit send keyboard newline multiline custom",
+  },
+  {
+    tab: "general",
+    label: "settings.general.row.closeAction.title",
+    description: "settings.general.row.closeAction.description",
+    target: "settings-close-action",
+    keywords: "close window tray hide quit exit ask",
+    available: "desktop",
+    flag: "desktop_close_tray",
   },
   {
     tab: "general",

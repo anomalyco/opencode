@@ -111,6 +111,8 @@ const getBase = (appId: string): Configuration => {
         to: "",
         filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
       },
+      // iconsDir reads icons from resourcesPath at runtime, so they must sit outside app.asar too.
+      { from: "resources/icons", to: "icons" },
     ],
     // Electron stores cookies in plain text by default. The browser pane keeps sign-ins, so encrypt them with the OS
     // key store (Keychain, DPAPI, libsecret or kwallet). This is one-way: turning it off again loses every cookie.

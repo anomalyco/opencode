@@ -66,6 +66,12 @@ describe("settings search index", () => {
     expect(targets({ mobile: true })).toContain("settings-mobile-titlebar-bottom")
   })
 
+  test("only advertises settings whose feature flag is on", () => {
+    const targets = (flag: boolean) => index({ desktop: true, flag: () => flag }).map((item) => item.view.target)
+    expect(targets(false)).not.toContain("settings-close-action")
+    expect(targets(true)).toContain("settings-close-action")
+  })
+
   test("uses section labels and stable identities independent of translated text", () => {
     const items = index()
     expect(new Set(items.map((item) => item.id)).size).toBe(items.length)

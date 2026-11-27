@@ -10,12 +10,15 @@
       import { mount } from "./windows-menu.fixture.tsx"
       const params = new URLSearchParams(location.search)
       const os = params.get("os")
+      const closeAction = params.get("closeAction")
       mount({
         server: params.get("server"),
         path: params.get("path") ?? undefined,
         os: os === "macos" || os === "linux" ? os : undefined,
         openApps: params.get("openApps") === "1",
         holdOpen: params.get("holdOpen") === "1",
+        closeAction:
+          closeAction === "ask" || closeAction === "hide" || closeAction === "quit" ? closeAction : undefined,
       })
     </script>
   </body>

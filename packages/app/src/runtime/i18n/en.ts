@@ -1310,6 +1310,11 @@ export const dict = {
   "settings.general.row.keepServiceRunning.title": "Keep running in the background",
   "settings.general.row.keepServiceRunning.description":
     "Keep sessions, terminals and MCP servers going after you quit. Turn off to stop OpenCode, including for the CLI, when the app quits",
+  "settings.general.row.closeAction.title": "On close",
+  "settings.general.row.closeAction.description": "Choose what happens when you close the last window",
+  "settings.general.row.closeAction.ask": "Ask every time",
+  "settings.general.row.closeAction.hide": "Hide to tray",
+  "settings.general.row.closeAction.quit": "Quit",
 
   "sound.option.none": "None",
   "sound.option.alert01": "Alert 01",

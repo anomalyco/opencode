@@ -3,6 +3,7 @@ import { app, BrowserWindow, nativeTheme, screen } from "electron"
 import { Effect, FileSystem, Path } from "effect"
 import { openExternalURL } from "../files"
 import { scoped } from "../native/logging"
+import { keepsAppInTray } from "../native/tray"
 import { DesktopPaths } from "../paths"
 import { DesktopStorage } from "../storage"
 import { getStore } from "../storage/store"
@@ -10,6 +11,7 @@ import { WINDOW_IDS_KEY } from "../storage/keys"
 import { windowDataFile } from "../../shared/ipc-transport"
 import { isQuitting, type State } from "../lifecycle/machine"
 import { windowArguments } from "./bootstrap"
+import { createClosePrompt, needsTrayCloseDecision } from "./close"
 import {
   getBackgroundColor,
   getPinchZoomEnabled,
@@ -113,6 +115,8 @@ export function setWindowThemeReady(win: BrowserWindow) {
 export const mainWindows = Effect.fn("Window.make")(function* (input: {
   readonly appState: () => State
   readonly relaunch: () => void
+  /** Called when the close dialog's Quit button is chosen. */
+  readonly quit: () => void
   /** Windows logoff or shutdown. */
   readonly sessionEnding: () => void
 }) {
@@ -122,6 +126,11 @@ export const mainWindows = Effect.fn("Window.make")(function* (input: {
   const storage = yield* DesktopStorage.Service
   const runFork = Effect.runForkWith(yield* Effect.context())
   const wireWindowRecovery = yield* windowRecovery
+
+  const closePrompt = createClosePrompt({
+    quit: input.quit,
+    isQuitting: () => isQuitting(input.appState()),
+  })
 
   // Turning a Windows contrast theme on or off changes the caption buttons' colour (`titlebarOverlay`).
   if (process.platform === "win32") {
@@ -225,6 +234,20 @@ export const mainWindows = Effect.fn("Window.make")(function* (input: {
 
     // The first window is created and shown focused before it is registered, so its focus event has already passed.
     if (win.isFocused()) registry.focused(id)
+
+    // While the tray keeps the app reachable, closing the last window asks whether to hide or quit. A real quit, a
+    // window that is not the last, and a build without a tray icon still close normally.
+    win.on("close", (event) => {
+      const decide = needsTrayCloseDecision({
+        tray: keepsAppInTray(),
+        quitting: isQuitting(input.appState()),
+        openWindows: getMainWindows().filter((other) => other !== win).length,
+      })
+
+      if (!decide) return
+      event.preventDefault()
+      closePrompt.request(win)
+    })
 
     // Windows emits session-end, but not before-quit, during shutdown and logoff.
     win.on("session-end", input.sessionEnding)

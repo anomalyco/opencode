@@ -83,6 +83,8 @@ export const api: ElectronAPI = {
   getZoomLevel: () => invoke("WindowGetZoomLevel"),
   setZoomLevel: (level) => invoke("WindowSetZoomLevel", { level }),
   onZoomChanged: (cb) => listen("WindowZoomChanged", (event) => cb({ factor: event.factor, level: event.level })),
+  getCloseAction: () => invoke("WindowGetCloseAction"),
+  setCloseAction: (choice) => invoke("WindowSetCloseAction", { choice }),
   setTitlebar: (theme) => invoke("WindowSetTitlebar", { theme }),
   setTrafficLightsPosition: (position) => invoke("WindowSetTrafficLightsPosition", position),
   setTaskbarBadge: (count, description) => invoke("WindowSetTaskbarBadge", { count, description }),

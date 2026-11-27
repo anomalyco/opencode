@@ -32,11 +32,13 @@ export const registry = {
     "Build an SQLite full-text index of session titles and message text in the background, and enable the opencode.session.search and opencode.session.read tools. The index covers every session in the database and starts while any loaded location enables it; SQLite keeps it current from then on, also after this is turned off.",
   browser_stream_tunnel:
     "Stream remote desktop browser TCP traffic over one prewarmed, ticket-authenticated binary WebSocket per live browser attachment instead of per-chunk RPC.",
+  desktop_close_tray:
+    "Let Windows and Linux users choose whether closing the last desktop window asks, hides the app in the system tray, or quits.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 
 /** Flags the server reports to clients at `GET /api/experimental/flag`, so they can adapt their UI. */
-export const ui: readonly Key[] = ["full_codemode"]
+export const ui: readonly Key[] = ["full_codemode", "desktop_close_tray"]
 
 export const optInOnly: ReadonlySet<Key> = new Set(["todo", "opencode_api"])
 

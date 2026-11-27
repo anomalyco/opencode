@@ -1,6 +1,7 @@
 import { createSimpleContext } from "@opencode/ui/context"
 import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
+import type { DesktopCloseChoice } from "@/desktop-close"
 import type { DesktopMenuAction, DesktopZoomLevel } from "@/shell/commands/desktop-menu"
 import type { DraftStore } from "@/runtime/persistence/drafts"
 import type { Bridge } from "@opencode/plugin/gui/host"
@@ -151,6 +152,12 @@ type PlatformBase = {
 
   /** Keep the background service running after the app quits, or stop it on quit (desktop only) */
   setKeepServiceRunning?(enabled: boolean): Promise<void>
+
+  /** Get what closing the last window does (desktop only) */
+  getCloseAction?(): Promise<DesktopCloseChoice>
+
+  /** Set what closing the last window does (desktop only) */
+  setCloseAction?(choice: DesktopCloseChoice): Promise<void> | void
 
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void

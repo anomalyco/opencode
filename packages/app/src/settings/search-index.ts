@@ -25,6 +25,8 @@ export function settingsSearchIndex(input: {
   linux: boolean
   browser: boolean
   mobile: boolean
+  /** Reads a resolved server feature flag; flags not listed there are off. */
+  flag?: (key: string) => boolean
   translate: ReturnType<typeof useLanguage>["t"]
   plugins?: readonly SettingsSearchPlugin[]
 }) {
@@ -100,6 +102,8 @@ export function settingsSearchIndex(input: {
     if (entry.available === "browser" && !input.browser) return
 
     if (entry.available === "mobile" && !input.mobile) return
+
+    if (entry.flag && !input.flag?.(entry.flag)) return
     add(entry, { type: "root", tab: entry.tab, target: entry.target }, "")
   })
   plugins.forEach((item) => {

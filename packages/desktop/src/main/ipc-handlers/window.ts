@@ -2,6 +2,7 @@ import { app, BrowserWindow, systemPreferences } from "electron"
 import { Effect } from "effect"
 import { WindowRpcs } from "../../shared/ipc-rpc"
 import { IpcPortHandoff } from "../ipc-transport"
+import { setTrayActive } from "../native/tray"
 import { Toasts } from "../notifications"
 import {
   getPinchZoomEnabled,
@@ -15,6 +16,7 @@ import {
   updateTitlebar,
 } from "../windows"
 import { storedZoomLevel } from "../windows/defaults"
+import { readCloseChoice, setCloseChoice } from "../windows/close"
 import { requestAttention } from "../windows/attention"
 import { focusWindow, showWindow } from "../windows/focus"
 import { sender } from "./context"
@@ -62,6 +64,12 @@ export const windowHandlers = WindowRpcs.toLayer(
       WindowSetZoomLevel: ({ level }) => Effect.sync(() => setZoomLevel(level)),
       WindowGetPinchZoomEnabled: () => Effect.sync(getPinchZoomEnabled),
       WindowSetPinchZoomEnabled: ({ enabled }) => Effect.sync(() => setPinchZoomEnabled(enabled)),
+      WindowGetCloseAction: () => Effect.sync(readCloseChoice),
+      WindowSetCloseAction: ({ choice }) =>
+        Effect.sync(() => {
+          setCloseChoice(choice)
+          setTrayActive(choice !== "quit")
+        }),
       WindowSetTitlebar: ({ theme }, context) =>
         Effect.sync(() => {
           const win = BrowserWindow.fromWebContents(sender(handoff, context))
