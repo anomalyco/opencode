@@ -16,8 +16,8 @@ import { host } from "./host"
 
 const sessionID = Session.ID.make("ses_plan_test")
 const plan = Agent.ID.make("plan")
-const home = "/home/plan-test"
-const planDirectory = path.join(home, ".opencode", "plan")
+const data = "/home/plan-test/.local/share/opencode"
+const planDirectory = path.join(data, "plan")
 
 /** Runs the plan plugin against stubbed domains, capturing the plan agent and the tool hook. */
 const run = Effect.fnUntraced(function* () {
@@ -62,7 +62,7 @@ const run = Effect.fnUntraced(function* () {
       },
     }),
   ).pipe(
-    Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home })),
+    Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), data })),
     Effect.provideService(Environment.Service, Environment.make(Environment.localID, driver)),
   )
   if (!toolHook) return yield* Effect.die("plan plugin did not register a tool hook")
