@@ -3,17 +3,16 @@ title: 网络
 description: 配置代理、自定义证书颁发机构和客户端证书。
 ---
 
-设置标准代理环境变量，并排除回环地址。OpenCode 的 CLI 与其后台服务之间使用本地 HTTP 连接，因此在 CLI 环境中配置代理时，必须排除回环地址。
+设置标准代理环境变量即可。OpenCode 的 CLI 通过本地 HTTP 连接与后台服务通信，并会自动让回环地址绕过代理。
 
 ```bash
 export HTTP_PROXY=http://proxy.example.com:8080
 export HTTPS_PROXY=http://proxy.example.com:8080
-export NO_PROXY=localhost,127.0.0.1,::1
 
 opencode
 ```
 
-`HTTP_PROXY` 用于 HTTP 目标地址，`HTTPS_PROXY` 用于 HTTPS 目标地址。两个变量中的代理 URL 本身都可以使用 `http://`。`NO_PROXY` 是以逗号分隔的主机和地址列表，这些地址会直接连接。
+`HTTP_PROXY` 用于 HTTP 目标地址，`HTTPS_PROXY` 用于 HTTPS 目标地址。两个变量中的代理 URL 都可以使用 `http://`。CLI 启动时会将 `127.0.0.1`、`localhost` 和 `::1` 同时加入 `NO_PROXY` 和 `no_proxy`。其他需要直连的主机可以加到 `NO_PROXY` 中，用逗号分隔。
 
 ## 后台服务
 
@@ -22,11 +21,11 @@ opencode
 ```bash
 opencode service set env HTTP_PROXY http://proxy.example.com:8080
 opencode service set env HTTPS_PROXY http://proxy.example.com:8080
-opencode service set env NO_PROXY localhost,127.0.0.1,::1
+opencode service set env NO_PROXY llm.company.example
 opencode service start
 ```
 
-修改托管环境变量会停止正在运行的服务，`service start` 会使用新的环境重新启动它。如果 CLI 所在的 shell 设置了代理，也要在该 shell 中保留 `NO_PROXY`，因为托管服务变量只作用于服务器进程，而不作用于 CLI 进程。
+修改托管环境变量会停止正在运行的服务，`service start` 会用新的环境变量重新启动它。托管服务的变量只对服务器进程生效，因此需要在运行 CLI 的 shell 中另行设置代理变量。CLI 和服务器都会自动让回环地址绕过代理。
 
 使用 `service unset env` 删除已持久化的变量：
 
@@ -116,7 +115,6 @@ CERT_SIGNATURE_FAILURE
 ```bash
 HTTP_PROXY=http://proxy.example.com:8080 \
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode --standalone
 ```
 
@@ -124,7 +122,6 @@ opencode --standalone
 
 ```bash
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode serve
 ```
 

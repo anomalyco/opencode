@@ -233,7 +233,7 @@ OpenCode 会按以下顺序使用第一个适用的方式向授权服务器标�
 | --- | --- |
 | 预先注册的客户端 | 配置了 `oauth.client_id`。 |
 | [客户端 ID 元数据文档](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents)（CIMD） | 授权服务器支持 CIMD 和公共客户端，且未设置 `oauth.redirect_uri`。 |
-| [动态客户端注册](https://datatracker.ietf.org/doc/html/rfc7591)（DCR） | 以上都不适用。OpenCode 会注册一个客户端，并在之后的登录中复用它。 |
+| [动态客户端注册](https://datatracker.ietf.org/doc/html/rfc7591)（DCR） | 以上都不适用。OpenCode 会注册一个客户端，后续登录会复用该客户端，并监听注册时使用的端口。如果该端口已被占用，OpenCode 会重新注册。 |
 
 授权服务器通过其元数据声明支持 CIMD：
 
@@ -290,8 +290,8 @@ https://opencode.ai/oauth/opencode/client.json
 | --- | --- |
 | `client_id` | 预先注册的客户端 ID。优先于 CIMD 和 DCR。 |
 | `client_secret` | 机密客户端的密钥，在令牌请求体中发送。公共客户端请省略。 |
-| `scope` | 要请求的作用域，以空格分隔。默认为服务器在拒绝未认证请求时指定的作用域。 |
-| `callback_port` | 本地回调端口，范围为 `1` 到 `65535`。默认使用 `redirect_uri` 的端口，然后使用一个可用的临时端口。 |
+| `scope` | 要请求的作用域，以空格分隔。默认采用服务器拒绝未经认证的请求时指定的作用域。OpenCode 刷新令牌时会再次发送已获授权的作用域。 |
+| `callback_port` | 本地回调端口，范围为 `1` 到 `65535`。默认依次选用 `redirect_uri` 指定的端口、此前登录时注册的客户端端口、可用的临时端口。 |
 | `redirect_uri` | 预先注册的回环 URI，其路径和端口需要能到达本地回调监听器。设置后会禁用 CIMD。 |
 | `auth_server_metadata_url` | 授权服务器的 OAuth 或 OpenID Connect 元数据文档 URL。如果 MCP 服务器没有发布指明其授权服务器的受保护资源元数据，请设置此项。 |
 
@@ -381,7 +381,7 @@ opencode mcp logout sentry
 
 - 只有使用 2026-07-28 修订版的连接才会共享。如果服务器以较旧的修订版响应，或被设为 `legacy`，则每个目录都会各自保留一个连接。
 - 只有当所有会影响连接的因素都一致时，目录才会共享连接：远程服务器的 URL、请求头、OAuth 设置和登录账号，本地服务器的命令、工作目录和环境变量。超时和 `protocol` 也必须一致。服务器名称不必相同，但登录凭据按名称存储，因此 OAuth 服务器只有在名称相同时才会共享。
-- 本地服务器只在本机上的目录之间共享，不包括工作区中的目录。跨项目共享需要固定的 `cwd`，例如 `"~"`。没有固定 `cwd` 时，它会在每个项目的文件夹中运行，因此每个项目都有自己的连接，OpenCode 会记录一条警告。
+- 本地服务器只在本机上的目录之间共享，不包括工作区中的目录。跨项目共享需要固定的 `cwd`，例如 `"~"`。否则，服务器会分别在每个项目的目录中运行，每个项目都有自己的连接，OpenCode 会记录一条警告。
 - 共享连接没有根目录。当工具请求输入时，请求会出现在发起调用的目录中。
 - 最后一个使用该连接的目录关闭连接或断开服务器后，连接会立即关闭。
 

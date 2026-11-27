@@ -39,7 +39,7 @@ Markdown agent 可以保存在全局目录中供所有项目使用，也可以�
 .opencode/agents/<name>.md
 ```
 
-OpenCode 会从当前目录逐级向上到项目根目录，查找项目中的 `.opencode` 目录。嵌套路径会成为 agent ID 的一部分：
+OpenCode 会从当前目录逐级向上查找项目中的 `.opencode` 目录，一直查到文件系统根目录。嵌套路径会成为 agent ID 的一部分：
 
 ```text
 .opencode/agents/team/reviewer.md  →  team/reviewer

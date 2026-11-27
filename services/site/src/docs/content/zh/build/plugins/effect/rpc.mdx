@@ -44,7 +44,7 @@ input: Schema.Struct({ query: Schema.String })
 
 ### 输入与输出
 
-`input` 定义方法的参数，`output` 定义方法的返回值。没有对应的值时，可以省略其中任意一项。
+`input` 定义方法的参数，`output` 定义方法的返回值，两项均为必填。没有输入或输出数据时，对应的 schema 用 `Schema.Struct({})`：不接收参数时传入 `{}`，不提供输出数据时返回 `{}`。
 
 ```ts
 search: {
@@ -65,7 +65,7 @@ errors: {
 
 ### 事件
 
-将事件添加到顶层的 `events` 映射中。事件数据必须是对象。
+将事件添加到顶层的 `events` 映射中。事件数据必须是对象。映射必填；如果 RPC 没有事件，请用 `events: {}`。
 
 ```ts
 events: {

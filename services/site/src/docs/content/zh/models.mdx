@@ -229,7 +229,7 @@ OpenCode 先应用提供商的值，再应用模型的值，最后应用所选�
 
 OpenCode 识别 `text`、`regex` 和 `lark`。models.dev 中的其他格式名称会被忽略，但不会因此丢弃模型或其工具。如果位于目录模型前面的代理拒绝自由格式工具，请在该模型上将 `capabilities.freeform` 设为 `[]`。
 
-这些只是回退假设，并非检测到的能力。如果知道准确的值，请设置 `capabilities` 和 `limit`；显式设置的值会替换回退值。添加 `disabled: true` 可以将模型从可用目录中隐藏：
+这些只是回退假设，并非检测到的能力。如果知道准确的值，请设置 `capabilities` 和 `limit`；显式设置的值会替换回退值。自动压缩以 `limit.input` 为准，但不会超过 `limit.context`，详见[窗口](/compaction#window)。添加 `disabled: true` 可以将模型从可用目录中隐藏：
 
 ```jsonc title="opencode.jsonc"
 {

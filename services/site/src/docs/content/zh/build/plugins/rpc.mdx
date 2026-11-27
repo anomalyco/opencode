@@ -66,7 +66,16 @@ RPC 定义描述了方法的输入和输出、事件以及错误的数据结构�
 
 ### 输入与输出
 
-每个方法都可以定义 `input` schema 描述参数，定义 `output` schema 描述返回值。如果方法不接受参数或没有返回值，省略对应的 schema 即可。
+每个方法都必须用 `input` schema 描述参数，用 `output` schema 描述返回值。没有输入或输出数据时，对应的 schema 应描述一个空对象：不接收参数时传入 `{}`，不提供输出数据时返回 `{}`。
+
+```ts
+refresh: {
+  input: { type: "object", additionalProperties: false },
+  output: { type: "object", additionalProperties: false },
+}
+```
+
+如果方法返回 `undefined`，会报 `rpc.invalid_output` 错误。
 
 ```ts
 search: {
@@ -104,7 +113,7 @@ errors: {
 
 ### 事件
 
-在顶层的 `events` 映射中添加事件。每个事件都有一个 schema，用于描述发送给订阅者的数据。
+在顶层的 `events` 映射中添加事件。每个事件都有一个 schema，用于描述发送给订阅者的数据。映射必填；如果 RPC 没有事件，请用 `events: {}`。
 
 事件数据必须是对象。没有数据时，使用空对象 schema：
 

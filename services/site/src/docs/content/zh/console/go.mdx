@@ -85,6 +85,7 @@ OpenCode Go 专为 [OpenCode](https://opencode.ai) 以及会产生类似请求�
 | **jcode**         | 更新到 **v0.81.6 或更高版本**，其中包含[会话请求头修复](https://github.com/1jehuang/jcode/issues/1167)。                                                                                                                     |
 | **OpenClaw**      | 当前版本会在 Go 请求中发送 `x-opencode-session`。浏览器登录需要 **2026.11.7 或更高版本**。                                                                                                                                      |
 | **Kilo Code CLI** | 包含 [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) 的版本会恢复 OpenCode 会话请求头。此修复适用于 CLI，不适用于 VS Code 扩展。请参阅 [issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723)。 |
+| **MiMo Code** | 请更新到 **v0.1.16 或更高版本**。这些版本会在 Go 请求中发送 `x-opencode-session`（[PR #2655](https://github.com/XiaomiMiMo/MiMo-Code/pull/2655)）。 |
 
 ### 已知有问题的客户端
 
@@ -95,7 +96,6 @@ OpenCode Go 专为 [OpenCode](https://opencode.ai) 以及会产生类似请求�
 | **DeepSeek Harness**    | 会话信息在某些模型路径上会到达，但在其他路径上缺失。我们能识别其原生请求头；剩余工作是在所有适配器中发送它。[Discussion #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495)。 |
 | **GitHub Copilot Chat** | 已在 [VS Code issue #334186](https://github.com/microsoft/vscode/issues/334186) 中请求自动会话请求头支持。                                                                                                                           |
 | **Kimi Code**           | [issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506) 中的会话请求头请求已关闭，未计划处理。                                                                                                                            |
-| **MiMo Code**           | [Issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) 已关闭，[PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327) 也已关闭且未合并。                                                                            |
 
 ## 用量限额
 

@@ -83,7 +83,7 @@ export default Plugin.define({
 
 ## 转换
 
-转换是对 OpenCode 领域状态的同步修改，每个转换都会基于其领域中较早的注册。诸如 `ctx.model.list()` 这样的注册表读取会反映到目前为止的每次注册，包括在插件 `setup` 期间；启动批处理只会合并更新通知，绝不会延迟读取返回的内容。资源状态 API 仍然报告正在运行的资源状态：注册了定义并不意味着其连接或其他资源工作已经完成。
+转换是对 OpenCode 领域状态的同步修改，每个转换都会基于其领域中较早的注册。诸如 `ctx.model.list()` 这样的注册表读取会反映到目前为止的每次注册，即使是在插件初始化期间。启动批处理只会合并更新通知，绝不会延迟读取返回的内容。资源状态 API 仍然报告正在运行的资源状态：注册了定义并不意味着其连接或其他资源工作已经完成。
 
 来源通过 `ctx.provider.transform` 贡献提供商和不可变的模型定义。
 
@@ -173,7 +173,7 @@ const agents = await ctx.agent.list()
 const build = await ctx.agent.get({ agentID: "build" })
 ```
 
-注册一个转换来检查、更新、移除或选择默认 agent。
+注册一个转换，即可查看、创建、更新或移除 agent，也可以设置默认 agent。
 
 ```ts
 await ctx.agent.transform((editor) => {
@@ -185,6 +185,18 @@ await ctx.agent.transform((editor) => {
     agent.description = "Builds features and fixes bugs"
   })
   editor.remove("legacy")
+})
+```
+
+用 `editor.update` 注册新 agent。如果 ID 已存在，就会编辑对应的 agent；否则会先通过 `Agent.Info.default(id)` 创建一个，再执行回调。
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
 })
 ```
 
@@ -992,13 +1004,13 @@ editor.add({
 
 在 Code Mode（`codemode: true`）中，自由格式工具直接接收字符串，例如 `await tools.ticket("OPS-42")`。`await tools.ticket({ id: "OPS-42" })` 也可以。
 
-更改回调捕获的来源数据后，请调用 `reload()`。重新加载会按原顺序重新应用活动转换，不会重新运行插件的 `setup`。
+更改回调捕获的来源数据后，请调用 `reload()`。重新加载会按原顺序重新应用活动转换，不会重新初始化插件。
 
 ```ts
 await ctx.tool.reload()
 ```
 
-使用 `list()` 和 `get()` 检查当前编辑器中的工具。工具的 `id` 包含其有效名称，ID 不存在时 `get()` 返回 `undefined`。使用有效工具名（包括其命名空间，如上面的 `acme_greeting`）调用 `update` 和 `remove`。命名空间中的点号和工具名中不受支持的字符会变为 `_`。不存在的名称会被忽略；创建工具需要 `add` 和完整定义。更新会保留名称和命名空间。要替换 schema 或选项，请赋予新值，而不是修改嵌套值。无效的更新会记录日志，并保留之前的定义。
+使用 `list()` 和 `get()` 检查当前编辑器中的工具。工具的 `id` 包含其有效名称，ID 不存在时 `get()` 返回 `undefined`。使用有效工具名（包括其命名空间，如上面的 `acme_greeting`）调用 `update` 和 `remove`。命名空间中的点号会替换为 `_`。工具名只保留字母、数字、`_` 和 `-`，其他字符同样替换为 `_`。不存在的名称会被忽略；创建工具需要 `add` 和完整定义。更新会保留名称和命名空间。要替换 schema 或选项，请赋予新值，而不是修改嵌套值。无效的更新会记录日志，并保留之前的定义。
 
 ```ts
 await ctx.tool.transform((editor) => {
@@ -1133,7 +1145,7 @@ export default Plugin.define({
 
 - 添加策略会自动选中它。最后注册的活动策略生效；无需策略选择配置。
 - 销毁其注册或卸载插件会恢复之前的实现，最终回退到内置的 Git 策略。
-- `reload()` 会在捕获的输入变化后重新应用转换，不会重新运行插件的 `setup`。
+- `reload()` 会在捕获的输入变化后重新应用转换，不会重新初始化插件。
 - 创建失败不会改用 Git 重试。即使默认值变化，现有 worktree 也会保留其记录的归属。
 - 策略管理本地目录。远程工作区预配不属于此接口。
 
@@ -1151,7 +1163,7 @@ await ctx.worktree.remove({ projectID, directory: created.directory, force: fals
 
 创建操作会从项目保存的 `canonical` 目录加载配置和插件，并使用它们选定的策略。它接受可选的父级 `directory`、来源 `from`、起始 `branch` 和 `name`。来源默认为规范检出目录，`from` 覆盖必须属于该项目。选择来源不会更改配置根目录。提供的起始 ref 必须得到所选策略的支持；例如 Rift 的原生快照操作没有 ref 选择选项。
 
-创建和刷新会等待规范检出目录的插件激活。在该检出目录的插件 `setup` 期间发起的调用只能看到目前为止的注册，不会等待自身的激活。
+创建和刷新会等待规范检出目录的插件激活。在该检出目录初始化插件时发起的调用只能看到已经完成的注册，不会等待插件自身激活。
 
 移除操作会加载规范配置并激活其插件，然后使用 worktree 记录的策略，而不是当前选定的默认策略。记录的归属不可用会产生错误。worktree 的目标位置可以在别处：
 
@@ -1163,7 +1175,8 @@ await ctx.worktree.remove({
 })
 ```
 
-归属缺失会使移除失败，而不是回退到 Git。策略可以抛出 `new Worktree.OperationError({ message: "Uncommitted changes", forceRequired: true })`（从 `@opencode/plugin` 导入 `Worktree`），以在无需依赖 Core 或 Git 错误的情况下请求强制确认。
+归属缺失会使移除失败，而不是回退到 Git。策略可以抛出 `new Worktree.OperationError({
+message: "Uncommitted changes", forceRequired: true })`（从 `@opencode/plugin` 导入 `Worktree`），以在无需依赖 Core 或 Git 错误的情况下请求强制确认。
 
 刷新会加载规范配置，并让所有可用策略在已知检出根目录中查找 worktree。它会合并结果、保留记录的归属，并清理缺失的目录。失败的发现来源会被记录，其他来源继续。即使没有可用策略报告，现有目录也会保留。请监听 `worktree.updated`，并再次调用 `list` 读取变化后的清单。
 

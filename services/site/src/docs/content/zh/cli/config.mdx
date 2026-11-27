@@ -35,6 +35,16 @@ OpenCode 在创建或迁移该文件时会自动添加 `$schema`。TUI 运行期
 
 未知设置会被忽略。请保留 `$schema`，这样编辑器会标记无效的值。
 
+### 旧版 `tui.json`
+
+V1 将终端客户端设置保存在 `tui.json` 中。V2 只在迁移时读取一次，不会将它作为优先级较低的配置与 `cli.json` 合并：
+
+- 如果 `cli.json` 不存在，CLI 会根据同一目录下全局 `tui.json` 中受支持的设置，以及状态目录下 `kv.json` 中保存的偏好创建该文件。
+- 有了 `cli.json` 后，CLI 就会忽略 `tui.json`。再修改它也不会生效，保留或删除都可以。
+- 删除 `cli.json` 后，下次启动时会重新迁移。
+- 迁移不会修改或删除旧文件。
+- 只会读取全局 `tui.json`。项目内的 `tui.json` 和任何 `tui.jsonc` 都不会迁移。
+
 ## 内联配置
 
 设置 `OPENCODE_CLI_CONFIG_CONTENT`，即可通过内联 JSON 应用 CLI 设置：
@@ -62,7 +72,7 @@ OpenCode 会将内联设置合并到全局 `cli.json` 之上。嵌套对象会�
 }
 ```
 
-<div class="docs-table-scroll" role="region" aria-label="外观设置" tabIndex={0}>
+<div class="docs-table-scroll" role="region" aria-label="Appearance settings" tabIndex={0}>
 
 | 设置项 | 取值 | 说明 |
 | ----------------- | --------------------------------------- | ------------------------------------------------------------------------ |
@@ -95,7 +105,7 @@ OpenCode 会将内联设置合并到全局 `cli.json` 之上。嵌套对象会�
 }
 ```
 
-<div class="docs-table-scroll" role="region" aria-label="输入设置" tabIndex={0}>
+<div class="docs-table-scroll" role="region" aria-label="Input settings" tabIndex={0}>
 
 | 设置项 | 取值 | 说明 |
 | -------------------------- | ------------------------------- | --------------------------------------------------------------------------- |
@@ -129,7 +139,7 @@ OpenCode 会将内联设置合并到全局 `cli.json` 之上。嵌套对象会�
 }
 ```
 
-<div class="docs-table-scroll" role="region" aria-label="会话设置" tabIndex={0}>
+<div class="docs-table-scroll" role="region" aria-label="Session settings" tabIndex={0}>
 
 | 设置项 | 取值 | 说明 |
 | ----------------------- | --------------------------- | ---------------------------------------------------------------------------- |
@@ -163,7 +173,7 @@ OpenCode 会将内联设置合并到全局 `cli.json` 之上。嵌套对象会�
 
 旧版布尔设置 `tabs.enabled` 仍然受支持：`true` 等同于 `on`，`false` 等同于 `off`。OpenCode 会读取它，但不会改写配置文件。
 
-<div class="docs-table-scroll" role="region" aria-label="标签页设置" tabIndex={0}>
+<div class="docs-table-scroll" role="region" aria-label="Tab settings" tabIndex={0}>
 
 | 设置项 | 取值 | 说明 |
 | ----------------- | --------------------------- | ----------------------------------------------------------------------------- |
@@ -192,7 +202,7 @@ OpenCode 会将内联设置合并到全局 `cli.json` 之上。嵌套对象会�
 }
 ```
 
-<div class="docs-table-scroll" role="region" aria-label="Diff 设置" tabIndex={0}>
+<div class="docs-table-scroll" role="region" aria-label="Diff settings" tabIndex={0}>
 
 | 设置项 | 取值 | 说明 |
 | -------------- | ------------------------------------------- | --------------------------------------------------------- |
@@ -226,7 +236,7 @@ OpenCode 会将内联设置合并到全局 `cli.json` 之上。嵌套对象会�
 }
 ```
 
-<div class="docs-table-scroll" role="region" aria-label="提醒设置" tabIndex={0}>
+<div class="docs-table-scroll" role="region" aria-label="Alert settings" tabIndex={0}>
 
 | 设置项 | 取值 | 说明 |
 | ------------------------ | ---------------------- | -------------------------------------------------------------------------------------------------------- |
@@ -261,7 +271,7 @@ OpenCode 会将内联设置合并到全局 `cli.json` 之上。嵌套对象会�
 }
 ```
 
-<div class="docs-table-scroll" role="region" aria-label="终端设置" tabIndex={0}>
+<div class="docs-table-scroll" role="region" aria-label="Terminal settings" tabIndex={0}>
 
 | 设置项 | 取值 | 说明 |
 | ---------------- | -------------------- | -------------------------------------------------------------------------------------------------------- |
@@ -291,7 +301,7 @@ OpenCode 会将内联设置合并到全局 `cli.json` 之上。嵌套对象会�
 }
 ```
 
-<div class="docs-table-scroll" role="region" aria-label="Mini 设置" tabIndex={0}>
+<div class="docs-table-scroll" role="region" aria-label="Mini settings" tabIndex={0}>
 
 | 设置项 | 取值 | 说明 |
 | ------------------- | ------------------------------ | ---------------------------------------------------------------------------------- |
@@ -342,7 +352,7 @@ density-wave      seed
 }
 ```
 
-<div class="docs-table-scroll" role="region" aria-label="快捷键设置" tabIndex={0}>
+<div class="docs-table-scroll" role="region" aria-label="Keybind settings" tabIndex={0}>
 
 | 设置项 | 取值 | 说明 |
 | ----------------------- | ------------------------------------------------ | -------------------------------------------------------------------- |
@@ -376,7 +386,7 @@ density-wave      seed
 }
 ```
 
-<div class="docs-table-scroll" role="region" aria-label="插件设置" tabIndex={0}>
+<div class="docs-table-scroll" role="region" aria-label="Plugin settings" tabIndex={0}>
 
 | 设置项 | 取值 | 说明 |
 | -------------------- | --------------- | --------------------------------------------------------------- |
@@ -403,7 +413,7 @@ density-wave      seed
 }
 ```
 
-<div class="docs-table-scroll" role="region" aria-label="调试与实验性功能设置" tabIndex={0}>
+<div class="docs-table-scroll" role="region" aria-label="Debug and experimental settings" tabIndex={0}>
 
 | 设置项 | 取值 | 说明 |
 | ------------------- | ------------------------------- | ----------------------------------------------------------------------------------- |

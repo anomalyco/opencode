@@ -104,6 +104,33 @@ grep 'role=server' ~/.local/share/opencode/log/opencode.log
 grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
 ```
 
+## 导出遥测数据
+
+OpenCode 可以将日志和追踪数据发送到 OpenTelemetry 收集器，也可以发送到支持通过 HTTP 接收 OTLP 数据的 APM 后端。请设置收集器的基础 URL，不要带路径：
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer example-token"
+export OTEL_RESOURCE_ATTRIBUTES="team=platform,host.name=dev-laptop"
+opencode
+```
+
+| 变量 | 行为 |
+| --- | --- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | 基础 URL。日志发往 `<endpoint>/v1/logs`，追踪数据发往 `<endpoint>/v1/traces`。不设置此变量就不会导出数据。 |
+| `OTEL_EXPORTER_OTLP_HEADERS` | 每次导出时发送的请求头，格式为 `key=value`，以逗号分隔，例如可用于发送 API 密钥。 |
+| `OTEL_RESOURCE_ATTRIBUTES` | 附加到每条记录的属性，格式为经过 URL 编码的 `key=value`，以逗号分隔。只要有一项格式错误，所有属性都会被忽略。 |
+
+每条记录还包含 `service.name`（`opencode`）、`service.version`、`deployment.environment.name`（发布渠道）、`opencode.client` 和 `opencode.run`（与日志文件中的运行 ID 相同）。
+
+后台服务是独立进程，不会继承当前 shell 的环境变量。要追踪模型调用和工具运行，也要为后台服务设置这些变量：
+
+```bash
+opencode service set env OTEL_EXPORTER_OTLP_ENDPOINT http://localhost:4318
+opencode service set env OTEL_EXPORTER_OTLP_HEADERS "authorization=Bearer example-token"
+opencode service start
+```
+
 ## 采集堆快照
 
 在任意平台上为正在运行的后台服务器写入内存（堆）快照：

@@ -16,6 +16,18 @@ Explain how authentication works in this project
 
 按 **Shift+Enter**、**Ctrl+Enter**、**Alt+Enter** 或 **Ctrl+J** 换行。OpenCode 工作期间，按 **Enter** 会引导当前会话（steer）；先按 **Ctrl+X** 再按 **Enter**，则把提示词加入队列稍后发送。
 
+## 项目与目录
+
+OpenCode 会在启动时所在的目录中查找文件、执行 shell 命令。同一个 Git 仓库中的目录（包括它的 worktree）都属于同一个项目。没有纳入版本控制的目录自成一个项目。
+
+启动时传入目录，即可打开另一个项目：
+
+```bash
+opencode ~/code/another-project
+```
+
+按 **Ctrl+O** 打开最近会话和项目列表。选中项目后按 **Right** 查看它的 worktree 列表，再按 **Ctrl+N** 创建新的 worktree。
+
 ## 上下文
 
 输入 `@` 搜索文件，选中后即可将该文件附加到提示词中。在 `@` 后继续输入可以缩小搜索范围。
@@ -68,7 +80,9 @@ Shell 命令在会话的工作目录中运行，输出会保留在会话中。
 
 ## 会话
 
-先按 **Ctrl+X** 再按 **N** 新建会话。先按 **Ctrl+X** 再按 **L**，或运行 `/sessions`，可以回到已有会话；**Ctrl+O** 会打开最近会话和项目的合并列表。
+每个会话都是一次独立的对话，有自己的历史记录和目录。要处理一项新任务，可以运行 `/new`，或先按 **Ctrl+X** 再按 **N** 新建会话；之前的会话仍可继续使用。新会话默认使用启动 OpenCode 时所在的目录；如果将 [`session.new_location`](/cli/config#sessions) 设为 `inherit`，则会沿用当前会话的目录。
+
+要回到已有会话，先按 **Ctrl+X** 再按 **L**，或运行 `/sessions`。在会话列表中，按 **Ctrl+A** 可以在当前目录的会话与所有项目的会话之间切换。按 **Ctrl+O** 会同时列出最近的会话和项目。
 
 标签页默认启用。用 **Ctrl+Tab** 和 **Ctrl+Shift+Tab** 在标签页间切换，先按 **Ctrl+X** 再按 **W** 关闭当前标签页，按 **Ctrl+Shift+T** 重新打开最近关闭的标签页。
 

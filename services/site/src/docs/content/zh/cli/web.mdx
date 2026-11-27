@@ -128,3 +128,23 @@ $ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
 ```bash
 $ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
 ```
+
+`opencode service set password` 只对托管的后台服务生效。`opencode serve` 会读取 `OPENCODE_PASSWORD`；如果未设置，每次启动都会生成新密码。
+
+### Docker
+
+每个版本都会发布一个带版本标签的镜像到 `ghcr.io/anomalyco/opencode`。镜像的入口点是 `opencode`，默认启动 TUI，因此要传入 `serve`。请绑定到 `0.0.0.0`，默认地址 `127.0.0.1` 只能从容器内部访问。
+
+```bash
+$ docker run -d --name opencode -p 4096:4096 \
+    -e OPENCODE_PASSWORD="a-long-secret" \
+    -e ANTHROPIC_API_KEY \
+    -v opencode-data:/root/.local/share/opencode \
+    -v opencode-config:/root/.config/opencode \
+    -v "$PWD":/workspace -w /workspace \
+    ghcr.io/anomalyco/opencode:<version> serve --hostname 0.0.0.0 --port 4096
+```
+
+- 设置 `OPENCODE_PASSWORD`，这样重启后密码也不会变。
+- 挂载数据目录 `/root/.local/share/opencode`。会话保存在该目录的数据库中，不挂载的话，删除容器时会话也会丢失。挂载配置目录 `/root/.config/opencode` 可以保留全局配置。
+- 运行 `curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info`，确认服务已就绪。

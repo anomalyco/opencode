@@ -178,7 +178,7 @@ export default Plugin.define({
 
 ## 转换
 
-转换（transform）通过编辑器同步修改状态。在每个领域内，OpenCode 按注册顺序应用转换。来源先提供提供商和不可变的模型定义，随后模型转换再编辑活跃提供商的候选模型。用 `yield*` 执行注册，即可将其保留在插件作用域内。
+转换（transform）通过编辑器同步修改状态。在每个领域内，OpenCode 按注册顺序应用转换。来源先提供提供商和不可变的模型定义，随后模型转换再编辑活跃提供商的候选模型。像下面这样在 Effect 生成器中执行注册，即可将其保留在插件作用域内。
 
 ```ts title="plugins/models-effect/index.ts"
 import { Model, Plugin, Provider } from "@opencode/plugin/effect"
@@ -1003,7 +1003,7 @@ effect: (ctx) =>
 
 Effect 工具接受与 Promise 工具相同的[自由格式输入声明](/build/plugins/server#freeform-tool-input)。如果模型未声明支持该格式，工具会保留常规的对象输入。
 
-工具的 `id` 包含其有效名称，该 ID 不存在时 `get()` 返回 `undefined`。调用 `update` 和 `remove` 时，请使用包含命名空间的有效工具名（上例中为 `acme_greeting`）。命名空间中的点号以及工具名中不支持的字符会被替换为 `_`。不存在的名称会被忽略；要创建工具，必须通过 `add` 提供完整定义。更新会保留名称和命名空间。要替换 schema 或选项，请直接赋予新值，不要修改嵌套的值。无效的更新会记录到日志，原有定义保持不变。
+工具的 `id` 包含其有效名称，该 ID 不存在时 `get()` 返回 `undefined`。调用 `update` 和 `remove` 时，请使用包含命名空间的有效工具名（上例中为 `acme_greeting`）。命名空间中的点号会替换为 `_`。工具名只保留字母、数字、`_` 和 `-`，其他字符同样替换为 `_`。不存在的名称会被忽略；要创建工具，必须通过 `add` 提供完整定义。更新会保留名称和命名空间。要替换 schema 或选项，请直接赋予新值，不要修改嵌套的值。无效的更新会记录到日志，原有定义保持不变。
 
 {/* prettier-ignore */}
 ```ts

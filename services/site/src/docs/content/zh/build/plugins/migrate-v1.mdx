@@ -85,7 +85,31 @@ V2 的上下文既是一个 OpenCode 客户端，也是插件 API。大多数操
 
 `ctx.location` 描述的是该插件实例加载所在的 Location，而不是插件可能观察到的每个会话或事件所在的 Location。如果需要区分这一点，请读取会话或事件自身的数据。
 
-上下文提供的领域远不止表中所列，还包括 catalog、命令、集成、MCP 服务器、引用、技能、存储、VCS、worktree 和网页搜索等。参见[插件的完整上下文](/build/plugins/server#api)。
+上下文提供的领域远不止表中所列，还包括命令、集成、MCP 服务器、引用、技能、存储、VCS、worktree 和网页搜索等。参见[插件的完整上下文](/build/plugins/server#api)。
+
+### 迁移 catalog 领域
+
+早期版本的插件通过 `ctx.catalog` 发布提供商和模型。现在 OpenCode 将 `ctx.provider` 和 `ctx.model` 作为两个独立的领域提供，因此调用 `ctx.catalog.transform` 的插件将无法加载。
+
+| 旧版 catalog API | 当前对应的 API |
+| --- | --- |
+| `ctx.catalog.transform(draft => …)` | `ctx.provider.transform(editor => …)` 和 `ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)` | `ctx.provider` 中的 `editor.update(id, fn)` |
+| `draft.model.update(providerID, modelID, fn)` | `ctx.model` 中的 `editor.update(providerID, modelID, fn)` |
+| `ctx.catalog.reload()` | `ctx.provider.reload()` 和 `ctx.model.reload()` |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+完整的编辑器 API 请参阅[提供商](/build/plugins/server#providers)和[模型](/build/plugins/server#models)。
 
 ## 在 `setup` 中注册钩子
 

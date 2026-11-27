@@ -113,10 +113,12 @@ V2 的操作名是字符串，因此插件可以定义更多操作。内置工�
 | `websearch` | 搜索词 |
 | `generate_image` | 所选的图片模型，格式为 `providerID/modelID`，设置后还包含 `#variant` |
 | `external_directory` | 规范化的外部目录边界，通常以 `/*` 结尾 |
-| `<server>_<tool>` | MCP 工具为 `*`；两个名称中不支持的字符都会替换为 `_` |
+| `<server>_<tool>` | MCP 工具的资源为 `*`；两个名称中的字母、数字、`_` 和 `-` 会原样保留，其他字符一律替换为 `_` |
 | `opencode_list_mcp_resources` | MCP 服务器名称 |
 | `opencode_read_mcp_resource` | `<server>:<uri>` |
 | `execute` | `*`；拒绝会移除 Code Mode 并直接列出其工具，嵌套调用的工具仍执行各自的规则 |
+
+MCP 操作名保留连字符，因此名为 `mcp-atlassian` 的服务器所提供的工具匹配 `mcp-atlassian_*`，而不是 `mcp_atlassian_*`。
 
 例如，只允许一个技能，拒绝其他所有技能：
 

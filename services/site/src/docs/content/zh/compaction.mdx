@@ -93,6 +93,26 @@ opencode api post /api/session/ses_example/compact --data '{"id":"msg_compact_on
 - 也可以使用 `20000` 这样的 token 数。同样的数量在小窗口中占比很大，在大窗口中占比很小。
 - 大于或等于模型窗口的 token 数会被忽略，并改用默认值。
 
+### 窗口
+
+窗口大小取模型的输入上限（`limit.input`），但不超过上下文上限（`limit.context`）。如果模型只设了其中一项，就用那一项。如果两项都没设，OpenCode 不会自动压缩；只有提供商因请求过长而拒绝时，才会压缩一次。
+
+配置中的上限按字段分别覆盖。如果模型目录同时指定了两项上限，仅调高 `limit.context`，窗口仍受目录给定的输入上限约束。此时也要设置 `limit.input`：
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "limit": { "context": 1050000, "input": 1000000 },
+        },
+      },
+    },
+  },
+}
+```
+
 ## 模型
 
 默认情况下，OpenCode 使用会话的模型自行生成摘要。设置 `agents.compaction.model` 可以用另一个模型生成摘要：
