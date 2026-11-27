@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileWatchDirs, safeWatch, watchFile } from "../src/util/watch"
@@ -69,6 +69,32 @@ test("follows a symlink that is created or repointed while watching", async () =
 
     const before = calls
     await Bun.sleep(100); await writeFile(second, "{\"a\":1}")
+    await waitFor(() => calls > before)
+    watcher.close()
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test("keeps watching the target directory after the target is deleted and recreated", async () => {
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "tui-watch-")))
+  try {
+    const target = path.join(root, "dotfiles", "cli.json")
+    const link = path.join(root, "config", "cli.json")
+    await Bun.write(target, "{}")
+    await mkdir(path.dirname(link), { recursive: true })
+    await symlink(target, link)
+
+    let calls = 0
+    const watcher = watchFile(link, () => calls++)
+    expect(watcher.dirs()).toContain(path.dirname(target))
+
+    await rm(target)
+    await Bun.sleep(300)
+    expect(watcher.dirs()).toContain(path.dirname(target))
+
+    const before = calls
+    await writeFile(target, '{"a":1}')
     await waitFor(() => calls > before)
     watcher.close()
   } finally {
