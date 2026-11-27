@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { Deferred, Effect, Exit, Fiber, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { KV } from "@opencode/core/kv"
+import { WebSearchMcp } from "@opencode/core/plugin/websearch/mcp"
 import { Bus } from "@opencode/core/bus"
 import { WebSearch } from "@opencode/core/websearch"
 import { Session } from "@opencode/schema/session"
@@ -330,6 +331,48 @@ describe("WebSearch", () => {
       expect(parallel.calls).toEqual([])
     }),
   )
+  ;[
+    { name: "MCP tool errors", cause: () => new WebSearchMcp.ToolError({ message: "Free MCP quota exhausted" }) },
+    { name: "HTTP 402", cause: () => TestWebSearch.httpError(402) },
+    { name: "HTTP 432", cause: () => TestWebSearch.httpError(432) },
+  ].forEach(({ name, cause }) => {
+    it.effect(`fails over on ${name} with random and stops using the provider`, () =>
+      Effect.gen(function* () {
+        const exa = yield* register("exa")
+        const parallel = yield* register("parallel")
+        const websearch = yield* WebSearch.Service
+        yield* websearch.select("random")
+        const first = yield* websearch.query({ query: "first" })
+        const failed = first.providerID === exa.providerID ? exa : parallel
+        const replacement = first.providerID === exa.providerID ? parallel : exa
+        failed.failure.cause = cause()
+        expect((yield* websearch.query({ query: "retry" })).providerID).toBe(replacement.providerID)
+        failed.failure.cause = undefined
+        yield* TestClock.adjust("1 day")
+        replacement.failure.cause = cause()
+        const error = yield* websearch.query({ query: "exhausted" }).pipe(Effect.flip)
+        expect(error).toMatchObject({ providerID: replacement.providerID, cause: replacement.failure.cause })
+        expect(failed.calls).toEqual([{ query: "first" }, { query: "retry" }])
+      }),
+    )
+
+    it.effect(`does not fail over a fixed provider on ${name}`, () =>
+      Effect.gen(function* () {
+        const exa = yield* register("exa")
+        const parallel = yield* register("parallel")
+        const websearch = yield* WebSearch.Service
+        yield* websearch.select(exa.providerID)
+        exa.failure.cause = cause()
+        expect(yield* websearch.query({ query: "fixed" }).pipe(Effect.flip)).toMatchObject({
+          providerID: exa.providerID,
+          cause: exa.failure.cause,
+        })
+        exa.failure.cause = undefined
+        expect((yield* websearch.query({ query: "recovered" })).providerID).toBe(exa.providerID)
+        expect(parallel.calls).toEqual([])
+      }),
+    )
+  })
 
   it.effect("reselects when the active provider is removed", () =>
     Effect.gen(function* () {

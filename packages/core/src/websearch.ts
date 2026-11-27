@@ -8,6 +8,7 @@ import { HttpClientError } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Bus } from "./bus.js"
 import { KV } from "./kv.js"
+import { WebSearchMcp } from "./plugin/websearch/mcp.js"
 import { State } from "./state.js"
 
 export const ID = WebSearch.ID
@@ -210,10 +211,10 @@ const layer = Layer.effect(
             if (result._tag === "Success") return new Response({ providerID: provider.id, results: result.success })
             const cause = result.failure
             const error = new RequestError({ providerID: provider.id, cause })
-            if (choice !== "random" || !HttpClientError.isHttpClientError(cause) || cause.response?.status !== 429)
-              return yield* error
             const now = yield* Clock.currentTimeMillis
-            cooldown = { until: now + cooldownMillis(cause.response.headers["retry-after"], now), error }
+            const until = choice === "random" ? failoverUntil(cause, now) : undefined
+            if (until === undefined) return yield* error
+            cooldown = { until, error }
             cooldowns.set(provider.id, cooldown)
           }
           provider = randomProvider(yield* Clock.currentTimeMillis, affinity, attempted)
@@ -223,6 +224,16 @@ const layer = Layer.effect(
     })
   }),
 )
+
+// Quota, plan-limit and provider-reported failures (402, Tavily's 432, MCP `isError`) will not clear on their own
+// soon, so the provider is skipped for the rest of the process. Auth failures (401/403) stay visible instead.
+function failoverUntil(cause: unknown, now: number) {
+  if (Schema.is(WebSearchMcp.ToolError)(cause)) return Infinity
+  if (!HttpClientError.isHttpClientError(cause)) return
+  const status = cause.response?.status
+  if (status === 429) return now + cooldownMillis(cause.response?.headers["retry-after"], now)
+  if (status === 402 || status === 432) return Infinity
+}
 
 function cooldownMillis(value: string | undefined, now: number) {
   if (!value?.trim()) return 60_000
