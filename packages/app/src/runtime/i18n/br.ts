@@ -975,12 +975,14 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Não foi possível iniciar o login. Verifique a conexão com o servidor e tente novamente.",
   "provider.connect.models.title": "Conectado a {{provider}}",
+  "provider.connect.models.description":
+    "Escolha um modelo para começar. Você pode trocar de modelo a qualquer momento.",
+  "provider.connect.models.available": "Modelos disponíveis",
   "provider.connect.chatgptWelcome.title": "ChatGPT conectado",
   "provider.connect.chatgptWelcome.description": "Solicitações elegíveis no OpenCode podem usar seu plano do ChatGPT.",
   "provider.connect.chatgptWelcome.usage": "Gerencie o uso nas configurações do ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "Entendi",
   "provider.connect.models.list": "Modelos disponíveis de {{provider}}",
-  "provider.connect.models.search": "Buscar modelos de {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Limite de uso do ChatGPT atingido",
   "provider.connect.chatgptUsageLimit.description": "Confira seu uso e seus limites nas configurações do ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "Gerenciar uso",

@@ -941,12 +941,13 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Det gick inte att starta inloggningen. Kontrollera serveranslutningen och försök igen.",
   "provider.connect.models.title": "Ansluten till {{provider}}",
+  "provider.connect.models.description": "Välj en modell att börja med. Du kan byta modell när som helst.",
+  "provider.connect.models.available": "Tillgängliga modeller",
   "provider.connect.chatgptWelcome.title": "ChatGPT anslutet",
   "provider.connect.chatgptWelcome.description": "Kvalificerade förfrågningar i OpenCode kan använda din ChatGPT-plan.",
   "provider.connect.chatgptWelcome.usage": "Hantera användning i ChatGPT-inställningarna",
   "provider.connect.chatgptWelcome.confirm": "Uppfattat",
   "provider.connect.models.list": "Modeller tillgängliga från {{provider}}",
-  "provider.connect.models.search": "Sök efter modeller från {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Användningsgränsen för ChatGPT har nåtts",
   "provider.connect.chatgptUsageLimit.description":
     "Kontrollera din användning och dina gränser i ChatGPT-inställningarna.",

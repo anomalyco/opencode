@@ -936,13 +936,14 @@ export const dict = {
   "provider.connect.console.statusFailed": "Չհաջողվեց ստուգել լիազորումը։ Ստուգեք սերվերի հետ կապը և կրկին փորձեք։",
   "provider.connect.console.startFailed": "Չհաջողվեց սկսել մուտքը։ Ստուգեք սերվերի հետ կապը և կրկին փորձեք։",
   "provider.connect.models.title": "Միացված է {{provider}}-ին",
+  "provider.connect.models.description": "Ընտրեք մոդել՝ սկսելու համար։ Մոդելը կարող եք փոխել ցանկացած պահի։",
+  "provider.connect.models.available": "Հասանելի մոդելներ",
   "provider.connect.chatgptWelcome.title": "ChatGPT-ն միացված է",
   "provider.connect.chatgptWelcome.description":
     "OpenCode-ի համապատասխան հարցումները կարող են օգտագործել ձեր ChatGPT պլանը։",
   "provider.connect.chatgptWelcome.usage": "Կառավարեք օգտագործումը ChatGPT-ի կարգավորումներում",
   "provider.connect.chatgptWelcome.confirm": "Հասկանալի է",
   "provider.connect.models.list": "{{provider}}-ից հասանելի մոդելներ",
-  "provider.connect.models.search": "Որոնել {{provider}}-ի մոդելներ",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT-ի օգտագործման սահմանաչափը սպառված է",
   "provider.connect.chatgptUsageLimit.description":
     "Ստուգեք ձեր օգտագործումն ու սահմանաչափերը ChatGPT-ի կարգավորումներում։",

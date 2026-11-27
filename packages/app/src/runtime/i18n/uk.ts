@@ -1033,13 +1033,14 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Не вдалося розпочати вхід. Перевірте підключення до сервера та спробуйте ще раз.",
   "provider.connect.models.title": "Підключено до {{provider}}",
+  "provider.connect.models.description": "Виберіть модель для початку. Змінити модель можна будь-коли.",
+  "provider.connect.models.available": "Доступні моделі",
   "provider.connect.chatgptWelcome.title": "ChatGPT підключено",
   "provider.connect.chatgptWelcome.description":
     "Відповідні запити в OpenCode можуть використовувати ваш план ChatGPT.",
   "provider.connect.chatgptWelcome.usage": "Керуйте використанням у налаштуваннях ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "Зрозуміло",
   "provider.connect.models.list": "Моделі, доступні від {{provider}}",
-  "provider.connect.models.search": "Пошук моделей від {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Досягнуто ліміту використання ChatGPT",
   "provider.connect.chatgptUsageLimit.description": "Перевірте використання та ліміти в налаштуваннях ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "Керувати використанням",

@@ -947,13 +947,15 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Kirishni boshlab bo‘lmadi. Server ulanishini tekshiring va qayta urinib ko‘ring.",
   "provider.connect.models.title": "{{provider}} ga ulandi",
+  "provider.connect.models.description":
+    "Boshlash uchun modelni tanlang. Modelni istalgan vaqtda almashtirishingiz mumkin.",
+  "provider.connect.models.available": "Mavjud modellar",
   "provider.connect.chatgptWelcome.title": "ChatGPT ulandi",
   "provider.connect.chatgptWelcome.description":
     "OpenCode’dagi mos so‘rovlar ChatGPT tarifingizdan foydalanishi mumkin.",
   "provider.connect.chatgptWelcome.usage": "Foydalanishni ChatGPT sozlamalarida boshqaring",
   "provider.connect.chatgptWelcome.confirm": "Tushunarli",
   "provider.connect.models.list": "{{provider}} dagi mavjud modellar",
-  "provider.connect.models.search": "{{provider}} modellarini qidirish",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT foydalanish limitiga yetildi",
   "provider.connect.chatgptUsageLimit.description": "Foydalanish va limitlarni ChatGPT sozlamalarida tekshiring.",
   "provider.connect.chatgptUsageLimit.manage": "Foydalanishni boshqarish",

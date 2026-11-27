@@ -962,13 +962,15 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Δεν ήταν δυνατή η έναρξη της σύνδεσης. Ελέγξτε τη σύνδεση με τον διακομιστή και δοκιμάστε ξανά.",
   "provider.connect.models.title": "Συνδέθηκε στο {{provider}}",
+  "provider.connect.models.description":
+    "Επιλέξτε ένα μοντέλο για να ξεκινήσετε. Μπορείτε να αλλάξετε μοντέλο οποιαδήποτε στιγμή.",
+  "provider.connect.models.available": "Διαθέσιμα μοντέλα",
   "provider.connect.chatgptWelcome.title": "Το ChatGPT συνδέθηκε",
   "provider.connect.chatgptWelcome.description":
     "Τα επιλέξιμα αιτήματα στο OpenCode μπορούν να χρησιμοποιούν το πρόγραμμα ChatGPT σας.",
   "provider.connect.chatgptWelcome.usage": "Διαχείριση χρήσης στις ρυθμίσεις του ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "Κατάλαβα",
   "provider.connect.models.list": "Διαθέσιμα μοντέλα από {{provider}}",
-  "provider.connect.models.search": "Αναζήτηση μοντέλων από {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Συμπληρώθηκε το όριο χρήσης του ChatGPT",
   "provider.connect.chatgptUsageLimit.description": "Ελέγξτε τη χρήση και τα όριά σας στις ρυθμίσεις του ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "Διαχείριση χρήσης",

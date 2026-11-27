@@ -942,13 +942,14 @@ export const dict = {
   "provider.connect.console.startFailed":
     "შესვლის დაწყება ვერ მოხერხდა. შეამოწმეთ სერვერთან კავშირი და სცადეთ ხელახლა.",
   "provider.connect.models.title": "დაკავშირებულია {{provider}}-თან",
+  "provider.connect.models.description": "აირჩიეთ მოდელი დასაწყებად. მოდელის შეცვლა ნებისმიერ დროს შეგიძლიათ.",
+  "provider.connect.models.available": "ხელმისაწვდომი მოდელები",
   "provider.connect.chatgptWelcome.title": "ChatGPT დაკავშირებულია",
   "provider.connect.chatgptWelcome.description":
     "OpenCode-ში შესაბამის მოთხოვნებს შეუძლია თქვენი ChatGPT-ის გეგმის გამოყენება.",
   "provider.connect.chatgptWelcome.usage": "გამოყენების მართვა ChatGPT-ის პარამეტრებში",
   "provider.connect.chatgptWelcome.confirm": "გასაგებია",
   "provider.connect.models.list": "{{provider}}-ის ხელმისაწვდომი მოდელები",
-  "provider.connect.models.search": "{{provider}}-ის მოდელების ძიება",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT-ის გამოყენების ლიმიტი ამოიწურა",
   "provider.connect.chatgptUsageLimit.description": "შეამოწმეთ გამოყენება და ლიმიტები ChatGPT-ის პარამეტრებში.",
   "provider.connect.chatgptUsageLimit.manage": "გამოყენების მართვა",

@@ -944,13 +944,14 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Најавата не можеше да започне. Проверете ја врската со серверот и обидете се повторно.",
   "provider.connect.models.title": "Поврзано со {{provider}}",
+  "provider.connect.models.description": "Изберете модел за почеток. Моделот можете да го смените во секое време.",
+  "provider.connect.models.available": "Достапни модели",
   "provider.connect.chatgptWelcome.title": "ChatGPT е поврзан",
   "provider.connect.chatgptWelcome.description":
     "Соодветните барања во OpenCode можат да го користат вашиот ChatGPT план.",
   "provider.connect.chatgptWelcome.usage": "Управувајте со потрошувачката во поставките на ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "Разбрав",
   "provider.connect.models.list": "Модели достапни од {{provider}}",
-  "provider.connect.models.search": "Пребарајте модели од {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Достигнат е лимитот за користење на ChatGPT",
   "provider.connect.chatgptUsageLimit.description": "Проверете ја потрошувачката и лимитите во поставките на ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "Управувај со потрошувачката",

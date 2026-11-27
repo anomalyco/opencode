@@ -970,13 +970,15 @@ export const dict = {
   "provider.connect.console.startFailed":
     "ސައިން އިން ފެށޭ ގޮތެއް ނުވިއެވެ. ސަރވަރ ކަނެކްޝަން ޗެކްކޮށް އަލުން ޖައްސަވާ.",
   "provider.connect.models.title": "⁨{{provider}}⁩ އާ ގުޅިއްޖެ",
+  "provider.connect.models.description":
+    "ފެށުމަށް މޮޑެލެއް ހޮވާށެވެ. ކޮންމެ ވަގުތެއްގައިވެސް މޮޑެލް ބަދަލުކުރެވޭނެއެވެ.",
+  "provider.connect.models.available": "ލިބެންހުރި މޮޑެލްތައް",
   "provider.connect.chatgptWelcome.title": "ChatGPT ގުޅިއްޖެ",
   "provider.connect.chatgptWelcome.description":
     "OpenCode ގައި ޝަރުތު ހަމަވާ ރިކުއެސްޓްތަކަށް ތިބާގެ ChatGPT ޕްލޭން ބޭނުންކުރެވޭނެއެވެ.",
   "provider.connect.chatgptWelcome.usage": "ChatGPT ސެޓިންގްސްގައި ބޭނުންކުރުން މެނޭޖްކުރާ",
   "provider.connect.chatgptWelcome.confirm": "އެނގިއްޖެ",
   "provider.connect.models.list": "⁨{{provider}}⁩ އިން ލިބެންހުރި މޮޑެލްތައް",
-  "provider.connect.models.search": "⁨{{provider}}⁩ ގެ މޮޑެލްތައް ސަރޗް ކުރޭ",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT ބޭނުންކުރުމުގެ ލިމިޓަށް އާދެވިއްޖެ",
   "provider.connect.chatgptUsageLimit.description":
     "ChatGPT ސެޓިންގްސްގައި ބޭނުންކުރި މިންވަރާއި ލިމިޓްތައް ޗެކްކުރާށެވެ.",

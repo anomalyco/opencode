@@ -942,13 +942,14 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Hyrja nuk mund të nisej. Kontrolloni lidhjen me serverin dhe provoni sërish.",
   "provider.connect.models.title": "U lidh me {{provider}}",
+  "provider.connect.models.description": "Zgjidhni një model për të filluar. Mund ta ndërroni modelin në çdo kohë.",
+  "provider.connect.models.available": "Modelet e disponueshme",
   "provider.connect.chatgptWelcome.title": "ChatGPT u lidh",
   "provider.connect.chatgptWelcome.description":
     "Kërkesat e përshtatshme në OpenCode mund të përdorin planin tuaj ChatGPT.",
   "provider.connect.chatgptWelcome.usage": "Menaxhoni përdorimin te cilësimet e ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "Në rregull",
   "provider.connect.models.list": "Modelet e disponueshme nga {{provider}}",
-  "provider.connect.models.search": "Kërko modele nga {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "U arrit kufiri i përdorimit të ChatGPT",
   "provider.connect.chatgptUsageLimit.description": "Kontrolloni përdorimin dhe kufijtë te cilësimet e ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "Menaxho përdorimin",

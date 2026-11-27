@@ -967,13 +967,14 @@ export const dict = {
   "provider.connect.console.startFailed":
     "No s'ha pogut iniciar la sessió. Comproveu la connexió amb el servidor i torneu-ho a provar.",
   "provider.connect.models.title": "Connectat a {{provider}}",
+  "provider.connect.models.description": "Trieu un model per començar. Podeu canviar de model quan vulgueu.",
+  "provider.connect.models.available": "Models disponibles",
   "provider.connect.chatgptWelcome.title": "ChatGPT connectat",
   "provider.connect.chatgptWelcome.description":
     "Les sol·licituds aptes d'OpenCode poden utilitzar el vostre pla de ChatGPT.",
   "provider.connect.chatgptWelcome.usage": "Gestioneu l'ús a la configuració de ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "Entesos",
   "provider.connect.models.list": "Models disponibles de {{provider}}",
-  "provider.connect.models.search": "Cerca models de {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "S'ha arribat al límit d'ús de ChatGPT",
   "provider.connect.chatgptUsageLimit.description": "Consulteu l'ús i els límits a la configuració de ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "Gestiona l'ús",

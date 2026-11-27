@@ -941,13 +941,14 @@ export const dict = {
   "provider.connect.console.startFailed":
     "පුරනය වීම ආරම්භ කළ නොහැකි විය. ඔබගේ සේවාදායක සම්බන්ධතාවය පරීක්ෂා කර නැවත උත්සාහ කරන්න.",
   "provider.connect.models.title": "{{provider}} වෙත සම්බන්ධයි",
+  "provider.connect.models.description": "ආරම්භ කිරීමට ආකෘතියක් තෝරන්න. ඔබට ඕනෑම වේලාවක ආකෘති මාරු කළ හැක.",
+  "provider.connect.models.available": "ලබා ගත හැකි ආකෘති",
   "provider.connect.chatgptWelcome.title": "ChatGPT සම්බන්ධයි",
   "provider.connect.chatgptWelcome.description":
     "OpenCode හි සුදුසුකම් ලත් ඉල්ලීම්වලට ඔබගේ ChatGPT සැලැස්ම භාවිතා කළ හැක.",
   "provider.connect.chatgptWelcome.usage": "ChatGPT සැකසීම්වල භාවිතය කළමනාකරණය කරන්න",
   "provider.connect.chatgptWelcome.confirm": "තේරුණා",
   "provider.connect.models.list": "{{provider}} වෙතින් ලබා ගත හැකි ආකෘති",
-  "provider.connect.models.search": "{{provider}} වෙතින් ආකෘති සොයන්න",
   "provider.connect.chatgptUsageLimit.title": "ChatGPT භාවිත සීමාවට ළඟා විය",
   "provider.connect.chatgptUsageLimit.description": "ChatGPT සැකසීම්වල ඔබගේ භාවිතය සහ සීමා පරීක්ෂා කරන්න.",
   "provider.connect.chatgptUsageLimit.manage": "භාවිතය කළමනාකරණය කරන්න",
