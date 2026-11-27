@@ -321,7 +321,7 @@ OpenCode identifies itself to the authorization server with the first method tha
 | --- | --- |
 | Pre-registered client | `oauth.client_id` is configured. |
 | [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents) (CIMD) | The authorization server supports CIMD and public clients, and `oauth.redirect_uri` is not set. |
-| [Dynamic client registration](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | Neither of the above applies. OpenCode registers a client and reuses it on later sign-ins. |
+| [Dynamic client registration](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | Neither of the above applies. OpenCode registers a client and reuses it on later sign-ins, listening on the port it registered. If that port is taken, OpenCode registers again. |
 
 An authorization server opts into CIMD through its metadata:
 
@@ -378,8 +378,8 @@ When a provider gives you client credentials, use V2's snake_case OAuth fields:
 | --- | --- |
 | `client_id` | Pre-registered client ID. Takes priority over CIMD and DCR. |
 | `client_secret` | Secret for a confidential client, sent in the token request body. Omit it for public clients. |
-| `scope` | Space-delimited scopes to request. Defaults to the scope the server names when it rejects an unauthenticated request. |
-| `callback_port` | Local callback port from `1` through `65535`. Defaults to the `redirect_uri` port, then an available ephemeral port. |
+| `scope` | Space-delimited scopes to request. Defaults to the scope the server names when it rejects an unauthenticated request. OpenCode sends the granted scope again when it refreshes the token. |
+| `callback_port` | Local callback port from `1` through `65535`. Defaults to the `redirect_uri` port, then the port of a client registered at an earlier sign-in, then an available ephemeral port. |
 | `redirect_uri` | Pre-registered loopback URI whose path and port reach the local callback listener. Setting it disables CIMD. |
 | `auth_server_metadata_url` | URL of the authorization server's OAuth or OpenID Connect metadata document. Set it when the MCP server does not publish protected resource metadata that names its authorization server. |
 

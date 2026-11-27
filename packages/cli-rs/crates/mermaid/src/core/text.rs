@@ -94,6 +94,7 @@ pub fn measure_text_box(value: &str, padding_x: i32, padding_y: i32, min_inner_w
 pub struct TextRun {
     pub text: String,
     pub italic: bool,
+    pub bold: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -103,9 +104,10 @@ pub struct TextLine {
 }
 
 static BREAK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)<br\s*/?>").expect("break pattern"));
-static ITALIC: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)</?(?:i|em)\s*>").expect("italic pattern"));
+static EMPHASIS: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)<(/?)(i|em|b|strong)\s*>").expect("emphasis pattern"));
 
-/// Splits `<br>` lines and `<i>`/`<em>` runs (`parseDiagramTextLines`).
+/// Splits `<br>` lines and `<i>`/`<em>`/`<b>`/`<strong>` runs (`parseDiagramTextLines`).
 pub fn parse_lines(value: &str) -> Vec<TextLine> {
     BREAK
         .split(value)
@@ -113,16 +115,22 @@ pub fn parse_lines(value: &str) -> Vec<TextLine> {
             let source = js_trim(line);
             let mut runs = Vec::new();
             let mut italic = false;
+            let mut bold = false;
             let mut offset = 0;
-            for tag in ITALIC.find_iter(source) {
-                if tag.start() > offset {
-                    runs.push(TextRun { text: source[offset..tag.start()].to_string(), italic });
+            for tag in EMPHASIS.captures_iter(source) {
+                let whole = tag.get(0).expect("whole match");
+                if whole.start() > offset {
+                    runs.push(TextRun { text: source[offset..whole.start()].to_string(), italic, bold });
                 }
-                italic = !tag.as_str().starts_with("</");
-                offset = tag.end();
+                let open = tag[1].is_empty();
+                match tag[2].to_ascii_lowercase().as_str() {
+                    "i" | "em" => italic = open,
+                    _ => bold = open,
+                }
+                offset = whole.end();
             }
             if offset < source.len() {
-                runs.push(TextRun { text: source[offset..].to_string(), italic });
+                runs.push(TextRun { text: source[offset..].to_string(), italic, bold });
             }
             TextLine { text: runs.iter().map(|run| run.text.as_str()).collect(), runs }
         })
@@ -275,7 +283,16 @@ fn code_point(code: u32) -> char {
 #[cfg(test)]
 mod tests {
     use super::super::entities::{CASES, ENTITIES};
-    use super::{decode, grapheme_width};
+    use super::{TextRun, decode, grapheme_width, parse_lines};
+
+    #[test]
+    fn parses_bold_and_italic_runs() {
+        let run = |text: &str, italic, bold| TextRun { text: text.to_string(), italic, bold };
+        let lines = parse_lines("<b>Service A</b> and <strong><i>both</i></STRONG><br/><em>again</em>");
+        assert_eq!(lines[0].text, "Service A and both");
+        assert_eq!(lines[0].runs, [run("Service A", false, true), run(" and ", false, false), run("both", true, true)]);
+        assert_eq!(lines[1].runs, [run("again", true, false)]);
+    }
 
     /// Widths `string-width` 7 gives each grapheme.
     #[test]

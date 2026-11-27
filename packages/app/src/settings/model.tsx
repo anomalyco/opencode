@@ -130,8 +130,8 @@ const generalSchema = Persistence.struct({
   timelineWidth: Schema.Literals(["focused", "comfortable", "wide"]),
   foldUserMessages: Schema.Boolean,
   wrapCodeBlocks: Schema.Boolean,
-  // The redesigned keyboard-first question dock, off until it ships.
-  newQuestionUI: Schema.Boolean,
+  // The question dock that answers from the composer. Only local and dev builds offer it, on by default there.
+  questionComposer: Persistence.optional(Schema.Boolean),
   // The redesigned session timeline, off until it ships.
   newTimeline: Persistence.optional(Schema.Boolean),
   // Browser-style session tab grouping across vertical and horizontal tabs.
@@ -321,7 +321,6 @@ export const defaultSettings: Settings = {
     timelineWidth: "comfortable",
     foldUserMessages: false,
     wrapCodeBlocks: false,
-    newQuestionUI: false,
     sidebarOrganize: "list",
     mobileTitlebarPosition: "top",
     followUpBehavior: "steer",
@@ -354,6 +353,11 @@ export function recentSessionsAvailable(platform: "web" | "desktop", channel: Im
   return platform === "desktop" && (channel === "local" || channel === "dev")
 }
 
+/** Only local and dev builds offer the question dock that answers from the composer. */
+export function questionComposerAvailable(channel: ImportMetaEnv["VITE_OPENCODE_CHANNEL"]) {
+  return channel === "local" || channel === "dev"
+}
+
 /** Projects moved to Consolidated where this build offers it (local/dev desktop), and to Customize elsewhere. */
 export function resolveSidebarOrganize(
   value: Settings["general"]["sidebarOrganize"] | undefined,
@@ -371,6 +375,8 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsPersistence, defaultSettings)
 
     const prototypes = recentSessionsAvailable(usePlatform().platform, import.meta.env.VITE_OPENCODE_CHANNEL)
+
+    const questionComposer = questionComposerAvailable(import.meta.env.VITE_OPENCODE_CHANNEL)
 
     const sidebarOrganizeOptions: SidebarOrganize[] = prototypes
       ? ["list", "customize", "recent", "consolidated"]
@@ -482,9 +488,14 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setSharedSidePanel(value: boolean) {
           setStore("general", "sharedSidePanel", value)
         },
-        newQuestionUI: withFallback(() => store.general?.newQuestionUI, defaultSettings.general.newQuestionUI),
-        setNewQuestionUI(value: boolean) {
-          setStore("general", "newQuestionUI", value)
+        questionComposerAvailable: questionComposer,
+        // Test fixtures keep the classic dock unless a test opts in.
+        questionComposer: withFallback(
+          () => (questionComposer ? store.general?.questionComposer : false),
+          questionComposer && import.meta.env.VITE_OPENCODE_TEST_FIXTURES !== "1",
+        ),
+        setQuestionComposer(value: boolean) {
+          setStore("general", "questionComposer", value)
         },
         sidebarOrganizeOptions,
         sidebarOrganize,

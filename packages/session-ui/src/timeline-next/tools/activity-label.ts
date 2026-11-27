@@ -84,7 +84,15 @@ export function activityLabel(parts: readonly ActivityGroupPart[], i18n: UiI18n,
 
   // Commands are counted, never quoted: a command can be any length.
   const commands = summary.commands ? [i18n.plural("ui.timeline.activity.commands", summary.commands)] : []
-  const used = [...new Set(summary.tools.map((name) => toolTitle(name, i18n)))]
+  // Counting a script's steps, tools the timeline doesn't know read as one "Tool", after the ones it does.
+  const titles = summary.tools.map((name) => toolTitle(name, i18n))
+  const other = i18n.t("ui.timeline.activity.otherTool")
+  const unknown = scriptSteps && summary.tools.some((name, index) => titles[index] === name)
+
+  const used = [
+    ...new Set(titles.filter((title, index) => !scriptSteps || title !== summary.tools[index])),
+    ...(unknown ? [other] : []),
+  ]
 
   const others = {
     explore: explore(false),

@@ -4,7 +4,6 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { eq } from "drizzle-orm"
 import { Context, Effect, Layer, Option, Result, Schema } from "effect"
-import { join } from "path"
 import { Database } from "../database/database.js"
 import { Environments } from "../environment/environments.js"
 import { Environment } from "../environment/index.js"
@@ -89,7 +88,7 @@ const layer = Layer.effect(
 
     const candidate = (cwd: SessionCwd.Resolved, name: string): Effect.Effect<Outcome> =>
       Effect.gen(function* () {
-        const target = (cwd.environment.path?.join ?? join)(cwd.absolute, name)
+        const target = cwd.environment.path.join(cwd.absolute, name)
         // One bounded read follows symlinks and rejects oversized targets before decoding.
         const file = yield* Effect.result(cwd.environment.files.read(target, { offset: 0, length: MAX_BYTES + 1 }))
         if (Result.isFailure(file)) return file.failure._tag === "Environment.Failed" ? unavailable : absent

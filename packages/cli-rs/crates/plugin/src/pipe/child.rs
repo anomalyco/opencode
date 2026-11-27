@@ -55,6 +55,8 @@ pub struct Limits {
     pub memory: u64,
     /// How often the resident set is read.
     pub poll: Duration,
+    /// How long a dropped child may take to end after its input closes before its process group is killed.
+    pub grace: Duration,
 }
 
 impl Default for Limits {
@@ -68,6 +70,7 @@ impl Default for Limits {
             setup: Duration::from_secs(10),
             memory: 512 << 20,
             poll: Duration::from_millis(500),
+            grace: Duration::from_millis(500),
         }
     }
 }
@@ -158,6 +161,9 @@ struct Shared {
     /// The reader waits for the host to take its trees: what the JS host sent after them is not read, so its silence
     /// is the host's, not the JS host's.
     held: AtomicBool,
+    /// A test holds the frames the host sends the child, as one that reads nothing does: its queue stays full, so the
+    /// host's overflow does not drain behind the test ([`Child::hold_input`]).
+    input_held: AtomicBool,
     /// Bytes read from the child, and of them in trees.
     read: AtomicU64,
     read_trees: AtomicU64,
@@ -227,6 +233,7 @@ impl Child {
             acked: AtomicU64::new(0),
             hello: AtomicBool::new(false),
             held: AtomicBool::new(false),
+            input_held: AtomicBool::new(false),
             read: AtomicU64::new(0),
             read_trees: AtomicU64::new(0),
             closed: AtomicBool::new(false),
@@ -331,6 +338,14 @@ impl Child {
         (self.shared.read.load(Ordering::Relaxed), self.shared.read_trees.load(Ordering::Relaxed))
     }
 
+    /// Holds what the host sends the child, as one that reads nothing does, and releases it again: what is queued
+    /// stays queued, so the host's overflow cannot drain behind a test that needs it full.
+    #[doc(hidden)]
+    pub fn hold_input(&self, held: bool) {
+        self.shared.input_held.store(held, Ordering::Release);
+        self.shared.out_ready.notify_all();
+    }
+
     /// The last acknowledged sequence.
     pub fn acked(&self) -> u64 {
         self.shared.acked.load(Ordering::Acquire)
@@ -365,7 +380,7 @@ impl Drop for Child {
         // The child ends when its input does; one that does not is killed. Off the UI thread, as a hang may be why it
         // is dropped.
         let reaped = std::thread::Builder::new().name("js-host-reap".to_owned()).spawn(move || {
-            let deadline = Instant::now() + Duration::from_millis(500);
+            let deadline = Instant::now() + shared.limits.grace;
             while Instant::now() < deadline {
                 let exited = lock(&shared.process).as_mut().is_none_or(exited);
                 if exited {
@@ -468,7 +483,11 @@ fn write(shared: &Shared, mut writer: channel::Writer) {
         let (frame, room) = {
             let mut out = lock(&shared.out);
             loop {
-                if let Some(frame) = out.frames.pop_front() {
+                // A held input pops nothing; the close still ends it. Unheld, what was queued before the close goes
+                // first: a test's hold is the only thing that may leave frames behind ([`Child::hold_input`]).
+                if !shared.input_held.load(Ordering::Acquire)
+                    && let Some(frame) = out.frames.pop_front()
+                {
                     out.bytes -= frame.len();
                     break (Some(frame), std::mem::take(&mut out.wants_room));
                 }
@@ -1258,6 +1277,41 @@ mod tests {
             std::thread::sleep(Duration::from_millis(5));
         }
         assert!(wakes.load(Ordering::SeqCst) > before, "the host was not woken when the queue had room");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_close_drains_the_frames_queued_before_it() {
+        use std::io::Read as _;
+        use std::os::unix::ffi::OsStrExt;
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let (gate, out) = (dir.path().join("gate"), dir.path().join("read"));
+        for path in [&gate, &out] {
+            let named = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
+            // SAFETY: a path of this test's own directory, NUL-terminated, with a plain mode.
+            assert_eq!(unsafe { libc::mkfifo(named.as_ptr(), 0o600) }, 0, "mkfifo {}", path.display());
+        }
+        // It reads nothing until the gate opens, then takes every frame to its own FIFO: the host's end of input is
+        // its EOF, so reading `out` blocks until the child ends, with no poll or deadline of the test's.
+        let mut command = Command::new("sh");
+        command.arg("-c").arg(format!("read _ < '{}'; cat > '{}'", gate.display(), out.display()));
+        // The reaper's grace is the test's, not a deadline: the child may take as long as the machine needs to read
+        // what the host queued before the close.
+        let limits = Limits { queued: 256 << 10, grace: Duration::from_secs(60), ..Limits::default() };
+        let child = Child::spawn(command, limits, || {}).unwrap();
+        let payload = vec![b'x'; 1 << 10];
+        let mut frames = Vec::new();
+        // Its pipe and queue fill: every send it took before the close is one the child must read.
+        while child.send(wire::CONTROL, &payload, None, Wait::Ack).is_ok() {
+            frames.extend(wire::encode(wire::CONTROL, &payload));
+        }
+        assert!(frames.len() > 128 << 10, "only {} bytes were queued", frames.len());
+        // The close ends the stream after what it queued; only a test's hold may leave frames behind.
+        drop(child);
+        std::fs::write(&gate, "go\n").unwrap();
+        let mut got = Vec::new();
+        std::fs::File::open(&out).unwrap().read_to_end(&mut got).unwrap();
+        assert_eq!(got, frames, "a frame queued before the close was dropped");
     }
 
     #[test]

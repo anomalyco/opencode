@@ -23,7 +23,8 @@ use crate::local::Local;
 use crate::prelude::*;
 
 /// `INTEGRATION_PRIORITY`: these come first, as "Popular".
-const PRIORITY: [&str; 6] = ["opencode", "opencode-go", "openai", "github-copilot", "anthropic", "google"];
+const PRIORITY: [&str; 7] =
+    ["opencode", "opencode-go", "openai", "anthropic", "claude-agent", "github-copilot", "google"];
 const SIGN_IN: &str = "Sign in required →";
 const POLL: Duration = Duration::from_millis(500);
 
@@ -1368,13 +1369,26 @@ mod tests {
         assert_eq!(
             ids(vec![
                 integration("mistral", "Mistral", ""),
+                integration("github-copilot", "GitHub Copilot", ""),
                 integration("openai", "OpenAI", ""),
                 integration("custom-z", "Zebra", ""),
+                integration("claude-agent", "Claude Agent", ""),
                 integration("anthropic", "Anthropic", ""),
+                integration("google", "Google", ""),
                 integration("opencode", "OpenCode Zen", ""),
                 integration("opencode-go", "OpenCode Go", go),
             ]),
-            ["opencode", "opencode-go", "openai", "anthropic", "mistral", "custom-z"]
+            [
+                "opencode",
+                "opencode-go",
+                "openai",
+                "anthropic",
+                "claude-agent",
+                "github-copilot",
+                "google",
+                "mistral",
+                "custom-z",
+            ]
         );
     }
 

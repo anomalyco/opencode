@@ -223,6 +223,53 @@ fn start_status_stop_and_restart() {
 }
 
 #[test]
+fn invalid_service_config_is_not_overwritten_while_status_and_stop_still_work() {
+    let Some(sandbox) = Sandbox::new() else { return };
+    let start = sandbox.run(&["service", "start"], &[]);
+    assert!(start.status.success(), "{}", text(&start.stderr));
+    let url = text(&start.stdout);
+    let registration_before = std::fs::read_to_string(sandbox.path("state/opencode/service-local.json")).unwrap();
+
+    let file = sandbox.path("config/opencode/service-local.json");
+    let raw = "{\"hostname\":\"127.0.0.1\",\"port\":\"4096\",\"password\":\"keep-me\",\"env\":{\"KEEP\":\"1\"}}\n";
+    std::fs::write(&file, raw).unwrap();
+
+    for args in [
+        &["service", "get"][..],
+        &["service", "get", "password"][..],
+        &["service", "set", "port", "4097"][..],
+        &["service", "set", "remote", "true"][..],
+        &["service", "unset", "port"][..],
+        &["service", "start"][..],
+        &["service", "restart"][..],
+    ] {
+        let output = sandbox.run(args, &[]);
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        let stderr = text(&output.stderr);
+        assert!(
+            stderr.contains(&format!("ServiceConfig.InvalidError: Invalid service config at {}", file.display())),
+            "{args:?}: {stderr}"
+        );
+        assert!(stderr.contains(r#"["port"]"#), "{args:?}: {stderr}");
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), raw, "{args:?}");
+        assert_eq!(
+            std::fs::read_to_string(sandbox.path("state/opencode/service-local.json")).unwrap(),
+            registration_before,
+            "{args:?}"
+        );
+    }
+
+    let status = sandbox.run(&["service", "status"], &[]);
+    assert!(status.status.success(), "{}", text(&status.stderr));
+    assert_eq!(text(&status.stdout), url);
+
+    let stop = sandbox.run(&["service", "stop"], &[]);
+    assert!(stop.status.success(), "{}", text(&stop.stderr));
+    assert!(sandbox.registration().is_none());
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), raw);
+}
+
+#[test]
 fn set_stops_the_service_without_ending_terminals() {
     let Some(sandbox) = Sandbox::new() else { return };
     assert!(sandbox.run(&["service", "start"], &[]).status.success());

@@ -12,6 +12,7 @@ import { IpcPortHandoff } from "../ipc-transport"
 import { ApplicationLifecycle } from "../lifecycle"
 import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "../lifecycle/onboarding"
 import { BackgroundService } from "../service/background-service"
+import { getKeepServiceRunning, setKeepServiceRunning } from "../service/keep-running"
 import { SidecarCredentials } from "../service/sidecar-credentials"
 import { getWindowID, setBackgroundColor } from "../windows"
 import { sender } from "./context"
@@ -47,6 +48,8 @@ export const appHandlers = AppRpcs.toLayer(
       AppSetSpellcheckEnabled: ({ enabled }) => Effect.sync(() => setSpellcheckEnabled(enabled)),
       AppGetSmoothScrollingEnabled: () => Effect.sync(getSmoothScrollingEnabled),
       AppSetSmoothScrollingEnabled: ({ enabled }) => Effect.sync(() => setSmoothScrollingEnabled(enabled)),
+      AppGetKeepServiceRunning: () => Effect.sync(getKeepServiceRunning),
+      AppSetKeepServiceRunning: ({ enabled }) => Effect.sync(() => setKeepServiceRunning(enabled)),
       AppExportDebugLogs: () => logging.exportDebug,
       AppSetForceFocus: ({ enabled }, context) => promise(() => setForceFocus(sender(handoff, context), enabled)),
       AppRecordFatalRendererError: ({ error }) =>

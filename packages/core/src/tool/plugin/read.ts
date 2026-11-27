@@ -1,12 +1,10 @@
 export * as ReadTool from "./read.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import path, { basename, dirname, extname, isAbsolute, join, relative } from "path"
+import { basename, dirname, extname, isAbsolute, join, relative } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
-import { Config } from "../../config.js"
-import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
 import { FileAccess } from "../../file-access.js"
 import { InstructionDiscovery } from "../../instruction-discovery.js"
@@ -53,8 +51,6 @@ export const Plugin = {
     const fs = yield* FSUtil.Service
     const environment = yield* Environment.Service
     const currentWorkingDirectory = yield* Environment.workingDirectoryResolver
-    const config = yield* Config.Service
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
     const discovery = yield* InstructionDiscovery.Service
 
@@ -62,7 +58,7 @@ export const Plugin = {
       .transform((editor) =>
         editor.add({
           name,
-          options: flags.resolve(loaded.entries).full_codemode.enabled
+          options: flags.current().full_codemode.enabled
             ? { codemode: { pinned: true, description: description(true) } }
             : { codemode: false },
           description: description(false),
@@ -82,8 +78,7 @@ export const Plugin = {
                 const files = [Skill.manifest, ...((yield* skills.files(id)) ?? [])]
                 yield* permission.assert({
                   action: "skill",
-                  resources: [skill.id],
-                  save: [skill.id],
+                  ...(yield* skills.approval(skill.id)),
                   ...Permission.invocation(context),
                 })
                 yield* permission.assert({
@@ -220,7 +215,7 @@ export const Plugin = {
       )
       if (matches.length !== 1) return
       // The path follows its environment's rules, whatever this server's platform joins with.
-      const rules = target.environment.path ?? path
+      const rules = target.environment.path
       return rules.join(rules.dirname(target.absolute), matches[0].name)
     })
 

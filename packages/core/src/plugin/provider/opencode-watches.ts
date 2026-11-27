@@ -150,14 +150,18 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
     const unattended = (yield* Effect.forEach(new Set(events.map((event) => event.watchID)), (id) =>
       ctx.storage.get(unattendedKey(id)),
     )).every((value) => value === true)
-    // CI runs pace themselves, so their updates count toward 20 since the prompt but not the 10-minute window.
-    const ci = !unattended && events.every((event) => event.kind === "workflow_run" || event.kind === "workflow_job")
+    // CI runs pace themselves, so their updates count toward 20 since the prompt but not the 10-minute window. A batch
+    // wakes if any update in it would alone, and counts once, toward the window only if a non-CI update fits in it.
+    const isCI = (event: WatchEvent) => event.kind === "workflow_run" || event.kind === "workflow_job"
+    const ci = !unattended && events.some(isCI)
+    const windowed = unattended || !events.every(isCI)
     // An update that arrives mid-run steers that run and wakes nothing, so it neither counts nor waits.
     const time = session.value.time
     const running = time.busy !== undefined && (time.idle === undefined || DateTime.isGreaterThan(time.busy, time.idle))
     const resume = running || ((ci || recent.length < WINDOW_LIMIT) && (unattended || count < PROMPT_LIMIT))
     const paused =
-      !running && (!resume || (!ci && recent.length + 1 >= WINDOW_LIMIT) || (!unattended && count + 1 >= PROMPT_LIMIT))
+      !running &&
+      (!resume || (windowed && recent.length + 1 >= WINDOW_LIMIT) || (!unattended && count + 1 >= PROMPT_LIMIT))
     // The same events delivered again, after a lost acknowledgement, conflict with the message they already made:
     // they were delivered, so they're acknowledged without another wake.
     const delivered = yield* ctx.session
@@ -181,7 +185,7 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
     if (delivered && !running)
       yield* ctx.storage.set(streakKey(sessionID), {
         count: resume ? count + 1 : count,
-        at: ci || !resume ? recent : [...recent, now],
+        at: resume && windowed && recent.length < WINDOW_LIMIT ? [...recent, now] : recent,
         last: now,
       })
     return ids
@@ -514,7 +518,14 @@ function stream(hub: Hub) {
       `${member.console.server.replace(/^http/, "ws")}/api/event-watches/stream`,
       { headers: headers.value },
     )
-    const reader = yield* socket.reader.pipe(Effect.option)
+    // workerd's global WebSocket constructor rejects header options with a synchronous TypeError defect;
+    // treat that as "refused" so watches fall back to HTTP long-polling.
+    const reader = yield* socket.reader.pipe(
+      Effect.option,
+      Effect.catchDefect((defect) =>
+        defect instanceof TypeError ? Effect.succeed(Option.none()) : Effect.die(defect),
+      ),
+    )
     if (Option.isNone(reader)) return "refused" as const
     const writer = yield* socket.writer
     const handle = yield* settle(hub, (ids) =>
@@ -640,25 +651,27 @@ const settle = Effect.fnUntraced(function* (
     }).pipe(Effect.catch((cause) => Effect.logWarning("failed to deliver settled watch events", { sessionID, cause })))
   return Effect.fnUntraced(function* (events: ReadonlyArray<WatchEvent>) {
     const now = yield* Clock.currentTimeMillis
-    const ready = yield* Effect.forEach(Map.groupBy(events, (event) => event.sessionID), ([sessionID, batch]) =>
-      Effect.gen(function* () {
-        const held = waiting.get(sessionID)
-        if (batch.every(settles)) {
-          if (held) {
-            held.events.push(...batch)
-            held.last = now
+    const ready = yield* Effect.forEach(
+      Map.groupBy(events, (event) => event.sessionID),
+      ([sessionID, batch]) =>
+        Effect.gen(function* () {
+          const held = waiting.get(sessionID)
+          if (batch.every(settles)) {
+            if (held) {
+              held.events.push(...batch)
+              held.last = now
+              return []
+            }
+            const fresh: Held = { events: [...batch], first: now, last: now }
+            waiting.set(sessionID, fresh)
+            fresh.fiber = yield* wait(sessionID, fresh).pipe(Effect.forkIn(scope, { startImmediately: true }))
             return []
           }
-          const fresh: Held = { events: [...batch], first: now, last: now }
-          waiting.set(sessionID, fresh)
-          fresh.fiber = yield* wait(sessionID, fresh).pipe(Effect.forkIn(scope, { startImmediately: true }))
-          return []
-        }
-        if (!held) return batch
-        waiting.delete(sessionID)
-        if (held.fiber) yield* Fiber.interrupt(held.fiber)
-        return [...held.events, ...batch]
-      }),
+          if (!held) return batch
+          waiting.delete(sessionID)
+          if (held.fiber) yield* Fiber.interrupt(held.fiber)
+          return [...held.events, ...batch]
+        }),
     )
     yield* send(ready.flat())
   })

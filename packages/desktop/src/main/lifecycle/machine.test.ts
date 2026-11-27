@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Scope } from "@opencode/plugin/gui/host"
 import {
+  endsApp,
   initialState,
   isQuitting,
   keptScope,
@@ -306,6 +307,22 @@ describe("app lifecycle machine", () => {
     (row) => {
       expect(quitsWhenAllWindowsClosed(row.state, "darwin")).toBe(row.darwin)
       expect(quitsWhenAllWindowsClosed(row.state, "win32")).toBe(row.win32)
+    },
+  )
+
+  test.each([
+    { name: "a quit", events: [{ type: "before.quit" }], ends: true },
+    { name: "a relaunch", events: [{ type: "exit.requested", mode: "relaunch" }], ends: false },
+    {
+      name: "a quit that a relaunch joined",
+      events: [{ type: "before.quit" }, { type: "exit.requested", mode: "relaunch" }],
+      ends: false,
+    },
+    { name: "an update handoff", events: [{ type: "restart.requested", keep, handoff, reply: reply() }], ends: false },
+  ] satisfies { name: string; events: Event[]; ends: boolean }[])(
+    "only a stop for a quit may take the background service down: $name ($ends)",
+    (row) => {
+      expect(endsApp(replay(row.events).state)).toBe(row.ends)
     },
   )
 })

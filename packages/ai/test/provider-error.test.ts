@@ -21,11 +21,26 @@ describe("provider error classification", () => {
       "Prompt exceeds max length",
       "The input is too long for the selected model.",
       "This text request is too large for the model's configured input limit.",
+      "[400003] Input tokens exceed the model context limit.",
+      "The number of input tokens exceeds the model's context limit.",
       // LiteLLM's own check, before it calls the model.
       "litellm.ContextWindowExceededError: litellm.BadRequestError: litellm._pre_call_checks: Context Window exceeded for given call. No models have context window large enough for this call.",
     ]
 
     expect(messages.every(isContextOverflow)).toBe(true)
+  })
+
+  test("classifies Tencent's 400003 passed through OpenCode Go as context overflow", () => {
+    const go = {
+      error: {
+        type: "server_error",
+        message: "Upstream request failed: [400003] Input tokens exceed the model context limit.",
+      },
+    }
+
+    expect(
+      classifyProviderFailure({ message: go.error.message, status: 400, rawBody: JSON.stringify(go) }),
+    ).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
   })
 
   test("classifies Anthropic request_too_large as recoverable overflow", () => {
@@ -788,6 +803,24 @@ describe("AIError getters", () => {
     expect(invalidRequest.reason._tag).toBe("InvalidRequest")
     expect([rateLimit.isRetryable, invalidRequest.isRetryable, transport.isRetryable]).toEqual([true, false, true])
     expect([rateLimit, invalidRequest, transport].map(isRetryable)).toEqual([true, false, true])
+  })
+
+  test("retryHint applies to failed responses, not streams that drop after a successful one", () => {
+    const failure = (status: number, hint: string) =>
+      new AIError({
+        reason: new TransportError({
+          message: "Connection lost while reading the response: ECONNRESET",
+          transport: "http",
+          operation: "read",
+          code: "ECONNRESET",
+          http: new HttpContext({ url: "https://api.test/v1", status, headers: { "x-should-retry": hint } }),
+        }),
+      })
+
+    expect([failure(500, "false").retryHint, failure(500, "true").retryHint]).toEqual([false, true])
+    expect([failure(200, "false").retryHint, failure(200, "true").retryHint]).toEqual([undefined, undefined])
+    expect(failure(500, "false").isRetryable).toBe(false)
+    expect(failure(200, "false").isRetryable).toBe(true)
   })
 
   test("retryAfterMs", () => {

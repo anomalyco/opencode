@@ -132,6 +132,10 @@ const layer = Layer.effect(
     const permission = yield* Permission.Service
     const flags = yield* Flag.Service
     const environments = yield* Environments.Service
+    // Checks `id === Environment.localID` rather than `environment.local` so bare server Locations on runtimes without
+    // a host OS (such as workerd) can still address remote workspaces and paired machines, while sandboxed workspace
+    // Locations (`wrk_...`) stay confined to their own environment.
+    const isServerLocation = environment.id === Environment.localID
 
     // The flag and the working directory are read once per operation by `locate` and `resolve`, which both call this.
     const place = Effect.fnUntraced(function* (
@@ -143,7 +147,7 @@ const layer = Layer.effect(
       // Only text the model typed on the server's own Location can address another environment: a sandboxed workspace
       // Location stays confined to its own environment and cannot escape to `local:/...`, paired machines, or other
       // sandboxes. Text derived from a target is always a plain path in that target's environment.
-      const crossEnvironment = enabled && environment.id === Environment.localID
+      const crossEnvironment = enabled && isServerLocation
       const parsed =
         !base && crossEnvironment
           ? yield* EnvironmentPath.typed(text, environments.has).pipe(
@@ -174,14 +178,12 @@ const layer = Layer.effect(
               ),
             )
         : undefined
-      const rules = target ? (target.path ?? path) : path.posix
-      const rooted =
+      const rules = target ? target.path : path.posix
+      const home =
         crossEnvironment && isHome && target?.home
-          ? rules.join(
-              yield* target.home.pipe(Effect.mapError((cause) => new Environment.Failed({ path: text, cause }))),
-              written.slice(1),
-            )
-          : written
+          ? yield* target.home.pipe(Effect.mapError((cause) => new Environment.Failed({ path: text, cause })))
+          : undefined
+      const rooted = home !== undefined ? rules.join(home, written.slice(1)) : written
       if (rooted.startsWith("~"))
         return yield* new Environment.Failed({ path: text, cause: new EnvironmentPath.NotAbsolute({ machine: id }) })
       // A relative text is relative to the directory it was written in, which is the base when there is one and
@@ -203,7 +205,7 @@ const layer = Layer.effect(
       const located = yield* place(input.path, input.base, enabled, workingDirectory)
       // A machine path is another machine's absolute path: it is never internal to this Location and never this server's.
       if (located.environment.id !== environment.id) {
-        const rules = workingDirectory.environment.path ?? path
+        const rules = workingDirectory.environment.path
         const relative =
           located.environment.id === workingDirectory.environment.id
             ? rules.relative(workingDirectory.absolute, located.absolute)
@@ -230,7 +232,7 @@ const layer = Layer.effect(
         return {
           absolute,
           // With cross-environment prefixes on, a local folder can be named like an environment path, so keep it local.
-          resource: enabled && environment.id === Environment.localID ? EnvironmentPath.local(relative) : relative,
+          resource: enabled && isServerLocation ? EnvironmentPath.local(relative) : relative,
           environment,
         } satisfies Target
       }
@@ -264,7 +266,7 @@ const layer = Layer.effect(
       const targetEnvironment = yield* environments
         .lookup(place.environment.id)
         .pipe(Effect.mapError((cause) => new Environment.Failed({ path: place.absolute, cause })))
-      const rules = targetEnvironment.path ?? path
+      const rules = targetEnvironment.path
       // Never wake a cold/lazy sandbox just to stat the approval boundary before permission is granted.
       const ready = yield* environments.ready(place.environment.id)
       const type =
@@ -316,19 +318,19 @@ const layer = Layer.effect(
     ) {
       // A local sibling keeps the Location's resolution exactly as without recovery; a machine's candidate has no
       // Location to resolve against, so it takes the machine and the sibling's directory.
-      const siblingPath = options?.siblingOf.environment.path ?? path
       const base =
         options === undefined || options.siblingOf.environment.id === environment.id
           ? undefined
           : {
-              absolute: AbsolutePath.make(siblingPath.dirname(options.siblingOf.absolute)),
+              absolute: AbsolutePath.make(options.siblingOf.environment.path.dirname(options.siblingOf.absolute)),
               environment: options.siblingOf.environment,
             }
       const target = yield* resolve({ path: file, base, kind: options ? "file" : undefined })
       const sibling =
         options !== undefined &&
         target.environment.id === options.siblingOf.environment.id &&
-        (target.environment.path ?? path).dirname(target.absolute) === siblingPath.dirname(options.siblingOf.absolute)
+        target.environment.path.dirname(target.absolute) ===
+          options.siblingOf.environment.path.dirname(options.siblingOf.absolute)
 
       // Filename recovery shares the directory approval, but checks the recovered file's own read rules.
       if (!sibling) yield* authorizeExternal([target], context)

@@ -18,8 +18,10 @@ describe("integrationOptions", () => {
     expect(
       integrationOptions([
         integration({ id: "mistral", name: "Mistral" }),
+        integration({ id: "github-copilot", name: "GitHub Copilot" }),
         integration({ id: "openai", name: "OpenAI" }),
         integration({ id: "custom-z", name: "Zebra" }),
+        integration({ id: "claude-agent", name: "Claude Agent" }),
         integration({ id: "anthropic", name: "Anthropic" }),
         integration({ id: "opencode", name: "OpenCode Zen" }),
         integration({
@@ -28,7 +30,16 @@ describe("integrationOptions", () => {
           connections: [{ type: "credential", id: "go", label: "Go", method: "key" }],
         }),
       ]).map((item) => item.id),
-    ).toEqual(["opencode", "opencode-go", "openai", "anthropic", "mistral", "custom-z"])
+    ).toEqual([
+      "opencode",
+      "opencode-go",
+      "openai",
+      "anthropic",
+      "claude-agent",
+      "github-copilot",
+      "mistral",
+      "custom-z",
+    ])
   })
 
   test("hides OpenCode Go until a Go key is saved", () => {

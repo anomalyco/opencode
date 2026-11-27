@@ -92,6 +92,8 @@ function tokens(definition: ThemeTokensDefinition): ThemeTokensDefinition {
     border: definition.border,
     scrollbar: definition.scrollbar,
     diff: definition.diff,
+    // Optional: an unset key must stay absent, since the resolver rejects undefined values.
+    ...(definition.find ? { find: definition.find } : {}),
     syntax: definition.syntax,
     markdown: definition.markdown,
   }
@@ -143,6 +145,8 @@ function resolveView(
 ): ResolvedThemeTokens {
   const source: Record<string, unknown> = { hue, ...definition }
   const resolved = createResolver(source)(source, "theme") as ResolvedThemeTokens
+  // Themes may leave any find color unset.
+  const find: { text?: { current?: RGBA }; background?: { match?: RGBA; current?: RGBA } } | undefined = resolved.find
   return {
     ...resolved,
     hue,
@@ -156,6 +160,14 @@ function resolveView(
       ...resolved.background,
       action: statefulActions(resolved.background.action),
       formfield: statefulColor(resolved.background.formfield),
+    },
+    // Other matches sit on the highest raised surface; the current match looks like a focused action.
+    find: {
+      text: { current: find?.text?.current ?? resolved.text.action.primary.focused },
+      background: {
+        match: find?.background?.match ?? resolved.background.raised.max,
+        current: find?.background?.current ?? resolved.background.action.primary.focused,
+      },
     },
     ...hueSteps,
   }

@@ -439,6 +439,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       disposeTab(tab)
     }
 
+    // A sidebar that lists sessions in its own order, rather than as tabs, picks where the route goes when the session
+    // it shows is removed. It answers false to leave the choice to the tab order.
+    let removedSessionSuccessor: ((input: SessionTabsRemovedDetail) => boolean) | undefined
+
     const actions = {
       restoreReady() {
         if (!ready() || !recentReady() || !servers.hydrated()) return false
@@ -732,6 +736,14 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         for (const draftID of drafts) removeDraftPersisted(draftID)
       },
+      /** Lets a sidebar choose the next session when the shown one is archived or deleted, until the returned cleanup. */
+      setRemovedSessionSuccessor(successor: (input: SessionTabsRemovedDetail) => boolean) {
+        removedSessionSuccessor = successor
+
+        return () => {
+          if (removedSessionSuccessor === successor) removedSessionSuccessor = undefined
+        }
+      },
       removeSessions: (input: SessionTabsRemovedDetail) => {
         const targetServer = input.server
 
@@ -753,6 +765,8 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         void commitPromotion(
           () => ({ type: "abandon", keys: abandon }),
           () => {
+            let moved: { next: Tab | undefined } | undefined
+
             setStore(
               produce((tabs) => {
                 const sessionIDs = new Set(input.sessionIDs)
@@ -781,14 +795,18 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
                 if (!removedCurrent) return
 
-                const nextTab =
-                  tabs.slice(currentIndex).find((tab) => tab.type === "session") ??
-                  tabs.slice(0, currentIndex).findLast((tab) => tab.type === "session")
-
-                if (nextTab) navigateTab(nextTab)
-                else navigate("/")
+                moved = {
+                  next:
+                    tabs.slice(currentIndex).find((tab) => tab.type === "session") ??
+                    tabs.slice(0, currentIndex).findLast((tab) => tab.type === "session"),
+                }
               }),
             )
+
+            if (moved && !removedSessionSuccessor?.(input)) {
+              if (moved.next) navigateTab(moved.next)
+              else navigate("/")
+            }
 
             if (removed.some((key) => key === recentKey())) setRecentKey(undefined)
           },

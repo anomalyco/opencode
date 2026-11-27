@@ -228,7 +228,7 @@ export const Plugin = {
     // On by default. `experimental.image_generate: false` is still honored for configs from when the tool was opt-in;
     // permissions are the supported way to turn it off. Internal plugins are not re-run on config changes, so reload the
     // tool transform instead.
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload(), imageGenerate)
 
     // Registered only while an image model is available, re-evaluated whenever the catalog changes.
     // Subscribing before the first read keeps a change in between from being missed.

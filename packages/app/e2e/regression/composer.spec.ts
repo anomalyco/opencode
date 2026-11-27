@@ -295,16 +295,14 @@ test("the free usage limit opens the Go dialog once, swaps the composer for the 
   await expect(view.editor).toHaveCount(0)
   await expect(page.getByText("Free usage limit reached.")).toHaveCount(0)
 
-  // Subscribe -> OpenCode sign-in -> the workspace's Go model -> Continue switches the model in the current session
+  // Subscribe -> OpenCode sign-in -> choosing the workspace's Go model switches the model in the current session
   // without opening a new draft tab.
   await upsell.getByRole("button", { name: "Subscribe", exact: true }).click()
   const connect = page.getByRole("dialog", { name: "Connect OpenCode", exact: true })
   await connect.getByRole("button", { name: "OpenCode account", exact: true }).click()
   const connected = page.getByRole("dialog", { name: "Connected to OpenCode" })
-  const go = connected.getByRole("radio", { name: "GLM-5 Go", exact: true })
-  await go.click()
-  await expect(go).toHaveAttribute("aria-checked", "true")
-  await connected.getByRole("button", { name: "Continue", exact: true }).click()
+  await connected.getByRole("combobox", { name: "Search OpenCode models", exact: true }).fill("glm")
+  await connected.getByRole("option", { name: "GLM-5 Go", exact: true }).click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expectPath(page, sessionHref(sessionID))
   await expect(page.locator("[data-titlebar-tab-slot]")).toHaveCount(1)

@@ -3,8 +3,6 @@ export * as SessionInterruptTool from "./session-interrupt.js"
 import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
-import { Config } from "../../config.js"
-import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
 import { Job } from "../../job.js"
 import { Session } from "../../session.js"
@@ -19,8 +17,6 @@ export const Plugin = {
   effect: Effect.fn("SessionInterruptTool.Plugin")(function* (ctx: Context) {
     const sessions = yield* Session.Service
     const jobs = yield* Job.Service
-    const config = yield* Config.Service
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
 
     // Cancelled jobs send no completion notice, so nothing wakes these sessions again. They're cancelled before the
@@ -36,7 +32,7 @@ export const Plugin = {
 
     yield* ctx.tool
       .transform((editor) => {
-        if (!flags.resolve(loaded.entries).full_codemode.enabled) return
+        if (!flags.current().full_codemode.enabled) return
         editor.add({
           name: "interrupt",
           description: "Interrupt a session, and stop its background commands and subagents too.",

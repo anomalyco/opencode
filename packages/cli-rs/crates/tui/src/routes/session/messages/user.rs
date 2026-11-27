@@ -1,7 +1,10 @@
 //! User prompts, attachments, and mention chips.
 
+use std::sync::LazyLock;
+
 use opencode_api::generated::{PromptFileSource, SessionInboxDelivery, SessionMessageUser};
 use opencode_ui::theme::ThemeMode;
+use regex::Regex;
 
 use super::images::{self, Images};
 use super::list::Context;
@@ -57,6 +60,10 @@ impl User {
             }
             let Some(tui) = weak.upgrade() else { return };
             if tui.app.selected_text().is_some_and(|text| !text.is_empty()) {
+                return;
+            }
+            // The app opens the clicked link.
+            if crate::features::links::link_at(&tui.app, event.x, event.y).is_some() {
                 return;
             }
             let message = clicked.borrow().clone();
@@ -120,7 +127,7 @@ impl User {
         self.images.update(cx, images::user_images(files));
         let skills = message.skills.as_deref().unwrap_or_default();
         self.root.visible(!message.text.trim().is_empty() || !files.is_empty() || !skills.is_empty());
-        self.text.set_text(message.text.as_str());
+        self.text.set_text(linked(&message.text, cx.theme.markdown.link));
 
         self.skills.clear();
         self.skills.visible(!skills.is_empty());
@@ -140,6 +147,29 @@ impl User {
         }
         *self.rendered.borrow_mut() = Some(message.clone());
     }
+}
+
+/// The prompt as written, with its http(s) URLs as links, split like the web app's linked text.
+fn linked(text: &str, link: Color) -> Vec<Span<'static>> {
+    static URL: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"https?://[^\s<>"'`]+"#).expect("valid regex"));
+    let mut spans = Vec::new();
+    let mut last = 0;
+    for found in URL.find_iter(text) {
+        // Sentence punctuation and closing brackets after a URL are almost never part of it.
+        let href = found.as_str().trim_end_matches([')', ',', '.', ';', ':', '!', '?', ']']);
+        if opencode_api::js::parse_url(href).is_err() {
+            continue;
+        }
+        if found.start() > last {
+            spans.push(Span::raw(text[last..found.start()].to_owned()));
+        }
+        spans.push(Span::styled(href.to_owned(), Style::new().fg(link).underline()).link(href.to_owned()));
+        last = found.start() + href.len();
+    }
+    if last < text.len() {
+        spans.push(Span::raw(text[last..].to_owned()));
+    }
+    spans
 }
 
 fn paint_body(body: &View, theme: &Theme, hover: bool) {

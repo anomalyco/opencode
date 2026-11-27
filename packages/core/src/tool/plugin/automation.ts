@@ -52,6 +52,7 @@ export const Plugin = {
       config,
       ctx.event,
       Effect.andThen(ctx.tool.reload(), ctx.command.reload()),
+      (entries) => Config.latest(entries, "automations") ?? true,
     )
     const enabled = () => Config.latest(loaded.entries, "automations") ?? true
 

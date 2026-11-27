@@ -1,10 +1,8 @@
 import { define } from "@opencode/plugin/effect/plugin"
-import { Event } from "@opencode/schema/config"
 import { Integration } from "@opencode/schema/integration"
 import { Provider } from "@opencode/schema/provider"
 import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
-import { Config } from "../config.js"
 import { Flag } from "../flag.js"
 import { Model } from "../model.js"
 import { ModelsDev } from "../models-dev.js"
@@ -38,11 +36,8 @@ export const ModelsDevPlugin = define({
   effect: Effect.fn(function* (ctx) {
     const modelsDev = yield* ModelsDev.Service
     const bus = yield* Bus.Service
-    const config = yield* Config.Service
     const flags = yield* Flag.Service
-    const get = Effect.flatMap(config.entries(), (entries) =>
-      modelsDev.get(flags.resolve(entries).recommended_api.enabled),
-    )
+    const get = Effect.suspend(() => modelsDev.get(flags.current().recommended_api.enabled))
     // Filtering and definition indexes are shared across Locations. Only Model materialization
     // makes mutable copies, after provider configuration and access have been resolved.
     const loaded = { data: snapshots(yield* get) }
@@ -79,7 +74,12 @@ export const ModelsDevPlugin = define({
       loaded.data = latest
       return ctx.integration.reload().pipe(Effect.andThen(ctx.provider.reload()))
     }
-    yield* bus.subscribe([ModelsDev.Event.Refreshed, Event.Updated]).pipe(
+    yield* bus.subscribe(ModelsDev.Event.Refreshed).pipe(
+      Stream.runForEach(() => get.pipe(Effect.flatMap(apply))),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    yield* flags.changes().pipe(
+      Stream.filter((keys) => keys.has("recommended_api")),
       Stream.runForEach(() => get.pipe(Effect.flatMap(apply))),
       Effect.forkScoped({ startImmediately: true }),
     )

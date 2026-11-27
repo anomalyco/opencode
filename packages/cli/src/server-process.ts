@@ -67,13 +67,13 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const foreground = options.mode === "default"
-      const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
+      const registrationFile = options.mode === "service" ? yield* ServiceConfig.registrationFile() : undefined
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
       const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
       const port = options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
       const findIncumbent =
-        serviceOptions !== undefined && port !== undefined
-          ? Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
+        registrationFile !== undefined && port !== undefined
+          ? Service.incumbent({ file: registrationFile, url: serviceURL(hostname, port) })
           : undefined
       if (findIncumbent !== undefined && (yield* findIncumbent) !== undefined) return
       // Desktop can launch the service directly without injecting its saved environment.
@@ -149,7 +149,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
                 : !truthy(process.env.OPENCODE_DISABLE_FFF),
           },
         },
-        serviceOptions === undefined
+        registrationFile === undefined
           ? undefined
           : {
               onListen: (address, shutdown) =>
@@ -159,7 +159,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
                     address,
                     password,
                     id: instanceID,
-                    file: serviceOptions.file,
+                    file: registrationFile,
                     shutdown,
                   })
                 }),
@@ -193,7 +193,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         }),
       )
       if (server === undefined) return
-      if (serviceOptions !== undefined && config.remote !== undefined && NetAddress.isInetAddress(server.address)) {
+      if (registrationFile !== undefined && config.remote !== undefined && NetAddress.isInetAddress(server.address)) {
         const bound = NetAddress.formatIp(server.address.address)
         // A wildcard bind also listens on loopback, which is all the tunnel needs to reach.
         const target =

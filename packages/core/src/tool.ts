@@ -6,7 +6,7 @@ import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
 import type { CodeMode } from "@opencode/codemode"
 import { Tool } from "@opencode/schema/tool"
 import { isRecord } from "@opencode/util/record"
-import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Types } from "effect"
+import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Stream, Types } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
@@ -303,6 +303,11 @@ const layer = Layer.effect(
         )
       },
     })
+
+    yield* flags.changes().pipe(
+      Stream.runForEach(() => state.reload()),
+      Effect.forkScoped({ startImmediately: true }),
+    )
 
     return Service.of({
       transform: state.transform,

@@ -11,11 +11,24 @@ describe("diagram text helpers", () => {
       {
         text: "plain italic",
         runs: [
-          { text: "plain ", italic: false },
-          { text: "italic", italic: true },
+          { text: "plain ", italic: false, bold: false },
+          { text: "italic", italic: true, bold: false },
         ],
       },
-      { text: "again", runs: [{ text: "again", italic: true }] },
+      { text: "again", runs: [{ text: "again", italic: true, bold: false }] },
+    ])
+  })
+
+  test("extracts Mermaid bold markup and nests it with italics", () => {
+    expect(parseDiagramTextLines("<b>Service A</b> and <strong><i>both</i></STRONG>")).toEqual([
+      {
+        text: "Service A and both",
+        runs: [
+          { text: "Service A", italic: false, bold: true },
+          { text: " and ", italic: false, bold: false },
+          { text: "both", italic: true, bold: true },
+        ],
+      },
     ])
   })
 

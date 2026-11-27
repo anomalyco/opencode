@@ -1,6 +1,6 @@
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
-import { Environment, makeFiles } from "@opencode/core/environment/index"
+import { Environment } from "@opencode/core/environment/index"
 import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
@@ -32,15 +32,7 @@ describe("OllamaPlugin", () => {
       const host = yield* PluginHost.make(plugin, "test")
       const providers = yield* Provider.Service
       yield* OllamaPlugin.effect(host).pipe(
-        Effect.provideService(
-          Environment.Service,
-          Environment.Service.of({
-            id: Environment.localID,
-            local: false,
-            files: makeFiles({ spawner: EnvironmentUnavailable.spawner }),
-            spawner: EnvironmentUnavailable.spawner,
-          }),
-        ),
+        Effect.provideService(Environment.Service, Environment.local(EnvironmentUnavailable.spawner)),
       )
       yield* Effect.promise(() => Bun.sleep(20))
       expect(yield* providers.get(Provider.ID.make("ollama"))).toBeUndefined()

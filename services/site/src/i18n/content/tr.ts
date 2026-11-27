@@ -1011,6 +1011,13 @@ export const content = {
           name: "Yazı logosu, beyaz",
         },
       },
+      avatars: {
+        body: "X, GitHub, Slack, LinkedIn ve diğer profiller için kare avatarlar. Amblem dairenin epey içinde durur, böylece yuvarlak kırpmada da bozulmaz. PNG'ler 1024 ve 400 px genişliğindedir.",
+        items: {
+          "avatar-dark": { name: "Avatar, koyu" },
+          "avatar-light": { name: "Avatar, açık" },
+        },
+      },
       all: {
         text: "Tümünü indir",
       },

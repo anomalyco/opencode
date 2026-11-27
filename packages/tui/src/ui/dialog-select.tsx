@@ -946,7 +946,10 @@ function DialogSelectRow(props: {
         </text>
       </Show>
       <Show when={props.gutter}>
-        <box flexShrink={0}>{props.gutter?.(text())}</box>
+        {/* The gutter takes the current marker's cell, so it takes the marker's color too. */}
+        <box flexShrink={0}>
+          {props.gutter?.(props.current && !props.active ? theme.text.formfield.selected : text())}
+        </box>
       </Show>
       <text
         flexGrow={1}

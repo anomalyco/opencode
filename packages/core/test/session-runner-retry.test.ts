@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { AIError, ProviderInternalError, TransportError } from "@opencode/ai/effect"
+import { AIError, HttpContext, ProviderInternalError, TransportError } from "@opencode/ai/effect"
 import { ModelRetry } from "@opencode/core/model-retry"
 import { Agent } from "@opencode/schema/agent"
 import { Model } from "@opencode/schema/model"
@@ -111,6 +111,23 @@ describe("ModelRetry.retryOneShot", () => {
           transport: "http",
           operation: "read",
           code: "ENETDOWN",
+        }),
+      })
+      yield* ModelRetry.retryOneShot(Effect.suspend(() => (calls++, Effect.fail(cutOff)))).pipe(Effect.flip)
+      expect(calls).toBe(1)
+    }),
+  )
+
+  it.effect("doesn't replay a call cut off after a successful response that said to retry", () =>
+    Effect.gen(function* () {
+      let calls = 0
+      const cutOff = new AIError({
+        reason: new TransportError({
+          message: "Connection lost while reading the response: ECONNRESET",
+          transport: "http",
+          operation: "read",
+          code: "ECONNRESET",
+          http: new HttpContext({ url: "https://example.com", status: 200, headers: { "x-should-retry": "true" } }),
         }),
       })
       yield* ModelRetry.retryOneShot(Effect.suspend(() => (calls++, Effect.fail(cutOff)))).pipe(Effect.flip)

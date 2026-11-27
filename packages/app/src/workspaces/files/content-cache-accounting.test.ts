@@ -61,7 +61,7 @@ describe("file content eviction", () => {
     expect(cache.evict()).toEqual([])
   })
 
-  // Every file provider (session, new session, components lab) used to share one cache, so one provider's directory
+  // Every file provider (session, new session, Lab) used to share one cache, so one provider's directory
   // change wiped the others' accounting and left their content unevictable.
   test("keeps each provider's accounting separate", () => {
     const first = createFileContentCache()

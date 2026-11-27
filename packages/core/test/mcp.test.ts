@@ -769,6 +769,7 @@ test("reports a local MCP server as failed when the location has no execution pl
     Environment.Service.of({
       id: Environment.localID,
       local: false,
+      path,
       files: Environment.makeFiles(driver),
       spawner: EnvironmentUnavailable.spawner,
     }),
@@ -880,6 +881,7 @@ test("closes a stdio process that finishes spawning after close", async () => {
     Environment.Service.of({
       id: Environment.localID,
       local: true,
+      path,
       files: Environment.makeFiles(driver),
       spawner: ChildProcessSpawner.make(() =>
         Effect.gen(function* () {
@@ -1162,6 +1164,156 @@ test("reconnects and retries a tool call after the MCP session expires", async (
             title: "MCP Resources",
           })
         }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+      }),
+    ),
+  )
+})
+
+test("keeps the session when a method the server lacks answers 404 with method-not-found (#60583)", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({
+          respond: async (request) => {
+            const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
+            if (!isRecord(body) || body.method !== "resources/templates/list") return undefined
+            return Response.json(
+              { jsonrpc: "2.0", id: body.id, error: { code: -32601, message: "Method not found" } },
+              { status: 404 },
+            )
+          },
+        })
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          expect((yield* service.resources({ server: "resources" })).templates).toEqual([])
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 1 } })
+
+          expect(server.state.initializations).toBe(1)
+          expect(server.state.sessions).toHaveLength(1)
+        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+      }),
+    ),
+  )
+})
+
+// A signed-in credential with no refresh token: a 401 can only end in a new login.
+const signedInLayer = (url: string) => {
+  const credential = (integrationID: Integration.ID) =>
+    new Credential.Info({
+      id: Credential.ID.make("cred_signed"),
+      integrationID,
+      label: "signed",
+      value: {
+        type: "oauth",
+        methodID: Integration.MethodID.make("signed"),
+        access: "signed-in",
+        refresh: "",
+        expires: Date.now() + 3_600_000,
+        metadata: { serverUrl: url, tokenType: "Bearer" },
+      },
+    })
+  return resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url }), undefined, undefined, {
+    credentials: {
+      list: (integrationID) => Effect.succeed([credential(integrationID)]),
+      get: () => Effect.succeed(credential(Integration.ID.make("unused"))),
+    },
+  })
+}
+
+const toolCall = async (request: Request) => {
+  const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
+  return isRecord(body) && body.method === "tools/call" && isRecord(body.params) ? body.params : undefined
+}
+
+test("reports needs_auth when a connected server refuses a tool call's credential (#53942)", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const refusing = { tools: false }
+        const server = yield* resourceServer({
+          respond: async (request) =>
+            refusing.tools && (await toolCall(request)) ? new Response(null, { status: 401 }) : undefined,
+        })
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 1 } })
+          refusing.tools = true
+
+          const error = yield* service.callTool({ server: "resources", name: "echo", args: { n: 2 } }).pipe(Effect.flip)
+
+          expect(error).toBeInstanceOf(Mcp.ToolCallError)
+          expect((yield* service.servers()).find((entry) => entry.name === "resources")?.status).toMatchObject({
+            status: "needs_auth",
+          })
+          // The refused connection is closed, so later calls don't reach the server.
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 3 } }).pipe(Effect.flip)
+          expect(server.state.toolCalls.map((call) => call.arguments)).toEqual([{ n: 1 }])
+        }).pipe(Effect.provide(signedInLayer(server.url)))
+      }),
+    ),
+  )
+})
+
+test("reports needs_auth when the retry after a reconnect is refused", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const first: { session?: string } = {}
+        const server = yield* resourceServer({
+          // The first session's calls pass to the server, which forgets that session on restart; the next session's
+          // calls are refused.
+          respond: async (request) => {
+            const session = request.headers.get("mcp-session-id")
+            if (session) first.session ??= session
+            return session && session !== first.session && (await toolCall(request))
+              ? new Response(null, { status: 401 })
+              : undefined
+          },
+        })
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 1 } })
+          yield* Effect.promise(server.restart)
+
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 2 } }).pipe(Effect.flip)
+
+          expect(server.state.initializations).toBe(2)
+          expect((yield* service.servers()).find((entry) => entry.name === "resources")?.status).toMatchObject({
+            status: "needs_auth",
+          })
+        }).pipe(Effect.provide(signedInLayer(server.url)))
+      }),
+    ),
+  )
+})
+
+test("keeps the server connected when one tool asks for more scope", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({
+          respond: async (request) => {
+            const call = await toolCall(request)
+            if (!isRecord(call?.arguments) || call.arguments.n !== 2) return undefined
+            return new Response(null, {
+              status: 403,
+              headers: {
+                "WWW-Authenticate": `Bearer error="insufficient_scope", scope="admin", resource_metadata="${new URL(request.url).origin}/prm"`,
+              },
+            })
+          },
+        })
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          const error = yield* service.callTool({ server: "resources", name: "echo", args: { n: 2 } }).pipe(Effect.flip)
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 3 } })
+
+          expect(error).toBeInstanceOf(Mcp.ToolCallError)
+          expect((yield* service.servers()).find((entry) => entry.name === "resources")?.status).toMatchObject({
+            status: "connected",
+          })
+          expect(server.state.toolCalls.map((call) => call.arguments)).toEqual([{ n: 3 }])
+        }).pipe(Effect.provide(signedInLayer(server.url)))
       }),
     ),
   )
@@ -1856,6 +2008,114 @@ testEffect(Layer.empty).live(
       )
       expect(JSON.stringify(entries)).toBe(original)
     }),
+)
+
+testEffect(Layer.empty).live("preserves runtime mcp.add and mcp.remove overrides across config reloads", () =>
+  Effect.gen(function* () {
+    const updates = yield* PubSub.unbounded<Payload>()
+    const document = (servers: Record<string, typeof ConfigMCP.Server.Type>) =>
+      new Document({
+        type: "document",
+        info: new Info({
+          mcp: new ConfigMCP.Info({
+            timeout: { startup: 10 },
+            servers,
+          }),
+        }),
+      })
+    let entries = [
+      document({
+        alpha: { type: "local", command: ["config-alpha"], disabled: true },
+        beta: { type: "local", command: ["config-beta"], disabled: true },
+      }),
+    ]
+    const publishUpdate = () =>
+      PubSub.publish(updates, {
+        id: ID.create(),
+        created: 0,
+        type: Event.Updated.type,
+        data: {},
+      } satisfies Payload<typeof Event.Updated>)
+    const runtimeAlpha = {
+      type: "local",
+      command: ["runtime-alpha"],
+      disabled: true,
+      timeout: { catalog: 60 },
+    } satisfies ConfigMCP.Local
+    const runtimeBeta = {
+      type: "local",
+      command: ["runtime-beta"],
+      disabled: true,
+    } satisfies ConfigMCP.Local
+
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* service.add("alpha", runtimeAlpha)
+      yield* service.remove("beta")
+
+      entries = [
+        document({
+          alpha: { type: "local", command: ["reloaded-alpha"], disabled: true },
+          beta: { type: "local", command: ["reloaded-beta"], disabled: true },
+          gamma: { type: "local", command: ["config-gamma"], disabled: true },
+        }),
+      ]
+      yield* publishUpdate()
+      const listed = yield* service.servers().pipe(
+        Effect.filterOrFail(
+          (items) => items.some((item) => item.name === "gamma"),
+          () => new Error("config reload did not add gamma"),
+        ),
+        Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
+      )
+      expect(listed.map((item) => String(item.name)).toSorted()).toEqual(["alpha", "gamma"])
+
+      const check = yield* service.transform((editor) => {
+        expect(editor.get("alpha")).toEqual(runtimeAlpha)
+        expect(editor.get("beta")).toBeUndefined()
+        expect(editor.get("gamma")).toEqual({
+          type: "local",
+          command: ["config-gamma"],
+          disabled: true,
+          timeout: { startup: 10 },
+        })
+      })
+      yield* check.dispose
+
+      yield* service.add("beta", runtimeBeta)
+      entries = [
+        document({
+          alpha: { type: "local", command: ["reloaded-alpha-2"], disabled: true },
+          beta: { type: "local", command: ["reloaded-beta-2"], disabled: true },
+          gamma: { type: "local", command: ["config-gamma"], disabled: true },
+          delta: { type: "local", command: ["config-delta"], disabled: true },
+        }),
+      ]
+      yield* publishUpdate()
+      const restored = yield* service.servers().pipe(
+        Effect.filterOrFail(
+          (items) => items.some((item) => item.name === "delta"),
+          () => new Error("config reload did not add delta"),
+        ),
+        Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
+      )
+      expect(restored.map((item) => String(item.name)).toSorted()).toEqual(["alpha", "beta", "delta", "gamma"])
+      yield* service.transform((editor) => {
+        expect(editor.get("alpha")).toEqual(runtimeAlpha)
+        expect(editor.get("beta")).toEqual(runtimeBeta)
+      })
+    }).pipe(
+      Effect.provide(
+        resourceMcpLayer("https://unused.example", undefined, undefined, {
+          entries: () => Effect.sync(() => entries),
+          subscribe: ((definition?: { readonly type: string }) =>
+            Stream.fromPubSub(updates).pipe(
+              Stream.filter((event) => !definition || event.type === definition.type),
+            )) as Bus.Interface["subscribe"],
+        }),
+      ),
+    )
+  }),
 )
 
 testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true }))).live(
@@ -3258,6 +3518,7 @@ describe("MCP pool", () => {
       localKey(),
     )
     expect(localKey({ clientInfo: { name: "other", version: "1" } })).not.toBe(localKey())
+    expect(key({ skills: true })).not.toBe(key({ skills: false }))
   })
 
   live("keeps a server that negotiates legacy private to each Location", () => {
@@ -3282,6 +3543,76 @@ describe("MCP pool", () => {
       // Once, when the verdict is recorded; the second Location skips straight to its own connection.
       expect(captured.logs).toEqual([
         ["mcp pool ignored: server speaks an older protocol", { server: "resources", version: "2025-11-25" }],
+      ])
+    }).pipe(Effect.provide(captured.layer))
+  })
+
+  live("reconnects and stops cleanly after falling back to a lazy private connection", () => {
+    const captured = poolLogs()
+    return Effect.gen(function* () {
+      const calls: string[] = []
+      const server = yield* Effect.acquireRelease(
+        Effect.promise(async () => {
+          const sessions = new Map<string, { protocol: Server; transport: WebStandardStreamableHTTPServerTransport }>()
+          const http = Bun.serve({
+            port: 0,
+            fetch: async (request) => {
+              const id = request.headers.get("mcp-session-id")
+              if (id && sessions.has(id)) return sessions.get(id)!.transport.handleRequest(request)
+              const protocol = new Server({ name: "legacy-multi", version: "1.0.0" }, { capabilities: { tools: {} } })
+              protocol.setRequestHandler("tools/list", () =>
+                Promise.resolve({ tools: [{ name: "echo", inputSchema: { type: "object", properties: {} } }] }),
+              )
+              protocol.setRequestHandler("tools/call", (req) => {
+                calls.push(req.params.name)
+                return Promise.resolve({ content: [{ type: "text", text: "ok" }] })
+              })
+              const transport = new WebStandardStreamableHTTPServerTransport({
+                sessionIdGenerator: () => crypto.randomUUID(),
+                enableJsonResponse: true,
+                onsessioninitialized: (sessionID) => {
+                  sessions.set(sessionID, { protocol, transport })
+                },
+              })
+              transport.onclose = () => {
+                if (transport.sessionId) sessions.delete(transport.sessionId)
+              }
+              await protocol.connect(transport)
+              return transport.handleRequest(request)
+            },
+          })
+          return {
+            url: http.url.toString(),
+            close: async () => {
+              for (const session of sessions.values()) await session.protocol.close().catch(() => {})
+              await http.stop(true)
+            },
+          }
+        }),
+        (server) => Effect.promise(server.close),
+      )
+
+      const pool = yield* makePool
+      const a = yield* open(pooled(server.url), pool, directories[0])
+      expect(yield* status(a.mcp)).toEqual({ status: "connected" })
+      yield* a.mcp.callTool({ server: "resources", name: "echo" })
+
+      yield* a.mcp.disconnect("resources")
+      expect(yield* status(a.mcp)).toEqual({ status: "disabled" })
+      expect(yield* a.mcp.tools()).toEqual([])
+
+      yield* a.mcp.connect("resources")
+      expect(yield* status(a.mcp)).toEqual({ status: "connected" })
+      yield* a.mcp.callTool({ server: "resources", name: "echo" })
+
+      const b = yield* open(pooled(server.url), pool, directories[1])
+      expect(yield* status(b.mcp)).toEqual({ status: "connected" })
+      yield* a.shutdown
+      yield* b.mcp.callTool({ server: "resources", name: "echo" })
+
+      expect(calls).toEqual(["echo", "echo", "echo"])
+      expect(captured.logs).toEqual([
+        ["mcp pool ignored: server speaks an older protocol", { server: "resources", version: expect.any(String) }],
       ])
     }).pipe(Effect.provide(captured.layer))
   })
@@ -3585,9 +3916,7 @@ describe("MCP pool", () => {
           const scope = yield* Effect.scope
           const run = yield* FiberSet.makeRuntime<never, void, never>()
           const connection = pool.connection({
-            name,
-            config,
-            directory,
+            spec: { name, config, directory },
             authProvider: Effect.undefined,
             elicitation: {
               create: (request) =>

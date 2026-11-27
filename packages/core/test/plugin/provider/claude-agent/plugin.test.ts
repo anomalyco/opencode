@@ -12,7 +12,7 @@ import { ClaudeIntegration } from "@opencode/core/plugin/provider/claude-agent/i
 import { ClaudeProvider } from "@opencode/core/plugin/provider/claude-agent/provider"
 import { Credential } from "@opencode/core/credential"
 import { Database } from "@opencode/core/database/database"
-import { Environment, makeFiles } from "@opencode/core/environment/index"
+import { Environment } from "@opencode/core/environment/index"
 import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { Integration } from "@opencode/core/integration"
 import { KV } from "@opencode/core/kv"
@@ -123,15 +123,7 @@ describe("ClaudeAgentPlugin", () => {
     Effect.gen(function* () {
       const claude = FakeClaude.make([])
       yield* addPlugin(FakeIO.make({ claude })).pipe(
-        Effect.provideService(
-          Environment.Service,
-          Environment.Service.of({
-            id: Environment.localID,
-            local: false,
-            files: makeFiles({ spawner: EnvironmentUnavailable.spawner }),
-            spawner: EnvironmentUnavailable.spawner,
-          }),
-        ),
+        Effect.provideService(Environment.Service, Environment.local(EnvironmentUnavailable.spawner)),
       )
       const providers = yield* Provider.Service
       const integrations = yield* Integration.Service

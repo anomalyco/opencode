@@ -85,6 +85,7 @@ describe("search tools", () => {
                   Environment.Service.of({
                     id: Environment.localID,
                     local: true,
+                    path,
                     files: Environment.makeFiles(Environment.makeMemoryDriver()),
                     spawner: Context.get(session, Environment.Service).spawner,
                   }),
