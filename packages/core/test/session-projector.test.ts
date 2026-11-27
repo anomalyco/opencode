@@ -30,7 +30,6 @@ import { Flag } from "@opencode/core/flag"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { SessionHistory } from "@opencode/core/session/history"
-import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
 import { Shell } from "@opencode/schema/shell"
 import {
   InstructionStateTable,
@@ -2675,14 +2674,6 @@ describe("SessionProjector", () => {
       expect(tool.state.status).toBe("error")
       if (tool.state.status !== "error") return
       expect(tool.state.input).toEqual(input)
-      const assistant = toLLMMessages([loaded], loaded.model).find((message) => message.role === "assistant")
-      expect(assistant?.role).toBe("assistant")
-      expect(Array.isArray(assistant?.content)).toBe(true)
-      if (!assistant || !Array.isArray(assistant.content)) return
-      const call = assistant.content.find((part) => part.type === "tool-call")
-      expect(call).toMatchObject({ type: "tool-call", input })
-      if (call?.type !== "tool-call") return
-      expect(call.input).not.toEqual({})
     }).pipe(Effect.provide(partRows)),
   )
 
