@@ -1,7 +1,7 @@
 //! Converts between editable prompts, wire requests and history entries.
 
 use opencode_api::generated::{
-    PromptBase64, PromptFileAttachment, PromptFileSource, PromptFileSourceInline, PromptMention,
+    PromptBase64, PromptFileAttachment, PromptFileSource, PromptFileSourceInline, PromptMention, tag,
 };
 use opencode_ui::prompt_input::editor::Mention;
 use serde_json::{Map, Value, json};
@@ -95,7 +95,7 @@ impl RunPrompt {
                     Some(PromptFileAttachment {
                         data: PromptBase64(data.to_owned()),
                         mime: file.mime.clone().unwrap_or_else(|| mime.to_owned()),
-                        source: PromptFileSource::Inline(PromptFileSourceInline { r#type: "inline".into() }),
+                        source: PromptFileSource::Inline(PromptFileSourceInline { r#type: tag::Inline }),
                         name: file.filename.clone(),
                         description: file.description.clone(),
                         mention: file.mention.as_ref().map(|mention| PromptMention {

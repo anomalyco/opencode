@@ -5,7 +5,7 @@ import { mockPluginsActivating, type MockServerConfig } from "../utils/mock-serv
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
 
-test("the composer preserves its ring on dialog return and leaves autofocus and clicks quiet", async ({ page }) => {
+test("the composer shows its caret, never a focus ring, however focus arrives", async ({ page }) => {
   const view = await openSession(page, { name: "ComposerKeyboardFocus" })
 
   const frame = page.locator('[data-component="composer"]').filter({ has: view.editor })
@@ -17,7 +17,8 @@ test("the composer preserves its ring on dialog return and leaves autofocus and 
   await expect(view.editor).not.toBeFocused()
   await page.keyboard.press("Tab")
   await expect(view.editor).toBeFocused()
-  await expect(frame).toHaveCSS("outline-style", "solid")
+  await expect(frame).toHaveCSS("outline-style", "none")
+  await expect(view.editor).toHaveCSS("outline-style", "none")
 
   const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
 
@@ -27,7 +28,7 @@ test("the composer preserves its ring on dialog return and leaves autofocus and 
   await expect(dialog.getByRole("combobox")).toBeFocused()
   await page.keyboard.press("Escape")
   await expect(view.editor).toBeFocused()
-  await expect(frame).toHaveCSS("outline-style", "solid")
+  await expect(frame).toHaveCSS("outline-style", "none")
 
   await view.editor.click()
   await expect(view.editor).toBeFocused()
@@ -294,16 +295,14 @@ test("the free usage limit opens the Go dialog once, swaps the composer for the 
   await expect(view.editor).toHaveCount(0)
   await expect(page.getByText("Free usage limit reached.")).toHaveCount(0)
 
-  // Subscribe -> OpenCode sign-in -> the workspace's Go model -> Continue switches the model in the current session
+  // Subscribe -> OpenCode sign-in -> choosing the workspace's Go model switches the model in the current session
   // without opening a new draft tab.
   await upsell.getByRole("button", { name: "Subscribe", exact: true }).click()
   const connect = page.getByRole("dialog", { name: "Connect OpenCode", exact: true })
   await connect.getByRole("button", { name: "OpenCode account", exact: true }).click()
   const connected = page.getByRole("dialog", { name: "Connected to OpenCode" })
-  const go = connected.getByRole("radio", { name: "GLM-5 Go", exact: true })
-  await go.click()
-  await expect(go).toHaveAttribute("aria-checked", "true")
-  await connected.getByRole("button", { name: "Continue", exact: true }).click()
+  await connected.getByRole("combobox", { name: "Search OpenCode models", exact: true }).fill("glm")
+  await connected.getByRole("option", { name: "GLM-5 Go", exact: true }).click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expectPath(page, sessionHref(sessionID))
   await expect(page.locator("[data-titlebar-tab-slot]")).toHaveCount(1)
@@ -1393,6 +1392,7 @@ test("lists slash commands in their built-in order", async ({ page }) => {
   await expect(page.locator('[data-component="composer-suggestions"] [data-suggestion-id] bdi')).toHaveText([
     "/init",
     "/review",
+    "/rename",
     "/new",
     "/undo",
     "/compact",

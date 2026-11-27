@@ -1,15 +1,25 @@
-use opencode_util::json_object;
-use serde_json::{Value, json};
+use std::borrow::Cow;
+use std::sync::Arc;
+
+use serde::ser::SerializeMap;
+use serde::{Serialize, Serializer};
+
+use crate::update::{self, Kind};
 
 pub const UPDATE_METHOD: &str = "opencode/session/child_update";
+pub const META_KEY: &str = "opencode/child-session";
 
-#[derive(Debug, Clone, PartialEq)]
+/// A child session; it serializes as its `opencode/child-session` meta.
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Session {
     pub id: String,
+    #[serde(rename = "parentID")]
     pub parent_id: String,
     pub depth: u64,
+    #[serde(skip_serializing_if = "untitled")]
     pub title: Option<String>,
     /// The inbox item of the prompt turn that started the family, if a prompt turn did.
+    #[serde(skip)]
     pub turn_id: Option<String>,
 }
 
@@ -20,54 +30,64 @@ impl Session {
     }
 }
 
-/// A child status event: `{ type: "status", status, error? }`.
-pub fn status(status: &str, error: Option<Value>) -> Value {
-    json_object! { "type": "status", "status": status, "error"?: error }
+fn untitled(title: &Option<String>) -> bool {
+    title.as_deref().is_none_or(str::is_empty)
 }
 
-/// A child update event: `{ type: "update", update }`.
-pub fn update_event(update: Value) -> Value {
-    json!({ "type": "update", "update": update })
+/// The `opencode/session/child_update` params.
+#[derive(Debug, Clone)]
+pub struct Update<'a> {
+    pub root_session_id: &'a str,
+    pub child: Arc<Session>,
+    pub event: Event<'a>,
 }
 
-/// The `opencode/session/child_update` params for `event`.
-pub fn update(root_session_id: &str, child: &Session, event: Value) -> Value {
-    json_object! {
-        "rootSessionId": root_session_id,
-        "childSessionId": child.id,
-        "parentSessionId": child.parent_id,
-        "depth": child.depth,
-        "title"?: child.title(),
-        ..event
+#[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant, reason = "built and written at once, never stored")]
+pub enum Event<'a> {
+    Status(&'static str, Option<&'a serde_json::Value>),
+    Update(update::Update<'a>),
+}
+
+impl Serialize for Update<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(None)?;
+        map.serialize_entry("rootSessionId", self.root_session_id)?;
+        map.serialize_entry("childSessionId", &self.child.id)?;
+        map.serialize_entry("parentSessionId", &self.child.parent_id)?;
+        map.serialize_entry("depth", &self.child.depth)?;
+        if let Some(title) = self.child.title() {
+            map.serialize_entry("title", title)?;
+        }
+        match &self.event {
+            Event::Status(status, error) => {
+                map.serialize_entry("type", "status")?;
+                map.serialize_entry("status", status)?;
+                if let Some(error) = error {
+                    map.serialize_entry("error", error)?;
+                }
+            }
+            Event::Update(update) => {
+                map.serialize_entry("type", "update")?;
+                map.serialize_entry("update", update)?;
+            }
+        }
+        map.end()
     }
 }
 
 /// A child's update as the parent session shows it: child metadata, and tool IDs and titles prefixed.
-pub fn project(mut update: Value, child: &Session) -> Value {
-    let Some(object) = update.as_object_mut() else { return update };
-    let mut merged = object.get("_meta").and_then(Value::as_object).cloned().unwrap_or_default();
-    if let Value::Object(own) = meta(child) {
-        merged.extend(own);
+pub fn project(update: &mut update::Update, child: &Arc<Session>) {
+    update.meta.child = Some(child.clone());
+    let (id, title) = match &mut update.kind {
+        Kind::ToolCall(call) => (&mut call.tool_call_id, Some(&mut call.title)),
+        Kind::ToolCallUpdate(call) => (&mut call.tool_call_id, call.title.as_mut()),
+        _ => return,
+    };
+    *id = Cow::Owned(tool_call_id(Some(&**child), id));
+    if let Some(title) = title.filter(|title| !title.is_empty()) {
+        *title = prefix_title(Some(&**child), title);
     }
-    object.insert("_meta".to_owned(), Value::Object(merged));
-    let kind = object.get("sessionUpdate").and_then(Value::as_str);
-    if matches!(kind, Some("tool_call" | "tool_call_update")) {
-        if let Some(id) = object.get("toolCallId").and_then(Value::as_str) {
-            let id = tool_call_id(Some(child), id);
-            object.insert("toolCallId".to_owned(), json!(id));
-        }
-        if let Some(title) = object.get("title").and_then(Value::as_str).filter(|title| !title.is_empty()) {
-            let title = prefix_title(Some(child), title);
-            object.insert("title".to_owned(), json!(title));
-        }
-    }
-    update
-}
-
-pub fn meta(child: &Session) -> Value {
-    let session =
-        json_object! { "id": child.id, "parentID": child.parent_id, "depth": child.depth, "title"?: child.title() };
-    json!({ "opencode/child-session": session })
 }
 
 pub fn tool_call_id(child: Option<&Session>, id: &str) -> String {

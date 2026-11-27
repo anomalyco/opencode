@@ -6,7 +6,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use common::*;
 use opencode_api::events::{self, Status};
 use opencode_api::generated::*;
-use opencode_store::{Catalog, CreateSession, Data, LoadMore, Options};
+use opencode_store::{
+    Catalog, CreateSession, Data, HELD, LoadMore, MAILBOX, Options, Payload, Touched, Unwoken, Wanted,
+};
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, watch};
 
@@ -79,32 +81,126 @@ fn reads(paths: &Log<String>, path: &str) -> usize {
 
 /// A reconnect the status watch coalesces (`Connected -> Reconnecting -> Connected` before `run`
 /// polls it) must still invalidate cached reads and wake views.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_coalesced_reconnect_invalidates_reads_and_flushes_everything() {
     let (data, paths) = counting();
     let (status, watcher) = watch::channel(state(Status::Connected));
     let (batches, receiver) = mpsc::channel(8);
-    let driver = tokio::spawn(opencode_store::connection::run(data.clone(), watcher, receiver));
-    batches.send(vec![connected()]).await.unwrap();
+    let driver = tokio::spawn(opencode_store::connection::run(data.remote(), watcher, receiver));
+    batches.send(vec![connected().into()]).await.unwrap();
     settle().await;
     let path = "/api/session/ses_a/message";
     data.message_sync(&id("ses_a")).await.unwrap();
     assert_eq!(reads(&paths, path), 1);
-    let seen = data.revision();
+    let mut taken = Taken::default();
+    taken.take(&data);
 
     // The second `server.connected` arrives with no status change `run` could observe.
-    batches.send(vec![connected()]).await.unwrap();
+    batches.send(vec![connected().into()]).await.unwrap();
     settle().await;
-    let (_, changes) = data.changes_since(seen);
-    assert!(changes.all, "a reconnect wakes every view");
+    let (_, changes) = taken.take(&data);
+    assert!(changes.all(), "a reconnect wakes every view");
     data.message_sync(&id("ses_a")).await.unwrap();
     assert_eq!(reads(&paths, path), 2, "a reconnect invalidates cached reads");
     drop((status, batches));
     driver.await.unwrap();
 }
 
+/// An owner that stops draining (the UI thread runs `$EDITOR` while two replies stream) fills the store's mailbox, and
+/// the connection keeps reading: it holds the batches with each part's deltas merged, so its own queue never fills and
+/// the stream stays up. The hold is bounded: past `HELD` events the connection stops reading, and a stream that then
+/// drops, again and again, adds nothing; its queued batches go, as a disconnect's do. Once the owner drains, every
+/// event held arrives, in order, and every delta's text.
+#[tokio::test(flavor = "local")]
+async fn an_owner_that_stops_draining_keeps_the_stream_and_every_event() {
+    let client = client(handler(|_req: Req| async { ok(json!({ "data": [] })) }));
+    let options = Options { directory: "/project".into(), ..Options::default() };
+    let data = Data::new(client, options, tokio::runtime::Handle::current(), || Err(Unwoken::Busy));
+    let _listening = data.listen([EventKind::TuiPromptAppend]);
+    let deltas = data.listen_deltas();
+    let append = |n: usize| {
+        let event =
+            json!({ "id": format!("evt_{n}"), "created": 1, "type": "tui.prompt.append", "data": { "text": "x" } });
+        Payload::read(event.to_string(), &Wanted::default()).unwrap()
+    };
+    let delta = |message: &str| {
+        let body = json!({ "sessionID": "ses_none", "assistantMessageID": message, "ordinal": 0, "delta": "y" });
+        let event = json!({ "id": "evt_delta", "created": 1, "type": "session.text.delta", "data": body });
+        // Read before the connection saw the listener: the hold decodes the delta to merge it.
+        Payload::read(event.to_string(), &Wanted::default()).unwrap()
+    };
+    // The mailbox's worth of appends, then two replies' deltas in turn with an append every 100 batches.
+    let streamed = 2_000;
+    let mut sent = Vec::new();
+    sent.extend((0..MAILBOX).map(|n| vec![append(n)]));
+    sent.extend((0..streamed).map(|n| {
+        let delta = delta(if n % 2 == 0 { "msg_a" } else { "msg_b" });
+        match n % 100 {
+            0 => vec![append(MAILBOX + n / 100), delta],
+            _ => vec![delta],
+        }
+    }));
+    let appended = MAILBOX + streamed / 100;
+    // Held: the appends, and one delta of each reply between two appends.
+    let held = streamed / 100 + 2 * streamed / 100;
+    let capacity = sent.len() + HELD;
+    let (status, watcher) = watch::channel(state(Status::Connected));
+    let (batches, receiver) = mpsc::channel(capacity);
+    tokio::spawn(opencode_store::connection::run(data.remote(), watcher, receiver));
+    for batch in sent {
+        batches.send(batch).await.unwrap();
+    }
+    wait(|| batches.capacity() == capacity).await;
+
+    // Past the cap the connection stops reading.
+    for n in 0..HELD {
+        batches.send(vec![append(appended + n)]).await.unwrap();
+    }
+    settle().await;
+    assert_eq!(capacity - batches.capacity(), held, "the connection stops reading at the bound");
+    // The stream drops and comes back, again and again: the queued batches go, and the hold does not grow.
+    for cycle in 0..3 {
+        status.send_replace(state(Status::Reconnecting));
+        wait(|| batches.capacity() == capacity).await;
+        status.send_replace(state(Status::Connected));
+        settle().await;
+        for n in 0..100 {
+            batches.send(vec![append(appended + HELD + 100 * cycle + n)]).await.unwrap();
+        }
+    }
+    status.send_replace(state(Status::Reconnecting));
+    wait(|| batches.capacity() == capacity).await;
+
+    let (mut signals, mut taken, mut merged, mut text) = (Vec::new(), Vec::new(), 0, 0);
+    let total = appended + HELD - held;
+    let started = std::time::Instant::now();
+    while signals.len() < total {
+        assert!(started.elapsed() < std::time::Duration::from_secs(10), "{} of {total} events", signals.len());
+        data.drain();
+        data.take_signals(&mut taken);
+        signals.extend(taken.iter().map(|event| event.id().to_owned()));
+        deltas.take(|events| {
+            merged += events.len();
+            text += events
+                .iter()
+                .map(|event| match event {
+                    V2Event::SessionTextDelta(delta) => delta.data.delta.len(),
+                    other => panic!("not a text delta: {}", other.tag()),
+                })
+                .sum::<usize>();
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+    }
+    settle().await;
+    data.drain();
+    data.take_signals(&mut taken);
+    assert!(taken.is_empty(), "past the cap, nothing was held");
+    assert_eq!(signals, (0..total).map(|n| format!("evt_{n}")).collect::<Vec<_>>());
+    assert_eq!((merged, text), (2 * streamed / 100, streamed), "each part's deltas merge, and all their text arrives");
+}
+
 /// The connection records a declared error by its message, as TS's does.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn the_connection_records_a_declared_error_by_its_message() {
     let declared = json!({ "_tag": "Unauthorized", "message": "no" });
     let data =
@@ -114,15 +210,66 @@ async fn the_connection_records_a_declared_error_by_its_message() {
     assert_eq!(connection.history()[1].error.as_deref(), Some("no"));
 }
 
+/// The connection reads each payload as the stream's reader did, a delta only through its view, and one that does not
+/// decode ends its stream with the reader's error: what came before it applies, what came after it never does, and the
+/// next stream's events apply.
+#[tokio::test(flavor = "local")]
+async fn a_payload_that_does_not_decode_ends_its_stream() {
+    let append = |n: &str| json!({ "id": n, "created": 1, "type": "tui.prompt.append", "data": { "text": "x" } });
+    let malformed =
+        json!({ "id": "evt_bad", "created": 1, "type": "session.text.delta", "data": { "sessionID": "s" } });
+    let connected = json!({ "id": "evt_connected", "type": "server.connected", "data": {} });
+    let sse = |events: &[&Value]| events.iter().map(|event| format!("data: {event}\n\n")).collect::<String>();
+    let first = sse(&[&connected, &append("evt_1"), &malformed, &append("evt_2")]);
+    let next = sse(&[&connected, &append("evt_4")]);
+    let opened = Arc::new(AtomicUsize::new(0));
+    let count = opened.clone();
+    let client = client(handler(move |req: Req| {
+        let reply = match (req.path == "/api/event").then(|| count.fetch_add(1, Ordering::SeqCst)) {
+            Some(0) => Reply::Sse(first.clone()),
+            Some(_) => Reply::Sse(next.clone()),
+            None => ok(json!({ "data": [] })),
+        };
+        async move { reply }
+    }));
+    let options = Options { directory: "/project".into(), ..Options::default() };
+    let data = Data::new(client, options, tokio::runtime::Handle::current(), || Ok(()));
+    let _listening = data.listen([EventKind::TuiPromptAppend]);
+    let options = events::Options { reconnect_delay: std::time::Duration::from_millis(10), ..Default::default() };
+    let (connection, _task) = opencode_store::connection::connect(&data, options);
+    let appended = |data: &Data| {
+        let mut taken = Vec::new();
+        data.drain();
+        data.take_signals(&mut taken);
+        taken.iter().map(|event| event.id().to_owned()).collect::<Vec<_>>()
+    };
+
+    let mut seen = Vec::new();
+    wait(|| {
+        seen.extend(appended(&data));
+        seen.len() > 1
+    })
+    .await;
+    assert_eq!(seen, ["evt_1", "evt_4"], "what came before it, then the next stream's events");
+    assert_eq!(opened.load(Ordering::SeqCst), 2);
+    let error = connection.history().into_iter().find_map(|record| record.error);
+    let read = opencode_api::sse::decode::<V2Event>(&malformed.to_string()).unwrap_err();
+    assert_eq!(
+        error,
+        Some(opencode_api::error::Error::from(read).error_message()),
+        "the error the stream's read gives"
+    );
+}
+
 /// The dying stream's last batch is applied before the disconnect invalidates, so a
 /// `session.created` in it cannot keep its reads marked done across the reconnect.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn the_dying_streams_tail_batch_applies_before_the_disconnect() {
     let (data, paths) = counting();
     let (status, watcher) = watch::channel(state(Status::Connected));
     let (batches, receiver) = mpsc::channel(8);
-    let driver = tokio::spawn(opencode_store::connection::run(data.clone(), watcher, receiver));
-    batches.send(vec![connected()]).await.unwrap();
+    let driver = tokio::spawn(opencode_store::connection::run(data.remote(), watcher, receiver));
+    batches.send(vec![connected().into()]).await.unwrap();
     settle().await;
 
     let created = durable(
@@ -130,7 +277,7 @@ async fn the_dying_streams_tail_batch_applies_before_the_disconnect() {
         "evt_created",
         json!({ "sessionID": "ses_new", "projectID": "project", "location": { "directory": "/project" }, "slug": "s", "version": "1" }),
     );
-    batches.send(vec![event(created)]).await.unwrap();
+    batches.send(vec![event(created).into()]).await.unwrap();
     status.send_replace(state(Status::Reconnecting));
     settle().await;
     status.send_replace(state(Status::Connected));
@@ -143,7 +290,7 @@ async fn the_dying_streams_tail_batch_applies_before_the_disconnect() {
 }
 
 /// A delivery whose enqueue this client missed in a reconnect reads the synced transcript again.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn the_delivery_of_an_unseen_prompt_reads_the_transcript_again() {
     let (data, paths) = counting();
     data.message_sync(&id("ses_a")).await.unwrap();
@@ -176,14 +323,14 @@ async fn deleted_before_first_poll(read: &str) {
     });
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn inflight_reads_cannot_resurrect_deleted_sessions() {
     for case in ["session", "message", "permission", "form"] {
         deleted_before_first_poll(case).await;
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn overtaking_enqueues_keep_their_order() {
     let release = Slot::<()>::default();
     let gate = release.clone();
@@ -217,7 +364,7 @@ async fn overtaking_enqueues_keep_their_order() {
 }
 
 /// The read of a running session that is not loaded checks the connection when it would start.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn rehydration_reads_nothing_once_offline() {
     let release = Slot::<()>::default();
     let paths = Log::<String>::default();
@@ -236,7 +383,7 @@ async fn rehydration_reads_nothing_once_offline() {
         }),
         Options::default(),
     );
-    data.apply(&[connected()]);
+    data.apply(vec![connected()]);
     wait(|| paths.get().iter().any(|path| path == "/api/session/active")).await;
     data.set_online(false);
     release.resolve(());
@@ -244,18 +391,16 @@ async fn rehydration_reads_nothing_once_offline() {
     assert_eq!(reads(&paths, "/api/session/ses_x"), 0);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn child_changes_mark_the_root_whose_family_and_cost_they_change() {
     let (data, _) = counting();
     let root = id("ses_root");
     data.remember(info(session("ses_root", None, 0.5)));
-    let seen = data.revision();
+    let mut taken = Taken::default();
+    taken.take(&data);
     data.remember(info(session("ses_child", Some("ses_root"), 1.0)));
-    let (seen, changes) = {
-        let (revision, changes) = data.changes_since(seen);
-        (revision, changes)
-    };
-    assert!(changes.session(&root), "joining the family changes the root");
+    let (_, changes) = taken.take(&data);
+    assert!(changes.has(&root, Touched::INFO), "joining the family changes the root");
     assert_eq!(data.read(|state| state.cost(&root)), 1.5);
 
     emit(
@@ -266,16 +411,24 @@ async fn child_changes_mark_the_root_whose_family_and_cost_they_change() {
             json!({ "sessionID": "ses_child", "cost": 2.0, "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } } }),
         ),
     );
-    let (seen, changes) = data.changes_since(seen);
-    assert!(changes.session(&root), "child usage changes the root's cost");
+    let (_, changes) = taken.take(&data);
+    assert!(changes.has(&root, Touched::INFO), "child usage changes the root's cost");
 
     emit(&data, durable("session.deleted", "evt_deleted", json!({ "sessionID": "ses_child" })));
-    let (_, changes) = data.changes_since(seen);
-    assert!(changes.session(&root), "removing a child changes the root's family");
+    let (_, changes) = taken.take(&data);
+    assert!(changes.has(&root, Touched::INFO), "removing a child changes the root's family");
     assert_eq!(data.read(|state| state.family(&root).len()), 1);
+
+    // A parent cycle ends the walk at the last session before the first one seen twice.
+    data.remember(info(session("ses_b", Some("ses_c"), 0.0)));
+    data.remember(info(session("ses_c", Some("ses_d"), 0.0)));
+    data.remember(info(session("ses_d", Some("ses_b"), 0.0)));
+    data.remember(info(session("ses_a", Some("ses_b"), 0.0)));
+    let roots = data.read(|state| ["ses_a", "ses_b", "ses_c", "ses_d"].map(|id| state.root(id).to_owned()));
+    assert_eq!(roots, ["ses_d", "ses_d", "ses_b", "ses_c"]);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_failed_create_after_its_echo_flushes_the_end_of_creating() {
     let release = Slot::<()>::default();
     let gate = release.clone();
@@ -304,25 +457,13 @@ async fn a_failed_create_after_its_echo_flushes_the_end_of_creating() {
     );
     // Let the echo's own session read land first.
     settle().await;
-    let seen = data.revision();
+    let mut taken = Taken::default();
+    taken.take(&data);
     release.resolve(());
     assert!(request.await.is_err());
     assert!(!data.read(|state| state.is_creating(&made)));
-    let (_, changes) = data.changes_since(seen);
-    assert!(changes.session(&made), "the end of creating is a change");
-}
-
-#[tokio::test]
-async fn views_read_changes_and_state_under_one_lock() {
-    let (data, _) = counting();
-    data.remember(info(session("ses_a", None, 0.0)));
-    let (revision, changes, count) = data.read(|state| {
-        let (revision, changes) = state.changes_since(0);
-        (revision, changes, state.sessions().len())
-    });
-    assert_eq!(revision, data.revision());
-    assert!(changes.session(&id("ses_a")));
-    assert_eq!(count, 1);
+    let (_, changes) = taken.take(&data);
+    assert!(changes.has(&made, Touched::INFO), "the end of creating is a change");
 }
 
 #[test]
@@ -334,36 +475,33 @@ fn connect_works_from_a_thread_outside_the_runtime() {
         count.fetch_add(1, Ordering::SeqCst);
         async { Reply::Text(500, "no stream".into()) }
     }));
-    let data = Data::with_runtime(client, Options::default(), runtime.handle().clone());
-    // The UI thread has no runtime context.
-    let (connection, _task) =
-        std::thread::spawn(move || opencode_store::connection::connect(&data, events::Options::default()))
-            .join()
-            .expect("connect does not panic outside the runtime");
+    let handle = runtime.handle().clone();
+    // The UI thread, which owns the store, has no runtime context.
+    let connection = std::thread::spawn(move || {
+        let data = Data::new(client, Options::default(), handle, || Ok(()));
+        opencode_store::connection::connect(&data, events::Options::default()).0
+    })
+    .join()
+    .expect("connect does not panic outside the runtime");
     runtime.block_on(async {
         wait(|| opened.load(Ordering::SeqCst) > 0).await;
     });
     drop(connection);
 }
 
-/// Nested reads reuse the outer guard. Writing inside a read must panic rather than deadlock.
-#[tokio::test]
+/// Reads nest. Writing inside a read panics.
+#[tokio::test(flavor = "local")]
 async fn a_nested_read_works_and_a_write_inside_a_read_panics() {
     let data = common::data(handler(|_| async { ok(json!({})) }), Options::default());
     let other = common::data(handler(|_| async { ok(json!({})) }), Options::default());
     assert!(data.read(|_| other.read(|_| data.read(|_| true))));
-    let (sender, receiver) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            data.read(|_| data.catalog_invalidate(Catalog::Model, None));
-        }));
-        let _ = sender.send(result.is_err());
-    });
-    let panicked = receiver.recv_timeout(std::time::Duration::from_secs(2));
-    assert_eq!(panicked, Ok(true), "a write inside a read must panic, not hang");
+    let written = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        data.read(|_| data.catalog_invalidate(Catalog::Model, None));
+    }));
+    assert!(written.is_err(), "a write inside a read must panic");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn deleting_a_session_drops_its_forms() {
     let (data, _) = counting();
     emit(
@@ -374,16 +512,17 @@ async fn deleting_a_session_drops_its_forms() {
         }),
     );
     assert_eq!(data.read(|state| state.form_sessions().len()), 1);
-    let seen = data.revision();
+    let mut taken = Taken::default();
+    taken.take(&data);
     emit(&data, durable("session.deleted", "evt_deleted", json!({ "sessionID": "ses_form" })));
-    let (_, changes) = data.changes_since(seen);
+    let (_, changes) = taken.take(&data);
     assert!(changes.forms("ses_form"));
     assert!(data.read(|state| state.forms("ses_form", None).is_none()));
     assert!(data.read(|state| state.form_sessions().is_empty()));
 }
 
 /// `handleEvent` "session.step.failed": a budget refusal refreshes usage limits that were read.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_budget_refusal_refreshes_usage_limits() {
     let paths = Log::<String>::default();
     let log = paths.clone();
@@ -442,7 +581,7 @@ fn permission(id: &str) -> Value {
 
 /// A permission asked while the list read is in flight survives the older snapshot; one replied
 /// meanwhile does not come back with it.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_permission_list_keeps_asks_and_replies_that_overtook_it() {
     let (data, release) = held("/api/session/ses_p/permission");
     let task = data.permission_sync(&id("ses_p"));
@@ -465,7 +604,7 @@ async fn a_permission_list_keeps_asks_and_replies_that_overtook_it() {
 }
 
 /// An overflow costs another read, never a lost permission request.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn an_overflowed_permission_read_reads_again() {
     let slot = Slot::<Value>::default();
     let release = slot.clone();
@@ -508,7 +647,7 @@ fn form(id: &str) -> Value {
     json!({ "id": id, "sessionID": "ses_f", "title": "Ask", "fields": [] })
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_form_list_keeps_forms_created_and_settled_while_it_was_read() {
     let (data, release) = held("/api/session/ses_f/form");
     let running = tokio::spawn(data.form_sync("ses_f", None));
@@ -535,7 +674,7 @@ async fn a_form_list_keeps_forms_created_and_settled_while_it_was_read() {
     assert_eq!(ids, ["frm_kept", "frm_new"]);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn an_overflowed_form_read_reads_again() {
     let slot = Slot::<Value>::default();
     let release = slot.clone();
@@ -591,7 +730,7 @@ fn text(data: &Data, message: &str) -> Option<String> {
 
 /// A latest-page read that started before a step must not erase the assistant row the step's
 /// events created, with or without an older copy of it in the page.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_transcript_refresh_keeps_the_reply_that_streamed_meanwhile() {
     let user = json!({ "id": "msg_u", "type": "user", "text": "hi", "time": { "created": 1 } });
     let stale = json!({
@@ -625,7 +764,7 @@ async fn a_transcript_refresh_keeps_the_reply_that_streamed_meanwhile() {
 
 /// An older page read from a cursor that a latest-page refresh replaced is not stitched onto the
 /// new list: the load starts again from the new cursor, so no message goes missing.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn an_older_page_does_not_leave_a_gap_after_a_refresh() {
     let release = Slot::<()>::default();
     let gate = release.clone();
@@ -659,17 +798,18 @@ async fn an_older_page_does_not_leave_a_gap_after_a_refresh() {
     data.message_sync(&session).await.unwrap();
     let load = {
         let (data, session) = (data.clone(), session.clone());
-        tokio::spawn(async move { data.message_load_more(&session, LoadMore::default()).await })
+        tokio::spawn(data.message_load_more(&session, LoadMore::default()))
     };
     settle().await;
-    latest.store(3, Ordering::SeqCst);
+    // Jump past the newest page and all three bridge pages so the refresh replaces the transcript and its cursor.
+    latest.store(7, Ordering::SeqCst);
     data.message_invalidate(&session);
     data.message_sync(&session).await.unwrap();
     release.resolve(());
     load.await.unwrap().unwrap();
     let ids: Vec<String> =
         data.read(|state| state.messages(&session).iter().map(|item| item.id().to_owned()).collect());
-    assert_eq!(ids.first().map(String::as_str), Some("msg_2"), "{ids:?}");
-    assert_eq!(ids, ["msg_2", "msg_3"]);
-    assert!(data.read(|state| state.has_more_messages(&session)), "the cursor to msg_1 is kept");
+    assert_eq!(ids.first().map(String::as_str), Some("msg_3"), "{ids:?}");
+    assert_eq!(ids, ["msg_3", "msg_4", "msg_5", "msg_6", "msg_7"]);
+    assert!(data.read(|state| state.has_more_messages(&session)), "the cursor to msg_2 is kept");
 }

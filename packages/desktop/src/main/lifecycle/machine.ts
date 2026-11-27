@@ -103,6 +103,9 @@ export const preventsQuit = (state: State) => state.status !== "handing-off" && 
 export const quitsWhenAllWindowsClosed = (state: State, platform: NodeJS.Platform) =>
   platform !== "darwin" || state.status === "stopping" || state.status === "quitting"
 
+/** A stop for a quit, not for a relaunch or a restart handoff: the only one that may take the background service down. */
+export const endsApp = (state: State) => state.status === "stopping" && state.exit === "quit"
+
 function restartRequested(state: State, event: Extract<Event, { type: "restart.requested" }>): Transition {
   if (state.status === "running")
     return {

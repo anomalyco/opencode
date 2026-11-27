@@ -8,7 +8,7 @@ import {
   STORY_DIRECTORY,
   STORY_PROJECTS,
   STORY_SERVER,
-} from "@/components-lab/dialog-story-runtime"
+} from "@/lab/dialog-story-runtime"
 import type { Platform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"

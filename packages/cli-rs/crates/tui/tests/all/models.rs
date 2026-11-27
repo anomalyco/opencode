@@ -14,7 +14,7 @@ use opencode_parity::fixtures_dir;
 use opencode_store::{Data, Options as StoreOptions};
 use opencode_tui::dialogs::go_upsell::{self, Offer};
 use opencode_tui::dialogs::model;
-use opencode_tui::dialogs::{agent, usage, usage_model, variant};
+use opencode_tui::dialogs::{agent, speed, usage, usage_model, variant};
 use opencode_tui::local::{Files, Local};
 use opencode_tui::{Deps, Route};
 use opencode_ui::dialog::{DialogKeymap, Dialogs, route_keys};
@@ -127,6 +127,7 @@ fn state() -> opencode_util::temp::TempDir {
 struct Kit {
     app: TestApp,
     local: Rc<Local>,
+    data: Data,
     fixture: Arc<Server>,
     _state: opencode_util::temp::TempDir,
 }
@@ -143,14 +144,10 @@ fn kit_with(width: u16, height: u16, fixture: Arc<Server>) -> Kit {
     let dialogs = Dialogs::new(&app, keymap, theme());
     let client = Client::with_transport("http://opencode.local", fixture.clone()).unwrap();
     let state = state();
-    let data = Data::with_runtime(
-        client,
-        StoreOptions { directory: "/project".into(), ..StoreOptions::default() },
-        app.runtime(),
-    );
+    let data = support::store(&app, client, StoreOptions { directory: "/project".into(), ..StoreOptions::default() });
     let local = Local::new(
         &app,
-        data,
+        data.clone(),
         dialogs,
         toasts,
         Some(Files { state: state.path().to_owned(), storage: None }),
@@ -167,7 +164,7 @@ fn kit_with(width: u16, height: u16, fixture: Arc<Server>) -> Kit {
             && !local.providers(|providers| providers.is_empty())
     });
     assert!(loaded, "the catalog never loaded: {:?}", fixture.seen());
-    Kit { app, local, fixture, _state: state }
+    Kit { app, local, data, fixture, _state: state }
 }
 
 impl Kit {
@@ -189,7 +186,7 @@ fn a_connection_reads_the_catalogs_again_after_the_server_answered_before_its_pr
     assert!(kit.local.current().is_none());
 
     fixture.models_empty.store(false, std::sync::atomic::Ordering::SeqCst);
-    kit.local.sync(&opencode_store::Changes::everything());
+    kit.local.sync(&opencode_store::Changes::everything(&kit.data));
     let loaded = kit.app.wait_until(WAIT, || !kit.local.models(|models| models.is_empty()));
     assert!(loaded, "the catalogs were not read again: {:?}", fixture.seen());
     let reads =
@@ -217,6 +214,14 @@ fn agent_and_variant_dialogs_match_typescript() {
     variant::show(&kit.local);
     kit.wait_for("high");
     support::wait_fixture(&kit.app, "E.16/variant");
+}
+
+#[test]
+fn speed_dialog_matches_typescript() {
+    let kit = kit(90, 34);
+    speed::show(&kit.local);
+    kit.wait_for("Standard");
+    support::wait_fixture(&kit.app, "E.16/speed");
 }
 
 #[test]
@@ -528,6 +533,92 @@ fn a_reload_that_read_the_file_before_a_pending_write_keeps_the_change() {
 }
 
 #[test]
+fn a_speed_switches_the_model_and_shows_beside_its_name() {
+    let h = mount();
+    let local = h.tui.local.clone();
+    let sonnet = |id: &str| Some(Model::new("anthropic", id));
+    assert_eq!(local.speed(), None);
+    let slash = h.tui.keymap.commands().into_iter().find(|command| command.id == "speed.list").and_then(|c| c.slash);
+    assert_eq!(slash.map(|slash| (slash.name, slash.aliases)), Some(("speed".to_owned(), vec!["fast".to_owned()])));
+
+    h.tui.keymap.dispatch("speed.list", None);
+    h.wait_for("Select speed");
+    h.app.press("down");
+    h.app.press("return");
+    // The speed is a model of its own; the name shown stays the model's, with its variant.
+    assert_eq!(local.current(), sonnet("claude-sonnet-fast"));
+    assert_eq!(local.speed().as_deref(), Some("fast"));
+    assert_eq!(local.standard(), sonnet("claude-sonnet"));
+    assert_eq!(local.variant().as_deref(), Some("high"));
+    h.wait_for("Claude Sonnet Anthropic · high · fast");
+    h.wait_file(|file| file["speed"]["anthropic/claude-sonnet"] == "fast");
+
+    // Slowest, standard, fastest, around.
+    h.tui.keymap.dispatch("speed.cycle", None);
+    assert_eq!(local.current(), sonnet("claude-sonnet-flex"));
+    h.tui.keymap.dispatch("speed.cycle", None);
+    assert_eq!(local.current(), sonnet("claude-sonnet"));
+    h.wait_file(|file| file["speed"].as_object().is_some_and(|speed| speed.is_empty()));
+
+    // A model without speeds has no speed commands.
+    local.set(&Model::new("openai", "gpt-5"), false);
+    assert!(h.tui.keymap.commands().iter().all(|command| !command.id.starts_with("speed.")));
+    assert_no_writes(&h.fixture);
+}
+
+#[test]
+fn a_model_runs_at_its_last_speed_and_lists_name_it_once() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    let paths = support::home_paths(home.path());
+    std::fs::create_dir_all(&paths.state).unwrap();
+    let fast = model_ref("anthropic", "claude-sonnet-fast");
+    let preferences = json!({
+        "recent": [model_ref("anthropic", "claude-sonnet-flex"), model_ref("anthropic", "claude-sonnet")],
+        "favorite": [fast, model_ref("anthropic", "claude-sonnet")],
+        "variant": {},
+        "speed": { "anthropic/claude-sonnet": "fast", "openai/gpt-5": "fast" },
+    });
+    std::fs::write(paths.state.join("model.json"), preferences.to_string()).unwrap();
+    let deps = Deps { roots: support::roots(paths, "test"), route: Route::Home, ..support::deps(Server::new()) };
+    let h = support::mount(100, 34, deps);
+    let local = h.tui.local.clone();
+    assert!(h.app.wait_until(WAIT, || local.ready() && local.catalog_ready() && !local.agents().is_empty()));
+    assert_eq!(local.current(), Some(Model::new("anthropic", "claude-sonnet-fast")));
+    assert_eq!(local.recent(), [Model::new("anthropic", "claude-sonnet")]);
+    assert_eq!(local.favorite(), [Model::new("anthropic", "claude-sonnet")]);
+    // A speed the model does not have is its standard speed.
+    local.set(&Model::new("openai", "gpt-5"), false);
+    assert_eq!(local.current(), Some(Model::new("openai", "gpt-5")));
+    // Removing the favorite removes the entry saved at another speed too.
+    local.toggle_favorite(&Model::new("anthropic", "claude-sonnet"));
+    assert!(local.favorite().is_empty());
+}
+
+#[test]
+fn a_speed_switch_uses_the_targets_legacy_variant_instead_of_its_siblings() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    let paths = support::home_paths(home.path());
+    std::fs::create_dir_all(&paths.state).unwrap();
+    // Saved before speeds shared their model's variant.
+    let preferences = json!({
+        "recent": [],
+        "favorite": [],
+        "variant": { "anthropic/claude-sonnet-flex": "low", "anthropic/claude-sonnet-fast": "high" },
+        "speed": {},
+    });
+    std::fs::write(paths.state.join("model.json"), preferences.to_string()).unwrap();
+    let deps = Deps { roots: support::roots(paths, "test"), route: Route::Home, ..support::deps(Server::new()) };
+    let h = support::mount(100, 34, deps);
+    let local = h.tui.local.clone();
+    assert!(h.app.wait_until(WAIT, || local.ready() && local.catalog_ready() && !local.agents().is_empty()));
+    assert_eq!(local.current(), Some(Model::new("anthropic", "claude-sonnet")));
+    assert_eq!(local.variant().as_deref(), Some("low"));
+    local.set_speed(Some("fast"));
+    assert_eq!(local.current(), Some(Model::new("anthropic", "claude-sonnet-fast")));
+    assert_eq!(local.variant().as_deref(), Some("high"));
+}
+
+#[test]
 fn leader_a_switches_the_agent() {
     let h = mount();
     h.app.press("ctrl+x");
@@ -573,6 +664,7 @@ fn model_json_is_shared_with_the_typescript_client() {
             "recent": [model_ref("anthropic", "claude-haiku")],
             "favorite": [model_ref("anthropic", "claude-haiku"), model_ref("openai", "gpt-5")],
             "variant": { "anthropic/claude-sonnet": "default" },
+            "speed": {},
         })
     );
     // An independent writer uses the same lock; the TUI should pick up its update through the watcher.
@@ -608,6 +700,166 @@ fn go_upsell_is_offered_once_a_day_and_remembers_dont_show() {
     let saved = h.app.wait_until(WAIT, || storage.load("go-upsell", &json!({})).unwrap()["dontShow"] == true);
     assert!(saved, "{}", storage.load("go-upsell", &json!({})).unwrap());
     assert_no_writes(&h.fixture);
+}
+
+#[test]
+fn lists_every_provider_of_the_integration_just_connected() {
+    let dir = "/tmp/opencode/app";
+    let fake = support::Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/location") => (200, support::location(dir)),
+        ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
+        ("GET", "/api/integration") => (
+            200,
+            support::list(
+                dir,
+                json!([{
+                    "id": "opencode",
+                    "name": "OpenCode",
+                    "methods": [{ "type": "oauth", "id": "oauth", "label": "OpenCode account" }],
+                    "connections": [{ "type": "credential", "id": "cred_1", "label": "Personal", "method": "oauth" }],
+                }]),
+            ),
+        ),
+        ("GET", "/api/provider") => (
+            200,
+            support::list(
+                dir,
+                json!([
+                    {
+                        "id": "opencode", "name": "Personal / OpenCode", "integrationID": "opencode",
+                        "activation": "enabled", "package": "opencode",
+                    },
+                    {
+                        "id": "opencode-go", "name": "OpenCode Go", "integrationID": "opencode",
+                        "activation": "enabled", "package": "opencode",
+                    },
+                    { "id": "ollama", "name": "Ollama", "activation": "enabled", "package": "openai-compatible" },
+                ]),
+            ),
+        ),
+        ("GET", "/api/model") => (
+            200,
+            support::list(
+                dir,
+                json!([
+                    support::model("opencode", "zen", "Zen Model"),
+                    support::model("opencode-go", "go", "Go Model"),
+                    support::model("ollama", "local", "Local Model"),
+                ]),
+            ),
+        ),
+        _ => support::base(seen, dir),
+    });
+    let home = opencode_util::temp::tempdir().unwrap();
+    let deps = Deps {
+        directory: dir.into(),
+        roots: support::roots(support::home_paths(home.path()), "test"),
+        route: Route::Home,
+        ..support::deps(Arc::new(fake))
+    };
+    let h = support::mount(100, 34, deps);
+    let local = h.tui.local.clone();
+    assert!(h.app.wait_until(WAIT, || local.ready() && local.catalog_ready() && local.connected()));
+    model::show(&local, Some("opencode".into()));
+    let screen = h.wait_for("Search models");
+    assert!(screen.contains("Zen Model"), "{screen}");
+    assert!(screen.contains("Go Model"), "{screen}");
+    assert!(!screen.contains("Local Model"), "{screen}");
+}
+
+#[test]
+fn lists_models_of_a_provider_declared_only_in_config() {
+    let dir = "/tmp/opencode/app";
+    let free = support::merge(
+        support::model("opencode", "free", "Free Model"),
+        json!({ "cost": [{ "input": 0, "output": 0, "cache": { "read": 0, "write": 0 } }] }),
+    );
+    let local_model = support::model("ollama", "local", "Local Model");
+    let fake = support::Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/location") => (200, support::location(dir)),
+        ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
+        ("GET", "/api/integration") => (
+            200,
+            support::list(
+                dir,
+                json!([{
+                    "id": "ollama",
+                    "name": "Ollama",
+                    "methods": [{ "type": "key" }],
+                    "connections": [],
+                }]),
+            ),
+        ),
+        ("GET", "/api/provider") => (
+            200,
+            support::list(
+                dir,
+                json!([
+                    { "id": "opencode", "name": "OpenCode", "activation": "auto", "package": "opencode" },
+                    { "id": "ollama", "name": "Ollama", "activation": "enabled", "package": "openai-compatible" },
+                ]),
+            ),
+        ),
+        ("GET", "/api/model") => (200, support::list(dir, json!([free.clone(), local_model.clone()]))),
+        _ => support::base(seen, dir),
+    });
+    let home = opencode_util::temp::tempdir().unwrap();
+    let deps = Deps {
+        directory: dir.into(),
+        roots: support::roots(support::home_paths(home.path()), "test"),
+        route: Route::Home,
+        ..support::deps(Arc::new(fake))
+    };
+    let h = support::mount(100, 34, deps);
+    let local = h.tui.local.clone();
+    assert!(h.app.wait_until(WAIT, || {
+        local.ready()
+            && local.catalog_ready()
+            && local.integrations().is_some()
+            && !local.providers(|providers| providers.is_empty())
+    }));
+    model::show(&local, None);
+    let screen = h.wait_for("Local Model");
+    assert!(!screen.contains("Free models"), "{screen}");
+}
+
+#[test]
+fn opens_the_free_models_list_without_a_connection_or_a_configured_provider() {
+    let dir = "/tmp/opencode/app";
+    let free = support::merge(
+        support::model("opencode", "free", "Free Model"),
+        json!({ "cost": [{ "input": 0, "output": 0, "cache": { "read": 0, "write": 0 } }] }),
+    );
+    let fake = support::Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/location") => (200, support::location(dir)),
+        ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
+        ("GET", "/api/provider") => (
+            200,
+            support::list(
+                dir,
+                json!([{ "id": "opencode", "name": "OpenCode", "activation": "auto", "package": "opencode" }]),
+            ),
+        ),
+        ("GET", "/api/model") => (200, support::list(dir, json!([free.clone()]))),
+        _ => support::base(seen, dir),
+    });
+    let home = opencode_util::temp::tempdir().unwrap();
+    let deps = Deps {
+        directory: dir.into(),
+        roots: support::roots(support::home_paths(home.path()), "test"),
+        route: Route::Home,
+        ..support::deps(Arc::new(fake))
+    };
+    let h = support::mount(100, 34, deps);
+    let local = h.tui.local.clone();
+    assert!(h.app.wait_until(WAIT, || {
+        local.ready()
+            && local.catalog_ready()
+            && local.integrations().is_some()
+            && !local.providers(|providers| providers.is_empty())
+    }));
+    model::show(&local, None);
+    h.wait_for("Free models");
 }
 
 #[test]

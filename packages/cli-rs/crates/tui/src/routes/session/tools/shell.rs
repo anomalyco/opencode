@@ -2,11 +2,12 @@
 
 use opencode_api::generated::ShellID;
 use opencode_ui::motion::Spinner;
+use opencode_ui::tool_info::ShellInput;
 use opentui::input::strip_ansi_sequences;
 
 use super::dispatch::{Block, BlockTool, Header, Props, Status, content_width, format_path, paint_badge, status_badge};
 use crate::prelude::*;
-use crate::routes::session::messages::list::Context;
+use crate::routes::session::messages::list::{Context, Switch};
 use crate::routes::session::messages::shell::{Output, collapse_shell_output};
 
 const MAX_LINES: usize = 10;
@@ -22,7 +23,7 @@ struct Inner {
     paints: Paints,
     body: View,
     call: RefCell<Option<Call>>,
-    expanded: Cell<bool>,
+    expanded: Switch,
     output: RefCell<Output>,
     was_running: Cell<bool>,
     listed: Cell<bool>,
@@ -71,7 +72,7 @@ impl Shell {
             paints: Paints::default(),
             body,
             call: RefCell::default(),
-            expanded: Cell::new(false),
+            expanded: cx.toggles.switch(),
             output: RefCell::default(),
             was_running: Cell::new(false),
             listed: Cell::new(false),
@@ -79,8 +80,7 @@ impl Shell {
             painted: RefCell::default(),
         });
         inner.block.on_click(bind!(inner, |inner| {
-            let expanded = !inner.expanded.get();
-            inner.expanded.set(expanded);
+            let expanded = inner.expanded.flip();
             inner.refresh();
             if expanded {
                 inner.load(!inner.background_running());
@@ -116,8 +116,8 @@ impl Shell {
                 None => props.output.clone(),
             },
             shell,
-            command: props.input_str("command").map(str::to_owned),
-            workdir: format_path(cx, props.input_str("workdir")),
+            command: ShellInput(props.input).command().str().map(str::to_owned),
+            workdir: format_path(cx, ShellInput(props.input).workdir().str()),
             status,
             background: status == Status::Completed
                 && props.metadata.get("status").and_then(serde_json::Value::as_str) == Some("running"),
@@ -127,7 +127,12 @@ impl Shell {
             directory,
         };
         self.0.listed.set(call.shell.as_ref().is_some_and(|id| cx.state.shell(&ShellID(id.clone())).is_some()));
-        *self.0.call.borrow_mut() = Some(call);
+        let first = self.0.call.replace(Some(call)).is_none();
+        self.0.expanded.key(format!("shell {}", props.part.id));
+        // A row built again for a call the reader opened reads its output, as the click that opened it did.
+        if first && self.0.expanded.get() {
+            self.0.load(!self.0.background_running());
+        }
         self.0.watch();
         self.0.paint();
     }

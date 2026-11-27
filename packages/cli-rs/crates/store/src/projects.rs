@@ -3,8 +3,10 @@ use std::collections::HashSet;
 
 use opencode_api::generated::*;
 
-use crate::connection::Follow;
-use crate::state::{Data, Error, State, Task};
+use crate::changes::Touched;
+use crate::core::Effect;
+use crate::reads::SessionRead;
+use crate::state::State;
 
 /// The project of sessions outside any repository (`Project.ID.global`).
 const GLOBAL_PROJECT: &str = "global";
@@ -43,7 +45,7 @@ impl State {
 
     /// Replaces the cached set as Solid's `reconcile` does: a kept project keeps its place, a new one
     /// goes last, so the order of projects that sort equal does not change between reads.
-    fn replace_projects(&mut self, projects: Vec<Project>) {
+    pub(crate) fn replace_projects(&mut self, projects: Vec<Project>) {
         let ids: HashSet<&ProjectID> = projects.iter().map(|project| &project.id).collect();
         self.projects.retain(|id, _| ids.contains(id));
         for project in projects {
@@ -55,30 +57,25 @@ impl State {
     /// Moves cached sessions into the resolved repository's project. A session of an adopted
     /// project matches by the project's canonical directory; a session whose adopted project is not
     /// cached is read again instead.
-    pub(crate) fn on_worktree_resolved(&mut self, data: &WorktreeResolvedData) -> Vec<Follow> {
-        let mut follow = Vec::new();
-        let ids: Vec<SessionID> = self.info.keys().cloned().collect();
-        for id in ids {
-            let Some(info) = self.info.get(&id) else { continue };
+    pub(crate) fn on_worktree_resolved(&mut self, data: &WorktreeResolvedData, effects: &mut Vec<Effect>) {
+        for (key, session) in self.sessions.entries_mut() {
+            let Some(info) = &mut session.info else { continue };
             let explicit = data.adopted.as_ref().is_some_and(|adopted| adopted.contains(&info.project_id));
             let directory = if explicit {
-                self.projects.get(&info.project_id).map(|project| project.canonical.0.clone())
+                self.projects.get(&info.project_id).map(|project| project.canonical.as_str())
             } else {
-                Some(info.location.directory.0.clone())
+                Some(info.location.directory.as_str())
             };
             let Some(directory) = directory else {
-                self.syncs.invalidate(&format!("session:{}", id.0));
-                follow.push(Follow::Session(id));
+                session.reads[SessionRead::Info].invalidate();
+                effects.push(Effect::Session(session.id.clone()));
                 continue;
             };
-            let Some((project, subpath)) = adopt(&info.project_id.0, &directory, data) else { continue };
-            if let Some(info) = self.info.get_mut(&id) {
-                info.project_id = ProjectID(project);
-                info.subpath = subpath.map(RelativePath);
-            }
-            self.log.session(&id);
+            let Some((project, subpath)) = adopt(&info.project_id.0, directory, data) else { continue };
+            info.project_id = ProjectID(project);
+            info.subpath = subpath.map(RelativePath);
+            self.log.touch(session, key, Touched::INFO);
         }
-        follow
     }
 }
 
@@ -132,17 +129,6 @@ fn array_index(key: &str) -> Option<u32> {
 fn is_windows_root(root: &str) -> bool {
     let bytes = root.as_bytes();
     bytes.len() >= 3 && bytes[0] == b'/' && bytes[1].is_ascii_alphabetic() && bytes[2] == b':'
-}
-
-impl Data {
-    /// Reads every project once per invalidation; the read replaces the cached set.
-    pub fn project_sync(&self) -> Task<()> {
-        self.sync_run("project".to_owned(), |data| async move {
-            let projects = data.client().project_list(&ProjectListInput::default()).await.map_err(Error::new)?;
-            data.write(|state| state.replace_projects(projects));
-            Ok(())
-        })
-    }
 }
 
 #[cfg(test)]

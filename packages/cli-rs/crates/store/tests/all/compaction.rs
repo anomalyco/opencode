@@ -130,7 +130,7 @@ fn failure(message: &str) -> Error {
     Arc::new(opencode_api::error::Error::Transport(message.into()))
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn admits_compaction_before_model_setup_and_serializes_the_following_prompt() {
     let parts = Parts::default();
     let fixture = setup(&parts, None);
@@ -157,7 +157,7 @@ async fn admits_compaction_before_model_setup_and_serializes_the_following_promp
     assert_eq!(parts.proposals.get(), [proposed]);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn coalesces_duplicate_gestures_until_the_admission_request_settles() {
     let parts = Parts::default();
     let fixture = setup(&parts, None);
@@ -177,7 +177,7 @@ async fn coalesces_duplicate_gestures_until_the_admission_request_settles() {
     assert!(!proposals.contains(&"msg_canonical".to_owned()));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn substitutes_the_canonical_response_id_and_reconciles_its_later_echo() {
     let parts = Parts::default();
     let fixture = setup(&parts, None);
@@ -208,7 +208,7 @@ async fn adopts_echo(kind: &str) {
     assert_eq!(fixture.pending(SESSION), info(json!([item(&id, 20)])));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn echoes_resolve_without_duplicate_compactions() {
     for case in ["proposed", "canonical"] {
         adopts_echo(case).await;
@@ -266,7 +266,7 @@ async fn does_not_resurrect(kind: &str) {
     assert_eq!(row["tokens"], tokens);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn settled_compactions_stay_settled_after_the_response() {
     for case in ["started", "cancelled", "failed"] {
         does_not_resurrect(case).await;
@@ -293,7 +293,7 @@ async fn rolls_back(rpc: &str) {
     assert_eq!(messages[0]["text"], "Follow up");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn rejected_rpcs_release_the_next_prompt() {
     for case in ["model", "compact"] {
         rolls_back(case).await;
@@ -320,14 +320,14 @@ async fn preserves_acknowledged(kind: &str) {
     assert_eq!(fixture.pending(SESSION), info(json!([item(&id, 10)])));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn acknowledged_compactions_survive_http_errors() {
     for case in ["proposed", "canonical", "existing"] {
         preserves_acknowledged(case).await;
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn uses_a_fresh_control_id_when_the_known_pending_compaction_starts_during_model_setup() {
     let proposed = Slot::<String>::default();
     let parts = Parts::default();
@@ -407,14 +407,14 @@ async fn preserves_fetched_durable(kind: &str) {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn durable_items_survive_delayed_sse_and_http_failure() {
     for case in ["compaction", "canonical compaction", "user"] {
         preserves_fetched_durable(case).await;
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn settles_admissions_when_the_data_owner_is_disposed_during_a_gate() {
     let parts = Parts::default();
     let fixture = setup(&parts, None);
@@ -439,7 +439,7 @@ async fn settles_admissions_when_the_data_owner_is_disposed_during_a_gate() {
     compact.await.unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn routes_concurrent_compaction_observations_by_session() {
     let first_response = Slot::<Reply>::default();
     let second_response = Slot::<Reply>::default();
@@ -510,7 +510,7 @@ async fn failed_preparation(kind: &str) {
         &session(),
         Some(ModelRef { provider_id: ProviderID("demo".into()), id: "first".into(), variant: None }),
     );
-    let (client, following_prepared) = (fixture.data.clone(), prepared.clone());
+    let (client, following_prepared) = (fixture.data.client().clone(), prepared.clone());
     let following = fixture.data.prompt(Prompt {
         input: SessionPromptInput { session_id: session(), text: "Follow up".into(), ..Default::default() },
         gate: None,
@@ -521,7 +521,7 @@ async fn failed_preparation(kind: &str) {
                     session_id: session(),
                     model: ModelRef { provider_id: ProviderID("demo".into()), id: "second".into(), variant: None },
                 };
-                client.client().session_switch_model(&input).await.map_err(Arc::new)
+                client.session_switch_model(&input).await.map_err(Arc::new)
             }
             .boxed()
         })),
@@ -545,14 +545,14 @@ async fn failed_preparation(kind: &str) {
     assert_eq!(messages[0]["text"], "Follow up");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn failed_preparation_releases_following_work() {
     for case in ["gate", "prepare"] {
         failed_preparation(case).await;
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn creation_failure_rejects_gated_prompt_compaction_and_following_preparation_without_sending_their_rpcs() {
     let creation = Slot::<Reply>::default();
     let requested = Slot::<()>::default();

@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createRenderEffect, createSignal, onCleanup, type Accessor, type JSX } from "solid-js"
+import { For, Show, createEffect, createMemo, createRenderEffect, createSignal, onCleanup, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createEventListener } from "@solid-primitives/event-listener"
@@ -29,6 +29,7 @@ import { createSessionPanelMenuEntries, type SessionPanelMenuEntry } from "./pan
 import { RegionContent, type Region, type RegionPane } from "./panels"
 import { PluginSlot } from "./render"
 import { createTabStripScroll } from "./tab-strip-scroll"
+import { createTabStripWidths } from "./tab-strip-widths"
 import { closedTabsModifier, type ClosedSideTab } from "./closed-tabs"
 import { ClosedTabsSection, createDeferredMenu, NewTabButton } from "./closed-tabs-view"
 import { selectDeferredMenuOpen } from "./deferred-menu-machine"
@@ -242,6 +243,39 @@ export function PaneTabs(props: {
 
   // Without a new tab item, "+" opens a host-owned new tab view listing the launchers, as ⌘T does inside the region.
   const current = createMemo(() => props.region.shownNewTab(props.pane.id))
+
+  // The control a plugin draws in the New tab view to take the keyboard, such as the browser's address field.
+  const [newTabField, setNewTabField] = createSignal<{ focus(): void }>()
+
+  // A New tab the person asked for gives the keyboard to that control once it renders and the region stops moving: a
+  // region that slides open takes no focus until it lands. Without such a control, focus stays.
+  createEffect(() => {
+    const field = newTabField()
+
+    if (!field || current() === undefined || !props.region.newTabFocus(props.pane.id)) return
+    props.region.settled(() => {
+      if (newTabField() !== field || !props.region.newTabFocus(props.pane.id)) return
+      field.focus()
+      props.region.newTabFocused()
+    })
+  })
+
+  // What the New tab view's plugin slots get: a tab a plugin opens from there lands in this pane.
+  const newTab = {
+    get session() {
+      return props.view
+    },
+    get screen() {
+      return props.screen
+    },
+    target: (plugin: string) => tabs().target(props.pane.id, plugin),
+    autofocus(control: { focus(): void }) {
+      setNewTabField(() => control)
+
+      return () => setNewTabField((field) => (field === control ? undefined : field))
+    },
+  }
+
   const add = () => props.region.openNewTab(props.pane.id)
 
   let selectionEvent: Event | undefined
@@ -277,6 +311,7 @@ export function PaneTabs(props: {
               capture: true,
             })
             onCleanup(createTabStripScroll({ el, lead: props.pane.lead }))
+            onCleanup(createTabStripWidths(el))
           }}
           onContextMenu={(event: MouseEvent) => {
             const key =
@@ -439,7 +474,13 @@ export function PaneTabs(props: {
       <Show when={current()}>
         {(id) => (
           <Tabs.Content value={id()} class="flex flex-col h-full overflow-hidden contain-strict">
-            <Launchers items={launchers()} onChoose={target} closed={closed} />
+            <Launchers
+              items={launchers()}
+              onChoose={target}
+              closed={closed}
+              top={<PluginSlot at="session.panel.new" input={newTab} />}
+              list={<PluginSlot at="session.panel.new.list" input={newTab} />}
+            />
           </Tabs.Content>
         )}
       </Show>
@@ -579,28 +620,37 @@ function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: (ke
   )
 }
 
-/** The + menu items as rows, then the session's recently closed tabs, in the new tab view. */
+/**
+ * The new tab view: what plugins draw across its top, the + menu items as rows, what plugins list under them, then the
+ * session's recently closed tabs.
+ */
 function Launchers(props: {
   items: readonly SessionPanelMenuEntry[]
   onChoose: (key: string) => void
   closed: { entries: readonly ClosedSideTab[]; onReopen: (key: string) => void }
+  top: JSX.Element
+  list: JSX.Element
 }): JSX.Element {
   const keys = createMemo(() => props.items.map((entry) => entry.key), [], { equals: same })
   const byKey = createMemo(() => new Map(props.items.map((entry) => [entry.key, entry.item])))
 
   return (
-    <div class="flex-1 min-h-0 overflow-y-auto px-6">
-      <div class="mx-auto flex max-w-[560px] flex-col gap-3 pt-12 pb-10">
-        <For each={keys()}>
-          {(key) => (
-            <Show when={byKey().get(key)}>
-              {(item) => <LauncherRow item={item()} onChoose={() => props.onChoose(key)} />}
-            </Show>
-          )}
-        </For>
-        <ClosedTabsSection entries={props.closed.entries} onReopen={props.closed.onReopen} />
+    <>
+      {props.top}
+      <div data-scrollable class="flex-1 min-h-0 overflow-y-auto px-6">
+        <div class="mx-auto flex max-w-[560px] flex-col gap-3 pt-12 pb-10">
+          <For each={keys()}>
+            {(key) => (
+              <Show when={byKey().get(key)}>
+                {(item) => <LauncherRow item={item()} onChoose={() => props.onChoose(key)} />}
+              </Show>
+            )}
+          </For>
+          {props.list}
+          <ClosedTabsSection entries={props.closed.entries} onReopen={props.closed.onReopen} />
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 

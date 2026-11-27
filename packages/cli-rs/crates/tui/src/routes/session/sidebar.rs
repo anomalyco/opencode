@@ -44,6 +44,7 @@ pub fn mount(tui: &Tui, row: &View, session: &SessionID) -> Sidebar {
     let title = Text::new(app, "").bold();
     let content = View::new(app).column().shrink(0.0).gap(1).padding_edge(Edge::Right, 1);
     let scroll = ScrollBox::new(app).axes(false, true).scrollbars(false).grow(1.0).min_height(0);
+    opencode_ui::scroll::apply(&scroll, crate::dialogs::scroll_config(&tui.settings.info()));
     scroll.add(&content);
     let footer = View::new(app).column().shrink(0.0).gap(1).padding_edge(Edge::Top, 1);
     let panel = View::new(app)
@@ -122,7 +123,7 @@ impl Sidebar {
     }
 
     pub fn sync(&self, tui: &Tui, changes: &Changes) {
-        if changes.session(&self.inner.session) {
+        if changes.has(&self.inner.session, Touched::INFO) {
             self.inner.retitle(tui);
         }
         self.inner.layout(tui);
@@ -244,7 +245,7 @@ impl Inner {
 }
 
 fn setting(tui: &Tui) -> SidebarSetting {
-    tui.settings.info().session.and_then(|session| session.sidebar).unwrap_or(SidebarSetting::Auto)
+    tui.config().info.session.as_ref().and_then(|session| session.sidebar).unwrap_or(SidebarSetting::Auto)
 }
 
 /// `session.sidebar.toggle` in the palette, and Escape or Ctrl+C to close the overlay while no dialog is open.

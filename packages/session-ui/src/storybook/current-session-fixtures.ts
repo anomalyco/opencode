@@ -589,6 +589,34 @@ export const executeCodeDocument = document([
   }),
 ] satisfies SessionMessageInfo[])
 
+// A script that read a source tree file by file: its rows start at the latest calls.
+export const executeManyCallsDocument = document([
+  user("msg_user_execute_many", "Find every state machine in the app.", 52_100),
+  assistant({
+    id: "msg_assistant_execute_many",
+    offset: 52_200,
+    completed: 52_900,
+    content: [
+      completedTool({
+        id: "tool_execute_many_calls",
+        name: "execute",
+        offset: 52_300,
+        args: {
+          code: 'const files = await Array.fromAsync(new Bun.Glob("src/**/*.ts").scan())\nreturn files.filter((file) => Bun.file(file).name?.endsWith("machine.ts")).length',
+        },
+        output: "48",
+        metadata: {
+          toolCalls: Array.from({ length: 75 }, (_, index) => ({
+            tool: "read",
+            status: "completed",
+            input: { path: `src/session/module-${index}.ts` },
+          })),
+        },
+      }),
+    ],
+  }),
+] satisfies SessionMessageInfo[])
+
 const executeWorktreeNames = [
   "child-permission-sync",
   "frontmatter-flow-repair",
@@ -1345,7 +1373,7 @@ export const largeCompletedDocument = {
   status: { type: "idle" },
   diffs: [
     {
-      file: "packages/session-ui/src/timeline/session-timeline.stories.tsx",
+      file: "packages/session-ui/src/timeline/session-timeline.lab.tsx",
       patch: "@@ -0,0 +1,16 @@",
       additions: 16,
       deletions: 0,

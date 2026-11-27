@@ -45,6 +45,106 @@
         ]
       },
       {
+        "id": "claude-sonnet-flex",
+        "modelID": "claude-sonnet-flex",
+        "providerID": "anthropic",
+        "name": "Claude Sonnet Flex",
+        "status": "active",
+        "enabled": true,
+        "capabilities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ],
+          "tools": true
+        },
+        "cost": [
+          {
+            "input": 1.5,
+            "output": 7.5,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        ],
+        "limit": {
+          "context": 200000,
+          "output": 32000
+        },
+        "time": {
+          "released": 0
+        },
+        "variants": [
+          {
+            "id": "low"
+          },
+          {
+            "id": "high"
+          }
+        ],
+        "experimental": {
+          "speed": {
+            "base": "claude-sonnet",
+            "id": "flex",
+            "faster": false
+          }
+        }
+      },
+      {
+        "id": "claude-sonnet-fast",
+        "modelID": "claude-sonnet-fast",
+        "providerID": "anthropic",
+        "name": "Claude Sonnet Fast",
+        "status": "active",
+        "enabled": true,
+        "capabilities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ],
+          "tools": true
+        },
+        "cost": [
+          {
+            "input": 6,
+            "output": 30,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        ],
+        "limit": {
+          "context": 200000,
+          "output": 32000
+        },
+        "time": {
+          "released": 0
+        },
+        "variants": [
+          {
+            "id": "low"
+          },
+          {
+            "id": "high"
+          }
+        ],
+        "experimental": {
+          "speed": {
+            "base": "claude-sonnet",
+            "id": "fast",
+            "faster": true
+          }
+        }
+      },
+      {
         "id": "claude-haiku",
         "modelID": "claude-haiku",
         "providerID": "anthropic",

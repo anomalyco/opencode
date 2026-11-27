@@ -8,13 +8,13 @@ use opencode_api::generated::{
     FormInfo, PromptFileAttachment, SessionInboxInfo, SessionInboxItem, SessionInfo,
     SessionMessageAssistantContentItem as ContentItem, SessionMessageAssistantToolState as ToolPartState,
     SessionMessageAssistantToolTime, SessionMessageToolStateCompleted, SessionMessageToolStateError,
-    SessionMessageToolStateRunning, SessionMessageToolStateStreaming,
+    SessionMessageToolStateRunning, SessionMessageToolStateStreaming, tag,
 };
-use opencode_ui::tool_info::{canonical_tool_name, titlecase, tool_display_content, tool_output_text};
+use opencode_ui::tool_info::{ToolKind, titlecase, tool_display_content, tool_output_text};
 
 use crate::footers::permission::Request;
 use crate::prelude::*;
-use crate::replay::{Fragment, Fragments, session_of, user_image_commits};
+use crate::replay::{Fragments, PartRef, reasoning_commit, session_of, text_commit, user_image_commits};
 use crate::scrollback::{EntryKind, Phase, Source};
 
 /// `CHILD_MESSAGE_LIMIT`: the messages a child's transcript lists.
@@ -187,16 +187,15 @@ impl Child {
             self.tools.insert(key, part);
             return;
         }
-        let name = canonical_tool_name(&part.name).to_owned();
-        let output = tool_output_text(&name, &tool_display_content(&part.state));
+        let output = tool_output_text(&part.name, &tool_display_content(&part.state));
         let commit = |phase, value: Option<&str>| crate::tools::commit(&part, message, phase, value, directory, 0);
         if let ToolPartState::Running(state) = &part.state {
             let provider =
                 |state: &SessionMessageToolStateRunning| state.metadata.get("provider").is_some_and(Value::is_string);
-            let ready = name != "websearch" || provider(state);
+            let ready = ToolKind::of(&part.name) != ToolKind::WebSearch || provider(state);
             let current = self.tools.get(&key);
             let awaiting = current.is_some_and(|current| {
-                canonical_tool_name(&current.name) == "websearch"
+                ToolKind::of(&current.name) == ToolKind::WebSearch
                     && matches!(&current.state, ToolPartState::Running(state) if !provider(state))
             });
             let fresh = current.is_none_or(|current| matches!(current.state, ToolPartState::Streaming(_)));
@@ -248,17 +247,17 @@ impl Child {
             for item in &assistant.content {
                 match item {
                     ContentItem::Text(part) => {
-                        let fragment = Fragment::new(id, "text", text_ordinal);
+                        let fragment = PartRef::Text(text_ordinal);
                         text_ordinal += 1;
-                        self.fragments.project(&fragment, &part.text, true);
-                        self.set_frame(fragment_key(&fragment), text_commit(&fragment, part.text.clone()));
+                        self.fragments.project(id, fragment, &part.text, true);
+                        self.set_frame(fragment_key(id, fragment), text_commit(id, fragment, part.text.clone()));
                     }
                     ContentItem::Reasoning(part) => {
-                        let fragment = Fragment::new(id, "reasoning", reasoning_ordinal);
+                        let fragment = PartRef::Reasoning(reasoning_ordinal);
                         reasoning_ordinal += 1;
-                        self.fragments.project(&fragment, &part.text, true);
+                        self.fragments.project(id, fragment, &part.text, true);
                         if thinking {
-                            self.set_frame(fragment_key(&fragment), reasoning_commit(&fragment, &part.text));
+                            self.set_frame(fragment_key(id, fragment), thinking_commit(id, fragment, &part.text));
                         }
                     }
                     ContentItem::Tool(tool) => self.tool(tool.clone(), id, directory),
@@ -480,7 +479,7 @@ impl Tracker {
     pub fn main(&mut self, event: &V2Event) -> Vec<Fetch> {
         let (message, id, metadata, created, success) = match event {
             V2Event::SessionToolInputStarted(started) => {
-                if canonical_tool_name(&started.data.name) == "subagent" {
+                if ToolKind::of(&started.data.name) == ToolKind::Subagent {
                     let key = source_key(started.data.assistant_message_id.as_str(), &started.data.id);
                     self.calls.insert(key, None);
                 }
@@ -732,7 +731,7 @@ impl Tracker {
 
     /// `mainTool`: a listed subagent call of the parent.
     fn main_tool(&mut self, tool: &SessionMessageAssistantTool) {
-        if canonical_tool_name(&tool.name) != "subagent" {
+        if ToolKind::of(&tool.name) != ToolKind::Subagent {
             return;
         }
         let (input, metadata) = match &tool.state {
@@ -839,37 +838,38 @@ impl Tracker {
             }
             V2Event::SessionTextDelta(delta) => {
                 let data = &delta.data;
-                let fragment = Fragment::new(data.assistant_message_id.as_str(), "text", data.ordinal as u64);
-                if child.fragments.delta(&fragment, &data.delta).is_some() {
-                    let text = child.fragments.value(&fragment).unwrap_or_default().to_owned();
-                    child.set_frame(fragment_key(&fragment), text_commit(&fragment, text));
+                let (message, fragment) = (data.assistant_message_id.as_str(), PartRef::Text(data.ordinal as u32));
+                if child.fragments.delta(message, fragment, &data.delta).is_some() {
+                    let text = child.fragments.value(message, fragment).unwrap_or_default().to_owned();
+                    child.set_frame(fragment_key(message, fragment), text_commit(message, fragment, text));
                     child.touch(delta.created);
                     detail = true;
                 }
             }
             V2Event::SessionTextEnded(ended) => {
                 let data = &ended.data;
-                let fragment = Fragment::new(data.assistant_message_id.as_str(), "text", data.ordinal as u64);
-                child.fragments.end(&fragment, &data.text);
-                child.set_frame(fragment_key(&fragment), text_commit(&fragment, data.text.clone()));
+                let (message, fragment) = (data.assistant_message_id.as_str(), PartRef::Text(data.ordinal as u32));
+                child.fragments.end(message, fragment, &data.text);
+                child.set_frame(fragment_key(message, fragment), text_commit(message, fragment, data.text.clone()));
                 child.touch(ended.created);
                 detail = true;
             }
             V2Event::SessionReasoningDelta(delta) => {
                 let data = &delta.data;
-                let fragment = Fragment::new(data.assistant_message_id.as_str(), "reasoning", data.ordinal as u64);
-                if child.fragments.delta(&fragment, &data.delta).is_some() && thinking {
-                    let text = child.fragments.value(&fragment).unwrap_or_default().to_owned();
-                    child.set_frame(fragment_key(&fragment), reasoning_commit(&fragment, &text));
+                let (message, fragment) = (data.assistant_message_id.as_str(), PartRef::Reasoning(data.ordinal as u32));
+                if child.fragments.delta(message, fragment, &data.delta).is_some() && thinking {
+                    let text = child.fragments.value(message, fragment).unwrap_or_default();
+                    let commit = thinking_commit(message, fragment, text);
+                    child.set_frame(fragment_key(message, fragment), commit);
                     detail = true;
                 }
             }
             V2Event::SessionReasoningEnded(ended) => {
                 let data = &ended.data;
-                let fragment = Fragment::new(data.assistant_message_id.as_str(), "reasoning", data.ordinal as u64);
-                child.fragments.end(&fragment, &data.text);
+                let (message, fragment) = (data.assistant_message_id.as_str(), PartRef::Reasoning(data.ordinal as u32));
+                child.fragments.end(message, fragment, &data.text);
                 if thinking {
-                    child.set_frame(fragment_key(&fragment), reasoning_commit(&fragment, &data.text));
+                    child.set_frame(fragment_key(message, fragment), thinking_commit(message, fragment, &data.text));
                     detail = true;
                 }
             }
@@ -878,7 +878,7 @@ impl Tracker {
                 let message = data.assistant_message_id.as_str();
                 if !child.finished.contains(&source_key(message, &data.id)) {
                     let state = ToolPartState::Streaming(SessionMessageToolStateStreaming {
-                        status: "streaming".into(),
+                        status: tag::Streaming,
                         input: String::new(),
                     });
                     let part = tool_part(&data.id, data.name.clone(), state, time(started.created, None, None));
@@ -914,7 +914,7 @@ impl Tracker {
                     let name = current.map_or_else(|| "tool".to_owned(), |part| part.name.clone());
                     let created = current.map_or(called.created, |part| part.time.created);
                     let state = ToolPartState::Running(SessionMessageToolStateRunning {
-                        status: "running".into(),
+                        status: tag::Running,
                         input: data.input.clone(),
                         metadata: IndexMap::new(),
                     });
@@ -933,7 +933,7 @@ impl Tracker {
                 if !child.finished.contains(&key) {
                     let current = child.tools.get(&key).cloned();
                     let state = ToolPartState::Running(SessionMessageToolStateRunning {
-                        status: "running".into(),
+                        status: tag::Running,
                         input: input_of(current.as_ref()),
                         metadata: data.metadata.clone(),
                     });
@@ -966,7 +966,7 @@ impl Tracker {
                     let input = input_of(current.as_ref());
                     let state = match event {
                         V2Event::SessionToolFailed(failed) => ToolPartState::Error(SessionMessageToolStateError {
-                            status: "error".into(),
+                            status: tag::Error,
                             input,
                             error: failed.data.error.clone(),
                             content: failed.data.content.clone(),
@@ -974,7 +974,7 @@ impl Tracker {
                         }),
                         V2Event::SessionToolSuccess(success) => {
                             ToolPartState::Completed(SessionMessageToolStateCompleted {
-                                status: "completed".into(),
+                                status: tag::Completed,
                                 input,
                                 content: success.data.content.clone(),
                                 metadata: success.data.metadata.clone(),
@@ -1094,24 +1094,16 @@ fn source_key(message: &str, id: &str) -> String {
     format!("{message}\u{0}{id}")
 }
 
-fn fragment_key(fragment: &Fragment) -> String {
-    source_key(&fragment.message_id, &fragment.part_id)
+fn fragment_key(message: &str, part: PartRef) -> String {
+    format!("{message}\u{0}{part}")
 }
 
 fn prompt(text: &str, files: Option<&[PromptFileAttachment]>) -> Prompt {
     Prompt { text: text.to_owned(), files: files.unwrap_or_default().to_vec() }
 }
 
-fn text_commit(fragment: &Fragment, text: String) -> Commit {
-    Commit::new(EntryKind::Assistant, Source::Assistant, Phase::Progress, text)
-        .message(&fragment.message_id)
-        .part_id(&fragment.part_id)
-}
-
-fn reasoning_commit(fragment: &Fragment, text: &str) -> Commit {
-    Commit::new(EntryKind::Reasoning, Source::Reasoning, Phase::Progress, format!("Thinking: {text}"))
-        .message(&fragment.message_id)
-        .part_id(&fragment.part_id)
+fn thinking_commit(message: &str, part: PartRef, text: &str) -> Commit {
+    reasoning_commit(message, part, format!("Thinking: {text}"))
 }
 
 fn to_value(value: &impl serde::Serialize) -> Value {
@@ -1134,7 +1126,7 @@ fn tool_part(
     time: SessionMessageAssistantToolTime,
 ) -> SessionMessageAssistantTool {
     SessionMessageAssistantTool {
-        r#type: "tool".into(),
+        r#type: tag::Tool,
         id: id.to_owned(),
         name,
         executed: None,

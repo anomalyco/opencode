@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Duration, Effect, Layer, LayerMap } from "effect"
+import { Duration, Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
@@ -34,7 +34,7 @@ const hostConfig: LayerNode.Replacements = [
 const instances = Layer.effect(
   LocationServiceMap.Service,
   Effect.gen(function* () {
-    const map = yield* LayerMap.make(
+    const map = yield* LocationServiceMap.make(
       (ref: Location.Ref) => {
         const name = path.basename(ref.directory)
         return Instance.layer(ref, {

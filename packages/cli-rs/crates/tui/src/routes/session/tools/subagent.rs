@@ -2,7 +2,7 @@
 
 use opencode_api::generated::ModelInfo;
 use opencode_store::SessionStatus;
-use opencode_ui::tool_info::titlecase;
+use opencode_ui::tool_info::{SubagentInput, titlecase};
 
 use super::dispatch::{Inline, InlineTool, Props, Status};
 use crate::prelude::*;
@@ -38,7 +38,8 @@ impl Subagent {
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
         let status = props.status();
         let text = |key: &str| props.metadata.get(key).and_then(Value::as_str);
-        let continued = props.input_str("sessionID");
+        let input = SubagentInput(props.input);
+        let continued = input.session_id().str();
         let session = text("sessionID")
             .or(text("sessionId"))
             .or(continued.filter(|_| status != Status::Error))
@@ -48,12 +49,11 @@ impl Subagent {
             || session.as_deref().is_some_and(|id| {
                 !id.is_empty() && cx.state.status(&SessionID(id.to_owned())) == SessionStatus::Running
             });
-        let description = props.input_str("description");
-        let agent = props.input_str("agent").or(props.input_str("subagent_type")).unwrap_or("General");
+        let description = input.description().str();
+        let agent = input.agent().str().or(input.subagent_type().str()).unwrap_or("General");
         let title =
             if continuation { "Continue subagent".to_owned() } else { format!("{} Subagent", titlecase(agent)) };
-        let model =
-            model_label(props.input_str("model"), cx.models).map(|model| format!(" · {model}")).unwrap_or_default();
+        let model = model_label(input.model().str(), cx.models).map(|model| format!(" · {model}")).unwrap_or_default();
         let icon = match (running, continuation, status) {
             (true, _, _) => "│",
             (_, true, _) => "↳",

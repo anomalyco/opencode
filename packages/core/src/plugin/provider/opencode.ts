@@ -1,5 +1,4 @@
-import { isDeepStrictEqual } from "node:util"
-import { Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Semaphore, Stream } from "effect"
+import { Duration, Effect, Equal, FiberHandle, Option, Random, Schema, Scope, Semaphore, Stream } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
@@ -36,6 +35,8 @@ import { ProviderRefresh } from "./refresh.js"
 
 const clientID = "opencode-cli"
 const methodID = Integration.MethodID.make("device")
+const pollInterval = Duration.minutes(5)
+const pollJitter = Duration.minutes(1)
 const Device = Schema.Struct({
   device_code: Schema.String,
   user_code: Schema.String,
@@ -224,7 +225,7 @@ export const OpencodePlugin = define<
     const artifacts = yield* OpencodeArtifacts.make(ctx, http)
 
     // Every project signed in to the same workspace shares one fetch, reused while it is younger than `maxAge`.
-    const load = Effect.fn("OpencodePlugin.load")(function* (maxAge: Duration.Input = Duration.minutes(1)) {
+    const load = Effect.fn("OpencodePlugin.load")(function* (maxAge: Duration.Input = pollInterval) {
       const connection = yield* ctx.integration.connection.active("opencode")
       if (!connection) {
         reported = undefined
@@ -310,11 +311,10 @@ export const OpencodePlugin = define<
     // while the rest of the document merges through config.
     let integrated: ConfigIntegration.Document | undefined
     const integrate = Effect.fnUntraced(function* (document: ConfigIntegration.Document | undefined) {
-      yield* config.integration?.(Integration.ID.make("opencode"), document) ?? Effect.void
-      integrated = (yield* config.entries()).find(
-        (entry): entry is ConfigIntegration.Document =>
-          entry instanceof ConfigIntegration.Document && entry.integrationID === Integration.ID.make("opencode"),
-      )
+      const result = yield* config.integration?.(Integration.ID.make("opencode"), document) ??
+        Effect.succeed({ _tag: "Cleared" as const })
+      integrated = result._tag === "Cleared" ? undefined : result.document
+      return result
     })
     // Policies and providers ride on the snapshot, so a credential switch, disconnect, or 404 replaces them too.
     const publish = Effect.fnUntraced(function* (next: typeof snapshot) {
@@ -332,11 +332,8 @@ export const OpencodePlugin = define<
           // `make` keeps only the standard config keys, so instructions and skills stay here.
           info: next.remote,
         })
-      yield* integrate(document)
-      // Managed `integration.use: deny` makes config layer a policies-only copy, which withholds instructions,
-      // skills and event watches too. Config keeps the document it holds when handed a deep-equal one, so compare by
-      // content.
-      const allowed = document !== undefined && (!config.integration || isDeepStrictEqual(integrated, document))
+      const result = yield* integrate(document)
+      const allowed = result._tag === "Applied"
       yield* syncInstructionsAndSkills(next, allowed)
       const watching = allowed && next.remote?.watches === true && (yield* flags.enabled("console_watches"))
       yield* syncWatches(watching ? next.connection : undefined)
@@ -571,12 +568,19 @@ export const OpencodePlugin = define<
     // Console config can change independently of local credential activity, so re-fetch
     // periodically and only rebuild the catalog and search providers when the snapshot differs.
     // Only while connected: a signed-out location runs no timer and no credential lookups.
+    // Additive jitter stays >= pollInterval so SharedCache never skips a wake-up as still fresh.
     const polling = yield* FiberHandle.make<void, never>()
+    const nextPoll = Effect.gen(function* () {
+      const jitter = yield* Random.nextIntBetween(0, Duration.toMillis(pollJitter))
+      return Duration.millis(Duration.toMillis(pollInterval) + jitter)
+    })
     const poll = Effect.fnUntraced(function* () {
       if (!snapshot.connection) return yield* FiberHandle.clear(polling)
-      yield* FiberHandle.run(polling, Effect.sleep(Duration.minutes(1)).pipe(Effect.andThen(check()), Effect.forever), {
-        onlyIfMissing: true,
-      })
+      yield* FiberHandle.run(
+        polling,
+        nextPoll.pipe(Effect.flatMap(Effect.sleep), Effect.andThen(check()), Effect.forever),
+        { onlyIfMissing: true },
+      )
     })
     yield* ProviderRefresh.onSwitch("opencode", refresh().pipe(Effect.andThen(poll())))
     yield* poll()

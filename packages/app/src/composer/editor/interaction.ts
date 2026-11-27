@@ -2,7 +2,6 @@ import { Predicate } from "effect"
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
 import { unwrap } from "solid-js/store"
 import { useFilteredList } from "@opencode/ui/hooks"
-import { focusField, handOffFocus, handoffRing } from "@opencode/ui/context/field-focus"
 import { abort } from "@opencode/util/abort"
 import { createComposerAttachments, type ComposerAttachmentConfig } from "../attachments/attachments"
 import type { Upload } from "../attachments/uploads"
@@ -60,6 +59,7 @@ export type ComposerEditorView = {
   }
   agent?: ComposerSelectControl
   variant?: ComposerSelectControl
+  speed?: ComposerSelectControl
   submit: {
     available?: Accessor<boolean>
     stopping: Accessor<boolean>
@@ -122,7 +122,7 @@ export function createComposerEditor(input: {
   let editor: HTMLElement | undefined
   let fileInput: HTMLInputElement | undefined
   let focusFrame: number | undefined
-  let focusRequest: { cursor: number; visible: boolean | undefined } | undefined
+  let focusRequest: { cursor: number } | undefined
 
   const cancelFocus = () => {
     if (focusFrame === undefined) return
@@ -139,8 +139,7 @@ export function createComposerEditor(input: {
 
     if (!editor) return
 
-    if (request.visible === undefined) editor.focus()
-    else focusField(editor, request.visible)
+    editor.focus()
     setCursorPosition(editor, request.cursor)
   }
 
@@ -210,9 +209,7 @@ export function createComposerEditor(input: {
           },
         }),
         editor: () => editor,
-        focusEditor: () => {
-          if (editor) handOffFocus(editor)
-        },
+        focusEditor: () => editor?.focus(),
         addPart,
         setDraggingType: (type) => dispatch({ type: type ? "drag.enter" : "drag.leave" }),
       })
@@ -569,9 +566,9 @@ export function createComposerEditor(input: {
     if (contextList.grouped.state === "ready" && contextList.flat().length === 0) dispatch({ type: "popover.close" })
   })
 
-  const restoreFocus = (cursor = draft.state.cursor ?? promptLength(draft.state.prompt), visible?: boolean) => {
+  const restoreFocus = (cursor = draft.state.cursor ?? promptLength(draft.state.prompt)) => {
     cancelFocus()
-    focusRequest = { cursor, visible: visible ?? handoffRing(editor) }
+    focusRequest = { cursor }
     focusFrame = requestAnimationFrame(flushFocus)
   }
 

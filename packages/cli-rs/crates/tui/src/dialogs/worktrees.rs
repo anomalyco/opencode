@@ -393,7 +393,7 @@ impl Workspaces {
             let state = self.state.borrow();
             (self.show_error(), self.locked(), state.working || state.loading || state.project_loading)
         };
-        let session = matches!(tui.route(), Route::Session { .. });
+        let session = matches!(&*tui.route(), Route::Session { .. });
         let current = self.current_value();
         let height = i64::from(tui.app.size().1);
         let full_height = (height - height / 4 - 2).clamp(8, 16) as u32;
@@ -641,7 +641,7 @@ impl Workspaces {
         if let Some(fallback) = &fallback {
             self.state.borrow_mut().replacement = Some(fallback.clone());
         }
-        if matches!(tui.route(), Route::Session { .. }) {
+        if matches!(&*tui.route(), Route::Session { .. }) {
             tui.dialogs.clear();
             tui.navigate(Route::Home);
             return true;
@@ -682,7 +682,9 @@ impl Workspaces {
 
     fn move_session(&self, option: &SelectOption<Selection>) {
         let Some(tui) = self.tui() else { return };
-        let (Route::Session { id }, Selection::Directory { directory, .. }) = (tui.route(), &option.value) else {
+        let (Route::Session { id }, Selection::Directory { directory, .. }) =
+            (Route::clone(&tui.route()), &option.value)
+        else {
             return;
         };
         tui.dialogs.clear();

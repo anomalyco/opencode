@@ -4,7 +4,17 @@ import { Cause, Deferred, Effect, PlatformError, Queue, Redacted, Schema, Sink, 
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { Environment } from "../environment/index.js"
 import { Failed, NotFound, WrongKind, type DirEntry, type FileInfo } from "../environment/files.js"
-import { ProcessID, Signal, type FileCall, type FromWorker, type Hello, type Instance, type ToWorker } from "./wire.js"
+import {
+  ProcessID,
+  Signal,
+  type FileCall,
+  type FromWorker,
+  type Hello,
+  type Instance,
+  type PeerCall,
+  type PeerLink,
+  type ToWorker,
+} from "./wire.js"
 
 /** How long a start whose connection was lost waits for the worker to come back before it is reported unknown. */
 const START_GRACE = "15 seconds"
@@ -34,6 +44,19 @@ export class ProcessLost extends Schema.TaggedError<ProcessLost>()("Machine.Proc
       : `${this.machine}'s worker no longer has the process`
   }
 }
+
+/** A worker refused or could not finish a peer request. */
+export class PeerFailed extends Schema.TaggedError<PeerFailed>()("Machine.PeerFailed", {
+  machine: Environment.ID,
+  reason: Schema.String,
+}) {
+  override get message() {
+    return `${this.machine}: ${this.reason}`
+  }
+}
+
+/** A peer request as the home asks for it, before it is given a `req`. */
+export type PeerRequest<M = PeerCall> = M extends unknown ? Omit<M, "req"> : never
 
 export const ConnectionInfo = Schema.Struct({
   kind: Schema.Literals(["websocket", "iroh"]),
@@ -67,9 +90,14 @@ export interface Interface {
   /** The hello of the connection being served, if there is one. */
   readonly hello: () => Hello | undefined
   readonly describe: () => typeof ConnectionInfo.Type | undefined
+  /** Sends one peer request on the current connection and waits for its answer. */
+  readonly peer: (request: PeerRequest) => Effect.Effect<void, PeerFailed | NotSent | Unknown>
+  /** The peer links that are up, as the current connection's hello and messages since report them. */
+  readonly links: () => ReadonlySet<PeerLink>
 }
 
 type Reply = Extract<FromWorker, { type: "fs" }>
+type PeerReply = Extract<FromWorker, { type: "peer" }>
 
 interface Link {
   readonly describe: Connection["describe"]
@@ -79,6 +107,9 @@ interface Link {
   /** File calls sent on this connection and not yet answered. */
   readonly calls: Map<number, Deferred.Deferred<Reply, Unknown>>
   readonly inputs: Map<number, { id: ProcessID; reply: Deferred.Deferred<void, Error> }>
+  /** Peer requests sent on this connection and not yet answered. */
+  readonly peers: Map<number, Deferred.Deferred<PeerReply, Unknown>>
+  readonly links: Set<PeerLink>
 }
 
 type OutputQueue = Queue.Queue<Uint8Array, PlatformError.PlatformError | Cause.Done>
@@ -123,6 +154,8 @@ export const make = (id: Environment.ID): Interface => {
     current.calls.forEach((call) => Deferred.doneUnsafe(call, Effect.fail(new Unknown({ machine: id }))))
     current.inputs.forEach((input) => Deferred.doneUnsafe(input.reply, Effect.fail(new Unknown({ machine: id }))))
     current.inputs.clear()
+    current.peers.forEach((reply) => Deferred.doneUnsafe(reply, Effect.fail(new Unknown({ machine: id }))))
+    current.links.clear()
   }
 
   // The process will not be heard from again: whoever waits on it gets `error`.
@@ -151,6 +184,8 @@ export const make = (id: Environment.ID): Interface => {
         lost: Deferred.makeUnsafe(),
         calls: new Map(),
         inputs: new Map(),
+        peers: new Map(),
+        links: new Set(connection.hello.links),
       }
       const restarted = connection.hello.instance !== instance
       instance = connection.hello.instance
@@ -204,6 +239,15 @@ export const make = (id: Environment.ID): Interface => {
     if (message.type === "fs") {
       const call = current.calls.get(message.req)
       if (call) Deferred.doneUnsafe(call, Effect.succeed(message))
+      return
+    }
+    if (message.type === "peer") {
+      const reply = current.peers.get(message.req)
+      if (reply) Deferred.doneUnsafe(reply, Effect.succeed(message))
+      return
+    }
+    if (message.type === "peer-closed") {
+      current.links.delete(message.link)
       return
     }
     const process = processes.get(message.id)
@@ -447,9 +491,31 @@ export const make = (id: Environment.ID): Interface => {
       }),
     )
 
+  const peer = (request: PeerRequest) =>
+    Effect.suspend((): Effect.Effect<void, PeerFailed | NotSent | Unknown> => {
+      const current = link
+      if (!current) return Effect.fail(new NotSent({ machine: id }))
+      const peerID = ++req
+      const reply = Deferred.makeUnsafe<PeerReply, Unknown>()
+      current.peers.set(peerID, reply)
+      current.send({ ...request, req: peerID })
+      return Deferred.await(reply).pipe(
+        Effect.ensuring(Effect.sync(() => current.peers.delete(peerID))),
+        Effect.flatMap((answer) => {
+          if (!answer.ok) return Effect.fail(new PeerFailed({ machine: id, reason: answer.message }))
+          if (link !== current) return Effect.void
+          if (request.type === "peer-accept" || request.type === "peer-connect") current.links.add(request.link)
+          if (request.type === "peer-close") current.links.delete(request.link)
+          return Effect.void
+        }),
+      )
+    })
+
   return {
     connect,
     close,
+    peer,
+    links: () => link?.links ?? new Set(),
     hello: () => link?.hello,
     describe: () => link?.describe?.(),
     environment: Environment.make(
@@ -470,7 +536,13 @@ export const make = (id: Environment.ID): Interface => {
       },
       // A worker is a POSIX machine with none of this server's shell paths, and its driver runs only argv, cwd and
       // env: `sh -c` is the contract every worker can meet.
-      { path: posix, shell: "sh" },
+      {
+        path: posix,
+        shell: "sh",
+        home: Effect.suspend(() =>
+          link ? Effect.succeed(link.hello.home) : Effect.fail(new NotSent({ machine: id })),
+        ),
+      },
     ),
   }
 }

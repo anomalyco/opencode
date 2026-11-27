@@ -105,6 +105,7 @@ import { CommandPaletteDialog } from "./component/command-palette"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/keymap"
 
 import { DialogVariant } from "./component/dialog-variant"
+import { DialogSpeed } from "./component/dialog-speed"
 import { destroyRenderer, setTerminalTitle } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
@@ -162,6 +163,8 @@ const appBindingCommands = [
   "agent.cycle.reverse",
   "variant.cycle",
   "variant.list",
+  "speed.cycle",
+  "speed.list",
   "provider.connect",
   "opencode.settings",
   "opencode.status",
@@ -678,7 +681,8 @@ function App() {
   })
 
   const args = useArgs()
-  const startupPrompt = args.prompt ? { text: args.prompt, files: [], agents: [], pasted: [] } : undefined
+  const startupText = args.sessionID || args.continue ? args.takePrompt() : undefined
+  const startupPrompt = startupText ? { text: startupText, files: [], agents: [], pasted: [] } : undefined
   onMount(() => {
     batch(() => {
       if (args.agent) local.agent.set(args.agent)
@@ -1023,6 +1027,28 @@ function App() {
           dialog.replace(() => <DialogVariant />)
         },
       },
+      // Only for a model that has other speeds, so nothing about speeds shows for the rest.
+      ...(local.model.speed.list().length > 0
+        ? [
+            {
+              name: "speed.cycle",
+              title: "Speed cycle",
+              category: "Agent",
+              run: () => {
+                local.model.speed.cycle()
+              },
+            },
+            {
+              name: "speed.list",
+              title: "Switch model speed",
+              category: "Agent",
+              slash: { name: "speed", aliases: ["fast"] },
+              run: () => {
+                dialog.replace(() => <DialogSpeed />)
+              },
+            },
+          ]
+        : []),
       {
         name: "agent.cycle.reverse",
         title: "Agent cycle reverse",
@@ -1040,7 +1066,7 @@ function App() {
         run: () => {
           dialog.replace(() => (
             <DialogIntegration
-              onConnected={(providerID) => dialog.replace(() => <DialogModel providerID={providerID} />)}
+              onConnected={(integrationID) => dialog.replace(() => <DialogModel integrationID={integrationID} />)}
             />
           ))
         },

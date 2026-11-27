@@ -15,7 +15,13 @@ export const home = {
     { keys: "\x03", until: { exit: true } },
   ],
   exits: true,
-  masks: [{ pattern: /Ask anything… .*$/, reason: "the placeholder is picked at random" }],
+  masks: [
+    { pattern: /Ask anything… .*$/, reason: "the placeholder is picked at random" },
+    {
+      pattern: /[○⦿●](?= UI )/,
+      reason: "the UI tab shows the client's own frame delay sample, which follows the machine's load",
+    },
+  ],
 }
 
 export default definePty({

@@ -211,10 +211,10 @@ fn check(tui: &Tui) {
                 return;
             }
             let mut sessions: Vec<String> = tui.terminals.lists.borrow().keys().cloned().collect();
-            if let crate::routes::Route::Session { id } = tui.route()
+            if let crate::routes::Route::Session { id } = &*tui.route()
                 && !sessions.contains(&id.0)
             {
-                sessions.push(id.0);
+                sessions.push(id.0.clone());
             }
             for session in sessions {
                 refresh(&tui, &SessionID(session), false, |_| {});
@@ -326,8 +326,8 @@ pub(crate) fn create(tui: &Tui, session: &SessionID, focus: bool, then: impl FnO
 }
 
 fn session(tui: &Tui) -> Option<SessionID> {
-    match tui.route() {
-        crate::routes::Route::Session { id } if crate::frame::terminal_host(tui) => Some(id),
+    match &*tui.route() {
+        crate::routes::Route::Session { id } if crate::frame::terminal_host(tui) => Some(id.clone()),
         _ => None,
     }
 }

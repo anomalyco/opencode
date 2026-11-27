@@ -2,6 +2,7 @@ import { expect } from "bun:test"
 import { RequestExecutor } from "@opencode/ai/route"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
+import { Model } from "@opencode/core/model"
 import { ModelsDev } from "@opencode/core/models-dev"
 import { Provider } from "@opencode/core/provider"
 import { Voice } from "@opencode/core/voice"
@@ -75,6 +76,29 @@ const modelsDev = Layer.mock(ModelsDev.Service, {
     ),
 })
 
+// A realtime model the model service lists, as models.dev or config leaves it on.
+const realtime = (provider: string, id: string, name: string, baseURL = "https://opencode.ai/inference/openai/v1") => ({
+  ...Model.Info.default(Provider.ID.make(provider), Model.ID.make(id)),
+  type: "realtime",
+  name,
+  settings: { baseURL },
+})
+
+// Newest first, as the model service sorts each type.
+const onModels = [
+  realtime("openai", "gpt-live-1.1", "GPT-Live 1.1"),
+  realtime("openai", "gpt-live-1", "GPT-Live 1"),
+  realtime("openai", "gpt-realtime-2.1", "GPT-Realtime-2.1"),
+  realtime("xai", "grok-voice-3.0", "Grok Voice 3.0"),
+  realtime("google", "gemini-3.8-live", "Gemini 3.8 Live"),
+  realtime("opencode", "gpt-live-1", "GPT-Live 1"),
+]
+
+const mockModels = (models: readonly Model.Info[] = onModels) =>
+  Layer.mock(Model.Service, {
+    available: (types) => Effect.succeed(models.filter((model) => types?.includes(model.type ?? "chat"))),
+  })
+
 const mockIntegration = (
   connections: (id: Integration.ID) => Integration.Info["connections"],
   resolve: Integration.Interface["connection"]["resolve"] = () => Effect.die("Voice.models resolved a credential"),
@@ -101,6 +125,7 @@ const start = (
   model: string,
   connections: Partial<Record<string, Integration.Info["connections"]>>,
   requests: HttpClientRequest.HttpClientRequest[],
+  models: readonly Model.Info[] = onModels,
 ) =>
   Effect.flatMap(Voice.Service, (voice) =>
     voice.session({
@@ -116,6 +141,7 @@ const start = (
         Layer.provide(
           Layer.mergeAll(
             modelsDev,
+            mockModels(models),
             mockIntegration((id) => connections[id] ?? [], resolveCredential),
             RequestExecutor.layer.pipe(
               Layer.provide(
@@ -226,6 +252,7 @@ it.effect("lists voice models with availability and default without resolving cr
             Layer.provide(
               Layer.mergeAll(
                 modelsDev,
+                mockModels(),
                 mockIntegration((id) => connections[id] ?? []),
                 Layer.mock(RequestExecutor.Service, {}),
               ),
@@ -328,5 +355,39 @@ it.effect("lists voice models with availability and default without resolving cr
       ],
       default: undefined,
     })
+  }),
+)
+
+it.effect("offers hosted GPT-Live only while its config leaves it on, at the URL config gives it", () =>
+  Effect.gen(function* () {
+    const requests: HttpClientRequest.HttpClientRequest[] = []
+    const opencode = { opencode: [credential("console", "oauth")] }
+    const others = onModels.filter((model) => model.providerID !== "opencode")
+    const list = (models: readonly Model.Info[]) =>
+      Effect.flatMap(Voice.Service, (voice) => voice.models()).pipe(
+        Effect.map((result) => result.models.filter((item) => item.provider === "opencode").map((item) => item.model)),
+        Effect.provide(
+          Voice.layer.pipe(
+            Layer.provide(
+              Layer.mergeAll(
+                modelsDev,
+                mockModels(models),
+                mockIntegration((id) => (id === "opencode" ? opencode.opencode : [])),
+                Layer.mock(RequestExecutor.Service, {}),
+              ),
+            ),
+          ),
+        ),
+      )
+
+    // A workspace that turned GPT-Live off sends it disabled, so the model service leaves it out.
+    expect(yield* list(others)).toEqual([])
+    const off = yield* start("gpt-live-1", opencode, requests, others).pipe(Effect.flip)
+    expect(off).toMatchObject({ _tag: "Voice.InvalidRequestError" })
+
+    const dev = realtime("opencode", "gpt-live-1", "GPT-Live 1", "https://console.dev.example/inference/openai/v1")
+    expect(yield* list([...others, dev])).toEqual(["gpt-live-1"])
+    yield* start("gpt-live-1", opencode, requests, [...others, dev])
+    expect(requests.map((req) => req.url)).toEqual(["https://console.dev.example/inference/openai/v1/live/sessions"])
   }),
 )

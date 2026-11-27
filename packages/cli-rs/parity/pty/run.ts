@@ -116,8 +116,9 @@ export type PtyCase = {
   requests?: boolean | "writes"
   // Runs only with `--sides rs,rs`: Rust behavior the TS client does not share, compared between two Rust runs.
   rsOnly?: boolean
-  // As in P-CLI: writes files into the sandbox before the command runs.
-  setup?: (root: string, server: string | undefined) => Promise<void>
+  // As in P-CLI: writes files into the sandbox before the command runs; `password` is the fake server's
+  // per-run credential, for a scenario that registers it as a service.
+  setup?: (root: string, server: string | undefined, password: string | undefined) => Promise<void>
   // Checks a side's run once the steps are done (and the program exited, with `exits`): returns what is wrong. For
   // what both sides must do, which a comparison of two sides that share a defect cannot catch.
   verify?: (run: { requests: Logged[]; exit: number | undefined; screen: string[] }) => string[]
@@ -132,7 +133,10 @@ export async function runPty(side: Side, value: PtyCase) {
   const rows = value.rows ?? 30
   const box = await sandbox({ TERM: "xterm-256color", COLORTERM: "truecolor", ...value.env })
   const server = value.server ? await startFakeServer(value.server) : undefined
-  await value.setup?.(box.root, server?.url)
+  // The fake server answers only its run's clients: the password goes in their environment, and a client left
+  // over from another run cannot log a request that the comparison would see.
+  if (server) box.env.OPENCODE_PASSWORD = server.password
+  await value.setup?.(box.root, server?.url, server?.password)
   // Large enough for any `resize` step.
   const setup = await createTestRenderer({ width: 300, height: 120 })
   const decoder = new TextDecoder()

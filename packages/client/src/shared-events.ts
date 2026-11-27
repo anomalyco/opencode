@@ -133,14 +133,14 @@ export function make<A extends { readonly type: string }>(
 
           return {
             next(): Promise<IteratorResult<Item>> {
+              if (options?.signal?.aborted) {
+                abort()
+                return Promise.resolve({ done: true, value: undefined })
+              }
               const value = queued.shift()
               if (value) return Promise.resolve({ done: false, value })
               if (completion) {
                 if ("error" in completion) return Promise.reject(completion.error)
-                return Promise.resolve({ done: true, value: undefined })
-              }
-              if (options?.signal?.aborted) {
-                abort()
                 return Promise.resolve({ done: true, value: undefined })
               }
               const request = Promise.withResolvers<IteratorResult<Item>>()

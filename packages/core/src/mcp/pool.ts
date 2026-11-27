@@ -1,19 +1,19 @@
 export * as McpPool from "./pool.js"
 
 import type { AuthProvider } from "@modelcontextprotocol/client"
-import type { Mcp } from "@opencode/schema/mcp"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { httpFetch } from "@opencode/util/effect/app-node-platform"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, FiberSet, Layer, Scope, Semaphore } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
+import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { Environment } from "../environment/index.js"
 import { SharedCache } from "../shared-cache.js"
 import type { McpClient } from "./client.js"
 import { McpConnection } from "./connection.js"
 
-export interface Input extends McpConnection.Input {
+export interface Input extends Omit<McpConnection.Input, "endpointLoads" | "shared"> {
   /**
    * Run once per start: what tells this connection apart from every other one to the same server (see `key`),
    * and the OAuth provider to open it with. Both come from one credential selection, so a slot's key and the
@@ -36,6 +36,8 @@ export interface Interface {
    * and every later start for that key skips straight to that.
    */
   readonly connection: (input: Input) => McpConnection.Connection
+  /** Serializes unshared remote endpoint handshakes across Locations on the same host. */
+  readonly endpointLoads: KeyedMutex.KeyedMutex<string>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/McpPool") {}
@@ -44,16 +46,16 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Mc
  * Everything that could make two connections behave differently, so only identical ones are shared.
  * The server's name is left out; each Location keeps its own. Secrets appear only as fingerprints.
  */
-export const key = (input: {
-  readonly config: Mcp.ServerConfig
-  /** Local only: the directory the server runs in, as `McpStdio.resolveCwd` resolves it for the spawn. */
-  readonly cwd?: string
-  /** The active OAuth credential's ID, which a token refresh keeps and a sign-in replaces. */
-  readonly credential?: string
-  readonly clientInfo?: { readonly name: string; readonly version: string }
-}) => {
+export const key = (
+  input: Omit<McpConnection.Spec, "name" | "directory"> & {
+    /** Local only: the directory the server runs in, as `McpStdio.resolveCwd` resolves it for the spawn. */
+    readonly cwd?: string
+    /** The active OAuth credential's ID, which a token refresh keeps and a sign-in replaces. */
+    readonly credential?: string
+  },
+) => {
   const config = input.config
-  const common = [config.protocol, config.timeout ?? null, input.clientInfo ?? null]
+  const common = [config.protocol, config.timeout ?? null, input.clientInfo ?? null, input.skills ?? false]
   if (config.type === "remote")
     return JSON.stringify([
       "remote",
@@ -105,6 +107,16 @@ interface Slot {
   connected: boolean
 }
 
+type Mode =
+  | { readonly _tag: "Idle" }
+  | {
+      readonly _tag: "Shared"
+      readonly claim: Scope.Closeable
+      readonly holder: Holder
+      readonly connection?: McpConnection.Connection
+    }
+  | { readonly _tag: "Private"; readonly connection: McpConnection.Connection }
+
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -113,6 +125,7 @@ export const layer = Layer.effect(
     const host = Environment.local(yield* ChildProcessSpawner)
     const fetch = yield* FetchHttpClient.Fetch
     const slots = new Map<string, Slot>()
+    const endpointLoads = KeyedMutex.makeUnsafe<string>()
     // Keys whose server negotiated legacy or refused the pooled handshake. Kept for the life of the process.
     const unpoolable = new Set<string>()
     // The subset that negotiated legacy. Their private connections skip the 2026-07-28 probe; a refusal
@@ -121,19 +134,17 @@ export const layer = Layer.effect(
     // Names of local servers already warned about for having no cwd, which keeps each project's folder in the key.
     const unfixed = new Set<string>()
 
-    // Takes only data from the Location that opens it: the connection outlives that Location's claim.
-    const open = (key: string, input: Pick<Input, "name" | "config" | "directory" | "clientInfo">) => {
+    // Takes only the spec from the Location that opens it: the connection outlives that Location's claim.
+    const open = (key: string, spec: McpConnection.Spec) => {
       const slot: Slot = {
         holders: new Set(),
         lock: Semaphore.makeUnsafe(1),
         outcome: Deferred.makeUnsafe(),
         connected: false,
         connection: McpConnection.make({
-          name: input.name,
-          config: input.config,
-          directory: input.directory,
+          spec,
+          endpointLoads,
           shared: true,
-          clientInfo: input.clientInfo,
           // Every holder of a key presents the same credential, so any of them can build the provider.
           authProvider: Effect.suspend(() => slot.holders.values().next().value?.authProvider ?? Effect.undefined),
           elicitation: {
@@ -165,7 +176,7 @@ export const layer = Layer.effect(
                 if (answered) {
                   unpoolable.add(key)
                   yield* Effect.logWarning("mcp pool ignored: server refused the shared connection", {
-                    server: input.name,
+                    server: spec.name,
                     error: failure.error,
                   })
                 }
@@ -177,7 +188,7 @@ export const layer = Layer.effect(
                 unpoolable.add(key)
                 legacy.add(key)
                 yield* Effect.logWarning("mcp pool ignored: server speaks an older protocol", {
-                  server: input.name,
+                  server: spec.name,
                   version,
                 })
                 yield* Deferred.succeed(slot.outcome, "private")
@@ -236,16 +247,9 @@ export const layer = Layer.effect(
         })
       })
 
-    const acquire = Effect.fnUntraced(function* (key: string, input: Input, holder: Holder) {
+    const acquire = Effect.fnUntraced(function* (key: string, spec: McpConnection.Spec, holder: Holder) {
       if (unpoolable.has(key)) return "private" as const
-      const slot =
-        slots.get(key) ??
-        open(key, {
-          name: input.name,
-          config: input.config,
-          directory: input.directory,
-          clientInfo: input.clientInfo,
-        })
+      const slot = slots.get(key) ?? open(key, spec)
       yield* Effect.acquireRelease(
         Effect.sync(() => slot.holders.add(holder)),
         () => release(key, slot, holder),
@@ -257,41 +261,27 @@ export const layer = Layer.effect(
     })
 
     const connection = (input: Input): McpConnection.Connection => {
-      const state: {
-        claim?: Scope.Closeable
-        holder?: Holder
-        shared?: McpConnection.Connection
-        own?: McpConnection.Connection
-        // This start's credential selection, which a private connection opens with as well.
-        selected?: Selection
-      } = {}
-      // A private connection, used when the key can't be shared, with the configured protocol or plain legacy.
-      const privately = (config: Mcp.ServerConfig) =>
-        McpConnection.make({
-          ...input,
-          config,
-          authProvider: Effect.suspend(() => state.selected?.authProvider ?? input.authProvider),
-        })
-      const configured = privately(input.config)
-      const older = privately({ ...input.config, protocol: "legacy" })
-      const live = () => state.shared ?? state.own ?? configured
+      let mode: Mode = { _tag: "Idle" }
+      const live = () => (mode._tag === "Idle" ? undefined : mode.connection)
       // The shared connection carries the name of the Location that opened it; forms show this Location's.
       const elicit: McpClient.ElicitationHandler["create"] = (request) =>
-        input.elicitation.create({ ...request, server: input.name })
+        input.elicitation.create({ ...request, server: input.spec.name })
 
       // Holder callbacks run in the Location's own callback runtime, under its lock, and only while the
       // claim they belong to is the current one.
       const current = (holder: Holder, effect: () => Effect.Effect<void>) =>
         input.callbacks(
-          Effect.suspend(() => (state.holder === holder ? effect() : Effect.void)).pipe(input.lock, Effect.ignore),
+          Effect.suspend(() => (mode._tag === "Shared" && mode.holder === holder ? effect() : Effect.void)).pipe(
+            input.lock,
+            Effect.ignore,
+          ),
         )
 
       const clear = Effect.suspend(() => {
-        const claim = state.claim
-        state.claim = undefined
-        state.holder = undefined
-        state.shared = undefined
-        return claim ? Scope.close(claim, Exit.void) : Effect.void
+        if (mode._tag !== "Shared") return Effect.void
+        const claim = mode.claim
+        mode = { _tag: "Idle" }
+        return Scope.close(claim, Exit.void)
       })
 
       // Resolves false when the key can't be shared, leaving the start to the Location's own connection.
@@ -305,9 +295,8 @@ export const layer = Layer.effect(
             closed: (reason) => current(holder, () => input.events.closed(reason)),
             changed: (kind) => current(holder, () => input.events.changed(kind)),
           }
-          state.claim = claim
-          state.holder = holder
-          const outcome = yield* acquire(selected.key, input, holder).pipe(
+          mode = { _tag: "Shared", claim, holder }
+          const outcome = yield* acquire(selected.key, input.spec, holder).pipe(
             Scope.provide(claim),
             Effect.onInterrupt(() => clear),
           )
@@ -320,7 +309,7 @@ export const layer = Layer.effect(
             yield* input.events.failed(outcome, false)
             return true
           }
-          state.shared = outcome
+          mode = { _tag: "Shared", claim, holder, connection: outcome }
           yield* input.events.connected
           return true
         }).pipe(Effect.onExit((exit) => (Exit.isSuccess(exit) && !exit.value ? Effect.void : input.events.settled)))
@@ -335,46 +324,76 @@ export const layer = Layer.effect(
 
       return {
         get client() {
-          return live().client
+          return live()?.client
         },
         get tools() {
-          return live().tools
+          return live()?.tools
         },
         get prompts() {
-          return live().prompts
+          return live()?.prompts
+        },
+        get skills() {
+          return live()?.skills
         },
         start: Effect.gen(function* () {
-          if (input.config.type === "local" && input.config.cwd === undefined && !unfixed.has(input.name)) {
-            unfixed.add(input.name)
+          if (
+            input.spec.config.type === "local" &&
+            input.spec.config.cwd === undefined &&
+            !unfixed.has(input.spec.name)
+          ) {
+            unfixed.add(input.spec.name)
             yield* Effect.logWarning(
               "mcp pool ignored: local server has no fixed cwd, so each directory runs its own",
               {
-                server: input.name,
+                server: input.spec.name,
               },
             )
           }
           const selected = yield* input.select
-          state.selected = selected
           if (!unpoolable.has(selected.key) && (yield* join(selected))) return
-          state.own = legacy.has(selected.key) ? older : configured
-          yield* state.own.start
+          const config = legacy.has(selected.key)
+            ? { ...input.spec.config, protocol: "legacy" as const }
+            : input.spec.config
+          const own = McpConnection.make({
+            spec: { ...input.spec, config },
+            authProvider: selected.authProvider,
+            elicitation: input.elicitation,
+            environment: input.environment,
+            fetch: input.fetch,
+            scope: input.scope,
+            lock: input.lock,
+            endpointLoads,
+            callbacks: input.callbacks,
+            fork: input.fork,
+            events: input.events,
+          })
+          mode = { _tag: "Private", connection: own }
+          yield* own.start
         }),
         stop: Effect.gen(function* () {
-          if (!state.claim) return yield* (state.own ?? configured).stop
+          if (mode._tag === "Idle") return
+          if (mode._tag === "Private") {
+            const own = mode.connection
+            mode = { _tag: "Idle" }
+            return yield* own.stop
+          }
           yield* clear
           yield* input.events.changed("tools")
           yield* input.events.changed("resources")
           yield* input.events.changed("prompts")
+          yield* input.events.changed("skills")
         }),
-        recovering: (client, request) =>
-          state.shared
-            ? state.shared.recovering(client, (client) => request(bind(client)))
-            : (state.own ?? configured).recovering(client, request),
-        catalog: (client) => live().catalog(client),
+        recovering: (client, request) => {
+          if (mode._tag === "Shared" && mode.connection)
+            return mode.connection.recovering(client, (client) => request(bind(client)))
+          if (mode._tag === "Private") return mode.connection.recovering(client, request)
+          return request(client)
+        },
+        catalog: (client) => live()?.catalog(client) ?? McpConnection.readCatalog(client),
       }
     }
 
-    return Service.of({ connection })
+    return Service.of({ connection, endpointLoads })
   }),
 )
 

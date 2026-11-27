@@ -27,6 +27,7 @@ const result = await Bun.build({
     "#persistent-pty-binary",
     "#fff",
     "#photon-wasm",
+    "#websocket-constructor",
     "#v1-migration",
   ],
   splitting: true,

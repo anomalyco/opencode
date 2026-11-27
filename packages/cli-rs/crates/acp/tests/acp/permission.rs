@@ -307,7 +307,11 @@ async fn previews_added_files_as_new_and_deleted_files_as_empty() {
                 session,
                 "call_add",
                 "patch",
-                json!({ "patchText": patch(&["*** Add File: added.ts", "+one"]) }),
+                json!({ "patchText": patch(&[
+                    "*** Add File: added.ts", "+one",
+                    "*** Add File: notes.md", "+# Title", "+",
+                    "*** Add File: blank.txt", "+",
+                ]) }),
                 json!({}),
             ));
             events.push(permission_asked(
@@ -359,7 +363,11 @@ async fn previews_added_files_as_new_and_deleted_files_as_empty() {
             json!([diff("file.ts", json!("one\r\ntwo\r\n"), "one\r\nthree\r\n")]),
             json!([diff("first.ts", json!("one\n"), "two\n"), diff("second.ts", json!("alpha\n"), "beta\n"),]),
             json!([diff("written.ts", Value::Null, "two\n")]),
-            json!([diff("added.ts", Value::Null, "one\n")]),
+            json!([
+                diff("added.ts", Value::Null, "one\n"),
+                diff("notes.md", Value::Null, "# Title\n\n"),
+                diff("blank.txt", Value::Null, "\n"),
+            ]),
             json!([diff("gone.ts", json!("gone\n"), "")]),
             Value::Null,
             Value::Null,
@@ -393,16 +401,19 @@ async fn previews_added_files_as_new_and_deleted_files_as_empty() {
 async fn leaves_a_scripts_changes_alone_some_have_no_diff_and_a_file_can_change_more_than_once() {
     let dir = opencode_util::temp::tempdir().unwrap();
     std::fs::write(dir.path().join("a.txt"), "a\nb\nc\n").unwrap();
-    let update = json!({ "sessionUpdate": "tool_call_update", "toolCallId": "call_1", "status": "completed" });
+    let call =
+        opencode_acp::tools::completed_tool_update("call_1".into(), "execute", &Default::default(), &[], None, "/");
+    let mut update = opencode_acp::update::Kind::ToolCallUpdate(call).into();
+    let before = json!(update);
     let source = opencode_acp::tools::DiffSource {
         tool_name: "execute".to_owned(),
-        input: json!({ "code": "1" }),
-        metadata: Some(json!({ "files": [
+        input: std::sync::Arc::new(serde_json::from_value(json!({ "code": "1" })).unwrap()),
+        metadata: Some(serde_json::from_value(json!({ "files": [
             { "file": "a.txt", "status": "modified", "additions": 1, "deletions": 0, "patch": "@@ -1 +1,2 @@\n a\n+b\n" },
             { "file": "a.txt", "status": "modified", "additions": 1, "deletions": 0, "patch": "@@ -1,2 +1,3 @@\n a\n b\n+c\n" },
-        ] })),
+        ] })).unwrap()),
     };
     let cwd = dir.path().to_string_lossy();
-    let result = opencode_acp::permission::with_completed_diffs(update.clone(), Some(&source), &cwd).await;
-    assert_eq!(result, update);
+    opencode_acp::permission::add_completed_diffs(&mut update, Some(&source), &cwd).await;
+    assert_eq!(json!(update), before);
 }

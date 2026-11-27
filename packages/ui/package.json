@@ -1,6 +1,6 @@
 {
   "name": "@opencode/ui",
-  "version": "2.3.0",
+  "version": "2.4.1",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -20,8 +20,7 @@
     "src/**/*.tsx",
     "!src/**/*.test.ts",
     "!src/**/*.test.tsx",
-    "!src/**/*.stories.ts",
-    "!src/**/*.stories.tsx",
+    "!src/**/*.lab.tsx",
     "src/**/*.css",
     "src/data-display/line-comment/*.svg",
     "src/theme/themes/*.json",
@@ -115,6 +114,8 @@
     "test": "bun test src --only-failures",
     "dev": "vite",
     "generate:tailwind": "bun run script/tailwind.ts",
+    "generate:icon-usage": "bun run script/generate-icon-usage.ts",
+    "generate:spinner": "bun run script/generate-spinner.ts",
     "generate:v2-oc2": "bun run script/build-oc2-v2-overrides.ts"
   },
   "devDependencies": {

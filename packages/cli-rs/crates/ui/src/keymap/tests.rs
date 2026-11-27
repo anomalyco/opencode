@@ -98,6 +98,17 @@ fn oracle_invalid_configs_fail_as_typescript_does() {
 }
 
 #[test]
+fn none_inside_an_array_disables_that_entry() {
+    let overrides = serde_json::json!({
+        "session.sidebar.toggle": ["none"],
+        "session.new": ["none", "ctrl+b"],
+    });
+    let keybinds = Keybinds::<u32>::resolve(overrides.as_object().unwrap(), true).unwrap();
+    assert!(keybinds.get("session.sidebar.toggle").is_empty());
+    assert_eq!(keybinds.get("session.new").len(), 1);
+}
+
+#[test]
 fn active_keys_follow_a_mode_condition() {
     let tui = TuiKeymap::<u32>::new(Keybinds::defaults(), Options::default());
     tui.layer(KeymapLayer {
@@ -178,7 +189,10 @@ fn a_binding_parses_as_its_layer_registers_it() {
         engine.sort();
         ours.sort();
         assert_eq!(ours, engine, "{key:?}");
+        // The shortcut labels follow each layer in and out.
+        assert_eq!(tui.shortcuts("probe.key").len(), engine.len(), "{key:?}");
         drop(layer);
+        assert_eq!(tui.shortcut("probe.key"), None, "{key:?}");
     }
     let escape = tui.keymap().parse_key("escape").unwrap().stroke;
     let takes_escape =
@@ -252,4 +266,29 @@ fn a_plugin_slash_name_never_takes_another_commands() {
     assert_eq!(names("first.run"), Some(vec!["first".to_owned(), "shared".to_owned()]));
     assert_eq!(names("taker.run"), Some(vec!["harmless".to_owned()]));
     assert_eq!(names("whole.run"), None);
+}
+
+#[test]
+fn an_unmatched_leader_sequence_consumes_its_last_key() {
+    let tui = TuiKeymap::<u32>::new(Keybinds::defaults(), Options::default());
+    let _layer = tui
+        .layer(KeymapLayer { commands: vec![TuiCommand::inline("<leader>a", |_, _| ())], ..KeymapLayer::default() })
+        .unwrap();
+    let mut parser = Parser::standalone().unwrap();
+    let mut press = |bytes: &str| {
+        let mut out = Vec::new();
+        parser.feed(bytes.as_bytes(), Instant::now(), &mut out).unwrap();
+        out.into_iter()
+            .filter_map(|input| match input {
+                Input::Event(Event::Key(event)) => Some(tui.handle_key(&event)),
+                _ => None,
+            })
+            .last()
+            .unwrap()
+    };
+    assert_eq!(press("\x18").reason, KeyReason::SequencePending);
+    let miss = press("z");
+    assert_eq!(miss.reason, KeyReason::SequenceMiss);
+    assert!(miss.stop_propagation && miss.prevent_default);
+    assert!(!press("z").stop_propagation);
 }

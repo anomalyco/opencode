@@ -251,11 +251,13 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     try: () => {
       const runtime = module.model(resolved.modelID ?? resolved.id, settings)
       const timeouts = Provider.timeouts(configured)
+      const base = resolved.compatibility
+        ? capabilities(runtime.capabilities, resolved.compatibility)
+        : runtime.capabilities
       return LanguageModel.update(runtime, {
         provider: resolved.canonical ?? resolved.providerID,
-        capabilities: resolved.compatibility
-          ? capabilities(runtime.capabilities, resolved.compatibility)
-          : runtime.capabilities,
+        // The catalog's freeform formats decide whether the AI package sends a tool as raw text, and with which grammar.
+        capabilities: { ...base, tools: { ...base?.tools, freeform: model.capabilities.freeform ?? [] } },
         compatibility: resolved.compatibility
           ? Object.assign({}, runtime.compatibility, Struct.omit(resolved.compatibility, CAPABILITY_KEYS))
           : runtime.compatibility,
@@ -274,7 +276,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
 })
 
 // Config `compatibility` keys the AI package reads as model capabilities.
-const CAPABILITY_KEYS = ["supportsPromptCacheKey", "streamUsage", "supportsEffortUpdates"] as const
+const CAPABILITY_KEYS = ["supportsPromptCacheKey", "streamUsage", "supportsEffortUpdates", "supportsSystemUpdates"] as const
 
 const capabilities = (base: LanguageModel["capabilities"], compatibility: Compatibility) => ({
   ...base,
@@ -283,6 +285,7 @@ const capabilities = (base: LanguageModel["capabilities"], compatibility: Compat
   ...("supportsEffortUpdates" in compatibility
     ? { reasoning: { ...base?.reasoning, updates: compatibility.supportsEffortUpdates } }
     : {}),
+  ...("supportsSystemUpdates" in compatibility ? { systemUpdates: compatibility.supportsSystemUpdates } : {}),
 })
 
 /** Settings and package loading shared by every model type: credentials, variables, canonical provider, overlays. */

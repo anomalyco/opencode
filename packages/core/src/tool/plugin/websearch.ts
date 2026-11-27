@@ -4,12 +4,11 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema, Semaphore } from "effect"
 import { HttpClientError } from "effect/http"
-import { Config } from "../../config.js"
-import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
 import { Form } from "../../form.js"
 import { Permission } from "../../permission.js"
 import { WebSearch } from "../../websearch.js"
+import { WebSearchMcp } from "../../plugin/websearch/mcp.js"
 
 export const name = "websearch"
 export const NO_RESULTS = "No search results found. Please try a different query."
@@ -41,15 +40,14 @@ export const Plugin = {
     const permission = yield* Permission.Service
     const forms = yield* Form.Service
     const websearch = yield* WebSearch.Service
-    const config = yield* Config.Service
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
 
     yield* ctx.tool
       .transform((editor) =>
         editor.add({
           name,
-          options: { codemode: flags.resolve(loaded.entries).full_codemode.enabled },
+          // Pinned so quick questions call it without searching the catalog first.
+          options: flags.current().full_codemode.enabled ? { codemode: { pinned: true } } : { codemode: false },
           description,
           input: Input,
           output: Output,
@@ -177,8 +175,9 @@ export const Plugin = {
                 if (!Schema.is(WebSearch.RequestError)(error)) return new ToolFailure({ message: fallback, error })
                 const status = HttpClientError.isHttpClientError(error.cause) ? error.cause.response?.status : undefined
                 return new ToolFailure({
-                  message:
-                    status === undefined
+                  message: Schema.is(WebSearchMcp.ToolError)(error.cause)
+                    ? `Web search failed: ${error.cause.message}`
+                    : status === undefined
                       ? fallback
                       : (httpErrors.get(status) ?? `Web search request failed (HTTP ${status})`),
                   error,

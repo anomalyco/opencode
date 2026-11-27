@@ -1,6 +1,5 @@
 import { createEffect, createMemo, createSignal, on, onMount, untrack, type Accessor } from "solid-js"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { focusField, handoffRing } from "@opencode/ui/context/field-focus"
 import type { ComposerControls } from "@/composer/adapter"
 import { setCursorPosition } from "@/composer/editor/dom"
 import { promptLength } from "@/composer/prompt-parts"
@@ -17,6 +16,7 @@ export function createSessionComposerController(input: {
   sessionKey: Accessor<string>
   controls: Accessor<ComposerControls>
   dock: Parameters<typeof createSessionComposerRegionController>[0]
+  takeBack: () => Promise<void>
 }) {
   const settings = useSettings()
   const dialog = useDialog()
@@ -32,6 +32,7 @@ export function createSessionComposerController(input: {
     controls: input.controls,
     submitted: region.onResponseSubmit,
     background,
+    takeBack: input.takeBack,
     setEditor: (element) => {
       setEditor(element)
       region.setPromptRef(element)
@@ -48,10 +49,8 @@ export function createSessionComposerController(input: {
       const target = editor()
 
       if (!target) return
-      const visible = handoffRing(target)
       requestAnimationFrame(() => {
-        if (visible === undefined) target.focus()
-        else focusField(target, visible)
+        target.focus()
         setCursorPosition(target, cursor)
       })
     },

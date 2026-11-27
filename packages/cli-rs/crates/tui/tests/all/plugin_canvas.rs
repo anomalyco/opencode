@@ -666,7 +666,7 @@ impl Model for Canvases {
             match command {
                 Command::Open | Command::Home => {
                     (reference.held, reference.asked) = (None, None);
-                    let on_route = matches!(harness.tui.route(), Route::Plugin { .. });
+                    let on_route = matches!(&*harness.tui.route(), Route::Plugin { .. });
                     reference.mounted = (on_route && !reference.dead).then_some(0);
                 }
                 Command::Show(shown) => {

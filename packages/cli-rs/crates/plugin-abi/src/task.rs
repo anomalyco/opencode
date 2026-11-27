@@ -1048,10 +1048,18 @@ mod tests {
         let host = Fake::default();
         let log = Log::default();
         let into = log.clone();
+        let (parked, start) = std::sync::mpsc::channel();
         tasks.spawn(&host, move |cx| async move {
-            let thread = cx.blocking(|| std::thread::current().name().map(str::to_owned)).await;
+            let thread = cx
+                .blocking(move || {
+                    // A job that finishes before the task's first poll is taken on that poll, which wakes no host.
+                    start.recv().expect("the task parked");
+                    std::thread::current().name().map(str::to_owned)
+                })
+                .await;
             into.borrow_mut().push(format!("{thread:?}"));
         });
+        parked.send(()).expect("the blocking thread started");
         let begun = Instant::now();
         while woken.load(Ordering::SeqCst) == 0 {
             assert!(begun.elapsed() < Duration::from_secs(10), "the thread never woke the host");

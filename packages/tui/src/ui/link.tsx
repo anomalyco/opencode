@@ -44,6 +44,16 @@ export function clickedLink(renderer: CliRenderer, event: MouseEvent) {
   return renderer.getLinkAt(event.x, event.y) ?? undefined
 }
 
+/** The http(s) URLs in plain text, split like the web app's linked text. */
+export function urlRanges(text: string) {
+  return Array.from(text.matchAll(/https?:\/\/[^\s<>"'`]+/g)).flatMap((match) => {
+    // Sentence punctuation and closing brackets after a URL are almost never part of it.
+    const href = match[0].replace(/[),.;:!?\]]+$/, "")
+    if (!URL.canParse(href)) return []
+    return [{ start: match.index, end: match.index + href.length, href }]
+  })
+}
+
 export function plainClick(renderer: CliRenderer, event: MouseEvent) {
   if (!event.isDragging || event.modifiers.ctrl || event.modifiers.alt || event.modifiers.shift) return false
   const selection = renderer.getSelection()

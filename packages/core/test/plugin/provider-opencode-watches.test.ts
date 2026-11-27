@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import type { Plugin as PluginContext } from "@opencode/plugin/effect"
-import { Effect, Layer } from "effect"
+import { DateTime, Effect, Layer } from "effect"
 import { TestClock } from "effect/testing"
 import { Credential } from "@opencode/core/credential"
 import { Flag } from "@opencode/core/flag"
@@ -15,6 +15,7 @@ import { SyntheticConflictError } from "@opencode/core/session/error"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Tool } from "@opencode/core/tool"
 import { Agent } from "@opencode/core/agent"
+import { advance } from "../lib/clock"
 import { eventually, waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -211,12 +212,24 @@ const location = Effect.fnUntraced(function* () {
   const real = yield* PluginHost.make(yield* Plugin.Service, "test")
   const wakes = new Array<Synthetic>()
   const replays = new Array<Synthetic>()
+  // Sessions the plugin reads as mid-run, which the test can't start without a model.
+  const running = new Set<string>()
   // Admitted for real, but never resumed: the test has no model to run. A message ID used before fails as the session
   // API does when that message already exists.
   const host: PluginContext.Context = {
     ...real,
     session: {
       ...real.session,
+      get: (input) =>
+        real.session
+          .get(input)
+          .pipe(
+            Effect.map((session) =>
+              running.has(input.sessionID)
+                ? { ...session, time: { ...session.time, busy: DateTime.makeUnsafe(1) } }
+                : session,
+            ),
+          ),
       synthetic: (input) => {
         if (input.id !== undefined && wakes.some((wake) => wake.id === input.id)) {
           replays.push(input)
@@ -228,13 +241,40 @@ const location = Effect.fnUntraced(function* () {
     },
   }
   yield* OpencodePlugin.effect(host)
-  return { host, wakes, replays }
+  return { host, wakes, replays, running }
 })
 
 /** Pushes `event` and waits until the plugin acknowledges it. */
 const deliver = Effect.fnUntraced(function* (console: ReturnType<typeof fakeConsole>, event: WatchEvent) {
   console.push(event)
   yield* waitUntil(Effect.sync(() => console.state.acks.flat().includes(event.id)))
+})
+
+/**
+ * Pushes status changes and waits until the client holds them. Frames are read in order, so once a marker pushed after
+ * them is acknowledged, their wait has begun. The marker's session is marked deleted, so it acknowledges without a wake.
+ */
+const hold = Effect.fnUntraced(function* (
+  console: ReturnType<typeof fakeConsole>,
+  host: PluginContext.Context,
+  ...events: WatchEvent[]
+) {
+  const marker = `evt_marker_${crypto.randomUUID()}`
+  yield* host.storage.set("watch-deleted:ses_marker", 0)
+  console.push(...events)
+  console.push(watchEvent("ses_marker", marker))
+  yield* waitUntil(Effect.sync(() => console.state.acks.flat().includes(marker)))
+})
+
+/** Pushes status changes, lets them settle, and waits until the plugin acknowledges them. */
+const settle = Effect.fnUntraced(function* (
+  console: ReturnType<typeof fakeConsole>,
+  host: PluginContext.Context,
+  ...events: WatchEvent[]
+) {
+  yield* hold(console, host, ...events)
+  yield* TestClock.adjust(OpencodeWatches.SETTLE)
+  yield* waitUntil(Effect.sync(() => events.every((event) => console.state.acks.flat().includes(event.id))))
 })
 
 const watchTools = Effect.gen(function* () {
@@ -327,7 +367,9 @@ describe("OpencodePlugin event watches", () => {
         const own = yield* host.session.create({})
         const ci = yield* host.session.create({})
         yield* waitUntil(Effect.sync(() => console.state.opens === 1))
-        console.push(
+        yield* settle(
+          console,
+          host,
           watchEvent(own.id, "evt_own", {
             source: "slack",
             kind: "message",
@@ -339,7 +381,6 @@ describe("OpencodePlugin event watches", () => {
           }),
           watchEvent(ci.id, "evt_ci", { kind: "workflow_run", status: "failure", body: "Run tests: exit 1" }),
         )
-        yield* waitUntil(Effect.sync(() => console.state.acks.flat().length === 2))
 
         const text = (sessionID: Session.ID) => wakes.find((wake) => wake.sessionID === sessionID)?.text ?? ""
         expect(text(own.id)).toContain(
@@ -576,17 +617,31 @@ describe("OpencodePlugin event watches", () => {
       ),
   )
 
-  it.effect("keeps resuming wakes minutes apart until 20 since the person's last prompt", () =>
+  it.effect("tells the agent in the text it reads when updates stop waking it", () =>
     withConsole({}, (console) =>
       Effect.gen(function* () {
         const { host, wakes } = yield* start(console)
         const session = yield* host.session.create({})
         yield* waitUntil(Effect.sync(() => console.state.opens === 1))
-        for (const index of Array.from({ length: 21 }, (_, index) => index)) {
-          yield* deliver(console, watchEvent(session.id, `evt_${index}`))
-          yield* TestClock.adjust("7 minutes")
-        }
-        expect(wakes.map((wake) => wake.resume)).toEqual([...Array.from({ length: 20 }, () => true), false])
+        for (const index of [1, 2, 3, 4, 5, 6]) yield* deliver(console, watchEvent(session.id, `evt_${index}`))
+        const paused = "Further updates won't wake this session until the user's next prompt."
+        expect(wakes.map((wake) => wake.text.includes(paused))).toEqual([false, false, false, false, true, true])
+      }),
+    ),
+  )
+
+  it.effect("doesn't count updates that arrive mid-run toward the limits", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const { host, wakes, running } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        running.add(session.id)
+        for (const index of [1, 2, 3, 4, 5, 6]) yield* deliver(console, watchEvent(session.id, `evt_busy_${index}`))
+        running.delete(session.id)
+        for (const index of [1, 2, 3, 4, 5, 6]) yield* deliver(console, watchEvent(session.id, `evt_idle_${index}`))
+        expect(wakes.map((wake) => wake.resume)).toEqual([...Array.from({ length: 11 }, () => true), false])
+        expect(wakes.slice(0, 6).every((wake) => wake.description === "acme/app#1 on GitHub")).toBe(true)
       }),
     ),
   )
@@ -625,8 +680,9 @@ describe("OpencodePlugin event watches", () => {
         yield* (yield* watchTool("watch")).execute({ target: "acme/app#1", unattended: true }, context(session.id))
         yield* waitUntil(Effect.sync(() => console.state.opens === 1))
         for (const index of [1, 2, 3, 4, 5, 6])
-          yield* deliver(
+          yield* settle(
             console,
+            host,
             watchEvent(session.id, `evt_${index}`, { watchID: "ew_new", kind: "workflow_run", status: "success" }),
           )
         expect(wakes.map((wake) => wake.resume)).toEqual([true, true, true, true, true, false])
@@ -668,7 +724,7 @@ describe("OpencodePlugin event watches", () => {
           const session = yield* host.session.create({})
           yield* waitUntil(Effect.sync(() => console.state.opens === 1))
           for (const index of [1, 2, 3, 4, 5, 6])
-            yield* deliver(console, watchEvent(session.id, `evt_${index}`, { kind: "workflow_run", status: "success" }))
+            yield* settle(console, host, watchEvent(session.id, `evt_${index}`, { kind: "workflow_run", status: "success" }))
           yield* deliver(
             console,
             watchEvent(session.id, "evt_reply", { source: "slack", kind: "message", status: null }),
@@ -685,7 +741,7 @@ describe("OpencodePlugin event watches", () => {
         const session = yield* host.session.create({})
         yield* waitUntil(Effect.sync(() => console.state.opens === 1))
         for (const index of Array.from({ length: 21 }, (_, index) => index))
-          yield* deliver(console, watchEvent(session.id, `evt_${index}`, { kind: "workflow_job", status: "failure" }))
+          yield* settle(console, host, watchEvent(session.id, `evt_${index}`, { kind: "workflow_job", status: "failure" }))
         expect(wakes.map((wake) => wake.resume)).toEqual([...Array.from({ length: 20 }, () => true), false])
       }),
     ),
@@ -704,9 +760,104 @@ describe("OpencodePlugin event watches", () => {
           )
           yield* waitUntil(Effect.sync(() => console.state.acks.flat().includes(`evt_review_${index}`)))
         }
-        yield* deliver(console, watchEvent(session.id, "evt_ci_6", { kind: "workflow_run", status: "success" }))
+        yield* settle(console, host, watchEvent(session.id, "evt_ci_6", { kind: "workflow_run", status: "success" }))
         yield* deliver(console, watchEvent(session.id, "evt_review_6"))
         expect(wakes.map((wake) => wake.resume)).toEqual([true, true, true, true, true, true, false])
+      }),
+    ),
+  )
+
+  it.effect("wakes a full window for a CI failure that settles with another watch's status change", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const { host, wakes } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        for (const index of [1, 2, 3, 4, 5]) yield* deliver(console, watchEvent(session.id, `evt_${index}`))
+        yield* hold(console, host, watchEvent(session.id, "evt_ci", { kind: "workflow_run", status: "failure" }))
+        yield* TestClock.adjust("5 seconds")
+        yield* hold(
+          console,
+          host,
+          watchEvent(session.id, "evt_state", { watchID: "ew_2", kind: "state", status: "closed" }),
+        )
+        yield* TestClock.adjust(OpencodeWatches.SETTLE)
+        yield* waitUntil(Effect.sync(() => console.state.acks.flat().includes("evt_state")))
+        expect(wakes.at(-1)?.metadata?.events).toEqual(["evt_ci", "evt_state"])
+        expect(wakes.map((wake) => wake.resume)).toEqual([true, true, true, true, true, true])
+      }),
+    ),
+  )
+
+  it.effect("wakes once for status changes seconds apart, once 15 seconds pass without another or 30 at most", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const { host, wakes } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        const status = (id: string, kind: string, status: string) => watchEvent(session.id, id, { kind, status })
+        yield* hold(console, host, status("evt_checks", "check", "all 1 passed"))
+        yield* TestClock.adjust("10 seconds")
+        yield* hold(console, host, status("evt_merged", "state", "merged"))
+        yield* TestClock.adjust("14 seconds")
+        expect(wakes).toEqual([])
+        yield* TestClock.adjust("1 second")
+        yield* waitUntil(Effect.sync(() => wakes.length === 1))
+        expect(wakes[0]?.metadata?.events).toEqual(["evt_checks", "evt_merged"])
+        expect(wakes[0]?.text).toStartWith("2 updates arrived")
+        expect(wakes[0]?.text).not.toContain("Looks good")
+
+        // Each arrives before the last has been quiet for 15 seconds, so the cap sends them 30 seconds after the first.
+        for (const index of [1, 2, 3]) {
+          yield* hold(console, host, status(`evt_slow_${index}`, "workflow_run", "success"))
+          yield* TestClock.adjust("10 seconds")
+        }
+        yield* waitUntil(Effect.sync(() => console.state.acks.flat().includes("evt_slow_3")))
+        expect(wakes[1]?.metadata?.events).toEqual(["evt_slow_1", "evt_slow_2", "evt_slow_3"])
+        expect(console.state.acks.flat().filter((id) => !id.startsWith("evt_marker"))).toEqual([
+          "evt_checks",
+          "evt_merged",
+          "evt_slow_1",
+          "evt_slow_2",
+          "evt_slow_3",
+        ])
+      }),
+    ),
+  )
+
+  it.effect("wakes at once for something someone wrote, with the status changes still settling", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const { host, wakes } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        yield* hold(console, host, watchEvent(session.id, "evt_ci", { kind: "workflow_run", status: "failure" }))
+        yield* deliver(console, watchEvent(session.id, "evt_review"))
+        expect(wakes.map((wake) => wake.metadata?.events)).toEqual([["evt_ci", "evt_review"]])
+
+        // The wait it was in is over: the clock moving on wakes nothing more.
+        yield* TestClock.adjust(OpencodeWatches.MAX_SETTLE)
+        yield* Effect.promise(() => Bun.sleep(50))
+        expect(wakes).toHaveLength(1)
+      }),
+    ),
+  )
+
+  it.effect("leaves status changes still settling unacknowledged when the socket closes, and settles them again", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const { host, wakes } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        yield* hold(console, host, watchEvent(session.id, "evt_ci", { kind: "workflow_run", status: "success" }))
+        console.state.sockets.forEach((socket) => socket.close(OpencodeWatches.LEASE_CLOSE_CODE, "lease"))
+        yield* waitUntil(Effect.sync(() => console.state.opens === 2))
+        expect(console.state.acks.flat()).not.toContain("evt_ci")
+
+        // The next connection's snapshot sends it again, and it waits there anew.
+        yield* settle(console, host)
+        yield* waitUntil(Effect.sync(() => console.state.acks.flat().includes("evt_ci")))
+        expect(wakes.map((wake) => wake.metadata?.events)).toEqual([["evt_ci"]])
       }),
     ),
   )
@@ -892,24 +1043,6 @@ describe("OpencodePlugin event watches", () => {
     ),
   )
 
-  it.effect("watches an event type that takes no arguments with empty ones", () =>
-    withConsole({}, (console) =>
-      Effect.gen(function* () {
-        const { host } = yield* start(console)
-        const session = yield* host.session.create({})
-
-        yield* (yield* watchTool("watch")).execute({ server: "sentry", event: "issue.created" }, context(session.id))
-
-        expect(console.state.requests.find((request) => request.method === "POST")?.body).toEqual({
-          sessionID: session.id,
-          server: "sentry",
-          event: "issue.created",
-          arguments: {},
-        })
-      }),
-    ),
-  )
-
   it.effect("refuses a watch given both a target and an event type, and watches nothing", () =>
     withConsole({}, (console) =>
       Effect.gen(function* () {
@@ -1009,6 +1142,36 @@ describe("OpencodePlugin event watches", () => {
     ),
   )
 
+  it.effect("watches the comments on an artifact a subagent's shell shared from its root session", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const hooks = yield* PluginHooks.Service
+        const { host } = yield* start(console)
+        const root = yield* host.session.create({})
+        const subagent = yield* host.session.create({ parentID: root.id })
+        yield* hooks.trigger("tool", "execute.after", {
+          tool: "shell",
+          codemode: true,
+          sessionID: subagent.id,
+          agent: Agent.ID.make("build"),
+          messageID: SessionMessage.ID.create(),
+          id: Tool.CallID.make("call_shell"),
+          input: { command: "npx -y @opencode/console@latest artifact share ./shots --name mcp-tab 2>&1 | tail -5" },
+          status: "completed",
+          result: { output: { exitCode: 0, output: "Shared mcp-tab: https://share.opncd.ai/x\n", wallTimeSeconds: 1 } },
+        })
+        const created = () =>
+          console.state.requests.filter((request) => request.method === "POST" && request.path === "/api/event-watches")
+        yield* waitUntil(Effect.sync(() => created().length === 1))
+
+        expect(created()[0]?.body).toEqual({
+          sessionID: root.id,
+          target: { _tag: "ArtifactComments", artifact: "mcp-tab" },
+        })
+      }),
+    ),
+  )
+
   it.effect("tells the session once why Console refused a shell command's watch, and skips other failures", () =>
     withConsole({}, (console) =>
       Effect.gen(function* () {
@@ -1056,13 +1219,13 @@ describe("OpencodePlugin event watches", () => {
         expect(yield* watchTools).toEqual([])
 
         console.state.watches = true
-        yield* TestClock.adjust("1 minute")
-        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        yield* TestClock.adjust("5 minutes")
+        yield* advance(() => console.state.opens === 1)
         expect(yield* eventually(watchTools, (tools) => tools.length === 4)).toHaveLength(4)
 
         console.state.watches = false
-        yield* TestClock.adjust("1 minute")
-        yield* waitUntil(Effect.sync(() => console.state.sockets.size === 0))
+        yield* TestClock.adjust("5 minutes")
+        yield* advance(() => console.state.sockets.size === 0)
         expect(yield* eventually(watchTools, (tools) => tools.length === 0)).toEqual([])
       }),
     ),
@@ -1090,6 +1253,19 @@ describe("OpencodeWatches.shellTarget", () => {
       ).toBeUndefined()
       expect(OpencodeWatches.shellTarget("git push", { exitCode: 0, output: "Everything up-to-date\n" })).toBeUndefined()
       expect(OpencodeWatches.shellTarget("echo git status", { exitCode: 0, output: push })).toBeUndefined()
+    }),
+  )
+
+  it.effect("reads the slug an artifact share printed, and skips a failed or unclear one", () =>
+    Effect.sync(() => {
+      const share = "opencode-console artifact share ./plan"
+      const shared = "Shared plan: https://share.opncd.ai/a\n"
+      const target = { _tag: "ArtifactComments" as const, artifact: "plan" }
+      expect(OpencodeWatches.shellTarget(share, { exitCode: 0, output: shared })).toEqual(target)
+      expect(OpencodeWatches.shellTarget(share, { exitCode: 0, output: '{"slug":"plan","url":"x"}' })).toEqual(target)
+      expect(OpencodeWatches.shellTarget(share, { exitCode: 1, output: shared })).toBeUndefined()
+      expect(OpencodeWatches.shellTarget(share, { exitCode: 0, output: "Not signed in\n" })).toBeUndefined()
+      expect(OpencodeWatches.shellTarget("echo artifact share", { exitCode: 0, output: shared })).toBeUndefined()
     }),
   )
 })

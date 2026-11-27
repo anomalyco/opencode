@@ -350,7 +350,10 @@ pub struct State {
     pub models: Vec<Value>,
     pub agents: Vec<Value>,
     pub commands: Vec<Value>,
+    pub skills: Vec<Value>,
+    pub providers: Vec<Value>,
     pub plugins: Vec<Value>,
+    pub project_id: String,
     /// Sessions `/api/session/active` lists as running.
     pub active: Vec<String>,
 }
@@ -378,6 +381,9 @@ impl Server {
                 models: vec![test_model(), second_model()],
                 agents: vec![agent("build", "Build", None), agent("plan", "Plan", Some("Plan first"))],
                 commands: vec![review_command()],
+                skills: Vec::new(),
+                providers: vec![json!({ "id": "test", "name": "Test Provider", "activation": "auto", "package": "" })],
+                project_id: "global".to_owned(),
                 plugins: vec![json!({
                     "id": "opencode.models.dev", "source": { "type": "builtin" },
                     "features": { "server": true }, "state": { "status": "active" },
@@ -464,7 +470,17 @@ impl Server {
             }
             ("GET", ["api", "agent"]) => catalog(&query, json!(self.state().agents)),
             ("GET", ["api", "command"]) => catalog(&query, json!(self.state().commands)),
+            ("GET", ["api", "skill"]) => catalog(&query, json!(self.state().skills)),
+            ("GET", ["api", "provider"]) => catalog(&query, json!(self.state().providers)),
             ("GET", ["api", "plugin"]) => catalog(&query, json!(self.state().plugins)),
+            ("GET", ["api", "location"]) => {
+                let directory = query.get("location[directory]").cloned().unwrap_or_else(|| "/workspace".to_owned());
+                let project_id = self.state().project_id.clone();
+                json_response(
+                    200,
+                    json!({ "directory": directory, "project": { "id": project_id, "directory": directory, "canonical": directory } }),
+                )
+            }
             ("GET", ["api", "session"]) => {
                 let sessions: Vec<Value> = self
                     .state()
@@ -472,6 +488,11 @@ impl Server {
                     .values()
                     .filter(|session| {
                         query.get("directory").is_none_or(|directory| session["location"]["directory"] == *directory)
+                    })
+                    .filter(|session| {
+                        query.get("parentID").is_none_or(|parent| {
+                            session.get("parentID").and_then(Value::as_str) == Some(parent.as_str())
+                        })
                     })
                     .cloned()
                     .collect();

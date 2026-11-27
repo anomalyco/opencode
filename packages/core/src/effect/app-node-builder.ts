@@ -1,22 +1,13 @@
-import { buildLocationServiceMap } from "../location-services.js"
+import { buildLocationServiceMap, selector } from "../location-services.js"
 import { LocationServiceMap } from "../location-service-map.js"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
-import { Effect, Layer, RcMap } from "effect"
+import { Effect, Layer } from "effect"
 import { Instance } from "../instance/service.js"
 
 const instances = makeGlobalNode({
   service: Instance.Service,
-  layer: Layer.effect(
-    Instance.Service,
-    Effect.gen(function* () {
-      const locations = yield* LocationServiceMap.Service
-      return Instance.Service.of({
-        provide: (session) => Effect.provide(locations.get(session.location)),
-        live: (session) => RcMap.has(locations.rcMap, LocationServiceMap.canonical(session.location)),
-      })
-    }),
-  ),
+  layer: Layer.effect(Instance.Service, Effect.map(LocationServiceMap.Service, selector)),
   deps: [LocationServiceMap.node],
 })
 

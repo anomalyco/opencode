@@ -4,7 +4,7 @@ use crate::support::{self, WAIT};
 
 use std::rc::Rc;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use opencode_api::generated::V2Event;
@@ -150,11 +150,42 @@ fn mount_at(width: u16, id: &str, config: Value) -> Harness {
 
 fn mount_with(width: u16, id: &str, config: Value, routes: Vec<MemoryRoute>) -> Harness {
     let memory = Memory::new(routes);
+    mount_transport(width, id, config, memory.clone(), Arc::new(memory))
+}
+
+/// Holds the event stream until the test releases it, so the first `server.connected` lands after the reads it
+/// would invalidate have been answered.
+struct Deferred {
+    memory: Memory,
+    release: Semaphore,
+}
+
+impl Transport for Deferred {
+    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
+        let stream = request.url.path() == "/api/event";
+        Box::pin(async move {
+            if stream {
+                self.release.acquire().await.unwrap().forget();
+            }
+            self.memory.send(request).await
+        })
+    }
+}
+
+/// A mount whose event stream waits for the returned handle's release.
+fn mount_deferred(width: u16, id: &str, config: Value, routes: Vec<MemoryRoute>) -> (Harness, Arc<Deferred>) {
+    let memory = Memory::new(routes);
+    let deferred = Arc::new(Deferred { memory: memory.clone(), release: Semaphore::new(0) });
+    (mount_transport(width, id, config, memory, deferred.clone()), deferred)
+}
+
+/// A mount over a wrapped transport, with `memory` logging the requests the test reads.
+fn mount_transport(width: u16, id: &str, config: Value, memory: Memory, transport: Arc<dyn Transport>) -> Harness {
     let deps = Deps {
         config: support::config(support::decode(&config.to_string())),
         route: support::session_route(id),
         events: true,
-        ..support::deps(Arc::new(memory.clone()))
+        ..support::deps(transport)
     };
     let support::Harness { app, tui } = support::mount(width, 30, deps);
     let h = Harness { app, tui, memory };
@@ -184,7 +215,7 @@ impl Harness {
             "data": data,
         }))
         .unwrap();
-        self.tui.data.apply(&[event]);
+        self.tui.data.apply(vec![event]);
     }
 
     fn ended(&self, seq: u64, message: &str, input: u64) {
@@ -213,6 +244,18 @@ impl Harness {
             .filter(|logged| logged.method == "GET" && logged.path == LIMITS)
             .map(|logged| logged.query.get("location[directory]").and_then(|values| values.first().cloned()))
             .collect()
+    }
+
+    /// The locations whose limits were asked for, each once: a read the stream made stale is read again.
+    fn location_reads(&self) -> Vec<Option<String>> {
+        let mut asked = self.limits();
+        asked.dedup();
+        asked
+    }
+
+    /// Reads of `path` the fixture answered.
+    fn reads(&self, path: &str) -> usize {
+        self.memory.requests().iter().filter(|logged| logged.method == "GET" && logged.path == path).count()
     }
 
     /// Pages up until the reader is away from the bottom, then sends a prompt.
@@ -442,36 +485,101 @@ fn a_failed_permission_read_is_read_again_on_the_next_session_change() {
     h.wait_for("Allow once");
 }
 
-#[test]
-fn usage_limits_are_kept_per_location() {
-    let h = mount("ses_a", json!({ "animations": false }));
-    h.wait_for("$5 left");
-    assert_eq!(h.limits(), [Some(DIRECTORY.to_owned())]);
+/// Holds the limits read that replaces a stale one until the test releases it, then answers it as `$4 left`
+/// instead of `$5`, so the test can see the re-read itself rather than the quiet before it starts.
+struct Reread {
+    memory: Memory,
+    reads: AtomicUsize,
+    asked: AtomicBool,
+    release: Semaphore,
+}
 
-    h.tui.navigate(support::session_route("ses_wt"));
-    h.wait_for("Worktree work");
-    h.wait_for("$4 left");
-    assert_eq!(h.limits(), [Some(DIRECTORY.to_owned()), Some(WORKTREE.to_owned())]);
-
-    // Back in the project, its limits show again without another request.
-    h.tui.navigate(support::session_route("ses_a"));
-    h.wait_for("$5 left");
-    h.settle();
-    assert_eq!(h.limits().len(), 2);
+impl Transport for Reread {
+    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
+        if request.url.path() != LIMITS || self.reads.fetch_add(1, Ordering::SeqCst) == 0 {
+            return self.memory.send(request);
+        }
+        self.asked.store(true, Ordering::SeqCst);
+        Box::pin(async move {
+            self.release.acquire().await.unwrap().forget();
+            // Ask the fixture too, so `limits()` counts this read, then replace its stale answer with a fresh one.
+            let _ = self.memory.send(request).await?.bytes().await?;
+            Ok(support::respond(200, &json!({ "location": location_at(DIRECTORY), "data": limits(6.0) })))
+        })
+    }
 }
 
 #[test]
-fn a_credential_change_reads_the_footer_limits_again() {
-    let h = mount("ses_a", json!({ "animations": false }));
-    h.wait_for("$5 left");
-    assert_eq!(h.limits().len(), 1);
+fn a_limits_read_made_stale_is_read_again() {
+    // Held, so the read the credential change invalidates is in flight every time: its answer still shows once it
+    // comes, but it does not settle the read, so the footer reads that location again. That read is held too and
+    // answered as `$4 left`, so the test sees the re-read and its answer, not the quiet before the read starts.
+    let memory = Memory::new(
+        routes().into_iter().map(|route| if route.path == LIMITS { route.held() } else { route }).collect(),
+    );
+    let reread = Arc::new(Reread {
+        memory: memory.clone(),
+        reads: AtomicUsize::new(0),
+        asked: AtomicBool::new(false),
+        release: Semaphore::new(0),
+    });
+    let h = mount_transport(100, "ses_a", json!({ "animations": false }), memory, reread.clone());
+    h.wait("the held limits request", || h.reads(LIMITS) == 1);
     let event: V2Event = serde_json::from_value(json!({
         "id": "evt_credential", "created": 1, "type": "credential.updated",
         "data": { "integrationID": "opencode", "credentialID": "credential" },
     }))
     .unwrap();
-    h.tui.data.apply(&[event]);
-    h.wait("the limits read again", || h.limits().len() == 2);
+    h.tui.data.apply(vec![event]);
+    h.memory.release(LIMITS);
+    h.wait_for("$5 left");
+    h.wait("the read after the stale one", || reread.asked.load(Ordering::SeqCst));
+    reread.release.add_permits(1);
+    h.wait_for("$4 left");
+    assert_eq!(h.limits().len(), 2);
+    assert_eq!(h.location_reads(), [Some(DIRECTORY.to_owned())]);
+}
+
+#[test]
+fn usage_limits_are_kept_per_location() {
+    let (h, connection) = mount_deferred(100, "ses_a", json!({ "animations": false }), routes());
+    // The limits answer is in before the stream opens, so the first connection does not read the location again:
+    // let it land, then count.
+    h.wait_for("$5 left");
+    connection.release.add_permits(1);
+    h.wait("the first connection's reads", || h.reads("/api/model") >= 2);
+    assert_eq!(h.location_reads(), [Some(DIRECTORY.to_owned())]);
+
+    h.tui.navigate(support::session_route("ses_wt"));
+    h.wait_for("Worktree work");
+    h.wait_for("$4 left");
+    h.wait("the worktree's limits read", || h.memory.in_flight() == 0);
+    assert_eq!(h.location_reads(), [Some(DIRECTORY.to_owned()), Some(WORKTREE.to_owned())]);
+    let asked = h.limits();
+
+    // Back in the project, its limits show again without another request.
+    h.tui.navigate(support::session_route("ses_a"));
+    h.wait_for("$5 left");
+    h.settle();
+    assert_eq!(h.limits(), asked);
+}
+
+#[test]
+fn a_credential_change_reads_the_footer_limits_again() {
+    let (h, connection) = mount_deferred(100, "ses_a", json!({ "animations": false }), routes());
+    // The limits answer is in before the stream opens, so the change makes the next read; let the first connection
+    // land before taking the baseline.
+    h.wait_for("$5 left");
+    connection.release.add_permits(1);
+    h.wait("the first connection's reads", || h.reads("/api/model") >= 2);
+    let before = h.limits().len();
+    let event: V2Event = serde_json::from_value(json!({
+        "id": "evt_credential", "created": 1, "type": "credential.updated",
+        "data": { "integrationID": "opencode", "credentialID": "credential" },
+    }))
+    .unwrap();
+    h.tui.data.apply(vec![event]);
+    h.wait("the limits read again", || h.limits().len() > before);
 }
 
 #[test]

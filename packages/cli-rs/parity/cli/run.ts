@@ -55,8 +55,8 @@ export type CliCase = {
   // root (`work/...` is the working directory, `home/.config/...` the XDG config).
   collect?: string[]
   // Writes files into the sandbox before the command runs, such as a service registration that names the
-  // fake server (`root` is the sandbox root, `server` the fake server's URL).
-  setup?: (root: string, server: string | undefined) => Promise<void>
+  // fake server (`root` is the sandbox root, `server` the fake server's URL, `password` its per-run credential).
+  setup?: (root: string, server: string | undefined, password: string | undefined) => Promise<void>
 }
 
 export function defineCli(value: CliCase) {
@@ -71,7 +71,10 @@ export async function runCli(side: Side, value: CliCase) {
     Object.entries(value.files ?? {}).map(([file, content]) => Bun.write(path.join(box.cwd, file), content)),
   )
   const server = value.server ? await startFakeServer(value.server) : undefined
-  await value.setup?.(box.root, server?.url)
+  // The fake server answers only its run's clients: the password goes in their environment, and a client left
+  // over from another run cannot log a request that the comparison would see.
+  if (server) box.env.OPENCODE_PASSWORD = server.password
+  await value.setup?.(box.root, server?.url, server?.password)
   const proc = Bun.spawn(value.command?.(side) ?? command(side, withServer(value.args, server?.url)), {
     cwd: box.cwd,
     env: box.env,

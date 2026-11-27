@@ -13,6 +13,7 @@ import {
   ToolRegistry,
   type ToolProps,
 } from "../../tools/tool-renderer"
+import { ToolResultImages, type ToolImage } from "../../tools/tool-result-images"
 import { ErrorCard } from "./error-card"
 import { GlobTool, GrepTool, ListTool, WebFetchTool, WebSearchTool } from "./explore"
 import { PatchTool } from "./patch"
@@ -33,7 +34,15 @@ const tools = new Map<string, Component<ToolProps>>([
  * One call. A call that failed shows as an error card. One the user stopped (`stopped`, from the rules) shows as one
  * that ran does, a shell saying it was stopped on its row. `tool` is the tool's current name, from the rules.
  */
-export function ToolDisplay(props: ToolProps & { id: string; error?: string; stopped?: boolean }) {
+export function ToolDisplay(
+  props: ToolProps & {
+    id: string
+    error?: string
+    stopped?: boolean
+    /** Images the call returned. A group of calls shows its calls' images itself. */
+    images?: readonly ToolImage[]
+  },
+) {
   const data = useData()
   const i18n = useI18n()
 
@@ -113,6 +122,7 @@ export function ToolDisplay(props: ToolProps & { id: string; error?: string; sto
             <Dynamic component={render()} {...props} />
           </Match>
         </Switch>
+        <ToolResultImages images={props.images ?? []} onContentRendered={props.onContentRendered} />
       </div>
     </Show>
   )

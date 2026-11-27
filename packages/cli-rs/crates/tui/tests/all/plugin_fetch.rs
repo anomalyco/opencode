@@ -197,7 +197,7 @@ fn a_slow_btw_reply_across_a_disable_delivers_nothing() {
     server.release();
     h.app.wait_until(Duration::from_millis(300), || false);
     assert!(!h.app.text().contains("answer to one"), "{}", h.app.text());
-    h.tui.navigate(h.tui.route());
+    h.tui.navigate(Route::clone(&h.tui.route()));
     h.wait_gone("/btw");
 }
 

@@ -17,13 +17,13 @@ import { docsUrl } from "~/lib/docs"
 /** The free models the site names (models.dev's opencode provider has the full, live list). */
 export const freeModels = ["Big Pickle", "DeepSeek V4.1 Flash Free"]
 
-export function getStarted(route: (path: string) => string) {
+export function getStarted(route: (path: string) => string, consoleHref = route) {
   const links = {
     download: route("/product"),
     // The docs' list of the free models (its pricing table above mixes in the paid ones).
     free: route(docsUrl("/console/models/#free-models")),
     subs: route(docsUrl("/providers/")),
-    go: "/console/go",
+    go: consoleHref("/console/go"),
   }
   return {
     title: "Get started",
@@ -40,8 +40,8 @@ export function getStarted(route: (path: string) => string) {
     freeModels,
     subscriptions: byos.yours.items,
     plans: [
-      { name: "OpenCode Go", amount: "$10", href: "/console/go#console-go-plan-go" },
-      { name: "OpenCode Go Plus", amount: "$40", href: "/console/go#console-go-plan-go-plus" },
+      { name: "OpenCode Go", amount: "$10", href: consoleHref("/console/go#console-go-plan-go") },
+      { name: "OpenCode Go Plus", amount: "$40", href: consoleHref("/console/go#console-go-plan-go-plus") },
     ],
     steps: [
       { title: "Download", line: "Desktop, terminal or mobile." },

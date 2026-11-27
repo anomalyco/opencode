@@ -801,7 +801,7 @@ fn toggle(harness: &Harness, shown: &mut Shown, active: bool) {
     let tui = &harness.tui;
     let host = opencode_tui::plugins::host::host(tui);
     tui.plugins.toggle(&host, plugin::ID, active);
-    tui.navigate(tui.route());
+    tui.navigate((*tui.route()).clone());
     plugin::settle(harness);
     let route = shown.route && runs(tui);
     *shown = Shown { route, ..Shown::new(runs(tui)) };
@@ -816,7 +816,7 @@ fn runs(tui: &Tui) -> bool {
 
 fn session(harness: &Harness) {
     let route = opencode_tui::Route::Session { id: opencode_api::generated::SessionID("ses_a".into()) };
-    if harness.tui.route() != route {
+    if *harness.tui.route() != route {
         harness.tui.navigate(route);
         plugin::settle(harness);
     }

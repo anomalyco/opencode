@@ -19,7 +19,16 @@ import {
 import { generateSystem, terminalMode } from "../theme/system"
 import { discoverThemes } from "../theme/discovery"
 import { createComponentTheme, type ComponentTheme } from "../theme/component"
-import { createEffect, createMemo, createSignal, onCleanup, onMount, type Accessor, type ParentProps } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  on,
+  onCleanup,
+  onMount,
+  type Accessor,
+  type ParentProps,
+} from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useConfig, useNewDesigns } from "../config"
@@ -135,17 +144,23 @@ const themeContext = createSimpleContext({
         const mode = lock ?? renderer.themeMode ?? props.mode
         draft.mode = mode
         draft.lock = lock
-        draft.active = config.theme?.name ?? "opencode"
+        draft.active = config.theme?.name || "opencode"
         draft.ready = false
       }),
     )
 
-    createEffect(() => {
-      const theme = config.theme?.name
-      if (!theme) return
-      setStore("active", theme)
-      if (theme === "system") refreshPalette()
-    })
+    createEffect(
+      on(
+        () => config.theme?.name,
+        (name) => {
+          const theme = name || "opencode"
+          if (store.active === theme) return
+          setStore("active", theme)
+          if (theme === "system") refreshPalette()
+        },
+        { defer: true },
+      ),
+    )
 
     createEffect(() => {
       const mode = config.theme?.mode
@@ -318,6 +333,7 @@ const themeContext = createSimpleContext({
     const current = createComponentTheme(tokens)
 
     createEffect(() => renderer.setBackgroundColor(tokens().background.base))
+    createEffect(() => renderer.setSelectionColors(tokens().background.selection, tokens().text.selection))
 
     const currentSyntax = createSyntaxStyleMemo(() => generateSyntax(tokens(), renderer.nativeScene))
     const service: Themes = {

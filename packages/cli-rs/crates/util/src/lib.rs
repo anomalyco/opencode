@@ -7,6 +7,8 @@ pub mod error;
 #[cfg(feature = "ring")]
 pub mod hash;
 pub mod job;
+pub mod memory;
+pub mod mime;
 pub mod page;
 pub mod path;
 pub mod rng;

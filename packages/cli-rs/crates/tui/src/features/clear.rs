@@ -41,7 +41,7 @@ pub fn navigate_new(tui: &Tui) {
 /// reported it missing; else the launch directory.
 fn new_location(tui: &Tui) -> Location {
     let launch = Location::new(tui.data.read(|state| state.default_location().directory.clone()));
-    let current = match tui.route() {
+    let current = match &*tui.route() {
         Route::Session { id } => tui
             .data
             .read(|state| state.session(&id).map(|session| Location::from(&session.location)))

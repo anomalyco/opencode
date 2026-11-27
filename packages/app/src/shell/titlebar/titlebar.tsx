@@ -25,6 +25,7 @@ import { SidebarInbox } from "@/shell/titlebar/inbox"
 import { SidebarCustomized, type SidebarStripGrouping } from "@/shell/titlebar/sidebar-customized"
 import { RecentSessions } from "@/shell/titlebar/recent-sessions"
 import { createNavigationSwitch } from "@/shell/tabs/navigation-switch"
+import { useAutomationSource } from "@/automations/source"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/shell/titlebar/session-events"
@@ -42,6 +43,7 @@ import { RecentlyClosedTabsMenu } from "./recently-closed-tabs-menu"
 import { useSettingsCommand, useSettingsDialog } from "@/settings/command"
 import { TitlebarItems, useTitlebarItems } from "@/runtime/plugin/titlebar-items"
 import { createRouteTabSync } from "./route-sync"
+import { createAutoTabSections } from "./auto-tab-sections"
 import {
   INITIAL_MOBILE_TABS_STATE,
   selectMobileTabsOpen,
@@ -86,6 +88,7 @@ function SidebarAction(props: {
   icon: string
   label: string
   keybind: string[]
+  count?: number
   pressed?: boolean
   current?: boolean
   onClick: () => void
@@ -104,6 +107,9 @@ function SidebarAction(props: {
     >
       <Icon name={props.icon} class="shrink-0" />
       <span class="min-w-0 truncate">{props.label}</span>
+      <Show when={props.count}>
+        <span class="ms-auto text-[12px] tabular-nums">{props.count}</span>
+      </Show>
       <div class="ms-auto hidden shrink-0 group-hover:block group-focus-visible:block" aria-hidden="true">
         <Keybind keys={props.keybind} variant="neutral" dir="ltr" />
       </div>
@@ -184,7 +190,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
   const titlebarItems = useTitlebarItems()
   const hideVerticalTitlebar = createMemo(() => !!props.verticalTabs && !windows())
-  const actionInSidebarHeader = () => !windows() && !macTrafficLights()
+  const actionInSidebarHeader = () => !windows() && !macTrafficLights() && !linux()
 
   command.register(() => [
     {
@@ -338,6 +344,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   return true
                 }
 
+                case "automations":
                 case "settings":
                 case "connect":
                 case "components":
@@ -404,7 +411,10 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             const homeLabel = () =>
               language.t(settings.appearance.navigationPrototype() ? "sidebar.sessions" : "home.title")
 
-            const homeIcon = () => (settings.appearance.navigationPrototype() ? "sessions-stack" : "grid-plus")
+            const automations = useAutomationSource()
+
+            const toggleAutomations = () =>
+              tabs.toggleAutomations({ automations: layout.route().type === "automations", current: currentTab() })
 
             const homeButton = (vertical = false) => (
               <Show
@@ -425,7 +435,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                       variant="ghost-muted"
                       size="large"
                       class="!w-9 shrink-0"
-                      icon={<Icon name={homeIcon()} />}
+                      icon={<Icon name="sessions-stack" />}
                       state={layout.route().type === "home" ? "pressed" : undefined}
                       onClick={toggleHome}
                       aria-label={homeLabel()}
@@ -436,7 +446,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               >
                 <SidebarAction
                   action="vertical-tabs-home"
-                  icon={homeIcon()}
+                  icon="sessions-stack"
                   label={homeLabel()}
                   keybind={command.keybindParts("home.toggle")}
                   pressed={layout.route().type === "home"}
@@ -506,6 +516,39 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               </Show>
             )
 
+            const automationsButton = (vertical = false) => (
+              <Show when={automations.available()}>
+                <Show
+                  when={vertical}
+                  fallback={
+                    <Tooltip placement="bottom" value={language.t("automations.title")} class="shrink-0">
+                      <IconButton
+                        type="button"
+                        variant="ghost-muted"
+                        size="large"
+                        class="!w-9 shrink-0"
+                        icon={<Icon name="clock" />}
+                        state={layout.route().type === "automations" ? "pressed" : undefined}
+                        onClick={toggleAutomations}
+                        aria-label={language.t("automations.title")}
+                        aria-pressed={layout.route().type === "automations"}
+                      />
+                    </Tooltip>
+                  }
+                >
+                  <SidebarAction
+                    action="vertical-tabs-automations"
+                    icon="clock"
+                    label={language.t("automations.title")}
+                    keybind={command.keybindParts("automations.open")}
+                    count={automations.active()}
+                    pressed={layout.route().type === "automations"}
+                    onClick={toggleAutomations}
+                  />
+                </Show>
+              </Show>
+            )
+
             command.register("titlebar-home", () => [
               {
                 id: "home.toggle",
@@ -520,6 +563,16 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   toggleHome()
                 },
               },
+              ...(automations.available()
+                ? [
+                    {
+                      id: "automations.open",
+                      title: language.t("automations.title"),
+                      category: language.t("command.category.view"),
+                      onSelect: toggleAutomations,
+                    },
+                  ]
+                : []),
               {
                 id: "sessions.search",
                 title: language.t("command.session.search"),
@@ -676,6 +729,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   const prototype = () => settings.appearance.navigationPrototype()
                   const pinnedTop = createPinnedLeading("horizontal")
                   const pinnedSide = createPinnedLeading("vertical")
+                  const grouped = createAutoTabSections({ hidden: pins.holds, currentTab })
 
                   const pinMenu = (tab: Tab) => {
                     const ref = pins.refOf(tab)
@@ -707,6 +761,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     <TitlebarTabStrip
                       orientation="vertical"
                       leading={pinnedSide()}
+                      sections={grouped.vertical()}
                       hidden={pins.holds}
                       tabContextMenu={pinMenu}
                       tabs={tabsStore}
@@ -765,7 +820,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                         "ps-3.5": windows() && !props.verticalTabs,
                       }}
                     >
-                      <Show when={windows() || linux()}>
+                      <Show when={(windows() || linux()) && !hideVerticalTitlebar()}>
                         <WindowsAppMenu command={command} platform={platform} />
                       </Show>
                       <Show when={windows() && props.verticalTabs}>
@@ -776,6 +831,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                         <div class="-me-0.5 flex shrink-0 items-center gap-0.5">
                           {homeButton()}
                           <Show when={!settings.appearance.navigationPrototype()}>{searchButton()}</Show>
+                          {automationsButton()}
                         </div>
                       </Show>
 
@@ -792,7 +848,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base focus-visible:-outline-offset-2 [app-region:no-drag]"
                               aria-label={language.t("titlebar.tabs")}
                             >
-                              <Show when={currentTab()} fallback={<Icon name="grid-plus" class="shrink-0" />}>
+                              <Show when={currentTab()} fallback={<Icon name="sessions-stack" class="shrink-0" />}>
                                 {(tab) => (
                                   <span
                                     data-slot="project-avatar-slot"
@@ -875,7 +931,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                       closeMobileTabs()
                                     }}
                                   >
-                                    <Icon name="grid-plus" />
+                                    <Icon name="sessions-stack" />
                                     {language.t("home.title")}
                                   </button>
                                   <div class="flex items-center gap-1">
@@ -916,6 +972,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               </Show>
                               <TitlebarTabStrip
                                 leading={prototype() ? pinnedTop() : undefined}
+                                sections={prototype() ? grouped.horizontal() : undefined}
                                 hidden={prototype() ? pins.holds : undefined}
                                 tabContextMenu={prototype() ? pinMenu : undefined}
                                 tabs={tabsStore}
@@ -954,7 +1011,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                   <Show when={!windows()}>
                                     <div
                                       data-slot="sidebar-header"
-                                      data-has-action={actionInSidebarHeader() ? "" : undefined}
+                                      data-has-action={actionInSidebarHeader() || linux() ? "" : undefined}
                                       class="flex w-full shrink-0 gap-2"
                                       classList={{
                                         "items-start pt-2.5 pb-[3px]": actionInSidebarHeader(),
@@ -977,6 +1034,12 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                           aria-hidden="true"
                                         />
                                       </Show>
+                                      <Show when={linux()}>
+                                        {/* The menu glyph sits 2px further into its slot than the sidebar icons sit into their rows. */}
+                                        <div class="-ms-0.5 shrink-0">
+                                          <WindowsAppMenu command={command} platform={platform} />
+                                        </div>
+                                      </Show>
                                       <Show when={actionInSidebarHeader()} fallback={<div class="flex-1" />}>
                                         <div class="min-w-0 flex-1">{firstSidebarAction()}</div>
                                       </Show>
@@ -990,6 +1053,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                       fallback={
                                         <>
                                           {searchButton(true)}
+                                          {automationsButton(true)}
                                           <Show when={projectNavigation()} fallback={newSessionButton()}>
                                             {settingsButton()}
                                           </Show>
@@ -997,6 +1061,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                       }
                                     >
                                       {homeButton(true)}
+                                      {automationsButton(true)}
                                       {settingsButton()}
                                     </Show>
                                   </div>

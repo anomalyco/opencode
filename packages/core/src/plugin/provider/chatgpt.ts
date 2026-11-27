@@ -2,7 +2,7 @@ import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { define } from "@opencode/plugin/effect/plugin"
 // import { Deferred, Duration, Effect, Option, Schema, Semaphore, Stream } from "effect"
-import { Deferred, Effect, Equal, Option, Schema, Semaphore } from "effect"
+import { Deferred, Effect, Equal, Exit, Option, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import type { Server, ServerResponse } from "node:http"
 import { App } from "../../app.js"
@@ -17,6 +17,7 @@ import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
 import { configuredSettings } from "./configured.js"
 import { storedCredential } from "./credential-settings.js"
+import { OpenAISubscriptionModels } from "./openai-subscription-models.js"
 import { ProviderRefresh } from "./refresh.js"
 
 // First-time sign-in registers a user-owned client; OpenAI returns its issued client ID on the callback.
@@ -31,9 +32,10 @@ const providerID = Provider.ID.openai
 const integrationID = Integration.ID.make("openai")
 const methodID = Integration.MethodID.make("chatgpt-token-sharing")
 const modelCacheKey = (clientID: string) => `models:${clientID}`
+// Clients whose refresh token OpenAI rejected. Signing in while the active connection is one of these reconnects it.
+const expiredKey = "chatgpt-expired-clients"
+// Used when the catalog has no Sign in with ChatGPT list. gpt-5.5 is rejected there.
 const fallbackModels = new Set([
-  "gpt-5.5",
-  "gpt-5.5-fast",
   "gpt-5.6-luna",
   "gpt-5.6-luna-fast",
   "gpt-5.6-sol",
@@ -94,15 +96,24 @@ const decodeCachedModels = Schema.decodeUnknownOption(Schema.Array(RemoteModel))
 const decodeInvalidGrant = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Struct({ error: Schema.Literal("invalid_grant") })),
 )
+const decodeExpired = Schema.decodeUnknownOption(Schema.Array(Schema.String))
+const expiredClients = (storage: Context["storage"]) =>
+  storage
+    .get(expiredKey)
+    .pipe(Effect.map((value) => Option.getOrElse(decodeExpired(value), (): readonly string[] => [])))
+const Metadata = Schema.Struct({
+  clientID: Schema.String,
+  scopes: Schema.optional(Schema.Array(Schema.String)),
+  email: Schema.optional(Schema.String),
+})
 const decodeMetadata = Schema.decodeUnknownOption(
   Schema.Struct({
-    clientID: Schema.String,
-    scopes: Schema.optional(Schema.Array(Schema.String)),
+    ...Metadata.fields,
     models: Schema.optional(Schema.Array(RemoteModel)),
   }),
 )
 
-const signIn = (app: App.Info, savedClientID: () => string | undefined, storage: Context["storage"]) =>
+const signIn = (app: App.Info, active: () => Credential.OAuth | undefined, storage: Context["storage"]) =>
   ({
     integrationID,
     method: {
@@ -118,7 +129,12 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
         const pkce = yield* Effect.promise(generatePKCE)
         const state = randomValue()
         const nonce = randomValue()
-        const savedID = savedClientID()
+        // Each issued client only accepts its own ChatGPT account. Signing in while connected adds another account,
+        // which needs a new client, unless the active connection has expired and this reconnects it.
+        const metadata = Option.getOrUndefined(decodeMetadata(active()?.metadata))
+        const expired = yield* expiredClients(storage)
+        const reconnect = metadata && expired.includes(metadata.clientID) ? metadata : undefined
+        const savedID = reconnect?.clientID
         // `response` is the browser's pending callback request; a pasted redirect has none.
         const received = yield* Deferred.make<{ code: string; clientID?: string; response?: ServerResponse }, Error>()
         // Lazy so runtimes without a loopback listener (workerd) never evaluate node:http.
@@ -132,7 +148,7 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
           const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
           const authorizationCode = url.searchParams.get("code")
           if (error) {
-            Effect.runFork(Deferred.fail(received, new Error(error)))
+            Deferred.doneUnsafe(received, Exit.fail(new Error(error)))
             response
               .writeHead(400, { "Content-Type": "text/html" })
               .end(OauthCallbackPage.error(error, { provider: "ChatGPT" }))
@@ -140,15 +156,16 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
           }
           if (!authorizationCode || url.searchParams.get("state") !== state) {
             const message = authorizationCode ? "Invalid OAuth state" : "Missing authorization code"
-            Effect.runFork(Deferred.fail(received, new Error(message)))
+            Deferred.doneUnsafe(received, Exit.fail(new Error(message)))
             response
               .writeHead(400, { "Content-Type": "text/html" })
               .end(OauthCallbackPage.error(message, { provider: "ChatGPT" }))
             return
           }
           if (
-            !Effect.runSync(
-              Deferred.succeed(received, {
+            !Deferred.doneUnsafe(
+              received,
+              Exit.succeed({
                 code: authorizationCode,
                 clientID: url.searchParams.get("client_id") ?? undefined,
                 response,
@@ -162,7 +179,7 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
         const redirect = `http://127.0.0.1:${port}/auth/callback`
         return {
           mode: "auto" as const,
-          url: authorizeURL(redirect, pkce, state, nonce, savedID, hostID),
+          url: authorizeURL(redirect, pkce, state, nonce, savedID, hostID, reconnect),
           instructions: "Complete authorization in your browser. This window will close automatically.",
           callback: Effect.gen(function* () {
             const result = yield* Deferred.await(received)
@@ -193,8 +210,14 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
                   ),
                 )
               if (!tokens.id_token) return yield* Effect.fail(new Error("ChatGPT sign-in did not return an ID token."))
-              yield* verifyIDToken(tokens.id_token, clientID, nonce)
-              return credential(tokens, clientID)
+              const email = yield* verifyIDToken(tokens.id_token, clientID, nonce)
+              const stale = yield* expiredClients(storage)
+              if (stale.includes(clientID))
+                yield* storage.set(
+                  expiredKey,
+                  stale.filter((id) => id !== clientID),
+                )
+              return credential(tokens, { clientID, email })
             }).pipe(
               Effect.tap(() => respond()),
               Effect.tapError((error) => respond(error instanceof Error ? error.message : "ChatGPT sign-in failed")),
@@ -208,7 +231,17 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
           }),
         }
       }),
-    refresh: (value) => refresh(value, app),
+    refresh: (value) =>
+      refresh(value, app).pipe(
+        Effect.tapError((error) =>
+          Effect.gen(function* () {
+            const clientID = Option.getOrUndefined(decodeMetadata(value.metadata))?.clientID
+            if (!(error instanceof SignInExpired) || !clientID) return
+            const expired = yield* expiredClients(storage)
+            if (!expired.includes(clientID)) yield* storage.set(expiredKey, [...expired, clientID])
+          }),
+        ),
+      ),
     revoke: (value) => revoke(value, app),
   }) satisfies IntegrationOAuthMethodRegistration
 
@@ -249,9 +282,7 @@ export const ChatGPTPlugin = define({
     })
 
     yield* ctx.integration.transform((editor) => {
-      editor.method.update(
-        signIn(ctx.app, () => Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))?.clientID, ctx.storage),
-      )
+      editor.method.update(signIn(ctx.app, () => chatgpt, ctx.storage))
     })
     yield* Effect.forEach(
       yield* credentials.list(Integration.ID.make("openai")),
@@ -274,6 +305,8 @@ export const ChatGPTPlugin = define({
       { discard: true },
     )
     yield* load()
+    // Temporary: the Sign in with ChatGPT list from models.dev, see openai-subscription-models.ts.
+    const plan = yield* OpenAISubscriptionModels.track("openai-chatgpt", ctx.provider.reload())
     yield* ctx.session.hook(
       "retry",
       (event) =>
@@ -320,7 +353,7 @@ export const ChatGPTPlugin = define({
         // models: available
         //   ? deriveModels(available, Array.from(item.models.values()))
         //   : Array.from(item.models.values()).filter((model) => fallbackModels.has(model.id)),
-        models: Array.from(item.models.values()).filter((model) => fallbackModels.has(model.id)),
+        models: Array.from(item.models.values()).filter((model) => (plan.current ?? fallbackModels).has(model.id)),
         sourceConnection: source,
       })
     })
@@ -421,7 +454,7 @@ export function refresh(value: Credential.OAuth, app: App.Info, url = tokenURL) 
       },
       "This ChatGPT sign-in has expired or was revoked. Connect again.",
     )
-    return credential(tokens, metadata.clientID, metadata.scopes)
+    return credential(tokens, metadata)
   })
 }
 
@@ -521,10 +554,13 @@ export function verifyIDToken(
       })
       if (typeof payload.sub !== "string" || !payload.sub.trim()) throw new Error("ID token subject is missing")
       if (payload.nonce !== nonce) throw new Error("ID token nonce does not match this sign-in attempt")
+      return typeof payload.email === "string" ? payload.email : undefined
     },
     catch: (cause) => new Error("ChatGPT sign-in returned an invalid ID token.", { cause }),
   })
 }
+
+class SignInExpired extends Error {}
 
 // `rejected` replaces the error when OpenAI answers invalid_grant, which means different things per grant type.
 function request<A>(url: string, init: RequestInit, rejected?: string) {
@@ -532,21 +568,26 @@ function request<A>(url: string, init: RequestInit, rejected?: string) {
     try: async (signal) => {
       const response = await fetch(url, { ...init, signal })
       if (response.ok) return response.json() as Promise<A>
-      if (rejected && Option.isSome(decodeInvalidGrant(await response.text()))) throw new Error(rejected)
+      if (rejected && Option.isSome(decodeInvalidGrant(await response.text()))) throw new SignInExpired(rejected)
       throw new Error(`Request failed: ${response.status}`)
     },
     catch: (cause) => cause,
   })
 }
 
-function credential(tokens: TokenResponse, clientID: string, scopes?: ReadonlyArray<string>) {
+// `email` preselects the account when it reconnects, and goes away with the credential on logout.
+function credential(tokens: TokenResponse, metadata: typeof Metadata.Type) {
   return Credential.OAuth.make({
     type: "oauth",
     methodID,
     refresh: tokens.refresh_token,
     access: tokens.access_token,
     expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-    metadata: { clientID, scopes: tokens.scope?.split(" ").filter(Boolean) ?? scopes ?? [] },
+    metadata: {
+      clientID: metadata.clientID,
+      scopes: tokens.scope?.split(" ").filter(Boolean) ?? metadata.scopes ?? [],
+      ...(metadata.email ? { email: metadata.email } : {}),
+    },
   })
 }
 
@@ -572,11 +613,14 @@ function authorizeURL(
   nonce: string,
   savedID: string | undefined,
   hostID: string,
+  account?: { email?: string },
 ) {
   return `${issuer}/api/accounts/authorize?${new URLSearchParams({
     client_id: savedID ?? registrationClientID,
     ...(savedID ? {} : { agent_name_hint: agentName }),
     ext_agent_host_id: hostID,
+    // Preselect the account being reconnected.
+    ...(account?.email ? { login_hint: account.email } : {}),
     // Enable only for user-requested consent retries after OpenAI confirms deployment;
     // ordinary sign-ins must not force reconsent.
     // force_reconsent: "true",

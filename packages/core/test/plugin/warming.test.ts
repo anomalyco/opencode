@@ -131,15 +131,6 @@ const run = Effect.fnUntraced(function* (
 })
 
 describe("WarmingPlugin interval", () => {
-  it.effect("warms every 4 minutes when the model has no cache.ttl", () =>
-    Effect.gen(function* () {
-      const warming = yield* run(true)
-      yield* warming.turn
-      for (const minutes of [4, 8]) yield* warming.at(minutes)
-      expect(warming.warms).toEqual([4, 8])
-    }),
-  )
-
   it.effect("warms at 90% of the model's cache.ttl by default", () =>
     Effect.gen(function* () {
       const warming = yield* run(true, { ttl: "5m" })

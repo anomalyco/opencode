@@ -1,6 +1,7 @@
 //! Paints the footer before resolving the session. On exit, flush queued rows, leave split mode and place the shell
 //! below the transcript.
 
+use std::borrow::Cow;
 use std::time::Instant;
 
 use opencode_local::cli_config::{CliConfig, MiniWorkSpinner, NewLocation, ThemeMode as ConfigMode, Visibility};
@@ -18,7 +19,7 @@ use crate::prelude::*;
 use crate::prompt::queue::{Queue, Submitted, Work};
 use crate::prompt::status::{self, mono_shortcut};
 use crate::prompt::{Delivery, Hooks, PROMPT_MAX_ROWS, Prompt, RunPrompt};
-use crate::replay::{self, Envelope, Incoming, Output, Transcript};
+use crate::replay::{self, Envelope, Incoming, Link, Output, Transcript};
 use crate::scrollback::{Flags, Writer};
 use crate::settings::{Change, MiniSettings};
 use crate::signals::{self, Trace};
@@ -101,7 +102,7 @@ pub fn run(input: Input) -> error::Result<()> {
         animations: input.config.animations != Some(false),
         providers: RefCell::new(None),
         variants: RefCell::new(Vec::new()),
-        catalog_refresh: Cell::new(None),
+        catalog_refresh: Cell::new(Refresh::Idle),
         preferences: ModelPreferences::new(&input.paths.state),
         config_store: CliConfig::new(&input.paths),
         queue: RefCell::new(Queue::default()),
@@ -209,7 +210,7 @@ struct Session {
 #[derive(Debug, Default)]
 struct State {
     running: bool,
-    status: String,
+    status: Cow<'static, str>,
     notice: String,
     notice_timer: Option<TimerId>,
     model: Option<(String, Option<String>, Option<String>)>,
@@ -236,6 +237,13 @@ struct ShellWait {
     grace: Option<TimerId>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Refresh {
+    Idle,
+    Running,
+    RunningThenAgain,
+}
+
 struct Mini {
     app: App,
     client: Client,
@@ -256,7 +264,7 @@ struct Mini {
     /// The current model's variants (`state.variants`).
     variants: RefCell<Vec<String>>,
     /// A catalog refresh in flight, and whether another follows it (`requestCatalogRefresh`).
-    catalog_refresh: Cell<Option<bool>>,
+    catalog_refresh: Cell<Refresh>,
     preferences: ModelPreferences,
     config_store: CliConfig,
     queue: RefCell<Queue>,
@@ -331,7 +339,9 @@ impl Mini {
                 mini.paint_status();
             }))),
             status: Some(Box::new(bind!(self, |mini, text| mini.set_notice(text)))),
-            blocker: Some(Box::new(bind!(self, |mini, text| mini.patch(|state| state.status = text.to_owned())))),
+            blocker: Some(
+                Box::new(bind!(self, |mini, text| mini.patch(|state| state.status = text.to_owned().into()))),
+            ),
             summary: Some(Box::new(bind!(self, |mini| mini.summary()))),
             agent: Some(Box::new(bind!(self, |mini, id| mini.select_agent(id)))),
             clear_screen: Some(Box::new(with(|mini| mini.clear_screen()))),
@@ -478,7 +488,7 @@ impl Mini {
             }
             mini.footers.models_changed();
             mini.paint_status();
-            if mini.transcript.borrow().as_ref().is_some_and(|transcript| transcript.connected) {
+            if mini.transcript.borrow().as_ref().is_some_and(|transcript| transcript.link == Link::Connected) {
                 mini.send_waiting(cx);
             }
         });
@@ -767,7 +777,7 @@ impl Mini {
                 Incoming::Hydrated { messages, active, inbox, .. } => {
                     let running = active.contains(&transcript.session_id);
                     self.trace("recv.hydrate", json!({ "messages": messages.len(), "active": running }));
-                    let reconnect = !transcript.initial;
+                    let reconnect = transcript.link != Link::Initial;
                     transcript.inbox(&inbox);
                     let output = self.blocked(transcript.hydrate(&messages, running));
                     hydrated = Some((messages, active, inbox, reconnect));
@@ -791,19 +801,12 @@ impl Mini {
                 Incoming::Disconnected(error) => {
                     self.trace("recv.reconnect", json!({ "error": error }));
                     transcript.disconnected();
-                    Output {
-                        patch: Some(replay::Patch {
-                            running: Some(true),
-                            status: Some("reconnecting".into()),
-                            usage: None,
-                        }),
-                        ..Output::default()
-                    }
+                    Output::patch(true, "reconnecting")
                 }
             }
         };
-        let connected =
-            output.patch.is_some() && self.transcript.borrow().as_ref().is_some_and(|transcript| transcript.connected);
+        let connected = output.patch.is_some()
+            && self.transcript.borrow().as_ref().is_some_and(|transcript| transcript.link == Link::Connected);
         let relist = output.relist;
         self.output(cx, output);
         let session = self.transcript.borrow().as_ref().map(|transcript| transcript.session_id.clone());
@@ -852,12 +855,12 @@ impl Mini {
     /// `requestCatalogRefresh`: reads the agents, references, commands, and providers again, then the default
     /// model when none is chosen. A request while one runs queues one more.
     fn refresh_catalog(self: &Rc<Self>) {
-        if self.catalog_refresh.get().is_some() {
-            self.catalog_refresh.set(Some(true));
+        if self.catalog_refresh.get() != Refresh::Idle {
+            self.catalog_refresh.set(Refresh::RunningThenAgain);
             return;
         }
         let Some(directory) = self.session.borrow().as_ref().map(|session| session.directory.clone()) else { return };
-        self.catalog_refresh.set(Some(false));
+        self.catalog_refresh.set(Refresh::Running);
         let client = self.client.clone();
         let mini = self.clone();
         let read = directory.clone();
@@ -870,7 +873,7 @@ impl Mini {
                 .await
             },
             move |_, (catalog, providers)| {
-                let queued = mini.catalog_refresh.take() == Some(true);
+                let queued = mini.catalog_refresh.replace(Refresh::Idle) == Refresh::RunningThenAgain;
                 if mini.state.borrow().closed
                     || mini.session.borrow().as_ref().is_none_or(|session| session.directory != directory)
                 {
@@ -904,7 +907,7 @@ impl Mini {
     /// A hydration's idle status names the request shown (`blockerStatus`).
     fn blocked(&self, mut output: Output) -> Output {
         if let Some(patch) = output.patch.as_mut().filter(|patch| patch.running == Some(false)) {
-            patch.status = Some(self.footers.blocker_status().to_owned());
+            patch.status = Some(self.footers.blocker_status().into());
         }
         output
     }
@@ -1021,7 +1024,7 @@ impl Mini {
     /// The stream is connected and the model catalog loaded once, so a prompt uses the model's variant.
     fn ready(&self) -> bool {
         self.providers.borrow().is_some()
-            && self.transcript.borrow().as_ref().is_some_and(|transcript| transcript.connected)
+            && self.transcript.borrow().as_ref().is_some_and(|transcript| transcript.link == Link::Connected)
     }
 
     fn send_waiting(self: &Rc<Self>, _cx: &mut Cx<'_>) {
@@ -1076,16 +1079,10 @@ impl Mini {
             return;
         }
         self.patch(|state| state.turn = false);
-        self.output(
-            cx,
-            Output {
-                patch: Some(replay::Patch { running: Some(false), status: Some(String::new()), usage: None }),
-                ..Output::default()
-            },
-        );
+        self.output(cx, Output::patch(false, ""));
     }
 
-    fn sending(&self, status: &str) {
+    fn sending(&self, status: &'static str) {
         self.patch(|state| {
             state.running = true;
             state.turn = true;
@@ -1428,7 +1425,7 @@ impl Mini {
                 let session = session.clone();
                 async move {
                     replay::wait(&client, &session, connected).await?;
-                    replay::messages(&client, &session, limit).await
+                    replay::projected(&client, &session, limit).await
                 }
             },
             move |cx, result| {
@@ -1665,7 +1662,7 @@ impl Mini {
         let (session, ticket) = {
             let mut transcript = self.transcript.borrow_mut();
             let Some(transcript) = transcript.as_mut() else { return };
-            if !self.input.replay || !transcript.connected {
+            if !self.input.replay || transcript.link != Link::Connected {
                 return;
             }
             // The last size wins: a resize during a replay replays once more after it (`queuedResizeReplay`).

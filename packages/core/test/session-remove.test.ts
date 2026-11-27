@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer, RcMap, Scope } from "effect"
+import { Effect, Layer, Scope } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Database } from "@opencode/core/database/database"
@@ -92,13 +92,13 @@ describe("Session.remove", () => {
       })
       const child = yield* sessions.create({ parentID: parent.id })
       closed.length = 0
-      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+      expect(yield* locations.keys).toEqual([])
 
       yield* sessions.remove(parent.id)
 
       expect(closed).toEqual([parent.id, child.id])
       expect(transportScopes.size).toBe(1)
-      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+      expect(yield* locations.keys).toEqual([])
       expect((yield* sessions.list()).data).toEqual([])
     }),
   )

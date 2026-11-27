@@ -1,4 +1,4 @@
-import type { Component } from "solid-js"
+import { Show, type Component } from "solid-js"
 import { Switch } from "@opencode/ui/switch"
 import { Select } from "@opencode/ui/select"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -72,19 +72,35 @@ export const SettingsExperimental: Component = () => {
               </div>
             </SettingsRow>
             <SettingsRow
-              title={language.t("settings.experimental.row.newQuestionUI.title")}
-              description={language.t("settings.experimental.row.newQuestionUI.description")}
+              title={language.t("settings.experimental.row.automations.title")}
+              description={language.t("settings.experimental.row.automations.description")}
             >
-              <div data-action="settings-new-question-ui">
+              <div data-action="settings-automations">
                 <Switch
-                  checked={settings.general.newQuestionUI()}
-                  onChange={(checked) => settings.general.setNewQuestionUI(checked)}
+                  checked={settings.general.automations()}
+                  onChange={(checked) => settings.general.setAutomations(checked)}
                   hideLabel
                 >
-                  {language.t("settings.experimental.row.newQuestionUI.title")}
+                  {language.t("settings.experimental.row.automations.title")}
                 </Switch>
               </div>
             </SettingsRow>
+            <Show when={settings.general.questionComposerAvailable}>
+              <SettingsRow
+                title={language.t("settings.experimental.row.questionComposer.title")}
+                description={language.t("settings.experimental.row.questionComposer.description")}
+              >
+                <div data-action="settings-question-composer">
+                  <Switch
+                    checked={settings.general.questionComposer()}
+                    onChange={(checked) => settings.general.setQuestionComposer(checked)}
+                    hideLabel
+                  >
+                    {language.t("settings.experimental.row.questionComposer.title")}
+                  </Switch>
+                </div>
+              </SettingsRow>
+            </Show>
           </SettingsList>
         </div>
       </div>

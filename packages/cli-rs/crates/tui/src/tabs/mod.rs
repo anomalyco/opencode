@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use opencode_api::generated::{SessionInboxInfo, SessionInboxItem, SessionInfoOutcome, SessionViewInput};
+use opencode_local::cli_config::TabsScope;
 use opencode_local::storage::Storage;
 use opencode_store::{Catalog, Location, SessionStatus, State};
 use opentui::input::{KeyCode, Modifiers};
@@ -82,6 +83,8 @@ type Write = Arc<dyn Fn(&mut Persisted) + Send + Sync>;
 #[derive(Default)]
 pub struct Tabs {
     file: RefCell<Persisted>,
+    /// The tabs of the scope [`Tabs::tabs`] last read, kept until `file` changes or another scope is read.
+    open: RefCell<Option<(TabsScope, Rc<[Tab]>)>>,
     /// The revision of the latest write.
     writes: Cell<u64>,
     /// Outstanding `tabs.json` writes in revision order.
@@ -106,6 +109,8 @@ pub struct Tabs {
     cwd: RefCell<String>,
     /// The open tabs [`prefetch`] last read, sorted (`openTabSessions`), and its delayed reads.
     fetched: RefCell<String>,
+    /// The tab list [`prefetch`] last read: the same list has the same signature.
+    fetched_tabs: RefCell<Option<Rc<[Tab]>>>,
     prefetch: Cell<Option<opentui::prelude::TimerId>>,
     retention: RefCell<Retention>,
     _watch: RefCell<Option<opencode_local::watch::Watch>>,
@@ -116,13 +121,30 @@ impl Tabs {
         tui.config().tabs.enabled
     }
 
-    pub fn tabs(&self, tui: &Tui) -> Vec<Tab> {
-        let file = self.file.borrow();
-        let scope = match tui.config().tabs.scope {
-            opencode_local::cli_config::TabsScope::Cwd => file.cwd.get(self.cwd.borrow().as_str()),
-            _ => Some(&file.global),
+    /// The open tabs, shared: they are copied only when the tab file or the configured scope changes.
+    pub fn tabs(&self, tui: &Tui) -> Rc<[Tab]> {
+        let scope = tui.config().tabs.scope;
+        if let Some((read, tabs)) = &*self.open.borrow()
+            && *read == scope
+        {
+            return tabs.clone();
+        }
+        let tabs: Rc<[Tab]> = {
+            let file = self.file.borrow();
+            let open = match scope {
+                TabsScope::Cwd => file.cwd.get(self.cwd.borrow().as_str()),
+                _ => Some(&file.global),
+            };
+            open.map_or(&[][..], |open| &open.tabs[..]).into()
         };
-        scope.map(|scope| scope.tabs.clone()).unwrap_or_default()
+        *self.open.borrow_mut() = Some((scope, tabs.clone()));
+        tabs
+    }
+
+    /// Replaces the tab file, or changes it in place.
+    fn write(&self, write: impl FnOnce(&mut Persisted)) {
+        write(&mut self.file.borrow_mut());
+        self.open.take();
     }
 
     pub fn new_tab(&self) -> bool {
@@ -130,8 +152,8 @@ impl Tabs {
     }
 
     pub fn current(&self, tui: &Tui) -> Option<String> {
-        match tui.route() {
-            Route::Session { id } => Some(tui.data.read(|state| state.root(&id)).0),
+        match &*tui.route() {
+            Route::Session { id } => Some(tui.data.read(|state| state.root(&id).to_owned())),
             _ => None,
         }
     }
@@ -141,12 +163,12 @@ impl Tabs {
         if !Self::enabled(tui) {
             return Vec::new();
         }
-        self.tabs(tui).into_iter().map(|tab| tab.session_id).collect()
+        self.tabs(tui).iter().map(|tab| tab.session_id.clone()).collect()
     }
 
     pub fn status(&self, tui: &Tui, session: &str) -> Status {
         let pulse = self.pulses.borrow().get(session).copied().unwrap_or(0);
-        tui.data.read(|state| status(state, &SessionID(session.to_owned()), pulse))
+        tui.data.read(|state| status(state, session, pulse))
     }
 
     pub fn expanded_groups(&self, session: &str) -> HashMap<String, bool> {
@@ -171,7 +193,7 @@ impl Tabs {
     }
 
     pub(crate) fn is_open(&self, tui: &Tui, session: &str) -> bool {
-        let root = tui.data.read(|state| state.root(&SessionID(session.to_owned()))).0;
+        let root = tui.data.read(|state| state.root(session).to_owned());
         self.tabs(tui).iter().any(|tab| tab.session_id == root)
     }
 
@@ -191,7 +213,8 @@ pub fn install(tui: &Rc<Tui>) {
     *tui.tabs.cwd.borrow_mut() =
         std::env::current_dir().map(|path| path.to_string_lossy().into_owned()).unwrap_or_default();
     if let Some(storage) = tui.storage() {
-        *tui.tabs.file.borrow_mut() = load(&storage);
+        let file = load(&storage);
+        tui.tabs.write(|persisted| *persisted = file);
         let proxy = tui.app.proxy();
         *tui.tabs._watch.borrow_mut() = storage.watch(move || {
             let _ = proxy.send(Reload);
@@ -245,7 +268,7 @@ fn reload(tui: &Tui, storage: &Storage) {
         pending.iter().for_each(|(_, write)| write(&mut file));
     }
     if *tui.tabs.file.borrow() != file {
-        *tui.tabs.file.borrow_mut() = file;
+        tui.tabs.write(|persisted| *persisted = file);
         changed(tui);
     }
 }
@@ -300,15 +323,16 @@ pub fn route_changed(tui: &Tui) {
     track(tui);
     retain(tui);
     let tabs = &tui.tabs;
-    let routed = match tui.route() {
+    let route = tui.route();
+    let routed = match &*route {
         Route::Session { id } => Some(id),
         _ => None,
     };
     let open = tabs.tabs(tui);
     let previous = tabs.new_tab.get();
-    let root = routed.as_ref().map(|id| tui.data.read(|state| state.root(id)).0);
+    let root = routed.as_ref().map(|id| tui.data.read(|state| state.root(id).to_owned()));
     tabs.new_tab.set(match &root {
-        None => matches!(tui.route(), Route::Home),
+        None => matches!(*route, Route::Home),
         Some(root) => previous && !open.iter().any(|tab| &tab.session_id == root),
     });
     let Some(root) = root.filter(|_| Tabs::enabled(tui)) else {
@@ -325,7 +349,7 @@ pub fn route_changed(tui: &Tui) {
         let fallback = tabs.new_tab.get().then(|| NEW_SESSION_TAB_TITLE.to_owned());
         // Prefer the new-tab title to the timestamp fallback.
         let (known, timestamped) = tui.data.read(|state| {
-            let info = state.session(&SessionID(root.clone()));
+            let info = state.session(&root);
             (info.and_then(|info| info.title.clone()), info.map(crate::dialogs::session_list::title))
         });
         let session = root.clone();
@@ -355,7 +379,7 @@ pub fn sync(tui: &Tui, changes: &Changes) {
         let mapping: Vec<(String, Tab)> = open
             .iter()
             .map(|tab| {
-                let root = tui.data.read(|state| state.root(&SessionID(tab.session_id.clone()))).0;
+                let root = tui.data.read(|state| state.root(&tab.session_id).to_owned());
                 let title = title_of(tui, &root, tab.title.clone(), None);
                 (tab.session_id.clone(), Tab::new(root, title))
             })
@@ -369,7 +393,7 @@ pub fn sync(tui: &Tui, changes: &Changes) {
                 model::open(&next, tab).unwrap_or(next)
             })
         };
-        if normalize(&open) != open {
+        if normalize(&open)[..] != open[..] {
             // Applied again to the file, which may hold another client's tabs.
             update(tui, move |scope| scope.tabs = normalize(&scope.tabs));
         }
@@ -382,10 +406,15 @@ fn prefetch(tui: &Tui, changes: &Changes) {
     if !Tabs::enabled(tui) {
         return;
     }
-    let mut ids: Vec<String> = tui.tabs.tabs(tui).into_iter().map(|tab| tab.session_id).collect();
+    let open = tui.tabs.tabs(tui);
+    if !changes.all() && tui.tabs.fetched_tabs.borrow().as_ref().is_some_and(|read| Rc::ptr_eq(read, &open)) {
+        return;
+    }
+    let mut ids: Vec<String> = open.iter().map(|tab| tab.session_id.clone()).collect();
+    *tui.tabs.fetched_tabs.borrow_mut() = Some(open);
     ids.sort();
     let signature = ids.join("\n");
-    if signature.is_empty() || (*tui.tabs.fetched.borrow() == signature && !changes.all) {
+    if signature.is_empty() || (*tui.tabs.fetched.borrow() == signature && !changes.all()) {
         return;
     }
     *tui.tabs.fetched.borrow_mut() = signature;
@@ -417,8 +446,8 @@ fn prefetch(tui: &Tui, changes: &Changes) {
         bind!(tui, |tui, _| {
             tui.tabs.prefetch.set(None);
             let current = tui.tabs.current(&tui);
-            for tab in tui.tabs.tabs(&tui).into_iter().filter(|tab| current.as_ref() != Some(&tab.session_id)) {
-                let id = SessionID(tab.session_id);
+            for tab in tui.tabs.tabs(&tui).iter().filter(|tab| current.as_ref() != Some(&tab.session_id)) {
+                let id = SessionID(tab.session_id.clone());
                 quiet(&tui, tui.data.message_sync(&id));
                 quiet(&tui, tui.data.pending_sync(&id));
                 quiet(&tui, tui.data.permission_sync(&id));
@@ -431,20 +460,16 @@ fn prefetch(tui: &Tui, changes: &Changes) {
 
 /// Keep transcripts for open tabs, the active root, and the most recently viewed roots; evict the rest.
 fn retain(tui: &Tui) {
-    let viewed = match tui.route() {
-        Route::Session { id } => Some(id.0),
+    let viewed = match &*tui.route() {
+        Route::Session { id } => Some(id.0.clone()),
         _ => None,
     };
-    let keep: Vec<String> = if Tabs::enabled(tui) {
-        tui.tabs.tabs(tui).into_iter().map(|tab| tab.session_id).collect()
-    } else {
-        Vec::new()
-    };
+    let keep = if Tabs::enabled(tui) { tui.tabs.tabs(tui) } else { Rc::from([]) };
     let mut retention = tui.tabs.retention.borrow_mut();
     let (excluded, evict) = tui.data.read(|state| {
-        let root = |id: &str| state.root(&SessionID(id.to_owned())).0;
+        let root = |id: &str| state.root(id).to_owned();
         let current = viewed.as_deref().map(root);
-        let keep: HashSet<String> = keep.iter().map(|id| root(id)).collect();
+        let keep: HashSet<String> = keep.iter().map(|tab| root(&tab.session_id)).collect();
         let advanced = current.clone().filter(|_| viewed != retention.previous);
         let mut recent: Vec<String> = Vec::new();
         for id in advanced.into_iter().chain(retention.recent.iter().map(|id| root(id))) {
@@ -486,7 +511,7 @@ fn retain(tui: &Tui) {
 
 /// `title`: the store's title, else the persisted one, else the fallback, else the timestamped default.
 fn title_of(tui: &Tui, session: &str, persisted: Option<String>, fallback: Option<String>) -> Option<String> {
-    let info = tui.data.read(|state| state.session(&SessionID(session.to_owned())).cloned());
+    let info = tui.data.read(|state| state.session(session).cloned());
     info.as_ref()
         .and_then(|info| info.title.clone())
         .or(persisted)
@@ -497,7 +522,7 @@ fn title_of(tui: &Tui, session: &str, persisted: Option<String>, fallback: Optio
 pub(crate) fn event(tui: &Tui, event: &Handled) -> bool {
     match event {
         Handled::SessionDeleted(event) => {
-            let target = tui.data.read(|state| state.root(&event.data.session_id)).0;
+            let target = tui.data.read(|state| state.root(&event.data.session_id).to_owned());
             tui.tabs.closed.borrow_mut().retain(|entry| entry.tab.session_id != target);
             let before = tui.route();
             remove(tui, &event.data.session_id.0, Tabs::enabled(tui));
@@ -507,7 +532,7 @@ pub(crate) fn event(tui: &Tui, event: &Handled) -> bool {
             if !Tabs::enabled(tui) || !matches!(event.data.item, SessionInboxItem::User(_)) {
                 return false;
             }
-            let session = tui.data.read(|state| state.root(&event.data.session_id)).0;
+            let session = tui.data.read(|state| state.root(&event.data.session_id).to_owned());
             if tui.tabs.current(tui).as_ref() == Some(&session)
                 || !tui.tabs.tabs(tui).iter().any(|tab| tab.session_id == session)
             {
@@ -524,11 +549,10 @@ pub(crate) fn event(tui: &Tui, event: &Handled) -> bool {
 /// `remove`: drops the tab, and with `navigate`, leaves it when it is open.
 fn remove(tui: &Tui, session: &str, navigate: bool) {
     let tabs = &tui.tabs;
-    let target = tui.data.read(|state| state.root(&SessionID(session.to_owned()))).0;
+    let target = tui.data.read(|state| state.root(session).to_owned());
     tabs.cancelled.borrow_mut().insert(target.clone());
     let family: Vec<String> = tui.data.read(|state| {
-        let root = SessionID(target.clone());
-        std::iter::once(root.0.clone()).chain(state.family(&root).iter().map(|id| id.0.clone())).collect()
+        std::iter::once(target.clone()).chain(state.family(&target).iter().map(|id| id.0.clone())).collect()
     });
     for id in &family {
         tabs.groups.borrow_mut().remove(id);
@@ -541,7 +565,7 @@ fn remove(tui: &Tui, session: &str, navigate: bool) {
     if closed.is_none() && !selected {
         return;
     }
-    let rest = closed.unwrap_or(open);
+    let rest = closed.unwrap_or_else(|| open.to_vec());
     let next = if selected {
         let mut history = tabs.history.borrow_mut();
         history.record(&target);
@@ -569,7 +593,7 @@ pub fn select(tui: &Tui, session: &str) {
     if !Tabs::enabled(tui) {
         return;
     }
-    tui.show_session(tui.data.read(|state| state.root(&SessionID(session.to_owned()))));
+    tui.show_session(tui.data.read(|state| SessionID::from(state.root(session))));
 }
 
 /// `open`: a tab for the session's root, without showing it.
@@ -577,7 +601,7 @@ pub fn open(tui: &Tui, session: &str) {
     if !Tabs::enabled(tui) {
         return;
     }
-    let root = tui.data.read(|state| state.root(&SessionID(session.to_owned()))).0;
+    let root = tui.data.read(|state| state.root(session).to_owned());
     if tui.tabs.tabs(tui).iter().any(|tab| tab.session_id == root) {
         return;
     }
@@ -604,14 +628,14 @@ pub fn close(tui: &Tui, session: Option<&str>) {
     }
     let tabs = &tui.tabs;
     let target = match session {
-        Some(session) => Some(tui.data.read(|state| state.root(&SessionID(session.to_owned()))).0),
+        Some(session) => Some(tui.data.read(|state| state.root(session).to_owned())),
         None => tabs.current(tui),
     };
     let open = tabs.tabs(tui);
     let Some(target) = target else {
         let previous = tabs.history.borrow_mut().step(&open, None, false);
         let session = previous.or_else(|| open.last().map(|tab| tab.session_id.clone()));
-        if let (Route::Home, Some(session)) = (tui.route(), session) {
+        if let (Route::Home, Some(session)) = (&*tui.route(), session) {
             tui.navigate(Route::Session { id: SessionID(session) });
         }
         return;
@@ -637,7 +661,7 @@ pub fn reorder(tui: &Tui, session: &str, index: usize) {
     if !Tabs::enabled(tui) {
         return;
     }
-    let root = tui.data.read(|state| state.root(&SessionID(session.to_owned()))).0;
+    let root = tui.data.read(|state| state.root(session).to_owned());
     if model::reorder(&tui.tabs.tabs(tui), &root, index).is_none() {
         return;
     }
@@ -678,7 +702,7 @@ fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
             }
         }
     };
-    apply(&mut tui.tabs.file.borrow_mut());
+    tui.tabs.write(&apply);
     let revision = tui.tabs.writes.get() + 1;
     tui.tabs.writes.set(revision);
     changed(tui);
@@ -713,15 +737,18 @@ fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
 /// one keeps showing the session; closing it here then still moves to a neighbour. Runs whenever the route, the
 /// roots or the tabs change, as the memo does.
 fn track(tui: &Tui) {
-    let current = tui.tabs.current(tui);
-    let index =
-        current.as_ref().and_then(|session| tui.tabs.tabs(tui).iter().position(|tab| tab.session_id == *session));
-    let mut viewed = tui.tabs.viewed.borrow_mut();
-    *viewed = match (current, index) {
-        (Some(session), Some(index)) => Some((session, index)),
-        (Some(session), None) => viewed.take().filter(|(previous, _)| *previous == session),
-        (None, _) => None,
-    };
+    let route = tui.route();
+    let Route::Session { id } = &*route else { return drop(tui.tabs.viewed.take()) };
+    let tabs = tui.tabs.tabs(tui);
+    tui.data.read(|state| {
+        let session = state.root(id);
+        let index = tabs.iter().position(|tab| tab.session_id == session);
+        let mut viewed = tui.tabs.viewed.borrow_mut();
+        let kept = viewed.as_ref().is_some_and(|(previous, at)| previous == session && index.is_none_or(|i| i == *at));
+        if !kept {
+            *viewed = index.map(|index| (session.to_owned(), index));
+        }
+    });
 }
 
 fn changed(tui: &Tui) {
@@ -730,20 +757,15 @@ fn changed(tui: &Tui) {
     crate::features::attention::program_status::sync(tui);
     // Notify plugins of tab changes and fetch the titles and statuses of background tabs.
     crate::plugins::host::local_changed(tui);
-    prefetch(tui, &Changes::default());
+    prefetch(tui, &Changes::nothing(&tui.data));
 }
 
-pub fn status(state: &State, session: &SessionID, prompt_pulse: u32) -> Status {
+pub fn status(state: &State, session: &(impl AsRef<str> + ?Sized), prompt_pulse: u32) -> Status {
     let root = state.root(session);
-    let members: Vec<SessionID> = {
-        let family = state.family(&root);
-        if family.contains(&root) {
-            family.to_vec()
-        } else {
-            std::iter::once(root.clone()).chain(family.iter().cloned()).collect()
-        }
-    };
-    let info = state.session(&root);
+    let family = state.family(root);
+    // The root and its family, each once.
+    let members = || std::iter::once(root).chain(family.iter().map(SessionID::as_str).filter(|id| *id != root));
+    let info = state.session(root);
     let unread = info.and_then(|info| {
         let idle = info.time.idle?;
         let viewed = info.time.viewed.is_none_or(|viewed| idle > viewed);
@@ -753,14 +775,14 @@ pub fn status(state: &State, session: &SessionID, prompt_pulse: u32) -> Status {
             Unread::Activity
         })
     });
-    let attention = if members.iter().any(|id| state.permissions(id).is_some_and(|list| !list.is_empty())) {
+    let attention = if members().any(|id| state.permissions(id).is_some_and(|list| !list.is_empty())) {
         Some(Attention::Permission)
-    } else if members.iter().any(|id| state.forms(&id.0, None).is_some_and(|list| !list.is_empty())) {
+    } else if members().any(|id| state.forms(id, None).is_some_and(|list| !list.is_empty())) {
         Some(Attention::Question)
     } else {
         None
     };
-    let busy = members.iter().any(|id| {
+    let busy = members().any(|id| {
         state.status(id) == SessionStatus::Running
             || state.pending(id).iter().any(|item| !matches!(item, SessionInboxInfo::Synthetic(_)))
     });
@@ -774,21 +796,22 @@ fn acknowledge(tui: &Tui) {
     if tabs.focused.get() != Some(true) {
         return;
     }
-    let Some(session) = tabs.current(tui) else { return };
-    let id = SessionID(session.clone());
-    let Some(idle) = tui.data.read(|state| {
-        let info = state.session(&id)?;
+    let route = tui.route();
+    let Route::Session { id } = &*route else { return };
+    let Some((session, idle)) = tui.data.read(|state| {
+        let session = state.root(id);
+        let info = state.session(session)?;
         let idle = info.time.idle?;
-        info.time.viewed.is_none_or(|viewed| idle > viewed).then_some(idle)
+        let unseen = info.time.viewed.is_none_or(|viewed| idle > viewed);
+        let acknowledged = tabs.acknowledged.borrow().get(session) == Some(&idle);
+        (unseen && !acknowledged).then(|| (session.to_owned(), idle))
     }) else {
         return;
     };
-    if tabs.acknowledged.borrow().get(&session) == Some(&idle) {
-        return;
-    }
     // Recorded before the request, so event-driven syncs do not post the same watermark again.
     tabs.acknowledged.borrow_mut().insert(session.clone(), idle);
     let client = tui.data.client().clone();
+    let id = SessionID(session.clone());
     tui.app.spawn(
         async move { client.session_view(&SessionViewInput { session_id: id, idle }).await },
         bind!(tui, |tui, cx, result| {

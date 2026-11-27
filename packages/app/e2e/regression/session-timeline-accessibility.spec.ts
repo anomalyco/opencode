@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Locator } from "@playwright/test"
 import {
   assistantMessage,
   renderedPartID,
@@ -46,6 +46,46 @@ test("space activates a focused timeline button instead of scrolling", async ({ 
   expect(await scroller.evaluate((element) => element.scrollTop)).toBe(before)
 })
 
+test("Tab moves between timeline controls without stopping on the timeline itself", async ({ page }) => {
+  await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([textPart("prt_tab_stop_text", "Long response. ".repeat(600))])],
+    seedHistory: true,
+  })
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const first = scroller.getByRole("button", { name: "More actions", exact: true })
+  await expect.poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  await expect(scroller).toHaveAttribute("tabindex", "-1")
+  await first.press("Shift+Tab")
+  await expect(scroller).not.toBeFocused()
+})
+
+test("a focused control that scrolls out of the mounted rows leaves the timeline where it was scrolled", async ({
+  page,
+}) => {
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([
+        shell("prt_focus_unmount_shell", "completed", lines(5)),
+        textPart("prt_focus_unmount_text", "Latest response."),
+      ]),
+    ],
+    settings: { shellToolPartsExpanded: false },
+    seedHistory: true,
+  })
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const trigger = page.getByRole("button", { name: "Used 1 Shell", exact: true })
+  await trigger.focus()
+  await expect(trigger).toBeFocused()
+  await scroller.hover()
+  await page.mouse.wheel(0, -100_000)
+  // The row left the mounted range, and its control went with it.
+  await expect(trigger).toHaveCount(0)
+  // The timeline keeps focus for the scroll keys. No control in another row takes it and scrolls the timeline to itself.
+  await expect(scroller).toBeFocused()
+  expect(await scroller.evaluate((element) => element.scrollTop)).toBe(0)
+})
+
 test("jump to latest is reachable only while it is shown", async ({ page }) => {
   await setupTimeline(page, {
     messages: [userMessage(), assistantMessage([textPart("prt_jump_latest_text", "Latest response.")])],
@@ -77,6 +117,73 @@ test("jump to latest is reachable only while it is shown", async ({ page }) => {
   await expect(latest).toBeInViewport()
   await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeFocused()
 })
+
+// A working turn shows controls the reader can use, such as a tool header and a link in a reply. The keyboard stops
+// on each one where the reader can see it, and none is hidden from a screen reader.
+for (const newTimeline of [false, true]) {
+  test(`every Tab stop of a working turn can be seen and read (${newTimeline ? "New" : "current"} timeline)`, async ({
+    page,
+  }) => {
+    await setupTimeline(page, {
+      messages: [
+        userMessage(),
+        assistantMessage(
+          [
+            shell("prt_working_stop_shell", "completed", lines(5)),
+            textPart("prt_working_stop_text", "See [the notes](https://example.com/notes) while this runs."),
+          ],
+          { completed: false },
+        ),
+      ],
+      settings: { newTimeline, shellToolPartsExpanded: false },
+    })
+    await expect(page.getByRole("button", { name: "Stop" })).toBeVisible()
+    await expect(page.getByText("while this runs.")).toBeVisible()
+
+    // The timeline's stops in the order the key reaches them, from the control it starts on to the first stop outside.
+    const walk = async (key: "Tab" | "Shift+Tab", from: Locator) => {
+      await from.focus()
+      const stops: { name: string; tool: boolean; hidden: boolean; shown: boolean }[] = []
+
+      for (let press = 0; press < 20; press++) {
+        await page.keyboard.press(key)
+
+        const stop = await page.evaluate(() => {
+          const element = document.activeElement
+
+          if (!(element instanceof HTMLElement) || !element.closest("[data-timeline-row]")) return undefined
+          const box = element.getBoundingClientRect()
+
+          return {
+            name: (element.getAttribute("aria-label") ?? element.textContent ?? "").trim().replace(/\s+/g, " "),
+            tool: element.matches("button[aria-expanded]"),
+            hidden: element.closest('[aria-hidden="true"]') !== null,
+            shown:
+              element.checkVisibility({ opacityProperty: true, visibilityProperty: true }) &&
+              box.bottom > 0 &&
+              box.top < innerHeight,
+          }
+        })
+
+        if (stop) stops.push(stop)
+
+        if (!stop && stops.length > 0) break
+      }
+
+      return stops
+    }
+
+    const forward = await walk("Tab", page.getByRole("button", { name: "More actions", exact: true }))
+    const back = await walk("Shift+Tab", page.getByRole("textbox", { name: "Prompt", exact: true }))
+
+    for (const stops of [forward, back]) {
+      expect(stops.filter((stop) => stop.hidden || !stop.shown)).toEqual([])
+      // The walk passed the turn's tool header and its link.
+      expect(stops.some((stop) => stop.tool)).toBe(true)
+      expect(stops.map((stop) => stop.name)).toContain("the notes")
+    }
+  })
+}
 
 function lines(count: number) {
   return Array.from({ length: count }, (_, index) => `line ${index + 1}`).join("\n")

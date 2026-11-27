@@ -1,4 +1,4 @@
-import type { UsagePoint } from "@opencode/data-core/domain/home"
+import type { MarketDay, ModelUsagePoint, UsagePoint } from "@opencode/data-core/domain/home"
 import { translate } from "../i18n"
 import {
   catalogModelPath,
@@ -14,7 +14,7 @@ import {
   latestFamilyComparisonPath,
   resolveComparisonFamily,
 } from "./comparison-pages"
-import { formatPercent, formatPrice, formatTokens, fromFirstUsage, isoDay } from "./format"
+import { formatPercent, formatPrice, formatTokens, fromFirstUsage } from "./format"
 import { baseUrl, jsonUrl, markdownUrl, pageUrl } from "./language"
 import { methodologyItems } from "./methodology"
 import type { ComparePageData, HomePageData, LabPageData, ModelPageData } from "./page-data"
@@ -27,7 +27,7 @@ const regions = new Intl.DisplayNames(["en"], { type: "region" })
 
 export function homeMarkdown(data: HomePageData) {
   const summary = homeSummary("en", data)
-  const latest = data.market.at(-1)
+  const latest = data.market.daily.at(-1)
   return markdown(
     `# ${translate("en", "app.title")}`,
     summary && `> ${summary}`,
@@ -58,9 +58,13 @@ export function homeMarkdown(data: HomePageData) {
       ]),
     ),
     "## Daily tokens by model: past 2 months",
-    seriesTable(data.usage, data.updatedAt, (value) => formatTokens(value * 1_000_000_000_000)),
+    seriesTable(data.usage.daily, (value) => formatTokens(value * 1_000_000_000_000)),
+    "## Weekly tokens by model: past 20 weeks",
+    seriesTable(data.usage.weekly, (value) => formatTokens(value * 1_000_000_000_000)),
     "## Daily unique users by model: past 2 months",
-    seriesTable(data.users, data.updatedAt, formatTokens),
+    seriesTable(data.users.daily, formatTokens),
+    "## Weekly unique users by model: past 20 weeks",
+    seriesTable(data.users.weekly, formatTokens),
     "## Weekly retention",
     translate("en", "methodology.retention"),
     table(
@@ -97,7 +101,7 @@ export function homeMarkdown(data: HomePageData) {
         formatTokens(entry.uncached * 1_000_000_000),
       ]),
     ),
-    latest && `## Market share by lab: ${isoDay(latest.date, data.updatedAt)}`,
+    latest && `## Market share by lab: ${latest.start}`,
     latest &&
       table(
         ["Lab", "Tokens", "Share"],
@@ -134,8 +138,10 @@ export function homeJson(data: HomePageData) {
       pastWeek: data.leaderboard.weekly.map((entry) => ({ ...leaderboardJson(entry), changePercent: entry.change })),
       pastDay: data.leaderboard.daily.map(leaderboardJson),
     },
-    dailyTokens: seriesJson(data.usage, data.updatedAt, 1_000_000_000_000),
-    dailyUniqueUsers: seriesJson(data.users, data.updatedAt, 1),
+    dailyTokens: seriesJson(data.usage.daily, 1_000_000_000_000),
+    dailyUniqueUsers: seriesJson(data.users.daily, 1),
+    weeklyTokens: seriesJson(data.usage.weekly, 1_000_000_000_000),
+    weeklyUniqueUsers: seriesJson(data.users.weekly, 1),
     weeklyRetention: data.retention.map((entry) => ({
       rank: entry.rank,
       model: entry.model,
@@ -162,15 +168,8 @@ export function homeJson(data: HomePageData) {
       cachedInputTokens: Math.round(entry.cached * 1_000_000_000),
       uncachedInputTokens: Math.round(entry.uncached * 1_000_000_000),
     })),
-    marketShare: data.market.map((day) => ({
-      date: isoDay(day.date, data.updatedAt),
-      tokens: Math.round(day.total * 1_000_000_000_000),
-      labs: day.authors.map((author) => ({
-        lab: formatCatalogLabName(author.author),
-        tokens: Math.round(author.tokens * 1_000_000_000_000),
-        sharePercent: author.share,
-      })),
-    })),
+    marketShare: marketJson(data.market.daily),
+    weeklyMarketShare: marketJson(data.market.weekly),
     countries: data.country.map((entry) => ({
       rank: entry.rank,
       country: entry.country,
@@ -213,17 +212,11 @@ export function labMarkdown(data: LabPageData) {
         ]
       }),
     ),
-    stats && stats.usage.length > 0 && "## Daily usage: past 2 months",
-    stats &&
-      stats.usage.length > 0 &&
-      table(
-        ["Date", "Tokens", "Unique users"],
-        fromFirstUsage(stats.usage).map((point) => [
-          isoDay(point.date, stats.updatedAt),
-          formatTokens(point.tokens),
-          formatTokens(point.users),
-        ]),
-      ),
+    ...usageTables(stats, ["Date", "Tokens", "Unique users"], (point) => [
+      point.start,
+      formatTokens(point.tokens),
+      formatTokens(point.users),
+    ]),
     methodologyMarkdown(),
   )
 }
@@ -255,13 +248,8 @@ export function labJson(data: LabPageData) {
       outputTokens: model.limit?.output ?? null,
       releaseDate: model.releaseDate ?? null,
     })),
-    daily: (stats?.usage ?? []).map((point) => ({
-      date: isoDay(point.date, stats?.updatedAt ?? null),
-      tokens: point.tokens,
-      uniqueUsers: point.users,
-      sessions: point.sessions,
-      costUsd: point.cost,
-    })),
+    daily: (stats?.usage ?? []).map(usageJson),
+    weekly: (stats?.weeklyUsage ?? []).map(usageJson),
   }
 }
 
@@ -314,18 +302,12 @@ export function modelMarkdown(data: ModelPageData, name: string) {
           ["Weekly retention", stats.weeklyRetention ? formatRate(stats.weeklyRetention.rate) : "-"],
         ],
       ),
-    stats && stats.usage.length > 0 && "## Daily usage: past 2 months",
-    stats &&
-      stats.usage.length > 0 &&
-      table(
-        ["Date", "Tokens", "Unique users", "Sessions"],
-        fromFirstUsage(stats.usage).map((point) => [
-          isoDay(point.date, stats.updatedAt),
-          formatTokens(point.tokens),
-          formatTokens(point.users),
-          point.sessions.toLocaleString("en"),
-        ]),
-      ),
+    ...usageTables(stats, ["Date", "Tokens", "Unique users", "Sessions"], (point) => [
+      point.start,
+      formatTokens(point.tokens),
+      formatTokens(point.users),
+      point.sessions.toLocaleString("en"),
+    ]),
     stats && stats.country.length > 0 && "## Top countries: past 2 months",
     stats &&
       stats.country.length > 0 &&
@@ -411,13 +393,8 @@ export function modelJson(data: ModelPageData, name: string) {
       costUsd: stats.totals.cost,
       cachedInputPercent: stats.totals.cacheRatio,
       weeklyRetentionPercent: stats.weeklyRetention?.rate ?? null,
-      daily: stats.usage.map((point) => ({
-        date: isoDay(point.date, stats.updatedAt),
-        tokens: point.tokens,
-        uniqueUsers: point.users,
-        sessions: point.sessions,
-        costUsd: point.cost,
-      })),
+      daily: stats.usage.map(usageJson),
+      weekly: stats.weeklyUsage.map(usageJson),
       countries: stats.country.map((country) => ({
         rank: country.rank,
         country: country.country,
@@ -497,7 +474,7 @@ export function llmsTxt(home: HomePageData, catalog: ModelCatalog) {
     "The home, lab, and model pages are also available as Markdown or JSON, and model comparison pages as Markdown: add `.md` or `.json` to the page URL (the home page is `/data/index.md`), or request a page with `Accept: text/markdown`.",
     "## Pages",
     [
-      `- ${link("AI model usage rankings", "/data/")}: leaderboards, daily tokens and users by model, retention, session cost, token prices, cache ratio, market share by lab, and countries`,
+      `- ${link("AI model usage rankings", "/data/")}: leaderboards, daily and weekly tokens and users by model, retention, session cost, token prices, cache ratio, market share by lab, and countries`,
       `- [Model comparisons](${pageUrl("/data/compare")}): compare models on usage, pricing, limits, and capabilities`,
     ].join("\n"),
     "## Top models: past 7 days",
@@ -570,24 +547,60 @@ function leaderboardJson(entry: HomePageData["leaderboard"]["weekly"][number]) {
   }
 }
 
-function seriesTable(points: UsagePoint[], updatedAt: string | null, format: (value: number) => string) {
+function seriesTable(points: UsagePoint[], format: (value: number) => string) {
   const models = points[0]?.segments.map((segment) => segment.model) ?? []
   return table(
     [translate("en", "chart.date"), ...models, "Total"],
     points.map((point) => [
-      isoDay(point.date, updatedAt),
+      point.start,
       ...models.map((model) => format(point.segments.find((segment) => segment.model === model)?.value ?? 0)),
       format(point.segments.reduce((sum, segment) => sum + segment.value, 0)),
     ]),
   )
 }
 
-function seriesJson(points: UsagePoint[], updatedAt: string | null, scale: number) {
+function seriesJson(points: UsagePoint[], scale: number) {
   return points.map((point) => ({
-    date: isoDay(point.date, updatedAt),
+    date: point.start,
     total: Math.round(point.segments.reduce((sum, segment) => sum + segment.value, 0) * scale),
     models: Object.fromEntries(point.segments.map((segment) => [segment.model, Math.round(segment.value * scale)])),
   }))
+}
+
+function marketJson(days: MarketDay[]) {
+  return days.map((day) => ({
+    date: day.start,
+    tokens: Math.round(day.total * 1_000_000_000_000),
+    labs: day.authors.map((author) => ({
+      lab: formatCatalogLabName(author.author),
+      tokens: Math.round(author.tokens * 1_000_000_000_000),
+      sharePercent: author.share,
+    })),
+  }))
+}
+
+function usageTables(
+  stats: { usage: ModelUsagePoint[]; weeklyUsage: ModelUsagePoint[] } | null | undefined,
+  headers: Cell[],
+  row: (point: ModelUsagePoint) => Cell[],
+) {
+  if (!stats || stats.usage.length === 0) return []
+  return [
+    "## Daily usage: past 2 months",
+    table(headers, fromFirstUsage(stats.usage).map(row)),
+    "## Weekly usage: past 20 weeks",
+    table(headers, fromFirstUsage(stats.weeklyUsage).map(row)),
+  ]
+}
+
+function usageJson(point: ModelUsagePoint) {
+  return {
+    date: point.start,
+    tokens: point.tokens,
+    uniqueUsers: point.users,
+    sessions: point.sessions,
+    costUsd: point.cost,
+  }
 }
 
 function methodologyMarkdown() {

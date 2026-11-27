@@ -138,6 +138,25 @@ fn clearing_the_filter_previews_the_opening_theme_again() {
 }
 
 #[test]
+fn selection_colors_follow_the_active_theme() {
+    let app = TestApp::new(80, 30);
+    let tui = mount(&app, support::component_info(json!({})));
+    let initial = tui.page();
+    assert_eq!(app.theme().selection_bg, initial.background.selection);
+    assert_eq!(app.theme().selection_fg, initial.text.selection);
+
+    theme_list::show(&tui, None);
+    wait_for(&app, "Search themes");
+    app.type_text("tokyo");
+    app.wait_until(WAIT, || theme(&tui) == "tokyonight");
+    app.press("enter");
+    let next = tui.page();
+    assert_ne!(next.background.selection, initial.background.selection);
+    assert_eq!(app.theme().selection_bg, next.background.selection);
+    assert_eq!(app.theme().selection_fg, next.text.selection);
+}
+
+#[test]
 fn settings_theme_opens_the_list_and_comes_back() {
     let app = TestApp::new(80, 30);
     let tui = mount(&app, support::component_info(json!({})));
@@ -367,7 +386,7 @@ fn the_host_entries_list_and_toggle_like_plugins() {
     assert!(matches!(tui.keymap.dispatch("diff.open", None), opentui::keymap::RunResult::Ok));
     // The viewer is a plugin, whose navigation is an effect after its command.
     let route = Route::Plugin { id: "opencode.diffs".to_owned(), name: "diff".to_owned() };
-    assert!(app.wait_until(WAIT, || tui.route() == route), "{:?}", tui.route());
+    assert!(app.wait_until(WAIT, || *tui.route() == route), "{:?}", tui.route());
     app.render();
     assert!(!app.text().contains("Unknown plugin route"), "{}", app.text());
 }

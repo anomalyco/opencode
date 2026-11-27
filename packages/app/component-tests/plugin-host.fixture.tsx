@@ -9,6 +9,7 @@ import {
   type App,
   type Keybinds,
   type MountedSession,
+  type PanelSidebar,
   type Router,
   type Servers,
   type SessionScreen,
@@ -598,7 +599,15 @@ export function mountSessionRegion(input: {
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
   const screen = route as unknown as SessionScreen
 
-  const sidebar = { opened: () => false, width: () => 0, transition: () => false, resize() {}, toggle() {} }
+  const sidebar: PanelSidebar = {
+    opened: () => false,
+    width: () => 0,
+    transition: () => false,
+    resize() {},
+    toggle() {},
+    side: () => "start",
+    move() {},
+  }
 
   function Region() {
     const host = usePluginHost()
@@ -711,7 +720,7 @@ export function mountSessionRegion(input: {
  * theme picker's choices as Settings › Appearance lists them; `disable` and `enable` toggle a plugin as
  * Extensions › Plugins does. With `pending`, the plugin list has not arrived until `load()`. `applied` counts the
  * provider's `onThemeApplied` calls, which show a desktop window. `preview`, `previewScheme`, `commit` and `cancel`
- * drive the provider's preview, as the components lab does.
+ * drive the provider's preview, as the Lab does.
  */
 export function mountThemes(input: { definitions: readonly Entry[]; pending?: true }) {
   const container = document.createElement("div")

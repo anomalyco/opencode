@@ -144,19 +144,31 @@ impl Permission {
 
     pub fn sync(&self, tui: &Tui, changes: &Changes) {
         let inner = &self.0;
+        // The family's info and requests, the asked request's messages, and a request no prompt shows yet.
+        let autoaccept = tui.config().permissions == Permissions::Autoaccept;
+        let content = Touched::SHAPE | Touched::CONTENT;
+        let asked = inner.prompt.borrow().request().map(|request| changes.has(&request.session_id, content));
+        let waiting = || {
+            let family = inner.family.borrow();
+            tui.data.read(|state| family.iter().any(|id| state.permissions(id).is_some_and(|list| !list.is_empty())))
+        };
+        let members = inner.family.borrow().iter().any(|id| changes.has(id, Touched::INFO | Touched::PERMISSIONS));
+        if !(autoaccept || members || changes.all() || asked.unwrap_or_else(waiting)) {
+            return;
+        }
         let (requests, family) = tui.data.read(|state| {
             let family = family(state, &inner.session);
             let requests: Vec<PermissionRequest> =
                 family.iter().flat_map(|id| state.permissions(id).unwrap_or_default()).cloned().collect();
             (requests, family)
         });
-        if changes.all || family.iter().any(|id| changes.session(id)) || *inner.family.borrow() != family {
+        if changes.all() || family.iter().any(|id| changes.has(id, Touched::INFO)) || *inner.family.borrow() != family {
             for id in &family {
                 super::form::quiet(tui, tui.data.permission_sync(id));
             }
             *inner.family.borrow_mut() = family;
         }
-        if tui.config().permissions == Permissions::Autoaccept {
+        if autoaccept {
             // Hide any existing prompt when entering auto-accept mode.
             if inner.shown() {
                 inner.show(tui, Prompt::Hidden);
@@ -171,7 +183,7 @@ impl Permission {
             return;
         }
         let refreshed = match (head, &mut *inner.prompt.borrow_mut()) {
-            (Some(head), Prompt::Asking { request, .. }) if changes.any_message(&head.session_id) => {
+            (Some(head), Prompt::Asking { request, .. }) if changes.has(&head.session_id, content) => {
                 *request = head;
                 true
             }
@@ -613,7 +625,6 @@ fn reply(
     message: Option<String>,
     failed: Box<dyn FnOnce()>,
 ) {
-    let data = tui.data.clone();
     let input = PermissionReplyInput {
         session_id: request.session_id.clone(),
         request_id: request.id.clone(),
@@ -621,7 +632,7 @@ fn reply(
         message,
     };
     let weak = tui.weak();
-    tui.app.spawn(async move { data.permission_reply(input).await }, move |_, result| {
+    tui.app.spawn(tui.data.permission_reply(input), move |_, result| {
         let Err(error) = result else { return };
         failed();
         if let Some(tui) = weak.upgrade() {
@@ -700,7 +711,12 @@ fn presentation_body(tui: &Tui, theme: &Theme, request: &PermissionRequest, curr
 fn edit_body(tui: &Tui, theme: &Theme, current: &Presentation) -> View {
     let app = &tui.app;
     let syntax = opencode_ui::code::syntax_theme(theme);
-    let scroll = || ScrollBox::new(app).height(Length::percent(100.0));
+    let config = crate::dialogs::scroll_config(&tui.settings.info());
+    let scroll = || {
+        let scroll = ScrollBox::new(app).height(Length::percent(100.0));
+        opencode_ui::scroll::apply(&scroll, config);
+        scroll
+    };
     let column = View::new(app).column().gap(1).grow(1.0).basis(Length::Auto).min_height(0);
     if let Some(diff) = &current.diff {
         let view = match tui.config().info.diffs.as_ref().and_then(|diffs| diffs.view) {

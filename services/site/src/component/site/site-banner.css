@@ -90,7 +90,7 @@
     }
 
     /* Settings › Banner label "plain": "NEW" in plain highlight caps at the message's cap height
-       (16px OpenTUI Mono caps are 11px tall, the same as the message's Inter caps at 15px, and sit on
+       (16px OpenMono caps are 11px tall, the same as the message's Inter caps at 15px, and sit on
        its baseline), no badge; the gap stays the badge version's, without the badge's padding. */
     &[data-label="plain"] [data-slot="new"] {
       padding: 0;

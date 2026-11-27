@@ -157,11 +157,18 @@ describe("submitting the field", () => {
     })
   })
 
-  test("a page without a tab ignores the submit", () => {
+  test("a field without a tab, as on the New tab page, opens what was entered without one", () => {
     const epoch = reports({ ...blank, tabID: undefined })
-    const editing = replay([{ type: "focused", epoch }])
 
-    expect(transitionAddress(editing, { type: "navigated", url: "https://example.com/", epoch }).state).toBe(editing)
+    const typed = replay([
+      { type: "focused", epoch },
+      { type: "input.changed", value: "example.com", completing: false, visits: [] },
+    ])
+
+    expect(transitionAddress(typed, { type: "submitted", epoch, visits: [], failed: false }).effects).toEqual([
+      { type: "navigate", tabID: undefined, url: "example.com" },
+      { type: "blur-input" },
+    ])
   })
 })
 
@@ -179,6 +186,18 @@ describe("editing", () => {
 
   const keys = (state: AddressState, ...pressed: ("ArrowDown" | "ArrowUp" | "Tab" | "Shift+Tab")[]) =>
     pressed.reduce((current, key) => press(current, key).state, state)
+
+  test("a field focused on a blank tab follows the page's address until the person types", () => {
+    const focused = replay([{ type: "focused", epoch }])
+    const loaded = reports(blank, { ...blank, url: "https://example.org/", loading: true })
+    const followed = transitionAddress(focused, { type: "page.followed", epoch: loaded })
+
+    expect(view(followed.state, loaded).field).toBe("https://example.org/")
+    expect(followed.effects).toEqual([{ type: "select-input" }])
+
+    const kept = typed("exa")
+    expect(transitionAddress(kept, { type: "page.followed", epoch: loaded }).state).toBe(kept)
+  })
 
   test("deleting never completes: the typed text is the first row, and Enter opens it", () => {
     const deleted = typed("exa", false)

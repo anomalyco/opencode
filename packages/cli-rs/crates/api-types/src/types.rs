@@ -139,12 +139,12 @@ impl ProviderSettingsTimeout {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ProviderCompactionSummary {
-    pub r#type: String,
+    pub r#type: tag::Summary,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ProviderCompactionNative {
-    pub r#type: String,
+    pub r#type: tag::Native,
 }
 
 /// `Provider.Compaction`, tagged by `type`.
@@ -164,7 +164,7 @@ impl<'de> Deserialize<'de> for ProviderCompaction {
 }
 
 impl ProviderCompaction {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("summary") => raw.variant().map(Self::Summary),
             Some("native") => raw.variant().map(Self::Native),
@@ -284,6 +284,39 @@ pub struct ProviderRequest {
     pub body: IndexMap<String, serde_json::Value>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct AgentInfoInstructionsObject {
+    pub selected: String,
+    pub unselected: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum AgentInfoInstructions {
+    String(String),
+    Object(AgentInfoInstructionsObject),
+    /// A shape this client does not know, kept as it arrived.
+    Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for AgentInfoInstructions {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl AgentInfoInstructions {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+        if let Ok(member) = raw.decode() {
+            return Ok(Self::String(member));
+        }
+        if let Ok(member) = raw.decode() {
+            return Ok(Self::Object(member));
+        }
+        raw.unknown().map(Self::Unknown)
+    }
+}
+
 literal_enum! {
 AgentInfoMode {
     Subagent => "subagent",
@@ -322,6 +355,8 @@ pub struct AgentInfo {
     pub request: ProviderRequest,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub system: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instructions: Option<AgentInfoInstructions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub mode: AgentInfoMode,
@@ -362,12 +397,12 @@ string_type!(PluginID, "`Plugin.ID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PluginSourceBuiltin {
-    pub r#type: String,
+    pub r#type: tag::Builtin,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PluginSourcePackage {
-    pub r#type: String,
+    pub r#type: tag::Package,
     pub target: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
@@ -379,13 +414,13 @@ pub struct PluginSourcePackage {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PluginSourceLocal {
-    pub r#type: String,
+    pub r#type: tag::Local,
     pub path: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PluginSourceSdk {
-    pub r#type: String,
+    pub r#type: tag::Sdk,
 }
 
 /// `Plugin.Source`, tagged by `type`.
@@ -407,7 +442,7 @@ impl<'de> Deserialize<'de> for PluginSource {
 }
 
 impl PluginSource {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("builtin") => raw.variant().map(Self::Builtin),
             Some("package") => raw.variant().map(Self::Package),
@@ -445,12 +480,12 @@ pub struct PluginFeatures {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PluginStateActive {
-    pub status: String,
+    pub status: tag::Active,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PluginStateFailed {
-    pub status: String,
+    pub status: tag::Failed,
     pub error: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub r#ref: Option<String>,
@@ -473,7 +508,7 @@ impl<'de> Deserialize<'de> for PluginState {
 }
 
 impl PluginState {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("active") => raw.variant().map(Self::Active),
             Some("failed") => raw.variant().map(Self::Failed),
@@ -579,14 +614,14 @@ string_type!(SessionMessageID, "`Session.Message.ID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionForkBoundaryBefore {
-    pub r#type: String,
+    pub r#type: tag::Before,
     #[serde(rename = "messageID")]
     pub message_id: SessionMessageID,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionForkBoundaryThrough {
-    pub r#type: String,
+    pub r#type: tag::Through,
     #[serde(rename = "messageID")]
     pub message_id: SessionMessageID,
 }
@@ -608,7 +643,7 @@ impl<'de> Deserialize<'de> for SessionForkBoundary {
 }
 
 impl SessionForkBoundary {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("before") => raw.variant().map(Self::Before),
             Some("through") => raw.variant().map(Self::Through),
@@ -866,12 +901,12 @@ pub struct SessionMoveInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PromptFileSourceInline {
-    pub r#type: String,
+    pub r#type: tag::Inline,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PromptFileSourceUri {
-    pub r#type: String,
+    pub r#type: tag::Uri,
     pub uri: String,
 }
 
@@ -892,7 +927,7 @@ impl<'de> Deserialize<'de> for PromptFileSource {
 }
 
 impl PromptFileSource {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("inline") => raw.variant().map(Self::Inline),
             Some("uri") => raw.variant().map(Self::Uri),
@@ -1016,7 +1051,7 @@ pub struct SessionInboxUser {
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
     pub time: SessionInboxUserTime,
-    pub r#type: String,
+    pub r#type: tag::User,
     pub payload: SessionInboxUserPayload,
     pub delivery: SessionInboxDelivery,
 }
@@ -1063,7 +1098,7 @@ pub struct SessionInboxSynthetic {
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
     pub time: SessionInboxUserTime,
-    pub r#type: String,
+    pub r#type: tag::Synthetic,
     pub payload: SessionInboxSyntheticPayload,
     pub delivery: SessionInboxDelivery,
 }
@@ -1096,7 +1131,7 @@ pub struct SessionInboxCompaction {
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
     pub time: SessionInboxUserTime,
-    pub r#type: String,
+    pub r#type: tag::Compaction,
     pub payload: SessionInboxCompactionPayload,
     pub delivery: SessionInboxDelivery,
 }
@@ -1139,7 +1174,7 @@ pub struct SessionMessageAgentSelected {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
     pub time: SessionInboxUserTime,
-    pub r#type: String,
+    pub r#type: tag::AgentSwitched,
     pub agent: AgentID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub previous: Option<AgentID>,
@@ -1151,7 +1186,7 @@ pub struct SessionMessageModelSelected {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
     pub time: SessionInboxUserTime,
-    pub r#type: String,
+    pub r#type: tag::ModelSwitched,
     pub model: ModelRef,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub previous: Option<ModelRef>,
@@ -1172,7 +1207,7 @@ pub struct SessionMessageLocationSwitched {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
     pub time: SessionInboxUserTime,
-    pub r#type: String,
+    pub r#type: tag::LocationSwitched,
     #[serde(rename = "projectID", default, skip_serializing_if = "Option::is_none")]
     pub project_id: Option<ProjectID>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1195,7 +1230,7 @@ pub struct SessionMessageUser {
     pub agents: Option<Vec<PromptAgentAttachment>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skills: Option<Vec<PromptSkillAttachment>>,
-    pub r#type: String,
+    pub r#type: tag::User,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -1207,7 +1242,7 @@ pub struct SessionMessageSynthetic {
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    pub r#type: String,
+    pub r#type: tag::Synthetic,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -1216,7 +1251,7 @@ pub struct SessionMessageSystem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
     pub time: SessionInboxUserTime,
-    pub r#type: String,
+    pub r#type: tag::System,
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -1228,7 +1263,7 @@ pub struct SessionMessageSkill {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
     pub time: SessionInboxUserTime,
-    pub r#type: String,
+    pub r#type: tag::Skill,
     pub skill: SkillID,
     pub name: SkillName,
     pub text: String,
@@ -1294,7 +1329,7 @@ pub struct SessionMessageShell {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
     pub time: SessionMessageShellTime,
-    pub r#type: String,
+    pub r#type: tag::Shell,
     #[serde(rename = "shellID")]
     pub shell_id: ShellID,
     pub command: String,
@@ -1327,7 +1362,7 @@ pub type SessionMessageNative = IndexMap<String, serde_json::Value>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageAssistantText {
-    pub r#type: String,
+    pub r#type: tag::Text,
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native: Option<SessionMessageNative>,
@@ -1335,7 +1370,7 @@ pub struct SessionMessageAssistantText {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageAssistantReasoning {
-    pub r#type: String,
+    pub r#type: tag::Reasoning,
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native: Option<SessionMessageNative>,
@@ -1345,26 +1380,26 @@ pub struct SessionMessageAssistantReasoning {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageToolStateStreaming {
-    pub status: String,
+    pub status: tag::Streaming,
     pub input: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageToolStateRunning {
-    pub status: String,
+    pub status: tag::Running,
     pub input: IndexMap<String, serde_json::Value>,
     pub metadata: IndexMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ToolTextContent {
-    pub r#type: String,
+    pub r#type: tag::Text,
     pub text: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ToolFileContent {
-    pub r#type: String,
+    pub r#type: tag::File,
     pub uri: String,
     pub mime: String,
     #[serde(default, deserialize_with = "crate::de::double_option", skip_serializing_if = "Option::is_none")]
@@ -1388,7 +1423,7 @@ impl<'de> Deserialize<'de> for ToolContent {
 }
 
 impl ToolContent {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("text") => raw.variant().map(Self::Text),
             Some("file") => raw.variant().map(Self::File),
@@ -1410,7 +1445,7 @@ impl ToolContent {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageToolStateCompleted {
-    pub status: String,
+    pub status: tag::Completed,
     pub input: IndexMap<String, serde_json::Value>,
     pub content: Vec<ToolContent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1436,7 +1471,7 @@ pub struct SessionStructuredError {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageToolStateError {
-    pub status: String,
+    pub status: tag::Error,
     pub input: IndexMap<String, serde_json::Value>,
     pub error: SessionStructuredError,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1463,7 +1498,7 @@ impl<'de> Deserialize<'de> for SessionMessageAssistantToolState {
 }
 
 impl SessionMessageAssistantToolState {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("streaming") => raw.variant().map(Self::Streaming),
             Some("running") => raw.variant().map(Self::Running),
@@ -1499,7 +1534,7 @@ pub struct SessionMessageAssistantToolTime {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionMessageAssistantTool {
-    pub r#type: String,
+    pub r#type: tag::Tool,
     pub id: String,
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1527,7 +1562,7 @@ impl<'de> Deserialize<'de> for SessionMessageAssistantContentItem {
 }
 
 impl SessionMessageAssistantContentItem {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("text") => raw.variant().map(Self::Text),
             Some("reasoning") => raw.variant().map(Self::Reasoning),
@@ -1603,7 +1638,7 @@ pub struct SessionMessageAssistant {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
     pub time: SessionMessageAssistantTime,
-    pub r#type: String,
+    pub r#type: tag::Assistant,
     pub agent: AgentID,
     pub model: ModelRef,
     pub content: Vec<SessionMessageAssistantContentItem>,
@@ -1634,24 +1669,24 @@ SessionMessageCompactionRunningReason {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionMessageCompactionRunning {
-    pub r#type: String,
+    pub r#type: tag::Compaction,
     pub id: SessionMessageID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
     pub time: SessionInboxUserTime,
-    pub status: String,
+    pub status: tag::Running,
     pub reason: SessionMessageCompactionRunningReason,
     pub summary: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionMessageCompactionCompleted {
-    pub r#type: String,
+    pub r#type: tag::Compaction,
     pub id: SessionMessageID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
     pub time: SessionInboxUserTime,
-    pub status: String,
+    pub status: tag::Completed,
     pub reason: SessionMessageCompactionRunningReason,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<ModelRef>,
@@ -1666,12 +1701,12 @@ pub struct SessionMessageCompactionCompleted {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionMessageCompactionFailed {
-    pub r#type: String,
+    pub r#type: tag::Compaction,
     pub id: SessionMessageID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
     pub time: SessionInboxUserTime,
-    pub status: String,
+    pub status: tag::Failed,
     pub reason: SessionMessageCompactionRunningReason,
     pub error: SessionStructuredError,
     #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
@@ -1698,7 +1733,7 @@ impl<'de> Deserialize<'de> for SessionMessageCompaction {
 }
 
 impl SessionMessageCompaction {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("running") => raw.variant().map(Self::Running),
             Some("completed") => raw.variant().map(Self::Completed),
@@ -1815,7 +1850,7 @@ pub struct SessionMessageIdle {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
     pub time: SessionInboxUserTime,
-    pub r#type: String,
+    pub r#type: tag::Idle,
     pub outcome: SessionInfoOutcome,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<SessionStructuredError>,
@@ -1847,7 +1882,7 @@ impl<'de> Deserialize<'de> for SessionMessageInfo {
 }
 
 impl SessionMessageInfo {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("agent-switched") => raw.variant().map(Self::AgentSwitched),
             Some("model-switched") => raw.variant().map(Self::ModelSwitched),
@@ -2157,7 +2192,7 @@ pub struct SessionInboxMove {
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
     pub time: SessionInboxUserTime,
-    pub r#type: String,
+    pub r#type: tag::Move,
     pub delivery: SessionInboxDelivery,
     pub payload: SessionInboxMovePayload,
 }
@@ -2181,7 +2216,7 @@ impl<'de> Deserialize<'de> for SessionInboxInfo {
 }
 
 impl SessionInboxInfo {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("user") => raw.variant().map(Self::User),
             Some("synthetic") => raw.variant().map(Self::Synthetic),
@@ -2412,7 +2447,7 @@ pub struct FormStringField {
     pub hidden: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub when: Option<Vec<FormWhen>>,
-    pub r#type: String,
+    pub r#type: tag::String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub format: Option<FormStringFieldFormat>,
     #[serde(rename = "minLength", default, skip_serializing_if = "Option::is_none")]
@@ -2444,7 +2479,7 @@ pub struct FormNumberField {
     pub hidden: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub when: Option<Vec<FormWhen>>,
-    pub r#type: String,
+    pub r#type: tag::Number,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub minimum: Option<SessionMessageShellExit>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2466,7 +2501,7 @@ pub struct FormIntegerField {
     pub hidden: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub when: Option<Vec<FormWhen>>,
-    pub r#type: String,
+    pub r#type: tag::Integer,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub minimum: Option<SessionMessageShellExit>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2488,7 +2523,7 @@ pub struct FormBooleanField {
     pub hidden: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub when: Option<Vec<FormWhen>>,
-    pub r#type: String,
+    pub r#type: tag::Boolean,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default: Option<bool>,
 }
@@ -2506,7 +2541,7 @@ pub struct FormMultiselectField {
     pub hidden: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub when: Option<Vec<FormWhen>>,
-    pub r#type: String,
+    pub r#type: tag::Multiselect,
     pub options: Vec<FormOption>,
     #[serde(rename = "minItems", default, skip_serializing_if = "Option::is_none")]
     pub min_items: Option<i64>,
@@ -2521,7 +2556,7 @@ pub struct FormMultiselectField {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct FormExternalField {
     pub key: String,
-    pub r#type: String,
+    pub r#type: tag::External,
     pub url: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
@@ -2550,7 +2585,7 @@ impl<'de> Deserialize<'de> for FormField {
 }
 
 impl FormField {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("string") => raw.variant().map(Self::String),
             Some("number") => raw.variant().map(Self::Number),
@@ -2719,7 +2754,7 @@ pub struct SessionFormGetInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct FormStatePending {
-    pub status: String,
+    pub status: tag::Pending,
 }
 
 /// `Form.Value`
@@ -2763,13 +2798,13 @@ pub type FormAnswer = IndexMap<String, FormValue>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct FormStateAnswered {
-    pub status: String,
+    pub status: tag::Answered,
     pub answer: FormAnswer,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct FormStateCancelled {
-    pub status: String,
+    pub status: tag::Cancelled,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
@@ -2792,7 +2827,7 @@ impl<'de> Deserialize<'de> for FormState {
 }
 
 impl FormState {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("pending") => raw.variant().map(Self::Pending),
             Some("answered") => raw.variant().map(Self::Answered),
@@ -2887,7 +2922,7 @@ pub struct SessionStatsInfoRange {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionStatsToolsNone {
-    pub mode: String,
+    pub mode: tag::None,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -2900,7 +2935,7 @@ pub struct SessionStatsToolTotals {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionStatsToolsSummary {
-    pub mode: String,
+    pub mode: tag::Summary,
     pub totals: SessionStatsToolTotals,
 }
 
@@ -2922,7 +2957,7 @@ pub struct SessionStatsToolUsage {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionStatsToolsDetail {
-    pub mode: String,
+    pub mode: tag::Detail,
     pub totals: SessionStatsToolTotals,
     pub usage: Vec<SessionStatsToolUsage>,
 }
@@ -2945,7 +2980,7 @@ impl<'de> Deserialize<'de> for SessionStatsTools {
 }
 
 impl SessionStatsTools {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("mode").as_str() {
             Some("none") => raw.variant().map(Self::None),
             Some("summary") => raw.variant().map(Self::Summary),
@@ -3183,7 +3218,7 @@ pub struct SessionCreated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionCreated,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3206,7 +3241,7 @@ pub struct SessionAgentSelected {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionAgentSelected,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3229,7 +3264,7 @@ pub struct SessionModelSelected {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionModelSelected,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3254,7 +3289,7 @@ pub struct SessionMoved {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionMoved,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3275,7 +3310,7 @@ pub struct SessionRenamed {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionRenamed,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3296,7 +3331,7 @@ pub struct SessionMetadataUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionMetadataUpdated,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3317,7 +3352,7 @@ pub struct SessionPermissions {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionPermissions,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3339,7 +3374,7 @@ pub struct SessionViewed {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionViewed,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3359,7 +3394,7 @@ pub struct SessionArchived {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionArchived,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3373,7 +3408,7 @@ pub struct SessionUnarchived {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionUnarchived,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3395,7 +3430,7 @@ pub struct SessionDeleted {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionDeleted,
     pub durable: SessionDeletedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3434,7 +3469,7 @@ pub struct SessionForked {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionForked,
     pub durable: SessionDeletedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3456,7 +3491,7 @@ pub struct SessionInboxDelivered {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionInboxDelivered,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3465,21 +3500,21 @@ pub struct SessionInboxDelivered {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionInboxItemUser {
-    pub r#type: String,
+    pub r#type: tag::User,
     pub payload: SessionInboxUserPayload,
     pub delivery: SessionInboxDelivery,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionInboxItemSynthetic {
-    pub r#type: String,
+    pub r#type: tag::Synthetic,
     pub payload: SessionInboxSyntheticPayload,
     pub delivery: SessionInboxDelivery,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionInboxItemCompaction {
-    pub r#type: String,
+    pub r#type: tag::Compaction,
     pub payload: SessionInboxCompactionPayload,
     pub delivery: SessionInboxDelivery,
 }
@@ -3495,7 +3530,7 @@ pub struct SessionInboxMovePayload1 {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionInboxItemMove {
-    pub r#type: String,
+    pub r#type: tag::Move,
     pub payload: SessionInboxMovePayload1,
     pub delivery: SessionInboxDelivery,
 }
@@ -3519,7 +3554,7 @@ impl<'de> Deserialize<'de> for SessionInboxItem {
 }
 
 impl SessionInboxItem {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("user") => raw.variant().map(Self::User),
             Some("synthetic") => raw.variant().map(Self::Synthetic),
@@ -3570,7 +3605,7 @@ pub struct SessionInboxEnqueued {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionInboxEnqueued,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3584,7 +3619,7 @@ pub struct SessionInboxCancelled {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionInboxCancelled,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3607,7 +3642,7 @@ pub struct SessionInboxDeliveryChanged {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionInboxDeliveryChanged,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3621,7 +3656,7 @@ pub struct SessionExecutionStarted {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionExecutionStarted,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3635,7 +3670,7 @@ pub struct SessionExecutionSucceeded {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionExecutionSucceeded,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3656,7 +3691,7 @@ pub struct SessionExecutionFailed {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionExecutionFailed,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3686,7 +3721,7 @@ pub struct SessionExecutionInterrupted {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionExecutionInterrupted,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3709,7 +3744,7 @@ pub struct SessionInstructionsUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionInstructionsUpdated,
     pub durable: SessionDeletedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3734,7 +3769,7 @@ pub struct SessionSynthetic {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionSynthetic,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3757,7 +3792,7 @@ pub struct SessionSkillActivated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionSkillActivated,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3804,7 +3839,7 @@ pub struct SessionShellStarted {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionShellStarted,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3826,7 +3861,7 @@ pub struct SessionShellEnded {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionShellEnded,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3853,7 +3888,7 @@ pub struct SessionStepStarted {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionStepStarted,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3875,7 +3910,7 @@ pub struct SessionStepFirstToken {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionStepFirstToken,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3889,7 +3924,7 @@ pub struct SessionStepStreamed {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionStepStreamed,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3923,7 +3958,7 @@ pub struct SessionStepEnded {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionStepEnded,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3960,7 +3995,7 @@ pub struct SessionStepFailed {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionStepFailed,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -3983,7 +4018,7 @@ pub struct SessionTextStarted {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionTextStarted,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -4009,7 +4044,7 @@ pub struct SessionTextEnded {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionTextEnded,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -4034,7 +4069,7 @@ pub struct SessionReasoningStarted {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionReasoningStarted,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -4048,7 +4083,7 @@ pub struct SessionReasoningEnded {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionReasoningEnded,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -4072,7 +4107,7 @@ pub struct SessionToolInputStarted {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionToolInputStarted,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -4096,7 +4131,7 @@ pub struct SessionToolInputEnded {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionToolInputEnded,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -4123,7 +4158,7 @@ pub struct SessionToolCalled {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionToolCalled,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -4152,7 +4187,7 @@ pub struct SessionToolSuccess {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionToolSuccess,
     pub durable: SessionDeletedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -4183,7 +4218,7 @@ pub struct SessionToolFailed {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionToolFailed,
     pub durable: SessionDeletedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -4208,7 +4243,7 @@ pub struct SessionRetryScheduled {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionRetryScheduled,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -4231,7 +4266,7 @@ pub struct SessionCompactionStarted {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionCompactionStarted,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -4261,7 +4296,7 @@ pub struct SessionCompactionEnded {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionCompactionEnded,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -4289,7 +4324,7 @@ pub struct SessionCompactionFailed {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionCompactionFailed,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -4310,7 +4345,7 @@ pub struct SessionRevertStaged {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionRevertStaged,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -4324,7 +4359,7 @@ pub struct SessionRevertCleared {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionRevertCleared,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -4345,7 +4380,7 @@ pub struct SessionRevertCommitted {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionRevertCommitted,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -4377,7 +4412,7 @@ pub struct SessionUsageRecorded {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionUsageRecorded,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -4402,7 +4437,7 @@ impl<'de> Deserialize<'de> for SessionMessageAssistantContentEncoded {
 }
 
 impl SessionMessageAssistantContentEncoded {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("text") => raw.variant().map(Self::Text),
             Some("reasoning") => raw.variant().map(Self::Reasoning),
@@ -4459,7 +4494,7 @@ pub struct SessionMessageContentUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionMessageContentUpdated,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -4529,7 +4564,7 @@ impl<'de> Deserialize<'de> for SessionEventDurable {
 }
 
 impl SessionEventDurable {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("session.created") => raw.variant().map(Self::SessionCreated),
             Some("session.agent.selected") => raw.variant().map(Self::SessionAgentSelected),
@@ -5091,7 +5126,7 @@ impl SessionEventDurable {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct EventLogSynced {
-    pub r#type: String,
+    pub r#type: tag::LogSynced,
     #[serde(rename = "aggregateID")]
     pub aggregate_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -5115,7 +5150,7 @@ impl<'de> Deserialize<'de> for SessionLogItem {
 }
 
 impl SessionLogItem {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("session.created")
             | Some("session.agent.selected")
@@ -5289,6 +5324,8 @@ pub struct ModelCompatibility {
     pub supports_thinking_block_binding: Option<bool>,
     #[serde(rename = "supportsEffortUpdates", default, skip_serializing_if = "Option::is_none")]
     pub supports_effort_updates: Option<bool>,
+    #[serde(rename = "supportsSystemUpdates", default, skip_serializing_if = "Option::is_none")]
+    pub supports_system_updates: Option<bool>,
     #[serde(rename = "mediaInput", default, skip_serializing_if = "Option::is_none")]
     pub media_input: Option<ModelMediaInput>,
 }
@@ -5344,6 +5381,19 @@ pub struct ModelVariant {
     pub headers: Option<IndexMap<String, String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body: Option<IndexMap<String, serde_json::Value>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ModelSpeed {
+    pub base: String,
+    pub id: String,
+    pub faster: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ModelInfoExperimental {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed: Option<ModelSpeed>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -5423,6 +5473,8 @@ pub struct ModelInfo {
     pub body: Option<IndexMap<String, serde_json::Value>>,
     pub capabilities: ModelCapabilities,
     pub variants: Vec<ModelVariant>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub experimental: Option<ModelInfoExperimental>,
     pub time: ModelInfoTime,
     pub cost: Vec<ModelCost>,
     pub status: ModelInfoStatus,
@@ -5543,7 +5595,7 @@ string_type!(GenerateVideoID, "`Generate.VideoID`");
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GenerateVideoRunning {
     pub id: GenerateVideoID,
-    pub status: String,
+    pub status: tag::Running,
 }
 
 /// Output of `Client::experimental_generate_video_create`.
@@ -5568,7 +5620,7 @@ pub struct BlobInfo {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GenerateVideoCompleted {
     pub id: GenerateVideoID,
-    pub status: String,
+    pub status: tag::Completed,
     pub blobs: Vec<BlobInfo>,
 }
 
@@ -5585,7 +5637,7 @@ GenerateVideoErrorReason {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GenerateVideoError {
     pub id: GenerateVideoID,
-    pub status: String,
+    pub status: tag::Error,
     pub error: String,
     pub reason: GenerateVideoErrorReason,
 }
@@ -5608,7 +5660,7 @@ impl<'de> Deserialize<'de> for GenerateVideoJob {
 }
 
 impl GenerateVideoJob {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("running") => raw.variant().map(Self::Running),
             Some("completed") => raw.variant().map(Self::Completed),
@@ -5645,19 +5697,19 @@ pub type ExperimentalGenerateVideoGetOutput = GenerateVideoJob;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GenerateDecisionTextPart {
-    pub r#type: String,
+    pub r#type: tag::Text,
     pub text: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GenerateDecisionJsonPart {
-    pub r#type: String,
+    pub r#type: tag::Json,
     pub value: serde_json::Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GenerateDecisionFilePart {
-    pub r#type: String,
+    pub r#type: tag::File,
     pub data: PromptBase64,
     pub mime: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -5682,7 +5734,7 @@ impl<'de> Deserialize<'de> for GenerateDecisionPart {
 }
 
 impl GenerateDecisionPart {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("text") => raw.variant().map(Self::Text),
             Some("json") => raw.variant().map(Self::Json),
@@ -5714,7 +5766,7 @@ pub struct GeneratePredicateQuestionCriteria {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GeneratePredicateQuestion {
-    pub r#type: String,
+    pub r#type: tag::Predicate,
     pub name: String,
     pub instructions: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -5758,7 +5810,7 @@ pub struct GenerateChoiceQuestionChoicesItem {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GenerateChoiceQuestion {
-    pub r#type: String,
+    pub r#type: tag::Choice,
     pub name: String,
     pub instructions: String,
     pub choices: Vec<GenerateChoiceQuestionChoicesItem>,
@@ -5773,7 +5825,7 @@ pub struct GenerateScoreQuestionLevelsItem {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GenerateScoreQuestion {
-    pub r#type: String,
+    pub r#type: tag::Score,
     pub name: String,
     pub instructions: String,
     pub levels: Vec<GenerateScoreQuestionLevelsItem>,
@@ -5797,7 +5849,7 @@ impl<'de> Deserialize<'de> for GenerateDecisionQuestion {
 }
 
 impl GenerateDecisionQuestion {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("predicate") => raw.variant().map(Self::Predicate),
             Some("choice") => raw.variant().map(Self::Choice),
@@ -5849,7 +5901,7 @@ pub struct ExperimentalGenerateDecisionsInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GeneratePredicateAnswer {
-    pub r#type: String,
+    pub r#type: tag::Predicate,
     pub name: String,
     #[serde(serialize_with = "crate::ser::number")]
     pub probability: f64,
@@ -5864,7 +5916,7 @@ pub struct GenerateChoiceAnswerProbabilitiesItem {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GenerateChoiceAnswer {
-    pub r#type: String,
+    pub r#type: tag::Choice,
     pub name: String,
     pub choice: GenerateChoiceValue,
     pub probabilities: Vec<GenerateChoiceAnswerProbabilitiesItem>,
@@ -5882,7 +5934,7 @@ pub struct GenerateScoreAnswerProbabilitiesItem {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GenerateScoreAnswer {
-    pub r#type: String,
+    pub r#type: tag::Score,
     pub name: String,
     #[serde(serialize_with = "crate::ser::number")]
     pub score: f64,
@@ -5893,7 +5945,7 @@ pub struct GenerateScoreAnswer {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GenerateErrorAnswer {
-    pub r#type: String,
+    pub r#type: tag::Error,
     pub name: String,
     pub reason: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -5919,7 +5971,7 @@ impl<'de> Deserialize<'de> for GenerateDecisionAnswer {
 }
 
 impl GenerateDecisionAnswer {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("predicate") => raw.variant().map(Self::Predicate),
             Some("choice") => raw.variant().map(Self::Choice),
@@ -5988,6 +6040,8 @@ VoiceTransportType {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct VoiceModel {
     pub model: String,
+    pub name: String,
+    pub engine: String,
     pub provider: String,
     pub transports: Vec<VoiceTransportType>,
     pub available: bool,
@@ -6002,7 +6056,7 @@ pub struct ExperimentalVoiceModelsOutput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct VoiceWebRTCTransportInput {
-    pub r#type: String,
+    pub r#type: tag::Webrtc,
     pub sdp: String,
     #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub dcid: Option<f64>,
@@ -6010,7 +6064,7 @@ pub struct VoiceWebRTCTransportInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct VoiceWebSocketTransportInput {
-    pub r#type: String,
+    pub r#type: tag::Websocket,
 }
 
 /// `VoiceTransportInput`, tagged by `type`.
@@ -6030,7 +6084,7 @@ impl<'de> Deserialize<'de> for VoiceTransportInput {
 }
 
 impl VoiceTransportInput {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("webrtc") => raw.variant().map(Self::Webrtc),
             Some("websocket") => raw.variant().map(Self::Websocket),
@@ -6060,13 +6114,13 @@ pub struct ExperimentalVoiceSessionInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct VoiceWebRTCTransport {
-    pub r#type: String,
+    pub r#type: tag::Webrtc,
     pub sdp: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct VoiceWebSocketTransport {
-    pub r#type: String,
+    pub r#type: tag::Websocket,
     pub url: String,
     pub token: String,
     #[serde(rename = "expiresAt", serialize_with = "crate::ser::number")]
@@ -6090,7 +6144,7 @@ impl<'de> Deserialize<'de> for VoiceTransport {
 }
 
 impl VoiceTransport {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("webrtc") => raw.variant().map(Self::Webrtc),
             Some("websocket") => raw.variant().map(Self::Websocket),
@@ -6203,7 +6257,7 @@ string_type!(IntegrationMethodID, "`Integration.MethodID`");
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationOAuthMethod {
     pub id: IntegrationMethodID,
-    pub r#type: String,
+    pub r#type: tag::Oauth,
     pub label: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub form: Option<FormFields>,
@@ -6212,14 +6266,14 @@ pub struct IntegrationOAuthMethod {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationCommandMethod {
     pub id: IntegrationMethodID,
-    pub r#type: String,
+    pub r#type: tag::Command,
     pub label: String,
     pub command: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationKeyMethod {
-    pub r#type: String,
+    pub r#type: tag::Key,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -6229,7 +6283,7 @@ pub struct IntegrationKeyMethod {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationExternalMethod {
     pub id: IntegrationMethodID,
-    pub r#type: String,
+    pub r#type: tag::External,
     pub label: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub form: Option<FormFields>,
@@ -6237,7 +6291,7 @@ pub struct IntegrationExternalMethod {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationEnvMethod {
-    pub r#type: String,
+    pub r#type: tag::Env,
     pub names: Vec<String>,
 }
 
@@ -6261,7 +6315,7 @@ impl<'de> Deserialize<'de> for IntegrationMethod {
 }
 
 impl IntegrationMethod {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("oauth") => raw.variant().map(Self::Oauth),
             Some("command") => raw.variant().map(Self::Command),
@@ -6327,7 +6381,7 @@ pub struct ConnectionStatus {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConnectionCredentialInfo {
-    pub r#type: String,
+    pub r#type: tag::Credential,
     pub id: CredentialID,
     pub label: String,
     pub method: ConnectionCredentialInfoMethod,
@@ -6337,7 +6391,7 @@ pub struct ConnectionCredentialInfo {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConnectionEnvInfo {
-    pub r#type: String,
+    pub r#type: tag::Env,
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<ConnectionStatus>,
@@ -6360,7 +6414,7 @@ impl<'de> Deserialize<'de> for ConnectionInfo {
 }
 
 impl ConnectionInfo {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("credential") => raw.variant().map(Self::Credential),
             Some("env") => raw.variant().map(Self::Env),
@@ -6493,26 +6547,26 @@ pub struct IntegrationOauthStatusInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationAttemptStatusPending {
-    pub status: String,
+    pub status: tag::Pending,
     pub time: IntegrationAttemptTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationAttemptStatusComplete {
-    pub status: String,
+    pub status: tag::Complete,
     pub time: IntegrationAttemptTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationAttemptStatusFailed {
-    pub status: String,
+    pub status: tag::Failed,
     pub message: String,
     pub time: IntegrationAttemptTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationAttemptStatusExpired {
-    pub status: String,
+    pub status: tag::Expired,
     pub time: IntegrationAttemptTime,
 }
 
@@ -6535,7 +6589,7 @@ impl<'de> Deserialize<'de> for IntegrationAttemptStatus {
 }
 
 impl IntegrationAttemptStatus {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("pending") => raw.variant().map(Self::Pending),
             Some("complete") => raw.variant().map(Self::Complete),
@@ -6657,7 +6711,7 @@ pub struct IntegrationCommandAttemptStatusPendingTime {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IntegrationCommandAttemptStatusPending {
-    pub status: String,
+    pub status: tag::Pending,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
     pub time: IntegrationCommandAttemptStatusPendingTime,
@@ -6665,20 +6719,20 @@ pub struct IntegrationCommandAttemptStatusPending {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IntegrationCommandAttemptStatusComplete {
-    pub status: String,
+    pub status: tag::Complete,
     pub time: IntegrationCommandAttemptStatusPendingTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IntegrationCommandAttemptStatusFailed {
-    pub status: String,
+    pub status: tag::Failed,
     pub message: String,
     pub time: IntegrationCommandAttemptStatusPendingTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IntegrationCommandAttemptStatusExpired {
-    pub status: String,
+    pub status: tag::Expired,
     pub time: IntegrationCommandAttemptStatusPendingTime,
 }
 
@@ -6701,7 +6755,7 @@ impl<'de> Deserialize<'de> for IntegrationCommandAttemptStatus {
 }
 
 impl IntegrationCommandAttemptStatus {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("pending") => raw.variant().map(Self::Pending),
             Some("complete") => raw.variant().map(Self::Complete),
@@ -6787,28 +6841,28 @@ pub struct McpListInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct McpStatusConnected {
-    pub status: String,
+    pub status: tag::Connected,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct McpStatusPending {
-    pub status: String,
+    pub status: tag::Pending,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct McpStatusDisabled {
-    pub status: String,
+    pub status: tag::Disabled,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct McpStatusFailed {
-    pub status: String,
+    pub status: tag::Failed,
     pub error: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct McpStatusNeedsAuth {
-    pub status: String,
+    pub status: tag::NeedsAuth,
     pub error: String,
 }
 
@@ -6831,7 +6885,7 @@ impl<'de> Deserialize<'de> for McpServerStatus {
 }
 
 impl McpServerStatus {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("connected") => raw.variant().map(Self::Connected),
             Some("pending") => raw.variant().map(Self::Pending),
@@ -6944,7 +6998,7 @@ McpProtocol {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ExperimentalMcpAddInputConfigLocal {
-    pub r#type: String,
+    pub r#type: tag::Local,
     pub command: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
@@ -7007,7 +7061,7 @@ impl ExperimentalMcpAddInputConfigRemoteOauth {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ExperimentalMcpAddInputConfigRemote {
-    pub r#type: String,
+    pub r#type: tag::Remote,
     pub url: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub headers: Option<IndexMap<String, String>>,
@@ -7041,7 +7095,7 @@ impl<'de> Deserialize<'de> for ExperimentalMcpAddInputConfig {
 }
 
 impl ExperimentalMcpAddInputConfig {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("local") => raw.variant().map(Self::Local),
             Some("remote") => raw.variant().map(Self::Remote),
@@ -7157,7 +7211,7 @@ pub struct ExperimentalMcpClientTokenOutput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct CredentialOAuth {
-    pub r#type: String,
+    pub r#type: tag::Oauth,
     #[serde(rename = "methodID")]
     pub method_id: IntegrationMethodID,
     pub refresh: String,
@@ -7169,7 +7223,7 @@ pub struct CredentialOAuth {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct CredentialKey {
-    pub r#type: String,
+    pub r#type: tag::Key,
     pub key: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
@@ -7177,7 +7231,7 @@ pub struct CredentialKey {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct CredentialExternal {
-    pub r#type: String,
+    pub r#type: tag::External,
     #[serde(rename = "methodID")]
     pub method_id: IntegrationMethodID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -7202,7 +7256,7 @@ impl<'de> Deserialize<'de> for CredentialValue {
 }
 
 impl CredentialValue {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("oauth") => raw.variant().map(Self::Oauth),
             Some("key") => raw.variant().map(Self::Key),
@@ -7630,6 +7684,14 @@ pub struct SkillListOutput {
     pub data: Vec<SkillInfo>,
 }
 
+/// Input of `Client::experimental_skill_file`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalSkillFileInput {
+    pub skill_id: SkillID,
+    pub location: Option<LocationQueryInput>,
+    pub path: String,
+}
+
 /// Input of `Client::rpc_call`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct RpcCallInput {
@@ -7664,7 +7726,7 @@ pub struct LocationShutdown {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::LocationShutdown,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: LocationShutdownData,
@@ -7680,7 +7742,7 @@ pub struct ModelsDevRefreshed {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::ModelsDevRefreshed,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: ModelsDevRefreshedData,
@@ -7701,7 +7763,7 @@ pub struct CredentialUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::CredentialUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: CredentialUpdatedData,
@@ -7722,7 +7784,7 @@ pub struct CredentialSwitched {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::CredentialSwitched,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: CredentialSwitchedData,
@@ -7738,7 +7800,7 @@ pub struct IntegrationUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::IntegrationUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: IntegrationUpdatedData,
@@ -7754,7 +7816,7 @@ pub struct ProviderUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::ProviderUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: ProviderUpdatedData,
@@ -7770,7 +7832,7 @@ pub struct ModelUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::ModelUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: ModelUpdatedData,
@@ -7786,7 +7848,7 @@ pub struct AgentUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::AgentUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: AgentUpdatedData,
@@ -7808,7 +7870,7 @@ pub struct SessionUsageUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionUsageUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionUsageUpdatedData,
@@ -7831,7 +7893,7 @@ pub struct SessionTextDelta {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionTextDelta,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionTextDeltaData,
@@ -7844,7 +7906,7 @@ pub struct SessionReasoningDelta {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionReasoningDelta,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionTextDeltaData,
@@ -7867,7 +7929,7 @@ pub struct SessionToolInputDelta {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionToolInputDelta,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionToolInputDeltaData,
@@ -7890,7 +7952,7 @@ pub struct SessionToolProgress {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionToolProgress,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionToolProgressData,
@@ -7910,7 +7972,7 @@ pub struct SessionCompactionDelta {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionCompactionDelta,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionCompactionDeltaData,
@@ -7937,7 +7999,7 @@ pub struct FilesystemChanged {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::FilesystemChanged,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: FilesystemChangedData,
@@ -7953,7 +8015,7 @@ pub struct ReferenceUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::ReferenceUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: ReferenceUpdatedData,
@@ -7983,7 +8045,7 @@ pub struct PermissionAsked {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::PermissionAsked,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: PermissionAskedData,
@@ -8005,7 +8067,7 @@ pub struct PermissionReplied {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::PermissionReplied,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: PermissionRepliedData,
@@ -8021,7 +8083,7 @@ pub struct PluginUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::PluginUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: PluginUpdatedData,
@@ -8050,7 +8112,7 @@ pub struct ProjectUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::ProjectUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: ProjectUpdatedData,
@@ -8069,7 +8131,7 @@ pub struct WorktreeUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::WorktreeUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: WorktreeUpdatedData,
@@ -8092,7 +8154,7 @@ pub struct WorktreeResolved {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::WorktreeResolved,
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
@@ -8109,7 +8171,7 @@ pub struct CommandUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::CommandUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: CommandUpdatedData,
@@ -8125,7 +8187,7 @@ pub struct ConfigUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::ConfigUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: ConfigUpdatedData,
@@ -8141,7 +8203,7 @@ pub struct SkillUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SkillUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SkillUpdatedData,
@@ -8181,7 +8243,7 @@ pub struct PtyCreated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::PtyCreated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: PtyCreatedData,
@@ -8194,7 +8256,7 @@ pub struct PtyUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::PtyUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: PtyCreatedData,
@@ -8214,7 +8276,7 @@ pub struct PtyExited {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::PtyExited,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: PtyExitedData,
@@ -8232,7 +8294,7 @@ pub struct PtyDeleted {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::PtyDeleted,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: PtyDeletedData,
@@ -8285,7 +8347,7 @@ pub struct PersistentPtyAdded {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::PersistentPtyAdded,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: PersistentPtyAddedData,
@@ -8306,7 +8368,7 @@ pub struct PersistentPtyRemoved {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::PersistentPtyRemoved,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: PersistentPtyRemovedData,
@@ -8319,7 +8381,7 @@ pub struct PersistentPtyUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::PersistentPtyUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: PersistentPtyAddedData,
@@ -8337,7 +8399,7 @@ pub struct ShellCreated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::ShellCreated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: ShellCreatedData,
@@ -8358,7 +8420,7 @@ pub struct ShellExited {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::ShellExited,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: ShellExitedData,
@@ -8376,7 +8438,7 @@ pub struct ShellDeleted {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::ShellDeleted,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: ShellDeletedData,
@@ -8402,7 +8464,7 @@ pub struct JobTime {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct JobShell {
-    pub kind: String,
+    pub kind: tag::Shell,
     pub id: String,
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
@@ -8417,7 +8479,7 @@ pub struct JobShell {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct JobSubagent {
-    pub kind: String,
+    pub kind: tag::Subagent,
     pub id: String,
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
@@ -8433,7 +8495,7 @@ pub struct JobSubagent {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct JobImage {
-    pub kind: String,
+    pub kind: tag::Image,
     pub id: String,
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
@@ -8447,7 +8509,7 @@ pub struct JobImage {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct JobVideo {
-    pub kind: String,
+    pub kind: tag::Video,
     pub id: String,
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
@@ -8460,7 +8522,7 @@ pub struct JobVideo {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct JobCodeMode {
-    pub kind: String,
+    pub kind: tag::Codemode,
     pub id: String,
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
@@ -8490,7 +8552,7 @@ impl<'de> Deserialize<'de> for JobInfo {
 }
 
 impl JobInfo {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("kind").as_str() {
             Some("shell") => raw.variant().map(Self::Shell),
             Some("subagent") => raw.variant().map(Self::Subagent),
@@ -8623,7 +8685,7 @@ pub struct ExperimentalJobUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::ExperimentalJobUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: ExperimentalJobUpdatedData,
@@ -8641,7 +8703,7 @@ pub struct FormCreated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::FormCreated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: FormCreatedData,
@@ -8662,7 +8724,7 @@ pub struct FormReplied {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::FormReplied,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: FormRepliedData,
@@ -8682,7 +8744,7 @@ pub struct FormCancelled {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::FormCancelled,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: FormCancelledData,
@@ -8698,10 +8760,26 @@ pub struct WebsearchUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::WebsearchUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: WebsearchUpdatedData,
+}
+
+/// Any value but `null`.
+pub type ExperimentalPushUpdatedData = crate::de::NotNull;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalPushUpdated {
+    pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
+    pub created: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: tag::ExperimentalPushUpdated,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<LocationRef>,
+    pub data: ExperimentalPushUpdatedData,
 }
 
 /// Any value but `null`.
@@ -8714,7 +8792,7 @@ pub struct ArtifactUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::ArtifactUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: ArtifactUpdatedData,
@@ -8722,7 +8800,7 @@ pub struct ArtifactUpdated {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionStatusIdle {
-    pub r#type: String,
+    pub r#type: tag::Idle,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -8738,7 +8816,7 @@ pub struct SessionStatusRetryAction {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionStatusRetry {
-    pub r#type: String,
+    pub r#type: tag::Retry,
     pub attempt: i64,
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -8748,7 +8826,7 @@ pub struct SessionStatusRetry {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionStatusBusy {
-    pub r#type: String,
+    pub r#type: tag::Busy,
 }
 
 /// `SessionStatus`, tagged by `type`.
@@ -8769,7 +8847,7 @@ impl<'de> Deserialize<'de> for SessionStatus {
 }
 
 impl SessionStatus {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("idle") => raw.variant().map(Self::Idle),
             Some("retry") => raw.variant().map(Self::Retry),
@@ -8805,7 +8883,7 @@ pub struct SessionStatusUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionStatusUpdatedData,
@@ -8818,7 +8896,7 @@ pub struct SessionIdle {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::SessionIdle,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionArchivedData,
@@ -8836,7 +8914,7 @@ pub struct TuiPromptAppend {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::TuiPromptAppend,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: TuiPromptAppendData,
@@ -8854,7 +8932,7 @@ pub struct TuiCommandExecute {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::TuiCommandExecute,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: TuiCommandExecuteData,
@@ -8886,7 +8964,7 @@ pub struct TuiToastShow {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::TuiToastShow,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: TuiToastShowData,
@@ -8899,7 +8977,7 @@ pub struct TuiSessionSelect {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::TuiSessionSelect,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionArchivedData,
@@ -8917,7 +8995,7 @@ pub struct InstallationUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::InstallationUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: InstallationUpdatedData,
@@ -8930,7 +9008,7 @@ pub struct InstallationUpdateAvailable {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::InstallationUpdateAvailable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: InstallationUpdatedData,
@@ -8949,7 +9027,7 @@ pub struct VcsBranchUpdated {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::VcsBranchUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: VcsBranchUpdatedData,
@@ -8967,7 +9045,7 @@ pub struct McpStatusChanged {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::McpStatusChanged,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: McpStatusChangedData,
@@ -8980,7 +9058,7 @@ pub struct McpResourcesChanged {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::McpResourcesChanged,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: McpStatusChangedData,
@@ -9008,10 +9086,78 @@ pub struct ExperimentalMcpEvent {
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: String,
+    pub r#type: tag::ExperimentalMcpEvent,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: ExperimentalMcpEventData,
+}
+
+string_type!(SpaceName, "`Space.Name`");
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceResyncData {
+    pub space: SpaceName,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceResync {
+    pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
+    pub created: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: tag::ExperimentalSpaceResync,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<LocationRef>,
+    pub data: ExperimentalSpaceResyncData,
+}
+
+string_type!(SpaceKey, "`Space.Key`");
+
+string_type!(SpaceValue, "`Space.Value`");
+
+/// `Space.Revision`
+pub type SpaceRevision = i64;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceUpdatedData {
+    pub space: SpaceName,
+    pub key: SpaceKey,
+    pub value: SpaceValue,
+    pub revision: SpaceRevision,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceUpdated {
+    pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
+    pub created: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: tag::ExperimentalSpaceUpdated,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<LocationRef>,
+    pub data: ExperimentalSpaceUpdatedData,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceDeletedData {
+    pub space: SpaceName,
+    pub key: SpaceKey,
+    pub revision: SpaceRevision,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceDeleted {
+    pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
+    pub created: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: tag::ExperimentalSpaceDeleted,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<LocationRef>,
+    pub data: ExperimentalSpaceDeletedData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -9026,8 +9172,11 @@ pub struct V2EventRpc {
     pub data: IndexMap<String, serde_json::Value>,
 }
 
-/// Any value but `null`.
-pub type V2EventServerConnectedData = crate::de::NotNull;
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct V2EventServerConnectedData {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stream: Option<String>,
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct V2EventServerConnected {
@@ -9036,7 +9185,7 @@ pub struct V2EventServerConnected {
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationPublicRef>,
-    pub r#type: String,
+    pub r#type: tag::ServerConnected,
     pub data: V2EventServerConnectedData,
 }
 
@@ -9130,6 +9279,7 @@ pub enum V2Event {
     FormReplied(FormReplied),
     FormCancelled(FormCancelled),
     WebsearchUpdated(WebsearchUpdated),
+    ExperimentalPushUpdated(ExperimentalPushUpdated),
     ArtifactUpdated(ArtifactUpdated),
     SessionStatus(SessionStatusUpdated),
     SessionIdle(SessionIdle),
@@ -9143,6 +9293,9 @@ pub enum V2Event {
     McpStatusChanged(McpStatusChanged),
     McpResourcesChanged(McpResourcesChanged),
     ExperimentalMcpEvent(ExperimentalMcpEvent),
+    ExperimentalSpaceResync(ExperimentalSpaceResync),
+    ExperimentalSpaceUpdated(ExperimentalSpaceUpdated),
+    ExperimentalSpaceDeleted(ExperimentalSpaceDeleted),
     Rpc(V2EventRpc),
     ServerConnected(V2EventServerConnected),
     /// A member this client does not know, kept as it arrived.
@@ -9156,7 +9309,7 @@ impl<'de> Deserialize<'de> for V2Event {
 }
 
 impl V2Event {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("location.shutdown") => raw.variant().map(Self::LocationShutdown),
             Some("models-dev.refreshed") => raw.variant().map(Self::ModelsDevRefreshed),
@@ -9244,6 +9397,7 @@ impl V2Event {
             Some("form.replied") => raw.variant().map(Self::FormReplied),
             Some("form.cancelled") => raw.variant().map(Self::FormCancelled),
             Some("websearch.updated") => raw.variant().map(Self::WebsearchUpdated),
+            Some("experimental.push.updated") => raw.variant().map(Self::ExperimentalPushUpdated),
             Some("artifact.updated") => raw.variant().map(Self::ArtifactUpdated),
             Some("session.status") => raw.variant().map(Self::SessionStatus),
             Some("session.idle") => raw.variant().map(Self::SessionIdle),
@@ -9257,6 +9411,9 @@ impl V2Event {
             Some("mcp.status.changed") => raw.variant().map(Self::McpStatusChanged),
             Some("mcp.resources.changed") => raw.variant().map(Self::McpResourcesChanged),
             Some("experimental.mcp.event") => raw.variant().map(Self::ExperimentalMcpEvent),
+            Some("experimental.space.resync") => raw.variant().map(Self::ExperimentalSpaceResync),
+            Some("experimental.space.updated") => raw.variant().map(Self::ExperimentalSpaceUpdated),
+            Some("experimental.space.deleted") => raw.variant().map(Self::ExperimentalSpaceDeleted),
             Some("server.connected") => raw.variant().map(Self::ServerConnected),
             Some(tag) if tag.starts_with("rpc.") => raw.variant().map(Self::Rpc),
             _ => raw.unknown().map(Self::Unknown),
@@ -9354,6 +9511,7 @@ impl V2Event {
             Self::FormReplied(value) => value.r#type.as_str(),
             Self::FormCancelled(value) => value.r#type.as_str(),
             Self::WebsearchUpdated(value) => value.r#type.as_str(),
+            Self::ExperimentalPushUpdated(value) => value.r#type.as_str(),
             Self::ArtifactUpdated(value) => value.r#type.as_str(),
             Self::SessionStatus(value) => value.r#type.as_str(),
             Self::SessionIdle(value) => value.r#type.as_str(),
@@ -9367,6 +9525,9 @@ impl V2Event {
             Self::McpStatusChanged(value) => value.r#type.as_str(),
             Self::McpResourcesChanged(value) => value.r#type.as_str(),
             Self::ExperimentalMcpEvent(value) => value.r#type.as_str(),
+            Self::ExperimentalSpaceResync(value) => value.r#type.as_str(),
+            Self::ExperimentalSpaceUpdated(value) => value.r#type.as_str(),
+            Self::ExperimentalSpaceDeleted(value) => value.r#type.as_str(),
             Self::Rpc(value) => value.r#type.as_str(),
             Self::ServerConnected(value) => value.r#type.as_str(),
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
@@ -9462,6 +9623,7 @@ impl V2Event {
             Self::FormReplied(value) => value.id.as_str(),
             Self::FormCancelled(value) => value.id.as_str(),
             Self::WebsearchUpdated(value) => value.id.as_str(),
+            Self::ExperimentalPushUpdated(value) => value.id.as_str(),
             Self::ArtifactUpdated(value) => value.id.as_str(),
             Self::SessionStatus(value) => value.id.as_str(),
             Self::SessionIdle(value) => value.id.as_str(),
@@ -9475,6 +9637,9 @@ impl V2Event {
             Self::McpStatusChanged(value) => value.id.as_str(),
             Self::McpResourcesChanged(value) => value.id.as_str(),
             Self::ExperimentalMcpEvent(value) => value.id.as_str(),
+            Self::ExperimentalSpaceResync(value) => value.id.as_str(),
+            Self::ExperimentalSpaceUpdated(value) => value.id.as_str(),
+            Self::ExperimentalSpaceDeleted(value) => value.id.as_str(),
             Self::Rpc(value) => value.id.as_str(),
             Self::ServerConnected(value) => value.id.as_str(),
             Self::Unknown(value) => value.get("id").and_then(serde_json::Value::as_str).unwrap_or_default(),
@@ -9570,6 +9735,7 @@ impl V2Event {
             Self::FormReplied(value) => Some(value.created),
             Self::FormCancelled(value) => Some(value.created),
             Self::WebsearchUpdated(value) => Some(value.created),
+            Self::ExperimentalPushUpdated(value) => Some(value.created),
             Self::ArtifactUpdated(value) => Some(value.created),
             Self::SessionStatus(value) => Some(value.created),
             Self::SessionIdle(value) => Some(value.created),
@@ -9583,6 +9749,9 @@ impl V2Event {
             Self::McpStatusChanged(value) => Some(value.created),
             Self::McpResourcesChanged(value) => Some(value.created),
             Self::ExperimentalMcpEvent(value) => Some(value.created),
+            Self::ExperimentalSpaceResync(value) => Some(value.created),
+            Self::ExperimentalSpaceUpdated(value) => Some(value.created),
+            Self::ExperimentalSpaceDeleted(value) => Some(value.created),
             Self::Rpc(value) => Some(value.created),
             Self::ServerConnected(_) | Self::Unknown(_) => None,
         }
@@ -9677,6 +9846,7 @@ impl V2Event {
             Self::FormReplied(value) => value.metadata.as_ref(),
             Self::FormCancelled(value) => value.metadata.as_ref(),
             Self::WebsearchUpdated(value) => value.metadata.as_ref(),
+            Self::ExperimentalPushUpdated(value) => value.metadata.as_ref(),
             Self::ArtifactUpdated(value) => value.metadata.as_ref(),
             Self::SessionStatus(value) => value.metadata.as_ref(),
             Self::SessionIdle(value) => value.metadata.as_ref(),
@@ -9690,6 +9860,9 @@ impl V2Event {
             Self::McpStatusChanged(value) => value.metadata.as_ref(),
             Self::McpResourcesChanged(value) => value.metadata.as_ref(),
             Self::ExperimentalMcpEvent(value) => value.metadata.as_ref(),
+            Self::ExperimentalSpaceResync(value) => value.metadata.as_ref(),
+            Self::ExperimentalSpaceUpdated(value) => value.metadata.as_ref(),
+            Self::ExperimentalSpaceDeleted(value) => value.metadata.as_ref(),
             Self::Rpc(value) => value.metadata.as_ref(),
             Self::ServerConnected(value) => value.metadata.as_ref(),
             Self::Unknown(_) => None,
@@ -9785,6 +9958,7 @@ impl V2Event {
             | Self::FormReplied(_)
             | Self::FormCancelled(_)
             | Self::WebsearchUpdated(_)
+            | Self::ExperimentalPushUpdated(_)
             | Self::ArtifactUpdated(_)
             | Self::SessionStatus(_)
             | Self::SessionIdle(_)
@@ -9798,6 +9972,9 @@ impl V2Event {
             | Self::McpStatusChanged(_)
             | Self::McpResourcesChanged(_)
             | Self::ExperimentalMcpEvent(_)
+            | Self::ExperimentalSpaceResync(_)
+            | Self::ExperimentalSpaceUpdated(_)
+            | Self::ExperimentalSpaceDeleted(_)
             | Self::Rpc(_)
             | Self::ServerConnected(_)
             | Self::Unknown(_) => None,
@@ -9893,6 +10070,7 @@ impl V2Event {
             | Self::FormReplied(_)
             | Self::FormCancelled(_)
             | Self::WebsearchUpdated(_)
+            | Self::ExperimentalPushUpdated(_)
             | Self::ArtifactUpdated(_)
             | Self::SessionStatus(_)
             | Self::SessionIdle(_)
@@ -9906,6 +10084,9 @@ impl V2Event {
             | Self::McpStatusChanged(_)
             | Self::McpResourcesChanged(_)
             | Self::ExperimentalMcpEvent(_)
+            | Self::ExperimentalSpaceResync(_)
+            | Self::ExperimentalSpaceUpdated(_)
+            | Self::ExperimentalSpaceDeleted(_)
             | Self::Rpc(_)
             | Self::ServerConnected(_)
             | Self::Unknown(_) => None,
@@ -10001,6 +10182,7 @@ impl V2Event {
             | Self::FormReplied(_)
             | Self::FormCancelled(_)
             | Self::WebsearchUpdated(_)
+            | Self::ExperimentalPushUpdated(_)
             | Self::ArtifactUpdated(_)
             | Self::SessionStatus(_)
             | Self::SessionIdle(_)
@@ -10014,9 +10196,360 @@ impl V2Event {
             | Self::McpStatusChanged(_)
             | Self::McpResourcesChanged(_)
             | Self::ExperimentalMcpEvent(_)
+            | Self::ExperimentalSpaceResync(_)
+            | Self::ExperimentalSpaceUpdated(_)
+            | Self::ExperimentalSpaceDeleted(_)
             | Self::Rpc(_)
             | Self::ServerConnected(_)
             | Self::Unknown(_) => None,
+        }
+    }
+}
+
+/// Which member of [`V2Event`] an event is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum EventKind {
+    LocationShutdown,
+    ModelsDevRefreshed,
+    CredentialUpdated,
+    CredentialSwitched,
+    IntegrationUpdated,
+    ProviderUpdated,
+    ModelUpdated,
+    AgentUpdated,
+    SessionCreated,
+    SessionAgentSelected,
+    SessionModelSelected,
+    SessionMoved,
+    SessionRenamed,
+    SessionMetadataUpdated,
+    SessionPermissions,
+    SessionViewed,
+    SessionArchived,
+    SessionUnarchived,
+    SessionUsageUpdated,
+    SessionDeleted,
+    SessionForked,
+    SessionInboxDelivered,
+    SessionInboxEnqueued,
+    SessionInboxCancelled,
+    SessionInboxDeliveryChanged,
+    SessionExecutionStarted,
+    SessionExecutionSucceeded,
+    SessionExecutionFailed,
+    SessionExecutionInterrupted,
+    SessionInstructionsUpdated,
+    SessionSynthetic,
+    SessionSkillActivated,
+    SessionShellStarted,
+    SessionShellEnded,
+    SessionStepStarted,
+    SessionStepFirstToken,
+    SessionStepStreamed,
+    SessionStepEnded,
+    SessionStepFailed,
+    SessionTextStarted,
+    SessionTextDelta,
+    SessionTextEnded,
+    SessionReasoningStarted,
+    SessionReasoningDelta,
+    SessionReasoningEnded,
+    SessionToolInputStarted,
+    SessionToolInputDelta,
+    SessionToolInputEnded,
+    SessionToolCalled,
+    SessionToolProgress,
+    SessionToolSuccess,
+    SessionToolFailed,
+    SessionRetryScheduled,
+    SessionCompactionStarted,
+    SessionCompactionDelta,
+    SessionCompactionEnded,
+    SessionCompactionFailed,
+    SessionRevertStaged,
+    SessionRevertCleared,
+    SessionRevertCommitted,
+    FilesystemChanged,
+    ReferenceUpdated,
+    PermissionAsked,
+    PermissionReplied,
+    PluginUpdated,
+    ProjectUpdated,
+    WorktreeUpdated,
+    WorktreeResolved,
+    CommandUpdated,
+    ConfigUpdated,
+    SkillUpdated,
+    PtyCreated,
+    PtyUpdated,
+    PtyExited,
+    PtyDeleted,
+    PersistentPtyAdded,
+    PersistentPtyRemoved,
+    PersistentPtyUpdated,
+    ShellCreated,
+    ShellExited,
+    ShellDeleted,
+    ExperimentalJobUpdated,
+    FormCreated,
+    FormReplied,
+    FormCancelled,
+    WebsearchUpdated,
+    ExperimentalPushUpdated,
+    ArtifactUpdated,
+    SessionStatus,
+    SessionIdle,
+    TuiPromptAppend,
+    TuiCommandExecute,
+    TuiToastShow,
+    TuiSessionSelect,
+    InstallationUpdated,
+    InstallationUpdateAvailable,
+    VcsBranchUpdated,
+    McpStatusChanged,
+    McpResourcesChanged,
+    ExperimentalMcpEvent,
+    ExperimentalSpaceResync,
+    ExperimentalSpaceUpdated,
+    ExperimentalSpaceDeleted,
+    Rpc,
+    ServerConnected,
+    Unknown,
+}
+
+impl EventKind {
+    /// How many kinds there are, `Unknown` included.
+    pub const COUNT: usize = 106;
+
+    /// The kind an event whose `type` is `tag` decodes to.
+    pub fn from_tag(tag: &str) -> Self {
+        match tag {
+            "location.shutdown" => Self::LocationShutdown,
+            "models-dev.refreshed" => Self::ModelsDevRefreshed,
+            "credential.updated" => Self::CredentialUpdated,
+            "credential.switched" => Self::CredentialSwitched,
+            "integration.updated" => Self::IntegrationUpdated,
+            "provider.updated" => Self::ProviderUpdated,
+            "model.updated" => Self::ModelUpdated,
+            "agent.updated" => Self::AgentUpdated,
+            "session.created" => Self::SessionCreated,
+            "session.agent.selected" => Self::SessionAgentSelected,
+            "session.model.selected" => Self::SessionModelSelected,
+            "session.moved" => Self::SessionMoved,
+            "session.renamed" => Self::SessionRenamed,
+            "session.metadata.updated" => Self::SessionMetadataUpdated,
+            "session.permissions" => Self::SessionPermissions,
+            "session.viewed" => Self::SessionViewed,
+            "session.archived" => Self::SessionArchived,
+            "session.unarchived" => Self::SessionUnarchived,
+            "session.usage.updated" => Self::SessionUsageUpdated,
+            "session.deleted" => Self::SessionDeleted,
+            "session.forked" => Self::SessionForked,
+            "session.inbox.delivered" => Self::SessionInboxDelivered,
+            "session.inbox.enqueued" => Self::SessionInboxEnqueued,
+            "session.inbox.cancelled" => Self::SessionInboxCancelled,
+            "session.inbox.delivery.changed" => Self::SessionInboxDeliveryChanged,
+            "session.execution.started" => Self::SessionExecutionStarted,
+            "session.execution.succeeded" => Self::SessionExecutionSucceeded,
+            "session.execution.failed" => Self::SessionExecutionFailed,
+            "session.execution.interrupted" => Self::SessionExecutionInterrupted,
+            "session.instructions.updated" => Self::SessionInstructionsUpdated,
+            "session.synthetic" => Self::SessionSynthetic,
+            "session.skill.activated" => Self::SessionSkillActivated,
+            "session.shell.started" => Self::SessionShellStarted,
+            "session.shell.ended" => Self::SessionShellEnded,
+            "session.step.started" => Self::SessionStepStarted,
+            "session.step.first-token" => Self::SessionStepFirstToken,
+            "session.step.streamed" => Self::SessionStepStreamed,
+            "session.step.ended" => Self::SessionStepEnded,
+            "session.step.failed" => Self::SessionStepFailed,
+            "session.text.started" => Self::SessionTextStarted,
+            "session.text.delta" => Self::SessionTextDelta,
+            "session.text.ended" => Self::SessionTextEnded,
+            "session.reasoning.started" => Self::SessionReasoningStarted,
+            "session.reasoning.delta" => Self::SessionReasoningDelta,
+            "session.reasoning.ended" => Self::SessionReasoningEnded,
+            "session.tool.input.started" => Self::SessionToolInputStarted,
+            "session.tool.input.delta" => Self::SessionToolInputDelta,
+            "session.tool.input.ended" => Self::SessionToolInputEnded,
+            "session.tool.called" => Self::SessionToolCalled,
+            "session.tool.progress" => Self::SessionToolProgress,
+            "session.tool.success" => Self::SessionToolSuccess,
+            "session.tool.failed" => Self::SessionToolFailed,
+            "session.retry.scheduled" => Self::SessionRetryScheduled,
+            "session.compaction.started" => Self::SessionCompactionStarted,
+            "session.compaction.delta" => Self::SessionCompactionDelta,
+            "session.compaction.ended" => Self::SessionCompactionEnded,
+            "session.compaction.failed" => Self::SessionCompactionFailed,
+            "session.revert.staged" => Self::SessionRevertStaged,
+            "session.revert.cleared" => Self::SessionRevertCleared,
+            "session.revert.committed" => Self::SessionRevertCommitted,
+            "filesystem.changed" => Self::FilesystemChanged,
+            "reference.updated" => Self::ReferenceUpdated,
+            "permission.asked" => Self::PermissionAsked,
+            "permission.replied" => Self::PermissionReplied,
+            "plugin.updated" => Self::PluginUpdated,
+            "project.updated" => Self::ProjectUpdated,
+            "worktree.updated" => Self::WorktreeUpdated,
+            "worktree.resolved" => Self::WorktreeResolved,
+            "command.updated" => Self::CommandUpdated,
+            "config.updated" => Self::ConfigUpdated,
+            "skill.updated" => Self::SkillUpdated,
+            "pty.created" => Self::PtyCreated,
+            "pty.updated" => Self::PtyUpdated,
+            "pty.exited" => Self::PtyExited,
+            "pty.deleted" => Self::PtyDeleted,
+            "persistent-pty.added" => Self::PersistentPtyAdded,
+            "persistent-pty.removed" => Self::PersistentPtyRemoved,
+            "persistent-pty.updated" => Self::PersistentPtyUpdated,
+            "shell.created" => Self::ShellCreated,
+            "shell.exited" => Self::ShellExited,
+            "shell.deleted" => Self::ShellDeleted,
+            "experimental.job.updated" => Self::ExperimentalJobUpdated,
+            "form.created" => Self::FormCreated,
+            "form.replied" => Self::FormReplied,
+            "form.cancelled" => Self::FormCancelled,
+            "websearch.updated" => Self::WebsearchUpdated,
+            "experimental.push.updated" => Self::ExperimentalPushUpdated,
+            "artifact.updated" => Self::ArtifactUpdated,
+            "session.status" => Self::SessionStatus,
+            "session.idle" => Self::SessionIdle,
+            "tui.prompt.append" => Self::TuiPromptAppend,
+            "tui.command.execute" => Self::TuiCommandExecute,
+            "tui.toast.show" => Self::TuiToastShow,
+            "tui.session.select" => Self::TuiSessionSelect,
+            "installation.updated" => Self::InstallationUpdated,
+            "installation.update-available" => Self::InstallationUpdateAvailable,
+            "vcs.branch.updated" => Self::VcsBranchUpdated,
+            "mcp.status.changed" => Self::McpStatusChanged,
+            "mcp.resources.changed" => Self::McpResourcesChanged,
+            "experimental.mcp.event" => Self::ExperimentalMcpEvent,
+            "experimental.space.resync" => Self::ExperimentalSpaceResync,
+            "experimental.space.updated" => Self::ExperimentalSpaceUpdated,
+            "experimental.space.deleted" => Self::ExperimentalSpaceDeleted,
+            "server.connected" => Self::ServerConnected,
+            tag if tag.starts_with("rpc.") => Self::Rpc,
+            _ => Self::Unknown,
+        }
+    }
+
+    /// Whether the events of this kind differ in their `type`, so that a listener names the ones it wants.
+    pub fn named(self) -> bool {
+        matches!(self, Self::Rpc | Self::Unknown)
+    }
+}
+
+impl V2Event {
+    /// Which member this is.
+    pub fn kind(&self) -> EventKind {
+        match self {
+            Self::LocationShutdown(_) => EventKind::LocationShutdown,
+            Self::ModelsDevRefreshed(_) => EventKind::ModelsDevRefreshed,
+            Self::CredentialUpdated(_) => EventKind::CredentialUpdated,
+            Self::CredentialSwitched(_) => EventKind::CredentialSwitched,
+            Self::IntegrationUpdated(_) => EventKind::IntegrationUpdated,
+            Self::ProviderUpdated(_) => EventKind::ProviderUpdated,
+            Self::ModelUpdated(_) => EventKind::ModelUpdated,
+            Self::AgentUpdated(_) => EventKind::AgentUpdated,
+            Self::SessionCreated(_) => EventKind::SessionCreated,
+            Self::SessionAgentSelected(_) => EventKind::SessionAgentSelected,
+            Self::SessionModelSelected(_) => EventKind::SessionModelSelected,
+            Self::SessionMoved(_) => EventKind::SessionMoved,
+            Self::SessionRenamed(_) => EventKind::SessionRenamed,
+            Self::SessionMetadataUpdated(_) => EventKind::SessionMetadataUpdated,
+            Self::SessionPermissions(_) => EventKind::SessionPermissions,
+            Self::SessionViewed(_) => EventKind::SessionViewed,
+            Self::SessionArchived(_) => EventKind::SessionArchived,
+            Self::SessionUnarchived(_) => EventKind::SessionUnarchived,
+            Self::SessionUsageUpdated(_) => EventKind::SessionUsageUpdated,
+            Self::SessionDeleted(_) => EventKind::SessionDeleted,
+            Self::SessionForked(_) => EventKind::SessionForked,
+            Self::SessionInboxDelivered(_) => EventKind::SessionInboxDelivered,
+            Self::SessionInboxEnqueued(_) => EventKind::SessionInboxEnqueued,
+            Self::SessionInboxCancelled(_) => EventKind::SessionInboxCancelled,
+            Self::SessionInboxDeliveryChanged(_) => EventKind::SessionInboxDeliveryChanged,
+            Self::SessionExecutionStarted(_) => EventKind::SessionExecutionStarted,
+            Self::SessionExecutionSucceeded(_) => EventKind::SessionExecutionSucceeded,
+            Self::SessionExecutionFailed(_) => EventKind::SessionExecutionFailed,
+            Self::SessionExecutionInterrupted(_) => EventKind::SessionExecutionInterrupted,
+            Self::SessionInstructionsUpdated(_) => EventKind::SessionInstructionsUpdated,
+            Self::SessionSynthetic(_) => EventKind::SessionSynthetic,
+            Self::SessionSkillActivated(_) => EventKind::SessionSkillActivated,
+            Self::SessionShellStarted(_) => EventKind::SessionShellStarted,
+            Self::SessionShellEnded(_) => EventKind::SessionShellEnded,
+            Self::SessionStepStarted(_) => EventKind::SessionStepStarted,
+            Self::SessionStepFirstToken(_) => EventKind::SessionStepFirstToken,
+            Self::SessionStepStreamed(_) => EventKind::SessionStepStreamed,
+            Self::SessionStepEnded(_) => EventKind::SessionStepEnded,
+            Self::SessionStepFailed(_) => EventKind::SessionStepFailed,
+            Self::SessionTextStarted(_) => EventKind::SessionTextStarted,
+            Self::SessionTextDelta(_) => EventKind::SessionTextDelta,
+            Self::SessionTextEnded(_) => EventKind::SessionTextEnded,
+            Self::SessionReasoningStarted(_) => EventKind::SessionReasoningStarted,
+            Self::SessionReasoningDelta(_) => EventKind::SessionReasoningDelta,
+            Self::SessionReasoningEnded(_) => EventKind::SessionReasoningEnded,
+            Self::SessionToolInputStarted(_) => EventKind::SessionToolInputStarted,
+            Self::SessionToolInputDelta(_) => EventKind::SessionToolInputDelta,
+            Self::SessionToolInputEnded(_) => EventKind::SessionToolInputEnded,
+            Self::SessionToolCalled(_) => EventKind::SessionToolCalled,
+            Self::SessionToolProgress(_) => EventKind::SessionToolProgress,
+            Self::SessionToolSuccess(_) => EventKind::SessionToolSuccess,
+            Self::SessionToolFailed(_) => EventKind::SessionToolFailed,
+            Self::SessionRetryScheduled(_) => EventKind::SessionRetryScheduled,
+            Self::SessionCompactionStarted(_) => EventKind::SessionCompactionStarted,
+            Self::SessionCompactionDelta(_) => EventKind::SessionCompactionDelta,
+            Self::SessionCompactionEnded(_) => EventKind::SessionCompactionEnded,
+            Self::SessionCompactionFailed(_) => EventKind::SessionCompactionFailed,
+            Self::SessionRevertStaged(_) => EventKind::SessionRevertStaged,
+            Self::SessionRevertCleared(_) => EventKind::SessionRevertCleared,
+            Self::SessionRevertCommitted(_) => EventKind::SessionRevertCommitted,
+            Self::FilesystemChanged(_) => EventKind::FilesystemChanged,
+            Self::ReferenceUpdated(_) => EventKind::ReferenceUpdated,
+            Self::PermissionAsked(_) => EventKind::PermissionAsked,
+            Self::PermissionReplied(_) => EventKind::PermissionReplied,
+            Self::PluginUpdated(_) => EventKind::PluginUpdated,
+            Self::ProjectUpdated(_) => EventKind::ProjectUpdated,
+            Self::WorktreeUpdated(_) => EventKind::WorktreeUpdated,
+            Self::WorktreeResolved(_) => EventKind::WorktreeResolved,
+            Self::CommandUpdated(_) => EventKind::CommandUpdated,
+            Self::ConfigUpdated(_) => EventKind::ConfigUpdated,
+            Self::SkillUpdated(_) => EventKind::SkillUpdated,
+            Self::PtyCreated(_) => EventKind::PtyCreated,
+            Self::PtyUpdated(_) => EventKind::PtyUpdated,
+            Self::PtyExited(_) => EventKind::PtyExited,
+            Self::PtyDeleted(_) => EventKind::PtyDeleted,
+            Self::PersistentPtyAdded(_) => EventKind::PersistentPtyAdded,
+            Self::PersistentPtyRemoved(_) => EventKind::PersistentPtyRemoved,
+            Self::PersistentPtyUpdated(_) => EventKind::PersistentPtyUpdated,
+            Self::ShellCreated(_) => EventKind::ShellCreated,
+            Self::ShellExited(_) => EventKind::ShellExited,
+            Self::ShellDeleted(_) => EventKind::ShellDeleted,
+            Self::ExperimentalJobUpdated(_) => EventKind::ExperimentalJobUpdated,
+            Self::FormCreated(_) => EventKind::FormCreated,
+            Self::FormReplied(_) => EventKind::FormReplied,
+            Self::FormCancelled(_) => EventKind::FormCancelled,
+            Self::WebsearchUpdated(_) => EventKind::WebsearchUpdated,
+            Self::ExperimentalPushUpdated(_) => EventKind::ExperimentalPushUpdated,
+            Self::ArtifactUpdated(_) => EventKind::ArtifactUpdated,
+            Self::SessionStatus(_) => EventKind::SessionStatus,
+            Self::SessionIdle(_) => EventKind::SessionIdle,
+            Self::TuiPromptAppend(_) => EventKind::TuiPromptAppend,
+            Self::TuiCommandExecute(_) => EventKind::TuiCommandExecute,
+            Self::TuiToastShow(_) => EventKind::TuiToastShow,
+            Self::TuiSessionSelect(_) => EventKind::TuiSessionSelect,
+            Self::InstallationUpdated(_) => EventKind::InstallationUpdated,
+            Self::InstallationUpdateAvailable(_) => EventKind::InstallationUpdateAvailable,
+            Self::VcsBranchUpdated(_) => EventKind::VcsBranchUpdated,
+            Self::McpStatusChanged(_) => EventKind::McpStatusChanged,
+            Self::McpResourcesChanged(_) => EventKind::McpResourcesChanged,
+            Self::ExperimentalMcpEvent(_) => EventKind::ExperimentalMcpEvent,
+            Self::ExperimentalSpaceResync(_) => EventKind::ExperimentalSpaceResync,
+            Self::ExperimentalSpaceUpdated(_) => EventKind::ExperimentalSpaceUpdated,
+            Self::ExperimentalSpaceDeleted(_) => EventKind::ExperimentalSpaceDeleted,
+            Self::Rpc(_) => EventKind::Rpc,
+            Self::ServerConnected(_) => EventKind::ServerConnected,
+            Self::Unknown(_) => EventKind::Unknown,
         }
     }
 }
@@ -10254,9 +10787,12 @@ pub struct ExperimentalBlobGetInput {
     pub id: BlobID,
 }
 
+/// Output of `Client::experimental_browser_tunnel`.
+pub type ExperimentalBrowserTunnelOutput = bool;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AutomationTriggerAt {
-    pub r#type: String,
+    pub r#type: tag::At,
     pub at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tz: Option<String>,
@@ -10266,7 +10802,7 @@ string_type!(AutomationDuration, "`Automation.Duration`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AutomationTriggerEvery {
-    pub r#type: String,
+    pub r#type: tag::Every,
     pub every: AutomationDuration,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tz: Option<String>,
@@ -10274,7 +10810,7 @@ pub struct AutomationTriggerEvery {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AutomationTriggerCron {
-    pub r#type: String,
+    pub r#type: tag::Cron,
     pub cron: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tz: Option<String>,
@@ -10282,7 +10818,7 @@ pub struct AutomationTriggerCron {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AutomationTriggerEvent {
-    pub r#type: String,
+    pub r#type: tag::Event,
     pub server: String,
     pub event: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -10308,7 +10844,7 @@ impl<'de> Deserialize<'de> for AutomationTrigger {
 }
 
 impl AutomationTrigger {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("at") => raw.variant().map(Self::At),
             Some("every") => raw.variant().map(Self::Every),
@@ -10382,7 +10918,7 @@ impl AutomationTarget {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AutomationPromptActionInput {
-    pub r#type: String,
+    pub r#type: tag::Prompt,
     pub prompt: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub to: Option<AutomationTarget>,
@@ -10390,7 +10926,7 @@ pub struct AutomationPromptActionInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AutomationCodeActionInput {
-    pub r#type: String,
+    pub r#type: tag::Code,
     pub code: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub args: Option<serde_json::Value>,
@@ -10398,7 +10934,7 @@ pub struct AutomationCodeActionInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AutomationShellActionInput {
-    pub r#type: String,
+    pub r#type: tag::Shell,
     pub command: String,
 }
 
@@ -10420,7 +10956,7 @@ impl<'de> Deserialize<'de> for AutomationActionInput {
 }
 
 impl AutomationActionInput {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("prompt") => raw.variant().map(Self::Prompt),
             Some("code") => raw.variant().map(Self::Code),
@@ -10457,14 +10993,14 @@ string_type!(AutomationID, "`Automation.ID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AutomationActionPrompt {
-    pub r#type: String,
+    pub r#type: tag::Prompt,
     pub prompt: String,
     pub to: AutomationTarget,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AutomationActionCode {
-    pub r#type: String,
+    pub r#type: tag::Code,
     pub code: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub args: Option<serde_json::Value>,
@@ -10472,7 +11008,7 @@ pub struct AutomationActionCode {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AutomationActionShell {
-    pub r#type: String,
+    pub r#type: tag::Shell,
     pub command: String,
 }
 
@@ -10494,7 +11030,7 @@ impl<'de> Deserialize<'de> for AutomationAction {
 }
 
 impl AutomationAction {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("prompt") => raw.variant().map(Self::Prompt),
             Some("code") => raw.variant().map(Self::Code),
@@ -10829,7 +11365,7 @@ pub type ExperimentalMachineListOutput = Vec<MachineInfo>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct MachineReach {
-    pub r#type: String,
+    pub r#type: tag::Url,
     pub url: String,
 }
 
@@ -10843,7 +11379,7 @@ pub struct ExperimentalMachineAddInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct MachineInviteReachItemIroh {
-    pub r#type: String,
+    pub r#type: tag::Iroh,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -10862,7 +11398,7 @@ impl<'de> Deserialize<'de> for MachineInviteReachItem {
 }
 
 impl MachineInviteReachItem {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("url") => raw.variant().map(Self::Url),
             Some("iroh") => raw.variant().map(Self::Iroh),
@@ -10897,6 +11433,347 @@ pub type ExperimentalMachineAddOutput = MachineInvite;
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalMachineRemoveInput {
     pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PushSettings {
+    pub paused: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<i64>,
+}
+
+string_type!(PushDeviceID, "`Push.DeviceID`");
+
+literal_enum! {
+/// `Push.Platform`
+PushPlatform {
+    Android => "android",
+    Ios => "ios",
+}
+}
+
+literal_enum! {
+/// `Push.Level`
+PushLevel {
+    All => "all",
+    Attention => "attention",
+    None => "none",
+}
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PushDeviceSettings {
+    pub default: PushLevel,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PushBell {
+    pub level: PushLevel,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PushDeviceTime {
+    pub created: i64,
+    pub updated: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PushDevice {
+    pub id: PushDeviceID,
+    pub name: String,
+    pub platform: PushPlatform,
+    #[serde(rename = "expiresAt")]
+    pub expires_at: i64,
+    pub settings: PushDeviceSettings,
+    pub paused: bool,
+    pub sessions: IndexMap<String, PushBell>,
+    pub time: PushDeviceTime,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PushInfo {
+    pub settings: PushSettings,
+    pub devices: Vec<PushDevice>,
+    pub sessions: IndexMap<String, PushBell>,
+}
+
+/// Output of `Client::experimental_push_get`.
+pub type ExperimentalPushGetOutput = PushInfo;
+
+/// Input of `Client::experimental_push_device_register`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExperimentalPushDeviceRegisterInput {
+    pub device_id: PushDeviceID,
+    pub callback_url: String,
+    pub expires_at: i64,
+    pub public_key: String,
+    pub platform: PushPlatform,
+    pub name: String,
+    pub settings: Option<PushDeviceSettings>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PushRegistered {
+    #[serde(rename = "publicKey")]
+    pub public_key: String,
+}
+
+/// Output of `Client::experimental_push_device_register`.
+pub type ExperimentalPushDeviceRegisterOutput = PushRegistered;
+
+/// Input of `Client::experimental_push_device_remove`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalPushDeviceRemoveInput {
+    pub device_id: PushDeviceID,
+}
+
+/// Input of `Client::experimental_push_device_update`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalPushDeviceUpdateInput {
+    pub device_id: PushDeviceID,
+    pub paused: Option<bool>,
+    pub settings: Option<PushDeviceSettings>,
+}
+
+/// Output of `Client::experimental_push_device_update`.
+pub type ExperimentalPushDeviceUpdateOutput = PushDevice;
+
+/// Input of `Client::experimental_push_device_session_set`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExperimentalPushDeviceSessionSetInput {
+    pub device_id: PushDeviceID,
+    pub session_id: SessionID,
+    pub level: PushLevel,
+    pub until: Option<i64>,
+}
+
+/// Output of `Client::experimental_push_device_session_set`.
+pub type ExperimentalPushDeviceSessionSetOutput = PushBell;
+
+/// Input of `Client::experimental_push_device_session_remove`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalPushDeviceSessionRemoveInput {
+    pub device_id: PushDeviceID,
+    pub session_id: SessionID,
+}
+
+/// Input of `Client::experimental_push_session_set`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExperimentalPushSessionSetInput {
+    pub session_id: SessionID,
+    pub level: PushLevel,
+    pub until: Option<i64>,
+}
+
+/// Output of `Client::experimental_push_session_set`.
+pub type ExperimentalPushSessionSetOutput = PushBell;
+
+/// Input of `Client::experimental_push_session_remove`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalPushSessionRemoveInput {
+    pub session_id: SessionID,
+}
+
+/// Input of `Client::experimental_push_settings_set`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalPushSettingsSetInput {
+    pub paused: bool,
+    pub until: Option<i64>,
+}
+
+/// Output of `Client::experimental_push_settings_set`.
+pub type ExperimentalPushSettingsSetOutput = PushSettings;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SpaceChange {
+    pub space: SpaceName,
+    pub key: SpaceKey,
+    #[serde(default)]
+    pub value: Option<SpaceValue>,
+}
+
+/// Input of `Client::experimental_space_write`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalSpaceWriteInput {
+    pub changes: Vec<SpaceChange>,
+}
+
+string_type!(SpaceCursor, "`Space.Cursor`");
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceWriteOutputSpacesItem {
+    pub space: SpaceName,
+    pub revision: SpaceRevision,
+    pub cursor: SpaceCursor,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceWriteOutput {
+    pub spaces: Vec<ExperimentalSpaceWriteOutputSpacesItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceSyncInputSpacesItem {
+    pub space: SpaceName,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<SpaceCursor>,
+}
+
+/// Input of `Client::experimental_space_sync`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalSpaceSyncInput {
+    pub spaces: Vec<ExperimentalSpaceSyncInputSpacesItem>,
+}
+
+string_type!(SpaceEpoch, "`Space.Epoch`");
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SpaceEntry {
+    pub key: SpaceKey,
+    pub value: SpaceValue,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SpaceSnapshot {
+    pub r#type: tag::Snapshot,
+    pub space: SpaceName,
+    pub epoch: SpaceEpoch,
+    pub revision: SpaceRevision,
+    pub entries: Vec<SpaceEntry>,
+    pub cursor: SpaceCursor,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next: Option<SpaceCursor>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SpaceDelta {
+    pub r#type: tag::Delta,
+    pub space: SpaceName,
+    pub epoch: SpaceEpoch,
+    pub revision: SpaceRevision,
+    pub entries: Vec<SpaceEntry>,
+    pub cursor: SpaceCursor,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next: Option<SpaceCursor>,
+    pub deleted: Vec<SpaceKey>,
+}
+
+/// `Space.Page`, tagged by `type`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum SpacePage {
+    Snapshot(SpaceSnapshot),
+    Delta(SpaceDelta),
+    /// A member this client does not know, kept as it arrived.
+    Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for SpacePage {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl SpacePage {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+        match raw.field("type").as_str() {
+            Some("snapshot") => raw.variant().map(Self::Snapshot),
+            Some("delta") => raw.variant().map(Self::Delta),
+            _ => raw.unknown().map(Self::Unknown),
+        }
+    }
+}
+
+impl SpacePage {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Snapshot(value) => value.r#type.as_str(),
+            Self::Delta(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `space` field, also of an unknown member.
+    pub fn space(&self) -> &str {
+        match self {
+            Self::Snapshot(value) => value.space.as_str(),
+            Self::Delta(value) => value.space.as_str(),
+            Self::Unknown(value) => value.get("space").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `epoch` field, also of an unknown member.
+    pub fn epoch(&self) -> &str {
+        match self {
+            Self::Snapshot(value) => value.epoch.as_str(),
+            Self::Delta(value) => value.epoch.as_str(),
+            Self::Unknown(value) => value.get("epoch").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `revision` field, also of an unknown member.
+    pub fn revision(&self) -> SpaceRevision {
+        match self {
+            Self::Snapshot(value) => value.revision,
+            Self::Delta(value) => value.revision,
+            Self::Unknown(value) => value.get("revision").and_then(serde_json::Value::as_i64).unwrap_or_default(),
+        }
+    }
+
+    /// The `entries` field, of the members that have it.
+    pub fn entries(&self) -> Option<&[SpaceEntry]> {
+        match self {
+            Self::Snapshot(value) => Some(value.entries.as_slice()),
+            Self::Delta(value) => Some(value.entries.as_slice()),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `cursor` field, also of an unknown member.
+    pub fn cursor(&self) -> &str {
+        match self {
+            Self::Snapshot(value) => value.cursor.as_str(),
+            Self::Delta(value) => value.cursor.as_str(),
+            Self::Unknown(value) => value.get("cursor").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `next` field, of the members that have it.
+    pub fn next(&self) -> Option<&str> {
+        match self {
+            Self::Snapshot(value) => value.next.as_ref().map(SpaceCursor::as_str),
+            Self::Delta(value) => value.next.as_ref().map(SpaceCursor::as_str),
+            Self::Unknown(_) => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceSyncOutput {
+    pub pages: Vec<SpacePage>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceSubscribeInputSpacesItem {
+    pub space: SpaceName,
+    pub cursor: SpaceCursor,
+}
+
+/// Input of `Client::experimental_space_subscribe`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalSpaceSubscribeInput {
+    pub stream: String,
+    pub spaces: Vec<ExperimentalSpaceSubscribeInputSpacesItem>,
+}
+
+/// Input of `Client::experimental_space_unsubscribe`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalSpaceUnsubscribeInput {
+    pub stream: String,
+    pub spaces: Vec<SpaceName>,
 }
 
 /// Input of `Client::shell_list`.
@@ -10970,13 +11847,13 @@ pub struct ReferenceListInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ReferenceLocalSource {
-    pub r#type: String,
+    pub r#type: tag::Local,
     pub path: AbsolutePath,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ReferenceGitSource {
-    pub r#type: String,
+    pub r#type: tag::Git,
     pub repository: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
@@ -10999,7 +11876,7 @@ impl<'de> Deserialize<'de> for ReferenceSource {
 }
 
 impl ReferenceSource {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("local") => raw.variant().map(Self::Local),
             Some("git") => raw.variant().map(Self::Git),
@@ -11277,13 +12154,13 @@ pub struct ExperimentalMigrationV1StatusOutput2RunningProgress {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ExperimentalMigrationV1StatusOutput2Running {
-    pub status: String,
+    pub status: tag::Running,
     pub progress: ExperimentalMigrationV1StatusOutput2RunningProgress,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ExperimentalMigrationV1StatusOutput2Error {
-    pub status: String,
+    pub status: tag::Error,
     pub error: String,
 }
 
@@ -11304,7 +12181,7 @@ impl<'de> Deserialize<'de> for ExperimentalMigrationV1StatusOutput2 {
 }
 
 impl ExperimentalMigrationV1StatusOutput2 {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("required") | Some("completed") => raw.variant().map(Self::Variant1),
             Some("running") => raw.variant().map(Self::Running),
@@ -11487,6 +12364,18 @@ pub struct ExperimentalUsageLimitsOutput {
     pub location: LocationPublicRef,
     #[serde(default)]
     pub data: Option<UsageLimitsInfo>,
+}
+
+/// Input of `Client::experimental_flag_get`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalFlagGetInput {
+    pub location: Option<LocationQueryInput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalFlagGetOutput {
+    pub location: LocationPublicRef,
+    pub data: IndexMap<String, bool>,
 }
 
 /// Input of `Client::config_get`.
@@ -12061,7 +12950,7 @@ impl<'de> Deserialize<'de> for ConfigModelReasoning {
 }
 
 impl ConfigModelReasoning {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("supported").as_bool() {
             Some(false) => raw.variant().map(Self::False),
             Some(true) => raw.variant().map(Self::True),
@@ -12268,15 +13157,13 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifacts: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub video_generate: Option<ConfigEntryDocumentInfoExperimentalVideoGenerate>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub console_watches: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mcp_events: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recommended_api: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub full_codemode: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codemode_agents: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub machines: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -12284,7 +13171,17 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_overlay: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opencode_api: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_skills: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compaction_jobs: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sqlite_fts: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browser_stream_tunnel: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video_generate: Option<ConfigEntryDocumentInfoExperimentalVideoGenerate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub part_rows: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -12365,7 +13262,7 @@ pub struct ConfigEntryDocumentInfo {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigEntryDocument {
-    pub r#type: String,
+    pub r#type: tag::Document,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<AbsolutePath>,
     pub info: ConfigEntryDocumentInfo,
@@ -12373,7 +13270,7 @@ pub struct ConfigEntryDocument {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigEntryDirectory {
-    pub r#type: String,
+    pub r#type: tag::Directory,
     pub path: AbsolutePath,
 }
 
@@ -12394,7 +13291,7 @@ impl<'de> Deserialize<'de> for ConfigEntry {
 }
 
 impl ConfigEntry {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("document") => raw.variant().map(Self::Document),
             Some("directory") => raw.variant().map(Self::Directory),
@@ -12560,6 +13457,18 @@ pub struct ConflictError {
 
 impl crate::TaggedError for ConflictError {
     const TAG: &'static str = "ConflictError";
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SkillLoadError {
+    #[serde(rename = "_tag")]
+    pub tag: String,
+    pub skill: SkillID,
+    pub message: String,
+}
+
+impl crate::TaggedError for SkillLoadError {
+    const TAG: &'static str = "SkillLoadError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12749,17 +13658,6 @@ impl crate::TaggedError for ProviderRequestError {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ForbiddenError {
-    #[serde(rename = "_tag")]
-    pub tag: String,
-    pub message: String,
-}
-
-impl crate::TaggedError for ForbiddenError {
-    const TAG: &'static str = "ForbiddenError";
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct VideoNotFoundError {
     #[serde(rename = "_tag")]
     pub tag: String,
@@ -12825,6 +13723,17 @@ pub struct McpServerNotFoundError {
 
 impl crate::TaggedError for McpServerNotFoundError {
     const TAG: &'static str = "McpServerNotFoundError";
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ForbiddenError {
+    #[serde(rename = "_tag")]
+    pub tag: String,
+    pub message: String,
+}
+
+impl crate::TaggedError for ForbiddenError {
+    const TAG: &'static str = "ForbiddenError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12989,6 +13898,19 @@ impl crate::TaggedError for MachineNotFoundError {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PushDeviceNotFoundError {
+    #[serde(rename = "_tag")]
+    pub tag: String,
+    #[serde(rename = "deviceID")]
+    pub device_id: String,
+    pub message: String,
+}
+
+impl crate::TaggedError for PushDeviceNotFoundError {
+    const TAG: &'static str = "PushDeviceNotFoundError";
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ShellNotFoundError {
     #[serde(rename = "_tag")]
     pub tag: String,
@@ -13030,4 +13952,249 @@ pub struct VcsInitNotSupportedError {
 
 impl crate::TaggedError for VcsInitNotSupportedError {
     const TAG: &'static str = "VcsInitNotSupportedError";
+}
+
+/// [`LocationRef`], with its strings borrowed from the JSON.
+#[derive(Debug, Deserialize)]
+pub struct LocationRefView<'a> {
+    #[serde(borrow)]
+    pub directory: crate::de::Str<'a>,
+    #[serde(borrow, rename = "workspaceID", default)]
+    pub workspace_id: Option<crate::de::Str<'a>>,
+}
+
+impl LocationRefView<'_> {
+    /// Whether every string borrows from the JSON, none having had an escape to decode.
+    pub fn borrowed(&self) -> bool {
+        crate::de::Str::borrowed(&self.directory) && self.workspace_id.as_ref().is_none_or(crate::de::Str::borrowed)
+    }
+}
+
+/// [`SessionTextDeltaData`], with its strings borrowed from the JSON.
+#[derive(Debug, Deserialize)]
+pub struct SessionTextDeltaDataView<'a> {
+    #[serde(borrow, rename = "sessionID")]
+    pub session_id: crate::de::Str<'a>,
+    #[serde(borrow, rename = "assistantMessageID")]
+    pub assistant_message_id: crate::de::Str<'a>,
+    pub ordinal: i64,
+    #[serde(borrow)]
+    pub delta: crate::de::Str<'a>,
+}
+
+impl SessionTextDeltaDataView<'_> {
+    /// Whether every string borrows from the JSON, none having had an escape to decode.
+    pub fn borrowed(&self) -> bool {
+        crate::de::Str::borrowed(&self.session_id)
+            && crate::de::Str::borrowed(&self.assistant_message_id)
+            && crate::de::Str::borrowed(&self.delta)
+    }
+}
+
+/// [`SessionTextDelta`], with its strings borrowed from the JSON.
+#[derive(Debug, Deserialize)]
+pub struct SessionTextDeltaView<'a> {
+    #[serde(borrow)]
+    pub id: crate::de::Str<'a>,
+    pub created: f64,
+    #[serde(default)]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: tag::SessionTextDelta,
+    #[serde(borrow, default)]
+    pub location: Option<LocationRefView<'a>>,
+    #[serde(borrow)]
+    pub data: SessionTextDeltaDataView<'a>,
+}
+
+impl SessionTextDeltaView<'_> {
+    /// Whether every string borrows from the JSON, none having had an escape to decode.
+    pub fn borrowed(&self) -> bool {
+        crate::de::Str::borrowed(&self.id)
+            && self.location.as_ref().is_none_or(LocationRefView::borrowed)
+            && SessionTextDeltaDataView::borrowed(&self.data)
+    }
+}
+
+/// [`SessionReasoningDelta`], with its strings borrowed from the JSON.
+#[derive(Debug, Deserialize)]
+pub struct SessionReasoningDeltaView<'a> {
+    #[serde(borrow)]
+    pub id: crate::de::Str<'a>,
+    pub created: f64,
+    #[serde(default)]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: tag::SessionReasoningDelta,
+    #[serde(borrow, default)]
+    pub location: Option<LocationRefView<'a>>,
+    #[serde(borrow)]
+    pub data: SessionTextDeltaDataView<'a>,
+}
+
+impl SessionReasoningDeltaView<'_> {
+    /// Whether every string borrows from the JSON, none having had an escape to decode.
+    pub fn borrowed(&self) -> bool {
+        crate::de::Str::borrowed(&self.id)
+            && self.location.as_ref().is_none_or(LocationRefView::borrowed)
+            && SessionTextDeltaDataView::borrowed(&self.data)
+    }
+}
+
+/// [`SessionToolInputDeltaData`], with its strings borrowed from the JSON.
+#[derive(Debug, Deserialize)]
+pub struct SessionToolInputDeltaDataView<'a> {
+    #[serde(borrow, rename = "sessionID")]
+    pub session_id: crate::de::Str<'a>,
+    #[serde(borrow, rename = "assistantMessageID")]
+    pub assistant_message_id: crate::de::Str<'a>,
+    #[serde(borrow)]
+    pub id: crate::de::Str<'a>,
+    #[serde(borrow)]
+    pub delta: crate::de::Str<'a>,
+}
+
+impl SessionToolInputDeltaDataView<'_> {
+    /// Whether every string borrows from the JSON, none having had an escape to decode.
+    pub fn borrowed(&self) -> bool {
+        crate::de::Str::borrowed(&self.session_id)
+            && crate::de::Str::borrowed(&self.assistant_message_id)
+            && crate::de::Str::borrowed(&self.id)
+            && crate::de::Str::borrowed(&self.delta)
+    }
+}
+
+/// [`SessionToolInputDelta`], with its strings borrowed from the JSON.
+#[derive(Debug, Deserialize)]
+pub struct SessionToolInputDeltaView<'a> {
+    #[serde(borrow)]
+    pub id: crate::de::Str<'a>,
+    pub created: f64,
+    #[serde(default)]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: tag::SessionToolInputDelta,
+    #[serde(borrow, default)]
+    pub location: Option<LocationRefView<'a>>,
+    #[serde(borrow)]
+    pub data: SessionToolInputDeltaDataView<'a>,
+}
+
+impl SessionToolInputDeltaView<'_> {
+    /// Whether every string borrows from the JSON, none having had an escape to decode.
+    pub fn borrowed(&self) -> bool {
+        crate::de::Str::borrowed(&self.id)
+            && self.location.as_ref().is_none_or(LocationRefView::borrowed)
+            && SessionToolInputDeltaDataView::borrowed(&self.data)
+    }
+}
+
+/// [`SessionCompactionDeltaData`], with its strings borrowed from the JSON.
+#[derive(Debug, Deserialize)]
+pub struct SessionCompactionDeltaDataView<'a> {
+    #[serde(borrow, rename = "sessionID")]
+    pub session_id: crate::de::Str<'a>,
+    #[serde(borrow)]
+    pub text: crate::de::Str<'a>,
+}
+
+impl SessionCompactionDeltaDataView<'_> {
+    /// Whether every string borrows from the JSON, none having had an escape to decode.
+    pub fn borrowed(&self) -> bool {
+        crate::de::Str::borrowed(&self.session_id) && crate::de::Str::borrowed(&self.text)
+    }
+}
+
+/// [`SessionCompactionDelta`], with its strings borrowed from the JSON.
+#[derive(Debug, Deserialize)]
+pub struct SessionCompactionDeltaView<'a> {
+    #[serde(borrow)]
+    pub id: crate::de::Str<'a>,
+    pub created: f64,
+    #[serde(default)]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: tag::SessionCompactionDelta,
+    #[serde(borrow, default)]
+    pub location: Option<LocationRefView<'a>>,
+    #[serde(borrow)]
+    pub data: SessionCompactionDeltaDataView<'a>,
+}
+
+impl SessionCompactionDeltaView<'_> {
+    /// Whether every string borrows from the JSON, none having had an escape to decode.
+    pub fn borrowed(&self) -> bool {
+        crate::de::Str::borrowed(&self.id)
+            && self.location.as_ref().is_none_or(LocationRefView::borrowed)
+            && SessionCompactionDeltaDataView::borrowed(&self.data)
+    }
+}
+
+/// Union members' tags. Each serializes as its literal and decodes from any string, since the union has picked the member.
+pub mod tag {
+    tags! {
+        Active = "active", AgentSwitched = "agent-switched", AgentUpdated = "agent.updated", Answered = "answered",
+        ArtifactUpdated = "artifact.updated", Assistant = "assistant", At = "at", Before = "before",
+        Boolean = "boolean", Builtin = "builtin", Busy = "busy", Cancelled = "cancelled", Choice = "choice",
+        Code = "code", Codemode = "codemode", Command = "command", CommandUpdated = "command.updated",
+        Compaction = "compaction", Complete = "complete", Completed = "completed", ConfigUpdated = "config.updated",
+        Connected = "connected", Credential = "credential", CredentialSwitched = "credential.switched",
+        CredentialUpdated = "credential.updated", Cron = "cron", Delta = "delta", Detail = "detail",
+        Directory = "directory", Disabled = "disabled", Document = "document", Env = "env", Error = "error",
+        Event = "event", Every = "every", ExperimentalJobUpdated = "experimental.job.updated",
+        ExperimentalMcpEvent = "experimental.mcp.event", ExperimentalPushUpdated = "experimental.push.updated",
+        ExperimentalSpaceDeleted = "experimental.space.deleted", ExperimentalSpaceResync = "experimental.space.resync",
+        ExperimentalSpaceUpdated = "experimental.space.updated", Expired = "expired", External = "external",
+        Failed = "failed", File = "file", FilesystemChanged = "filesystem.changed", FormCancelled = "form.cancelled",
+        FormCreated = "form.created", FormReplied = "form.replied", Git = "git", Idle = "idle", Image = "image",
+        Inline = "inline", InstallationUpdateAvailable = "installation.update-available",
+        InstallationUpdated = "installation.updated", Integer = "integer", IntegrationUpdated = "integration.updated",
+        Iroh = "iroh", Json = "json", Key = "key", Local = "local", LocationShutdown = "location.shutdown",
+        LocationSwitched = "location-switched", LogSynced = "log.synced", McpResourcesChanged = "mcp.resources.changed",
+        McpStatusChanged = "mcp.status.changed", ModelSwitched = "model-switched", ModelUpdated = "model.updated",
+        ModelsDevRefreshed = "models-dev.refreshed", Move = "move", Multiselect = "multiselect", Native = "native",
+        NeedsAuth = "needs_auth", None = "none", Number = "number", Oauth = "oauth", Package = "package",
+        Pending = "pending", PermissionAsked = "permission.asked", PermissionReplied = "permission.replied",
+        PersistentPtyAdded = "persistent-pty.added", PersistentPtyRemoved = "persistent-pty.removed",
+        PersistentPtyUpdated = "persistent-pty.updated", PluginUpdated = "plugin.updated", Predicate = "predicate",
+        ProjectUpdated = "project.updated", Prompt = "prompt", ProviderUpdated = "provider.updated",
+        PtyCreated = "pty.created", PtyDeleted = "pty.deleted", PtyExited = "pty.exited", PtyUpdated = "pty.updated",
+        Reasoning = "reasoning", ReferenceUpdated = "reference.updated", Remote = "remote", Retry = "retry",
+        Running = "running", Score = "score", Sdk = "sdk", ServerConnected = "server.connected",
+        SessionAgentSelected = "session.agent.selected", SessionArchived = "session.archived",
+        SessionCompactionDelta = "session.compaction.delta", SessionCompactionEnded = "session.compaction.ended",
+        SessionCompactionFailed = "session.compaction.failed", SessionCompactionStarted = "session.compaction.started",
+        SessionCreated = "session.created", SessionDeleted = "session.deleted",
+        SessionExecutionFailed = "session.execution.failed",
+        SessionExecutionInterrupted = "session.execution.interrupted",
+        SessionExecutionStarted = "session.execution.started",
+        SessionExecutionSucceeded = "session.execution.succeeded", SessionForked = "session.forked",
+        SessionIdle = "session.idle", SessionInboxCancelled = "session.inbox.cancelled",
+        SessionInboxDelivered = "session.inbox.delivered",
+        SessionInboxDeliveryChanged = "session.inbox.delivery.changed", SessionInboxEnqueued = "session.inbox.enqueued",
+        SessionInstructionsUpdated = "session.instructions.updated",
+        SessionMessageContentUpdated = "session.message.content.updated",
+        SessionMetadataUpdated = "session.metadata.updated", SessionModelSelected = "session.model.selected",
+        SessionMoved = "session.moved", SessionPermissions = "session.permissions",
+        SessionReasoningDelta = "session.reasoning.delta", SessionReasoningEnded = "session.reasoning.ended",
+        SessionReasoningStarted = "session.reasoning.started", SessionRenamed = "session.renamed",
+        SessionRetryScheduled = "session.retry.scheduled", SessionRevertCleared = "session.revert.cleared",
+        SessionRevertCommitted = "session.revert.committed", SessionRevertStaged = "session.revert.staged",
+        SessionShellEnded = "session.shell.ended", SessionShellStarted = "session.shell.started",
+        SessionSkillActivated = "session.skill.activated", SessionStatus = "session.status",
+        SessionStepEnded = "session.step.ended", SessionStepFailed = "session.step.failed",
+        SessionStepFirstToken = "session.step.first-token", SessionStepStarted = "session.step.started",
+        SessionStepStreamed = "session.step.streamed", SessionSynthetic = "session.synthetic",
+        SessionTextDelta = "session.text.delta", SessionTextEnded = "session.text.ended",
+        SessionTextStarted = "session.text.started", SessionToolCalled = "session.tool.called",
+        SessionToolFailed = "session.tool.failed", SessionToolInputDelta = "session.tool.input.delta",
+        SessionToolInputEnded = "session.tool.input.ended", SessionToolInputStarted = "session.tool.input.started",
+        SessionToolProgress = "session.tool.progress", SessionToolSuccess = "session.tool.success",
+        SessionUnarchived = "session.unarchived", SessionUsageRecorded = "session.usage.recorded",
+        SessionUsageUpdated = "session.usage.updated", SessionViewed = "session.viewed", Shell = "shell",
+        ShellCreated = "shell.created", ShellDeleted = "shell.deleted", ShellExited = "shell.exited", Skill = "skill",
+        SkillUpdated = "skill.updated", Snapshot = "snapshot", Streaming = "streaming", String = "string",
+        Subagent = "subagent", Summary = "summary", Synthetic = "synthetic", System = "system", Text = "text",
+        Through = "through", Tool = "tool", TuiCommandExecute = "tui.command.execute",
+        TuiPromptAppend = "tui.prompt.append", TuiSessionSelect = "tui.session.select", TuiToastShow = "tui.toast.show",
+        Uri = "uri", Url = "url", User = "user", VcsBranchUpdated = "vcs.branch.updated", Video = "video",
+        Webrtc = "webrtc", WebsearchUpdated = "websearch.updated", Websocket = "websocket",
+        WorktreeResolved = "worktree.resolved", WorktreeUpdated = "worktree.updated",
+    }
 }

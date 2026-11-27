@@ -5,7 +5,12 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
+import { CodeModeAgents } from "../../codemode/agents.js"
+import { Environment } from "../../environment/index.js"
+import { Flag } from "../../flag.js"
 import { LocationLifecycle } from "../../location-lifecycle.js"
+import { Environments } from "../../environment/environments.js"
+import { SessionCwd } from "../cwd.js"
 import { InstructionState } from "../instruction-state.js"
 import { SessionCompaction } from "../compaction.js"
 import { SessionContext } from "../context.js"
@@ -44,17 +49,20 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const flags = yield* Flag.Service
     const lifecycle = yield* LocationLifecycle.Service
     const store = yield* SessionStore.Service
     const context = yield* SessionContext.Service
     const modelTransport = yield* SessionModelTransport.Service
     const db = (yield* Database.Service).db
+    const inbox = yield* SessionInbox.Service
     const compaction = yield* SessionCompaction.Service
     const plugins = yield* Plugin.Service
     const hooks = yield* PluginHooks.Service
     const jobs = yield* Job.Service
     const title = yield* SessionTitle.Service
     const steps = yield* SessionStep.make
+    const cwd = yield* SessionCwd.make
     const pty = yield* PersistentPty.Service
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
@@ -91,7 +99,7 @@ const layer = Layer.effect(
                 })
               }
               // Location entry and idle boundaries allow queued controls, not necessarily queued prompts.
-              const pending = yield* SessionInbox.serialized(
+              const pending = yield* inbox.serialized(
                 sessionID,
                 Effect.gen(function* () {
                   const next = yield* SessionInbox.nextPromotable(
@@ -191,12 +199,7 @@ const layer = Layer.effect(
               const ready = yield* restore(
                 Effect.gen(function* () {
                   const selected = yield* prepareContext(sessionID)
-                  const promoted = yield* SessionInbox.promote(
-                    db,
-                    bus,
-                    sessionID,
-                    entering && !continuing ? promotable : "steer",
-                  )
+                  const promoted = yield* inbox.promote(sessionID, entering && !continuing ? promotable : "steer")
                   // A control admitted during context preparation owns this boundary.
                   if (promoted === undefined) return undefined
                   if (promoted > 0 && !selected.session.parentID && SessionTitle.isUntitled(selected.session))
@@ -290,41 +293,49 @@ const layer = Layer.effect(
               options: prepared.options,
               retry: prepared.retry,
               executeTool: prepared.executeTool,
-              codeModeExpression: prepared.codeModeExpression,
             })),
           )
-        const outcome = yield* steps.attempt({
-          isLocationClosed: lifecycle.isClosed,
-          interruption,
-          handoffPrepared: pty.handoffPrepared,
-          sessionID,
-          assistantMessageID,
-          agent: loaded.agent.id,
-          model: loaded.model,
-          prepared: {
-            ...prepared,
-            // A tool call can arrive during a reload; its permission check reads the session's agent.
-            executeTool: (call) => plugins.awaitActivation.pipe(Effect.andThen(prepared.executeTool(call))),
-          },
-          retryAttempt,
-          retry: (cause, error, proposed) =>
-            retry.decide({
-              cause,
-              error,
-              agent: loaded.agent.id,
-              model: loaded.model.ref,
-              hook: prepared.retry,
-              retry: proposed,
-            }),
-          recoverContinuation,
-          recoverOverflow: Effect.suspend(() =>
-            recoverOverflow
-              ? compaction
-                  .compact({ reason: "overflow", context: loaded, estimate })
-                  .pipe(Effect.map((result) => result.status === "completed"))
-              : Effect.succeed(false),
-          ),
-        })
+        const activeCwd = yield* cwd.current(sessionID)
+        const endsTurnTool =
+          (yield* flags.enabled("codemode_agents")) &&
+          CodeModeAgents.sessionMarker(loaded.session.id, loaded.session.metadata)?.structured === true
+            ? CodeModeAgents.OUTPUT_TOOL
+            : undefined
+        const outcome = yield* steps
+          .attempt({
+            isLocationClosed: lifecycle.isClosed,
+            interruption,
+            handoffPrepared: pty.handoffPrepared,
+            sessionID,
+            assistantMessageID,
+            agent: loaded.agent.id,
+            model: loaded.model,
+            prepared: {
+              ...prepared,
+              // A tool call can arrive during a reload; its permission check reads the session's agent.
+              executeTool: (call) => plugins.awaitActivation.pipe(Effect.andThen(prepared.executeTool(call))),
+            },
+            ...(endsTurnTool === undefined ? {} : { endsTurnTool }),
+            retryAttempt,
+            retry: (cause, error, proposed) =>
+              retry.decide({
+                cause,
+                error,
+                agent: loaded.agent.id,
+                model: loaded.model.ref,
+                hook: prepared.retry,
+                retry: proposed,
+              }),
+            recoverContinuation,
+            recoverOverflow: Effect.suspend(() =>
+              recoverOverflow
+                ? compaction
+                    .compact({ reason: "overflow", context: loaded, estimate })
+                    .pipe(Effect.map((result) => result.status === "completed"))
+                : Effect.succeed(false),
+            ),
+          })
+          .pipe(Effect.provideService(Environment.CurrentWorkingDirectory, activeCwd))
         retryAttempt = undefined
         const completed = yield* SessionStep.Outcome.$match(outcome, {
           Completed: Effect.fnUntraced(function* (outcome) {
@@ -453,11 +464,15 @@ export const node = makeLocationNode({
   layer,
   deps: [
     Bus.node,
+    Environment.node,
+    Flag.node,
     LocationLifecycle.node,
+    Environments.node,
     llmClient,
     SessionContext.node,
     SessionModelTransport.node,
     SessionStore.node,
+    SessionInbox.node,
     SessionCompaction.node,
     Plugin.node,
     PluginHooks.node,

@@ -4,6 +4,7 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use indexmap::IndexMap;
@@ -581,7 +582,26 @@ impl CliConfig {
         if let Err(error) = fs::create_dir_all(&self.config) {
             log::warn!("failed to create {}: {error}", self.config.display());
         }
-        crate::watch::watch(&self.config, |_| true, crate::watch::DEBOUNCE, on_change)
+        let on_change = Arc::new(Mutex::new(on_change));
+        let call = move || {
+            if let Ok(mut on_change) = on_change.lock() {
+                on_change();
+            }
+        };
+        let watch = crate::watch::watch(&self.config, |_| true, crate::watch::DEBOUNCE, call.clone())?;
+        // Editing a symlinked file's target changes nothing in the config directory, so also watch the target's.
+        let Some(target) = fs::symlink_metadata(&self.file)
+            .is_ok_and(|metadata| metadata.file_type().is_symlink())
+            .then(|| fs::canonicalize(&self.file).ok())
+            .flatten()
+            .filter(|target| target.parent() != fs::canonicalize(&self.config).ok().as_deref())
+        else {
+            return Some(watch);
+        };
+        let (Some(dir), Some(name)) = (target.parent(), target.file_name().map(|name| name.to_owned())) else {
+            return Some(watch);
+        };
+        Some(watch.with(crate::watch::watch(dir, move |file| file == name, crate::watch::DEBOUNCE, call)))
     }
 
     fn load(&self, migration: Option<Value>) -> Info {
@@ -623,7 +643,8 @@ pub struct Resolved {
     pub permissions: Permissions,
     pub tps: bool,
     pub tabs: ResolvedTabs,
-    /// `HERDR_ENV=1` when resolved, so [`Resolved::with_info`] resolves a reload the same way.
+    /// Inside herdr (`HERDR_ENV=1`) or a Herdr.app pane (`HC_TERMINAL_ID`) when resolved, so
+    /// [`Resolved::with_info`] resolves a reload the same way.
     herdr: bool,
 }
 
@@ -658,7 +679,8 @@ impl Resolved {
             Some(true) => TabsMode::On,
             Some(false) => TabsMode::Off,
         });
-        let herdr = environment("HERDR_ENV").as_deref() == Some("1");
+        let herdr = environment("HERDR_ENV").as_deref() == Some("1")
+            || environment("HC_TERMINAL_ID").is_some_and(|id| !id.is_empty());
         Self {
             attention: ResolvedAttention {
                 notifications: attention.notifications.unwrap_or(false),
@@ -709,5 +731,14 @@ mod tests {
         // A reload keeps the environment of the first resolve.
         assert!(!herdr.with_info(Info::default()).tabs.enabled);
         assert!(resolved.with_info(Info::default()).tabs.enabled);
+    }
+
+    #[test]
+    fn automatic_tabs_are_hidden_in_herdr_app_panes() {
+        let pane = Resolved::new(Info::default(), |name| (name == "HC_TERMINAL_ID").then(|| "term-1".to_string()));
+        assert!(!pane.tabs.enabled);
+        assert!(!pane.with_info(Info::default()).tabs.enabled);
+        let empty = Resolved::new(Info::default(), |name| (name == "HC_TERMINAL_ID").then(String::new));
+        assert!(empty.tabs.enabled);
     }
 }

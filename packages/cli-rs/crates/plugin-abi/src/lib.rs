@@ -1646,7 +1646,9 @@ pub enum HostRequest {
     /// [`Read::limits`].
     Limits,
     /// [`Read::providers`].
-    Providers,
+    Providers {
+        location: Option<LocationRef>,
+    },
     /// [`Read::info`].
     Info,
     /// [`Read::mcp_servers`].
@@ -2550,6 +2552,10 @@ pub struct Panel {
     /// footer row (TS `DialogLayout` without a footer).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub height: Option<u16>,
+    /// The body also stops where the screen ends under a dialog a quarter down it, and is at least 3 rows high
+    /// (TS `GoalDialog`'s `maxHeight`); otherwise it is at most 60% of the screen and at least 8 rows.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub fit_screen: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -2642,7 +2648,7 @@ pub trait Read {
         self.messages(session, &mut |messages| visit(messages.iter().find(|item| item.id() == message)));
     }
     /// The models of `location`, or of the location the TUI works in for `None`; `None` while they are not loaded.
-    fn models(&self, _location: Option<&LocationRef>) -> Option<Vec<ModelInfo>> {
+    fn models(&self, _location: Option<&LocationRef>) -> Option<std::sync::Arc<[ModelInfo]>> {
         None
     }
     /// The model the next prompt uses.
@@ -2654,8 +2660,8 @@ pub trait Read {
     fn limits(&self) -> Option<UsageLimitsInfo> {
         None
     }
-    /// The providers where the TUI works; `None` while they are not loaded.
-    fn providers(&self) -> Option<Vec<ProviderInfo>> {
+    /// The providers of `location`, or of the location the TUI works in for `None`; `None` while they are not loaded.
+    fn providers(&self, _location: Option<&LocationRef>) -> Option<std::sync::Arc<[ProviderInfo]>> {
         None
     }
     /// The value stored under one of the plugin's declared storage keys ([`Setup::storage_key`]). It shows a
@@ -2668,11 +2674,11 @@ pub trait Read {
         Info::default()
     }
     /// The MCP servers of `location` (where the TUI works for `None`); `None` while they are not loaded.
-    fn mcp_servers(&self, _location: Option<&LocationRef>) -> Option<Vec<McpServer>> {
+    fn mcp_servers(&self, _location: Option<&LocationRef>) -> Option<std::sync::Arc<[McpServer]>> {
         None
     }
     /// The integrations of `location` (where the TUI works for `None`); `None` while they are not loaded.
-    fn integrations(&self, _location: Option<&LocationRef>) -> Option<Vec<IntegrationInfo>> {
+    fn integrations(&self, _location: Option<&LocationRef>) -> Option<std::sync::Arc<[IntegrationInfo]>> {
         None
     }
     /// The version control state of `location` (where the TUI works for `None`); `None` while it is not loaded.
@@ -3117,8 +3123,8 @@ impl Read for HostHandle {
         visit(found.as_ref());
     }
 
-    fn models(&self, location: Option<&LocationRef>) -> Option<Vec<ModelInfo>> {
-        self.read(&HostRequest::Models { location: location.cloned() })
+    fn models(&self, location: Option<&LocationRef>) -> Option<std::sync::Arc<[ModelInfo]>> {
+        self.read::<Vec<_>>(&HostRequest::Models { location: location.cloned() }).map(Into::into)
     }
 
     fn model(&self) -> Option<ModelRef> {
@@ -3129,8 +3135,8 @@ impl Read for HostHandle {
         self.read(&HostRequest::Limits)
     }
 
-    fn providers(&self) -> Option<Vec<ProviderInfo>> {
-        self.read(&HostRequest::Providers)
+    fn providers(&self, location: Option<&LocationRef>) -> Option<std::sync::Arc<[ProviderInfo]>> {
+        self.read::<Vec<_>>(&HostRequest::Providers { location: location.cloned() }).map(Into::into)
     }
 
     fn storage_get(&self, key: &str) -> Option<serde_json::Value> {
@@ -3141,12 +3147,12 @@ impl Read for HostHandle {
         self.read(&HostRequest::Info).unwrap_or_default()
     }
 
-    fn mcp_servers(&self, location: Option<&LocationRef>) -> Option<Vec<McpServer>> {
-        self.read(&HostRequest::McpServers { location: location.cloned() })
+    fn mcp_servers(&self, location: Option<&LocationRef>) -> Option<std::sync::Arc<[McpServer]>> {
+        self.read::<Vec<_>>(&HostRequest::McpServers { location: location.cloned() }).map(Into::into)
     }
 
-    fn integrations(&self, location: Option<&LocationRef>) -> Option<Vec<IntegrationInfo>> {
-        self.read(&HostRequest::Integrations { location: location.cloned() })
+    fn integrations(&self, location: Option<&LocationRef>) -> Option<std::sync::Arc<[IntegrationInfo]>> {
+        self.read::<Vec<_>>(&HostRequest::Integrations { location: location.cloned() }).map(Into::into)
     }
 
     fn vcs(&self, location: Option<&LocationRef>) -> Option<VcsInfo> {

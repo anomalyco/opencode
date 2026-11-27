@@ -485,11 +485,7 @@ export function context(base: Base, carrier: Carrier) {
       integration: collection("integrations"),
       mcp: { server: collection("mcp-servers"), resource: none("location.mcp.resource") },
       model: collection("models"),
-      provider: {
-        list: () => read("providers", { type: "providers" }) ?? undefined,
-        sync: () => synced("providers", { type: "providers" }),
-        invalidate() {},
-      },
+      provider: collection("providers"),
       reference: listed("reference", ["reference.updated"]),
       skill: listed("skill", ["skill.updated"]),
     },
@@ -1152,11 +1148,22 @@ export function context(base: Base, carrier: Carrier) {
     baseUrl: "http://opencode.internal/",
     fetch: (async (url: URL, init?: RequestInit) => {
       const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined
-      const result = await carrier.fetch({
-        method: init?.method ?? "GET",
-        path: url.pathname,
-        query: [...url.searchParams],
-        ...(body === undefined ? {} : { body }),
+      const signal = init?.signal
+      // As fetch does: an aborted call never starts, and an abort mid-call rejects with the signal's reason.
+      if (signal?.aborted) throw signal.reason
+      const result = await new Promise<Json>((resolve, reject) => {
+        const abort = () => reject(signal!.reason)
+        signal?.addEventListener("abort", abort, { once: true })
+        Promise.resolve(
+          carrier.fetch({
+            method: init?.method ?? "GET",
+            path: url.pathname,
+            query: [...url.searchParams],
+            ...(body === undefined ? {} : { body }),
+          }),
+        )
+          .then(resolve, reject)
+          .finally(() => signal?.removeEventListener("abort", abort))
       })
       if (result && "Ok" in result)
         return result.Ok === null
@@ -1199,8 +1206,9 @@ export function context(base: Base, carrier: Carrier) {
           return {
             async next(): Promise<IteratorResult<Json>> {
               while (!queue.length && !done) await new Promise<void>((resolve) => (wake = resolve))
-              if (queue.length) return { value: queue.shift(), done: false }
-              return { value: undefined, done: true }
+              // A cancelled subscription ends even with events still queued, as the TS client's does.
+              if (done) return { value: undefined, done: true }
+              return { value: queue.shift(), done: false }
             },
             async return(): Promise<IteratorResult<Json>> {
               end()

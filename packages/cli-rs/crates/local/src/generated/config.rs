@@ -130,6 +130,8 @@ pub const KEYBIND_NAMES: &[&str] = &[
     "agent.cycle.reverse",
     "variant.cycle",
     "variant.list",
+    "speed.cycle",
+    "speed.list",
     "session.page.up",
     "session.page.down",
     "session.line.up",

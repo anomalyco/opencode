@@ -6,7 +6,6 @@ use bytes::Bytes;
 use futures_util::StreamExt;
 use opencode_api::client::{Auth, Client};
 use opencode_api::error::Error;
-use opencode_api::events::Event;
 use opencode_api::generated::*;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use serde_json::{Value, json};
@@ -67,7 +66,11 @@ fn tagged_union_decodes_known_rpc_and_unknown_members() {
     let connected: V2Event =
         serde_json::from_value(json!({ "id": "evt_1", "type": "server.connected", "data": {} })).unwrap();
     assert!(matches!(connected, V2Event::ServerConnected(_)), "{connected:?}");
-    assert_eq!(connected.kind(), "server.connected");
+    assert_eq!(connected.tag(), "server.connected");
+    // A member decoded on its own takes any tag, since only the union checks it, and writes its own.
+    let member: V2EventServerConnected =
+        serde_json::from_value(json!({ "id": "evt_1", "type": "other", "data": {} })).unwrap();
+    assert_eq!(serde_json::to_value(member).unwrap()["type"], "server.connected");
 
     let rpc = json!({
         "id": "evt_2", "created": 1.5, "type": "rpc.plugin.ping",
@@ -214,7 +217,7 @@ async fn event_stream_decodes_generated_events() {
     let script = Script::new(200, "text/event-stream", body);
     let response = client(&script).event_subscribe(&EventSubscribeInput::default()).await.unwrap();
     let events: Vec<_> = response.events(|| {}).collect().await;
-    let kinds: Vec<_> = events.iter().map(|event| event.as_ref().unwrap().kind().to_owned()).collect();
+    let kinds: Vec<_> = events.iter().map(|event| event.as_ref().unwrap().tag().to_owned()).collect();
     assert_eq!(kinds, ["server.connected", "future.event", "skill.updated"]);
 
     let script = Script::new(200, "", "{}");

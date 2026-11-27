@@ -34,6 +34,7 @@ import { legacyKeys, panelKey } from "./panel-keys"
 import { closedEntry, createSideFocus, type ClosedTabs } from "./closed-tabs"
 import {
   createNewTabsState,
+  selectNewTabFocus,
   selectPaneNewTabs,
   selectShownNewTab,
   transitionNewTabs,
@@ -78,6 +79,7 @@ const SidebarState = Persistence.struct({
     Schema.isBetween({ minimum: SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN, maximum: SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX }),
   ),
   expandMode: Schema.Literals(["expand", "collapse"]),
+  sidebarSide: Schema.Literals(["start", "end"]),
 })
 
 /**
@@ -89,6 +91,7 @@ export function createPanelSidebar(): PanelSidebar {
     sidebarOpened: true,
     sidebarWidth: SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT,
     expandMode: "collapse",
+    sidebarSide: "start",
   })
 
   const sidebar: PanelSidebar = {
@@ -101,6 +104,8 @@ export function createPanelSidebar(): PanelSidebar {
         Math.min(SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX, Math.max(SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN, width)),
       ),
     toggle: () => setStore("sidebarOpened", (opened) => !opened),
+    side: () => store.sidebarSide,
+    move: (side) => setStore("sidebarSide", side),
   }
 
   onCleanup(usePluginAttachment().sidebar(sidebar))
@@ -441,6 +446,12 @@ export function createRegion(input: {
       dispatchNewTabs({ type: "open", pane })
     },
     dismissNewTab,
+    /** The pane's New tab view should give the keyboard to its first field: the person just asked for it. */
+    newTabFocus: (pane: SessionPane) => selectNewTabFocus(newTabsState(), pane),
+    /** The New tab view gave the keyboard to its field. */
+    newTabFocused: () => dispatchNewTabs({ type: "focus.taken" }),
+    /** Runs once the side region stops moving, at once while it is still; hidden contents cannot take focus. */
+    settled,
     /** Closes the shown new tab view in the given or active pane; returns whether one was showing. */
     closeNewTab(pane: SessionPane = activePane()) {
       const id = shownNewTab(pane)
@@ -468,6 +479,8 @@ export function createRegion(input: {
         focused instanceof HTMLElement && (focused.isContentEditable || /^(INPUT|TEXTAREA)$/.test(focused.tagName))
           ? focused
           : undefined
+      // A New tab the region opens on takes the keyboard in its field.
+      dispatchNewTabs({ type: "focus.requested", pane: "side" })
       side.toggle()
       const key = active()
       const entry = key ? byKey().get(key) : undefined

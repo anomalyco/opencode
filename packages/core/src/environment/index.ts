@@ -1,6 +1,6 @@
 export * as Environment from "./index.js"
 
-export { type Driver } from "./driver.js"
+export { type Driver, EnvironmentDriver } from "./driver.js"
 export {
   type DirEntry,
   exists,
@@ -16,4 +16,18 @@ export {
 export { execDefaults, makeFiles } from "./exec-defaults.js"
 export { makeLocalDriver } from "./local.js"
 export { makeMemoryDriver, type MemoryDriver } from "./memory.js"
-export { ID, type Interface, local, localID, make, node, Place, Service, workingDirectory } from "./environment.js"
+export {
+  CurrentWorkingDirectory,
+  ID,
+  type Interface,
+  local,
+  localID,
+  make,
+  node,
+  type Options,
+  Place,
+  Service,
+  unavailable,
+  workspace,
+  workingDirectoryResolver,
+} from "./environment.js"

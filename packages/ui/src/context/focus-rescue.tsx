@@ -1,8 +1,7 @@
 // Chromium leaves focus on <body> when the focused element is removed, disabled or stops being editable, and fires no
 // event. Inside a focus scope ([data-focus-scope]: a list, a tab strip, a chip row), move it to the next item, or to the
-// previous one when the last item went, and widen to the enclosing scope when the inner one has nothing left.
-
-import { focusField } from "./field-focus"
+// previous one when the last item went, and widen to the enclosing scope when the inner one has nothing left. An element
+// with [data-focus-key] that is remounted elsewhere, such as a row moving to another section, takes focus with it.
 
 const FOCUSABLE = [
   'a[href]:not([tabindex="-1"])',
@@ -14,15 +13,16 @@ const FOCUSABLE = [
   '[contenteditable="plaintext-only"]',
   '[contenteditable=""]',
   '[tabindex]:not([tabindex="-1"])',
-  // Roving focus: only one tree item is a Tab stop, but focus may land on any of them.
+  // Roving focus: only one item is a Tab stop, but focus may land on any of them.
   '[role="treeitem"]',
+  "[data-roving]",
 ].join(",")
 
 const SCOPE = "[data-focus-scope]"
 
 // Where the element was: the gap its removal left, or the element itself when it stayed in place.
 type Spot =
-  | { type: "removed"; parent: Node; next: Node | null; previous: Node | null; added: Node[] }
+  | { type: "removed"; parent: Node; next: Node | null; previous: Node | null; added: Node[]; key?: string }
   | { type: "stayed"; element: HTMLElement }
 
 type Entry = { element: HTMLElement; observer: MutationObserver; spot?: Spot }
@@ -58,7 +58,13 @@ export function installFocusRescue() {
   }
 }
 
-const useKeyboard = () => {
+// A rescued control shows its ring, and scrolls into view, only while the keyboard is moving focus. Typing, shortcuts
+// and a key pressed on a control the pointer focused are not that: a pointer user never sees the rescue, so it must not
+// move their list.
+const NAVIGATION = new Set(["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"])
+
+const useKeyboard = (event: KeyboardEvent) => {
+  if (event.ctrlKey || event.altKey || event.metaKey || !NAVIGATION.has(event.key)) return
   keyboard = true
 }
 
@@ -120,6 +126,7 @@ function lose(entry: Entry, records: MutationRecord[]) {
         next: record.nextSibling,
         previous: record.previousSibling,
         added: Array.from(record.addedNodes),
+        key: element.dataset.focusKey,
       }
     : { type: "stayed", element }
   entry.observer.disconnect()
@@ -145,15 +152,14 @@ function rescue() {
     if (!entry.spot) return
     const target = pick(entry.spot)
 
-    // Fields such as the composer draw their own ring.
-    if (target) return focusField(target, ring, { focusVisible: ring })
+    if (target) return target.focus({ focusVisible: ring, preventScroll: !ring })
 
     if (target === undefined) continue
 
     // A scope left with nothing to focus, such as the last toast, hands focus back to what had it before.
     const previous = entries.slice(index + 1).find((item) => !item.spot && usable(item.element))
 
-    if (previous) focusField(previous.element, ring, { focusVisible: ring })
+    if (previous) previous.element.focus({ focusVisible: ring, preventScroll: !ring })
 
     return
   }
@@ -161,6 +167,11 @@ function rescue() {
 
 // `undefined` outside any scope, `null` when nothing in the scope or around it can take focus.
 function pick(spot: Spot) {
+  // The same item remounted, wherever it went: the old parent may be gone, so it need not be in a scope.
+  const same = spot.type === "removed" && spot.key ? keyed(spot.key) : undefined
+
+  if (same) return same
+
   const anchor = spot.type === "removed" ? spot.parent : spot.element
   const start = (anchor instanceof Element ? anchor : anchor.parentElement)?.closest<HTMLElement>(SCOPE)
 
@@ -188,6 +199,13 @@ function pick(spot: Spot) {
   }
 
   return null
+}
+
+// Compared rather than selected: CSS.escape turns a NUL into U+FFFD, and keys built from IDs may hold one.
+function keyed(key: string) {
+  return Array.from(document.querySelectorAll<HTMLElement>("[data-focus-key]")).find(
+    (element) => element.dataset.focusKey === key && usable(element),
+  )
 }
 
 // Never into a Kobalte tab list: its tabs select themselves on focus, and with no tab left it never settles.

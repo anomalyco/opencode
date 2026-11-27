@@ -35,13 +35,12 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
 
 fn model(read: &dyn abi::Read) -> Option<(String, bool)> {
     let selected = read.model()?;
-    let model = read
-        .models(None)?
-        .into_iter()
-        .find(|model| model.provider_id == selected.provider_id && model.id == selected.id)?;
+    let models = read.models(None)?;
+    let model = models.iter().find(|model| model.provider_id == selected.provider_id && model.id == selected.id)?;
     let info = read.limits()?;
+    let providers = read.providers(None);
     let provider =
-        read.providers().and_then(|providers| providers.into_iter().find(|item| item.id == model.provider_id));
-    let usage = model_usage(&info, &model, provider.as_ref())?;
-    Some((format_dollars(usage.left), matches!(level(&usage, &model), Level::Out | Level::Reached)))
+        providers.as_deref().and_then(|providers| providers.iter().find(|item| item.id == model.provider_id));
+    let usage = model_usage(&info, model, provider)?;
+    Some((format_dollars(usage.left), matches!(level(&usage, model), Level::Out | Level::Reached)))
 }

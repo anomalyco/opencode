@@ -1,5 +1,17 @@
 import { describe, expect } from "bun:test"
-import { Duration, Effect, Layer, LayerMap, Stream } from "effect"
+import { Duration, Effect, Layer, Stream } from "effect"
+import { Config } from "@opencode/core/config"
+import { Document, Event, Info } from "@opencode/schema/config"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { ArtifactTools } from "@opencode/core/tool/plugin/artifact"
+import { AutomationTools } from "@opencode/core/tool/plugin/automation"
+import { ImageGenerateTool } from "@opencode/core/tool/plugin/image-generate"
+import { VideoGenerateTool } from "@opencode/core/tool/plugin/video-generate"
+import { WebSearchTool } from "@opencode/core/tool/plugin/websearch"
+import { SessionInterruptTool } from "@opencode/core/tool/plugin/session-interrupt"
+import { PluginTestLayer } from "./fixture"
+import { drain } from "../lib/clock"
 import { App } from "@opencode/core/app"
 import { ConfigPluginSource } from "@opencode/core/config/plugin/source"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -29,7 +41,7 @@ const unexpected = (pkg: string) =>
 const instances = Layer.effect(
   LocationServiceMap.Service,
   Effect.gen(function* () {
-    const map = yield* LayerMap.make(
+    const map = yield* LocationServiceMap.make(
       (ref: Location.Ref) => Instance.layer(ref, { discovery: false, replacements: bindings }),
       { idleTimeToLive: Duration.infinity },
     )
@@ -96,6 +108,62 @@ describe("PluginInternal flags", () => {
       expect(registered).toContain("shell")
       expect(registered).not.toContain(TodoTool.name)
       expect(direct).not.toContain("shell")
+    }).pipe(Effect.provideService(Flag.Overrides, undefined)),
+  )
+})
+
+const reactive = testEffect(PluginTestLayer)
+
+describe("Flag-driven tool reloads", () => {
+  reactive.effect("ignores unrelated edits and rebuilds all flag-gated tools once per changed snapshot", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const host = yield* PluginHost.make(plugins, "test")
+      const tools = yield* Tool.Service
+      const config = yield* Config.Test
+      const bus = yield* Bus.Service
+      yield* TodoTool.Plugin.effect(host)
+      yield* ArtifactTools.Plugin.effect(host)
+      yield* WebSearchTool.Plugin.effect(host)
+      yield* SessionInterruptTool.Plugin.effect(host)
+      yield* ImageGenerateTool.Plugin.effect(host)
+      yield* VideoGenerateTool.Plugin.effect(host)
+      yield* AutomationTools.Plugin.effect(host)
+      const builds = { count: 0 }
+      yield* tools.transform(() => {
+        builds.count++
+      })
+      yield* drain
+      const initial = builds.count
+      expect((yield* tools.list()).map((tool) => tool.id)).not.toContain(TodoTool.name)
+      expect((yield* toolDefinitions(tools)).map((tool) => tool.name)).toContain("websearch")
+
+      yield* config.setEntries([new Document({ type: "document", info: new Info({ shell: "/bin/sh" }) })])
+      yield* bus.publish(Event.Updated, {})
+      yield* drain
+      expect(builds.count).toBe(initial)
+
+      yield* config.setEntries([
+        new Document({
+          type: "document",
+          info: new Info({
+            experimental: new ConfigExperimental.Info({ todo: true, artifacts: true, full_codemode: true }),
+          }),
+        }),
+      ])
+      yield* bus.publish(Event.Updated, {})
+      yield* drain
+      expect(builds.count).toBe(initial + 1)
+      expect((yield* tools.list()).map((tool) => tool.id)).toContain(TodoTool.name)
+      expect((yield* tools.list()).map((tool) => tool.id)).toContain("opencode_artifact_create")
+      expect((yield* toolDefinitions(tools)).map((tool) => tool.name)).not.toContain("websearch")
+
+      yield* config.setEntries([])
+      yield* bus.publish(Event.Updated, {})
+      yield* drain
+      expect(builds.count).toBe(initial + 2)
+      expect((yield* tools.list()).map((tool) => tool.id)).not.toContain(TodoTool.name)
+      expect((yield* toolDefinitions(tools)).map((tool) => tool.name)).toContain("websearch")
     }).pipe(Effect.provideService(Flag.Overrides, undefined)),
   )
 })

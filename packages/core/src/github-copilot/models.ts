@@ -187,6 +187,7 @@ function build(id: Model.ID, remote: UsableModel, baseURL: string, previous?: Mo
     settings: Provider.mergeOverlay(previous?.settings, { baseURL: route.baseURL }),
     headers: previous?.headers,
     body: previous?.body,
+    compatibility: previous?.compatibility,
     capabilities: {
       tools: remote.capabilities.supports.tool_calls,
       input,

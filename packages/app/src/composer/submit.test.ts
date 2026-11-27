@@ -314,7 +314,11 @@ describe("Composer submission", () => {
     gate.resolve()
     await submitted
     await sent.promise
-    expect(calls.filter((call) => call === "gate" || call === "admit" || call === "send")).toEqual(["gate", "admit", "send"])
+    expect(calls.filter((call) => call === "gate" || call === "admit" || call === "send")).toEqual([
+      "gate",
+      "admit",
+      "send",
+    ])
     expect(composer.submission.state()).toEqual({ type: "idle", attempt: 1 })
   })
 
@@ -322,46 +326,54 @@ describe("Composer submission", () => {
     { name: "a prompt", prompt: "Hello", left: "Hello" },
     { name: "a prompt, with a draft typed since", prompt: "Hello", edit: "next", left: "Hello\n\nnext" },
     { name: "a server command", prompt: "/review now", left: "/review now" },
-  ])("Stop while $name waits on the gate cancels that send: nothing reaches the server and its text comes back", async (row) => {
-    const calls: string[] = []
-    const timeline: string[] = []
-    const statuses: ("idle" | "running")[] = []
-    const gate = Promise.withResolvers<void>()
+  ])(
+    "Stop while $name waits on the gate cancels that send: nothing reaches the server and its text comes back",
+    async (row) => {
+      const calls: string[] = []
+      const timeline: string[] = []
+      const statuses: ("idle" | "running")[] = []
+      const gate = Promise.withResolvers<void>()
 
-    const target = session({
-      calls,
-      statuses,
-      handoff: { set: () => timeline.push("set"), hold() {}, settle: () => timeline.push("settle"), clear: () => timeline.push("clear") },
-      command: async () => void calls.push("command"),
-    })
+      const target = session({
+        calls,
+        statuses,
+        handoff: {
+          set: () => timeline.push("set"),
+          hold() {},
+          settle: () => timeline.push("settle"),
+          clear: () => timeline.push("clear"),
+        },
+        command: async () => void calls.push("command"),
+      })
 
-    const composer = gated(target, () => gate.promise, { prompt: row.prompt, calls })
-    const submitted = composer.submission.submit(new Event("submit"))
-    await flush()
-    expect(composer.submission.state().type).toBe("sending")
-    expect(text(composer.state)).toBe("")
+      const composer = gated(target, () => gate.promise, { prompt: row.prompt, calls })
+      const submitted = composer.submission.submit(new Event("submit"))
+      await flush()
+      expect(composer.submission.state().type).toBe("sending")
+      expect(text(composer.state)).toBe("")
 
-    if (row.edit) composer.state.set(typed(row.edit), row.edit.length)
-    await composer.submission.stop()
-    await submitted
-    await flush()
+      if (row.edit) composer.state.set(typed(row.edit), row.edit.length)
+      await composer.submission.stop()
+      await submitted
+      await flush()
 
-    // Neither the request nor an interrupt: the Session was never told of this send.
-    expect(calls.filter((call) => call === "send" || call === "command" || call === "interrupt")).toEqual([])
-    expect(text(composer.state)).toBe(row.left)
-    expect(composer.failures).toEqual([])
-    expect(composer.submission.state()).toEqual({ type: "idle", attempt: 1 })
-    // A prompt that showed in the Session is taken out of it again, and the Session is not left looking busy.
-    expect(timeline).toEqual(row.prompt.startsWith("/") ? [] : ["set", "clear"])
-    expect(statuses.at(-1) ?? "idle").toBe("idle")
-    expect(composer.history).toEqual([`add:${row.prompt}`, `remove:${row.prompt}`])
+      // Neither the request nor an interrupt: the Session was never told of this send.
+      expect(calls.filter((call) => call === "send" || call === "command" || call === "interrupt")).toEqual([])
+      expect(text(composer.state)).toBe(row.left)
+      expect(composer.failures).toEqual([])
+      expect(composer.submission.state()).toEqual({ type: "idle", attempt: 1 })
+      // A prompt that showed in the Session is taken out of it again, and the Session is not left looking busy.
+      expect(timeline).toEqual(row.prompt.startsWith("/") ? [] : ["set", "clear"])
+      expect(statuses.at(-1) ?? "idle").toBe("idle")
+      expect(composer.history).toEqual([`add:${row.prompt}`, `remove:${row.prompt}`])
 
-    // What the send waited for is ready later: the result belongs to a send that no longer exists.
-    gate.resolve()
-    await flush()
-    expect(calls.filter((call) => call === "send" || call === "command")).toEqual([])
-    expect(composer.submission.state()).toEqual({ type: "idle", attempt: 1 })
-  })
+      // What the send waited for is ready later: the result belongs to a send that no longer exists.
+      gate.resolve()
+      await flush()
+      expect(calls.filter((call) => call === "send" || call === "command")).toEqual([])
+      expect(composer.submission.state()).toEqual({ type: "idle", attempt: 1 })
+    },
+  )
 
   test.each([
     {
@@ -405,7 +417,12 @@ describe("Composer submission", () => {
 
     await flush()
     expect(composer.state.context.items()).toEqual([])
-    composer.state.context.add({ type: "file", path: "src/later.ts", comment: "Added while it waited", commentID: "later" })
+    composer.state.context.add({
+      type: "file",
+      path: "src/later.ts",
+      comment: "Added while it waited",
+      commentID: "later",
+    })
     await composer.submission.stop()
     await submitted
     await flush()
@@ -526,8 +543,7 @@ describe("Composer submission", () => {
         const ref = { key: `server\n${target.id}`, id: target.id } as SessionRef
         const never = { plugin: "browser", value: { ready: () => new Promise<void>(() => undefined) } }
 
-        const ready = () =>
-          how === "times out" ? settlePromptGates([never], () => true, ref) : gate.promise
+        const ready = () => (how === "times out" ? settlePromptGates([never], () => true, ref) : gate.promise)
 
         const sends = [
           gated(target, ready, { prompt: "Hello" }),
@@ -557,9 +573,7 @@ describe("Composer submission", () => {
     const accepted = Promise.withResolvers<void>()
     const state = createMemoryComposerState({ prompt: "Hello" }).capture()
 
-    await submitInput(active(state, session({ calls, accept: () => accepted.resolve() }))).submit(
-      new Event("submit"),
-    )
+    await submitInput(active(state, session({ calls, accept: () => accepted.resolve() }))).submit(new Event("submit"))
     await accepted.promise
 
     expect(calls.filter((call) => call === "accept-send")).toHaveLength(1)
@@ -657,9 +671,7 @@ describe("Composer submission", () => {
       expect(await submission.submitComment("quote:c=selected", "Compare @src/api.ts with @here")).toBe(true)
       expect(calls[0]).toBe("keep-preview")
       expect(requests).toHaveLength(1)
-      expect(requests[0]?.text).toBe(
-        "The user quoted the following from earlier in the conversation:\n> Selected passage\n\nThe user made the following comment regarding this quote: Compare @src/api.ts with @here",
-      )
+      expect(requests[0]?.text).toBe("> Selected passage\n\nCompare @src/api.ts with @here")
       expect(requests[0]).toMatchObject({
         delivery,
         files: [{ uri: "file:///C:/repo/src/api.ts", name: "api.ts" }],
@@ -759,7 +771,7 @@ describe("Composer submission", () => {
     expect(await pending).toBe(false)
     expect(errors).toHaveLength(1)
     expect(state.current()).toEqual([{ type: "text", content: "Keep this draft", start: 0, end: 15 }])
-    expect(state.context.items()).toMatchObject([
+    expect(JSON.parse(JSON.stringify(state.context.items()))).toMatchObject([
       { key: "quote:c=selected", text: "Selected passage", comment: "Latest comment" },
     ])
     expect(calls.filter((call) => call === "send")).toHaveLength(2)
@@ -1310,7 +1322,7 @@ describe("Composer submission", () => {
     expect(statuses).toEqual(["running", "idle", "running", "idle"])
     expect(state.current()).toEqual(prompt)
     // In the order it was sent, so the resend's request matches the first.
-    expect(state.context.items()).toMatchObject([
+    expect(JSON.parse(JSON.stringify(state.context.items()))).toMatchObject([
       { type: "file", path: "notes.md", description: "the failing version" },
       note,
     ])
@@ -1350,8 +1362,10 @@ describe("Composer submission", () => {
     ).submit(new Event("submit"))
     await failed.promise
 
-    expect(promoted.current()).toMatchObject([{ type: "text", content: "first prompt" }])
-    expect(promoted.context.items()).toMatchObject([{ type: "file", path: "src/app.ts", comment: "Keep this comment" }])
+    expect(JSON.parse(JSON.stringify(promoted.current()))).toMatchObject([{ type: "text", content: "first prompt" }])
+    expect(JSON.parse(JSON.stringify(promoted.context.items()))).toMatchObject([
+      { type: "file", path: "src/app.ts", comment: "Keep this comment" },
+    ])
     expect(promoted.mode.current()).toBe("shell")
   })
 
@@ -1392,7 +1406,9 @@ describe("Composer submission", () => {
     await failed.promise
 
     expect(text(promoted)).toBe("first prompt\n\nfollow-up")
-    expect(promoted.context.items()).toMatchObject([{ key, type: "quote", text: "quoted passage" }])
+    expect(JSON.parse(JSON.stringify(promoted.context.items()))).toMatchObject([
+      { key, type: "quote", text: "quoted passage" },
+    ])
     expect(promoted.quoteSource.state.sources[key]).toEqual(source)
     // A recovered follow-up changes the payload, so it is not a retry of the failed admission.
     expect(promoted.retry.current()).toBeUndefined()

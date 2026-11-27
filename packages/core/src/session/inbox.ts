@@ -66,11 +66,7 @@ const decodeCompaction = Schema.decodeUnknownSync(CompactionPayload)
 const encodeCompaction = Schema.encodeSync(CompactionPayload)
 const decodeMove = Schema.decodeUnknownSync(MovePayload)
 const encodeMove = Schema.encodeSync(MovePayload)
-const inboxLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
 type PendingRef = { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID }
-
-export const serialized = <A, E, R>(sessionID: SessionSchema.ID, effect: Effect.Effect<A, E, R>) =>
-  inboxLocks.withLock(sessionID)(effect)
 
 export class LifecycleConflict extends Schema.TaggedError<LifecycleConflict>()("SessionInbox.LifecycleConflict", {
   id: SessionMessage.ID,
@@ -172,6 +168,17 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
   const database = yield* Database.Service
   const db = database.db
   const bus = yield* Bus.Service
+  const locks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
+
+  const serialized = <A, E, R>(sessionID: SessionSchema.ID, effect: Effect.Effect<A, E, R>) =>
+    locks.withLock(sessionID)(effect)
+
+  const publishMutation = <A, E, R>(input: PendingRef, effect: Effect.Effect<A, E, R>) =>
+    serialized(input.sessionID, effect).pipe(
+      Effect.asVoid,
+      // Bus projectors abort their transaction through the defect channel.
+      Effect.catchDefect((defect) => (defect instanceof LifecycleConflict ? Effect.fail(defect) : Effect.die(defect))),
+    )
 
   /** First admission wins for matching Session and type, without preparing a new payload. */
   const reconcile = Effect.fn("SessionInbox.reconcile")(function* <Type extends Item["type"]>(request: {
@@ -281,8 +288,20 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     ),
   )
 
+  /**
+   * Promotes pending input into visible messages and returns the promoted count,
+   * or undefined when the runner must first handle a pending control.
+   * Steered compaction takes priority over pending prompts, without crossing a move.
+   * Only the "input" scope may fall through to one queued input.
+   */
+  const promote = Effect.fn("SessionInbox.promote")((sessionID: SessionSchema.ID, scope: Promotable) =>
+    serialized(sessionID, promoteUnlocked(db, bus, sessionID, scope)),
+  )
+
   return {
     list: (sessionID: SessionSchema.ID) => list(db, sessionID),
+    serialized,
+    promote,
     reconcile,
     admit,
     admitCompaction,
@@ -519,13 +538,6 @@ export const has = Effect.fn("SessionInbox.has")(function* (
   return row !== undefined
 })
 
-const publishMutation = <A, E, R>(input: PendingRef, effect: Effect.Effect<A, E, R>) =>
-  serialized(input.sessionID, effect).pipe(
-    Effect.asVoid,
-    // Bus projectors abort their transaction through the defect channel.
-    Effect.catchDefect((defect) => (defect instanceof LifecycleConflict ? Effect.fail(defect) : Effect.die(defect))),
-  )
-
 const publish = Effect.fn("SessionInbox.publish")(function* (
   db: DatabaseService,
   bus: Bus.Interface,
@@ -558,6 +570,26 @@ const publish = Effect.fn("SessionInbox.publish")(function* (
   return rows.length
 })
 
+const promoteUnlocked = (
+  db: DatabaseService,
+  bus: Bus.Interface,
+  sessionID: SessionSchema.ID,
+  scope: Promotable,
+) =>
+  Effect.gen(function* () {
+    const steers = yield* pendingSteers(db, sessionID)
+    if (steers.length > 0 || scope === "steer") {
+      if (steers.length > 0 && isControl(steers[0])) return undefined
+      return yield* publish(db, bus, sessionID, beforeControl(steers))
+    }
+
+    const queued = yield* firstQueued(db, sessionID)
+    if (!queued) return 0
+    if (isControl(queued)) return undefined
+    const promoted = yield* publish(db, bus, sessionID, [queued])
+    return promoted + (yield* publish(db, bus, sessionID, beforeControl(yield* pendingSteers(db, sessionID))))
+  })
+
 /**
  * Promotes pending input into visible messages and returns the promoted count,
  * or undefined when the runner must first handle a pending control.
@@ -570,22 +602,8 @@ export const promote = Effect.fn("SessionInbox.promote")(function* (
   sessionID: SessionSchema.ID,
   scope: Promotable,
 ) {
-  return yield* serialized(
-    sessionID,
-    Effect.gen(function* () {
-      const steers = yield* pendingSteers(db, sessionID)
-      if (steers.length > 0 || scope === "steer") {
-        if (steers.length > 0 && isControl(steers[0])) return undefined
-        return yield* publish(db, bus, sessionID, beforeControl(steers))
-      }
-
-      const queued = yield* firstQueued(db, sessionID)
-      if (!queued) return 0
-      if (isControl(queued)) return undefined
-      const promoted = yield* publish(db, bus, sessionID, [queued])
-      return promoted + (yield* publish(db, bus, sessionID, beforeControl(yield* pendingSteers(db, sessionID))))
-    }),
-  )
+  const inbox = yield* Service
+  return yield* inbox.serialized(sessionID, promoteUnlocked(db, bus, sessionID, scope))
 })
 
 const isControl = (row: typeof SessionInboxTable.$inferSelect) => row.type === "compaction" || row.type === "move"

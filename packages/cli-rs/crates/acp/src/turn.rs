@@ -9,9 +9,11 @@ use std::time::Duration;
 use futures_util::StreamExt;
 use futures_util::future::BoxFuture;
 use opencode_api::client::Client;
+use opencode_api::events::CONNECTED;
 use opencode_api::generated::{
     PromptInputFileAttachment, SessionCommandInput, SessionCompactInput, SessionGetInput, SessionID,
-    SessionInboxDelivery, SessionInterruptInput, SessionMessageID, SessionPromptInput, SessionSyntheticInput,
+    SessionInboxDelivery, SessionInterruptInput, SessionListInput, SessionMessageID, SessionPromptInput,
+    SessionSyntheticInput, SessionsCursor,
 };
 use opencode_util::lock;
 use serde_json::{Value, json};
@@ -21,7 +23,7 @@ use tokio_util::sync::CancellationToken;
 use crate::capabilities::Capabilities;
 use crate::catalog::{Catalogs, find_model};
 use crate::child;
-use crate::client::{check, classify, decode_session_id, event_type, subscribe};
+use crate::client::{check, classify, decode_session_id, subscribe};
 use crate::config_option::current_model;
 use crate::connection::{Connection, Responded};
 use crate::elicitation;
@@ -34,7 +36,7 @@ use crate::translate::{self, Output, StartKind, Terminal, TurnContext, TurnState
 /// Core acknowledges an interrupt before its cleanup settles, and its shell tool waits 3 s before SIGKILL.
 pub const CANCEL_DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
 
-type Event = Result<Value, opencode_api::error::Error>;
+type Event = Result<translate::Event, opencode_api::error::Error>;
 type Job = BoxFuture<'static, ()>;
 
 struct Subscription {
@@ -86,6 +88,33 @@ pub struct Turns {
     serial: AtomicU64,
     drain_timeout: Duration,
     scope: CancellationToken,
+}
+
+fn subagent_cost<'a>(client: &'a Client, session_id: &'a str) -> BoxFuture<'a, Result<f64, Failure>> {
+    Box::pin(async move {
+        let mut total = 0.0;
+        let mut cursor: Option<SessionsCursor> = None;
+        loop {
+            let input = match cursor.take() {
+                Some(cursor) => {
+                    SessionListInput { cursor: Some(cursor), limit: Some(100), ..SessionListInput::default() }
+                }
+                None => SessionListInput {
+                    parent_id: Some(Some(SessionID(session_id.to_owned()))),
+                    limit: Some(100),
+                    ..SessionListInput::default()
+                },
+            };
+            let page = check(client.session_list(&input).await)?;
+            for child in &page.data {
+                total += child.cost + subagent_cost(client, &child.id.0).await?;
+            }
+            match page.cursor.next.flatten().filter(|next| !next.0.is_empty()) {
+                Some(next) => cursor = Some(next),
+                None => return Ok(total),
+            }
+        }
+    })
 }
 
 fn files(prepared: &Prepared) -> Vec<PromptInputFileAttachment> {
@@ -140,6 +169,8 @@ impl Turns {
                 safe_message: format!("Session already has an active ACP prompt: {session_id}"),
                 service: Some("session".to_owned()),
                 error_name: None,
+                status: None,
+                retry_after_ms: None,
             });
         }
         let serial = self.serial.fetch_add(1, Ordering::Relaxed);
@@ -201,6 +232,7 @@ impl Turns {
         responded: watch::Receiver<bool>,
     ) -> Result<Value, Failure> {
         let attached = self.sessions.require(session_id)?;
+        self.sessions.restore_mcp(&attached).await?;
         let prepared = prompt::prepare(&self.catalogs.get(&attached.cwd).await?, content).await?;
         let capabilities = *lock(&self.capabilities);
         let turn = self
@@ -301,10 +333,10 @@ impl Turns {
         };
         match first {
             Err(failure) => return Exit::Failed(failure),
-            Ok(event) if event_type(&event) != "server.connected" => {
+            Ok(event) if event.event.tag() != CONNECTED => {
                 return Exit::Failed(Failure::Defect {
                     name: Some("Error".to_owned()),
-                    detail: format!("expected server.connected, got {}", event_type(&event)),
+                    detail: format!("expected server.connected, got {}", event.event.tag()),
                 });
             }
             Ok(_) => {}
@@ -355,6 +387,7 @@ impl Turns {
                     id: Some(Some(SessionMessageID(prepared.start.id.clone()))),
                     text: prepared.text.clone(),
                     files: Some(files(&prepared)),
+                    skills: (!prepared.skills.is_empty()).then(|| prepared.skills.clone()),
                     delivery: Some(Some(SessionInboxDelivery::Steer)),
                     resume: Some(Some(false)),
                     ..SessionPromptInput::default()
@@ -420,6 +453,7 @@ impl Turns {
                     id: Some(Some(SessionMessageID(prepared.start.id.clone()))),
                     text: prepared.text.clone(),
                     files,
+                    skills: (!prepared.skills.is_empty()).then(|| prepared.skills.clone()),
                     delivery: Some(Some(SessionInboxDelivery::Steer)),
                     ..SessionPromptInput::default()
                 })
@@ -549,15 +583,19 @@ impl Turns {
         let catalog = self.catalogs.get(&attached.cwd).await?;
         let model = find_model(&catalog.models, &current_model(&catalog, &attached.selection()));
         let Some(size) = model.map(|model| model.limit.context).filter(|size| *size != 0) else { return Ok(()) };
-        let info =
-            check(self.client.session_get(&SessionGetInput { session_id: SessionID(attached.id.clone()) }).await)?;
+        let session_input = SessionGetInput { session_id: SessionID(attached.id.clone()) };
+        let (info, subagents) =
+            tokio::join!(self.client.session_get(&session_input), subagent_cost(&self.client, &attached.id),);
+        let info = check(info)?;
+        let subagents = subagents?;
         self.connection.session_update(
             &attached.id,
-            json!({
+            &json!({
                 "sessionUpdate": "usage_update",
                 "used": translate::number(used),
                 "size": size,
-                "cost": { "amount": translate::number(info.cost), "currency": "USD" },
+                // Subagents record their spend on their own sessions; the session's cost includes them, as the TUI's does.
+                "cost": { "amount": translate::number(info.cost + subagents), "currency": "USD" },
             }),
         )
     }
@@ -598,34 +636,27 @@ impl Turns {
         }
     }
 
-    async fn interpret(self: &Arc<Self>, turn: &Turn, output: Output) -> Result<(), Failure> {
+    async fn interpret(self: &Arc<Self>, turn: &Turn, output: Output<'_>) -> Result<(), Failure> {
         match output {
-            Output::SessionUpdate { update, diff } => {
-                let update = permission::with_completed_diffs(update, diff.as_ref(), &turn.ctx.cwd).await;
-                self.connection.session_update(&turn.ctx.session_id, update)
+            Output::SessionUpdate { mut update, diff } => {
+                permission::add_completed_diffs(&mut update, diff.as_ref(), &turn.ctx.cwd).await;
+                self.connection.session_update(&turn.ctx.session_id, &update)
             }
             Output::ChildUpdate { mut update, diff } => {
-                if update.get("type").and_then(Value::as_str) == Some("update")
-                    && let Some(inner) = update.get("update").cloned()
-                {
-                    let enriched = permission::with_completed_diffs(inner, diff.as_ref(), &turn.ctx.cwd).await;
-                    if let Some(object) = update.as_object_mut() {
-                        object.insert("update".to_owned(), enriched);
-                    }
+                if let child::Event::Update(update) = &mut update.event {
+                    permission::add_completed_diffs(update, diff.as_ref(), &turn.ctx.cwd).await;
                 }
-                if let Err(failure) = self.connection.notify(child::UPDATE_METHOD, update) {
+                if let Err(failure) = self.connection.notify(child::UPDATE_METHOD, &update) {
                     log::warn!(cause = failure.tag(); "ACP child session update failed");
                 }
                 Ok(())
             }
-            Output::PermissionAsk { event, tool, child } => {
-                let data = event.get("data").cloned().unwrap_or(Value::Null);
-                let id = data.get("id").and_then(Value::as_str).unwrap_or_default().to_owned();
+            Output::PermissionAsk { ask, tool, child } => {
+                let id = ask.id.0.clone();
                 let input = Arc::new(permission::Input {
                     client: self.client.clone(),
                     connection: self.connection.clone(),
-                    session_id: data.get("sessionID").and_then(Value::as_str).unwrap_or_default().to_owned(),
-                    event,
+                    ask,
                     client_session_id: turn.ctx.session_id.clone(),
                     cwd: turn.ctx.cwd.clone(),
                     tool,
@@ -642,13 +673,15 @@ impl Turns {
                 Ok(())
             }
             Output::FormAsk { form, child } => {
+                // The form becomes a JSON Schema, which elicitation builds from its JSON.
+                let form = serde_json::to_value(&form).unwrap_or_default();
                 let capabilities = *lock(&self.capabilities);
                 let Some(requested_schema) = elicitation::requested_schema(&form, &capabilities) else {
                     elicitation::cancel_unshown(&self.client, &form).await;
                     return Ok(());
                 };
                 let id = form.get("id").and_then(Value::as_str).unwrap_or_default().to_owned();
-                let tool_call_sent = child.as_ref().is_none_or(|child| translate::project_child(&turn.ctx, child));
+                let tool_call_sent = child.as_deref().is_none_or(|child| translate::project_child(&turn.ctx, child));
                 let input = Arc::new(elicitation::Input {
                     client: self.client.clone(),
                     connection: self.connection.clone(),
@@ -669,7 +702,7 @@ impl Turns {
                 Ok(())
             }
             Output::AskSettled { id } => {
-                if let Some(settled) = lock(&turn.subscription.settled).remove(&id) {
+                if let Some(settled) = lock(&turn.subscription.settled).remove(id) {
                     let _ = settled.send(());
                 }
                 Ok(())
@@ -693,7 +726,7 @@ async fn join(result: &mut watch::Receiver<Option<Result<Terminal, Failure>>>) -
     }
 }
 
-async fn take(subscription: &Subscription) -> Result<Value, Failure> {
+async fn take(subscription: &Subscription) -> Result<translate::Event, Failure> {
     match subscription.events.lock().await.recv().await {
         Some(Ok(event)) => Ok(event),
         Some(Err(error)) => Err(classify(&error)),

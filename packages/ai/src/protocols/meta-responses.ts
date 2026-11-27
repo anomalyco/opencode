@@ -242,6 +242,7 @@ export const protocol = Protocol.make({
     step,
     terminal: OpenResponses.terminal,
   },
+  supportsEffortUpdates: OpenResponses.protocol.supportsEffortUpdates,
 })
 
 export const httpTransport = OpenResponses.httpTransport

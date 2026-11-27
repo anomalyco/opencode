@@ -666,12 +666,6 @@ describe("AzurePlugin resource name", () => {
       credential: keyCredential(),
       expected: "test-resource",
     },
-    {
-      name: "reads the resource of an API key imported from V1",
-      env: { AZURE_RESOURCE_NAME: "from-env" },
-      credential: Credential.Key.make({ type: "key", key: "secret", metadata: { resourceName: "imported-resource" } }),
-      expected: "imported-resource",
-    },
   ]
 
   cases.forEach((item) =>

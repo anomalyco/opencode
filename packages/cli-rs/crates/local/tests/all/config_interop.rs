@@ -583,6 +583,9 @@ fn model_and_storage_files_match_typescript() {
         {"variant": {"providerID": "a", "modelID": "b"}, "value": "high"},
         {"variant": {"providerID": "c", "modelID": "d"}, "value": null},
         {"favorite": {"providerID": "c", "modelID": "d"}, "enabled": false},
+        {"speed": {"providerID": "a", "modelID": "b"}, "value": "fast"},
+        {"speed": {"providerID": "a", "modelID": "b"}, "value": null},
+        {"speed": {"providerID": "c", "modelID": "d"}, "value": "flex"},
         {},
     ]);
     let seed = "{\"x\":1,\"recent\":[{\"providerID\":\"z\",\"modelID\":\"y\",\"extra\":1},5],\"variant\":{\"\":\"a\"}}";
@@ -604,9 +607,12 @@ fn model_and_storage_files_match_typescript() {
         if let Some(m) = op.get("recent") {
             prefs.add_recent(&model(m)).unwrap();
         } else if let Some(m) = op.get("favorite") {
-            prefs.set_favorite(&model(m), op["enabled"].as_bool().unwrap()).unwrap();
+            let key = model(m).key();
+            prefs.set_favorite(&model(m), op["enabled"].as_bool().unwrap(), |item| item.key() == key).unwrap();
         } else if let Some(m) = op.get("variant") {
             prefs.save_variant(&model(m), op["value"].as_str()).unwrap();
+        } else if let Some(m) = op.get("speed") {
+            prefs.save_speed(&model(m), op["value"].as_str()).unwrap();
         }
     }
     assert_eq!(fs::read_to_string(&mixed_file).unwrap(), fs::read_to_string(&ts_file).unwrap());
@@ -620,6 +626,7 @@ fn model_and_storage_files_match_typescript() {
         Value::Object(loaded.variant.into_iter().map(|(k, v)| (k, Value::String(v))).collect()),
         last["variant"]
     );
+    assert_eq!(Value::Object(loaded.speed.into_iter().map(|(k, v)| (k, Value::String(v))).collect()), last["speed"]);
 
     // Storage: the same updates by TypeScript alone and alternating with Rust.
     let initial = json!({"pinned": [], "sort": "updated"});
@@ -718,4 +725,32 @@ fn watch_reloads_a_config_file_created_in_a_missing_directory() {
         .expect("watching a missing directory");
     fs::write(config.path(), "{ \"mouse\": false }\n").unwrap();
     changed.recv_timeout(Duration::from_secs(5)).unwrap();
+}
+
+/// Editing the target of a symlinked `cli.json` changes nothing in the config directory, so the TS
+/// watcher also watches the target's directory.
+#[cfg(unix)]
+#[test]
+fn watch_reloads_when_a_symlinked_config_target_changes() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    let paths = paths(home.path());
+    let dotfiles = home.path().join("dotfiles");
+    fs::create_dir_all(&paths.config).unwrap();
+    fs::create_dir_all(&dotfiles).unwrap();
+    let target = dotfiles.join("cli.json");
+    fs::write(&target, "{ \"mouse\": true }\n").unwrap();
+    let config = CliConfig::with_content(&paths, None);
+    std::os::unix::fs::symlink(&target, config.path()).unwrap();
+    let (sender, changed) = std::sync::mpsc::channel();
+    let _watch = config
+        .watch(move || {
+            let _ = sender.send(());
+        })
+        .expect("watching the config directory");
+    // The watch may start after the first write, so write again until it calls back.
+    let reloaded = (0..20).any(|_| {
+        fs::write(&target, "{ \"mouse\": false }\n").unwrap();
+        changed.recv_timeout(Duration::from_millis(250)).is_ok()
+    });
+    assert!(reloaded, "editing the symlink target did not call back");
 }

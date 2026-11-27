@@ -2,97 +2,73 @@
 
 mod unified;
 
+use std::borrow::Cow;
+use std::sync::Arc;
+
 use opencode_api::client::Client;
-use opencode_api::generated::{PermissionID, PermissionReply, PermissionReplyInput, SessionID};
+use opencode_api::generated::{PermissionAskedData, PermissionReply, PermissionReplyInput};
+use opencode_api::tool::{ExternalDirectoryInput, SearchInput, ToolInput, ToolKind, WebFetchInput, WebSearchInput};
+use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::child;
 use crate::client::{check, is_declared};
 use crate::connection::Connection;
 use crate::error::Failure;
-use crate::tools::{
-    DiffSource, absolute_path, canonical_name, file_path, locations, patch, patch_hunks, pending_tool_call, text,
-};
+use crate::tools::{DiffSource, absolute_path, locations, patch, patch_hunks, pending_tool_call, tool_kind};
 use crate::translate::Tool;
+use crate::update::{Diff, Kind, Location, Meta, ToolCall, ToolCallContent, Update};
 
 pub struct Input {
     pub client: Client,
     pub connection: Connection,
-    /// The `permission.asked` event.
-    pub event: Value,
-    pub session_id: String,
+    pub ask: PermissionAskedData,
     pub client_session_id: String,
     pub cwd: String,
     pub tool: Option<Tool>,
-    pub child: Option<child::Session>,
+    pub child: Option<Arc<child::Session>>,
 }
 
-impl Input {
-    fn data(&self, key: &str) -> Option<&Value> {
-        self.event.get("data").and_then(|data| data.get(key))
-    }
-}
-
-/// A `diff` tool call content item.
-#[derive(Debug, Clone, PartialEq)]
-struct Diff {
-    path: String,
-    old_text: Option<String>,
-    new_text: String,
-}
-
-impl Diff {
-    fn new(path: String, old_text: Option<String>, new_text: String) -> Self {
-        Self { path, old_text, new_text }
-    }
-
-    fn json(&self) -> Value {
-        json!({ "type": "diff", "path": self.path, "oldText": self.old_text, "newText": self.new_text })
-    }
+/// The tool call of a permission request.
+#[derive(Serialize)]
+struct Asked<'a> {
+    #[serde(flatten)]
+    call: ToolCall<'a>,
+    #[serde(rename = "_meta", skip_serializing_if = "Meta::is_empty")]
+    meta: Meta<'a>,
 }
 
 /// Asks the client and returns the decision: `once`, `always`, or `reject`.
 pub async fn ask(input: &Input) -> Result<String, Failure> {
-    let tool_name = input.tool.as_ref().map_or_else(
-        || input.data("action").and_then(Value::as_str).unwrap_or_default().to_owned(),
-        |tool| tool.name.clone(),
-    );
+    let ask = &input.ask;
+    let tool_name = input.tool.as_ref().map_or(ask.action.as_str(), |tool| tool.name.as_str());
     let tool_input = input
         .tool
         .as_ref()
-        .map(|tool| tool.input.clone())
-        .or_else(|| input.data("metadata").cloned())
-        .unwrap_or_else(|| json!({}));
-    let previews =
-        permission_previews(&tool_name, &tool_input, input.data("metadata"), &input.cwd).await.unwrap_or_default();
-    let request_id = input.data("id").and_then(Value::as_str).unwrap_or_default();
-    let tool_call_id =
-        child::tool_call_id(input.child.as_ref(), input.tool.as_ref().map_or(request_id, |tool| tool.id.as_str()));
-    let title = permission_title(&tool_name, &tool_input, &previews)
+        .map_or_else(|| Arc::new(ask.metadata.clone().unwrap_or_default()), |tool| tool.input.clone());
+    let fields = ToolInput::map(&tool_input);
+    let previews = permission_previews(tool_name, fields, ask.metadata.as_ref(), &input.cwd).await.unwrap_or_default();
+    let tool_id = input.tool.as_ref().and(ask.source.as_ref()).map_or(ask.id.as_str(), |source| source.id.as_str());
+    let tool_call_id = child::tool_call_id(input.child.as_deref(), tool_id);
+    let title = permission_title(tool_name, fields, &previews)
         .filter(|title| !title.is_empty())
-        .map(|title| child::prefix_title(input.child.as_ref(), &title))
+        .map(|title| child::prefix_title(input.child.as_deref(), &title))
         .or_else(|| input.child.as_ref().and_then(|child| child.title.clone()));
-    let mut tool_call = pending_tool_call(&tool_call_id, &tool_name, &tool_input, title.as_deref(), &input.cwd);
-    if let Some(object) = tool_call.as_object_mut() {
-        if input.tool.is_none() {
-            object.shift_remove("name");
-            object.shift_remove("rawInput");
-        }
-        object.insert("locations".to_owned(), json!(permission_locations(&tool_name, &tool_input, input, &input.cwd)));
-        if !previews.is_empty() {
-            object.insert("content".to_owned(), json!(previews.iter().map(Diff::json).collect::<Vec<_>>()));
-        }
-        if let Some(child) = &input.child {
-            object.insert("_meta".to_owned(), child::meta(child));
-        }
+    let mut call = pending_tool_call(Cow::Owned(tool_call_id), tool_name, &tool_input, title.as_deref(), &input.cwd);
+    if input.tool.is_none() {
+        call.name = None;
+        call.raw_input = None;
     }
+    call.locations = permission_locations(tool_name, fields, input, &input.cwd);
+    call.content = previews.into_iter().map(ToolCallContent::Diff).collect();
+    let meta = Meta { child: input.child.clone(), ..Meta::default() };
     let result = input
         .connection
         .request(
             "session/request_permission",
             json!({
                 "sessionId": input.client_session_id,
-                "toolCall": tool_call,
+                "toolCall": Asked { call, meta },
                 "options": [
                     { "optionId": "once", "kind": "allow_once", "name": "Allow once" },
                     { "optionId": "always", "kind": "allow_always", "name": "Always allow" },
@@ -115,8 +91,8 @@ pub async fn respond(input: &Input, decision: &str) -> Result<(), Failure> {
     let result = input
         .client
         .permission_reply(&PermissionReplyInput {
-            session_id: SessionID(input.session_id.clone()),
-            request_id: PermissionID(input.data("id").and_then(Value::as_str).unwrap_or_default().to_owned()),
+            session_id: input.ask.session_id.clone(),
+            request_id: input.ask.id.clone(),
             decision: match decision {
                 "once" => PermissionReply::Once,
                 "always" => PermissionReply::Always,
@@ -131,44 +107,33 @@ pub async fn respond(input: &Input, decision: &str) -> Result<(), Failure> {
     }
 }
 
-/// A completed edit's update with full-file diffs added.
-pub async fn with_completed_diffs(update: Value, source: Option<&DiffSource>, cwd: &str) -> Value {
-    let Some(source) = source else { return update };
-    if update.get("sessionUpdate").and_then(Value::as_str) != Some("tool_call_update") {
-        return update;
-    }
+/// Adds full-file diffs to a completed edit's update.
+pub async fn add_completed_diffs(update: &mut Update<'_>, source: Option<&DiffSource>, cwd: &str) {
+    let Some(source) = source else { return };
+    let Kind::ToolCallUpdate(call) = &mut update.kind else { return };
     // A script lists each change it made, some without a diff, and the same file more than once; rebuilding them from
     // the file on disk would show its final text for every change.
-    if canonical_name(&source.tool_name) == "execute" {
-        return update;
+    let kind = tool_kind(&source.tool_name);
+    if kind == ToolKind::Execute {
+        return;
     }
-    let hunks = if canonical_name(&source.tool_name) == "patch" { patch_hunks(&source.input) } else { Vec::new() };
-    let mut diffs = Vec::new();
+    let hunks = if kind == ToolKind::Patch { patch_hunks(ToolInput::map(&source.input)) } else { Vec::new() };
     for file in decode_files(source.metadata.as_ref().and_then(|metadata| metadata.get("files"))) {
-        diffs.extend(completed_diff(&file, &hunks, cwd).await);
+        if let Some(diff) = completed_diff(&file, &hunks, cwd).await {
+            call.content.get_or_insert_default().push(ToolCallContent::Diff(diff));
+        }
     }
-    if diffs.is_empty() {
-        return update;
-    }
-    let mut update = update;
-    let mut content = update.get("content").and_then(Value::as_array).cloned().unwrap_or_default();
-    content.extend(diffs.iter().map(Diff::json));
-    update["content"] = Value::Array(content);
-    update
 }
 
 async fn completed_diff(file: &FileDiff, hunks: &[patch::Hunk], cwd: &str) -> Option<Diff> {
     let path = absolute_path(&file.file, cwd);
-    let new_text = match file.status.as_str() {
-        "deleted" => String::new(),
-        _ => read_text(&path).await?,
-    };
-    if file.status == "added" {
-        return Some(Diff::new(path, None, new_text));
+    let new_text = if file.status == FileStatus::Deleted { String::new() } else { read_text(&path).await? };
+    if file.status == FileStatus::Added {
+        return Some(Diff { path, old_text: None, new_text });
     }
     let recorded = unified::parse_first(&file.patch)?;
     if let Some(old_text) = unified::apply(&new_text, &unified::reverse(&recorded)) {
-        return Some(Diff::new(path, Some(old_text), new_text));
+        return Some(Diff { path, old_text: Some(old_text), new_text });
     }
     // Core trims indentation from patch-tool diffs, so rebuild those from its hunks and keep them if the ranges agree.
     let chunks = hunks.iter().find_map(|hunk| match hunk {
@@ -192,49 +157,52 @@ async fn completed_diff(file: &FileDiff, hunks: &[patch::Hunk], cwd: &str) -> Op
         })
         .collect();
     let rebuilt = patch::derive(from, &reversed, &new_text).ok()?;
-    (unified::structured_ranges(&rebuilt, &new_text) == unified::ranges(&recorded))
-        .then(|| Diff::new(path, Some(rebuilt), new_text))
+    (unified::structured_ranges(&rebuilt, &new_text) == unified::ranges(&recorded)).then_some(Diff {
+        path,
+        old_text: Some(rebuilt),
+        new_text,
+    })
 }
 
 // Core trims the patch tool's diffs for display, which breaks `applyPatch`, so its previews come from its own hunks.
 // Any failure drops every preview, as the TS `Effect.forEach` does.
-async fn permission_previews(tool_name: &str, input: &Value, metadata: Option<&Value>, cwd: &str) -> Option<Vec<Diff>> {
-    if canonical_name(tool_name) == "patch" {
+async fn permission_previews(
+    tool_name: &str,
+    input: ToolInput<'_>,
+    metadata: Option<&crate::update::Input>,
+    cwd: &str,
+) -> Option<Vec<Diff>> {
+    if tool_kind(tool_name) == ToolKind::Patch {
         return patch_previews(input, cwd).await;
     }
     let mut previews = Vec::new();
     for file in decode_files(metadata.and_then(|metadata| metadata.get("files"))) {
         let path = absolute_path(&file.file, cwd);
-        let old_text = match file.status.as_str() {
-            "added" => None,
-            _ => Some(read_text(&path).await?),
-        };
+        let old_text = if file.status == FileStatus::Added { None } else { Some(read_text(&path).await?) };
         let files = unified::parse(&file.patch)?;
         // `applyPatch` throws on a patch of more than one file.
         let [hunks] = files.as_slice() else { return None };
         if let Some(new_text) = unified::apply(old_text.as_deref().unwrap_or_default(), hunks) {
-            previews.push(Diff::new(path, old_text, new_text));
+            previews.push(Diff { path, old_text, new_text });
         }
     }
     Some(previews)
 }
 
-async fn patch_previews(input: &Value, cwd: &str) -> Option<Vec<Diff>> {
+async fn patch_previews(input: ToolInput<'_>, cwd: &str) -> Option<Vec<Diff>> {
     let mut previews = Vec::new();
     for hunk in patch_hunks(input) {
         let path = absolute_path(hunk.path(), cwd);
         let preview = match hunk {
-            patch::Hunk::Add { contents, .. } => {
-                let new_text =
-                    if contents.is_empty() || contents.ends_with('\n') { contents } else { format!("{contents}\n") };
-                Diff::new(path, None, new_text)
+            patch::Hunk::Add { contents, .. } => Diff { path, old_text: None, new_text: contents },
+            patch::Hunk::Delete { .. } => {
+                Diff { old_text: Some(read_text(&path).await?), path, new_text: String::new() }
             }
-            patch::Hunk::Delete { .. } => Diff::new(path.clone(), Some(read_text(&path).await?), String::new()),
             patch::Hunk::Update { path: from, move_path, chunks } => {
                 let old_text = read_text(&path).await?;
                 let derived = patch::derive(&from, &chunks, &old_text).ok()?;
                 let target = move_path.map_or(path, |target| absolute_path(&target, cwd));
-                Diff::new(target, Some(old_text), derived)
+                Diff { path: target, old_text: Some(old_text), new_text: derived }
             }
         };
         previews.push(preview);
@@ -242,36 +210,33 @@ async fn patch_previews(input: &Value, cwd: &str) -> Option<Vec<Diff>> {
     Some(previews)
 }
 
-fn permission_title(tool_name: &str, input: &Value, previews: &[Diff]) -> Option<String> {
+fn permission_title(tool_name: &str, fields: ToolInput, previews: &[Diff]) -> Option<String> {
     if previews.len() > 1 {
         return Some(format!("{} files", previews.len()));
     }
-    match canonical_name(tool_name).as_str() {
-        "external_directory" => {
-            text(input, "description").or_else(|| text(input, "command")).or_else(|| text(input, "parentDir"))
-        }
-        "webfetch" => text(input, "url"),
-        "websearch" => text(input, "query"),
-        "grep" | "glob" => text(input, "pattern"),
-        "read" | "edit" | "write" | "patch" => {
-            file_path(input).or_else(|| previews.first().map(|preview| preview.path.clone()))
+    let dir = ExternalDirectoryInput(fields);
+    let text = match tool_kind(tool_name) {
+        ToolKind::ExternalDirectory => dir.description().str().or(dir.command().str()).or(dir.parent_dir().str()),
+        ToolKind::WebFetch => WebFetchInput(fields).url().str(),
+        ToolKind::WebSearch => WebSearchInput(fields).query().str(),
+        ToolKind::Grep | ToolKind::Glob => SearchInput(fields).pattern().str(),
+        ToolKind::Read | ToolKind::Edit | ToolKind::Write | ToolKind::Patch => {
+            fields.file_path().or(previews.first().map(|preview| preview.path.as_str()))
         }
         _ => None,
-    }
+    };
+    text.map(str::to_owned)
 }
 
-fn permission_locations(tool_name: &str, tool_input: &Value, input: &Input, cwd: &str) -> Vec<Value> {
-    let found = locations(tool_name, tool_input, cwd);
-    let action = input.data("action").and_then(Value::as_str);
-    if !found.is_empty() || !matches!(action, Some("read" | "edit" | "external_directory")) {
+fn permission_locations(tool_name: &str, fields: ToolInput, input: &Input, cwd: &str) -> Vec<Location> {
+    let found = locations(tool_name, fields, cwd);
+    if !found.is_empty() || !matches!(input.ask.action.as_str(), "read" | "edit" | "external_directory") {
         return found;
     }
     let paths = input
-        .data("resources")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
+        .ask
+        .resources
+        .iter()
         .map(|resource| resource.strip_suffix("/*").unwrap_or(resource))
         .filter(|path| !path.is_empty() && !path.contains(['*', '?']))
         .map(|path| Some(absolute_path(path, cwd)));
@@ -286,11 +251,17 @@ async fn read_text(path: &str) -> Option<String> {
 }
 
 /// One `FileDiff.Info`.
-#[derive(Debug, Clone, PartialEq)]
 struct FileDiff {
     file: String,
     patch: String,
-    status: String,
+    status: FileStatus,
+}
+
+#[derive(PartialEq)]
+enum FileStatus {
+    Added,
+    Deleted,
+    Modified,
 }
 
 /// `Schema.decodeUnknownOption(Schema.Array(FileDiff.Info))`, with an invalid value as no files.
@@ -302,18 +273,18 @@ fn decode_files(value: Option<&Value>) -> Vec<FileDiff> {
 fn decode_file(value: &Value) -> Option<FileDiff> {
     let count =
         |key: &str| value.get(key).and_then(Value::as_f64).is_some_and(|number| number >= 0.0 && number.fract() == 0.0);
-    let status = value.get("status")?.as_str()?;
-    let more = value.get("more");
-    if !count("additions")
-        || !count("deletions")
-        || !matches!(status, "added" | "deleted" | "modified")
-        || more.is_some_and(|more| more != &json!(true))
-    {
+    let status = match value.get("status")?.as_str()? {
+        "added" => FileStatus::Added,
+        "deleted" => FileStatus::Deleted,
+        "modified" => FileStatus::Modified,
+        _ => return None,
+    };
+    if !count("additions") || !count("deletions") || value.get("more").is_some_and(|more| more != &json!(true)) {
         return None;
     }
     Some(FileDiff {
         file: value.get("file")?.as_str()?.to_owned(),
         patch: value.get("patch")?.as_str()?.to_owned(),
-        status: status.to_owned(),
+        status,
     })
 }

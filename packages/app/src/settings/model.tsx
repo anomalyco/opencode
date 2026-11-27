@@ -17,6 +17,8 @@ export type WorkspaceLastUsed = Settings["workspaces"]["lastUsed"][string]
 
 export type FollowUpBehavior = Settings["general"]["followUpBehavior"]
 
+export type QuestionSubmitKey = Settings["general"]["questionSubmitKey"]
+
 export type BackgroundActivity = Settings["general"]["backgroundActivity"]
 
 export type TimelineWidth = Settings["general"]["timelineWidth"]
@@ -36,25 +38,22 @@ export function projectSettingsKey(scope: ServerScope, projectID: string | undef
   return projectID ? ScopedKey.from(scope, projectID) : undefined
 }
 
-export const monoDefault = "IBM Plex Mono"
+export const monoDefault = "OpenMono"
 
 export const sansDefault = "Inter"
 
-export const terminalDefault = "JetBrainsMono Nerd Font Mono"
+export const terminalDefault = "OpenMono"
 
 const monoFallback =
-  '"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+  '"OpenMono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 
 const sansFallback = '"Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
-
-const terminalFallback =
-  '"JetBrainsMono Nerd Font Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 
 const monoBase = monoFallback
 
 const sansBase = sansFallback
 
-const terminalBase = terminalFallback
+const terminalBase = monoFallback
 
 function input(font: string | undefined) {
   return font ?? ""
@@ -131,12 +130,14 @@ const generalSchema = Persistence.struct({
   timelineWidth: Schema.Literals(["focused", "comfortable", "wide"]),
   foldUserMessages: Schema.Boolean,
   wrapCodeBlocks: Schema.Boolean,
-  // The redesigned keyboard-first question dock, off until it ships.
-  newQuestionUI: Schema.Boolean,
+  // The question dock that answers from the composer. Only local and dev builds offer it, on by default there.
+  questionComposer: Persistence.optional(Schema.Boolean),
   // The redesigned session timeline, off until it ships.
   newTimeline: Persistence.optional(Schema.Boolean),
   // Browser-style session tab grouping across vertical and horizontal tabs.
   tabGroups: Persistence.optional(Schema.Boolean),
+  // The Automations view in the sidebar and Home, off in releases until it ships.
+  automations: Persistence.optional(Schema.Boolean),
   // One side panel open state for every session tab, instead of one per tab.
   sharedSidePanel: Persistence.optional(Schema.Boolean),
   // "projects" is retired; `resolveSidebarOrganize` moves it to its replacement.
@@ -145,6 +146,9 @@ const generalSchema = Persistence.struct({
   // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
   mobileDiffWrap: Persistence.optional(Schema.Boolean),
   followUpBehavior: Schema.Literals(["queue", "steer"]),
+  // The key that moves a question dock on, or submits it on the last question. The other Enter selects an answer or
+  // starts a new line in the custom answer.
+  questionSubmitKey: Schema.Literals(["enter", "mod+enter"]),
 })
 
 const appearanceSchema = Persistence.struct({
@@ -156,6 +160,8 @@ const appearanceSchema = Persistence.struct({
   tabLayout: Schema.Literals(["horizontal", "vertical", "inbox"]),
   // Prototype (local/dev desktop builds): tabs at `tabLayout`'s position, or one list of every session.
   navigation: Persistence.optional(Schema.Literals(["tabs", "list"])),
+  // Prototype: open tabs grouped by their project or server.
+  tabGrouping: Persistence.optional(Schema.Literals(["none", "project", "server"])),
   sidebarOpen: Persistence.optional(Schema.Boolean),
   reduceMotion: Schema.Literals(["system", "on", "off"]),
 })
@@ -315,10 +321,10 @@ export const defaultSettings: Settings = {
     timelineWidth: "comfortable",
     foldUserMessages: false,
     wrapCodeBlocks: false,
-    newQuestionUI: false,
     sidebarOrganize: "list",
     mobileTitlebarPosition: "top",
     followUpBehavior: "steer",
+    questionSubmitKey: "enter",
   },
   appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", reduceMotion: "system" },
   keybinds: {},
@@ -347,6 +353,11 @@ export function recentSessionsAvailable(platform: "web" | "desktop", channel: Im
   return platform === "desktop" && (channel === "local" || channel === "dev")
 }
 
+/** Only local and dev builds offer the question dock that answers from the composer. */
+export function questionComposerAvailable(channel: ImportMetaEnv["VITE_OPENCODE_CHANNEL"]) {
+  return channel === "local" || channel === "dev"
+}
+
 /** Projects moved to Consolidated where this build offers it (local/dev desktop), and to Customize elsewhere. */
 export function resolveSidebarOrganize(
   value: Settings["general"]["sidebarOrganize"] | undefined,
@@ -364,6 +375,8 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsPersistence, defaultSettings)
 
     const prototypes = recentSessionsAvailable(usePlatform().platform, import.meta.env.VITE_OPENCODE_CHANNEL)
+
+    const questionComposer = questionComposerAvailable(import.meta.env.VITE_OPENCODE_CHANNEL)
 
     const sidebarOrganizeOptions: SidebarOrganize[] = prototypes
       ? ["list", "customize", "recent", "consolidated"]
@@ -464,13 +477,25 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setTabGroups(value: boolean) {
           setStore("general", "tabGroups", value)
         },
+        automations: withFallback(
+          () => store.general?.automations,
+          import.meta.env.DEV && import.meta.env.VITE_OPENCODE_TEST_FIXTURES !== "1",
+        ),
+        setAutomations(value: boolean) {
+          setStore("general", "automations", value)
+        },
         sharedSidePanel: withFallback(() => store.general?.sharedSidePanel, false),
         setSharedSidePanel(value: boolean) {
           setStore("general", "sharedSidePanel", value)
         },
-        newQuestionUI: withFallback(() => store.general?.newQuestionUI, defaultSettings.general.newQuestionUI),
-        setNewQuestionUI(value: boolean) {
-          setStore("general", "newQuestionUI", value)
+        questionComposerAvailable: questionComposer,
+        // Test fixtures keep the classic dock unless a test opts in.
+        questionComposer: withFallback(
+          () => (questionComposer ? store.general?.questionComposer : false),
+          questionComposer && import.meta.env.VITE_OPENCODE_TEST_FIXTURES !== "1",
+        ),
+        setQuestionComposer(value: boolean) {
+          setStore("general", "questionComposer", value)
         },
         sidebarOrganizeOptions,
         sidebarOrganize,
@@ -487,6 +512,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         followUpBehavior: withFallback(() => store.general?.followUpBehavior, defaultSettings.general.followUpBehavior),
         setFollowUpBehavior(value: FollowUpBehavior) {
           setStore("general", "followUpBehavior", value)
+        },
+        questionSubmitKey: withFallback(
+          () => store.general?.questionSubmitKey,
+          defaultSettings.general.questionSubmitKey,
+        ),
+        setQuestionSubmitKey(value: QuestionSubmitKey) {
+          setStore("general", "questionSubmitKey", value)
         },
       },
       visibility: {
@@ -526,12 +558,16 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         /** The navigation prototype (Experimental → Consolidated): pinned sessions and groups, and Tabs or List. */
         navigationPrototype: createMemo(() => sidebarOrganize() === "consolidated"),
         navigation: createMemo(() =>
-          sidebarOrganize() === "consolidated" && store.appearance?.navigation === "list"
-            ? "list"
-            : "tabs",
+          sidebarOrganize() === "consolidated" && store.appearance?.navigation === "list" ? "list" : "tabs",
         ),
         setNavigation(value: "tabs" | "list") {
           setStore("appearance", "navigation", value)
+        },
+        tabGrouping: createMemo(() =>
+          sidebarOrganize() === "consolidated" ? (store.appearance?.tabGrouping ?? "none") : "none",
+        ),
+        setTabGrouping(value: "none" | "project" | "server") {
+          setStore("appearance", "tabGrouping", value)
         },
         sidebarOpen: withFallback(() => store.appearance?.sidebarOpen, true),
         setSidebarOpen(value: boolean) {
@@ -543,6 +579,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
       },
       keybinds: {
+        all: () => store.keybinds ?? {},
         get: (action: string) => store.keybinds?.[action],
         set(action: string, keybind: string) {
           setStore("keybinds", action, keybind)

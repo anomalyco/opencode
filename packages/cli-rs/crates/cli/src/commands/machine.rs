@@ -7,7 +7,7 @@ use opencode_api::client::Client;
 use opencode_api::error::Error as ApiError;
 use opencode_api::generated::{
     ConflictError, ExperimentalMachineAddInput, ExperimentalMachineRemoveInput, ForbiddenError, InvalidRequestError,
-    MachineInfo, MachineInvite, MachineInviteReachItem, MachineNotFoundError, MachineReach,
+    MachineInfo, MachineInvite, MachineInviteReachItem, MachineNotFoundError, MachineReach, tag,
 };
 use opencode_util::time::{Zone, now_ms};
 use opencode_util::{bail, error};
@@ -84,8 +84,7 @@ async fn client(context: &Context) -> error::Result<Connected> {
     if context.server.standalone {
         bail!("--standalone starts a server for this command only; a machine needs one that keeps running.");
     }
-    let disabled = Local::from_env()?.config().read()?.disabled == Some(true);
-    if context.server.server.is_none() && disabled {
+    if context.server.server.is_none() && Local::from_env()?.config().read()?.disabled == Some(true) {
         bail!("Managing machines requires the background service; run `opencode service unset disabled` first.");
     }
     connect(context).await
@@ -110,7 +109,7 @@ fn reach(urls: &[String]) -> Vec<MachineReach> {
             seen.push(href);
         }
     }
-    seen.into_iter().map(|url| MachineReach { r#type: "url".into(), url: url.into() }).collect()
+    seen.into_iter().map(|url| MachineReach { r#type: tag::Url, url: url.into() }).collect()
 }
 
 /// `formatMachineAdd`: only the join string when stdout is not a terminal.
@@ -128,7 +127,7 @@ fn add_text(invite: &MachineInvite, tty: bool, now: i64, zone: Zone) -> String {
         }
         _ => false,
     };
-    let access = if invite.reach.iter().any(|entry| entry.tag() == "iroh") {
+    let access = if invite.reach.iter().any(|entry| matches!(entry, MachineInviteReachItem::Iroh(_))) {
         "Works from any network."
     } else if invite.reach.iter().any(reachable) {
         "Works from computers that can reach one of these addresses."
@@ -268,7 +267,6 @@ mod tests {
                 "ws://[::1]:4096/api/experimental/machine/link",
             ]
         );
-        assert!(reach(&servers.map(String::from)).iter().all(|entry| entry.r#type == "url"));
     }
 
     /// machine.test.ts "machine output formatting".

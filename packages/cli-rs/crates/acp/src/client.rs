@@ -1,6 +1,7 @@
 use futures_util::stream::BoxStream;
 use opencode_api::client::Client;
 use opencode_api::error::Error;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::error::Failure;
@@ -24,6 +25,18 @@ pub fn classify(error: &Error) -> Failure {
                 Some("InvalidCursorError") => Failure::InvalidRequest {
                     message: declared.message.clone().unwrap_or_default(),
                     field: Some("cursor".to_owned()),
+                },
+                Some("CommandNotFoundError") => Failure::InvalidRequest {
+                    message: declared.message.clone().unwrap_or_default(),
+                    field: Some("prompt".to_owned()),
+                },
+                // The message is the command's own, such as its usage, so the client shows it instead of a generic failure.
+                Some("CommandExecutionError") => Failure::ServiceFailure {
+                    safe_message: declared.message.clone().unwrap_or_default(),
+                    service: Some("command".to_owned()),
+                    error_name: Some("CommandExecutionError".to_owned()),
+                    status: None,
+                    retry_after_ms: None,
                 },
                 tag => Failure::Defect { name: tag.map(str::to_owned), detail: error.to_string() },
             }
@@ -50,8 +63,8 @@ pub fn decode_session_id(value: &str) -> Result<String, Failure> {
     Err(Failure::invalid_request("Invalid session ID", Some("sessionID")))
 }
 
-/// One `GET /api/event` stream of raw events. A failure to open the stream is its first item.
-pub fn subscribe(client: &Client) -> BoxStream<'static, Result<Value, Error>> {
+/// One `GET /api/event` stream of events. A failure to open the stream is its first item.
+pub fn subscribe<T: DeserializeOwned + Send + 'static>(client: &Client) -> BoxStream<'static, Result<T, Error>> {
     opencode_api::events::raw(client)
 }
 

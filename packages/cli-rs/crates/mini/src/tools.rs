@@ -3,8 +3,10 @@
 
 use opencode_api::generated::{SessionMessageAssistantToolState as State, ToolContent};
 use opencode_ui::tool_info::{
-    Todo, TodoStatus, canonical_tool_name, normalize_input, normalize_metadata, parse_todos, primitive_input_summary,
-    todo_marker, tool_display_content, tool_display_metadata, tool_output_text, tool_path, web_search_provider_label,
+    LspInput, QuestionInput, SearchInput, ShellInput, SkillInput, SubagentInput, Todo, TodoInput, TodoStatus,
+    ToolInput, ToolKind, WebFetchInput, WebSearchInput, WriteInput, canonical_tool_name, normalize_metadata,
+    primitive_input_summary, todo_marker, tool_display_content, tool_display_metadata, tool_output_text, tool_path,
+    web_search_provider_label,
 };
 use opentui::input::strip_ansi_sequences;
 use opentui::widget::{Code, DiffColors, DiffView, LineNumbers};
@@ -33,20 +35,23 @@ pub struct DiffItem {
 
 /// `ToolFrame`: a tool part normalized for display.
 #[derive(Clone, Debug, Default)]
-struct Frame {
+struct Frame<'a> {
     directory: Option<String>,
     raw: String,
     name: String,
-    input: Map<String, Value>,
+    kind: ToolKind,
+    input: ToolInput<'a>,
     meta: Map<String, Value>,
-    status: String,
+    /// `None` for no part; streaming counts as running.
+    status: Option<ToolState>,
     error: String,
     output: String,
     start: Option<f64>,
     end: Option<f64>,
 }
 
-fn frame(part: &SessionMessageAssistantTool, directory: Option<&str>) -> Frame {
+fn frame<'a>(part: &'a SessionMessageAssistantTool, directory: Option<&str>) -> Frame<'a> {
+    let kind = ToolKind::of(&part.name);
     let name = canonical_tool_name(&part.name).to_owned();
     let directory = directory.map(str::to_owned);
     if let State::Streaming(state) = &part.state {
@@ -54,19 +59,20 @@ fn frame(part: &SessionMessageAssistantTool, directory: Option<&str>) -> Frame {
             directory,
             raw: state.input.clone(),
             name,
-            status: "streaming".into(),
+            kind,
+            status: Some(ToolState::Running),
             start: Some(part.time.created),
             ..Frame::default()
         };
     }
     let output = tool_output_text(&name, &tool_display_content(&part.state));
-    let state = serde_json::to_value(&part.state).unwrap_or_default();
     Frame {
         directory,
         raw: output.clone(),
-        input: normalize_input(&name, state.get("input")),
-        meta: normalize_metadata(&name, tool_display_metadata(&part.state)),
-        status: part.state.tag().to_owned(),
+        kind,
+        input: ToolInput::of(&part.state),
+        meta: normalize_metadata(kind, tool_display_metadata(&part.state)),
+        status: state_of(&part.state),
         error: match &part.state {
             State::Error(state) => state.error.message.clone(),
             _ => String::new(),
@@ -79,41 +85,36 @@ fn frame(part: &SessionMessageAssistantTool, directory: Option<&str>) -> Frame {
 }
 
 /// `toolFrame`: a commit's frame, with the commit's own state and text taking precedence.
-fn tool_frame(commit: &Commit, raw: &str) -> Frame {
+fn tool_frame<'a>(commit: &'a Commit, raw: &str) -> Frame<'a> {
     let current = commit.part.as_ref().map(|part| frame(part, commit.directory.as_deref())).unwrap_or_default();
     let name = commit.tool.as_deref().filter(|name| !name.is_empty()).unwrap_or(match current.name.as_str() {
         "" => "tool",
         name => name,
     });
-    let status = match commit.tool_state {
-        Some(state) => state_name(state).to_owned(),
-        None => current.status.clone(),
-    };
     let error = commit.tool_error.clone().unwrap_or(current.error.clone()).trim().to_owned();
     Frame {
         directory: commit.directory.clone(),
         raw: raw.to_owned(),
         name: canonical_tool_name(name).to_owned(),
+        kind: ToolKind::of(name),
         output: if commit.part.is_some() { current.output.clone() } else { raw.to_owned() },
-        status,
+        status: commit.tool_state.or(current.status),
         error,
         ..current
     }
 }
 
-fn state_name(state: ToolState) -> &'static str {
-    match state {
-        ToolState::Running => "running",
-        ToolState::Completed => "completed",
-        ToolState::Error => "error",
+/// A part's state by its tag: streaming, and any state this client does not know, counts as running.
+fn state_of(state: &State) -> Option<ToolState> {
+    match state.tag() {
+        "" => None,
+        "completed" => Some(ToolState::Completed),
+        "error" => Some(ToolState::Error),
+        _ => Some(ToolState::Running),
     }
 }
 
-impl Frame {
-    fn input(&self, key: &str) -> &str {
-        self.input.get(key).and_then(Value::as_str).unwrap_or_default()
-    }
-
+impl Frame<'_> {
     fn path(&self, input: &str, home: bool) -> String {
         let home = home.then(opencode_local::paths::home);
         tool_path(input, self.directory.as_deref(), home.as_deref())
@@ -140,79 +141,64 @@ struct ToolView {
     snap: bool,
 }
 
-/// The tools of `TOOL_RULES`.
-const KNOWN: [&str; 17] = [
-    "invalid",
-    "shell",
-    "write",
-    "edit",
-    "patch",
-    "batch",
-    "subagent",
-    "todowrite",
-    "question",
-    "read",
-    "glob",
-    "grep",
-    "list",
-    "lsp",
-    "webfetch",
-    "websearch",
-    "skill",
-];
-
-fn tool_view(name: &str) -> ToolView {
-    let view = |output, final_, snap| ToolView { output, final_, snap };
-    match canonical_tool_name(name) {
-        "invalid" | "shell" | "batch" => view(true, false, false),
-        "write" | "edit" | "patch" | "subagent" | "todowrite" | "question" => view(false, true, true),
-        "read" | "glob" | "grep" | "list" | "lsp" | "webfetch" | "websearch" | "skill" => view(false, false, false),
-        _ => view(true, true, false),
+/// `TOOL_RULES`' view of a tool, `None` for a tool without rules.
+fn rule(kind: ToolKind) -> Option<ToolView> {
+    let view = |output, final_, snap| Some(ToolView { output, final_, snap });
+    match kind {
+        ToolKind::Invalid | ToolKind::Shell | ToolKind::Batch => view(true, false, false),
+        ToolKind::Write | ToolKind::Edit | ToolKind::Patch => view(false, true, true),
+        ToolKind::Subagent | ToolKind::Todo | ToolKind::Question => view(false, true, true),
+        ToolKind::Read | ToolKind::Glob | ToolKind::Grep | ToolKind::List | ToolKind::Lsp => view(false, false, false),
+        ToolKind::WebFetch | ToolKind::WebSearch | ToolKind::Skill => view(false, false, false),
+        _ => None,
     }
 }
 
 /// `toolScroll`: the text of one phase, by the tool's rule or the fallback.
 fn scroll(phase: Phase, frame: &Frame) -> String {
     let name = frame.name.as_str();
-    let rule = match (name, phase) {
-        ("invalid" | "write" | "edit" | "patch" | "batch" | "subagent" | "todowrite" | "question", Phase::Start) => {
+    let rule = match (frame.kind, phase) {
+        (ToolKind::Invalid | ToolKind::Write | ToolKind::Edit | ToolKind::Patch, Phase::Start) => Some(String::new()),
+        (ToolKind::Batch | ToolKind::Subagent | ToolKind::Todo | ToolKind::Question, Phase::Start) => {
             Some(String::new())
         }
-        ("shell", Phase::Start) => Some(shell_start(frame)),
-        ("shell", Phase::Progress) => Some(shell_progress(frame)),
-        ("shell", Phase::Final) => Some(shell_final(frame)),
-        ("patch", Phase::Final) => Some(patch_final(frame)),
-        ("subagent", Phase::Final) => Some(task_final(frame)),
-        ("question", Phase::Final) => Some(question_final(frame)),
-        ("read", Phase::Start) => {
-            let extra = primitive_input_summary(&frame.input, &["path"]);
+        (ToolKind::Shell, Phase::Start) => Some(shell_start(frame)),
+        (ToolKind::Shell, Phase::Progress) => Some(shell_progress(frame)),
+        (ToolKind::Shell, Phase::Final) => Some(shell_final(frame)),
+        (ToolKind::Patch, Phase::Final) => Some(patch_final(frame)),
+        (ToolKind::Subagent, Phase::Final) => Some(task_final(frame)),
+        (ToolKind::Question, Phase::Final) => Some(question_final(frame)),
+        (ToolKind::Read, Phase::Start) => {
+            let extra = primitive_input_summary(frame.input.iter(), &["path"]);
             let tail = if extra.is_empty() { String::new() } else { format!(" {extra}") };
-            Some(format!("→ Read {}{tail}", frame.path(frame.input("path"), false)).trim().to_owned())
+            Some(format!("→ Read {}{tail}", frame.path(frame.input.legacy_path().text(), false)).trim().to_owned())
         }
-        ("glob" | "grep", Phase::Start) => {
-            let label = if name == "glob" { "Glob" } else { "Grep" };
-            let pattern = frame.input("pattern");
+        (kind @ (ToolKind::Glob | ToolKind::Grep), Phase::Start) => {
+            let label = if kind == ToolKind::Glob { "Glob" } else { "Grep" };
+            let pattern = SearchInput(frame.input).pattern().text();
             let head = if pattern.is_empty() { format!("✱ {label}") } else { format!("✱ {label} \"{pattern}\"") };
-            let dir = frame.input("path");
+            let dir = frame.input.path().text();
             Some(if dir.is_empty() { head } else { format!("{head} in {}", frame.path(dir, false)) })
         }
-        ("glob", Phase::Final) => Some(if tool_error(frame).is_empty() { fail(frame) } else { tool_error(frame) }),
-        ("list", Phase::Start) => {
-            let dir = frame.input("path");
+        (ToolKind::Glob, Phase::Final) => {
+            Some(if tool_error(frame).is_empty() { fail(frame) } else { tool_error(frame) })
+        }
+        (ToolKind::List, Phase::Start) => {
+            let dir = frame.input.path().text();
             Some(if dir.is_empty() { "→ List".into() } else { format!("→ List {}", frame.path(dir, false)) })
         }
-        ("lsp", Phase::Start) => Some(format!("→ {}", lsp_title(frame))),
-        ("webfetch", Phase::Start) => {
-            let url = frame.input("url");
+        (ToolKind::Lsp, Phase::Start) => Some(format!("→ {}", lsp_title(frame))),
+        (ToolKind::WebFetch, Phase::Start) => {
+            let url = WebFetchInput(frame.input).url().text();
             Some(if url.is_empty() { "% WebFetch".into() } else { format!("% WebFetch {url}") })
         }
-        ("websearch", Phase::Start) => {
+        (ToolKind::WebSearch, Phase::Start) => {
             let title = web_search_provider_label(frame.meta.get("provider").unwrap_or(&Value::Null));
-            let query = frame.input("query");
+            let query = WebSearchInput(frame.input).query().text();
             Some(if query.is_empty() { format!("◈ {title}") } else { format!("◈ {title} \"{query}\"") })
         }
-        ("skill", Phase::Start) => {
-            let name = [frame.meta.get("name"), frame.input.get("id")]
+        (ToolKind::Skill, Phase::Start) => {
+            let name = [frame.meta.get("name"), SkillInput(frame.input).id().value()]
                 .into_iter()
                 .flatten()
                 .find(|name| !name.is_null())
@@ -224,7 +210,7 @@ fn scroll(phase: Phase, frame: &Frame) -> String {
     };
     rule.unwrap_or_else(|| match phase {
         Phase::Start => {
-            let extra = primitive_input_summary(&frame.input, &[]);
+            let extra = primitive_input_summary(frame.input.iter(), &[]);
             if extra.is_empty() { format!("⚙ {name}") } else { format!("⚙ {name} {extra}") }
         }
         Phase::Progress => frame.raw.clone(),
@@ -248,10 +234,10 @@ fn tool_error(frame: &Frame) -> String {
 }
 
 fn fallback_final(frame: &Frame) -> String {
-    if frame.status == "error" {
+    if frame.status == Some(ToolState::Error) {
         return fail(frame);
     }
-    if !frame.status.is_empty() && frame.status != "completed" {
+    if frame.status == Some(ToolState::Running) {
         return frame.raw.trim().to_owned();
     }
     match frame.span() {
@@ -261,8 +247,8 @@ fn fallback_final(frame: &Frame) -> String {
 }
 
 fn shell_start(frame: &Frame) -> String {
-    let command = frame.input("command");
-    let workdir = frame.input("workdir");
+    let input = ShellInput(frame.input);
+    let (command, workdir) = (input.command().text(), input.workdir().text());
     let formatted = if !workdir.is_empty() && workdir != "." { frame.path(workdir, true) } else { String::new() };
     let dir = if formatted == "." { "" } else { formatted.as_str() };
     match (command.is_empty(), dir.is_empty()) {
@@ -275,7 +261,8 @@ fn shell_start(frame: &Frame) -> String {
 
 fn shell_progress(frame: &Frame) -> String {
     let out = strip_ansi_sequences(&frame.raw);
-    let command = frame.input("command").trim();
+    let input = ShellInput(frame.input);
+    let command = input.command().text().trim();
     let format = |text: &str| {
         let body = text.trim_start_matches('\n').trim_end_matches('\n');
         if body.is_empty() { String::new() } else { format!("\n{body}") }
@@ -283,7 +270,7 @@ fn shell_progress(frame: &Frame) -> String {
     if command.is_empty() {
         return out.trim_end_matches('\n').to_owned();
     }
-    let raw_dir = frame.input("workdir").trim();
+    let raw_dir = input.workdir().text().trim();
     let dir = if raw_dir.is_empty() { String::new() } else { frame.path(raw_dir, true) };
     let lines: Vec<&str> = out.split('\n').collect();
     let first = lines.first().copied().unwrap_or_default().trim();
@@ -302,7 +289,7 @@ fn shell_progress(frame: &Frame) -> String {
 }
 
 fn shell_final(frame: &Frame) -> String {
-    if frame.status == "error" {
+    if frame.status == Some(ToolState::Error) {
         return fail(frame);
     }
     let time = frame.span();
@@ -338,7 +325,7 @@ fn patch_title(file: &Map<String, Value>, frame: &Frame) -> String {
 }
 
 fn patch_final(frame: &Frame) -> String {
-    if frame.status == "error" {
+    if frame.status == Some(ToolState::Error) {
         return fail(frame);
     }
     let files = frame.files();
@@ -362,25 +349,25 @@ fn patch_final(frame: &Frame) -> String {
 }
 
 fn agent_kind(frame: &Frame, fallback: &str) -> String {
-    opencode_ui::tool_info::titlecase(match frame.input("agent") {
+    opencode_ui::tool_info::titlecase(match SubagentInput(frame.input).legacy_agent().text() {
         "" => fallback,
         agent => agent,
     })
 }
 
 fn task_final(frame: &Frame) -> String {
-    if frame.status == "error" {
+    if frame.status == Some(ToolState::Error) {
         return fail(frame);
     }
     let kind = agent_kind(frame, "general");
-    match frame.input("description") {
+    match SubagentInput(frame.input).description().text() {
         "" => format!("# {kind} Subagent"),
         row => format!("# {kind} Subagent\n{row}"),
     }
 }
 
 fn questions(frame: &Frame) -> Vec<String> {
-    let list = frame.input.get("questions").and_then(Value::as_array).cloned().unwrap_or_default();
+    let list = QuestionInput(frame.input).questions().array();
     list.iter().map(|item| item.get("question").and_then(Value::as_str).unwrap_or_default().to_owned()).collect()
 }
 
@@ -414,16 +401,17 @@ fn question_final(frame: &Frame) -> String {
 }
 
 fn lsp_title(frame: &Frame) -> String {
-    let operation = match frame.input("operation") {
+    let input = LspInput(frame.input);
+    let operation = match input.operation().text() {
         "" => "request",
         operation => operation,
     };
-    let file = frame.input("path");
+    let file = frame.input.legacy_path().text();
     if file.is_empty() {
         return format!("LSP {operation}");
     }
-    let number = |key| frame.input.get(key).filter(|value| value.is_number()).map(opencode_api::js::js_string);
-    let position = match (number("line"), number("character")) {
+    let number = |value: Option<&Value>| value.filter(|value| value.is_number()).map(opencode_api::js::js_string);
+    let position = match (number(input.line().value()), number(input.character().value())) {
         (Some(line), Some(character)) => format!(":{line}:{character}"),
         _ => String::new(),
     };
@@ -431,9 +419,9 @@ fn lsp_title(frame: &Frame) -> String {
 }
 
 fn snapshot(frame: &Frame) -> Option<Snapshot> {
-    match frame.name.as_str() {
-        "write" => {
-            let (file, content) = (frame.input("path"), frame.input("content"));
+    match frame.kind {
+        ToolKind::Write => {
+            let (file, content) = (frame.input.legacy_path().text(), WriteInput(frame.input).content().text());
             if file.is_empty() && content.is_empty() {
                 return None;
             }
@@ -443,10 +431,10 @@ fn snapshot(frame: &Frame) -> Option<Snapshot> {
                 file: file.to_owned(),
             })
         }
-        "edit" => {
+        ToolKind::Edit => {
             let item = frame.files().first().copied();
             let file = item.map(|item| file_text(item, "file")).filter(|file| !file.is_empty());
-            let file = file.unwrap_or(frame.input("path"));
+            let file = file.unwrap_or(frame.input.legacy_path().text());
             let diff = item.map(|item| file_text(item, "patch")).filter(|diff| !diff.is_empty());
             let diff = diff.unwrap_or(frame.meta.get("diff").and_then(Value::as_str).unwrap_or_default());
             if file.is_empty() || diff.trim().is_empty() {
@@ -457,7 +445,7 @@ fn snapshot(frame: &Frame) -> Option<Snapshot> {
                 items: vec![DiffItem { title, diff: diff.to_owned(), file: file.to_owned(), deletions: None }],
             })
         }
-        "patch" => {
+        ToolKind::Patch => {
             let files = frame.files();
             let items: Vec<DiffItem> = files
                 .iter()
@@ -471,16 +459,17 @@ fn snapshot(frame: &Frame) -> Option<Snapshot> {
                 .collect();
             (!files.is_empty() && items.len() == files.len()).then_some(Snapshot::Diff { items })
         }
-        "subagent" => {
-            let rows = Some(frame.input("description")).filter(|row| !row.is_empty()).map(str::to_owned);
+        ToolKind::Subagent => {
+            let rows =
+                Some(SubagentInput(frame.input).description().text()).filter(|row| !row.is_empty()).map(str::to_owned);
             Some(Snapshot::Task {
                 title: format!("# {} Subagent", agent_kind(frame, "general")),
                 rows: rows.into_iter().collect(),
                 tail: String::new(),
             })
         }
-        "todowrite" => Some(Snapshot::Todo { items: parse_todos(frame.input.get("todos").unwrap_or(&Value::Null)) }),
-        "question" => {
+        ToolKind::Todo => Some(Snapshot::Todo { items: TodoInput(frame.input).items() }),
+        ToolKind::Question => {
             let items = questions(frame)
                 .into_iter()
                 .enumerate()
@@ -553,17 +542,18 @@ pub fn entry_body(commit: &Commit, raw: &str, options: BodyOptions) -> Option<Bo
         };
     }
     let frame = tool_frame(commit, raw);
-    let view = tool_view(&frame.name);
-    if frame.name == "shell" && commit.phase == Phase::Progress && !options.shell_output {
+    let rule = rule(frame.kind);
+    let view = rule.unwrap_or(ToolView { output: true, final_: true, snap: false });
+    if frame.kind == ToolKind::Shell && commit.phase == Phase::Progress && !options.shell_output {
         return None;
     }
-    if frame.name == "subagent" {
+    if frame.kind == ToolKind::Subagent {
         if commit.phase == Phase::Start {
             return None;
         }
         // A launch completes while its child keeps running: its output is instructions, so the card shows.
         if commit.phase == Phase::Final
-            && frame.status == "completed"
+            && frame.status == Some(ToolState::Completed)
             && frame.meta.get("status").and_then(Value::as_str) != Some("running")
             && let Some(result) = task_result(&frame.output)
         {
@@ -574,19 +564,19 @@ pub fn entry_body(commit: &Commit, raw: &str, options: BodyOptions) -> Option<Bo
         return None;
     }
     if commit.phase == Phase::Final {
-        if frame.status == "error" {
+        if frame.status == Some(ToolState::Error) {
             return text_body(scroll(Phase::Final, &frame));
         }
         if !view.final_ {
             return None;
         }
-        if !frame.status.is_empty() && frame.status != "completed" {
+        if frame.status == Some(ToolState::Running) {
             return text_body(frame.raw.trim().to_owned());
         }
         if structured_final(commit) {
             return snapshot(&frame).map(Body::Structured).or_else(|| text_body(scroll(Phase::Final, &frame)));
         }
-        if !KNOWN.contains(&frame.name.as_str()) && frame.output.trim().is_empty() {
+        if rule.is_none() && frame.output.trim().is_empty() {
             return structured_fallback(&frame.meta).or_else(|| text_body(scroll(Phase::Final, &frame)));
         }
     }
@@ -630,12 +620,12 @@ pub fn mono_body(body: Body) -> Body {
 
 /// `toolStructuredFinal`: whether a final tool commit draws a structured body, which groups on its own.
 pub fn structured_final(commit: &Commit) -> bool {
-    let state = commit.tool_state.map(state_name).or_else(|| commit.part.as_ref().map(|part| part.state.tag()));
+    let state = commit.tool_state.or_else(|| commit.part.as_ref().and_then(|part| state_of(&part.state)));
     let name = commit.tool.as_deref().or(commit.part.as_ref().map(|part| part.name.as_str()));
     commit.kind == EntryKind::Tool
         && commit.phase == Phase::Final
-        && state == Some("completed")
-        && name.is_some_and(|name| tool_view(name).snap)
+        && state == Some(ToolState::Completed)
+        && name.and_then(|name| rule(ToolKind::of(name))).is_some_and(|rule| rule.snap)
 }
 
 /// `toolCommit`: one commit of a tool part.
@@ -649,10 +639,7 @@ pub fn commit(
 ) -> Commit {
     let name = canonical_tool_name(&part.name);
     let partial = matches!(part.state, State::Error(_)) && phase == Phase::Progress && value.is_some();
-    let running = || match name {
-        "subagent" => "running subagent".to_owned(),
-        name => format!("running {name}"),
-    };
+    let running = || format!("running {name}");
     let text = match &part.state {
         State::Running(_) => value.map(str::to_owned).unwrap_or_else(running),
         State::Error(_) if partial => value.map(str::to_owned).unwrap_or_else(running),
@@ -682,8 +669,8 @@ pub fn commit(
 /// `toolFinalPhase`: a completed tool whose output already streamed ends with that output as progress.
 pub fn final_phase(part: &SessionMessageAssistantTool) -> Phase {
     let State::Completed(state) = &part.state else { return Phase::Final };
-    let name = canonical_tool_name(&part.name);
-    if tool_view(name).output && !tool_output_text(name, &state.content).is_empty() {
+    let output = rule(ToolKind::of(&part.name)).is_none_or(|rule| rule.output);
+    if output && !tool_output_text(&part.name, &state.content).is_empty() {
         return Phase::Progress;
     }
     Phase::Final
@@ -858,8 +845,10 @@ mod tests {
                 "content": [{ "type": "text", "text": "task_id: x\n<task_result>\nFound.\n</task_result>" }] }),
         );
         assert_eq!(body(&commit(&task, "m", Phase::Final, None, None, 0)), Some(Body::Markdown("Found.".into())));
-        let frame = tool_frame(&commit(&task, "m", Phase::Final, None, None, 0), "");
-        assert_eq!(task_final(&frame), "# Explore Subagent\nFind it");
+        assert_eq!(
+            task_final(&tool_frame(&commit(&task, "m", Phase::Final, None, None, 0), "")),
+            "# Explore Subagent\nFind it"
+        );
         let launch = part(
             "subagent",
             json!({ "status": "completed", "input": { "agent": "explore", "description": "Inspect reducer" },
@@ -877,14 +866,18 @@ mod tests {
             json!({ "status": "completed", "input": {}, "content": [],
                 "metadata": { "files": [{ "file": "a", "status": "added" }, { "file": "b", "status": "modified" }] } }),
         );
-        let frame = tool_frame(&commit(&patch, "m", Phase::Final, None, Some("/w"), 0), "");
-        assert_eq!(patch_final(&frame), "+ Created a");
+        assert_eq!(
+            patch_final(&tool_frame(&commit(&patch, "m", Phase::Final, None, Some("/w"), 0), "")),
+            "+ Created a"
+        );
         let question = part(
             "question",
             json!({ "status": "completed", "input": { "questions": [{ "question": "Why?" }, {}] }, "content": [],
                 "metadata": { "answers": [["Because"]] } }),
         );
-        let frame = tool_frame(&commit(&question, "m", Phase::Final, None, None, 0), "");
-        assert_eq!(question_final(&frame), "? Why?\n  Because\n? Question 2\n  (no answer)");
+        assert_eq!(
+            question_final(&tool_frame(&commit(&question, "m", Phase::Final, None, None, 0), "")),
+            "? Why?\n  Because\n? Question 2\n  (no answer)"
+        );
     }
 }

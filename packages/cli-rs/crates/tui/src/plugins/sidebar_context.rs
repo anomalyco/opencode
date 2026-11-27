@@ -50,7 +50,7 @@ pub struct Last {
     session: String,
     location: Option<abi::LocationRef>,
     boundary: Option<String>,
-    models: Option<Vec<ModelInfo>>,
+    models: Option<std::sync::Arc<[ModelInfo]>>,
     usage: Option<Usage>,
     from: usize,
     after: Vec<(String, u64)>,

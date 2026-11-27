@@ -1,0 +1,59 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "VS Code",
+  "id": "vscode",
+  "light": {
+    "palette": {
+      "neutral": "#ffffff",
+      "ink": "#1f1f1f",
+      "primary": "#005fb8",
+      "accent": "#af00db",
+      "success": "#1a7f37",
+      "warning": "#9a6700",
+      "error": "#d1242f",
+      "info": "#005fb8",
+      "interactive": "#005fb8",
+      "diffAdd": "#1a7f37",
+      "diffDelete": "#d1242f"
+    },
+    "overrides": {
+      "text-weak": "#616161",
+      "syntax-comment": "#007a00",
+      "syntax-keyword": "#0000ff",
+      "syntax-string": "#a31515",
+      "syntax-primitive": "#795e26",
+      "syntax-property": "#001080",
+      "syntax-type": "#1f6e86",
+      "syntax-constant": "#08784e",
+      "syntax-operator": "#1f1f1f",
+      "syntax-punctuation": "#3b3b3b"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#1f1f1f",
+      "ink": "#cccccc",
+      "primary": "#0078d4",
+      "accent": "#c586c0",
+      "success": "#4ec9b0",
+      "warning": "#cca700",
+      "error": "#f14c4c",
+      "info": "#3794ff",
+      "interactive": "#0078d4",
+      "diffAdd": "#2ea043",
+      "diffDelete": "#f14c4c"
+    },
+    "overrides": {
+      "text-weak": "#9d9d9d",
+      "syntax-comment": "#6a9955",
+      "syntax-keyword": "#569cd6",
+      "syntax-string": "#ce9178",
+      "syntax-primitive": "#dcdcaa",
+      "syntax-property": "#9cdcfe",
+      "syntax-type": "#4ec9b0",
+      "syntax-constant": "#b5cea8",
+      "syntax-operator": "#d4d4d4",
+      "syntax-punctuation": "#9d9d9d"
+    }
+  }
+}

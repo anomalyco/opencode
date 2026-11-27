@@ -6,7 +6,8 @@ import { BlobStore } from "@opencode/schema/blob-store"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
-import { Context, Effect, Layer, Schema, Stream } from "effect"
+import { Context, Duration, Effect, Layer, Schedule, Schema, Stream } from "effect"
+import { FileRetention } from "./file-retention.js"
 
 export const ID = BlobStore.ID
 export type ID = BlobStore.ID
@@ -23,6 +24,8 @@ export class UnavailableError extends Schema.TaggedError<UnavailableError>()("Bl
 
 /** Blobs are files named by their ID, with no extension; their type is read from their first bytes. */
 export const DIRECTORY = "blobs"
+/** How long a blob is kept after it was written, whatever stored it. */
+export const RETENTION = Duration.days(7)
 
 /** A stored blob and where its file is. */
 export interface Content extends Info {
@@ -38,7 +41,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/BlobStore") {}
 
-/** Files under `<data>/blobs/`, kept until something removes them. */
+/** Files under `<data>/blobs/`, each deleted a week after it was written. */
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -80,6 +83,16 @@ const layer = Layer.effect(
         const stored = yield* read(id).pipe(Effect.mapError(unavailable))
         return { id, mime: stored.mime, bytes: stored.bytes } satisfies Info
       }).pipe(Effect.withSpan("BlobStore.write"))
+
+    yield* fs.readDirectory(directory).pipe(
+      Effect.map((entries) =>
+        entries.filter((entry) => entry.startsWith("blob_")).map((entry) => path.join(directory, entry)),
+      ),
+      Effect.orElseSucceed(() => []),
+      Effect.flatMap((files) => FileRetention.cleanup(fs, files, RETENTION)),
+      Effect.repeat(Schedule.spaced(Duration.hours(1))),
+      Effect.forkScoped,
+    )
 
     return Service.of({ write, read, remove })
   }),

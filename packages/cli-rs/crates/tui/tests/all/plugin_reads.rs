@@ -277,7 +277,7 @@ fn tabs_open_move_and_close_as_ts_does() {
     h.tui.keymap.dispatch("p0b.open", Some("ses_a"));
     h.wait_for("p0b open true");
     h.wait_for("[ses_a]");
-    assert!(matches!(h.tui.route(), Route::Home), "open showed the tab");
+    assert!(matches!(&*h.tui.route(), Route::Home), "open showed the tab");
     h.tui.keymap.dispatch("p0b.open", Some("ses_b"));
     h.wait_for("[ses_a,ses_b]");
     opencode_tui::tabs::reorder(&h.tui, "ses_b", 0);
@@ -286,7 +286,7 @@ fn tabs_open_move_and_close_as_ts_does() {
     h.wait_for("[ses_a,ses_b]");
     h.tui.keymap.dispatch("p0b.focus", Some("ses_b"));
     h.wait_for("[ses_a,ses_b*]");
-    assert!(matches!(h.tui.route(), Route::Session { id } if id.0 == "ses_b"), "focus did not show the tab");
+    assert!(matches!(&*h.tui.route(), Route::Session { id } if id.0 == "ses_b"), "focus did not show the tab");
     h.tui.keymap.dispatch("p0b.close", Some("ses_b"));
     h.wait_for("[ses_a*]");
     h.tui.keymap.dispatch("p0b.move", Some("ses_b"));
@@ -424,7 +424,7 @@ fn a_claim_hears_of_tabs_keymap_and_theme_changes() {
     assert!(written);
     // Under the storage lock, as another client writes, so a write of the TUI's in flight cannot undo it.
     h.tui.storage().unwrap().update("tabs", &json!({}), reverse_tabs).unwrap();
-    let ids = || h.tui.tabs.tabs(&h.tui).into_iter().map(|tab| tab.session_id).collect::<Vec<_>>();
+    let ids = || h.tui.tabs.tabs(&h.tui).iter().map(|tab| tab.session_id.clone()).collect::<Vec<_>>();
     assert!(h.app.wait_until(WAIT, || ids() == ["ses_b", "ses_a"]), "{:?}", ids());
     let first = h.app.render().text();
     assert!(first.contains("[ses_b,ses_a]"), "{first}");
@@ -467,24 +467,30 @@ fn a_call_reads_one_snapshot() {
         }))
         .unwrap()
     };
-    let batch = [usage("ses_a"), usage("ses_b")];
+    let batch = vec![usage("ses_a"), usage("ses_b")];
     let (go, started) = std::sync::mpsc::channel::<()>();
-    let data = h.tui.data.clone();
+    let (remote, runtime) = (h.tui.data.remote(), h.app.runtime());
     let writer = std::thread::spawn(move || {
         started.recv().unwrap();
-        data.apply(&batch);
+        drop(runtime.spawn(async move { remote.call(move |data| data.apply(batch)).await }));
     });
     BETWEEN.set(Some(Box::new(move || {
         go.send(()).unwrap();
-        // Long enough for the writer to apply, unless the call holds the store.
+        // Long enough for the writer's batch to arrive; it applies once the call returns.
         std::thread::sleep(std::time::Duration::from_millis(200));
     })));
     h.tui.keymap.dispatch("p0b.pair", None);
     BETWEEN.set(None);
     assert_eq!(PAIR.take(), Some((0.0, 0.0)));
     writer.join().unwrap();
-    h.tui.keymap.dispatch("p0b.pair", None);
-    assert_eq!(PAIR.take(), Some((5.0, 5.0)));
+    let pair = std::cell::Cell::new(None);
+    let applied = h.app.wait_until(WAIT, || {
+        h.tui.keymap.dispatch("p0b.pair", None);
+        pair.set(PAIR.take());
+        pair.get() != Some((0.0, 0.0))
+    });
+    assert!(applied, "the batch never applied");
+    assert_eq!(pair.get(), Some((5.0, 5.0)));
 }
 
 #[test]
@@ -636,9 +642,9 @@ fn deltas_reach_the_plugin_once_a_frame() {
         }))
         .unwrap()
     };
-    h.tui.data.apply(&[delta(0, "a")]);
+    h.tui.data.apply(vec![delta(0, "a")]);
     opencode_tui::features::events::deltas(&h.tui);
-    h.tui.data.apply(&[delta(1, "b"), delta(2, "c")]);
+    h.tui.data.apply(vec![delta(1, "b"), delta(2, "c")]);
     opencode_tui::features::events::deltas(&h.tui);
     let first = h.app.render().text();
     assert!(first.contains("d:abc ") && first.contains(" n:1"), "{first}");

@@ -2777,7 +2777,7 @@
   }
 
   /* Two halves of exactly 50%, each a label and its value, with the same 0.75rem either side of the
-     middle; wide enough that "OpenCode, OpenTUI Mono and Inter" stays on one line from 1280px. */
+     middle; wide enough that "OpenCode, OpenMono and Inter" stays on one line from 1280px. */
   [data-slot="credits"] {
     max-width: 56rem;
 

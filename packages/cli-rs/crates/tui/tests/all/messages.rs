@@ -80,7 +80,7 @@ fn open(height: u16, session: Value, messages: Vec<Value>, inbox: Vec<Value>, in
 
 impl Screen {
     fn apply(&self, kind: &str, seq: u64, data: Value) {
-        self.tui.data.apply(&[support::event(ID, kind, seq, data)]);
+        self.tui.data.apply(vec![support::event(ID, kind, seq, data)]);
     }
 
     fn row(&self, text: &str) -> u16 {
@@ -194,7 +194,7 @@ fn shell_skill_notice_and_switch_messages_render_as_one_line_each() {
 
     h.app.click(8, h.row("Explore finished"));
     assert!(h.app.wait_until(WAIT, || matches!(
-        h.tui.route(),
+        &*h.tui.route(),
         Route::Session { id } if id.0 == "ses_child"
     )));
 }
@@ -473,4 +473,34 @@ fn a_live_free_limit_stop_restores_the_prompt_and_offers_go() {
     assert!(screen.contains("You've used today's free messages."), "{screen}");
     let prompt = h.tui.textarea.borrow().clone().expect("the prompt is focused");
     assert_eq!(prompt.text(), "Write the tests");
+}
+
+#[test]
+fn a_wrapped_url_in_a_prompt_opens_in_full_from_any_row_without_the_message_dialog() {
+    let capture = opencode_tui::features::links::testing::capture();
+    let url =
+        "https://example.com/some/really/long/path/segment/that/keeps/going/and/going/index.html?query=value&other=1";
+    let messages = vec![user("msg_1", 1000, &format!("Read {url}. Then reply"))];
+    let h = open(30, session(json!({})), messages, Vec::new(), Info::default());
+    let screen = h.wait_for("Then reply");
+    let (head, tail) = (h.row("https://example"), h.row("other=1"));
+    assert!(tail > head, "{screen}");
+    let column = |row: u16, text: &str| {
+        let line = screen.lines().nth(usize::from(row)).unwrap();
+        line[..line.find(text).unwrap()].chars().count() as u16
+    };
+    let link = |x: u16, y: u16| opencode_tui::features::links::link_at(h.app.app(), x, y);
+    assert_eq!(link(column(head, "https://example"), head).as_deref(), Some(url));
+    assert_eq!(link(column(tail, "other=1"), tail).as_deref(), Some(url));
+    // Punctuation after the URL is plain text.
+    assert_eq!(link(column(tail, ". Then"), tail), None);
+
+    h.app.click(column(tail, "other=1"), tail);
+    assert_eq!(*capture.0.opened.borrow(), [url]);
+    assert!(!h.tui.dialogs.is_open(), "{}", h.app.text());
+
+    h.app.advance(std::time::Duration::from_millis(600));
+    h.app.click(column(tail, "Then reply") + 2, tail);
+    assert!(h.tui.dialogs.is_open(), "{}", h.app.text());
+    assert_eq!(capture.0.opened.borrow().len(), 1);
 }

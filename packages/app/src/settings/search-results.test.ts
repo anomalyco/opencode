@@ -18,6 +18,7 @@ function index(input: Partial<Parameters<typeof settingsSearchIndex>[0]> = {}) {
     servers,
     selected: "local",
     desktop: false,
+    linux: false,
     browser: false,
     mobile: false,
     translate: (key) => strings.get(key) ?? key,
@@ -57,6 +58,8 @@ describe("settings search index", () => {
     expect(targets({})).toContain("settings-tab-layout")
     expect(targets({ desktop: true })).toContain("settings-pinch-zoom")
     expect(targets({ desktop: true })).toContain("settings-zoom")
+    expect(targets({ desktop: true })).not.toContain("settings-smooth-scrolling")
+    expect(targets({ desktop: true, linux: true })).toContain("settings-smooth-scrolling")
     expect(targets({ browser: true })).not.toContain("settings-experimental-browser")
     expect(targets({})).not.toContain("settings-show-project-icon")
     expect(targets({})).not.toContain("settings-mobile-titlebar-bottom")
@@ -79,9 +82,9 @@ describe("settings search index", () => {
       page: "Preferences / Timeline",
       view: { tab: "general", target: "settings-fold-user-messages" },
     })
-    expect(rankSettings("new question UI", items)[0].view).toMatchObject({
+    expect(rankSettings("new timeline", items)[0].view).toMatchObject({
       tab: "experimental",
-      target: "settings-new-question-ui",
+      target: "settings-new-timeline",
     })
     expect(rankSettings("capsule", items)[0].view).toMatchObject({
       tab: "general",

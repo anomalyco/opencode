@@ -17,7 +17,8 @@ import {
   SynchronizedRef,
 } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
-import { Job as JobSchema } from "@opencode/schema/job"
+import { Event } from "@opencode/schema/job"
+import type { Info as JobInfo } from "@opencode/schema/job"
 import { Bus } from "./bus.js"
 import { Database } from "./database/database.js"
 import { JobList } from "./job/list.js"
@@ -107,7 +108,7 @@ type FinishResult = {
   cancel?: Effect.Effect<void>
   scope?: Scope.Closeable
   generation?: Scope.Closeable
-  listed?: JobSchema.Info
+  listed?: JobInfo
 }
 
 type BackgroundResult = {
@@ -255,8 +256,8 @@ export const make = Effect.gen(function* () {
   const bus = Option.getOrUndefined(yield* Effect.serviceOption(Bus.Service))
 
   // Clients follow listed jobs through this instead of polling the list.
-  const updated = (listed: JobSchema.Info | undefined) =>
-    bus && listed ? bus.publish(JobSchema.Event.Updated, { info: listed }).pipe(Effect.asVoid) : Effect.void
+  const updated = (listed: JobInfo | undefined) =>
+    bus && listed ? bus.publish(Event.Updated, { info: listed }).pipe(Effect.asVoid) : Effect.void
   const listed = (info: Info, recovery: Recovery | undefined) => (recovery ? JobList.item(info, recovery) : undefined)
 
   const consume = (id: string, generation: Scope.Closeable) =>
@@ -505,7 +506,7 @@ export const make = Effect.gen(function* () {
   })
 
   const background: Interface["background"] = Effect.fn("Job.background")(function* (id) {
-    let moved: JobSchema.Info | undefined
+    let moved: JobInfo | undefined
     const result = yield* SynchronizedRef.modifyEffect(
       state.jobs,
       Effect.fnUntraced(function* (jobs): Effect.fn.Return<readonly [BackgroundResult, Map<string, Active>]> {
@@ -524,7 +525,7 @@ export const make = Effect.gen(function* () {
   })
 
   const backgroundAll: Interface["backgroundAll"] = Effect.fn("Job.backgroundAll")(function* (input) {
-    const moved: (JobSchema.Info | undefined)[] = []
+    const moved: (JobInfo | undefined)[] = []
     const result = yield* SynchronizedRef.modifyEffect(
       state.jobs,
       Effect.fnUntraced(function* (jobs): Effect.fn.Return<

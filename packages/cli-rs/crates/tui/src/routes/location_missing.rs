@@ -46,11 +46,12 @@ impl LocationMissing {
 
     /// Shows the view while the location error names the session's directory.
     pub fn sync(&self, tui: &Tui) {
-        let directory =
-            tui.data.read(|state| state.session(&self.session).map(|session| session.location.directory.0.clone()));
-        let missing = directory.filter(|directory| {
-            crate::features::location::error(tui).is_some_and(|location| location.directory == *directory)
-        });
+        let here = |location: &opencode_store::Location| {
+            tui.data.read(|state| {
+                state.session(&self.session).is_some_and(|info| info.location.directory.0 == location.directory)
+            })
+        };
+        let missing = crate::features::location::error(tui).filter(here).map(|location| location.directory);
         if missing.is_some() == self.active.get() {
             return;
         }

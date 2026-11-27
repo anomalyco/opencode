@@ -13,4 +13,4 @@ pub mod sse;
 pub mod transport;
 pub mod ws;
 
-pub use opencode_api_types::{de, js, ser};
+pub use opencode_api_types::{de, js, kinds, ser, tool};

@@ -22,9 +22,10 @@ const integrationPriority = new Map([
   ["opencode-go", 0],
   ["opencode", 1],
   ["openai", 2],
-  ["github-copilot", 3],
-  ["anthropic", 4],
-  ["google", 5],
+  ["anthropic", 3],
+  ["claude-agent", 4],
+  ["github-copilot", 5],
+  ["google", 6],
 ])
 
 export default Runtime.handler(

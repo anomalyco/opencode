@@ -7,7 +7,7 @@ import { createSignal } from "solid-js"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys, sessionKeyOpen } from "./helpers"
 import { ServerScope, SessionRouteKey, SessionStateKey } from "@/runtime/server/scope"
 
-test.each(["settings", "connect"] as const)("%s has its own layout route", (type) => {
+test.each(["automations", "settings", "connect"] as const)("%s has its own layout route", (type) => {
   expect(currentRoute(`/${type}`, "")).toEqual({ type })
 })
 

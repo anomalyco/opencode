@@ -52,6 +52,7 @@ export const Plugin = {
       config,
       ctx.event,
       Effect.andThen(ctx.tool.reload(), ctx.command.reload()),
+      (entries) => Config.latest(entries, "automations") ?? true,
     )
     const enabled = () => Config.latest(loaded.entries, "automations") ?? true
 
@@ -70,9 +71,7 @@ export const Plugin = {
     const owned = (id: Automation.ID, sessionID: SessionSchema.ID) =>
       Effect.gen(function* () {
         const session = yield* caller(sessionID)
-        const info = yield* automations.get(id)
-        if (info.projectID !== session.projectID) return yield* new Automation.NotFoundError({ automationID: id })
-        return info
+        return yield* automations.get(id, { projectID: session.projectID })
       })
     const failure = (error: { readonly message: string }) => new ToolFailure({ message: error.message, error })
 

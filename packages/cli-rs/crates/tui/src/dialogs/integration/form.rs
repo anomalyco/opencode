@@ -459,7 +459,7 @@ fn string_choice(local: &Local, title: String, string: FormStringField, resolve:
         let theme = &cx.theme;
         let height = (count + rows.iter().filter(|row| row.description.is_some()).count())
             .min((usize::from(app.size().1) / 2).saturating_sub(6).max(3));
-        let list = ScrollBox::new(app).scrollbars(false).content_gap(1);
+        let list = cx.scroll_box().scrollbars(false).content_gap(1);
         list.height(height as u32);
         let focused = theme.text.formfield.focused;
         let textarea = Textarea::new(app)

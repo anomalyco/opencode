@@ -606,7 +606,7 @@ export function Colophon() {
     ["Typeface", "OpenCode 1.001"],
     ["Drawn on", "4 × 7 modules of 120 units"],
     ["Source", "The OpenCode wordmark"],
-    ["Specimen set in", "OpenCode, OpenTUI Mono and Inter"],
+    ["Specimen set in", "OpenCode, OpenMono and Inter"],
     ["Built with", "SVG and CSS, no images"],
     ["Published by", "Anomaly"],
   ]
