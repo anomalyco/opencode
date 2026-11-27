@@ -480,16 +480,16 @@ fn write(shared: &Shared, mut writer: channel::Writer) {
         let (frame, room) = {
             let mut out = lock(&shared.out);
             loop {
-                if out.closed {
-                    break (None, false);
-                }
-                if shared.input_held.load(Ordering::Acquire) {
-                    out = shared.out_ready.wait(out).unwrap_or_else(|poisoned| poisoned.into_inner());
-                    continue;
-                }
-                if let Some(frame) = out.frames.pop_front() {
+                // A held input pops nothing; the close still ends it. Unheld, what was queued before the close goes
+                // first: a test's hold is the only thing that may leave frames behind ([`Child::hold_input`]).
+                if !shared.input_held.load(Ordering::Acquire)
+                    && let Some(frame) = out.frames.pop_front()
+                {
                     out.bytes -= frame.len();
                     break (Some(frame), std::mem::take(&mut out.wants_room));
+                }
+                if out.closed {
+                    break (None, false);
                 }
                 out = shared.out_ready.wait(out).unwrap_or_else(|poisoned| poisoned.into_inner());
             }
@@ -1274,6 +1274,38 @@ mod tests {
             std::thread::sleep(Duration::from_millis(5));
         }
         assert!(wakes.load(Ordering::SeqCst) > before, "the host was not woken when the queue had room");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_close_drains_the_frames_queued_before_it() {
+        use std::io::Read as _;
+        use std::os::unix::ffi::OsStrExt;
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let (gate, out) = (dir.path().join("gate"), dir.path().join("read"));
+        for path in [&gate, &out] {
+            let named = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
+            // SAFETY: a path of this test's own directory, NUL-terminated, with a plain mode.
+            assert_eq!(unsafe { libc::mkfifo(named.as_ptr(), 0o600) }, 0, "mkfifo {}", path.display());
+        }
+        // It reads nothing until the gate opens, then takes every frame to its own FIFO: the host's end of input is
+        // its EOF, so reading `out` blocks until the child ends, with no poll or deadline of the test's.
+        let mut command = Command::new("sh");
+        command.arg("-c").arg(format!("read _ < '{}'; cat > '{}'", gate.display(), out.display()));
+        let child = Child::spawn(command, Limits { queued: 256 << 10, ..Limits::default() }, || {}).unwrap();
+        let payload = vec![b'x'; 1 << 10];
+        let mut frames = Vec::new();
+        // Its pipe and queue fill: every send it took before the close is one the child must read.
+        while child.send(wire::CONTROL, &payload, None, Wait::Ack).is_ok() {
+            frames.extend(wire::encode(wire::CONTROL, &payload));
+        }
+        assert!(frames.len() > 128 << 10, "only {} bytes were queued", frames.len());
+        // The close ends the stream after what it queued; only a test's hold may leave frames behind.
+        drop(child);
+        std::fs::write(&gate, "go\n").unwrap();
+        let mut got = Vec::new();
+        std::fs::File::open(&out).unwrap().read_to_end(&mut got).unwrap();
+        assert_eq!(got, frames, "a frame queued before the close was dropped");
     }
 
     #[test]
