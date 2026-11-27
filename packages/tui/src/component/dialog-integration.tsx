@@ -12,11 +12,11 @@ import type {
   FormValue,
   LocationRef,
 } from "@opencode/client"
-import { openUrl } from "@opencode/util/open"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useNewDesigns } from "../config"
 import { useClipboard } from "../context/clipboard"
+import { useLinks } from "../context/link"
 import { useData } from "../context/data"
 import { useClient } from "../context/client"
 import { Keymap } from "../context/keymap"
@@ -186,6 +186,7 @@ function manageConnections(
     const client = useClient()
     const toast = useToast()
     const theme = useTheme().surface("dialog")
+    const links = useLinks()
     const shortcuts = Keymap.useShortcuts()
     const newDesigns = useNewDesigns()
     const [deleting, setDeleting] = createSignal<string>()
@@ -229,7 +230,7 @@ function manageConnections(
                 bg: confirming ? theme.background.action.destructive.focused : undefined,
                 fg: confirming ? theme.text.action.destructive.focused : undefined,
                 onSelect: () => {
-                  if (connection.status?.url) return void openUrl(connection.status.url).catch(toast.error)
+                  if (connection.status?.url) return void links.openUrl(connection.status.url).catch(toast.error)
                   if (connection.status)
                     return selectMethod(current() ?? integration, methods, location, dialog, onConnected)
                   if (credentialConnections(current() ?? integration)[0]?.id === connection.id) return
@@ -670,12 +671,13 @@ function OAuthAuto(props: {
   const toast = useToast()
   const clipboard = useClipboard()
   const newDesigns = useNewDesigns()
+  const links = useLinks()
   const theme = useTheme().surface("dialog")
   let timer: ReturnType<typeof setTimeout> | undefined
   let settled = false
 
   const open = () => {
-    openUrl(props.attempt.url).catch(() =>
+    links.openUrl(props.attempt.url).catch(() =>
       toast.show({
         message: "Could not open the browser. Copy the URL and continue manually.",
         variant: "error",
@@ -1283,12 +1285,17 @@ async function externalAnswer(
     if (choice === true) return true
     const result = await new Promise<boolean | typeof CANCELLED>((resolve) => {
       dialog.replace(
-        () => <OAuthView title={formLabel(field) || title} message="Opening link…" />,
+        () => {
+          const links = useLinks()
+          onMount(() => {
+            void links.openUrl(field.url).then(
+              () => resolve(true),
+              () => resolve(false),
+            )
+          })
+          return <OAuthView title={formLabel(field) || title} message="Opening link…" />
+        },
         () => resolve(CANCELLED),
-      )
-      void openUrl(field.url).then(
-        () => resolve(true),
-        () => resolve(false),
       )
     })
     if (result === CANCELLED) return CANCELLED

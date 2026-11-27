@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js"
-import { openPath } from "@opencode/util/open"
 import { useRenderer } from "@opentui/solid"
 import { useClipboard } from "../context/clipboard"
+import { useLinks } from "../context/link"
 import { useDialog } from "./dialog"
 import { DialogSelect } from "./dialog-select"
 import { useToast } from "./toast"
@@ -11,6 +11,7 @@ export function useWorkingDirectoryActions(input: { directory: () => string | un
   const dialog = useDialog()
   const renderer = useRenderer()
   const toast = useToast()
+  const links = useLinks()
   const [hovered, setHovered] = createSignal(false)
 
   function openMenu() {
@@ -39,7 +40,7 @@ export function useWorkingDirectoryActions(input: { directory: () => string | un
             description: "in system file manager",
             onSelect: (dialog) => {
               dialog.clear()
-              void openPath(directory).catch(toast.error)
+              void links.openPath(directory).catch(toast.error)
             },
           },
           ...(input.onMove

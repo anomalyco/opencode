@@ -93,7 +93,7 @@ import { Toast, ToastProvider, useToast } from "./ui/toast"
 import { isFallbackTitle } from "@opencode/util/session-title-fallback"
 import * as Model from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
-import { openUrl } from "@opencode/util/open"
+import { LinkProvider, useLinks } from "./context/link"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Config, ConfigProvider, useConfig } from "./config"
 import { newSessionLocation } from "./config/new-session-location"
@@ -388,81 +388,83 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                 }}
                               >
                                 <ClipboardProvider value={clipboard}>
-                                  <ArgsProvider {...input.args}>
-                                    <ConfigProvider
-                                      config={config}
-                                      service={input.config}
-                                      options={{ terminalSuspend: process.platform !== "win32" }}
-                                    >
-                                      <Keymap.Provider>
-                                        <ToastProvider>
-                                          <RouteProvider
-                                            initialRoute={
-                                              input.args.continue
-                                                ? {
-                                                    type: "session",
-                                                    sessionID: "dummy",
-                                                  }
-                                                : undefined
-                                            }
-                                          >
-                                            <ClientProvider
-                                              api={api}
-                                              url={input.server.endpoint.url}
-                                              headers={headers}
-                                              service={service}
+                                  <LinkProvider>
+                                    <ArgsProvider {...input.args}>
+                                      <ConfigProvider
+                                        config={config}
+                                        service={input.config}
+                                        options={{ terminalSuspend: process.platform !== "win32" }}
+                                      >
+                                        <Keymap.Provider>
+                                          <ToastProvider>
+                                            <RouteProvider
+                                              initialRoute={
+                                                input.args.continue
+                                                  ? {
+                                                      type: "session",
+                                                      sessionID: "dummy",
+                                                    }
+                                                  : undefined
+                                              }
                                             >
-                                              <PermissionProvider>
-                                                <DataProvider directory={directory}>
-                                                  <LocationProvider>
-                                                    <SessionTabsProvider>
-                                                      <SessionTerminalsProvider>
-                                                        <ThemeProvider
-                                                          mode={mode}
-                                                          source={createThemeSource(global.config)}
-                                                        >
-                                                          <ThemeErrorToast />
-                                                          <ClientMcp />
-                                                          <LocalProvider>
-                                                            <PromptStashProvider>
-                                                              <DialogProvider>
-                                                                <FrecencyProvider>
-                                                                  <PromptHistoryProvider>
-                                                                    <PromptRefProvider>
-                                                                      <EditorContextProvider>
-                                                                        <AttentionProvider>
-                                                                          <UpdateNotificationProvider
-                                                                            updater={input.updater}
-                                                                          >
-                                                                            <PanelProvider>
-                                                                              <PluginProvider
-                                                                                packages={input.packages}
-                                                                                directories={pluginDirectories}
-                                                                              >
-                                                                                <App />
-                                                                              </PluginProvider>
-                                                                            </PanelProvider>
-                                                                          </UpdateNotificationProvider>
-                                                                        </AttentionProvider>
-                                                                      </EditorContextProvider>
-                                                                    </PromptRefProvider>
-                                                                  </PromptHistoryProvider>
-                                                                </FrecencyProvider>
-                                                              </DialogProvider>
-                                                            </PromptStashProvider>
-                                                          </LocalProvider>
-                                                        </ThemeProvider>
-                                                      </SessionTerminalsProvider>
-                                                    </SessionTabsProvider>
-                                                  </LocationProvider>
-                                                </DataProvider>
-                                              </PermissionProvider>
-                                            </ClientProvider>
-                                          </RouteProvider>
-                                        </ToastProvider>
-                                      </Keymap.Provider>
-                                    </ConfigProvider>
-                                  </ArgsProvider>
+                                              <ClientProvider
+                                                api={api}
+                                                url={input.server.endpoint.url}
+                                                headers={headers}
+                                                service={service}
+                                              >
+                                                <PermissionProvider>
+                                                  <DataProvider directory={directory}>
+                                                    <LocationProvider>
+                                                      <SessionTabsProvider>
+                                                        <SessionTerminalsProvider>
+                                                          <ThemeProvider
+                                                            mode={mode}
+                                                            source={createThemeSource(global.config)}
+                                                          >
+                                                            <ThemeErrorToast />
+                                                            <ClientMcp />
+                                                            <LocalProvider>
+                                                              <PromptStashProvider>
+                                                                <DialogProvider>
+                                                                  <FrecencyProvider>
+                                                                    <PromptHistoryProvider>
+                                                                      <PromptRefProvider>
+                                                                        <EditorContextProvider>
+                                                                          <AttentionProvider>
+                                                                            <UpdateNotificationProvider
+                                                                              updater={input.updater}
+                                                                            >
+                                                                              <PanelProvider>
+                                                                                <PluginProvider
+                                                                                  packages={input.packages}
+                                                                                  directories={pluginDirectories}
+                                                                                >
+                                                                                  <App />
+                                                                                </PluginProvider>
+                                                                              </PanelProvider>
+                                                                            </UpdateNotificationProvider>
+                                                                          </AttentionProvider>
+                                                                        </EditorContextProvider>
+                                                                      </PromptRefProvider>
+                                                                    </PromptHistoryProvider>
+                                                                  </FrecencyProvider>
+                                                                </DialogProvider>
+                                                              </PromptStashProvider>
+                                                            </LocalProvider>
+                                                          </ThemeProvider>
+                                                        </SessionTerminalsProvider>
+                                                      </SessionTabsProvider>
+                                                    </LocationProvider>
+                                                  </DataProvider>
+                                                </PermissionProvider>
+                                              </ClientProvider>
+                                            </RouteProvider>
+                                          </ToastProvider>
+                                        </Keymap.Provider>
+                                      </ConfigProvider>
+                                    </ArgsProvider>
+                                  </LinkProvider>
                                 </ClipboardProvider>
                               </TuiStartupProvider>
                             </TuiTerminalEnvironmentProvider>
@@ -518,6 +520,7 @@ function App() {
   const promptRef = usePromptRef()
   const plugins = usePlugin()
   const clipboard = useClipboard()
+  const links = useLinks()
   const terminalEnvironment = useTuiTerminalEnvironment()
   let paletteTimer: ReturnType<typeof setTimeout> | undefined
   let disposed = false
@@ -1211,7 +1214,7 @@ function App() {
         name: "docs.open",
         title: "Open docs",
         run: () => {
-          openUrl("https://opencode.ai/docs").catch(() => {})
+          links.openUrl("https://opencode.ai/docs").catch(() => {})
           dialog.clear()
         },
         category: "System",
@@ -1459,7 +1462,7 @@ function App() {
       }}
       onMouseUp={(event) => {
         const url = clickedLink(renderer, event)
-        if (url) return void openUrl(url).catch(toast.error)
+        if (url) return void links.openUrl(url).catch(toast.error)
         if (copyOnSelectEnabled()) Selection.copyOnSelectRelease(event, renderer, toast, clipboard)
       }}
     >

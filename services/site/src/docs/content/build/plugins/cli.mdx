@@ -482,6 +482,26 @@ if (context.ui.tabs.enabled()) {
 }
 ```
 
+## Links
+
+Handle a link before OpenCode opens it. OpenCode calls handlers for URLs it would open in the browser, for session
+links and subagent rows, and for folders it would open in the file manager. Return `true` to take over the link, so
+OpenCode skips its own action.
+
+```ts
+const unregister = context.ui.links.register((link) => {
+  if (link.type !== "session") return false
+  void openSessionInNewPane(link.sessionID)
+  return true
+})
+return unregister
+```
+
+- Handlers run in registration order until one returns `true`.
+- `link` is `{ type: "url", url }`, `{ type: "session", sessionID }`, or `{ type: "path", path }`.
+- A handler must decide synchronously. Start async work and return `true`.
+- OpenCode removes the handler when the plugin deactivates.
+
 ## Model
 
 Read the prompt's selected model and change its variant. `current()` and `variant.list()` are reactive when read in a

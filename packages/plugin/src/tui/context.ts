@@ -156,6 +156,11 @@ export type Route =
 
 export type Destination = Route | Omit<Extract<Route, { readonly type: "plugin" }>, "id">
 
+export type LinkTarget =
+  | { readonly type: "url"; readonly url: string }
+  | { readonly type: "session"; readonly sessionID: string }
+  | { readonly type: "path"; readonly path: string }
+
 export interface Page {
   readonly name: string
   readonly render: (input: { readonly data?: Record<string, any> }) => JSX.Element
@@ -502,6 +507,14 @@ export interface UI {
     register(page: Page): () => void
     navigate(destination: Destination): void
     current(): Route
+  }
+  readonly links: {
+    /**
+     * Runs before OpenCode opens a URL, a session link, or a local folder for the user. Return true to open the link yourself, so
+     * OpenCode skips its own action. Handlers run in registration order until one returns true. The handler is removed
+     * when the returned function is called or the plugin deactivates.
+     */
+    register(handler: (link: LinkTarget) => boolean): () => void
   }
   readonly panel: {
     /** Opens the session.panel slot in the current session. */

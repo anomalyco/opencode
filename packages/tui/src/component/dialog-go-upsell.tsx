@@ -1,12 +1,12 @@
 import { RGBA, TextAttributes, type Renderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import type { FormAnswer, IntegrationOauthConnectOutput, IntegrationOAuthMethod } from "@opencode/client"
-import * as Open from "@opencode/util/open"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { useConfig, useNewDesigns } from "../config"
 import { useClient } from "../context/client"
 import { useClipboard } from "../context/clipboard"
 import { useData } from "../context/data"
+import { useLinks } from "../context/link"
 import { Keymap } from "../context/keymap"
 import { useLocal } from "../context/local"
 import { useLocation } from "../context/location"
@@ -46,6 +46,7 @@ export function DialogGoUpsell(props: {
   const dimensions = useTerminalDimensions()
   const theme = useTheme().surface("dialog")
   const config = useConfig().data
+  const links = useLinks()
   const narrow = () => dimensions().width < 52
   const short = () => dimensions().height < 22
   const compact = () => short() || dimensions().height < (narrow() ? 26 : 22)
@@ -69,7 +70,7 @@ export function DialogGoUpsell(props: {
 
   const run = (action: Action) => {
     if (action === "subscribe") {
-      Open.openUrl(GO_URL).catch(() => {})
+      links.openUrl(GO_URL).catch(() => {})
       dialog.replace(() => <DialogGoUpsellConnect canContinue={props.canContinue} onSubscribed={props.onSubscribe} />)
       return
     }
@@ -202,6 +203,7 @@ function DialogGoUpsellConnect(props: { canContinue?: () => boolean; onSubscribe
   const client = useClient()
   const toast = useToast()
   const clipboard = useClipboard()
+  const links = useLinks()
   const local = useLocal()
   const newDesigns = useNewDesigns()
   const theme = useTheme().surface("dialog")
@@ -371,7 +373,7 @@ function DialogGoUpsellConnect(props: { canContinue?: () => boolean; onSubscribe
   const open = () => {
     const current = attempt()
     if (!current) return
-    Open.openUrl(current.url).catch(() =>
+    links.openUrl(current.url).catch(() =>
       toast.show({
         message: "Could not open the browser. Copy the URL and continue manually.",
         variant: "error",
