@@ -55,7 +55,7 @@ export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }
                 minWidth={0}
                 onMouseUp={() =>
                   props.context.ui.dialog.show(() => (
-                    <DialogMcp initialServer={item.name} details={item.status.status === "failed"} />
+                    <DialogMcp initialServer={item.id} details={item.status.status === "failed"} />
                   ))
                 }
               >
@@ -68,7 +68,7 @@ export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }
                   •
                 </text>
                 <text fg={theme.text.base} wrapMode="none" truncate flexGrow={1} flexShrink={1} minWidth={0}>
-                  <b>{item.name}</b>
+                  <b>{item.title}</b>
                 </text>
                 <text
                   fg={item.status.status === "failed" ? theme.text.feedback.error.base : theme.text.muted}

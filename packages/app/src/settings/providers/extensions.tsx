@@ -79,12 +79,12 @@ export const SettingsExtensions: Component<{
     const active = data.location.mcp.server.list(location())
 
     return (data.location.mcp.server.list(data.location.default()) ?? [])
-      .map((server) => active?.find((item) => item.name === server.name) ?? server)
-      .toSorted((a, b) => a.name.localeCompare(b.name))
+      .map((server) => active?.find((item) => item.id === server.id) ?? server)
+      .toSorted((a, b) => a.title.localeCompare(b.title))
   })
 
   const toggle = (item: McpServer, enabled: boolean) =>
-    mcp.dispatch({ type: "toggle.requested", name: item.name, enabled, status: item.status.status })
+    mcp.dispatch({ type: "toggle.requested", name: item.id, enabled, status: item.status.status })
 
   const sources = createConsoleSources(() => props.directory)
 
@@ -227,13 +227,13 @@ export const SettingsExtensions: Component<{
               <SettingsList variant="catalog">
                 <For each={mcps()}>
                   {(item) => {
-                    const row = () => mcpRowView(mcp.state(), item.name, item.status.status)
+                    const row = () => mcpRowView(mcp.state(), item.id, item.status.status)
 
                     const busy = () => row().busy
 
-                    const managed = () => sources.managed(item.name)
+                    const managed = () => sources.managed(item.id)
 
-                    const links = () => sources.links(item.name)
+                    const links = () => sources.links(item.id)
 
                     const status = () =>
                       managed()?.needsConnection && item.status.status === "connected"
@@ -247,7 +247,7 @@ export const SettingsExtensions: Component<{
                       return item.status.status === "pending" ? undefined : language.t(statusLabels[item.status.status])
                     }
 
-                    const connect = () => sources.connect(item.name)
+                    const connect = () => sources.connect(item.id)
 
                     return (
                       <div class="settings-extension-row settings-mcp-row" data-status={status()}>
@@ -257,12 +257,12 @@ export const SettingsExtensions: Component<{
                           </span>
                           <Show
                             when={managed() && links()}
-                            fallback={<TruncatedText text={item.name} class="settings-extension-name" />}
+                            fallback={<TruncatedText text={item.title} class="settings-extension-name" />}
                           >
-                            {(current) => <ConsoleName name={item.name} href={current().manage} />}
+                            {(current) => <ConsoleName name={item.title} href={current().manage} />}
                           </Show>
-                          <Show when={sources.mcp(item.name)?.overridden && links()}>
-                            {(current) => <ConsoleReplaced name={item.name} href={current().manage} />}
+                          <Show when={sources.mcp(item.id)?.overridden && links()}>
+                            {(current) => <ConsoleReplaced name={item.title} href={current().manage} />}
                           </Show>
                         </div>
                         <div class="settings-extension-trailing">
@@ -270,9 +270,9 @@ export const SettingsExtensions: Component<{
                             <Button
                               size="small"
                               variant="ghost-muted"
-                              aria-label={language.t("dialog.mcp.error.viewLabel", { name: item.name })}
+                              aria-label={language.t("dialog.mcp.error.viewLabel", { name: item.title })}
                               onClick={() =>
-                                dialog.show(() => <DialogMcp directory={location().directory} server={item.name} />)
+                                dialog.show(() => <DialogMcp directory={location().directory} server={item.id} />)
                               }
                             >
                               {language.t("dialog.mcp.error.view")}
@@ -291,7 +291,7 @@ export const SettingsExtensions: Component<{
                                     class="[&_[data-slot=switch-description]]:sr-only"
                                     onChange={(enabled) => toggle(item, enabled)}
                                   >
-                                    <span class="sr-only">{item.name}</span>
+                                    <span class="sr-only">{item.title}</span>
                                   </Switch>
                                 }
                               >
@@ -300,7 +300,7 @@ export const SettingsExtensions: Component<{
                                   variant="ghost-muted"
                                   disabled={busy()}
                                   aria-busy={busy()}
-                                  aria-label={language.t("dialog.mcp.signIn.open", { name: item.name })}
+                                  aria-label={language.t("dialog.mcp.signIn.open", { name: item.title })}
                                   onClick={() => toggle(item, true)}
                                 >
                                   {language.t(busy() ? "dialog.mcp.signingIn" : "dialog.mcp.signIn")}
@@ -312,7 +312,7 @@ export const SettingsExtensions: Component<{
                               <Button
                                 size="small"
                                 variant="ghost-muted"
-                                aria-label={language.t("settings.extensions.console.connect", { name: item.name })}
+                                aria-label={language.t("settings.extensions.console.connect", { name: item.title })}
                                 onClick={() => platform.openExternal(href())}
                               >
                                 {language.t("common.connect")}

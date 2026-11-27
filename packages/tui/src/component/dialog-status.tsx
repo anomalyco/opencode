@@ -28,7 +28,7 @@ export function DialogStatus() {
                   •
                 </text>
                 <text fg={theme.text.base} wrapMode="word">
-                  <b>{item.name}</b>{" "}
+                  <b>{item.title}</b>{" "}
                   <span style={{ fg: theme.text.muted }}>
                     <Switch fallback={item.status.status}>
                       <Match when={item.status.status === "connected"}>Connected</Match>

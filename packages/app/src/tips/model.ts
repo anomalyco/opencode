@@ -64,7 +64,7 @@ export function createTipToasts() {
       when: () =>
         !location()
           ?.mcp.server.list()
-          ?.some((item) => item.name === "browse"),
+          ?.some((item) => item.id === "browse"),
       action: {
         label: "tips.browse.install",
         run: () => platform.openExternal(

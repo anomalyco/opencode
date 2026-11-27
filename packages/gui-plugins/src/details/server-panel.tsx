@@ -577,7 +577,7 @@ function useMcp(props: ServiceProps, controllers: McpControllers, close: () => v
     },
   })
 
-  const servers = createMemo(() => (list() ?? []).toSorted((a, b) => a.name.localeCompare(b.name)))
+  const servers = createMemo(() => (list() ?? []).toSorted((a, b) => a.title.localeCompare(b.title)))
 
   return {
     get view() {
@@ -596,7 +596,7 @@ function useMcp(props: ServiceProps, controllers: McpControllers, close: () => v
         <Index each={servers()}>
           {(server) => {
             const enabled = () => server().status.status !== "disabled"
-            const view = createMemo(() => mcpRowView(mcp.state(), server().name, server().status.status))
+            const view = createMemo(() => mcpRowView(mcp.state(), server().id, server().status.status))
             const pending = () => view().pending
             const busy = () => view().busy
 
@@ -624,7 +624,7 @@ function useMcp(props: ServiceProps, controllers: McpControllers, close: () => v
             const change = (value: boolean) =>
               mcp.dispatch({
                 type: "toggle.requested",
-                name: server().name,
+                name: server().id,
                 enabled: value,
                 status: server().status.status,
               })
@@ -632,7 +632,7 @@ function useMcp(props: ServiceProps, controllers: McpControllers, close: () => v
             const showError = () => {
               const error = failure()
 
-              if (error) mcp.dispatch({ type: "error.opened", name: server().name, error })
+              if (error) mcp.dispatch({ type: "error.opened", name: server().id, error })
             }
 
             const follow = () => {
@@ -651,10 +651,10 @@ function useMcp(props: ServiceProps, controllers: McpControllers, close: () => v
                   <StatusDot
                     status={server().status.status}
                     error={failure()}
-                    label={ctx.t("mcp.error.actionLabel", { name: server().name })}
+                    label={ctx.t("mcp.error.actionLabel", { name: server().title })}
                     onClick={showError}
                   />
-                  <TruncatedText text={server().name} class="session-summary-label" />
+                  <TruncatedText text={server().title} class="session-summary-label" />
                 </span>
                 <span class="session-mcp-trailing" onClick={(event) => event.stopPropagation()}>
                   <Show
@@ -669,7 +669,7 @@ function useMcp(props: ServiceProps, controllers: McpControllers, close: () => v
                         class="[&_[data-slot=switch-description]]:sr-only"
                         onChange={change}
                       >
-                        <span class="sr-only">{server().name}</span>
+                        <span class="sr-only">{server().title}</span>
                       </Switch>
                     }
                   >
@@ -679,7 +679,7 @@ function useMcp(props: ServiceProps, controllers: McpControllers, close: () => v
                       class="session-mcp-sign-in"
                       disabled={pending()}
                       aria-busy={busy()}
-                      aria-label={ctx.t("mcp.signIn.open", { name: server().name })}
+                      aria-label={ctx.t("mcp.signIn.open", { name: server().title })}
                       onClick={follow}
                     >
                       {ctx.t(busy() ? "mcp.signingIn" : "mcp.signIn")}
@@ -1381,7 +1381,7 @@ function createMcpController(server: ServerRef, directory: string, release: () =
     const ref = { directory }
     const name = effect.name
     const attempt = effect.attempt
-    const found = (await client.mcp.list({ location: ref }, { signal })).data.find((item) => item.name === name)
+    const found = (await client.mcp.list({ location: ref }, { signal })).data.find((item) => item.id === name)
 
     if (!found) return { type: "toggle.succeeded", name, attempt }
 
@@ -1392,7 +1392,7 @@ function createMcpController(server: ServerRef, directory: string, release: () =
 
     source.location.mcp.server.invalidate(ref)
     await source.location.mcp.server.sync(ref)
-    const current = source.location.mcp.server.list(ref)?.find((item) => item.name === name)
+    const current = source.location.mcp.server.list(ref)?.find((item) => item.id === name)
     const integrationID = current?.integrationID
 
     if (effect.enabled && current?.status.status === "needs_auth" && integrationID) {
@@ -1448,7 +1448,8 @@ function McpErrorDialog(props: {
 }) {
   const ctx = usePlugin()
   const list = () => props.server.data.location.mcp.server.list({ directory: props.directory })
-  const status = () => list()?.find((item) => item.name === props.name)?.status
+  const entry = () => list()?.find((item) => item.id === props.name)
+  const status = () => entry()?.status
   const view = createMemo(() => mcpDialogView(props.mcp.state(), props.attempt, status()?.status))
 
   // Follows the server's status, which changes here and anywhere else: a reconnect or a removal closes the dialog, and
@@ -1493,7 +1494,7 @@ function McpErrorDialog(props: {
             <DialogTitleGroup
               title={
                 <span dir="auto" class="[overflow-wrap:anywhere]">
-                  {current().name}
+                  {entry()?.title ?? current().name}
                 </span>
               }
               description={ctx.t("mcp.error.status")}
@@ -1505,7 +1506,7 @@ function McpErrorDialog(props: {
                 class="error-details-copy"
                 variant="ghost-muted"
                 icon={current().copied ? "check" : "copy"}
-                onClick={() => copy(current().name, current().error)}
+                onClick={() => copy(entry()?.title ?? current().name, current().error)}
               >
                 {ctx.t(current().copied ? "common.copied" : "mcp.error.copy")}
               </Button>

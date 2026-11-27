@@ -652,8 +652,10 @@ function mockHandlers(
     (Predicate.isFunction(config.mcp) ? config.mcp(directory) : (config.mcp ?? [])).map((server) => {
       if (!Predicate.isObject(server)) return server
       const status = state.mcp.get(`${directory}\n${String(server.name)}`)
+      // Fixtures name each server once; the API carries that ID as `id`, the deprecated `name` and the default `title`.
+      const server_ = { id: server.name, title: server.name, ...server }
 
-      return status ? { ...server, status } : server
+      return status ? { ...server_, status } : server_
     })
 
   const mcpAction = (server: string, action: "connect" | "disconnect", request: { url: string }) =>

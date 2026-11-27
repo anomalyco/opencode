@@ -58,12 +58,13 @@ export function McpDialog(props: {
   const [query, setQuery] = createSignal("")
 
   const servers = createMemo(() => props.servers ?? [])
-  const statusOf = (name: string) => servers().find((server) => server.name === name)?.status
+  const serverOf = (name: string) => servers().find((server) => server.id === name)
+  const statusOf = (name: string) => serverOf(name)?.status
 
   const items = createMemo(() =>
     servers()
-      .map((server) => ({ name: server.name, status: server.status.status }))
-      .sort((a, b) => a.name.localeCompare(b.name)),
+      .map((server) => ({ id: server.id, title: server.title, status: server.status.status }))
+      .sort((a, b) => a.title.localeCompare(b.title)),
   )
 
   const results = createMemo(() => {
@@ -72,9 +73,9 @@ export function McpDialog(props: {
     if (!current) return items()
 
     return fuzzysort
-      .go(current, items(), { keys: ["name", "status"] })
+      .go(current, items(), { keys: ["title", "id", "status"] })
       .map((result) => result.obj)
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort((a, b) => a.title.localeCompare(b.title))
   })
 
   // The error view's server, by attempt, so its status follows the list while it shows.
@@ -113,7 +114,7 @@ export function McpDialog(props: {
   }
 
   const copy = (current: { attempt: number; name: string; error: string }) => {
-    const details = language.t("dialog.mcp.error.details", { name: current.name, error: current.error })
+    const details = language.t("dialog.mcp.error.details", { name: serverOf(current.name)?.title ?? current.name, error: current.error })
 
     return (platform.writeClipboardText?.(details) ?? navigator.clipboard.writeText(details))
       .then(() => props.mcp.dispatch({ type: "detail.copied", attempt: current.attempt, error: current.error }))
@@ -198,7 +199,7 @@ export function McpDialog(props: {
                 <DialogTitleGroup
                   title={
                     <span dir="auto" class="[overflow-wrap:anywhere]">
-                      {current().name}
+                      {serverOf(current().name)?.title ?? current().name}
                     </span>
                   }
                   description={language.t("dialog.mcp.error.status")}
@@ -233,12 +234,12 @@ export function McpDialog(props: {
             onQuery={setQuery}
             placeholder={language.t("dialog.mcp.search.placeholder")}
             items={results()}
-            key={(item) => item.name}
+            key={(item) => item.id}
             empty={language.t(items().length > 0 ? "dialog.mcp.search.empty" : "dialog.mcp.empty")}
-            onSelect={(item) => select(item.name)}
+            onSelect={(item) => select(item.id)}
           >
             {(item, row) => {
-              const server = () => servers().find((entry) => entry.name === item().name)
+              const server = () => serverOf(item().id)
               const status = () => server()?.status
 
               const error = () => {
@@ -250,7 +251,7 @@ export function McpDialog(props: {
               // The switch would start sign-in anyway, so an auth-gated server shows that action instead.
               const signIn = () => status()?.status === "needs_auth" && !!server()?.integrationID
 
-              const view = () => mcpRowView(props.mcp.state(), item().name, status()?.status)
+              const view = () => mcpRowView(props.mcp.state(), item().id, status()?.status)
               const busy = () => view().busy
 
               // The dot shows the status, as in the session's MCP list; the words stay for assistive technology.
@@ -261,20 +262,20 @@ export function McpDialog(props: {
               }
 
               return (
-                <div {...row} data-option-key={item().name} data-status={status()?.status} data-size="compact">
+                <div {...row} data-option-key={item().id} data-status={status()?.status} data-size="compact">
                   <span class="mcp-dialog-lead">
                     <span class="mcp-dialog-status" aria-hidden="true">
                       <span class="mcp-status-dot" data-status={status()?.status} />
                     </span>
-                    <TruncatedText text={item().name} class="mcp-dialog-name" />
+                    <TruncatedText text={item().title} class="mcp-dialog-name" />
                   </span>
                   <div class="mcp-trailing" onClick={(event) => event.stopPropagation()}>
                     <Show when={error()}>
                       <Button
                         size="small"
                         variant="ghost-muted"
-                        aria-label={language.t("dialog.mcp.error.viewLabel", { name: item().name })}
-                        onClick={() => select(item().name)}
+                        aria-label={language.t("dialog.mcp.error.viewLabel", { name: item().title })}
+                        onClick={() => select(item().id)}
                       >
                         {language.t("dialog.mcp.error.view")}
                       </Button>
@@ -287,9 +288,9 @@ export function McpDialog(props: {
                           disabled={view().pending}
                           description={label()}
                           class="[&_[data-slot=switch-description]]:sr-only"
-                          onChange={(enabled) => toggle(item().name, enabled)}
+                          onChange={(enabled) => toggle(item().id, enabled)}
                         >
-                          <span class="sr-only">{item().name}</span>
+                          <span class="sr-only">{item().title}</span>
                         </Switch>
                       }
                     >
@@ -298,8 +299,8 @@ export function McpDialog(props: {
                         variant="ghost-muted"
                         disabled={busy()}
                         aria-busy={busy()}
-                        aria-label={language.t("dialog.mcp.signIn.open", { name: item().name })}
-                        onClick={() => toggle(item().name, true)}
+                        aria-label={language.t("dialog.mcp.signIn.open", { name: item().title })}
+                        onClick={() => toggle(item().id, true)}
                       >
                         {language.t(busy() ? "dialog.mcp.signingIn" : "dialog.mcp.signIn")}
                       </Button>

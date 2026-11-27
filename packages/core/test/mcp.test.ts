@@ -1717,10 +1717,23 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
           expect(published).toContain(McpEvent.StatusChanged.type)
           expect(yield* service.connect("missing").pipe(Effect.flip)).toBeInstanceOf(Mcp.NotFoundError)
           expect(yield* service.disconnect("missing").pipe(Effect.flip)).toBeInstanceOf(Mcp.NotFoundError)
+          // A disconnected server without a configured title falls back to its ID.
+          expect((yield* service.servers())[0]).toMatchObject({ id: "resources", name: "resources", title: "resources" })
           yield* service.add("dynamic", new ConfigMCP.Remote(config))
-          expect((yield* service.servers()).find((server) => server.name === "dynamic")?.status).toEqual({
-            status: "connected",
+          expect((yield* service.servers()).find((server) => server.id === "dynamic")).toMatchObject({
+            name: "dynamic",
+            title: "MCP Resources",
+            status: { status: "connected" },
           })
+
+          // A configured title wins over the server's own, and renaming keeps the connection.
+          const initializations = server.state.initializations
+          yield* service.add("dynamic", new ConfigMCP.Remote({ ...config, title: "Docs" }))
+          expect((yield* service.servers()).find((server) => server.id === "dynamic")).toMatchObject({
+            title: "Docs",
+            status: { status: "connected" },
+          })
+          expect(server.state.initializations).toBe(initializations)
 
           yield* service.add("dynamic", new ConfigMCP.Remote({ ...config, disabled: true }))
           expect((yield* service.servers()).find((server) => server.name === "dynamic")?.status).toEqual({

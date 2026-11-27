@@ -856,9 +856,10 @@ export type IntegrationAttempt = {
 export type IntegrationCommandAttempt = { attemptID: IntegrationAttemptID; time: { created: number; expires: number } }
 
 export type McpServer = {
+  id: string
   name: string
+  title: string
   status: McpStatusConnected | McpStatusPending | McpStatusDisabled | McpStatusFailed | McpStatusNeedsAuth
-  title?: string
   integrationID?: IntegrationID
 }
 
@@ -2659,6 +2660,7 @@ export type ConfigEntry =
               | {
                   type: "local"
                   command: Array<string>
+                  title?: string
                   cwd?: string
                   environment?: { [x: string]: string }
                   disabled?: boolean
@@ -2670,6 +2672,7 @@ export type ConfigEntry =
               | {
                   type: "remote"
                   url: string
+                  title?: string
                   headers?: { [x: string]: string }
                   oauth?:
                     | {
@@ -4433,6 +4436,7 @@ export type ExperimentalMcpAddInput = {
     | {
         readonly type: "local"
         readonly command: ReadonlyArray<string>
+        readonly title?: string
         readonly cwd?: string
         readonly environment?: { readonly [x: string]: string }
         readonly disabled?: boolean
@@ -4444,6 +4448,7 @@ export type ExperimentalMcpAddInput = {
     | {
         readonly type: "remote"
         readonly url: string
+        readonly title?: string
         readonly headers?: { readonly [x: string]: string }
         readonly oauth?:
           | {

@@ -217,7 +217,7 @@ function createMcpController(
     const data = input.ctx.data
     const name = effect.name
     const attempt = effect.attempt
-    const found = (await api.mcp.list({ location: ref }, { signal })).data.find((item) => item.name === name)
+    const found = (await api.mcp.list({ location: ref }, { signal })).data.find((item) => item.id === name)
 
     if (!found) return { type: "toggle.succeeded", name, attempt }
 
@@ -228,7 +228,7 @@ function createMcpController(
 
     data.location.mcp.server.invalidate(ref)
     await data.location.mcp.server.sync(ref)
-    const current = data.location.mcp.server.list(ref)?.find((item) => item.name === name)
+    const current = data.location.mcp.server.list(ref)?.find((item) => item.id === name)
     const integrationID = current?.integrationID
 
     if (effect.enabled && current?.status.status === "needs_auth" && integrationID) {

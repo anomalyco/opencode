@@ -11,12 +11,14 @@ function McpDialogStory(props: { server?: string; empty?: boolean; signingIn?: b
   const dialog = useDialog()
 
   const [servers, setServers] = createStore<McpServer[]>([
-    { name: "figma-remote", integrationID: "figma-oauth", status: { status: "needs_auth", error: "Sign in required" } },
-    { name: "local-files", status: { status: "disabled" } },
-    { name: "paper", status: { status: "connected" } },
-    { name: "search-index", status: { status: "pending" } },
+    { id: "figma-remote", name: "figma-remote", title: "Figma", integrationID: "figma-oauth", status: { status: "needs_auth", error: "Sign in required" } },
+    { id: "local-files", name: "local-files", title: "local-files", status: { status: "disabled" } },
+    { id: "paper", name: "paper", title: "paper", status: { status: "connected" } },
+    { id: "search-index", name: "search-index", title: "search-index", status: { status: "pending" } },
     {
+      id: "unreachable-server",
       name: "unreachable-server",
+      title: "unreachable-server",
       status: {
         status: "failed",
         error: "Streamable HTTP error: Error POSTing to endpoint: 404 Not Found\nCheck the server URL and try again.",
@@ -46,7 +48,7 @@ function McpDialogStory(props: { server?: string; empty?: boolean; signingIn?: b
           return listeners.forEach((listener) => listener(effect))
 
         if (effect.type !== "run-toggle") return
-        setServers((server) => server.name === effect.name, "status", {
+        setServers((server) => server.id === effect.name, "status", {
           status: effect.enabled ? "connected" : "disabled",
         })
         mcp.dispatch({ type: "toggle.succeeded", name: effect.name, attempt: effect.attempt })

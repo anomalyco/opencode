@@ -12,14 +12,14 @@ export default Runtime.handler(
     const { endpoint } = yield* ServerConnection.resolve()
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const response = yield* Effect.promise(() => client.mcp.list({ location: { directory: process.cwd() } }))
-    const servers = response.data.toSorted((a, b) => a.name.localeCompare(b.name))
+    const servers = response.data.toSorted((a, b) => a.id.localeCompare(b.id))
     if (servers.length === 0) {
       process.stdout.write("No MCP servers configured" + EOL)
       return
     }
-    const width = Math.max(...servers.map((server) => server.name.length))
+    const width = Math.max(...servers.map((server) => server.id.length))
     const lines = servers.map(
-      (server) => `${icon(server.status)} ${server.name.padEnd(width)}  ${describe(server.status)}`,
+      (server) => `${icon(server.status)} ${server.id.padEnd(width)}  ${describe(server.status)}`,
     )
     process.stdout.write(lines.join(EOL) + EOL)
   }),

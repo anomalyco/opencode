@@ -7,7 +7,7 @@ const server = (
   name: string,
   integrationID?: string,
   status: McpServer["status"] = { status: "pending" },
-): McpServer => ({ name, integrationID, status })
+): McpServer => ({ id: name, name, title: name, integrationID, status })
 
 const integration = (id: string, methods: IntegrationInfo["methods"], connected = false): IntegrationInfo => ({
   id,
