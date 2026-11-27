@@ -49,7 +49,7 @@ export { arcadeMenu }
 export function ArcadeChrome(props: { settingsRows?: () => JSX.Element }) {
   const i18n = useI18n()
   const language = useLanguage()
-  const links = createMemo(() => siteLinks(i18n.t, language.route))
+  const links = createMemo(() => siteLinks(i18n.t, language.route, language.consoleRoute))
   useViewportCover()
   // The same items and order as the site's sidebar (site.tsx) with the current settings.
   const nav = createMemo(() => {
