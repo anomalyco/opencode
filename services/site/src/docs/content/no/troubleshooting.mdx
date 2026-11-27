@@ -1,0 +1,241 @@
+---
+title: "Feilsøking"
+description: "Diagnostiser OpenCode-problemer ved å sjekke bakgrunnstjenesten, inspisere API-et, lese logger og ta profiler."
+---
+
+<Callout type="tip">
+  Du kan be OpenCode feilsøke seg selv. Beskriv problemet og be den bruke denne feilsøkingssiden; den kan lese
+  trinnene nedenfor, inspisere tjenesten og loggene sine og hjelpe med å identifisere problemet.
+</Callout>
+
+OpenCode bruker en klient-tjener-arkitektur. En bakgrunnsserver eier økter, plugins, tillatelser og annen applikasjonstilstand.
+Start med å avgjøre om et problem ligger i en klient, den delte serveren eller et bestemt prosjekt.
+
+## Sjekk bakgrunnstjenesten
+
+Vis gjeldende serverinformasjon:
+
+```bash
+opencode service status
+```
+
+Sjekk at API-et svarer som det skal:
+
+```bash
+opencode api get /api/info
+```
+
+Start tjenesten på nytt hvis den henger eller ikke fungerer som den skal:
+
+```bash
+opencode service restart
+```
+
+Du kan også stoppe og starte den eksplisitt:
+
+```bash
+opencode service stop
+opencode service start
+```
+
+<Callout type="note">
+  OpenCode oppdager eller starter normalt den delte bakgrunnstjenesten automatisk. Tjenestekommandoene trengs bare
+  når du diagnostiserer livssyklusen.
+</Callout>
+
+## Tillat en origin for nettleseren
+
+Hvis CORS hindrer en nettleserklient med en annen origin i å koble til, legger du klientens origin til i tjenestekonfigurasjonen:
+
+```bash
+opencode service set cors http://192.168.1.10:3001
+opencode service get cors
+```
+
+Bruk en nøyaktig HTTP- eller HTTPS-opprinnelse, inkludert porten når det trengs, uten bane eller etterfølgende skråstrek. For å tillate flere
+opprinnelser, send en kommaseparert liste som ett argument; mellomrom rundt hver opprinnelse trimmes:
+
+```bash
+opencode service set cors "http://192.168.1.10:3001, https://app.example.com"
+```
+
+`service get cors` skriver ut en JSON-matrise. Fjern den konfigurerte listen med:
+
+```bash
+opencode service unset cors
+```
+
+Innstilling eller fjerning av tjenestekonfigurasjon stopper bakgrunnstjenesten. Neste start tar i bruk den nye konfigurasjonen;
+bruk `opencode service start` for å starte den eksplisitt.
+
+For en forgrunnsserver gjentar du `--cors` for hver ekstra tillatte opprinnelse:
+
+```bash
+opencode serve --cors http://192.168.1.10:3001 --cors https://app.example.com
+```
+
+Med `serve --service` overstyrer oppgitte `--cors`-flagg den lagrede listen for den prosessen. Uten disse flaggene bruker tjenestemodusen
+den lagrede listen. CORS endrer ikke lyttadressen eller omgår serverautentisering.
+
+## Inspiser API-et
+
+`api`-kommandoen bruker den vanlige måten å finne og autentisere seg mot den lokale tjenesten på. Den godtar enten en HTTP-metode og sti eller en
+OpenAPI-operasjons-ID.
+
+Se [API-referansen](/api) for alle endpoints og operasjons-ID-er.
+
+Send en JSON-forespørselsbody med `--data` eller `-d`, og legg til headere med `--header` eller `-H`.
+
+<Callout type="warning">
+  Å kjøre `opencode api` kan starte bakgrunnstjenesten når ingen kompatibel, frisk tjeneste er tilgjengelig.
+</Callout>
+
+## Les logger
+
+Installerte bygg skriver logger til:
+
+```text
+~/.local/share/opencode/log/opencode.log
+```
+
+Følg loggen mens du gjenskaper problemet:
+
+```bash
+tail -f ~/.local/share/opencode/log/opencode.log
+```
+
+Hver linje inneholder en prosess-`run`-ID og et `role`-felt. Bruk `role=server` for økt-, leverandør-, plugin-, tillatelses- og
+verktøyaktivitet.
+
+```bash
+grep 'role=server' ~/.local/share/opencode/log/opencode.log
+grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
+```
+
+## Ta et heap-snapshot
+
+Skriv et minne-snapshot (heap) av den kjørende bakgrunnsserveren på alle plattformer:
+
+```bash
+opencode debug heap-dump
+```
+
+Kommandoen venter til snapshottet er ferdig, og skriver deretter ut banen:
+
+```text
+/home/me/.local/share/opencode/log/heap-48213-2026-10-23T013012345Z.heapsnapshot
+```
+
+Skriv det et annet sted med `--directory`. Serveren oppretter katalogen når den mangler:
+
+```bash
+opencode debug heap-dump --directory ./snapshots
+```
+
+- Den bruker bare en server som allerede kjører. Den starter, erstatter eller restarter aldri en.
+- Bruk `--server <url>` for å ta et snapshot av en server du startet med `opencode serve`. Angi `OPENCODE_PASSWORD` hvis den har ett.
+  `--directory` er da en bane på serverens maskin.
+- Åpne filen i Memory-panelet i Chrome DevTools.
+
+<Callout type="warning">
+  Serveren settes på pause mens den skriver snapshottet, og minnebruken kan øke midlertidig. Snapshottet kan
+  inneholde prompter, filinnhold og tilgangsopplysninger. Ikke del det offentlig.
+</Callout>
+
+### I desktop-appen
+
+Kjør **Capture heap snapshots** fra kommandopaletten. Den skriver én mappe i Downloads-mappen din med et snapshot av
+hver del av appen, pluss en oversikt over minnet et snapshot ikke kan vise:
+
+```text
+opencode-heap-2026-10-23T013012345Z/
+  memory.json                  where the memory is, per process, in MiB: start here
+  memory-infra.json            Chromium's memory dump trace; open it in https://ui.perfetto.dev
+  heap-48213-….heapsnapshot    the desktop's own server
+  window-1-48390.heapsnapshot  one per app window
+  main-48102.heapsnapshot      the desktop main process
+  gpu.json                     the GPU and driver
+  manifest.json                processes, PIDs, and memory before and after; written last
+```
+
+- Et heap-snapshot inneholder bare JavaScript-objekter og siden. Bilder, layout, komposittlag og GPU-minne ligger i
+  `memory.json` og `memory-infra.json` i stedet.
+- Eksterne servere tas ikke med. Bruk `opencode debug heap-dump` på den maskinen i stedet.
+- Serveren skriver snapshottet sitt rett i mappen, så ingenting stort flyttes eller kopieres.
+- Nettleserfaner inkluderes ikke, fordi snapshottene deres inneholder innholdet på sidene du besøkte.
+
+## Ta CPU- og minneprofiler
+
+På macOS og Linux kan du sende et signal til en kjørende OpenCode-prosess for å ta diagnostiske data. Hent bakgrunnsserverens PID
+fra endpointet for helsesjekk:
+
+```bash
+opencode api get /api/info
+```
+
+Bruk `pid` fra svaret med ett av disse signalene:
+
+- `SIGPROF` tar en CPU-profil på ti sekunder:
+
+  ```bash
+  kill -SIGPROF <pid>
+  ```
+
+  Resultatet skrives til loggkatalogen som `cpu-<pid>-<timestamp>.cpuprofile`.
+
+- `SIGUSR1` tar et minne-snapshot (heap):
+
+  ```bash
+  kill -SIGUSR1 <pid>
+  ```
+
+  Resultatet skrives til loggkatalogen som `heap-<pid>-<timestamp>.heapsnapshot`.
+
+Vent på `CPU profile written` eller `heap snapshot written` i `opencode.log` før du åpner filen. Den tilhørende
+loggoppføringen inneholder hele banen. Du kan inspisere begge filtypene i Chrome DevTools.
+
+<Callout type="note">
+  Signalutløste profiler er ikke tilgjengelige på Windows. Bruk `opencode debug heap-dump` for heap-snapshots i stedet.
+  Skriving av et heap-snapshot kan pause prosessen og øke minnebruken midlertidig.
+</Callout>
+
+## Tjenestefiler
+
+Den delte serveren registrerer seg på:
+
+```text
+~/.local/state/opencode/service.json
+```
+
+Den private tjenestekonfigurasjonen lagres separat på:
+
+```text
+~/.config/opencode/service.json
+```
+
+Databasen ligger normalt på:
+
+```text
+~/.local/share/opencode/opencode.db
+```
+
+`OPENCODE_DB` kan overstyre databaseplasseringen.
+
+<Callout type="warning">
+  Ikke slett eller rediger tjenestefiler eller databasen mens du feilsøker. Bruk tjenestekommandoene for å administrere
+  daemonen, og ta sikkerhetskopi før du inspiserer varige data med eksterne verktøy.
+</Callout>
+
+## Rapporter et problem
+
+Ta med følgende når du rapporterer et reproduserbart problem:
+
+- Utdata fra `opencode --version`
+- Utdata fra `opencode service status`
+- Den korteste sekvensen med trinn som gjenskaper problemet
+- Om problemet påvirker den delte tjenesten, en bestemt klient eller ett prosjekt
+- Relevante logglinjer, inkludert `run`- og `role`-feltene
+
+Fjern API-nøkler, autorisasjonsheadere, prompter, filinnhold og andre sensitive data før du deler logger.
+
+Rapporter reproduserbare problemer i [GitHub Issues](https://github.com/anomalyco/opencode/issues).

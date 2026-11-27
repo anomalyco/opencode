@@ -1,0 +1,166 @@
+---
+title: "Vedlegg"
+description: "Legg ved filer, kataloger og bilder i OpenCode-prompter, og se hva modellen mottar for hvert format."
+---
+
+## Legg ved
+
+Legg ved en lokal fil og be OpenCode bruke den i prompten. I desktop- eller
+nettklienten kan du velge **Attach file**, lime inn en fil eller dra den inn i prompten.
+
+```text
+Summarize the attached README.md and list the required setup steps.
+```
+
+Du kan velge filer på til sammen 20 MiB i filvelgeren i desktop-appen. Andre grensesnitt kan
+ha lavere grenser på klientsiden.
+
+<Callout type="warning">
+  Velg en modell som kan ta imot bilder før du legger ved et bilde. OpenCode kan sende støttede bilder til leverandøren,
+  men leverandøren og modellen har fortsatt egne krav til format, dimensjoner, antall filer og filstørrelse.
+  En modell som bare tar imot tekst, kan avvise forespørselen.
+</Callout>
+
+## Syntaks
+
+I inndata til prompter og kommandoer i V2 beskriver du et vedlegg med `uri` og de valgfrie feltene
+`name` og `description`:
+
+```json
+{
+  "uri": "file:///home/me/project/src/server.ts",
+  "name": "server.ts",
+  "description": "HTTP server entrypoint"
+}
+```
+
+Bruk en absolutt `file:`-URL for en fil eller katalog som er tilgjengelig for
+serveren. For tekstfiler velger du linjer med positive `start`- og `end`-verdier. Linjenumrene starter på 1.
+
+```text
+file:///home/me/project/src/server.ts?start=20&end=60
+```
+
+Bruk en `data:`-URL for å sende innhold direkte:
+
+```json
+{
+  "uri": "data:text/plain;base64,SGVsbG8sIE9wZW5Db2RlIQ==",
+  "name": "greeting.txt"
+}
+```
+
+HTTP- og HTTPS-URL-er for vedlegg støttes ikke. Se den genererte
+[API-referansen](/api) for å se hvordan du sender inn prompter fra kode.
+
+## Formater
+
+Gjeldende V2-økter gjør disse vedleggstypene synlige for modellen:
+
+| Inndata                 | Modellen mottar                                           | Eksempel            |
+| ----------------------- | -------------------------------------------------------- | ------------------ |
+| UTF-8-tekstfil          | Filnavn og dekodet tekst                                  | `README.md`        |
+| Katalog                 | Ikke-rekursiv liste over filer og kataloger på øverste nivå | `file:///home/me/` |
+| PNG, JPEG, GIF eller WebP | Bildemedium                                             | `diagram.png`      |
+| PDF                     | Dokumentmedium                                            | `report.pdf`       |
+
+PDF-filer krever en modell som kan ta imot PDF. Hvis modellen ikke støtter
+vedleggstypen, sender OpenCode en kort merknad i stedet.
+
+SVG behandles som tekst. AVIF, BMP, lyd, video og andre binære promptvedlegg
+inkluderes ikke i modellforespørselen. Konverter en ikke-støttet binærfil til tekst eller et støttet bilde først;
+konverter for eksempel et BMP-bilde til PNG før du legger det ved.
+
+OpenCode leser hvert vedlegg før prompten godtas. Den avviser ugyldige
+URL-er, stier som ikke kan leses eller ikke peker til filer eller kataloger, og
+vedlegg som er over 20 MiB etter dekoding. OpenCode avgjør medietypen ut fra
+innholdet. Å endre filnavnet eller medietypen i en `data:`-URL gjør ikke en
+binærfil i et format som ikke støttes, synlig for modellen.
+
+## Bilder
+
+Konfigurer bildenormalisering i `opencode.json` eller `opencode.jsonc`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "media": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880,
+    },
+  },
+}
+```
+
+Alle felt er valgfrie:
+
+| Felt               | Standard  | Atferd                                                                  |
+| ------------------ | --------- | ------------------------------------------------------------------------- |
+| `auto_resize`      | `true`    | Endrer størrelsen på et bilde over en konfigurert grense; når `false`, avvises bildet. |
+| `max_width`        | `2000`    | Maksimal bredde i piksler; må være et positivt heltall.                |
+| `max_height`       | `2000`    | Maksimal høyde i piksler; må være et positivt heltall.                 |
+| `max_base64_bytes` | `5242880` | Maksimalt antall byte i det Base64-kodede bildet; må være et positivt heltall. |
+
+For eksempel avviser dette et bilde bredere enn 1200 piksler i stedet for å endre størrelsen:
+
+```jsonc title="opencode.jsonc"
+{
+  "media": {
+    "image": {
+      "auto_resize": false,
+      "max_width": 1200,
+    },
+  },
+}
+```
+
+Disse innstillingene gjelder både for støttede bilder som legges ved prompter, og for bilder
+som returneres av det innebygde `read`-verktøyet.
+
+## Behandling
+
+`read`-verktøyet gjenkjenner PNG, JPEG, GIF og WebP ut fra innholdet og leser
+opptil 20 MiB bildedata. Det sjekker bredde, høyde og Base64-lengde
+mot de konfigurerte bildegrensene.
+
+Med `auto_resize: true` bevarer OpenCode sideforholdet og skalerer ned
+til dimensjonsgrensene. Den prøver deretter gradvis mindre PNG- og JPEG-
+kodinger til Base64-grensen er nådd, så medietypen i utdataene kan endres.
+
+```text
+Input:  4000 × 2000 WebP
+Limits: 2000 × 2000
+Output: 2000 × 1000 PNG or JPEG
+```
+
+Hvis ingen koding holder seg innenfor grensen, mislykkes behandlingen. Med `auto_resize: false`
+avviser OpenCode bilder som overskrider en grense, uten å endre dem. Bilder som ikke kan dekodes,
+avvises også.
+
+```text
+Input:  2400 × 1600 JPEG
+Limit:  max_width = 2000, auto_resize = false
+Result: Image processing fails
+```
+
+Hvis funksjonen for skalering ikke er tilgjengelig, sender OpenCode originalbildet
+uendret videre. Bildeinnstillingene er derfor behandlingsgrenser, ikke en opplastings- eller
+sikkerhetsgrense.
+
+## Grenser
+
+| Grense                        | Verdi eller atferd                                            | Eksempel                                      |
+| ----------------------------- | ------------------------------------------------------------- | -------------------------------------------- |
+| Direkte vedlegg               | 20 MiB dekodet per element; klienter kan ha lavere grenser    | To filer på 12 MiB passerer grensen per element |
+| Valg i desktop-velgeren       | 20 MiB totalt                                                 | To filer på 12 MiB overskrider valggrensen    |
+| `max_base64_bytes`            | Bare Base64-kodingen, ikke hele `data:`-URL-en                | `SGVsbG8=` teller som 8 byte                  |
+| Leverandørens bildegrenser    | Gjelder etter OpenCode-behandlingen                           | En leverandør kan avvise et godtatt bilde     |
+| Modellstøtte for tekstvedlegg | Krever ikke en multimodal modell                              | `notes.txt` settes inn som prompttekst        |
+| Tekstgrenser for `read`       | Egne grenser for sideinndeling og avkorting                   | Les en stor logg én side om gangen           |
+
+At en klient godtar en fil, garanterer ikke at innholdet når
+modellen. Vedlegget må bruke et format modellen kan se, og tilfredsstille både OpenCode-
+og leverandørgrensene.

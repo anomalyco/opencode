@@ -1,0 +1,90 @@
+---
+title: "TUI"
+description: "Start en økt og lær de vanligste oppgavene i terminalgrensesnittet."
+---
+
+Kjør OpenCode fra prosjektet ditt, skriv en forespørsel og trykk **Enter**.
+
+```bash
+cd ~/code/my-project
+opencode
+```
+
+```text
+Explain how authentication works in this project
+```
+
+Trykk **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** eller **Ctrl+J** for en ny linje. Mens OpenCode arbeider, styrer **Enter** den aktive økten; trykk **Ctrl+X** og deretter **Enter** for å legge prompten i kø til senere.
+
+## Kontekst
+
+Skriv `@` for å søke etter en fil, og velg den for å legge filen ved i prompten. Fortsett å skrive etter `@` for å begrense resultatene.
+
+```text
+Review @src/auth.ts for error handling problems
+```
+
+Du kan ta med en linje eller et område etter banen.
+
+```text
+Explain @src/auth.ts#20-45
+```
+
+## Terminalkommandoer
+
+Skriv `!` i starten av en tom prompt for å gå over i shell-modus. Skriv en kommando og trykk **Enter**. Trykk **Esc** for å gå ut av modusen uten å kjøre en kommando.
+
+```text
+!git status
+```
+
+Terminalkommandoer kjøres i øktens arbeidskatalog, og utdataene blir værende i økten.
+
+## Kommandoer
+
+Skriv `/` for å liste skråstrekkommandoer. Fortsett å skrive for å filtrere listen, og trykk **Enter** for å kjøre den valgte kommandoen.
+
+```text
+/models
+```
+
+Vanlige kommandoer er `/new`, `/sessions`, `/models`, `/agents`, `/undo`, `/redo` og `/editor`. Trykk **Ctrl+P** for å åpne kommandopaletten for alle handlinger som er tilgjengelige i gjeldende visning.
+
+Etter en oppdatering viser OpenCode én gang hva som er nytt i utgivelsen, på hjemmeskjermen. Kjør `/highlights` for å se det igjen, eller angi `"highlights": false` i [`cli.json`](/cli/config#alerts) for å hindre at det åpnes automatisk.
+
+## Hurtigspørsmål
+
+Kjør `/btw <question>` for å stille et raskt spørsmål om samtalen så langt. Svaret bruker øktens kontekst og gjeldende modell, men legges ikke til i samtalen, så det påvirker ikke senere prompter. En `/btw`-indikator vises nederst i promptfeltet mens den kjører, og svaret åpnes i en dialog; trykk **C** for å kopiere det.
+
+```text
+/btw why did the test in step 2 fail?
+```
+
+## Modeller
+
+Trykk **Ctrl+X** og deretter **M** for å velge en modell, eller kjør `/models`. Trykk **F2** for å bla gjennom nylig brukte modeller.
+
+Trykk **Ctrl+X** og deretter **A** for å velge en agent, eller kjør `/agents`. Trykk **Shift+Tab** for å bla gjennom agenter.
+
+## Økter
+
+Trykk **Ctrl+X** og deretter **N** for å starte en ny økt. Trykk **Ctrl+X** og deretter **L**, eller kjør `/sessions`, for å gå tilbake til en eksisterende økt; **Ctrl+O** åpner nylige økter og prosjekter sammen.
+
+Faner er slått på som standard. Bruk **Ctrl+Tab** og **Ctrl+Shift+Tab** for å bevege deg mellom dem, **Ctrl+X** og deretter **W** for å lukke én, og **Ctrl+Shift+T** for å gjenåpne den sist lukkede fanen.
+
+## Historikk
+
+Trykk **Ctrl+X** og deretter **U**, eller kjør `/undo`, for å tilbakestille den siste brukermeldingen og arbeidet som fulgte. Prompten kommer tilbake i composer, slik at du kan redigere den.
+
+Trykk **Ctrl+X** og deretter **R**, eller kjør `/redo`, for å gjenopprette det tilbakestilte arbeidet. Sender du en ny prompt i stedet, godtas tilbakestillingen, og arbeidet fortsetter derfra.
+
+## Editor
+
+Angi `VISUAL` eller `EDITOR`, og trykk deretter **Ctrl+X** og **E**, eller kjør `/editor`, for å redigere gjeldende prompt i det valgte redigeringsprogrammet. Lagre og avslutt for å få teksten tilbake i composer, og trykk **Enter** for å sende den.
+
+```bash
+export EDITOR="nvim"
+opencode
+```
+
+Ledertasten er **Ctrl+X** som standard. Se [Hurtigtaster](/cli/keybinds) for å endre disse snarveiene.

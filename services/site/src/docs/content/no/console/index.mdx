@@ -1,0 +1,37 @@
+---
+title: "Introduksjon til Console"
+description: "OpenCode Console er en valgfri tjeneste som gir deg arbeidsområder for team, modellinferens, budsjetter, policyer og driftet nettsøk."
+---
+
+[OpenCode Console](https://opencode.ai/console) er en valgfri tjeneste som gir ekstra fordeler når du bruker
+OpenCode, alene eller som team.
+
+- [Arbeidsområder](/console/workspaces) for å dele tilgang med [teamet](/console/members)
+- [Inferens](/console/models) for både proprietære modeller og modeller med åpen kildekode
+- [Leverandører](/console/providers) for å koble til dine egne leverandørkontoer gjennom Console-gatewayen
+- Sporing av bruk og kontroll av [budsjett](/console/budgets)
+- Rull ut policyer for hele teamet for å styre OpenCode-atferd
+- [Nettsøk](/console/websearch)
+- [Harnesses](/console/harnesses) for å bruke Console-modeller fra Claude Code, Codex og andre agenter
+- [OpenCode Go, Go Plus og Go Teams](/console/go) gir tilgang til modeller med åpen kildekode. Go koster $10 i måneden, Go Plus $40 i måneden og Go Teams $20 per medlem i måneden.
+
+## Kom i gang
+
+Du trenger ikke et team for å bruke Console. Hver konto starter med et **Personal**-arbeidsområde der du er det eneste
+medlemmet.
+
+1. Logg inn på [Console](https://opencode.ai/console).
+2. Abonner på [Go](/console/go), legg til [kreditter](/console/billing#add-credits), eller koble til en [leverandør](/console/providers).
+3. Kjør `/connect` i OpenCode og velg arbeidsområdet.
+4. Eventuelt kan du [invitere](/console/members#invite-members) teamet ditt.
+
+```text
+/connect
+```
+
+## Policyer
+
+Reglene for Providers og Tools på Policies-siden gjelder for alle OpenCode-klienter
+som er koblet til arbeidsområdet. De sendes som [policyregler](/policies#console) som går foran medlemmets bruker- og prosjektkonfigurasjon. De trer i kraft
+innen omtrent ett minutt. Administrerte innstillinger og systemkonfigurasjonsfilen har fortsatt høyere prioritet enn arbeidsområdets policyer.
+Se [prioritetsrekkefølgen](/policies#precedence).

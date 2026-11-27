@@ -1,0 +1,252 @@
+---
+title: "Plugin-RPC"
+description: "Eksponer en plugins egendefinerte metoder og hendelser til andre plugins og klienter."
+---
+
+Plugins kan eksponere egendefinerte metoder og hendelser som kjører på serveren og kan
+kalles av andre plugins eller klienter.
+
+## Definer
+
+Bruk `Rpc.define` for å liste RPC-ens metoder, feil og hendelser.
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+        additionalProperties: false,
+      },
+      errors: {
+        not_found: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: {
+        type: "object",
+        properties: {
+          itemID: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["itemID", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+})
+```
+
+### Validering
+
+En RPC-definisjon beskriver strukturen til inndata og utdata for metoder, hendelser
+og feil. Den støtter to skjemaformater:
+
+- JSON Schema, enkelt og uten avhengigheter.
+- Enhver Standard Schema-kompatibel validator
+  - Zod
+  - Valibot
+  - ArkType
+
+### Inndata og utdata
+
+Hver metode kan definere et `input`-skjema for argumentet og et `output`-skjema
+for returverdien. Utelat en av dem hvis metoden ikke godtar eller returnerer en verdi.
+
+```ts
+search: {
+  input: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+  },
+  output: {
+    type: "object",
+    properties: { text: { type: "string" } },
+    required: ["text"],
+  },
+}
+```
+
+JSON Schema-verdier er `unknown` i TypeScript, så innsnevr dem før bruk.
+Standard Schema utleder inndata- og utdatatypene.
+
+### Feil
+
+Legg til et `errors`-kart på en metode for forventede feil. Hver nøkkel blir
+feilens `type`, og skjemaet definerer feilens `data`.
+
+```ts
+errors: {
+  not_found: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+    additionalProperties: false,
+  },
+}
+```
+
+Feilnavn som begynner med `rpc.`, er reservert av OpenCode.
+
+### Hendelser
+
+Legg hendelser til det overordnede `events`-kartet. Hver hendelse har et skjema for dataene
+som sendes til abonnenter.
+
+Hendelsesdata må være et objekt. Bruk et tomt objektskjema når det ikke finnes data:
+
+```ts
+events: {
+  refreshed: {
+    schema: { type: "object", additionalProperties: false },
+  },
+}
+```
+
+Skalarer, matriser, `null` og `undefined` er ikke gyldige hendelsesdata.
+
+## Implementer
+
+Registrer implementasjonen inne i `setup`:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-plugin",
+  async setup(ctx) {
+    const registration = await ctx.rpc.register(Acme, {
+      search: async (input, context) => {
+        const { query } = input as { query: string }
+        const text = await findText(query, { signal: context.signal })
+        if (!text) return context.error("not_found", "Result not found", { query })
+        return { text }
+      },
+    })
+
+    const acme = ctx.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+
+    await registration.events.emit("updated", { itemID: "item-1", text: "ready" })
+  },
+})
+```
+
+Etter at RPC-en er registrert, kan samme plugin kalle den gjennom `ctx.rpc(Acme)`.
+
+Det andre argumentet inkluderer `signal` for avbrytelse og `context.error(...)`
+for deklarerte feil. Du kan returnere eller kaste feilen.
+
+En plugin kan registrere mer enn én RPC. Avhending av registreringen fjerner den.
+
+## Kall
+
+Når RPC-en er registrert, kan den kalles over HTTP eller fra en annen plugin.
+
+### HTTP
+
+Lag en OpenCode-klient, og bruk deretter `client.rpc` for å lage en subklient for
+RPC-en:
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const acme = client.rpc(Acme)
+const result = await acme.search({ query: "hello" })
+```
+
+### Plugin
+
+Plugins har allerede en OpenCode-klient. For eksempel kan en TUI-plugin lage
+samme RPC-subklient fra `context.client`:
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode/plugin/tui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  id: "acme-tui",
+  async setup(context) {
+    const acme = context.client.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+    console.log(result)
+  },
+})
+```
+
+En [GUI-plugin](/build/plugins/gui) leser klienten til desktop-appens egen server fra `ctx.client`:
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  setup(ctx) {
+    ctx.add(Command, {
+      id: "search",
+      title: "Search Acme",
+      run: async () => {
+        const result = await ctx.client.rpc(Acme).search({ query: "hello" })
+        console.log(result)
+      },
+    })
+  },
+})
+```
+
+Les `ctx.client` der du skal gjøre kallet. Klienten endres når serveren startes på nytt. Så lenge serveren er utilgjengelig, avvises alle kall.
+
+### Abonner
+
+Bruk `events.on` med en callback-funksjon, og avslutt abonnementet når du ikke lenger trenger lytteren:
+
+```ts
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+
+unsubscribe()
+```
+
+For en asynkron iterable, bruk `events.subscribe("updated")`:
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+Abonnementet leverer hendelser etter hvert som de skjer. Abonnenter som er frakoblet, går derfor glipp av dem.
+
+- Abonner med det lokale navnet, for eksempel `updated`.
+- Den mottatte typen er prefikset, for eksempel `rpc.acme.updated`.
+- Hver hendelse inkluderer `data` og `location`.
+- Plugin-avlasting lukker abonnementene.
+
+Eksterne klienter mottar hendelser fra alle plasseringer, så sjekk `event.location`
+når det trengs. Serverplugin'en må fortsatt være konfigurert og kjørende.

@@ -1,0 +1,104 @@
+---
+title: "Cloudflare"
+description: "Kjør OpenCode inne i et Cloudflare Durable Object med @opencode/sdk/workerd, støttet av objektets SQLite-lagring."
+---
+
+Bruk `@opencode/sdk/workerd` inne i et Cloudflare Durable Object. Denne profilen bruker objektets SQLite-lagring,
+bevarer varige hendelser for gjenoppretting etter utkastelse og erstatter utilgjengelige lokale filsystem- og prosesstjenester.
+
+```sh
+bun add @opencode/sdk
+```
+
+Bruk samme vert så lenge Durable Object-forekomsten lever, i stedet for å opprette en ny vert for hver forespørsel.
+
+```ts
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.server.info())
+  }
+}
+```
+
+`blockConcurrencyWhile` holder tilbake alle hendelser for Durable Object til verten er klar, og tilbakestiller objektet hvis
+initialiseringen mislykkes. Ved å beholde Promise-objektet får forespørselsbehandlerne direkte tilgang til samme vert etter oppstart.
+
+```ts
+constructor(state: DurableObjectState) {
+  this.opencode = state.blockConcurrencyWhile(() =>
+    OpenCodeWorkerd.create({ storage: state.storage }),
+  )
+}
+```
+
+Wrangler velger OpenCodes Workerd-trygge implementasjoner gjennom `workerd`-pakkebetingelsen. Cloudflare kan kaste ut
+et Durable Object uten å kjøre opprydding, så korrektheten avhenger ikke av at `close()` kalles.
+
+```jsonc title="wrangler.jsonc"
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+## Rut utgående forespørsler
+
+Send `fetch` for å rute OpenCodes utgående HTTP-forespørsler (OpenCode Console-konfigurasjon, modellforespørsler, webhenting og
+-søk, well-known-konfigurasjon og eksterne MCP-servere) gjennom en egendefinert behandler som en Service Binding. Agentkode i
+Code Mode fortsetter å bruke `globalThis.fetch`.
+
+```ts
+OpenCodeWorkerd.create({
+  storage: state.storage,
+  fetch: (input, init) => {
+    const request = new Request(input, init)
+    return new URL(request.url).hostname === "console.example.com" ? env.CONSOLE.fetch(request) : fetch(request)
+  },
+})
+```
+
+## Tilpass
+
+Tilpass OpenCode-forekomsten din ved å registrere plugins som er pakket sammen med
+Workeren. Send plugins til `OpenCodeWorkerd.create()` for å tilpasse agenter, modeller,
+verktøy og annen atferd:
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [plugin],
+})
+```
+
+Se [den fullstendige plugin-dokumentasjonen](/build/plugins/server) for plugin-hooks,
+transforms, verktøy og hele pluginkonteksten.
