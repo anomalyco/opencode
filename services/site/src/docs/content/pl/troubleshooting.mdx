@@ -113,6 +113,36 @@ grep 'role=server' ~/.local/share/opencode/log/opencode.log
 grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
 ```
 
+## Eksport telemetrii
+
+OpenCode może wysyłać logi i ślady do kolektora OpenTelemetry lub do backendu APM, który przyjmuje dane w formacie OTLP
+przez HTTP. Ustaw bazowy URL kolektora bez ścieżki:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer example-token"
+export OTEL_RESOURCE_ATTRIBUTES="team=platform,host.name=dev-laptop"
+opencode
+```
+
+| Zmienna                       | Działanie                                                                                                      |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Bazowy URL. Logi trafiają do `<endpoint>/v1/logs`, a ślady do `<endpoint>/v1/traces`. Usuń zmienną, aby wyłączyć eksport. |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | Oddzielone przecinkami nagłówki `key=value` wysyłane przy każdym eksporcie, na przykład klucz API. |
+| `OTEL_RESOURCE_ATTRIBUTES`    | Oddzielone przecinkami atrybuty `key=value` z kodowaniem URL, dodawane do każdego rekordu. Jeden nieprawidłowy wpis powoduje pominięcie wszystkich tych atrybutów. |
+
+Każdy rekord zawiera też `service.name` (`opencode`), `service.version`, `deployment.environment.name` (kanał wydania),
+`opencode.client` i `opencode.run`, czyli to samo ID uruchomienia co w pliku logów.
+
+Usługa w tle działa w osobnym procesie i nie dziedziczy środowiska Twojej powłoki. Ustaw te zmienne również dla usługi,
+aby rejestrować ślady wywołań modeli i uruchomień narzędzi:
+
+```bash
+opencode service set env OTEL_EXPORTER_OTLP_ENDPOINT http://localhost:4318
+opencode service set env OTEL_EXPORTER_OTLP_HEADERS "authorization=Bearer example-token"
+opencode service start
+```
+
 ## Przechwytywanie zrzutu sterty
 
 Zapisz zrzut pamięci (sterty) działającego serwera w tle na dowolnej platformie:

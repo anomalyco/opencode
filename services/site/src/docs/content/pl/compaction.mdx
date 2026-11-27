@@ -99,6 +99,29 @@ Dodaj `compaction` do dowolnego [pliku konfiguracji OpenCode](/config):
 - Liczba tokenów, taka jak `20000`, też działa. Ta sama liczba to duży udział małego okna i mały udział dużego.
 - Liczba tokenów równa co najmniej oknu modelu jest ignorowana i obowiązuje wartość domyślna.
 
+### Okno kontekstu
+
+Rozmiar okna wyznacza limit wejścia modelu (`limit.input`), który nie może przekroczyć limitu kontekstu (`limit.context`).
+Jeśli model ma tylko jeden z tych limitów, OpenCode używa właśnie jego. Jeśli nie ma żadnego, automatyczne kompaktowanie
+nie działa. OpenCode kompaktuje wtedy rozmowę tylko raz, gdy dostawca odrzuci zbyt długie żądanie.
+
+Konfiguracja zastępuje limity osobno dla każdego pola. Jeśli katalog określa oba limity, zwiększenie samego
+`limit.context` nie zmienia rozmiaru okna: nadal wyznacza go limit wejścia z katalogu. Ustaw więc także `limit.input`:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "limit": { "context": 1050000, "input": 1000000 },
+        },
+      },
+    },
+  },
+}
+```
+
 ## Model
 
 Domyślnie OpenCode sam pisze podsumowanie, używając modelu sesji. Ustaw `agents.compaction.model`, aby używać innego

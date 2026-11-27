@@ -17,6 +17,20 @@ Explain how authentication works in this project
 Naciśnij **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** lub **Ctrl+J**, aby przejść do nowej linii. Gdy OpenCode pracuje,
 **Enter** steruje aktywną sesją; naciśnij **Ctrl+X**, a następnie **Enter**, aby dodać prompt do kolejki na później.
 
+## Projekty i katalogi
+
+OpenCode szuka plików i wykonuje polecenia powłoki w katalogu, z którego go uruchomisz. Katalogi w tym samym
+repozytorium Git, w tym jego worktree, należą do jednego projektu. Katalog bez kontroli wersji stanowi osobny projekt.
+
+Podaj katalog, aby uruchomić OpenCode w innym projekcie:
+
+```bash
+opencode ~/code/another-project
+```
+
+Naciśnij **Ctrl+O**, aby otworzyć listę ostatnich sesji i projektów. Podświetl projekt i naciśnij **Right**, aby
+wyświetlić jego worktree. Na tej liście naciśnij **Ctrl+N**, aby utworzyć nowe worktree.
+
 ## Kontekst
 
 Wpisz `@`, aby wyszukać plik, a następnie wybierz go, aby dołączyć do promptu. Pisz dalej po `@`, aby zawęzić wyniki.
@@ -77,8 +91,14 @@ agentów.
 
 ## Sesje
 
-Naciśnij **Ctrl+X**, a następnie **N**, aby rozpocząć nową sesję. Naciśnij **Ctrl+X**, a następnie **L**, lub uruchom
-`/sessions`, aby wrócić do istniejącej sesji; **Ctrl+O** otwiera razem ostatnie sesje i projekty.
+Każda sesja to osobna rozmowa z własną historią i katalogiem. Aby rozpocząć sesję do osobnego zadania, uruchom `/new`
+lub naciśnij **Ctrl+X**, a następnie **N**. Wcześniejsze sesje pozostaną dostępne. Nowe sesje zaczynają się w katalogu,
+z którego uruchomiono OpenCode. Ustaw [`session.new_location`](/cli/config#sessions) na `inherit`, aby używać katalogu
+bieżącej sesji.
+
+Naciśnij **Ctrl+X**, a następnie **L** lub uruchom `/sessions`, aby wrócić do istniejącej sesji. Na tej liście
+**Ctrl+A** przełącza między sesjami z bieżącego katalogu a sesjami ze wszystkich projektów. Skrót **Ctrl+O** otwiera
+wspólną listę ostatnich sesji i projektów.
 
 Karty są domyślnie włączone. Używaj **Ctrl+Tab** i **Ctrl+Shift+Tab**, aby przełączać się między nimi, **Ctrl+X**,
 a następnie **W**, aby zamknąć kartę, i **Ctrl+Shift+T**, aby ponownie otworzyć ostatnio zamkniętą kartę.

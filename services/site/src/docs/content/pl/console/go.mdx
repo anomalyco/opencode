@@ -102,6 +102,7 @@ Poza OpenCode następujące klienty zostały zweryfikowane pod kątem poprawnej 
 | **jcode**         | Zaktualizuj do **v0.81.6 lub nowszej**, która zawiera [poprawkę nagłówka sesji](https://github.com/1jehuang/jcode/issues/1167).                                                                                                             |
 | **OpenClaw**      | Bieżące kompilacje wysyłają `x-opencode-session` w żądaniach Go. Logowanie w przeglądarce wymaga **2026.11.7 lub nowszej**.                                                                                                                 |
 | **Kilo Code CLI** | Kompilacje zawierające [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) przywracają nagłówki sesji OpenCode. Poprawka obejmuje CLI, a nie rozszerzenie VS Code. Zobacz [zgłoszenie #13723](https://github.com/Kilo-Org/kilocode/issues/13723). |
+| **MiMo Code**     | Zaktualizuj do wersji **v0.1.16 lub nowszej**. Od tej wersji MiMo Code wysyła `x-opencode-session` w żądaniach do Go ([PR #2655](https://github.com/XiaomiMiMo/MiMo-Code/pull/2655)). |
 
 ### Znane problematyczne klienty
 
@@ -113,7 +114,6 @@ i obejścia.
 | **DeepSeek Harness**    | Informacje o sesji docierają niektórymi ścieżkami modeli, ale w innych ich brakuje. Rozpoznajemy jego natywny nagłówek; pozostaje wysyłanie go we wszystkich adapterach. [Dyskusja #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495). |
 | **GitHub Copilot Chat** | Automatyczna obsługa nagłówka sesji jest zgłoszona w [zgłoszeniu VS Code #334186](https://github.com/microsoft/vscode/issues/334186).                                                                                                                  |
 | **Kimi Code**           | Prośba o nagłówek sesji w [zgłoszeniu #3506](https://github.com/MoonshotAI/kimi-code/issues/3506) została zamknięta jako nieplanowana.                                                                                                                |
-| **MiMo Code**           | [Zgłoszenie #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) jest zamknięte, a [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327) zamknięto bez scalania.                                                                         |
 
 ## Limity użycia
 

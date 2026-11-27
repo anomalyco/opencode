@@ -51,8 +51,8 @@ OpenCode automatycznie przeszukuje te lokalizacje:
 | Projekt           | `.opencode/skills`                     |
 | Zgodność projektu | `.claude/skills`, `.agents/skills`     |
 
-W źródłach projektu OpenCode przeszukuje od bieżącego katalogu do katalogu głównego projektu i uwzględnia pasujące
-katalogi na każdym poziomie.
+W przypadku źródeł projektu OpenCode szuka od bieżącego katalogu aż do katalogu głównego systemu plików i uwzględnia
+pasujące katalogi na każdym poziomie.
 
 Każde źródło może zawierać jedną z form:
 
@@ -186,10 +186,10 @@ wczytywany przez OpenCode:
 Źródła są rejestrowane od niższego do wyższego pierwszeństwa:
 
 1. Wbudowane skille
-2. `.claude/skills`, najpierw globalne, potem od najdalszego przodka w stronę bieżącego katalogu
-3. `.agents/skills`, najpierw globalne, potem od najdalszego przodka w stronę bieżącego katalogu
+2. `.claude/skills`, najpierw globalne, potem od najdalszego katalogu nadrzędnego do bieżącego katalogu
+3. `.agents/skills`, najpierw globalne, potem od najdalszego katalogu nadrzędnego do bieżącego katalogu
 4. `~/.config/opencode/skills`
-5. Projektowe `.opencode/skills`, od katalogu głównego projektu w stronę bieżącego katalogu
+5. Projektowe `.opencode/skills`, od najdalszego katalogu nadrzędnego do bieżącego katalogu
 6. Jawne wpisy `skills` w konfiguracji, według priorytetu konfiguracji i kolejności tablicy
 
 Unikaj duplikatów ID, chyba że chcesz zastąpić wcześniejszy skill.

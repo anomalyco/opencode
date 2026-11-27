@@ -245,7 +245,7 @@ OpenCode identyfikuje się wobec serwera autoryzacji pierwszą metodą, która m
 | --- | --- |
 | Wstępnie zarejestrowany klient | Skonfigurowano `oauth.client_id`. |
 | [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents) (CIMD) | Serwer autoryzacji obsługuje CIMD i klienty publiczne, a `oauth.redirect_uri` nie jest ustawione. |
-| [Dynamiczna rejestracja klienta](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | Żadna z powyższych nie ma zastosowania. OpenCode rejestruje klienta i używa go ponownie przy późniejszych logowaniach. |
+| [Dynamiczna rejestracja klienta](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | Żadna z powyższych metod nie ma zastosowania. OpenCode rejestruje klienta, a przy kolejnych logowaniach używa go ponownie i nasłuchuje na zarejestrowanym porcie. Jeśli port jest zajęty, OpenCode ponawia rejestrację. |
 
 Serwer autoryzacji włącza CIMD przez swoje metadane:
 
@@ -304,8 +304,8 @@ Gdy dostawca przekazuje poświadczenia klienta, używaj pól OAuth V2 w snake_ca
 | --- | --- |
 | `client_id` | ID wstępnie zarejestrowanego klienta. Ma pierwszeństwo przed CIMD i DCR. |
 | `client_secret` | Sekret klienta poufnego, wysyłany w treści żądania tokenu. Pomiń dla klientów publicznych. |
-| `scope` | Zakresy do żądania, rozdzielane spacjami. Domyślnie zakres wskazany przez serwer przy odrzuceniu nieuwierzytelnionego żądania. |
-| `callback_port` | Lokalny port wywołania zwrotnego od `1` do `65535`. Domyślnie port z `redirect_uri`, a potem dostępny port efemeryczny. |
+| `scope` | Zakresy, o które ma wystąpić klient, oddzielone spacjami. Domyślnie obowiązuje zakres wskazany przez serwer przy odrzuceniu nieuwierzytelnionego żądania. Podczas odświeżania tokenu OpenCode ponownie wysyła przyznany zakres. |
+| `callback_port` | Lokalny port wywołania zwrotnego od `1` do `65535`. Domyślnie OpenCode używa portu z `redirect_uri`, w drugiej kolejności portu klienta zarejestrowanego przy wcześniejszym logowaniu, a w ostatniej – wolnego portu efemerycznego. |
 | `redirect_uri` | Wstępnie zarejestrowany URI loopback, którego ścieżka i port trafiają do lokalnego nasłuchu wywołania zwrotnego. Ustawienie go wyłącza CIMD. |
 | `auth_server_metadata_url` | URL dokumentu metadanych OAuth lub OpenID Connect serwera autoryzacji. Ustaw go, gdy serwer MCP nie publikuje metadanych chronionego zasobu wskazujących jego serwer autoryzacji. |
 

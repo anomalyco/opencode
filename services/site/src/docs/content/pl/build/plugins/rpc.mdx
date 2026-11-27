@@ -66,8 +66,17 @@ Definicja RPC opisuje kształty wejścia i wyjścia metod, zdarzeń i błędów.
 
 ### Wejście i wyjście
 
-Każda metoda może definiować schemat `input` dla argumentu i schemat `output` dla wartości zwracanej. Pomiń odpowiedni
-schemat, jeśli metoda nie przyjmuje argumentu albo nie zwraca wartości.
+Każda metoda wymaga schematu `input` dla argumentu i schematu `output` dla zwracanej wartości. Jeśli metoda nie przyjmuje
+argumentu lub nic nie zwraca, użyj schematu pustego obiektu, wywołaj metodę z `{}` i zwróć `{}`:
+
+```ts
+refresh: {
+  input: { type: "object", additionalProperties: false },
+  output: { type: "object", additionalProperties: false },
+}
+```
+
+Metoda zwracająca `undefined` kończy się błędem `rpc.invalid_output`.
 
 ```ts
 search: {
@@ -107,7 +116,8 @@ Nazwy błędów zaczynające się od `rpc.` są zarezerwowane przez OpenCode.
 
 ### Zdarzenia
 
-Dodaj zdarzenia do głównej mapy `events`. Każde zdarzenie ma schemat danych wysyłanych do subskrybentów.
+Dodaj zdarzenia do mapy `events` na najwyższym poziomie. Każde zdarzenie ma schemat danych wysyłanych subskrybentom.
+Mapa jest wymagana. Jeśli RPC nie ma zdarzeń, użyj `events: {}`.
 
 Dane zdarzenia muszą być obiektem. Użyj schematu pustego obiektu, gdy nie ma danych:
 

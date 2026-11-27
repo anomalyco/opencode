@@ -44,7 +44,8 @@ Obsługiwane są też JSON Schema i Standard Schema.
 
 ### Wejście i wyjście
 
-Użyj `input` dla argumentu metody, a `output` dla wartości zwracanej. Pomiń ten schemat, dla którego nie ma wartości.
+Użyj `input` dla argumentu metody, a `output` dla zwracanej wartości. Oba pola są wymagane. Jeśli metoda nie
+przyjmuje argumentu lub nic nie zwraca, użyj `Schema.Struct({})`, wywołaj metodę z `{}` i zwróć `{}`.
 
 ```ts
 search: {
@@ -65,7 +66,8 @@ errors: {
 
 ### Zdarzenia
 
-Dodaj zdarzenia do głównej mapy `events`. Dane zdarzenia muszą być obiektem.
+Dodaj zdarzenia do mapy `events` na najwyższym poziomie. Dane zdarzenia muszą być obiektem. Mapa jest wymagana.
+Jeśli RPC nie ma zdarzeń, użyj `events: {}`.
 
 ```ts
 events: {

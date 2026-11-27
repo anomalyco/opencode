@@ -246,7 +246,8 @@ narzędzi. Jeśli proxy przed modelem katalogowym odrzuca narzędzia freeform, u
 modelu.
 
 To założenia zapasowe, a nie wykryte możliwości. Ustaw dokładne wartości `capabilities` i `limit`, gdy są znane; jawne
-wartości zastępują założenia. Dodaj `disabled: true`, aby ukryć model w dostępnym katalogu:
+wartości zastępują założenia. Automatyczne kompaktowanie używa `limit.input` ograniczonego do `limit.context`. Zobacz
+[Okno kontekstu](/compaction#window). Dodaj `disabled: true`, aby ukryć model w dostępnym katalogu:
 
 ```jsonc title="opencode.jsonc"
 {

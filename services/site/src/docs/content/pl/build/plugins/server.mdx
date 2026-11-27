@@ -191,7 +191,7 @@ const agents = await ctx.agent.list()
 const build = await ctx.agent.get({ agentID: "build" })
 ```
 
-Zarejestruj transformację, aby sprawdzać, aktualizować, usuwać lub wybierać domyślnego agenta.
+Zarejestruj transformację, aby sprawdzać, tworzyć, aktualizować i usuwać agentów lub wybierać domyślnego agenta.
 
 ```ts
 await ctx.agent.transform((editor) => {
@@ -203,6 +203,19 @@ await ctx.agent.transform((editor) => {
     agent.description = "Builds features and fixes bugs"
   })
   editor.remove("legacy")
+})
+```
+
+Zarejestruj nowego agenta za pomocą `editor.update`. Jeśli agent o podanym ID już istnieje, metoda go edytuje.
+W przeciwnym razie tworzy agenta za pomocą `Agent.Info.default(id)`, a dopiero potem wywołuje funkcję zwrotną.
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
 })
 ```
 
@@ -1046,12 +1059,13 @@ transformacje bez zmiany ich kolejności; nie uruchamia ponownie konfiguracji pl
 await ctx.tool.reload()
 ```
 
-Użyj `list()` i `get()`, aby sprawdzić narzędzia aktualnie w edytorze. Narzędzia mają `id` zawierające ich efektywną
-nazwę, a `get()` zwraca `undefined`, gdy tego ID nie ma. Używaj `update` i `remove` z efektywną nazwą narzędzia, wraz
-z jej przestrzenią nazw (`acme_greeting` powyżej). Kropki w przestrzeniach nazw i nieobsługiwane znaki w nazwach
-narzędzi stają się `_`. Brakujące nazwy są ignorowane; utworzenie narzędzia wymaga `add` z kompletną definicją.
-Aktualizacje zachowują nazwę i przestrzeń nazw. Przypisuj nowe schematy lub opcje, aby je zastąpić, zamiast mutować
-zagnieżdżone wartości. Nieprawidłowe aktualizacje są zapisywane, a poprzednia definicja pozostaje nienaruszona.
+Użyj `list()` i `get()`, aby sprawdzić narzędzia dostępne w edytorze. Pole `id` zawiera nazwę, pod którą narzędzie jest
+dostępne. Jeśli nie ma narzędzia o podanym ID, `get()` zwraca `undefined`. Do `update` i `remove` przekaż nazwę narzędzia
+razem z przestrzenią nazw (`acme_greeting` powyżej). Każdą kropkę w przestrzeni nazw OpenCode zastępuje znakiem `_`.
+W nazwach narzędzi zachowuje tylko litery, cyfry, `_` i `-`, a pozostałe znaki zastępuje znakiem `_`. Jeśli podana
+nazwa nie istnieje, operacja nic nie zmienia. Aby utworzyć narzędzie, wywołaj `add` z pełną definicją. Aktualizacja nie zmienia
+nazwy ani przestrzeni nazw. Aby zastąpić schematy lub opcje, przypisz nowe wartości, zamiast modyfikować wartości
+zagnieżdżone. Nieprawidłowe aktualizacje trafiają do logów, a poprzednia definicja pozostaje bez zmian.
 
 ```ts
 await ctx.tool.transform((editor) => {

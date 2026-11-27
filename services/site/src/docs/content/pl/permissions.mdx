@@ -119,10 +119,13 @@ akcji i zasobów:
 | `websearch`          | Zapytanie wyszukiwania                                                      |
 | `generate_image` | Wybrany model obrazu jako `providerID/modelID`, plus `#variant`, gdy ustawiono |
 | `external_directory` | Kanoniczna granica zewnętrznego katalogu, zwykle kończąca się na `/*`       |
-| `<server>_<tool>`    | `*` dla narzędzia MCP; nieobsługiwane znaki w obu nazwach stają się `_`     |
+| `<server>_<tool>`    | `*` dla narzędzia MCP; w obu nazwach litery, cyfry, `_` i `-` pozostają bez zmian, a każdy inny znak jest zastępowany przez `_` |
 | `opencode_list_mcp_resources` | Nazwa serwera MCP                                                  |
 | `opencode_read_mcp_resource`  | `<server>:<uri>`                                                   |
 | `execute`            | `*`; odmowa usuwa Code Mode i wymienia jego narzędzia bezpośrednio, a zagnieżdżone narzędzia egzekwują swoje reguły |
+
+Nazwy akcji MCP zachowują łączniki, więc narzędzia serwera `mcp-atlassian` pasują do wzorca `mcp-atlassian_*`,
+a nie do `mcp_atlassian_*`.
 
 Na przykład zezwól na jeden skill i zabroń wszystkich pozostałych:
 

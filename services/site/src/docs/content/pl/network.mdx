@@ -3,19 +3,19 @@ title: "Sieć"
 description: "Skonfiguruj proxy, własne urzędy certyfikacji i certyfikaty klienta."
 ---
 
-Ustaw standardowe zmienne proxy i wyklucz adresy loopback. OpenCode używa lokalnych połączeń HTTP między CLI a usługą
-w tle, więc wykluczenie loopback jest wymagane, gdy w środowisku CLI skonfigurowano proxy.
+Ustaw standardowe zmienne proxy. OpenCode używa lokalnych połączeń HTTP między CLI a usługą w tle. CLI automatycznie
+pomija proxy przy połączeniach z adresami loopback.
 
 ```bash
 export HTTP_PROXY=http://proxy.example.com:8080
 export HTTPS_PROXY=http://proxy.example.com:8080
-export NO_PROXY=localhost,127.0.0.1,::1
 
 opencode
 ```
 
-`HTTP_PROXY` obsługuje cele HTTP, a `HTTPS_PROXY` cele HTTPS. Sam adres proxy może używać `http://` dla obu zmiennych.
-`NO_PROXY` to rozdzielana przecinkami lista hostów i adresów, które łączą się bezpośrednio.
+`HTTP_PROXY` obsługuje połączenia HTTP, a `HTTPS_PROXY` połączenia HTTPS. W obu zmiennych URL serwera proxy może
+zaczynać się od `http://`. Przy uruchamianiu CLI dodaje `127.0.0.1`, `localhost` i `::1` do `NO_PROXY` i `no_proxy`.
+W `NO_PROXY` podaj oddzieloną przecinkami listę pozostałych hostów, z którymi trzeba się łączyć bezpośrednio.
 
 ## Usługa
 
@@ -25,13 +25,13 @@ w zarządzanej konfiguracji usługi, aby przy kolejnych uruchomieniach korzysta�
 ```bash
 opencode service set env HTTP_PROXY http://proxy.example.com:8080
 opencode service set env HTTPS_PROXY http://proxy.example.com:8080
-opencode service set env NO_PROXY localhost,127.0.0.1,::1
+opencode service set env NO_PROXY llm.company.example
 opencode service start
 ```
 
 Zmiana zarządzanej zmiennej środowiskowej zatrzymuje działającą usługę. `service start` uruchamia ją ponownie z nowym
-środowiskiem. Utrzymuj `NO_PROXY` także w powłoce CLI, gdy ta powłoka ustawia proxy, ponieważ zmienne usługi zarządzanej
-dotyczą procesu serwera, a nie procesu CLI.
+środowiskiem. Ustaw zmienne proxy również w powłoce CLI, bo zmienne usługi zarządzanej dotyczą tylko procesu serwera.
+Adresy loopback są automatycznie wykluczane po obu stronach.
 
 Usuń zapisaną zmienną przez `service unset env`:
 
@@ -132,7 +132,6 @@ przedstawiają.
 ```bash
 HTTP_PROXY=http://proxy.example.com:8080 \
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode --standalone
 ```
 
@@ -140,7 +139,6 @@ Zastosuj ten sam wzorzec do serwera na pierwszym planie:
 
 ```bash
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode serve
 ```
 

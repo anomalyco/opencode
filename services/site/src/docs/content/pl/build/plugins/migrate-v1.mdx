@@ -93,8 +93,33 @@ znajdować się we właściwości `client`.
 `ctx.location` opisuje lokalizację, w której wczytano tę instancję pluginu. Nie jest to lokalizacja każdej sesji ani
 zdarzenia, które plugin może obserwować. Czytaj dane sesji lub zdarzenia, gdy to rozróżnienie ma znaczenie.
 
-Kontekst udostępnia znacznie więcej domen niż w tabeli, w tym katalogi, polecenia, integracje, serwery MCP, referencje,
+Kontekst udostępnia znacznie więcej domen niż w tabeli, w tym polecenia, integracje, serwery MCP, referencje,
 skille, magazyn, VCS, worktree i wyszukiwanie w internecie. Zobacz [pełny kontekst pluginu](/build/plugins/server#api).
+
+### Migracja domeny katalogu
+
+We wcześniejszych wersjach pluginy udostępniały dostawców i modele przez `ctx.catalog`. OpenCode udostępnia teraz
+`ctx.provider` i `ctx.model` jako osobne domeny, więc plugin wywołujący `ctx.catalog.transform` nie wczyta się.
+
+| Poprzednie API katalogu                       | Obecny odpowiednik                                                           |
+| --------------------------------------------- | ---------------------------------------------------------------------------- |
+| `ctx.catalog.transform(draft => …)`           | `ctx.provider.transform(editor => …)` i `ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)`               | `editor.update(id, fn)` w `ctx.provider`                                    |
+| `draft.model.update(providerID, modelID, fn)` | `editor.update(providerID, modelID, fn)` w `ctx.model`                      |
+| `ctx.catalog.reload()`                        | `ctx.provider.reload()` i `ctx.model.reload()`                             |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+Pełny opis API edytorów znajdziesz w sekcjach [Dostawcy](/build/plugins/server#providers) i [Modele](/build/plugins/server#models).
 
 ## Rejestracja hooków w `setup`
 

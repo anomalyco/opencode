@@ -1043,12 +1043,13 @@ odtwarza aktywne transformacje bez zmiany ich kolejności; nie uruchamia ponowni
 Narzędzia Effect przyjmują tę samą [deklarację wejścia freeform](/build/plugins/server#freeform-tool-input) co narzędzia
 Promise. Jeśli model nie ogłasza tego formatu, narzędzie zachowuje normalne wejście obiektowe.
 
-Narzędzia mają `id` zawierające ich efektywną nazwę, a `get()` zwraca `undefined`, gdy tego ID nie ma. Używaj `update`
-i `remove` z efektywną nazwą narzędzia, wraz z jej przestrzenią nazw (`acme_greeting` powyżej). Kropki w przestrzeniach
-nazw i nieobsługiwane znaki w nazwach narzędzi stają się `_`. Brakujące nazwy są ignorowane; utworzenie narzędzia
-wymaga `add` z kompletną definicją. Aktualizacje zachowują nazwę i przestrzeń nazw. Przypisuj nowe schematy lub opcje,
-aby je zastąpić, zamiast mutować zagnieżdżone wartości. Nieprawidłowe aktualizacje są zapisywane, a poprzednia definicja
-pozostaje nienaruszona.
+Pole `id` zawiera nazwę, pod którą narzędzie jest dostępne. Jeśli nie ma narzędzia o podanym ID, `get()` zwraca
+`undefined`. Do `update` i `remove` przekaż nazwę narzędzia razem z przestrzenią nazw (`acme_greeting` powyżej).
+Każdą kropkę w przestrzeni nazw OpenCode zastępuje znakiem `_`. W nazwach narzędzi zachowuje tylko litery, cyfry, `_`
+i `-`, a pozostałe znaki zastępuje znakiem `_`. Jeśli podana nazwa nie istnieje, operacja nic nie zmienia. Aby utworzyć narzędzie,
+wywołaj `add` z pełną definicją. Aktualizacja nie zmienia nazwy ani przestrzeni nazw. Aby zastąpić schematy lub opcje,
+przypisz nowe wartości, zamiast modyfikować wartości zagnieżdżone. Nieprawidłowe aktualizacje trafiają do logów, a
+poprzednia definicja pozostaje bez zmian.
 
 {/* prettier-ignore */}
 ```ts
