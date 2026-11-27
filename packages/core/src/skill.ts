@@ -40,10 +40,36 @@ export class FileNotFoundError extends Schema.TaggedError<FileNotFoundError>()("
   file: Schema.String,
 }) {}
 
+/** Why a skill or one of its files couldn't be loaded. */
+export const LoadReason = Schema.Union([
+  /** The server failed or couldn't be reached. */
+  Schema.TaggedStruct("Unavailable", { file: Schema.String, detail: Schema.String }),
+  /** The file the server served doesn't match what it listed. */
+  Schema.TaggedStruct("Mismatch", {
+    file: Schema.String,
+    check: Schema.Literals(["unlisted", "size", "digest", "frontmatter"]),
+    detail: Schema.String,
+  }),
+  /** The server didn't confirm a skill named by address. */
+  Schema.TaggedStruct("NotConfirmed", { server: Schema.String, uri: Schema.String, detail: Schema.String }),
+])
+export type LoadReason = typeof LoadReason.Type
+
 export class LoadError extends Schema.TaggedError<LoadError>()("Skill.LoadError", {
   skill: Schema.String,
-  message: Schema.String,
-}) {}
+  reason: LoadReason,
+}) {
+  override get message() {
+    switch (this.reason._tag) {
+      case "Unavailable":
+        return `Failed to load ${this.reason.file} of skill ${this.skill}: ${this.reason.detail}`
+      case "Mismatch":
+        return `Failed to load ${this.reason.file} of skill ${this.skill}: ${this.reason.detail}`
+      case "NotConfirmed":
+        return `MCP server "${this.reason.server}" did not confirm ${this.reason.uri}: ${this.reason.detail}`
+    }
+  }
+}
 
 /** A skill's SKILL.md body or one of its files: inline, or loaded the first time it's needed. */
 export type Content = string | Effect.Effect<string, LoadError>

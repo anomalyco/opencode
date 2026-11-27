@@ -52,7 +52,7 @@ const itWithActiveExecution = testEffect(
       LocationServiceMap.node.replace(
         Layer.effect(
           LocationServiceMap.Service,
-          LayerMap.make(
+          LocationServiceMap.make(
             (ref: Location.Ref) =>
               Layer.merge(
                 LayerNode.compile(Location.boundNode(ref), {
@@ -68,7 +68,7 @@ const itWithActiveExecution = testEffect(
 )
 const unavailableLocations = Layer.effect(
   LocationServiceMap.Service,
-  LayerMap.make(
+  LocationServiceMap.make(
     () =>
       Layer.effectDiscard(Effect.die(new Error("broken location"))) as unknown as Layer.Layer<
         LocationServices,
