@@ -32,6 +32,7 @@ import { Mcp } from "@opencode/core/mcp/index"
 import { McpClient } from "@opencode/core/mcp/client"
 import { McpPool } from "@opencode/core/mcp/pool"
 import { McpStdio } from "@opencode/core/mcp/stdio"
+import { McpToggles } from "@opencode/core/mcp/toggles"
 import { Permission } from "@opencode/core/permission"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
@@ -365,6 +366,7 @@ function resourceMcpLayer(
     environment?: Layer.Layer<Environment.Service>
     published?: string[]
     pool?: Layer.Layer<McpPool.Service>
+    toggles?: Layer.Layer<McpToggles.Service>
     directory?: string
     /** The configured server's name; "resources" unless given. */
     name?: string
@@ -394,6 +396,7 @@ function resourceMcpLayer(
     Layer.provide(
       Layer.mergeAll(
         overrides?.pool ?? poolLayer,
+        overrides?.toggles ?? McpToggles.layer,
         overrides?.entries
           ? Layer.succeed(
               Config.Service,
@@ -1914,6 +1917,53 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
   )
 })
 
+describe.each([
+  { operation: "disconnect", disabled: false, after: "disabled" },
+  { operation: "connect", disabled: true, after: "connected" },
+] as const)("a runtime MCP $operation", ({ operation, disabled, after }) => {
+  test("survives the location being rebuilt", async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const server = yield* resourceServer({ modern: true, resources: false })
+          const toggles = Layer.succeed(
+            McpToggles.Service,
+            Context.get(yield* Layer.build(McpToggles.layer), McpToggles.Service),
+          )
+          const layer = resourceMcpLayer(
+            new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "2026-07-28", disabled }),
+            undefined,
+            undefined,
+            { toggles },
+          )
+
+          // Each build is a fresh Location over the same config, as after an idle eviction.
+          const first = yield* Scope.make()
+          yield* Mcp.Service.use((service) =>
+            Effect.gen(function* () {
+              expect(yield* settled(service)).toEqual({ status: disabled ? "disabled" : "connected" })
+              yield* service[operation]("resources")
+              expect(yield* settled(service)).toEqual({ status: after })
+            }),
+          ).pipe(Effect.provide(yield* Layer.buildWithScope(layer, first)))
+          yield* State.shutdown(Scope.close(first, Exit.void))
+          const lists = server.state.toolLists
+
+          const second = yield* Scope.make()
+          yield* Mcp.Service.use((service) =>
+            Effect.gen(function* () {
+              expect(yield* settled(service)).toEqual({ status: after })
+              // Only a server left on connects again.
+              expect(server.state.toolLists > lists).toBe(after === "connected")
+            }),
+          ).pipe(Effect.provide(yield* Layer.buildWithScope(layer, second)))
+          yield* State.shutdown(Scope.close(second, Exit.void))
+        }),
+      ),
+    )
+  })
+})
+
 test("marks a remote MCP server with an invalid URL as failed", async () => {
   await Effect.runPromise(
     Effect.scoped(
@@ -2449,6 +2499,7 @@ const shutdownIt = testEffect(
       Location.node,
       Flag.node,
       McpPool.node,
+      McpToggles.node,
     ]),
     [
       Location.node.replace(
