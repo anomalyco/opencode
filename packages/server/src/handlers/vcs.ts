@@ -73,11 +73,12 @@ export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
             const existing = yield* locations.contextEffectOption(ref)
             if (Option.isSome(existing)) return yield* info.pipe(Effect.provideContext(existing.value))
 
-            if (spawner !== EnvironmentUnavailable.spawner)
+            const local = ref.workspaceID === undefined && spawner !== EnvironmentUnavailable.spawner
+            if (local)
               yield* FileSystem.localRoot(fs, ref.directory).pipe(
                 Effect.catchTag("FileSystem.DirectoryAccessDeniedError", Effect.die),
               )
-            const resolved = yield* project.resolve(ref.directory, { persist: false })
+            const resolved = yield* project.resolve(ref.directory, { persist: false, local })
             const provider = resolved.vcs?.type
             if (provider === "git") {
               const { VcsGitPlugin } = yield* Effect.promise(() => import("@opencode/core/plugin/vcs/git"))

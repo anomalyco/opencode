@@ -64,7 +64,8 @@ export const makeVcsGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
           OpenApi.annotations({
             identifier: "vcs.get",
             summary: "VCS info",
-            description: "Get current and default branch information for the requested location.",
+            description:
+              "Get current and default branch information for the requested location. Cold locations use the built-in Git or Mercurial provider when available. Loaded locations use the currently active VCS provider.",
           }),
         ),
     )

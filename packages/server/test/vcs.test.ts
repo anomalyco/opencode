@@ -1,10 +1,16 @@
+import { chmod, mkdir, symlink } from "node:fs/promises"
 import path from "node:path"
 import { $ } from "bun"
 import { describe, expect } from "bun:test"
+import { LocationWatcher } from "@opencode/core/filesystem/location-watcher"
+import { Location } from "@opencode/core/location"
+import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { AbsolutePath } from "@opencode/core/schema"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
-import { Effect, Layer, Schedule } from "effect"
+import { Context, Deferred, Effect, Fiber, Layer, MutableHashMap, Option, Schedule } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
+import { waitUntil } from "../../core/test/lib/eventually"
 import { startServer } from "./fixture/server"
 import { serveRoutes } from "./fixture/routes"
 import { ServerFetch } from "../src/fetch"
@@ -54,6 +60,127 @@ it.live("reads VCS info without loading a cold location", () =>
       _tag: "LocationNotFoundError",
       location: { directory: missing },
     })
+  }),
+)
+
+it.live("reads cold Git edge cases without persisting projects or loading locations", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-vcs-edge-")))
+    const repo = path.join(tmp.path, "repo")
+    const nested = path.join(repo, "nested")
+    const unborn = path.join(tmp.path, "unborn")
+    const linked = path.join(tmp.path, "linked")
+    const alias = path.join(tmp.path, "alias")
+    yield* Effect.promise(async () => {
+      await mkdir(nested, { recursive: true })
+      await mkdir(unborn)
+      await $`git init -b main`.cwd(repo).quiet()
+      await $`git -c user.name=Test -c user.email=test@opencode.test -c commit.gpgsign=false commit --allow-empty -m initial`
+        .cwd(repo)
+        .quiet()
+      await $`git worktree add -b linked ${linked}`.cwd(repo).quiet()
+      await $`git checkout --detach`.cwd(repo).quiet()
+      await $`git init -b unborn`.cwd(unborn).quiet()
+      await symlink(nested, alias, "junction")
+    })
+    const server = yield* serveRoutes({
+      database: { path: ":memory:" },
+      config: { directory: path.join(tmp.path, "config") },
+      fs: { filewatcher: false },
+      models: { fetch: false },
+    })
+    const projects = () =>
+      Effect.promise(async () => {
+        const response = await server.fetch("http://opencode.local/api/project?archived=true")
+        expect(response.status).toBe(200)
+        return response.json()
+      })
+    const before = yield* projects()
+    for (const [directory, data] of [
+      [repo, { provider: "git", branch: { default: "main" } }],
+      [nested, { provider: "git", branch: { default: "main" } }],
+      [alias, { provider: "git", branch: { default: "main" } }],
+      [unborn, { provider: "git", branch: { current: "unborn" } }],
+      [linked, { provider: "git", branch: { current: "linked", default: "main" } }],
+      [tmp.path, { branch: {} }],
+    ] as const) {
+      const url = new URL("http://opencode.local/api/vcs")
+      url.searchParams.set("location[directory]", directory)
+      const response = yield* Effect.promise(() => server.fetch(url))
+      expect(response.status).toBe(200)
+      expect(yield* Effect.promise(() => response.json())).toEqual({ location: { directory }, data })
+    }
+    if (process.platform !== "win32" && process.getuid?.() !== 0) {
+      const unreadable = path.join(tmp.path, "unreadable")
+      yield* Effect.acquireRelease(
+        Effect.promise(() => mkdir(unreadable, { mode: 0o000 })),
+        () => Effect.promise(() => chmod(unreadable, 0o700)),
+      )
+      const url = new URL("http://opencode.local/api/vcs")
+      url.searchParams.set("location[directory]", unreadable)
+      const denied = yield* Effect.promise(() => server.fetch(url))
+      expect(denied.status).toBe(500)
+    }
+    expect(yield* projects()).toEqual(before)
+    const loaded = yield* Effect.promise(() => server.fetch("http://opencode.local/api/debug/location"))
+    expect(loaded.status).toBe(200)
+    expect(yield* Effect.promise(() => loaded.json())).toEqual([])
+  }),
+)
+
+it.live("releases a cancelled VCS read borrowing a location that is still booting", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-vcs-boot-")))
+    const started = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const server = yield* serveRoutes(
+      {
+        database: { path: ":memory:" },
+        config: { directory: path.join(tmp.path, "config") },
+        fs: { filewatcher: false },
+        models: { fetch: false },
+      },
+      [
+        LocationWatcher.node.replace(
+          Layer.effect(
+            LocationWatcher.Service,
+            Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as({})),
+          ),
+        ),
+      ],
+    )
+    const ref = LocationServiceMap.canonical(Location.Ref.make({ directory: AbsolutePath.make(tmp.path) }))
+    const locations = Context.get(server.context, LocationServiceMap.Service)
+    const url = new URL("http://opencode.local/api/location")
+    url.searchParams.set("location[directory]", tmp.path)
+    const boot = yield* Effect.promise(() => server.fetch(url)).pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Deferred.await(started)
+    const state = locations.rcMap.state
+    if (state._tag !== "Open") return yield* Effect.die("Location map should be open")
+    const entry = Option.getOrThrow(MutableHashMap.get(state.map, ref))
+    expect(entry.refCount).toBe(1)
+    const vcsUrl = new URL(url)
+    vcsUrl.pathname = "/api/vcs"
+    const read = (signal: AbortSignal) => server.fetch(vcsUrl, { signal })
+    const cancelled = yield* Effect.promise(read).pipe(Effect.forkChild({ startImmediately: true }))
+    yield* waitUntil(Effect.sync(() => entry.refCount === 2))
+    expect(cancelled.pollUnsafe()).toBeUndefined()
+    yield* Fiber.interrupt(cancelled)
+    yield* waitUntil(Effect.sync(() => entry.refCount === 1))
+
+    const completing = yield* Effect.promise(read).pipe(Effect.forkChild({ startImmediately: true }))
+    yield* waitUntil(Effect.sync(() => entry.refCount === 2))
+    yield* Deferred.succeed(release, undefined)
+    expect((yield* Fiber.join(boot)).status).toBe(200)
+    const result = yield* Fiber.join(completing)
+    expect(result.status).toBe(200)
+    expect(yield* Effect.promise(() => result.json())).toEqual({
+      location: { directory: tmp.path },
+      data: { branch: {} },
+    })
+    yield* waitUntil(Effect.sync(() => entry.refCount === 0))
+    yield* locations.invalidate(ref)
+    expect(entry.scope.state._tag).toBe("Closed")
   }),
 )
 
@@ -167,6 +294,8 @@ it.live(
 it.live("uses the loaded VCS provider and returns 501 when it has no initializer", () =>
   Effect.gen(function* () {
     const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-vcs-no-init-")))
+    const pluginStarted = yield* Deferred.make<void>()
+    const activatePlugin = yield* Deferred.make<void>()
     const server = yield* serveRoutes(
       {
         database: { path: ":memory:" },
@@ -185,19 +314,23 @@ it.live("uses the loaded VCS provider and returns 501 when it has no initializer
                   id: "read-only-vcs",
                   revision: "test",
                   effect: (ctx) =>
-                    ctx.vcs
-                      .transform((editor) => {
-                        editor.add({
-                          id: "read-only",
-                          name: "Read-only VCS",
-                          info: () => Effect.succeed({ branch: { current: "plugin-branch" } }),
-                          branches: () => Effect.succeed([]),
-                          status: () => Effect.succeed([]),
-                          diff: () => Effect.succeed([]),
-                        })
-                        editor.default.set("read-only")
-                      })
-                      .pipe(Effect.asVoid),
+                    Deferred.succeed(pluginStarted, undefined).pipe(
+                      Effect.andThen(Deferred.await(activatePlugin)),
+                      Effect.andThen(
+                        ctx.vcs.transform((editor) => {
+                          editor.add({
+                            id: "read-only",
+                            name: "Read-only VCS",
+                            info: () => Effect.succeed({ branch: { current: "plugin-branch" } }),
+                            branches: () => Effect.succeed([]),
+                            status: () => Effect.succeed([]),
+                            diff: () => Effect.succeed([]),
+                          })
+                          editor.default.set("read-only")
+                        }),
+                      ),
+                      Effect.asVoid,
+                    ),
                 },
               ],
             }),
@@ -213,6 +346,17 @@ it.live("uses the loaded VCS provider and returns 501 when it has no initializer
       location: { directory: tmp.path },
       data: { branch: {} },
     })
+    const locationUrl = new URL(url)
+    locationUrl.pathname = "/api/location"
+    expect((yield* Effect.promise(() => server.fetch(locationUrl))).status).toBe(200)
+    yield* Deferred.await(pluginStarted)
+    const activating = yield* Effect.promise(() => server.fetch(url))
+    expect(activating.status).toBe(200)
+    expect(yield* Effect.promise(() => activating.json())).toEqual({
+      location: { directory: tmp.path },
+      data: { branch: {} },
+    })
+    yield* Deferred.succeed(activatePlugin, undefined)
     yield* server.pluginsLoaded(tmp.path)
     const info = yield* Effect.promise(() => server.fetch(url))
     expect(info.status).toBe(200)

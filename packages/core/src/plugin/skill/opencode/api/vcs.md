@@ -11,7 +11,7 @@ Returns: nothing
 
 ## GET /api/vcs
 
-Get current and default branch information for the requested location.
+Get current and default branch information for the requested location. Cold locations use the built-in Git or Mercurial provider when available. Loaded locations use the currently active VCS provider.
 
 Returns: `{ location: Location.PublicRef; data: Vcs.Info }`
 
