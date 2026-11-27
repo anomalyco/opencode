@@ -199,6 +199,7 @@ describe("history reconciliation", () => {
           { type: "text", text: "Attached media from tool result:" },
           { type: "file", mediaType: "image/png", data: "AQI=", filename: "swatch.png" },
           { type: "file", mediaType: "application/pdf", data: "AwQ=" },
+          { type: "file", mediaType: "image/bmp", data: "Qk0=" },
         ],
       },
       {
@@ -212,10 +213,8 @@ describe("history reconciliation", () => {
     expect(JSON.stringify(blocks)).toContain("marker.txt")
     expect(JSON.stringify(blocks)).toContain("LEMON-IBIS")
     expect(JSON.stringify(blocks)).not.toContain("PRIVATE")
-    // Files from earlier turns sit under the tool that returned them, and the image is wrapped in a document so Claude
-    // Code does not take it for a new paste. An image sent now stays an image.
-    expect(blocks.slice(-8)).toEqual([
-      { type: "text", text: "<tool>" },
+    expect(blocks.slice(-9)).toEqual([
+      { type: "text", text: "<user>" },
       { type: "text", text: "Attached media from tool result:" },
       {
         type: "document",
@@ -226,7 +225,8 @@ describe("history reconciliation", () => {
         title: "swatch.png",
       },
       { type: "document", source: { type: "base64", media_type: "application/pdf", data: "AwQ=" } },
-      { type: "text", text: "</tool>" },
+      { type: "text", text: "[image/bmp was left out: Claude Code cannot read this file type.]" },
+      { type: "text", text: "</user>" },
       { type: "text", text: "</conversation-checkpoint>" },
       { type: "text", text: "Continue" },
       { type: "image", source: { type: "base64", media_type: "image/png", data: "BQY=" } },

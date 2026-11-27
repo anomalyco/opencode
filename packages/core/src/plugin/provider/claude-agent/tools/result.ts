@@ -40,12 +40,8 @@ export function convert(
           parts.push({ type: "text", text: part.text })
           continue
         }
-        if (part.type === "image-data") {
-          parts.push({ type: "file", mediaType: part.mediaType, data: part.data })
-          continue
-        }
-        if (part.type === "file-data") {
-          parts.push({ type: "file", mediaType: part.mediaType, data: part.data, filename: part.filename })
+        if (part.type === "image-data" || part.type === "file-data") {
+          parts.push({ ...part, type: "file" })
           continue
         }
         if (part.type === "image-url") {

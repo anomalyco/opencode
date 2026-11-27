@@ -75,7 +75,6 @@ describe("tool bridge conversion", () => {
       { type: "image", source: { type: "base64", media_type: "image/png", data: "aW1hZ2U=" } },
       { type: "document", source: { type: "base64", media_type: "application/pdf", data: "cGRm" } },
     ])
-    // A file type Claude cannot read becomes a note. Throwing would fail every later turn: the file stays in history.
     const image = ToolResult.convert({
       type: "content",
       value: [
