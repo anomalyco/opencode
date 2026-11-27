@@ -1,0 +1,180 @@
+---
+title: "Claude Agent"
+description: "استخدم خطة Claude أو تسجيل دخول Claude Code في OpenCode عبر Claude Agent، الذي يشغّل Claude Code على جهازك."
+noindex: true
+---
+
+استخدم خطة Claude لديك أو تسجيل دخول آخر إلى Claude Code. يشغّل Claude Agent تطبيق Claude Code على جهازك، فثبّت Claude Code
+2.1.248 أو أحدث وسجّل الدخول أولًا.
+
+```bash
+claude auth login
+```
+
+ثم اربط **Claude Agent** واختر نموذجًا. تأتي قائمة النماذج من Claude Code. وتتوفر مستويات جهد التفكير في صورة متغيّرات، مثل
+`claude-agent/opus#high`.
+
+```text
+/connect
+# Select Claude Agent.
+/models
+```
+
+ويمكنك أيضًا الربط من CLI بـ`auth login claude-agent`.
+
+ويعثر OpenCode على `claude` في `PATH` لديك. ولاستخدام نسخة أخرى، اضبط `OPENCODE_CLAUDE_PATH` على الخادم.
+
+```bash
+opencode service set env OPENCODE_CLAUDE_PATH /opt/claude/bin/claude
+```
+
+## كيف يعمل
+
+يستدعي Claude Code النموذج، ويتولى OpenCode كل شيء آخر.
+
+- يتلقى Claude مطالبة نظام Claude Code، إضافة إلى مطالبة وكيلك وملفات `AGENTS.md` والمهارات وتعليمات MCP.
+- يستخدم Claude أدوات OpenCode وأذوناته بدلًا من أدوات Claude Code المدمجة.
+- ولا تُحمَّل إعدادات Claude Code لديك ولا ملفات `CLAUDE.md` ولا الخطافات ولا خوادم MCP ولا المهارات ولا الذاكرة.
+- يتولّى OpenCode ضغط السياق وتشغيل الوكلاء الفرعيين.
+- ويمكنك التبديل بين Claude Agent ونماذج أخرى في الجلسة نفسها.
+
+## التكلفة
+
+تختلف التكلفة حسب طريقة تسجيل الدخول إلى Claude Code.
+
+| تسجيل الدخول | التكلفة المعروضة |
+| --- | --- |
+| اشتراك Claude | لا شيء، فخطتك تغطيها |
+| مفتاح Anthropic API، أو Claude Platform على AWS أو Google Cloud | أسعار Anthropic |
+| Amazon Bedrock | أسعار Bedrock، أو أسعار Anthropic على Bedrock Mantle |
+| Google Vertex | أسعار Vertex |
+| Microsoft Foundry | أسعار Azure |
+| عنوان URL أساسي مخصّص | لا شيء |
+
+## الإعداد
+
+تُمرَّر إعدادات اتصال المزوّد `claude-agent` إلى Claude Code. وتعلو قيمها على قيم المتغيّرات المقابلة في بيئة
+shell لديك.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": {
+        "baseURL": "https://llm-proxy.example.com/anthropic",
+      },
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+    },
+  },
+}
+```
+
+| الإعداد | متغيّر Claude Code |
+| --- | --- |
+| `settings.baseURL` | `ANTHROPIC_BASE_URL` |
+| `settings.apiKey` | `ANTHROPIC_API_KEY` |
+| `settings.authToken` | `ANTHROPIC_AUTH_TOKEN` |
+| `settings.headerTimeout` | `API_TIMEOUT_MS` |
+| `settings.chunkTimeout` | `CLAUDE_STREAM_IDLE_TIMEOUT_MS` |
+| `settings.configDir` | `CLAUDE_CONFIG_DIR` |
+| `headers` | `ANTHROPIC_CUSTOM_HEADERS` |
+| `body` | `CLAUDE_CODE_EXTRA_BODY` |
+
+واضبطها على نموذج لتتجاوز قيم المزوّد لذلك النموذج.
+
+## استخدام حساب Claude ثانٍ
+
+سجّل الدخول إلى الحساب الثاني في مجلده الخاص. ويبقى تسجيل دخولك المعتاد دون تغيير.
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-2" claude auth login
+```
+
+وفي PowerShell:
+
+```powershell
+$env:CLAUDE_CONFIG_DIR = "$HOME\.claude-2"; claude auth login
+```
+
+ثم أضف نماذج تستخدم ذلك المجلد:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "models": {
+        "sonnet-2": {
+          "modelID": "sonnet",
+          "name": "Sonnet (Claude 2)",
+          "settings": { "configDir": "~/.claude-2" },
+        },
+      },
+    },
+  },
+}
+```
+
+ولاستخدام حساب واحد لكل نماذج المشروع، اضبط `settings.configDir` على المزوّد في إعداد ذلك المشروع
+بدلًا من ذلك.
+
+## التبديل بين الحسابات
+
+إذا كانت لديك عدة حسابات قابلة للتبادل، يمكن لـ OpenCode الانتقال إلى التالي عندما يبلغ حساب حد استخدامه.
+وسجّل الدخول إلى كل حساب إضافي في مجلده الخاص. ويمكن أن يبقى تسجيل دخولك الحالي في `~/.claude` كما هو:
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-1" claude auth login
+```
+
+ثم اسرد المجلدات:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": { "configDir": ["~/.claude", "~/.claude-1"] },
+    },
+  },
+}
+```
+
+تظل المحادثة مرتبطة بآخر حساب أجاب فيها، وتبدأ المحادثات الجديدة بآخر حساب نجح في الاستجابة. ويقتصر التبديل
+على الحسابات المسجّل دخولها باشتراك Claude؛ ولا يشمل `apiKey` أو `authToken`.
+
+## البحث على الويب
+
+ويمكن لـ Claude Agent أن يقدّم البحث على الويب في OpenCode أيضًا عبر WebSearch في Claude Code، فتُحتسب عمليات البحث على خطة
+Claude لديك بدل الحاجة إلى مفتاح API للبحث. ويستطيع كل نموذج استخدامه. فاختره في `opencode.jsonc`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+راجع [البحث على الويب](/websearch#claude-agent) للتفاصيل.
+
+## القيود
+
+- يجب تثبيت Claude Code على الجهاز نفسه الذي عليه خادم OpenCode. وClaude Agent غير متاح في مساحات العمل
+  البعيدة.
+- تحل مطالبة نظام Claude Code محل مطالبة OpenCode المدمجة. وتبقى مطالبات الوكلاء المخصّصة سارية.
+- لا تُدعم temperature وtop-p وtop-k وseed وتسلسلات الإيقاف.
+- لا تعمل خطافات الملحق `http.request` و`http.response`، لأن Claude Code هو من يجري استدعاءات API.
+- وميزات Claude Code مثل `/usage` و`/loop` والوضع التلقائي وفرق الوكلاء غير متاحة.
+
+## الأخطاء
+
+| الخطأ أو العَرَض | ما تتحقق منه |
+| --- | --- |
+| `Claude Code is not installed` | ثبّت Claude Code، أو اضبط `OPENCODE_CLAUDE_PATH` على مساره. |
+| `Claude Code is not logged in` | شغّل `claude auth login`، ثم اربط Claude Agent مجددًا. ومع `configDir`، شغّل الأمر الذي يعرضه الخطأ لذلك المجلد. |
+| `Claude Code ... is too old` | شغّل `claude update`. |

@@ -1,0 +1,241 @@
+---
+title: "استكشاف الأخطاء وإصلاحها"
+description: "شخّص مشكلات OpenCode بفحص الخدمة الخلفية وواجهة API وقراءة السجلات والتقاط ملفات تعريف الأداء."
+---
+
+<Callout type="tip">
+  يمكنك أن تطلب من OpenCode تصحيح أخطائه بنفسه. صف المشكلة واطلب منه استخدام صفحة استكشاف الأخطاء هذه؛ فبإمكانه قراءة
+  الخطوات أدناه وفحص خدمته وسجلاته والمساعدة في تحديد المشكلة.
+</Callout>
+
+يستخدم OpenCode بنية عميل وخادم. فخادم خلفي يملك الجلسات والملحقات والأذونات وغيرها من حالة
+التطبيق. ابدأ بتحديد ما إذا كانت المشكلة في عميل أو الخادم المشترك أو مشروع محدّد.
+
+## فحص الخدمة الخلفية
+
+اعرض معلومات الخادم الحالية:
+
+```bash
+opencode service status
+```
+
+وتحقق من سلامة واجهته:
+
+```bash
+opencode api get /api/info
+```
+
+وإذا كانت الخدمة متوقفة أو غير سليمة، فأعد تشغيلها:
+
+```bash
+opencode service restart
+```
+
+ويمكنك أيضًا إيقافها وبدءها صراحةً:
+
+```bash
+opencode service stop
+opencode service start
+```
+
+<Callout type="note">
+  يكتشف OpenCode الخدمة الخلفية المشتركة أو يبدأها تلقائيًا عادةً. ولا تحتاج أوامر الخدمة إلا عند تشخيص
+  دورة حياتها.
+</Callout>
+
+## السماح بأصل متصفح
+
+إذا تعذّر الاتصال بسبب CORS على عميل يعمل في المتصفح من أصل آخر، فأضف أصل ذلك العميل إلى إعدادات الخدمة:
+
+```bash
+opencode service set cors http://192.168.1.10:3001
+opencode service get cors
+```
+
+واستخدم أصل HTTP أو HTTPS دقيقًا، بما في ذلك المنفذ عند الحاجة، دون مسار أو شرطة مائلة لاحقة. وللسماح بعدة
+أصول، مرّر قائمة مفصولة بفواصل كوسيط واحد؛ وتُشذّب المسافات حول كل أصل:
+
+```bash
+opencode service set cors "http://192.168.1.10:3001, https://app.example.com"
+```
+
+ويطبع `service get cors` مصفوفة JSON. وأزل القائمة المضبوطة بـ:
+
+```bash
+opencode service unset cors
+```
+
+وضبط إعداد الخدمة أو إلغاؤه يوقف الخدمة الخلفية. ويأخذ بدؤها التالي الإعداد الجديد؛
+فاستخدم `opencode service start` لبدئها صراحةً.
+
+ولخادم في المقدّمة، كرّر `--cors` لكل أصل إضافي مسموح:
+
+```bash
+opencode serve --cors http://192.168.1.10:3001 --cors https://app.example.com
+```
+
+ومع `serve --service`، تتجاوز أعلام `--cors` المقدّمة القائمة المحفوظة لتلك العملية. وبدون تلك الأعلام،
+يستخدم وضع الخدمة القائمة المحفوظة. ولا يغيّر CORS عنوان الاستماع ولا يتجاوز مصادقة الخادم.
+
+## فحص واجهة API
+
+يستخدم أمر `api` تدفق اكتشاف الخدمة المحلية ومصادقتها. ويقبل إما طريقة HTTP ومسارًا أو
+معرّف عملية OpenAPI.
+
+راجع [مرجع API](/api) لكل نقاط النهاية ومعرّفات العمليات.
+
+ومرّر جسم طلب JSON بـ`--data` أو `-d`، وأضف ترويسات بـ`--header` أو `-H`.
+
+<Callout type="warning">
+  قد يؤدي تشغيل `opencode api` إلى بدء الخدمة الخلفية عندما لا تتوفر خدمة سليمة متوافقة.
+</Callout>
+
+## قراءة السجلات
+
+تكتب الإصدارات المثبّتة السجلات في:
+
+```text
+~/.local/share/opencode/log/opencode.log
+```
+
+وتابع السجل أثناء إعادة إنتاج المشكلة:
+
+```bash
+tail -f ~/.local/share/opencode/log/opencode.log
+```
+
+ويتضمن كل سطر معرّف `run` للعملية وحقل `role`. واستخدم `role=server` لنشاط الجلسات والمزوّدين والملحقات والأذونات
+والأدوات.
+
+```bash
+grep 'role=server' ~/.local/share/opencode/log/opencode.log
+grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
+```
+
+## التقاط لقطة ذاكرة
+
+اكتب لقطة ذاكرة (heap) للخادم الخلفي العامل على أي منصة:
+
+```bash
+opencode debug heap-dump
+```
+
+فينتظر الأمر اكتمال اللقطة، ثم يطبع مسارها:
+
+```text
+/home/me/.local/share/opencode/log/heap-48213-2026-10-23T013012345Z.heapsnapshot
+```
+
+واكتبها في مكان آخر بـ`--directory`. وينشئ الخادم المجلد عندما يكون مفقودًا:
+
+```bash
+opencode debug heap-dump --directory ./snapshots
+```
+
+- لا يستخدم إلا خادمًا يعمل بالفعل. ولا يبدأ خادمًا ولا يستبدله ولا يعيد تشغيله أبدًا.
+- استخدم `--server <url>` لالتقاط خادم بدأته بـ`opencode serve`. واضبط `OPENCODE_PASSWORD` إن كان لديه كلمة مرور.
+  ويكون `--directory` حينها مسارًا على جهاز الخادم.
+- افتح الملف في لوحة Memory في Chrome DevTools.
+
+<Callout type="warning">
+  يتوقف الخادم أثناء كتابة اللقطة، وقد يزداد استخدامه للذاكرة لفترة قصيرة. وقد تحتوي اللقطة
+  مطالبات ومحتويات ملفات وبيانات اعتماد. فلا تشاركها علنًا.
+</Callout>
+
+### في تطبيق سطح المكتب
+
+شغّل **Capture heap snapshots** من لوحة الأوامر. فيكتب مجلدًا واحدًا في مجلد التنزيلات، فيه لقطة
+لكل جزء من التطبيق، إضافة إلى تفصيل للذاكرة التي لا تستطيع اللقطة إظهارها:
+
+```text
+opencode-heap-2026-10-23T013012345Z/
+  memory.json                  where the memory is, per process, in MiB: start here
+  memory-infra.json            Chromium's memory dump trace; open it in https://ui.perfetto.dev
+  heap-48213-….heapsnapshot    the desktop's own server
+  window-1-48390.heapsnapshot  one per app window
+  main-48102.heapsnapshot      the desktop main process
+  gpu.json                     the GPU and driver
+  manifest.json                processes, PIDs, and memory before and after; written last
+```
+
+- تحتوي لقطة heap كائنات JavaScript والصفحة فقط. أما الصور والتخطيط وطبقات التركيب وذاكرة GPU فهي في
+  `memory.json` و`memory-infra.json` بدلًا من ذلك.
+- لا تُلتقط الخوادم البعيدة. استخدم `opencode debug heap-dump` على ذلك الجهاز بدلًا من ذلك.
+- يكتب الخادم لقطته مباشرةً في المجلد، فلا يُنقل أو يُنسخ شيء كبير.
+- لا تُضمَّن علامات تبويب المتصفح، لأن لقطاتها تحتوي محتوى الصفحات التي زرتها.
+
+## التقاط ملفات تعريف CPU والذاكرة
+
+على macOS وLinux، يمكنك إرسال إشارة إلى عملية OpenCode عاملة لالتقاط بيانات تشخيصية. احصل على معرّف عملية الخادم الخلفي
+من نقطة نهاية الصحة:
+
+```bash
+opencode api get /api/info
+```
+
+واستخدم `pid` من الاستجابة مع إحدى هذه الإشارات:
+
+- تلتقط `SIGPROF` ملف تعريف CPU مدته عشر ثوانٍ:
+
+  ```bash
+  kill -SIGPROF <pid>
+  ```
+
+  وتُكتب النتيجة في مجلد السجلات باسم `cpu-<pid>-<timestamp>.cpuprofile`.
+
+- وتلتقط `SIGUSR1` لقطة ذاكرة (heap):
+
+  ```bash
+  kill -SIGUSR1 <pid>
+  ```
+
+  وتُكتب النتيجة في مجلد السجلات باسم `heap-<pid>-<timestamp>.heapsnapshot`.
+
+وانتظر ظهور `CPU profile written` أو `heap snapshot written` في `opencode.log` قبل فتح الملف. ويتضمن إدخال السجل
+المقابل مساره الكامل. ويمكنك فحص نوعي الملفات في Chrome DevTools.
+
+<Callout type="note">
+  ملفات التعريف التي تطلقها الإشارات غير متاحة على Windows. استخدم `opencode debug heap-dump` للقطات heap بدلًا من ذلك.
+  وكتابة لقطة heap قد توقف العملية وترفع استخدامها للذاكرة مؤقتًا.
+</Callout>
+
+## ملفات الخدمة
+
+يسجّل الخادم المشترك نفسه في:
+
+```text
+~/.local/state/opencode/service.json
+```
+
+ويُخزَّن إعداد خدمته الخاص منفصلًا في:
+
+```text
+~/.config/opencode/service.json
+```
+
+توجد قاعدة البيانات عادةً في هذا المسار:
+
+```text
+~/.local/share/opencode/opencode.db
+```
+
+ويمكن لـ`OPENCODE_DB` تجاوز موقع قاعدة البيانات.
+
+<Callout type="warning">
+  لا تحذف ملفات الخدمة أو قاعدة البيانات أو تحرّرها أثناء استكشاف الأخطاء. استخدم أوامر الخدمة لإدارة
+  البرنامج الخفي، وخذ نسخة احتياطية قبل فحص البيانات الدائمة بأدوات خارجية.
+</Callout>
+
+## الإبلاغ عن مشكلة
+
+أدرج ما يلي عند الإبلاغ عن مشكلة قابلة لإعادة الإنتاج:
+
+- مخرجات `opencode --version`
+- مخرجات `opencode service status`
+- أقصر تسلسل خطوات يعيد إنتاج المشكلة
+- ما إذا كانت المشكلة تصيب الخدمة المشتركة أو عميلًا محدّدًا أو مشروعًا واحدًا
+- أسطر السجل ذات الصلة، بما في ذلك حقلاها `run` و`role`
+
+وأزل مفاتيح API وترويسات التفويض والمطالبات ومحتويات الملفات وغيرها من البيانات الحساسة قبل مشاركة السجلات.
+
+وأبلغ عن المشكلات القابلة لإعادة الإنتاج في [GitHub Issues](https://github.com/anomalyco/opencode/issues).

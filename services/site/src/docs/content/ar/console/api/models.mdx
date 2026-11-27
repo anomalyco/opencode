@@ -1,0 +1,203 @@
+---
+title: "API قائمة النماذج"
+description: "اسرد النماذج التي يمكن لمساحة عمل استخدامها، مع حدودها وأسعارها وقدراتها وعنوان URL الخاص بـ Console لاستدعاء كل منها."
+---
+
+هناك نوعان من قوائم النماذج. تعيد [قائمة Console](#console-model-list) كل ما يمكن لمساحة عمل استخدامه،
+بما في ذلك المزوّدون المرتبطون بمساحة العمل. أما [قوائم الاستدلال](#inference-model-lists) فتعيد القائمتين العامّتين لنماذج OpenCode Models وGo
+بصيغة قوائم OpenAI.
+
+| القائمة                                             | ما تعيده                                                                                        | المفتاح      |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------- |
+| [`/console/api/v1/models`](#console-model-list)     | كل مزوّد ونموذج يستطيع المستدعي استخدامه، مع تطبيق تعديلات مساحة العمل.               | مطلوب |
+| [`/inference/v1/models`](#inference-model-lists)    | OpenCode Models. كل نموذج عام دون مفتاح؛ ومع مفتاح، النماذج التي يمكن لمساحته استخدامها. | اختياري |
+| [`/inference/go/v1/models`](#inference-model-lists) | نماذج [Go](/console/go)، بالصيغ نفسها.                                                  | اختياري |
+
+استخدم قائمة Console عندما ينبغي لعميلك أن يعرض النماذج نفسها التي يعرضها OpenCode، بما في ذلك المزوّدون المرتبطون. واستخدم قائمة
+استدلال عندما تحتاج OpenCode Models أو Go فقط، أو عندما لا يكون لديك مفتاح بعد وتريد الكتالوج العام.
+
+## قائمة نماذج Console
+
+يعيد `GET https://opencode.ai/console/api/v1/models` كل مزوّد يستطيع المستدعي استخدامه، وتحته النماذج التي
+يمكنه استدعاؤها.
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+ويستطيع أي عضو في مساحة العمل استدعاءها: من جلسة متصفح، أو تسجيل دخول OpenCode، أو [مفتاح API شخصي](/console/api#personal-api-keys)،
+أو [مفتاح حساب خدمة](/console/api#service-accounts) يملك **Models › Read**. وهي تستخدم القواعد نفسها التي يستخدمها
+OpenCode config الذي تولّده Console، لذا تطابق القائمة ما يعرضه `/models` في OpenCode. ولا تُخزَّن الاستجابة مؤقتًا أبدًا
+(`Cache-Control: private, no-store`).
+
+### المزوّدون
+
+الاستجابة كائن مفاتيحه معرّفات المزوّدين، وهي المعرّفات التي يستخدمها OpenCode.
+
+| معرّف المزوّد                 | المزوّد                                                                                                                         |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `opencode`                  | [OpenCode Models](/console/models)، تُخصم تكلفتها من رصيد مساحة العمل.                                                                 |
+| `opencode-go`               | نماذج [Go](/console/go). ولا تظهر إلا مع اشتراك Go.                                                                   |
+| `console-<connection slug>` | [اتصال](/console/providers) أضافته مساحة العمل، مثل `console-openai` أو `console-anthropic` أو `console-aws-bedrock`. |
+
+لكل مزوّد `id` و`name` و`models`. و`name` هو الاسم الذي يعرضه OpenCode، وعادةً اسم مساحة العمل يتبعه
+اسم المزوّد. و`models` كائن مفاتيحه معرّفات النماذج.
+
+### مثال
+
+مختصرًا إلى مزوّد واحد ونموذج واحد:
+
+```json
+{
+  "opencode": {
+    "id": "opencode",
+    "name": "Acme Inc. / OpenCode",
+    "models": {
+      "claude-sonnet-5-5": {
+        "type": "chat",
+        "id": "claude-sonnet-5-5",
+        "canonical_id": "anthropic/claude-sonnet-5-5",
+        "name": "Claude Sonnet 5.5",
+        "description": "Fast Claude model for everyday coding, agents, and knowledge work",
+        "family": "claude-sonnet",
+        "open_weights": false,
+        "knowledge": "2026-06",
+        "release_date": "2026-09-28",
+        "last_updated": "2026-09-28",
+        "modalities": {
+          "input": ["text", "image/jpeg", "image/png", "application/pdf"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": { "supported": true },
+          "reasoning": {
+            "supported": true,
+            "effort": ["low", "medium", "high", "xhigh", "max"]
+          }
+        },
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 2,
+              "cache": { "read": 0.1, "write": 2.5 }
+            },
+            "output": { "price": 10 }
+          }
+        },
+        "api": {
+          "messages": {
+            "base_url": "https://opencode.ai/inference/anthropic/v1",
+            "sdk": {
+              "aisdk": "@ai-sdk/anthropic",
+              "opencodeai": "@opencode/ai/providers/anthropic"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### الحقول
+
+كل نموذج هو إدخال v2 من [models.dev](https://models.dev) مع تطبيق تعديلات مساحة العمل، لذا فالحقول هي التي
+[ينشرها models.dev](https://models.dev/experimental/v2.0/api.json). وتُستبعد النماذج المعطّلة والنماذج التي يعلّمها models.dev
+متوقفة.
+
+| الحقل          | المعنى                                                                                                                                                                                                                                                                             |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`         | نوع النموذج، مثل `chat` أو `embedding` أو `image` أو `decision`.                                                                                                                                                                                                             |
+| `id`           | معرّف النموذج الذي يُرسل في الطلبات. وهو أيضًا المفتاح في `models`.                                                                                                                                                                                                                   |
+| `name`         | اسم العرض.                                                                                                                                                                                                                                                                       |
+| `limit`        | `context` هو نافذة السياق. ويحدّ `input` مدخلات الطلب عندما يضع النموذج حدًّا لها. ويحدّ `output` الاستجابة.                                                                                                                                                                |
+| `cost`         | السعر بالدولار الأمريكي لكل 1M رمز: `text.input.price` و`text.input.cache.read` و`text.input.cache.write` و`text.output.price`. وتعني القيمة `0` أن الاستخدام مجاني. وإذا غابت حقول الذاكرة المؤقتة، فلا سعر لها في هذا النموذج. وتضيف بعض النماذج `cost.multipliers` لرفع السعر في الأوقات المحدّدة فيها. |
+| `capabilities` | ما يستطيعه النموذج، مثل استدعاءات الأدوات وجهد التفكير.                                                                                                                                                                                                                     |
+| `modalities`   | أنواع الإدخال المقبولة، مثل `text` أو `image/png` أو `application/pdf`، وأنواع الإخراج.                                                                                                                                                                                          |
+| `api`          | عنوان URL في Console وحزمة SDK اللازمة لهذا النموذج. راجع [API النموذج](#model-api).                                                                                                                                                                                                         |
+
+### API النموذج
+
+يحتوي `api` على سجل واحد، مفتاحه البروتوكول الذي يدعمه النموذج: `chat-completions` لـ OpenAI Chat Completions، و`responses`
+لـ OpenAI Responses، و`messages` لـ Anthropic Messages، و`generate-content` لـ Gemini، و`embeddings` لـ
+[OpenAI Embeddings](/console/models#embedding-models). وهو إدخال البروتوكول في
+models.dev مع استبدال عنوان URL الخاص بالمورّد بعنوان Console، واستبعاد البروتوكولات الأخرى.
+
+| الحقل            | المعنى                                                                                                                                                                                                                                            |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base_url`       | وجهة إرسال الطلبات لهذا النموذج. يستخدم OpenCode Models العنوان `https://opencode.ai/inference/...`، ويستخدم Go العنوان `https://opencode.ai/inference/go/...`، ويستخدم الاتصال عنوان Console API URL الخاص به، `https://opencode.ai/inference/custom/<connection_id>`. |
+| `sdk.aisdk`      | حزمة AI SDK الخاصة بالبروتوكول، وهي نفسها في جدول [نقاط نهاية النماذج](/console/models#endpoints).                                                                                                                                       |
+| `sdk.opencodeai` | وحدة المزوّد المطابقة التي يحمّلها OpenCode.                                                                                                                                                                                                       |
+
+وهكذا يبدو نموذج على اتصال أضفته أنت. أضف مسار البروتوكول، مثل `/chat/completions` أو
+`/responses`، كما هو موصوف في [API المزوّدين](/console/api/providers#endpoints).
+
+```json
+"api": {
+  "responses": {
+    "base_url": "https://opencode.ai/inference/custom/conn_...",
+    "sdk": {
+      "aisdk": "@ai-sdk/openai",
+      "opencodeai": "@opencode/ai/providers/openai/responses"
+    }
+  }
+}
+```
+
+## قوائم نماذج الاستدلال
+
+يسرد `GET https://opencode.ai/inference/v1/models` نماذج OpenCode Models، ويسرد `GET https://opencode.ai/inference/go/v1/models`
+نماذج Go. وكلتاهما تعيدان صيغة قوائم OpenAI.
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+مختصرًا إلى نموذج واحد وحقوله الشائعة:
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "claude-sonnet-5-5",
+      "object": "model",
+      "created": 1795006281,
+      "owned_by": "opencode",
+      "name": "Claude Sonnet 5.5",
+      "type": "chat",
+      "limit": { "context": 1000000, "output": 128000 },
+      "cost": {
+        "text": {
+          "input": { "price": 2, "cache": { "read": 0.1, "write": 2.5 } },
+          "output": { "price": 10 }
+        }
+      }
+    }
+  ]
+}
+```
+
+بدون مفتاح، تضم القائمة كل نموذج عام. ومع مفتاح، لا تضم إلا النماذج التي يمكن لمساحة عمل ذلك المفتاح استخدامها، لذا يحتاج
+مفتاح حساب الخدمة إلى **Models › Read**. أرسله في `Authorization: Bearer` أو `x-api-key`. وتُستبعد النماذج
+الخاصة أو المتوقفة.
+
+يبدأ كل عنصر بحقول OpenAI `id` و`object` و`created` و`owned_by`، ثم حقول models.dev نفسها التي تستخدمها
+[قائمة Console](#fields): `name` و`type` و`limit` و`cost` و`capabilities` و`modalities` و`api` و`family`
+و`release_date` وغيرها. وخلافًا لقائمة Console، لا تتضمن قوائم الاستدلال اتصالات مساحة العمل. وإذا كانت بيانات
+models.dev غير متاحة مؤقتًا، تظهر العناصر بحقول OpenAI وحدها، ويساوي `name` المعرّف.
+
+ولكل نموذج Go حقل `go` أيضًا، ويبيّن حدّ الاستخدام الشهري في كل خطة (`monthly_usage`)، وما إذا كانت الطلبات تُستخدم لتدريب النموذج
+(`training`)، وما إذا كان لا يحتفظ بأيٍّ من بياناتك (`zdr`)، وما إذا كان استخدامه محظورًا في بعض البلدان (`limited_regions`).
+
+## الأخطاء
+
+| الحالة | المعنى                                                                                |
+| ------ | -------------------------------------------------------------------------------------- |
+| `401`  | لا توجد بيانات اعتماد، أو مفتاح منتهٍ أو ملغى.                                          |
+| `403`  | لا يستطيع المفتاح سرد النماذج. وتحتاج مفاتيح حسابات الخدمة والمفاتيح المقيّدة إلى **Models › Read**. |

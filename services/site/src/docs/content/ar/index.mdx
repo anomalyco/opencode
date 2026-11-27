@@ -1,0 +1,97 @@
+---
+title: "المقدمة"
+description: "ثبّت OpenCode، وكيل البرمجة مفتوح المصدر، كـ CLI أو تطبيق سطح مكتب أو تطبيق ويب أو صورة Docker، ثم اربط مزوّد نموذج."
+---
+
+OpenCode وكيل برمجة مفتوح المصدر. يتوفر كواجهة تعمل في الطرفية، أو تطبيق سطح مكتب، أو تطبيق ويب.
+
+
+## CLI
+
+<CodeTabs
+  id="install"
+  label="Install method"
+  tabs={[
+    { label: "curl", code: "curl -fsSL https://opencode.ai/v2/install | bash" },
+    { label: "homebrew", code: "brew install anomalyco/tap/opencode-v2" },
+    { label: "npm", code: "npm install -g @opencode/cli" },
+    { label: "bun", code: "bun install -g --trust @opencode/cli" },
+    { label: "pnpm", code: "pnpm add -g --allow-build=@opencode/cli @opencode/cli" },
+    { label: "yarn", code: "yarn global add @opencode/cli" },
+    { label: "vite+", code: "vp install -g @opencode/cli" },
+    { label: "aur", code: "paru -S opencode-beta" },
+    { label: "mise", code: "mise use -g opencode" },
+  ]}
+/>
+
+تستخدم حزمة npm سكربت postinstall لاختيار ملف `opencode` التنفيذي المخصّص لمنصّتك. ويسمح أمرا Bun وpnpm صراحةً
+بالسكربت المطلوب، بينما لا يحتاج Vite+ إلى أي خيار إضافي. ويحتاج أمر mise إلى mise 2026.10.9 أو أحدث،
+أما الإصدارات الأقدم فتثبّت OpenCode 1.
+
+لا يدعم OpenCode أدوات إدارة الحزم على Windows.
+
+
+نزّل ملف CLI التنفيذي المستقل لبيئتك.
+
+- **macOS:** [Apple silicon](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-arm64.zip) · [Intel](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64.zip) · [Intel (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64-baseline.zip)
+- **Windows:** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-arm64.zip) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64.zip) · [x64 (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64-baseline.zip)
+- **Linux (glibc):** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-arm64.tar.gz) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64.tar.gz) · [x64 (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-baseline.tar.gz)
+- **Linux (musl):** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-arm64-musl.tar.gz) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-musl.tar.gz) · [x64 (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-baseline-musl.tar.gz)
+
+## Desktop
+
+نزّل أحدث إصدار من OpenCode Desktop لبيئتك.
+
+- **macOS:** [Apple silicon](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-mac-arm64.dmg) · [Intel](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-mac-x64.dmg)
+- **Windows:** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-win-x64.exe) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-win-arm64.exe)
+- **Linux (.deb):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-amd64.deb) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-arm64.deb)
+- **Linux (.rpm):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-x86_64.rpm) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-aarch64.rpm)
+- **Linux (AppImage):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-x86_64.AppImage) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-arm64.AppImage)
+
+
+## Web
+
+افتح واجهة OpenCode على الويب بالأمر `opencode pair`.
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+```
+
+## Docker
+
+تستخدم صور Docker وسومًا تحمل أرقام إصدارات، مثل `ghcr.io/anomalyco/opencode:2.0.0`.
+
+---
+
+## Connect
+
+يدعم OpenCode العديد من مزوّدي LLM دون إعداد إضافي. يمكنك الاتصال بهم مباشرةً
+[من TUI](/cli/providers) بالأمر `/connect`.
+
+راجع [المزوّدين](/providers) لإعداد مزوّدين مخصّصين.
+
+وإذا أردت وصولًا سهلًا إلى أفضل نماذج البرمجة، جرّب
+[OpenCode Console](/console).
+
+يمكنك أيضًا تجربة [OpenCode Go](/console/go)، وهي خطة اشتراك بسعر $10/month
+تمنحك الوصول إلى أفضل نماذج البرمجة.
+
+---
+
+## Customize
+
+خصّص OpenCode بتعديل [OpenCode config](/config)، أو [تحميل الملحقات](/plugins)، أو
+[ربط خوادم MCP](/mcp-servers)، أو [إنشاء الأوامر](/commands). وللاطلاع على سمات واجهة الطرفية
+واختصارات لوحة المفاتيح، راجع [إعدادات CLI](/cli/config).
+
+---
+
+## Learn
+
+إذا كنت مهتمًا بدورة معمّقة عن OpenCode، فقد أنشأ Boot.dev دورة
+[AI Coding with OpenCode](https://www.boot.dev/courses/learn-ai-coding) ممتازة بالتشاور مع فريقنا. جميع
+معلومات الدورة متاحة للقراءة والمشاهدة مجانًا، وإن كانت بعض الميزات التفاعلية قد تتطلب الدفع.

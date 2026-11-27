@@ -1,0 +1,677 @@
+---
+title: "الإعدادات"
+description: "اضبط OpenCode في opencode.json أو opencode.jsonc، واعرف أين تعيش ملفات الإعدادات وكيف تتقدم على بعضها وكيف تستبدل المتغيّرات."
+---
+
+أنشئ `opencode.jsonc` في مشروعك لإعداد OpenCode. أضف المخطط ليتحقق المحرّر من الإعدادات، ثم اضبط الخيارات التي تحتاجها فقط.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-5-5",
+}
+```
+
+يمكنك أيضًا أن تطلب من OpenCode تحديث هذا الملف لك.
+
+## الصيغة
+
+يدعم OpenCode صيغتي JSON وJSONC. استخدم JSONC عندما تريد تعليقات أو فواصل لاحقة.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Use this model by default.
+  "model": "anthropic/claude-sonnet-5-5",
+}
+```
+
+## المواقع
+
+ضع الإعدادات المُدارة على مستوى الجهاز في مجلد إعدادات النظام:
+
+| المنصة   | المجلد                                  |
+| -------- | --------------------------------------- |
+| macOS    | `/Library/Application Support/opencode` |
+| Linux    | `/etc/opencode`                         |
+| Windows  | `%ProgramData%\opencode`                |
+
+يعمل مجلد النظام كالمجلد العام. فإلى جانب
+`opencode.json(c)`، يحمّل `agents/` و`commands/` و`skills/` و`plugins/`
+لكل مستخدم على الجهاز:
+
+```text
+/etc/opencode/
+├── opencode.json
+├── agents/review.md
+├── commands/release.md
+└── skills/deploy/SKILL.md
+```
+
+على macOS، يقرأ OpenCode أيضًا التفضيلات المُدارة التي تنشرها أدوات MDM لنطاق
+`ai.opencode.managed`. ويحل ملف تعريف خاص بالمستخدم محل
+ملف تعريف الجهاز:
+
+```text
+/Library/Managed Preferences/<user>/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist
+```
+
+للإعدادات المُدارة الأولوية القصوى، فلا يستطيع المستخدمون أو المشاريع تغيير القيم التي تحدّدها. وللتفضيلات المُدارة أولوية على إعدادات
+مجلد النظام. ولا تمنع الإعدادات وحدها المستخدمين من إضافة مزوّدين أو خوادم MCP
+أو وكلاء أو ملحقات؛ استخدم [السياسات](/policies#precedence) في الإعداد المُدار
+لفرض القيود.
+
+ضع إعدادات المستخدم لكل المشاريع في الإعداد العام:
+
+```text
+~/.config/opencode/opencode.json(c)
+```
+
+ضع إعدادات المشروع في أي من هذين الملفين:
+
+```text
+/home/user/projects/my-app/opencode.json(c)
+/home/user/projects/my-app/.opencode/opencode.json(c)
+```
+
+يبحث OpenCode من المجلد الحالي إلى جذر نظام الملفات. ويضم أولًا
+ملفات `opencode.json(c)` المباشرة من المجلد الأبعد إلى الأقرب، ثم يضم الملفات داخل مجلدات `.opencode` بالترتيب نفسه.
+وهذا يعني أن كل إعداد `.opencode` مكتشف يتجاوز كل إعداد مباشر.
+واستخدم صيغة واحدة في شجرة المجلدات كلها إلا إذا كنت تحتاج هذا السلوك.
+
+مثلًا، ابدأ OpenCode من `/home/user/projects/acme/packages/web`:
+
+```text
+/etc/opencode/opencode.json
+~/.config/opencode/opencode.json
+
+/home/user/projects/acme/
+├── opencode.json
+└── packages/
+    └── web/
+        ├── opencode.json
+        └── src/
+```
+
+يطبّق OpenCode هذه الملفات من الأقل أسبقية إلى الأعلى:
+
+1. `~/.config/opencode/opencode.json`
+2. `/home/user/projects/acme/opencode.json`
+3. `/home/user/projects/acme/packages/web/opencode.json`
+4. `/etc/opencode/opencode.json`
+
+يتجاوز إعداد الحزمة الإعدادات المطابقة في إعداد المستودع،
+الذي يتجاوز الإعداد العام. ويتجاوز إعداد النظام جميعها.
+وتُحفظ الإعدادات غير المتعارضة. أما [السياسات](/policies#precedence)
+من الملفات العامة وملفات المشاريع فتُقيَّم بالترتيب العكسي، وتتجاوز سياسات النظام
+جميعها.
+
+## المخطط
+
+مخطط إعدادات OpenCode الكامل متاح على
+[opencode.ai/config.json](https://opencode.ai/config.json).
+
+أضف حقل `$schema` إلى ملف إعداداتك لتفعيل التحقق والإكمال التلقائي في المحررات التي تدعم JSON Schema:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json"
+}
+```
+
+استخدم المخطط مصدرًا موثوقًا للحقول المتاحة والقيم المقبولة
+وأشكال الإعداد المتداخلة.
+
+### Shell
+
+اضبط الـshell الذي تستخدمه أداتا الطرفية وshell.
+
+```jsonc
+{
+  "shell": "/bin/zsh",
+}
+```
+
+### النموذج
+
+اضبط النموذج الافتراضي بصيغة `provider/model`. والافتراضي في الجذر لا يحتفظ حاليًا
+بـ`#variant`؛ ويمكن لمراجع النموذج في الوكلاء والأوامر اختيار واحد.
+
+```jsonc
+{
+  "model": "anthropic/claude-sonnet-5-5",
+}
+```
+
+راجع [دليل النماذج](/models) لاختيار النماذج والنماذج المحلية.
+
+### الوكيل
+
+اختر الوكيل الرئيسي المستخدم عندما لا تختار جلسة وكيلًا صريحًا.
+
+```jsonc
+{
+  "default_agent": "build",
+}
+```
+
+راجع [دليل الوكلاء](/agents) للوكلاء المدمجين والمخصّصين.
+
+### التحديثات
+
+تحكّم في فحوص التحديثات من الإعداد العام. اضبط `update` على `"disable"` لتخطيها،
+أو `"notify"` لعرض التحديثات المتاحة قبل تثبيتها، أو `"auto"` لتثبيتها تلقائيًا. وعند إغفاله،
+تكون القيمة الافتراضية لـ `update` هي `"notify"`.
+
+ولا يعيد التثبيت التلقائي تشغيل خادم يعمل. فأعد تشغيله يدويًا لتفعيل التحديث المثبّت.
+وتُتجاهل القيم على مستوى المشروع.
+
+```jsonc
+{
+  "update": "notify",
+}
+```
+
+### اسم المستخدم
+
+اضبط اسم مستخدم. ويقبل OpenCode هذا الحقل لكنه لا يعرضه في
+المحادثات.
+
+```jsonc
+{
+  "username": "alice",
+}
+```
+
+### الأذونات
+
+عرّف قواعد مرتّبة تسمح أو ترفض أو تسأل قبل أن يستخدم الوكيل أداة على
+مورد مطابق.
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "shell",
+      "resource": "git push *",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+راجع [دليل الأذونات](/permissions) لمطابقة القواعد والإجراءات المتاحة.
+
+### السياسات
+
+اسمح باستخدام مزوّد أو ارفضه، أو ارفض فحص إذن رفضًا قاطعًا، أو احجب خادم
+MCP أو مهارة أو ملحقًا، بعبارات مرتّبة يمكن لإعداد أوسع أن
+يتجاوزها.
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+  ],
+}
+```
+
+راجع [دليل السياسات](/policies) للمطابقة والأسبقية بين ملفات
+الإعداد والسياسة المُدارة من Console.
+
+### الوكلاء
+
+تجاوز الوكلاء المدمجين أو عرّف وكلاء متخصصين بنموذجهم
+وتعليماتهم ووضعهم وأذونهم.
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "description": "Review changes without editing files",
+      "mode": "subagent",
+      "system": "Focus on correctness, security, and missing tests.",
+      "permissions": [{ "action": "edit", "resource": "*", "effect": "deny" }],
+    },
+  },
+}
+```
+
+راجع [دليل الوكلاء](/agents) لكل خيارات الوكلاء والوكلاء المعرّفين في ملفات.
+
+### اللقطات
+
+فعّل أو عطّل لقطات نظام الملفات التي يستخدمها سلوك التراجع والاسترجاع.
+
+```jsonc
+{
+  "snapshots": false,
+}
+```
+
+راجع [دليل اللقطات](/snapshots) لسلوك التراجع والإعادة.
+
+### المراقب
+
+تجاهل الملفات والمجلدات التي لا ينبغي أن تطلق تحديثات نظام الملفات.
+
+```jsonc
+{
+  "watcher": {
+    "ignore": ["dist/**", "coverage/**"],
+  },
+}
+```
+
+### المنسّق
+
+نسّق الملفات بعد أن تغيّرها أدوات `write` أو `edit` أو `patch`. اضبط
+`formatter` على `true` لتفعيل المنسّقات المدمجة المتاحة.
+
+```jsonc
+{
+  "formatter": true,
+}
+```
+
+راجع [دليل المنسّقات](/formatters) للمنسّقات المدمجة والمخصّصة.
+
+### الوسائط
+
+تحكّم في كيفية تغيير حجم الصور المفرطة التي تحمّلها أداة `read` أو رفضها
+قبل إرسالها إلى نموذج.
+
+```jsonc
+{
+  "media": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880,
+    },
+  },
+}
+```
+
+راجع [دليل المرفقات](/attachments) لمعالجة الصور وحدودها.
+
+### الإخراج
+
+اضبط الحد الأقصى لعدد الأسطر والبايتات المحتفظ بها من نتيجة أداة.
+
+```jsonc
+{
+  "tool_output": {
+    "max_lines": 2000,
+    "max_bytes": 51200,
+  },
+}
+```
+
+### البحث
+
+اختر كيف يبحث OpenCode على الويب. استخدم `"random"` لاختيار مزوّد
+متاح تلقائيًا.
+
+```jsonc
+{
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+راجع [دليل البحث على الويب](/websearch) للمزوّدين وبيانات الاعتماد والاختيار
+وحدود المعدل وتعطيل البحث.
+
+### MCP
+
+أعدّ خوادم Model Context Protocol المحلية والبعيدة. وتنطبق قيم `mcp.timeout` العامة
+على الخوادم المعرّفة في ملفات الإعدادات؛ ويتجاوزها `timeout` الخاص بكل
+خادم.
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["bunx", "@playwright/mcp"],
+      },
+    },
+  },
+}
+```
+
+راجع [دليل MCP](/mcp-servers) للخوادم البعيدة وOAuth ومتغيّرات البيئة والمهل.
+
+### ضغط السياق
+
+تحكّم في ضغط السياق التلقائي ومقدار السياق الحديث الذي يحتفظ به.
+
+```jsonc
+{
+  "compaction": {
+    "auto": true,
+    "keep": {
+      "tokens": 15000,
+    },
+    "buffer": "15%",
+  },
+}
+```
+
+`buffer` هي حصة نافذة سياق النموذج التي تبقى فارغة قبل أن يبدأ الضغط التلقائي.
+
+وتبقى الملخصات المحلية هي الافتراضي. ولتفعيل ضغط المزوّد الأصلي للطلبات
+التلقائية واليدوية معًا، استخدم سياسة مزوّد أو نموذج:
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-6.1-sol": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}
+```
+
+ويتجاوز إعداد النموذج إعداد المزوّد. ويستخدم الضغط التلقائي
+ميزانية الإدخال المتاحة للنموذج المختار. وتحتفظ نقاط تحقق المزوّد برسائل المستخدم الحديثة ضمن ميزانية
+`compaction.keep.tokens` نفسها التي تستخدمها الملخصات المحلية لذيلها المحتفظ به.
+ويوقف `compaction.auto: false` في الأعلى الضغط التلقائي الجديد دون
+التخلص من نقاط التحقق المثبّتة. راجع [دليل ضغط السياق](/compaction) لتقدير
+الميزانية والتعافي من الفائض.
+
+### التسخين
+
+أبقِ جلسات النماذج النشطة حديثًا دافئة بطلبات عابرة دورية.
+والتسخين متوقف افتراضيًا؛ اضبطه على `true` للتسخين قبيل انتهاء
+ذاكرة كل نموذج المؤقتة مباشرةً، لمدة تصل إلى 30 دقيقة.
+
+```jsonc
+{
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "auto",
+    "duration": "30 minutes",
+  },
+}
+```
+
+ويتجاوزه `settings.cache.warming` الخاص بالمزوّد أو النموذج، ويضبط
+`settings.cache.ttl` مدة احتفاظ المزوّد بالذاكرة المؤقتة. راجع
+[دليل التسخين](/warming) لسلوك الطلبات والتخصيص واعتبارات التكلفة،
+و[عمر الذاكرة المؤقتة](/models#cache-lifetime) لـ`cache.ttl`.
+
+### المهارات
+
+أضف مجلدات أو عناوين URL ينبغي أن يبحث فيها OpenCode عن مهارات الوكلاء.
+
+```jsonc
+{
+  "skills": ["./team-skills", "https://example.com/.well-known/skills/"],
+}
+```
+
+راجع [دليل المهارات](/skills) لبنية المهارات والاكتشاف التلقائي تحت `.opencode/skills/`.
+
+### الأوامر
+
+عرّف أوامر شرطة مائلة قابلة لإعادة الاستخدام كقوالب مطالبات مسمّاة.
+
+```jsonc
+{
+  "commands": {
+    "review": {
+      "description": "Review the current changes",
+      "template": "Review the current diff for correctness and missing tests.",
+    },
+  },
+}
+```
+
+راجع [دليل الأوامر](/commands) للوسائط والنماذج والوكلاء والأوامر المعرّفة في ملفات.
+
+### التعليمات
+
+أعلن ملفات تعليمات إضافية أو أنماط glob أو عناوين URL بصيغة HTTP(S). ويحمّلها OpenCode
+إلى جانب ملفات `AGENTS.md` المكتشفة.
+
+```jsonc
+{
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md"],
+}
+```
+
+راجع [دليل التعليمات](/instructions) لتعليمات المشروع و`AGENTS.md`.
+
+### المراجع
+
+اجعل مجلدات محلية أو مستودعات Git متاحة كسياق مساند مسمّى.
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Product behavior and terminology",
+    },
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+راجع [دليل المراجع](/references) للاختصارات والظهور وتحليل المسارات.
+
+### Worktrees
+
+اضبط المجلد الأب لـworktrees المحلية الجديدة. ويضيف OpenCode اسم worktree المطلوب أو المولّد.
+
+```jsonc
+{
+  "worktree": {
+    "directory": "../worktrees",
+  },
+}
+```
+
+تُحل المسارات النسبية بالنسبة لنسخة المشروع الأساسية المحفوظة. وينطبق ذلك على الإعداد العام وإعداد المشروع
+على السواء؛ وتُستخدم المسارات المطلقة كما هي، ويُحل `~/`
+بالنسبة لمجلد المستخدم الرئيسي.
+
+مثلًا، يضع هذا الإعداد العام worktrees الجديدة تحت مجلد `.lane/trees/` الخاص بكل مشروع:
+
+```jsonc
+{
+  "worktree": {
+    "directory": ".lane/trees",
+  },
+}
+```
+
+وبدون هذا الإعداد، يستخدم الإنشاء مجلد بيانات الخادم تحت `worktree/<first-six-project-ID-characters>`.
+ويحمّل إنشاء worktree وتحديثها الإعداد من نسخة المشروع الأساسية المحفوظة، بما في ذلك عندما تشترك نسخ أخرى
+في معرّف المشروع. وتغييره لا ينقل worktrees الموجودة.
+
+وGit هو الافتراضي المدمج. وأي [ملحق](/build/plugins/server#worktrees) يسجّل
+استراتيجية يصبح تلقائيًا الافتراضي في بيئة تشغيل ذلك الملحق. وتستخدم عمليات المشروع بيئة تشغيل النسخة الأساسية.
+وخيارات الاستراتيجية الخاصة تنتمي إلى ذلك الملحق، لا إلى كائن إعداد `worktree`.
+
+### الملحقات
+
+حمّل الملحقات من الحزم أو مجلدات الملحقات المحلية. واستخدم صيغة الكائن عندما يقبل الملحق
+خيارات.
+
+```jsonc
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugins/local",
+      "options": {
+        "enabled": true,
+      },
+    },
+  ],
+}
+```
+
+راجع [دليل الملحقات](/plugins) لتحميل الملحقات وإعدادها.
+
+### المزوّدون
+
+أعدّ المزوّدين وأضف نماذجهم أو تجاوزها، وإعدادات الطلبات،
+والترويسات، ومتغيّرات النماذج.
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol-custom": {
+          "modelID": "gpt-6.1-sol",
+          "name": "GPT-6.1 Sol Custom",
+          "limit": {
+            "context": 200000,
+            "output": 32000,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+ويختار `settings.transport: "websocket"` في المزوّد WebSocket جلسته.
+
+راجع [دليل المزوّدين](/providers) لبيانات الاعتماد ونقاط النهاية المخصّصة وحزم المزوّدين ونقل WebSocket وإعداد النماذج.
+
+## المتغيّرات
+
+يمكنك استخدام استبدال المتغيّرات في ملفات إعدادك للإشارة إلى متغيّرات البيئة ومحتويات الملفات. ضع الإشارات داخل سلاسل JSON.
+
+### متغيّرات البيئة
+
+استخدم `{env:VARIABLE_NAME}` لاستبدال متغيّرات البيئة:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:OPENCODE_MODEL}",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "apiKey": "{env:ANTHROPIC_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+وإذا لم يكن متغيّر البيئة مضبوطًا، فسيُستبدل بسلسلة فارغة.
+
+### الملفات
+
+استخدم `{file:path/to/file}` لاستبدال محتويات ملف:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": {
+        "apiKey": "{file:~/.secrets/openai-key}",
+      },
+    },
+  },
+}
+```
+
+يمكن أن تكون مسارات الملفات:
+
+- نسبية إلى مجلد ملف الإعداد
+- مطلقة، أو بدءًا بـ `~/` لمجلدك الرئيسي
+
+وإذا لم يكن الملف موجودًا، فسيُستبدل بسلسلة فارغة.
+
+وهي مفيدة في:
+
+- إبقاء بيانات حساسة مثل مفاتيح API في ملفات منفصلة.
+- مشاركة مقتطفات إعداد شائعة بين عدة ملفات إعداد.
+
+## تجريبي
+
+<Callout type="warning">
+  قد تتغير الإعدادات التجريبية أو تتعطل أو تُحذف في أي إصدار دون إشعار. فلا تعتمد عليها في
+  سير عمل مستقر.
+</Callout>
+
+تعيش جميع الإعدادات التجريبية تحت المفتاح `experimental`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "todo": true,
+    "subagent_depth": 2,
+    "image_generate": { "model": "openai/gpt-image-2" },
+    "location_idle_timeout": "4 hours",
+  },
+}
+```
+
+### المهام
+
+اضبط `todo` على `true` لمنح الوكلاء أداة `todowrite` لتتبّع العمل متعدد الخطوات. والافتراضي `false`.
+
+### عمق الوكلاء الفرعيين
+
+يضبط `subagent_depth` مدى عمق بدء الوكلاء الفرعيين لوكلائهم الفرعيين. والافتراضي `1`، فلا يستطيع الوكيل الفرعي
+بدء وكيل فرعي آخر.
+
+### توليد الصور
+
+يضبط `image_generate` النموذج الافتراضي لأداة [`generate_image`](/tools#image-generate)، بصيغة
+`providerID/modelID`، مع `#variant` اختياريًا. وعندما لا يكون ذلك النموذج متاحًا أو لا يستطيع معالجة طلب،
+يختار OpenCode نموذج صور آخر تلقائيًا.
+
+```jsonc
+{
+  "experimental": {
+    "image_generate": {
+      "model": "openai/gpt-image-2",
+    },
+  },
+}
+```
+
+### مهلة خمول الموقع
+
+يتحكم `location_idle_timeout` في المدة التي يمكن أن يمضيها موقع مشروع دون نشاط جلسات قبل أن يفرّغ OpenCode
+خدماته. ويأخذ مدة مثل `"2 hours"`، والافتراضي `"60 minutes"`. وتبقي الجلسات الجارية والمهام الخلفية
+الموقع محمّلًا. واضبطه على `false` لعدم تفريغ المواقع الخاملة أبدًا. ويمكن لإعداد المشروع أن يتجاوز القيمة
+العامة.
+
+```jsonc
+{
+  "experimental": {
+    "location_idle_timeout": false,
+  },
+}
+```
+
+### السياسات المتوقفة
+
+`experimental.policies` متوقف. استخدم [`policies`](/policies) في الأعلى بدلًا منه. ويعمل المفتاح القديم
+لكنه يُدمج في `policies`.
