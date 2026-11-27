@@ -1175,8 +1175,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "አዲስ የጊዜ መስመር",
   "settings.experimental.row.newTimeline.description":
     "ወኪሉ ያደረገውን የሚያቧድን፣ ከዙሩ በታች አንድ የሁኔታ መስመር ያለው በአዲስ መልክ የተነደፈ የክፍለ ጊዜ የጊዜ መስመር",
-  "settings.experimental.row.newQuestionUI.title": "አዲስ የጥያቄ UI",
-  "settings.experimental.row.newQuestionUI.description": "በቁልፍ ሰሌዳ ላይ ያተኮረውን የጥያቄ ፓነል ቅድመ እይታ ይመልከቱ",
   "settings.experimental.row.sidebarOrganize.title": "ቁመታዊ የጎን አሞሌን አደራጅ",
   "settings.experimental.row.sidebarOrganize.description": "ክፍለ ጊዜዎች በጎን አሞሌው ውስጥ እንዴት እንደሚዘረዘሩ ይምረጡ። ለጎን ትሮች ብቻ ይሠራል።",
   "settings.experimental.sidebarOrganize.recent": "የቅርብ ጊዜ",

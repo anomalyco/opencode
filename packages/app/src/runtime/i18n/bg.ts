@@ -1241,9 +1241,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Нова хронология",
   "settings.experimental.row.newTimeline.description":
     "Преработена хронология на сесията, която групира действията на агента, с един ред за състояние под хода",
-  "settings.experimental.row.newQuestionUI.title": "Нов интерфейс за въпроси",
-  "settings.experimental.row.newQuestionUI.description":
-    "Предварителен преглед на панела за въпроси, управляван от клавиатурата",
   "settings.experimental.row.sidebarOrganize.title": "Организиране на вертикалната странична лента",
   "settings.experimental.row.sidebarOrganize.description":
     "Изберете как да се изброяват сесиите в страничната лента. Важи само за страничните раздели.",

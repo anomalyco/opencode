@@ -1,6 +1,7 @@
 import { activeQuestionRequest, questionPendingDocument } from "@opencode/session-ui/storybook"
+import type { FormInfo } from "@opencode/client/promise"
 import { SessionPreview } from "./story-model"
-import { SettingsExperimental } from "@/settings/experimental/experimental"
+import { SessionQuestionDockClassic } from "./requests/session-question-dock-classic"
 
 export default {
   title: "OpenCode/Session/Question switch",
@@ -8,25 +9,115 @@ export default {
   component: SessionPreview,
   parameters: {
     layout: "fullscreen",
-    // The components lab shows these Knobs and their replay buttons in its inspector.
-    motion: ["Question"],
     docs: {
       description: {
         component:
-          "Compare the original question cards with the New question UI experiment. With the experiment enabled, step through questions with ← and →. Its motion is off until Question dock motion is turned on under Knobs → Timeline → Question.",
+          "The question dock in its classic form and in the New question UI experiment, which answers from the composer.",
       },
     },
   },
 }
 
-export const Experiments = {
+// Questions of different lengths, with and without answer descriptions, ending in a text-only one.
+const composerAnswerRequest = {
+  ...activeQuestionRequest,
+  fields: [
+    ...activeQuestionRequest.fields,
+    {
+      key: "open",
+      type: "string",
+      title: "Open automatically",
+      description: "Open it automatically?",
+      options: [
+        { value: "manual", label: "Only when I ask" },
+        { value: "ready", label: "When changes are ready", description: "Open it after a session edits files." },
+      ],
+      custom: true,
+    },
+    {
+      key: "narrow",
+      type: "string",
+      title: "Small windows",
+      description:
+        "On a small window, the review panel competes with the transcript and the file tree for space. People may be reading a long diff, checking the session’s explanation, or jumping between files. How should the panel behave when there isn’t room to keep all three surfaces visible at once?",
+      options: [
+        {
+          value: "overlay",
+          label: "Open review over the transcript",
+          description: "Keep the file tree visible so people can move between changed files without leaving review.",
+        },
+        {
+          value: "replace",
+          label: "Replace both the transcript and the file tree with a full-width review",
+          description:
+            "Give the diff the whole window. Back returns to the same transcript position and restores the file tree exactly as it was.",
+        },
+        { value: "collapse", label: "Collapse the file tree" },
+      ],
+      custom: true,
+    },
+    {
+      key: "filters",
+      type: "multiselect",
+      title: "Review filters",
+      description: "Which filters should be available in the review panel?",
+      options: [
+        { value: "staged", label: "Staged changes", description: "Show what will go into the next commit." },
+        { value: "unstaged", label: "Unstaged changes" },
+        { value: "added", label: "New files" },
+        { value: "deleted", label: "Deleted files" },
+        { value: "renamed", label: "Renamed files" },
+        {
+          value: "generated",
+          label: "Generated files and lockfiles",
+          description: "Review these separately from hand-written changes.",
+        },
+        { value: "tests", label: "Test files" },
+        { value: "docs", label: "Documentation" },
+        { value: "unread", label: "Files I haven’t reviewed yet" },
+        { value: "commented", label: "Files with unresolved comments" },
+      ],
+    },
+    {
+      key: "empty",
+      type: "string",
+      title: "Empty state",
+      description: "What should the panel say when there’s nothing to review?",
+      custom: true,
+    },
+  ],
+} satisfies FormInfo
+
+export const ComposerAnswer = {
+  name: "New question UI",
+  globals: { theme: "dark" },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Focus stays in the composer: ↑ and ↓ highlight an answer, Space or its number marks it, and typing writes a custom answer. Answering or dismissing restores the chat draft. Use Reset to try again.",
+      },
+    },
+  },
   render: () => (
     <SessionPreview
-      title="Choose a Session layout"
-      description="opencode · question UI experiments"
+      title="Add the Session review panel"
+      description="opencode · question composer"
       document={questionPendingDocument}
-      request={{ type: "question", value: activeQuestionRequest }}
-      side={<SettingsExperimental />}
+      draft="Keep the review panel compact on smaller screens."
+      composerPreview={(finish) => (
+        <SessionQuestionDockClassic
+          request={composerAnswerRequest}
+          composer
+          respond={(action) =>
+            finish(
+              action.type === "reply"
+                ? `Answered locally: ${JSON.stringify(action.answer)}`
+                : "Dismissed the question locally",
+            )
+          }
+        />
+      )}
     />
   ),
 }

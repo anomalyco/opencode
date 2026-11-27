@@ -1260,8 +1260,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Jauna laika skala",
   "settings.experimental.row.newTimeline.description":
     "Pārveidota sesijas laika skala, kas grupē aģenta paveikto, ar vienu statusa rindu zem gājiena",
-  "settings.experimental.row.newQuestionUI.title": "Jauna jautājumu saskarne",
-  "settings.experimental.row.newQuestionUI.description": "Priekšskatīt uz tastatūru orientētu jautājumu paneli",
   "settings.experimental.row.sidebarOrganize.title": "Kārtot vertikālo sānjoslu",
   "settings.experimental.row.sidebarOrganize.description":
     "Izvēlieties, kā sesijas tiek uzskaitītas sānjoslā. Attiecas tikai uz sānu cilnēm.",

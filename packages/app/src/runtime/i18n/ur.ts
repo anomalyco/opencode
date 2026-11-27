@@ -1242,8 +1242,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "نئی ٹائم لائن",
   "settings.experimental.row.newTimeline.description":
     "سیشن کی نئے انداز کی ٹائم لائن جو ایجنٹ کے کیے گئے کاموں کو گروپ کرتی ہے، اور باری کے نیچے ایک اسٹیٹس لائن دکھاتی ہے",
-  "settings.experimental.row.newQuestionUI.title": "سوالات کا نیا UI",
-  "settings.experimental.row.newQuestionUI.description": "کی بورڈ پر مبنی سوالات کے پینل کا پیش منظر دیکھیں",
   "settings.experimental.row.sidebarOrganize.title": "عمودی سائیڈ بار ترتیب دیں",
   "settings.experimental.row.sidebarOrganize.description":
     "منتخب کریں کہ سائیڈ بار میں سیشنز کیسے دکھائے جائیں۔ صرف سائیڈ ٹیبز پر لاگو ہوتا ہے۔",

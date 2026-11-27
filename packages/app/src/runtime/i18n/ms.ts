@@ -1232,8 +1232,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Garis masa baharu",
   "settings.experimental.row.newTimeline.description":
     "Garis masa sesi yang direka semula yang mengumpulkan perkara yang dilakukan ejen, dengan satu baris status di bawah giliran",
-  "settings.experimental.row.newQuestionUI.title": "UI soalan baharu",
-  "settings.experimental.row.newQuestionUI.description": "Pratonton dok soalan yang mengutamakan papan kekunci",
   "settings.experimental.row.sidebarOrganize.title": "Susun bar sisi menegak",
   "settings.experimental.row.sidebarOrganize.description":
     "Pilih cara sesi disenaraikan dalam bar sisi. Hanya terpakai pada tab sisi.",

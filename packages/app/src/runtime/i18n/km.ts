@@ -1218,8 +1218,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "បន្ទាត់ពេលវេលាថ្មី",
   "settings.experimental.row.newTimeline.description":
     "បន្ទាត់ពេលវេលាសម័យដែលបានរចនាឡើងវិញ ដែលដាក់ជាក្រុមនូវអ្វីដែលភ្នាក់ងារបានធ្វើ ជាមួយបន្ទាត់ស្ថានភាពមួយនៅខាងក្រោមវេន",
-  "settings.experimental.row.newQuestionUI.title": "UI សំណួរថ្មី",
-  "settings.experimental.row.newQuestionUI.description": "មើលផ្ទាំងសំណួរដែលផ្តោតលើក្តារចុចជាមុន",
   "settings.experimental.row.sidebarOrganize.title": "រៀបចំរបារចំហៀងបញ្ឈរ",
   "settings.experimental.row.sidebarOrganize.description":
     "ជ្រើសរបៀបរាយបញ្ជីសម័យក្នុងរបារចំហៀង។ អនុវត្តចំពោះផ្ទាំងចំហៀងតែប៉ុណ្ណោះ។",

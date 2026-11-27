@@ -1619,8 +1619,7 @@
   scroll-margin-top: var(--sticky-accordion-top, 0px);
 }
 
-[data-component="dock-prompt"][data-kind="permission"],
-[data-component="dock-prompt"][data-variant="experimental"] {
+[data-component="dock-prompt"][data-kind="permission"] {
   position: relative;
   display: flex;
   flex-direction: column;

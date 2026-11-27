@@ -1274,8 +1274,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Nova linha do tempo",
   "settings.experimental.row.newTimeline.description":
     "Uma linha do tempo da sessão redesenhada que agrupa o que o agente fez, com uma única linha de status abaixo do turno",
-  "settings.experimental.row.newQuestionUI.title": "Nova interface de perguntas",
-  "settings.experimental.row.newQuestionUI.description": "Visualizar o painel de perguntas focado no teclado",
   "settings.experimental.row.sidebarOrganize.title": "Organizar barra lateral vertical",
   "settings.experimental.row.sidebarOrganize.description":
     "Escolha como as sessões são listadas na barra lateral. Aplica-se apenas às abas laterais.",

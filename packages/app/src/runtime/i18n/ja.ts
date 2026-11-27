@@ -1240,8 +1240,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "新しいタイムライン",
   "settings.experimental.row.newTimeline.description":
     "エージェントの作業をグループ化し、ターンの下に1行のステータスを表示する、再設計されたセッションタイムライン",
-  "settings.experimental.row.newQuestionUI.title": "新しい質問UI",
-  "settings.experimental.row.newQuestionUI.description": "キーボード操作を重視した質問ドックをプレビュー",
   "settings.experimental.row.sidebarOrganize.title": "縦型サイドバーの整理",
   "settings.experimental.row.sidebarOrganize.description":
     "サイドバーでのセッションの表示方法を選択します。サイドタブでのみ適用されます。",

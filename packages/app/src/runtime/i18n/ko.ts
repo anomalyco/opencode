@@ -1227,8 +1227,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "새 타임라인",
   "settings.experimental.row.newTimeline.description":
     "에이전트가 한 일을 그룹으로 묶고 턴 아래에 상태 줄 하나를 표시하는 새로 디자인된 세션 타임라인",
-  "settings.experimental.row.newQuestionUI.title": "새 질문 UI",
-  "settings.experimental.row.newQuestionUI.description": "키보드 중심의 질문 도크 미리 보기",
   "settings.experimental.row.sidebarOrganize.title": "세로 사이드바 정리",
   "settings.experimental.row.sidebarOrganize.description":
     "사이드바에 세션을 나열하는 방식을 선택하세요. 사이드 탭에만 적용됩니다.",

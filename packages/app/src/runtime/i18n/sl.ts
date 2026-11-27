@@ -1273,8 +1273,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Nova časovnica",
   "settings.experimental.row.newTimeline.description":
     "Prenovljena časovnica seje, ki združi, kaj je agent naredil, z eno vrstico stanja pod korakom",
-  "settings.experimental.row.newQuestionUI.title": "Nov vmesnik za vprašanja",
-  "settings.experimental.row.newQuestionUI.description": "Predogled podokna za vprašanja, prilagojenega tipkovnici",
   "settings.experimental.row.sidebarOrganize.title": "Organiziraj navpično stransko vrstico",
   "settings.experimental.row.sidebarOrganize.description":
     "Izberite, kako so seje navedene v stranski vrstici. Velja samo za stranske zavihke.",

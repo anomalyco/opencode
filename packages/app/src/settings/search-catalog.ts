@@ -160,13 +160,18 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     description: "settings.experimental.row.automations.description",
     keywords: "automations schedules timers cron watches events",
   },
-  {
-    tab: "experimental",
-    label: "settings.experimental.row.newQuestionUI.title",
-    target: "settings-new-question-ui",
-    description: "settings.experimental.row.newQuestionUI.description",
-    keywords: "question answers keyboard dock redesign",
-  },
+  // Matches questionComposerAvailable in settings/model.tsx; that module is too heavy to import here.
+  ...(import.meta.env.VITE_OPENCODE_CHANNEL === "local" || import.meta.env.VITE_OPENCODE_CHANNEL === "dev"
+    ? [
+        {
+          tab: "experimental",
+          label: "settings.experimental.row.questionComposer.title",
+          target: "settings-question-composer",
+          description: "settings.experimental.row.questionComposer.description",
+          keywords: "question answers keyboard dock composer custom answer",
+        } satisfies Entry<SettingsRootTab>,
+      ]
+    : []),
   {
     tab: "experimental",
     label: "settings.experimental.row.tabGroups.title",

@@ -1269,8 +1269,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "އާ ޓައިމްލައިން",
   "settings.experimental.row.newTimeline.description":
     "އޭޖެންޓް ކުރި ކަންތައްތައް ގްރޫޕްކޮށް، ޓަރނުގެ ތިރީގައި އެއް ސްޓޭޓަސް ލައިން ދައްކާ އަލުން ޑިޒައިންކުރި ސެޝަން ޓައިމްލައިން",
-  "settings.experimental.row.newQuestionUI.title": "އާ ސުވާލު UI",
-  "settings.experimental.row.newQuestionUI.description": "ކީބޯޑަށް އިސްކަންދޭ ސުވާލު ޑޮކް ޕްރިވިއު ކުރާ",
   "settings.experimental.row.sidebarOrganize.title": "ވަރޓިކަލް ސައިޑްބާރ ތަރުތީބުކުރާ",
   "settings.experimental.row.sidebarOrganize.description":
     "ސައިޑްބާރުގައި ސެޝަންތައް ލިސްޓްކުރާނެ ގޮތް ހޮވާށެވެ. ފަރާތުގެ ޓެބްތަކަށް އެކަނި ފުދޭ.",

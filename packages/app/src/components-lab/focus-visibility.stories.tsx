@@ -573,7 +573,7 @@ const surfaces: Surface[] = [
         target: '[data-slot="question-progress-segment"]',
         keys: "Open a multi-question prompt, Tab to the progress segments.",
         sizing: "Any width. Segments sit 2px apart.",
-        source: "session-ui/src/components/question-prompt.css, question-prompt-experimental.css",
+        source: "session-ui/src/components/question-prompt.css",
         fix: "Was 2px at a 1px offset, which overlapped the neighbouring segment. Now inset (-2px), inside the segment.",
         render: () => (
           <div data-component="dock-prompt" data-kind="question" style={{ width: "240px" }}>

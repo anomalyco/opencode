@@ -1216,8 +1216,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Uus ajaskaala",
   "settings.experimental.row.newTimeline.description":
     "Ümber kujundatud seansi ajaskaala, mis rühmitab agendi tegevused ja näitab vooru all üht olekurida",
-  "settings.experimental.row.newQuestionUI.title": "Uus küsimuste liides",
-  "settings.experimental.row.newQuestionUI.description": "Vaata klaviatuurikeskse küsimuste doki eelvaadet",
   "settings.experimental.row.sidebarOrganize.title": "Korrasta vertikaalset külgriba",
   "settings.experimental.row.sidebarOrganize.description":
     "Vali, kuidas seansse külgribal loetletakse. Kehtib ainult külgvahekaartidele.",

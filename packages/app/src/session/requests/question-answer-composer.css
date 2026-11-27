@@ -1,0 +1,165 @@
+/* The question dock that answers from the composer: preset answers in a card, the custom answer and actions below. */
+[data-component="session-question-dock"][data-composer] > [data-component="dock-prompt"][data-kind="question"] {
+  gap: 8px;
+
+  [data-slot="question-body"] {
+    gap: 4px;
+    /* Match the composer's border so both 16px insets line up. */
+    border-inline-start: 0.5px solid transparent;
+    padding-block: 12px 10px;
+    padding-inline-start: 16px;
+
+    &:not(:has([data-slot="question-option"]:first-child [data-slot="option-description"])) {
+      gap: 0;
+    }
+  }
+
+  [data-slot="question-header"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+  }
+
+  [data-slot="question-header-top"] {
+    grid-area: 1 / 2;
+    align-self: start;
+  }
+
+  /* The question's first line sits centred on the 28px header buttons. */
+  [data-slot="question-details"] {
+    grid-area: 1 / 1;
+    align-self: start;
+    padding-block-start: calc((28px - var(--line-height-compact)) / 2);
+  }
+
+  [data-slot="question-options"] {
+    --option-inset: 6px;
+    --option-gap: 10px;
+    --option-row-gap: 1px;
+
+    gap: var(--option-row-gap);
+    margin: 0;
+    margin-inline: calc(-1 * var(--option-inset)) -2px;
+    padding: 0;
+  }
+
+  /* 7px + 20px label + 2px gap + 16px description + 7px = 52px. Without a description, 34px keeps the same 9px above
+     the box. */
+  [data-slot="question-option"] {
+    gap: var(--option-gap);
+    min-block-size: 34px;
+    padding: 6px var(--option-inset);
+
+    &,
+    &[data-picked="true"] {
+      box-shadow: none;
+    }
+
+    &:has([data-slot="option-description"]) {
+      padding-block: 7px;
+    }
+
+    &:not(:has([data-slot="option-description"])) {
+      align-items: center;
+    }
+
+    [data-slot="question-option-main"] {
+      gap: 2px;
+    }
+  }
+
+  /* The gap between rows belongs to the row below, so the pointer never falls between two answers. */
+  [data-slot="question-option"] + [data-slot="question-option"]::after {
+    content: "";
+    position: absolute;
+    inset-block-start: calc(-1 * var(--option-row-gap));
+    inset-inline: 0;
+    block-size: var(--option-row-gap);
+  }
+
+  [data-slot="option-description"] {
+    text-wrap: balance;
+  }
+
+  [data-slot="question-option-box"][data-picked="false"] {
+    background-color: var(--v2-background-bg-layer-01);
+  }
+
+  [data-slot="question-option-shortcut"] {
+    /* Center the number beneath Dismiss while retaining the answer inset. */
+    inline-size: 20px;
+    justify-content: center;
+  }
+
+  [data-slot="question-options"][data-browsing] [data-slot="question-option"]:not([data-picked="true"]) {
+    background-color: var(--v2-background-bg-base);
+  }
+
+  [data-slot="question-option"][data-active]::before {
+    background-color: var(--v2-background-bg-layer-01);
+    opacity: 1;
+  }
+
+  [data-slot="question-option"][data-active][data-picked="true"]::before {
+    background-color: var(--v2-question-answer-bg-selected);
+    background-image: linear-gradient(var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover));
+  }
+
+  @media (forced-colors: active) {
+    [data-slot="question-option"][data-active] {
+      forced-color-adjust: none;
+
+      &::before {
+        background: Highlight;
+      }
+
+      :is([data-slot="option-label"], [data-slot="option-description"]) {
+        color: HighlightText;
+      }
+
+      :is([data-slot="question-option-check"], [data-slot="question-option-shortcut"]) {
+        forced-color-adjust: auto;
+      }
+    }
+  }
+
+  /* Adjacent picked answers read as one group: only its outer corners round. */
+  [data-slot="question-option"][data-picked="true"]:has(+ [data-slot="question-option"][data-picked="true"])::before {
+    border-end-start-radius: 0;
+    border-end-end-radius: 0;
+  }
+
+  [data-slot="question-option"][data-picked="true"] + [data-slot="question-option"][data-picked="true"]::before {
+    border-start-start-radius: 0;
+    border-start-end-radius: 0;
+  }
+
+  [data-slot="question-footer"] {
+    border-radius: var(--radius-xl);
+    box-shadow: var(--v2-elevation-raised);
+    margin-block-start: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: end;
+    gap: 4px;
+    padding: 8px;
+
+    &:focus-within {
+      border-color: var(--v2-border-border-strong);
+    }
+  }
+
+  [data-slot="question-custom-input"] {
+    flex: 1 1 12rem;
+    inline-size: auto;
+    min-inline-size: 0;
+    min-block-size: 28px;
+    padding: 4px 0;
+    padding-inline-start: 8px;
+    line-height: var(--line-height-base);
+
+    &::placeholder {
+      color: var(--v2-text-text-faint);
+    }
+  }
+}

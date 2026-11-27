@@ -1231,8 +1231,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "නව කාලරේඛාව",
   "settings.experimental.row.newTimeline.description":
     "නියෝජිතයා කළ දේ සමූහගත කරන, වාරයට පහළින් එක් තත්ත්ව පේළියක් සහිත නැවත සැලසුම් කළ සැසි කාලරේඛාවක්",
-  "settings.experimental.row.newQuestionUI.title": "නව ප්‍රශ්න UI",
-  "settings.experimental.row.newQuestionUI.description": "යතුරුපුවරුව-මූලික ප්‍රශ්න ඩොක් එක පෙරදසුන් කරන්න",
   "settings.experimental.row.sidebarOrganize.title": "සිරස් පැති තීරුව සංවිධානය කරන්න",
   "settings.experimental.row.sidebarOrganize.description":
     "පැති තීරුවේ සැසි ලැයිස්තුගත කරන ආකාරය තෝරන්න. පැති ටැබ් සඳහා පමණක් අදාළ වේ.",

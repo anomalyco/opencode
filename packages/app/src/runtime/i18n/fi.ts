@@ -1228,8 +1228,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Uusi aikajana",
   "settings.experimental.row.newTimeline.description":
     "Uudistettu istunnon aikajana, joka ryhmittelee agentin toimet ja näyttää yhden tilarivin vuoron alla",
-  "settings.experimental.row.newQuestionUI.title": "Uusi kysymysnäkymä",
-  "settings.experimental.row.newQuestionUI.description": "Esikatsele näppäimistökeskeistä kysymyspaneelia",
   "settings.experimental.row.sidebarOrganize.title": "Järjestä pystysivupalkki",
   "settings.experimental.row.sidebarOrganize.description":
     "Valitse, miten istunnot luetellaan sivupalkissa. Koskee vain sivuvälilehtiä.",

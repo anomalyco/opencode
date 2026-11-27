@@ -1319,8 +1319,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Nueva cronología",
   "settings.experimental.row.newTimeline.description":
     "Una cronología de sesión rediseñada que agrupa lo que hizo el agente, con una línea de estado bajo el turno",
-  "settings.experimental.row.newQuestionUI.title": "Nueva interfaz de preguntas",
-  "settings.experimental.row.newQuestionUI.description": "Prueba el panel de preguntas pensado para el teclado",
   "settings.experimental.row.sidebarOrganize.title": "Organizar la barra lateral vertical",
   "settings.experimental.row.sidebarOrganize.description":
     "Elige cómo se listan las sesiones en la barra lateral. Solo se aplica a las pestañas laterales.",

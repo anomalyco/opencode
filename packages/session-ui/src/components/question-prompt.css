@@ -1,4 +1,4 @@
-[data-component="dock-prompt"][data-kind="question"]:not([data-variant="experimental"]) {
+[data-component="dock-prompt"][data-kind="question"] {
   --v2-question-answer-bg-selected: var(--v2-background-bg-layer-02);
   --question-feedback-duration: 120ms;
 

@@ -1242,8 +1242,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Yangi vaqt jadvali",
   "settings.experimental.row.newTimeline.description":
     "Agent bajargan ishlarni guruhlaydigan, qadam ostida bitta holat qatori bo‘lgan qayta ishlangan sessiya vaqt jadvali",
-  "settings.experimental.row.newQuestionUI.title": "Yangi savol interfeysi",
-  "settings.experimental.row.newQuestionUI.description": "Klaviaturaga yo‘naltirilgan savol panelini sinab ko‘ring",
   "settings.experimental.row.sidebarOrganize.title": "Vertikal yon panelni tartiblash",
   "settings.experimental.row.sidebarOrganize.description":
     "Sessiyalar yon panelda qanday ro‘yxatlanishini tanlang. Faqat yon varaqlarga taalluqli.",

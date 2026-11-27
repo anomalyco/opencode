@@ -1235,8 +1235,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "新時間軸",
   "settings.experimental.row.newTimeline.description":
     "重新設計的工作階段時間軸，會將代理程式的動作分組，並在每一輪下方顯示一行狀態",
-  "settings.experimental.row.newQuestionUI.title": "新問題介面",
-  "settings.experimental.row.newQuestionUI.description": "預覽以鍵盤為主的問題面板",
   "settings.experimental.row.sidebarOrganize.title": "整理垂直側邊欄",
   "settings.experimental.row.sidebarOrganize.description": "選擇工作階段在側邊欄中的列出方式。僅適用於側邊分頁。",
   "settings.experimental.sidebarOrganize.recent": "最近",

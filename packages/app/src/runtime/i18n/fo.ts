@@ -1223,9 +1223,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Nýggj tíðarlinja",
   "settings.experimental.row.newTimeline.description":
     "Ein umskipað setutíðarlinja, sum bólkar tað, agenturin gjørdi, við einari støðulinju undir umfarinum",
-  "settings.experimental.row.newQuestionUI.title": "Nýtt spurningaviðmót",
-  "settings.experimental.row.newQuestionUI.description":
-    "Forskoða spurningaviðmótið, sum fyrst og fremst verður stýrt við knappaborðinum",
   "settings.experimental.row.sidebarOrganize.title": "Skipa loddrættu síðulinjuna",
   "settings.experimental.row.sidebarOrganize.description":
     "Vel hvussu setur verða listaðar í síðulinjuni. Er bert galdandi fyri síðuflipar.",
