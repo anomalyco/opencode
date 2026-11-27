@@ -63,6 +63,35 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("replaces characters providers reject in replayed names of undeclared tool calls", () =>
+    Effect.gen(function* () {
+      const invented = ToolCallPart.make({ id: "call_1", name: "opencode.session.search", input: {} })
+      const declared = ToolCallPart.make({ id: "call_2", name: "weather.get", input: {} })
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          tools: [
+            ToolDefinition.make({ name: "weather.get", description: "Weather", inputSchema: { type: "object" } }),
+          ],
+          messages: [
+            Message.assistant([invented, declared]),
+            Message.tool({ id: invented.id, name: invented.name, result: "unknown tool", resultType: "error" }),
+            Message.tool({ id: declared.id, name: declared.name, result: "sunny", resultType: "text" }),
+          ],
+        }),
+      )
+
+      // A declared name stays as declared, for providers that accept it.
+      expect(prepared.body.messages[0]).toMatchObject({
+        role: "assistant",
+        tool_calls: [
+          { id: "call_1", function: { name: "opencode_session_search" } },
+          { id: "call_2", function: { name: "weather.get" } },
+        ],
+      })
+    }),
+  )
+
   it.effect("omits stream usage options when compatibility disables them", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -1244,6 +1273,85 @@ describe("OpenAI Chat route", () => {
         const replay = yield* compileRequest(ai.request({ model, messages: [response.message] }))
         expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", [field]: "thinking" }])
       }
+    }),
+  )
+
+  // A mid-session model switch can keep the same provider metadata key while the new model reads reasoning from a
+  // declared field of its own; details replayed from the earlier model are refused by some endpoints.
+  it.effect("does not replay reasoning details when the model declares another reasoning field", () =>
+    Effect.gen(function* () {
+      const details = [
+        { type: "reasoning.text", text: "thinking", signature: "signed", format: "anthropic-claude-v1", index: 0 },
+      ]
+      const replay = yield* compileRequest(
+        ai.request({
+          model: LanguageModel.update(model, { compatibility: { reasoningField: "reasoning_content" } }),
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "thinking",
+                providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+              },
+              { type: "text", text: "Hello" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_content: "thinking" }])
+    }),
+  )
+
+  it.effect("keeps replayed reasoning details when the model declares reasoning_details", () =>
+    Effect.gen(function* () {
+      const details = [
+        { type: "reasoning.text", text: "thinking", signature: "signed", format: "anthropic-claude-v1", index: 0 },
+      ]
+      const replay = yield* compileRequest(
+        ai.request({
+          model: LanguageModel.update(model, { compatibility: { reasoningField: "reasoning_details" } }),
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "thinking",
+                providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+              },
+              { type: "text", text: "Hello" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_details: details }])
+    }),
+  )
+
+  it.effect("keeps replayed reasoning details when the model declares no reasoning field", () =>
+    Effect.gen(function* () {
+      const details = [
+        { type: "reasoning.text", text: "thinking", signature: "signed", format: "anthropic-claude-v1", index: 0 },
+      ]
+      const replay = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "thinking",
+                providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+              },
+              { type: "text", text: "Hello" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(replay.body.messages).toEqual([
+        { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: details },
+      ])
     }),
   )
 

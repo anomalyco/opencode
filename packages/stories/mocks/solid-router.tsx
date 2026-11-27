@@ -68,6 +68,20 @@ export function useNavigate() {
   }
 }
 
+export function Navigate(props: {
+  href:
+    | string
+    | ((args: { navigate: ReturnType<typeof useNavigate>; location: ReturnType<typeof useLocation> }) => string)
+  state?: unknown
+}) {
+  const navigate = useNavigate()
+
+  const path = typeof props.href === "function" ? props.href({ navigate, location: useLocation() }) : props.href
+
+  navigate(path, { replace: true, state: props.state })
+  return null
+}
+
 export function useSearchParams<T extends Record<string, string>>() {
   const ctx = useContext(RouterContext)
 

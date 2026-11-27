@@ -11,10 +11,29 @@ import {
   type MediaUsage,
   type ProviderMetadata,
 } from "../../schema/index.js"
-import { ProviderShared } from "../shared.js"
+import { knownString, ProviderShared } from "../shared.js"
 import { MediaInput } from "./media-input.js"
 
 const PROVIDER = ProviderID.make("google")
+
+export const SafetySetting = Schema.Struct({
+  category: knownString<
+    | "HARM_CATEGORY_UNSPECIFIED"
+    | "HARM_CATEGORY_HATE_SPEECH"
+    | "HARM_CATEGORY_DANGEROUS_CONTENT"
+    | "HARM_CATEGORY_HARASSMENT"
+    | "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+    | "HARM_CATEGORY_CIVIC_INTEGRITY"
+  >(),
+  threshold: knownString<
+    | "HARM_BLOCK_THRESHOLD_UNSPECIFIED"
+    | "BLOCK_LOW_AND_ABOVE"
+    | "BLOCK_MEDIUM_AND_ABOVE"
+    | "BLOCK_ONLY_HIGH"
+    | "BLOCK_NONE"
+    | "OFF"
+  >(),
+})
 
 const UsageMetadata = Schema.Struct({
   promptTokenCount: Schema.optional(Schema.Number),

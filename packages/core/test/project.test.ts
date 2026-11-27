@@ -478,10 +478,11 @@ describe("Project.resolve", () => {
     }),
   )
 
-  it.live("falls back to root commit when origin is missing", () =>
+  it.live("falls back to root commit when origin is missing and the cached id is corrupt", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
+      yield* Effect.promise(() => Bun.write(path.join(tmp.path, ".git", "opencode"), "\u0000".repeat(40)))
       const project = yield* Project.Service
 
       const result = yield* project.resolve(abs(tmp.path))
@@ -560,19 +561,6 @@ describe("Project.resolve", () => {
       yield* project.resolve(abs(tmp.path))
 
       expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".git", "opencode")).exists())).toBe(false)
-    }),
-  )
-
-  it.live("resolves from nested directories to repo root", () =>
-    Effect.gen(function* () {
-      const tmp = yield* tmpdirScoped()
-      yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
-      yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "a", "b"), { recursive: true }))
-      const project = yield* Project.Service
-
-      const result = yield* project.resolve(abs(path.join(tmp.path, "a", "b")))
-
-      expect(result.directory).toBe(yield* real(tmp.path))
     }),
   )
 

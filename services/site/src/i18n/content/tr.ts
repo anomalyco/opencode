@@ -44,11 +44,6 @@ export const content = {
       body: "OpenCode'u kendi betiklerinizden, CI işlerinizden ve araçlarınızdan yönetin.",
       action: "Dokümanlar",
     },
-    ide: {
-      name: "IDE eklentileri",
-      body: "OpenCode'u VS Code, Cursor ve Windsurf'te ya da ACP ile Zed ve JetBrains IDE'lerinde açın.",
-      action: "Kur",
-    },
     mini: {
       name: "Mini",
       body: "Minimal bir terminal arayüzü. Yanıtlar kaydırma geçmişinize yazılır, altta tek bir prompt kalır.",
@@ -258,47 +253,6 @@ export const content = {
         },
       },
     },
-    ide: {
-      title: "OpenCode | VS Code, Cursor ve Zed için editör entegrasyonları",
-      description:
-        "OpenCode'u editörünüzde kullanın. VS Code, Cursor, Windsurf ve VSCodium için eklenti, Zed, JetBrains IDE'leri ve diğer ACP editörleri için opencode acp.",
-      intro:
-        "OpenCode'u editörünüzün içinde kullanın. VS Code, Cursor, Windsurf ve VSCodium'da entegre terminalde opencode çalıştırın, eklenti kendini kursun. Zed, JetBrains IDE'leri ve Agent Client Protocol destekleyen diğer editörler OpenCode'u opencode acp ile çalıştırır.",
-      features: {
-        "quick-launch": {
-          title: "Hızlı açılış",
-          body: "Cmd+Esc ya da Ctrl+Esc, OpenCode'u bölünmüş bir terminalde açar.",
-        },
-        "new-session": {
-          title: "Yeni oturum",
-          body: "Cmd+Shift+Esc ya da Ctrl+Shift+Esc yeni bir oturum başlatır.",
-        },
-        context: {
-          title: "Bağlam",
-          body: "Geçerli seçiminizi ya da sekmenizi OpenCode ile paylaşır.",
-        },
-        "file-references": {
-          title: "Dosya referansı",
-          body: "Cmd+Option+K ya da Alt+Ctrl+K, @File#L37-42 ekler.",
-        },
-        "installs-itself": {
-          title: "Kendini kurar",
-          body: "Eklemek için entegre terminalde opencode çalıştırın.",
-        },
-        "acp-editors": {
-          title: "ACP editörleri",
-          body: "Zed, JetBrains IDE'leri, Avante.nvim ve CodeCompanion.nvim.",
-        },
-        "open-vsx": {
-          title: "Open VSX",
-          body: "Cursor, Windsurf ve VSCodium için Open VSX'te de var.",
-        },
-        "same-agent": {
-          title: "Aynı ajan",
-          body: "Terminalde çalıştırdığınız OpenCode, kodunuzun yanında.",
-        },
-      },
-    },
     mini: {
       title: "OpenCode | Mini, ajan için minimal bir terminal arayüzü",
       description:
@@ -352,9 +306,9 @@ export const content = {
       body: "Ajanlar gerçek tarayıcınızı kullansın.",
       title: "OpenCode | Browse, kodlama ajanları için gerçek tarayıcınız",
       description:
-        "Browse, OpenCode'un ve diğer MCP istemcilerinin gerçek tarayıcınızı kullanmasını sağlar. Ajanlar arka plan sekmelerini Playwright ile yönetir, girişleri ve 2FA'yı size bırakır.",
+        "Browse, OpenCode'un ve diğer MCP istemcilerinin gerçek tarayıcınızı kullanmasını sağlar. Ajanlar okur, tıklar, yazar, ekran görüntüsü alır, sekme kaydeder ve girişleri ve 2FA'yı size bırakır.",
       intro:
-        "Ajanlarınızın gerçek tarayıcınızı, yani sekmelerinizi, oturum açmış hesaplarınızı ve eklentilerinizi kullanmasını sağlayan bir MCP sunucusu ve bir Chromium eklentisi. Sekmeleri Playwright ile açıp yönetir, ekran görüntüsü alır ve ekranı kaydederler. Bunu yolunuza çıkmayan, gruplanmış arka plan sekmelerinde yaparlar. Sıra size geldiğinde, örneğin bir giriş, 2FA istemi ya da ödeme için, sekmeyi size verirler ve siz Continue'ya tıklayınca devam ederler.",
+        "Ajanlarınızın gerçek tarayıcınızı, yani sekmelerinizi, oturum açmış hesaplarınızı ve eklentilerinizi kullanmasını sağlayan bir MCP sunucusu ve bir Chromium eklentisi. Sekmeleri arka planda, yolunuzdan uzakta gruplanmış olarak açarlar; sayfaları okur, tıklar, yazar, ekran görüntüsü alır ve sekme kaydederler. Sıra size geldiğinde, örneğin bir giriş, 2FA istemi ya da ödeme için, sekmeyi size verirler ve siz Continue'ya tıklayınca devam ederler.",
       features: {
         "your-real-browser": {
           title: "Gerçek tarayıcınız",
@@ -374,7 +328,7 @@ export const content = {
         },
         "record-and-capture": {
           title: "Kaydet ve yakala",
-          body: "Ekran görüntüleri, ekran kayıtları ve HAR olarak ağ trafiği.",
+          body: "Ekran görüntüleri, sekme kayıtları ve ağ trafiği.",
         },
         "any-mcp-client": {
           title: "Her MCP istemcisi",
@@ -384,9 +338,9 @@ export const content = {
           title: "Tüm oturum açmalarınız",
           body: "Ajanlar zaten oturum açtığınız siteleri kullanır. Anahtar yok, kurulum yok.",
         },
-        allowlists: {
-          title: "İzin listeleri",
-          body: "Bir oturumun sekmelerini belirttiğiniz sitelerle sınırlayın.",
+        "allowed-sites": {
+          title: "İzin verilen siteler",
+          body: "Bir ajanın sekmesini belirttiğiniz sitelerde tutun.",
         },
       },
       install:
@@ -554,7 +508,7 @@ export const content = {
     },
     colors: {
       title: "Renkler",
-      body: "Logo ve yazı logosu tek bir mürekkebi üç opaklıkta kullanır, koyu arka planlar için daha açık bir mürekkep vardır. Aşağıdaki değerler, standart dosyalardaki gibi bu mürekkebin beyaz ya da #0B0B0B üzerindeki hâlidir. Kopyalamak için bir değere tıklayın.",
+      body: "Logo ve yazı logosu tek bir mürekkebi üç opaklıkta kullanır, koyu arka planlar için daha açık bir mürekkep vardır. Aşağıdaki değerler standart dosyalardaki renklerdir. Bunları yalnızca logo ve yazı logosu için kullanın; diğer metinlerde veya arka planlarda kullanmayın. Kopyalamak için bir değere tıklayın.",
       palettes: {
         light: {
           name: "Açık",
@@ -726,7 +680,7 @@ export const content = {
       badges: {
         body: "README'nize, dokümanlarınıza ya da sitenize bir rozet koyun ve opencode.ai'ye bağlayın. Arka planınıza göre açık ya da koyu dosyayı seçin (HTML kendiliğinden geçiş yapar) ve renkleri ya da metni değiştirmeyin.",
         sizes: "Her stil 20, 32 ve 44px boyutlarında (Shields yalnızca 20px), SVG ve 2× PNG olarak gelir.",
-        mono: "Her dosyanın OpenTUI Mono metinli bir sürümü de var. Uzantıdan önce -mono ekleyin, örneğin opencode-works-with-a-light-20-mono.svg, ya da büyük harfli OpenTUI Mono için -mono-caps.",
+        mono: "Her dosyanın OpenMono metinli bir sürümü de var. Uzantıdan önce -mono ekleyin, örneğin opencode-works-with-a-light-20-mono.svg, ya da büyük harfli OpenMono için -mono-caps.",
         groups: {
           "works-with": {
             title: "Uyumlu",
@@ -1179,20 +1133,6 @@ export const content = {
     sdk: {
       more: {
         label: "SDK dokümanlarını okuyun",
-      },
-    },
-    ide: {
-      links: {
-        "vs-code-marketplace": {
-          label: "VS Code Marketplace",
-        },
-        "open-vsx-cursor-windsurf-vscodium": {
-          label: "Open VSX (Cursor, Windsurf, VSCodium)",
-        },
-      },
-      lead: "Editörünüzün entegre terminalinde opencode çalıştırın, eklenti kendini kursun ya da kendiniz kurun.",
-      more: {
-        label: "Zed, JetBrains IDE'leri ve diğer ACP editörlerini kurun",
       },
     },
     mini: {

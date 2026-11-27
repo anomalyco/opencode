@@ -52,7 +52,7 @@ How it works:
 3. It writes a VHS tape that runs `opencode --standalone`, types the prompt and takes three `Screenshot`s: `home` (prompt typed), `permission` (diff and "Allow once"), and `done` (tests pass and summary). `Wait+Screen` reacts to the real UI, so there are no fixed sleeps for model output.
 4. It writes `manifest.json` and `opencode-terminal-screenshots.zip`.
 
-Requirements: `opencode` (or `OPENCODE_BIN=/path/to/build`), `vhs` 0.12+ (`brew install vhs`, which installs ttyd and uses headless Chrome), `bun`, `git` and `zip`. Font: `--font` / `CAPTURE_FONT` (default OpenTUI Mono, which must be installed; its OFL files are in anomalyco/opentui `packages/web/public/fonts`).
+Requirements: `opencode` (or `OPENCODE_BIN=/path/to/build`), `vhs` 0.12+ (`brew install vhs`, which installs ttyd and uses headless Chrome), `bun`, `git` and `zip`. Font: `--font` / `CAPTURE_FONT` (default OpenMono Nerd, the terminal family of OpenMono, which must be installed: it has the symbols the TUI draws, each one cell wide).
 
 Output: `fresh-assets/` next to the checkout (override with `--out` or `FRESH_ASSETS_DIR`; not the temp folder, which a reboot wipes): 6 PNGs, 3200×2000, light and dark, manifest and zip. The /brand terminal pair is the `done` beat, copied to `public/brand/screenshots/opencode-terminal-{dark,light}.png` with 1600×1000 WebP previews (`cwebp -q 82 -m 6 -resize 1600 1000`), and `manifest.json` next to them feeds the "captured from" line.
 

@@ -1,5 +1,5 @@
 import { bindings, defineConfig, exports, triggers } from "cf/config"
-import { stage } from "./stage"
+import { stage, stageAccount } from "./stage"
 
 // The Worker that syncs R2 SQL aggregates into the data database (packages/data/server/src/worker.ts): the
 // DataSyncWorkflow, and the cron handler that starts its runs. The schedules must match
@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
   const name = `opencode-data-sync-${current}`
   return {
     // Anomaly
-    accountId: "15d29c8639fd3733b1b5486a2acfd968",
+    accountId: stageAccount(current),
     worker: {
       name,
       compatibilityDate: "2026-07-25",
@@ -24,6 +24,7 @@ export default defineConfig(({ mode }) => {
       env: {
         DataSyncWorkflow: bindings.workflow({ name, worker: name, exportName: "DataSyncWorkflow" }),
         STAGE: bindings.text(current),
+        ...(current === "dev" && { R2_SQL_ACCOUNT_ID: bindings.text(stageAccount(current)) }),
         // Set from AWS Secrets Manager (opencode/<stage>/*) by the deploy job.
         DATA_DATABASE_HOST: bindings.secret(),
         DATA_DATABASE_USERNAME: bindings.secret(),

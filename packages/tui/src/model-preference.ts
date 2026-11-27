@@ -13,6 +13,8 @@ export type ModelPreference = {
   recent: ModelPreferenceModel[]
   favorite: ModelPreferenceModel[]
   variant: Record<string, string | undefined>
+  /** The speed last chosen for each model. A model without an entry runs at its standard speed. */
+  speed: Record<string, string | undefined>
 }
 
 export type ModelPreferenceDocument = Record<string, unknown> & ModelPreference
@@ -59,9 +61,24 @@ export function recentModels(model: ModelPreferenceModel, recent: ModelPreferenc
     .map((item) => ({ providerID: item.providerID, modelID: item.modelID }))
 }
 
-export function favoriteModels(model: ModelPreferenceModel, favorite: ModelPreferenceModel[], enabled: boolean) {
-  const current = favorite.filter((item) => modelPreferenceKey(item) !== modelPreferenceKey(model))
+export function favoriteModels(
+  model: ModelPreferenceModel,
+  favorite: ModelPreferenceModel[],
+  enabled: boolean,
+  same = (item: ModelPreferenceModel) => modelPreferenceKey(item) === modelPreferenceKey(model),
+) {
+  const current = favorite.filter((item) => !same(item))
   return enabled ? [model, ...current] : current
+}
+
+/** Slower speeds, then standard (undefined), then faster ones; wraps around. */
+export function cycleModelSpeed(current: string | undefined, speeds: readonly { id: string; faster: boolean }[]) {
+  const order = [
+    ...speeds.filter((speed) => !speed.faster).map((speed) => speed.id),
+    undefined,
+    ...speeds.filter((speed) => speed.faster).map((speed) => speed.id),
+  ]
+  return order[(order.indexOf(current) + 1) % order.length]
 }
 
 export function cycleModelVariant(current: string | undefined, variants: string[]) {
@@ -81,6 +98,7 @@ export function decodeModelPreference(value: unknown): ModelPreferenceDocument {
     recent: models(root.recent),
     favorite: models(root.favorite),
     variant: variants(root.variant),
+    speed: variants(root.speed),
   }
 }
 
@@ -89,6 +107,7 @@ function preference(value: ModelPreferenceDocument): ModelPreference {
     recent: value.recent,
     favorite: value.favorite,
     variant: value.variant,
+    speed: value.speed,
   }
 }
 
@@ -97,6 +116,7 @@ function patch(value: Partial<ModelPreference>) {
     ...(value.recent === undefined ? {} : { recent: models(value.recent) }),
     ...(value.favorite === undefined ? {} : { favorite: models(value.favorite) }),
     ...(value.variant === undefined ? {} : { variant: variants(value.variant) }),
+    ...(value.speed === undefined ? {} : { speed: variants(value.speed) }),
   }
 }
 
@@ -145,8 +165,8 @@ export function createModelPreferenceRepository(filePath: string) {
     addRecent(model: ModelPreferenceModel) {
       return update((current) => ({ recent: recentModels(model, current.recent) }))
     },
-    setFavorite(model: ModelPreferenceModel, enabled: boolean) {
-      return update((current) => ({ favorite: favoriteModels(model, current.favorite, enabled) }))
+    setFavorite(model: ModelPreferenceModel, enabled: boolean, same?: (item: ModelPreferenceModel) => boolean) {
+      return update((current) => ({ favorite: favoriteModels(model, current.favorite, enabled, same) }))
     },
     subscribe(listener: (value: ModelPreference) => void) {
       listeners.add(listener)
@@ -178,6 +198,9 @@ export function createModelPreferenceRepository(filePath: string) {
       const key = modelPreferenceKey(model)
       const next = normalizeModelVariant(value) ?? "default"
       return update((current) => ({ variant: { ...current.variant, [key]: next } }))
+    },
+    saveSpeed(model: ModelPreferenceModel, value: string | undefined) {
+      return update((current) => ({ speed: { ...current.speed, [modelPreferenceKey(model)]: value } }))
     },
   }
 }

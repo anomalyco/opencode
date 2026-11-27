@@ -36,4 +36,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "سرور شامل کرو",
   "menu.delete": "مکاؤ",
+  "error.unavailable": "SSH دستیاب نئیں",
 }

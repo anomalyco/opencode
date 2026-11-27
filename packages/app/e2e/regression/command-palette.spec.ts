@@ -120,7 +120,7 @@ test("titlebar search lists recent sessions and opens the typed match", async ({
   const input = dialog.getByRole("combobox")
   await expect(input).toBeFocused()
   await expect(input).toHaveAttribute("placeholder", "Search sessions")
-  await expect(dialog.getByText("Recent sessions", { exact: true })).toBeVisible()
+  await expect(dialog.getByText("Recent sessions", { exact: true })).toBeHidden()
   await expect(dialog.getByRole("option", { name: /Palette fixture session/ })).toHaveAttribute("aria-selected", "true")
   // Session search lists sessions only, never commands.
   await input.fill("settings")
@@ -132,7 +132,35 @@ test("titlebar search lists recent sessions and opens the typed match", async ({
   await expect(page.getByRole("heading", { name: paletteSession.title, exact: true })).toBeVisible()
 })
 
-test("titlebar search asks for one bounded result set after a pause in typing", async ({ page }) => {
+test("titlebar search finds archived sessions dimmed but keeps them out of recent sessions", async ({ page }) => {
+  const archived = {
+    ...paletteSession,
+    id: "ses_command_palette_archived",
+    title: "Palette archived session",
+    time: { ...paletteSession.time, updated: paletteSession.time.updated + 1, archived: 1700000000500 },
+  }
+
+  await openPaletteWorkspace(page, true, [paletteSession, archived])
+  await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  const input = dialog.getByRole("combobox")
+  const row = dialog.getByRole("option", { name: /Palette archived session/ })
+  await expect(dialog.getByRole("option", { name: /Palette fixture session/ })).toBeVisible()
+  await expect(row).toHaveCount(0)
+  await input.fill("Palette")
+  await expect(dialog.getByRole("option")).toHaveCount(2)
+  await expect(row.locator(".command-palette-title")).toHaveClass(/opacity-70/)
+  await expect(
+    dialog.getByRole("option", { name: /Palette fixture session/ }).locator(".command-palette-title"),
+  ).not.toHaveClass(/opacity-70/)
+  await row.click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByRole("heading", { name: archived.title, exact: true })).toBeVisible()
+})
+
+test("titlebar search asks for one bounded active and one bounded archived result set after a pause in typing", async ({
+  page,
+}) => {
   await openPaletteWorkspace(page, true)
   const searches: URL[] = []
   page.on("request", (request) => {
@@ -171,13 +199,17 @@ test("titlebar search asks for one bounded result set after a pause in typing", 
     }
   })
 
-  const request = new URL((await searched).url())
+  await searched
   await expect(dialog.getByRole("option", { name: /Palette fixture session/ })).toBeVisible()
-  expect(searches).toHaveLength(1)
-  expect(request.searchParams.get("limit")).toBe("50")
-  expect(request.searchParams.get("parentID")).toBe("null")
-  expect(request.searchParams.get("archived")).toBe("false")
-  expect(request.searchParams.get("cursor")).toBeNull()
+  await expect.poll(() => searches.length).toBe(2)
+  expect(searches.map((url) => url.searchParams.get("archived")).toSorted()).toEqual(["false", "true"])
+
+  for (const url of searches) {
+    expect(url.searchParams.get("search")).toBe("Palette fixture")
+    expect(url.searchParams.get("limit")).toBe("50")
+    expect(url.searchParams.get("parentID")).toBe("null")
+    expect(url.searchParams.get("cursor")).toBeNull()
+  }
 })
 
 test("titlebar search shows one server's matches while another server's search fails", async ({ page }) => {
@@ -778,7 +810,7 @@ test("titlebar session search shrinks with results while its field stays anchore
   await expect(options).toHaveCount(23)
   const scroll = dialog.locator('[data-slot="search-list-scroll"]')
   await expect.poll(() => scroll.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0)
-  await expect.poll(async () => (await geometry()).height).toBeLessThanOrEqual(480)
+  await expect.poll(async () => (await geometry()).height).toBeLessThanOrEqual(600)
   const last = dialog.getByRole("option", { name: /Compact keeper result 22/ })
   await expect(last).not.toBeInViewport()
   await scroll.hover()

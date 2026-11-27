@@ -1,5 +1,6 @@
 import { Route, useParams } from "@solidjs/router"
 import { createMemo, lazy, Show, Suspense, type ParentProps } from "solid-js"
+import { AutomationSourceProvider } from "@/automations/source"
 import { Home } from "@/home/route"
 import { ServerProvider } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -7,9 +8,11 @@ import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { isServerUnauthorized } from "@/runtime/server/health-machine"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import { ServerSignedOutPanel } from "@/session/server-unavailable-panel"
+import { sessionKeyOpen } from "@/shell/state/helpers"
 import { LayoutProvider } from "@/shell/state/layout"
 import { SettingsSurfaceProvider } from "@/settings/surface"
 import Shell from "@/shell/shell"
+import { useTabs } from "@/shell/tabs/tabs"
 import { requireServerKey } from "./session"
 import { PluginAttachment } from "@/runtime/plugin/root"
 
@@ -20,6 +23,10 @@ const loadSessionRoute = () => Promise.all([import("@/session/route"), File.prel
 const DraftRoute = lazy(() => import("@/new-session/route").then((module) => ({ default: module.DraftRoute })))
 
 const SettingsScreen = lazy(() => import("@/settings/shell").then((module) => ({ default: module.SettingsScreen })))
+
+const AutomationsScreen = lazy(() =>
+  import("@/automations/route").then((module) => ({ default: module.AutomationsScreen })),
+)
 
 const ConnectServerScreen = lazy(() =>
   import("@/servers/connect/screen").then((module) => ({ default: module.ConnectServerScreen })),
@@ -43,6 +50,8 @@ export function preloadRoute(url: string) {
 
   if (pathname === "/settings") return SettingsScreen.preload().then(() => undefined)
 
+  if (pathname === "/automations") return AutomationsScreen.preload().then(() => undefined)
+
   if (/^\/server\/[^/]+\/session\/[^/]+$/.test(pathname))
     return TargetSessionRouteContent.preload().then(() => undefined)
 
@@ -53,6 +62,7 @@ export function AppRoutes() {
   return (
     <Route component={AppLayout}>
       <Route path="/" component={Home} />
+      <Route path="/automations" component={AutomationsScreen} />
       <Route path="/settings" component={SettingsScreen} />
       <Route
         path="/server/:serverKey/session/:id"
@@ -109,6 +119,7 @@ function TargetServerRoute(props: ParentProps) {
 function AppLayout(props: ParentProps) {
   const servers = useServers()
   const global = useGlobal()
+  const tabs = useTabs()
 
   // A lone server that rejects our credentials (e.g. the web app before pairing) has nothing else to show.
   const signedOut = () => {
@@ -119,12 +130,18 @@ function AppLayout(props: ParentProps) {
     return isServerUnauthorized(global.servers.health[ServerConnection.key(only)]) ? only : undefined
   }
 
+  // The layout keeps the side tabs of a limited number of sessions, and of every session open in a shell tab. It is
+  // told which those are once the saved shell tabs have loaded.
+  const open = () => (tabs.restoreReady() ? (key: string) => sessionKeyOpen(key, tabs.store, servers.scope) : undefined)
+
   return (
     <Show when={servers.list.length > 0 && !signedOut()} fallback={<ConnectServerScreen url={signedOut()?.http.url} />}>
-      <LayoutProvider>
+      <LayoutProvider open={open}>
         <SettingsSurfaceProvider>
           <PluginAttachment>
-            <Shell>{props.children}</Shell>
+            <AutomationSourceProvider>
+              <Shell>{props.children}</Shell>
+            </AutomationSourceProvider>
           </PluginAttachment>
         </SettingsSurfaceProvider>
       </LayoutProvider>

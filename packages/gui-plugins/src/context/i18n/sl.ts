@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Uporaba",
   "usage.cost": "Stroški",
   "usage.view": "Oglejte si uporabo konteksta",
-  "systemPrompt.title": "Sistemski poziv",
   "rawMessages.title": "Neobdelana sporočila",
   "export.session": "Izvozna seja",
   "stats.session": "Seja",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Shranjena seja v {{filename}}",
   "export.failed.title": "Seje ni bilo mogoče izvoziti",
   "export.failed.description": "Pri izvozu seje je prišlo do napake",
+  "usage.toggle": "Preklopi kontekst seje",
 }

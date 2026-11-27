@@ -21,11 +21,6 @@ export const content = {
       body: "Pilotez OpenCode depuis vos scripts, jobs CI et outils.",
       action: "Lire la doc",
     },
-    ide: {
-      name: "Extensions IDE",
-      body: "Ouvrez OpenCode dans VS Code, Cursor et Windsurf, ou dans Zed et les IDE JetBrains via ACP.",
-      action: "Installer",
-    },
     mini: {
       body: "Une interface terminal minimale. Les réponses s'affichent dans votre historique, avec un seul prompt en dessous.",
       action: "Installer",
@@ -234,47 +229,6 @@ export const content = {
         },
       },
     },
-    ide: {
-      title: "OpenCode | Intégrations éditeur pour VS Code, Cursor et Zed",
-      description:
-        "Utilisez OpenCode dans votre éditeur, avec l'extension pour VS Code, Cursor, Windsurf et VSCodium, et opencode acp pour Zed, les IDE JetBrains et d'autres éditeurs ACP.",
-      intro:
-        "Utilisez OpenCode dans votre éditeur. Dans VS Code, Cursor, Windsurf et VSCodium, lancez opencode dans le terminal intégré et l'extension s'installe d'elle-même. Zed, les IDE JetBrains et les autres éditeurs compatibles avec l'Agent Client Protocol lancent OpenCode avec opencode acp.",
-      features: {
-        "quick-launch": {
-          title: "Lancement rapide",
-          body: "Cmd+Esc ou Ctrl+Esc ouvre OpenCode dans un terminal scindé.",
-        },
-        "new-session": {
-          title: "Autre session",
-          body: "Cmd+Shift+Esc ou Ctrl+Shift+Esc lance une autre session.",
-        },
-        context: {
-          title: "Contexte",
-          body: "Partage votre sélection ou votre onglet actuel avec OpenCode.",
-        },
-        "file-references": {
-          title: "Citer un fichier",
-          body: "Cmd+Option+K ou Alt+Ctrl+K insère @File#L37-42.",
-        },
-        "installs-itself": {
-          title: "Installation auto",
-          body: "Lancez opencode dans le terminal intégré pour l'ajouter.",
-        },
-        "acp-editors": {
-          title: "Éditeurs ACP",
-          body: "Zed, IDE JetBrains, Avante.nvim et CodeCompanion.nvim.",
-        },
-        "open-vsx": {
-          title: "Open VSX",
-          body: "Aussi sur Open VSX pour Cursor, Windsurf et VSCodium.",
-        },
-        "same-agent": {
-          title: "Le même agent",
-          body: "L'OpenCode que vous lancez dans le terminal, à côté de votre code.",
-        },
-      },
-    },
     mini: {
       title: "OpenCode | Mini, une interface terminal minimale pour l'agent",
       description:
@@ -327,9 +281,9 @@ export const content = {
       body: "Laissez les agents utiliser votre vrai navigateur.",
       title: "OpenCode | Browse, votre vrai navigateur pour agents de code",
       description:
-        "Browse permet à OpenCode et à d'autres clients MCP d'utiliser votre vrai navigateur. Les agents pilotent des onglets en arrière-plan avec Playwright et vous rendent la main pour les connexions et la 2FA.",
+        "Browse permet à OpenCode et à d'autres clients MCP d'utiliser votre vrai navigateur. Les agents lisent, cliquent, tapent, font des captures, enregistrent des onglets et vous rendent la main pour les connexions et la 2FA.",
       intro:
-        "Un serveur MCP et une extension Chromium qui permettent à vos agents d'utiliser votre vrai navigateur, avec vos onglets, vos connexions et vos extensions. Ils ouvrent et pilotent des onglets avec Playwright, font des captures d'écran et enregistrent l'écran, dans des onglets en arrière-plan regroupés à l'écart. Quand c'est votre tour, pour une connexion, une demande de 2FA ou un paiement, ils vous rendent l'onglet et reprennent dès que vous cliquez sur Continuer.",
+        "Un serveur MCP et une extension Chromium qui permettent à vos agents d'utiliser votre vrai navigateur, avec vos onglets, vos connexions et vos extensions. Ils ouvrent des onglets en arrière-plan, regroupés à l'écart, et lisent les pages, cliquent, tapent, font des captures d'écran et enregistrent des onglets. Quand c'est votre tour, pour une connexion, une demande de 2FA ou un paiement, ils vous rendent l'onglet et reprennent dès que vous cliquez sur Continuer.",
       features: {
         "your-real-browser": {
           title: "Votre vrai navigateur",
@@ -349,7 +303,7 @@ export const content = {
         },
         "record-and-capture": {
           title: "Enregistrer et capturer",
-          body: "Captures d'écran, enregistrements d'écran et trafic réseau au format HAR.",
+          body: "Captures d'écran, enregistrements d'onglets et trafic réseau.",
         },
         "any-mcp-client": {
           title: "Tout client MCP",
@@ -359,9 +313,9 @@ export const content = {
           title: "Toutes vos connexions",
           body: "Les agents utilisent les sites où vous êtes déjà connecté. Pas de clés, pas de configuration.",
         },
-        allowlists: {
-          title: "Liste blanche",
-          body: "Limitez les onglets d'une session aux sites que vous indiquez.",
+        "allowed-sites": {
+          title: "Sites autorisés",
+          body: "Gardez l'onglet d'un agent sur les sites que vous indiquez.",
         },
       },
       install:
@@ -512,7 +466,7 @@ export const content = {
     },
     colors: {
       title: "Couleurs",
-      body: "Le logo et le logotype utilisent une seule encre à trois opacités, avec une encre plus claire pour les fonds sombres. Les valeurs ci-dessous sont cette encre sur du blanc ou du #0B0B0B, comme dans les fichiers standards. Cliquez sur une valeur pour la copier.",
+      body: "Le logo et le logotype utilisent une seule encre à trois opacités, avec une encre plus claire pour les fonds sombres. Les valeurs ci-dessous sont les couleurs des fichiers standards. Utilisez-les uniquement pour le logo et le logotype, pas pour d’autres textes ou arrière-plans. Cliquez sur une valeur pour la copier.",
       palettes: {
         light: {
           name: "Clair",
@@ -684,7 +638,7 @@ export const content = {
       badges: {
         body: "Placez un badge dans votre README, votre doc ou votre site et faites-le pointer vers opencode.ai. Choisissez le fichier clair ou sombre selon votre fond (le HTML bascule tout seul), et ne modifiez ni les couleurs ni le texte.",
         sizes: "Chaque style existe en 20, 32 et 44px (Shields uniquement en 20px), en SVG et en PNG à 2×.",
-        mono: "Chaque fichier existe aussi avec un texte en OpenTUI Mono. Ajoutez -mono avant l'extension, comme dans opencode-works-with-a-light-20-mono.svg, ou -mono-caps pour le même texte en majuscules.",
+        mono: "Chaque fichier existe aussi avec un texte en OpenMono. Ajoutez -mono avant l'extension, comme dans opencode-works-with-a-light-20-mono.svg, ou -mono-caps pour le même texte en majuscules.",
         groups: {
           "works-with": {
             title: "Compatible avec",
@@ -1118,20 +1072,6 @@ export const content = {
     sdk: {
       more: {
         label: "Lire la doc du SDK",
-      },
-    },
-    ide: {
-      lead: "Lancez opencode dans le terminal intégré de votre éditeur et l'extension s'installe d'elle-même, ou installez-la vous-même.",
-      more: {
-        label: "Configurer Zed, les IDE JetBrains et d'autres éditeurs ACP",
-      },
-      links: {
-        "vs-code-marketplace": {
-          label: "VS Code Marketplace",
-        },
-        "open-vsx-cursor-windsurf-vscodium": {
-          label: "Open VSX (Cursor, Windsurf, VSCodium)",
-        },
       },
     },
     mini: {

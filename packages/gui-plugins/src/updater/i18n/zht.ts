@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "下一步",
   "releaseNotes.action.hideFuture": "不再顯示",
   "releaseNotes.media.alt": "版本預覽",
+  "action.reload": "重新載入以更新",
+  "action.reloading": "正在重新載入…",
+  "web.ready.title": "更新已就緒",
+  "web.ready.message": "新版 OpenCode 已就緒。重新載入即可在所有開啟的視窗中使用。",
+  "web.reload": "重新載入",
+  "web.reset.title": "從伺服器重新載入",
+  "web.reset.description": "清除應用程式的已儲存副本，並載入伺服器上的目前版本",
+  "web.reset.action": "從伺服器重新載入",
 }

@@ -1235,7 +1235,7 @@ export function Site(props: {
       }
       data-status-bars={siteSettings.statusBars}
       data-logo-menu-hover={siteSettings.logoMenuHover}
-      data-light-bg={siteSettings.lightBackground === "#ffffff" ? undefined : siteSettings.lightBackground.slice(1)}
+      data-light-bg={siteSettings.lightBackground === "#fbfbfb" ? undefined : siteSettings.lightBackground.slice(1)}
       data-sidebar={siteSettings.sidebar === "fifth column" ? "column" : undefined}
       data-layout={props.aside ? "docs" : undefined}
       data-bare={props.bare ? "" : undefined}
@@ -1254,8 +1254,8 @@ export function Site(props: {
           font-display: optional's short wait and reflowing the text (CLS). Only the Latin file:
           most pages need nothing else. */}
       <Link rel="preload" href={interLatin} as="font" type="font/woff2" crossorigin="anonymous" />
-      {/* OpenTUI Mono's regular Latin file, the monospace text above the fold (the nav, the hero title,
-          card titles): fetched with the page, so it paints in OpenTUI Mono instead of swapping to it
+      {/* OpenMono's regular Latin file, the monospace text above the fold (the nav, the hero title,
+          card titles): fetched with the page, so it paints in OpenMono instead of swapping to it
           (which, with the size-matched stand-ins, is a change of letter shapes only). The other files
           load when text needs them. */}
       <Link rel="preload" href={monoFontLatin} as="font" type="font/woff2" crossorigin="anonymous" />

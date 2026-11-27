@@ -5,8 +5,8 @@ import { Octokit } from "@octokit/rest"
 import { parseRepositoryClaim } from "./github"
 
 export interface Env {
-  GITHUB_APP_ID: string
-  GITHUB_APP_PRIVATE_KEY: string
+  GITHUB_APP_ID?: string
+  GITHUB_APP_PRIVATE_KEY?: string
 }
 
 export default new Hono<{ Bindings: Env }>()
@@ -15,6 +15,10 @@ export default new Hono<{ Bindings: Env }>()
    * Used by the GitHub action to get GitHub installation access token given the OIDC token
    */
   .post("/exchange_github_app_token", async (c) => {
+    if (!c.env.GITHUB_APP_ID || !c.env.GITHUB_APP_PRIVATE_KEY) {
+      const dev = new URL(c.req.url).hostname === "api.dev.opencode.ai"
+      return c.json({ error: dev ? "not configured on dev" : "GitHub App not configured" }, 503)
+    }
     const EXPECTED_AUDIENCE = "opencode-github-action"
     const GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
     const JWKS_URL = `${GITHUB_ISSUER}/.well-known/jwks`
@@ -44,10 +48,25 @@ export default new Hono<{ Bindings: Env }>()
       })
       const appAuth = await auth({ type: "app" })
       const octokit = new Octokit({ auth: appAuth.token })
-      const { data: installation } = await octokit.apps.getRepoInstallation({
-        owner: repository.owner,
-        repo: repository.repo,
-      })
+      const installation = await octokit.apps
+        .getRepoInstallation({
+          owner: repository.owner,
+          repo: repository.repo,
+        })
+        .then((response) => response.data)
+        .catch((error: { status?: number }) => {
+          if (error.status === 404) return undefined
+          throw error
+        })
+      if (!installation) {
+        console.warn(`GitHub App is not installed on ${repository.owner}/${repository.repo}`)
+        return c.json(
+          {
+            error: `The OpenCode GitHub App is not installed on ${repository.owner}/${repository.repo}. Install it at https://github.com/apps/opencode-agent`,
+          },
+          { status: 404 },
+        )
+      }
       const installationAuth = await auth({
         type: "installation",
         installationId: installation.id,

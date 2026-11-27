@@ -50,15 +50,16 @@ const INTEGRATION_PRIORITY: Record<string, number> = {
   opencode: 0,
   "opencode-go": 1,
   openai: 2,
-  "github-copilot": 3,
-  anthropic: 4,
-  google: 5,
+  anthropic: 3,
+  "claude-agent": 4,
+  "github-copilot": 5,
+  google: 6,
 }
 
 type ConnectMethod = Exclude<IntegrationInfo["methods"][number], { type: "env" }>
 type IntegrationAttempt = IntegrationOauthConnectOutput["data"]
 type CommandAttempt = IntegrationCommandConnectOutput["data"]
-type OnIntegrationConnected = (providerID?: string) => void
+type OnIntegrationConnected = (integrationID?: string) => void
 const CANCELLED = Symbol("cancelled")
 const CUSTOM = Symbol("custom")
 const OPEN = Symbol("open")
@@ -66,13 +67,16 @@ const SUBMIT = Symbol("submit")
 // Device-flow codes such as "R283-GOUEO"; when present they are copied instead of the URL.
 const OAUTH_CODE = /[A-Z0-9]{4}-[A-Z0-9]{4,5}/
 
+// OpenCode Go connects through OpenCode, so it's only listed for people who already saved a Go key.
 export function integrationOptions(list: IntegrationInfo[]) {
-  return list.toSorted(
-    (a, b) =>
-      (INTEGRATION_PRIORITY[a.id] ?? 99) - (INTEGRATION_PRIORITY[b.id] ?? 99) ||
-      a.name.localeCompare(b.name) ||
-      a.id.localeCompare(b.id),
-  )
+  return list
+    .filter((integration) => integration.id !== "opencode-go" || credentialConnections(integration).length > 0)
+    .toSorted(
+      (a, b) =>
+        (INTEGRATION_PRIORITY[a.id] ?? 99) - (INTEGRATION_PRIORITY[b.id] ?? 99) ||
+        a.name.localeCompare(b.name) ||
+        a.id.localeCompare(b.id),
+    )
 }
 
 export function connectMethods(integration: IntegrationInfo): ConnectMethod[] {
@@ -1167,12 +1171,15 @@ function textAnswer(
               resolve(value)
             }}
             description={() => (
-              <box gap={1}>
-                <Show when={field.description}>
-                  {(description) => <text fg={theme.text.muted}>{description()}</text>}
-                </Show>
-                <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.base}>{value()}</text>}</Show>
-              </box>
+              // An empty box would still take a row in the prompt's gap, so render nothing without content.
+              <Show when={field.description || error()}>
+                <box gap={1}>
+                  <Show when={field.description}>
+                    {(description) => <text fg={theme.text.muted}>{description()}</text>}
+                  </Show>
+                  <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.base}>{value()}</text>}</Show>
+                </box>
+              </Show>
             )}
           />
         )
@@ -1307,22 +1314,18 @@ async function connected(
   ])
   toast.show({ variant: "success", message: `Connected ${integration.name}` })
   if (onConnected) {
-    onConnected(providerID(data, location, integration.id))
+    // One integration can serve several providers, such as OpenCode's workspace models and OpenCode Go, so the
+    // model picker that follows lists all of them rather than the first.
+    onConnected(
+      (data.location.provider.list(location) ?? []).some(
+        (provider) => provider.integrationID === integration.id || provider.id === integration.id,
+      )
+        ? integration.id
+        : undefined,
+    )
     return
   }
   dialog.clear()
-}
-
-function providerID(data: ReturnType<typeof useData>, location: LocationRef, integrationID: string) {
-  const models = data.location.model.list(location) ?? []
-  const matches = (data.location.provider.list(location) ?? []).filter(
-    (provider) => provider.integrationID === integrationID || provider.id === integrationID,
-  )
-  return (
-    matches.find((provider) =>
-      models.some((model) => model.providerID === provider.id && model.status !== "deprecated"),
-    )?.id ?? matches[0]?.id
-  )
 }
 
 function locationQuery(location: LocationRef) {

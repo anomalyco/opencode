@@ -26,8 +26,8 @@ const Body = Schema.Struct({
 })
 
 const fromRequest = Effect.fn("MetaMessages.fromRequest")(function* (request: LLMRequest) {
-  const projected = ProviderShared.flattenToolRequest(request)
-  const body = yield* AnthropicMessages.protocol.body.from(projected.request)
+  const body = yield* AnthropicMessages.protocol.body.from(request)
+  const definitions = ProviderShared.flattenTools(request.tools)
   return {
     ...body,
     messages: body.messages.map((message) => {
@@ -45,7 +45,7 @@ const fromRequest = Effect.fn("MetaMessages.fromRequest")(function* (request: LL
         ? undefined
         : yield* Effect.forEach(body.tools, (tool, index) =>
             Effect.gen(function* () {
-              const native = projected.tools[index]?.native
+              const native = definitions[index]?.native
               if (native === undefined) return tool
               const search = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(MetaResponses.WebSearch))(
                 native.meta,
@@ -62,6 +62,8 @@ export const protocol = Protocol.make({
   id: "meta-messages",
   body: { schema: Body, from: fromRequest },
   stream: AnthropicMessages.protocol.stream,
+  supportsEffortUpdates: AnthropicMessages.protocol.supportsEffortUpdates,
+  toolUpdates: AnthropicMessages.protocol.toolUpdates,
 })
 
 export * as MetaMessages from "./meta-messages.js"

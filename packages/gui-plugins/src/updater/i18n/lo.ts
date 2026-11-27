@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "ຕໍ່ໄປ",
   "releaseNotes.action.hideFuture": "ຢ່າສະແດງສິ່ງເຫຼົ່ານີ້ໃນອະນາຄົດ",
   "releaseNotes.media.alt": "ປ່ອຍຕົວຢ່າງ",
+  "action.reload": "ໂຫຼດຄືນໃໝ່ເພື່ອອັບເດດ",
+  "action.reloading": "ກຳລັງໂຫຼດຄືນໃໝ່…",
+  "web.ready.title": "ອັບເດດພ້ອມແລ້ວ",
+  "web.ready.message": "OpenCode ເວີຊັນໃໝ່ພ້ອມແລ້ວ. ໂຫຼດຄືນໃໝ່ເພື່ອໃຊ້ມັນໃນທຸກປ່ອງຢ້ຽມທີ່ເປີດຢູ່.",
+  "web.reload": "ໂຫຼດຄືນໃໝ່",
+  "web.reset.title": "ໂຫຼດຄືນໃໝ່ຈາກເຊີບເວີ",
+  "web.reset.description": "ລ້າງສຳເນົາແອັບທີ່ບັນທຶກໄວ້ ແລະໂຫຼດເວີຊັນປັດຈຸບັນຂອງເຊີບເວີ",
+  "web.reset.action": "ໂຫຼດຄືນໃໝ່ຈາກເຊີບເວີ",
 }

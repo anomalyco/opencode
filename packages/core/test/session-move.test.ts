@@ -52,7 +52,7 @@ const itWithActiveExecution = testEffect(
       LocationServiceMap.node.replace(
         Layer.effect(
           LocationServiceMap.Service,
-          LayerMap.make(
+          LocationServiceMap.make(
             (ref: Location.Ref) =>
               Layer.merge(
                 LayerNode.compile(Location.boundNode(ref), {
@@ -68,7 +68,7 @@ const itWithActiveExecution = testEffect(
 )
 const unavailableLocations = Layer.effect(
   LocationServiceMap.Service,
-  LayerMap.make(
+  LocationServiceMap.make(
     () =>
       Layer.effectDiscard(Effect.die(new Error("broken location"))) as unknown as Layer.Layer<
         LocationServices,
@@ -512,6 +512,45 @@ describe("Session.move", () => {
     ),
   )
 
+  for (const removed of [false, true]) {
+    it.effect(`moves children from the ${removed ? "removed" : "same"} source with their parent`, () =>
+      tmpdirScoped().pipe(
+        Effect.flatMap((tmp) =>
+          Effect.gen(function* () {
+            const session = yield* Session.Service
+            const bus = yield* Bus.Service
+            const source = AbsolutePath.make(path.join(tmp.path, "source"))
+            const other = AbsolutePath.make(path.join(tmp.path, "other"))
+            const destination = AbsolutePath.make(tmp.path)
+            yield* Effect.promise(() => Promise.all([mkdir(source), mkdir(other)]))
+            const parent = yield* session.create({ location: Location.Ref.make({ directory: source }) })
+            const child = yield* session.create({ parentID: parent.id })
+            const grandchild = yield* session.create({ parentID: child.id })
+            const elsewhere = yield* session.create({ parentID: parent.id })
+            yield* bus.publish(SessionEvent.Moved, {
+              sessionID: elsewhere.id,
+              location: Location.Ref.make({ directory: other }),
+              projectID: Project.ID.global,
+            })
+            if (removed) yield* Effect.promise(() => rm(source, { recursive: true }))
+
+            yield* session.move({ sessionID: parent.id, directory: destination })
+
+            for (const id of [parent.id, child.id, grandchild.id]) {
+              if (removed) expect((yield* session.get(id)).location.directory).toBe(destination)
+              else
+                expect(yield* session.inbox(id)).toMatchObject([
+                  { type: "move", payload: { location: { directory: destination } } },
+                ])
+            }
+            expect((yield* session.get(elsewhere.id)).location.directory).toBe(other)
+            expect(yield* session.inbox(elsewhere.id)).toEqual([])
+          }),
+        ),
+      ),
+    )
+  }
+
   itWithActiveExecution.live("defers an active move when the source directory no longer exists", () =>
     tmpdirScoped().pipe(
       Effect.flatMap((tmp) =>
@@ -580,4 +619,53 @@ describe("Session.move", () => {
       ),
     ),
   )
+})
+
+describe("Session.move home expansion", () => {
+  const isolated = testEffect(Layer.empty)
+  // `~\` is the native form on Windows; elsewhere both spellings are `~/`.
+  for (const separator of new Set(["/", path.sep]))
+    isolated.live(`expands a destination written as ~${separator}dest`, () =>
+      Effect.gen(function* () {
+        const tmp = yield* tmpdirScoped()
+        const home = path.join(tmp.path, "home")
+        const destination = path.join(home, "dest")
+        yield* Effect.promise(() => mkdir(destination, { recursive: true }))
+        const context = yield* Layer.build(
+          AppNodeBuilder.build(LayerNode.group([SessionMove.node, SessionStore.node, Bus.node, Project.node]), [
+            Global.node.replace(
+              Global.layerWith({
+                home,
+                data: path.join(tmp.path, "data"),
+                cache: path.join(tmp.path, "cache"),
+                config: path.join(tmp.path, "config"),
+                state: path.join(tmp.path, "state"),
+                tmp: path.join(tmp.path, "tmp"),
+                bin: path.join(tmp.path, "cache", "bin"),
+                log: path.join(tmp.path, "data", "log"),
+                repos: path.join(tmp.path, "data", "repos"),
+              }),
+            ),
+            Project.node.replace(globalProjectNode),
+            SessionExecution.node.replace(SessionExecution.noopLayer),
+            offlineModels,
+          ]),
+        )
+        const moves = Context.get(context, SessionMove.Service)
+        const store = Context.get(context, SessionStore.Service)
+        const bus = Context.get(context, Bus.Service)
+        yield* Context.get(context, Project.Service).resolve(AbsolutePath.make(destination))
+        const sessionID = Session.ID.create()
+        yield* bus.publish(SessionEvent.Created, {
+          sessionID,
+          slug: "move-home",
+          version: "test",
+          projectID: Project.ID.global,
+          location: Location.Ref.make({ directory: AbsolutePath.make(path.join(tmp.path, "source")) }),
+        })
+
+        yield* moves.move({ sessionID, directory: AbsolutePath.make(`~${separator}dest`) })
+        expect((yield* store.get(sessionID))?.location.directory).toBe(AbsolutePath.make(destination))
+      }),
+    )
 })

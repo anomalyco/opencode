@@ -1,0 +1,63 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Alabaster",
+  "id": "alabaster",
+  "light": {
+    "palette": {
+      "neutral": "#f7f7f7",
+      "ink": "#000000",
+      "primary": "#325cc0",
+      "accent": "#7a3e9d",
+      "success": "#448c27",
+      "warning": "#b07b00",
+      "error": "#aa3731",
+      "info": "#325cc0",
+      "interactive": "#325cc0",
+      "diffAdd": "#448c27",
+      "diffDelete": "#aa3731"
+    },
+    "overrides": {
+      "text-weak": "#5c5c5c",
+      "syntax-comment": "#aa3731",
+      "syntax-keyword": "#000000",
+      "syntax-string": "#36761d",
+      "syntax-primitive": "#325cc0",
+      "syntax-variable": "#000000",
+      "syntax-property": "#000000",
+      "syntax-type": "#325cc0",
+      "syntax-constant": "#7a3e9d",
+      "syntax-operator": "#595959",
+      "syntax-punctuation": "#595959",
+      "syntax-object": "#000000"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#0e1415",
+      "ink": "#cecece",
+      "primary": "#71ade7",
+      "accent": "#cc8bc9",
+      "success": "#95cb82",
+      "warning": "#dfdf8e",
+      "error": "#e06c65",
+      "info": "#71ade7",
+      "interactive": "#71ade7",
+      "diffAdd": "#6abf40",
+      "diffDelete": "#e06c65"
+    },
+    "overrides": {
+      "text-weak": "#8d989a",
+      "syntax-comment": "#dfdf8e",
+      "syntax-keyword": "#cecece",
+      "syntax-string": "#95cb82",
+      "syntax-primitive": "#71ade7",
+      "syntax-variable": "#cecece",
+      "syntax-property": "#cecece",
+      "syntax-type": "#71ade7",
+      "syntax-constant": "#cc8bc9",
+      "syntax-operator": "#859ea1",
+      "syntax-punctuation": "#859ea1",
+      "syntax-object": "#cecece"
+    }
+  }
+}

@@ -10,11 +10,6 @@ export const content = {
     mobile: { name: "Mobile", body: "无论身在何处，都能在手机上启动、引导和批准会话。", action: "下载" },
     terminal: { name: "Terminal", body: "快速的终端界面，可在任意 shell、编辑器或远程服务器中使用。", action: "安装" },
     sdk: { name: "SDK", body: "在您自己的脚本、CI 任务和工具中驱动 OpenCode。", action: "阅读文档" },
-    ide: {
-      name: "IDE 扩展",
-      body: "在 VS Code、Cursor 和 Windsurf 中打开 OpenCode，或通过 ACP 在 Zed 和 JetBrains IDE 中使用。",
-      action: "安装",
-    },
     mini: {
       name: "Mini",
       body: "极简的终端界面，回复直接输出到滚动记录中，下方只有一个提示词输入框。",
@@ -125,23 +120,6 @@ export const content = {
         },
       },
     },
-    ide: {
-      title: "OpenCode | 适用于 VS Code、Cursor、Zed 等的 IDE 扩展",
-      description:
-        "在编辑器中使用 OpenCode。VS Code、Cursor、Windsurf 和 VSCodium 有专用扩展，Zed、JetBrains IDE 和其他 ACP 编辑器可使用 opencode acp。",
-      intro:
-        "在编辑器中使用 OpenCode。在 VS Code、Cursor、Windsurf 和 VSCodium 中，在集成终端里运行 opencode，扩展就会自动安装。Zed、JetBrains IDE 以及其他支持 Agent Client Protocol 的编辑器可通过 opencode acp 运行 OpenCode。",
-      features: {
-        "quick-launch": { title: "快速启动", body: "Cmd+Esc 或 Ctrl+Esc 在分屏终端中打开 OpenCode。" },
-        "new-session": { title: "新会话", body: "Cmd+Shift+Esc 或 Ctrl+Shift+Esc 开启另一个会话。" },
-        context: { title: "上下文", body: "将当前选中内容或标签页分享给 OpenCode。" },
-        "file-references": { title: "文件引用", body: "Cmd+Option+K 或 Alt+Ctrl+K 插入 @File#L37-42。" },
-        "installs-itself": { title: "自动安装", body: "在集成终端中运行 opencode 即可添加。" },
-        "acp-editors": { title: "ACP 编辑器", body: "Zed、JetBrains IDE、Avante.nvim 和 CodeCompanion.nvim。" },
-        "open-vsx": { title: "Open VSX", body: "也在 Open VSX 上提供，适用于 Cursor、Windsurf 和 VSCodium。" },
-        "same-agent": { title: "同一个代理", body: "就是您在终端中运行的 OpenCode，就在代码旁边。" },
-      },
-    },
     mini: {
       title: "OpenCode | Mini，代理的极简终端界面",
       description:
@@ -171,9 +149,9 @@ export const content = {
       body: "让代理使用您真实的浏览器。",
       title: "OpenCode | Browse，为编程代理准备的真实浏览器",
       description:
-        "Browse 让 OpenCode 和其他 MCP 客户端使用您真实的浏览器。代理通过 Playwright 操作后台标签页，并把登录和双重验证交还给您。",
+        "Browse 让 OpenCode 和其他 MCP 客户端使用您真实的浏览器。代理会阅读页面、点击、输入、截图、录制标签页，并把登录和双重验证交还给您。",
       intro:
-        "一个 MCP 服务器加一个 Chromium 扩展，让您的代理使用真实的浏览器，包括您的标签页、登录状态和扩展。代理通过 Playwright 打开和操作标签页、截图和录屏，这些标签页都在后台分组，不会打扰您。轮到您操作时，比如登录、双重验证或付款，代理会把标签页交还给您，您点击“继续”后它再接着工作。",
+        "一个 MCP 服务器加一个 Chromium 扩展，让您的代理使用真实的浏览器，包括您的标签页、登录状态和扩展。代理在后台打开标签页，分组收好，不打扰您，并阅读页面、点击、输入、截图和录制标签页。轮到您操作时，比如登录、双重验证或付款，代理会把标签页交还给您，您点击“继续”后它再接着工作。",
       features: {
         "your-real-browser": {
           title: "真实的浏览器",
@@ -182,7 +160,7 @@ export const content = {
         "out-of-your-way": { title: "不打扰您", body: "代理的标签页在后台打开，并收进折叠的分组中。" },
         handoffs: { title: "交接", body: "自己完成登录或双重验证，然后点击“继续”。" },
         "lend-a-tab": { title: "借出标签页", body: "点击工具栏按钮，把已打开的标签页交给代理。" },
-        "record-and-capture": { title: "录制和捕获", body: "截图、录屏，以及 HAR 格式的网络流量。" },
+        "record-and-capture": { title: "录制和捕获", body: "截图、标签页录制和网络流量。" },
         "any-mcp-client": {
           title: "任意 MCP 客户端",
           body: "OpenCode、Claude Code、Cursor、Codex、Zed 等众多客户端。",
@@ -191,7 +169,7 @@ export const content = {
           title: "沿用你的所有登录",
           body: "智能体直接使用你已登录的网站。无需密钥，无需设置。",
         },
-        allowlists: { title: "允许列表", body: "将会话的标签页限制在您指定的网站内。" },
+        "allowed-sites": { title: "允许的网站", body: "让代理的标签页只停留在您指定的网站。" },
       },
       install:
         "请先安装 [Chrome 扩展]，它会引导你完成其余步骤。如需直接安装 CLI（通常不需要），可使用以下任一命令。",
@@ -268,7 +246,7 @@ export const content = {
     },
     colors: {
       title: "颜色",
-      body: "Logo 和文字标识使用同一种墨色的三种不透明度，深色背景则使用更浅的墨色。下方数值是该墨色叠加在白色或 #0B0B0B 上的效果，与标准文件一致。点击数值即可复制。",
+      body: "Logo 和文字标识使用同一种墨色的三种不透明度，深色背景则使用更浅的墨色。下方数值是标准文件中的颜色。它们仅用于 Logo 和文字标识，请勿用于其他文本或背景。点击数值即可复制。",
       palettes: {
         light: {
           name: "浅色",
@@ -353,7 +331,7 @@ export const content = {
       badges: {
         body: "在 README、文档或网站中放置徽章，并链接到 opencode.ai。根据背景选择浅色或深色文件（HTML 会自动切换），不要修改颜色或文字。",
         sizes: "每种样式都提供 20、32 和 44px（Shields 仅 20px），格式为 SVG 和 2 倍 PNG。",
-        mono: "每个文件还有使用 OpenTUI Mono 字体的版本，在扩展名前加 -mono，例如 opencode-works-with-a-light-20-mono.svg；加 -mono-caps 则为大写 OpenTUI Mono。",
+        mono: "每个文件还有使用 OpenMono 字体的版本，在扩展名前加 -mono，例如 opencode-works-with-a-light-20-mono.svg；加 -mono-caps 则为大写 OpenMono。",
         groups: {
           "works-with": { title: "兼容", alt: "兼容 OpenCode", body: "适用于配合 OpenCode 运行的插件、提供商和工具。" },
           "built-with": { title: "构建于", alt: "基于 OpenCode 构建", body: "适用于用 OpenCode 制作的项目。" },
@@ -600,14 +578,6 @@ export const content = {
   productDownloads: {
     terminal: { commands: { curl: { name: "脚本" } } },
     sdk: { more: { label: "阅读 SDK 文档" } },
-    ide: {
-      links: {
-        "vs-code-marketplace": { label: "VS Code 扩展市场" },
-        "open-vsx-cursor-windsurf-vscodium": { label: "Open VSX (Cursor, Windsurf, VSCodium)" },
-      },
-      lead: "在编辑器的集成终端中运行 opencode，扩展就会自动安装，也可以手动安装。",
-      more: { label: "设置 Zed、JetBrains IDE 和其他 ACP 编辑器" },
-    },
     mini: {
       commands: { curl: { name: "脚本" } },
       lead: "Mini 随 OpenCode CLI 一起提供。用以下任一方式安装，然后运行 opencode mini。",

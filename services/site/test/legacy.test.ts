@@ -31,9 +31,8 @@ describe("legacy redirects", () => {
 
   test("moved pages match exact paths only, keep the query and leave the inference API alone", () => {
     const zen = get("/zen/", { search: "?ref=app" })
-    expect(zen?.status).toBe(302)
+    expect(zen?.status).toBe(301)
     expect(zen?.headers.get("Location")).toBe("/console/models?ref=app")
-    expect(zen?.headers.get("Cache-Control")).toBe("no-store")
     expect(get("/zen/go")?.headers.get("Location")).toBe("/console/go")
     expect(get("/teams")?.headers.get("Location")).toBe("/console/teams")
     for (const path of ["/zen/v1/models", "/zen/go/v1/chat/completions", "/go/v1", "/models.json", "/gopher"])
@@ -46,7 +45,7 @@ describe("legacy redirects", () => {
     expect(get("/pricing", { locale: "de" })).toBeUndefined()
   })
 
-  test("the old dashboard, Black, stats and share links", () => {
+  test("the old dashboard, Black, stats, share and IDE links", () => {
     const auth = get("/workspace/wrk_123/go", { method: "POST", locale: "de" })
     expect(auth?.status).toBe(302)
     expect(auth?.headers.get("Location")).toBe("https://opencode.ai/console/login")
@@ -63,6 +62,8 @@ describe("legacy redirects", () => {
     const share = get("/s/abc123")
     expect(share?.status).toBe(301)
     expect(share?.headers.get("Location")).toBe("https://opncd.ai/share/abc123")
+    expect(get("/ide/", { locale: "de" })?.headers.get("Location")).toBe("/v1/docs/ide/")
+    expect(get("/ideas")).toBeUndefined()
   })
 
   test("the V2 docs' old /v2 URLs move to /docs permanently, keeping the path and query", () => {

@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Gebruik",
   "usage.cost": "Kosten",
   "usage.view": "Bekijk contextgebruik",
-  "systemPrompt.title": "Systeemprompt",
   "rawMessages.title": "Ruwe berichten",
   "export.session": "Sessie exporteren",
   "stats.session": "Sessie",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Sessie opgeslagen in {{filename}}",
   "export.failed.title": "Kan sessie niet exporteren",
   "export.failed.description": "Er is een fout opgetreden tijdens het exporteren van de sessie",
+  "usage.toggle": "Sessiecontext tonen of verbergen",
 }

@@ -44,6 +44,7 @@ import type {
   RunCommand,
   RunInput,
   RunPrompt,
+  RunPromptPart,
   RunProvider,
   RunTuiConfig,
   StreamCommit,
@@ -868,8 +869,8 @@ test("run entry content eagerly renders final monochrome markdown", async () => 
   try {
     await app.renderOnce()
     const frame = app.captureCharFrame()
-    expect(frame).toContain("# Caf? ->")
-    expect(frame).toContain("Caf? ->")
+    // The heading (its marker concealed) and the fence's code.
+    expect(frame.match(/^Caf\? ->/gm)).toHaveLength(2)
     expect(frame).not.toMatch(/[^\x00-\x7f]/)
   } finally {
     app.renderer.destroy()
@@ -1472,6 +1473,47 @@ test("undo retains mentioned files when the prompt is sent again", async () => {
   }
 })
 
+test("an undone chip deletion keeps the chip's file", async () => {
+  const submitted: RunPrompt[] = []
+  const file: RunPromptPart = {
+    type: "file",
+    url: "file:///src/main.ts",
+    filename: "main.ts",
+    source: { type: "file", path: "src/main.ts", text: { start: 8, end: 20, value: "@src/main.ts" } },
+  }
+  const app = await renderFooter({
+    queuedPrompts: [
+      { messageID: "m-1", delivery: "queue", prompt: { text: "inspect @src/main.ts please", parts: [file] } },
+    ],
+    onQueuedPromptAction: async () => {
+      app.setQueuedPrompts([])
+    },
+    onSubmit: (prompt) => {
+      submitted.push(prompt)
+      return true
+    },
+  })
+  try {
+    await app.renderOnce()
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressKey("q")
+    await app.renderOnce()
+    app.mockInput.pressKey("u", { ctrl: true })
+    await Bun.sleep(0)
+    const text = () => (app.renderer.currentFocusedEditor as TextareaRenderable | null)?.plainText
+    await app.waitFor(() => text() === "inspect @src/main.ts please")
+    app.mockInput.pressKey("u", { ctrl: true })
+    await app.waitFor(() => text() === "")
+    app.mockInput.pressKey("z", { super: true })
+    await app.waitFor(() => text() === "inspect @src/main.ts please")
+    app.mockInput.pressEnter()
+    await Bun.sleep(0)
+    expect(submitted).toMatchObject([{ text: "inspect @src/main.ts please", parts: [file] }])
+  } finally {
+    app.cleanup()
+  }
+})
+
 test("direct footer steers the oldest queued prompt from an empty composer", async () => {
   const steered: string[] = []
   const app = await renderFooter({
@@ -1760,7 +1802,7 @@ test("direct footer counts queued and steering work while running", async () => 
     const frame = app.captureCharFrame()
     const transparent = RGBA.fromValues(0, 0, 0, 0).toInts()
     const statusline = footerStatusline(app.renderer.root)
-    expect(frame).toContain("esc stop · ctrl+x q 2 pending · ↓ 1 subagent · ctrl+b background · Build")
+    expect(frame).toContain("ctrl+x q 2 pending · ↓ 1 subagent · Build")
     expect(frame).toMatch(/opencode · ctrl\+p menu *$/m)
     expect(frame).not.toContain("1 agent")
     expect(statusline.backgroundColor.toInts()).toEqual(transparent)
@@ -1990,7 +2032,6 @@ test.each(["ctrl+g", "none"])("context actions use only configured bindings (%s)
         "session.interrupt": "ctrl+i",
         "session.queued_prompts": queued,
         "session.child.first": "ctrl+j",
-        "session.background": "none",
         "command.palette.show": "ctrl+y",
       },
     }),
@@ -2034,7 +2075,7 @@ test("identity and context precede the provider and a non-fitting provider block
   }
 })
 
-test("direct footer keeps compact work, model detail, and context ahead of cost and rich labels", async () => {
+test("direct footer keeps work, model detail, context, and cost in priority order", async () => {
   const app = await renderFooter({
     currentAgent: "Plan",
     subagents: {
@@ -2055,7 +2096,7 @@ test("direct footer keeps compact work, model detail, and context ahead of cost 
     await app.renderOnce()
     const statusline = footerStatusline(app.renderer.root)
     expect(app.captureCharFrame().split("\n")[statusline.y].trimEnd()).toBe(
-      "\u25aa esc stop · ↓ 1 sub · ctrl+b bg · Plan · a-model-name-long-enough… · 16% ctx",
+      "\u25aa esc stop · ↓ 1 sub · Plan · a-model-name-long-enough… · 159.6K (16%) · $4.23",
     )
   } finally {
     app.cleanup()
@@ -2186,7 +2227,7 @@ test("direct footer reserves the working indicator beside complete status text",
   }
 })
 
-test("direct footer always offers backgrounding for a foreground subagent", async () => {
+test("direct footer never offers backgrounding for a subagent", async () => {
   const app = await renderFooter({
     subagents: {
       tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" })],
@@ -2201,7 +2242,8 @@ test("direct footer always offers backgrounding for a foreground subagent", asyn
     await app.renderOnce()
     const frame = app.captureCharFrame()
 
-    expect(frame).toContain("↓ 1 subagent · ctrl+b background · Build · gpt-5 · ctrl+p menu")
+    expect(frame).toContain("↓ 1 subagent · Build · gpt-5 · ctrl+p menu")
+    expect(frame).not.toContain("ctrl+b")
     expect(frame).not.toContain("queued")
   } finally {
     app.cleanup()

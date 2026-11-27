@@ -216,6 +216,7 @@ export function DialogSessionList() {
       options={options()}
       skipFilter={true}
       current={currentSessionID()}
+      focusCurrent={false}
       onFilter={(query) => {
         setFilter(query)
         setSearch(query)

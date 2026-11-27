@@ -21,13 +21,14 @@ import {
   type StoredOAuthTokens,
 } from "@modelcontextprotocol/client"
 import { OAuthMetadataSchema, OpenIdProviderDiscoveryMetadataSchema } from "@modelcontextprotocol/core"
-import { Cause, Clock, Data, Deferred, Duration, Effect, Option, Schema } from "effect"
+import { Cause, Clock, Data, Deferred, Duration, Effect, Exit, Option, Schema } from "effect"
 import { FetchHttpClient } from "effect/http"
 import type { ServerResponse } from "node:http"
 import type { AddressInfo } from "node:net"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "../credential.js"
 import { OauthCallbackPage } from "../oauth/page.js"
+import { OauthRedirect } from "../oauth/redirect.js"
 import type { Integration } from "../integration.js"
 import { ErrorSummary } from "../util/error-summary.js"
 
@@ -136,7 +137,8 @@ interface Options {
   readonly config: typeof ConfigMCP.Remote.Type
   readonly store: Store
   readonly redirect: {
-    readonly url: string
+    readonly url: () => string
+    readonly registered: string[]
     readonly state: string
     readonly open: (url: URL) => void | Promise<void>
   }
@@ -150,7 +152,9 @@ const provider = (options: Options): OAuthClientProvider => {
   const redirect = options.redirect
   let discovery = options.discovery
   return {
-    redirectUrl: redirect.url,
+    get redirectUrl() {
+      return redirect.url()
+    },
     discoveryState: async () => discovery,
     saveDiscoveryState: (state) => {
       discovery = state
@@ -159,7 +163,7 @@ const provider = (options: Options): OAuthClientProvider => {
     ...(options.clientMetadataUrl ? { clientMetadataUrl: options.clientMetadataUrl } : {}),
     state: () => redirect.state,
     clientMetadata: {
-      redirect_uris: [redirect.url],
+      redirect_uris: redirect.registered,
       client_name: "opencode",
       client_uri: "https://opencode.ai",
       logo_uri: "https://opencode.ai/web-app-manifest-512x512.png",
@@ -197,10 +201,16 @@ const selectResource = (config: typeof ConfigMCP.Remote.Type, resource: string |
   if (!checkResourceAllowed({ requestedResource: identity, configuredResource: resource }))
     throw new Error(`Protected resource ${resource} does not cover ${identity}`)
   const canonical = new URL(resource)
-  // The transport dials the configured URL with extra query parameters and some servers echo
-  // that back as the resource. Query is transport detail, not identity: the token stays bound
-  // to the configured URL so a later refresh names the same resource the login did.
-  if (canonical.origin === identity.origin && canonical.pathname === identity.pathname) return identity
+  // The transport adds ?codemode=false when dialing and some servers echo that query back as
+  // the protected resource. Strip only that transport parameter so refresh names the same
+  // resource login did, without overwriting a queryless canonical resource with config.url.
+  if (
+    canonical.origin === identity.origin &&
+    canonical.pathname === identity.pathname &&
+    canonical.searchParams.has("codemode") &&
+    !identity.searchParams.has("codemode")
+  )
+    canonical.searchParams.delete("codemode")
   return canonical
 }
 
@@ -434,7 +444,10 @@ export const authorize = (input: {
       const client = clientFromCredential(previous)
       if (client) yield* Effect.promise(() => store.saveClientInformation(client))
     }
-    const code = yield* Deferred.make<{ code: string; iss: string | undefined; response?: ServerResponse }, Error>()
+    const code = yield* Deferred.make<
+      { code: string; iss: string | undefined; host?: string; response?: ServerResponse },
+      Error
+    >()
     const redirect = oauth?.redirect_uri ? new URL(oauth.redirect_uri) : undefined
     const redirectPath = redirect?.pathname ?? "/callback"
     const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")
@@ -449,7 +462,7 @@ export const authorize = (input: {
       }
       const fail = (reason: string, failure: string) => {
         runFork(Effect.logWarning("mcp oauth callback rejected", { ...fields, reason: failure }))
-        Effect.runSync(Deferred.fail(code, new Error(reason)))
+        Deferred.doneUnsafe(code, Exit.fail(new Error(reason)))
         response
           .writeHead(400, { "Content-Type": "text/html" })
           .end(OauthCallbackPage.error(reason, { provider: input.name }))
@@ -470,8 +483,14 @@ export const authorize = (input: {
       if (!value) return fail("Missing authorization code", "missing_code")
       // The page waits for the token exchange so the browser never reports success for a rejected code.
       if (
-        !Effect.runSync(
-          Deferred.succeed(code, { code: value, iss: url.searchParams.get("iss") ?? undefined, response }),
+        !Deferred.doneUnsafe(
+          code,
+          Exit.succeed({
+            code: value,
+            iss: url.searchParams.get("iss") ?? undefined,
+            host: request.headers.host,
+            response,
+          }),
         )
       )
         response.writeHead(409).end("OAuth callback already received")
@@ -529,6 +548,10 @@ export const authorize = (input: {
       registration: oauth?.client_id ? "static" : cimd ? "cimd" : "dcr",
     })
 
+    // Some authorization servers (Clerk) rewrite a 127.0.0.1 redirect to localhost before sending the browser back,
+    // and issue the code for the rewritten URI. Both are registered, and the token exchange repeats the one used.
+    const loopback = (host: string) => `http://${host}:${port}${redirectPath}`
+    let reached = "127.0.0.1"
     let authorizationUrl: URL | undefined
     const oauthProvider = provider({
       config: input.config,
@@ -536,7 +559,8 @@ export const authorize = (input: {
       clientMetadataUrl: cimd ? CLIENT_METADATA_URL : undefined,
       discovery: { ...discovery, resourceMetadataUrl: resourceMetadataUrl?.toString() },
       redirect: {
-        url: oauth?.redirect_uri ?? `http://127.0.0.1:${port}${redirectPath}`,
+        url: () => oauth?.redirect_uri ?? loopback(reached),
+        registered: oauth?.redirect_uri ? [oauth.redirect_uri] : [loopback("127.0.0.1"), loopback("localhost")],
         state,
         open: (url) => {
           authorizationUrl = url
@@ -579,6 +603,7 @@ export const authorize = (input: {
     const completed = yield* Deferred.make<Credential.OAuth, Error>()
     yield* Deferred.await(code).pipe(
       Effect.flatMap((value) => {
+        if (value.host === `localhost:${port}`) reached = "localhost"
         const respond = (error?: string) =>
           Effect.sync(() =>
             value.response
@@ -624,23 +649,11 @@ export const authorize = (input: {
       callback: Deferred.await(completed),
       // A pasted URL is held to the same checks as the browser's redirect, but a wrong paste keeps the login waiting.
       submit: (pasted: string) =>
-        Effect.gen(function* () {
-          const text = pasted.trim()
-          if (!URL.canParse(text))
-            return yield* Effect.fail(new Error("Paste the full URL from the browser's address bar"))
-          const url = new URL(text)
-          if (url.searchParams.get("state") !== state)
-            return yield* Effect.fail(new Error("This URL belongs to a different sign-in"))
-          const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
-          if (error) {
-            yield* Deferred.fail(code, new Error(error))
-            return
-          }
-          const value = url.searchParams.get("code")
-          if (!value) return yield* Effect.fail(new Error("The URL does not contain an authorization code"))
-          yield* Effect.logInfo("mcp oauth redirect pasted", fields)
-          yield* Deferred.succeed(code, { code: value, iss: url.searchParams.get("iss") ?? undefined })
-        }),
+        OauthRedirect.submit({
+          state,
+          callback: code,
+          received: (value, params) => ({ code: value, iss: params.get("iss") ?? undefined }),
+        })(pasted).pipe(Effect.tap(() => Effect.logInfo("mcp oauth redirect pasted", fields))),
     }
   }).pipe(
     Effect.onError((cause) =>

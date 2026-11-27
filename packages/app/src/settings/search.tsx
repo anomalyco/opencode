@@ -185,13 +185,13 @@ export function SettingsSearch() {
             ref={input}
             type="search"
             value={search.query()}
-            leadingIcon={<Icon name="magnifying-glass" size="small" />}
+            leadingIcon={<Icon name="magnifying-glass" />}
             placeholder={language.t("settings.search.placeholder")}
             aria-label={language.t("settings.search.placeholder")}
             data-overflow-start={state.overflow.start}
             data-overflow-end={state.overflow.end}
             showClearButton
-            clearIcon="circle-xmark"
+            clearIcon="close"
             onClearClick={clear}
             onFocus={() => search.expand()}
             onScroll={updateOverflow}
@@ -274,6 +274,7 @@ export function createSettingsSearchCatalog() {
       servers: inventory(),
       selected: surface.server()?.key,
       desktop: platform.platform === "desktop",
+      linux: platform.platform === "desktop" && platform.os === "linux",
       browser: platform.platform === "desktop",
       mobile: mobile(),
       translate: language.t,

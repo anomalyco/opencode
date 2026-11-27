@@ -1,4 +1,4 @@
-import { Component } from "solid-js"
+import type { Component } from "solid-js"
 import { Switch } from "@opencode/ui/switch"
 import { Select } from "@opencode/ui/select"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -30,6 +30,20 @@ export const SettingsExperimental: Component = () => {
         <div class="settings-section">
           <SettingsList>
             <SettingsRow
+              title={language.t("settings.experimental.row.tabGroups.title")}
+              description={language.t("settings.experimental.row.tabGroups.description")}
+            >
+              <div data-action="settings-tab-groups">
+                <Switch
+                  checked={settings.general.tabGroups()}
+                  onChange={(checked) => settings.general.setTabGroups(checked)}
+                  hideLabel
+                >
+                  {language.t("settings.experimental.row.tabGroups.title")}
+                </Switch>
+              </div>
+            </SettingsRow>
+            <SettingsRow
               title={language.t("settings.experimental.row.sidebarOrganize.title")}
               description={language.t("settings.experimental.row.sidebarOrganize.description")}
             >
@@ -44,25 +58,31 @@ export const SettingsExperimental: Component = () => {
               />
             </SettingsRow>
             <SettingsRow
-              title={language.t("settings.experimental.row.newIcons.title")}
-              description={language.t("settings.experimental.row.newIcons.description")}
+              title={language.t("settings.experimental.row.newTimeline.title")}
+              description={language.t("settings.experimental.row.newTimeline.description")}
             >
-              <div data-action="settings-new-icons">
+              <div data-action="settings-new-timeline">
                 <Switch
-                  checked={settings.general.newIcons()}
-                  onChange={(checked) => settings.general.setNewIcons(checked)}
-                />
+                  checked={settings.general.newTimeline()}
+                  onChange={(checked) => settings.general.setNewTimeline(checked)}
+                  hideLabel
+                >
+                  {language.t("settings.experimental.row.newTimeline.title")}
+                </Switch>
               </div>
             </SettingsRow>
             <SettingsRow
-              title={language.t("settings.experimental.row.foldUserMessages.title")}
-              description={language.t("settings.experimental.row.foldUserMessages.description")}
+              title={language.t("settings.experimental.row.automations.title")}
+              description={language.t("settings.experimental.row.automations.description")}
             >
-              <div data-action="settings-fold-user-messages">
+              <div data-action="settings-automations">
                 <Switch
-                  checked={settings.general.foldUserMessages()}
-                  onChange={(checked) => settings.general.setFoldUserMessages(checked)}
-                />
+                  checked={settings.general.automations()}
+                  onChange={(checked) => settings.general.setAutomations(checked)}
+                  hideLabel
+                >
+                  {language.t("settings.experimental.row.automations.title")}
+                </Switch>
               </div>
             </SettingsRow>
             <SettingsRow

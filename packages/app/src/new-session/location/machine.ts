@@ -25,8 +25,6 @@ export type LocationHistoryItem =
       readonly active: string | undefined
     }
 
-// One step of the location dialog. `history` holds the steps to step back through, so a step entered from any other
-// step returns to it intact. `direct` marks a worktree step the dialog opened on, where Escape closes the dialog.
 export type LocationDialogState =
   | { readonly type: "projects"; readonly query: string; readonly history: readonly LocationHistoryItem[] }
   | { readonly type: "others"; readonly query: string; readonly history: readonly LocationHistoryItem[] }
@@ -34,6 +32,7 @@ export type LocationDialogState =
   | {
       readonly type: "worktrees"
       readonly project: PromptProject
+      /** Escape closes a dialog opened directly on the worktree step. */
       readonly direct: boolean
       readonly query: string
       readonly history: readonly LocationHistoryItem[]
@@ -76,7 +75,8 @@ export type LocationDialogTransition = {
   readonly stop: boolean
 }
 
-export function createLocationDialogState(drilled?: PromptProject): LocationDialogState {
+/** With `only`, the dialog lists the drilled project's worktrees and has no projects step to go back to. */
+export function createLocationDialogState(drilled?: PromptProject, only = false): LocationDialogState {
   if (!drilled) return { type: "projects", query: "", history: [] }
 
   return {
@@ -84,7 +84,7 @@ export function createLocationDialogState(drilled?: PromptProject): LocationDial
     project: drilled,
     direct: true,
     query: "",
-    history: [{ type: "projects", query: "", active: projectEntryID(drilled) }],
+    history: only ? [] : [{ type: "projects", query: "", active: projectEntryID(drilled) }],
   }
 }
 
@@ -139,13 +139,9 @@ function back(state: LocationDialogState): LocationDialogTransition {
   const top = state.history.at(-1)
 
   if (!top) return same(state)
-  const history = state.history.slice(0, -1)
-  const effects = [{ type: "focus", active: top.active }] as const
+  const { active, ...previous } = top
 
-  if (top.type === "worktrees")
-    return to({ type: "worktrees", project: top.project, direct: top.direct, query: top.query, history }, effects)
-
-  return to({ type: top.type, query: top.query, history }, effects)
+  return to({ ...previous, history: state.history.slice(0, -1) }, [{ type: "focus", active }])
 }
 
 function key(state: LocationDialogState, event: Extract<LocationDialogEvent, { type: "key.down" }>) {
@@ -190,15 +186,15 @@ export function locationDialogView(state: LocationDialogState) {
     case "others":
       return {
         drilled: undefined,
-        titleKey: "session.new.location.otherProjects",
-        placeholderKey: "session.new.project.search",
+        titleKey: undefined,
+        placeholderKey: "session.new.project.other.search",
         ownsEscape: true,
         otherGroupHeader: false,
       } as const
     case "servers":
       return {
         drilled: undefined,
-        titleKey: "session.new.location.servers",
+        titleKey: undefined,
         placeholderKey: "session.new.location.servers.search",
         ownsEscape: true,
         otherGroupHeader: false,
@@ -218,20 +214,16 @@ export function projectEntryID(project: PromptProject) {
   return `project:${project.server?.key ?? ""}:${project.worktree}`
 }
 
-// Leaves the current step for `next`, remembering the current step and its active row to return to.
 function enter(
-  state: LocationDialogState,
+  state: Exclude<LocationDialogState, { type: "servers" }>,
   active: string | undefined,
   next:
     | { type: "others" | "servers"; query: string }
     | { type: "worktrees"; project: PromptProject; direct: boolean; query: string },
 ): LocationDialogTransition {
-  const frame: LocationHistoryItem =
-    state.type === "worktrees"
-      ? { type: "worktrees", project: state.project, direct: state.direct, query: state.query, active }
-      : { type: state.type === "others" ? "others" : "projects", query: state.query, active }
+  const { history, ...previous } = state
 
-  return to({ ...next, history: [...state.history, frame] }, [{ type: "focus", active: undefined }])
+  return to({ ...next, history: [...history, { ...previous, active }] }, [{ type: "focus", active: undefined }])
 }
 
 function to(state: LocationDialogState, effects: readonly LocationDialogEffect[] = []): LocationDialogTransition {

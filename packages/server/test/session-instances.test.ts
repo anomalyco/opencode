@@ -20,7 +20,7 @@ import { AbsolutePath } from "@opencode/schema/schema"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Global } from "@opencode/util/global"
-import { Context, Duration, Effect, Layer, LayerMap, RcMap, Schema } from "effect"
+import { Context, Duration, Effect, Layer, LayerMap, Schema } from "effect"
 import { HttpEffect, HttpRouter, HttpServer } from "effect/http"
 import { LanguageModel, LLMClient } from "../../ai/src/effect"
 import { OpenAIChat } from "../../ai/src/protocols/openai-chat"
@@ -61,7 +61,7 @@ it.live(
         Watcher.node.replace(Watcher.configured({ enabled: false })),
         llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
         SessionRunnerModel.node.replace(
-          Layer.succeed(SessionRunnerModel.Service, { resolve: () => Effect.succeed(model) }),
+          Layer.succeed(SessionRunnerModel.Service, { select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })), resolve: () => Effect.succeed(model) }),
         ),
         Instance.node.replace(
           makeGlobalNode({
@@ -329,7 +329,7 @@ it.live(
         }).pipe(instances.provide(entry.session))
       }
       expect(boots).toEqual([first.id, second.id])
-      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+      expect(yield* locations.keys).toEqual([])
     }),
   15_000,
 )

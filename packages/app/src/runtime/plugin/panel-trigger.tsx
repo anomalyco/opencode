@@ -78,7 +78,7 @@ export function PanelTrigger(props: {
       <IconButton
         size="small"
         variant="ghost-muted"
-        class={reveal ? "hover-reveal relative z-10 group-hover:opacity-100" : undefined}
+        class={reveal ? "hover-reveal relative z-10 group-hover:opacity-100 focus-visible:opacity-100" : undefined}
         classList={reveal ? { "opacity-100": props.active } : undefined}
         onPointerDown={(event) => {
           event.preventDefault()
@@ -89,7 +89,7 @@ export function PanelTrigger(props: {
           event.stopPropagation()
           props.onClose(props.value)
         }}
-        icon={<Icon name="xmark-small" />}
+        icon={<Icon name="close" />}
         aria-label={language.t("common.closeTab")}
       />,
     )

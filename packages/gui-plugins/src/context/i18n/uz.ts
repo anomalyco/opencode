@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Foydalanish",
   "usage.cost": "Narxi",
   "usage.view": "Kontekstdan foydalanishni ko'rish",
-  "systemPrompt.title": "Tizim so'rovi",
   "rawMessages.title": "Xom xabarlar",
   "export.session": "Eksport seansi",
   "stats.session": "Sessiya",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Seans {{filename}}ga saqlandi",
   "export.failed.title": "Seansni eksport qilib boʻlmadi",
   "export.failed.description": "Seansni eksport qilishda xatolik yuz berdi",
+  "usage.toggle": "Sessiya kontekstini almashtirish",
 }

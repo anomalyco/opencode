@@ -1,0 +1,3 @@
+{
+  "table": "Sizes:\n\n| Name | Size | Note |\n| --- | ---: | --- |\n| alpha | 1 | first row |\n| beta | 22 | `code` cell |\n\nAfter the table.\n"
+}

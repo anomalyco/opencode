@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "Berikutnya",
   "releaseNotes.action.hideFuture": "Jangan tampilkan ini di masa depan",
   "releaseNotes.media.alt": "Pratinjau rilis",
+  "action.reload": "Muat ulang untuk memperbarui",
+  "action.reloading": "Memuat ulang…",
+  "web.ready.title": "Pembaruan siap",
+  "web.ready.message":
+    "Versi baru OpenCode sudah siap. Muat ulang untuk menggunakannya di setiap jendela yang terbuka.",
+  "web.reload": "Muat ulang",
+  "web.reset.title": "Muat ulang dari server",
+  "web.reset.description": "Hapus salinan aplikasi yang tersimpan dan muat versi terkini dari server",
+  "web.reset.action": "Muat ulang dari server",
 }

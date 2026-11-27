@@ -39,4 +39,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Server qo'shish",
   "menu.delete": "Oʻchirish",
+  "error.unavailable": "SSH mavjud emas",
 }

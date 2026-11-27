@@ -120,7 +120,7 @@
 
     [data-slot="badge"] {
       background: var(--link);
-      color: light-dark(#ffffff, #0c0c0c);
+      color: var(--text-inverted);
     }
   }
 

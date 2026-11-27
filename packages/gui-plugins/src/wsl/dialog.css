@@ -1,13 +1,5 @@
-[data-component="dialog-v2"].settings-wsl-dialog [data-slot="dialog-container"] {
-  width: 480px;
-  max-width: calc(100vw - 32px);
-  height: auto;
-  align-items: stretch;
-}
-
 [data-component="dialog-v2"].settings-wsl-dialog [data-slot="dialog-content"] {
   align-items: stretch;
-  width: 100%;
   overflow: hidden;
 }
 
@@ -42,20 +34,8 @@
   margin-top: 8px;
 }
 
-[data-component="dialog-v2"].settings-wsl-not-installed-dialog [data-slot="dialog-container"] {
-  width: 480px;
-  max-width: calc(100vw - 32px);
-  min-height: 264px;
-  height: auto;
-  background: var(--v2-background-bg-layer-01);
-  box-shadow: var(--v2-elevation-overlay);
-  border-radius: 10px;
-}
-
 [data-component="dialog-v2"].settings-wsl-not-installed-dialog [data-slot="dialog-content"] {
   align-items: stretch;
-  min-height: 264px;
-  border-radius: 10px;
   overflow: hidden;
 }
 

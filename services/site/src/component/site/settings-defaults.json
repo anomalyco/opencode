@@ -48,7 +48,7 @@
   "consoleClearing": 65,
   "sidebar": "fifth column",
   "bodyWeight": "400",
-  "monoFont": "OpenTUI Mono",
+  "monoFont": "OpenMono",
   "wordmarkHatch": 1,
   "wordmarkNodes": "on",
   "footerWordmark": "on",
@@ -352,8 +352,8 @@
   "consoleCopyColumns": "2 columns",
   "docsSwitcher": "lockup",
   "docsSubmenu": "flyout",
-  "docsNav": "split",
-  "docsVersionNotice": "frosted top",
+  "docsNav": "combined",
+  "docsVersionNotice": "inverted",
   "terminalInstall": "button",
   "carouselPreset": "four across",
   "carousel": {
@@ -366,7 +366,7 @@
   "arcadeVersion": "3D",
   "arcadeMode": "layers",
   "arcadeModeRevision": 2,
-  "monoFontRevision": 2,
+  "monoFontRevision": 3,
   "docsChoicesApplied": {
     "typography": "4",
     "lists": "3",

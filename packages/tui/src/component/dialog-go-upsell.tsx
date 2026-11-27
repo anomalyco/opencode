@@ -1,5 +1,5 @@
 import { RGBA, TextAttributes, type Renderable } from "@opentui/core"
-import { useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { useTerminalDimensions } from "@opentui/solid"
 import type { FormAnswer, IntegrationOauthConnectOutput, IntegrationOAuthMethod } from "@opencode/client"
 import * as Open from "@opencode/util/open"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
@@ -46,7 +46,6 @@ export function DialogGoUpsell(props: {
   const dimensions = useTerminalDimensions()
   const theme = useTheme().surface("dialog")
   const config = useConfig().data
-  const renderer = useRenderer()
   const narrow = () => dimensions().width < 52
   const short = () => dimensions().height < 22
   const compact = () => short() || dimensions().height < (narrow() ? 26 : 22)
@@ -65,18 +64,6 @@ export function DialogGoUpsell(props: {
     dialog.setCentered(true)
     onCleanup(() => {
       if (dialog.stack.length > 0) dialog.setCentered(false)
-    })
-  })
-
-  // Every cell changes each frame, so hold the renderer to 30 fps while the art plays.
-  createEffect(() => {
-    if (!animate()) return
-    const fps = { target: renderer.targetFps, max: renderer.maxFps }
-    renderer.targetFps = 30
-    renderer.maxFps = 30
-    onCleanup(() => {
-      renderer.targetFps = fps.target
-      renderer.maxFps = fps.max
     })
   })
 

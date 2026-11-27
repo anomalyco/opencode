@@ -34,7 +34,10 @@ describe("Provider", () => {
     const specifiers = new Set(
       Object.values(snapshot)
         .flatMap((provider) => Object.values(provider.models ?? {}))
-        .flatMap((model) => Object.values(model.api ?? {}))
+        // A transcription model's `transcriptions` API names the entrypoint its caller loads, not a Provider package.
+        .flatMap((model) =>
+          Object.entries(model.api ?? {}).flatMap(([name, api]) => (name === "transcriptions" ? [] : [api])),
+        )
         .map((api) => api.sdk?.opencodeai)
         .filter((specifier): specifier is string => specifier?.startsWith("@opencode/ai/") === true),
     )

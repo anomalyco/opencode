@@ -12,15 +12,15 @@ import {
   ProjectAvatar,
 } from "@opencode/ui/project-avatar"
 import { TextInput } from "@opencode/ui/text-input"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { createTypeahead } from "@opencode/ui/typeahead"
 import { createEventListener } from "@solid-primitives/event-listener"
-import { getFilename } from "@opencode/util/path"
+import { getFilename, sameDirectory } from "@opencode/util/path"
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import type { PromptProject, PromptProjectController, PromptServer } from "@/new-session/project/selector"
 import type { NewSessionWorkspaceController } from "@/new-session/workspace/controller"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
-import { useData } from "@/runtime/server/current"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useCommand } from "@/shell/commands/command"
@@ -54,9 +54,14 @@ export function useNewSessionLocationDialog(input: {
       () => (
         <NewSessionLocationDialog
           project={input.project}
-          workspace={input.workspace}
           drilled={options?.project}
-          onWorkspace={options?.onWorkspace}
+          current={(project) => (input.project.isSelected(project) ? input.workspace.selection.value() : undefined)}
+          onWorkspace={(project, value) => {
+            if (input.project.isSelected(project)) input.workspace.selection.set(value)
+
+            if (!input.project.isSelected(project)) input.project.select(project, value)
+            options?.onWorkspace?.(value)
+          }}
         />
       ),
       input.onDone,
@@ -64,11 +69,31 @@ export function useNewSessionLocationDialog(input: {
   }
 }
 
+/**
+ * Opens one project's worktree step on its own, with no way back to the projects. `onSelect` gets "main", "create", or
+ * a worktree directory; `omit` leaves out a directory that cannot be chosen, such as a session's missing folder.
+ */
+export function useWorktreeDialog() {
+  const dialog = useDialog()
+
+  return (options: { project: PromptProject; omit?: string; onSelect: (value: string) => void }) =>
+    void dialog.show(() => (
+      <NewSessionLocationDialog
+        drilled={options.project}
+        omit={options.omit}
+        onWorkspace={(_, value) => options.onSelect(value)}
+      />
+    ))
+}
+
 function NewSessionLocationDialog(props: {
-  project: PromptProjectController
-  workspace: NewSessionWorkspaceController
+  /** Absent when the dialog only lists the drilled project's worktrees. */
+  project?: PromptProjectController
   drilled?: PromptProject
-  onWorkspace?: (value: string) => void
+  /** The project's chosen destination, marked with a check. */
+  current?: (project: PromptProject) => string | undefined
+  omit?: string
+  onWorkspace: (project: PromptProject, value: string) => void
 }) {
   const dialog = useDialog()
   const language = useLanguage()
@@ -76,11 +101,22 @@ function NewSessionLocationDialog(props: {
   const global = useGlobal()
   const servers = useServers()
   const serverSDK = useServerSDK()
-  const data = useData()
 
-  const [step, setStep] = createSignal(createLocationDialogState(props.drilled))
+  const [step, setStep] = createSignal(createLocationDialogState(props.drilled, !props.project))
   const view = createMemo(() => locationDialogView(step()))
   const drilled = createMemo(() => view().drilled)
+
+  const currentDestination = createMemo(() => {
+    const project = drilled()
+
+    if (project) return props.current?.(project)
+  })
+
+  const current = (entry: LocationEntry) => {
+    const destination = currentDestination()
+
+    return entry.type === "workspace" && destination !== undefined && sameDirectory(entry.value, destination)
+  }
 
   const connection = (project: PromptProject) =>
     project.server ? servers.list.find((item) => ServerConnection.key(item) === project.server!.key) : serverSDK.server
@@ -122,19 +158,28 @@ function NewSessionLocationDialog(props: {
     return !query || values.some((value) => value?.toLowerCase().includes(query))
   }
 
-  // Only the current server's checkouts have a synced branch.
   const checkout = (project: PromptProject) =>
-    tagged(project.server) ? undefined : data.location.vcs.info({ directory: project.worktree })?.branch.current
+    context(project)?.data.location.vcs.info({ directory: project.worktree })?.branch.current
 
-  const otherCount = createMemo(() => props.project.projects().filter((project) => !project.used).length)
+  createEffect(() => {
+    const project = drilled()
+
+    if (project?.vcs === "git")
+      void context(project)
+        ?.data.location.vcs.sync({ directory: project.worktree })
+        .catch(() => undefined)
+  })
+
+  const projects = () => props.project?.projects() ?? []
+
+  const otherCount = createMemo(() => projects().filter((project) => !project.used).length)
 
   const projectEntries = createMemo<LocationEntry[]>(() => {
     const others = step().type === "others"
     const query = step().query.trim()
 
     return [
-      ...props.project
-        .projects()
+      ...projects()
         .filter((project) => (others ? !project.used : project.used || !!query))
         // Remote projects also match their server's name, which their tag shows.
         .filter((project) => matches(displayName(project), project.worktree, tagged(project.server)?.name))
@@ -153,8 +198,7 @@ function NewSessionLocationDialog(props: {
   )
 
   const serverEntries = createMemo<LocationEntry[]>(() =>
-    props.project
-      .servers()
+    (props.project?.servers() ?? [])
       .filter((server) => matches(server.name))
       .map((server) => ({ id: `server:${server.key}`, type: "server" as const, server })),
   )
@@ -175,13 +219,15 @@ function NewSessionLocationDialog(props: {
         value: directory,
         directory,
       })),
-    ].filter((entry) =>
-      matches(
-        workspaceTitle(project, entry.value),
-        entry.directory,
-        entry.value === "main" ? checkout(project) : undefined,
-      ),
-    )
+    ]
+      .filter((entry) => entry.value === "create" || !props.omit || !sameDirectory(entry.directory, props.omit))
+      .filter((entry) =>
+        matches(
+          workspaceTitle(project, entry.value),
+          entry.directory,
+          entry.value === "main" ? checkout(project) : undefined,
+        ),
+      )
   })
 
   const entries = () => {
@@ -204,22 +250,26 @@ function NewSessionLocationDialog(props: {
 
   const placeholder = () => language.t(view().placeholderKey)
 
-  const choosesServer = () => props.project.servers().length > 1
-  command.register("new-session-location", () => [
-    {
-      id: "project.open",
-      title: language.t("command.project.open"),
-      category: language.t("command.category.project"),
-      keybind: "mod+o",
-      onSelect: () => choose({ id: "add", type: "add" }),
-    },
-  ])
-  createEventListener(document, "keydown", (event) => {
-    if (event.isComposing || !command.matches("project.open", event)) return
-    event.preventDefault()
-    event.stopPropagation()
-    command.trigger("project.open", "keybind")
-  })
+  const choosesServer = () => (props.project?.servers().length ?? 0) > 1
+
+  // A dialog that only lists one project's worktrees has no projects to open one from, so it leaves Mod+O to the app.
+  if (props.project) {
+    command.register("new-session-location", () => [
+      {
+        id: "project.open",
+        title: language.t("command.project.open"),
+        category: language.t("command.category.project"),
+        keybind: "mod+o",
+        onSelect: () => choose({ id: "add", type: "add" }),
+      },
+    ])
+    createEventListener(document, "keydown", (event) => {
+      if (event.isComposing || !command.matches("project.open", event)) return
+      event.preventDefault()
+      event.stopPropagation()
+      command.trigger("project.open", "keybind")
+    })
+  }
 
   // Every step opens on its first row; the user's choice holds while it stays in the results.
   const typeahead = createTypeahead<LocationEntry>({
@@ -264,23 +314,20 @@ function NewSessionLocationDialog(props: {
 
       if (effect.type === "project.add") {
         dialog.close()
-        props.project.add(effect.server)
+        props.project?.add(effect.server)
 
         return
       }
 
       if (effect.type === "project.select") {
-        props.project.select(effect.project)
+        props.project?.select(effect.project)
         dialog.close()
 
         return
       }
 
       if (effect.type === "workspace.select") {
-        if (props.project.isSelected(effect.project)) props.workspace.selection.set(effect.value)
-
-        if (!props.project.isSelected(effect.project)) props.project.select(effect.project, effect.value)
-        props.onWorkspace?.(effect.value)
+        props.onWorkspace(effect.project, effect.value)
       }
 
       dialog.close()
@@ -321,7 +368,7 @@ function NewSessionLocationDialog(props: {
   }
 
   return (
-    <Dialog class="command-palette new-session-location" size="large">
+    <Dialog class="command-palette new-session-location" size="large" fit>
       <DialogBody class="command-palette-body">
         <div class="palette-menu-search">
           <TextInput
@@ -333,7 +380,21 @@ function NewSessionLocationDialog(props: {
             appearance="large"
             aria-label={placeholder()}
             placeholder={placeholder()}
-            leadingIcon={<Icon name="magnifying-glass" />}
+            leadingIcon={
+              <Show when={view().ownsEscape && step().history.length > 0} fallback={<Icon name="magnifying-glass" />}>
+                <Tooltip value={language.t("session.new.location.back")} placement="bottom-start">
+                  <button
+                    type="button"
+                    class="new-session-location-search-back"
+                    aria-label={language.t("session.new.location.back")}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={back}
+                  >
+                    <Icon name="arrow-left" />
+                  </button>
+                </Tooltip>
+              </Show>
+            }
             role="combobox"
             aria-expanded="true"
             data-owns-escape={view().ownsEscape ? "" : undefined}
@@ -350,17 +411,16 @@ function NewSessionLocationDialog(props: {
           viewportRef={(el) => (resultsRef = el)}
         >
           <div id={typeahead.listID} class="command-palette-results" role="listbox">
-            <div class="command-palette-group">
+            <div
+              class="command-palette-group"
+              role={title() ? "group" : undefined}
+              aria-labelledby={title() ? `${typeahead.listID}-title` : undefined}
+            >
               <Show when={title()}>
                 {(value) => (
-                  <button
-                    type="button"
-                    class="command-palette-group-title new-session-location-back"
-                    aria-label={language.t("session.new.location.back")}
-                    onClick={back}
-                  >
+                  <div id={`${typeahead.listID}-title`} class="command-palette-group-title">
                     {value()}
-                  </button>
+                  </div>
                 )}
               </Show>
               <Show
@@ -402,15 +462,16 @@ function NewSessionLocationDialog(props: {
                           "new-session-location-workspace": entry.type === "workspace",
                         }}
                         role="option"
-                        aria-selected={activeEntry()?.id === entry.id}
+                        aria-selected={entry.type === "workspace" ? current(entry) : activeEntry()?.id === entry.id}
                         data-active={activeEntry()?.id === entry.id ? "" : undefined}
                         onMouseMove={(event) => {
                           // Ignore hover from a static cursor when keyboard scrolling moves rows underneath it.
                           if (event.movementX === 0 && event.movementY === 0) return
                           typeahead.setActive(entry.id)
                         }}
+                        // The search field keeps focus and names the active row, so rows are not Tab stops.
+                        tabIndex={-1}
                         onMouseDown={(event) => event.preventDefault()}
-                        onFocus={() => typeahead.setActive(entry.id)}
                         onClick={() => choose(entry)}
                       >
                         <Switch>
@@ -495,6 +556,9 @@ function NewSessionLocationDialog(props: {
                             )}
                           </Match>
                         </Switch>
+                        <Show when={current(entry)}>
+                          <Icon name="check" class="ms-auto shrink-0 text-v2-icon-icon-muted" />
+                        </Show>
                       </button>
                     </>
                   )}
@@ -532,7 +596,7 @@ function ProjectRow(props: {
             <Show when={props.branch}>
               {(branch) => (
                 <span class="new-session-location-branch">
-                  <Icon name="branch" size="small" />
+                  <Icon name="branch" />
                   <span dir="auto">{branch()}</span>
                 </span>
               )}
@@ -570,7 +634,7 @@ function ServerTag(props: { server?: PromptServer }) {
     <Show when={tagged(props.server)}>
       {(server) => (
         <Badge class="new-session-location-tag" variant="subtle" title={server().label}>
-          <Icon name={serverIcon(server())} size="small" />
+          <Icon name={serverIcon(server())} />
           <span>{server().name}</span>
         </Badge>
       )}
