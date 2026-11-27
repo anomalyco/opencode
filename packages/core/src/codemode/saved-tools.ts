@@ -2,12 +2,12 @@ export * as CodeModeSavedTools from "./saved-tools.js"
 
 import { CodeMode, Extension } from "@opencode/codemode"
 import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
+import { isRecord } from "@opencode/util/record"
 import { and, eq, inArray } from "drizzle-orm"
 import { Context, Effect, JsonSchema, Layer, PubSub, Ref, Result, Schema, Scope, Stream } from "effect"
 import { Database } from "../database/database.js"
 import { Instructions } from "../instructions/index.js"
 import { CodeModeAgents } from "./agents.js"
-import { CodeModeExecution } from "./execution.js"
 import { SavedToolTable } from "./sql.js"
 
 /** The namespace saved tools are called under: `tools.opencode.<name>`. */
@@ -18,6 +18,9 @@ export const GLOBAL = "*"
 
 /** How deep saved tools may call saved tools. */
 export const MAX_DEPTH = 4
+
+/** How many saved tools are running inside each other; see `MAX_DEPTH`. */
+export const Depth = Context.Reference<number>("@opencode/CodeModeSavedTools/Depth", { defaultValue: () => 0 })
 
 export interface Saved {
   /** A project ID, or `GLOBAL`. */
@@ -34,10 +37,10 @@ export interface StoreInterface {
   /** The project's tools and the global ones; a project tool hides a global one of the same name. */
   readonly list: (projectID: string) => Effect.Effect<ReadonlyArray<Saved>>
   readonly save: (tool: Saved) => Effect.Effect<void>
-  /** Removes the first of `scopes` that has the tool; false when none has it. */
+  /** Removes the tool from the first of `scopes` that has it; false when none has it. */
   readonly remove: (scopes: ReadonlyArray<string>, name: string) => Effect.Effect<boolean>
-  /** Emits after every save or remove, in any project, so each Location can reload its tools. */
-  readonly changes: Stream.Stream<void>
+  /** The scope of every save or remove, in any project, so each Location can reload the tools it sees. */
+  readonly changes: Stream.Stream<string>
 }
 
 export class Store extends Context.Service<Store, StoreInterface>()("@opencode/CodeModeSavedTools/Store") {}
@@ -46,40 +49,44 @@ const storeLayer = Layer.effect(
   Store,
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
-    const changed = yield* PubSub.unbounded<void>()
-    const columns = {
-      scope: SavedToolTable.scope,
-      name: SavedToolTable.name,
-      description: SavedToolTable.description,
-      input: SavedToolTable.input,
-      output: SavedToolTable.output,
-      code: SavedToolTable.code,
-    }
+    const changed = yield* PubSub.unbounded<string>()
     return Store.of({
       list: Effect.fn("CodeModeSavedTools.list")(function* (projectID) {
         const rows = yield* db
-          .select(columns)
+          .select({
+            scope: SavedToolTable.scope,
+            name: SavedToolTable.name,
+            description: SavedToolTable.description,
+            input: SavedToolTable.input,
+            output: SavedToolTable.output,
+            code: SavedToolTable.code,
+          })
           .from(SavedToolTable)
           .where(inArray(SavedToolTable.scope, [projectID, GLOBAL]))
           .all()
           .pipe(Effect.orDie)
-        const project = new Set(rows.filter((row) => row.scope !== GLOBAL).map((row) => row.name))
+        const own = new Set(rows.filter((row) => row.scope !== GLOBAL).map((row) => row.name))
         return rows
-          .filter((row) => row.scope !== GLOBAL || !project.has(row.name))
+          .filter((row) => row.scope !== GLOBAL || !own.has(row.name))
           .map((row) => ({ ...row, output: row.output ?? undefined }))
       }),
       save: Effect.fn("CodeModeSavedTools.save")(function* (tool) {
-        const values = { ...tool, output: tool.output ?? null }
+        const values = {
+          description: tool.description,
+          input: tool.input,
+          output: tool.output ?? null,
+          code: tool.code,
+        }
         yield* db
           .insert(SavedToolTable)
-          .values(values)
+          .values({ scope: tool.scope, name: tool.name, ...values })
           .onConflictDoUpdate({
             target: [SavedToolTable.scope, SavedToolTable.name],
             set: { ...values, time_updated: Date.now() },
           })
           .run()
           .pipe(Effect.orDie)
-        yield* PubSub.publish(changed, undefined)
+        yield* PubSub.publish(changed, tool.scope)
       }),
       remove: Effect.fn("CodeModeSavedTools.remove")(function* (scopes, name) {
         for (const scope of scopes) {
@@ -90,7 +97,7 @@ const storeLayer = Layer.effect(
             .all()
             .pipe(Effect.orDie)
           if (removed.length === 0) continue
-          yield* PubSub.publish(changed, undefined)
+          yield* PubSub.publish(changed, scope)
           return true
         }
         return false
@@ -111,13 +118,10 @@ export interface DefineInput {
   readonly global: boolean
 }
 
-type Execution = CodeModeExecution.Service["Service"]
-
 /** What runs tool.define() and tool.delete() for a Location; the saved-tools plugin provides it. */
 export interface Implementation {
-  /** Saves the tool and returns the path a script calls it at. */
-  readonly define: (input: DefineInput, execution: Execution) => Effect.Effect<string, Error>
-  readonly remove: (name: string, execution: Execution) => Effect.Effect<boolean, Error>
+  readonly define: (input: DefineInput) => Effect.Effect<void, Error>
+  readonly remove: (name: string) => Effect.Effect<boolean>
 }
 
 export interface Interface {
@@ -144,55 +148,42 @@ export const layer = Layer.effect(
 
 export const node = makeLocationNode({ service: Service, layer, deps: [] })
 
-/** For runs without the `saved_tools` extension, whose environment still names this service. */
+/** For runs without the `codemode_tools` extension, whose environment still names this service. */
 export const unavailable = Service.of({ register: () => Effect.void, current: Effect.succeed(undefined) })
 
-/**
- * The program a saved tool runs: its `run` called with the `input` binding. `run` may be any function form
- * `Function.prototype.toString` gives, a method (`async run(input) {}`) included. Fails on source that is none.
- */
-export function program(
-  code: string,
-): Result.Result<{ readonly code: string; readonly tools: ReadonlyArray<string> }, string> {
-  const attempts = [`return await (${code})(input)`, `return await Object.values({ ${code} })[0](input)`]
-  const failures = attempts.map((attempt) => ({ attempt, scanned: CodeMode.scanProgram(attempt, []) }))
-  const parsed = failures.find((item) => Result.isSuccess(item.scanned))
-  if (parsed && Result.isSuccess(parsed.scanned))
-    return Result.succeed({ code: parsed.attempt, tools: parsed.scanned.success.tools })
-  const first = failures[0].scanned
-  return Result.fail(`run is not a function: ${Result.isFailure(first) ? first.failure.message : "unknown"}`)
+export interface Program {
+  readonly code: string
+  /** The `tools.<path>`s it calls. */
+  readonly tools: ReadonlyArray<string>
 }
 
-const NAME = /^[a-z][a-z0-9_]*$/
+/**
+ * The program a saved tool runs: its `run` called with the `input` binding. `run` is a function expression, or a method
+ * (`async run(input) {}`), the other form `Function.prototype.toString` gives. Source that only parses as another
+ * expression fails when the tool is called.
+ */
+export function program(source: string): Result.Result<Program, string> {
+  const direct = parse(`return await (${source})(input)`)
+  if (Result.isSuccess(direct)) return Result.succeed(direct.success)
+  const method = parse(`return await Object.values({ ${source} })[0](input)`)
+  if (Result.isSuccess(method)) return Result.succeed(method.success)
+  return Result.fail(`run is not a function: ${direct.failure.message}`)
+}
 
-const DefineSpec = Schema.Struct({
-  name: Schema.String.check(Schema.isPattern(NAME)),
-  description: Schema.String.check(Schema.isNonEmpty()),
-  input: Schema.Record(Schema.String, Schema.Unknown),
-  output: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-  run: Schema.String,
-  global: Schema.optional(Schema.Boolean),
-})
-
-const requireImplementation = Effect.gen(function* () {
-  const service = yield* Service
-  const implementation = yield* service.current
-  if (implementation) return implementation
-  return yield* Effect.fail(new Error("tool.define() and tool.delete() are not available in this session."))
-})
+const parse = (code: string) =>
+  Result.map(CodeMode.scanProgram(code, []), (scanned): Program => ({ code, tools: scanned.tools }))
 
 /** The script's `tool` global: `tool.define(spec)` and `tool.delete(name)`. */
 export const extension = Extension.make({
-  name: "saved_tools",
+  name: "codemode_tools",
   globals: {
     tool: {
       define: Extension.async((spec: unknown) =>
         Effect.gen(function* () {
-          const input = yield* parseSpec(spec)
+          const input = yield* Effect.fromResult(parseSpec(spec))
           const implementation = yield* requireImplementation
-          const execution = yield* CodeModeExecution.Service
-          const path = yield* implementation.define(input, execution)
-          return { path: `tools.${path}` }
+          yield* implementation.define(input)
+          return { path: `tools.${NAMESPACE}.${input.name}` }
         }),
       ),
       delete: Extension.async((name: unknown) =>
@@ -200,8 +191,7 @@ export const extension = Extension.make({
           if (typeof name !== "string" || name === "")
             return yield* Effect.fail(new TypeError("tool.delete(name) needs the tool's name."))
           const implementation = yield* requireImplementation
-          const execution = yield* CodeModeExecution.Service
-          return { deleted: yield* implementation.remove(name, execution) }
+          return { deleted: yield* implementation.remove(name) }
         }),
       ),
     },
@@ -212,41 +202,52 @@ export const extension = Extension.make({
 export const display = (args: ReadonlyArray<unknown>): Record<string, string> => {
   const first = args[0]
   if (typeof first === "string") return { name: first }
-  const name = typeof first === "object" && first !== null && "name" in first ? first.name : undefined
-  return typeof name === "string" ? { name } : {}
+  return isRecord(first) && typeof first.name === "string" ? { name: first.name } : {}
 }
 
-function parseSpec(spec: unknown) {
+const DefineSpec = Schema.Struct({
+  name: Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9_]*$/)),
+  description: Schema.String.check(Schema.isNonEmpty()),
+  input: Schema.Record(Schema.String, Schema.Unknown),
+  output: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  run: Schema.String,
+  global: Schema.optional(Schema.Boolean),
+})
+
+function parseSpec(spec: unknown): Result.Result<DefineInput, TypeError> {
   const decoded = Schema.decodeUnknownResult(DefineSpec)(spec, { errors: "all", onExcessProperty: "error" })
   if (Result.isFailure(decoded))
-    return Effect.fail(
-      new TypeError(
-        `tool.define({ name, description, input, output?, run, global? }) is invalid: ${decoded.failure.message}. name is lowercase letters, digits and _; input and output are JSON Schemas; run is an async function's source, as a string.`,
-      ),
+    return invalid(
+      `{ name, description, input, output?, run, global? } is invalid: ${decoded.failure.message}. name is lowercase letters, digits and _; input and output are JSON Schemas; run is an async function's source, as a string.`,
     )
-  const value = decoded.success
-  // Boundary values from a script: `compile` below checks they are usable JSON Schemas.
-  const input = value.input as JsonSchema.JsonSchema
-  const output = value.output as JsonSchema.JsonSchema | undefined
-  if (input.type !== "object") return Effect.fail(new TypeError("tool.define(): input must be an object schema."))
-  const problems = [
-    ["input", CodeModeAgents.compile(input, false)],
-    ...(output === undefined ? [] : [["output", CodeModeAgents.compile(output, false)] as const]),
-  ] as const
-  const invalid = problems.find(([, result]) => Result.isFailure(result))
-  if (invalid && Result.isFailure(invalid[1]))
-    return Effect.fail(new TypeError(`tool.define(): ${invalid[0]} ${invalid[1].failure}`))
-  const runnable = program(value.run)
-  if (Result.isFailure(runnable)) return Effect.fail(new TypeError(`tool.define(): ${runnable.failure}`))
-  return Effect.succeed({
-    name: value.name,
-    description: value.description,
+  // Boundary values from a script: `compile` checks they are JSON Schemas Core can validate against.
+  const input = decoded.success.input as JsonSchema.JsonSchema
+  const output = decoded.success.output as JsonSchema.JsonSchema | undefined
+  if (input.type !== "object") return invalid("input must be an object schema.")
+  const inputCodec = CodeModeAgents.compile(input, false)
+  if (Result.isFailure(inputCodec)) return invalid(`input ${inputCodec.failure}`)
+  const outputCodec = output === undefined ? undefined : CodeModeAgents.compile(output, false)
+  if (outputCodec !== undefined && Result.isFailure(outputCodec)) return invalid(`output ${outputCodec.failure}`)
+  const runnable = program(decoded.success.run)
+  if (Result.isFailure(runnable)) return invalid(runnable.failure)
+  return Result.succeed({
+    name: decoded.success.name,
+    description: decoded.success.description,
     input,
     ...(output === undefined ? {} : { output }),
-    code: value.run,
-    global: value.global === true,
-  } satisfies DefineInput)
+    code: decoded.success.run,
+    global: decoded.success.global === true,
+  })
 }
+
+const invalid = (message: string) => Result.fail(new TypeError(`tool.define(): ${message}`))
+
+const requireImplementation = Effect.gen(function* () {
+  const service = yield* Service
+  const implementation = yield* service.current
+  if (implementation) return implementation
+  return yield* Effect.fail(new Error("tool.define() and tool.delete() are not available in this session."))
+})
 
 // prettier-ignore
 const guide = `## Saved tools in Code Mode

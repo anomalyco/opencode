@@ -6,7 +6,8 @@ import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
 import type { CodeMode } from "@opencode/codemode"
 import { Tool } from "@opencode/schema/tool"
 import { isRecord } from "@opencode/util/record"
-import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Types } from "effect"
+import { Identifier } from "@opencode/schema/identifier"
+import { Context, Effect, Layer, Result, Schema, SchemaIssue, Scope, Types } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
@@ -443,28 +444,31 @@ const layer = Layer.effect(
             .filter(([, tool]) => !PermissionPolicy.isActionDenied(input.policy, tool.options?.permission ?? tool.id))
             .map(([, tool]) => [tool.id, tool] as const),
         )
-        const callSeq = yield* Ref.make(0)
         const full = input.services !== undefined && (yield* flags.enabled("full_codemode"))
+        // Inside an execute call (a saved tool's run), permission requests show on that call's row, as its own
+        // program's calls do. Fresh IDs keep two runs in one message apart.
+        const parent = yield* CodeModeTool.Parent
+        const scope = yield* Effect.scope
+        const callID = Effect.gen(function* () {
+          const id = Tool.CallID.make(`call_${Identifier.ascending()}`)
+          if (parent !== undefined) yield* permission.nested(id, parent).pipe(Scope.provide(scope))
+          return id
+        })
         return yield* CodeModeTool.check(
           { tools, namespaces: data.namespaces, definitions: data.definitions },
           {
             ...input,
-            context: { ...input.context, id: Tool.CallID.make(`call_${input.context.messageID}_execute`) },
+            context: { ...input.context, id: yield* callID },
             permission,
             services: full ? input.services : undefined,
           },
           (name, tool, toolInput) =>
             Effect.gen(function* () {
-              const index = yield* Ref.getAndUpdate(callSeq, (value) => value + 1)
-              const context: Tool.Context = {
-                ...input.context,
-                id: Tool.CallID.make(`call_${input.context.messageID}_${index}`),
-                codemode: true,
-              }
+              const context: Tool.Context = { ...input.context, id: yield* callID, codemode: true }
               return yield* run(tools, tool, name, toolInput, context)
             }),
         )
-      }),
+      }, Effect.scoped),
     })
   }),
 )

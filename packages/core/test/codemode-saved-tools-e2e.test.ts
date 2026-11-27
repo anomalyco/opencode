@@ -53,15 +53,22 @@ const pluginSupervisor = makeLocationNode({
     Effect.gen(function* () {
       const tools = yield* Tool.Service
       // A built-in tool under the saved tools' namespace, which a saved tool may not replace.
-      yield* tools.transform((editor) =>
+      yield* tools.transform((editor) => {
         editor.add({
           name: "builtin",
           description: "A built-in tool.",
           input: { type: "object" },
           options: { namespace: CodeModeSavedTools.NAMESPACE },
           execute: () => Effect.succeed({ content: "built-in" }),
-        }),
-      )
+        })
+        editor.add({
+          name: "move",
+          description: "A built-in tool under a namespace of its own.",
+          input: { type: "object" },
+          options: { namespace: `${CodeModeSavedTools.NAMESPACE}.session` },
+          execute: () => Effect.succeed({ content: "moved" }),
+        })
+      })
       yield* registerToolPlugin(SavedToolsPlugin.Plugin)
     }),
   ),
@@ -113,10 +120,13 @@ const modelLayer = Layer.succeed(
   }),
 )
 
-const harness = Effect.fnUntraced(function* () {
+const harness = Effect.fnUntraced(function* (options: { enabled?: boolean; deny?: ReadonlyArray<string> } = {}) {
   const dir = yield* tmpdirScoped()
   yield* Effect.promise(() =>
-    Bun.write(path.join(dir.path, "opencode.json"), JSON.stringify({ experimental: { codemode_tools: true } })),
+    Bun.write(
+      path.join(dir.path, "opencode.json"),
+      JSON.stringify({ experimental: { codemode_tools: options.enabled ?? true } }),
+    ),
   )
   const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
   const scope = yield* Effect.scope
@@ -144,6 +154,7 @@ const harness = Effect.fnUntraced(function* () {
     agents.transform((editor) => {
       editor.update(Agent.ID.make("build"), (agent) => {
         agent.permissions.push({ action: "*", resource: "*", effect: "allow" })
+        for (const action of options.deny ?? []) agent.permissions.push({ action, resource: "*", effect: "deny" })
       })
     }),
   ).pipe(Effect.provide(locations.get(location)))
@@ -250,6 +261,61 @@ describe("tool.define()", () => {
       expect(
         yield* h.run(define(`name: "Bad-Name", description: "x", input: { type: "object" }, run: \`async () => 1\``)),
       ).toContain("is invalid")
+    }),
+  )
+
+  e2e.live("gives null for a run that returns nothing", () =>
+    Effect.gen(function* () {
+      const h = yield* harness()
+      yield* h.run(
+        define(`name: "noop", description: "Does nothing.", input: { type: "object" }, run: \`async () => {}\``),
+      )
+      expect(yield* h.run(`return await tools.opencode.noop({})`)).toBe("null")
+    }),
+  )
+
+  e2e.live("runs under the caller's permissions", () =>
+    Effect.gen(function* () {
+      const h = yield* harness({ deny: ["opencode_builtin"] })
+      yield* h.run(
+        define(
+          `name: "wrap", description: "Calls the built-in.", input: { type: "object" }, run: \`async () => await tools.opencode.builtin({})\``,
+        ),
+      )
+      // A denied tool is left out of the saved tool's run, as it is from the caller's.
+      expect(yield* h.run(`return await tools.opencode.wrap({})`)).toContain("Unknown tool 'opencode.builtin'")
+    }),
+  )
+
+  e2e.live("refuses a name a built-in namespace uses", () =>
+    Effect.gen(function* () {
+      const h = yield* harness()
+      expect(
+        yield* h.run(define(`name: "session", description: "x", input: { type: "object" }, run: \`async () => 1\``)),
+      ).toContain("built-in tool")
+    }),
+  )
+
+  e2e.live("hides a global tool behind the project's own, until that one is deleted", () =>
+    Effect.gen(function* () {
+      const h = yield* harness()
+      yield* h.run(
+        define(
+          `name: "which", description: "x", input: { type: "object" }, global: true, run: \`async () => "global"\``,
+        ),
+      )
+      yield* h.run(define(`name: "which", description: "x", input: { type: "object" }, run: \`async () => "project"\``))
+      expect(yield* h.run(`return await tools.opencode.which({})`)).toBe("project")
+      yield* h.run(`return await tool.delete("which")`)
+      expect(yield* h.run(`return await tools.opencode.which({})`)).toBe("global")
+    }),
+  )
+
+  e2e.live("is absent with the flag off", () =>
+    Effect.gen(function* () {
+      const h = yield* harness({ enabled: false })
+      expect(yield* h.run(`return typeof tool`)).toBe("undefined")
+      expect(text((yield* h.llm.requests())[0]!)).not.toContain("tool.define(")
     }),
   )
 
