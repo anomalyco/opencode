@@ -45,7 +45,7 @@ export type LabEntry = {
   states: LabState[]
 }
 
-/** Loads every story file. A file that fails to import is reported rather than hiding the rest. */
+/** Loads every Lab page. A file that fails to import is reported rather than hiding the rest. */
 export async function loadLabCatalog(
   modules: Record<string, () => Promise<StoryModule>>,
   sources: Record<string, () => Promise<string>>,
@@ -73,7 +73,7 @@ export async function loadLabCatalog(
   }
 }
 
-// A story file as the lab shows it. A module lists its exports alphabetically, so `source`, the file's text, gives the
+// A page as the lab shows it. A module lists its exports alphabetically, so `source`, the file's text, gives the
 // order the author wrote the states in.
 export function labEntry(file: string, module: StoryModule, source: string): LabEntry {
   const meta = isStoryObject(module.default) ? module.default : {}
@@ -111,9 +111,9 @@ export function labEntry(file: string, module: StoryModule, source: string): Lab
   }
 }
 
-/** A story file's name: `composer-docks` for `…/composer-docks.stories.tsx`. */
+/** A page's name: `composer-docks` for `…/composer-docks.lab.tsx`. */
 export function fileName(file: string) {
-  return file.replace(/^.*\//, "").replace(/\.stories\.tsx$/, "")
+  return file.replace(/^.*\//, "").replace(/\.lab\.tsx$/, "")
 }
 
 /** The args a state renders with: the meta's, then the state's own. */

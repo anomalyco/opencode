@@ -2,7 +2,7 @@ import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { onMount } from "solid-js"
 import { createStore } from "solid-js/store"
-import { DialogStoryRuntime } from "@/components-lab/dialog-story-runtime"
+import { DialogStoryRuntime } from "@/lab/dialog-story-runtime"
 import type { ModelSelection } from "./selection"
 import { DialogSelectModel } from "./select-dialog"
 

@@ -720,7 +720,7 @@ export function mountSessionRegion(input: {
  * theme picker's choices as Settings › Appearance lists them; `disable` and `enable` toggle a plugin as
  * Extensions › Plugins does. With `pending`, the plugin list has not arrived until `load()`. `applied` counts the
  * provider's `onThemeApplied` calls, which show a desktop window. `preview`, `previewScheme`, `commit` and `cancel`
- * drive the provider's preview, as the components lab does.
+ * drive the provider's preview, as the Lab does.
  */
 export function mountThemes(input: { definitions: readonly Entry[]; pending?: true }) {
   const container = document.createElement("div")

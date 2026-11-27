@@ -6,7 +6,7 @@ import {
   STORY_DIRECTORY,
   STORY_PROJECTS,
   STORY_SERVER,
-} from "@/components-lab/dialog-story-runtime"
+} from "@/lab/dialog-story-runtime"
 import { HomeSessionsView } from "@/home/sessions/view"
 import { groupSessions } from "@/home/sessions/controller"
 import { buildHomeSessionRecords, homeSessionLocation } from "@/home/sessions/records"

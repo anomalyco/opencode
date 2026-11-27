@@ -6,7 +6,7 @@ import {
   STORY_DIRECTORY,
   STORY_PROJECTS,
   STORY_SERVER,
-} from "@/components-lab/dialog-story-runtime"
+} from "@/lab/dialog-story-runtime"
 import { createPromptProjectController, type PromptProject, type PromptServer } from "@/new-session/project/selector"
 import { createNewSessionWorkspaceController } from "@/new-session/workspace/controller"
 import { ServerConnection } from "@/runtime/server/registry"

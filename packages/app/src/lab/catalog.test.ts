@@ -25,7 +25,7 @@ const module = {
 
 describe("labEntry", () => {
   test("keeps the states in source order, each over the meta's args", () => {
-    const entry = labEntry("docks.stories.tsx", module, source)
+    const entry = labEntry("docks.lab.tsx", module, source)
 
     expect(entry.states.map((state) => state.name)).toEqual(["Empty", "Queue 3", "Answered"])
     expect(stateArgs(entry, 1)).toEqual({ queued: 3, question: false, size: "normal", label: "Send" })
@@ -34,7 +34,7 @@ describe("labEntry", () => {
 
 describe("labFields", () => {
   test("types each arg by its argType, else by its value", () => {
-    const entry = labEntry("docks.stories.tsx", module, source)
+    const entry = labEntry("docks.lab.tsx", module, source)
     const fields = labFields(entry)
 
     expect(fields).toEqual({
@@ -49,7 +49,7 @@ describe("labFields", () => {
 
 test("starts each knob at the first state's value", () => {
   const entry = labEntry(
-    "spinner.stories.tsx",
+    "spinner.lab.tsx",
     { default: { args: { variant: "radar" } }, Today: { args: { variant: "today" } }, Radar: {} },
     "export const Today = {}\nexport const Radar = {}",
   )

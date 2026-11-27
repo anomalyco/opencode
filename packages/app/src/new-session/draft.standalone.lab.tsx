@@ -7,7 +7,7 @@ import {
   STORY_DIRECTORY,
   STORY_PROJECTS,
   STORY_SERVER,
-} from "@/components-lab/dialog-story-runtime"
+} from "@/lab/dialog-story-runtime"
 import { useLocal } from "@/providers/models/selection"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useDirectoryPicker } from "@/workspaces/selection/picker"
