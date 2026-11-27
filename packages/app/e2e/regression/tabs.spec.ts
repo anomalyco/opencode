@@ -2781,6 +2781,72 @@ test("the inbox list's own menu moves Working between the bottom shelf and above
   await expect(shelf.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([/Working inbox session/])
 })
 
+test("a working session finishing in the inbox shelf leaves the list where it was", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 480 })
+
+  const workspace = await mockWorkspace(page, {
+    name: "InboxFinish",
+    sessions: [
+      ...Array.from({ length: 12 }, (_, index) => ({
+        id: `ses_finish_read_${String(index).padStart(2, "0")}`,
+        title: `Read session ${index}`,
+        time: { created: T0, updated: T0 + 100 - index, idle: T0 + 100 - index, viewed: T0 + 200 },
+      })),
+      { id: "ses_finish_working", title: "Working session", time: { created: T0, updated: T0 + 150, busy: T0 } },
+    ],
+    sessionStatus: { ses_finish_working: { type: "running" } },
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [],
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true, recentExpanded: true } },
+    },
+  })
+
+  await page.goto("/")
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+  const list = inbox.locator('[data-slot="sidebar-inbox-scroll"]')
+  const shelf = inbox.locator('[data-slot="sidebar-inbox-working"]')
+  const recent = list.getByRole("group", { name: "Recent", exact: true }).locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(shelf.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([/Working session/])
+  await expect(recent).toHaveCount(12)
+  expect(await list.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+
+  // Open the first session, then move focus down the list to the working card without opening it.
+  await recent.first().click()
+  await expectPath(page, sessionHref("ses_finish_read_00"))
+  await expect(recent.first()).toBeFocused()
+  await page.keyboard.press("End")
+  await expect(shelf.locator('[data-slot="sidebar-inbox-item"]')).toBeFocused()
+  await list.evaluate((element) => element.scrollTo(0, 0))
+  expect(await list.evaluate((element) => element.scrollTop)).toBe(0)
+
+  // The mock serves these records, so the session's next load sees the run's end.
+  const working = workspace.sessions.find((session) => session.id === "ses_finish_working")
+
+  if (!working) throw new Error("Unknown session ses_finish_working")
+  Object.assign(working, { time: { ...working.time, updated: T0 + 300, idle: T0 + 300 } })
+  await workspace.push([
+    {
+      id: "evt_finish_succeeded",
+      created: T0 + 300,
+      type: "session.execution.succeeded",
+      location: { directory: workspace.directory },
+      durable: { aggregateID: "ses_finish_working", seq: 1, version: 1 },
+      data: { sessionID: "ses_finish_working" },
+    } satisfies Extract<OpenCodeEvent, { type: "session.execution.succeeded" }>,
+  ])
+
+  // The finished run is the newest unread result, at the top of Recent, and the list stays at the top to show it.
+  await expect(shelf).toHaveCount(0)
+  await expect(recent.first()).toContainText("Working session")
+  await expect(recent.first()).toHaveAttribute("data-status", "done")
+  await expect(recent.first()).toBeFocused()
+  await expect(recent.first()).toBeInViewport({ ratio: 1 })
+  expect(await list.evaluate((element) => element.scrollTop)).toBe(0)
+})
+
 test("deleting from the inbox closes its dialog at once and a slow delete leaves the next dialog open", async ({
   page,
 }) => {

@@ -326,6 +326,7 @@ export function SidebarInbox() {
                 rowRefs.set(key, element)
                 onCleanup(() => rowRefs.get(key) === element && rowRefs.delete(key))
               }}
+              focusKey={`inbox:${key}`}
               project={entry().ctx.projects.forSession(entry().session)}
               directory={entry().session.location.directory}
               title={entry().session.title}
@@ -901,6 +902,8 @@ export function InboxSessionMenuItems(props: {
 
 export function InboxSessionCard(props: {
   ref?: (element: HTMLButtonElement) => void
+  // A session changing section remounts its card, and focus rescue follows this key to the new one.
+  focusKey?: string
   project?: LocalProject
   directory: string
   title?: string
@@ -956,6 +959,7 @@ export function InboxSessionCard(props: {
         tabIndex={navigation ? (navigation() === id ? 0 : -1) : 0}
         aria-current={props.selected ? "page" : undefined}
         data-slot="sidebar-inbox-item"
+        data-focus-key={props.focusKey}
         data-roving
         onPointerDown={(event: PointerEvent) => event.stopPropagation()}
         data-status={status()}
