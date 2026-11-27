@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process"
-import { readFile } from "node:fs/promises"
+import { mkdir, open, readFile, stat } from "node:fs/promises"
 import net from "node:net"
 import path from "node:path"
 import { Cause, Data, Duration, Effect, Schema, Semaphore } from "effect"
@@ -269,13 +269,15 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
 
   const spawnDaemon = Effect.fn("PersistentPty.daemon.spawn")(function* () {
     const executable = yield* Effect.tryPromise({ try: binary, catch: (cause) => failure("spawn", cause) })
+    // Without a log the daemon's own reports (a terminal it stopped waiting for, a job it could not use) are lost.
+    const log = yield* Effect.promise(() => openLog(root).catch(() => undefined))
     const child = yield* Effect.tryPromise({
       try: () =>
         new Promise<ReturnType<typeof spawn>>((resolve, reject) => {
           const child = spawn(executable, ["daemon", "--runtime-dir", root, "--name", id], {
             detached: true,
             windowsHide: true,
-            stdio: "ignore",
+            stdio: ["ignore", "ignore", log?.fd ?? "ignore"],
           })
           child.once("spawn", () => {
             child.unref()
@@ -283,8 +285,8 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
           })
           child.once("error", reject)
         }),
-      catch: (cause) => failure("spawn", cause),
-    })
+      catch: (cause) => failure("spawn", refusedSpawn(executable, cause) ?? cause),
+    }).pipe(Effect.ensuring(Effect.promise(() => log?.close() ?? Promise.resolve())))
     return yield* Effect.gen(function* () {
       const deadline = Date.now() + 5_000
       let last: DaemonError | undefined
@@ -376,10 +378,38 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     withRegistration(shouldStart, (current) => oneShot(current, value)),
   )
 
+  // The registration resets only when connecting fails, so a daemon that still takes connections but answers nothing
+  // would fail every later request the same way until the server restarts. When a reply goes missing and a ping on a
+  // fresh connection gets none either, give the daemon up: closing the owner connection stops it, and the next request
+  // starts a fresh one. Its terminals end with it. The request itself is not replayed, since it may have run.
+  const replaceUnresponsive = Effect.fn("PersistentPty.daemon.replaceUnresponsive")(function* (error: DaemonError) {
+    const current = registration
+    if (!current) return yield* Effect.fail(error)
+    const answers = yield* oneShot(current, { op: "ping" }).pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false),
+    )
+    if (answers) return yield* Effect.fail(error)
+    yield* startup.withPermit(
+      Effect.sync(() => {
+        if (registration === current) abandon()
+      }),
+    )
+    yield* Effect.logWarning("Replacing an opencode-pty daemon that stopped responding", { pid: current.pid })
+    return yield* Effect.fail(
+      new DaemonError({
+        kind: "connect",
+        message: "opencode-pty stopped responding and was replaced",
+        pid: current.pid,
+      }),
+    )
+  })
+
   const request = Effect.fn("PersistentPty.daemon.request")(function* (value: object, shouldStart = false) {
     return yield* attempt(value, shouldStart).pipe(
       Effect.catch((error) => {
         if (error.kind === "registration") return attempt(value, shouldStart)
+        if (error.kind === "response") return replaceUnresponsive(error)
         if (error.kind !== "connect") return Effect.fail(error)
         registration = undefined
         if (!shouldStart) return Effect.fail(error)
@@ -743,6 +773,26 @@ function decode(payload: Uint8Array) {
 
 function responseError(message: string) {
   return new DaemonError({ kind: message === "authentication failed" ? "registration" : "request", message })
+}
+
+// Windows refuses an unsigned program under Smart App Control or an application control policy, and libuv reports
+// that only as an unknown error, which says nothing about the cause.
+function refusedSpawn(executable: string, cause: unknown) {
+  if (process.platform !== "win32" || !(cause instanceof Error) || !("code" in cause) || cause.code !== "EUNKNOWN")
+    return
+  return `Windows refused to start ${executable}. Smart App Control or an application control policy (WDAC, AppLocker) usually causes this; a damaged file can too. (${cause.message})`
+}
+
+// One log for every daemon of this root, beside their runtime directories, which their sweep leaves alone. It starts
+// over once it passes 1 MB.
+async function openLog(root: string) {
+  await mkdir(root, { recursive: true })
+  const file = path.join(root, "opencode-pty.log")
+  const size = await stat(file).then(
+    (info) => info.size,
+    () => 0,
+  )
+  return open(file, size > 1024 * 1024 ? "w" : "a")
 }
 
 function failure(kind: DaemonError["kind"], cause: unknown) {

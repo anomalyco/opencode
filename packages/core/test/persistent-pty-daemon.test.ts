@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises"
 import net from "node:net"
 import path from "node:path"
 import { Effect, Fiber } from "effect"
+import { TestClock } from "effect/testing"
 import { makeDaemonTransport } from "../src/persistent-pty/daemon"
 import { frame, listen, pong, temporaryDirectory, terminal, writeRegistration } from "./fixture/persistent-pty-daemon"
 import { it } from "./lib/effect"
@@ -200,6 +201,66 @@ it.live("does not replay a dispatched mutating request when its response is lost
 
     expect(error.kind).toBe("response")
     expect(creates).toBe(1)
+  }),
+)
+
+it.effect("replaces a daemon that takes requests but no longer answers them", () =>
+  Effect.gen(function* () {
+    const { root, directory } = yield* TestClock.withLive(temporaryRuntime())
+    const socketPath = path.join(directory, "daemon.sock")
+    const seen: string[] = []
+    let answering = true
+    yield* TestClock.withLive(
+      listen(socketPath, (_socket, request) => {
+        seen.push(String(request.op))
+        if (!answering) return undefined
+        if (request.op === "ping") return pong
+        return { type: "processes", processes: [] }
+      }),
+    )
+    yield* Effect.promise(() => writeRegistration(directory, socketPath))
+    const daemon = yield* makeDaemonTransport(root, "daemon")
+    yield* TestClock.withLive(daemon.request({ op: "list" }))
+    answering = false
+
+    const waitFor = (op: string, count: number) =>
+      TestClock.withLive(
+        Effect.gen(function* () {
+          const deadline = Date.now() + 10_000
+          while (seen.filter((value) => value === op).length < count && Date.now() < deadline) yield* Effect.sleep(5)
+        }),
+      )
+    const pings = seen.filter((value) => value === "ping").length
+    const pending = yield* daemon
+      .request({ op: "list" })
+      .pipe(Effect.flip, Effect.forkChild({ startImmediately: true }))
+    yield* waitFor("list", 2)
+    yield* TestClock.adjust("5 seconds")
+    yield* waitFor("ping", pings + 1)
+    yield* TestClock.adjust("5 seconds")
+    const error = yield* Fiber.join(pending)
+
+    expect(error).toMatchObject({ kind: "connect", message: "opencode-pty stopped responding and was replaced" })
+    // The registration was given up: nothing is running for the next request that must not start a daemon.
+    expect(yield* TestClock.withLive(daemon.requestIfRunning({ op: "list" }))).toBeUndefined()
+    expect(seen.filter((value) => value === "list")).toHaveLength(2)
+  }),
+)
+
+// Windows reports an executable it refuses to start, blocked by policy or not a valid program, as EUNKNOWN.
+const windows = process.platform === "win32" ? it.live : it.live.skip
+
+windows("names the likely cause when Windows refuses to start the daemon", () =>
+  Effect.gen(function* () {
+    const { root } = yield* temporaryRuntime()
+    const binary = path.join(root, "opencode-pty.exe")
+    yield* Effect.promise(() => writeFile(binary, "not a program"))
+    const daemon = yield* makeDaemonTransport(root, "daemon", () => Promise.resolve(binary))
+
+    const error = yield* Effect.flip(daemon.request({ op: "list" }, true))
+    expect(error.kind).toBe("spawn")
+    expect(error.message).toContain(`Windows refused to start ${binary}`)
+    expect(error.message).toContain("Smart App Control")
   }),
 )
 
