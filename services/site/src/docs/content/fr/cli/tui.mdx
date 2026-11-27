@@ -1,0 +1,90 @@
+---
+title: TUI
+description: Démarrez une session et découvrez les opérations courantes dans l’interface du terminal.
+---
+
+Lancez OpenCode depuis votre projet, saisissez une demande et appuyez sur **Enter**.
+
+```bash
+cd ~/code/my-project
+opencode
+```
+
+```text
+Explain how authentication works in this project
+```
+
+Appuyez sur **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** ou **Ctrl+J** pour une nouvelle ligne. Pendant qu’OpenCode travaille, **Enter** pilote la session active ; appuyez sur **Ctrl+X**, puis **Enter** pour mettre le prompt en file d’attente.
+
+## Contexte
+
+Saisissez `@` pour rechercher un fichier, puis sélectionnez-le pour joindre ce fichier au prompt. Continuez à taper après `@` pour affiner les résultats.
+
+```text
+Review @src/auth.ts for error handling problems
+```
+
+Vous pouvez inclure une ligne ou une plage après le chemin.
+
+```text
+Explain @src/auth.ts#20-45
+```
+
+## Shell
+
+Saisissez `!` au début d’un prompt vide pour passer en mode shell. Saisissez une commande et appuyez sur **Enter** ; appuyez sur **Esc** pour quitter le mode shell sans en exécuter.
+
+```text
+!git status
+```
+
+Les commandes shell s’exécutent dans le répertoire de travail de la session et leur sortie reste dans la session.
+
+## Commandes
+
+Saisissez `/` pour lister les commandes slash. Continuez à taper pour filtrer la liste, puis appuyez sur **Enter** pour exécuter la commande sélectionnée.
+
+```text
+/models
+```
+
+Les commandes courantes incluent `/new`, `/sessions`, `/models`, `/agents`, `/undo`, `/redo` et `/editor`. Appuyez sur **Ctrl+P** pour ouvrir la palette de commandes de toutes les actions disponibles dans la vue actuelle.
+
+Après une mise à jour, OpenCode présente une fois les nouveautés de la version sur l’écran d’accueil. Lancez `/highlights` pour les revoir, ou définissez `"highlights": false` dans [`cli.json`](/cli/config#alerts) pour empêcher leur ouverture automatique.
+
+## Questions annexes
+
+Lancez `/btw <question>` pour poser une question rapide sur ce qui a déjà été dit. La réponse s’appuie sur le contexte de la session et le modèle actif, mais ne rejoint pas la conversation et n’influence donc pas les prompts suivants. Un indicateur `/btw` s’affiche sous la zone de saisie pendant le traitement. La réponse s’ouvre dans une boîte de dialogue ; appuyez sur **C** pour la copier.
+
+```text
+/btw why did the test in step 2 fail?
+```
+
+## Modèles
+
+Appuyez sur **Ctrl+X**, puis **M** pour choisir un modèle, ou lancez `/models`. Appuyez sur **F2** pour parcourir les modèles récemment utilisés.
+
+Appuyez sur **Ctrl+X**, puis **A** pour choisir un agent, ou lancez `/agents`. Appuyez sur **Shift+Tab** pour parcourir les agents.
+
+## Sessions
+
+Appuyez sur **Ctrl+X**, puis **N** pour démarrer une nouvelle session. Appuyez sur **Ctrl+X**, puis **L** ou lancez `/sessions` pour revenir à une session existante ; **Ctrl+O** ouvre ensemble les sessions et projets récents.
+
+Les onglets sont activés par défaut. Utilisez **Ctrl+Tab** et **Ctrl+Shift+Tab** pour passer de l’un à l’autre, **Ctrl+X** puis **W** pour en fermer un, et **Ctrl+Shift+T** pour rouvrir le dernier onglet fermé.
+
+## Historique
+
+Appuyez sur **Ctrl+X**, puis **U**, ou lancez `/undo`, pour annuler le dernier message utilisateur et le travail qui a suivi. Le prompt annulé revient dans la zone de saisie pour que vous puissiez le modifier.
+
+Appuyez sur **Ctrl+X**, puis **R**, ou lancez `/redo` pour restaurer le travail annulé. Si vous envoyez plutôt un nouveau prompt, vous validez l’annulation et reprenez à partir de ce point.
+
+## Éditeur
+
+Définissez `VISUAL` ou `EDITOR`, puis appuyez sur **Ctrl+X**, puis **E**, ou lancez `/editor`, pour modifier le prompt actuel dans cet éditeur. Enregistrez et quittez pour renvoyer le texte dans la zone de saisie, puis appuyez sur **Enter** pour l’envoyer.
+
+```bash
+export EDITOR="nvim"
+opencode
+```
+
+La touche leader est **Ctrl+X** par défaut. Consultez [Raccourcis clavier](/cli/keybinds) pour modifier ces raccourcis.

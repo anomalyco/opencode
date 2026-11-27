@@ -1,0 +1,645 @@
+---
+title: Créer des plugins TUI
+description: Construisez la partie TUI d’un plugin OpenCode pour l’interface terminal avec @opencode/plugin/tui.
+---
+
+Les plugins TUI étendent l’interface terminal avec des commandes, des routes, des slots, des moteurs de rendu Markdown, des notifications et un état local. Un plugin TUI est la partie `./tui` d’un [paquet de plugin](/build/plugins), généralement à côté d’une [partie serveur](/build/plugins/server).
+
+```ts title="src/tui.tsx"
+import { Plugin } from "@opencode/plugin/tui"
+
+export default Plugin.define({
+  id: "acme.cli",
+  setup(context) {
+    context.ui.toast.show({ message: "TUI plugin loaded", variant: "success" })
+  },
+})
+```
+
+Importez `@opencode/plugin/tui` directement. OpenCode résout cet import à l’exécution : les plugins TUI locaux n’ont donc pas besoin d’un chemin absolu vers un checkout d’OpenCode.
+
+## Contexte
+
+`setup` reçoit la configuration, les métadonnées de l’application, la Location actuelle, le client OpenCode, les données en cache, les tokens de thème, le moteur de rendu OpenTUI et les API d’interface documentées ci-dessous.
+
+```ts
+setup(context) {
+  const compact = context.options.compact === true
+  const location = context.location ?? context.data.location.default()
+  const version = context.app.version
+  const channel = context.app.channel
+  const client = context.client
+  const renderer = context.renderer
+  const theme = context.theme
+}
+```
+
+Renvoyez une fonction de nettoyage pour les ressources que le plugin gère.
+
+```ts
+setup(context) {
+  const stop = context.data.on("session.execution.succeeded", () => {})
+  return () => stop()
+}
+```
+
+## Client
+
+`context.client` est le client OpenCode généré et peut appeler le serveur connecté, y compris un serveur distant.
+
+```ts
+const response = await context.client.plugin.list({
+  location: context.location ?? context.data.location.default(),
+})
+const plugins = response.data
+```
+
+## Événements
+
+Utilisez `data.on` pour un événement typé ou `data.listen` pour chaque événement du serveur ; les deux renvoient une fonction de désabonnement.
+
+```ts
+const stopPermission = context.data.on("permission.asked", (event) => {
+  context.ui.toast.show({ message: `Permission ${event.data.id}` })
+})
+const stopAll = context.data.listen(({ details }) => console.log(details.type))
+
+return () => {
+  stopPermission()
+  stopAll()
+}
+```
+
+## Sessions
+
+Vous pouvez lister les sessions, les rechercher, consulter leur hiérarchie, leur coût et leur état, ou encore synchroniser et invalider leurs données.
+
+```ts
+const sessions = context.data.session.list()
+const session = context.data.session.get(sessionID)
+const rootID = context.data.session.root(sessionID)
+const familyIDs = context.data.session.family(sessionID)
+const cost = context.data.session.cost(sessionID)
+const status = context.data.session.status(sessionID)
+await context.data.session.sync(sessionID)
+context.data.session.invalidate(sessionID)
+```
+
+Les éléments de boîte de réception et messages en attente disposent d’API de listage, de recherche, de synchronisation et d’invalidation.
+
+```ts
+await context.data.session.pending.sync(sessionID)
+const pending = context.data.session.pending.list(sessionID)
+context.data.session.pending.invalidate(sessionID)
+
+await context.data.session.message.sync(sessionID)
+const messages = context.data.session.message.list(sessionID)
+const message = context.data.session.message.get(sessionID, messageID)
+context.data.session.message.invalidate(sessionID)
+```
+
+Les demandes d’autorisation peuvent être lues et rafraîchies pour une session.
+
+```ts
+await context.data.session.permission.sync(sessionID)
+const requests = context.data.session.permission.list(sessionID) ?? []
+context.data.session.permission.invalidate(sessionID)
+```
+
+Vous pouvez lister, actualiser, remplir ou annuler les formulaires d’une Location donnée.
+
+```ts
+import type { SessionFormCancelInput, SessionFormReplyInput } from "@opencode/client"
+
+async function handleForm(reply: SessionFormReplyInput, cancel: SessionFormCancelInput) {
+  const location = context.location
+  await context.data.session.form.sync(sessionID, location)
+  const forms = context.data.session.form.list(sessionID, location) ?? []
+  await context.data.session.form.reply(reply, location)
+  await context.data.session.form.cancel(cancel, location)
+  context.data.session.form.invalidate(sessionID, location)
+}
+```
+
+## Projets et shells
+
+Les projets et les autorisations enregistrées prennent en charge les opérations de listage, de recherche, de synchronisation et d’invalidation.
+
+```ts
+await context.data.project.sync()
+const projects = context.data.project.list()
+const project = context.data.project.get(projectID)
+context.data.project.invalidate()
+
+await context.data.project.permission.sync(projectID)
+const saved = context.data.project.permission.list(projectID) ?? []
+context.data.project.permission.invalidate(projectID)
+```
+
+Vous pouvez lister, rechercher, synchroniser et invalider les données de shell pour une Location donnée.
+
+```ts
+await context.data.shell.sync(context.location)
+const shells = context.data.shell.list(context.location)
+const shell = context.data.shell.get(shellID)
+context.data.shell.invalidate(context.location)
+```
+
+## Données de Location
+
+L’état des Locations donne accès à la Location par défaut et permet d’actualiser ses données.
+
+```ts
+const location = context.data.location.default()
+await context.data.location.sync(location)
+context.data.location.invalidate(location)
+```
+
+L’état du contrôle de version donne accès aux informations sur le dépôt pour une Location donnée.
+
+```ts
+await context.data.location.vcs.sync(context.location)
+const vcs = context.data.location.vcs.info(context.location)
+const branch = vcs?.branch.current
+context.data.location.vcs.invalidate(context.location)
+```
+
+Les agents, commandes, intégrations, modèles, fournisseurs, références, skills et données MCP partagent les méthodes `list`, `sync` et `invalidate`.
+
+```ts
+const location = context.location
+await Promise.all([
+  context.data.location.agent.sync(location),
+  context.data.location.command.sync(location),
+  context.data.location.integration.sync(location),
+  context.data.location.model.sync(location),
+  context.data.location.provider.sync(location),
+  context.data.location.reference.sync(location),
+  context.data.location.skill.sync(location),
+  context.data.location.mcp.server.sync(location),
+  context.data.location.mcp.resource.sync(location),
+])
+
+const agents = context.data.location.agent.list(location) ?? []
+const commands = context.data.location.command.list(location) ?? []
+const integrations = context.data.location.integration.list(location) ?? []
+const models = context.data.location.model.list(location) ?? []
+const providers = context.data.location.provider.list(location) ?? []
+const references = context.data.location.reference.list(location) ?? []
+const skills = context.data.location.skill.list(location) ?? []
+const servers = context.data.location.mcp.server.list(location) ?? []
+const resources = context.data.location.mcp.resource.list(location) ?? []
+
+context.data.location.model.invalidate(location)
+```
+
+## Attention
+
+Les demandes d’attention peuvent afficher une notification système, jouer un son configuré, ou les deux selon le focus du terminal.
+
+```ts
+const result = await context.attention.notify({
+  title: "OpenCode",
+  message: "Session done",
+  notification: { when: "blurred" },
+  sound: { name: "done", volume: 0.5, when: "always" },
+})
+console.log(result.ok, result.notification, result.sound, result.skipped)
+```
+
+## Thème et moteur de rendu
+
+Utilisez les tokens de thème sémantiques avec les éléments OpenTUI et passez `context.renderer` aux helpers propres au moteur de rendu.
+
+```tsx
+const Status = () => <text fg={context.theme.text.base}>Ready</text>
+const renderer = context.renderer
+```
+
+Une ressource OpenTUI dessinée par le moteur de rendu a besoin de `context.renderer.nativeScene` comme propriétaire. Par exemple, `<markdown>` et `<code>` nécessitent un `SyntaxStyle`. Détruisez la ressource lorsque le moteur de rendu est inactif, après la dernière trame qui la dessine.
+
+```tsx
+import { SyntaxStyle } from "@opentui/core"
+
+const style = SyntaxStyle.fromStyles({ default: { fg: context.theme.text.base } }, context.renderer.nativeScene)
+context.ui.slot({ append: "home.footer", render: () => <markdown content="Ready" syntaxStyle={style} /> })
+return () => context.renderer.idle().then(() => style.destroy())
+```
+
+Pour lire le style de mise en page d’un élément rendu, appelez la méthode portant le nom du getter de nœud Yoga, comme `box.getPadding(Yoga.Edge.Bottom)` ou `box.getMaxWidth()`. Les éléments rendus de l’hôte ne font pas partie de l’API des plugins. Leur structure et leurs styles peuvent changer à chaque version.
+
+### Plugins conçus pour OpenTUI 0.5
+
+OpenCode exécute les plugins avec son propre OpenTUI. Depuis OpenTUI 0.6 :
+
+- `SyntaxStyle.create()`, `SyntaxStyle.fromStyles()`, `SyntaxStyle.fromTheme()`, `TextBuffer.create()` et `EditBuffer.create()` prennent un propriétaire comme dernier argument. `OptimizedBuffer.create()` le prend dans l’option `owner`. Passez `context.renderer.nativeScene`. OpenTUI 0.5 ignore l’argument supplémentaire, le plugin fonctionne donc toujours sur les versions plus anciennes d’OpenCode.
+- `generateSyntax()` de `@opencode/theme/tui` prend le propriétaire comme deuxième argument : `generateSyntax(context.theme, context.renderer.nativeScene)`. Les anciennes versions de `@opencode/theme` construisent le style sans propriétaire : mettez aussi le paquet à jour.
+- `getLayoutNode()` est retiré. Remplacez `getLayoutNode().getMaxWidth()` et les autres getters de style par la méthode de l’élément rendu du même nom, sur OpenTUI 0.6.5 ou ultérieur. Remplacez `getComputedLayout()` et les autres getters de position et de taille calculées par `getLayout()`, et `markDirty()` par `invalidateIntrinsicSize()`. Le padding, la marge et la bordure calculés n’ont pas de remplacement, et `getPadding(edge)` ne lit que le padding défini pour ce bord. Pour restaurer un style qu’un getter signale comme non défini (`Unit.Undefined`), affectez `undefined` à la propriété, sur OpenTUI 0.6.6 ou ultérieur.
+
+Les [notes de version OpenTUI 0.6.0](https://opentui.com/docs/releases/0.6.0) listent chaque changement.
+
+## Composants Solid
+
+Utilisez `usePlugin` pour accéder au contexte actuel dans le JSX rendu par une route, une boîte de dialogue ou un slot.
+
+```tsx
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>{context.app.version}</text>
+}
+```
+
+## Markdown
+
+Enregistrez un moteur de rendu pour les blocs de code d’un langage donné ; la fonction renvoyée le désenregistre.
+
+```ts
+const unregister = context.markdown.registerCodeBlockRenderer("acme", (_token, render) => render.defaultRender())
+return unregister
+```
+
+## Commandes et raccourcis clavier
+
+Enregistrez des commandes pour la palette, le menu des commandes slash et le clavier dans une couche réactive de raccourcis.
+
+```ts
+context.keymap.layer(() => ({
+  mode: "global",
+  priority: 10,
+  commands: [
+    {
+      id: "acme.status",
+      title: "Show Acme status",
+      group: "Acme",
+      bind: "ctrl+g",
+      palette: true,
+      slash: { name: "acme", aliases: ["status"], arguments: true },
+      enabled: () => true,
+      suggested: true,
+      run: async (input) => context.ui.toast.show({ message: input ?? "Ready" }),
+    },
+  ],
+  bindings: ["acme.status"],
+}))
+```
+
+Appelez `layer` depuis `setup`, y compris après un `await`, ou depuis un composant. Chaque couche est retirée au premier de ces événements :
+
+- Le plugin est désactivé, rechargé ou échoue à son initialisation.
+- Le composant ou le calcul réactif qui l’a créé, comme un slot, une route ou une boîte de dialogue, est libéré.
+
+La fabrique de couche doit être pure. OpenCode l’évalue une fois sans suivi de dépendances pour valider la structure initiale des commandes, puis de façon réactive. Les erreurs initiales de forme de commande, comme une commande de palette sans ID, sont levées par `layer()`. OpenTUI gère les erreurs d’analyse des raccourcis. Les erreurs des mises à jour réactives ultérieures suivent la gestion d’erreurs de Solid.
+
+```ts
+async setup(context) {
+  const settings = await loadSettings()
+  context.keymap.layer(() => ({
+    mode: "global",
+    commands: [{ id: "acme.sync", title: "Sync Acme", palette: true, run: () => sync(settings) }],
+  }))
+}
+```
+
+Une couche peut cibler un seul élément rendu OpenTUI et peut renvoyer `false` depuis une commande pour laisser l’événement clavier poursuivre son chemin.
+
+```ts
+context.keymap.layer(() => ({
+  target: () => panel,
+  commands: [{ bind: "escape", run: (_input, event) => (event ? false : undefined) }],
+}))
+```
+
+Déclenchez des commandes, consultez leurs raccourcis et leur état, ou activez un mode de saisie temporaire.
+
+```ts
+context.keymap.dispatch("acme.status", "verbose")
+const shortcuts = context.keymap.shortcuts("acme.status")
+const commands = context.keymap.commands()
+const pending = context.keymap.pending()
+const active = context.keymap.active()
+const currentMode = context.keymap.mode.current()
+const popMode = context.keymap.mode.push("acme-search")
+popMode()
+```
+
+## Stockage
+
+Le stockage durable conserve les données JSON après redémarrage et se synchronise entre les instances TUI.
+
+```ts
+const [settings, updateSettings] = context.storage.store("settings", {
+  initial: { compact: false },
+})
+await updateSettings((draft) => {
+  draft.compact = true
+})
+```
+
+Le stockage mémoire survit aux rechargements de plugins mais est perdu à la fermeture du TUI.
+
+```ts
+const [state, updateState] = context.storage.memory("state", {
+  initial: { count: 0 },
+})
+updateState((draft) => {
+  draft.count++
+})
+```
+
+## Boîtes de dialogue et notifications éphémères
+
+Utilisez des boîtes de dialogue à base de promesses pour les alertes, confirmations, saisies de texte et sélections.
+
+```ts
+await context.ui.dialog.alert({ title: "Acme", message: "Ready" })
+const confirmed = await context.ui.dialog.confirm({
+  title: "Continue?",
+  message: "Run the Acme action?",
+  label: { confirm: "Run", cancel: "Cancel" },
+})
+const name = await context.ui.dialog.prompt({ title: "Name", placeholder: "release" })
+const mode = await context.ui.dialog.select({
+  title: "Mode",
+  current: "safe",
+  options: [
+    { title: "Safe", value: "safe", description: "Ask before changes" },
+    { title: "Fast", value: "fast", disabled: false, category: "Advanced" },
+  ],
+})
+```
+
+### Recherche dans le sélecteur
+
+Passez `search` pour prendre en charge la correspondance et l’ordre des résultats. Il s’exécute pour chaque requête, y compris la requête vide, et ne reçoit que les options activées. Les résultats sont listés dans l’ordre renvoyé, chaque catégorie étant affichée en ligne.
+
+```ts
+const project = await context.ui.dialog.select({
+  title: "Projects",
+  options: [
+    { title: "Alpha", value: "alpha", category: "Recent" },
+    { title: "Beta", value: "beta", category: "Pinned" },
+  ],
+  search: (query, options) =>
+    options
+      .filter((option) => option.title.toLowerCase().includes(query.toLowerCase()))
+      .toSorted((left, right) => right.title.localeCompare(left.title)),
+})
+```
+
+### Actions du sélecteur
+
+Les actions apparaissent dans le pied de page et s’exécutent avec leur raccourci clavier, au clic ou en les sélectionnant avec Tab puis Entrée. Par défaut, elles reçoivent la valeur sélectionnée et sont indisponibles sans sélection. Utilisez `selection: "none"` pour les actions qui n’ont pas besoin de sélection.
+
+```ts
+await context.ui.dialog.select({
+  title: "Projects",
+  options: [{ title: "Alpha", value: "alpha" }],
+  actions: [
+    { bind: "ctrl+o", title: "Inspect", onTrigger: (value) => context.ui.toast.show({ message: value }) },
+    { bind: "ctrl+a", title: "Close", side: "right", selection: "none", onTrigger: () => context.ui.dialog.clear() },
+  ],
+})
+```
+
+- Une action ne ferme pas la boîte de dialogue et ne résout pas la promesse.
+- Appuyer sur Entrée ou cliquer sur une option résout la promesse avec la valeur sélectionnée.
+- Appuyer sur Échap, appeler `clear()` ou ouvrir une autre boîte de dialogue résout la promesse avec `undefined`.
+- N’attribuez pas `ctrl+n` ni `ctrl+p` à une action. La boîte de dialogue réserve ces raccourcis à la navigation, et ses propres raccourcis priment.
+
+Les boîtes de dialogue JSX personnalisées peuvent définir leur taille et se fermer.
+
+```tsx
+context.ui.dialog.set({ size: "large", centered: true })
+context.ui.dialog.show(
+  () => (
+    <box>
+      <text>Acme</text>
+    </box>
+  ),
+  () => console.log("closed"),
+)
+context.ui.dialog.clear()
+```
+
+Les notifications éphémères prennent en charge un titre, un message, une variante et une durée.
+
+```ts
+context.ui.toast.show({
+  title: "Acme",
+  message: "Saved",
+  variant: "success",
+  duration: 3000,
+})
+```
+
+## Routes et onglets
+
+Enregistrez une route JSX, inspectez la route actuelle et naviguez vers l’accueil, une session ou la page du plugin.
+
+```tsx
+const unregister = context.ui.router.register({
+  name: "dashboard",
+  render: ({ data }) => <text>{String(data?.title ?? "Acme")}</text>,
+})
+const current = context.ui.router.current()
+context.ui.router.navigate({ type: "plugin", name: "dashboard", data: { title: "Status" } })
+context.ui.router.navigate({ type: "session", sessionID })
+context.ui.router.navigate({ type: "home" })
+return unregister
+```
+
+Les onglets peuvent être listés, ouverts, focalisés, déplacés et fermés lorsque les onglets de session sont activés. `open` laisse le focus inchangé ; `focus` ouvre l’onglet si nécessaire.
+
+```ts
+if (context.ui.tabs.enabled()) {
+  context.ui.tabs.open(backgroundSessionID)
+  context.ui.tabs.focus(sessionID)
+  const tabs = context.ui.tabs.list()
+  context.ui.tabs.move(backgroundSessionID, tabs.length - 1)
+  context.ui.tabs.close(sessionID)
+  context.ui.tabs.close()
+}
+```
+
+## Modèle
+
+Lisez le modèle sélectionné du prompt et changez sa variante. `current()` et `variant.list()` sont réactifs lorsqu’ils sont lus dans un calcul Solid. Une valeur `undefined` pour `variant` sélectionne la variante par défaut du modèle.
+
+```ts
+const selected = context.ui.model.current()
+const variants = context.ui.model.variant.list()
+context.ui.model.variant.set("high")
+context.ui.model.variant.set(undefined)
+```
+
+`variant.set` renvoie `false` lorsqu’aucun modèle n’est sélectionné ou que le modèle n’a pas cette variante. Liez-le à une commande pour remplacer le cycle de variantes intégré, par exemple pour ignorer la variante par défaut du modèle :
+
+```ts
+context.keymap.layer(() => ({
+  commands: [
+    {
+      id: "acme.variant.cycle",
+      title: "Cycle variants",
+      bind: "tab",
+      run() {
+        const variants = context.ui.model.variant.list()
+        if (variants.length === 0) return
+        const index = variants.indexOf(context.ui.model.current()?.variant ?? "")
+        context.ui.model.variant.set(variants[(index + 1) % variants.length])
+      },
+    },
+  ],
+}))
+```
+
+## Slots
+
+Les slots insèrent ou remplacent du JSX à `app`, `home.footer`, `home.footer.status`, `prompt.footer`, `prompt.footer.status`, `prompt.footer.file`, `session.composer.top`, `sidebar.content` ou `sidebar.footer`.
+
+```tsx
+return context.ui.slot({
+  append: "sidebar.content",
+  render: ({ sessionID }) => <text>{context.data.session.get(sessionID)?.title}</text>,
+})
+```
+
+Utilisez `prepend`, `append`, `before`, `after` ou `replace` pour le placement.
+
+```tsx
+context.ui.slot({ prepend: "home.footer", render: () => <text>Before footer content</text> })
+context.ui.slot({ append: "home.footer", render: () => <text>After footer content</text> })
+context.ui.slot({ before: "home.footer", render: () => <text>Before footer slot</text> })
+context.ui.slot({ after: "home.footer", render: () => <text>After footer slot</text> })
+context.ui.slot({ replace: "home.footer", render: () => <text>New footer</text> })
+```
+
+Utilisez `home.footer.status` pour ajouter du contenu à la ligne de pied de page intégrée sans la remplacer. Les contributions d’état apparaissent après les indicateurs de santé d’OpenCode et avant la version.
+
+```tsx
+context.ui.slot({ append: "home.footer.status", render: () => <text>SYNCED</text> })
+```
+
+### Panneaux de session
+
+Enregistrez une contribution à `session.panel`, puis ouvrez le panneau depuis une commande. L’hôte gère le dimensionnement, le focus et la présentation plein écran ; le plugin gère son contenu. Le nom sélectionné est passé à chaque contribution sous `panel.name`, et chaque contribution décide de s’afficher ou non.
+
+```tsx
+import { Show } from "solid-js"
+
+context.ui.slot({
+  append: "session.panel",
+  render: (panel) => (
+    <Show when={panel.name === "acme.review"}>
+      <ReviewPanel panel={panel} />
+    </Show>
+  ),
+})
+
+context.ui.slot({
+  append: "app",
+  render: () => {
+    context.keymap.layer(() => ({
+      mode: "global",
+      commands: [
+        {
+          id: "acme.review",
+          title: "Open review",
+          slash: { name: "review" },
+          run: () => {
+            context.ui.panel.open("acme.review")
+          },
+        },
+      ],
+    }))
+    return null
+  },
+})
+```
+
+- Ouvrir hors d’une session renvoie `false`.
+- C’est un slot ordinaire : les cinq placements et les règles d’ordre de remplacement existantes s’appliquent.
+- Utilisez `append` pour des contributions sélectionnables indépendamment afin qu’elles coexistent. `replace` prend toujours le slot.
+- Les noms sont des valeurs de sélection partagées, pas des noms réservés lors de l’enregistrement. Utilisez un nom préfixé par le plugin, comme `acme.review`, pour éviter les collisions. Ouvrir un nom sans moteur de rendu correspondant laisse le slot vide.
+- Changer de présentation préserve les contributions montées. Fermer le panneau les libère ; désactiver un plugin retire ses contributions via le nettoyage normal des slots.
+- Ses couches clavier et modes de saisie ne sont actifs que tant que le panneau reçoit la saisie.
+
+Le slot reçoit les propriétés réactives `name`, `sessionID`, `width`, `presentation` et `focused`, ainsi que les actions `focus`, `close` et `toggleFullscreen`. L’hôte garde les terminaux étroits en plein écran ; `toggleFullscreen` n’a aucun effet tant qu’il n’y a pas assez de place pour un panneau latéral.
+
+```tsx
+import type { PanelInput } from "@opencode/plugin/tui/context"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function ReviewPanel(props: { panel: PanelInput }) {
+  const context = usePlugin()
+  context.keymap.layer(() => ({
+    commands: [
+      {
+        id: "acme.review.fullscreen",
+        bind: "f",
+        run: props.panel.toggleFullscreen,
+      },
+    ],
+  }))
+  return <text>Reviewing {props.panel.sessionID}</text>
+}
+```
+
+Vous pouvez demander une présentation plein écran dès le départ, inspecter votre panneau actif ou le fermer sans affecter celui d’un autre plugin.
+
+```ts
+context.ui.panel.open("acme.review", { presentation: "fullscreen" })
+const current = context.ui.panel.current()
+context.ui.panel.close()
+```
+
+## Formatage
+
+Formatez les chemins du système de fichiers pour l’affichage, y compris l’abréviation du répertoire personnel.
+
+```ts
+const displayPath = context.ui.format.path(context.location?.directory ?? "/home/me/project")
+```
+
+## Publication et chargement
+
+Exposez le plugin TUI via `./tui` ; déclarez les dépendances homologues d’OpenTUI si le plugin affiche du JSX.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.6.6",
+    "@opentui/solid": ">=0.6.6",
+    "solid-js": ">=1.9.0"
+  }
+}
+```
+
+Exportez `./tui` à côté d’une [partie serveur](/build/plugins/server) ou d’une [partie GUI](/build/plugins/gui) pour un chargement automatique.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "acme.server",
+  setup() {},
+})
+```
+
+Configurez un paquet TUI uniquement dans [`cli.json`](/cli/plugins) pour qu’il reste actif lorsque vous utilisez un serveur distant.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-plugin"]
+}
+```

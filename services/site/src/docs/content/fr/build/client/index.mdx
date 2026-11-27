@@ -1,0 +1,146 @@
+---
+title: JavaScript
+description: Connectez votre application à un serveur OpenCode avec @opencode/client, le client TypeScript de l’API HTTP d’OpenCode.
+---
+
+`@opencode/client` est le client TypeScript de l’API HTTP d’OpenCode. Utilisez-le lorsque votre application se connecte à un serveur OpenCode via le réseau. Ses types et méthodes natifs sont générés à partir du même contrat que la [référence de l’API](/api). Les types RPC des plugins proviennent des définitions RPC importées.
+
+## Installation
+
+```sh
+bun add @opencode/client
+```
+
+## Créer un client
+
+Créez un client avec l’URL du serveur, puis appelez les méthodes groupées par ressource d’API :
+
+```ts
+import { OpenCode } from "@opencode/client"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const session = await client.session.create({
+  location: { directory: "/workspace" },
+})
+
+await client.session.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+## En-têtes et requêtes
+
+Passez des en-têtes d’authentification ou d’application par défaut à `OpenCode.make` avec `headers`. Vous pouvez aussi fournir une implémentation `fetch` personnalisée. Chaque opération accepte des options de requête comme dernier argument pour un `AbortSignal` ou des en-têtes par requête. Les abonnements aux événements font exception : seule l’annulation de chaque abonnement est configurable et utilisent les en-têtes du client de base.
+
+```ts
+const client = OpenCode.make({
+  baseUrl: "https://opencode.example.com",
+  headers: {
+    authorization: `Bearer ${process.env.OPENCODE_TOKEN}`,
+  },
+})
+
+await client.session.list(undefined, {
+  signal: AbortSignal.timeout(10_000),
+})
+```
+
+## Diffuser les événements
+
+Les endpoints de streaming renvoient des itérables asynchrones :
+
+```ts
+for await (const event of client.event.subscribe()) {
+  console.log(event.type)
+}
+```
+
+Les abonnés aux événements natifs et RPC partagent une seule connexion par client, ouverte à la demande. La création du client, du handle ou de l’itérable n’ouvre pas la connexion : elle s’ouvre lorsque vous commencez à lire les événements. Interrompre l’itération ou annuler un abonnement ne met fin qu’à l’itérateur concerné. Le départ du dernier abonné ferme la connexion. La source partagée attend que les abonnés actifs acceptent chaque événement ; mettez les événements en tampon avant tout traitement qui prend du temps.
+
+Les abonnements sont en direct uniquement, sans rejeu ni reconnexion automatique. Une défaillance de la source met fin aux abonnements en cours ; réabonnez-vous après le rétablissement. Un abonné aux événements natifs qui rejoint le flux en cours reçoit le marqueur `server.connected` courant, pas les événements métier passés.
+
+Passez `types` pour ne recevoir que certains types d’événements. Les événements sont typés en conséquence, et `server.connected` est toujours transmis pour que les abonnés qui utilisent un filtre sachent quand se resynchroniser. Le filtrage a lieu sur la connexion partagée, dans le client.
+
+```ts
+for await (const event of client.event.subscribe({ types: ["config.updated"] })) {
+  // event.type is "config.updated" | "server.connected"
+}
+```
+
+## RPC des plugins
+
+Importez le contrat partagé d’un plugin et passez-le à `client.rpc` :
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = await acme.search(
+  { query: "hello" },
+  { location: { directory: "/workspace" }, signal: AbortSignal.timeout(10_000) },
+)
+
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+```
+
+Le deuxième argument des méthodes, facultatif, contient `location`, `signal` et `headers`, distincts de l’entrée définie par le plugin. Si vous ne précisez pas de Location, les valeurs par défaut des requêtes natives s’appliquent : d’abord les en-têtes de Location du client, puis le répertoire de travail du serveur. La création du sous-client ne sélectionne aucune Location.
+
+Les méthodes infèrent les arguments et les résultats depuis la définition. Le contrat détermine où les valeurs sont analysées : l’appelant envoie les données au format d’entrée accepté et le gestionnaire reçoit les valeurs déjà analysées. Le client Promise accepte les définitions Standard Schema ou JSON Schema simple et n’exécute pas d’analyseur de schéma localement : le serveur renvoie une sortie déjà analysée et transformée. Les définitions Effect Schema nécessitent le client Effect.
+
+En cas d’erreur de méthode déclarée, la promesse est rejetée comme pour les autres endpoints du client Promise. Les erreurs interceptées restent non typées. Les wrappers d’erreur HTTP RPC génériques sont retirés par le sous-client typé. Les défaillances du framework `rpc.*` réservées restent des défaillances RPC simples, tandis que les erreurs d’authentification, de transport et de protocole non liées conservent leurs représentations client normales.
+
+Les abonnements RPC utilisent des noms locaux et reçoivent les événements de ce RPC pour toutes les Locations. Pour les filtrer, consultez le champ obligatoire `event.location`. `events.subscribe` correspond à l’API d’itérable asynchrone native :
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+`events.on` est une interface simplifiée sur la même source. Il renvoie une fonction de désabonnement ; chaque callback asynchrone doit se terminer avant que le suivant ne commence. En cas d’erreur dans un callback ou dans la source, l’erreur est journalisée et l’écouteur s’arrête. Les abonnements natifs et typés reçoivent la même enveloppe normale `rpc.<rpcID>.<event>` avec les données de l’événement directement sous forme d’objet. Les abonnements en direct ne rejouent pas les événements manqués.
+
+Le plugin serveur doit être configuré et implémenter le RPC ; importer une définition ne l’enregistre pas. Consultez [RPC des plugins](/build/plugins/rpc) pour l’API de définition et d’enregistrement. Tout client HTTP peut aussi invoquer la route générique `POST /api/rpc/{rpcID}/{method}` avec `{ "input": ... }` et recevoir `{ "output": ... }`. Les champs input/output omis représentent l’absence de valeur.
+
+## Service d’arrière-plan local
+
+Les points d’entrée principaux du client sont compatibles avec les navigateurs et n’incluent pas la gestion de processus locaux. Dans une application Node, importez l’API de service Promise native depuis `@opencode/client/service`.
+
+- `Service.discover()` renvoie un endpoint enregistré qui répond correctement sans démarrer de processus.
+- `Service.ensure()` renvoie un service compatible, en en démarrant un si nécessaire.
+- `Service.stop()` arrête précisément l’instance de service enregistrée.
+- `Service.headers(endpoint)` crée les en-têtes d’authentification d’un client.
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Service } from "@opencode/client/service"
+
+const endpoint = await Service.ensure()
+const client = OpenCode.make({
+  baseUrl: endpoint.url,
+  headers: Service.headers(endpoint),
+})
+
+const info = await client.server.info()
+```
+
+`Service.ensure()` accepte facultativement un fichier d’enregistrement, une version, une commande de service et un callback `onStart`. `version` accepte soit une valeur exacte, soit un prédicat de compatibilité :
+
+```ts
+const endpoint = await Service.ensure({
+  file: "/var/run/opencode/service.json",
+  version: (version) => version.startsWith("2."),
+  command: ["opencode", "serve", "--service"],
+  onStart(reason, previousVersion) {
+    console.log(reason, previousVersion)
+  },
+})
+```
+
+Omettez ces options pour utiliser le chemin d’enregistrement standard et la commande `opencode serve --service`.

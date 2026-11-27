@@ -1,0 +1,417 @@
+---
+title: Réglages
+description: Configurez tous les réglages du CLI et du TUI d’OpenCode.
+---
+
+Les réglages du CLI ne concernent que les clients terminal. Ils sont distincts des réglages serveur et projet de `opencode.json(c)`.
+
+Appuyez sur `Ctrl+P`, puis sélectionnez **Open settings** pour modifier les réglages courants depuis le TUI.
+
+<img src={`${import.meta.env.BASE_URL}assets/cli/settings.png`} alt="OpenCode TUI settings dialog" />
+
+## Fichier de configuration
+
+OpenCode stocke les réglages du CLI dans un seul fichier global :
+
+```text
+~/.config/opencode/cli.json
+```
+
+Lorsque `$XDG_CONFIG_HOME` est défini, OpenCode utilise :
+
+```text
+$XDG_CONFIG_HOME/opencode/cli.json
+```
+
+Il n’existe pas de fichier de réglages CLI propre à un projet. Ajoutez le JSON Schema publié pour la validation et l’autocomplétion :
+
+```json title="cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json"
+}
+```
+
+OpenCode ajoute `$schema` lorsqu’il crée ou migre ce fichier. Les modifications valides sont rechargées pendant que le TUI tourne.
+
+Les réglages inconnus sont ignorés. Conservez `$schema` pour que votre éditeur signale les valeurs invalides.
+
+## Configuration en ligne
+
+Définissez `OPENCODE_CLI_CONFIG_CONTENT` pour appliquer des réglages CLI depuis du JSON en ligne :
+
+```sh
+OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"mode":"off"}}' opencode
+```
+
+OpenCode fusionne les réglages en ligne avec ceux du fichier `cli.json` global. Les objets imbriqués sont fusionnés, mais les tableaux et les valeurs scalaires issus de l’environnement remplacent les valeurs globales. Les réglages en ligne restent prioritaires tant que la variable est définie.
+
+## Apparence
+Choisissez un thème, contrôlez les animations de l’interface et remplacez le curseur du terminal :
+
+```json title="cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  },
+  "animations": true,
+  "cursor": {
+    "style": "block",
+    "blinking": true
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Appearance settings" tabIndex={0}>
+
+| Réglage | Valeurs | Description |
+| --- | --- | --- |
+| `theme.name` | chaîne | Sélectionne un thème intégré, personnalisé ou dérivé du terminal. |
+| `theme.mode` | `system`, `dark` ou `light` | Suit l’apparence du terminal ou verrouille le thème sur un mode de couleur. |
+| `animations` | booléen | Active les animations de l’interface. |
+| `cursor.style` | `block`, `underline`, `line`, `default` | Définit la forme du curseur. `default` conserve la forme du curseur du terminal. |
+| `cursor.blinking` | booléen | Contrôle le clignotement du curseur. Sans effet lorsque le style est `default`. |
+
+</div>
+
+Consultez [Thème](/cli/theme) pour choisir et créer des thèmes.
+
+## Saisie
+
+Configurez la capture de la souris, le défilement, le contexte de l’éditeur, les collages et les aperçus d’images des prompts :
+
+```json title="cli.json"
+{
+  "mouse": true,
+  "scroll": {
+    "speed": 3,
+    "acceleration": false
+  },
+  "prompt": {
+    "editor": true,
+    "paste": "compact",
+    "image_preview": false
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Input settings" tabIndex={0}>
+
+| Réglage | Valeurs | Description |
+| --- | --- | --- |
+| `mouse` | booléen | Active la capture de la souris par le terminal. |
+| `scroll.speed` | nombre, au moins `0.001` | Définit la distance fixe par cran de défilement. |
+| `scroll.acceleration` | booléen | Accélère le défilement lors d’actions répétées. Ce réglage prime sur la vitesse fixe lorsqu’il est activé. |
+| `prompt.editor` | booléen | Inclut le fichier ou la sélection de l’éditeur actif comme contexte du prompt. |
+| `prompt.paste` | `compact` ou `full` | Affiche les collages volumineux sous forme d’espaces réservés compacts ou de texte complet. |
+| `prompt.image_preview` | booléen | Affiche des aperçus des images jointes au-dessus de la saisie du prompt. |
+
+</div>
+
+## Sessions
+
+Configurez la présentation des sessions TUI plein écran et le point de départ des nouvelles sessions :
+
+```json title="cli.json"
+{
+  "session": {
+    "sidebar": "auto",
+    "scrollbar": false,
+    "submit_scroll": "bottom",
+    "thinking": "hide",
+    "grouping": "auto",
+    "image_preview": false,
+    "tps": true,
+    "markdown": "rendered",
+    "new_location": "launch",
+    "permissions": "prompt"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Session settings" tabIndex={0}>
+
+| Réglage | Valeurs | Description |
+| --- | --- | --- |
+| `session.sidebar` | `auto` ou `hide` | Affiche la barre latérale lorsque la place le permet ou la masque toujours. |
+| `session.scrollbar` | booléen | Affiche la barre de défilement de la transcription. |
+| `session.submit_scroll` | `bottom` ou `keep` | Saute au dernier message lors de l’envoi d’un prompt, ou conserve votre position. |
+| `session.thinking` | `show` ou `hide` | Affiche ou masque le raisonnement du modèle par défaut. |
+| `session.grouping` | `auto` ou `none` | Regroupe les éléments liés de la transcription ou affiche chaque élément séparément. |
+| `session.image_preview` | booléen | Affiche les images des pièces jointes utilisateur et des résultats d’outils dans la transcription. |
+| `session.tps` | booléen | Affiche les tokens de sortie par seconde dans les pieds des messages de l’assistant. |
+| `session.markdown` | `source` ou `rendered` | Affiche les marqueurs de syntaxe Markdown ou les masque dans le contenu rendu. |
+| `session.new_location` | `launch` ou `inherit` | Ouvre la nouvelle session dans le répertoire de lancement du TUI ou à l’emplacement de la session active. |
+| `session.permissions` | `prompt` ou `autoaccept` | Demande une confirmation pour les autorisations ou accepte automatiquement chaque demande. |
+
+</div>
+
+## Onglets
+
+Configurez la barre d’onglets de session persistante :
+
+```json title="cli.json"
+{
+  "tabs": {
+    "mode": "auto",
+    "scope": "cwd",
+    "layout": "horizontal",
+    "indicators": "status"
+  }
+}
+```
+
+L’ancien réglage booléen `tabs.enabled` reste pris en charge : `true` vaut `on` et `false` vaut `off`. OpenCode le lit sans réécrire le fichier de configuration.
+
+<div class="docs-table-scroll" role="region" aria-label="Tab settings" tabIndex={0}>
+
+| Réglage | Valeurs | Description |
+| --- | --- | --- |
+| `tabs.mode` | `auto`, `on` ou `off` | Utilise les onglets automatiquement, toujours ou jamais. Auto les masque dans Herdr. |
+| `tabs.scope` | `cwd` ou `global` | Conserve des onglets séparés par répertoire de travail ou les partage globalement. |
+| `tabs.layout` | `horizontal` ou `vertical` | Place les onglets dans une barre horizontale ou une barre latérale verticale. |
+| `tabs.indicators` | `status` ou `numbers` | Affiche des icônes d’état ou toujours les numéros d’onglet. |
+
+</div>
+
+Les indicateurs numériques conservent les couleurs d’état et les animations d’arrière-plan. Les raccourcis Ctrl+numéro changent d’onglet dans les deux modes d’indicateur.
+
+## Diffs
+
+Configurez le périmètre et la présentation initiaux du diff :
+
+```json title="cli.json"
+{
+  "diffs": {
+    "source": "branch",
+    "wrap": "word",
+    "tree": true,
+    "single": false,
+    "view": "auto"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Diff settings" tabIndex={0}>
+
+| Réglage | Valeurs | Description |
+| --- | --- | --- |
+| `diffs.source` | `branch`, `committed`, `working` ou `turn` | Définit le périmètre de revue initial. |
+| `diffs.wrap` | `word` ou `none` | Coupe les longues lignes aux mots ou les laisse non coupées. |
+| `diffs.tree` | booléen | Affiche l’arborescence des fichiers du diff. |
+| `diffs.single` | booléen | Affiche uniquement le patch du fichier sélectionné. |
+| `diffs.view` | `auto`, `split` ou `unified` | Définit la mise en page. `auto` choisit selon la largeur disponible. |
+
+</div>
+
+`branch` (libellé **All**) affiche toutes les modifications de la branche et les modifications locales. `committed` n’affiche que les commits de la branche, tandis que `working` affiche les modifications indexées, non indexées et non suivies. `turn` (libellé **Last turn**) affiche les fichiers modifiés par la session lors de son dernier tour. La vue s’actualise à la fin de chaque tour et revient à `branch` si `/diff` est ouvert en dehors d’une session.
+
+Dans `/diff`, appuyez sur `d` pour changer de périmètre ou choisissez une branche de comparaison dans **Base**. Ces choix dans la vue durent jusqu’à la fermeture du TUI et ne modifient pas `cli.json`.
+
+## Alertes
+
+Activez séparément les notifications système et les alertes sonores :
+
+```json title="cli.json"
+{
+  "attention": {
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "permission": "/home/me/sounds/permission.wav"
+    }
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Alert settings" tabIndex={0}>
+
+| Réglage | Valeurs | Description |
+| --- | --- | --- |
+| `attention.notifications` | booléen | Affiche les notifications système, normalement lorsque le terminal n’a pas le focus. |
+| `attention.sound` | booléen | Émet des alertes sonores. |
+| `attention.volume` | nombre de `0` à `1` | Définit le volume du son. |
+| `attention.sound_pack` | chaîne | Sélectionne l’ID du pack de sons actif. |
+| `attention.sounds` | objet | Remplace les fichiers sons pour `default`, `question`, `permission`, `error`, `done` ou `subagent_done`. |
+
+</div>
+
+Un remplacement invalide ou illisible retombe sur le son intégré de l’événement.
+
+Après une mise à jour, le TUI affiche une fois les nouveautés de la version sur l’écran d’accueil. Lancez `/highlights` pour les revoir, ou désactivez la boîte de dialogue :
+
+```json title="cli.json"
+{
+  "highlights": false
+}
+```
+
+## Terminal
+
+Configurez l’intégration au terminal :
+
+```json title="cli.json"
+{
+  "terminal": {
+    "title": true,
+    "copy": "select"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Terminal settings" tabIndex={0}>
+
+| Réglage | Valeurs | Description |
+| --- | --- | --- |
+| `terminal.title` | booléen | Met à jour le titre de la fenêtre du terminal. |
+| `terminal.copy` | `manual` ou `select` | Copie manuellement ou immédiatement après la sélection. La valeur par défaut de la plateforme est `manual` sous Windows et `select` ailleurs. |
+
+</div>
+
+## Mini
+
+Le groupe `mini` contrôle [`opencode mini`](/cli#mini), l’interface interactive minimale :
+
+```json title="cli.json"
+{
+  "mini": {
+    "thinking": "show",
+    "tools": "hide",
+    "shell_output": "hide",
+    "turn_summary": "show",
+    "footer": "show",
+    "splash": "show",
+    "work_spinner": "block-soft-slide",
+    "mono": false,
+    "replay": true,
+    "replay_limit": 200
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Mini settings" tabIndex={0}>
+
+| Réglage | Valeurs | Description |
+| --- | --- | --- |
+| `mini.thinking` | `show` ou `hide` | Affiche ou masque le raisonnement du modèle. |
+| `mini.tools` | `show` ou `hide` | Affiche ou masque les appels d’outils et le texte de l’assistant qui les précède. |
+| `mini.shell_output` | `show` ou `hide` | Affiche ou masque la sortie brute de l’outil shell. |
+| `mini.turn_summary` | `show` ou `hide` | Affiche ou masque le résumé de l’agent, du modèle et de la durée dans l’historique de défilement. |
+| `mini.footer` | `show` ou `hide` | Affiche ou masque les détails persistants d’activité, de modèle, d’utilisation et de contexte. |
+| `mini.splash` | `show` ou `hide` | Affiche ou masque les bannières d’entrée et de sortie. |
+| `mini.work_spinner` | ID de spinner | Sélectionne l’animation de travail dans le pied de page. |
+| `mini.mono` | booléen | Utilise une sortie ASCII monochrome. |
+| `mini.replay` | booléen | Restaure l’historique de session à la reprise et au redimensionnement du terminal. |
+| `mini.replay_limit` | entier positif | Limite la reprise aux messages les plus récents. La limite par défaut est `200`. |
+
+</div>
+
+Les ID de spinner disponibles sont :
+
+```text
+block-soft-slide  block-soft-sweep  block-low-comet  block-low-duet
+block-shuttle     block-bridge      block-squeeze    small-toggle
+square-toggle     grow-shrink       quadrant-orbit   crosshatch
+density-wave      seed
+```
+
+Les options `mini` de rejeu en ligne de commande remplacent ces réglages pour cette invocation.
+
+## Raccourcis clavier
+
+Modifiez le raccourci d’une commande et le délai d’attente après la touche leader :
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app.exit": ["ctrl+c", "ctrl+d", "<leader>q"],
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "event": "press",
+      "preventDefault": false,
+      "fallthrough": false
+    },
+    "help.show": false
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Keybind settings" tabIndex={0}>
+
+| Réglage | Valeurs | Description |
+| --- | --- | --- |
+| `keybinds.leader` | valeur de liaison | Définit la touche référencée par `<leader>` dans les autres liaisons. |
+| `keybinds.<command>` | valeur de liaison | Remplace la liaison d’un ID de commande. |
+| `keybinds.*.key` | chaîne de touche ou descripteur | Sélectionne la touche d’une liaison objet. |
+| `keybinds.*.event` | `press` ou `release` | Limite une liaison objet à un événement de touche. |
+| `keybinds.*.preventDefault` | booléen | Contrôle si le comportement par défaut du terminal pour la touche est empêché. |
+| `keybinds.*.fallthrough` | booléen | Permet aux gestionnaires de priorité inférieure de recevoir le même événement. |
+| `leader.timeout` | entier positif | Définit le nombre de millisecondes à attendre après la touche leader. |
+
+</div>
+
+Une valeur de liaison peut être une chaîne, un tableau d’alternatives ou un objet. Utilisez `"none"` ou `false` pour désactiver une liaison. Consultez [Raccourcis clavier](/cli/keybinds) pour la syntaxe des touches acceptée, chaque ID de commande et chaque liaison par défaut.
+
+## Plugins
+
+Chargez les plugins réservés au terminal dans l’ordre :
+
+```json title="cli.json"
+{
+  "plugins": [
+    "-opencode.notifications",
+    {
+      "package": "./plugins/status",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Plugin settings" tabIndex={0}>
+
+| Réglage | Valeurs | Description |
+| --- | --- | --- |
+| `plugins` | tableau | Déclare des directives d’activation ordonnées et des plugins externes. |
+| `plugins[].package` | chaîne | Définit un nom de paquet, un chemin local ou une URL de fichier. |
+| `plugins[].options` | objet | Passe des options propres au plugin à ce plugin. |
+
+</div>
+
+Consultez [Plugins](/cli/plugins) pour les formes de paquet, la découverte locale, les jokers et les directives de désactivation.
+
+## Débogage et expérimental
+
+Activez les diagnostics ou optez pour une expérimentation actuellement disponible :
+
+```json title="cli.json"
+{
+  "debug": {
+    "devtools": false,
+    "timing": false,
+    "turn_tokens": "verbose"
+  },
+  "experimental": {}
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Debug and experimental settings" tabIndex={0}>
+
+| Réglage | Valeurs | Description |
+| --- | --- | --- |
+| `debug.devtools` | booléen | Affiche la barre de débogage DevTools. |
+| `debug.timing` | booléen | Affiche les diagnostics de délai jusqu’au premier rendu dans la barre de débogage. |
+| `debug.turn_tokens` | booléen ou `verbose` | Affiche l’utilisation de tokens par tour ; `verbose` inclut aussi les entrées des appels d’outils. |
+| `experimental` | objet associant chaque ID de fonctionnalité à un booléen | Active ou désactive des fonctionnalités expérimentales qui peuvent changer ou disparaître sans préavis. |
+
+</div>
+
+N’utilisez que les ID de fonctionnalités actuellement listés par la boîte de dialogue **Experiments** du TUI. Les ID inconnus n’ont aucun effet.
