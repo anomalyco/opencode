@@ -19,6 +19,7 @@ mod config_live;
 mod diffs;
 mod drive;
 mod editor;
+mod find;
 mod form;
 mod home_footer;
 mod hover_pointer;
