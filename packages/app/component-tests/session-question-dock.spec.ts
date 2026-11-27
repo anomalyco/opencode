@@ -321,6 +321,9 @@ story.describe("New question UI", () => {
 
     await page.keyboard.press("Enter")
     await highlighted("Changed files")
+    await page.keyboard.press("ArrowDown")
+    await page.keyboard.press("ArrowUp")
+    await highlighted("Changed files")
     await page.keyboard.press("Space")
 
     const terminal = await option("Terminal").boundingBox()
@@ -344,6 +347,22 @@ story.describe("New question UI", () => {
       'Answered locally: {"layout":"wide","details":["files","terminal","Notes"],"empty":"Nothing to review yet"}',
     )
   })
+
+  story(
+    "types a custom answer that starts with a number while the first answer rests highlighted",
+    async ({ mount, page }) => {
+      const component = await mount("session-question-switch--composer-answer")
+      const field = component.getByRole("textbox", { name: "Type your answer…", exact: true })
+
+      await expect(field).toHaveAttribute(
+        "aria-activedescendant",
+        (await component.getByRole("option", { name: /Focused/ }).getAttribute("id"))!,
+      )
+      await page.keyboard.type("2 columns")
+      await expect(field).toHaveValue("2 columns")
+      await expect(component.getByRole("option", { selected: true })).toHaveCount(0)
+    },
+  )
 
   story("returns Up from the first line of a typed answer to the answers", async ({ mount, page }) => {
     const component = await mount("session-question-switch--composer-answer")

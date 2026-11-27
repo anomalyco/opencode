@@ -157,6 +157,9 @@ export const SessionQuestionDockClassic: Component<{
     // The answer the composer's arrow keys or the pointer highlight; focus stays in the composer.
     // SAFETY: widens the initial undefined to the type of a highlighted answer's index.
     activeOption: undefined as number | undefined,
+    // Whether the arrows or the pointer moved the highlight. Only then do digits and Space pick answers, so a custom
+    // answer can start with a number while the highlight set on open or after Next rests on the first answer.
+    browsed: false,
     keyboard: false,
     reducedMotion: prefersReducedMotion(),
     focus: 0,
@@ -194,7 +197,8 @@ export const SessionQuestionDockClassic: Component<{
 
   const activeOption = () => store.activeOption
 
-  const setActiveOption = (index: number | undefined) => setStore("activeOption", index)
+  const setActiveOption = (index: number | undefined, browsed = false) =>
+    setStore({ activeOption: index, browsed: index !== undefined && browsed })
 
   const listID = createUniqueId()
 
@@ -279,8 +283,8 @@ export const SessionQuestionDockClassic: Component<{
     )
   }
 
-  const highlight = (index: number) => {
-    setActiveOption(index)
+  const highlight = (index: number, browsed = false) => {
+    setActiveOption(index, browsed)
     reveal(optsRef[index])
   }
 
@@ -415,17 +419,17 @@ export const SessionQuestionDockClassic: Component<{
 
       event.preventDefault()
 
-      if (active === undefined) return highlight(step > 0 ? 0 : size - 1)
+      if (active === undefined) return highlight(step > 0 ? 0 : size - 1, true)
 
       if (active + step === size) return setActiveOption(undefined)
 
       // Up from the first answer wraps to the last one.
-      highlight(active + step < 0 ? size - 1 : active + step)
+      highlight(active + step < 0 ? size - 1 : active + step, true)
 
       return
     }
 
-    if (active === undefined) return
+    if (active === undefined || !store.browsed) return
 
     const index = event.key === " " ? active : /^[1-9]$/.test(event.key) ? Number(event.key) - 1 : -1
 
@@ -434,7 +438,7 @@ export const SessionQuestionDockClassic: Component<{
 
     if (event.repeat) return
     selectOption(index)
-    highlight(index)
+    highlight(index, true)
   }
 
   const nav = (event: KeyboardEvent) => {
@@ -724,7 +728,7 @@ export const SessionQuestionDockClassic: Component<{
       data-component="session-question-dock"
       data-keyboard={store.keyboard}
       data-composer={props.composer || undefined}
-      onPointerDown={() => setStore({ keyboard: false, activeOption: undefined })}
+      onPointerDown={() => setStore({ keyboard: false, activeOption: undefined, browsed: false })}
       onKeyDown={() => setStore("keyboard", true)}
     >
       <DockPrompt
@@ -912,7 +916,7 @@ export const SessionQuestionDockClassic: Component<{
             const row = event.target instanceof Element ? event.target.closest('[data-slot="question-option"]') : null
             const index = row instanceof HTMLDivElement ? optsRef.indexOf(row) : -1
 
-            if (index >= 0 && index !== activeOption()) setActiveOption(index)
+            if (index >= 0 && (index !== activeOption() || !store.browsed)) setActiveOption(index, true)
           }}
           style={{
             "max-height": hidden() > 0 ? `${Math.max(0, store.optionsHeight * (1 - hidden()))}px` : undefined,
