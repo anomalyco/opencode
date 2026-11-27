@@ -232,7 +232,7 @@ context.ui.slot({ append: "home.footer", render: () => <markdown content="Ready"
 return () => context.renderer.idle().then(() => style.destroy())
 ```
 
-若要讀取可算繪物件的版面樣式，請呼叫與 Yoga Node getter 同名的方法，例如
+若要讀取可算繪物件的版面樣式，請呼叫與 Yoga Node 取值方法同名的方法，例如
 `box.getPadding(Yoga.Edge.Bottom)` 或 `box.getMaxWidth()`。主機的可算繪物件不屬於外掛 API。其
 結構與樣式可能在任何版本中變更。
 

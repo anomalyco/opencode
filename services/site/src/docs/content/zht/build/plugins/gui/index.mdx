@@ -3770,7 +3770,7 @@ type Live<T> =
 
 對於計時器或通訊端等其他資源，請從 setup 傳回清理函式。它會在相同時間執行。
 
-- **視窗 `setup`** 不能是 `async`，因為它在 Solid owner 下執行。請傳回清理函式，或使用
+- **視窗 `setup`** 不能是 `async`，因為它在 Solid 的擁有者作用域內執行。請傳回清理函式，或使用
   `onCleanup` 或 `ctx.signal`。
 - **`main`** 可以是 `async`。請傳回或解析為清理函式，或使用 `ctx.onCleanup(fn)`。
 

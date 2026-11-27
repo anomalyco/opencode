@@ -35,9 +35,8 @@ export default Plugin.define({
 
 ### 上下文
 
-外掛上下文本質上是一個 [OpenCode 伺服器用戶端](/build/client)。
-其讀取與動作方法使用與用戶端相同的輸入與回應。它會新增外掛專屬方法，用於轉換、執行階段掛鉤、重新載入、註冊
-與外掛選項。
+外掛上下文基本上就是 [OpenCode 伺服器用戶端](/build/client)。其中讀取資料和執行動作的方法，輸入及回應都與用戶端相同。
+外掛上下文還提供專用方法，可用於轉換、執行階段掛鉤、重新載入、註冊與外掛選項。
 
 ```ts
 setup(ctx) {
@@ -125,9 +124,8 @@ export default Plugin.define({
 作用中的轉換重播到全新的值上，藉此重建它。請讓轉換保持輕量且可重複。你已
 讀取的值永遠不會被之後的重建修改。
 
-在供應商轉換與可用性解析完成後，OpenCode 會具體化現用供應商的模型，並依序重播
-每個模型轉換。模型原則可以檢視整個候選集合，包括新重新整理的
-來源。
+套用供應商轉換並確認哪些供應商可用後，OpenCode 會為啟用中的供應商建立模型清單，再依序重播各項模型轉換。
+模型原則可檢視所有候選模型，連來源剛更新的模型也包括在內。
 
 ```ts title="plugins/model-budget/index.ts"
 import { Plugin } from "@opencode/plugin"
@@ -750,12 +748,11 @@ execute: async (input, context) => {
 
 - `action` 與 `resources` 會與規則比對。任何 `deny` 都會封鎖動作；否則任何 `ask` 都會提示。
 - `save` 列出使用者選擇一律允許時儲存的模式。
-- `agent` 選擇套用誰的規則，預設為工作階段的 agent。`source` 會將提示附加到工具呼叫。
+- `agent` 指定要套用哪個 agent 的規則，預設為工作階段的 agent。`source` 會將提示詞附加到工具呼叫。
 - `metadata` 會將額外細節傳遞給權限提示與 `evaluate` 掛鉤。
 
-拒絕規則或附有回饋的拒絕會以攜帶原因的 `Tool.Error` 拒絕，讓模型看到並
-繼續。單純的拒絕會結束目前步驟。請讓這些錯誤向外傳播，而不要將它們作為工具
-輸出回傳。
+如果規則拒絕操作，或使用者拒絕並附上意見回饋，就會擲出帶有原因的 `Tool.Error`，讓模型讀到原因後繼續。
+使用者若只拒絕、不附上意見，則會結束目前的步驟。請讓這些錯誤向外傳遞，不要把它們當成工具輸出回傳。
 
 檢視或解析待處理的權限請求。
 
@@ -1060,11 +1057,9 @@ await ctx.tool.transform((editor) => {
 })
 ```
 
-更新與移除會與新增一起依序重播，包括在 MCP 目錄重新整理後。處置其
-註冊會移除那些變更，並從其餘轉換重建。
+新增、更新與移除都會依序重播，MCP 目錄重新整理後也不例外。釋放註冊時，會撤銷該項註冊的變更，並依其餘轉換重建。
 
-處置註冊可移除其轉換，並從其餘轉換重建，顯示它所覆寫的任何先前的
-定義。處置是冪等的，卸載外掛也會處置其註冊。
+釋放註冊會移除該項轉換，再依其餘轉換重建，因此先前被覆寫的定義會再次生效。重複釋放不會產生額外效果；卸載外掛也會釋放其註冊。
 
 ```ts
 await registration.dispose()
@@ -1212,7 +1207,7 @@ await ctx.worktree.refresh({ projectID })
 await ctx.worktree.remove({ projectID, directory: created.directory, force: false })
 ```
 
-Create 會從專案儲存的 `canonical` 目錄載入設定與外掛，並使用其選取的策略。
+建立 worktree 時，會從專案記錄的 `canonical` 目錄載入設定與外掛，並使用選定的策略。
 它接受選用的父 `directory`、來源 `from`、起始 `branch` 與 `name`。
 來源預設為主要 checkout，且 `from` 指定的來源必須屬於該專案。選擇來源
 不會變更設定根目錄。
@@ -1222,9 +1217,8 @@ Create 會從專案儲存的 `canonical` 目錄載入設定與外掛，並使用
 建立與重新整理作業會等待主要 checkout 的外掛啟用。在該 checkout 的外掛初始化期間發出的呼叫，
 會看到當時已有的註冊項目，不會等到呼叫端的外掛本身啟用。
 
-Remove 會載入標準設定並啟動其外掛，然後使用 worktree 記錄的策略，而不是
-目前選取的預設值。無法使用的記錄擁有者會產生錯誤。worktree 的目的地可以在
-其他位置：
+移除 worktree 時，會載入主要 checkout 的設定並啟用其外掛，再使用該 worktree 記錄的策略，而不是目前選定的預設策略。
+若記錄中的策略已無法使用，就會發生錯誤。worktree 的目的地可以位於其他位置：
 
 ```ts
 await ctx.worktree.remove({
@@ -1238,8 +1232,8 @@ await ctx.worktree.remove({
 message: "Uncommitted changes", forceRequired: true })`，要求使用者確認強制移除，而不必依賴 Core 或 Git 錯誤。
 
 重新整理會載入主要 checkout 的設定，並要求所有可用策略在已知的 checkout 根目錄中尋找 worktree。
-它會合併結果、保留記錄的擁有權，並修剪缺少的目錄。失敗的探索來源會記錄下來，
-其他來源則繼續。即使沒有可用策略回報，既有目錄仍會保留。請觀察
+OpenCode 會合併結果，保留目錄與其管理策略的對應，並從清單移除已不存在的目錄。若某個來源探索失敗，OpenCode 會記錄錯誤，
+並繼續處理其他來源。目錄只要仍存在，即使沒有任何可用策略回報，也會保留在清單中。請監聽
 `worktree.updated` 並再次呼叫 `list` 以讀取變更後的清單。
 
 ```ts
@@ -1381,7 +1375,7 @@ await registration.dispose()
 
 ### 工作階段
 
-工作階段掛鉤會攔截提示詞接納、模型呼叫、原生 HTTP 與重試。
+工作階段掛鉤會攔截提示詞收錄、模型呼叫、原生 HTTP 與重試。
 
 #### 建立工作階段分支
 
@@ -1407,7 +1401,7 @@ await ctx.session.hook("prompt", (event) => {
 
 掛鉤會收到一份由它單獨持有、可以修改的草稿：
 
-- `prompt` 包含 `text`、`files`、`agents` 中的 agent 提及，以及選取的 `skills`。
+- `prompt` 包含 `text`、`files`、`agents` 中提到的 agent，以及選取的 `skills`。
 - `metadata` 包含應用程式為收錄流程定義的中繼資料。
 - `delivery` 預設為 `"steer"`，可以變更為 `"queue"`。
 - 工作階段與訊息 ID 是唯讀的，掛鉤不能改變提示詞收錄的目標。
@@ -1558,8 +1552,7 @@ await ctx.session.hook("http.response", (event) => {
 透過 WebSocket 串流的供應商會為每個工作階段開啟一條連線，並在請求之間重複使用，因此
 `http.request` 與 `http.response` 永遠不會看到該流量。`experimental.ws.handshake` 掛鉤會在每次模型
 呼叫時、選取連線前執行一次。它攜帶與 HTTP
-掛鉤相同的 `sessionID`、`agent`、`model` 與 `kind`，以及連線的 `url` 與 `headers`。變更 `url` 或 `headers` 會變更請求使用的通訊端，因此
-輪替的 bearer 權杖會重新開啟連線。
+掛鉤相同的 `sessionID`、`agent`、`model` 與 `kind`，以及連線的 `url` 與 `headers`。變更 `url` 或 `headers` 會改用其他通訊端，因此輪替 Bearer 權杖時會重新建立連線。
 
 HTTP 掛鉤仍會為每個 HTTP 請求執行，包括 WebSocket 路由退回的請求。
 

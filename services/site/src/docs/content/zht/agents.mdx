@@ -32,7 +32,7 @@ agent 會把系統提示詞、模型偏好、權限與顯示資訊組合成一�
 
 ## 位置
 
-Markdown agent 可以儲存在全域設定中供所有專案使用，也可以放在專案內：
+以 Markdown 定義的 agent 可以儲存在全域設定中供所有專案使用，也可以放在專案內：
 
 ```text
 ~/.config/opencode/agents/<name>.md
@@ -49,7 +49,7 @@ OpenCode 會從目前目錄一路向上搜尋到檔案系統的根目錄，尋�
 
 ### Markdown
 
-frontmatter 接受的欄位與 `agents` 設定項目相同。Markdown 本文會成為 agent 的 `system` 提示詞：
+前置中繼資料接受的欄位與 `agents` 設定項目相同。Markdown 本文會成為 agent 的 `system` 提示詞：
 
 ```md title=".opencode/agents/explainer.md"
 ---
@@ -60,7 +60,7 @@ mode: subagent
 Explain the relevant code with short examples. Do not edit files.
 ```
 
-V1 的 frontmatter 欄位已棄用。仍使用這些欄位的檔案會如何解析，請參閱 [agent 檔案](/migrate-v1#agent-files)。
+V1 的前置中繼資料欄位已棄用。仍使用這些欄位的檔案會如何解析，請參閱 [agent 檔案](/migrate-v1#agent-files)。
 
 ### JSONC
 
@@ -236,7 +236,7 @@ JSON 設定也接受展開形式：
 }
 ```
 
-專案指示、技能、引用與其他指示來源仍會加入。在 Markdown agent 中，請把這段文字放在文件本文，而不是 frontmatter 的 `system` 欄位。
+專案指示、技能、引用與其他指示來源仍會加入。若以 Markdown 定義 agent，請將這段文字放在文件本文，而不是前置中繼資料的 `system` 欄位。
 
 ### 權限
 

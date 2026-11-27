@@ -1,6 +1,6 @@
 ---
 title: "TUI"
-description: "啟動工作階段，並在終端機介面中使用日常的工作流程。"
+description: "在終端機介面啟動工作階段，並掌握常用操作。"
 ---
 
 在專案中執行 OpenCode、輸入請求，然後按 **Enter**。
@@ -14,7 +14,7 @@ opencode
 Explain how authentication works in this project
 ```
 
-按 **Shift+Enter**、**Ctrl+Enter**、**Alt+Enter** 或 **Ctrl+J** 換行。OpenCode 工作時，**Enter** 會引導作用中的工作階段；按 **Ctrl+X** 再按 **Enter**，可將提示詞排入佇列稍後送出。
+按 **Shift+Enter**、**Ctrl+Enter**、**Alt+Enter** 或 **Ctrl+J** 換行。OpenCode 正在處理請求時，按 **Enter** 可送出提示詞，調整目前工作階段接下來的處理方向；若要將提示詞排入佇列、稍後再處理，請先按 **Ctrl+X**，再按 **Enter**。
 
 ## 專案與目錄
 
@@ -36,7 +36,7 @@ opencode ~/code/another-project
 Review @src/auth.ts for error handling problems
 ```
 
-你可以在路徑後包含一行或一個範圍。
+你可以在路徑後加上行號或行號範圍。
 
 ```text
 Explain @src/auth.ts#20-45
@@ -50,7 +50,7 @@ Explain @src/auth.ts#20-45
 !git status
 ```
 
-Shell 指令會在工作階段的工作目錄中執行，其輸出會留在工作階段中。
+Shell 指令會在目前工作階段的工作目錄中執行，輸出也會保留在該工作階段。
 
 ## 指令
 
@@ -62,7 +62,7 @@ Shell 指令會在工作階段的工作目錄中執行，其輸出會留在工�
 
 常用指令包括 `/new`、`/sessions`、`/models`、`/agents`、`/undo`、`/redo` 與 `/editor`。按 **Ctrl+P** 開啟指令面板，查看目前畫面上所有可用的操作。
 
-更新後，OpenCode 會在主畫面顯示一次版本的新功能。執行 `/highlights` 可再次查看，或在 [`cli.json`](/cli/config#alerts) 中設定 `"highlights": false`，讓它不再自動開啟。
+更新後，OpenCode 會在主畫面顯示一次這個版本的新功能。執行 `/highlights` 可再次查看；若不想讓它自動開啟，請在 [`cli.json`](/cli/config#alerts) 中設定 `"highlights": false`。
 
 ## 附帶問題
 
@@ -90,7 +90,7 @@ Shell 指令會在工作階段的工作目錄中執行，其輸出會留在工�
 
 按 **Ctrl+X** 再按 **U**，或執行 `/undo`，復原最新的使用者訊息及其後的工作。被復原的提示詞會回到輸入框，讓你編輯。
 
-按 **Ctrl+X** 再按 **R**，或執行 `/redo`，取回剛剛復原的工作。若改為送出新的提示詞，則會確認這次復原，從該時間點繼續。
+按 **Ctrl+X** 再按 **R**，或執行 `/redo`，即可重做已復原的工作。如果改送新的提示詞，OpenCode 會保留復原後的狀態，並從該狀態繼續。
 
 ## 編輯器
 
@@ -101,4 +101,4 @@ export EDITOR="nvim"
 opencode
 ```
 
-Leader 鍵預設為 **Ctrl+X**。如要變更這些快捷鍵，請參閱[快捷鍵](/cli/keybinds)。
+快捷鍵的前置鍵（Leader 鍵）預設為 **Ctrl+X**。如要變更這些快捷鍵，請參閱[快捷鍵](/cli/keybinds)。

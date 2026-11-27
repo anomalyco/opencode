@@ -1,6 +1,6 @@
 ---
 title: "模型"
-description: "為每個工作階段或執行選擇模型、設定預設值，並設定變體、推理、提示詞快取與本機模型。"
+description: "為工作階段或單次執行選擇模型、指定預設模型，以及設定變體、推理、提示詞快取與本機模型。"
 ---
 
 使用 `/models` 為目前的工作階段選擇模型：
@@ -9,9 +9,8 @@ description: "為每個工作階段或執行選擇模型、設定預設值，並
 /models
 ```
 
-OpenCode 會列出 [models.dev](https://models.dev)、供應商整合與你的設定中的模型。選單
-只會顯示已啟用、且供應商在目前專案中可用的模型。請在
-[供應商](/providers)中連接供應商。
+OpenCode 會列出來自 [models.dev](https://models.dev)、供應商整合及你自行設定的模型。選單只顯示已啟用且供應商在目前專案中可用的模型。
+連接方式請參閱[供應商](/providers)。
 
 ## 選取
 
@@ -30,7 +29,7 @@ anthropic/claude-sonnet-5-5
 
 ## 執行
 
-使用 `--model` 為單次命令列執行選擇模型，而不變更已設定的預設值：
+使用 `--model` 為單次命令列執行指定模型，不會變更預設模型：
 
 ```bash
 opencode run --model anthropic/claude-sonnet-5-5 "Refactor parseToken"
@@ -49,8 +48,7 @@ agent 與指令也可以選擇自己的模型。請參閱 [Agents](/agents) 與[
 }
 ```
 
-設定的模型會在已啟用且其供應商可用時，成為目錄的預設值。否則，OpenCode
-會改用最新可用且受支援的模型。
+指定的模型必須已啟用且供應商可用，才會成為目錄中的預設模型。否則，OpenCode 會改用目前可用且受支援的最新模型。
 
 - 工作階段已選取的模型優先於設定的預設值。
 - 切換工作階段的模型不會改寫設定檔。
@@ -85,8 +83,8 @@ opencode service set env OPENCODE_DISABLE_FREE_MODELS 1
 opencode run --model openai/gpt-6.1-sol#high "Review this migration plan"
 ```
 
-變體名稱來自所選模型目前的目錄中繼資料。`low`、`high` 與 `max` 等名稱
-並非每個模型都有，未知的變體會產生模型解析錯誤。
+可用的變體名稱取決於所選模型在目錄中的目前中繼資料。並非每個模型都提供 `low`、`high` 或 `max` 等變體；
+指定不存在的變體會造成模型解析錯誤。
 
 在模型的 `variants` 陣列中定義新變體，或以相同 ID 取代目錄中的變體：
 
@@ -148,10 +146,10 @@ opencode run --model openai/gpt-6.1-sol#high "Review this migration plan"
 
 | 欄位 | 用途 |
 | --- | --- |
-| `supported` | 模型是否進行推理。`false`，或沒有控制項的 `true`，都不會新增變體。 |
+| `supported` | 模型是否支援推理。設為 `false` 時不會新增變體，設為 `true` 但未指定控制項時也不會。 |
 | `toggle` | 新增一個關閉推理的 `none` 變體。 |
 | `effort` | 要提供的推理強度等級。`default` 保留供應商預設值，不新增變體。 |
-| `budget` | 選用的 `min` 與 `max` 思考 token。設定 `effort` 時會被忽略。 |
+| `budget` | 可選填思考 token 的下限 `min` 與上限 `max`。若已設定 `effort`，則忽略此欄位。 |
 
 `variants` 中列出的變體會疊加在由 `capabilities.reasoning` 建立的變體之上。
 
@@ -190,7 +188,7 @@ opencode run --model openai/gpt-6.1-sol#high "Review this migration plan"
 | `headers` | 其他 HTTP 請求標頭。 |
 | `body` | 供應商專屬的請求主體欄位。 |
 
-OpenCode 會先套用供應商值，其次套用模型值，最後套用所選變體。
+OpenCode 會依序套用供應商、模型和所選變體的設定。
 
 - 巢狀的 `settings` 與 `body` 物件會合併。
 - 後面的陣列與純量值會取代先前的值。
@@ -228,8 +226,8 @@ OpenCode 會先套用供應商值，其次套用模型值，最後套用所選�
 }
 ```
 
-在這裡，`openai/coding-default` 是可選取的引用，而 `gpt-6.1-sol` 會傳送給供應商。對於尚未在
-目錄中的模型，OpenCode 會假設：
+在這個範例中，你可選擇 `openai/coding-default`，但 OpenCode 會將 `gpt-6.1-sol` 傳送給供應商。
+如果模型未收錄在目錄中，OpenCode 會採用以下預設：
 
 - 支援 JSON 工具、文字與圖片輸入，以及文字輸出。除非 `capabilities.freeform` 列出格式，否則不支援自由格式工具輸入。
 - 200,000 token 的上下文上限與 32,000 token 的輸出上限。
@@ -307,7 +305,7 @@ OpenCode 能辨識 `reasoning`、`reasoning_content` 與 `reasoning_text`，也�
 接著，OpenCode 會以 `cache_control: { "type": "ephemeral" }` 標記最後一個工具定義、系統提示詞
 與最新訊息，這會使用端點預設的五分鐘快取存留時間。Alibaba Model Studio 模型請使用
 `"alibaba"`，它們接受相同的標記，但會忽略工具定義上的標記。
-若供應商提供的每個模型都接受相同格式，請改在供應商上設定
+若同一供應商的所有模型都接受相同格式，請改在供應商層級設定
 `compatibility.cacheFormat`。其他欄位請參閱[相容性](#compatibility)。
 
 ### 快取存留時間
@@ -338,16 +336,15 @@ Anthropic 的五分鐘。在供應商或模型上設定 `settings.cache.ttl` 即
 | Bedrock Converse | 每個 `cachePoint` 上的 `ttl`。僅快取五分鐘的舊版 Claude 模型會忽略 `"1h"`。 |
 | OpenAI Chat and Responses | `"24h"` 會放到 `prompt_cache_retention`；其他值會放到 `prompt_cache_options.ttl`。 |
 
-不需標記即自動快取的供應商（例如 Gemini）會忽略此設定。較長的存留時間通常會提高
-寫入成本：Anthropic 對一小時的快取寫入收取輸入價格的 2 倍，五分鐘則為 1.25 倍。
+不需標記即可自動快取的供應商（例如 Gemini）會忽略這項設定。快取存留時間越長，寫入成本通常越高：
+在 Anthropic，寫入保留一小時的快取費用是輸入價格的 2 倍，保留五分鐘則為 1.25 倍。
 
-[預熱](/warming)可以使用此存留時間，以 `interval: "auto"` 安排請求時機。
+將[預熱](/warming)的間隔設為 `interval: "auto"`，就能依快取存留時間安排請求。
 
 ## 相容性
 
-`compatibility` 描述模型所使用 API 的請求與回應特殊行為，例如哪個欄位承載
-推理，或端點是否接受 `prompt_cache_key`。每個模型都透過一種 API 提供，欄位
-只有在該 API 讀取時才會生效。其他欄位會被忽略。
+`compatibility` 說明提供模型的 API 如何處理請求和回應，例如推理內容放在哪個欄位，或端點是否接受 `prompt_cache_key`。
+每個模型只會透過一種 API 提供。只有該 API 會讀取的欄位才會生效，其餘欄位一律忽略。
 
 ```jsonc title="opencode.jsonc"
 {
@@ -381,10 +378,10 @@ Anthropic 的五分鐘。在供應商或模型上設定 `settings.cache.ttl` 即
 | `supportsPromptCacheKey` | 端點是否接受 `prompt_cache_key` 主體欄位。 | OpenAI Chat、OpenAI Responses、Mistral | `true` 或 `false`。OpenAI Chat 只有在 `true` 時才會傳送此鍵，部分供應商套件預設會設定。其他 API 除非設為 `false`，否則會傳送。 |
 | `streamUsage` | 以 `stream_options.include_usage` 在串流中要求 token 用量。 | OpenAI Chat | `true` 或 `false`。預設為 `true`。 |
 | `cacheFormat` | 端點接受的提示詞快取標記語法。會覆寫供應商自動放置斷點的行為。`alibaba` 會略過工具定義。 | 所有使用提示詞快取標記的 API，包括 OpenAI Chat、Anthropic Messages 與 Bedrock Converse | `anthropic` 或 `alibaba`。未設定時使用供應商預設值。請參閱[提示詞快取](#prompt-caching)。 |
-| `supportsThinkingBlockBinding` | 要求 API 捨棄較早上下文已變更的思考區塊，而不是拒絕請求。 | Anthropic Messages、Bedrock Converse | `true` 或 `false`。未設定時會偵測 Claude 5.1 與更新版本。 |
-| `supportsEffortUpdates` | 將推理強度變更以逐訊息更新傳送，以保留提示詞快取。否則推理強度會套用至整個請求。 | Anthropic Messages、OpenAI Responses | `true` 或 `false`。未設定時會偵測 Claude Opus 5、Claude 5.1 與更新版本，以及 GPT-6 與更新版本。 |
+| `supportsThinkingBlockBinding` | 如果思考區塊之前的上下文已變更，要求 API 捨棄該區塊，而不是拒絕整個請求。 | Anthropic Messages、Bedrock Converse | `true` 或 `false`。未設定時會偵測 Claude 5.1 與更新版本。 |
+| `supportsEffortUpdates` | 在個別訊息中傳送推理強度的變更，藉此保留提示詞快取。否則，推理強度會對整個請求一併變更。 | Anthropic Messages、OpenAI Responses | `true` 或 `false`。未設定時會偵測 Claude Opus 5、Claude 5.1 與更新版本，以及 GPT-6 與更新版本。 |
 | `supportsSystemUpdates` | 將對話中途新增的系統訊息以原生系統訊息傳送。否則會包裝成文字，放在下一個使用者回合中。 | Anthropic Messages | `true` 或 `false`。未設定時會偵測 Claude Opus 4.8 與 Claude 5 及更新版本。 |
-| `mediaInput` | 圖片與其他媒體在決策請求中的位置。 | System One | `assets`（從狀態引用的圖片）、`state`（行內於狀態中）或 `root`（頂層 `images`、`audio` 與 `videos` 清單）。未設定時使用供應商預設值。 |
+| `mediaInput` | 圖片與其他媒體在決策請求中的位置。 | System One | `assets`（由狀態引用圖片）、`state`（直接放在狀態中）或 `root`（頂層 `images`、`audio` 與 `videos` 清單）。未設定時使用供應商預設值。 |
 
 ## 本機
 
@@ -411,7 +408,7 @@ vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct
 OpenCode 會在背景重新整理清單，並從 Ollama 讀取上下文、視覺與工具使用能力。
 僅供嵌入的模型會被排除。
 
-若使用其他主機或連接埠，請設定 Ollama 的 OpenAI 相容 URL。探索仍會使用相同路徑前綴的原生 Ollama API：
+若使用其他主機或連接埠，請設定 Ollama 的 OpenAI 相容 URL。OpenCode 仍會透過相同路徑前綴下的原生 Ollama API 探索模型：
 
 ```jsonc title="opencode.jsonc"
 {
@@ -426,13 +423,12 @@ OpenCode 會在背景重新整理清單，並從 Ollama 讀取上下文、視覺
 }
 ```
 
-- 端點不需要 bearer 驗證時，請省略 `apiKey`。
+- 端點不要求以 Bearer 權杖驗證時，請省略 `apiKey`。
 - 使用 `"plugins": ["-opencode.provider.ollama"]` 停用探索。
 
 ### LM Studio
 
-若 `http://127.0.0.1:1234` 上有未驗證的 LM Studio 伺服器，請使用 `lmstudio`
-供應商 ID 選取探索到的模型：
+如果 `http://127.0.0.1:1234` 上的 LM Studio 伺服器不要求驗證，請使用 `lmstudio` 供應商 ID 選取自動探索到的模型：
 
 ```jsonc title="opencode.jsonc"
 {
@@ -476,8 +472,8 @@ OpenCode 會在背景重新整理清單，並從 LM Studio 讀取上下文、視
 OpenCode 會檢查 `/health`、在背景重新整理 `/v1/models`，使用回報的 `max_model_len` 作為上下文
 上限，且只納入 `vllm` 擁有的模型卡。
 
-探索到的模型會宣告文字輸入與輸出，但不宣告視覺或工具。vLLM 會透過
-`--enable-auto-tool-choice` 與 `--tool-call-parser` 等伺服器旗標啟用工具呼叫，但探索不會回報這些資訊。
+自動探索到的模型會標示支援文字輸入與輸出，但不會標示視覺或工具支援。vLLM 可透過
+`--enable-auto-tool-choice` 和 `--tool-call-parser` 等伺服器旗標啟用工具呼叫，但探索時不會回報這些資訊。
 
 若使用其他端點或需要驗證的伺服器，請設定其 OpenAI 相容 URL：
 
@@ -566,7 +562,7 @@ openrouter/anthropic/claude-sonnet-5.5#high
 }
 ```
 
-展開形式適合產生的或程式化的設定。
+如果設定是自動產生的，或會以程式處理，物件形式會比較方便。
 
 ## 注意事項
 

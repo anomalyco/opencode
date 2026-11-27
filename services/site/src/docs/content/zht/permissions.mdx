@@ -1,14 +1,13 @@
 ---
 title: "權限"
-description: "以有序的允許、拒絕與詢問規則控制 OpenCode agent 能做什麼，規則可比對動作與路徑、指令等資源。"
+description: "依序套用允許、拒絕與詢問規則，根據動作及路徑、指令等資源，控制 OpenCode agent 能執行哪些操作。"
 ---
 
 權限控制 agent 能否對某個資源執行操作。
 
 ## 設定
 
-常見的設定方式是：執行 shell 指令前先詢問，允許例行性的 Git
-檢查，並一律封鎖推送。請將這些有序規則加入 `opencode.jsonc`：
+常見做法是執行 shell 指令前先詢問，但允許例行的 Git 檢查，並一律封鎖推送。請依下列順序將規則加入 `opencode.jsonc`：
 
 ```jsonc
 {
@@ -35,8 +34,8 @@ description: "以有序的允許、拒絕與詢問規則控制 OpenCode agent �
 
 | 欄位 | 意義 |
 | --- | --- |
-| `action` | 工具權限動作 |
-| `resource` | 使用中的值，例如路徑、指令、URL、查詢、技能 ID 或 agent ID |
+| `action` | 要檢查權限的工具動作 |
+| `resource` | 動作所使用的值，例如路徑、指令、URL、查詢、技能 ID 或 agent ID |
 | `effect` | `allow`、`deny` 或 `ask` |
 
 ```jsonc
@@ -85,8 +84,7 @@ description: "以有序的允許、拒絕與詢問規則控制 OpenCode agent �
 
 這同時比對 `git status` 與 `git status --short`。
 
-OpenCode 會依序合併規則，並使用最後一筆相符的規則。優先順序較低的
-設定會先載入，接著附加全域規則，最後再附加 agent 規則。
+OpenCode 會依序合併規則，以最後一條相符的規則為準。先載入優先順序較低的設定，再加入全域規則，最後加入 agent 規則。
 
 ```jsonc
 {
@@ -97,8 +95,8 @@ OpenCode 會依序合併規則，並使用最後一筆相符的規則。優先�
 }
 ```
 
-操作可能會檢查多個資源，例如觸及多個檔案的修補。任何 `deny` 都會拒絕該操作；
-否則任何 `ask` 都會詢問；若都沒有，則允許該操作。
+套用涉及多個檔案的修補等操作時，可能要檢查多個資源。只要有一項是 `deny`，就會拒絕整個操作；
+若沒有拒絕項目，但至少一項是 `ask`，就會詢問；兩者皆無才會允許。
 
 ## 動作
 
@@ -117,7 +115,7 @@ V2 的動作名稱是字串，因此外掛可以定義更多動作。內建工�
 | `question` | `*` |
 | `webfetch` | 請求的 URL |
 | `websearch` | 搜尋查詢 |
-| `generate_image` | 所選圖片模型，格式為 `providerID/modelID`，設定時再加上 `#variant` |
+| `generate_image` | 所選圖片模型，格式為 `providerID/modelID`；若已指定變體，會加上 `#variant` |
 | `external_directory` | 標準化的外部目錄邊界，通常以 `/*` 結尾 |
 | `<server>_<tool>` | MCP 工具為 `*`；兩個名稱都保留字母、數字、`_` 和 `-`，其餘字元一律換成 `_` |
 | `opencode_list_mcp_resources` | MCP 伺服器名稱 |
@@ -141,9 +139,9 @@ MCP 動作名稱會保留連字號，因此名為 `mcp-atlassian` 的伺服器�
 
 ## 目錄
 
-同時位於作用中位置及其非根專案 worktree 之外的路徑，會先依
-`external_directory` 檢查，再套用其 `read` 或 `edit` 規則。預設原則
-允許 `external_directory`，因此除非你新增規則，否則外部路徑不會提示。
+如果路徑既不在目前位置內，也不在該專案的 worktree 內（只計入不是根目錄的 worktree），OpenCode 會先檢查
+`external_directory`，再套用 `read` 或 `edit` 規則。預設原則
+允許 `external_directory`，所以除非你另外新增規則，否則存取外部路徑時不會詢問。
 若要在存取專案外部任何內容之前先詢問：
 
 ```jsonc
@@ -155,7 +153,7 @@ MCP 動作名稱會保留連字號，因此名為 `mcp-atlassian` 的伺服器�
 }
 ```
 
-其後較窄的規則可以允許或拒絕特定目錄：
+接著可加入範圍更小的規則，允許或拒絕存取特定目錄：
 
 ```jsonc
 {
@@ -179,7 +177,7 @@ shell 會先檢查其外部工作目錄與掃描器推斷的目錄，再檢查
 { "action": "read", "resource": "$HOME/reference/*", "effect": "allow" }
 ```
 
-shell 資源仍是原始指令文字，不會展開主目錄。
+shell 資源保留指令原文，不會將主目錄寫法展開成實際路徑。
 
 <Callout type="warning">
   `shell` 會以主機使用者的檔案系統、處理程序與網路權限執行。從指令文字推斷目錄
@@ -212,7 +210,7 @@ shell 權限檢查會使用 OpenCode 內建的 shell 掃描器，涵蓋 Bash、Z
 
 ## 預設值
 
-每個 agent（包括自訂 agent）都會從下列有序的基礎原則開始：
+所有 agent（含自訂 agent）都會先依序套用下列基礎原則：
 
 ```jsonc
 [
@@ -290,8 +288,7 @@ shell 建議指令前綴，網路擷取建議 URL 的網站（例如
 `https://opencode.ai/*`），技能與 subagent 則建議其 ID。
 請審查範圍過廣的核准，並移除不再需要的項目。
 
-用戶端拒絕時可以附上意見回饋。非互動式用戶端必須自行決定
-如何處理核准請求；已設定的 `deny` 規則一律維持生效。
+用戶端拒絕時可以附上意見回饋。非互動式用戶端必須自行決定如何處理核准請求；已設定的 `deny` 規則仍一律適用。
 
 ## 原則
 

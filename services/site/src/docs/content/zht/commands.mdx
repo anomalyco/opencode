@@ -35,7 +35,7 @@ Review $ARGUMENTS using the team's checklist.
 巢狀指令的執行方式為 `/team/review src/auth.ts`。舊版的單數目錄 `command/` 也會被探索，
 但新檔案請使用 `commands/`。
 
-指令需要中繼資料時，請加入 YAML frontmatter。去除前後空白後的 Markdown 本文一律是提示詞範本。
+指令需要中繼資料時，請在文件開頭加入 YAML 前置中繼資料。去除前後空白的 Markdown 本文一律作為提示詞範本。
 
 ```md title=".opencode/commands/review.md"
 ---
@@ -66,7 +66,7 @@ Review $ARGUMENTS. Report bugs first.
 
 ## 欄位
 
-Markdown frontmatter 與 JSON 項目接受相同的欄位，差別在於 Markdown 會從檔案本文取得 `template`。
+Markdown 的前置中繼資料與 JSON 項目接受相同的欄位，差別在於 Markdown 會從檔案本文取得 `template`。
 
 | 欄位 | 必填 | 行為 |
 | --- | --- | --- |
@@ -93,7 +93,7 @@ Markdown frontmatter 與 JSON 項目接受相同的欄位，差別在於 Markdow
 }
 ```
 
-請勿將 `template` 放在 Markdown frontmatter 中；本文會提供它。
+請勿將 `template` 寫在 Markdown 的前置中繼資料中；範本取自文件本文。
 
 ## 引數
 

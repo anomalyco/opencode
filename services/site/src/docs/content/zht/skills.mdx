@@ -120,7 +120,7 @@ HTTP 目錄是帶有 `index.json` 檔案的基礎 URL：
 
 ## Frontmatter
 
-使用 frontmatter 為技能命名，並控制其出現位置：
+使用前置中繼資料為技能命名，並控制它會顯示在哪裡：
 
 ```markdown title="SKILL.md"
 ---
@@ -140,13 +140,13 @@ Prepare the changelog, version bump, tag, and release notes.
 | `metadata.opencode/autoinvoke` | 設為 `false` 可將技能從模型的可用清單中省略 |
 | `disable-model-invocation` | 設為 `true` 可達到與 `opencode/autoinvoke: false` 相同的效果 |
 
-執行階段的所有 frontmatter 都是選用的。若模型應探索該技能，請加入清楚的 `description`；沒有描述的技能不會被公告。
+執行階段不要求任何前置中繼資料欄位。若希望模型能找到該技能，請在 `description` 中清楚說明用途；沒有描述的技能不會提供給模型。
 
 `opencode/autoinvoke: false` 只會將技能從模型的可用清單中隱藏。技能仍會註冊，且仍可依 ID 明確載入。當 `disable-model-invocation` 與 `opencode/autoinvoke` 同時設定時，`opencode/autoinvoke` 優先。V2 接受 `license` 與 `compatibility` 等可攜性欄位，但不會解讀它們。
 
 ## ID
 
-檔案路徑決定技能 ID。frontmatter 的 `name` 只是顯示標籤。
+檔案路徑決定技能 ID。前置中繼資料中的 `name` 只用於顯示。
 
 | 檔案 | ID |
 | --- | --- |
@@ -154,7 +154,7 @@ Prepare the changelog, version bump, tag, and release notes.
 | `<source>/git-release/SKILL.md` | `git-release` |
 | `<source>/teams/release/SKILL.md` | `release` |
 
-ID 必須完全相符且區分大小寫。若要保持可攜性，請使用 1 到 64 個字元的唯一小寫 kebab-case ID，並與目錄名稱保持一致：
+ID 必須完全相符，且區分大小寫。為了讓技能能在不同環境使用，請採用 kebab-case 格式的唯一 ID，由 1 到 64 個字元組成，一律使用小寫，並與目錄名稱一致：
 
 ```text
 ^[a-z0-9]+(-[a-z0-9]+)*$
@@ -198,7 +198,7 @@ V2 目前不會強制此模式、1 到 64 個字元的建議、`name` 與目錄�
 
 1. 為該 ID 選取目前的定義。
 2. 檢查所選 agent 的 `skill` 權限。
-3. 將不含 frontmatter 的 Markdown 本文加入對話。
+3. 將 Markdown 本文加入對話，不含前置中繼資料。
 4. 提供技能的基礎目錄，以及最多十個輔助檔案路徑的範例。
 
 若要自行載入技能，請在提示詞中以 `@skill-id` 提及它。
@@ -229,7 +229,7 @@ V2 目前不會強制此模式、1 到 64 個字元的建議、`name` 與目錄�
 
 ## 疑難排解
 
-例如，此技能的 ID 是 `release`，而不是其 frontmatter 名稱 `Git Release`：
+例如，這個技能的 ID 是 `release`，而不是前置中繼資料中的名稱 `Git Release`：
 
 ```text
 .opencode/skills/release/SKILL.md
@@ -239,7 +239,7 @@ V2 目前不會強制此模式、1 到 64 個字元的建議、`name` 與目錄�
 若技能缺少或載入了錯誤的內容：
 
 1. 確認檔案是根層級的 `*.md`，或名稱完全為 `SKILL.md` 的巢狀檔案。
-2. 檢查由路徑衍生且區分大小寫的 ID，而不是 frontmatter 的 `name`。
+2. 檢查由路徑決定、區分大小寫的 ID，而不是前置中繼資料中的 `name`。
 3. 若模型應探索該技能，請加入 `description`。
 4. 檢查 `opencode/autoinvoke` 與所選 agent 的 `skill` 權限。
 5. 尋找較晚定義相同 ID 的來源。

@@ -9,7 +9,7 @@ OpenCode V2 文件 `content/zht/` 的翻譯用語。英文欄與 `zh.md` 一致�
 - 供應商、模型、公司、應用程式與工具名稱。
 - 縮寫：MCP、LSP、SDK、CLI、API、TUI、JSON、ZDR、SSO、SCIM、OIDC、SAML、harness、profile（Codex）、bundle、schema。
 - 指令、旗標、設定鍵與值、環境變數、路徑、程式碼、URL、金鑰。
-- 從產品引用的粗體英文介面標籤，例如 **Settings › Billing**、**Add credits**。
+- 從產品引用的英文介面標籤，例如 **Settings › Billing**、**Add credits**，以及供應商驗證模式表格中的 Bearer、API key header、Custom header。
 
 ## 用語
 
@@ -67,13 +67,15 @@ OpenCode V2 文件 `content/zht/` 的翻譯用語。英文欄與 `zh.md` 一致�
 | Free（價格或方案標籤） | 免費 | |
 | base URL | 基礎 URL | |
 | harness, profile（Codex） | harness、profile | 保留英文 |
+| profile（AWS） | 設定檔 | 例如「具名的 AWS 設定檔」 |
 | invoice / invoiced billing / credit limit | 發票 / 按發票結算 / 授信額度 | |
 | keybind / shortcut | 快捷鍵 | |
 | metadata | 中繼資料 | |
+| frontmatter | 前置中繼資料 | 程式碼及檔案欄位原樣保留 |
 | command palette | 指令面板 | |
 | session fork | 建立工作階段分支 | Git 與 Effect 的 `fork` 另依語境處理 |
 | raised surface | 浮層背景 | |
-| checkout（Git） / well-known | checkout / well-known | 保留英文 |
+| checkout（Git） / worktree / well-known | checkout / worktree / well-known | 保留英文，包括 Git worktree |
 | render / renderer（UI） | 算繪 / 算繪器 | 視句意可用「顯示」或「呈現」；協定轉換仍用「轉譯」 |
 | fiber（Effect） | fiber | 保留英文 |
 

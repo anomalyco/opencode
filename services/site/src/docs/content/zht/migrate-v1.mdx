@@ -494,10 +494,10 @@ V2 位置是：
 .opencode/agents/<name>.md
 ```
 
-V1 `mode/` 或 `modes/` 目錄下的檔案代表主要 agent。將其一移至 `agents/` 時，請在其 frontmatter 加入
+V1 `mode/` 或 `modes/` 目錄下的檔案代表主要 agent。將這類檔案移至 `agents/` 時，請在前置中繼資料中加入
 `mode: primary`。`agent/` 下的檔案可以移到 `agents/`，而不變更其由路徑衍生的 ID。
 
-將 frontmatter 轉換為原生 V2 欄位時：
+將前置中繼資料轉換為原生 V2 欄位時：
 
 - 保留 Markdown 本文作為 agent 的系統指示。
 - 在 JSON 設定中出現時，將 `prompt` 重新命名為 `system`；檔案本文不需要 `system` 欄位。
@@ -505,10 +505,10 @@ V1 `mode/` 或 `modes/` 目錄下的檔案代表主要 agent。將其一移至 `
 - 以 `provider/model#variant` 合併 `model` 與 `variant`。
 - 在模型變體上設定取樣與供應商選項，如[上述](#agents-and-modes)所示。
 
-V1 agent frontmatter 已棄用，但仍會自動轉譯。每個檔案只會以一種格式讀取。使用
+V1 的 agent 前置中繼資料已棄用，但仍會自動轉譯。每個檔案只會以一種格式讀取。使用
 `permissions`、`request`、`system` 或 `disabled` 任一的檔案會以 V2 讀取，其中的 V1 欄位（例如 `name`、
 `tools`、`permission` 或 `temperature`）會被忽略，並在日誌中留下警告。其他使用 V1 欄位的檔案會以 V1
-讀取。請一次轉換檔案的整個 frontmatter，不要混用兩種格式。請參閱 [Agents](/agents)。
+讀取。請一次轉換檔案的整段前置中繼資料，不要混用兩種格式。請參閱 [Agents](/agents)。
 
 ### 指令檔案
 
@@ -519,8 +519,8 @@ V1 指令檔案可能使用 `command/` 或 `commands/`。V2 兩者都會探索�
 ```
 
 將檔案從 `command/` 移到 `commands/` 下的相同相對路徑，以保留指令名稱。Markdown 本文仍是
-指令範本，`description` 與 `agent` frontmatter 保留相同名稱。將 `subtask` 重新命名為 `subagent`，以使用
-背景委派的原生名稱。若 frontmatter 有獨立的
+指令範本；前置中繼資料中的 `description` 與 `agent` 欄位名稱不變。將 `subtask` 重新命名為 `subagent`，以使用
+背景委派的原生名稱。若前置中繼資料中有獨立的
 `model` 與 `variant` 欄位，請將變體附加到模型並移除 `variant`：
 
 ```yaml
@@ -545,7 +545,7 @@ V2 會從 `.opencode/skill/` 與 `.opencode/skills/` 探索技能。偏好的配
 ```
 
 請移動完整的技能目錄，而不只是 `SKILL.md`，讓相對的指令碼、參考資料與其他輔助檔案仍可
-使用。請保持目錄名稱穩定以保留技能 ID。現有技能 frontmatter 與 Markdown 本文不需要
+使用。請勿更改目錄名稱，以免技能 ID 改變。現有技能的前置中繼資料與 Markdown 本文不需要
 V2 改寫。請參閱[技能](/skills)。
 
 ### 指示檔案
