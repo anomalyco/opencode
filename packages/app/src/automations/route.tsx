@@ -84,13 +84,11 @@ export function AutomationsScreen() {
           <div class="mx-auto flex max-w-[480px] flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
             <h2 class="text-14-medium text-v2-text-text-base">
               {language.t(
-                !controller.available()
-                  ? "automations.off"
-                  : controller.failed()
-                    ? "automations.failed"
-                    : controller.loading()
-                      ? "automations.loading"
-                      : "automations.empty.title",
+                controller.failed()
+                  ? "automations.failed"
+                  : controller.loading()
+                    ? "automations.loading"
+                    : "automations.empty.title",
               )}
             </h2>
             <Show when={controller.draftTarget() && !controller.loading() && !controller.failed()}>

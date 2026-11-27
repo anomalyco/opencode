@@ -2,7 +2,6 @@ import { ScrollView } from "@opencode/ui/scroll-view"
 import { createMediaQuery } from "@solid-primitives/media"
 import { useNavigate } from "@solidjs/router"
 import { createMemo, onMount, Show } from "solid-js"
-import { useAutomationSource } from "@/automations/source"
 import { useLayout } from "@/shell/state/layout"
 import { useSettings } from "@/settings/model"
 import { useProjectNavigation } from "@/shell/project-navigation"
@@ -37,11 +36,10 @@ function HomeOverview() {
   const layout = useLayout()
   const settings = useSettings()
   const home = createHomeController()
-  const automations = useAutomationSource()
   const navigate = useNavigate()
 
   const projects = createHomeProjectsController(home, {
-    automations: { available: automations.available, open: () => navigate("/automations") },
+    automations: { open: () => navigate("/automations") },
   })
 
   const sessions = createHomeSessionsController(home)

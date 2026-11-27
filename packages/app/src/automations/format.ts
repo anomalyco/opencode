@@ -50,7 +50,21 @@ function describeCron(cron: string, language: Language) {
     return language.t("automations.trigger.days", { days, time })
   }
 
-  if (hours.length || weekdays.length) return
+  if (weekdays.length) return
+
+  if (hours.length) {
+    const step = hours[1]! - hours[0]!
+
+    if (
+      minutes.length !== 1 ||
+      hours.length < 2 ||
+      24 % step ||
+      !hours.every((hour, index) => hour === hours[0]! + index * step)
+    )
+      return
+
+    return language.t("automations.trigger.hours", { count: step, minute: String(minutes[0]).padStart(2, "0") })
+  }
 
   if (minutes.length === 1)
     return language.t("automations.trigger.hourly", { minute: String(minutes[0]).padStart(2, "0") })
@@ -89,6 +103,20 @@ export function relativeTime(at: number, language: Language) {
   if (Math.abs(hours) < 24) return format.format(Math.round(hours), "hour")
 
   return format.format(Math.round(hours / 24), "day")
+}
+
+// "5m", "2h", "3d": how long until the next run, for the list's chip.
+export function shortDuration(at: number, language: Language) {
+  const minutes = Math.max(1, Math.round((at - Date.now()) / 60_000))
+
+  const [value, unit] =
+    minutes < 60
+      ? [minutes, "minute"]
+      : minutes < 1440
+        ? [Math.round(minutes / 60), "hour"]
+        : [Math.round(minutes / 1440), "day"]
+
+  return new Intl.NumberFormat(language.intl(), { style: "unit", unit, unitDisplay: "narrow" }).format(value)
 }
 
 export function statusLabel(row: AutomationInfo, t: Language["t"]) {

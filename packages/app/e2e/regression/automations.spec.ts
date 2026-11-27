@@ -75,7 +75,7 @@ test("inspects event and timer automations and manages the selected row", async 
     automations,
     seed: {
       theme: { id: "oc-2", scheme: "dark" },
-      settings: { general: { automations: true }, appearance: { tabLayout: "vertical", sidebarOpen: true } },
+      settings: { appearance: { tabLayout: "vertical", sidebarOpen: true } },
     },
   })
   await page.goto(sessionHref("ses_release"))
@@ -86,12 +86,7 @@ test("inspects event and timer automations and manages the selected row", async 
   await page.getByRole("button", { name: /Release health watch/ }).click()
   await expect(detail.getByRole("heading", { name: "Release health watch" })).toBeVisible()
   await expect(detail.getByText("deployment.finished from deployments", { exact: true })).toBeVisible()
-  await expect(
-    detail
-      .getByRole("term")
-      .filter({ hasText: /^Runs on$/ })
-      .locator("+ dd"),
-  ).toHaveText("release-runner-03")
+  await expect(detail.getByText("release-runner-03")).toHaveCount(0)
   await expect(detail.getByText('environment = "staging"', { exact: true })).toBeVisible()
   await expect(detail.getByText("Next run")).toHaveCount(0)
   await expect(
@@ -119,14 +114,6 @@ test("inspects event and timer automations and manages the selected row", async 
   await expect(page.locator('[data-component="composer-editor"]')).toHaveText(/\/automation/)
 })
 
-test("hides every automation entry point while the experimental setting is off", async ({ page }) => {
-  await mockWorkspace(page, { name: "Off", commands: [{ name: "automation" }] })
-  await page.goto("/automations")
-  await expect(page.getByText("Turn on Automations in Settings → Experimental.")).toBeVisible()
-  await expect(page.getByRole("button", { name: "Automations", exact: true })).toHaveCount(0)
-  await expect(page.getByRole("button", { name: "New automation" })).toHaveCount(0)
-})
-
 test("keeps the entry for an empty server and withdraws New automation when the server removes its command", async ({
   page,
 }) => {
@@ -135,7 +122,6 @@ test("keeps the entry for an empty server and withdraws New automation when the 
   const { push, directory } = await mockWorkspace(page, {
     name: "Empty",
     commands: () => (enabled ? [{ name: "automation" }] : []),
-    seed: { settings: { general: { automations: true } } },
   })
 
   await page.goto("/automations")
@@ -177,7 +163,6 @@ test("manages a watch outside open locations and opens the recipient instead of 
       { id: "ses_child", title: "Research notes", parentID: "ses_parent" },
     ],
     seed: {
-      settings: { general: { automations: true } },
       storage: {
         "opencode.window.browser.dat:tabs": [
           {
@@ -247,7 +232,6 @@ test("keeps identically keyed automations on separate servers and starts the dra
     ),
   )
   await seed(page, {
-    settings: { general: { automations: true } },
     servers: [REMOTE_SERVER],
     usedProjects: { local: ["proj_shared"], [REMOTE_SERVER]: ["proj_shared"] },
   })
@@ -256,7 +240,7 @@ test("keeps identically keyed automations on separate servers and starts the dra
   const detail = page.getByRole("article")
   await expect(detail.getByText("Remote project", { exact: true })).toBeVisible()
   await expect(detail.getByText("Created by")).toHaveCount(0)
-  await expect(detail.getByRole("button", { name: "ses_notes" })).toBeVisible()
+  await expect(detail.getByRole("button", { name: "another session" })).toBeVisible()
   const directory = "/projects/remote/worktrees/docs"
   await expect(detail.getByText(directory, { exact: true })).toBeVisible()
   await page.getByRole("button", { name: "New automation" }).click()
