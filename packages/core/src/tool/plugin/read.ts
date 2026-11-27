@@ -82,8 +82,7 @@ export const Plugin = {
                 const files = [Skill.manifest, ...((yield* skills.files(id)) ?? [])]
                 yield* permission.assert({
                   action: "skill",
-                  resources: [skill.id],
-                  save: [skill.id],
+                  ...(yield* skills.approval(skill.id)),
                   ...Permission.invocation(context),
                 })
                 yield* permission.assert({
