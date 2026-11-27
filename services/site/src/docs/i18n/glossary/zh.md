@@ -37,4 +37,6 @@
 | invoice / invoiced billing / credit limit / credits / balance | 发票 / 按发票结算 / 授信额度 / 额度 / 余额 | |
 | Free (price or tier label) | 免费 | |
 | base URL | 基础 URL | |
+| frontmatter | 文件头元数据 | YAML frontmatter → 文件开头的 YAML 元数据块 |
+| worktree | 工作树 | Git worktree → Git 工作树；保留代码中的 `worktree` |
 | Diff (the viewer or its section) | Diff | Generic differences → 差异 |

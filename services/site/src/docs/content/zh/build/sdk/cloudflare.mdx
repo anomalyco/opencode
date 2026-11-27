@@ -45,7 +45,7 @@ constructor(state: DurableObjectState) {
 }
 ```
 
-Wrangler 会通过 `workerd` 包条件（package condition）选择 OpenCode 中适用于 Workerd 的实现。Cloudflare 可能会在不执行清理的情况下驱逐 Durable Object，因此程序的正确性并不依赖于是否调用了 `close()`。
+Wrangler 会根据 `workerd` 包导出条件选择 OpenCode 中适用于 Workerd 的实现。Cloudflare 可能会在不执行清理的情况下回收 Durable Object，因此即使没有调用 `close()`，程序也能正确运行。
 
 ```jsonc title="wrangler.jsonc"
 {

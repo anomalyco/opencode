@@ -1,13 +1,13 @@
 ---
 title: "权限"
-description: "用按顺序匹配操作与资源（如路径和命令）的允许、拒绝、询问规则，控制 OpenCode agent 能做什么。"
+description: "按顺序匹配操作和资源（如路径、命令），通过允许、拒绝或询问规则，控制 OpenCode agent 能做什么。"
 ---
 
 权限决定 agent 能否对某个资源执行某项操作。
 
 ## 配置
 
-一种常见的设置是：运行 shell 命令前先询问，允许常规的 Git 查看操作，并始终禁止推送。将以下有序规则添加到 `opencode.jsonc`：
+常见做法是让 OpenCode 在运行 shell 命令前先询问，直接放行常规的 Git 查看操作，并始终禁止推送。按以下顺序将规则添加到 `opencode.jsonc`：
 
 ```jsonc
 {
@@ -34,7 +34,7 @@ description: "用按顺序匹配操作与资源（如路径和命令）的允许
 | 字段 | 含义 |
 | ---------- | -------------------------------------------------------------------------- |
 | `action` | 工具的权限操作 |
-| `resource` | 被使用的值，例如路径、命令、URL、搜索词、技能 ID 或 agent ID |
+| `resource` | 操作涉及的值，例如路径、命令、URL、搜索词、技能 ID 或 agent ID |
 | `effect` | `allow`、`deny` 或 `ask` |
 
 ```jsonc
@@ -56,7 +56,7 @@ description: "用按顺序匹配操作与资源（如路径和命令）的允许
 
 ## 匹配规则
 
-操作和资源使用简单的整值通配符匹配：
+操作和资源都支持简单的通配符，匹配时会检查完整值：
 
 | 模式 | 匹配 |
 | ------- | ------------------------------------------ |
@@ -93,7 +93,7 @@ OpenCode 按顺序合并规则，并采用最后一条匹配的规则。优先�
 }
 ```
 
-一次操作可能会检查多个资源，例如一个涉及多个文件的补丁。只要有任何一个 `deny`，操作就会被拒绝；否则只要有任何一个 `ask`，就会询问；其余情况下操作被允许。
+一次操作可能涉及多个资源，例如一个补丁修改了多个文件。只要有一个资源的结果是 `deny`，就拒绝整个操作；否则，只要有一个结果是 `ask`，就先询问；其余情况直接允许。
 
 ## 操作
 
@@ -105,18 +105,18 @@ V2 的操作名是字符串，因此插件可以定义更多操作。内置工�
 | `edit` | `edit`、`write` 和 `patch` 的目标路径 |
 | `glob` | 请求的 glob 模式 |
 | `grep` | 请求的正则表达式，而不是搜索路径 |
-| `shell` | 扫描器解析出的命令字符串；复合命令可能产生多个 |
+| `shell` | 扫描器提取的命令字符串；复合命令可能提取出多个字符串 |
 | `subagent` | 目标 agent ID |
 | `skill` | 技能 ID |
 | `question` | `*` |
 | `webfetch` | 请求的 URL |
 | `websearch` | 搜索词 |
-| `generate_image` | 所选的图片模型，格式为 `providerID/modelID`，设置后还包含 `#variant` |
+| `generate_image` | 所选图像模型，格式为 `providerID/modelID`；如果指定了变体，则附加 `#variant` |
 | `external_directory` | 规范化的外部目录边界，通常以 `/*` 结尾 |
 | `<server>_<tool>` | MCP 工具的资源为 `*`；两个名称中的字母、数字、`_` 和 `-` 会原样保留，其他字符一律替换为 `_` |
 | `opencode_list_mcp_resources` | MCP 服务器名称 |
 | `opencode_read_mcp_resource` | `<server>:<uri>` |
-| `execute` | `*`；拒绝会移除 Code Mode 并直接列出其工具，嵌套调用的工具仍执行各自的规则 |
+| `execute` | `*`；拒绝此操作时不提供 Code Mode，而是直接列出它包含的工具；嵌套调用的工具仍遵循各自的规则 |
 
 MCP 操作名保留连字符，因此名为 `mcp-atlassian` 的服务器所提供的工具匹配 `mcp-atlassian_*`，而不是 `mcp_atlassian_*`。
 
@@ -135,7 +135,7 @@ MCP 操作名保留连字符，因此名为 `mcp-atlassian` 的服务器所提�
 
 ## 目录
 
-如果路径既不在当前 Location 内，也不在其非根项目 worktree 内，那么在应用 `read` 或 `edit` 规则之前，会先按 `external_directory` 检查。默认策略允许 `external_directory`，因此除非你添加规则，否则外部路径不会触发询问。若要在访问项目之外的任何内容前都先询问：
+如果路径既不在当前 Location 内，也不在该项目的工作树内（文件系统根目录不计入），OpenCode 会在应用 `read` 或 `edit` 规则之前，先检查 `external_directory`。默认策略允许 `external_directory`，所以外部路径不会触发询问，除非你添加规则。若要在访问项目之外的任何路径前先询问，可添加：
 
 ```jsonc
 {
@@ -146,7 +146,7 @@ MCP 操作名保留连字符，因此名为 `mcp-atlassian` 的服务器所提�
 }
 ```
 
-其后的更窄规则可以允许或拒绝特定目录：
+在它后面添加范围更小的规则，就可以允许或拒绝访问特定目录：
 
 ```jsonc
 {
@@ -167,17 +167,17 @@ MCP 操作名保留连字符，因此名为 `mcp-atlassian` 的服务器所提�
 { "action": "read", "resource": "$HOME/reference/*", "effect": "allow" }
 ```
 
-Shell 资源保持为原始命令文本，不会展开主目录。
+Shell 资源保留原始命令文本，不会将上述前缀展开为主目录。
 
 <Callout type="warning">
   `shell` 以主机用户的身份运行，拥有其在文件系统、进程和网络方面的全部权限。从命令文本推断目录只能尽力而为，因此请优先使用范围较窄的 shell 允许列表，而不是试图用模式识别所有危险命令。
 </Callout>
 
-相对路径的修改操作可能会离开当前 Location，但仍位于其项目 worktree 之内。显式指定的外部路径会在匹配前规范化，因此只应授权可信的目录边界。
+通过相对路径修改文件时，目标可能在当前 Location 之外，但仍在项目的工作树内。显式指定的外部路径会先规范化，再匹配规则，因此请只放行你信任的目录范围。
 
 ## 扫描器
 
-shell 权限检查会在 Bash、Zsh、POSIX `sh` 和 PowerShell 中使用 OpenCode 内置的 shell 扫描器。有些命令无法安全分析，例如语法错误或 `eval` 这样的动态求值。只要有任何 `shell` 拒绝规则适用，这类命令就会以扫描器错误失败，因为无法将其子命令与拒绝规则比对。否则，它需要作为单个 `shell` 资源获得整条命令的批准，并需要 `external_directory` `*` 的批准。只有允许所有目录的规则或用户本人才能授予第二种批准，并且这两种批准都不会保存为模式。
+对于 Bash、Zsh、POSIX `sh` 和 PowerShell，OpenCode 都使用内置的 shell 扫描器来检查权限。语法有误或涉及 `eval` 等动态求值的命令无法安全分析。如果存在适用的 `shell` 拒绝规则，扫描器会报错并阻止执行，因为它无法用拒绝规则检查子命令。否则，整条命令需要作为一个 `shell` 资源获得批准，此外还须批准 `external_directory` 的 `*` 资源。后者只能由允许访问所有目录的规则或用户本人批准。这两项批准都不会保存为模式。
 
 ```jsonc
 {
@@ -193,7 +193,7 @@ shell 权限检查会在 Bash、Zsh、POSIX `sh` 和 PowerShell 中使用 OpenCo
 }
 ```
 
-权限规则、已保存的批准模式以及尽力而为的目录推断会应用于每个提取出的子命令和 `cd` 目标。不会为未知目录引入额外的批准模式或一刀切的限制。
+OpenCode 会对提取出的每条子命令和每个 `cd` 目标应用权限规则、已保存的批准模式，并尽可能推断目录。对于未知目录，不会启用额外的批准模式，也不会一律禁止访问。
 
 ## 默认值
 
@@ -220,7 +220,7 @@ shell 权限检查会在 Bash、Zsh、POSIX `sh` 和 PowerShell 中使用 OpenCo
 | `summary` | 拒绝所有操作 |
 | `compaction` | 保持基础策略 |
 
-由于没有默认规则询问 `external_directory`，在 Location 和 worktree 之外的读取和编辑会直接进行，不会提示。若要恢复提示或阻止外部访问，请按[目录](#directories)一节所示添加 `external_directory` 的 `ask` 或 `deny` 规则。之后的全局规则和 agent 规则会覆盖这些默认值。
+默认规则不会针对 `external_directory` 询问，因此读取或编辑 Location 和工作树之外的文件时，不会弹出权限提示。要先询问或禁止外部访问，请按[目录](#directories)一节所示，为 `external_directory` 添加 `ask` 或 `deny` 规则。后加载的全局规则和 agent 规则可以覆盖这些默认规则。
 
 ## Agents
 
@@ -245,7 +245,7 @@ shell 权限检查会在 Bash、Zsh、POSIX `sh` 和 PowerShell 中使用 OpenCo
 }
 ```
 
-agent 规则会追加在全局规则之后，而不会替换全局规则数组。自定义 subagent 使用它自己的权限，而不是其父 agent 权限的子集。
+agent 规则会追加到全局规则之后，不会替换全局规则数组。自定义 subagent 使用自己的权限规则，其权限不必是父 agent 权限的子集。
 
 ## 批准
 
@@ -263,13 +263,13 @@ agent 规则会追加在全局规则之后，而不会替换全局规则数组�
 shell: git status * → allow
 ```
 
-已保存的批准是持久的项目级 `allow` 规则，不会覆盖已配置的 `deny`。建议保存的模式由工具决定：有些工具建议 `*`，shell 建议命令前缀，网页获取建议 URL 的站点（例如 `https://opencode.ai/*`），技能和 subagent 则建议其 ID。请定期检查范围过宽的批准，并删除不再需要的批准。
+批准保存后会成为项目级的持久 `allow` 规则，但不会覆盖已配置的 `deny`。由工具决定建议保存什么模式：有些工具建议 `*`，shell 建议命令前缀，网页获取建议 URL 对应的站点（例如 `https://opencode.ai/*`），技能和 subagent 则建议保存各自的 ID。请检查范围过宽的批准，删除不再需要的规则。
 
 客户端在拒绝时可以附带反馈。非交互式客户端必须自行决定如何处理批准请求；已配置的 `deny` 规则始终会被执行。
 
 ## 策略
 
-[策略](/policies)可以在上述规则和已保存的批准执行之后，强制拒绝某次权限检查。它会把 `allow` 或 `ask` 变为 `deny`，但永远不会授予访问权限。
+应用上述规则和已保存的批准后，[策略](/policies)仍可强制拒绝操作。它会把 `allow` 或 `ask` 改为 `deny`，但绝不会授予访问权限。
 
 ```jsonc
 {

@@ -226,7 +226,7 @@ context.ui.slot({ append: "home.footer", render: () => <markdown content="Ready"
 return () => context.renderer.idle().then(() => style.destroy())
 ```
 
-要读取可渲染元素的布局样式，请调用与 Yoga Node getter 同名的方法，例如 `box.getPadding(Yoga.Edge.Bottom)` 或 `box.getMaxWidth()`。宿主可渲染元素不属于插件 API，其结构和样式可能在任何版本中变化。
+要读取可渲染元素的布局样式，请调用与 Yoga Node 取值方法同名的方法，例如 `box.getPadding(Yoga.Edge.Bottom)` 或 `box.getMaxWidth()`。宿主的可渲染元素不属于插件 API，其结构和样式可能随版本变化。
 
 ### 为 OpenTUI 0.5 构建的插件
 
@@ -262,7 +262,7 @@ return unregister
 
 ## 命令与按键映射
 
-在响应式的按键映射层（keymap layer）中注册命令面板、斜杠和键盘命令。
+在响应式按键映射层中注册命令面板命令、斜杠命令和键盘命令。
 
 ```ts
 context.keymap.layer(() => ({

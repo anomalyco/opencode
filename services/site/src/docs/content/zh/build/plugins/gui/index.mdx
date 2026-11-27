@@ -2641,7 +2641,7 @@ const show = async (path: string) => {
 - `system.openExternal` 在系统浏览器中打开 URL。对于应用内的链接，请使用 `ctx.links.open`，它会把 `Link` 路由到其[链接处理器](#link-handlers)。
 - `desktop.launch(path, app?)` 用指定应用或默认应用打开路径。`desktop.reveal(path)` 在文件管理器中显示它。
 - `ctx.embeds` 在窗口中渲染主进程 Web 视图；请参阅[嵌入式 Web 视图](#embedded-web-views)。
-- `ctx.locale` 读取界面语言及其书写方向。`ctx.appearance.font("mono")` 是用户终端字体的 CSS font family。
+- `ctx.locale` 读取界面语言及其书写方向。`ctx.appearance.font("mono")` 返回用户终端字体的 CSS 字体族。
 - `ctx.router` 读取当前路由路径以及路由转换是否进行中。
 - 用户从服务器移除工作区目录时运行 `ctx.workspaces.on("remove", handler)`，以便清理该范围下的存储。
 
@@ -2885,7 +2885,7 @@ const [expanded, setExpanded] = createVisitState(false)
 function createVisitState<T>(initial: T): [value: () => T, set: (next: T) => void]
 ```
 
-### usePanel and useDrawer
+### usePanel 和 useDrawer
 
 `usePanel()` 读取周围的面板框架，在面板渲染之外会抛出错误。`useDrawer()` 返回贡献周围的移动端抽屉，在贡献之外返回 `undefined`。
 

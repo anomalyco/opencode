@@ -49,7 +49,7 @@ OpenCode 会从当前目录逐级向上查找项目中的 `.opencode` 目录，�
 
 ### Markdown
 
-frontmatter 接受的字段与 `agents` 配置条目相同。Markdown 正文会成为 agent 的 `system` 提示词：
+文件头元数据支持的字段与 `agents` 配置条目相同。Markdown 正文会成为 agent 的 `system` 提示词：
 
 ```md title=".opencode/agents/explainer.md"
 ---
@@ -60,7 +60,7 @@ mode: subagent
 Explain the relevant code with short examples. Do not edit files.
 ```
 
-V1 的 frontmatter 字段已弃用。仍在使用这些字段的文件将如何解析，请参阅[agent 文件](/migrate-v1#agent-files)。
+V1 的文件头元数据字段已弃用。关于如何解析仍在使用这些字段的文件，请参阅 [agent 文件](/migrate-v1#agent-files)。
 
 ### JSONC
 
@@ -236,7 +236,7 @@ JSON 配置也接受展开形式：
 }
 ```
 
-项目指令、技能、引用以及其他指令来源仍会照常添加。在 Markdown agent 中，请把这段文字写在文档正文里，而不是写在 frontmatter 的 `system` 字段中。
+项目指令、技能、引用和其他来源的指令仍会照常加入。如果用 Markdown 定义 agent，请把这段文字写在文件正文里，不要写在文件头元数据的 `system` 字段里。
 
 ### 权限
 

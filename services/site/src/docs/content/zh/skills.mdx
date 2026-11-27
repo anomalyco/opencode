@@ -120,7 +120,7 @@ HTTP 技能目录是一个带有 `index.json` 文件的基础 URL：
 
 ## Frontmatter
 
-使用 frontmatter 为技能命名，并控制它在哪里出现：
+通过文件头元数据为技能命名，并指定它在哪些地方可用：
 
 ```markdown title="SKILL.md"
 ---
@@ -140,13 +140,13 @@ Prepare the changelog, version bump, tag, and release notes.
 | `metadata.opencode/autoinvoke` | 设为 `false` 可将该技能从模型的可用列表中隐藏  |
 | `disable-model-invocation`     | 设为 `true` 的效果与 `opencode/autoinvoke: false` 相同 |
 
-在运行时，所有 frontmatter 字段都是可选的。如果希望模型能发现该技能，请添加清晰的 `description`；没有描述的技能不会被推荐给模型。
+运行时不要求填写任何文件头元数据字段。如果希望模型能发现该技能，请添加清晰的 `description`；没有描述的技能不会被推荐给模型。
 
 `opencode/autoinvoke: false` 只会把技能从模型的可用列表中隐藏。该技能仍处于注册状态，依然可以通过 ID 显式加载。如果同时设置了 `disable-model-invocation` 和 `opencode/autoinvoke`，以 `opencode/autoinvoke` 为准。V2 接受 `license`、`compatibility` 等用于可移植性的字段，但不会解释它们。
 
 ## ID
 
-技能 ID 由文件路径决定。frontmatter 中的 `name` 只是一个显示标签。
+技能 ID 由文件路径决定。文件头元数据中的 `name` 只是显示名称。
 
 | 文件                              | ID            |
 | --------------------------------- | ------------- |
@@ -154,7 +154,7 @@ Prepare the changelog, version bump, tag, and release notes.
 | `<source>/git-release/SKILL.md`   | `git-release` |
 | `<source>/teams/release/SKILL.md` | `release`     |
 
-ID 需要精确匹配，并且区分大小写。为了让技能便于移植，请使用唯一的、长度为 1–64 个字符的小写 kebab-case ID，并与目录名保持一致：
+ID 必须完全匹配，并且区分大小写。为便于移植，请使用 1–64 个字符的唯一 ID，采用小写、以连字符分隔的写法，并确保与目录名一致：
 
 ```text
 ^[a-z0-9]+(-[a-z0-9]+)*$
@@ -198,7 +198,7 @@ V2 目前不会强制要求这一格式，也不会强制 1–64 个字符的建
 
 1. 选择该 ID 当前对应的定义。
 2. 检查所选 agent 的 `skill` 权限。
-3. 将去掉 frontmatter 的 Markdown 正文添加到对话中。
+3. 只将 Markdown 正文添加到对话中，不包含文件头元数据。
 4. 提供技能的基础目录，以及最多十个辅助文件路径的示例。
 
 如果想自己加载技能，可以在提示词中以 `@skill-id` 的形式提及它。
@@ -239,7 +239,7 @@ V2 目前不会强制要求这一格式，也不会强制 1–64 个字符的建
 如果某个技能找不到或加载了错误的内容：
 
 1. 确认该文件是位于根目录的 `*.md`，或者是文件名恰好为 `SKILL.md` 的嵌套文件。
-2. 检查由路径推导、区分大小写的 ID，而不是 frontmatter 中的 `name`。
+2. 检查根据路径生成、区分大小写的 ID，而不是文件头元数据中的 `name`。
 3. 如果希望模型发现该技能，请添加 `description`。
 4. 检查 `opencode/autoinvoke` 以及所选 agent 的 `skill` 权限。
 5. 查看是否有后注册的来源定义了相同的 ID。
