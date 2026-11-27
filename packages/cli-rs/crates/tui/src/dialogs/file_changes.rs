@@ -54,7 +54,7 @@ pub fn show(tui: &Tui, files: Vec<VcsFileStatus>, texts: Texts, on_choice: Rc<dy
             let width = u32::from(app.size().0).saturating_sub(2).min(DialogSize::Medium.width());
             let counts = files.iter().map(|file| count_text(file).width() + 2).max().unwrap_or(0);
             let name_width = (width as i64 - DIALOG_INSET as i64 * 2 - 2 - counts.max(7) as i64).max(2);
-            let list = ScrollBox::new(app).scrollbars(false).height(files.len().min(8) as u32);
+            let list = cx.scroll_box().scrollbars(false).height(files.len().min(8) as u32);
             for file in &files {
                 list.add(&file_row(app, &page, file, name_width));
             }

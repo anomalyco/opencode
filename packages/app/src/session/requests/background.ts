@@ -193,6 +193,11 @@ export function createSessionBackground(input: {
     if (!id) return []
     const current = history()
 
+    // A shell whose call ended while it runs has a running job.
+    const moved = new Set(
+      (input.jobs?.() ?? []).flatMap((job) => (job.kind === "shell" && job.status === "running" ? [job.shellID] : [])),
+    )
+
     const shells = oldestFirst(input.shells(), (shell) => shell.time.started).flatMap((shell) => {
       if (shell.status !== "running" || shell.metadata.sessionID !== id) return []
 
@@ -200,7 +205,9 @@ export function createSessionBackground(input: {
         current.blocking.some((item) =>
           item.type === "shell"
             ? item.id === shell.id || (!!item.label && shell.command === item.label)
-            : shell.time.started >= item.started && item.commands.includes(shell.command),
+            : // A script's shell names its execute call. A server that doesn't is matched by the calls the script lists.
+              (shell.metadata.callID === item.partID && !moved.has(shell.id)) ||
+              (shell.time.started >= item.started && item.commands.includes(shell.command)),
         )
       )
         return []

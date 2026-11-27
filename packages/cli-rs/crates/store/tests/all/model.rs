@@ -1515,6 +1515,20 @@ const KNOWN: &[(&str, &str, &[Op])] = &[
         "missing ses_0",
         &[Op::Step(0), Op::Delete(0), Op::SyncMessages(0), Op::Release(Read::Head, 0)],
     ),
+    // An unknown-order head read that drops an overtaking step seals the anchor so later events cannot join across it.
+    (
+        "unknown-order head read seals the anchor across a failed retry",
+        "transcript ses_0",
+        &[
+            Op::SyncMessages(0),
+            Op::Step(0),
+            Op::Deliver(2),
+            Op::Release(Read::Head, 0),
+            Op::Step(0),
+            Op::Fail(Read::Head, 0),
+            Op::Step(0),
+        ],
+    ),
 ];
 
 const OPEN: &[(&str, &str, &[Op])] = &[

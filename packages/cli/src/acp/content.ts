@@ -34,7 +34,7 @@ function contentBlockToParts(block: ContentBlock): PromptPart[] {
     }
     case "resource_link":
       return [resourceLinkToPart(block)]
-    case "resource":
+    case "resource": {
       if ("text" in block.resource) {
         const parsed = URL.canParse(block.resource.uri) ? new URL(block.resource.uri) : undefined
         const decoded =
@@ -50,17 +50,20 @@ function contentBlockToParts(block: ContentBlock): PromptPart[] {
         const filepath = path.sep === "\\" ? decoded.replace(/\\/g, "/") : decoded
         return [{ type: "text", text: `[${filepath}${line ? `:${line}` : ""}]\n${block.resource.text}` }]
       }
-      if (!block.resource.mimeType) return []
+      const filename = filenameFromUri(block.resource.uri) ?? "file"
+      // ACP makes `mimeType` optional, so infer it from the name rather than dropping the bytes.
+      const mime = block.resource.mimeType || Bun.file(filename).type.split(";")[0] || "application/octet-stream"
       return [
         {
           type: "file",
           url: block.resource.uri.startsWith("data:")
             ? block.resource.uri
-            : `data:${block.resource.mimeType};base64,${block.resource.blob}`,
-          filename: filenameFromUri(block.resource.uri) ?? "file",
-          mime: block.resource.mimeType,
+            : `data:${mime};base64,${block.resource.blob}`,
+          filename,
+          mime,
         },
       ]
+    }
     default:
       return []
   }
@@ -136,16 +139,18 @@ export function partsToContentChunks(parts: readonly ReplayPart[]): ContentChunk
 }
 
 function resourceLinkToPart(link: ResourceLink): PromptPart {
-  if (link.uri.startsWith("file://")) {
+  const parsed = URL.canParse(link.uri) ? new URL(link.uri) : undefined
+  // `file:/path` and `file:///path` name the same file; the parsed URL spells both as the latter.
+  if (parsed?.protocol === "file:") {
     return {
       type: "file",
-      url: link.uri,
+      url: parsed.href,
       filename: link.name || filenameFromUri(link.uri) || "file",
       mime: link.mimeType ?? "text/plain",
     }
   }
-  if (link.uri.startsWith("zed://") && URL.canParse(link.uri)) {
-    const pathname = new URL(link.uri).searchParams.get("path")
+  if (parsed?.protocol === "zed:") {
+    const pathname = parsed.searchParams.get("path")
     if (pathname)
       return {
         type: "file",
@@ -165,7 +170,14 @@ function filenameFromUri(uri: string | undefined): string | undefined {
   if (!uri || uri.startsWith("data:")) return undefined
   if (URL.canParse(uri)) {
     const url = new URL(uri)
-    return path.basename((url.protocol === "zed:" && url.searchParams.get("path")) || url.pathname) || undefined
+    // Zed's `path` query is already decoded; a URL path is not.
+    const zedPath = url.protocol === "zed:" ? url.searchParams.get("path") : null
+    if (zedPath) return path.basename(zedPath) || undefined
+    return decodeComponent(path.basename(url.pathname)) || undefined
   }
   return path.basename(uri) || undefined
+}
+
+function decodeComponent(value: string) {
+  return Result.try(() => decodeURIComponent(value)).pipe(Result.getOrElse(() => value))
 }

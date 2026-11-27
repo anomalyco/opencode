@@ -6,8 +6,8 @@ let stop: () => void
 beforeEach(() => {
   document.body.innerHTML = `
     <header>
-      <a href="/" data-nav-logo aria-label="OpenCode home"><svg width="20" height="25"></svg></a>
-      <span><a href="/data" data-nav-product="data" aria-haspopup="menu" aria-expanded="false">Data</a></span>
+      <a href="/" data-nav-logo aria-label="OpenCode home" aria-haspopup="menu" aria-expanded="false"><svg width="20" height="25"></svg></a>
+      <a href="/data" data-nav-name>Data</a>
     </header>
     <main><a href="#elsewhere">Elsewhere</a></main>`
   stop = installNavMenus({ link: (path) => `https://example.test${path}` })
@@ -16,8 +16,7 @@ beforeEach(() => {
 afterEach(() => stop())
 
 const logo = () => document.querySelector<HTMLElement>("[data-nav-logo]")!
-const name = () => document.querySelector<HTMLElement>("[data-nav-product]")!
-const chevron = () => document.querySelector<HTMLElement>("[data-nav-product-toggle]")!
+const name = () => document.querySelector<HTMLElement>("[data-nav-name]")!
 const menus = () => [...document.querySelectorAll<HTMLElement>("[data-nav-menu]:not([data-closing])")]
 const items = (menu: HTMLElement) => [...menu.querySelectorAll<HTMLAnchorElement>('[role="menuitem"]')]
 const press = (target: HTMLElement, key: string, shiftKey = false) =>
@@ -80,63 +79,19 @@ describe("logo menu", () => {
   })
 })
 
-describe("product menu", () => {
-  test("lists the products in order with this page's one current", () => {
-    name().focus()
+describe("product name", () => {
+  test("stays a plain link with no hover dropdown or touch toggle", async () => {
+    expect(document.querySelector("[data-nav-product-toggle]")).toBeNull()
 
+    name().dispatchEvent(new PointerEvent("pointerover", { bubbles: true, pointerType: "mouse" }))
+    await Bun.sleep(200)
     press(name(), "ArrowDown")
-
-    expect(items(menus()[0]!).map((item) => [item.textContent, item.getAttribute("aria-current")])).toEqual([
-      ["OpenCode", null],
-      ["Console", null],
-      ["Data", "page"],
-      ["Docs", null],
-    ])
-    expect(name().getAttribute("aria-expanded")).toBe("true")
-  })
-
-  test("each product card shows its label alone", () => {
-    name().focus()
-
-    press(name(), "ArrowDown")
-
-    expect(items(menus()[0]!).map((item) => item.querySelectorAll("[data-slot]").length)).toEqual([1, 1, 1, 1])
-  })
-
-  test("the chevron opens and closes it, showing the open state on the chevron and the name", () => {
-    chevron().click()
-    expect(chevron().getAttribute("aria-expanded")).toBe("true")
-    expect(name().getAttribute("aria-expanded")).toBe("true")
-
-    chevron().click()
 
     expect(menus()).toHaveLength(0)
-    expect(chevron().getAttribute("aria-expanded")).toBe("false")
-  })
-
-  test("Escape returns focus to the chevron that opened it", () => {
-    chevron().focus()
-    press(chevron(), "Enter")
-    press(document.activeElement as HTMLElement, "Escape")
-
-    expect(document.activeElement).toBe(chevron())
   })
 })
 
-describe("one menu at a time", () => {
-  test("opening the logo menu closes the product menu at once", () => {
-    name().focus()
-    press(name(), "ArrowDown")
-
-    logo().dispatchEvent(
-      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 9, clientY: 9 }),
-    )
-
-    expect(document.querySelectorAll("[data-nav-menu]")).toHaveLength(1)
-    expect(menus()[0]!.getAttribute("data-nav-menu")).toBe("logo")
-    expect(name().getAttribute("aria-expanded")).toBe("false")
-  })
-
+describe("closing", () => {
   test("a click elsewhere on the page closes it", () => {
     press(logo(), "ContextMenu")
 
@@ -153,7 +108,7 @@ describe("one menu at a time", () => {
     expect(menus()).toHaveLength(0)
   })
 
-  test("tells the host when one opens, so it can close its own menus", () => {
+  test("tells the host when it opens, so it can close its own menus", () => {
     const opened: string[] = []
     document.addEventListener("opencode-nav-menu-open", () => opened.push("open"), { once: true })
 

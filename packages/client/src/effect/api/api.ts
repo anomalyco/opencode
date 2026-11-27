@@ -2434,6 +2434,9 @@ export type ExperimentalPersistentPtyConnectTokenOperation<E = never> = (
   input: ExperimentalPersistentPtyConnectTokenInput,
 ) => Effect.Effect<ExperimentalPersistentPtyConnectTokenOutput, E>
 
+export type ExperimentalBrowserTunnelOutput = boolean
+export type ExperimentalBrowserTunnelOperation<E = never> = () => Effect.Effect<ExperimentalBrowserTunnelOutput, E>
+
 export type ExperimentalAutomationCreateInput = {
   readonly sessionID?: Session.ID | undefined
   readonly directory?: string | undefined
@@ -2675,6 +2678,64 @@ export type ExperimentalPushSettingsSetOperation<E = never> = (
   input: ExperimentalPushSettingsSetInput,
 ) => Effect.Effect<ExperimentalPushSettingsSetOutput, E>
 
+export type ExperimentalSpaceWriteInput = {
+  readonly changes: ReadonlyArray<{ readonly space: string; readonly key: string; readonly value: string | null }>
+}
+export type ExperimentalSpaceWriteOutput = {
+  readonly spaces: ReadonlyArray<{ readonly space: string; readonly revision: number; readonly cursor: string }>
+}
+export type ExperimentalSpaceWriteOperation<E = never> = (
+  input: ExperimentalSpaceWriteInput,
+) => Effect.Effect<ExperimentalSpaceWriteOutput, E>
+
+export type ExperimentalSpaceSyncInput = {
+  readonly spaces: ReadonlyArray<{ readonly space: string; readonly cursor?: string | undefined }>
+}
+export type ExperimentalSpaceSyncOutput = {
+  readonly pages: ReadonlyArray<
+    | {
+        readonly type: "snapshot"
+        readonly space: string
+        readonly epoch: string
+        readonly revision: number
+        readonly entries: ReadonlyArray<{ readonly key: string; readonly value: string }>
+        readonly cursor: string
+        readonly next?: string | undefined
+      }
+    | {
+        readonly type: "delta"
+        readonly space: string
+        readonly epoch: string
+        readonly revision: number
+        readonly entries: ReadonlyArray<{ readonly key: string; readonly value: string }>
+        readonly cursor: string
+        readonly next?: string | undefined
+        readonly deleted: ReadonlyArray<string>
+      }
+  >
+}
+export type ExperimentalSpaceSyncOperation<E = never> = (
+  input: ExperimentalSpaceSyncInput,
+) => Effect.Effect<ExperimentalSpaceSyncOutput, E>
+
+export type ExperimentalSpaceSubscribeInput = {
+  readonly stream: string
+  readonly spaces: ReadonlyArray<{ readonly space: string; readonly cursor: string }>
+}
+export type ExperimentalSpaceSubscribeOutput = void
+export type ExperimentalSpaceSubscribeOperation<E = never> = (
+  input: ExperimentalSpaceSubscribeInput,
+) => Effect.Effect<ExperimentalSpaceSubscribeOutput, E>
+
+export type ExperimentalSpaceUnsubscribeInput = { readonly stream: string; readonly spaces: ReadonlyArray<string> }
+export type ExperimentalSpaceUnsubscribeOutput = void
+export type ExperimentalSpaceUnsubscribeOperation<E = never> = (
+  input: ExperimentalSpaceUnsubscribeInput,
+) => Effect.Effect<ExperimentalSpaceUnsubscribeOutput, E>
+
+export type ExperimentalSpaceResetOutput = void
+export type ExperimentalSpaceResetOperation<E = never> = () => Effect.Effect<ExperimentalSpaceResetOutput, E>
+
 export interface ExperimentalApi<E = never> {
   readonly persistentPty: {
     readonly read: ExperimentalPersistentPtyReadOperation<E>
@@ -2688,6 +2749,7 @@ export interface ExperimentalApi<E = never> {
     readonly remove: ExperimentalPersistentPtyRemoveOperation<E>
     readonly connectToken: ExperimentalPersistentPtyConnectTokenOperation<E>
   }
+  readonly browser: { readonly tunnel: ExperimentalBrowserTunnelOperation<E> }
   readonly automation: {
     readonly create: ExperimentalAutomationCreateOperation<E>
     readonly list: ExperimentalAutomationListOperation<E>
@@ -2726,6 +2788,13 @@ export interface ExperimentalApi<E = never> {
       readonly remove: ExperimentalPushSessionRemoveOperation<E>
     }
     readonly settings: { readonly set: ExperimentalPushSettingsSetOperation<E> }
+  }
+  readonly space: {
+    readonly write: ExperimentalSpaceWriteOperation<E>
+    readonly sync: ExperimentalSpaceSyncOperation<E>
+    readonly subscribe: ExperimentalSpaceSubscribeOperation<E>
+    readonly unsubscribe: ExperimentalSpaceUnsubscribeOperation<E>
+    readonly reset: ExperimentalSpaceResetOperation<E>
   }
 }
 
@@ -2957,6 +3026,19 @@ export type ExperimentalUsageLimitsOperation<E = never> = (
 
 export interface ExperimentalUsageApi<E = never> {
   readonly limits: ExperimentalUsageLimitsOperation<E>
+}
+
+export type ExperimentalFlagGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+export type ExperimentalFlagGetOutput = {
+  readonly location: Location.PublicRef
+  readonly data: { readonly [x: string]: boolean }
+}
+export type ExperimentalFlagGetOperation<E = never> = (
+  input?: ExperimentalFlagGetInput,
+) => Effect.Effect<ExperimentalFlagGetOutput, E>
+
+export interface ExperimentalFlagApi<E = never> {
+  readonly get: ExperimentalFlagGetOperation<E>
 }
 
 export type ConfigGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
@@ -3234,6 +3316,7 @@ export interface AppApi<E = never> {
     readonly file: ExperimentalFileApi<E>
     readonly migration: ExperimentalMigrationApi<E>
     readonly usage: ExperimentalUsageApi<E>
+    readonly flag: ExperimentalFlagApi<E>
     readonly config: ExperimentalConfigApi<E>
   }
   readonly message: MessageApi<E>

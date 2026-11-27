@@ -410,7 +410,7 @@ export function defaultMetrics(size: number, row: number): RowMetrics {
 /** The dividers inside the document: summary, sections and colophon (Settings › Architect dividers). */
 export type Divider = "solid" | "squares" | "dashes" | "double" | "labelled" | "dots"
 
-/** An OpenTUI Mono character cell at the labelled divider's 8.5pt (it advances 0.6em), in mm. */
+/** An OpenMono character cell at the labelled divider's 8.5pt (it advances 0.6em), in mm. */
 const cell = 1.8
 
 /**
@@ -447,7 +447,7 @@ function dividerImage(kind: Exclude<Divider, "labelled">, width: number) {
  * The print CSS for the dividers. Summary and colophon rules are SVG images at the text column's
  * width (CSS borders print at whole pixels, heavier than the rule weight); every style but solid
  * also draws a divider above each numbered section, across the meta column and the text. The
- * labelled divider is the section heading itself: "─── § 02 Personal data ──────", in OpenTUI Mono on
+ * labelled divider is the section heading itself: "─── § 02 Personal data ──────", in OpenMono on
  * the character cell.
  */
 function dividerCss(kind: Divider, layout: ArchitectLayout) {
@@ -488,7 +488,7 @@ const sheets = {
 }
 
 /**
- * OpenTUI Mono's left side bearing on the 8pt section numbers, in mm: the "N" of "No." starts
+ * OpenMono's left side bearing on the 8pt section numbers, in mm: the "N" of "No." starts
  * 0.085em in from its box.
  */
 const labelBearing = (0.085 * 8 * 25.4) / 72

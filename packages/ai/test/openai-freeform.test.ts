@@ -11,6 +11,11 @@ const inputSchema = {
 }
 const tool = (input: Partial<ToolDefinition.Input> = {}) =>
   ToolDefinition.make({ name: "run", description: "Run code", inputSchema, freeform: { type: "text" }, ...input })
+// The formats a model that takes every kind of freeform tool lists.
+const resolve = (
+  definition: ToolDefinition,
+  formats: ReadonlyArray<"text" | "lark" | "regex"> = ["text", "lark", "regex"],
+) => OpenAIFreeform.resolve(definition, formats)
 const custom = { field: "code", format: { type: "text" } } as const
 const customs = new Map([["run", custom]])
 
@@ -18,25 +23,23 @@ const RAW = ['say "hi"\n\tdone\\', "naïve 😀 \u2028", "\u0000 }{ ]"]
 
 describe("OpenAI freeform tools", () => {
   test("resolves a freeform tool to its string field", () => {
-    expect(OpenAIFreeform.resolve(tool())).toEqual(custom)
-    expect(OpenAIFreeform.resolve(tool({ freeform: undefined }))).toBeUndefined()
-    expect(OpenAIFreeform.resolve(tool({ native: { openai: {} } }))).toBeUndefined()
-    expect(
-      OpenAIFreeform.resolve(tool({ inputSchema: { ...inputSchema, properties: { code: { type: "number" } } } })),
-    ).toBeUndefined()
-    expect(OpenAIFreeform.resolve(tool({ inputSchema: { ...inputSchema, required: [] } }))).toBeUndefined()
+    expect(resolve(tool())).toEqual(custom)
+    expect(resolve(tool({ freeform: undefined }))).toBeUndefined()
+    expect(resolve(tool({ native: { openai: {} } }))).toBeUndefined()
+    expect(resolve(tool({ inputSchema: { ...inputSchema, properties: { code: { type: "number" } } } }))).toBeUndefined()
+    expect(resolve(tool({ inputSchema: { ...inputSchema, required: [] } }))).toBeUndefined()
     // Naming the only field changes nothing.
-    expect(OpenAIFreeform.resolve(tool({ freeform: { type: "text", field: "code" } }))).toEqual({
+    expect(resolve(tool({ freeform: { type: "text", field: "code" } }))).toEqual({
       field: "code",
       format: { type: "text", field: "code" },
     })
   })
 
-  test("only sends a format the model accepts, and every format when the model doesn't say", () => {
-    expect(OpenAIFreeform.resolve(tool(), ["text", "lark"])).toEqual(custom)
-    expect(OpenAIFreeform.resolve(tool(), undefined)).toEqual(custom)
-    expect(OpenAIFreeform.resolve(tool(), [])).toBeUndefined()
-    expect(OpenAIFreeform.resolve(tool(), ["regex"])).toBeUndefined()
+  test("only sends a format the model accepts, and none when the model doesn't say", () => {
+    expect(resolve(tool(), ["text", "lark"])).toEqual(custom)
+    expect(OpenAIFreeform.resolve(tool())).toBeUndefined()
+    expect(resolve(tool(), [])).toBeUndefined()
+    expect(resolve(tool(), ["regex"])).toBeUndefined()
   })
 
   test("converts between raw text and the JSON input", () => {
@@ -101,7 +104,7 @@ describe("OpenAI freeform tools with other parameters", () => {
     background: { type: "boolean" },
   })
   const format = { type: "text", field: "code" } as const
-  const options = OpenAIFreeform.resolve(tool({ inputSchema: executeSchema, freeform: format }))!
+  const options = resolve(tool({ inputSchema: executeSchema, freeform: format }))!
   const parsed = (raw: string, definition = options) => {
     const result = OpenAIFreeform.parse(definition, raw)
     return { input: JSON.parse(result.input), header: result.header }
@@ -168,7 +171,7 @@ describe("OpenAI freeform tools with other parameters", () => {
   })
 
   test("takes number, string and enum values", () => {
-    const definition = OpenAIFreeform.resolve(
+    const definition = resolve(
       tool({
         inputSchema: schema({
           ratio: { type: "number" },
@@ -190,7 +193,7 @@ describe("OpenAI freeform tools with other parameters", () => {
   })
 
   test("requires the line when a parameter is required", () => {
-    const definition = OpenAIFreeform.resolve(
+    const definition = resolve(
       tool({ inputSchema: schema({ path: { type: "string" } }, ["code", "path"]), freeform: format }),
     )!
     expect(definition.options?.grammar?.split("\n").at(0)).toBe("start: ff_line ff_body")
@@ -199,7 +202,7 @@ describe("OpenAI freeform tools with other parameters", () => {
 
   test("composes a tool's own grammar as the body", () => {
     const grammar = ["start: patch LF", 'patch: "*** " /(.+)/', "%import common.LF"].join("\n")
-    const definition = OpenAIFreeform.resolve(
+    const definition = resolve(
       tool({ inputSchema: executeSchema, freeform: { type: "lark", grammar, field: "code" } }),
     )!
     expect(definition.options?.grammar?.split("\n").at(0)).toBe("start: ff_line fb_start | fb_start")
@@ -211,7 +214,7 @@ describe("OpenAI freeform tools with other parameters", () => {
   })
 
   test("parses the line without a grammar for a model that only takes text", () => {
-    const definition = OpenAIFreeform.resolve(tool({ inputSchema: executeSchema, freeform: format }), ["text"])!
+    const definition = resolve(tool({ inputSchema: executeSchema, freeform: format }), ["text"])!
     expect(OpenAIFreeform.grammar(definition)).toBeUndefined()
     expect(definition.options?.description).toBe(options.options?.description)
     expect(parsed('// @options: {"background": true}\nx', definition)).toMatchObject({
@@ -219,19 +222,17 @@ describe("OpenAI freeform tools with other parameters", () => {
     })
     // Without Lark, only a raw text body can share the wire with the line.
     expect(
-      OpenAIFreeform.resolve(
-        tool({ inputSchema: executeSchema, freeform: { type: "regex", pattern: "x", field: "code" } }),
-        ["text", "regex"],
-      ),
+      resolve(tool({ inputSchema: executeSchema, freeform: { type: "regex", pattern: "x", field: "code" } }), [
+        "text",
+        "regex",
+      ]),
     ).toBeUndefined()
   })
 
   test("stays a JSON tool when a parameter can't go on the line", () => {
     for (const property of [{ type: "object" }, { type: ["string", "null"] }, { enum: [] }])
-      expect(OpenAIFreeform.resolve(tool({ inputSchema: schema({ env: property }), freeform: format }))).toBeUndefined()
-    expect(
-      OpenAIFreeform.resolve(tool({ inputSchema: executeSchema, freeform: { ...format, field: "script" } })),
-    ).toBeUndefined()
+      expect(resolve(tool({ inputSchema: schema({ env: property }), freeform: format }))).toBeUndefined()
+    expect(resolve(tool({ inputSchema: executeSchema, freeform: { ...format, field: "script" } }))).toBeUndefined()
   })
 
   test("closes a streamed call with the parsed input and its line in the metadata", () => {

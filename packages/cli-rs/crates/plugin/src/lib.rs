@@ -1356,7 +1356,7 @@ impl abi::Read for Scoped<'_> {
         models(location: Option<&abi::LocationRef>) -> Option<std::sync::Arc<[abi::types::ModelInfo]>>;
         model() -> Option<abi::types::ModelRef>;
         limits() -> Option<abi::types::UsageLimitsInfo>;
-        providers() -> Option<std::sync::Arc<[abi::types::ProviderInfo]>>;
+        providers(location: Option<&abi::LocationRef>) -> Option<std::sync::Arc<[abi::types::ProviderInfo]>>;
         info() -> abi::Info;
         mcp_servers(location: Option<&abi::LocationRef>) -> Option<std::sync::Arc<[abi::types::McpServer]>>;
         integrations(location: Option<&abi::LocationRef>) -> Option<std::sync::Arc<[abi::types::IntegrationInfo]>>;

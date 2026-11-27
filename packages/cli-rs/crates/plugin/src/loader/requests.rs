@@ -178,7 +178,9 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
         }
         HostRequest::Model => return read(ctx, &mut |read| serde_json::to_value(read.model())),
         HostRequest::Limits => return read(ctx, &mut |read| serde_json::to_value(read.limits())),
-        HostRequest::Providers => return read(ctx, &mut |read| serde_json::to_value(read.providers().as_deref())),
+        HostRequest::Providers { location } => {
+            return read(ctx, &mut |read| serde_json::to_value(read.providers(location.as_ref()).as_deref()));
+        }
         HostRequest::Info => return read(ctx, &mut |read| serde_json::to_value(read.info())),
         HostRequest::Plugins => return read(ctx, &mut |read| serde_json::to_value(read.plugins())),
         HostRequest::Setting { name } => return read(ctx, &mut |read| serde_json::to_value(read.setting(&name))),
@@ -428,7 +430,7 @@ fn effect(request: &HostRequest) -> bool {
         | HostRequest::Models { .. }
         | HostRequest::Model
         | HostRequest::Limits
-        | HostRequest::Providers
+        | HostRequest::Providers { .. }
         | HostRequest::Info
         | HostRequest::Plugins
         | HostRequest::Setting { .. }

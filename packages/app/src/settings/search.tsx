@@ -274,6 +274,7 @@ export function createSettingsSearchCatalog() {
       servers: inventory(),
       selected: surface.server()?.key,
       desktop: platform.platform === "desktop",
+      linux: platform.platform === "desktop" && platform.os === "linux",
       browser: platform.platform === "desktop",
       mobile: mobile(),
       translate: language.t,

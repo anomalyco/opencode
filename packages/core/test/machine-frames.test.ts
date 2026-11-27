@@ -41,7 +41,7 @@ const PIECE = 65_535 - 16 - 1
 
 const HELLO: Machine.Hello = {
   type: "hello",
-  protocol: 2,
+  protocol: 3,
   os: "linux",
   arch: "x64",
   home: "/home/worker",
@@ -737,7 +737,7 @@ it.effect("reproduces the pinned v1 transcript", () => {
   )
 })
 
-for (const protocol of [1, 3]) {
+for (const protocol of [2, 4]) {
   it.effect(`refuses protocol ${protocol} and logs an update instruction`, () =>
     home(
       Effect.gen(function* () {
@@ -760,7 +760,7 @@ for (const protocol of [1, 3]) {
         yield* worker.frame(concat(Uint8Array.of(0), text(JSON.stringify({ ...HELLO, protocol }))))
         expect(yield* Fiber.join(serving).pipe(Effect.flip)).toEqual(new Link.Refused())
         expect(JSON.stringify(logs)).toContain(`uses protocol ${protocol}`)
-        expect(JSON.stringify(logs)).toContain("requires protocol 2")
+        expect(JSON.stringify(logs)).toContain("requires protocol 3")
         expect(JSON.stringify(logs)).toContain("The worker and the home must be the same version")
       }),
     ),

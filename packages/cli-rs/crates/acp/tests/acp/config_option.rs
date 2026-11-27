@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use opencode_acp::catalog::{Catalog, Mode};
 use opencode_acp::config_option::{Selection, config_options, parse_model_selection};
 use opencode_api::generated::{ModelInfo, ModelRef, ProviderID};
@@ -25,7 +27,24 @@ fn catalog() -> Catalog {
         modes: vec![Mode { id: "build".to_owned(), name: "Build".to_owned(), description: None }],
         default_mode_id: "build".to_owned(),
         commands: Vec::new(),
+        skills: Vec::new(),
+        provider_names: HashMap::from([(ProviderID("anthropic".to_owned()), "Anthropic".to_owned())]),
     }
+}
+
+#[test]
+fn labels_models_with_their_provider_display_name_or_id() {
+    let model =
+        config_options(&catalog(), &Selection::default()).into_iter().find(|option| option["id"] == "model").unwrap();
+    assert_eq!(
+        model["options"],
+        json!([
+            { "value": "anthropic/claude-haiku", "name": "Anthropic / Claude Haiku" },
+            { "value": "anthropic/claude/sonnet-4", "name": "Anthropic / Claude Sonnet 4" },
+            { "value": "openai/gpt-5", "name": "openai / GPT-5" },
+            { "value": "test/effort", "name": "test / Effort" },
+        ])
+    );
 }
 
 fn effort_option(provider: &str, id: &str) -> Option<serde_json::Value> {

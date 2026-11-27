@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Ref, Schema, Stream } from "effect"
+import { Cause, Data, Deferred, Effect, Exit, Fiber, Layer, Ref, Schema, Stream } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Event } from "@opencode/schema/event"
 import { Session } from "@opencode/schema/session"
@@ -13,6 +13,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Workspace } from "@opencode/core/workspace"
 import { eq } from "drizzle-orm"
 import { location } from "./fixture/location"
+import { TestDatabase } from "./lib/database"
 import { testEffect } from "./lib/effect"
 
 const locationLayer = Layer.succeed(
@@ -27,6 +28,8 @@ const Message = Bus.ephemeral({
     text: Schema.String,
   },
 })
+
+class CommitRejected extends Data.TaggedError("Test.CommitRejected") {}
 
 const SyncMessage = Bus.durable({
   type: "test.sync",
@@ -100,16 +103,20 @@ const tail = (bus: Bus.Interface, input: { aggregateID: string; after?: number }
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, Location.node]), [
+    TestDatabase.replacement,
     Location.node.replace(locationLayer),
     Bus.node.replace(Bus.configured({ persist: true })),
   ]),
 )
 const itWithoutLocation = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+    TestDatabase.replacement,
     Bus.node.replace(Bus.configured({ persist: true })),
   ]),
 )
-const itWithoutPersistence = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node])))
+const itWithoutPersistence = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [TestDatabase.replacement]),
+)
 
 describe("Bus", () => {
   it.effect("subscribes to multiple event definitions with a discriminated payload union", () =>
@@ -270,6 +277,40 @@ describe("Bus", () => {
         .pipe(Effect.exit)
 
       expect(String(exit)).toContain("commit failed")
+      expect(yield* db.all("SELECT value FROM event_commit_probe")).toEqual([])
+      expect(yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).all()).toEqual([])
+      expect(
+        yield* db.select().from(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, aggregateID)).all(),
+      ).toEqual([])
+    }),
+  )
+
+  it.effect("rolls back and surfaces a typed failure from the local commit", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const aggregateID = Event.ID.create()
+      const received = new Array<Event.Payload>()
+      yield* db.run("CREATE TABLE IF NOT EXISTS event_commit_probe (value text NOT NULL)")
+      yield* db.run("DELETE FROM event_commit_probe")
+      yield* bus.project(SyncMessage, () =>
+        db.run("INSERT INTO event_commit_probe (value) VALUES ('projected')").pipe(Effect.orDie, Effect.asVoid),
+      )
+      yield* bus.listen((event) => Effect.sync(() => received.push(event)))
+
+      const single = yield* bus
+        .publish(SyncMessage, { id: aggregateID, text: "hello" }, { commit: () => Effect.fail(new CommitRejected()) })
+        .pipe(Effect.flip)
+      const batch = yield* bus
+        .publishAll([
+          [SyncMessage, { id: aggregateID, text: "first" }],
+          [SyncMessage, { id: aggregateID, text: "second" }, { commit: () => Effect.fail(new CommitRejected()) }],
+        ])
+        .pipe(Effect.flip)
+
+      expect(single).toBeInstanceOf(CommitRejected)
+      expect(batch).toBeInstanceOf(CommitRejected)
+      expect(received).toEqual([])
       expect(yield* db.all("SELECT value FROM event_commit_probe")).toEqual([])
       expect(yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).all()).toEqual([])
       expect(
@@ -633,6 +674,7 @@ describe("Bus", () => {
       const continueRead = yield* Deferred.make<void>()
       let pause = true
       const eventLayer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+        TestDatabase.replacement,
         Bus.node.replace(
           Bus.configured({
             persist: true,
@@ -1276,6 +1318,7 @@ describe("Bus", () => {
   it.effect("log replays across configured read pages", () =>
     Effect.gen(function* () {
       const eventLayer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+        TestDatabase.replacement,
         Bus.node.replace(Bus.configured({ persist: true, logReadPageSize: 2 })),
       ])
 
@@ -1309,6 +1352,7 @@ describe("Bus", () => {
       const releaseRead = yield* Deferred.make<void>()
       const firstRead = yield* Ref.make(true)
       const eventLayer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+        TestDatabase.replacement,
         Bus.node.replace(
           Bus.configured({
             persist: true,

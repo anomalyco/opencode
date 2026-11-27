@@ -1,14 +1,14 @@
-/* The OpenCode nav menus (index.ts): the logo menu and the product menu, one card style, as opencode.ai's logo menu
-   (cards, blue hover). No panel; each item is a card on the see-through pop-up surface, its thumbnail, a divider, then
-   its label. The menus sit in the page's body (or the top layer), so only these rules style them. A host recolours
-   them by setting these on an ancestor of its triggers (the menu copies them when it opens):
+/* The OpenCode nav logo menu (index.ts) and shared header lockup: cards with blue hover, as on opencode.ai.
+   No panel; each item is a card on the see-through pop-up surface, its thumbnail, a divider, then its label. The menu
+   sits in the page's body (or the top layer), so only these rules style it. A host recolours it by setting these on an
+   ancestor of its triggers (the menu copies them when it opens):
      --nav-menu-ink       strong text
      --nav-menu-weak      the labels' resting grey
      --nav-menu-popover   the pop-up surface
      --nav-menu-link      the link blue: hover and focus
-     --nav-menu-bar       the current product's bar
+     --nav-menu-bar       the active bar
      --nav-menu-icon      the Brand, ZIP and Press drawings
-     --nav-menu-mono      OpenTUI Mono (the host loads it) */
+     --nav-menu-mono      OpenMono (the host loads it) */
 [data-nav-menu] {
   --ink: var(--nav-menu-ink, light-dark(#161616, #fafafa));
   --weak: var(--nav-menu-weak, light-dark(#5c5c5c, #aeaeae));
@@ -45,13 +45,10 @@
   border: 0;
   background: none;
   color: var(--ink);
-  font: 400 12px/16px var(--nav-menu-mono, "OpenTUI Mono", ui-monospace, monospace);
+  font: 400 12px/16px var(--nav-menu-mono, "OpenMono", ui-monospace, monospace);
   letter-spacing: 0;
   text-align: start;
   -webkit-font-smoothing: antialiased;
-  /* The whole box, its padding and the gaps between cards included, is the menu: the pointer can rest or cross
-     anywhere in it without the menu closing (index.ts closes a hover-opened menu only once the pointer has left it and
-     its trigger for 200ms). */
 
   &[data-scroll] {
     overflow-y: auto;
@@ -63,16 +60,6 @@
 
   &[data-closing] {
     pointer-events: none;
-  }
-
-  /* The 1px between the name and the menu's padding counts as the menu too, so the pointer crosses it while the menu
-     is open on hover; it stops short of the name, which stays clickable. */
-  &[data-nav-menu="product"]::before {
-    content: "";
-    position: absolute;
-    bottom: 100%;
-    inset-inline: 0;
-    height: 1px;
   }
 
   [role="menuitem"] {
@@ -129,11 +116,6 @@
 
     &:active {
       scale: 0.98;
-    }
-
-    /* The current product: its label at full strength, where the others rest muted. */
-    &[aria-current="page"] {
-      color: var(--ink);
     }
   }
 
@@ -192,31 +174,6 @@
     box-shadow: 0 0 0 1px var(--link);
   }
 
-  /* The product cards: the label alone, in capitals like the names beside the logo (the accessible names keep their
-     case), 12px in from both edges, so each card is as wide as its label. The current product's label is at full
-     strength, with the site's active bar on the card's leading edge, the link blue while hovered, focused or pressed. */
-  &[data-nav-menu="product"] {
-    [role="menuitem"] {
-      padding-inline: 12px;
-    }
-
-    [data-slot="label"] {
-      letter-spacing: 0;
-      text-transform: uppercase;
-    }
-
-    [role="menuitem"][aria-current="page"]::before {
-      content: "";
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      inset-inline-start: -1px;
-      z-index: 1;
-      width: 2px;
-      background: var(--bar);
-    }
-  }
-
   [data-slot="meta"] {
     color: var(--weak);
   }
@@ -233,70 +190,6 @@
   }
 }
 
-/* The product menu's chevron after the name, for touch screens (no hover), the same as the docs' split chevron after
-   DOCS (services/site docs-lockup.css reads these tokens too): --nav-chevron-width wide and --nav-chevron-gap after the
-   name's highlight, a --nav-chevron-glyph chevron that flips at once while the menu is open, a 44px tall target that
-   reaches --nav-chevron-reach further into the empty bar, the name fill on hover and the mark's inner grey pressed or
-   open. Hidden where a pointer can hover, where the name opens the menu. */
-[data-nav-product-toggle] {
-  all: unset;
-  position: relative;
-  display: none;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  width: var(--nav-chevron-width);
-  height: 100%;
-  min-height: 25px;
-  margin-inline-start: var(--nav-chevron-gap);
-  color: var(--nav-chevron-ink);
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    background-color 120ms ease,
-    color 120ms ease;
-
-  &::before {
-    content: "";
-    position: absolute;
-    inset-block: calc(50% - 22px);
-    inset-inline: 0 calc(-1 * var(--nav-chevron-reach));
-  }
-
-  svg {
-    display: block;
-    width: var(--nav-chevron-glyph);
-    height: var(--nav-chevron-glyph);
-  }
-
-  @media (hover: hover) and (pointer: fine) {
-    &:hover {
-      background: var(--nav-chevron-hover);
-      color: var(--nav-menu-ink, var(--nav-chevron-ink));
-    }
-  }
-
-  &:active,
-  &[aria-expanded="true"] {
-    background: var(--nav-chevron-press);
-    color: var(--nav-menu-ink, var(--nav-chevron-ink));
-  }
-
-  &[aria-expanded="true"] svg {
-    scale: 1 -1;
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--nav-menu-link, light-dark(#3b5cf6, #6b8fff));
-    outline-offset: 2px;
-  }
-
-  @media (hover: none), (pointer: coarse) {
-    display: inline-flex;
-  }
-}
-
 /* The OpenCode bar's metrics, opencode.ai's (site.css: the logo 25px from the top and the start edge, in the box of
    "[1]" at 15px; the 56px phone top bar with its 24 × 30 logo box), so a product's bar puts everything where
    opencode.ai does and moving between them never jumps:
@@ -309,30 +202,17 @@
   --nav-edge: 24px;
   --nav-end: 17.5px;
   --nav-rule: light-dark(hsl(0 0% 88%), hsl(0 0% 18%));
-  /* The product name's one fill (hover, open and pressed), opencode.ai's lockup hover: the hover step of the shared
-     grey scale. Fixed, so it is the same on every page background. */
+  /* The product name's hover fill, opencode.ai's lockup hover: the hover step of the shared grey scale. Fixed, so it
+     is the same on every page background. */
   --nav-name-hover: light-dark(#eeeeee, #242424);
-  /* The chevron after a product name (and the docs' after DOCS): its box, the gap after the name's highlight, the glyph,
-     how far its touch target reaches past it, and its colours. */
-  --nav-chevron-width: 20px;
-  --nav-chevron-gap: 2px;
-  --nav-chevron-glyph: 10px;
-  --nav-chevron-reach: 24px;
-  --nav-chevron-ink: light-dark(#161616, #fafafa);
-  --nav-chevron-hover: var(--nav-name-hover);
-  --nav-chevron-press: light-dark(#d2d2d2, #4b4b4b);
-  /* The product name after the mark (and the docs' DOCS): its size, and the padding under it that puts OpenTUI Mono's
+  /* The product name after the mark (and the docs' DOCS): its size, and the padding under it that puts OpenMono's
      caps (0.69 of the size) where they belong in the 25px row. */
   --nav-name-size: 15px;
   --nav-name-pad: 0.65px;
 
-  /* Phones: the docs sticky rows' 16px chevron, in an 18px box close to the name, its target reaching 26px past it so
-     it stays 44px wide. The name grows to 20px, its caps centred in the 25px row (5.5px above and below), within half
-     a pixel of the mark's inner rectangle. */
+  /* Phones: the name grows to 20px, its caps centred in the 25px row (5.5px above and below), within half a pixel of
+     the mark's inner rectangle. */
   @media (max-width: 60rem) {
-    --nav-chevron-width: 18px;
-    --nav-chevron-glyph: 16px;
-    --nav-chevron-reach: 26px;
     --nav-name-size: 20px;
     --nav-name-pad: 1px;
   }
@@ -348,9 +228,8 @@
 }
 
 /* The lockup: the logo (`data-nav-logo`, a 20 × 25 mark at whole pixels in its box, as on opencode.ai), then the
-   product's name (`data-nav-product`) 12px after the box: OpenTUI Mono Bold 15px caps whose 6px padding is the
-   highlight, --nav-name-hover while hovered, pressed or open (hovering opens the product menu, so it never steps darker).
-   Placed at --nav-edge, centred in the bar. */
+   product's name (`data-nav-name`) 12px after the box: OpenMono Bold 15px caps whose 6px padding is the
+   highlight, --nav-name-hover while hovered or pressed. Placed at --nav-edge, centred in the bar. */
 [data-nav-lockup] {
   --nav-lockup-ink: light-dark(#161616, #fafafa);
   --nav-logo-inner: light-dark(#d2d2d2, #4b4b4b);
@@ -390,8 +269,7 @@
     }
   }
 
-  /* `data-nav-name` is a name with no product menu (the status page's). */
-  :is([data-nav-product], [data-nav-name]):is([data-nav-product], [data-nav-name]) {
+  :is([data-nav-name], [data-nav-product]):is([data-nav-name], [data-nav-product]) {
     position: relative;
     display: inline-flex;
     align-items: center;
@@ -403,7 +281,7 @@
     padding: 0 6px var(--nav-name-pad);
     background: none;
     color: var(--nav-lockup-ink);
-    font: 700 var(--nav-name-size) / 1 var(--nav-menu-mono, "OpenTUI Mono", ui-monospace, monospace);
+    font: 700 var(--nav-name-size) / 1 var(--nav-menu-mono, "OpenMono", ui-monospace, monospace);
     letter-spacing: 0;
     text-decoration: none;
     text-transform: uppercase;
@@ -433,19 +311,13 @@
       }
     }
 
-    &:active,
-    &[aria-expanded="true"] {
+    &:active {
       background: var(--nav-name-hover);
     }
   }
 
-  :is([data-nav-logo], [data-nav-product], [data-nav-name]):focus-visible {
+  :is([data-nav-logo], [data-nav-name], [data-nav-product]):focus-visible {
     outline: 2px solid var(--nav-menu-link, light-dark(#3b5cf6, #6b8fff));
     outline-offset: 2px;
-  }
-
-  [data-nav-product-toggle] {
-    height: 25px;
-    margin-top: var(--nav-lockup-inset);
   }
 }

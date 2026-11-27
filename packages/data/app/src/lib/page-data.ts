@@ -18,6 +18,7 @@ import {
   type ModelCatalog,
 } from "../routes/model-catalog"
 import { resolveComparisonFamily } from "./comparison-pages"
+import { estimateUsersSinceLaunch } from "./estimate-users"
 
 const DAY_MS = 86_400_000
 const NEW_MODEL_DAYS = 30
@@ -85,10 +86,15 @@ export async function loadModelPage(labParam: string, modelParam: string) {
   const lab = entry?.lab ?? labParam
   const model = entry?.slug ?? modelParam
   const stats = lab && model ? await runStatsEffect(getStatsModelData(model, lab)) : null
+  const stealthKey = statModel(stats?.model ?? modelParam, undefined)
   return {
     catalog: {
       entry,
-      stealthSpecs: entry ? null : (catalog.stealthSpecs[statModel(stats?.model ?? modelParam, undefined)] ?? null),
+      stealthSpecs: entry
+        ? null
+        : Object.hasOwn(catalog.stealthSpecs, stealthKey)
+          ? catalog.stealthSpecs[stealthKey]
+          : null,
       labs: catalog.labs.map((item) => ({ id: item.id, name: item.name })),
       labModels:
         catalog.labs
@@ -180,6 +186,12 @@ function newModelsFromCatalog(candidates: NewModelCandidate[], catalog: ModelCat
           free: catalog.freeModels.includes(item.model),
           releaseDate,
           daysLive: Math.round((Date.parse(latest) - Date.parse(launch)) / DAY_MS) + 1,
+          users: estimateUsersSinceLaunch({
+            daily: item.daily,
+            weekly: item.weekly,
+            firstSeen: item.firstSeen,
+            launch,
+          }),
           tokens: daily.reduce((sum, day) => sum + day.tokens, 0),
           sessions: daily.reduce((sum, day) => sum + day.sessions, 0),
           peakUsers: Math.max(0, ...daily.map((day) => day.users)),

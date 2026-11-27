@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import type { FileSystem } from "@opencode/core/filesystem"
-import { DateTime, Effect, Fiber, Layer, LayerMap, Schema, Stream } from "effect"
+import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
 import { eq } from "drizzle-orm"
@@ -93,7 +93,7 @@ const locations = makeGlobalNode({
     Effect.gen(function* () {
       const app = yield* App.Service
       const bus = yield* Bus.Service
-      return yield* LayerMap.make(
+      return yield* LocationServiceMap.make(
         (ref: Location.Ref) =>
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           Layer.mergeAll(
@@ -133,6 +133,7 @@ const harness = (channel?: string) =>
         Bus.node,
         SessionProjector.node,
         SessionStore.node,
+        SessionInbox.node,
         Session.node,
         SessionTransfer.node,
       ]),

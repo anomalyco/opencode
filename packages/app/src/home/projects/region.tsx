@@ -58,6 +58,7 @@ export function HomeProjects(props: {
       onHideProject={props.projects.project.hide}
       onOpenSettings={props.projects.utility.settings}
       onOpenHelp={props.projects.utility.help}
+      automations={props.projects.utility.automations}
     />
   )
 }

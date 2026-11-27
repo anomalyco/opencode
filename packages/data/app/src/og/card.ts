@@ -10,6 +10,10 @@ import { formatTokens } from "../lib/format"
 export const width = 1200
 export const height = 630
 
+// Satori keeps one face per family name and weight, so each of the font's two files has a family name of its own
+// and the card names both: the Latin file first, the rest for the characters it lacks.
+export const ogFontFamilies = { latin: "OpenMono", rest: "OpenMono Rest" } as const
+
 export type OgCard =
   | {
       kind: "model"
@@ -99,7 +103,7 @@ function frame(...children: SatoriElement[]) {
       width,
       height,
       backgroundColor: colors.background,
-      fontFamily: "OpenMono",
+      fontFamily: Object.values(ogFontFamilies).join(", "),
       color: colors.text,
     },
     dots(),

@@ -54,8 +54,8 @@ describe("EventFeed", () => {
           return event.type
         },
       })
-      const first = yield* feed.subscribe()
-      const second = yield* feed.subscribe()
+      const first = (yield* feed.subscribe()).events
+      const second = (yield* feed.subscribe()).events
       const left = yield* first.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       const right = yield* second.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
 
@@ -73,8 +73,8 @@ describe("EventFeed", () => {
     Effect.gen(function* () {
       const source = makeSource()
       const feed = yield* EventFeed.make(source.observe, { encode: (event) => event.type })
-      const filtered = yield* feed.subscribe([Credential.Event.Switched.type])
-      const all = yield* feed.subscribe()
+      const filtered = (yield* feed.subscribe([Credential.Event.Switched.type])).events
+      const all = (yield* feed.subscribe()).events
       const left = yield* filtered.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       const right = yield* all.pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
 
@@ -101,8 +101,8 @@ describe("EventFeed", () => {
         capacity: 1,
         encode: (event) => event.id,
       })
-      const slow = yield* feed.subscribe()
-      const fast = yield* feed.subscribe()
+      const slow = (yield* feed.subscribe()).events
+      const fast = (yield* feed.subscribe()).events
       const first = yield* Deferred.make<void>()
       const second = yield* Deferred.make<void>()
       const received = new Array<string>()
@@ -142,7 +142,7 @@ describe("EventFeed", () => {
     Effect.gen(function* () {
       const source = makeSource()
       const feed = yield* EventFeed.make(source.observe, { encode: (event) => event.type })
-      const stream = yield* feed.subscribe()
+      const stream = (yield* feed.subscribe()).events
       const received = yield* stream.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
 
       yield* source.publish({
@@ -163,7 +163,7 @@ describe("EventFeed", () => {
     Effect.gen(function* () {
       const source = makeSource()
       const feed = yield* EventFeed.make(source.observe, { capacity: 1, encode: (event) => event.type })
-      const stream = yield* feed.subscribe()
+      const stream = (yield* feed.subscribe()).events
 
       yield* source.publish(internal("one"))
       yield* source.publish(internal("two"))
@@ -182,13 +182,13 @@ describe("EventFeed", () => {
           return event.id
         },
       })
-      const current = yield* feed.subscribe()
+      const current = (yield* feed.subscribe()).events
       const failed = yield* current.pipe(Stream.runCollect, Effect.exit, Effect.forkScoped)
 
       yield* source.publish(event("bad"))
       const exit = yield* Fiber.join(failed)
 
-      const next = yield* feed.subscribe()
+      const next = (yield* feed.subscribe()).events
       const received = yield* next.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* source.publish(event("good"))
 
@@ -199,3 +199,32 @@ describe("EventFeed", () => {
     }),
   )
 })
+
+it.live("each stream gets its own ID, and a failing extension never fails it", () =>
+  Effect.gen(function* () {
+    const source = makeSource()
+    const opened: Array<{ stream: string; send: Parameters<EventFeed.Extension["open"]>[1] }> = []
+    const feed = yield* EventFeed.make(source.observe, {
+      extensions: [
+        { open: () => Effect.die(new Error("broken")) },
+        { open: (stream, send) => Effect.sync(() => void opened.push({ stream, send })) },
+      ],
+    })
+    const first = yield* feed.subscribe()
+    const second = yield* feed.subscribe()
+    expect(opened.map((item) => item.stream)).toEqual([first.id, second.id])
+    expect(first.id).not.toBe(second.id)
+    // A cyclic payload cannot be encoded; it is dropped instead of failing the stream.
+    const cyclic: Record<string, unknown> = {}
+    cyclic.self = cyclic
+    const send = opened[0]?.send
+    if (send) yield* send({ ...event("bad"), data: cyclic })
+    yield* source.publish(event("ok"))
+    const [frame] = yield* first.events.pipe(
+      Stream.take(1),
+      Stream.runCollect,
+      Effect.map((frames) => Array.from(frames)),
+    )
+    expect(frame && JSON.parse(frame.slice("data: ".length)).id).toBe("evt_ok")
+  }),
+)

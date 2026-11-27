@@ -6,6 +6,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Database } from "@opencode/core/database/database"
 import { Environments } from "@opencode/core/environment/environments"
 import { Environment, makeMemoryDriver } from "@opencode/core/environment/index"
+import { WorkspaceConnector } from "@opencode/core/environment/workspace-connector"
 import { EnvironmentPath } from "@opencode/core/environment/path"
 import { FileAccess } from "@opencode/core/file-access"
 import { Flag } from "@opencode/core/flag"
@@ -126,6 +127,7 @@ const buildLayer = (options: {
             ),
           ]
         : []),
+      WorkspaceConnector.node.replace(Workspace.connectorNode),
       WorkspaceDriver.node.replace(
         Layer.succeed(
           WorkspaceDriver.RegistryService,

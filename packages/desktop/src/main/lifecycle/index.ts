@@ -14,8 +14,10 @@ import { safeWebContentsOrigin } from "../windows/state"
 import { getLastFocusedWindow, mainWindows } from "../windows"
 import type { Scope } from "@opencode/plugin/gui/host"
 import { marks } from "./marks"
+import { createBackgroundNotice } from "./background-notice"
 import {
   createDriver,
+  isQuitting,
   preventsQuit,
   quitsWhenAllWindowsClosed,
   restoresWindows,
@@ -152,7 +154,24 @@ const runtime = Layer.effect(
       deepLinks.receive([url])
     }
 
+    const notice = createBackgroundNotice({
+      parent: () => getLastFocusedWindow() ?? undefined,
+      quit: () => app.quit(),
+      openSettings: () => {
+        const win = getLastFocusedWindow() ?? restoreWindows()[0] ?? createWindow()
+        focusWindow(win)
+        sendMenuCommand(win, "settings.open", false)
+      },
+    })
+
     const beforeQuit = (event: Event) => {
+      // Only a quit the user starts gets the notice: relaunches, update handoffs and OS signals are already stopping.
+      if (!isQuitting(driver.state()) && notice.holdsQuit()) {
+        event.preventDefault()
+
+        return
+      }
+
       if (preventsQuit(driver.state())) event.preventDefault()
       driver.dispatch({ type: "before.quit" })
     }

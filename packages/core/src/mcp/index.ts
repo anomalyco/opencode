@@ -220,7 +220,7 @@ export interface Interface extends State.Transformable<Editor> {
     readonly server: ServerName | string
     readonly entry: McpClient.Skill
     readonly ref?: string
-  }) => Effect.Effect<McpClient.SkillFile, NotFoundError | Error>
+  }) => Effect.Effect<McpClient.SkillFile, NotFoundError | McpClient.SkillMismatchError | Error>
   /** Experimental: one skill of a server by its `SKILL.md` URI, listed or not (`skills/get`). No file is read. */
   readonly getSkill: (input: {
     readonly server: ServerName | string
@@ -712,6 +712,7 @@ export const layer = (options?: Options) =>
             fetch,
             scope: servers,
             lock: locks.withLock(name),
+            endpointLoads: pool.endpointLoads,
             callbacks,
             fork,
             events: {

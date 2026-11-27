@@ -21,7 +21,7 @@ import {
   type StoredOAuthTokens,
 } from "@modelcontextprotocol/client"
 import { OAuthMetadataSchema, OpenIdProviderDiscoveryMetadataSchema } from "@modelcontextprotocol/core"
-import { Cause, Clock, Data, Deferred, Duration, Effect, Option, Schema } from "effect"
+import { Cause, Clock, Data, Deferred, Duration, Effect, Exit, Option, Schema } from "effect"
 import { FetchHttpClient } from "effect/http"
 import type { ServerResponse } from "node:http"
 import type { AddressInfo } from "node:net"
@@ -462,7 +462,7 @@ export const authorize = (input: {
       }
       const fail = (reason: string, failure: string) => {
         runFork(Effect.logWarning("mcp oauth callback rejected", { ...fields, reason: failure }))
-        Effect.runSync(Deferred.fail(code, new Error(reason)))
+        Deferred.doneUnsafe(code, Exit.fail(new Error(reason)))
         response
           .writeHead(400, { "Content-Type": "text/html" })
           .end(OauthCallbackPage.error(reason, { provider: input.name }))
@@ -483,8 +483,9 @@ export const authorize = (input: {
       if (!value) return fail("Missing authorization code", "missing_code")
       // The page waits for the token exchange so the browser never reports success for a rejected code.
       if (
-        !Effect.runSync(
-          Deferred.succeed(code, {
+        !Deferred.doneUnsafe(
+          code,
+          Exit.succeed({
             code: value,
             iss: url.searchParams.get("iss") ?? undefined,
             host: request.headers.host,

@@ -75,6 +75,24 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("gives the AI model the effort and system update flags, and leaves them unset otherwise", () =>
+    Effect.gen(function* () {
+      const flags = (compatibility?: Compatibility) =>
+        ModelResolver.fromCatalogModel(model("@opencode/ai/providers/anthropic", { compatibility })).pipe(
+          Effect.map((resolved) => ({
+            effort: resolved.capabilities?.reasoning?.updates,
+            system: resolved.capabilities?.systemUpdates,
+          })),
+        )
+      expect(yield* flags({ supportsEffortUpdates: true, supportsSystemUpdates: true })).toEqual({
+        effort: true,
+        system: true,
+      })
+      expect(yield* flags({ supportsSystemUpdates: false })).toEqual({ effort: undefined, system: false })
+      expect(yield* flags()).toEqual({ effort: undefined, system: undefined })
+    }),
+  )
+
   it.effect("constructs native Azure requests with deployment IDs and projected resource URLs", () =>
     Effect.gen(function* () {
       const responses = yield* ModelResolver.fromCatalogModel(

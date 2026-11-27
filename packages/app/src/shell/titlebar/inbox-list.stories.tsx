@@ -148,7 +148,6 @@ function SessionListStory(props: {
       get label() {
         return language.t("sidebar.inbox.section.recent")
       },
-      unlabeled: true,
       get count() {
         return visibleRecent().length
       },

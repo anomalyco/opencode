@@ -1,0 +1,100 @@
+import { Space } from "@opencode/schema/space"
+import { optional } from "@opencode/schema/schema"
+import { InvalidRequestError } from "../errors.js"
+import { Schema } from "effect"
+import { HttpApiEndpoint, HttpApiSchema, OpenApi } from "effect/http-api"
+
+const annotations = (identifier: string, summary: string, description: string) =>
+  OpenApi.annotations({
+    identifier: `experimental.space.${identifier}`,
+    summary,
+    description: `${description} To follow a space, a client opens /api/event and reads its stream ID from server.connected, syncs with experimental.space.sync until no space has a \`next\` or is left without a page, then subscribes the stream with the saved cursor through experimental.space.subscribe and applies the stream's events in order. On experimental.space.resync it syncs and subscribes that space again; after a reconnect it subscribes again with its latest cursor. Experimental: may change without compatibility guarantees.`,
+    // The routes share the `server.experimental` group with the persistent PTY prototype; tag them on their own.
+    transform: (operation) => ({ ...operation, tags: ["experimental"] }),
+  })
+
+/** Lives in the `server.experimental` group (see `groups/experimental.ts`). */
+export const SpaceEndpoints = [
+  HttpApiEndpoint.post("space.write", "/api/experimental/space/write", {
+    payload: Schema.Struct({
+      changes: Schema.Array(Space.Change).check(Schema.isMinLength(1), Schema.isMaxLength(Space.MaxChanges)),
+    }),
+    error: InvalidRequestError,
+    success: Schema.Struct({
+      spaces: Schema.Array(
+        Schema.Struct({
+          space: Space.Name,
+          revision: Space.Revision,
+          cursor: Space.Cursor.annotate({ description: "Covers this write and every change of the space before it." }),
+        }),
+      ),
+    }),
+  }).annotateMerge(
+    annotations(
+      "write",
+      "Write values",
+      "Commit 1 to 1024 changes, across any spaces, in one transaction, their values at most 1 MiB of UTF-8 in total. A string value sets the space's key, replacing any previous value; null deletes it, and deleting an unset key changes nothing. In request order, each change that changes a key takes its space's next revision and goes to that space's subscribers as its own experimental.space.updated or experimental.space.deleted event, so a key that appears twice keeps its last value. Values are client-defined, such as JSON text, and sent back unchanged. Returns each space's revision after the write, in the order the spaces first appear.",
+    ),
+  ),
+  HttpApiEndpoint.post("space.sync", "/api/experimental/space/sync", {
+    payload: Schema.Struct({
+      spaces: Schema.Array(
+        Schema.Struct({
+          space: Space.Name,
+          cursor: optional(Space.Cursor).annotate({
+            description:
+              "A page's `next`, or a saved `cursor`. Without one, or with one this database cannot use, sync starts from a snapshot.",
+          }),
+        }),
+      ).check(Schema.isMinLength(1), Schema.isMaxLength(Space.MaxSpaces)),
+    }),
+    error: InvalidRequestError,
+    success: Schema.Struct({ pages: Schema.Array(Space.Page) }),
+  }).annotateMerge(
+    annotations(
+      "sync",
+      "Sync spaces",
+      "Read one page for each of 1 to 100 distinct spaces, in request order, with at most 500 keys across all pages: a snapshot page, or a delta of the keys changed and deleted since the cursor. A delta whose deletions were purged comes back as a snapshot. Apply a delta page at once; apply a snapshot page's entries at once, and remove the keys none of the snapshot's pages held after its last one, the page without `next` or the one before a delta. Once the 500 keys are used up, the remaining spaces get no page: sync them again with the same cursor, together with the `next` of the pages that have one.",
+    ),
+  ),
+  HttpApiEndpoint.post("space.subscribe", "/api/experimental/space/subscribe", {
+    payload: Schema.Struct({
+      stream: Schema.String.annotate({ description: "The stream ID from the stream's server.connected event." }),
+      spaces: Schema.Array(Schema.Struct({ space: Space.Name, cursor: Space.Cursor })).check(
+        Schema.isMinLength(1),
+        Schema.isMaxLength(Space.MaxSpaces),
+      ),
+    }),
+    error: InvalidRequestError,
+    success: HttpApiSchema.NoContent,
+  }).annotateMerge(
+    annotations(
+      "subscribe",
+      "Subscribe stream",
+      "Send 1 to 100 distinct spaces' changes to an open event stream, replacing any earlier subscription of those spaces on it: first the changes since each cursor as experimental.space.updated and experimental.space.deleted events in revision order, then every later change the same way, none missed or repeated. The catch-ups read at most 500 changes together, in request order: a space whose changes do not fit what is left, every space after they are used up, and one whose cursor is unusable get experimental.space.resync instead.",
+    ),
+  ),
+  HttpApiEndpoint.post("space.unsubscribe", "/api/experimental/space/unsubscribe", {
+    payload: Schema.Struct({
+      stream: Schema.String.annotate({ description: "The stream ID from the stream's server.connected event." }),
+      spaces: Schema.Array(Space.Name).check(Schema.isMinLength(1), Schema.isMaxLength(Space.MaxSpaces)),
+    }),
+    error: InvalidRequestError,
+    success: HttpApiSchema.NoContent,
+  }).annotateMerge(
+    annotations(
+      "unsubscribe",
+      "Unsubscribe stream",
+      "Stop sending these 1 to 100 distinct spaces' changes to an open event stream, including a catch-up still going out. Spaces it does not follow are ignored.",
+    ),
+  ),
+  HttpApiEndpoint.post("space.reset", "/api/experimental/space/reset", {
+    success: HttpApiSchema.NoContent,
+  }).annotateMerge(
+    annotations(
+      "reset",
+      "Reset revisions",
+      "Replace the epoch, so every client's saved cursor becomes unusable and its next sync starts from a snapshot. A restored backup brings back its old epoch, and cursors issued after the backup would then get wrong deltas: after restoring one, call this before clients reconnect, and do not serve writes or subscribers until it has run.",
+    ),
+  ),
+] as const

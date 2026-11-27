@@ -18,6 +18,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { useServerSDK } from "@/runtime/server/client"
 import { consoleProviderName } from "@/providers/catalog/console"
 import { useIntegrations } from "@/providers/catalog/integrations"
+import { popularProviders } from "@/providers/catalog/order"
 import { ProviderModelGroup, ProviderModelIcon } from "@/providers/models/provider-group"
 import type { ModelSelection } from "@/providers/models/selection"
 import { decode64 } from "@/runtime/persistence/base64"
@@ -289,10 +290,6 @@ const METHOD_ICON = {
   external: "server",
 } as const satisfies Record<ProviderConnectMethod["type"], string>
 
-// The TUI's integration groups, with connected integrations pulled up into their own group first. Unlike the TUI,
-// Go comes before Console here.
-const POPULAR = ["opencode-go", "opencode", "openai", "github-copilot", "anthropic", "google"]
-
 const providerNote = (id: string) => {
   if (id === "opencode-go") return "dialog.provider.opencodeGo.tagline" as const
 }
@@ -330,13 +327,13 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
 
   const popular = createMemo(() =>
     unconnected()
-      .filter((row) => POPULAR.includes(row.id))
-      .toSorted((a, b) => POPULAR.indexOf(a.id) - POPULAR.indexOf(b.id)),
+      .filter((row) => popularProviders.includes(row.id))
+      .toSorted((a, b) => popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id)),
   )
 
   const services = createMemo(() =>
     unconnected()
-      .filter((row) => !POPULAR.includes(row.id))
+      .filter((row) => !popularProviders.includes(row.id))
       .toSorted((a, b) => a.name.localeCompare(b.name)),
   )
 

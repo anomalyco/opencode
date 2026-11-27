@@ -38,7 +38,13 @@ fn view(read: &dyn abi::Read, session: &str) -> Node {
         .session(session)
         .map(|session| abi::LocationRef { directory: session.info.location.directory.0, workspace: None })
         .unwrap_or(info.location);
-    let connected = read.integrations(Some(&location)).map(|list| list.iter().any(|item| !item.connections.is_empty()));
+    let connected =
+        match (read.integrations(Some(&location)), read.providers(Some(&location)), read.models(Some(&location))) {
+            (Some(integrations), Some(providers), Some(models)) => {
+                Some(crate::local::has_connected_provider(&integrations, &providers, &models))
+            }
+            _ => None,
+        };
     let branch = read.vcs(Some(&location)).and_then(|vcs| vcs.branch.current);
     let dismissed = read.storage_get(KEY).and_then(|value| value.get("dismissed")?.as_bool()).unwrap_or(false);
     let mut children = Vec::new();

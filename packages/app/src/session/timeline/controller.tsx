@@ -75,6 +75,8 @@ export function createTimelineController(input: {
   active: Accessor<boolean>
   /** Whether this timeline is the New timeline experiment. */
   next: boolean
+  /** The server's `full_codemode` flag: without it, a script's changes neither show nor count. */
+  scriptDiffs: Accessor<boolean>
 }) {
   const navigate = useNavigate()
   const sdk = useWorkspaceLocation()
@@ -213,6 +215,7 @@ export function createTimelineController(input: {
     pendingInputIDs,
     queuedCompactionIDs,
     turnDiffs: settings.general.showTurnDiffs,
+    scriptDiffs: input.scriptDiffs,
   }
 
   const projection = input.next

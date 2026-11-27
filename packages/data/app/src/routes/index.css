@@ -1,8 +1,9 @@
-/* OpenMono, Anomaly's font (SIL OFL 1.1, ../asset/fonts/OpenMono-OFL.txt), copied from services/site/src/asset/fonts,
-   with its faces as in services/site style/fonts.css. "latin" covers Latin, punctuation, arrows and box drawing;
-   "cyrillic" and "rest" load only when a page uses one of their characters. Regular serves weights up to 599 and bold
-   the rest, so 500 and 600 never get a synthesized face. The Menlo, Consolas and Courier faces stand in while it loads:
-   the system font scaled to OpenMono's 0.6 em advance and line metrics, so the swap changes letter shapes only. */
+/* OpenMono, Anomaly's font (SIL OFL 1.1, ../asset/fonts/OpenMono-OFL.txt), copied from services/site/src/asset/fonts
+   by script/openmono.ts, with its faces as in services/site style/fonts.css. "latin" covers Latin, punctuation, arrows
+   and box drawing; "cyrillic" and "rest" load only when a page uses one of their characters. Regular serves weights up
+   to 599 and bold the rest, so 500 and 600 never get a synthesized face. The Menlo, Consolas and Courier faces stand in
+   while it loads: the system font scaled to OpenMono's 0.6 em advance and line metrics, so the swap changes letter
+   shapes only. */
 @font-face {
   font-family: "OpenMono";
   src: url("../asset/fonts/openmono-regular-latin.woff2") format("woff2");
@@ -1609,11 +1610,10 @@ body {
 }
 
 /* The range choices in one frame, as the leaderboard's cards and the Share button beside them: a hairline over the
-   layer, 28px tall; the chosen one on grey inside it. */
+   layer, its 2px padding round the buttons (28px tall with the 22px ones); the chosen one on grey inside it. */
 [data-page="stats"] [data-component="usage-filter"][data-variant="range"] {
   box-sizing: border-box;
   gap: 2px;
-  height: 28px;
   padding: 2px;
   background: linear-gradient(180deg, #ffffff0a 0%, #ffffff00 100%), var(--stats-layer);
   border: 1px solid var(--stats-line);
@@ -8272,12 +8272,34 @@ body {
 
   [data-page="stats"] [data-slot="section-heading-row"] {
     flex-direction: column;
-    gap: 12px;
+    gap: 36px;
     margin-bottom: 32px;
+  }
+
+  /* A section whose heading has controls starts them as far below its top line as they are from its right edge. */
+  [data-page="stats"] [data-section]:has(> [data-slot="section-heading-row"]) {
+    padding-top: 24px;
+  }
+
+  /* Each description on its own line under its title, the title's full stop dropped. */
+  [data-page="stats"] h2:has(> strong > [data-slot="heading-link"]) > span {
+    display: block;
+    margin-top: 4px;
+  }
+
+  [data-page="stats"] [data-slot="heading-stop"] {
+    display: none;
   }
 
   [data-page="stats"] [data-slot="section-heading-row"] > h2 {
     margin-bottom: 0;
+  }
+
+  /* The section's controls (Daily and Weekly, Share) above its title, at the top right. */
+  [data-page="stats"] [data-slot="section-heading-row"] > :not(h2) {
+    order: -1;
+    align-self: flex-end;
+    margin-top: 0;
   }
 
   [data-page="stats"] [data-slot="section-heading-row"] > [data-component="usage-filter"] {
@@ -8286,6 +8308,24 @@ body {
 
   [data-page="stats"] [data-slot="section-heading-row"] [data-component="usage-filter"] button {
     height: 32px;
+  }
+
+  /* On a touch screen, 38px buttons, each reaching into the frame's padding for a 44px target. */
+  @media (pointer: coarse) {
+    [data-page="stats"] [data-slot="section-heading-row"] [data-component="usage-filter"] button {
+      position: relative;
+      height: 38px;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+
+      &::after {
+        content: "";
+        position: absolute;
+        inset: -3px -1px;
+      }
+    }
   }
 
   [data-page="stats"] [data-slot="cache-ratio-heading"],
