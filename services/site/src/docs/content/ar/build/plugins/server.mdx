@@ -36,9 +36,9 @@ export default Plugin.define({
 
 ### السياق
 
-سياق الملحق هو أساسًا [عميل خادم OpenCode](/build/client).
-وتستخدم طرق القراءة والإجراء فيه المدخلات والاستجابات نفسها التي يستخدمها العميل. ويضيف
-طرقًا خاصة بالملحقات للتحويلات وخطافات وقت التشغيل وإعادات التحميل والتسجيلات
+يستند سياق الملحق إلى [عميل خادم OpenCode](/build/client).
+تستخدم طرق القراءة وتنفيذ الإجراءات فيه المدخلات والاستجابات نفسها التي يستخدمها العميل. ويضيف السياق
+طرقًا خاصة بالملحقات للتحويلات وخطافات وقت التشغيل وإعادة التحميل والتسجيلات
 وخيارات الملحق.
 
 ```ts
@@ -226,9 +226,9 @@ await ctx.agent.transform((editor) => {
 await ctx.agent.reload()
 ```
 
-#### Reference
+#### المرجع
 
-Schema: [`Agent.Info`](/api#schema-Agent.Info)
+المخطّط: [`Agent.Info`](/api#schema-Agent.Info)
 
 ```ts
 interface AgentContext {
@@ -300,9 +300,9 @@ await ctx.provider.transform((editor) => {
 })
 ```
 
-#### Reference
+#### المرجع
 
-Schemas: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info)
+المخطّطات: [`Provider.Info`](/api#schema-Provider.Info)، [`Model.Info`](/api#schema-Model.Info)
 
 ```ts
 interface ProviderDomain extends ProviderApi {
@@ -354,8 +354,8 @@ await ctx.model.transform((editor) => {
 })
 ```
 
-وتعدّل ردود النداء تجاوزات النموذج الخام. وتُدمج افتراضيات المزوّد مرة واحدة عندما يثبّت OpenCode النتيجة؛ وتعيد القراءات غير المتغيّرة
-استخدام تلك النتيجة. ويعرض `editor.provider` تعريفات المصادر غير القابلة للتغيير، بما في ذلك القوالب غير النشطة، لا
+تعدّل دوال ردّ النداء قيم النموذج قبل دمجها مع الإعدادات الافتراضية للمزوّد. يدمج OpenCode تلك الإعدادات مرة واحدة عند اعتماد النتيجة،
+ويعيد استخدامها في القراءات اللاحقة ما لم تتغيّر. ويعرض `editor.provider` تعريفات المصادر غير القابلة للتغيير، بما فيها القوالب غير النشطة، ولا يعرض
 مخرجات تحويل النموذج.
 
 ```ts
@@ -370,9 +370,9 @@ await ctx.model.transform((editor) => {
 await ctx.model.reload()
 ```
 
-#### Reference
+#### المرجع
 
-Schema: [`Model.Info`](/api#schema-Model.Info)
+المخطّط: [`Model.Info`](/api#schema-Model.Info)
 
 ```ts
 interface ModelDomain extends ModelApi {
@@ -429,9 +429,9 @@ await ctx.command.transform((editor) => {
 await ctx.command.reload()
 ```
 
-#### Reference
+#### المرجع
 
-Schemas: [`Command.Info`](/api#schema-Command.Info),
+المخطّطات: [`Command.Info`](/api#schema-Command.Info)،
 [`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery)
 
 ```ts
@@ -487,7 +487,7 @@ await ctx.integration.oauth.complete({ integrationID: "github", attemptID: attem
 await ctx.integration.oauth.cancel({ integrationID: "github", attemptID: attempt.data.attemptID })
 ```
 
-وتعرض الاتصالات القائمة على الأوامر تدفق البدء والحالة والإلغاء نفسه.
+وتوفّر الاتصالات القائمة على الأوامر العمليات نفسها لبدء الاتصال وفحص حالته وإلغائه.
 
 ```ts
 const attempt = await ctx.integration.command.connect({ integrationID: "acme", methodID: "cli" })
@@ -523,10 +523,10 @@ await ctx.integration.transform((editor) => {
 await ctx.integration.reload()
 ```
 
-#### Reference
+#### المرجع
 
-Schemas: [`Integration.Info`](/api#schema-Integration.Info), [`Integration.Method`](/api#schema-Integration.Method),
-[`Connection.Info`](/api#schema-Connection.Info), [`Form.Answer`](/api#schema-Form.Answer)
+المخطّطات: [`Integration.Info`](/api#schema-Integration.Info)، [`Integration.Method`](/api#schema-Integration.Method)،
+[`Connection.Info`](/api#schema-Connection.Info)، [`Form.Answer`](/api#schema-Form.Answer)
 
 ```ts
 interface IntegrationContext {
@@ -584,7 +584,7 @@ interface IntegrationEditor {
 await ctx.credential.activate({ credentialID })
 ```
 
-#### Reference
+#### المرجع
 
 ```ts
 interface CredentialContext {
@@ -616,7 +616,7 @@ await ctx.mcp.transform((editor) => {
 ```
 
 واضبط `disabled: true` في تحويل لتعطيل خادم وقطع اتصاله، أو `disabled: false` لتفعيله والسماح
-لـOpenCode بالاتصال. ويوائم OpenCode دورة حياة الخادم من الإعداد المحوّل.
+لـ OpenCode بالاتصال به. ويضبط OpenCode دورة حياة الخادم وفق الإعدادات الناتجة عن التحويل.
 
 واستدعِ `reload()` بعد تغيّر حالة خارجية يستخدمها تحويل لإعادة تطبيق التحويلات ومواءمة الخوادم.
 
@@ -624,9 +624,9 @@ await ctx.mcp.transform((editor) => {
 await ctx.mcp.reload()
 ```
 
-#### Reference
+#### المرجع
 
-Schemas: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded),
+المخطّطات: [`Mcp.Server`](/api#schema-Mcp.Server)، [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded)،
 [`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded)
 
 ```ts
@@ -653,9 +653,9 @@ interface MCPEditor {
 const plugins = await ctx.plugin.list()
 ```
 
-#### Reference
+#### المرجع
 
-Schemas: [`Plugin.Info`](/api#schema-Plugin.Info), [`Plugin.Source`](/api#schema-Plugin.Source)
+المخطّطات: [`Plugin.Info`](/api#schema-Plugin.Info)، [`Plugin.Source`](/api#schema-Plugin.Source)
 
 ```ts
 interface PluginContext {
@@ -690,9 +690,9 @@ await ctx.reference.transform((editor) => {
 await ctx.reference.reload()
 ```
 
-#### Reference
+#### المرجع
 
-Schemas: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource`](/api#schema-Reference.LocalSource),
+المخطّطات: [`Reference.Info`](/api#schema-Reference.Info)، [`Reference.LocalSource`](/api#schema-Reference.LocalSource)،
 [`Reference.GitSource`](/api#schema-Reference.GitSource)
 
 ```ts
@@ -713,7 +713,7 @@ interface ReferenceEditor {
 ### التوليد (تجريبي)
 
 ولّد بنموذج مختار دون إنشاء جلسة أو استدعاء أدوات أو إضافة إلى سجل الجلسة. وقد تتغير هذه الواجهات.
-ولا يزال `ctx.generate.text` يعمل لكنه متوقف لصالح `ctx.experimental.generate.text`.
+لا يزال `ctx.generate.text` يعمل، لكن يُنصح باستخدام `ctx.experimental.generate.text` بدلًا منه.
 
 ```ts
 const review = await ctx.experimental.generate.text({
@@ -755,14 +755,14 @@ execute: async (input, context) => {
 
 - يُطابَق `action` و`resources` مع القواعد. تمنع أيّ نتيجة `deny` تنفيذ الإجراء؛ وفي غيابها، تؤدي أيّ نتيجة `ask` إلى طلب موافقة المستخدم.
 - ويسرد `save` الأنماط المحفوظة عندما يختار المستخدم السماح دائمًا.
-- ويختار `agent` قواعد من تنطبق، ويؤول إلى وكيل الجلسة. ويربط `source` المطالبة باستدعاء أداة.
+- يحدّد `agent` الوكيل الذي تُطبَّق قواعده. إذا لم تحدّده، تُطبَّق قواعد وكيل الجلسة. ويربط `source` طلب الإذن باستدعاء أداة.
 - ويمرّر `metadata` تفاصيل إضافية إلى مطالبات الأذونات وخطافات `evaluate`.
 
 إذا منعت قاعدةٌ الإجراء أو رفضه المستخدم مع إبداء ملاحظات، يفشل الاستدعاء بخطأ `Tool.Error` يتضمّن السبب، فيتلقّاه النموذج
 ويواصل عمله. أما الرفض من دون ملاحظات فينهي الخطوة الحالية. دع الأخطاء تنتقل إلى المستدعي بدلًا من إرجاعها على أنها مخرجات
 الأداة.
 
-افحص طلبات الأذونات المعلّقة أو حلها.
+افحص طلبات الأذونات المعلّقة أو اتخذ قرارًا بشأنها.
 
 ```ts
 const pending = await ctx.permission.list({ sessionID })
@@ -770,7 +770,7 @@ const request = await ctx.permission.get({ sessionID, requestID })
 await ctx.permission.reply({ sessionID, requestID, decision: "once" })
 ```
 
-استبدل قواعد الأذونات المحدودة بالجلسة. وتُقيَّم بعد قواعد الوكيل، وتفوز القاعدة
+استبدل قواعد الأذونات الخاصة بالجلسة. وتُقيَّم بعد قواعد الوكيل، وتُطبّق القاعدة
 المطابقة الأخيرة. وترث الجلسات الفرعية القواعد السارية عند إنشائها.
 
 ```ts
@@ -846,10 +846,10 @@ const entries = await ctx.session.instructions.entry.list({ sessionID })
 await ctx.session.instructions.entry.remove({ sessionID, key: "deploy-target" })
 ```
 
-#### Reference
+#### المرجع
 
-Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
-[`Session.Inbox.User`](/api#schema-Session.Inbox.User), [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic),
+المخطّطات: [`Session.Info`](/api#schema-Session.Info)، [`Model.Ref`](/api#schema-Model.Ref)،
+[`Session.Inbox.User`](/api#schema-Session.Inbox.User)، [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic)،
 [`InstructionEntry.Info`](/api#schema-InstructionEntry.Info)
 
 ```ts
@@ -919,9 +919,9 @@ await ctx.skill.transform((editor) => {
 await ctx.skill.reload()
 ```
 
-#### Reference
+#### المرجع
 
-Schema: [`Skill.Info`](/api#schema-Skill.Info)
+المخطّط: [`Skill.Info`](/api#schema-Skill.Info)
 
 ```ts
 interface SkillContext {
@@ -956,7 +956,7 @@ const page = await ctx.storage.scan({ prefix: "cache/", limit: 100 })
 const next = page.next
 ```
 
-#### Reference
+#### المرجع
 
 ```ts
 interface StorageContext {
@@ -1015,8 +1015,8 @@ const registration = await ctx.tool.transform((editor) => {
 })
 ```
 
-ويتلقى منفّذو أدوات Promise `context.signal`. فمرّره إلى العمل القابل للإلغاء مثل `fetch` حتى يوقف إيقاف الجلسة
-العملية الأساسية أيضًا.
+يتلقّى منفّذو أدوات Promise قيمة `context.signal`. مرّرها إلى العمليات القابلة للإلغاء، مثل `fetch`، حتى يتوقّف تنفيذها أيضًا
+عند مقاطعة الجلسة.
 
 ```ts
 execute: async ({ url }, context) => {
@@ -1076,14 +1076,13 @@ await ctx.tool.transform((editor) => {
 await registration.dispose()
 ```
 
-وكل طلب نموذج يلتقط لقطة أدوات مستقرة قابلة للتنفيذ. وتؤثر التحويلات وإعادات التحميل والتخلص اللاحقة في اللقطات
-المستقبلية، لا في التعريفات أو أوصاف نطاقات Code Mode أو المنفّذين الملتقطين أصلًا. والمنفّذون الذين يغلقون
-على بيانات ملحق متغيّرة يلاحظون تلك البيانات مع ذلك؛ فالتقط قيمة داخل التحويل عندما يجب أن تبقى مرتبطة
-بذلك التعريف.
+يأخذ كل طلب إلى النموذج لقطة ثابتة للأدوات القابلة للتنفيذ. ولا تؤثّر التحويلات أو إعادة التحميل أو إلغاء التسجيل لاحقًا إلا في اللقطات
+المستقبلية، لا في التعريفات أو أوصاف نطاقات Code Mode أو دوال التنفيذ التي سبق أخذها في لقطة. لكن دوال التنفيذ التي تشير
+إلى بيانات ملحق قابلة للتغيير تظل ترى أحدث قيمها. إذا أردت إبقاء قيمة مرتبطة بالتعريف، فاحفظها داخل التحويل نفسه.
 
-#### Reference
+#### المرجع
 
-Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
+المخطّطات: [`Tool.Content`](/api#schema-Tool.Content)، [`Tool.TextContent`](/api#schema-Tool.TextContent)،
 [`Tool.FileContent`](/api#schema-Tool.FileContent)
 
 ```ts
@@ -1135,14 +1134,14 @@ await ctx.vcs.transform((editor) => {
 الاختياري. وتتلقى ردود نداء الفروق أيضًا الوضع المختار والسياق المطلوب وميزانية بايتات الإخراج. ويواصل اكتشاف المستودع
 استخدام أدوات كشف Git وMercurial المدمجة في OpenCode.
 
-ويمكن للمزوّدين اختياريًا تطبيق `init(scope, { signal })` لإنشاء مستودع في `scope.worktree`. ويختار التهيئة
-المزوّد بمعرّفه (Git افتراضيًا)، لا بنوع المستودع المكتشف. وسجّل مزوّدًا فيه `init` حتى
+يمكن للمزوّدين تنفيذ `init(scope, { signal })` اختياريًا لإنشاء مستودع في `scope.worktree`. وتختار عملية التهيئة
+المزوّد بحسب معرّفه (Git افتراضيًا)، لا بحسب نوع المستودع المكتشف. ويمكنك تسجيل مزوّد ينفّذ `init` حتى
 عندما لا يكون للموقع مستودع بعد؛ فيتحقق OpenCode من وجود المجلد وخلوّه من مستودع قبل استدعائه،
 ثم يعيد اكتشاف المشروع. ولا تزال صيغ المستودعات الجديدة تحتاج دعم اكتشاف يتجاوز رد النداء هذا.
 
-#### Reference
+#### المرجع
 
-Schemas: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
+المخطّطات: [`Vcs.Info`](/api#schema-Vcs.Info)، [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus)،
 [`FileDiff.Info`](/api#schema-FileDiff.Info)
 
 ```ts
@@ -1171,10 +1170,10 @@ interface VcsDefinition {
 }
 ```
 
-### Worktrees
+### مجلدات worktree
 
-سجّل استراتيجية worktree محلية باستخدام دورة حياة الملحق العادية. وتملك وحدة التطبيق في هذا المثال
-التحقق من الخيارات وعمليات `create` و`remove` و`list` في الواجهة الخلفية.
+سجّل استراتيجية worktree محلية باستخدام دورة حياة الملحق المعتادة. في هذا المثال، تتولّى وحدة التنفيذ
+التحقّق من الخيارات وعمليات `create` و`remove` و`list` في الواجهة الخلفية.
 
 ```ts title="plugins/worktrees/index.ts"
 import { Plugin } from "@opencode/plugin"
@@ -1200,10 +1199,10 @@ export default Plugin.define({
 }
 ```
 
-- وإضافة استراتيجية تختارها تلقائيًا. ويفوز آخر تسجيل نشط؛ ولا حاجة إلى إعداد لاختيار الاستراتيجية.
-- والتخلص من تسجيلها أو تفريغ الملحق يعيد التطبيق السابق، وفي النهاية استراتيجية Git المضمّنة.
+- تُختار الاستراتيجية تلقائيًا عند إضافتها. وتكون الأولوية لآخر تسجيل نشط، فلا حاجة إلى إعداد لاختيار الاستراتيجية.
+- يُعيد إلغاء تسجيل الاستراتيجية أو إلغاء تحميل الملحق التنفيذَ السابق، وصولًا إلى استراتيجية Git المدمجة.
 - و`reload()` يعيد تشغيل التحويلات بعد تغيّر المدخلات الملتقطة؛ ولا يعيد تشغيل إعداد الملحق.
-- وإخفاقات الإنشاء لا تعيد المحاولة عبر Git. وتحتفظ worktrees القائمة بمالكها المسجّل حتى عندما يتغيّر الافتراضي.
+- لا يُعاد الإنشاء عبر Git عند فشله. وتظلّ مجلدات worktree القائمة مرتبطة باستراتيجياتها المسجّلة حتى لو تغيّرت الاستراتيجية الافتراضية.
 - تدير الاستراتيجيات مجلدات محلية. ولا تشمل هذه الواجهة إعداد مساحات عمل بعيدة.
 
 #### العمليات
@@ -1242,9 +1241,9 @@ await ctx.worktree.remove({
 })
 ```
 
-والملكية الغائبة تفشل الإزالة بدل العودة إلى Git. ويمكن للاستراتيجية رفع `new Worktree.OperationError({
+إذا تعذّر العثور على الاستراتيجية المسجّلة، تفشل الإزالة بدلًا من الرجوع إلى Git. ويمكن للاستراتيجية إطلاق الخطأ `new Worktree.OperationError({
 message: "Uncommitted changes", forceRequired: true })`، مع استيراد `Worktree` من `@opencode/plugin`، لطلب
-تأكيد الإجبار دون الاعتماد على أخطاء Core أو Git.
+تأكيد الإزالة القسرية دون الاعتماد على أخطاء Core أو Git.
 
 والتحديث يحمّل الإعداد الأساسي ويطلب من كل الاستراتيجيات المتاحة إيجاد worktrees عبر جذور نسخ السحب المعروفة.
 ويجمع النتائج ويحفظ الملكية المسجّلة ويشذّب المجلدات المفقودة. ويُسجّل مصدر اكتشاف فاشل
@@ -1255,7 +1254,7 @@ message: "Uncommitted changes", forceRequired: true })`، مع استيراد `W
 await ctx.worktree.refresh({ projectID })
 ```
 
-#### Reference
+#### المرجع
 
 وتتلقى التطبيقات وجهة مقترحة بعد التسمية ومعالجة التعارض. فأعد المجلد الفعلي من
 `create`؛ فقد يختلف عندما تتطلب واجهة خلفية تخطيطها. ويحل OpenCode المسار المعاد ويستخدمه
@@ -1325,9 +1324,9 @@ await ctx.websearch.transform((editor) => editor.default.set(false))
 await ctx.websearch.reload()
 ```
 
-#### Reference
+#### المرجع
 
-Schemas: [`WebSearch.Provider`](/api#schema-WebSearch.Provider), [`WebSearch.Result`](/api#schema-WebSearch.Result)
+المخطّطات: [`WebSearch.Provider`](/api#schema-WebSearch.Provider)، [`WebSearch.Result`](/api#schema-WebSearch.Result)
 
 ```ts
 interface WebSearchContext {
@@ -1360,9 +1359,9 @@ void (async () => {
 return () => controller.abort()
 ```
 
-#### Reference
+#### المرجع
 
-Schema: [`V2EventEncoded`](/api#schema-V2EventEncoded)
+المخطّط: [`V2EventEncoded`](/api#schema-V2EventEncoded)
 
 ```ts
 type EventType = Exclude<OpenCodeEvent["type"], "server.connected">
@@ -1419,7 +1418,7 @@ await ctx.session.hook("prompt", (event) => {
 - و`prompt` يضم `text` و`files` وإشارات الوكلاء في `agents` والمهارات المختارة `skills`.
 - و`metadata` يضم بيانات قبول يعرّفها التطبيق.
 - و`delivery` هو `"steer"` افتراضيًا ويمكن تغييره إلى `"queue"`.
-- ومعرّفات الجلسة والرسالة للقراءة فقط؛ ولا يستطيع خطاف إعادة توجيه القبول.
+- معرّفات الجلسة والرسالة للقراءة فقط، ولا يستطيع الخطاف توجيه المطالبة إلى جلسة أو رسالة أخرى.
 
 وتتبع الملفات والمهارات التي يضيفها خطاف مسار التحليل والتحقق
 العادي. وعند إعادة كتابة النص، حدّث إزاحات `mention` في المرفقات التي لم تعد
@@ -1448,7 +1447,7 @@ await ctx.session.hook("prompt", (event) => {
 نوع طلب تصدره الجلسة خطافه الخاص، فيستطيع الملحق معاملة حلقة الوكيل والطلبات المساعدة
 بشكل مختلف:
 
-- يعمل `context` لحلقة الوكيل، بما في ذلك المتابعات المدفوعة بالأدوات.
+- يعمل `context` في حلقة الوكيل، بما في ذلك خطوات المتابعة الناتجة عن استدعاء الأدوات.
 - ويعمل `compaction` لملخصات نقاط التحقق. و`messages` هو سجل المحادثة الجاري تلخيصه؛ ويضيف OpenCode
   مطالبة تلخيصه بعد عمل الخطافات. واضبط `result` لتسجيل الضغط بنفسك وتخطي استدعاء النموذج؛ ويأخذ
   الحقول نفسها التي تأخذها رسالة ضغط مكتملة.
@@ -1480,7 +1479,7 @@ await ctx.session.hook("compaction", async (event) => {
 
 وتتبع تجاوزات الطلب هذه القواعد:
 
-- يبدأ `options` فارغًا لكل استدعاء نموذج؛ ولا يحتوي إعدادات النموذج المحلولة.
+- يبدأ `options` فارغًا عند كل استدعاء للنموذج، ولا يتضمّن الإعدادات الفعلية للنموذج.
 - والمفاتيح المحدّدة النوع إعدادات توليد؛ وأي مفتاح آخر يُمرَّر إلى البروتوكول المختار كخيار مزوّد.
 - وتعمل الخطافات بترتيب التسجيل وترى التجاوزات التي أجرتها الخطافات السابقة.
 - لإعدادات الطلب أسبقية على الإعدادات الافتراضية للنموذج، وللأخيرة أسبقية على الإعدادات الافتراضية للمسار.
@@ -1513,8 +1512,8 @@ await ctx.session.hook(
 هذا خطاف تجريبي يعمل كلّما حدّدت الجلسة النموذج الذي سيعالج الطلب، وقبل تجهيز أيّ جزء من الطلب. يبدأ `model`
 بالنموذج المختار؛ فغيّره لخدمة هذا الطلب بنموذج آخر من المزوّد نفسه، بما في ذلك نموذج مخفي
 من منتقي النماذج. وتحتفظ الجلسة بنموذجها المختار؛ ويستخدم الطلب ورسالة المساعد النموذج الجديد.
-ويفيد `kind` بالطلب الجاري حله، فيستطيع موجّه تخطي العناوين أو إعادة التوجيه بعد الضغط. ونموذج من
-مزوّد آخر يفشل باعتباره غير متاح.
+يحدّد `kind` نوع الطلب الذي يجري اختيار نموذج له، بحيث يستطيع الموجّه تخطّي طلبات توليد العناوين أو إعادة التوجيه بعد ضغط السياق. وإذا اختار الخطاف نموذجًا من
+مزوّد آخر، يفشل الطلب لأن النموذج غير متاح.
 
 ```ts
 await ctx.session.hook(
@@ -1544,8 +1543,8 @@ await ctx.session.hook(
 
 #### HTTP الأصلية
 
-عدّل طلبات المزوّد الأصلية أو استجاباته. فأجسامها تدفقات تُقرأ مرة واحدة؛ فانسخ الجسم أو استبدله قبل
-قراءته.
+عدّل طلبات المزوّد الأصلية أو استجاباته. يُبثّ محتواها في صورة تدفّقات لا يمكن قراءتها إلا مرة واحدة، لذا أنشئ نسخة من محتوى الطلب أو الاستجابة، أو استبدله
+قبل قراءته.
 
 ويعمل الخطافان لكل طلب تصدره الجلسة. ويفيد `event.kind` بالتدفق الذي أصدره: `"primary"` لحلقة
 الوكيل، و`"compaction"` لملخصات نقاط التحقق، و`"title"` لتوليد العناوين، و`"generate"` لاستدعاءات
@@ -1570,8 +1569,8 @@ await ctx.session.hook("http.response", (event) => {
 والمزوّدون الذين يبثّون عبر WebSocket يفتحون اتصالًا واحدًا لكل جلسة ويعيدون استخدامه بين الطلبات، فلا
 ترى `http.request` و`http.response` تلك الحركة أبدًا. ويعمل خطاف `experimental.ws.handshake` مرة لكل استدعاء نموذج
 قبل اختيار الاتصال. ويحمل `sessionID` و`agent` و`model` و`kind` نفسها التي تحملها خطافات
-HTTP، إضافة إلى `url` و`headers` للاتصال. وتغيير `url` أو `headers` يغيّر المقبس الذي يستخدمه الطلب، فيعيد
-رمز bearer المدوّر فتح الاتصال.
+HTTP، إضافة إلى `url` و`headers` للاتصال. ويؤدّي تغيير `url` أو `headers` إلى تغيير المقبس الذي يستخدمه الطلب، لذا يُفتح اتصال جديد
+عند تبديل رمز bearer.
 
 ولا تزال خطافات HTTP تعمل لكل طلب HTTP، بما في ذلك الطلب الذي يعود إليه مسار WebSocket.
 
@@ -1586,13 +1585,13 @@ await ctx.session.hook(
 )
 ```
 
-ويعرض `experimental.ws.send` و`experimental.ws.receive` الإطارات نفسها، وهما نظير WebSocket
-لتحرير جسم طلب HTTP أو استجابته. ويعمل `send` بعد بناء سائق المزوّد إطارًا صادرًا وقبل
-كتابته؛ ويعمل `receive` على كل إطار وارد قبل أن يلاحظه السائق. وكلاهما يحمل الإطار كسلسلة ويرسل
-ما يحمله `frame` عند إرجاع الخطاف.
+يتيح `experimental.ws.send` و`experimental.ws.receive` الوصول إلى الإطارات نفسها، وهو ما يقابل تعديل محتوى طلب HTTP أو استجابته
+في WebSocket. يعمل `send` بعد أن يُنشئ مشغّل المزوّد إطارًا صادرًا وقبل أن يكتبه، ويعمل
+`receive` على كل إطار وارد قبل أن يقرأه المشغّل. ويحمل كلا الخطافين الإطار كسلسلة نصية، ويمرّر
+القيمة الموجودة في `frame` عند انتهاء الخطاف.
 
-ولا يتحقق OpenCode من الإطارات المعاد كتابتها. ويتتبع السائق الحالة من ردود المزوّد، فإعادة الكتابة التي
-تغيّر معنى البروتوكول مسؤولية الملحق، كما هو جسم HTTP المعاد كتابته.
+لا يتحقّق OpenCode من الإطارات المعدّلة. ويتتبّع مشغّل المزوّد الحالة استنادًا إلى ردود المزوّد، لذا يتحمّل الملحق مسؤولية أيّ تعديل يغيّر
+دلالة الإطار في البروتوكول، كما هي الحال عند تعديل محتوى طلب HTTP أو استجابته.
 
 ```ts
 await ctx.session.hook(
@@ -1632,8 +1631,8 @@ await ctx.session.hook("retry", (event) => {
 })
 ```
 
-ويمكن لخطافات إعادة المحاولة تغيير `decision` الأولي في OpenCode بجعل فشل نهائي
-قابلًا لإعادة المحاولة أو بنقض إعادة محاولة مقترحة.
+يمكن لخطافات إعادة المحاولة تغيير `decision` الأولي في OpenCode للسماح بمحاولة جديدة بعد إخفاق يُعدّ نهائيًا،
+أو لمنع إعادة محاولة مقترحة.
 
 وتتبع قرارات إعادة المحاولة هذه القواعد:
 
@@ -1643,7 +1642,7 @@ await ctx.session.hook("retry", (event) => {
 - والتأخيرات غير الصالحة مثل `NaN` أو اللانهاية أو القيم السالبة تعود إلى التأخير المحسوب.
 - والتعافي من فائض السياق منفصل لأنه يضغط المحادثة بدل إعادة محاولة الطلب نفسه.
 
-#### Session reference
+#### مرجع الجلسة
 
 ```ts
 import type { SessionPrompt } from "@opencode/plugin/promise/session"
@@ -1773,7 +1772,7 @@ await ctx.permission.hook("evaluate", async (event) => {
 - ويمكن للخطاف تغيير `effect` إلى `allow` أو `ask` أو `deny`.
 - ويظهر `message` في طلب إذن مصعّد أو يصبح سبب الرفض.
 
-#### Reference
+#### المرجع
 
 ```ts
 interface PermissionEvaluation {
@@ -1799,7 +1798,7 @@ await ctx.shell.hook("create.before", (event) => {
 })
 ```
 
-#### Reference
+#### المرجع
 
 ```ts
 interface ShellHookContext {
@@ -1834,7 +1833,7 @@ await ctx.tool.hook("execute.after", (event) => {
 })
 ```
 
-#### Reference
+#### المرجع
 
 ```ts
 interface ToolHooks {
@@ -1852,8 +1851,8 @@ interface ToolHookContext {
 
 ## دعم V1
 
-ويمكن لملحق دعم V1 وV2 من نقطة دخول الحزمة نفسها. فصدّر افتراضيًا
-كائنًا واحدًا فيه دالة `server()` لـV1 ودالة `setup()` لـV2:
+يمكن للملحق دعم V1 وV2 من نقطة دخول الحزمة نفسها. اجعل التصدير الافتراضي كائنًا واحدًا
+يحتوي على دالة `server()` لـ V1 ودالة `setup()` لـ V2:
 
 ```ts title="src/index.ts"
 import { Plugin } from "@opencode/plugin"
@@ -1879,8 +1878,8 @@ export default {
 
 - يستدعي V1 الدالة `server()` ويستخدم الخطافات المعادة.
 - ويقرأ V2 `id` و`setup()` من التصدير الافتراضي (أو `effect()` لملحقات Effect)، ويتجاهل `server()`.
-- وأبقِ كل تطبيق على واجهته؛ فمشاركة تصدير لا تترجم خطافات V1 إلى خطافات V2.
-- وافرد `Plugin.define(...)` في الكائن المصدّر ليتحقق من نوع تعريف V2 على حدة من `server()`.
+- استخدم في كل تنفيذ واجهة API الخاصة بإصداره؛ فالتصدير المشترك لا يحوّل خطافات V1 إلى خطافات V2.
+- استخدم معامل النشر لإدراج ناتج `Plugin.define(...)` في الكائن المصدّر، كي يجري التحقّق من أنواع تعريف V2 بمعزل عن `server()`.
 
 وتُدعم صيغة كائن V1 في OpenCode `1.18.29`. وقد تتوقع إصدارات V1 الأقدم
 تصديرات دوال بدلًا من ذلك؛ فاختبر الحزمة المثبّتة بأقدم إصدار V1

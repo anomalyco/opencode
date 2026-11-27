@@ -231,7 +231,7 @@ context.ui.slot({ append: "home.footer", render: () => <markdown content="Ready"
 return () => context.renderer.idle().then(() => style.destroy())
 ```
 
-ولقراءة نمط تخطيط عنصر قابل للعرض، استدعِ الطريقة باسم أداة جلب Yoga Node، مثل
+لقراءة نمط تخطيط عنصر قابل للعرض، استدعِ الطريقة التي تحمل اسم طريقة القراءة المقابلة في عقدة Yoga، مثل
 `box.getPadding(Yoga.Edge.Bottom)` أو `box.getMaxWidth()`. والعناصر القابلة للعرض في المضيف ليست جزءًا من واجهة الملحقات. وقد يتغير
 بناؤها وأنماطها في أي إصدار.
 
