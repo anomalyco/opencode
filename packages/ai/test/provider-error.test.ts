@@ -805,6 +805,24 @@ describe("AIError getters", () => {
     expect([rateLimit, invalidRequest, transport].map(isRetryable)).toEqual([true, false, true])
   })
 
+  test("retryHint applies to failed responses, not streams that drop after a successful one", () => {
+    const failure = (status: number, hint: string) =>
+      new AIError({
+        reason: new TransportError({
+          message: "Connection lost while reading the response: ECONNRESET",
+          transport: "http",
+          operation: "read",
+          code: "ECONNRESET",
+          http: new HttpContext({ url: "https://api.test/v1", status, headers: { "x-should-retry": hint } }),
+        }),
+      })
+
+    expect([failure(500, "false").retryHint, failure(500, "true").retryHint]).toEqual([false, true])
+    expect([failure(200, "false").retryHint, failure(200, "true").retryHint]).toEqual([undefined, undefined])
+    expect(failure(500, "false").isRetryable).toBe(false)
+    expect(failure(200, "false").isRetryable).toBe(true)
+  })
+
   test("retryAfterMs", () => {
     expect([rateLimit.retryAfterMs, invalidRequest.retryAfterMs, transport.retryAfterMs]).toEqual([
       2000,

@@ -108,9 +108,7 @@ const ONE_SHOT_RETRIES = 3
 const NOT_SENT_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN"])
 
 const notRun = (error: AIError) => {
-  const override = error.reason.http?.headers["x-should-retry"]
-  if (override === "true") return true
-  if (override === "false") return false
+  if (error.retryHint !== undefined) return error.retryHint
   const reason = error.reason
   if (reason._tag === "RateLimit") return true
   if (reason._tag === "ProviderInternal") return reason.http?.status === 503 || reason.http?.status === 529
