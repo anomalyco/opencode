@@ -1,6 +1,6 @@
 ---
 title: "Dostawcy"
-description: "Podłączaj OpenCode do dostawców modeli, takich jak OpenCode Go, ChatGPT, Amazon Bedrock, Google Vertex, GitHub Copilot i Ollama, albo dodaj własnego."
+description: "Połącz OpenCode z dostawcami modeli, takimi jak OpenCode Go, ChatGPT, Amazon Bedrock, Google Vertex, GitHub Copilot i Ollama, albo dodaj własnego dostawcę."
 ---
 
 OpenCode zawiera katalog dostawców i modeli z [models.dev](https://models.dev). W przypadku większości dostawców
@@ -86,7 +86,7 @@ pakiet środowiska uruchomieniowego, endpoint i pierwszy model.
 }
 ```
 
-Obiekt `providers` ma klucze według ID dostawcy używanego w odniesieniach modeli, takiego jak `acme/qwen3-coder`.
+Kluczem każdej pozycji w obiekcie `providers` jest ID dostawcy używane w odwołaniach do modeli, na przykład w `acme/qwen3-coder`.
 
 | Pole | Przeznaczenie |
 | --- | --- |
@@ -102,8 +102,8 @@ Obiekt `providers` ma klucze według ID dostawcy używanego w odniesieniach mode
 
 ## Endpoint
 
-Nadpisz `settings.baseURL`, aby kierować dostawcę z katalogu przez proxy lub zgodny endpoint. Jego istniejący pakiet,
-modele i połączenie nadal obowiązują.
+Nadpisz `settings.baseURL`, aby kierować żądania do dostawcy z katalogu przez proxy lub zgodny endpoint. OpenCode nadal używa
+tego samego pakietu, tych samych modeli i tego samego połączenia.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -299,7 +299,7 @@ ID wysyłane do dostawcy.
 | `modelID` | ID modelu lub wdrożenia wysyłane do dostawcy. |
 | `name` | Nazwa wyświetlana. |
 | `family` | Rodzina modelu używana do grupowania powiązanych modeli. |
-| `type` | Co produkuje model: `chat`, `decision`, `image`, `video`, `realtime`, `embedding` lub `transcription`. Domyślnie `chat`; do sesji oferowane są tylko modele czatu. Modele czasu rzeczywistego odpowiadające mową są oferowane do głosu, a ustawione na `disabled: true` nie są. |
+| `type` | Co generuje model: `chat`, `decision`, `image`, `video`, `realtime`, `embedding` lub `transcription`. Domyślna wartość to `chat`. W sesjach dostępne są tylko modele czatu. W sesjach głosowych dostępne są modele czasu rzeczywistego, które odpowiadają głosem, o ile nie ustawisz `disabled: true`. |
 | `releaseDate` | Data wydania w formacie `YYYY-MM-DD` lub `YYYY-MM`. |
 | `package` | Nadpisanie środowiska uruchomieniowego dla tego modelu. Model transkrypcji wskazuje swój protokół transkrypcji, taki jak `@opencode/ai/protocols/openai-transcription`; model czasu rzeczywistego nie przyjmuje żadnego, ponieważ sesje głosowe zaczynają się przez jego API. |
 | `settings` | Ustawienia OpenCode na poziomie modelu i opcje JSON właściwe dla pakietu. |
@@ -370,8 +370,8 @@ Azure udostępnia model tylko przez wdrożenie, więc OpenCode wyświetla wdroż
 Azure. Lista wczytuje się w tle po starcie, po podłączeniu i po zmianie konta. Aby uwzględnić wdrożenie dodane później,
 uruchom OpenCode ponownie lub podłącz się ponownie.
 
-- Dopóki lista nie wczyta się dla połączenia lub jeśli się nie powiedzie, cały katalog pozostaje dostępny.
-- Nieudane przeładowanie tego samego połączenia zachowuje jego ostatni kompletny spis.
+- Dopóki lista wdrożeń danego połączenia się nie wczyta lub gdy wczytanie się nie powiedzie, dostępny jest cały katalog.
+- Jeśli nie uda się odświeżyć listy dla tego samego połączenia, OpenCode zachowa ostatnią kompletną listę.
 - Zmiana konta nigdy nie pokazuje spisu poprzedniego konta; nowe konto zaczyna od całego katalogu.
 - Wdrożenia dziedziczą limity, koszty i możliwości ze swoich modeli katalogowych.
 
@@ -411,7 +411,7 @@ Twoja tożsamość potrzebuje jednej z tych ról:
 - **Cognitive Services OpenAI User** dla modeli Azure OpenAI.
 - **Cognitive Services User** dla innych modeli Foundry.
 
-Jeśli żądanie używa tokenu z niewłaściwego tenanta, zaloguj się ponownie wymaganym tenantem.
+Jeśli żądanie korzysta z tokenu innego tenanta, zaloguj się ponownie do właściwego tenanta.
 
 ```bash
 az login --tenant TENANT_ID
@@ -496,8 +496,8 @@ a domyślnie używa `us-central1`.
 GOOGLE_CLOUD_PROJECT=my-project GOOGLE_VERTEX_LOCATION=europe-west4 opencode --standalone
 ```
 
-Konta usługowe działają przez tę samą ścieżkę ADC. Wskaż `GOOGLE_APPLICATION_CREDENTIALS` na plik JSON konta usługowego
-i nadal podaj projekt przez ustawienia lub jedną z powyższych zmiennych projektu.
+Konta usługowe też korzystają z ADC. Ustaw `GOOGLE_APPLICATION_CREDENTIALS` na ścieżkę do pliku JSON konta usługowego
+i podaj projekt w ustawieniach lub za pomocą jednej z powyższych zmiennych projektu.
 
 ```bash
 GOOGLE_APPLICATION_CREDENTIALS=/secure/vertex.json \
@@ -558,8 +558,8 @@ jest wysyłany jako token bearer w żądaniach wykrywania i wywołaniach modeli.
 }
 ```
 
-Odkrywanie odświeża się okresowo i zachowuje ostatni udany spis podczas tymczasowej awarii. Modele tylko do osadzeń nie
-pojawiają się, ponieważ OpenCode dodaje tylko modele, których metadane Ollama zawierają możliwość `completion`.
+OpenCode odświeża listę modeli okresowo, a podczas chwilowej niedostępności zachowuje ostatnią listę, którą udało się pobrać. Modele służące
+wyłącznie do osadzeń nie pojawiają się, ponieważ OpenCode dodaje tylko modele z funkcją `completion` w metadanych Ollama.
 
 ## Środowiska uruchomieniowe
 

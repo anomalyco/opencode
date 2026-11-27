@@ -14,7 +14,7 @@ OpenCode Go daje niezawodny dostęp do popularnych otwartych modeli kodujących 
 Go działa jak każdy inny dostawca w OpenCode. Subskrybujesz OpenCode Go i otrzymujesz klucz API. Jest
 **całkowicie opcjonalny** i nie potrzebujesz go, aby korzystać z OpenCode.
 
-Usługa jest zaprojektowana przede wszystkim dla użytkowników międzynarodowych i zapewnia stabilny dostęp globalny.
+Usługa powstała głównie z myślą o użytkownikach z różnych krajów i zapewnia stabilny dostęp na całym świecie.
 
 ## Jak to działa
 
@@ -58,14 +58,14 @@ Zobacz [Prywatność](#privacy), aby poznać warunki trenowania i retencji każd
 
 ## Płatność środkami
 
-Właściciele i administratorzy mogą opłacać Go, w tym odnowienia i uaktualnienia, ze środków obszaru roboczego. Wybierz
-**Credit** jako metodę płatności przy subskrypcji lub później w **Manage subscription**. Jest to osobne od
-[Extra Usage](#usage-beyond-limits), które opłaca użycie ponad limity.
+Właściciele i administratorzy mogą opłacać Go ze środków obszaru roboczego, także przy odnowieniu lub zmianie na wyższy plan. Wybierz
+**Credit** jako metodę płatności przy zakupie subskrypcji lub później w **Manage subscription**. Ta metoda jest niezależna od funkcji
+[Extra Usage](#usage-beyond-limits), która pozwala płacić za użycie po osiągnięciu limitu.
 
 - Pełna cena jest pobierana z salda środków. Jeśli saldo jest zbyt niskie, najpierw doładuj środki.
-- Odnowienia pobierają cenę ze środków po zakończeniu okresu. Jeśli środków nie wystarczy, Go pozostaje aktywne,
-  a odnowienie jest ponawiane 1, 3 i 7 dni po zakończeniu okresu oraz ponownie, gdy tylko wystarczy środków. Jeśli
-  ostatnia próba się nie powiedzie, Go kończy się.
+- Opłatę za odnowienie pobieramy z salda na koniec okresu rozliczeniowego. Jeśli środków zabraknie, Go pozostanie aktywne,
+  a płatność ponowimy 1, 3 i 7 dni po zakończeniu okresu oraz od razu po wpłacie wystarczającej kwoty. Jeśli
+  ostatnia próba się nie powiedzie, subskrypcja Go wygaśnie.
 - Obszary robocze objęte [rozliczeniami na podstawie faktur](/console/billing#invoiced-billing) nie mogą opłacać Go
   środkami.
 - Gdy zwracamy płatność za Go dokonaną ze środków, kwota wraca na saldo, a dany okres subskrypcji się kończy.
@@ -106,8 +106,8 @@ Poza OpenCode następujące klienty zostały zweryfikowane pod kątem poprawnej 
 
 ### Znane problematyczne klienty
 
-Te klienty mają brakującą lub niepełną obsługę sesji w wersjach, które zbadaliśmy. Powiązane raporty śledzą poprawki
-i obejścia.
+W sprawdzonych przez nas wersjach te klienty nie obsługują sesji lub obsługują je tylko częściowo. Informacje o poprawkach
+i obejściach znajdziesz w podlinkowanych zgłoszeniach.
 
 | Klient                  | Status i śledzenie                                                                                                                                                                                                                                     |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -154,7 +154,7 @@ Możesz śledzić bieżące użycie w [Console](https://opencode.ai/console) lub
 
 <Callout type="tip">Po osiągnięciu limitu użycia możesz dalej korzystać z darmowych modeli.</Callout>
 
-Limity użycia mogą się zmieniać wraz z wnioskami z wczesnego użycia i opinii.
+Limity użycia mogą się zmieniać na podstawie pierwszych danych o użyciu i opinii użytkowników.
 
 ---
 
@@ -175,8 +175,7 @@ przekazujemy Ci w postaci wyższego miesięcznego użycia.
 W przypadku niektórych modeli nie mieliśmy okazji wynegocjować rabatu ani hostować ich taniej, ponieważ model jest nowy
 albo jego publiczny cennik jest już obniżony.
 
-W tych modelach nadal otrzymujesz nieco więcej, niż płacąc bezpośrednio dostawcom modeli; dlatego ich zawarte miesięczne
-użycie jest niższe.
+Miesięczny limit tych modeli jest więc niższy, ale wciąż pozwala korzystać z nich nieco więcej, niż gdyby płacić bezpośrednio dostawcom.
 
 ## Endpointy
 
@@ -266,7 +265,7 @@ curl https://opencode.ai/inference/go/openai/v1/embeddings \
 
 ### Użycie
 
-Sprawdź, ile wykorzystałeś ze swoich [limitów użycia](#usage-limits), na przykład aby pokazać je we własnym kliencie:
+Sprawdź, jaka część Twoich [limitów użycia](#usage-limits) została już wykorzystana. Możesz na przykład wyświetlać te dane we własnym kliencie:
 
 ```bash
 curl https://opencode.ai/inference/go/v1/usage \
@@ -347,7 +346,7 @@ Sprawdź, czy każdy model [trenuje na Twoich danych](https://opencode.ai/consol
 - **Muse Spark 1.2 Contributor:** Znacznie niższe ceny tokenów w zamian za zgodę na wykorzystanie Twoich promptów i odpowiedzi modeli do trenowania przyszłych modeli Meta. Model jest dostępny tylko w regionach dopuszczonych przez [Geographic Use Policy](https://ai.developer.meta.com/legal/geographic-use-policy) Meta. [Dowiedz się więcej](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Iceman Contributor Free:** Darmowy przez ograniczony czas w zamian za zgodę na wykorzystanie Twoich promptów i odpowiedzi modelu do jego ulepszania.
 - **HungerG Free:** Darmowy przez ograniczony czas. Twoje prompty i odpowiedzi modelu nie służą do trenowania modeli.
-- **LongCat 2.5:** Hostowany w Chinach. Wymaga regionów **Global** w ustawieniach prywatności obszaru roboczego.
+- **LongCat 2.5:** Hostowany w Chinach. Aby go używać, wybierz **Global** w ustawieniach prywatności obszaru roboczego.
 - **DeepSeek:** Umowa ZDR jest odnawiana co miesiąc. Obecna umowa obowiązuje do 31 grudnia 2026 r.
 
 ## Tło

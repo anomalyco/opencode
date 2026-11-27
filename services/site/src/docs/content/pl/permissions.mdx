@@ -7,8 +7,8 @@ Uprawnienia kontrolują, czy agent może wykonać akcję na zasobie.
 
 ## Konfiguracja
 
-Typowa konfiguracja pyta przed uruchomieniem poleceń powłoki, zezwala na rutynowe sprawdzanie Git i zawsze blokuje
-wypychanie. Dodaj te uporządkowane reguły do `opencode.jsonc`:
+W typowej konfiguracji OpenCode pyta o zgodę przed wykonaniem poleceń powłoki, pozwala na rutynowe sprawdzanie
+stanu repozytorium Git i zawsze blokuje wypychanie zmian. Dodaj te reguły w podanej kolejności do `opencode.jsonc`:
 
 ```jsonc
 {
@@ -97,8 +97,8 @@ następnie dopisywane są reguły globalne, a na końcu reguły agenta.
 }
 ```
 
-Operacje mogą sprawdzać kilka zasobów, na przykład patch dotyczący wielu plików. Każde `deny` blokuje operację;
-w przeciwnym razie każde `ask` powoduje pytanie; w przeciwnym razie operacja jest dozwolona.
+Jedna operacja może wymagać sprawdzenia kilku zasobów, na przykład gdy poprawka dotyczy wielu plików. Wystarczy jedno `deny`, aby zablokować operację.
+Jeśli nie ma odmowy, jedno `ask` wystarczy, aby poprosić o zgodę. W pozostałych przypadkach operacja jest dozwolona.
 
 ## Akcje
 
@@ -107,7 +107,7 @@ akcji i zasobów:
 
 | Akcja                | Zasób                                                                       |
 | -------------------- | --------------------------------------------------------------------------- |
-| `read`               | Wewnętrzna ścieżka względna lokalizacji lub kanoniczna bezwzględna ścieżka zewnętrzna |
+| `read`               | Ścieżka wewnętrzna względem lokalizacji albo bezwzględna ścieżka zewnętrzna w postaci kanonicznej |
 | `edit`               | Ścieżka docelowa dla `edit`, `write` i `patch`                              |
 | `glob`               | Żądany wzorzec glob                                                         |
 | `grep`               | Żądane wyrażenie regularne, a nie ścieżka wyszukiwania                      |
@@ -268,8 +268,8 @@ Wspólne reguły umieść na najwyższym poziomie, a węższe w `agents.<id>.per
 }
 ```
 
-Reguły agenta są dopisywane po regułach globalnych; nie zastępują tablicy globalnej. Własny subagent używa własnych
-uprawnień, a nie podzbioru uprawnień sesji nadrzędnej.
+OpenCode dopisuje reguły agenta po regułach globalnych, zamiast zastępować tablicę globalną. Skonfigurowany przez Ciebie subagent korzysta z własnych
+uprawnień, a nie z podzbioru uprawnień agenta nadrzędnego.
 
 ## Zatwierdzenia
 
@@ -288,13 +288,13 @@ Na przykład wybór **Allow always** dla `git status --short` może zapisać pre
 shell: git status * → allow
 ```
 
-Zapisane zatwierdzenia to trwałe reguły `allow` w zakresie projektu. Nigdy nie zastępują skonfigurowanego `deny`.
-Narzędzia wybierają proponowany zapisany wzorzec: niektóre proponują `*`, powłoka proponuje prefiksy poleceń, pobieranie
-z sieci proponuje witrynę adresu URL (na przykład `https://opencode.ai/*`), a skille i subagenty proponują swoje ID.
+Zapisane zatwierdzenia to trwałe reguły `allow` obowiązujące tylko w danym projekcie. Nigdy nie mają pierwszeństwa przed skonfigurowanym `deny`.
+Każde narzędzie proponuje wzorzec do zapisania. Niektóre proponują `*`, powłoka proponuje prefiksy poleceń, narzędzie do pobierania
+z sieci proponuje witrynę wskazaną przez adres URL (na przykład `https://opencode.ai/*`), a skille i subagenty proponują swoje ID.
 Przeglądaj szerokie zatwierdzenia i usuwaj te, które nie są już potrzebne.
 
-Klienty mogą dołączyć opinię przy odrzucaniu. Klienty nieinteraktywne muszą zdecydować, jak obsługiwać żądania
-zatwierdzenia; skonfigurowane reguły `deny` zawsze pozostają egzekwowane.
+Klienty mogą dołączyć komentarz przy odrzucaniu żądania. Klienty nieinteraktywne muszą same zdecydować, jak obsłużyć prośby
+o zatwierdzenie. Skonfigurowane reguły `deny` zawsze obowiązują.
 
 ## Zasady
 
