@@ -23,7 +23,7 @@ import { emptyThemeSource, tmpdir } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
-test("scopes sessions to the active session location", async () => {
+test("scopes sessions to the active session location and renames from its title", async () => {
   const active = "/tmp/opencode/project-b"
   const events = createEventStream()
   const requestedProjects: string[] = []
@@ -122,6 +122,16 @@ test("scopes sessions to the active session location", async () => {
     const frame = await app.waitForFrame((value) => value.includes("Project B session"))
     expect(frame).not.toContain("Project A session")
     expect(requestedProjects.at(-1)).toBe("proj_b")
+
+    // The first delete keystroke only asks for confirmation. Renaming then must still offer the session's title,
+    // not the label the row shows while it waits for the second keystroke.
+    app.mockInput.pressKey("d", { ctrl: true })
+    await app.waitForFrame((value) => value.includes("again to confirm"))
+
+    app.mockInput.pressKey("r", { ctrl: true })
+    const rename = await app.waitForFrame((value) => value.includes("Rename session"))
+    expect(rename).toContain("Project B session")
+    expect(rename).not.toContain("again to confirm")
   } finally {
     app.renderer.destroy()
     await storage.flush()
