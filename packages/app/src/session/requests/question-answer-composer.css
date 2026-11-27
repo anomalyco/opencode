@@ -4,13 +4,12 @@
 
   [data-slot="question-body"] {
     gap: 4px;
-    /* Match the composer's border so both 16px insets line up. */
-    border-inline-start: 0.5px solid transparent;
-    padding-block: 12px 10px;
+    /* The last answer's highlight sits 6px from the bottom, as from the sides. */
+    padding-block: 10px 6px;
     padding-inline-start: 16px;
 
     &:not(:has([data-slot="question-option"]:first-child [data-slot="option-description"])) {
-      gap: 0;
+      gap: 2px;
     }
   }
 
@@ -20,9 +19,11 @@
     gap: 12px;
   }
 
+  /* Dismiss and the progress lines move 3px out so the × stays centred over the number badges. */
   [data-slot="question-header-top"] {
     grid-area: 1 / 2;
     align-self: start;
+    margin-inline-end: -3px;
   }
 
   /* The question's first line sits centred on the 28px header buttons. */
@@ -33,13 +34,16 @@
   }
 
   [data-slot="question-options"] {
-    --option-inset: 6px;
+    --option-inset: 10px;
     --option-gap: 10px;
     --option-row-gap: 1px;
 
     gap: var(--option-row-gap);
     margin: 0;
-    margin-inline: calc(-1 * var(--option-inset)) -2px;
+    /* The list holds focus while its highlighted answer shows where the keys act, as in the model picker. */
+    outline: none;
+    /* The highlight reaches 6px from the card's edges; the answers inside stay on the 16px line. */
+    margin-inline: calc(-1 * var(--option-inset)) -6px;
     padding: 0;
   }
 
@@ -85,10 +89,9 @@
     background-color: var(--v2-background-bg-layer-01);
   }
 
+  /* The number badge sits 10px inside the highlight, like the box on the other side. */
   [data-slot="question-option-shortcut"] {
-    /* Center the number beneath Dismiss while retaining the answer inset. */
-    inline-size: 20px;
-    justify-content: center;
+    justify-content: end;
   }
 
   [data-slot="question-options"][data-browsing] [data-slot="question-option"]:not([data-picked="true"]) {
@@ -134,8 +137,16 @@
     border-start-end-radius: 0;
   }
 
+  /* Styled as the docked chat composer: the raised shadow with no border, on layer 01 in dark (see editor.css). */
   [data-slot="question-footer"] {
+    border: none;
     border-radius: var(--radius-xl);
+    background-color: var(--v2-background-bg-base);
+
+    [data-color-scheme="dark"] & {
+      background-color: var(--v2-background-bg-layer-01);
+    }
+
     box-shadow: var(--v2-elevation-raised);
     margin-block-start: 0;
     flex-wrap: wrap;
@@ -143,10 +154,6 @@
     align-items: end;
     gap: 4px;
     padding: 8px;
-
-    &:focus-within {
-      border-color: var(--v2-border-border-strong);
-    }
   }
 
   [data-slot="question-custom-input"] {

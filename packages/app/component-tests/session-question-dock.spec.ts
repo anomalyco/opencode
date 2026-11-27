@@ -298,31 +298,39 @@ story(
 )
 
 story.describe("New question UI", () => {
-  story("keeps focus in the composer while the arrows, the pointer and Space pick answers", async ({ mount, page }) => {
+  const mountComposer = async (mount: (id: string) => Promise<Locator>) => {
     const component = await mount("session-question-switch--composer-answer")
     const dock = component.locator('[data-component="session-question-dock"][data-composer]')
-    const field = dock.getByRole("textbox", { name: "Type your answer…", exact: true })
-    const option = (name: string | RegExp) => dock.getByRole("option", { name })
+
+    return {
+      component,
+      list: dock.getByRole("listbox"),
+      field: dock.getByRole("textbox", { name: "Type your answer…", exact: true }),
+      option: (name: string | RegExp) => dock.getByRole("option", { name }),
+      dock,
+    }
+  }
+
+  story("moves through the answers in the list and types in the field", async ({ mount, page }) => {
+    const { component, dock, list, field, option } = await mountComposer(mount)
 
     const highlighted = async (name: string | RegExp) => {
-      await expect(field).toBeFocused()
-      await expect(field).toHaveAttribute("aria-activedescendant", (await option(name).getAttribute("id"))!)
+      await expect(list).toBeFocused()
+      await expect(list).toHaveAttribute("aria-activedescendant", (await option(name).getAttribute("id"))!)
     }
 
     await highlighted(/Focused/)
     await page.keyboard.press("ArrowUp")
     await highlighted(/Wide/)
     await page.keyboard.press("ArrowDown")
-    await expect(field).not.toHaveAttribute("aria-activedescendant")
+    await expect(field).toBeFocused()
+    await expect(list).not.toHaveAttribute("aria-activedescendant")
     await page.keyboard.press("ArrowUp")
+    await highlighted(/Wide/)
     await page.keyboard.press("Space")
     await expect(option(/Wide/)).toHaveAttribute("aria-selected", "true")
-    await expect(field).toHaveValue("")
 
     await page.keyboard.press("Enter")
-    await highlighted("Changed files")
-    await page.keyboard.press("ArrowDown")
-    await page.keyboard.press("ArrowUp")
     await highlighted("Changed files")
     await page.keyboard.press("Space")
 
@@ -335,9 +343,11 @@ story.describe("New question UI", () => {
     await expect(option("Changed files")).toHaveAttribute("aria-selected", "true")
     await expect(option("Terminal")).toHaveAttribute("aria-selected", "true")
 
+    await page.keyboard.press("ArrowDown")
+    await page.keyboard.press("ArrowDown")
+    await expect(field).toBeFocused()
     await page.keyboard.type("Notes")
     await expect(field).toHaveValue("Notes")
-    await expect(field).not.toHaveAttribute("aria-activedescendant")
 
     await dock.getByRole("button", { name: "Questions 6", exact: true }).click()
     await expect(field).toBeFocused()
@@ -348,43 +358,40 @@ story.describe("New question UI", () => {
     )
   })
 
-  story(
-    "types a custom answer that starts with a number while the first answer rests highlighted",
-    async ({ mount, page }) => {
-      const component = await mount("session-question-switch--composer-answer")
-      const field = component.getByRole("textbox", { name: "Type your answer…", exact: true })
+  story("picks with numbers in the list and types numbers in the field", async ({ mount, page }) => {
+    const { list, field, option } = await mountComposer(mount)
 
-      await expect(field).toHaveAttribute(
-        "aria-activedescendant",
-        (await component.getByRole("option", { name: /Focused/ }).getAttribute("id"))!,
-      )
-      await page.keyboard.type("2 columns")
-      await expect(field).toHaveValue("2 columns")
-      await expect(component.getByRole("option", { selected: true })).toHaveCount(0)
-    },
-  )
+    await expect(list).toBeFocused()
+    await page.keyboard.press("a")
+    await expect(list).toBeFocused()
+    await expect(field).toHaveValue("")
+    await page.keyboard.press("2")
+    await expect(option(/Wide/)).toHaveAttribute("aria-selected", "true")
+
+    await page.keyboard.press("ArrowDown")
+    await expect(field).toBeFocused()
+    await page.keyboard.type("2 columns")
+    await expect(field).toHaveValue("2 columns")
+  })
 
   story("returns Up from the first line of a typed answer to the answers", async ({ mount, page }) => {
-    const component = await mount("session-question-switch--composer-answer")
-    const field = component.getByRole("textbox", { name: "Type your answer…", exact: true })
+    const { list, field, option } = await mountComposer(mount)
 
-    await expect(field).toBeFocused()
+    await field.click()
     await page.keyboard.type("First line")
     await page.keyboard.press("Shift+Enter")
     await page.keyboard.type("Second line")
     await page.keyboard.press("ArrowUp")
-    await expect(field).not.toHaveAttribute("aria-activedescendant")
+    await expect(field).toBeFocused()
     await page.keyboard.press("ArrowUp")
-    await expect(field).toHaveAttribute(
-      "aria-activedescendant",
-      (await component.getByRole("option", { name: /Wide/ }).getAttribute("id"))!,
-    )
+    await expect(list).toBeFocused()
+    await expect(list).toHaveAttribute("aria-activedescendant", (await option(/Wide/).getAttribute("id"))!)
   })
 
   story("dismisses with Escape and gives focus back to the chat draft", async ({ mount, page }) => {
-    const component = await mount("session-question-switch--composer-answer")
+    const { component, list } = await mountComposer(mount)
 
-    await expect(component.getByRole("textbox", { name: "Type your answer…", exact: true })).toBeFocused()
+    await expect(list).toBeFocused()
     await page.keyboard.press("Escape")
     await expect(component.locator("output")).toHaveText("Dismissed the question locally")
     await expect(component.locator('[data-component="composer-editor"]')).toBeFocused()

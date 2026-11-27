@@ -157,9 +157,6 @@ export const SessionQuestionDockClassic: Component<{
     // The answer the composer's arrow keys or the pointer highlight; focus stays in the composer.
     // SAFETY: widens the initial undefined to the type of a highlighted answer's index.
     activeOption: undefined as number | undefined,
-    // Whether the arrows or the pointer moved the highlight. Only then do digits and Space pick answers, so a custom
-    // answer can start with a number while the highlight set on open or after Next rests on the first answer.
-    browsed: false,
     keyboard: false,
     reducedMotion: prefersReducedMotion(),
     focus: 0,
@@ -197,8 +194,7 @@ export const SessionQuestionDockClassic: Component<{
 
   const activeOption = () => store.activeOption
 
-  const setActiveOption = (index: number | undefined, browsed = false) =>
-    setStore({ activeOption: index, browsed: index !== undefined && browsed })
+  const setActiveOption = (index: number | undefined) => setStore("activeOption", index)
 
   const listID = createUniqueId()
 
@@ -283,13 +279,29 @@ export const SessionQuestionDockClassic: Component<{
     )
   }
 
-  const highlight = (index: number, browsed = false) => {
-    setActiveOption(index, browsed)
+  const highlight = (index: number) => {
+    setActiveOption(index)
     reveal(optsRef[index])
   }
 
-  const focusComposer = () => {
+  const focusField = () => {
     if (!matchMedia("(pointer: coarse)").matches) customInput?.focus({ preventScroll: true })
+  }
+
+  // The answer the list highlights when it takes focus: the first picked one, or the first.
+  const restingOption = () =>
+    Math.max(
+      0,
+      options().findIndex((item) => picked(item.value)),
+    )
+
+  // Where a question starts: on its answers, or in the field when it has none or already holds a typed answer.
+  const land = () => {
+    setActiveOption(undefined)
+
+    if (options().length === 0 || (on() && input())) return focusField()
+    optionsRef?.focus({ preventScroll: true })
+    highlight(restingOption())
   }
 
   // The arrow keys and End land in the custom answer's field rather than on its toggle, so the answer is typed at once.
@@ -336,13 +348,7 @@ export const SessionQuestionDockClassic: Component<{
       if (raf !== undefined) cancelAnimationFrame(raf)
     })
 
-    if (props.composer) {
-      focusComposer()
-
-      if (answerFieldFocused() && options().length > 0 && (!on() || !input())) highlight(0)
-
-      return
-    }
+    if (props.composer) return land()
 
     focus(pickFocus())
   })
@@ -397,48 +403,59 @@ export const SessionQuestionDockClassic: Component<{
     focus(store.focus + step, true)
   }
 
-  const browseOptions = (event: KeyboardEvent, field: HTMLTextAreaElement) => {
-    if (sending() || event.altKey || event.shiftKey || event.metaKey || event.ctrlKey) return
+  // Keys on the answer list, which keeps focus while the highlight moves. Typing a custom answer needs the field.
+  const listKeys = (event: KeyboardEvent) => {
+    if (sending() || event.isComposing || event.keyCode === 229 || event.altKey || event.metaKey || event.ctrlKey)
+      return
 
     const size = options().length
-
-    if (!size) return
 
     const active = activeOption()
 
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      const step = event.key === "ArrowDown" ? 1 : -1
-
-      // A draft keeps its native caret movement until Up is pressed at its start.
-      if (
-        active === undefined &&
-        field.value &&
-        (step > 0 || field.selectionStart !== field.selectionEnd || !caretOnFirstLine(field))
-      )
-        return
-
       event.preventDefault()
 
-      if (active === undefined) return highlight(step > 0 ? 0 : size - 1, true)
+      const step = event.key === "ArrowDown" ? 1 : -1
 
-      if (active + step === size) return setActiveOption(undefined)
+      if (active === undefined) return highlight(step > 0 ? 0 : size - 1)
 
-      // Up from the first answer wraps to the last one.
-      highlight(active + step < 0 ? size - 1 : active + step, true)
+      // Down from the last answer goes on to the field; Up from the first wraps to the last.
+      if (active + step === size) {
+        setActiveOption(undefined)
+
+        return customInput?.focus({ preventScroll: true })
+      }
+
+      highlight(active + step < 0 ? size - 1 : active + step)
 
       return
     }
 
-    if (active === undefined || !store.browsed) return
+    if (event.key === "Home" || event.key === "End") {
+      event.preventDefault()
+      highlight(event.key === "Home" ? 0 : size - 1)
 
-    const index = event.key === " " ? active : /^[1-9]$/.test(event.key) ? Number(event.key) - 1 : -1
+      return
+    }
 
-    if (index < 0 || index >= size) return
+    const enter = questionEnter(event, submitKey())
+
+    if (enter === "submit") {
+      event.preventDefault()
+
+      if (!event.repeat) enterAnswer()
+
+      return
+    }
+
+    const index =
+      event.key === " " || enter === "select" ? active : /^[1-9]$/.test(event.key) ? Number(event.key) - 1 : undefined
+
+    if (index === undefined || index >= size) return
     event.preventDefault()
 
     if (event.repeat) return
     selectOption(index)
-    highlight(index, true)
   }
 
   const nav = (event: KeyboardEvent) => {
@@ -535,7 +552,7 @@ export const SessionQuestionDockClassic: Component<{
     setStore("editing", false)
     form.pick(opt.value)
 
-    if (props.composer && !answerFieldFocused()) focusComposer()
+    if (props.composer) highlight(optIndex)
   }
 
   const commitCustom = () => {
@@ -611,13 +628,7 @@ export const SessionQuestionDockClassic: Component<{
       setStore("optionsHeight", optionsRef.scrollHeight)
     }
 
-    if (props.composer) {
-      if (!answerFieldFocused()) focusComposer()
-
-      if (options().length > 0 && (!on() || !input())) highlight(focusIndex ?? 0)
-
-      return
-    }
+    if (props.composer) return land()
 
     if (!store.minimized && !keepAnswerFocus) focus(focusIndex ?? pickFocus(tab))
   }
@@ -659,8 +670,6 @@ export const SessionQuestionDockClassic: Component<{
       dir="auto"
       aria-label={answerLabel()}
       aria-describedby={props.composer ? questionID : undefined}
-      aria-controls={props.composer && options().length > 0 ? listID : undefined}
-      aria-activedescendant={activeDescendant()}
       placeholder={answerLabel()}
       value={!props.composer || on() ? input() : ""}
       disabled={sending()}
@@ -669,14 +678,12 @@ export const SessionQuestionDockClassic: Component<{
         focusFrame = undefined
         setStore("focus", clamp(options().length))
         setStore("editing", true)
+        setActiveOption(undefined)
       }}
       onClick={() => {
         if (!props.composer) form.selectCustom()
       }}
-      onBlur={() => {
-        setStore("editing", false)
-        setActiveOption(undefined)
-      }}
+      onBlur={() => setStore("editing", false)}
       onKeyDown={(e) => {
         if (e.isComposing || e.keyCode === 229) return
 
@@ -690,9 +697,22 @@ export const SessionQuestionDockClassic: Component<{
 
         if ((e.metaKey || e.ctrlKey) && !e.altKey) return
 
-        if (props.composer) browseOptions(e, e.currentTarget)
+        // Up from the first line of the composer's field returns to the last answer.
+        if (
+          props.composer &&
+          options().length > 0 &&
+          e.key === "ArrowUp" &&
+          !e.shiftKey &&
+          !e.altKey &&
+          e.currentTarget.selectionStart === e.currentTarget.selectionEnd &&
+          caretOnFirstLine(e.currentTarget)
+        ) {
+          e.preventDefault()
+          optionsRef?.focus({ preventScroll: true })
+          highlight(options().length - 1)
 
-        if (e.defaultPrevented) return
+          return
+        }
 
         // Up from the start of the inline field returns to the answers above it.
         if (
@@ -714,12 +734,9 @@ export const SessionQuestionDockClassic: Component<{
         if (questionEnter(e, submitKey()) !== "submit") return
         e.preventDefault()
 
-        if (!e.repeat) enterAnswer()
+        if (!e.repeat) next()
       }}
-      onInput={(e) => {
-        setActiveOption(undefined)
-        form.input(e.currentTarget.value)
-      }}
+      onInput={(e) => form.input(e.currentTarget.value)}
     />
   )
 
@@ -728,7 +745,7 @@ export const SessionQuestionDockClassic: Component<{
       data-component="session-question-dock"
       data-keyboard={store.keyboard}
       data-composer={props.composer || undefined}
-      onPointerDown={() => setStore({ keyboard: false, activeOption: undefined, browsed: false })}
+      onPointerDown={() => setStore("keyboard", false)}
       onKeyDown={() => setStore("keyboard", true)}
     >
       <DockPrompt
@@ -906,17 +923,32 @@ export const SessionQuestionDockClassic: Component<{
           role={props.composer ? (options().length > 0 ? "listbox" : undefined) : multi() ? "group" : "radiogroup"}
           aria-multiselectable={props.composer && multi() ? true : undefined}
           aria-label={!props.composer || options().length > 0 ? question()?.question : undefined}
+          aria-activedescendant={props.composer ? activeDescendant() : undefined}
+          tabindex={props.composer && options().length > 0 ? 0 : undefined}
+          onKeyDown={(event) => {
+            if (props.composer) listKeys(event)
+          }}
+          onFocus={(event) => {
+            if (props.composer && event.target === event.currentTarget && activeOption() === undefined)
+              highlight(restingOption())
+          }}
+          onFocusOut={(event) => {
+            const next = event.relatedTarget
+
+            if (props.composer && !(next instanceof Node && event.currentTarget.contains(next)))
+              setActiveOption(undefined)
+          }}
           inert={store.minimized}
           aria-hidden={store.minimized || optionsOff() ? "true" : undefined}
           classList={{ "pointer-events-none": hidden() > 0.1 }}
           onPointerMove={(event) => {
             if (!props.composer || (!event.movementX && !event.movementY)) return
 
-            // The highlight follows the pointer, as in the model picker, so Space marks the answer under it.
+            // The highlight follows the pointer, as in the model picker.
             const row = event.target instanceof Element ? event.target.closest('[data-slot="question-option"]') : null
             const index = row instanceof HTMLDivElement ? optsRef.indexOf(row) : -1
 
-            if (index >= 0 && (index !== activeOption() || !store.browsed)) setActiveOption(index, true)
+            if (index >= 0 && index !== activeOption()) setActiveOption(index)
           }}
           style={{
             "max-height": hidden() > 0 ? `${Math.max(0, store.optionsHeight * (1 - hidden()))}px` : undefined,
