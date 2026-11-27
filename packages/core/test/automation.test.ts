@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { FileSystem } from "@opencode/core/filesystem"
-import { Clock, DateTime, Effect, Fiber, Latch, Layer, LayerMap, Queue, Schema, Stream } from "effect"
+import { Clock, DateTime, Effect, Fiber, Latch, Layer, Queue, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { eq } from "drizzle-orm"
 import { Agent } from "@opencode/core/agent"
@@ -203,7 +203,7 @@ const locations = makeGlobalNode({
             .pipe(Effect.map((project) => [dir, project] as const)),
         ),
       )
-      return yield* LayerMap.make(
+      return yield* LocationServiceMap.make(
         (ref: Location.Ref): Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError> => {
           const project = places.get(ref.directory)
           if (!project) throw new Error(`Unknown test location: ${ref.directory}`)

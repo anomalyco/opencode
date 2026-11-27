@@ -1,7 +1,7 @@
 import type { FileSystem } from "@opencode/core/filesystem"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Duration, Effect, Layer, LayerMap } from "effect"
+import { Duration, Effect, Layer } from "effect"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -43,7 +43,7 @@ const locations = makeGlobalNode({
   service: LocationServiceMap.Service,
   layer: Layer.effect(
     LocationServiceMap.Service,
-    LayerMap.make(
+    LocationServiceMap.make(
       (ref: Location.Ref) =>
         // These tests need skill activation and prompt preparation from the same location services.
         // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion

@@ -14,10 +14,8 @@ import {
   Exit,
   Fiber,
   Layer,
-  LayerMap,
   Logger,
   Option,
-  RcMap,
   Scope,
   Stream,
 } from "effect"
@@ -60,7 +58,7 @@ const it = testEffect(
 )
 const activityLocations = Layer.effect(
   LocationServiceMap.Service,
-  LayerMap.make(
+  LocationServiceMap.make(
     (ref) =>
       // LocationActivity reads each location's config during its sweep.
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
@@ -288,7 +286,7 @@ describe("LocationServiceMap", () => {
       const event = yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID })
       expect(event).not.toHaveProperty("location")
       yield* TestClock.adjust("2 minutes")
-      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+      expect(yield* locations.keys).toEqual([])
     }),
   )
 
@@ -305,16 +303,16 @@ describe("LocationServiceMap", () => {
       yield* bus.publish(Provider.Event.Updated, {}, { location: ref })
       yield* bus.publish(Model.Event.Updated, {}, { location: ref })
       yield* TestClock.adjust("2 minutes")
-      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+      expect(yield* locations.keys).toEqual([])
 
       yield* read
       yield* bus.publish(SessionEvent.Execution.Started, { sessionID }, { location: ref })
       yield* TestClock.adjust("59 minutes")
       yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, { location: ref })
       yield* TestClock.adjust("1 minute")
-      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([ref])
+      expect(yield* locations.keys).toEqual([ref])
       yield* TestClock.adjust("59 minutes")
-      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+      expect(yield* locations.keys).toEqual([])
     }),
   )
 
@@ -366,12 +364,12 @@ describe("LocationServiceMap", () => {
           // evicted by a zero idle time-to-live.
           const location = yield* Location.Service.pipe(Effect.provide(locations.get(workspaceRef)), Effect.scoped)
           expect(location.directory).toBe(directory)
-          expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([workspaceRef])
+          expect(yield* locations.keys).toEqual([workspaceRef])
 
           // A local ref with the same missing directory is dropped after its
           // boot failure so a retry can rebuild it.
           yield* Location.Service.pipe(Effect.provide(locations.get(localRef)), Effect.scoped, Effect.exit)
-          expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([workspaceRef])
+          expect(yield* locations.keys).toEqual([workspaceRef])
         }),
       ),
     ),
@@ -431,15 +429,13 @@ describe("LocationServiceMap", () => {
             if (process.platform === "win32") expect(absent.directory).not.toBe(present.directory)
 
             expect(yield* locations.contextEffectOption(absent)).toEqual(Option.none())
-            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(0)
+            expect(yield* locations.keys).toHaveLength(0)
 
             const first = yield* locations.contextEffect(absent)
             expect(yield* locations.contextEffect(present)).toBe(first)
             expect(Option.getOrThrow(yield* locations.contextEffectOption(absent))).toBe(first)
             expect(Option.getOrThrow(yield* locations.contextEffectOption(present))).toBe(first)
-            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([
-              Location.Ref.make({ directory, workspaceID: undefined }),
-            ])
+            expect(yield* locations.keys).toEqual([Location.Ref.make({ directory, workspaceID: undefined })])
 
             const variants = [
               `${directory}${path.sep}`,
@@ -452,7 +448,7 @@ describe("LocationServiceMap", () => {
               expect(LocationServiceMap.canonical(ref).directory).toBe(directory)
               expect(yield* locations.contextEffect(ref)).toBe(first)
             }
-            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(1)
+            expect(yield* locations.keys).toHaveLength(1)
             const root = path.parse(directory).root
             expect(
               LocationServiceMap.canonical(Location.Ref.make({ directory: AbsolutePath.make(root) })).directory,
@@ -462,7 +458,7 @@ describe("LocationServiceMap", () => {
             yield* locations.invalidate(present)
             expect(yield* locations.contextEffectOption(absent)).toEqual(Option.none())
             expect(yield* locations.contextEffectOption(present)).toEqual(Option.none())
-            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(0)
+            expect(yield* locations.keys).toHaveLength(0)
           }),
         ),
       ),

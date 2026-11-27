@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Cause, Context, Deferred, Effect, Exit, Layer, Scope } from "effect"
-import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { makeGlobalNode, Node } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { Bus } from "@opencode/core/bus"
@@ -92,13 +92,9 @@ describe("location host", () => {
   it.live("rejects global replacements passed to Instance.layer alongside a host", () =>
     Effect.gen(function* () {
       const ref = yield* locationAt()
-      const api = codeModeApi(() => Effect.void)
-      const context = yield* Layer.build(AppNodeBuilder.build(LocationServiceMap.node, api.replacements))
-      const locations = Context.get(context, LocationServiceMap.Service)
-      const host = yield* locations.host ?? Effect.die(new Error("no host"))
       expect(() =>
         Instance.layer(ref, {
-          host,
+          host: { tag: Node.tags.values.global, context: Context.empty() },
           replacements: [CodeModeApi.node.replace(Layer.succeed(CodeModeApi.Service, CodeModeApi.unavailable))],
         }),
       ).toThrow("Cannot replace @opencode/CodeModeApi in a child graph")
@@ -130,7 +126,7 @@ describe("location host", () => {
             Effect.flatMap((dir) => Deferred.succeed(result, dir)),
             Effect.forkDetach,
           )
-          // Give the forked fiber a turn to hit locations.host before Stage 1 finishes.
+          // Give the forked fiber a turn to reach the host before Stage 1 finishes.
           yield* Effect.yieldNow
         }),
       )
@@ -154,13 +150,16 @@ describe("location host", () => {
       const locations = Context.get(context, LocationServiceMap.Service)
       const exit = yield* Effect.scoped(locations.contextEffect(ref)).pipe(Effect.exit)
       expect(Exit.isFailure(exit) && Cause.pretty(exit.cause)).toContain("stage 1 broke")
-      const host = yield* Effect.exit(locations.host ?? Effect.die(new Error("no host")))
-      expect(Exit.isFailure(host) && Cause.pretty(host.cause)).toContain("stage 1 broke")
+      // The failed host is shared: a retry fails the same way without building Stage 1 again.
+      const retry = yield* Effect.scoped(locations.contextEffect(ref)).pipe(Effect.exit)
+      expect(Exit.isFailure(retry) && Cause.pretty(retry.cause)).toContain("stage 1 broke")
+      expect(api.state.acquired).toBe(1)
     }),
   )
 
-  it.live("interrupts host lookup cleanly after the host scope closes", () =>
+  it.live("interrupts Location lookups cleanly after the host scope closes", () =>
     Effect.gen(function* () {
+      const ref = yield* locationAt()
       const api = codeModeApi(() => Effect.void)
       const scope = yield* Scope.make()
       const context = yield* Layer.buildWithScope(
@@ -169,7 +168,7 @@ describe("location host", () => {
       )
       const locations = Context.get(context, LocationServiceMap.Service)
       yield* Scope.close(scope, Exit.void)
-      const exit = yield* Effect.exit(locations.host ?? Effect.die(new Error("no host")))
+      const exit = yield* Effect.scoped(locations.contextEffect(ref)).pipe(Effect.exit)
       expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
     }),
   )
