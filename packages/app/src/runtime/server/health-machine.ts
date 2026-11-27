@@ -165,10 +165,6 @@ export function isServerIncompatible(health: ServerHealth | undefined) {
   return health?.type === "incompatible"
 }
 
-export function selectServerVersion(health: ServerHealth | undefined) {
-  return health?.type === "healthy" ? health.version : undefined
-}
-
 export function selectServerHostname(health: ServerHealth | undefined) {
   return health?.type === "healthy" ? health.hostname : undefined
 }
