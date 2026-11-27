@@ -30,10 +30,10 @@ opencode service set env OPENCODE_CLAUDE_PATH /opt/claude/bin/claude
 
 Claude Code 调用模型，其他所有事情都由 OpenCode 完成。
 
-- Claude 会获得 Claude Code 的系统提示词，以及你的代理提示词、`AGENTS.md` 文件、技能和 MCP 指令。
+- Claude 会获得 Claude Code 的系统提示词，以及你的 agent 提示词、`AGENTS.md` 文件、技能和 MCP 指令。
 - Claude 使用 OpenCode 的工具和权限，而不是 Claude Code 的内置工具。
 - 不会加载你的 Claude Code 设置、`CLAUDE.md` 文件、钩子、MCP 服务器、技能和记忆。
-- OpenCode 负责压缩和子代理。
+- OpenCode 负责压缩和 subagent。
 - 你可以在同一个会话中在 Claude Agent 和其他模型之间切换。
 
 ## 费用
@@ -158,10 +158,10 @@ Claude Agent 还可以使用 Claude Code 的 WebSearch 来提供 OpenCode 的网
 ## 限制
 
 - Claude Code 必须安装在 OpenCode 服务器所在的同一台机器上。远程工作区中无法使用 Claude Agent。
-- Claude Code 的系统提示词会替换 OpenCode 的内置提示词。自定义代理提示词仍然适用。
+- Claude Code 的系统提示词会替换 OpenCode 的内置提示词。自定义 agent 提示词仍然适用。
 - 不支持 temperature、top-p、top-k、seed 和停止序列。
 - 插件 `http.request` 和 `http.response` 钩子不会运行，因为 API 调用由 Claude Code 发起。
-- `/usage`、`/loop`、自动模式和代理团队等 Claude Code 功能不可用。
+- `/usage`、`/loop`、自动模式和 agent 团队等 Claude Code 功能不可用。
 
 ## 错误
 

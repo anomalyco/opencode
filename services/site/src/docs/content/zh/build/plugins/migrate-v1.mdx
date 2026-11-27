@@ -151,7 +151,7 @@ export default Plugin.define({
 | `experimental.chat.messages.transform` | `ctx.session.hook("context", ...)`，并修改 `event.messages` |
 | `experimental.session.compacting`      | `ctx.session.hook("compaction", ...)`                        |
 
-这些是迁移的目标位置，并不总是简单的重命名。特别要注意，V2 的 `prompt` 钩子在提示词被持久化接收之前运行，而 `context` 钩子在代理发起模型请求之前立即运行。如果某个转换需要作用于所有类型的模型请求，请分别注册 `context`、`compaction`、`generate` 和 `title`。
+这些是迁移的目标位置，并不总是简单的重命名。特别要注意，V2 的 `prompt` 钩子在提示词被持久化接收之前运行，而 `context` 钩子在 agent 发起模型请求之前立即运行。如果某个转换需要作用于所有类型的模型请求，请分别注册 `context`、`compaction`、`generate` 和 `title`。
 
 并不是每个 V1 实验性钩子在 V2 中都有直接对应的钩子。对于使用 `experimental.compaction.autocontinue`、`experimental.provider.small_model` 或 `experimental.text.complete` 的插件，请基于 V2 的会话、提供商、模型和事件 API 重新设计，而不是沿用对内部生命周期的假设。
 

@@ -20,7 +20,7 @@ opencode mcp list
 opencode mcp add context7 --global --url https://mcp.context7.com/mcp
 ```
 
-远程服务器默认使用 OAuth。如果列表中显示 `needs authentication`，请打开 OpenCode，运行 `/mcps`，选择该服务器并登录。已连接的服务器即可供代理使用：
+远程服务器默认使用 OAuth。如果列表中显示 `needs authentication`，请打开 OpenCode，运行 `/mcps`，选择该服务器并登录。已连接的服务器即可供 agent 使用：
 
 ```text
 ✓ context7  connected
@@ -436,7 +436,7 @@ Code Mode 默认启用。如果某个服务器的工具必须保留在提供商�
 
 ## 资源
 
-代理通过两个内置工具读取 MCP 资源：`list_mcp_resources` 和 `read_mcp_resource`。使用以下权限操作控制它们：
+agent 通过两个内置工具读取 MCP 资源：`list_mcp_resources` 和 `read_mcp_resource`。使用以下权限操作控制它们：
 
 | 操作 | 资源 |
 | --- | --- |
@@ -469,9 +469,9 @@ Code Mode 默认启用。如果某个服务器的工具必须保留在提供商�
 </mcp_instructions>
 ```
 
-对于使用 Code Mode 的服务器，OpenCode 会添加一行说明，指出代理可以在哪里找到该服务器的工具。
+对于使用 Code Mode 的服务器，OpenCode 会添加一行说明，指出 agent 可以在哪里找到该服务器的工具。
 
-当代理的权限拒绝了某个服务器的所有工具时，该服务器的指令会被省略。当权限拒绝 `execute` 时，服务器的工具会被直接列出，其指令会保留，但不包含 Code Mode 的说明行。
+当 agent 的权限拒绝了某个服务器的所有工具时，该服务器的指令会被省略。当权限拒绝 `execute` 时，服务器的工具会被直接列出，其指令会保留，但不包含 Code Mode 的说明行。
 
 ## 输入请求
 

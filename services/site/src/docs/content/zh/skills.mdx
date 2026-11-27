@@ -1,9 +1,9 @@
 ---
 title: 技能
-description: "编写 SKILL.md 文件，为 OpenCode 代理提供某项任务的可复用指令，只在需要时加载。"
+description: "编写 SKILL.md 文件，为 OpenCode agent 提供某项任务的可复用指令，只在需要时加载。"
 ---
 
-技能可以为代理提供针对特定任务、可复用的指令。在 `.opencode/skills/<skill-id>` 中放一个 `SKILL.md` 文件，并在 `description` 中说明何时使用它。
+技能可以为 agent 提供针对特定任务、可复用的指令。在 `.opencode/skills/<skill-id>` 中放一个 `SKILL.md` 文件，并在 `description` 中说明何时使用它。
 
 ```markdown title=".opencode/skills/git-release/SKILL.md"
 ---
@@ -19,7 +19,7 @@ description: Prepare release notes, version bumps, and GitHub releases
 4. Run `scripts/changelog.ts` only after the user approves the version.
 ```
 
-当这个技能与当前任务相关时，OpenCode 会向代理推荐它。代理随后可以通过 `skill` 工具加载其中的指令，而不必把所有技能都塞进每一条提示词。
+当这个技能与当前任务相关时，OpenCode 会向 agent 推荐它。agent 随后可以通过 `skill` 工具加载其中的指令，而不必把所有技能都塞进每一条提示词。
 
 ## 创建
 
@@ -197,13 +197,13 @@ V2 目前不会强制要求这个格式、1–64 个字符的长度建议、`nam
 随后 OpenCode 会：
 
 1. 选择该 ID 当前对应的定义。
-2. 检查所选代理的 `skill` 权限。
+2. 检查所选 agent 的 `skill` 权限。
 3. 将去掉 frontmatter 的 Markdown 正文添加到对话中。
 4. 提供技能的基础目录，以及最多十个辅助文件路径的示例。
 
 如果想自己加载技能，可以在提示词中以 `@skill-id` 的形式提及它。
 
-辅助文件的内容不会自动加载，代理会在技能指示时再去读取。只有基于目录的 `SKILL.md` 技能才会提供文件示例；扁平的 Markdown 技能不会获得相邻文件列表。
+辅助文件的内容不会自动加载，agent 会在技能指示时再去读取。只有基于目录的 `SKILL.md` 技能才会提供文件示例；扁平的 Markdown 技能不会获得相邻文件列表。
 
 ## 权限
 
@@ -225,7 +225,7 @@ V2 目前不会强制要求这个格式、1–64 个字符的长度建议、`nam
 | `ask` | 推荐匹配的技能，并在加载前询问 |
 | `deny` | 对模型隐藏匹配的技能，并拒绝加载 |
 
-把同样的规则放在 `agents.<id>.permissions` 下，即可只对某一个代理生效。
+把同样的规则放在 `agents.<id>.permissions` 下，即可只对某一个 agent 生效。
 
 ## 故障排除
 
@@ -241,6 +241,6 @@ V2 目前不会强制要求这个格式、1–64 个字符的长度建议、`nam
 1. 确认该文件是位于根目录的 `*.md`，或者是文件名恰好为 `SKILL.md` 的嵌套文件。
 2. 检查由路径推导、区分大小写的 ID，而不是 frontmatter 中的 `name`。
 3. 如果希望模型发现该技能，请添加 `description`。
-4. 检查 `opencode/autoinvoke` 以及所选代理的 `skill` 权限。
+4. 检查 `opencode/autoinvoke` 以及所选 agent 的 `skill` 权限。
 5. 查看是否有后注册的来源定义了相同的 ID。
 6. 对于 HTTP 技能目录，检查 `index.json`、文件路径是否同源，以及 `version` 是否已更新。

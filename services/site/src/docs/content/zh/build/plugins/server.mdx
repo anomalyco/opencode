@@ -1,9 +1,9 @@
 ---
 title: "服务器"
-description: "构建 OpenCode 插件的服务器部分：工具、钩子、集成、命令和代理。"
+description: "构建 OpenCode 插件的服务器部分：工具、钩子、集成、命令和 agent。"
 ---
 
-插件的服务器部分在 OpenCode 服务器中运行。它可以修改 OpenCode 的行为并添加功能：工具、钩子、集成、命令和代理。插件包如何组织、加载和发布，请参阅[概览](/build/plugins)。
+插件的服务器部分在 OpenCode 服务器中运行。它可以修改 OpenCode 的行为并添加功能：工具、钩子、集成、命令和 agent。插件包如何组织、加载和发布，请参阅[概览](/build/plugins)。
 
 ```ts title=".opencode/plugins/example/index.ts"
 import { Plugin } from "@opencode/plugin"
@@ -164,16 +164,16 @@ export default Plugin.define({
 
 ## API
 
-### 代理
+### Agent
 
-读取所有代理，或按 ID 获取一个代理。
+读取所有 agent，或按 ID 获取一个 agent。
 
 ```ts
 const agents = await ctx.agent.list()
 const build = await ctx.agent.get({ agentID: "build" })
 ```
 
-注册一个转换来检查、更新、移除或选择默认代理。
+注册一个转换来检查、更新、移除或选择默认 agent。
 
 ```ts
 await ctx.agent.transform((editor) => {
@@ -188,7 +188,7 @@ await ctx.agent.transform((editor) => {
 })
 ```
 
-当转换使用的外部状态发生变化后，重新加载代理。
+当转换使用的外部状态发生变化后，重新加载 agent。
 
 ```ts
 await ctx.agent.reload()
@@ -713,7 +713,7 @@ execute: async (input, context) => {
 
 - `action` 和 `resources` 会与规则匹配。任何 `deny` 都会阻止操作；否则任何 `ask` 都会询问。
 - `save` 列出用户选择始终允许时保存的模式。
-- `agent` 选择应用谁的规则，默认为会话的代理。`source` 将提示附加到工具调用。
+- `agent` 选择应用谁的规则，默认为会话的 agent。`source` 将提示附加到工具调用。
 - `metadata` 向权限提示和 `evaluate` 钩子传递额外细节。
 
 拒绝规则或带反馈的拒绝会以携带原因的 `Tool.Error` 拒绝，让模型看到原因并继续。普通拒绝会结束当前步骤。请让这些错误向上传播，而不是将其作为工具输出返回。
@@ -726,7 +726,7 @@ const request = await ctx.permission.get({ sessionID, requestID })
 await ctx.permission.reply({ sessionID, requestID, decision: "once" })
 ```
 
-替换会话级权限规则。它们会在代理规则之后评估，最后匹配的规则生效。子会话会继承创建时生效的规则。
+替换会话级权限规则。它们会在 agent 规则之后评估，最后匹配的规则生效。子会话会继承创建时生效的规则。
 
 ```ts
 await ctx.session.update({
@@ -752,7 +752,7 @@ const page = await ctx.session.list({ directory: ctx.location.directory, limit: 
 const next = page.cursor.next ? await ctx.session.list({ cursor: page.cursor.next, limit: 20 }) : undefined
 ```
 
-更改后续请求使用的代理或模型。
+更改后续请求使用的 agent 或模型。
 
 ```ts
 await ctx.session.switchAgent({ sessionID, agent: "build" })
@@ -1325,12 +1325,12 @@ await ctx.session.hook("prompt", (event) => {
 
 该钩子会收到一个归属的可变草稿：
 
-- `prompt` 包含 `text`、`files`、`agents` 中的代理提及，以及选定的 `skills`。
+- `prompt` 包含 `text`、`files`、`agents` 中的 agent 提及，以及选定的 `skills`。
 - `metadata` 包含应用定义的接收元数据。
 - `delivery` 默认为 `"steer"`，可以改为 `"queue"`。
 - 会话和消息 ID 是只读的；钩子无法改变接收目标。
 
-钩子添加的文件和技能会经过正常的解析和校验流程。重写文本时，请更新或移除不再匹配的附件 `mention` 偏移量。代理提及不会切换会话的活动代理。
+钩子添加的文件和技能会经过正常的解析和校验流程。重写文本时，请更新或移除不再匹配的附件 `mention` 偏移量。agent 提及不会切换会话的活动 agent。
 
 提示词钩子在以下条件下运行：
 
@@ -1350,9 +1350,9 @@ await ctx.session.hook("prompt", (event) => {
 
 #### 模型请求
 
-在模型分派前立即修改已组装的系统指令、消息、工具或请求选项。会话发出的每种请求都有自己的钩子，因此插件可以区别对待代理循环和辅助请求：
+在模型分派前立即修改已组装的系统指令、消息、工具或请求选项。会话发出的每种请求都有自己的钩子，因此插件可以区别对待 agent 循环和辅助请求：
 
-- `context` 为代理循环运行，包括由工具驱动的后续调用。
+- `context` 为 agent 循环运行，包括由工具驱动的后续调用。
 - `compaction` 为检查点摘要运行。`messages` 是待摘要的对话记录；OpenCode 会在钩子运行后追加摘要提示词。设置 `result` 可以自行记录压缩并跳过模型调用；它接受与已完成的压缩消息相同的字段。
 - `generate` 为临时的 `ctx.session.generate` 调用运行。
 - `title` 为标题生成运行。它没有 `agent` 或 `tools`。设置 `result` 可以自行提供标题。
@@ -1438,7 +1438,7 @@ await ctx.session.hook(
 
 修改原生提供商请求或响应。它们的请求体是一次性流；读取前请克隆或替换请求体。
 
-两个钩子都会为会话发出的每个请求运行。`event.kind` 表示该请求由哪个流程发出：代理循环为 `"primary"`，检查点摘要为 `"compaction"`，标题生成为 `"title"`，临时 `ctx.session.generate` 调用为 `"generate"`。请用它而不是代理 ID 来区分辅助请求。
+两个钩子都会为会话发出的每个请求运行。`event.kind` 表示该请求由哪个流程发出：agent 循环为 `"primary"`，检查点摘要为 `"compaction"`，标题生成为 `"title"`，临时 `ctx.session.generate` 调用为 `"generate"`。请用它而不是 agent ID 来区分辅助请求。
 
 ```ts
 await ctx.session.hook("http.request", (event) => {

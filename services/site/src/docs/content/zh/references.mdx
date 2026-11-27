@@ -17,7 +17,7 @@ description: "为 OpenCode 提供对当前项目之外本地目录和 Git 仓库
 }
 ```
 
-附加 `docs` 后，让代理查看相关路径：
+附加 `docs` 后，让 agent 查看相关路径：
 
 ```text
 Read the attached docs reference and summarize api/authentication.md.
@@ -164,12 +164,12 @@ Background refresh completes → later tool read sees newer content
 ```
 
 <Callout type="warning">
-  缓存的检出副本是共享的，可能在代理使用过程中发生更新。刷新会重置这些副本，因此请避免编辑它们。
+  缓存的检出副本是共享的，可能在 agent 使用过程中发生更新。刷新会重置这些副本，因此请避免编辑它们。
 </Callout>
 
 ## 使用指引
 
-`description` 告诉代理何时该使用某个引用。带有描述的引用会连同别名和解析后的路径一起出现在代理指令中。
+`description` 告诉 agent 何时该使用某个引用。带有描述的引用会连同别名和解析后的路径一起出现在 agent 指令中。
 
 ```jsonc
 {
@@ -182,7 +182,7 @@ Background refresh completes → later tool read sees newer content
 }
 ```
 
-没有描述的引用仍可供客户端使用，但不会被自动告知代理。
+没有描述的引用仍可供客户端使用，但不会被自动告知 agent。
 
 ```jsonc
 {
@@ -210,7 +210,7 @@ Background refresh completes → later tool read sees newer content
 }
 ```
 
-`hidden` 只影响交互界面中的可见性。该引用仍会保留在引用 API 中；如果设置了描述，也仍会出现在代理指令中。
+`hidden` 只影响交互界面中的可见性。该引用仍会保留在引用 API 中；如果设置了描述，也仍会出现在 agent 指令中。
 
 ## 使用方法
 
@@ -221,7 +221,7 @@ Attached alias: docs
 Ask: Inspect docs/guides/deployment.md and explain the deployment steps.
 ```
 
-如果需要根目录下更深层的内容，请让代理查看具体路径。
+如果需要根目录下更深层的内容，请让 agent 查看具体路径。
 
 ## 权限
 
@@ -240,7 +240,7 @@ Read ../product-docs/api.md
 | `path` | 必填 | 不适用 | 本地目录路径 |
 | `repository` | 不适用 | 必填 | 远程 Git 仓库 |
 | `branch` | 不适用 | 可选 | 要拉取并检出的分支 |
-| `description` | 可选 | 可选 | 说明代理应在何时使用它 |
+| `description` | 可选 | 可选 | 说明 agent 应在何时使用它 |
 | `hidden` | 可选 | 可选 | 在交互式客户端选择器中隐藏 |
 
 完整的 Git 条目可以使用所有适用于 Git 的字段：

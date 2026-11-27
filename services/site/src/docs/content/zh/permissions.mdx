@@ -1,9 +1,9 @@
 ---
 title: "权限"
-description: "通过按顺序匹配操作和路径、命令等资源的允许、拒绝和询问规则，控制 OpenCode 代理可以做什么。"
+description: "通过按顺序匹配操作和路径、命令等资源的允许、拒绝和询问规则，控制 OpenCode agent 可以做什么。"
 ---
 
-权限决定代理能否对某个资源执行某项操作。
+权限决定 agent 能否对某个资源执行某项操作。
 
 ## 配置
 
@@ -34,7 +34,7 @@ description: "通过按顺序匹配操作和路径、命令等资源的允许、
 | 字段 | 含义 |
 | ---------- | -------------------------------------------------------------------------- |
 | `action` | 工具的权限操作 |
-| `resource` | 被使用的值，例如路径、命令、URL、搜索词、技能 ID 或代理 ID |
+| `resource` | 被使用的值，例如路径、命令、URL、搜索词、技能 ID 或 agent ID |
 | `effect` | `allow`、`deny` 或 `ask` |
 
 ```jsonc
@@ -82,7 +82,7 @@ description: "通过按顺序匹配操作和路径、命令等资源的允许、
 
 它同时匹配 `git status` 和 `git status --short`。
 
-OpenCode 按顺序合并规则，并采用最后一条匹配的规则。优先级较低的配置最先加载，然后追加全局规则，最后追加代理规则。
+OpenCode 按顺序合并规则，并采用最后一条匹配的规则。优先级较低的配置最先加载，然后追加全局规则，最后追加 agent 规则。
 
 ```jsonc
 {
@@ -106,7 +106,7 @@ V2 的操作名是字符串，因此插件可以定义更多操作。内置工�
 | `glob` | 请求的 glob 模式 |
 | `grep` | 请求的正则表达式，而不是搜索路径 |
 | `shell` | 扫描器解析出的命令字符串；复合命令可能产生多个 |
-| `subagent` | 目标代理 ID |
+| `subagent` | 目标 agent ID |
 | `skill` | 技能 ID |
 | `question` | `*` |
 | `webfetch` | 请求的 URL |
@@ -195,7 +195,7 @@ shell 权限检查会在 Bash、Zsh、POSIX `sh` 和 PowerShell 中使用 OpenCo
 
 ## 默认值
 
-每个代理（包括自定义代理）都从以下有序的基础策略开始：
+每个 agent（包括自定义 agent）都从以下有序的基础策略开始：
 
 ```jsonc
 [
@@ -206,21 +206,21 @@ shell 权限检查会在 Bash、Zsh、POSIX `sh` 和 PowerShell 中使用 OpenCo
 ]
 ```
 
-内置代理会在此基础上追加以下策略：
+内置 agent 会在此基础上追加以下策略：
 
-| 代理 | 追加的策略 |
+| Agent | 追加的策略 |
 | ------------ | ------------------------------------------------------------------------------ |
 | `build` | 允许提问 |
 | `plan` | 允许提问；拒绝编辑，`~/.opencode/plan` 下的文件除外 |
-| `general` | 拒绝提问和启动子代理 |
+| `general` | 拒绝提问和启动 subagent |
 | `explore` | 除 shell、读取、glob、grep、网页获取、网页搜索和外部目录外，拒绝所有操作；读取 `.env` 时询问 |
 | `title` | 拒绝所有操作 |
 | `summary` | 拒绝所有操作 |
 | `compaction` | 保持基础策略 |
 
-由于没有默认规则询问 `external_directory`，在 Location 和 worktree 之外的读取和编辑会直接进行，不会提示。若要恢复提示或阻止外部访问，请按[目录](#directories)一节所示添加 `external_directory` 的 `ask` 或 `deny` 规则。之后的全局规则和代理规则会覆盖这些默认值。
+由于没有默认规则询问 `external_directory`，在 Location 和 worktree 之外的读取和编辑会直接进行，不会提示。若要恢复提示或阻止外部访问，请按[目录](#directories)一节所示添加 `external_directory` 的 `ask` 或 `deny` 规则。之后的全局规则和 agent 规则会覆盖这些默认值。
 
-## 代理
+## Agents
 
 将共享规则放在顶层，将范围更窄的规则放在 `agents.<id>.permissions` 下：
 
@@ -243,7 +243,7 @@ shell 权限检查会在 Bash、Zsh、POSIX `sh` 和 PowerShell 中使用 OpenCo
 }
 ```
 
-代理规则会追加在全局规则之后，而不会替换全局规则数组。自定义子代理使用它自己的权限，而不是其父代理权限的子集。
+agent 规则会追加在全局规则之后，而不会替换全局规则数组。自定义 subagent 使用它自己的权限，而不是其父 agent 权限的子集。
 
 ## 批准
 
@@ -261,7 +261,7 @@ shell 权限检查会在 Bash、Zsh、POSIX `sh` 和 PowerShell 中使用 OpenCo
 shell: git status * → allow
 ```
 
-已保存的批准是持久化的、项目级的 `allow` 规则。它们永远不会覆盖已配置的 `deny`。建议保存的模式由工具决定：有些工具建议 `*`，shell 建议命令前缀，网页获取建议 URL 的站点（例如 `https://opencode.ai/*`），技能和子代理则建议其 ID。请定期检查范围过宽的批准，并删除不再需要的批准。
+已保存的批准是持久化的、项目级的 `allow` 规则。它们永远不会覆盖已配置的 `deny`。建议保存的模式由工具决定：有些工具建议 `*`，shell 建议命令前缀，网页获取建议 URL 的站点（例如 `https://opencode.ai/*`），技能和 subagent 则建议其 ID。请定期检查范围过宽的批准，并删除不再需要的批准。
 
 客户端在拒绝时可以附带反馈。非交互式客户端必须自行决定如何处理批准请求；已配置的 `deny` 规则始终会被执行。
 

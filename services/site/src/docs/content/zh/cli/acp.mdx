@@ -3,7 +3,7 @@ title: "ACP"
 description: "通过 Agent Client Protocol 客户端使用 OpenCode。"
 ---
 
-`opencode acp` 会将 OpenCode 作为 [Agent Client Protocol](https://agentclientprotocol.com) 代理运行，这样你就可以在 Zed 等 ACP 客户端中使用它。以下示例将 OpenCode 添加到 Zed：
+`opencode acp` 会将 OpenCode 作为 [Agent Client Protocol](https://agentclientprotocol.com) agent 运行，这样你就可以在 Zed 等 ACP 客户端中使用它。以下示例将 OpenCode 添加到 Zed：
 
 ```json title="~/.config/zed/settings.json"
 {
@@ -26,7 +26,7 @@ OpenCode 会使用已有的提供商凭据。启动 ACP 客户端之前，请先
 opencode auth login
 ```
 
-OpenCode 只提供一种身份验证方式：`opencode-login`。默认情况下，它是代理身份验证方式（agent auth method）。`authenticate` 请求只接受这一种方式，并且不会收集凭据。如果提示词因提供商需要身份验证而失败，OpenCode 会返回 ACP 的 `auth_required` 错误。
+OpenCode 只提供一种身份验证方式：`opencode-login`。默认情况下，它是 agent 身份验证方式（agent auth method）。`authenticate` 请求只接受这一种方式，并且不会收集凭据。如果提示词因提供商需要身份验证而失败，OpenCode 会返回 ACP 的 `auth_required` 错误。
 
 如果客户端将 `clientCapabilities.auth.terminal` 设置为 `true`，该身份验证方式就是终端身份验证方式（terminal auth method）：
 
@@ -75,7 +75,7 @@ opencode --print-logs acp
 
 ### 能力
 
-OpenCode 的 `initialize` 响应包含以下代理能力：
+OpenCode 的 `initialize` 响应包含以下 agent 能力：
 
 ```json
 {
@@ -104,12 +104,12 @@ OpenCode 会读取以下客户端能力：
 
 ### 会话
 
-客户端在创建会话时设置工作目录。OpenCode 会使用该目录的配置，包括其中的模型、代理、命令、技能、指令、插件和 MCP 服务器。
+客户端在创建会话时设置工作目录。OpenCode 会使用该目录的配置，包括其中的模型、agent、命令、技能、指令、插件和 MCP 服务器。
 
 - `cwd` 必须是绝对路径。对于相对路径的 `cwd`，OpenCode 会返回 invalid params 错误。
 - `session/load` 会重放已保存的消息，`session/resume` 和 `session/fork` 则不会。
 - 加载、恢复或分叉会话时，客户端必须将该会话的目录作为 `cwd` 传入，也可以传入同一项目的另一个目录，例如会话迁入 worktree 之前所在的主检出目录。对于其他任何 `cwd`，OpenCode 都会返回 invalid params 错误，其 `data.directory` 为该会话的目录。
-- `session/list` 每页最多返回 100 个会话，支持 `cwd` 过滤条件和 `cursor`。每个子代理会话都带有 `_meta["opencode/child-session"]`，其中包含其 `id`、`parentID` 和 `title`。
+- `session/list` 每页最多返回 100 个会话，支持 `cwd` 过滤条件和 `cursor`。每个 subagent 会话都带有 `_meta["opencode/child-session"]`，其中包含其 `id`、`parentID` 和 `title`。
 - OpenCode 重命名会话时（例如生成标题后），会发送带有新 `title` 的 `session_info_update`。
 - `session/close` 会中断进行中的工作，并将会话与 ACP 进程分离。OpenCode 会保留已保存的会话。
 - `session/delete` 会像 `session/cancel` 一样结束进行中的提示词，然后删除会话。删除不存在的会话也会成功。
@@ -137,13 +137,13 @@ OpenCode 会读取以下客户端能力：
 
 ### 配置选项
 
-新会话使用该目录的默认模型和主代理。`session/new`、`session/load`、`session/resume` 和 `session/fork` 的响应包含以下配置选项：
+新会话使用该目录的默认模型和主 agent。`session/new`、`session/load`、`session/resume` 和 `session/fork` 的响应包含以下配置选项：
 
 | ID | 类别 | 取值 |
 | --- | --- | --- |
 | `model` | `model` | 已启用的模型，格式为 `provider/model`。加上 `/variant` 后缀还会同时设置推理强度。 |
 | `effort` | `thought_level` | 模型的变体以及 `default`。仅当模型有变体时才会出现。 |
-| `mode` | `mode` | 可见的主代理。 |
+| `mode` | `mode` | 可见的主 agent。 |
 
 每个 `model` 选项都以提供商的显示名称和模型名称命名，例如 `Anthropic / Claude Sonnet 5.5`。`session/set_config_option` 接受字符串值：
 
@@ -151,7 +151,7 @@ OpenCode 会读取以下客户端能力：
 { "sessionId": "ses_123", "configId": "model", "value": "anthropic/claude-sonnet-5-5" }
 ```
 
-`session/set_mode` 也会设置代理。当可用的模型或代理发生变化时，OpenCode 会发送 `config_option_update`；其他客户端更改了会话的模型或代理时，也会发送。
+`session/set_mode` 也会设置 agent。当可用的模型或 agent 发生变化时，OpenCode 会发送 `config_option_update`；其他客户端更改了会话的模型或 agent 时，也会发送。
 
 ### 提示词内容
 

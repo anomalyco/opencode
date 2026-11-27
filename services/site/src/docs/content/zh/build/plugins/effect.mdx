@@ -246,9 +246,9 @@ effect: (ctx) =>
 
 ## API
 
-### 代理
+### Agent
 
-读取所有代理，或按 ID 获取单个代理。客户端响应包含解析后的位置和 schema 数据。
+读取所有 agent，或按 ID 获取单个 agent。客户端响应包含解析后的位置和 schema 数据。
 
 ```ts
 effect: (ctx) =>
@@ -260,7 +260,7 @@ effect: (ctx) =>
   }),
 ```
 
-转换或重新加载代理。
+转换或重新加载 agent。
 
 ```ts
 effect: (ctx) =>
@@ -769,7 +769,7 @@ interface ReferenceDomain extends ReferenceApi<unknown> {
 
 ### 会话
 
-创建或读取会话，然后选择后续工作要使用的代理和模型。
+创建或读取会话，然后选择后续工作要使用的 agent 和模型。
 
 ```ts
 effect: (ctx) =>
@@ -1188,7 +1188,7 @@ effect: (ctx) =>
 
 ### 会话
 
-在请求发送给模型之前，修改组装好的系统指令、消息或工具。`context` 在代理循环中运行；`compaction`、`generate` 和 `title` 则在对应的辅助请求中运行。`compaction` 和 `title` 接受 `result`，设置后会跳过模型调用。
+在请求发送给模型之前，修改组装好的系统指令、消息或工具。`context` 在 agent 循环中运行；`compaction`、`generate` 和 `title` 则在对应的辅助请求中运行。`compaction` 和 `title` 接受 `result`，设置后会跳过模型调用。
 
 ```ts
 effect: (ctx) =>

@@ -93,7 +93,7 @@ OpenCode 内置了来自 [models.dev](https://models.dev) 的提供商和模型�
 
 ## 端点
 
-覆盖 `settings.baseURL`，即可让目录中的提供商通过代理或兼容端点发送请求。它原有的包、模型和连接仍然适用。
+覆盖 `settings.baseURL`，即可让目录中的提供商通过 agent 或兼容端点发送请求。它原有的包、模型和连接仍然适用。
 
 ```jsonc title="opencode.jsonc"
 {
@@ -486,7 +486,7 @@ ollama serve
 ollama pull qwen3:8b
 ```
 
-使用 `settings.baseURL` 可以让 OpenCode 指向远程或经过代理的 Ollama 服务器。地址中需要包含 `/v1`，OpenCode 会据此推导出原生的 `/api/tags` 和 `/api/show` 发现路径。`apiKey` 是可选的，会作为 bearer token 随发现请求和模型请求一起发送。
+使用 `settings.baseURL` 可以让 OpenCode 指向远程或经过 agent 的 Ollama 服务器。地址中需要包含 `/v1`，OpenCode 会据此推导出原生的 `/api/tags` 和 `/api/show` 发现路径。`apiKey` 是可选的，会作为 bearer token 随发现请求和模型请求一起发送。
 
 ```jsonc title="opencode.jsonc"
 {

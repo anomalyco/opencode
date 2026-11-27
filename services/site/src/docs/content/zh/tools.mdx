@@ -1,6 +1,6 @@
 ---
 title: "工具"
-description: "OpenCode 的内置工具可以读写文件、运行 shell 命令、抓取和搜索网页、启动子代理并驱动浏览器。"
+description: "OpenCode 的内置工具可以读写文件、运行 shell 命令、抓取和搜索网页、启动 subagent 并驱动浏览器。"
 ---
 
 直接说出你想要的结果即可。OpenCode 会选择可用的工具，在需要时请求你的批准，然后返回结果。
@@ -158,25 +158,25 @@ Load the effect skill before changing this Effect code.
 
 ### Subagent
 
-`subagent` 使用已配置的子代理启动一个子会话。需要提供代理 ID、简短的 `description` 和完整的 `prompt`。
+`subagent` 使用已配置的 subagent 启动一个子会话。需要提供 agent ID、简短的 `description` 和完整的 `prompt`。
 
 ```text
 Ask the explore subagent to map the authentication flow and return the key files.
 ```
 
-子代理始终在后台运行。调用会立即返回 `sessionID`，子代理空闲时父代理会收到一条 `<subagent>` 消息，之后每完成一轮工作还会再次收到，因此父代理可以继续工作，也可以直接结束本轮而无需等待。传入返回的 `sessionID` 可以继续同一个子会话的对话；对正在运行的子代理追加消息会加入其当前运行。只能使用 subagent 模式的代理，默认嵌套深度为一层。
+subagent 始终在后台运行。调用会立即返回 `sessionID`，subagent 空闲时父 agent 会收到一条 `<subagent>` 消息，之后每完成一轮工作还会再次收到，因此父 agent 可以继续工作，也可以直接结束本轮而无需等待。传入返回的 `sessionID` 可以继续同一个子会话的对话；对正在运行的 subagent 追加消息会加入其当前运行。只能使用 subagent 模式的 agent，默认嵌套深度为一层。
 
-权限：`subagent`，资源为所选的代理 ID。
+权限：`subagent`，资源为所选的 agent ID。
 
 ### Execute
 
-`execute` 在 Code Mode 中运行 JavaScript，让代理能够调用并组合工具目录中的工具。它适合并行执行相互独立的调用，也适合在不把每个中间结果都放进模型上下文的情况下处理结果。
+`execute` 在 Code Mode 中运行 JavaScript，让 agent 能够调用并组合工具目录中的工具。它适合并行执行相互独立的调用，也适合在不把每个中间结果都放进模型上下文的情况下处理结果。
 
 ```text
 Read package.json and README.md in parallel, then return their relevant setup details.
 ```
 
-该运行时不能直接访问文件系统，也不支持导入或定时器。它提供 `fetch` 用于 HTTP 请求，其他操作都通过其工具目录中的工具完成。拒绝资源为 `*` 的 `execute` 会移除 Code Mode。此时它原本可以调用的工具（包括来自未设置 `codemode: false` 的服务器的 MCP 工具）会作为直接工具列出，每个请求都会带上它们的完整定义。如果代理不应拥有这些工具，也请一并拒绝。嵌套的内置工具和 MCP 工具仍会执行各自的权限检查，插件工具则执行其声明的权限。
+该运行时不能直接访问文件系统，也不支持导入或定时器。它提供 `fetch` 用于 HTTP 请求，其他操作都通过其工具目录中的工具完成。拒绝资源为 `*` 的 `execute` 会移除 Code Mode。此时它原本可以调用的工具（包括来自未设置 `codemode: false` 的服务器的 MCP 工具）会作为直接工具列出，每个请求都会带上它们的完整定义。如果 agent 不应拥有这些工具，也请一并拒绝。嵌套的内置工具和 MCP 工具仍会执行各自的权限检查，插件工具则执行其声明的权限。
 
 ### Sessions
 
@@ -213,10 +213,10 @@ Open https://example.com, take a snapshot of that tab, and report the main headi
 
 该命名空间包括标签页和导航命令、页面快照与搜索、点击与表单输入、截图、文件传输、控制台与网络检查、性能追踪、堆检查以及 Lighthouse 审计。截图需要一个获得焦点且可见的标签页。上传路径是服务器本地路径；截取结果也返回服务器本地路径，每次文件传输最多 5 MiB。
 
-页面内容、日志、请求头和响应体都是不可信数据，而不是给代理的指令。资源为 `*` 的 `browser` 拒绝规则会移除整个浏览器工具目录；浏览器操作不会逐个弹出权限请求。
+页面内容、日志、请求头和响应体都是不可信数据，而不是给 agent 的指令。资源为 `*` 的 `browser` 拒绝规则会移除整个浏览器工具目录；浏览器操作不会逐个弹出权限请求。
 
 ## 扩展
 
-[MCP 服务器](/mcp-servers)会添加工具，其名称和输入由每个已连接的服务器提供。它们的权限操作为 `<server>_<tool>`，资源为 `*`。这些工具不属于固定的内置工具目录。默认情况下，代理会在 `execute` 中通过服务器的命名空间访问这些工具；在服务器上设置 `codemode: false` 可以直接列出其工具。
+[MCP 服务器](/mcp-servers)会添加工具，其名称和输入由每个已连接的服务器提供。它们的权限操作为 `<server>_<tool>`，资源为 `*`。这些工具不属于固定的内置工具目录。默认情况下，agent 会在 `execute` 中通过服务器的命名空间访问这些工具；在服务器上设置 `codemode: false` 可以直接列出其工具。
 
 [技能](/skills)提供的是任务指令，而不是新的可执行工具。[附件](/attachments)将用户选择的内容放入提示词，[引用](/references)则提供具名的外部目录。这些功能是对工具的补充，不会绕过工具的权限检查。

@@ -5,7 +5,7 @@ description: "允许或拒绝 OpenCode 对指定资源执行操作，托管策�
 
 策略决定 OpenCode 能否对指定资源执行某项操作。策略在 `policies` 下编写，也可以由已连接的 [OpenCode Console](/console) 工作区下发。
 
-策略与[权限](/permissions)相互独立。权限是针对每个代理的工具规则，可以是 `allow`、`deny` 或 `ask`。策略只有允许和拒绝两种结果，从不弹出提示，并且只会收紧权限和提供商原本允许的范围。
+策略与[权限](/permissions)相互独立。权限是针对每个 agent 的工具规则，可以是 `allow`、`deny` 或 `ask`。策略只有允许和拒绝两种结果，从不弹出提示，并且只会收紧权限和提供商原本允许的范围。
 
 ## 配置
 
@@ -106,18 +106,18 @@ description: "允许或拒绝 OpenCode 对指定资源执行操作，托管策�
 }
 ```
 
-被拒绝的检查会直接以 `Blocked by configuration policy` 失败，而不会弹出提示。它在代理规则和已保存的批准之后生效，因此无论是 `ask` 还是“Allow always”批准，都会被它覆盖。
+被拒绝的检查会直接以 `Blocked by configuration policy` 失败，而不会弹出提示。它在 agent 规则和已保存的批准之后生效，因此无论是 `ask` 还是“Allow always”批准，都会被它覆盖。
 
 | 模式 | 阻止的内容 |
 | ---------------------------- | ------------------------------------------- |
 | `shell:*` | 所有 shell 命令 |
 | `read:*/.ssh/*` | 读取 SSH 相关文件 |
 | `external_directory:*` | 对 Location 或 worktree 之外的任何访问 |
-| `subagent:general` | 启动某个特定子代理 |
+| `subagent:general` | 启动某个特定 subagent |
 | `github_delete_repository:*` | 某个特定 MCP 工具 |
 | `*` | 所有尚未被拒绝的操作 |
 
-`effect` 为 `allow` 的 `tool.use` 语句永远不会授予访问权限。它只会解除之前更宽泛的 `deny`，之后由代理自身的规则决定。
+`effect` 为 `allow` 的 `tool.use` 语句永远不会授予访问权限。它只会解除之前更宽泛的 `deny`，之后由 agent 自身的规则决定。
 
 ```jsonc
 {
@@ -128,7 +128,7 @@ description: "允许或拒绝 OpenCode 对指定资源执行操作，托管策�
 }
 ```
 
-`git status` 会回退到代理的 `shell` 规则；其他所有命令都会被阻止。
+`git status` 会回退到 agent 的 `shell` 规则；其他所有命令都会被阻止。
 
 ## 集成
 

@@ -33,7 +33,7 @@ anthropic/claude-sonnet-5-5
 opencode run --model anthropic/claude-sonnet-5-5 "Refactor parseToken"
 ```
 
-代理和命令也可以选择各自的模型。请参阅[代理](/agents)和[命令](/commands)。
+agent 和命令也可以选择各自的模型。请参阅[agent](/agents)和[命令](/commands)。
 
 ## 默认模型
 
@@ -74,7 +74,7 @@ opencode service set env OPENCODE_DISABLE_FREE_MODELS 1
 
 ## 变体
 
-变体是同一个模型的具名选项，通常用于设置推理强度或 token 预算。为单次运行、会话、代理或命令选择变体时，在后面加上 `#variant`：
+变体是同一个模型的具名选项，通常用于设置推理强度或 token 预算。为单次运行、会话、agent 或命令选择变体时，在后面加上 `#variant`：
 
 ```bash
 opencode run --model openai/gpt-6.1-sol#high "Review this migration plan"
@@ -506,7 +506,7 @@ openrouter/anthropic/claude-sonnet-4.5#high
 | 变体 | 如果有，跟在 `#` 之后。 |
 | 大小写 | 提供商 ID 和模型 ID 区分大小写。 |
 
-请使用目录 ID，而不是提供商的显示名称。根级、代理和命令中的 `model` 字段既接受上面的字符串形式，也接受展开的对象形式：
+请使用目录 ID，而不是提供商的显示名称。根级、agent 和命令中的 `model` 字段既接受上面的字符串形式，也接受展开的对象形式：
 
 ```jsonc
 {
@@ -530,7 +530,7 @@ openrouter/anthropic/claude-sonnet-4.5#high
 ```
 
 - 选择器对象使用 `model`；提供商目录条目则使用 `modelID` 表示发送给提供商的 ID。
-- 虽然根级选择的结构接受变体，但 V2 的目录默认模型不会保留它。请改为在会话、单次运行、代理或命令中选择变体。
+- 虽然根级选择的结构接受变体，但 V2 的目录默认模型不会保留它。请改为在会话、单次运行、agent 或命令中选择变体。
 - 模型选项因提供商而异，其他提供商包可能会忽略或拒绝它们。
 - 目录数据、凭据和配置都限定在各自的位置范围内。在一个项目中可用的模型，在另一个项目中可能不可用。
 - 配置文件通常会自动重新加载。已经在进行中的模型请求会继续使用它开始时的设置。

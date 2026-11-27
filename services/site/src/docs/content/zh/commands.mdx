@@ -70,7 +70,7 @@ Markdown frontmatter 和 JSON 条目支持相同的字段，只是 Markdown 的 
 | --- | --- | --- |
 | `template` | 仅 JSON | 提示词模板。 |
 | `description` | 否 | 显示在命令列表和发现结果中的文本。 |
-| `agent` | 否 | 运行命令时选用的代理。 |
+| `agent` | 否 | 运行命令时选用的 agent。 |
 | `model` | 否 | 覆盖所用模型，格式为 `provider/model` 或 `provider/model#variant`。 |
 | `subagent` | 否 | `true` 表示在后台子会话中运行；`false` 表示强制在当前会话中运行。 |
 | `subtask` | 否 | `subagent` 的已弃用别名。 |
@@ -158,7 +158,7 @@ Summarize these commits:
 对于 `/history 5`，shell 收到的是 `git log --oneline -5`。不要把不受信任的参数放进 shell 代码块。
 
 <Callout type="warning">
-  Shell 代码块会在 OpenCode 处理命令时运行，不经过代理的工具权限流程。只使用来自可信来源的命令。
+  Shell 代码块会在 OpenCode 处理命令时运行，不经过 agent 的工具权限流程。只使用来自可信来源的命令。
 </Callout>
 
 ## 附件
@@ -188,10 +188,10 @@ Plan $ARGUMENTS.
 模型的选择遵循以下规则：
 
 1. 命令的 `model` 优先于其他所有模型。
-2. 否则，命令所选代理配置的模型会覆盖调用时正在使用的模型。
+2. 否则，命令所选 agent 配置的模型会覆盖调用时正在使用的模型。
 3. 否则，继续使用当前会话的模型。
 
-例如，下面这个命令同时指定了代理和一个显式模型：
+例如，下面这个命令同时指定了 agent 和一个显式模型：
 
 ```md title=".opencode/commands/design.md"
 ---
@@ -216,15 +216,15 @@ subagent: true
 Audit $ARGUMENTS for bugs and missing tests.
 ```
 
-父会话仍然可用，并保持原有的代理和模型。子会话结束后，OpenCode 会把它的结果或失败信息发回父会话。
+父会话仍然可用，并保持原有的 agent 和模型。子会话结束后，OpenCode 会把它的结果或失败信息发回父会话。
 
 | 值 | 行为 |
 | --- | --- |
-| `true` | 始终使用子会话，即使所选代理设置了 `mode: primary`。 |
-| `false` | 始终使用当前会话，即使所选代理设置了 `mode: subagent`。 |
-| 省略 | 仅当所选代理设置了 `mode: subagent` 时才使用子会话。 |
+| `true` | 始终使用子会话，即使所选 agent 设置了 `mode: primary`。 |
+| `false` | 始终使用当前会话，即使所选 agent 设置了 `mode: subagent`。 |
+| 省略 | 仅当所选 agent 设置了 `mode: subagent` 时才使用子会话。 |
 
-子会话依次使用命令的模型、所选代理的模型、父会话的模型。旧的 `subtask` 字段仍然可用；如果两个字段同时存在，以 `subagent` 为准。
+子会话依次使用命令的模型、所选 agent 的模型、父会话的模型。旧的 `subtask` 字段仍然可用；如果两个字段同时存在，以 `subagent` 为准。
 
 ```yaml
 subagent: false

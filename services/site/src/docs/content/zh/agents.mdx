@@ -1,9 +1,9 @@
 ---
-title: 代理
-description: "用 Markdown 或配置定义可复用的代理，每个代理都有自己的系统提示词、模型、权限和模式。"
+title: Agents
+description: "用 Markdown 或配置定义可复用的 agent，每个 agent 都有自己的系统提示词、模型、权限和模式。"
 ---
 
-创建一个 Markdown 文件即可添加可复用的代理。下面的示例添加了一个只读的审查代理，主代理可以启动它来审查代码：
+创建一个 Markdown 文件即可添加可复用的 agent。下面的示例添加了一个只读的审查 agent，主 agent 可以启动它来审查代码：
 
 ```md title=".opencode/agents/reviewer.md"
 ---
@@ -22,24 +22,24 @@ permissions:
 Review the current changes. List findings in severity order with file and line references.
 ```
 
-让主代理使用它：
+让主 agent 使用它：
 
 ```text
 Use the reviewer subagent to review my current changes.
 ```
 
-代理把系统提示词、模型偏好、权限和显示信息组合成一个具名的助手配置。
+agent 把系统提示词、模型偏好、权限和显示信息组合成一个具名的助手配置。
 
 ## 存放位置
 
-Markdown 代理可以保存在全局目录中供所有项目使用，也可以保存在某个项目内：
+Markdown agent 可以保存在全局目录中供所有项目使用，也可以保存在某个项目内：
 
 ```text
 ~/.config/opencode/agents/<name>.md
 .opencode/agents/<name>.md
 ```
 
-OpenCode 会从当前目录向上直到项目根目录查找项目中的 `.opencode` 目录。嵌套路径会成为代理 ID 的一部分：
+OpenCode 会从当前目录向上直到项目根目录查找项目中的 `.opencode` 目录。嵌套路径会成为 agent ID 的一部分：
 
 ```text
 .opencode/agents/team/reviewer.md  →  team/reviewer
@@ -49,7 +49,7 @@ OpenCode 会从当前目录向上直到项目根目录查找项目中的 `.openc
 
 ### Markdown
 
-frontmatter 接受的字段与 `agents` 配置条目相同。Markdown 正文会成为代理的 `system` 提示词：
+frontmatter 接受的字段与 `agents` 配置条目相同。Markdown 正文会成为 agent 的 `system` 提示词：
 
 ```md title=".opencode/agents/explainer.md"
 ---
@@ -60,11 +60,11 @@ mode: subagent
 Explain the relevant code with short examples. Do not edit files.
 ```
 
-V1 的 frontmatter 字段已弃用。仍在使用这些字段的文件会如何读取，请参阅[代理文件](/migrate-v1#agent-files)。
+V1 的 frontmatter 字段已弃用。仍在使用这些字段的文件会如何读取，请参阅[agent 文件](/migrate-v1#agent-files)。
 
 ### JSONC
 
-在任意 [OpenCode 配置文件](/config)的 `agents` 下定义代理：
+在任意 [OpenCode 配置文件](/config)的 `agents` 下定义 agent：
 
 ```jsonc title="opencode.jsonc"
 {
@@ -82,9 +82,9 @@ V1 的 frontmatter 字段已弃用。仍在使用这些字段的文件会如何�
 }
 ```
 
-## 选择代理
+## 选择 agent
 
-设置会话未选择代理时使用的主代理：
+设置会话未选择 agent 时使用的主 agent：
 
 ```jsonc title="opencode.jsonc"
 {
@@ -96,11 +96,11 @@ V1 的 frontmatter 字段已弃用。仍在使用这些字段的文件会如何�
 }
 ```
 
-所选的默认代理必须存在、可见，并且可以作为主代理使用。否则 OpenCode 会使用 `build`，再不行就使用第一个可见且能作为主代理的代理。修改此设置不会替换已有会话中保存的代理。
+所选的默认 agent 必须存在、可见，并且可以作为主 agent 使用。否则 OpenCode 会使用 `build`，再不行就使用第一个可见且能作为主 agent 的 agent。修改此设置不会替换已有会话中保存的 agent。
 
 ## 模式
 
-根据代理的运行方式设置 `mode`：
+根据 agent 的运行方式设置 `mode`：
 
 ```jsonc
 {
@@ -112,11 +112,11 @@ V1 的 frontmatter 字段已弃用。仍在使用这些字段的文件会如何�
 
 | 模式 | 行为 |
 | --- | --- |
-| `primary` | 作为会话的主代理运行。这是新建自定义代理的默认值。 |
+| `primary` | 作为会话的主 agent 运行。这是新建自定义 agent 的默认值。 |
 | `subagent` | 只能通过 `subagent` 工具在子会话中运行。 |
-| `all` | 既可以作为主代理运行，也可以作为子代理运行。 |
+| `all` | 既可以作为主 agent 运行，也可以作为 subagent 运行。 |
 
-子代理会在自己的子会话中以全新的上下文运行。它们始终在后台运行：子代理空闲时父代理会收到报告，之后每完成一轮工作还会再次收到报告。父代理的 `subagent` 权限决定它可以启动哪些代理；子代理则使用自己配置的权限。
+subagent 会在自己的子会话中以全新的上下文运行。它们始终在后台运行：subagent 空闲时父 agent 会收到报告，之后每完成一轮工作还会再次收到报告。父 agent 的 `subagent` 权限决定它可以启动哪些 agent；subagent 则使用自己配置的权限。
 
 ```jsonc
 {
@@ -131,18 +131,18 @@ V1 的 frontmatter 字段已弃用。仍在使用这些字段的文件会如何�
 }
 ```
 
-## 内置代理
+## 内置 agent
 
-OpenCode 内置了以下可见代理：
+OpenCode 内置了以下可见 agent：
 
-| 代理 | 模式 | 用途 |
+| Agent | 模式 | 用途 |
 | --- | --- | --- |
-| **Build** (`build`) | `primary` | 默认的编程代理。默认允许使用所有工具和访问工作区以外的内容；读取敏感的环境变量文件时会请求批准。 |
+| **Build** (`build`) | `primary` | 默认的编程 agent。默认允许使用所有工具和访问工作区以外的内容；读取敏感的环境变量文件时会请求批准。 |
 | **Plan** (`plan`) | `primary` | 负责探索和规划，不会编辑普通的项目文件。在你要求时，它可以写入 OpenCode 计划文件，shell 命令仍受权限控制。 |
-| **General** (`general`) | `subagent` | 拥有广泛的工具访问权限，负责调研和多步骤任务，但不能再启动其他子代理。 |
+| **General** (`general`) | `subagent` | 拥有广泛的工具访问权限，负责调研和多步骤任务，但不能再启动其他 subagent。 |
 | **Explore** (`explore`) | `subagent` | 搜索并阅读代码或网页资料，不会编辑文件。 |
 
-使用相同的 ID 即可覆盖内置代理：
+使用相同的 ID 即可覆盖内置 agent：
 
 ```jsonc
 {
@@ -156,11 +156,11 @@ OpenCode 内置了以下可见代理：
 }
 ```
 
-隐藏的 `compaction`、`title` 和 `summary` 代理负责执行维护任务，不能直接选择。V2 没有内置的 `scout` 代理。
+隐藏的 `compaction`、`title` 和 `summary` agent 负责执行维护任务，不能直接选择。V2 没有内置的 `scout` agent。
 
 ## 合并规则
 
-代理定义按配置顺序合并。后出现的标量值会替换先前的值，请求映射按键合并，权限规则则依次追加：
+agent 定义按配置顺序合并。后出现的标量值会替换先前的值，请求映射按键合并，权限规则则依次追加：
 
 ```jsonc
 {
@@ -177,13 +177,13 @@ OpenCode 内置了以下可见代理：
 }
 ```
 
-全局 `permissions` 会先于代理专属规则应用，因此后面的代理规则可以对其进一步细化。
+全局 `permissions` 会先于 agent 专属规则应用，因此后面的 agent 规则可以对其进一步细化。
 
 ## 选项
 
 ### 描述
 
-`description` 用于说明代理的用途。请为子代理添加此字段，因为模型在决定启动哪个代理时，OpenCode 会把它展示给模型：
+`description` 用于说明 agent 的用途。请为 subagent 添加此字段，因为模型在决定启动哪个 agent 时，OpenCode 会把它展示给模型：
 
 ```yaml
 description: Reviews database migrations for safety
@@ -191,7 +191,7 @@ description: Reviews database migrations for safety
 
 ### 模式
 
-`mode` 可选 `primary`、`subagent` 或 `all`。新建自定义代理时如果省略，默认为 `primary`：
+`mode` 可选 `primary`、`subagent` 或 `all`。新建自定义 agent 时如果省略，默认为 `primary`：
 
 ```yaml
 mode: all
@@ -221,12 +221,12 @@ JSON 配置也接受展开形式：
 }
 ```
 
-- 子代理使用自己配置的模型；如果没有配置，则继承父会话的模型。
-- 会话会单独保存所选的模型。按 ID 选择主代理不会改变该模型。
+- subagent 使用自己配置的模型；如果没有配置，则继承父会话的模型。
+- 会话会单独保存所选的模型。按 ID 选择主 agent 不会改变该模型。
 
 ### 系统提示词
 
-`system` 用于设置代理的系统提示词。非空值会替换提供商为该代理提供的基础提示词：
+`system` 用于设置 agent 的系统提示词。非空值会替换提供商为该 agent 提供的基础提示词：
 
 ```jsonc
 {
@@ -236,7 +236,7 @@ JSON 配置也接受展开形式：
 }
 ```
 
-项目指令、技能、目录引用以及其他指令来源仍会照常添加。在 Markdown 代理中，请把这段文字写在文档正文里，而不是写在 frontmatter 的 `system` 字段中。
+项目指令、技能、目录引用以及其他指令来源仍会照常添加。在 Markdown agent 中，请把这段文字写在文档正文里，而不是写在 frontmatter 的 `system` 字段中。
 
 ### 权限
 
@@ -258,7 +258,7 @@ JSON 配置也接受展开形式：
 | 字段 | 含义 |
 | --- | --- |
 | `action` | 工具或权限操作。支持通配符。 |
-| `resource` | 操作所匹配的路径、命令、代理 ID 或其他值。支持通配符。 |
+| `resource` | 操作所匹配的路径、命令、agent ID 或其他值。支持通配符。 |
 | `effect` | `allow`、`ask` 或 `deny`。 |
 
 最后一条匹配的规则生效，因此请把宽泛的规则放在例外规则之前。常用的操作包括：
@@ -267,7 +267,7 @@ JSON 配置也接受展开形式：
 | --- | --- |
 | `shell` | Shell 命令 |
 | `edit` | 编辑、写入和补丁工具 |
-| `subagent` | 子代理 |
+| `subagent` | subagent |
 | `read`, `glob`, `grep` | 本地查找工具 |
 | `webfetch`, `websearch` | 网络工具 |
 | `skill` | 技能加载 |
@@ -292,17 +292,17 @@ steps: 8
 
 ### 隐藏
 
-`hidden` 会把代理从常规列表、交互式发现和子代理目录中移除：
+`hidden` 会把 agent 从常规列表、交互式发现和 subagent 目录中移除：
 
 ```yaml
 hidden: true
 ```
 
-这只控制可见性，与安全无关。如需限制代理的行为，请使用权限。
+这只控制可见性，与安全无关。如需限制 agent 的行为，请使用权限。
 
 ### 颜色
 
-`color` 使用六位十六进制值设置代理在界面中的颜色：
+`color` 使用六位十六进制值设置 agent 在界面中的颜色：
 
 ```yaml
 color: "#ff6b6b"
@@ -310,7 +310,7 @@ color: "#ff6b6b"
 
 ### 禁用
 
-`disabled` 会在配置加载到该位置时移除一个内置或自定义代理：
+`disabled` 会在配置加载到该位置时移除一个内置或自定义 agent：
 
 ```jsonc
 {
@@ -322,7 +322,7 @@ color: "#ff6b6b"
 
 ### 请求
 
-`request` 接受按代理叠加的请求头和 JSON 请求体：
+`request` 接受按 agent 叠加的请求头和 JSON 请求体：
 
 ```jsonc
 {
@@ -341,4 +341,4 @@ color: "#ff6b6b"
   V2 会话运行器会保留这些值，但目前还不会在模型请求中发送它们。请改为在提供商、模型或模型变体上配置实际生效的请求设置。
 </Callout>
 
-在新的 V2 代理配置中，不要使用 `temperature`、`top_p`、`prompt`、`permission`、`tools`、`disable` 或 `maxSteps` 等旧的顶层字段。
+在新的 V2 agent 配置中，不要使用 `temperature`、`top_p`、`prompt`、`permission`、`tools`、`disable` 或 `maxSteps` 等旧的顶层字段。
