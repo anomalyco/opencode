@@ -62,6 +62,8 @@ export const protocol = Protocol.make({
   id: "meta-messages",
   body: { schema: Body, from: fromRequest },
   stream: AnthropicMessages.protocol.stream,
+  supportsEffortUpdates: AnthropicMessages.protocol.supportsEffortUpdates,
+  toolUpdates: AnthropicMessages.protocol.toolUpdates,
 })
 
 export * as MetaMessages from "./meta-messages.js"
