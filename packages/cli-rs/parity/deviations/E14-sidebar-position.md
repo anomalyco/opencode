@@ -13,4 +13,4 @@ The default is `"right"`. The Settings dialog and command palette list **Sidebar
 ## Reason
 
 The position setting is currently implemented only in the TypeScript TUI. The E.18a settings oracle and dialog
-recordings omit this row when comparing the two clients.
+recordings and the E.20/toggles app recording omit this row when comparing the two clients.

@@ -45,6 +45,8 @@ for (const file of files) {
 
 async function record(name: string, file: string) {
   const scenario: AppScenario = (await import(`${parity}${file}`)).default
+  // Match the native Settings dialog in E.20 (parity/deviations/E14-sidebar-position.md).
+  using _settings = name === "E.20/toggles" ? await omitSidebarPosition() : undefined
   const config = withNewDesigns({ ...scenario.config, animations: false })
   const routes = scenario.routes ?? []
   const defaults = createFetch().fetch
@@ -167,6 +169,14 @@ async function record(name: string, file: string) {
 
 // A fake IDE MCP server (E.5): it answers `initialize`, keeps every message a client sends, and pushes
 // notifications to the clients that finished the handshake.
+async function omitSidebarPosition() {
+  const { settings } = await import("../../../tui/src/component/dialog-config")
+  const index = settings.findIndex((setting) => setting.path.join(".") === "session.sidebar_position")
+  if (index < 0) return
+  const removed = settings.splice(index, 1)
+  return { [Symbol.dispose]: () => settings.splice(index, 0, ...removed) }
+}
+
 function startIde() {
   const received: unknown[] = []
   const ready = new Set<ServerWebSocket<unknown>>()
