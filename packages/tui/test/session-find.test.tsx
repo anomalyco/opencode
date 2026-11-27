@@ -35,6 +35,12 @@ describe("find", () => {
     expect(findPattern("Needle")?.source).toBe(findPattern("needle")?.source)
   })
 
+  test("finds a capital letter whose lowercase form is a different sequence", () => {
+    // U+0130 lowercases to "i" plus a combining dot, which would search for a different sequence.
+    expect(findRanges("Visit İstanbul", findPattern("İstanbul"))).toEqual([{ start: 6, end: 14 }])
+    expect(findRanges("Visit İstanbul", findPattern("İSTANBUL"))).toEqual([{ start: 6, end: 14 }])
+  })
+
   test("searches prompts, assistant text and compaction summaries in transcript order, not reasoning or tools", () => {
     const messages: Record<string, SessionMessageInfo> = {
       u1: { id: "u1", type: "user", text: "find the needle", time: { created: 1 } } as SessionMessageInfo,
