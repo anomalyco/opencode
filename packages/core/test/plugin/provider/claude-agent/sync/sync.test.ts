@@ -172,7 +172,7 @@ describe("history reconciliation", () => {
     expect(CatchUp.content(prompt, 4)).toEqual([{ type: "text", text: "What happened?" }])
   })
 
-  test("catch-up preserves tool calls, results, images and PDFs, excluding reasoning", () => {
+  test("catch-up preserves tool calls and results, excluding reasoning, and replaces tool media with notes", () => {
     const blocks = CatchUp.content([
       user("Read the files"),
       {
@@ -206,8 +206,11 @@ describe("history reconciliation", () => {
     expect(JSON.stringify(blocks)).toContain("marker.txt")
     expect(JSON.stringify(blocks)).toContain("LEMON-IBIS")
     expect(JSON.stringify(blocks)).not.toContain("PRIVATE")
-    expect(blocks.some((block) => block.type === "image")).toBe(true)
-    expect(blocks.some((block) => block.type === "document")).toBe(true)
+    expect(blocks.some((block) => block.type === "image" || block.type === "document")).toBe(false)
+    expect(blocks).toContainEqual({
+      type: "text",
+      text: "[image/png from the tool result above, not included in this replay]",
+    })
     expect(blocks.at(-1)).toEqual({ type: "text", text: "Continue" })
   })
 })
