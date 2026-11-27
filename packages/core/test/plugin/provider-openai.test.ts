@@ -4,6 +4,7 @@ import { Session } from "@opencode/core/session"
 import { OpenAIResponses } from "@opencode/ai/protocols/openai-responses"
 import { describe, expect } from "bun:test"
 import { DateTime, Effect } from "effect"
+import { HttpClient, HttpClientResponse } from "effect/http"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Location } from "@opencode/core/location"
@@ -27,10 +28,15 @@ import { PluginTestLayer } from "./fixture"
 
 const it = testEffect(PluginTestLayer)
 
-const addPlugin = Effect.fn(function* () {
+// The Codex account model list, unavailable unless a test serves one.
+const unavailableModels = HttpClient.make((request) =>
+  Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({}, { status: 404 }))),
+)
+
+const addPlugin = Effect.fn(function* (http = unavailableModels) {
   const plugin = yield* Plugin.Service
   const host = yield* PluginHost.make(plugin, "test")
-  yield* OpenAIPlugin.effect(host)
+  yield* OpenAIPlugin.effect(host).pipe(Effect.provideService(HttpClient.HttpClient, http))
 })
 
 
@@ -253,7 +259,10 @@ describe("OpenAIPlugin", () => {
       const lists = { current: { "openai-codex": ["gpt-5.5", "gpt-6-sol", "gpt-6-sol-fast", "gpt-image-2"] } }
       const plugin = yield* Plugin.Service
       const host = yield* PluginHost.make(plugin, "test")
-      yield* OpenAIPlugin.effect(host).pipe(Effect.provideService(ModelsDev.Service, subscriptionCatalog(lists)))
+      yield* OpenAIPlugin.effect(host).pipe(
+        Effect.provideService(ModelsDev.Service, subscriptionCatalog(lists)),
+        Effect.provideService(HttpClient.HttpClient, unavailableModels),
+      )
       const enabled = (id: string) =>
         models.get(Provider.ID.openai, Model.ID.make(id)).pipe(Effect.map((model) => required(model).enabled))
 
@@ -271,6 +280,77 @@ describe("OpenAIPlugin", () => {
       yield* drain
       expect(yield* enabled("gpt-7")).toBe(true)
       expect(yield* enabled("gpt-5.5")).toBe(false)
+    }),
+  )
+
+  it.effect("lets the account's own Codex list decide the speeds of the models it names", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const models = yield* Model.Service
+      const credentials = yield* Credential.Service
+      yield* catalog.transform((catalog) => {
+        catalog.update(Provider.ID.openai, (draft) => {
+          draft.package = "@opencode/ai/providers/openai"
+        })
+        for (const id of ["gpt-6-sol", "gpt-6.1-terra", "gpt-7"])
+          catalog.models.update(Provider.ID.openai, Model.ID.make(id), () => {})
+        for (const speed of ["fast", "ultrafast"])
+          catalog.models.update(Provider.ID.openai, Model.ID.make(`gpt-6-sol-${speed}`), (model) => {
+            model.experimental = { speed: { base: Model.ID.make("gpt-6-sol"), id: speed, faster: true } }
+          })
+      })
+      yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-browser"),
+          access: "chatgpt-token",
+          refresh: "refresh",
+          expires: Date.now() + 60_000,
+          metadata: { accountID: "acct_123" },
+        }),
+      })
+      const requests: Array<{ url: string; headers: Record<string, string> }> = []
+      const account = HttpClient.make((request, url) => {
+        requests.push({ url: url.toString(), headers: request.headers })
+        return Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              models: [
+                { slug: "gpt-6-sol", visibility: "list", service_tiers: [{ id: "priority", name: "Fast" }] },
+                { slug: "gpt-6.1-terra", visibility: "list", service_tiers: [] },
+                { slug: "gpt-reserve", visibility: "hide", service_tiers: [] },
+              ],
+            }),
+          ),
+        )
+      })
+      yield* addPlugin(account).pipe(
+        Effect.provideService(
+          ModelsDev.Service,
+          subscriptionCatalog({
+            current: { "openai-codex": ["gpt-6-sol", "gpt-6-sol-fast", "gpt-6-sol-ultrafast", "gpt-7"] },
+          }),
+        ),
+      )
+      yield* drain
+      const enabled = (id: string) =>
+        models.get(Provider.ID.openai, Model.ID.make(id)).pipe(Effect.map((model) => required(model).enabled))
+
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.url).toBe("https://chatgpt.com/backend-api/codex/models?client_version=99.0.0")
+      expect(requests[0]?.headers).toMatchObject({
+        authorization: "Bearer chatgpt-token",
+        "chatgpt-account-id": "acct_123",
+      })
+      // The account's list names gpt-6-sol with Fast only, so its Ultrafast is hidden even though the plan list has it.
+      expect(yield* enabled("gpt-6-sol")).toBe(true)
+      expect(yield* enabled("gpt-6-sol-fast")).toBe(true)
+      expect(yield* enabled("gpt-6-sol-ultrafast")).toBe(false)
+      // A model only the account lists is offered, and one it leaves out still follows the plan list.
+      expect(yield* enabled("gpt-6.1-terra")).toBe(true)
+      expect(yield* enabled("gpt-7")).toBe(true)
     }),
   )
 

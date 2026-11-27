@@ -25,6 +25,7 @@ import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { Provider } from "@opencode/core/provider"
 import { SessionRunnerRetry } from "@opencode/core/session/runner/retry"
 import { toSessionError } from "@opencode/core/session/to-session-error"
+import { drain } from "../lib/clock"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -58,7 +59,7 @@ const subscriptionCatalog = (lists: { current: Record<string, readonly string[]>
 const addLegacyPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
   const host = yield* PluginHost.make(plugin, OpenAIPlugin.id)
-  yield* OpenAIPlugin.effect(host)
+  yield* OpenAIPlugin.effect(host).pipe(Effect.provideService(HttpClient.HttpClient, unavailableModels))
 })
 
 function required<T>(value: T | undefined): T {
@@ -963,6 +964,70 @@ describe("ChatGPTPlugin", () => {
           .map((model) => model.id)
           .sort(),
       ).toEqual([Model.ID.make("gpt-6-sol"), Model.ID.make("gpt-7")])
+    }),
+  )
+
+  it.effect("lets the account's own model list decide the speeds of the models it names", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const models = yield* Model.Service
+      const credentials = yield* Credential.Service
+      yield* catalog.transform((catalog) => {
+        catalog.update(Provider.ID.openai, (draft) => {
+          draft.package = "@opencode/ai/providers/openai"
+        })
+        for (const id of ["gpt-6-sol", "gpt-7"]) catalog.models.update(Provider.ID.openai, Model.ID.make(id), () => {})
+        for (const speed of ["fast", "ultrafast"])
+          catalog.models.update(Provider.ID.openai, Model.ID.make(`gpt-6-sol-${speed}`), (model) => {
+            model.experimental = { speed: { base: Model.ID.make("gpt-6-sol"), id: speed, faster: true } }
+          })
+      })
+      yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+          access: "chatgpt-token",
+          refresh: "refresh",
+          expires: Date.now() + 60_000,
+          metadata: { clientID: "oaiapp_test" },
+        }),
+      })
+      const urls: string[] = []
+      const account = HttpClient.make((request, url) => {
+        urls.push(url.toString())
+        return Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              models: [
+                {
+                  slug: "gpt-6-sol",
+                  visibility: "list",
+                  supported_in_api: true,
+                  service_tiers: [{ id: "priority" }, { id: "ultrafast" }],
+                },
+              ],
+            }),
+          ),
+        )
+      })
+      yield* addPlugin(account).pipe(
+        Effect.provideService(
+          ModelsDev.Service,
+          subscriptionCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-6-sol-fast", "gpt-7"] } }),
+        ),
+      )
+      yield* drain
+
+      expect(urls).toEqual(["https://api.openai.com/v1/models"])
+      // Ultrafast comes from the account's list, which the plan list doesn't have; gpt-7 still follows the plan list.
+      expect(
+        (yield* models.available())
+          .filter((model) => model.providerID === Provider.ID.openai)
+          .map((model) => model.id)
+          .sort(),
+      ).toEqual(["gpt-6-sol", "gpt-6-sol-fast", "gpt-6-sol-ultrafast", "gpt-7"].map((id) => Model.ID.make(id)))
     }),
   )
 
