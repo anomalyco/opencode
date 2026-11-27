@@ -18,7 +18,7 @@ export default Plugin.define({
 
 ## Livscyklus
 
-`setup` kører, når pluginet indlæses. Funktionen kan returnere en oprydningsfunktion, der kører, når pluginet afindlæses.
+`setup` kører, når pluginet indlæses. Funktionen kan returnere en oprydningsfunktion, der kører, når OpenCode fjerner det indlæste plugin.
 
 ```ts
 import { Plugin } from "@opencode/plugin"
@@ -57,7 +57,7 @@ setup(ctx) {
 
 ### Indstillinger
 
-Send pluginindstillinger med objektformen i `opencode.json(c)`.
+Angiv pluginindstillingerne i objektformat i `opencode.json(c)`.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -117,7 +117,7 @@ export default Plugin.define({
 })
 ```
 
-Hver registrering, fjernelse eller hvert kald til `reload()` markerer registeret som ændret. Ved næste læsning genopbygges det ved at anvende alle aktive transforms i registreringsrækkefølge på en ny værdi. Hold transforms hurtige, og sørg for, at de kan køres igen. En værdi, du allerede har læst, ændres ikke ved senere genopbygninger.
+Hver gang du registrerer eller fjerner en transform eller kalder `reload()`, markeres registret som ændret. Næste gang registret læses, genopbygges det ved at anvende alle aktive transforms i registreringsrækkefølge på en ny værdi. Sørg for, at dine transforms kører hurtigt og kan køres igen. En værdi, du allerede har læst, ændres ikke ved senere genopbygninger.
 
 Når udbydernes transforms er anvendt, og deres tilgængelighed er afgjort, opretter OpenCode de aktive udbyderes modeller og anvender alle modeltransforms i rækkefølge. En modelpolitik kan undersøge alle modeller, der kan vælges, også dem fra kilder, der netop er opdateret.
 
@@ -139,7 +139,7 @@ export default Plugin.define({
 })
 ```
 
-Fangede input overvåges ikke automatisk. Indlæs eksterne data før det synkrone callback, og kald derefter
+OpenCode overvåger ikke automatisk de input, en transform bruger fra sin omgivende kontekst. Indlæs eksterne data, før det synkrone callback kører, og kald derefter
 `reload()`, når input ændres. Her returnerer `loadFromSource()`
 `{ info: Provider.Info, models: readonly Model.Info[] }`-poster.
 
@@ -216,7 +216,7 @@ await ctx.agent.reload()
 
 #### Reference
 
-Schema: [`Agent.Info`](/api#schema-Agent.Info)
+Skema: [`Agent.Info`](/api#schema-Agent.Info)
 
 ```ts
 interface AgentContext {
@@ -290,7 +290,7 @@ await ctx.provider.transform((editor) => {
 
 #### Reference
 
-Schemas: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info)
+Skemaer: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info)
 
 ```ts
 interface ProviderDomain extends ProviderApi {
@@ -360,7 +360,7 @@ await ctx.model.reload()
 
 #### Reference
 
-Schema: [`Model.Info`](/api#schema-Model.Info)
+Skema: [`Model.Info`](/api#schema-Model.Info)
 
 ```ts
 interface ModelDomain extends ModelApi {
@@ -392,7 +392,7 @@ Læs de kommandoer, der er tilgængelige på en location.
 const commands = await ctx.command.list()
 ```
 
-Registrér kommandoer med en transform. Executoren modtager sessionen, promptvedhæftninger og den ønskede leveringstilstand.
+Registrér kommandoer med en transform. Funktionen, der kører kommandoen, modtager sessionen, promptens vedhæftninger og den ønskede leveringstilstand.
 
 ```ts
 await ctx.command.transform((editor) => {
@@ -419,7 +419,7 @@ await ctx.command.reload()
 
 #### Reference
 
-Schemas: [`Command.Info`](/api#schema-Command.Info),
+Skemaer: [`Command.Info`](/api#schema-Command.Info),
 [`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery)
 
 ```ts
@@ -513,7 +513,7 @@ await ctx.integration.reload()
 
 #### Reference
 
-Schemas: [`Integration.Info`](/api#schema-Integration.Info), [`Integration.Method`](/api#schema-Integration.Method),
+Skemaer: [`Integration.Info`](/api#schema-Integration.Info), [`Integration.Method`](/api#schema-Integration.Method),
 [`Connection.Info`](/api#schema-Connection.Info), [`Form.Answer`](/api#schema-Form.Answer)
 
 ```ts
@@ -614,7 +614,7 @@ await ctx.mcp.reload()
 
 #### Reference
 
-Schemas: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded),
+Skemaer: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded),
 [`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded)
 
 ```ts
@@ -643,7 +643,7 @@ const plugins = await ctx.plugin.list()
 
 #### Reference
 
-Schemas: [`Plugin.Info`](/api#schema-Plugin.Info), [`Plugin.Source`](/api#schema-Plugin.Source)
+Skemaer: [`Plugin.Info`](/api#schema-Plugin.Info), [`Plugin.Source`](/api#schema-Plugin.Source)
 
 ```ts
 interface PluginContext {
@@ -680,7 +680,7 @@ await ctx.reference.reload()
 
 #### Reference
 
-Schemas: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource`](/api#schema-Reference.LocalSource),
+Skemaer: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource`](/api#schema-Reference.LocalSource),
 [`Reference.GitSource`](/api#schema-Reference.GitSource)
 
 ```ts
@@ -742,7 +742,7 @@ execute: async (input, context) => {
 
 - `action` og `resources` matches mod reglerne. Enhver `deny` blokerer handlingen; ellers spørger enhver `ask`.
 - `save` angiver de mønstre, der gemmes, når brugeren vælger altid at tillade.
-- `agent` vælger, hvis regler der gælder, og er som standard sessionens agent. `source` knytter prompten til et værktøjskald.
+- `agent` angiver, hvilken agents regler der gælder. Som standard bruges sessionens agent. `source` knytter prompten til et værktøjskald.
 - `metadata` sender ekstra detaljer til tilladelsesprompts og `evaluate`-hooks.
 
 Hvis en regel blokerer handlingen, eller brugeren afviser med en begrundelse, afvises kaldet med en `Tool.Error`, der indeholder årsagen, så modellen ser den og kan fortsætte. En afvisning uden begrundelse afslutter det aktuelle trin. Lad fejlene fortsætte op gennem kaldestakken i stedet for at returnere dem som værktøjsoutput.
@@ -755,7 +755,7 @@ const request = await ctx.permission.get({ sessionID, requestID })
 await ctx.permission.reply({ sessionID, requestID, decision: "once" })
 ```
 
-Erstat de session-afgrænsede tilladelsesregler. De evalueres efter agentens regler, og den
+Erstat tilladelsesreglerne for sessionen. De evalueres efter agentens regler, og den
 sidste matchende regel vinder. Undersessioner arver de regler, der gælder, når de oprettes.
 
 ```ts
@@ -790,7 +790,7 @@ await ctx.session.switchAgent({ sessionID, agent: "build" })
 await ctx.session.switchModel({ sessionID, model: { providerID: "anthropic", id: "claude-sonnet-5-5" } })
 ```
 
-Send brugerprompts, forbigående genereringsanmodninger, kommandoer eller syntetiske beskeder.
+Send brugerprompts, midlertidige genereringsanmodninger, kommandoer eller syntetiske beskeder.
 
 ```ts
 const prompt = await ctx.session.prompt({ sessionID, text: "Review the current changes" })
@@ -799,7 +799,7 @@ await ctx.session.command({ sessionID, name: "review", text: "--staged" })
 const synthetic = await ctx.session.synthetic({ sessionID, text: "Deployment completed" })
 ```
 
-`generate` returnerer `text` sammen med kaldets `tokens` og `cost` i samme form, som en assistant-besked
+`generate` returnerer `text` sammen med kaldets `tokens` og `cost` i samme format, som en assistentbesked
 rapporterer dem.
 
 Omdøb, afbryd eller vent på en session.
@@ -832,7 +832,7 @@ await ctx.session.instructions.entry.remove({ sessionID, key: "deploy-target" })
 
 #### Reference
 
-Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
+Skemaer: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
 [`Session.Inbox.User`](/api#schema-Session.Inbox.User), [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic),
 [`InstructionEntry.Info`](/api#schema-InstructionEntry.Info)
 
@@ -905,7 +905,7 @@ await ctx.skill.reload()
 
 #### Reference
 
-Schema: [`Skill.Info`](/api#schema-Skill.Info)
+Skema: [`Skill.Info`](/api#schema-Skill.Info)
 
 ```ts
 interface SkillContext {
@@ -1064,7 +1064,7 @@ Hver modelanmodning fastholder et stabilt, eksekverbart snapshot af værktøjern
 
 #### Reference
 
-Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
+Skemaer: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
 [`Tool.FileContent`](/api#schema-Tool.FileContent)
 
 ```ts
@@ -1123,7 +1123,7 @@ den, og genopdager derefter projektet. Nye repositoryformater kræver stadig sø
 
 #### Reference
 
-Schemas: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
+Skemaer: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
 [`FileDiff.Info`](/api#schema-FileDiff.Info)
 
 ```ts
@@ -1189,7 +1189,7 @@ Indlæs pluginet gennem `plugins`, og konfigurer den fælles destination separat
 
 #### Operationer
 
-Plugin-konteksten eksponerer samme projektbaserede worktree-operationer som klienten. Hver operation kræver et
+Pluginkonteksten giver adgang til de samme worktreehandlinger for projektet som klienten. Hver handling kræver et
 `projectID`. `list` læser kun den gemte fortegnelse, inklusive kendte checkouts af samme projekt; den indlæser ikke
 konfiguration, starter ikke plugins og finder ikke filsystemændringer.
 
@@ -1206,7 +1206,7 @@ Den accepterer en valgfri overordnet `directory`, kilden `from`, start-`branch` 
 Kilden er som standard det kanoniske checkout, og en `from`-tilsidesættelse skal tilhøre det projekt. Valg af en kilde
 ændrer ikke konfigurationsroden.
 En angivet startref skal understøttes af den valgte strategi;
-Rifts native snapshot-operation har f.eks. ingen indstilling til ref-valg.
+Rifts egen snapshothandling har f.eks. ingen indstilling til at vælge en ref.
 
 Create og refresh venter på, at det kanoniske checkouts plugins aktiveres. Kald, der foretages under det checkouts plugin-
 setup, ser de hidtidige registreringer og venter ikke på deres egen aktivering.
@@ -1307,7 +1307,7 @@ await ctx.websearch.reload()
 
 #### Reference
 
-Schemas: [`WebSearch.Provider`](/api#schema-WebSearch.Provider), [`WebSearch.Result`](/api#schema-WebSearch.Result)
+Skemaer: [`WebSearch.Provider`](/api#schema-WebSearch.Provider), [`WebSearch.Result`](/api#schema-WebSearch.Result)
 
 ```ts
 interface WebSearchContext {
@@ -1342,7 +1342,7 @@ return () => controller.abort()
 
 #### Reference
 
-Schema: [`V2EventEncoded`](/api#schema-V2EventEncoded)
+Skema: [`V2EventEncoded`](/api#schema-V2EventEncoded)
 
 ```ts
 type EventType = Exclude<OpenCodeEvent["type"], "server.connected">
@@ -1423,7 +1423,7 @@ Sørg for, at prompt-hooks kan tåle gentagne forsøg. De garanterer ikke, at si
 
 #### Modelanmodninger
 
-Rediger sammensatte systeminstruktioner, beskeder, værktøjer eller indstillinger for anmodningen umiddelbart før modeldispatch. Hver
+Redigér systeminstruktionerne, beskederne, værktøjerne eller indstillingerne i den færdige anmodning, lige før den sendes til modellen. Hver
 type anmodning, en session udsteder, har sin egen hook, så et plugin kan behandle agentløkken og hjælpeanmodninger
 forskelligt:
 
@@ -1469,7 +1469,7 @@ Tilsidesættelser i anmodningen følger disse regler:
 
 #### Udbyderindstillinger
 
-Udbyderindstillinger bruger den valgte protokols semantiske indstillingsnavne, ikke rå HTTP-body-felter. Afgræns udbyderspecifikke
+Udbyderindstillinger bruger den valgte protokols semantiske indstillingsnavne, ikke de rå felter i HTTP-anmodningens indhold. Afgræns udbyderspecifikke
 indstillinger til den matchende udbyder. OpenAI Responses bruger f.eks. `reasoningEffort`:
 
 ```ts
@@ -1504,7 +1504,7 @@ await ctx.session.hook(
 
 #### Modelanmodning
 
-Rediger model-indstillinger for anmodningen, og afgræns eventuelt hooken til én udbyder. Hændelsen bærer samme `kind`
+Redigér modelindstillingerne for anmodningen, og afgræns eventuelt hooket til én udbyder. Hændelsen har samme `kind`
 som HTTP-hookene nedenfor.
 
 ```ts
@@ -1517,7 +1517,7 @@ await ctx.session.hook(
 )
 ```
 
-#### Native HTTP
+#### Udbyderens HTTP-trafik
 
 Redigér udbyderens oprindelige HTTP-anmodninger eller -svar. Indholdet kan kun læses én gang som en stream. Klon eller erstat indholdet, før du læser det.
 
@@ -1539,13 +1539,13 @@ await ctx.session.hook("http.response", (event) => {
 })
 ```
 
-#### Native WebSocket (eksperimentelt)
+#### Udbyderens WebSocket-trafik (eksperimentel)
 
 Udbydere, der streamer over en WebSocket, åbner én forbindelse pr. session og genbruger den på tværs af anmodninger, så
 `http.request` og `http.response` aldrig ser den trafik. Den eksperimentelle `experimental.ws.handshake`-hook kører én gang pr. model-
 kald, før forbindelsen vælges. Den bærer samme `sessionID`, `agent`, `model` og `kind` som HTTP-
-hookene samt forbindelsens `url` og `headers`. Ændring af `url` eller `headers` ændrer, hvilken socket anmodningen bruger, så et
-roteret bearer-token genåbner forbindelsen.
+hookene samt forbindelsens `url` og `headers`. Ændring af `url` eller `headers` ændrer, hvilken socket anmodningen bruger. Derfor åbnes
+forbindelsen på ny, når bearer-tokenet udskiftes.
 
 HTTP-hooks kører stadig for hver HTTP-anmodning, inklusive den anmodning, som en WebSocket-rute falder tilbage til.
 
@@ -1560,10 +1560,10 @@ await ctx.session.hook(
 )
 ```
 
-`experimental.ws.send` og `experimental.ws.receive` eksponerer selve frames, WebSocket-modstykket til
-at redigere en HTTP-request- eller response-body. `send` kører, efter at udbyderdriveren har bygget en udgående frame, og før den
-skrives; `receive` kører på hver indgående frame, før driveren observerer den. Begge bærer framen som en streng og
-sender det, `frame` indeholder, når hooken returnerer.
+`experimental.ws.send` og `experimental.ws.receive` giver adgang til selve WebSocket-framen, ligesom du kan redigere
+indholdet af en HTTP-anmodning eller et HTTP-svar. `send` kører, efter at udbyderdriveren har bygget en udgående frame, men før den
+sendes. `receive` kører for hver indgående frame, før driveren læser den. Begge hooks giver framen som en streng og
+sender det, `frame` indeholder, når hooket returnerer.
 
 OpenCode validerer ikke omskrevne frames. Driveren sporer tilstand ud fra udbyderens svar, så en omskrivning, der
 ændrer protokolbetydning, er pluginets ansvar, ligesom en omskrevet HTTP-body er det.
@@ -1606,8 +1606,8 @@ await ctx.session.hook("retry", (event) => {
 })
 ```
 
-Retry-hooks kan ændre OpenCodes indledende `decision` ved at gøre en terminal fejl
-genforsøgsbar eller nedlægge veto mod et foreslået genforsøg.
+Hooks for nye forsøg kan ændre OpenCodes oprindelige `decision`: De kan tillade et nyt forsøg efter en fejl, der ellers ville standse anmodningen,
+eller afvise et foreslået nyt forsøg.
 
 Genforsøgsbeslutninger følger disse regler:
 
@@ -1851,8 +1851,8 @@ export default {
 
 - V1 kalder `server()` og bruger de returnerede hooks.
 - V2 læser standardeksportens `id` og `setup()` (eller `effect()` for Effect-plugins) og ignorerer `server()`.
-- Hold hver implementering på sit eget API; deling af et export oversætter ikke V1-hooks til V2-hooks.
-- Spread `Plugin.define(...)` ind i det eksporterede objekt, så det typechecker V2-definitionen separat fra `server()`.
+- Hold hver implementering på sit eget API. V1-hooks bliver ikke til V2-hooks, bare fordi de deler et eksportobjekt.
+- Brug spread-syntaks til at føje `Plugin.define(...)` til det eksporterede objekt, så V2-definitionen typekontrolleres uafhængigt af `server()`.
 
 V1-objektformen understøttes i OpenCode `1.18.29`. Ældre V1-releases kan
 forvente funktionseksporter i stedet; test den installerede pakke med den ældste V1-

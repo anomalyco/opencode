@@ -1,10 +1,10 @@
 ---
 title: "Udbydere"
-description: "Forbind OpenCode til modeludbydere som OpenCode Go, ChatGPT, Amazon Bedrock, Google Vertex, GitHub Copilot og Ollama, eller tilføj en brugerdefineret."
+description: "Opret forbindelse fra OpenCode til modeludbydere som OpenCode Go, ChatGPT, Amazon Bedrock, Google Vertex, GitHub Copilot og Ollama, eller tilføj din egen udbyder."
 ---
 
-OpenCode indeholder et udbyder- og modelkatalog fra [models.dev](https://models.dev). For de fleste udbydere skal du først
-forbinde en konto og derefter vælge en model.
+OpenCode har et katalog over udbydere og modeller fra [models.dev](https://models.dev). Hos de fleste udbydere skal du først
+tilknytte en konto og derefter vælge en model.
 
 ## Opsætning
 
@@ -30,8 +30,8 @@ Se [Go-guiden](/console/go) for forbrugsgrænser, endpoints og oplysninger om pr
 
 ## ChatGPT
 
-Brug et ChatGPT Plus- eller Pro-abonnement i stedet for en OpenAI-API-nøgle. Forbind **OpenAI**, og vælg derefter **Sign in with ChatGPT**
-eller en af de ældre **Codex**-loginmetoder. Forbruget tæller mod dit abonnement, så disse modeller viser ingen omkostning.
+Brug et abonnement på ChatGPT Plus or Pro i stedet for en OpenAI-API-nøgle. Opret forbindelse til **OpenAI**, og vælg derefter **Sign in with ChatGPT**
+eller en af de ældre **Codex**-loginmetoder. Forbruget dækkes af abonnementet, så OpenCode viser ingen pris for de modeller.
 
 ```text
 /connect
@@ -57,7 +57,7 @@ alle andre plugins forbliver aktiveret.
 }
 ```
 
-## Brugerdefineret
+## Brugerdefinerede udbydere
 
 Tilføj en udbyder, når dens API ikke allerede findes i kataloget. Dette OpenAI-kompatible eksempel definerer legitimationsoplysningerne,
 runtime-pakken, endpointet og den første model samlet.
@@ -87,20 +87,20 @@ runtime-pakken, endpointet og den første model samlet.
 
 | Felt | Formål |
 | --- | --- |
-| `name` | Vist navn. |
-| `env` | Ordnede miljøvariabelnavne, der kan levere legitimationsoplysningerne. |
+| `name` | Visningsnavn. |
+| `env` | Navne på miljøvariabler, der kan levere legitimationsoplysningerne, i den rækkefølge OpenCode prøver dem. |
 | `package` | Runtime-udbyderpakke. |
 | `canonical` | Indbygget udbyder-ID, hvis katalogstandarder denne udbyder arver. |
 | `compatibility` | API-særheder, som deles af hver model hos denne udbyder. Se [Kompatibilitet](/models#compatibility). |
-| `settings` | Typede OpenCode-kontroller og JSON-indstillinger, der sendes til runtime-pakken. |
+| `settings` | OpenCode-indstillinger med faste typer samt JSON-indstillinger, der sendes til runtimepakken. |
 | `headers` | HTTP-headere med strengværdier, der føjes til anmodninger. |
-| `body` | JSON-felter, der flettes ind i request-bodies. |
+| `body` | JSON-felter, der flettes ind i anmodningernes indhold. |
 | `models` | Modeller, der skal tilføjes eller tilsidesættes, med OpenCode-model-ID som nøgle. |
 
 ## Endpoint
 
-Tilsidesæt `settings.baseURL` for at sende en katalogudbyder gennem en proxy eller et kompatibelt endpoint. Dens eksisterende pakke,
-modeller og forbindelse gælder stadig.
+Tilsidesæt `settings.baseURL` for at sende anmodninger til en udbyder i kataloget gennem en proxy eller et kompatibelt endpoint. OpenCode bruger stadig udbyderens eksisterende pakke,
+modeller og forbindelse.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -119,7 +119,7 @@ modeller og forbindelse gælder stadig.
 
 ## Anmodninger
 
-Brug `headers` til ekstra HTTP-headere og `body` til JSON-felter, der skal flettes ind i hver request-body.
+Brug `headers` til ekstra HTTP-headere og `body` til JSON-felter, der skal flettes ind i hver anmodnings indhold.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -139,7 +139,7 @@ Brug `headers` til ekstra HTTP-headere og `body` til JSON-felter, der skal flett
 }
 ```
 
-Begge felter kan også angives på en model eller variant, når kun en del af en udbyders trafik har brug for tilsidesættelsen.
+Du kan også angive begge felter for en bestemt model eller variant, hvis ændringen kun skal gælde for en del af udbyderens trafik.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -164,11 +164,11 @@ Begge felter kan også angives på en model eller variant, når kun en del af en
 
 ## Timeouts
 
-HTTP-anmodninger venter op til fem minutter på response-headere og op til femten minutter mellem streamede response-chunks.
+For HTTP-anmodninger venter OpenCode op til fem minutter på svarheaderne og op til femten minutter mellem dele af det streamede svar.
 Sæt udbyderens `settings.headerTimeout` eller `settings.chunkTimeout` til et antal millisekunder for at ændre en grænse
 eller til `false` for at deaktivere den. `settings.timeout` begrænser desuden hele anmodningen fra afsendelse til svaret
-er færdigt; den har ingen standard. Disse konfigurationsindstillinger gælder for hele udbyderen, ikke pr. model eller variant. På en
-WebSocket-transport begrænser `chunkTimeout` i stedet afstanden mellem frames og er som standard tredive minutter.
+er færdigt. Der er ingen standardværdi. Disse indstillinger gælder for hele udbyderen, ikke pr. model eller variant. Over
+WebSocket angiver `chunkTimeout` i stedet den maksimale ventetid mellem frames. Standardværdien er tredive minutter.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -189,10 +189,10 @@ tre gange, før det giver op.
 
 ## Kodning af anmodninger
 
-`settings.encoding` komprimerer HTTP-request-bodies med `"zstd"` eller `"gzip"` eller sender almindelig JSON med `"none"`. Angiv den
-på en udbyder, model eller variant; den mest specifikke værdi vinder. Aktivér kun en encoding, som endpointet afkoder: de fleste
-udbydere og gateways afviser komprimerede bodies. OpenAI bruger som standard `"zstd"`, når du er logget ind med ChatGPT, og der ikke er konfigureret en brugerdefineret
-`baseURL`; API-nøgler sender almindelig JSON. WebSocket-beskeder påvirkes ikke.
+`settings.encoding` komprimerer indholdet af HTTP-anmodninger med `"zstd"` eller `"gzip"` eller sender almindelig JSON med `"none"`. Angiv indstillingen
+for en udbyder, model eller variant. Den mest specifikke værdi gælder. Vælg kun en kodning, som endpointet kan afkode: De fleste
+udbydere og gateways afviser komprimeret indhold. For OpenAI bruges `"zstd"` som standard, når du er logget ind med ChatGPT uden en brugerdefineret
+`baseURL`. Med en API-nøgle sendes almindelig JSON. WebSocket-beskeder påvirkes ikke.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -207,8 +207,8 @@ udbydere og gateways afviser komprimerede bodies. OpenAI bruger som standard `"z
 
 ## Pakker
 
-Feltet `package` vælger det runtime, der kommunikerer med en udbyder. Brug det kompatible runtime til API'er, der
-implementerer OpenAIs requestformat.
+Feltet `package` vælger den runtime, der kommunikerer med en udbyder. Brug den kompatible runtime til API'er, der
+implementerer OpenAIs anmodningsformat.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -227,7 +227,7 @@ implementerer OpenAIs requestformat.
 }
 ```
 
-Native pakkemuligheder omfatter:
+Blandt de udbyderspecifikke pakker finder du:
 
 - `@opencode/ai/providers/openai`
 - `@opencode/ai/providers/openai/chat`
@@ -291,21 +291,21 @@ det ID, der sendes til udbyderen.
 
 | Felt | Formål |
 | --- | --- |
-| `modelID` | Model- eller deployment-ID, der sendes til udbyderen. |
-| `name` | Vist navn. |
+| `modelID` | ID for modellen eller udrulningen, som sendes til udbyderen. |
+| `name` | Visningsnavn. |
 | `family` | Modelfamilie, der bruges til at gruppere relaterede modeller. |
-| `type` | Hvad modellen producerer: `chat`, `decision`, `image`, `video`, `realtime`, `embedding` eller `transcription`. Standard er `chat`; kun chatmodeller tilbydes til sessioner. Realtidsmodeller, der svarer med tale, tilbydes til stemme, og med `disabled: true` gør de ikke. |
+| `type` | Hvad modellen producerer: `chat`, `decision`, `image`, `video`, `realtime`, `embedding` eller `transcription`. Standardtypen er `chat`, og kun chatmodeller tilbydes til sessioner. Realtidsmodeller, der svarer med tale, kan bruges til stemmesessioner, medmindre `disabled: true` er angivet. |
 | `releaseDate` | Udgivelsesdato som `YYYY-MM-DD` eller `YYYY-MM`. |
-| `package` | Runtime-tilsidesættelse for denne model. En transskriptionsmodel angiver sin transskriptionsprotokol, f.eks. `@opencode/ai/protocols/openai-transcription`; en realtidsmodel tager ingen, da stemmesessioner starter gennem dens API. |
-| `settings` | OpenCode-kontroller på modelniveau og pakkespecifikke JSON-indstillinger. |
-| `headers` | Ekstra request-headere med strengværdier. |
-| `body` | Ekstra JSON-request-body-felter. |
-| `capabilities` | Værktøjsunderstøttelse, accepterede input- og outputmedietyper, temperaturunderstøttelse og ræsonneringskontroller. |
+| `package` | En anden runtime til denne model. For en transskriptionsmodel angives transskriptionsprotokollen, f.eks. `@opencode/ai/protocols/openai-transcription`. Feltet bruges ikke for realtidsmodeller, da stemmesessioner startes via modellens API. |
+| `settings` | OpenCode-indstillinger på modelniveau og pakkespecifikke JSON-indstillinger. |
+| `headers` | Ekstra anmodningsheadere med strengværdier. |
+| `body` | Ekstra JSON-felter i anmodningens indhold. |
+| `capabilities` | Understøttelse af værktøjer og temperatur, accepterede medietyper for input og output samt indstillinger for ræsonnering. |
 | `compatibility` | API-særheder for denne model, som tilsidesætter udbyderens. Se [Kompatibilitet](/models#compatibility). |
 | `variants` | Navngivne varianter med deres egne `settings`, `headers` og `body`. |
-| `cost` | Priser for input, output og eventuelt cache pr. million tokens. |
+| `cost` | Priser for input, output og eventuelt cache pr. 1 mio. tokens. |
 | `limit` | Grænser for kontekst-, input- og output-tokens. |
-| `disabled` | Fjerner modellen fra valget, når den er `true`. |
+| `disabled` | Skjuler modellen i modelvælgeren, når værdien er `true`. |
 
 Se [Modeller](/models) for valg, standarder, kapaciteter, grænser, omkostninger og varianter.
 
@@ -345,10 +345,10 @@ vælge **Microsoft Entra ID (Azure CLI)**, når du forbinder Azure.
 az login
 ```
 
-Angiv ressourcenavnet ved forbindelse, hvis det ikke allerede leveres af konfigurationen eller miljøet. Et ressourcenavn,
-der er gemt med en forbindelse, har forrang over konfigurationen; forbind igen for at ændre det.
+Angiv ressourcenavnet, når du opretter forbindelse, hvis det ikke allerede er angivet i konfigurationen eller miljøet. Et ressourcenavn,
+der er gemt med en forbindelse, har forrang over konfigurationen. Opret forbindelsen igen for at ændre det.
 
-Azure CLI-forbindelser bruger den konto, der er valgt i Azure CLI. For en ressource i en anden tenant eller subscription
+Azure CLI-forbindelser bruger den konto, der er valgt i Azure CLI. For en ressource i en anden tenant eller et andet abonnement
 skal du vælge begge eksplicit.
 
 ```bash
@@ -356,34 +356,34 @@ az login --tenant TENANT_ID
 az account set --subscription NAME_OR_ID
 ```
 
-I stedet for konfiguration leverer `AZURE_RESOURCE_NAME` ressourcenavnet til OpenCode-serveren. Den ældre
+Du kan give OpenCode-serveren ressourcenavnet via `AZURE_RESOURCE_NAME` i stedet for at angive det i konfigurationen. Den ældre
 `AZURE_COGNITIVE_SERVICES_RESOURCE_NAME`-variabel virker også.
 
 ### Deployments
 
-Azure leverer kun en model gennem en deployment, så OpenCode viser dine ressourcers deployments og viser dem
-i stedet for hele Azure-kataloget. Listen indlæses i baggrunden efter start, efter forbindelse og efter
-kontoskift. Hvis du vil hente en deployment, der er tilføjet senere, skal du genstarte OpenCode eller forbinde igen.
+Azure gør kun modeller tilgængelige via udrulninger, så OpenCode viser udrulningerne for din ressource
+i stedet for hele Azure-kataloget. Listen indlæses i baggrunden ved opstart, når du opretter forbindelse, og når du skifter konto.
+Genstart OpenCode, eller opret forbindelsen igen for at få vist udrulninger, der er tilføjet siden.
 
-- Indtil listen er indlæst for en forbindelse, eller hvis den mislykkes, forbliver hele kataloget tilgængeligt.
-- En mislykket genindlæsning for samme forbindelse beholder sin seneste komplette fortegnelse.
-- Kontoskift viser aldrig den forrige kontos fortegnelse; den nye konto starter fra hele kataloget.
-- Deployments arver grænser, omkostninger og kapaciteter fra deres katalogmodeller.
+- Hele kataloget er tilgængeligt, indtil listen er indlæst for forbindelsen, eller hvis indlæsningen mislykkes.
+- Hvis en genindlæsning for samme forbindelse mislykkes, beholder OpenCode den seneste komplette liste.
+- Når du skifter konto, vises den forrige kontos liste aldrig. Den nye konto starter med hele kataloget.
+- Udrulninger arver grænser, priser og funktioner fra de tilsvarende modeller i kataloget.
 
-Deploymentnavne er deres model-ID'er med små bogstaver, fordi Azure ignorerer casing i navne, f.eks.
-`azure/gpt-production`. En deployment opkaldt efter sin model, som `gpt-6-luna`, beholder katalog-ID'et. Disse ID'er forbliver
-stabile, når andre deployments tilføjes eller fjernes.
+Udrulningens navn bruges som model-ID, f.eks. `azure/gpt-production`. Navnet skrives med små bogstaver, da Azure ikke
+skelner mellem store og små bogstaver i navne. En udrulning med samme navn som modellen, f.eks. `gpt-6-luna`, beholder katalog-ID'et. Disse ID'er ændres ikke,
+når andre udrulninger tilføjes eller fjernes.
 
-OpenCode matcher en deployment til kataloget efter den model, den deployer, eller efter dens navn, når Azure staver modellen
-anderledes, som med `gpt-4` for GPT-4 Turbo. En deployment opkaldt efter en anden model, f.eks. `gpt-6.1-sol`, der deployer
-`gpt-6-luna`, viser den models navn, grænser og omkostninger.
+OpenCode slår udrulningen op i kataloget ud fra den udrullede model eller ud fra udrulningens navn, hvis Azure bruger et andet modelnavn,
+f.eks. `gpt-4` for GPT-4 Turbo. Hvis udrulningen er opkaldt efter en anden model, f.eks. en udrulning med navnet `gpt-6.1-sol`, der kører
+`gpt-6-luna`, vises den udrullede models navn, grænser og priser.
 
-Med Azure CLI viser OpenCode deployments gennem Azure-administrations-API'et, som kræver læseadgang til
-ressourcen. Hvis det mislykkes, og altid med en API-nøgle, bruger den ressourcens ældre deploymentfortegnelse. Søgningen læser
-hver side, før listen publiceres. En brugerdefineret `settings.baseURL` beholder kataloget.
+Med Azure CLI henter OpenCode udrulningerne via Azure-administrations-API'et, som kræver læseadgang til
+ressourcen. Hvis det mislykkes, eller hvis du bruger en API-nøgle, bruger OpenCode ressourcens ældre liste over udrulninger. OpenCode henter
+alle sider, før den viser listen. Hvis du angiver en brugerdefineret `settings.baseURL`, beholder OpenCode kataloget.
 
-Konfigurer en deployment eksplicit, når dens model ikke findes i kataloget, f.eks. en finjusteret model, eller for selv at knytte et model-ID
-til en deployment. OpenCode logger en advarsel, der navngiver sådanne deployments. Eksplicit konfigurerede modeller bevares
+Konfigurer en udrulning eksplicit, hvis modellen ikke findes i kataloget, f.eks. en finjusteret model, eller hvis du selv vil knytte et model-ID
+til en udrulning. OpenCode logger en advarsel med navnene på den slags udrulninger. Eksplicit konfigurerede modeller bevares
 altid.
 
 ```jsonc title="opencode.jsonc"
@@ -414,16 +414,16 @@ az login --tenant TENANT_ID
 
 ## Bedrock
 
-Amazon Bedrock bruger AWS' standardlegitimationskæde. En navngivet AWS-profil er den enkleste varige opsætning; OpenCode genkender også
-adgangsnøglemiljøer, webidentitet og containerlegitimationsoplysninger.
+Amazon Bedrock bruger AWS' standardkæde til at finde legitimationsoplysninger. En navngivet AWS-profil er den enkleste varige løsning. OpenCode genkender også
+adgangsnøgler fra miljøet, webidentitet og legitimationsoplysninger fra containere.
 
 ```bash
 aws configure sso --profile work
 aws sso login --profile work
 ```
 
-Vælg profilen og regionen i udbyderindstillingerne. En konfigureret `profile`, `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`, webidentitets-
-tokenfil eller containerlegitimations-URI aktiverer udbyderen; en region alene gør ikke.
+Vælg profilen og regionen i udbyderindstillingerne. Du aktiverer udbyderen ved at angive `profile`, `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`, en fil med et webidentitetstoken
+eller en URI til containerens legitimationsoplysninger. En region alene er ikke nok.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -457,8 +457,7 @@ VPC-endpoint skal du angive `baseURL` og beholde samme profil og region.
 }
 ```
 
-Bedrock-API-nøgler bruger `AWS_BEARER_TOKEN_BEDROCK`. Andre AWS-variabler fodrer SigV4 og gemmes ikke som OpenCode-API-nøgle-
-konti.
+Bedrock-API-nøgler bruger `AWS_BEARER_TOKEN_BEDROCK`. Andre AWS-variabler bruges til SigV4 og gemmes ikke som API-nøglekonti i OpenCode.
 
 ## Vertex
 
@@ -491,8 +490,8 @@ OpenCode kan også finde projektet via `GOOGLE_VERTEX_PROJECT`, `GOOGLE_CLOUD_PR
 GOOGLE_CLOUD_PROJECT=my-project GOOGLE_VERTEX_LOCATION=europe-west4 opencode --standalone
 ```
 
-Tjenestekonti virker gennem samme ADC-sti. Peg `GOOGLE_APPLICATION_CREDENTIALS` på tjenestekontoens JSON-
-fil, og angiv stadig et projekt gennem indstillingerne eller en af projektvariablerne ovenfor.
+Tjenestekonti bruger også ADC. Sæt `GOOGLE_APPLICATION_CREDENTIALS` til stien til tjenestekontoens JSON-fil. Du skal stadig angive et projekt
+i indstillingerne eller i en af projektvariablerne ovenfor.
 
 ```bash
 GOOGLE_APPLICATION_CREDENTIALS=/secure/vertex.json \
@@ -505,8 +504,8 @@ udbyder-ID `google-vertex-anthropic` er utilgængeligt i V2.
 
 ## Copilot
 
-GitHub Copilot understøtter device OAuth i stedet for manuel API-nøgleindtastning. Forbind **GitHub Copilot**, vælg GitHub.com eller
-GitHub Enterprise, gennemfør device-flowet, og åbn derefter `/models`.
+GitHub Copilot bruger OAuth med enhedskode i stedet for manuel indtastning af en API-nøgle. Opret forbindelse til **GitHub Copilot**, vælg GitHub.com eller
+GitHub Enterprise, gennemfør login med enhedskoden, og åbn derefter `/models`.
 
 ```text
 /connect
@@ -514,30 +513,29 @@ GitHub Enterprise, gennemfør device-flowet, og åbn derefter `/models`.
 /models
 ```
 
-For GitHub Enterprise skal du angive deployment-URL'en eller domænet, når du bliver bedt om det. OpenCode bruger et Copilot-API-endpoint returneret
-af GitHub, når det er tilgængeligt; ellers udleder den endpointet fra enterprise-domænet.
+For GitHub Enterprise skal du angive installationens URL eller domæne, når du bliver bedt om det. OpenCode bruger det Copilot-API-endpoint,
+GitHub returnerer. Hvis GitHub ikke returnerer et endpoint, udleder OpenCode det af GitHub Enterprise-domænet.
 
 ```text
 company.ghe.com
 ```
 
-Den forbundne konto skal have adgang til Copilot Chat. Hvis GitHub rapporterer ingen rettighed, skal du tilmelde dig Copilot Free eller bede
-organisationen om at tildele en Copilot-plads og derefter forbinde igen. OpenCode henter kontos aktuelle modelliste efter login
+Den tilknyttede konto skal have adgang til Copilot Chat. Hvis GitHub melder, at du ikke har adgang, skal du tilmelde dig Copilot Free eller bede
+organisationen om at give dig en Copilot-licens. Opret derefter forbindelsen igen. OpenCode henter kontoens aktuelle modelliste, når du logger ind,
 og hver gang den aktive Copilot-konto ændres.
 
 ## Ollama
 
 Start Ollama, og hent en model. OpenCode undersøger `http://127.0.0.1:11434`, finder completion-modeller og føjer dem til
-`/models` uden en kontoforbindelse.
+`/models`, uden at du behøver at tilknytte en konto.
 
 ```bash
 ollama serve
 ollama pull qwen3:8b
 ```
 
-Peg OpenCode på en ekstern eller proxet Ollama-server med `settings.baseURL`. Medtag `/v1`; OpenCode udleder de native
-søgestier `/api/tags` og `/api/show` fra den. `apiKey` er valgfri og sendes som bearer-token til søgning og
-modelanmodninger.
+Angiv en ekstern Ollama-server eller en Ollama-server bag en proxy med `settings.baseURL`. Medtag `/v1`. OpenCode bruger adressen til at finde Ollamas egne
+stier `/api/tags` og `/api/show` til modelopslag. `apiKey` er valgfri. Hvis du angiver den, sendes den som bearer-token ved modelopslag og modelkald.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -553,8 +551,8 @@ modelanmodninger.
 }
 ```
 
-Søgningen opdateres periodisk og beholder den seneste vellykkede fortegnelse under et midlertidigt udfald. Modeller, der kun er
-embeddings, vises ikke, fordi OpenCode kun tilføjer modeller, hvis Ollama-metadata omfatter `completion`-kapaciteten.
+OpenCode opdaterer jævnligt listen og beholder den senest hentede liste ved et midlertidigt udfald. Modeller, der kun
+genererer embeddings, vises ikke, fordi OpenCode kun tilføjer modeller med `completion` i deres Ollama-metadata.
 
 ## Runtimes
 
@@ -575,14 +573,14 @@ LM Studio og vLLM har også indbygget lokal søgning. Deres standardendpoints er
 }
 ```
 
-LM Studio finder sprogmodeller fra `/api/v1/models`. vLLM kontrollerer `/health`, før den læser `/v1/models`; dens
-søgning kan ikke udlede værktøjsunderstøttelse, så fundne vLLM-modeller starter med værktøjer deaktiveret. For et andet OpenAI-kompatibelt
-runtime skal du bruge opskriften for [brugerdefinerede udbydere](#custom) og angive dens modeller eksplicit.
+OpenCode finder sprogmodeller i LM Studio via `/api/v1/models`. For vLLM læser OpenCode `/health` før `/v1/models`. OpenCode kan
+ikke afgøre, om vLLM-modellerne understøtter værktøjer, så værktøjerne er slået fra for de fundne modeller. Hvis du bruger en anden OpenAI-kompatibel
+runtime, skal du følge vejledningen til [brugerdefinerede udbydere](#custom) og angive modellerne eksplicit.
 
 ## Gateways
 
-OpenRouter bruger sit native runtime og katalog. Giv `OPENROUTER_API_KEY` til OpenCode-serveren, eller forbind en
-OpenRouter-konto, og referer derefter til modeller med det fulde OpenRouter-model-ID efter udbyderpræfikset.
+OpenRouter bruger sin egen runtime og sit eget katalog. Angiv `OPENROUTER_API_KEY` på OpenCode-serveren, eller tilknyt en
+OpenRouter-konto. Angiv derefter hele OpenRouter-model-ID'et efter udbyderpræfikset.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -591,8 +589,8 @@ OpenRouter-konto, og referer derefter til modeller med det fulde OpenRouter-mode
 }
 ```
 
-Behold den native OpenRouter-pakke, når du tilsidesætter dens endpoint eller router gennem en OpenRouter-kompatibel gateway.
-Det bevarer OpenRouters request- og ræsonneringsadfærd.
+Behold OpenRouters egen pakke, hvis du ændrer dens endpoint eller sender trafikken gennem en OpenRouter-kompatibel gateway.
+Så behandles anmodninger og ræsonnering stadig som normalt for OpenRouter.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -648,13 +646,13 @@ ID, før du ændrer pakker.
 | Ollama har ingen modeller | Bekræft, at serveren eksponerer `/api/tags` og `/api/show` på stien udledt fra `baseURL`, og at `/api/show` rapporterer `completion`-kapaciteten. |
 | Copilot har ingen modeller | Bekræft, at den aktive OAuth-konto har adgang til Copilot Chat. En mislykket modelsynkronisering logges som `failed to sync GitHub Copilot models`. |
 
-V2 afviser de udgåede udbyder-ID'er med en direkte erstatning. Brug `azure/<model>` i stedet for
+V2 afviser udgåede udbyder-ID'er og angiver, hvad du skal bruge i stedet. Brug `azure/<model>` i stedet for
 `azure-cognitive-services/<model>`, og `google-vertex/<model>` i stedet for `google-vertex-anthropic/<model>`.
 
 ## WebSockets
 
 OpenAI-, xAI- og understøttede Azure Responses-modeller kan holde én WebSocket-forbindelse åben pr. session. Efterfølgende trin
-genbruger det uændrede requestpræfiks og sender kun indhold tilføjet siden det forrige svar, hvilket reducerer uploads i lange
+genbruger den uændrede del i starten af anmodningen og sender kun det indhold, der er tilføjet siden sidste svar. Det mindsker mængden af data, der sendes i lange
 sessioner.
 
 ```jsonc title="opencode.jsonc"
@@ -670,11 +668,11 @@ sessioner.
 
 WebSocket-adfærden følger disse regler:
 
-- Indbyggede udbydere tilmelder understøttede ruter efter deres egen politik.
-- Udbyders `settings.transport: "websocket"` aktiverer den; `"http"` deaktiverer den.
-- `"websocket"` på en rute uden en WebSocket-kanal logger en advarsel og falder tilbage til HTTP.
-- OpenAI-udbyderkomprimering bruger samme forbindelse.
-- xAI fortsætter kun fra gemte svar. Med dens standard `store: false` sendes hvert trin fuldt over den genbrugte
+- Indbyggede udbydere aktiverer WebSocket på understøttede ruter ifølge deres egen politik.
+- Angiv `settings.transport: "websocket"` for udbyderen for at slå WebSocket til eller `"http"` for at slå det fra.
+- Med `"websocket"` på en rute uden en WebSocket-kanal logger OpenCode en advarsel og bruger HTTP i stedet.
+- OpenAIs komprimering bruger samme forbindelse.
+- xAI kan kun fortsætte ud fra gemte svar. Med standardindstillingen `store: false` sendes hvert trin i sin helhed over den samme
   forbindelse.
-- En lukket socket genopretter forbindelsen ved næste trin. Hvis forbindelsen ikke kan åbnes, fortsætter sessionen over HTTP.
-- Udbyderplugins med `http.request`- eller `http.response`-hooks forbliver på HTTP, så hver anmodning forbliver observerbar.
+- Hvis forbindelsen er lukket, forsøger OpenCode at genoprette den ved næste trin. Hvis det ikke lykkes, fortsætter sessionen over HTTP.
+- Udbyderplugins med `http.request`- eller `http.response`-hooks bruger fortsat HTTP, så de kan følge hver anmodning.

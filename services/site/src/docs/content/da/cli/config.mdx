@@ -250,7 +250,7 @@ Aktivér systemnotifikationer og opmærksomhedslyde uafhængigt:
 | ------------------------ | ---------------------- | -------------------------------------------------------------------------------------------------------- |
 | `attention.notifications` | boolean               | Viser systemnotifikationer, normalt når terminalen ikke har fokus.                                  |
 | `attention.sound`        | boolean                | Afspiller opmærksomhedslyde.                                                                                  |
-| `attention.volume`       | number from `0` to `1` | Angiver lydstyrken.                                                                                       |
+| `attention.volume`       | tal fra `0` til `1` | Angiver lydstyrken.                                                                                       |
 | `attention.sound_pack`   | string                 | Vælger ID'et for den aktive lydpakke.                                                                        |
 | `attention.sounds`       | object                 | Tilsidesætter lydfiler for `default`, `question`, `permission`, `error`, `done` eller `subagent_done`.    |
 
@@ -320,10 +320,10 @@ Konfigurer terminalintegration:
 | `mini.turn_summary` | `show` eller `hide`            | Viser eller skjuler et resumé af agent, model og varighed i scrollback.               |
 | `mini.footer`       | `show` eller `hide`            | Viser eller skjuler de faste oplysninger om aktivitet, model, forbrug og kontekst.             |
 | `mini.splash`       | `show` eller `hide`            | Viser eller skjuler bannere ved start og afslutning.                                      |
-| `mini.work_spinner` | spinner ID                     | Vælger arbejdsanimationen i sidefoden.                                          |
+| `mini.work_spinner` | ID for statusanimation        | Vælger arbejdsanimationen i sidefoden.                                          |
 | `mini.mono`         | boolean                        | Bruger monokromt ASCII-output.                                                      |
 | `mini.replay`       | boolean                        | Gendanner sessionshistorik ved genoptagelse og terminalstørrelsesændring.                            |
-| `mini.replay_limit` | positive integer               | Begrænser genafspilning til de nyeste beskeder. Standardgrænsen er `200`.                  |
+| `mini.replay_limit` | positivt heltal                | Begrænser genafspilning til de nyeste beskeder. Standardgrænsen er `200`.                  |
 
 </div>
 
@@ -365,13 +365,13 @@ Tilsidesæt en kommandobinding og timeouten for leadertasten:
 
 | Indstilling | Værdier | Beskrivelse |
 | ----------------------- | ------------------------------------------------ | -------------------------------------------------------------------- |
-| `keybinds.leader`       | binding value                                    | Angiver den tast, som `<leader>` i andre bindinger refererer til.             |
-| `keybinds.<command>`    | binding value                                    | Tilsidesætter bindingen for ét kommando-ID.                            |
+| `keybinds.leader`       | værdi for tastebinding                           | Angiver den tast, som `<leader>` i andre bindinger refererer til.             |
+| `keybinds.<command>`    | værdi for tastebinding                           | Tilsidesætter bindingen for ét kommando-ID.                            |
 | `keybinds.*.key`        | Tast som streng eller deskriptor                  | Vælger tasten for en binding angivet som et objekt.                               |
 | `keybinds.*.event`      | `press` eller `release`                          | Begrænser en binding angivet som et objekt til én tastehændelse.                           |
 | `keybinds.*.preventDefault` | boolean                                      | Styrer, om terminalens standardtasteadfærd forhindres.  |
 | `keybinds.*.fallthrough` | boolean                                         | Lader handlere med lavere prioritet modtage samme hændelse.            |
-| `leader.timeout`        | positive integer                                 | Angiver, hvor mange millisekunder der ventes efter leadertasten.             |
+| `leader.timeout`        | positivt heltal                                  | Angiver, hvor mange millisekunder der ventes efter leadertasten.             |
 
 </div>
 
@@ -430,7 +430,7 @@ Aktivér diagnostik, eller tilmeld dig et aktuelt tilgængeligt eksperiment:
 | `debug.devtools`    | boolean                         | Viser DevTools-debuglinjen.                                                       |
 | `debug.timing`      | boolean                         | Viser diagnostik for tid til første tegning i debuglinjen.                              |
 | `debug.turn_tokens` | boolean eller `verbose`         | Viser tokenforbrug pr. tur; `verbose` viser også input til værktøjskaldene.               |
-| `experimental`      | object of feature IDs to booleans | Aktiverer eller deaktiverer eksperimenter, som kan ændre sig eller fjernes uden varsel.     |
+| `experimental`      | objekt med funktions-ID'er som nøgler og booleske værdier | Aktiverer eller deaktiverer eksperimenter, som kan ændre sig eller fjernes uden varsel.     |
 
 </div>
 

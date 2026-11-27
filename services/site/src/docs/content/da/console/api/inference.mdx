@@ -142,8 +142,8 @@ curl -X POST "https://opencode.ai/inference/openai/v1/embeddings" \
 
 Hvert svar angiver, hvad anmodningen kostede dig, ved siden af det forbrug, som API'et allerede returnerer: i `usage` for
 OpenAI og Anthropic og i `usageMetadata` for Gemini. Streams angiver det på den hændelse, der bærer det endelige forbrug:
-den sidste usage-chunk for Chat Completions med `stream_options.include_usage`, `response.completed` for Responses,
-`message_delta` for Messages og den sidste chunk for Gemini.
+den sidste del med forbrugsdata fra Chat Completions med `stream_options.include_usage`, `response.completed` fra Responses,
+`message_delta` fra Messages og den sidste del fra Gemini.
 
 ```json
 "usage": {

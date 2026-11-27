@@ -1,14 +1,14 @@
 ---
 title: "Tilladelser"
-description: "Styr, hvad OpenCode-agenter må, med ordnede allow-, deny- og ask-regler, der matcher handlinger og ressourcer som stier og kommandoer."
+description: "Styr, hvad OpenCode-agenter må, med allow-, deny- og ask-regler i en bestemt rækkefølge. Reglerne matcher handlinger og ressourcer som stier og kommandoer."
 ---
 
 Tilladelser styrer, om en agent må udføre en handling på en ressource.
 
 ## Konfiguration
 
-En almindelig opsætning er at spørge, før shell-kommandoer køres, tillade rutinemæssig Git-inspektion
-og altid blokere pushes. Tilføj disse ordnede regler i `opencode.jsonc`:
+En almindelig opsætning er at bede om godkendelse, før der køres shellkommandoer, tillade rutinemæssige opslag i Git
+og altid blokere pushes. Tilføj reglerne i denne rækkefølge i `opencode.jsonc`:
 
 ```jsonc
 {
@@ -22,7 +22,7 @@ og altid blokere pushes. Tilføj disse ordnede regler i `opencode.jsonc`:
 }
 ```
 
-Den sidste matchende regel vinder, så de specifikke undtagelser følger efter den brede regel.
+Den sidste regel, der matcher, gælder, så specifikke undtagelser skal stå efter den generelle regel.
 
 <Callout type="warning">
   V1 bruger andre felt- og handlingsnavne. I V2 skal du bruge `permissions`, `shell` og `subagent` i stedet for `permission`,
@@ -35,8 +35,8 @@ Hver regel kræver tre strengfelter:
 
 | Felt      | Betydning                                                                    |
 | --------- | ---------------------------------------------------------------------------- |
-| `action`   | Værktøjstilladelseshandling                                                  |
-| `resource` | Værdien, der bruges, f.eks. en sti, kommando, URL, forespørgsel, skill-ID eller agent-ID |
+| `action`   | Den værktøjshandling, reglen gælder for                                      |
+| `resource` | Den værdi, handlingen bruger, f.eks. en sti, kommando, URL, forespørgsel, skill-ID eller agent-ID |
 | `effect`   | `allow`, `deny` eller `ask`                                                  |
 
 ```jsonc
@@ -58,7 +58,7 @@ Hvis ingen regel matcher, bruger OpenCode `ask`.
 
 ## Matchning
 
-Handlinger og ressourcer bruger enkle wildcards for hele værdien:
+Du kan bruge enkle jokertegn til at matche hele værdien for en handling eller ressource:
 
 | Mønster | Match                                    |
 | ------- | ---------------------------------------- |
@@ -74,10 +74,10 @@ Handlinger og ressourcer bruger enkle wildcards for hele værdien:
 }
 ```
 
-Dette mønster matcher hele den normaliserede sti. Backslashes normaliseres til
-skråstreger, og matchning er case-insensitiv på Windows.
+Dette mønster matcher hele den normaliserede sti. Omvendte skråstreger bliver til
+skråstreger, og på Windows skelnes der ikke mellem store og små bogstaver.
 
-Et shell-mønster, der slutter med ` *`, matcher også kommandoen uden argumenter:
+Et shellmønster, der slutter med ` *`, matcher også kommandoen uden argumenter:
 
 ```jsonc
 { "action": "shell", "resource": "git status *", "effect": "allow" }
@@ -85,9 +85,8 @@ Et shell-mønster, der slutter med ` *`, matcher også kommandoen uden argumente
 
 Dette matcher både `git status` og `git status --short`.
 
-OpenCode kombinerer regler i rækkefølge og bruger den sidste match. Konfiguration med lavere prioritet
-indlæses først, globale regler tilføjes derefter, og agentregler
-tilføjes sidst.
+OpenCode samler reglerne i rækkefølge og bruger den sidste, der matcher. Konfigurationer med lavere prioritet
+indlæses først, efterfulgt af globale regler og til sidst agentregler.
 
 ```jsonc
 {
@@ -98,9 +97,8 @@ tilføjes sidst.
 }
 ```
 
-Handlinger kan kontrollere flere ressourcer, f.eks. en patch, der berører flere
-filer. Enhver `deny` afviser handlingen; ellers spørger enhver `ask`; ellers
-tillades handlingen.
+En handling kan omfatte flere ressourcer, f.eks. hvis en patch ændrer flere
+filer. Hvis bare én ressource giver `deny`, afvises hele handlingen. Hvis ingen afvises, men mindst én giver `ask`, spørger OpenCode. Ellers tillades handlingen.
 
 ## Handlinger
 
@@ -109,12 +107,12 @@ bruger i øjeblikket disse handlinger og ressourcer:
 
 | Handling               | Ressource                                                                    |
 | ---------------------- | ---------------------------------------------------------------------------- |
-| `read`                 | Placeringsrelativ intern sti eller kanonisk absolut ekstern sti               |
+| `read`                 | Intern sti relativ til den aktive Location eller kanonisk, absolut ekstern sti |
 | `edit`                 | Målsti for `edit`, `write` og `patch`                                        |
 | `glob`                 | Det ønskede globmønster                                                      |
 | `grep`                 | Det ønskede regulære udtryk, ikke søgestien                                   |
-| `shell`                | Scannergenereret kommandostreng; sammensatte kommandoer kan give flere        |
-| `subagent`             | Målagentens ID                                                               |
+| `shell`                | Kommandostreng fra shellscanneren; sammensatte kommandoer kan give flere     |
+| `subagent`             | ID'et på den agent, der skal startes                                         |
 | `skill`                | Skill-ID                                                                     |
 | `question`             | `*`                                                                          |
 | `webfetch`             | Den ønskede URL                                                              |
@@ -124,7 +122,7 @@ bruger i øjeblikket disse handlinger og ressourcer:
 | `<server>_<tool>`      | `*` for et MCP-værktøj. Bogstaver, cifre, `_` og `-` bevares i begge navne, mens alle andre tegn erstattes med `_`. |
 | `opencode_list_mcp_resources` | MCP-servernavn                                                         |
 | `opencode_read_mcp_resource`  | `<server>:<uri>`                                                       |
-| `execute`              | `*`; en deny fjerner Code Mode og viser dets værktøjer direkte, mens indlejrede værktøjer håndhæver deres regler |
+| `execute`              | `*`; ved afvisning deaktiveres Code Mode, og værktøjerne vises direkte. Indlejrede værktøjer håndhæver fortsat deres egne regler. |
 
 MCP-handlinger bevarer bindestreger, så værktøjer fra en server med navnet `mcp-atlassian` matcher `mcp-atlassian_*`, ikke
 `mcp_atlassian_*`.
@@ -140,11 +138,11 @@ Tillad f.eks. én skill og afvis alle andre skills:
 }
 ```
 
-`doom_loop` og `lsp` er ikke aktuelle V2 Core-tilladelseshandlinger.
+`doom_loop` og `lsp` bruges ikke længere som tilladelseshandlinger i V2 Core.
 
 ## Mapper
 
-Hvis en sti ligger uden for både den aktive Location og dens projektworktree, som ikke ligger i filsystemets rod,
+Hvis en sti ligger uden for både den aktive Location og projektets worktree (forudsat at worktreen ikke er filsystemets rod),
 kontrollerer OpenCode `external_directory` før reglerne for `read` eller `edit`. Standardpolitikken
 tillader `external_directory`, så OpenCode ikke beder om godkendelse til eksterne stier, medmindre du tilføjer en regel.
 Brug følgende for at blive spurgt, hver gang en agent vil tilgå noget uden for projektet:
@@ -158,7 +156,7 @@ Brug følgende for at blive spurgt, hver gang en agent vil tilgå noget uden for
 }
 ```
 
-Mere snævre regler efter den kan tillade eller afvise bestemte mapper:
+Du kan tilføje mere specifikke regler bagefter for at tillade eller afvise adgang til bestemte mapper:
 
 ```jsonc
 {
@@ -189,13 +187,13 @@ Shell-ressourcer forbliver rå kommandotekst og udvides ikke med hjemmemappen.
   af kommandoteksten, så brug en snæver liste over tilladte shellkommandoer frem for mønstre, der skal genkende alle farlige kommandoer.
 </Callout>
 
-Relative ændringsstier kan forlade den aktive Location, mens de forbliver inde i
-dens projektworktree. Eksplicitte eksterne stier kanoniseres før matchning,
-så autorisér kun betroede mappegrænser.
+Relative stier til ændringer kan pege uden for den aktive Location, men stadig inden for
+projektets worktree. OpenCode omsætter eksplicitte eksterne stier til deres kanoniske form, før de matches mod reglerne,
+så giv kun adgang til mapper, du har tillid til.
 
 ## Scanner
 
-Shell-tilladelseskontroller bruger OpenCodes indbyggede shell-scanner på tværs af Bash, Zsh, POSIX `sh` og PowerShell. Nogle kommandoer kan ikke analyseres sikkert, f.eks. fejlbehæftet syntaks eller dynamisk evaluering som `eval`. Hvis en `shell`-deny-regel gælder, mislykkes en sådan kommando med en scannerfejl, fordi dens underkommandoer ikke kan kontrolleres mod deny-reglen. Ellers kræver den godkendelse for hele kommandoen som én `shell`-ressource og for `external_directory` `*`. Kun en regel, der tillader alle mapper, eller brugeren kan give den anden godkendelse, og ingen af godkendelserne gemmes som et mønster.
+OpenCode bruger sin indbyggede shellscanner til at kontrollere tilladelser i Bash, Zsh, POSIX `sh` og PowerShell. Kommandoer med f.eks. ugyldig syntaks eller dynamisk evaluering som `eval` kan ikke analyseres sikkert. Hvis en afvisningsregel for `shell` gælder, stopper kommandoen med en scannerfejl, fordi underkommandoerne ikke kan kontrolleres mod reglen. Ellers kræves der godkendelse af hele kommandoen som én `shell`-ressource og af `external_directory` `*`. Den anden godkendelse kan kun komme fra brugeren eller en regel, der tillader alle mapper. Ingen af godkendelserne gemmes som mønster.
 
 ```jsonc
 {
@@ -211,11 +209,11 @@ Shell-tilladelseskontroller bruger OpenCodes indbyggede shell-scanner på tværs
 }
 ```
 
-Tilladelsesregler, gemte godkendelsesmønstre og bedste-forsøg-mappeudledning gælder for hver udtrukket underkommando og hvert `cd`-mål. Der er ingen ekstra godkendelsestilstand eller generel begrænsning for ukendte mapper.
+OpenCode anvender tilladelsesregler og gemte godkendelsesmønstre på hver udtrukket underkommando og hvert `cd`-mål og forsøger at udlede de relevante mapper. Der er ingen særskilt godkendelsestilstand eller generel begrænsning for ukendte mapper.
 
 ## Standarder
 
-Hver agent, også brugerdefinerede agenter, starter med denne ordnede basispolitik:
+Alle agenter, også brugerdefinerede agenter, starter med disse grundregler i den viste rækkefølge:
 
 ```jsonc
 [
@@ -231,9 +229,9 @@ Medfølgende agenter tilføjer disse politikker:
 | Agent        | Ekstra politik                                                                 |
 | ------------ | ------------------------------------------------------------------------------- |
 | `build`      | Tillader spørgsmål                                                              |
-| `plan`       | Tillader spørgsmål; afviser redigeringer undtagen filer under `~/.opencode/plan` |
+| `plan`       | Tillader spørgsmål. Tillader kun at redigere filer under `~/.opencode/plan`. |
 | `general`    | Afviser spørgsmål og start af subagenter                                        |
-| `explore`    | Afviser alt undtagen shell, læsninger, globs, grep, webhentninger, websøgninger og eksterne mapper; spørger ved `.env`-læsninger |
+| `explore`    | Afviser alt undtagen shellkommandoer, fillæsning, globs, grep, hentning fra nettet, websøgning og adgang til eksterne mapper. Spørger før læsning af `.env`. |
 | `title`      | Afviser alle handlinger                                                         |
 | `summary`    | Afviser alle handlinger                                                         |
 | `compaction` | Beholder basispolitikken                                                        |
@@ -245,7 +243,7 @@ Senere globale regler og agentregler tilsidesætter disse standarder.
 
 ## Agenter
 
-Læg delte regler på topniveau og snævrere regler under
+Læg fælles regler på topniveau og mere specifikke regler under
 `agents.<id>.permissions`:
 
 ```jsonc
@@ -268,8 +266,7 @@ Læg delte regler på topniveau og snævrere regler under
 ```
 
 Agentregler tilføjes efter globale regler; de erstatter ikke det globale
-array. En brugerdefineret subagent bruger sine egne tilladelser, ikke en delmængde af forælderens
-tilladelser.
+array. En brugerdefineret subagent bruger sine egne tilladelser og arver ikke et udsnit af den overordnede agents tilladelser.
 
 ## Godkendelser
 
@@ -277,9 +274,9 @@ Når en regel giver `ask`, kan klienter svare med:
 
 | Valg         | Svar       | Resultat                                                             |
 | ------------ | ---------- | -------------------------------------------------------------------- |
-| Tillad én gang | `once`   | Godkend kun den ventende anmodning                                   |
-| Tillad altid | `always`   | Godkend den, og gem værktøjets foreslåede mønstre for projektet      |
-| Afvis        | `reject`   | Afvis den og enhver anden ventende tilladelsesanmodning i den session |
+| Allow once   | `once`     | Godkend kun den ventende anmodning                                  |
+| Allow always | `always`   | Godkend anmodningen, og gem de mønstre, værktøjet foreslår, for projektet |
+| Reject       | `reject`   | Afvis anmodningen og alle andre ventende tilladelsesanmodninger i sessionen |
 
 Hvis du f.eks. vælger **Allow always** for `git status --short`, kan det gemme et
 shell-præfiks, der dækker senere `git status`-kommandoer:
@@ -289,8 +286,8 @@ shell: git status * → allow
 ```
 
 Gemte godkendelser er varige `allow`-regler afgrænset til projektet. De tilsidesætter aldrig
-en konfigureret `deny`. Værktøjerne vælger det foreslåede gemte mønster: nogle foreslår `*`,
-shell foreslår kommandopræfikser, webhentninger foreslår URL'ens websted (f.eks.
+en konfigureret `deny`. Værktøjerne foreslår selv, hvilket mønster der skal gemmes: Nogle foreslår `*`,
+shellværktøjet foreslår kommandopræfikser, og værktøjet til at hente websider foreslår webstedet fra URL'en (f.eks.
 `https://opencode.ai/*`), og skills og subagenter foreslår deres ID'er.
 Gennemgå brede godkendelser, og fjern dem, der ikke længere er nødvendige.
 
@@ -308,5 +305,5 @@ godkendelser. Den ændrer `allow` eller `ask` til `deny` og giver aldrig adgang.
 }
 ```
 
-Globale og Console-administrerede politikker tilsidesætter projektkonfigurationen, og det er sådan en
-organisation blokerer en kommando, som et repository ellers ville tillade.
+Globale politikker og politikker administreret i Console tilsidesætter projektkonfigurationen. På den måde kan en
+organisation blokere en kommando, som et repository ellers ville tillade.

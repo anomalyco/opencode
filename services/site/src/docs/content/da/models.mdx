@@ -1,6 +1,6 @@
 ---
 title: "Modeller"
-description: "Vælg en model pr. session eller kørsel, angiv en standard, og konfigurer varianter, ræsonnering, prompt-caching og lokale modeller."
+description: "Vælg en model pr. session eller kørsel, angiv en standardmodel, og konfigurer varianter, ræsonnering, promptcaching og lokale modeller."
 ---
 
 Vælg en model til den aktuelle session med `/models`:
@@ -9,13 +9,13 @@ Vælg en model til den aktuelle session med `/models`:
 /models
 ```
 
-OpenCode viser modeller fra [models.dev](https://models.dev), udbyderintegrationer og din konfiguration. Vælgeren
-viser kun aktiverede modeller, hvis udbyder er tilgængelig i det aktuelle projekt. Forbind udbydere i
+OpenCode viser modeller fra [models.dev](https://models.dev), udbyderintegrationer og din konfiguration. Modelvælgeren
+viser kun aktiverede modeller fra udbydere, der er tilgængelige i det aktuelle projekt. Se, hvordan du tilslutter udbydere, under
 [Udbydere](/providers).
 
 ## Vælg
 
-Vælg en post fra `/models` i stedet for at gætte dens udbyder- eller model-ID. Valget gælder den aktuelle session
+Vælg en model i `/models` i stedet for at gætte udbyderens ID eller modellens ID. Valget gælder den aktuelle session
 og ændrer ikke din konfiguration.
 
 ```text
@@ -38,9 +38,9 @@ opencode run --model anthropic/claude-sonnet-5-5 "Refactor parseToken"
 
 Agenter og kommandoer kan også vælge deres egen model. Se [Agenter](/agents) og [Kommandoer](/commands).
 
-## Standarder
+## Standardmodel
 
-Angiv `model` i `opencode.json` eller `opencode.jsonc` for at vælge standarden for nyt arbejde:
+Angiv `model` i `opencode.json` eller `opencode.jsonc` for at vælge standardmodellen til nye opgaver:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -49,12 +49,12 @@ Angiv `model` i `opencode.json` eller `opencode.jsonc` for at vælge standarden 
 }
 ```
 
-Den konfigurerede model bliver katalogstandarden, når den er aktiveret, og dens udbyder er tilgængelig. Ellers falder OpenCode
-tilbage til den nyeste tilgængelige understøttede model.
+Den konfigurerede model bliver standard i kataloget, hvis den er aktiveret, og udbyderen er tilgængelig. Ellers vælger OpenCode
+den nyeste af de modeller, der både er understøttet og tilgængelige.
 
-- En model, der allerede er valgt for en session, har forrang over den konfigurerede standard.
-- Skift af en sessions model omskriver ikke konfigurationsfilen.
-- Rodfeltet `model` bevarer i øjeblikket kun standardudbyderen og -modellen, ikke en variant.
+- Har du allerede valgt en model til en session, har den forrang for standardmodellen.
+- Du kan skifte model i en session uden at ændre konfigurationsfilen.
+- `model` på topniveau gemmer i øjeblikket kun standardudbyderen og standardmodellen, ikke en variant.
 
 Se [Konfiguration](/config) for placeringer og prioritet.
 
@@ -72,9 +72,9 @@ For den delte baggrundsserver:
 opencode service set env OPENCODE_DISABLE_FREE_MODELS 1
 ```
 
-Gratis betyder en `opencode`- eller `opencode-go`-model uden inputpris. Disse modeller forsvinder fra kataloget og standarderne;
-eksplicit valg af en mislykkes med `Model unavailable`. Uden login er `opencode`-udbyderen fraværende, indtil du forbinder
-en OpenCode Console-konto eller angiver `OPENCODE_API_KEY`, som gendanner dens betalte modeller.
+En gratis model er en `opencode`- eller `opencode-go`-model uden inputpris. De modeller fjernes fra kataloget og kan ikke længere bruges som standard.
+Hvis du vælger en af dem eksplicit, får du fejlen `Model unavailable`. Hvis du ikke er logget ind, vises `opencode`-udbyderen ikke. For at få adgang til de betalte modeller igen skal du tilknytte
+en OpenCode Console-konto eller angive `OPENCODE_API_KEY`.
 
 Hvis du vil blokere gratis modeller for alle i en organisation, skal du i stedet bruge en politik. Se [Enterprise](/enterprise#block-free-models).
 
@@ -124,10 +124,10 @@ Definér nye varianter, eller erstat katalogvarianter med samme ID, i modellens 
 }
 ```
 
-Hver variant kan indeholde `settings`, `headers` og `body`. Dens værdier anvendes efter udbyder- og modelværdier.
+Hver variant kan indeholde `settings`, `headers` og `body`. Variantens værdier anvendes efter udbyderens og modellens.
 
-Hvis du vil erstatte en models ræsonneringsvarianter, skal du beskrive dens ræsonneringskontroller i `capabilities.reasoning` med
-[models.dev](https://models.dev) v2-formen. OpenCode bygger varianterne til modellens pakke ud fra dem:
+Hvis du vil erstatte en models ræsonneringsvarianter, skal du angive modellens ræsonneringsindstillinger i `capabilities.reasoning` i v2-formatet fra
+[models.dev](https://models.dev). OpenCode bruger dem til at bygge varianterne til modellens pakke:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -150,12 +150,12 @@ Hvis du vil erstatte en models ræsonneringsvarianter, skal du beskrive dens ræ
 
 | Felt        | Formål                                                                    |
 | ----------- | -------------------------------------------------------------------------- |
-| `supported` | Om modellen ræsonnerer. `false` eller `true` uden kontroller tilføjer ingen varianter. |
+| `supported` | Om modellen kan ræsonnere. `false` eller `true` uden ræsonneringsindstillinger tilføjer ingen varianter. |
 | `toggle`    | Tilføjer en `none`-variant, der slår ræsonnering fra.                     |
 | `effort`    | Ræsonneringsniveauer, der tilbydes. `default` beholder udbyderens standard og tilføjer ingen variant. |
-| `budget`    | Valgfri `min` og `max` thinking-tokens. Ignoreres, når `effort` er angivet. |
+| `budget`    | Valgfri nedre og øvre grænse for ræsonneringstokens, `min` og `max`. Ignoreres, når `effort` er angivet. |
 
-Varianter, der er angivet i `variants`, anvendes oven på dem, der er bygget ud fra `capabilities.reasoning`.
+OpenCode anvender varianterne fra `variants` efter dem, der er bygget ud fra `capabilities.reasoning`.
 
 ## Indstillinger
 
@@ -189,8 +189,8 @@ Udbyder- og modelposter kan tilpasse anmodninger med `settings`, `headers` og `b
 | Felt       | Formål                                                             |
 | ---------- | ------------------------------------------------------------------ |
 | `settings` | Indstillinger for udbyderpakken som `baseURL` eller `reasoningEffort`. |
-| `headers`  | Ekstra HTTP-request-headere.                                       |
-| `body`     | Udbyderspecifikke request-body-felter.                             |
+| `headers`  | Ekstra HTTP-headere til anmodningen.                               |
+| `body`     | Udbyderspecifikke felter i anmodningens indhold.                    |
 
 OpenCode anvender udbyderens værdier først, modellens værdier derefter og den valgte variant sidst.
 
@@ -201,7 +201,7 @@ OpenCode anvender udbyderens værdier først, modellens værdier derefter og den
 
 ## Aliaser
 
-Brug `modelID` til at give en API-model et venligere katalog-ID:
+Brug `modelID` til at give en API-model et katalog-ID, der er nemmere at bruge:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -230,8 +230,8 @@ Brug `modelID` til at give en API-model et venligere katalog-ID:
 }
 ```
 
-Her er `openai/coding-default` den valgbare reference, og `gpt-6.1-sol` sendes til udbyderen. For en model, der ikke
-allerede findes i kataloget, antager OpenCode:
+Her kan du vælge `openai/coding-default`, mens `gpt-6.1-sol` sendes til udbyderen. Hvis modellen ikke allerede
+findes i kataloget, gør OpenCode sig følgende antagelser:
 
 - JSON-værktøjsunderstøttelse, tekst- og billedinput og tekstoutput. Intet freeform-værktøjsinput, medmindre `capabilities.freeform` angiver formatet.
 - En kontekstgrænse på 200.000 tokens og en outputgrænse på 32.000 tokens.
@@ -259,7 +259,7 @@ dog højst `limit.context`. Se [Kontekstvindue](/compaction#window). Tilføj `di
 
 ## Ræsonnering
 
-For en OpenAI-kompatibel model, der streamer ræsonnering i et brugerdefineret assistant-beskedfelt, skal du angive
+For en OpenAI-kompatibel model, der streamer ræsonnering i et brugerdefineret felt i assistentbeskeden, skal du angive
 `compatibility.reasoningField`:
 
 ```jsonc title="opencode.jsonc"
@@ -279,14 +279,14 @@ For en OpenAI-kompatibel model, der streamer ræsonnering i et brugerdefineret a
 ```
 
 OpenCode genkender `reasoning`, `reasoning_content` og `reasoning_text` og accepterer også en anden udbyderspecifik
-streng. Den læser streamet ræsonnering fra feltet og gendanner feltet, når tidligere assistant-beskeder sendes tilbage til
+streng. OpenCode læser den streamede ræsonnering fra feltet og gendanner feltet, når tidligere assistentbeskeder sendes tilbage til
 modellen. Se [Kompatibilitet](#compatibility) for det relaterede `requireReasoning`-felt.
 
 ## Prompt-caching
 
-OpenCode placerer automatisk prompt-cache-breakpoints på ruter, der vides at have brug for dem, som Anthropic. Når
+OpenCode indsætter automatisk markører til promptcaching på ruter, der kræver dem, f.eks. hos Anthropic. Når
 Claude-modeller leveres gennem en OpenAI-kompatibel proxy som LiteLLM, kan OpenCode ikke se, at de har brug for
-`cache_control`-breakpoints i Anthropic-stil. Angiv `compatibility.cacheFormat` på disse Claude-modeller:
+Anthropics `cache_control`-markører. Angiv `compatibility.cacheFormat` for disse Claude-modeller:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -310,7 +310,7 @@ Claude-modeller leveres gennem en OpenAI-kompatibel proxy som LiteLLM, kan OpenC
 ```
 
 OpenCode markerer derefter den seneste værktøjsdefinition, systemprompten og den nyeste besked med
-`cache_control: { "type": "ephemeral" }`, som bruger endpointets standard-cachelevetid på fem minutter. Brug `"alibaba"`
+`cache_control: { "type": "ephemeral" }`, så endpointets standardlevetid på fem minutter bruges. Brug `"alibaba"`
 til Alibaba Model Studio-modeller, som accepterer samme markører, men ignorerer dem på værktøjsdefinitioner. Angiv
 `compatibility.cacheFormat` på udbyderen i stedet, når alle modeller, den leverer, accepterer samme format. Se
 [Kompatibilitet](#compatibility) for de øvrige felter.
@@ -343,16 +343,16 @@ angivet, så brug en værdi, som udbyderen accepterer:
 | Bedrock Converse | `ttl` på hver `cachePoint`. Ældre Claude-modeller, der kun cacher i fem minutter, ignorerer `"1h"`. |
 | OpenAI Chat and Responses | `"24h"` går til `prompt_cache_retention`; andre værdier går til `prompt_cache_options.ttl`. |
 
-Udbydere, der cacher automatisk uden markører, som Gemini, ignorerer den. En længere levetid koster normalt mere at
-skrive: Anthropic opkræver 2× inputprisen for en skrivning til en times cache og 1.25× for en på fem minutter.
+Udbydere, der cacher automatisk uden markører, f.eks. Gemini, ignorerer værdien. Det koster normalt mere at skrive til cachen med en længere
+levetid: Hos Anthropic koster en cacheskrivning 2× inputprisen ved en levetid på en time og 1.25× ved fem minutter.
 
 [Opvarmning](/warming) kan bruge levetiden til at time sine anmodninger med `interval: "auto"`.
 
 ## Kompatibilitet
 
-`compatibility` beskriver særheder i request og response for det API, en model leveres gennem, f.eks. hvilket felt der bærer
-ræsonnering, eller om endpointet accepterer `prompt_cache_key`. Hver model leveres gennem ét API, og et felt har kun
-effekt, når det API læser det. Andre felter ignoreres.
+`compatibility` beskriver særlige forhold ved anmodninger og svar i modellens API, f.eks. hvilket felt der indeholder
+ræsonnering, eller om endpointet accepterer `prompt_cache_key`. Hver model bruger ét API, og et felt har kun
+virkning, hvis det læses af det pågældende API. Andre felter ignoreres.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -372,23 +372,23 @@ effekt, når det API læser det. Andre felter ignoreres.
 Udbyderens `compatibility` gælder for hver model hos den udbyder. En models egen `compatibility` tilsidesætter den felt for
 felt: OpenCode starter med de værdier, [models.dev](https://models.dev) publicerer for modellens API (`reasoningField`,
 `maxTokensField` og `mediaInput` samt `supportsEffortUpdates` og `supportsSystemUpdates`, når models.dev markerer
-API'et som understøttende dem), og anvender derefter modellens konfiguration. Uindstillede felter beholder udbyderpakkens indbyggede
-standard eller registrering. `supportsThinkingBlockBinding`, `supportsEffortUpdates` og `supportsSystemUpdates` er
+API'et som kompatibelt med disse felter), og anvender derefter modellens konfiguration. For felter uden en angivet værdi bruger OpenCode udbyderpakkens indbyggede
+standard eller automatiske registrering. `supportsThinkingBlockBinding`, `supportsEffortUpdates` og `supportsSystemUpdates` er
 kun for modeller.
 
-| Felt | Hvad den gør | Læses af | Værdier og standard |
+| Felt | Hvad det gør | Læses af | Værdier og standard |
 | --- | --- | --- | --- |
-| `reasoningField` | Assistant-beskedfelt, der bærer ræsonnering. Kontrolleres først ved læsning af streamet ræsonnering og bruges, når tidligere ræsonnering sendes tilbage. | OpenAI Chat | Ethvert feltnavn undtagen `role`, `content`, `refusal` eller `tool_calls`. Uindstillet bruges feltet fra streamen, ellers `reasoning_content`. |
-| `requireReasoning` | Sender ræsonneringsfeltet på hver tidligere assistant-besked, som en tom streng, når der ikke var ræsonnering. | OpenAI Chat | `true` eller `false`. Standard er `true`, når `reasoningField` er angivet, eller modellen er DeepSeek, ellers `false`. |
-| `maxTokensField` | Body-felt, der bærer outputtokengrænsen. | OpenAI Chat | `max_completion_tokens` eller `max_tokens`. Uindstillet registreres `max_tokens` for udbydere, der har brug for det, som DeepSeek, Moonshot, Together AI, Z.AI og Cerebras, ellers `max_completion_tokens`. |
+| `reasoningField` | Det felt i assistentbeskeden, der indeholder ræsonnering. OpenCode tjekker først dette felt, når det læser streamet ræsonnering, og bruger det, når tidligere ræsonnering sendes tilbage. | OpenAI Chat | Ethvert feltnavn undtagen `role`, `content`, `refusal` eller `tool_calls`. Hvis feltet ikke er angivet, bruges feltet fra streamen, hvis der er et, ellers `reasoning_content`. |
+| `requireReasoning` | Sender ræsonneringsfeltet for hver tidligere assistentbesked, også som tom streng, hvis der ikke var nogen ræsonnering. | OpenAI Chat | `true` eller `false`. Standard er `true`, når `reasoningField` er angivet, eller modellen er DeepSeek, ellers `false`. |
+| `maxTokensField` | Det felt i anmodningen, der angiver grænsen for outputtokens. | OpenAI Chat | `max_completion_tokens` eller `max_tokens`. Uden en angivet værdi bruger OpenCode `max_tokens` til udbydere, der kræver det, f.eks. DeepSeek, Moonshot, Together AI, Z.AI og Cerebras, ellers `max_completion_tokens`. |
 | `requireFinishReason` | Behandler en stream, der slutter uden `finish_reason`, som en fejl om ufuldstændigt svar. `false` accepterer den som afsluttet. | OpenAI Chat | `true` eller `false`. Standard er `true`. |
-| `requireAssistantAfterTool` | Indsætter en assistant-besked mellem et værktøjsresultat og den næste brugermeddelelse, for endpoints der afviser den rækkefølge. | OpenAI Chat | `true` eller `false`. Standard er `true` for model-ID'er i Mistral-familien, ellers `false`. |
+| `requireAssistantAfterTool` | Indsætter en assistentbesked mellem et værktøjsresultat og næste brugerbesked, hvis endpointet ellers afviser rækkefølgen. | OpenAI Chat | `true` eller `false`. Standard er `true` for model-ID'er i Mistral-familien, ellers `false`. |
 | `supportsPromptCacheKey` | Om endpointet accepterer body-feltet `prompt_cache_key`. | OpenAI Chat, OpenAI Responses, Mistral | `true` eller `false`. OpenAI Chat sender kun nøglen, når den er `true`, hvilket nogle udbyderpakker sætter som standard. Andre API'er sender den, medmindre den er `false`. |
 | `streamUsage` | Anmoder om tokenforbrug i streamen med `stream_options.include_usage`. | OpenAI Chat | `true` eller `false`. Standard er `true`. |
 | `cacheFormat` | Syntaks for prompt-cache-markører, som endpointet accepterer. Tilsidesætter udbyderens automatiske breakpointplacering. `alibaba` springer værktøjsdefinitioner over. | Hvert API med prompt-cache-markører, inklusive OpenAI Chat, Anthropic Messages og Bedrock Converse | `anthropic` eller `alibaba`. Uindstillet bruges udbyderens standard. Se [Prompt-caching](#prompt-caching). |
 | `supportsThinkingBlockBinding` | Beder API'et om at droppe thinking-blokke, hvis tidligere kontekst er ændret, i stedet for at afvise anmodningen. | Anthropic Messages, Bedrock Converse | `true` eller `false`. Uindstillet registreres Claude 5.1 og nyere. |
 | `supportsEffortUpdates` | Sender ændringer i ræsonneringsniveauet som opdateringer pr. besked, så prompt-cachen bevares. Ellers ændres niveauet for hele anmodningen. | Anthropic Messages, OpenAI Responses | `true` eller `false`. Uden en værdi genkender OpenCode Claude Opus 5, Claude 5.1 og nyere samt GPT-6 og nyere. |
-| `supportsSystemUpdates` | Sender systembeskeder, der tilføjes midt i samtalen, som native systembeskeder. Ellers pakkes de som tekst i næste brugertur. | Anthropic Messages | `true` eller `false`. Uindstillet registreres Claude Opus 4.8 og Claude 5 og nyere. |
+| `supportsSystemUpdates` | Sender systembeskeder, der tilføjes midt i samtalen, som egentlige systembeskeder. Ellers føjes de som tekst til brugerens næste besked. | Anthropic Messages | `true` eller `false`. Uden en angivet værdi genkender OpenCode Claude Opus 4.8 samt Claude 5 og nyere. |
 | `mediaInput` | Hvor billeder og andre medier placeres i en beslutningsanmodning. | System One | `assets` (billeder refereret fra state), `state` (inline i state) eller `root` (`images`-, `audio`- og `videos`-lister på topniveau). Uindstillet bruges udbyderens standard. |
 
 ## Lokalt
@@ -413,10 +413,10 @@ Når Ollama lytter på `http://127.0.0.1:11434`, skal du vælge en fundet model 
 }
 ```
 
-OpenCode opdaterer fortegnelsen i baggrunden og læser kontekst-, vision- og værktøjsbrugskapaciteter fra Ollama.
-Modeller, der kun er embeddings, udelades.
+OpenCode opdaterer listen i baggrunden og læser oplysninger om kontekst, billedinput og brug af værktøjer fra Ollama.
+Modeller, der kun genererer embeddings, udelades.
 
-For en anden host eller port skal du angive Ollamas OpenAI-kompatible URL. Søgningen bruger stadig den native Ollama-API på samme
+Hvis du bruger en anden vært eller port, skal du angive Ollamas OpenAI-kompatible URL. OpenCode finder stadig modellerne via Ollamas eget API med samme
 stipræfiks:
 
 ```jsonc title="opencode.jsonc"
@@ -447,7 +447,7 @@ udbyder-ID'et:
 }
 ```
 
-OpenCode opdaterer fortegnelsen i baggrunden og læser kontekst-, vision- og værktøjsbrugskapaciteter fra LM Studio.
+OpenCode opdaterer listen i baggrunden og læser oplysninger om kontekst, billedinput og brug af værktøjer fra LM Studio.
 Embedding-modeller udelades.
 
 For en anden host eller port skal du angive den OpenAI-kompatible URL. Modeller findes stadig automatisk:
@@ -482,8 +482,8 @@ Når vLLM lytter på `http://127.0.0.1:8000`, skal du vælge en fundet model med
 OpenCode kontrollerer `/health`, opdaterer `/v1/models` i baggrunden, bruger den rapporterede `max_model_len` som kontekst-
 grænse og medtager kun modelkort ejet af `vllm`.
 
-Fundne modeller annoncerer tekstinput og -output, men ikke vision eller værktøjer. vLLM aktiverer værktøjskald med serverflag
-som `--enable-auto-tool-choice` og `--tool-call-parser`, som søgningen ikke rapporterer.
+De modeller, OpenCode finder, angiver understøttelse af tekstinput og -output, men ikke af billedinput eller værktøjer. vLLM kan aktivere værktøjskald via serverflag
+som `--enable-auto-tool-choice` og `--tool-call-parser`, men de fremgår ikke af modeloplysningerne.
 
 For et andet endpoint eller en autentificeret server skal du angive dens OpenAI-kompatible URL:
 
@@ -505,7 +505,7 @@ For et andet endpoint eller en autentificeret server skal du angive dens OpenAI-
 - Proxies med stipræfiks understøttes. F.eks. kontrollerer `https://example.com/vllm/v1` `/vllm/health` og finder
   `/vllm/v1/models`.
 
-### Kompatibel
+### OpenAI-kompatible servere
 
 For en anden OpenAI-kompatibel server skal du definere dens udbyderpakke, endpoint og mindst én model:
 
@@ -539,9 +539,9 @@ For en anden OpenAI-kompatibel server skal du definere dens udbyderpakke, endpoi
 }
 ```
 
-Brug serverens rigtige modelnavn, grænser, input- og outputtyper og værktøjsunderstøttelse. OpenCode kan ikke registrere, om
-fallbackværdierne for den brugerdefinerede model er præcise. Hvis endpointet kræver en nøgle, skal du tilføje `apiKey` til `settings` med en miljø-
-substitution som `"apiKey": "{env:LOCAL_API_KEY}"`; commit ikke hemmeligheder.
+Angiv serverens faktiske modelnavn, grænser, input- og outputtyper og understøttelse af værktøjer. OpenCode kan ikke kontrollere, om
+reserveværdierne for den brugerdefinerede model er korrekte. Hvis endpointet kræver en nøgle, skal du tilføje `apiKey` til `settings` og læse værdien fra en miljøvariabel,
+f.eks. med `"apiKey": "{env:LOCAL_API_KEY}"`. Gem ikke hemmeligheder i commits.
 
 ## Referencer
 
@@ -558,7 +558,7 @@ openrouter/anthropic/claude-sonnet-5.5#high
 | Udbyder  | Slutter ved det første `/`; må ikke indeholde `/` eller `#`. |
 | Model    | Må indeholde yderligere `/`-tegn; må ikke indeholde `#`.   |
 | Variant  | Følger efter `#`, når den er til stede.                    |
-| Casing   | Udbyder- og model-ID'er er case-sensitive.                 |
+| Store og små bogstaver | Der skelnes mellem store og små bogstaver i udbyder- og model-ID'er. |
 
 Brug katalog-ID'er i stedet for udbyderens viste navne. `model`-felter på rodniveau, i agenter og i kommandoer accepterer strengformen ovenfor
 eller et udvidet objekt:
@@ -584,8 +584,8 @@ Husk disse regler, når du konfigurerer modeller:
 }
 ```
 
-- Et vælgerobjekt bruger `model`; en udbyderkatalogpost bruger `modelID` til det ID, der sendes til udbyderen.
-- Selvom rodvalgsformen accepterer en variant, bevarer V2-katalogstandarden den ikke. Vælg i stedet varianter for en
+- Et objekt til modelvalg bruger `model`. En post i udbyderens katalog bruger `modelID` til det ID, der sendes til udbyderen.
+- Selvom modelvalget på topniveau kan indeholde en variant, gemmer V2 den ikke som en del af katalogets standardmodel. Vælg i stedet en variant til en
   session, kørsel, agent eller kommando.
 - Modelindstillinger er udbyderspecifikke. En anden udbyderpakke kan ignorere eller afvise dem.
 - Katalogdata, legitimationsoplysninger og konfiguration er afgrænset til placeringen. En model, der er tilgængelig i ét projekt, kan være utilgængelig

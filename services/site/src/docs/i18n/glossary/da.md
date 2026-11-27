@@ -33,6 +33,9 @@ stilguide for oversættere. Hold den engelske kolonne uændret, og tilføj nye t
 - Kommandoer, flag, konfigurationsnøgler og -værdier, miljøvariabler, stier, kode, URL'er og nøgler.
 - Engelske UI-labels, der citeres fra produktet, især fede labels: **Settings › Billing**,
   **Add credits**, **Regions**, **Global**, **Credit**, **Manage subscription**, **Privacy**.
+  Bevar også fakturaposten **Monthly Usage** og Cloudflares feltnavne **Account ID** og
+  **Gateway ID**.
+- "Dynamic client registration" ved henvisning til OAuth-specifikationen (RFC 7591).
 - "harness" og "profile" (Codex) som fagtermer.
 - "bundle", "base URL", "rate limit", "loopback", "scrollback", "diff" (viewer/sektion).
 
@@ -66,6 +69,7 @@ stilguide for oversættere. Hold den engelske kolonne uændret, og tilføj nye t
 | hook | hook | hooks |
 | event | hændelse | hændelsesabonnement, serverhændelse; API-identifikatorer bevares |
 | cleanup function | oprydningsfunktion | |
+| schema | skema | Behold identifikatorer som `Schema` uændret |
 | command | kommando | slash command → slash-kommando |
 | keybind | tastebinding | tastebindinger |
 | config / configuration | konfiguration | config-fil → konfigurationsfil; `opencode.json` bevares |
@@ -122,7 +126,7 @@ stilguide for oversættere. Hold den engelske kolonne uændret, og tilføj nye t
 | tab | fane | |
 | panel | panel | |
 | window | vindue | |
-| settings | indstillinger | UI-labelt **Settings** bevares |
+| settings | indstillinger | UI-labelen **Settings** bevares |
 | environment variable | miljøvariabel | |
 | shell | shell | |
 | terminal | terminal | |

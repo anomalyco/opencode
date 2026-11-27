@@ -3,7 +3,7 @@ title: "Fakturering"
 description: "Tilføj kredit, slå automatisk optankning til, administrer betalingsmetoder, og download fakturaer i OpenCode Console."
 ---
 
-Console er gratis uanset teamets størrelse, og der er ingen gebyrer pr. brugerplads. Du betaler kun for forbruget, som trækkes fra den forudbetalte saldo for hele arbejdsområdet. Ejere og administratorer administrerer fakturering under **Settings › Billing**.
+Console er gratis for teams af alle størrelser, uden betaling pr. bruger. Du betaler kun for forbruget, som trækkes fra arbejdsområdets fælles, forudbetalte saldo. Ejere og administratorer administrerer faktureringen under **Settings › Billing**.
 
 Forbrug via [dine egne udbydere](/console/providers) faktureres af udbyderen, ikke af Console.
 
@@ -21,7 +21,7 @@ Understøttede betalingsmetoder:
 - UPI
 - WeChat Pay
 
-Brug **⋯ › Make default** til at vælge betalingsmetode for automatiske opkrævninger. Hvis du fjerner en betalingsmetode, kan automatisk optankning og Go-fornyelser, der bruger den, stoppe.
+Brug **⋯ › Make default** til at vælge betalingsmetode for automatiske opkrævninger. Hvis du fjerner en betalingsmetode, kan det sætte automatisk optankning og fornyelse af Go-abonnementer i stå, hvis de bruger den.
 
 ## Tilføj kredit
 
@@ -29,7 +29,7 @@ Brug **⋯ › Make default** til at vælge betalingsmetode for automatiske opkr
 2. Vælg $10, $50 eller $100, eller vælg **Other**, og angiv et beløb.
 3. Vælg en betalingsmetode, og klik på **Confirm and pay**.
 
-Der lægges et betalingsgebyr på 4,6 % + $0.31 oven i købsbeløbet, så et køb på $50 koster $52.61, og hele beløbet på $50 sættes ind på saldoen.
+Der lægges et betalingsgebyr på 4,6 % + $0.31 oven i købsbeløbet, så du betaler $52.61 for at få $50 i kredit.
 
 ## Automatisk optankning
 
@@ -59,7 +59,7 @@ Upstream request failed: Insufficient account funds
 
 Hver betaling vises under **Invoices** med status og et link til **Download invoice** eller **View receipt**.
 
-| Post                | Oprettet af                                              |
+| Post                | Hvad udløser posten?                                     |
 | ------------------- | -------------------------------------------------------- |
 | Optankning af saldoen | Tilføjelse af kredit                                     |
 | Automatisk optankning | Automatisk optankning                                    |
@@ -67,7 +67,7 @@ Hver betaling vises under **Invoices** med status og et link til **Download invo
 | Go-fornyelse        | Månedlig Go-fornyelse                                    |
 | Opgradering til Go Plus | Opgradering fra Go til Go Plus                      |
 | Opgradering til Go Teams | Opgradering fra Go eller Go Plus til Go Teams       |
-| Go Teams-medlem     | Et nyt medlem tilføjes til et arbejdsområde med Go Teams |
+| Go Teams-medlem     | Et nyt medlem bliver en del af et arbejdsområde med Go Teams |
 | Monthly Usage       | Betaling efter faktura                                  |
 
 ## Skatteformularer
@@ -78,11 +78,11 @@ Kunder i USA kan downloade [W-9-formularen fra Anomaly Innovations Inc.](/assets
 
 Arbejdsområder med en kreditaftale kan få en månedlig faktura i stedet for at købe kredit på forhånd. Kontakt support for at få det sat op.
 
-- Forbruget trækkes på den aftalte kreditramme i stedet for på en forudbetalt saldo.
+- Forbruget modregnes i den aftalte kreditramme i stedet for at blive trukket fra en forudbetalt saldo.
 - Fakturaen for hver måned udstedes den 1. (UTC) og forfalder 14 dage senere.
 - Fakturaer, der endnu ikke er betalt, har knappen **Pay now**.
 - Anmodninger afvises med HTTP `402`, når kreditrammen er nået, eller en faktura har overskredet betalingsfristen.
 
 ## Go
 
-[OpenCode Go](/console/go)-abonnementer bruger de samme betalingsmetoder og vises på den samme fakturaliste. Du kan også [betale for Go med kredit](/console/go#pay-with-credit). Slå **Extra Usage** til på siden **Go** for at betale med kredit, når du når en Go-grænse.
+Abonnementer på [OpenCode Go](/console/go) bruger de samme betalingsmetoder og vises på den samme fakturaliste. Du kan også [betale for Go med kredit](/console/go#pay-with-credit). Slå **Extra Usage** til på siden **Go** for at betale med kredit, når du når en Go-grænse.

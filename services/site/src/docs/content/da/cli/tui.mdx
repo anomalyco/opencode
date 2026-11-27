@@ -1,6 +1,6 @@
 ---
 title: "TUI"
-description: "Start en session, og brug de daglige arbejdsgange i terminalbrugerfladen."
+description: "Start en session, og kom i gang med de mest almindelige arbejdsgange i terminalbrugerfladen."
 ---
 
 Kør OpenCode fra dit projekt, skriv en anmodning, og tryk på **Enter**.
@@ -18,7 +18,7 @@ Tryk på **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** eller **Ctrl+J** for at 
 
 ## Projekter og mapper
 
-OpenCode søger efter filer og kører shellkommandoer i den mappe, du starter det i. Mapper i samme Git-repo hører til ét
+OpenCode søger efter filer og kører shellkommandoer i den mappe, hvor du starter OpenCode. Mapper i samme Git-repo hører til ét
 projekt, også repoets worktrees. En mappe uden versionsstyring er sit eget projekt.
 
 Angiv en mappe for at starte i et andet projekt:
@@ -32,7 +32,7 @@ at se dets worktrees. Tryk på **Ctrl+N** på listen for at oprette en ny worktr
 
 ## Kontekst
 
-Skriv `@` for at søge efter en fil, og vælg den for at vedhæfte filen til prompten. Bliv ved med at skrive efter `@` for at indsnævre resultaterne.
+Skriv `@` for at søge efter en fil, og vælg den for at vedhæfte den til prompten. Skriv videre efter `@` for at indsnævre søgeresultaterne.
 
 ```text
 Review @src/auth.ts for error handling problems
@@ -46,13 +46,13 @@ Explain @src/auth.ts#20-45
 
 ## Shell
 
-Skriv `!` i starten af en tom prompt for at gå i shell-tilstand. Skriv en kommando, og tryk på **Enter**; tryk på **Esc** for at forlade shell-tilstanden uden at køre en kommando.
+Skriv `!` i starten af en tom prompt for at skifte til shelltilstand. Skriv en kommando, og tryk på **Enter**; tryk på **Esc** for at forlade shelltilstanden uden at køre en kommando.
 
 ```text
 !git status
 ```
 
-Shell-kommandoer kører i sessionens arbejdsmappe, og deres output bliver i sessionen.
+Shellkommandoer kører i sessionens arbejdsmappe, og outputtet bliver i sessionen.
 
 ## Kommandoer
 
@@ -64,11 +64,11 @@ Skriv `/` for at vise slash-kommandoer. Bliv ved med at skrive for at filtrere l
 
 Almindelige kommandoer er `/new`, `/sessions`, `/models`, `/agents`, `/undo`, `/redo` og `/editor`. Tryk på **Ctrl+P** for at åbne kommandopaletten med alle handlinger, der er tilgængelige i den aktuelle visning.
 
-Efter en opdatering viser OpenCode én gang på startskærmen, hvad der er nyt i versionen. Kør `/highlights` for at se det igen, eller angiv `"highlights": false` i [`cli.json`](/cli/config#alerts) for at forhindre, at det åbnes automatisk.
+Efter en opdatering viser OpenCode nyhederne i versionen én gang på startskærmen. Kør `/highlights` for at se dem igen, eller angiv `"highlights": false` i [`cli.json`](/cli/config#alerts) for at slå den automatiske visning fra.
 
 ## Sidespørgsmål
 
-Kør `/btw <question>` for at stille et hurtigt spørgsmål om samtalen indtil nu. Svaret bruger sessionens kontekst og den aktuelle model, men føjes ikke til samtalen, så det påvirker ikke senere prompts. Mens OpenCode arbejder på svaret, vises en `/btw`-indikator under inputfeltet, og svaret åbnes i en dialog; tryk på **C** for at kopiere det.
+Kør `/btw <question>` for at stille et hurtigt spørgsmål om samtalen indtil nu. OpenCode bruger sessionens kontekst og den aktuelle model til at svare, men føjer ikke svaret til samtalen, så det ikke påvirker senere prompts. Mens OpenCode arbejder på svaret, vises en `/btw`-indikator under inputfeltet. Svaret åbnes i en dialog, hvor du kan trykke på **C** for at kopiere det.
 
 ```text
 /btw why did the test in step 2 fail?
@@ -94,13 +94,13 @@ Faner er aktiveret som standard. Brug **Ctrl+Tab** og **Ctrl+Shift+Tab** til at 
 
 ## Historik
 
-Tryk på **Ctrl+X** og derefter **U**, eller kør `/undo`, for at fortryde den seneste brugerbesked og det arbejde, der fulgte efter. Den fortrudte prompt vender tilbage til inputfeltet, så du kan redigere den.
+Tryk på **Ctrl+X** og derefter **U**, eller kør `/undo`, for at fortryde den seneste brugerbesked og det arbejde, der fulgte efter. Prompten sættes tilbage i inputfeltet, så du kan redigere den.
 
-Tryk på **Ctrl+X** og derefter **R**, eller kør `/redo`, for at gendanne det fortrudte arbejde. Hvis du i stedet sender en ny prompt, accepteres fortrydelsen, og arbejdet fortsætter derfra.
+Tryk på **Ctrl+X** og derefter **R**, eller kør `/redo`, for at gendanne det arbejde, du fortrød. Sender du i stedet en ny prompt, fastholdes fortrydelsen, og arbejdet fortsætter derfra.
 
 ## Editor
 
-Angiv `VISUAL` eller `EDITOR`, og tryk derefter på **Ctrl+X** og **E**, eller kør `/editor`, for at redigere den aktuelle prompt i den editor. Gem, og afslut for at føre teksten tilbage til inputfeltet, og tryk derefter på **Enter** for at sende den.
+Angiv `VISUAL` eller `EDITOR`, og tryk så på **Ctrl+X** efterfulgt af **E**, eller kør `/editor`, for at redigere den aktuelle prompt i det valgte program. Gem og afslut programmet for at få teksten tilbage i inputfeltet, og tryk derefter på **Enter** for at sende den.
 
 ```bash
 export EDITOR="nvim"
