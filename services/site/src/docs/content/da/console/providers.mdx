@@ -1,0 +1,203 @@
+---
+title: "Console-udbydere"
+description: "Forbind dine egne modeludbyderkonti til et OpenCode Console-arbejdsområde, og vælg hvilke modeller medlemmerne kan bruge."
+---
+
+Tilslut udbyderkonti, du allerede betaler for, f.eks. Anthropic, OpenAI eller AWS Bedrock, og del deres modeller med alle i arbejdsområdet. Console gemmer legitimationsoplysningerne og giver adgang til hver udbyder via sin gateway, så medlemmer kan bruge modellerne uden at se udbyderens nøgle. Du kan bruge den samme gateway fra dine egne værktøjer via [API'et til udbydere](/console/api/providers).
+
+Ejere og administratorer administrerer udbydere fra fanen **Providers**. Medlemmer får de aktiverede modeller i OpenCode efter
+at have kørt `/connect`.
+
+## Forbind en udbyder
+
+1. Åbn **Providers**, og klik på **Connect Provider**.
+2. Vælg en udbyder fra kataloget, og angiv dens API-nøgle.
+3. Klik eventuelt på **Test connection**, og klik derefter på **Save**.
+
+Kataloget omfatter Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, Groq, OpenRouter og mange flere. Katalogudbydere
+leveres med deres modeller forudkonfigureret.
+
+### Cloududbydere
+
+Cloududbydere kræver et par ekstra oplysninger.
+
+| Udbyder               | Oplysninger                          |
+| --------------------- | ------------------------------------ |
+| Azure                 | Ressourcenavn og API-nøgle           |
+| AWS Bedrock           | Region og API-nøgle                  |
+| Google Vertex AI      | Region og JSON til tjenestekonto     |
+| Cloudflare AI Gateway | Account ID, Gateway ID og API-token  |
+| Databricks            | Arbejdsområde-URL og token           |
+
+### Brugerdefinerede udbydere
+
+Klik på **Add Custom Provider** for at forbinde et andet endpoint, og tilføj derefter dets modeller med **Add Model**.
+
+| Felt       | Beskrivelse                                                                     |
+| ---------- | ------------------------------------------------------------------------------- |
+| Base URL   | Hvor Console videresender anmodninger, f.eks. `https://api.deepseek.com/v1`.     |
+| Format     | Chat Completions, Responses API, Anthropic Compatible eller Google Generative AI. |
+| Auth mode  | Bearer, API key-header eller Custom header.                                     |
+| Credential | Den nøgle, Console sender til udbyderen.                                        |
+
+## Vælg modeller
+
+Åbn en udbyder for at se dens modeller. Kun aktiverede modeller er tilgængelige for medlemmer.
+
+- Brug kontakten **Enabled** til at slå en model til eller fra.
+- Slå **New models** til for at aktivere modeller, som udbyderen tilføjer i fremtiden.
+
+## Rediger modeller
+
+Klik på en model for at redigere den. Ændringer gemmes, når du lukker panelet.
+
+| Sektion       | Hvad du kan ændre                                               |
+| ------------- | --------------------------------------------------------------- |
+| General       | Vist navn, API-ID, værktøjsunderstøttelse, input- og outputtyper |
+| Variants      | Varianter med deres egne headere eller body                     |
+| Configuration | Standardvariant, anmodningsheadere og body, tokengrænser        |
+| Cost Tiers    | Priser for input, output, cache-læsning og cache-skrivning pr. 1 mio. tokens |
+
+### Brugerdefineret prissætning
+
+Modeller i kataloget bruger som udgangspunkt udbyderens listepris. Har du aftalt andre priser, f.eks. en rabat i din OpenAI-aftale, kan du angive de aftalte priser under **Cost Tiers**, så forbrugsrapporter og [budgetter](/console/budgets) afspejler, hvad du faktisk betaler.
+
+| Felt             | Listepris | Din pris |
+| ---------------- | --------- | -------- |
+| Inputpris        | $2.50     | $2.00    |
+| Outputpris       | $15.00    | $12.00   |
+| Cache-læsepris   | $0.25     | $0.20    |
+
+Priser, du ændrer, fremhæves på udbydersiden. Brug **Restore default value** på et felt eller **⋯ › Restore...**
+på modellen for at vende tilbage til listeprisen.
+
+Tilføj et **Context**-niveau, når en model koster mere over en bestemt kontekststørrelse, f.eks. for prompts over 200K tokens.
+
+### Brugerdefinerede modeller
+
+Klik på **Add Model** for at tilføje en model, som kataloget ikke indeholder, med dens **Display name** og **Model ID**. Brug
+**⋯ › Duplicate...** på en eksisterende model for at tage udgangspunkt i dens indstillinger.
+
+## OpenCode Models
+
+Fanen **Models** administrerer de [modeller](/console/models), som Console leverer, og som betales fra arbejdsområdets kredit. Den
+fungerer som en udbyderside:
+
+- Slå enkelte modeller til eller fra.
+- Slå **Free models** fra for at blokere gratis modeller for arbejdsområdet.
+- Slå **New models** til for automatisk at aktivere nye Console-modeller.
+
+Deaktivér hele udbyderen fra **⋯ › Disable** for kun at bruge dine egne udbydere.
+
+## Brug i OpenCode
+
+Medlemmerne kører `/connect` og vælger arbejdsområdet. Hver aktiveret udbyder vises som arbejdsområdets navn efterfulgt af
+udbyderens navn, og `/models` viser dens aktiverede modeller.
+
+```text
+Acme Inc. / Anthropic
+```
+
+Slå **Managed providers only** til i **Settings › General** for at begrænse OpenCode til arbejdsområdets udbydere for
+alle.
+
+## Send identitet
+
+Når en udbyder er en gateway, du selv driver, skal du slå **Send identity** til på dens side. Console tilføjer derefter en
+`x-opencode-actor`-header til hver modelanmodning, den sender dertil. Headeren angiver det medlem eller den tjenestekonto,
+der står bag anmodningen, så din gateway kan logge eller begrænse anmodninger efter afsender.
+
+```text
+x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZCI6Ii4uLiJ9...
+```
+
+- Den er slået fra som standard, og ændring af base URL'en slår den fra.
+- En udbyder, der stadig bruger leverandørens egen API, f.eks. `https://api.openai.com/v1`, viser ikke indstillingen, da
+  leverandøren ignorerer headeren.
+- Console fjerner enhver `x-opencode-*`-header, som en klient sender, så den eneste `x-opencode-actor`, din gateway
+  modtager, er den, Console har signeret.
+- **Test connection** og hentning af modellisten kalder `GET <base URL>/models` med legitimationsoplysningerne alene, så gør ikke
+  headeren obligatorisk på den rute.
+
+### Token
+
+Headeren er et JWT, som Console signerer for hver anmodning.
+
+| Felt         | Værdi                                            |
+| ------------ | ------------------------------------------------ |
+| `alg`        | `ES256`                                          |
+| `typ`        | `opencode-actor+jwt`                             |
+| `iss`        | `https://opencode.ai/inference`                  |
+| `aud`        | Udbyderens base URL uden afsluttende skråstreger |
+| `iat`, `exp` | `exp` er 120 sekunder efter `iat`                |
+
+| Claim                | Værdi                                                                  |
+| -------------------- | ---------------------------------------------------------------------- |
+| `sub`                | `user_id` for et medlem, ellers `service_account_id`                   |
+| `workspace_id`       | Arbejdsområdet, som anmodningen kørte i                                |
+| `user_id`, `email`   | Medlemmet, når et medlem sendte anmodningen                            |
+| `service_account_id` | Tjenestekontoen, når en tjenestekonto sendte den (agenter inkluderet)  |
+| `session_id`         | Klientens sessions-ID, når den sendte et                                |
+| `request_id`         | Det ID, som klienten får tilbage i svarheaderen `x-opencode-log-id`      |
+
+En anmodning fra et medlem har en payload som denne:
+
+```json
+{
+  "iss": "https://opencode.ai/inference",
+  "aud": "https://llm.example.com/v1",
+  "sub": "user_...",
+  "workspace_id": "org_...",
+  "user_id": "user_...",
+  "email": "ada@example.com",
+  "session_id": "ses_...",
+  "request_id": "019a6e8f-24a0-7b12-9c3d-4e5f6a7b8c9d",
+  "iat": 1794500000,
+  "exp": 1794500120
+}
+```
+
+### Verificér tokenet
+
+Console publicerer sine offentlige nøgler på `https://opencode.ai/inference/.well-known/jwks.json`, udleveret med
+`Cache-Control: public, max-age=300`. Kontrollér signaturen, issuer, audience, type og alder og derefter arbejdsområdet. Dette
+eksempel bruger [jose](https://github.com/panva/jose).
+
+```ts
+import { createRemoteJWKSet, jwtVerify } from "jose"
+
+const keys = createRemoteJWKSet(new URL("https://opencode.ai/inference/.well-known/jwks.json"))
+
+export async function sender(request: Request) {
+  const token = request.headers.get("x-opencode-actor")
+  if (!token) throw new Error("Missing x-opencode-actor")
+  const { payload } = await jwtVerify(token, keys, {
+    issuer: "https://opencode.ai/inference",
+    audience: "https://llm.example.com/v1",
+    algorithms: ["ES256"],
+    typ: "opencode-actor+jwt",
+    maxTokenAge: "120s",
+    clockTolerance: "5s",
+  })
+  if (payload.workspace_id !== "org_...") throw new Error("Another workspace")
+  return payload
+}
+```
+
+Angiv `audience` til den base URL, der er gemt for udbyderen i Console, uden afsluttende skråstreger, og erstat `org_...` med arbejdsområdets ID fra din Console-URL. Console offentliggør en ny signeringsnøgle, inden den tages i brug. Derfor fortsætter valideringen ved nøgleskift, hvis den slår nøgler op efter `kid`, sådan som `createRemoteJWKSet` gør.
+
+## Deaktivér eller fjern
+
+Åbn udbyderens **⋯**-menu:
+
+- **Disable** skjuler udbyderen og dens modeller for medlemmerne, men beholder indstillingerne.
+- **Remove...** sletter udbyderen og dens modeller. Dialogen viser, hvem der har brugt den for nylig, og tilbyder
+  **Disable instead**.
+
+Hvis du vil rotere en nøgle, skal du klikke på legitimationsoplysningerne på udbydersiden og angive den nye.
+
+## Fakturering
+
+Udbyderen fakturerer dig for tokens; Console trækker ikke kredit fra din saldo. Console registrerer stadig hver anmodning og dens pris ud fra modellens prissætning, så forbrugsrapporter og [budgetter](/console/budgets) medregner den.
+
+Hvis du vil kalde en udbyder fra dine egne værktøjer i stedet for OpenCode, skal du bruge [API'et til udbydere](/console/api/providers).

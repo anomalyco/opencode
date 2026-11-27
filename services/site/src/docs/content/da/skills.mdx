@@ -1,0 +1,246 @@
+---
+title: "Skills"
+description: "Skriv SKILL.md-filer, der giver OpenCode-agenter genanvendelige instruktioner til en opgave, og som kun indlæses, når opgaven har brug for dem."
+---
+
+Opret en skill for at give en agent genanvendelige instruktioner til en bestemt opgave. Læg en `SKILL.md`-fil i `.opencode/skills/<skill-id>`, og beskriv i `description`, hvornår den skal bruges.
+
+```markdown title=".opencode/skills/git-release/SKILL.md"
+---
+name: Git Release
+description: Prepare release notes, version bumps, and GitHub releases
+---
+
+## Workflow
+
+1. Read `references/release-policy.md`.
+2. Summarize merged changes since the previous tag.
+3. Propose the version bump before changing files.
+4. Run `scripts/changelog.ts` only after the user approves the version.
+```
+
+OpenCode annoncerer denne skill, når den er relevant. Agenten kan derefter indlæse dens instruktioner med `skill`-værktøjet i stedet for at tilføje hver skill til hver prompt.
+
+## Opret
+
+Hold relaterede scripts, referencer og skabeloner ved siden af `SKILL.md`:
+
+```text
+.opencode/skills/
+└── git-release/
+    ├── SKILL.md
+    ├── scripts/
+    │   └── changelog.ts
+    └── references/
+        └── release-policy.md
+```
+
+Stier, der skrives inde i skillen, er relative til mappen, der indeholder `SKILL.md`. Mappeformen anbefales, fordi den giver understøttende filer en privat basismappe.
+
+## Søgning
+
+OpenCode søger automatisk disse placeringer:
+
+| Omfang                | Kilder                                 |
+| --------------------- | -------------------------------------- |
+| Global                | `~/.config/opencode/skills`            |
+| Global kompatibilitet | `~/.claude/skills`, `~/.agents/skills` |
+| Projekt               | `.opencode/skills`                     |
+| Projektkompatibilitet | `.claude/skills`, `.agents/skills`     |
+
+For projektkilder søger OpenCode fra den aktuelle mappe op til projektroden og medtager matchende mapper på hvert niveau.
+
+Hver kilde kan indeholde en af formerne:
+
+```text
+skills/
+├── review.md
+└── git-release/
+    └── SKILL.md
+```
+
+- Markdown-filer skal ligge i kildens rod, f.eks. `skills/review.md`.
+- Filer med præcis navnet `SKILL.md` kan ligge indlejret i grupperingsmapper, f.eks. `skills/git-release/SKILL.md` eller `skills/teams/release/SKILL.md`.
+- En mappe, der indeholder `SKILL.md`, er én skill. OpenCode søger ikke videre inde i den efter flere skills.
+- Skjulte filer og mapper samt `node_modules` springes over.
+- Søgningen stopper seks mapper under kildens rod.
+
+## Kilder
+
+Tilføj flere lokale mapper eller HTTP-kataloger med `skills`-arrayet i enhver `opencode.json` eller `opencode.jsonc`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": [
+    "./team-skills",
+    "~/shared/opencode-skills",
+    "/opt/company-skills",
+    "https://example.com/opencode/skills/",
+  ],
+}
+```
+
+| Værdi | Fortolkning |
+| ----- | ---------- |
+| Relativ sti | Fra den aktive OpenCode-arbejdsmappe, ikke konfigurationsfilen |
+| `~/`-sti | Fra den aktuelle brugers hjemmemappe |
+| Absolut sti | Bruges som skrevet |
+| `http://`- eller `https://`-URL | Indlæses som et HTTP-katalog |
+
+Hver fundet konfigurationsfil bidrager med sine poster. `skills`-arrays kombineres i stedet for at blive erstattet.
+
+Et tilsluttet [OpenCode Console](/console)-arbejdsområde kan også dele skills.
+
+## Kataloger
+
+Et HTTP-katalog er en base URL med en `index.json`-fil:
+
+```json title="index.json"
+{
+  "skills": [
+    {
+      "name": "git-release",
+      "version": "3",
+      "files": ["git-release.md", "references/release-policy.md"]
+    }
+  ]
+}
+```
+
+For den post downloader OpenCode hver fil fra `<base-url>/git-release/<file>`.
+
+| Regel | Krav |
+| ----- | ----------- |
+| Stier | Skal være sikre, relative og same-origin |
+| Indgangsfil | Skal indeholde `SKILL.md` eller `<name>.md`, f.eks. `git-release.md` |
+| Opdateringer | Forøg `version`, når filer ændres, så OpenCode opdaterer sin cache |
+
+Hver downloadet skillmappe bliver en kilderod opkaldt efter posten, så både `git-release.md` og `SKILL.md` har ID'et `git-release`.
+
+## Frontmatter
+
+Brug frontmatter til at navngive skillen og styre, hvor den vises:
+
+```markdown title="SKILL.md"
+---
+name: Git Release
+description: Prepare a repository release
+metadata:
+  opencode/autoinvoke: false
+---
+
+Prepare the changelog, version bump, tag, and release notes.
+```
+
+| Felt                          | Adfærd                                                          |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `name`                         | Vist navn; standard er ID'et, der er udledt af stien             |
+| `description`                  | Resumé, der bruges til at vise skillen for modellen              |
+| `metadata.opencode/autoinvoke` | Sæt til `false` for at udelade skillen fra modellens tilgængelige liste |
+| `disable-model-invocation`     | Sæt til `true` for samme effekt som `opencode/autoinvoke: false` |
+
+Al frontmatter er valgfri ved kørsel. Tilføj en klar `description`, når modellen skal finde skillen; skills uden en sådan annonceres ikke.
+
+`opencode/autoinvoke: false` skjuler kun skillen fra modellens tilgængelige liste. Skillen forbliver registreret og kan stadig indlæses eksplicit efter ID. Når både `disable-model-invocation` og `opencode/autoinvoke` er angivet, vinder `opencode/autoinvoke`. V2 accepterer portabilitetsfelter som `license` og `compatibility`, men fortolker dem ikke.
+
+## ID'er
+
+Filstien bestemmer skill-ID'et. Frontmatterens `name` er kun en visningslabel.
+
+| Fil                               | ID            |
+| --------------------------------- | ------------- |
+| `<source>/git-release.md`         | `git-release` |
+| `<source>/git-release/SKILL.md`   | `git-release` |
+| `<source>/teams/release/SKILL.md` | `release`     |
+
+ID'er er eksakte og case-sensitive. For portable skills skal du bruge et unikt kebab-case-ID med små bogstaver på 1–64 tegn og holde det i overensstemmelse med mappenavnet:
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+V2 håndhæver i øjeblikket ikke dette mønster, anbefalingen om 1–64 tegn, overensstemmelse mellem `name` og mappen eller en maksimal beskrivelseslængde.
+
+## Prioritet
+
+Skills vælges efter ID. Hvis to kilder definerer `git-release`, leverer kilden, der registreres senere, den skill, som OpenCode indlæser:
+
+```text
+~/.config/opencode/skills/git-release/SKILL.md  ← lower precedence
+.opencode/skills/git-release/SKILL.md           ← loaded
+```
+
+Kilder registreres fra lavere til højere prioritet:
+
+1. Indbyggede skills
+2. `.claude/skills`, først globalt og derefter fra den fjerneste overordnede mappe mod den aktuelle mappe
+3. `.agents/skills`, først globalt og derefter fra den fjerneste overordnede mappe mod den aktuelle mappe
+4. `~/.config/opencode/skills`
+5. Projektets `.opencode/skills`, fra projektroden mod den aktuelle mappe
+6. Eksplicitte `skills`-poster efter konfigurationsfilernes prioritet og derefter efter rækkefølgen i hvert array
+
+Undgå dublerede ID'er, medmindre du vil tilsidesætte en tidligere skill.
+
+## Indlæsning
+
+Ved hvert modeltrin viser OpenCode tilladte skills, der har en beskrivelse og ikke har `opencode/autoinvoke` sat til `false`. Listen indeholder kun ID, navn og beskrivelse, ikke hele Markdown-bodyen.
+
+Modellen indlæser en skill ved at kalde `skill`-værktøjet med dens præcise ID:
+
+```json title="skill tool input"
+{
+  "id": "git-release"
+}
+```
+
+OpenCode gør derefter følgende:
+
+1. Vælger den aktuelle definition for det ID.
+2. Kontrollerer den valgte agents `skill`-tilladelse.
+3. Føjer Markdown-bodyen uden frontmatter til samtalen.
+4. Angiver skillens basismappe og et udvalg på op til ti stier til understøttende filer.
+
+Hvis du selv vil indlæse en skill, skal du nævne den i din prompt som `@skill-id`.
+
+Indholdet af understøttende filer indlæses ikke automatisk. Agenten læser dem, når skillen instruerer den i det. Filudvalget er tilgængeligt for mappebaserede `SKILL.md`-skills; flade Markdown-skills får ikke en liste over nabofiler.
+
+## Tilladelser
+
+Brug handlingen `skill` og skill-ID'et som ressource. Regler kører i rækkefølge, og den sidste matchende regel vinder:
+
+```jsonc title="opencode.jsonc"
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "allow" },
+    { "action": "skill", "resource": "internal-*", "effect": "deny" },
+    { "action": "skill", "resource": "experimental-*", "effect": "ask" },
+  ],
+}
+```
+
+| Effekt | Adfærd |
+| ------ | -------- |
+| `allow` | Annoncerer og indlæser matchende skills uden godkendelse |
+| `ask` | Annoncerer matchende skills og spørger, før de indlæses |
+| `deny` | Skjuler matchende skills for modellen og afviser indlæsning |
+
+Placér de samme regler under `agents.<id>.permissions` for kun at anvende dem på én agent.
+
+## Fejlfinding
+
+Denne skills ID er f.eks. `release`, ikke frontmatterens navn `Git Release`:
+
+```text
+.opencode/skills/release/SKILL.md
+                      └─ ID: release
+```
+
+Hvis en skill mangler eller indlæser det forkerte indhold:
+
+1. Bekræft, at filen enten er en `*.md` i roden eller en indlejret fil med præcis navnet `SKILL.md`.
+2. Kontrollér det stiudledte, case-sensitive ID i stedet for frontmatterens `name`.
+3. Tilføj en `description`, hvis modellen skal finde skillen.
+4. Kontrollér `opencode/autoinvoke` og den valgte agents `skill`-tilladelser.
+5. Se efter en senere kilde, der definerer det samme ID.
+6. For HTTP-kataloger skal du kontrollere `index.json`, same-origin-filstier og en ændret `version`.

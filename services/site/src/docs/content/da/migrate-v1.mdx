@@ -1,0 +1,636 @@
+---
+title: "Migrér fra V1"
+description: "Opgradér fra OpenCode 1 til OpenCode 2, hvor ændringer i plugins, server-API'et og terminalklientens konfiguration bryder bagudkompatibiliteten."
+---
+
+OpenCode 1 og OpenCode 2 bruger begge kommandoen `opencode` og installeres ikke længere side om side som standard. Fjern en
+pakkehåndteret V1-installation, før du installerer V2; V2-curl-installatøren erstatter V1-binæren.
+
+## Ændringer, der bryder bagudkompatibiliteten
+
+V2 bryder bevidst bagudkompatibiliteten på tre områder:
+
+- [Plugins](/build/plugins/migrate-v1) bruger et nyt plugin-API.
+- [Server-API'et og klienterne](#server-api-and-clients) har nye kontrakter.
+- [Terminalklientkonfigurationen](/cli/config) flyttes fra lagdelte `tui.json(c)`-filer til én global `cli.json`-fil
+  (automatisk migreret).
+
+Understøttet V1-funktionalitet uden for disse områder er beregnet til at forblive kompatibel med V1. Nogle felter, som V1-
+schemaet accepterede, har aldrig haft en V2-ækvivalent og ignoreres bevidst; de er listet under
+[Accepterede, men ikke understøttede felter](#accepted-but-unsupported-fields).
+
+Eksisterende understøttede serverkonfigurationsfelter, agentdefinitioner, kommandodefinitioner, skills og andre filer i `.opencode/`
+bør fortsætte med at virke uden ændringer. Hvis understøttet adfærd beskrevet i denne guide holder op med at virke i V2, skal du behandle det som en
+kompatibilitetsfejl og ikke som et forventet migreringskrav.
+
+<Callout type="tip">
+  Hvis understøttet V1-funktionalitet ikke virker i V2, skal du følge vejledningen til fejlrapportering i
+  [Fejlfinding](/troubleshooting) og indsende en kompatibilitetsfejl.
+</Callout>
+
+## Installér V2
+
+Installér V2-terminalklienten med [installationsvejledningen](/#cli).
+
+Du behøver ikke omskrive alt, før du starter V2. En praktisk migrering er:
+
+1. Behold din eksisterende konfiguration og filbaserede definitioner.
+2. Start V2, og kontrollér modeller, legitimationsoplysninger, agenter, tilladelser og MCP-servere.
+3. Portér plugins, fordi V1-pluginimplementeringer ikke kører i V2.
+4. Portér integrationer, der kalder server-API'et.
+5. Konvertér konfigurationen til den native V2-form, når du er klar. Dette trin er valgfrit.
+
+Behold en kopi af din V1-opsætning, mens du validerer migreringen. V1 og V2 bruger samme konfigurationsplaceringer, så peg ikke
+V1 på filer, efter du har konverteret dem til native V2-only-former.
+
+## Konfiguration
+
+Dette afsnit dækker både JSON/JSONC-konfiguration og filbaserede definitioner under `.opencode/`.
+
+### Brug din eksisterende konfiguration
+
+V2 læser eksisterende system-, global- og projektkonfiguration fra samme placeringer som V1:
+
+```text
+/Library/Application Support/opencode/opencode.json(c)
+/etc/opencode/opencode.json(c)
+%ProgramData%\opencode\opencode.json(c)
+/Library/Managed Preferences/<user>/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist
+~/.config/opencode/opencode.json(c)
+<project>/opencode.json(c)
+<project>/.opencode/opencode.json(c)
+```
+
+V2 normaliserer understøttede V1- og native V2-felter i hukommelsen uden at omskrive kildefilen.
+Eksisterende understøttet V1-konfiguration er beregnet til at blive ved med at virke, så du behøver ikke konvertere den for at prøve eller tage
+V2 i brug.
+
+Som i V1 har systemkonfiguration og macOS-administrerede præferencer højeste prioritet, så deres indstillinger tilsidesætter
+globale filer og projektfiler. Deres [politikker](/policies#precedence), inklusive migrerede `enabled_providers` og
+`disabled_providers`, har også forrang over globale politikker og projektpolitikker. Tilsidesættelse af en indstilling kan ikke forhindre brugere i at tilføje
+udbydere, MCP-servere, agenter eller plugins, så udtryk administratorhåndhævede begrænsninger som `policies` i stedet
+for almindelige indstillinger som `permissions`.
+
+### Bed OpenCode om at migrere
+
+V1-konfigurationsformatet understøttes stadig. Det native V2-format er valgfrit og gør flere indstillinger mere eksplicitte og
+ergonomiske.
+
+Den anbefalede migreringsvej er at bede OpenCode om at opdatere konfigurationen for dig:
+
+```text
+Migrate my OpenCode configuration, including file-based definitions, from the V1 format to the native V2 format.
+Preserve its behavior and all unrelated settings.
+```
+
+OpenCode kan inspicere hele filen, anvende de relevante ændringer nedenfor og undgå at omskrive indstillinger, der ikke skal
+ændres. Konverteringen behøver ikke ske på én gang: understøttede V1-felter og native V2-felter kan sameksistere på topniveau.
+Når begge former angiver samme kanoniske værdi, har en gyldig native V2-værdi forrang uanset JSON-nøglernes rækkefølge.
+
+Indlejret blanding er bevidst begrænset. OpenCode genkender blandede V1- og V2-medlemmer i `mcp`, `compaction` og
+`experimental`, men udleder ikke rekursivt formater inde i individuelle agenter, udbydere, kommandoer eller modeller. Hold
+hver af disse indlejrede poster helt i ét format. Understøttet V1-syntaks er stille i sig selv; fejlbehæftede værdier,
+ikke-understøttede ældre felter og modstridende V1/V2-værdier giver advarsler, mens urelaterede gyldige indstillinger fortsat indlæses.
+
+### Tilladelser og værktøjer
+
+V1 grupperer tilladelseseffekter efter værktøj. V2 bruger ét ordnet `permissions`-array, som gør prioritet og undtagelser eksplicitte:
+
+```jsonc
+// V1
+{
+  "permission": {
+    "bash": {
+      "git push *": "ask"
+    },
+    "edit": "allow"
+  },
+  "tools": {
+    "websearch": false
+  }
+}
+
+// V2
+{
+  "permissions": [
+    { "action": "shell", "resource": "git push *", "effect": "ask" },
+    { "action": "edit", "resource": "*", "effect": "allow" },
+    { "action": "websearch", "resource": "*", "effect": "deny" }
+  ]
+}
+```
+
+Tilladelseshandlinger er også ændret: `bash` er nu `shell`, `task` er nu `subagent`, og `write` og `patch` er nu `edit`.
+Se [Tilladelser](/permissions) for det ordnede V2-regelformat.
+
+Todos er slået fra som standard i V2. Brug det eksperimentelle flag for at slå dem til. Det kan ændre sig eller fjernes i en fremtidig
+release; se [Eksperimentelt](/config#experimental).
+
+```jsonc
+{
+  "experimental": {
+    "todo": true,
+  },
+}
+```
+
+<Callout type="warning">
+  V1 spørger, før der tilgås stier uden for projektet. V2 gør ikke: `external_directory` er tilladt som standard. Hvis du vil beholde
+  V1-adfærden, skal du tilføje `{ "action": "external_directory", "resource": "*", "effect": "ask" }` til `permissions`.
+</Callout>
+
+### Agenter og tilstande
+
+Entalsmappet `agent` og det forældede `mode` bliver `agents`. Agentfelter bliver mere konsistente med resten af
+V2-konfigurationen:
+
+```jsonc
+// V1
+{
+  "agent": {
+    "reviewer": {
+      "prompt": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-5-5",
+      "variant": "high",
+      "disable": false,
+      "permission": {
+        "edit": "deny"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "agents": {
+    "reviewer": {
+      "system": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "disabled": false,
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" }
+      ]
+    }
+  }
+}
+```
+
+`prompt` bliver `system`, `disable` bliver `disabled`, og en separat `variant` føjes til modelreferencen efter `#`.
+`maxSteps` bliver `steps`. Poster fra det gamle `mode`-map bliver primære agenter.
+
+Agentens [`request.body`](/agents#request) bevares, men sendes ikke til modellen, så V1 `temperature`, `top_p` og `options`
+har ingen effekt der. Angiv dem i stedet på en modelvariant. DeepSeek anvender kun `temperature`, når thinking er slået fra, så
+denne variant slår også thinking fra:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "opencode": {
+      "models": {
+        "deepseek-v4.1-flash": {
+          "variants": [{ "id": "review", "body": { "thinking": { "type": "disabled" }, "temperature": 0.2 } }],
+        },
+      },
+    },
+  },
+  "agents": {
+    "reviewer": { "model": "opencode/deepseek-v4.1-flash#review" },
+  },
+}
+```
+
+Brug `body` til udbyderens JSON-felter og `settings` til indstillinger for udbyderpakken. Se [modelindstillinger](/models#options).
+
+### Snapshots
+
+Omdøb entalsfeltet `snapshot` til `snapshots`. Dens booleske værdi ændres ikke:
+
+```jsonc
+// V1
+{ "snapshot": false }
+
+// V2
+{ "snapshots": false }
+```
+
+### Medier
+
+Omdøb entalsobjektet `attachment` til `media`. Indlejrede billedindstillinger beholder samme navne:
+
+```jsonc
+// V1
+{ "attachment": { "image": { "auto_resize": true } } }
+
+// V2
+{ "media": { "image": { "auto_resize": true } } }
+```
+
+### MCP-servere
+
+V2 grupperer servere under `mcp.servers`, erstatter `enabled` med det omvendte `disabled` og opdeler timeoutformål:
+
+```jsonc
+// V1
+{
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "@playwright/mcp"],
+      "enabled": true,
+      "timeout": 30000
+    }
+  }
+}
+
+// V2
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["npx", "@playwright/mcp"],
+        "disabled": false,
+        "timeout": {
+          "catalog": 30000,
+          "execution": 30000
+        }
+      }
+    }
+  }
+}
+```
+
+Eksterne OAuth-felter bruger snake case: `clientId` bliver `client_id`, `clientSecret` bliver `client_secret`,
+`callbackPort` bliver `callback_port`, og `redirectUri` bliver `redirect_uri`. V1-værdien `experimental.mcp_timeout`
+bliver også standardværdierne for `mcp.timeout.catalog` og `mcp.timeout.execution`. Se [MCP-servere](/mcp-servers).
+
+### Komprimering
+
+V2 grupperer tokenbudgettet for bevaret kontekst under `keep` og giver reserven et klarere navn:
+
+```jsonc
+// V1
+{
+  "compaction": {
+    "preserve_recent_tokens": 8000,
+    "reserved": 20000
+  }
+}
+
+// V2
+{
+  "compaction": {
+    "keep": {
+      "tokens": 8000
+    },
+    "buffer": 20000
+  }
+}
+```
+
+V1-tokenantallet overføres som det er. V2 accepterer også en procentdel af modellens vindue, f.eks. `"buffer": "15%"`,
+hvilket passer til modeller med forskellige vinduesstørrelser.
+
+`auto` beholder sit navn. V2 har intet native `tail_turns`- eller `prune`-felt; begge ældre felter ignoreres med en advarsel. Nylig
+kontekst bevares i stedet efter tokenbudget. Se [Komprimering](/compaction).
+
+### Skills
+
+V1 adskiller ekstra skillstier og URL'er. V2 kombinerer begge i ét ordnet array:
+
+```jsonc
+// V1
+{
+  "skills": {
+    "paths": ["./team-skills"],
+    "urls": ["https://example.com/skills/"]
+  }
+}
+
+// V2
+{
+  "skills": ["./team-skills", "https://example.com/skills/"]
+}
+```
+
+Eksisterende skillfiler og automatisk søgning i `.opencode/skills/` ændres ikke. Se [Skills](/skills).
+
+### Kommandoer
+
+Omdøb entalsmappet `command` til `commands` og `subtask` til `subagent`. Føj en separat model-`variant` til modelreferencen:
+
+```jsonc
+// V1
+{
+  "command": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-5-5",
+      "variant": "high",
+      "subtask": true
+    }
+  }
+}
+
+// V2
+{
+  "commands": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "subagent": true
+    }
+  }
+}
+```
+
+`template`, `description` og `agent` beholder deres navne. Det ældre `subtask` accepteres stadig; delegerede kommandoer kører nu
+automatisk i baggrunden og rapporterer deres resultater til den overordnede session. Eksisterende Markdown-kommandodefinitioner understøttes stadig.
+Se [Kommandoer](/commands).
+
+### Referencer
+
+Omdøb det forældede entalsmap `reference` til `references`:
+
+```jsonc
+// V1
+{ "reference": { "docs": "../docs" } }
+
+// V2
+{ "references": { "docs": "../docs" } }
+```
+
+V1 accepterer allerede `references`, så der er ingen ændring nødvendig, når filen bruger det. Referenceposter beholder
+samme former. Se [Referencer](/references).
+
+### Udbydere
+
+Omdøb entalsmappet `provider` til `providers`. V2 adskiller runtime-pakken, endpointet og request-indstillingerne:
+
+```jsonc
+// V1
+{
+  "provider": {
+    "acme": {
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://llm.example.com/v1",
+      "options": {
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "providers": {
+    "acme": {
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.example.com/v1",
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+V1 `npm` bliver `package`, og AI SDK-pakker får `aisdk:`-præfikset. `api` bliver `settings.baseURL`. Udbyderens
+`options` opdeles i `settings`, `headers` og `body` efter deres requestrolle. `options.setCacheKey`
+bliver `compatibility.supportsPromptCacheKey` på udbyderen. Se [Udbydere](/providers).
+
+V2 konsoliderede to ældre udbydernavnerum:
+
+| V1-udbyder-ID              | Kanonisk V2-udbyder-ID |
+| -------------------------- | ---------------------- |
+| `azure-cognitive-services` | `azure`                |
+| `google-vertex-anthropic`  | `google-vertex`        |
+
+Migrering af entydige V1-udbyder-, agent-, kommando- og udbyderfilterfelter bruger disse kanoniske ID'er. Det delte
+`model`-felt på topniveau beholder sit præcise udbyder-ID, fordi samme syntaks er gyldig i native V2-konfiguration; opdater feltet
+til det kanoniske ID, når du migrerer en ældre indbygget udbyder.
+
+### Modeller og varianter
+
+Modeller forbliver indlejret under deres udbyder, men flere modelfelter bliver mere eksplicitte:
+
+- `id` bliver `modelID`.
+- `tool_call` og `modalities` bliver `capabilities.tools`, `capabilities.input` og `capabilities.output`.
+- En `status` på `"deprecated"` bliver `disabled: true`.
+- Cacheomkostninger flyttes fra `cache_read` og `cache_write` til `cache.read` og `cache.write`.
+- Udbyderspecifikke `options` bliver `settings`.
+- Et V1-variantobjekt bliver et V2-array med et `id` på hver post.
+
+```jsonc
+// V1
+{
+  "variants": {
+    "high": {
+      "reasoningEffort": "high"
+    }
+  }
+}
+
+// V2
+{
+  "variants": [
+    {
+      "id": "high",
+      "settings": {
+        "reasoningEffort": "high"
+      }
+    }
+  ]
+}
+```
+
+Se [Modeller](/models) for den komplette native modelform.
+
+### Understøttede felter uden direkte native ækvivalenter
+
+De fleste felter, der beholder samme form, inklusive `shell`, `model`, `default_agent`, `watcher`, `formatter`,
+`instructions`, `enterprise` og `tool_output`, kræver ingen migrering.
+
+V2 accepterer og bevarer `lsp`-konfiguration, men kører ikke languageservere, eksponerer ikke LSP-værktøjer og producerer ikke LSP-
+diagnostik. Erstat arbejdsgange, der afhænger af disse kapaciteter, med projektets lint-, typecheck- eller compilerkommandoer.
+
+V1-udbyderfiltrene har ikke et en-til-en native V2-konfigurationsfelt, men deres adfærd understøttes stadig gennem
+[politikker](/policies):
+
+- `enabled_providers` bliver en intern deny-by-default-udbyderpolitik efterfulgt af allow for de listede udbydere.
+- `disabled_providers` bliver interne deny-politikker for de listede udbydere.
+- `autoupdate` bliver `update`: `false` svarer til `"disable"`, `"notify"` svarer til `"notify"`, og `true` svarer til `"auto"`.
+- `small_model` bliver `model`-valget for den indbyggede `title`-agent. Native V2-konfiguration bør bruge
+  `agents.title.model` i stedet.
+
+Du kan beholde disse felter i V1-syntaks. OpenCode normaliserer dem uden advarsel.
+
+### Accepterede, men ikke understøttede felter
+
+V1-schemaet accepterede også felter uden understøttet V2-adfærd. V2 ignorerer disse værdier og udsender en advarsel, så
+de ikke forveksles med aktiv konfiguration:
+
+- `logLevel`: brug `OPENCODE_LOG_LEVEL`, når du starter OpenCode.
+- `server`: brug V2-tjenesten og eksplicitte serverindstillinger; server-API'et er bevidst ikke bagudkompatibelt.
+- Topniveau `subagent_depth`: brug `experimental.subagent_depth` i stedet.
+- `compaction.tail_turns` og `compaction.prune`: V2 bruger `compaction.keep.tokens` og checkpointbaseret komprimering i stedet.
+- Agent-`name` inde i V1 JSON-konfiguration.
+- En V1-MCP-post, der kun indeholder feltet enabled og ikke har en `type`.
+- V1-eksperimentfelterne `batch_tool`, `openTelemetry`, `primary_tools` og `continue_loop_on_deny`.
+- V1-udbyderfelterne `id`, `whitelist` og `blacklist`.
+- Felterne `release_date`, `attachment`, `reasoning`, `temperature` og `experimental` på V1-udbydermodeller, en værdi
+  forskellig fra `deprecated` i `status` og en boolesk værdi i `interleaved`.
+
+Ignorering af disse felter er bevidst og er ikke en kompatibilitetsregression. Hvis V2 ikke bevarer adfærd, der er identificeret
+som understøttet andre steder i denne guide, skal du følge vejledningen til fejlrapportering i [Fejlfinding](/troubleshooting).
+
+### Agentfiler
+
+V1-agentfiler kan bruge `agent/`, `agents/`, `mode/` eller `modes/`. V2 finder stadig alle fire mapper. Den foretrukne
+V2-placering er:
+
+```text
+.opencode/agents/<name>.md
+```
+
+Filer under en V1 `mode/`- eller `modes/`-mappe repræsenterer primære agenter. Når du flytter en til `agents/`, skal du tilføje
+`mode: primary` til dens frontmatter. Filer under `agent/` kan flyttes til `agents/` uden at ændre deres stiudledte ID.
+
+Når du konverterer frontmatteren til native V2-felter:
+
+- Behold Markdown-bodyen som agentens systeminstruktioner.
+- Omdøb `prompt` til `system`, når det forekommer i JSON-konfiguration; filbodyer har ikke brug for et `system`-felt.
+- Omdøb `disable` til `disabled` og `permission` til `permissions`.
+- Føj `model` og `variant` sammen som `provider/model#variant`.
+- Angiv sampling- og udbyderindstillinger på en modelvariant, som vist [ovenfor](#agents-and-modes).
+
+V1-agentfrontmatter er forældet, men oversættes stadig automatisk. Hver fil læses som ét format. En fil, der
+bruger en af `permissions`, `request`, `system` eller `disabled`, læses som V2, og V1-felter i den, som `name`,
+`tools`, `permission` eller `temperature`, ignoreres med en advarsel i loggen. Andre filer, der bruger V1-felter, læses
+som V1. Konvertér en fils frontmatter på én gang i stedet for at blande de to formater. Se [Agenter](/agents).
+
+### Kommandofiler
+
+V1-kommandofiler kan bruge `command/` eller `commands/`. V2 finder begge. Den foretrukne placering er:
+
+```text
+.opencode/commands/<name>.md
+```
+
+Flyt filer fra `command/` til samme relative sti under `commands/` for at bevare kommandonavne. Markdown-bodyen forbliver
+kommandoskabelonen, og `description`- og `agent`-frontmatter beholder samme navne. Omdøb `subtask` til `subagent` for at bruge
+det native navn til baggrundsdelegering. Hvis frontmatteren har separate
+`model`- og `variant`-felter, skal du føje varianten til modellen og fjerne `variant`:
+
+```yaml
+# V1
+model: anthropic/claude-sonnet-5-5
+variant: high
+subtask: true
+
+# V2
+model: anthropic/claude-sonnet-5-5#high
+subagent: true
+```
+
+Se [Kommandoer](/commands).
+
+### Skillfiler
+
+V2 finder skills fra både `.opencode/skill/` og `.opencode/skills/`. Det foretrukne layout er:
+
+```text
+.opencode/skills/<skill-id>/SKILL.md
+```
+
+Flyt hele skillmappen, ikke kun `SKILL.md`, så relative scripts, referencer og andre understøttende filer forbliver
+tilgængelige. Hold mappenavnet stabilt for at bevare skill-ID'et. Eksisterende skillfrontmatter og Markdown-bodyer kræver
+ikke en V2-omskrivning. Se [Skills](/skills).
+
+### Instruktionsfiler
+
+Eksisterende `AGENTS.md`-filer bliver liggende. V2 finder den globale `~/.config/opencode/AGENTS.md` og omkringliggende `AGENTS.md`-
+filer fra den aktuelle mappe op til hjemmemappen. For projekter uden for hjemmemappen stopper søgningen ved projektroden.
+
+V2 beholder V1's `CLAUDE.md`-fallback: en mappe uden `AGENTS.md` bruger sin `CLAUDE.md`, og `~/.claude/CLAUDE.md`
+erstatter en manglende global `AGENTS.md`. `OPENCODE_DISABLE_CLAUDE_CODE` springer alle `CLAUDE.md` over, og det samme gør
+`OPENCODE_DISABLE_CLAUDE_CODE_PROMPT`, som i V1 kun sprang `~/.claude/CLAUDE.md` over. I modsætning til V1, som stoppede ved det
+første filnavn, der blev fundet op igennem træet, vælger V2 pr. mappe, så en `AGENTS.md` i roden ikke længere skjuler en
+indlejret `CLAUDE.md`. Se [Instruktioner](/instructions).
+
+## Terminalklientkonfiguration
+
+V2 erstatter lagdelte V1 `tui.json(c)`-filer med én global terminalklientkonfigurationsfil:
+
+```text
+~/.config/opencode/cli.json
+```
+
+Terminalklienten ejer denne fil; baggrundstjenesten indlæser den ikke. Når `cli.json` mangler, migrerer den første V2-
+terminalklientstart understøttede globale `tui.json`-indstillinger og gemte præferencer, mens V1-filerne forbliver
+uændrede. Projektlokal klientkonfiguration migreres ikke, fordi V2-klientkonfiguration er global. Se
+[CLI-indstillinger](/cli/config) for den aktuelle reference til klientindstillinger.
+
+## Plugins
+
+Omdøb `plugin` til `plugins`. Erstat en pakke-og-indstillinger-tuple med et objekt:
+
+```jsonc
+// V1
+{
+  "plugin": ["opencode-example-plugin", ["./plugin/local.ts", { "enabled": true }]]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+V2 finder lokale plugins fra både `.opencode/plugin/` og `.opencode/plugins/`; brug `.opencode/plugins/` til V2-filer.
+Konfigurerede lokale stier skal være mapper, så flyt det portede plugin til `./plugin/local/index.ts`.
+
+<Callout type="warning">
+  V1-pluginimplementeringer kører ikke i V2. Det er ikke nok at flytte en fil eller omdøbe dens konfigurationspost.
+</Callout>
+
+Portér entrypoints, hooks, værktøjer, hændelser og pakkeeksporter med den dedikerede
+[pluginmigreringsguide](/build/plugins/migrate-v1).
+
+## Server-API og klienter
+
+OpenCode 2 har et revideret, mere ergonomisk server-API og et nyt sæt klienter. Integrationer, der kalder V1-server-API'et,
+skal migreres til V2-API'et.
+
+Brug pakken `@opencode/client` til at tilgå det udgivne V2-API. Se den genererede [API-reference](/api) for dens
+endpoints, requesttyper og svar.
+
+### Serverautentificering
+
+V2-servere bruger stadig HTTP Basic auth med disse ændringer:
+
+- `OPENCODE_PASSWORD` angiver adgangskoden. `OPENCODE_SERVER_PASSWORD` virker stadig.
+- `OPENCODE_SERVER_USERNAME` understøttes ikke længere. Brugernavnet er altid `opencode`.
+
+```bash
+# V1
+OPENCODE_SERVER_USERNAME=alice OPENCODE_SERVER_PASSWORD=secret opencode serve
+
+# V2
+OPENCODE_PASSWORD=secret opencode serve
+```
+
+Se [Web](/cli/web#authentication).
+
+## Kontrollér din opsætning
+
+Kontrollér din model, udbyderlegitimationsoplysninger, agenter, tilladelser, MCP-servere og plugins i et projekt, før du bruger V2
+til almindeligt arbejde. Behold din V1-opsætning, indtil du har bekræftet den V2-adfærd, du har brug for, og peg ikke V1 på
+konfiguration, som du har konverteret til den native V2-form.

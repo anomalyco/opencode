@@ -1,0 +1,90 @@
+---
+title: "TUI"
+description: "Start en session, og brug de daglige arbejdsgange i terminalbrugerfladen."
+---
+
+Kør OpenCode fra dit projekt, skriv en anmodning, og tryk på **Enter**.
+
+```bash
+cd ~/code/my-project
+opencode
+```
+
+```text
+Explain how authentication works in this project
+```
+
+Tryk på **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** eller **Ctrl+J** for at indsætte et linjeskift. Mens OpenCode arbejder, sender **Enter** din prompt som en ny instruktion til den aktive session; tryk på **Ctrl+X** og derefter **Enter** for at sætte prompten i kø til senere.
+
+## Kontekst
+
+Skriv `@` for at søge efter en fil, og vælg den for at vedhæfte filen til prompten. Bliv ved med at skrive efter `@` for at indsnævre resultaterne.
+
+```text
+Review @src/auth.ts for error handling problems
+```
+
+Du kan angive et linjenummer eller et linjeinterval efter stien.
+
+```text
+Explain @src/auth.ts#20-45
+```
+
+## Shell
+
+Skriv `!` i starten af en tom prompt for at gå i shell-tilstand. Skriv en kommando, og tryk på **Enter**; tryk på **Esc** for at forlade shell-tilstanden uden at køre en kommando.
+
+```text
+!git status
+```
+
+Shell-kommandoer kører i sessionens arbejdsmappe, og deres output bliver i sessionen.
+
+## Kommandoer
+
+Skriv `/` for at vise slash-kommandoer. Bliv ved med at skrive for at filtrere listen, og tryk derefter på **Enter** for at køre den valgte kommando.
+
+```text
+/models
+```
+
+Almindelige kommandoer er `/new`, `/sessions`, `/models`, `/agents`, `/undo`, `/redo` og `/editor`. Tryk på **Ctrl+P** for at åbne kommandopaletten med alle handlinger, der er tilgængelige i den aktuelle visning.
+
+Efter en opdatering viser OpenCode én gang på startskærmen, hvad der er nyt i versionen. Kør `/highlights` for at se det igen, eller angiv `"highlights": false` i [`cli.json`](/cli/config#alerts) for at forhindre, at det åbnes automatisk.
+
+## Sidespørgsmål
+
+Kør `/btw <question>` for at stille et hurtigt spørgsmål om samtalen indtil nu. Svaret bruger sessionens kontekst og den aktuelle model, men føjes ikke til samtalen, så det påvirker ikke senere prompts. Mens OpenCode arbejder på svaret, vises en `/btw`-indikator under inputfeltet, og svaret åbnes i en dialog; tryk på **C** for at kopiere det.
+
+```text
+/btw why did the test in step 2 fail?
+```
+
+## Modeller
+
+Tryk på **Ctrl+X** og derefter **M** for at vælge en model, eller kør `/models`. Tryk på **F2** for at skifte mellem nyligt brugte modeller.
+
+Tryk på **Ctrl+X** og derefter **A** for at vælge en agent, eller kør `/agents`. Tryk på **Shift+Tab** for at skifte agent.
+
+## Sessioner
+
+Tryk på **Ctrl+X** og derefter **N** for at starte en ny session. Tryk på **Ctrl+X** og derefter **L**, eller kør `/sessions`, for at vende tilbage til en eksisterende session; **Ctrl+O** åbner nylige sessioner og projekter samlet.
+
+Faner er aktiveret som standard. Brug **Ctrl+Tab** og **Ctrl+Shift+Tab** til at skifte mellem dem, **Ctrl+X** og derefter **W** til at lukke en fane og **Ctrl+Shift+T** til at genåbne den senest lukkede fane.
+
+## Historik
+
+Tryk på **Ctrl+X** og derefter **U**, eller kør `/undo`, for at fortryde den seneste brugerbesked og det arbejde, der fulgte efter. Den fortrudte prompt vender tilbage til inputfeltet, så du kan redigere den.
+
+Tryk på **Ctrl+X** og derefter **R**, eller kør `/redo`, for at gendanne det fortrudte arbejde. Hvis du i stedet sender en ny prompt, accepteres fortrydelsen, og arbejdet fortsætter derfra.
+
+## Editor
+
+Angiv `VISUAL` eller `EDITOR`, og tryk derefter på **Ctrl+X** og **E**, eller kør `/editor`, for at redigere den aktuelle prompt i den editor. Gem, og afslut for at føre teksten tilbage til inputfeltet, og tryk derefter på **Enter** for at sende den.
+
+```bash
+export EDITOR="nvim"
+opencode
+```
+
+Leadertasten er som standard **Ctrl+X**. Se [Tastebindinger](/cli/keybinds) for at ændre genvejene.

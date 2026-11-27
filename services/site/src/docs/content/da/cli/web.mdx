@@ -1,0 +1,144 @@
+---
+title: "Web"
+description: "Kør OpenCode i browseren."
+---
+
+OpenCodes webbrugerflade kører på samme server som TUI'en. Den er tilgængelig som standard og beskyttet med adgangskode.
+
+## Adgang
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+
+  █▀▀▀▀▀█ ...
+```
+
+Når du åbner et link i en browser, logges der ind med en session-cookie, og webUI'en
+indlæses. Hvis du scanner QR-koden fra OpenCode-appen eller indsætter linket i
+appens felt til serveradresse, forbindes appen på samme måde. Sessioner varer 30 dage;
+hvis du ændrer serveradgangskoden, logges alle sessioner ud.
+
+### Over SSH
+
+Når serveren kun lytter på localhost, skal du videresende dens port fra din maskine
+og åbne det udskrevne link lokalt:
+
+```bash
+$ ssh -L 49374:127.0.0.1:49374 my-server
+```
+
+Som standard lytter serveren kun på localhost. Porten afhænger af
+platformen:
+
+| Platform              | Standardport |
+| --------------------- | ------------ |
+| macOS, Linux og WSL   | 49374        |
+| Windows               | 28894        |
+
+Windows reserverer porte fra 49152 og opefter, og WSL's mirrored networking reserverer
+endnu et interval nedenunder. Udskriv den aktuelle adresse med
+`opencode service status`:
+
+```bash
+$ opencode service status
+http://127.0.0.1:49374
+```
+
+Du kan ændre denne konfiguration med kommandoen `opencode service`.
+
+### Fjernadgang
+
+Du kan tilslutte en klient fra hvor som helst via en ekstern [OpenTunnel](https://github.com/anomalyco/opentunnel)-adresse:
+
+```bash
+$ opencode pair --remote
+```
+
+Første gang du aktiverer fjernadgang, beder OpenCode dig om at bekræfte, før det fortsætter:
+
+```text
+▲  This will expose your OpenCode server to the internet.
+│  Traffic is end-to-end encrypted, and access requires your server password.
+│  To pair locally instead, run `opencode pair` without the --remote flag.
+│
+◆  Expose your server to the internet?
+│  ● Yes / ○ No
+```
+
+Uden en interaktiv terminal mislykkes kommandoen, medmindre du sender `--yes` for at
+acceptere. Når den er accepteret, springes spørgsmålet over ved senere kørsler, også efter fjernadgang er
+slået fra med `opencode service set remote false`.
+
+## Konfiguration
+
+Angiv en vilkårlig indstilling med `opencode service set`:
+
+```bash
+# Listen on every network interface
+$ opencode service set hostname 0.0.0.0
+
+# Use a fixed port instead of the channel default
+$ opencode service set port 49374
+
+# Replace the generated password
+$ opencode service set password "a-long-secret"
+
+# Allow a web client served from another origin
+$ opencode service set cors https://app.example.com,https://other.example.com
+
+# Pass an environment variable to the server process
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+Ændring af en indstilling stopper baggrundsserveren. Start den igen for at anvende den nye konfiguration:
+
+```bash
+$ opencode service start
+```
+
+## Standalone
+
+`opencode serve` kører den samme server i forgrunden i stedet for gennem den
+delte baggrundstjeneste.
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password <password>
+```
+
+Brug den, når du vil:
+
+- Køre OpenCode på en delt, altid kørende eller ekstern host og derefter forbinde klienter med
+  `opencode --server <url>`.
+- Styre hostname, port og CORS-origins for en enkelt proces.
+- Køre under en supervisor som systemd, Docker eller et andet miljø, der forventer
+  en forgrundsproces.
+- Holde en dedikeret server i stedet for den delte baggrundstjeneste.
+
+Forbind en klient til den med `--server`:
+
+```bash
+$ opencode --server http://127.0.0.1:4096
+```
+
+### Autentificering
+
+Angiv `OPENCODE_PASSWORD` for at bruge en fast adgangskode i stedet for en genereret. Den
+samme variabel giver adgangskoden til `opencode --server`.
+
+```bash
+$ OPENCODE_PASSWORD="a-long-secret" opencode serve --port 4096
+$ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
+```
+
+Andre HTTP-klienter bruger Basic auth. Brugernavnet er altid `opencode`, og kun
+adgangskoden kan ændres.
+
+```bash
+$ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
+```

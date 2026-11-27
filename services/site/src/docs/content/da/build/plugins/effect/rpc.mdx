@@ -1,0 +1,167 @@
+---
+title: "Effect plugin-RPC"
+description: "Gør et Effect-plugins metoder og hændelser tilgængelige som typede Effects og Streams."
+---
+
+Effect-plugins kan stille metoder og hændelser til rådighed, som returnerer typede Effects og Streams.
+
+## Definér
+
+Brug `Rpc.define` med Effect Schema til at definere RPC'en.
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+import { Schema } from "effect"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: Schema.Struct({ query: Schema.String }),
+      output: Schema.Struct({ text: Schema.String }),
+      errors: {
+        not_found: Schema.Struct({ query: Schema.String }),
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: Schema.Struct({ itemID: Schema.String, text: Schema.String }),
+    },
+  },
+})
+```
+
+### Validering
+
+Effect Schema validerer værdier og udleder deres TypeScript-typer.
+
+```ts
+input: Schema.Struct({ query: Schema.String })
+```
+
+JSON Schema og Standard Schema understøttes også.
+
+### Input og output
+
+Brug `input` til metodeargumentet og `output` til dets returværdi. Udelad
+en af dem, når der ikke er nogen værdi.
+
+```ts
+search: {
+  input: Schema.Struct({ query: Schema.String }),
+  output: Schema.Struct({ text: Schema.String }),
+}
+```
+
+### Fejl
+
+Tilføj forventede fejl til `errors`. Hver nøgle bliver fejlens `type`.
+
+```ts
+errors: {
+  not_found: Schema.Struct({ query: Schema.String }),
+}
+```
+
+### Hændelser
+
+Tilføj hændelser til opslagstabellen `events` på øverste niveau. Hændelsesdata skal være et objekt.
+
+```ts
+events: {
+  updated: {
+    schema: Schema.Struct({ itemID: Schema.String, text: Schema.String }),
+  },
+}
+```
+
+## Implementér
+
+Registrér implementeringen fra plugin-Effectet:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-effect-plugin",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const registration = yield* ctx.rpc.register(Acme, {
+        search: ({ query }, context) =>
+          findText(query).pipe(
+            Effect.flatMap((text) =>
+              text
+                ? Effect.succeed({ text })
+                : Effect.fail(context.error("not_found", "Result not found", { query })),
+            ),
+          ),
+      })
+
+      const acme = ctx.rpc(Acme)
+      const result = yield* acme.search({ query: "hello" })
+
+      yield* registration.events.emit("updated", { itemID: "item-1", text: result.text })
+    }).pipe(Effect.orDie),
+})
+```
+
+Oversigten over fejl fastlægger fejltypen for hver metodes Effect. Brug `context.error(...)` til at oprette en deklareret fejl.
+
+## Kald
+
+Når RPC'en er registreret, kan den kaldes over HTTP eller fra et andet plugin.
+
+### HTTP
+
+Opret Effect-klienten, og opret derefter RPC-underklienten:
+
+```ts
+import { OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const acme = client.rpc(Acme)
+  return yield* acme.search({ query: "hello" })
+})
+
+const result = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+### Plugin
+
+Et andet Effect-plugin kan oprette en lokal underklient fra sin kontekst:
+
+```ts
+import { Effect } from "effect"
+
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const acme = ctx.rpc(Acme)
+    const result = yield* acme.search({ query: "hello" })
+    yield* Effect.logInfo(result.text)
+  }).pipe(Effect.orDie)
+```
+
+### Abonnér
+
+RPC-hændelser er Streams. Abonnér på hændelsesnavnet, og kør Streamen i en fiber knyttet til et scope:
+
+{/* prettier-ignore */}
+```ts
+import { Effect, Stream } from "effect"
+
+const acme = ctx.rpc(Acme)
+
+yield* acme.events.subscribe("updated").pipe(
+  Stream.runForEach((event) => Effect.logInfo(event.data.text)),
+  Effect.forkScoped,
+)
+```
+
+Abonnementer leverer kun nye hændelser og lukkes, når læsning fra Streamen stopper.

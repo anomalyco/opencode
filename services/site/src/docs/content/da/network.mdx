@@ -1,0 +1,156 @@
+---
+title: "Netværk"
+description: "Konfigurer proxyer, brugerdefinerede certifikatmyndigheder og klientcertifikater."
+---
+
+Angiv standardproxyvariablerne, og udelad loopback-adresser. OpenCode bruger lokale HTTP-forbindelser mellem CLI'en og
+dens baggrundstjeneste, så loopback-undtagelsen er nødvendig, når der er konfigureret en proxy i CLI-miljøet.
+
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+export NO_PROXY=localhost,127.0.0.1,::1
+
+opencode
+```
+
+`HTTP_PROXY` håndterer HTTP-destinationer, og `HTTPS_PROXY` håndterer HTTPS-destinationer. Selve proxy-URL'en kan bruge `http://`
+for begge variabler. `NO_PROXY` er en kommasepareret liste over hosts og adresser, der forbinder direkte.
+
+## Tjeneste
+
+Shell-eksport påvirker kun en baggrundstjeneste, når tjenesten starter fra shellen. Gør variablerne varige i den administrerede
+tjenestekonfiguration, så senere tjenestestarter bruger de samme netværksindstillinger.
+
+```bash
+opencode service set env HTTP_PROXY http://proxy.example.com:8080
+opencode service set env HTTPS_PROXY http://proxy.example.com:8080
+opencode service set env NO_PROXY localhost,127.0.0.1,::1
+opencode service start
+```
+
+Ændring af en administreret miljøvariabel stopper den kørende tjeneste. `service start` starter den igen med det nye miljø.
+Behold også `NO_PROXY` i CLI-shellen, når den shell angiver en proxy, fordi administrerede tjenestevariabler gælder for serverprocessen,
+ikke CLI-processen.
+
+Fjern en varig variabel med `service unset env`:
+
+```bash
+opencode service unset env HTTPS_PROXY
+```
+
+## Autentificering
+
+Hvis proxyen accepterer legitimationsoplysninger i URL'en, skal du angive brugernavn og adgangskode i hver proxy-URL, der kræver autentificering.
+Procentkod tegn som `@`, `:` og `/` i både brugernavn og adgangskode.
+
+```bash
+export HTTPS_PROXY='http://user:p%40ssword@proxy.example.com:8080'
+```
+
+For baggrundstjenesten skal du gøre den fulde URL varig. Værdien gemmes i den private tjenestekonfiguration og
+vises af `opencode service get env`, så del ikke det output.
+
+```bash
+opencode service set env HTTPS_PROXY 'http://user:p%40ssword@proxy.example.com:8080'
+```
+
+## Certifikater
+
+Lad `NODE_EXTRA_CA_CERTS` pege på en PEM-fil, når proxyen eller destinationen bruger et certifikat, som er signeret af en privat
+certifikatmyndighed. De ekstra myndigheder føjes til listen over betroede certifikatmyndigheder, når processen starter.
+
+```bash
+export NODE_EXTRA_CA_CERTS=/etc/company/ca.pem
+opencode --standalone
+```
+
+Gør filstien varig for baggrundstjenesten, og genstart den derefter:
+
+```bash
+opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
+opencode service start
+```
+
+## Antivirus og HTTPS-inspektion
+
+Antivirusfunktioner som “HTTPS-scanning” eller “scanning af krypterede forbindelser” (Kaspersky, Avast, ESET og andre) og virksomheders
+SSL-inspektionsproxyer erstatter serverens certifikat med deres eget. OpenCode afviser det, og anmodninger mislykkes med
+fejl som:
+
+```text
+self signed certificate in certificate chain
+SELF_SIGNED_CERT_IN_CHAIN
+CERT_NOT_YET_VALID
+CERT_SIGNATURE_FAILURE
+```
+
+Løs det på en af to måder:
+
+- Udelad `opencode.ai` og `*.opencode.ai` fra HTTPS-scanning i antivirusindstillingerne. Tilføj også din udbyders API-host,
+  f.eks. `api.anthropic.com`, hvis du forbinder direkte til en udbyder.
+- Eksportér inspektionscertifikatmyndigheden som en PEM-fil, og gør den betroet med `NODE_EXTRA_CA_CERTS`, som vist i
+  [Certifikater](#certificates).
+
+## Klientcertifikater
+
+Angiv `settings.tls` for en udbyder, hvis gateway kræver gensidig TLS. Modelanmodninger til udbyderen bruger certifikatet,
+men det sendes kun under TLS-handshaket til servere, der beder om det.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "company": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.company.example/v1",
+        "tls": {
+          "cert": "{file:/etc/company/client.pem}",
+          "key": "{file:/etc/company/client.key}",
+          "passphrase": "{env:CLIENT_KEY_PASSPHRASE}",
+        },
+      },
+    },
+  },
+}
+```
+
+- `cert` og `key` er PEM-tekst. Brug `{file:...}` til at læse dem fra filer. En fil, der ikke kan læses, efterlader `tls` uindstillet.
+- `passphrase` er kun nødvendig for en krypteret nøgle.
+- Virker på Bun- og Node-builds. En server på Cloudflare Workers kan ikke fremvise et klientcertifikat gennem `fetch`.
+- Anmodninger med et klientcertifikat følger ikke redirects, så certifikatet fremvises ikke for en anden host.
+
+Hver modelanmodning til den udbyder fremviser certifikatet: chat-, komprimerings-, billed- og beslutningsmodeller. En udbyder
+med `tls` bruger HTTP i stedet for WebSockets. Værktøjer som webfetch, eksterne MCP-servere og plugininstallationer fremviser
+det ikke.
+
+## Foreground
+
+`--standalone` og `serve` bruger deres egen proces' miljø. `opencode service set env` konfigurerer ikke disse
+processer.
+
+```bash
+HTTP_PROXY=http://proxy.example.com:8080 \
+HTTPS_PROXY=http://proxy.example.com:8080 \
+NO_PROXY=localhost,127.0.0.1,::1 \
+opencode --standalone
+```
+
+Anvend samme mønster på en forgrundsserver:
+
+```bash
+HTTPS_PROXY=http://proxy.example.com:8080 \
+NO_PROXY=localhost,127.0.0.1,::1 \
+opencode serve
+```
+
+## Kontrollér
+
+Kontrollér, at CLI'en kan nå baggrundstjenesten, efter at indstillingerne er anvendt:
+
+```bash
+opencode api get /api/info
+```
+
+Et vellykket health-svar bekræfter den lokale klient-til-tjeneste-forbindelse. Kør en normal udbyderanmodning for at kontrollere
+tjenestens udgående proxy- og certifikatsti.

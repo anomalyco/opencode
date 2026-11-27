@@ -1,0 +1,111 @@
+---
+title: "API til forbrugseksport"
+description: "Download et arbejdsområdes daglige forbrug som CSV med anmodninger, tokens og omkostninger for hver dag, person, udbyder og model."
+---
+
+`GET https://opencode.ai/console/api/v2/usage/export` returnerer et arbejdsområdes forbrug som CSV med én række pr. UTC-dag,
+medlem eller tjenestekonto, udbyder og model. Det er den samme fil, som knappen **Export usage** downloader fra
+**Activity › Usage**.
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v2/usage/export?range=30d" \
+  --header "Authorization: Bearer oc_sk_..." \
+  --output usage-30d.csv
+```
+
+## Autentificering
+
+Send en [API-nøgle](/console/api#api-keys) som bearer-token. Eksporten omfatter forbruget i det arbejdsområde, hvor nøglen blev oprettet.
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+Nøglen skal have **Usage › Read**. Nøgler med **All** eller **Read only** har den. En begrænset nøgle skal have:
+
+```text
+Permissions: Restricted
+Usage:       Read
+```
+
+Brug en [nøgle til en tjenestekonto](/console/api#service-accounts) til planlagte eksporter eller en ejers eller
+administrators [personlige API-nøgle](/console/api#personal-api-keys). Medlemmer kan ikke læse arbejdsområdets forbrug, så
+deres nøgler returnerer `403`.
+
+## Anmodning
+
+| Parameter | Påkrævet | Værdi                                                                                                                 |
+| --------- | -------- | --------------------------------------------------------------------------------------------------------------------- |
+| `range`   | Ja       | `7d`, `30d` eller `90d`.                                                                                              |
+| `user_id` | Nej      | Et medlems-ID (`user_...`) eller tjenestekonto-ID (`svcacct_...`). Returnerer kun rækker for det pågældende medlem eller den pågældende tjenestekonto. |
+
+`range` tæller UTC-dage og omfatter i dag, så `7d` er i dag og de seks dage før. Dagens rækker vokser, indtil midnat UTC.
+
+Hvis du vil eksportere én tjenestekontos forbrug, skal du angive dens ID fra `user_id`-kolonnen i en tidligere eksport:
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v2/usage/export?range=7d&user_id=svcacct_01JD8Z4Q2W7N3K5M6P9R0S1T2V" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+Et ID, der ikke findes i arbejdsområdet, giver kun rækken med kolonneoverskrifter.
+
+## Svar
+
+En vellykket anmodning returnerer `200` med `Content-Type: text/csv; charset=utf-8`. Første linje indeholder kolonneoverskrifterne. Derefter følger datarækkerne med den nyeste dag først.
+
+```csv
+day,user_type,user_id,user_name,provider,model,requests,input_tokens,output_tokens,cache_read_tokens,cache_write_5m_tokens,cache_write_1h_tokens,cost_micro_cents,cost_usd
+2026-11-24,service_account,svcacct_01JD8Z4Q2W7N3K5M6P9R0S1T2V,CI Pipeline,opencode,claude-sonnet-5-5,412,1830211,96402,5120330,210044,0,1512334800,15.123348
+2026-11-24,member,user_01JC2X7Y8Z9A0B1C2D3E4F5G6H,ada@example.com,opencode,claude-haiku-5-5,57,402118,31877,880012,0,0,214500000,2.145
+2026-11-23,member,user_01JC2X7Y8Z9A0B1C2D3E4F5G6H,ada@example.com,opencode,claude-sonnet-5-5,96,711560,48210,2204118,61022,0,587000000,5.87
+```
+
+- Linjer slutter med `\r\n`.
+- Dage uden forbrug har ingen rækker.
+- Svaret er en download (`Content-Disposition: attachment; filename="usage-30d.csv"`) og caches aldrig
+  (`Cache-Control: private, no-store`).
+- En tekstcelle, der starter med `=`, `+`, `-` eller `@`, får et ledende `'`, så regneark ikke kører den som en formel.
+
+### Kolonner
+
+| Kolonne                 | Betydning                                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `day`                   | UTC-datoen som `YYYY-MM-DD`.                                                                                  |
+| `user_type`             | `member` eller `service_account`.                                                                             |
+| `user_id`               | Medlemmets eller tjenestekontoens ID.                                                                         |
+| `user_name`             | Medlemmets e-mail eller tjenestekontoens navn. Kan være tomt.                                                 |
+| `provider`              | Udbyderen, der betjente anmodningerne, f.eks. `opencode` for [OpenCode Models](/console/models).             |
+| `model`                 | Model-ID'et.                                                                                                  |
+| `requests`              | Antal anmodninger.                                                                                            |
+| `input_tokens`          | Input-tokens.                                                                                                 |
+| `output_tokens`         | Output-tokens.                                                                                                |
+| `cache_read_tokens`     | Tokens læst fra prompt-cachen.                                                                                |
+| `cache_write_5m_tokens` | Tokens skrevet til prompt-cachen med en levetid på 5 minutter.                                                |
+| `cache_write_1h_tokens` | Tokens skrevet til prompt-cachen med en levetid på 1 time.                                                    |
+| `cost_micro_cents`      | Omkostning som et helt antal mikrocents. Én amerikansk dollar er `100000000`.                                 |
+| `cost_usd`              | Den samme omkostning i amerikanske dollars som en eksakt decimal med mindst to decimaler, f.eks. `2.145` eller `0.00`. |
+
+### Hvad er inkluderet
+
+- Hver modelanmodning, som arbejdsområdets medlemmer og tjenestekonti har foretaget.
+- Anmodninger til gratis modeller og anmodninger, som medlemmer foretager gennem deres egne Claude Code-, Codex- eller
+  OpenCode-abonnementer, er inkluderet med deres tokens til nul omkostning.
+- [Websøgning](/console/websearch) og andre hostede tjenester er ikke inkluderet.
+- Totaler kan være omkring et minut bagud i forhold til nye anmodninger.
+
+## Grænser
+
+- En eksport dækker højst 90 dage. Hvis du vil beholde længere historik, skal du gemme filerne efter en tidsplan.
+- Anmodninger tæller med i Console-API'ets grænse på 300 anmodninger pr. minut pr. konto. Grænsen gælder på tværs af API'ets
+  endpoints. Anmodninger med en personlig API-nøgle tæller med hos det medlem, der ejer nøglen.
+
+## Fejl
+
+| Status | Betydning                                                                                             |
+| ------ | ----------------------------------------------------------------------------------------------------- |
+| `400`  | `range` mangler eller er ikke `7d`, `30d` eller `90d`, eller `user_id` er ikke et medlems- eller tjenestekonto-ID. |
+| `401`  | Ingen legitimationsoplysninger eller en udløbet eller tilbagekaldt nøgle.                              |
+| `403`  | Nøglen har ikke **Usage › Read**, eller den tilhører et medlem, der ikke er ejer eller administrator. |
+| `429`  | Den gældende rate limit er overskredet. Prøv igen efter det antal sekunder, der står i `Retry-After`-headeren. |
+| `503`  | Daglige totaler er endnu ikke tilgængelige. Prøv anmodningen igen senere.                             |
