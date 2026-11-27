@@ -1,21 +1,21 @@
 ---
 title: "Modelle"
-description: "Wähle ein Modell pro Session oder Lauf, setze einen Standard und konfiguriere Varianten, Reasoning, Prompt-Caching und lokale Modelle."
+description: "Wähle ein Modell für eine Session oder einen einzelnen Aufruf, lege das Standardmodell fest und konfiguriere Varianten, Reasoning, Prompt-Caching und lokale Modelle."
 ---
 
-Wähle ein Modell für die aktuelle Session mit `/models`:
+Wähle mit `/models` ein Modell für die aktuelle Session:
 
 ```text
 /models
 ```
 
-OpenCode listet Modelle von [models.dev](https://models.dev), Anbieter-Integrationen und deiner Konfiguration auf. Der
-Picker zeigt nur aktivierte Modelle, deren Anbieter im aktuellen Projekt verfügbar ist. Verbinde Anbieter unter
+OpenCode listet Modelle aus [models.dev](https://models.dev), aus Anbieterintegrationen und aus deiner Konfiguration auf.
+Zur Auswahl stehen nur aktivierte Modelle, deren Anbieter im aktuellen Projekt verfügbar ist. Verbinde Anbieter unter
 [Anbieter](/providers).
 
 ## Auswählen
 
-Wähle einen Eintrag aus `/models`, statt Anbieter oder Modell-ID zu raten. Die Auswahl gilt für die aktuelle Session
+Wähle das Modell in `/models` aus, statt die Anbieter- oder Modell-ID zu erraten. Die Auswahl gilt für die aktuelle Session
 und ändert deine Konfiguration nicht.
 
 ```text
@@ -30,7 +30,7 @@ Die Verfügbarkeit ist projektspezifisch:
 
 ## Läufe
 
-Nutze `--model`, um ein Modell für einen Befehlszeilenlauf zu wählen, ohne den konfigurierten Standard zu ändern:
+Nutze `--model`, um für einen einzelnen CLI-Aufruf ein Modell zu wählen, ohne das Standardmodell zu ändern:
 
 ```bash
 opencode run --model anthropic/claude-sonnet-5-5 "Refactor parseToken"
@@ -40,7 +40,7 @@ Agenten und Befehle können ebenfalls ihr eigenes Modell wählen. Siehe [Agenten
 
 ## Standards
 
-Setze `model` in `opencode.json` oder `opencode.jsonc`, um den Standard für neue Arbeit zu wählen:
+Setze `model` in `opencode.json` oder `opencode.jsonc`, um das Standardmodell für neue Aufgaben festzulegen:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -49,12 +49,12 @@ Setze `model` in `opencode.json` oder `opencode.jsonc`, um den Standard für neu
 }
 ```
 
-Das konfigurierte Modell wird zum Katalogstandard, wenn es aktiviert ist und sein Anbieter verfügbar ist. Andernfalls
-fällt OpenCode auf das neueste verfügbare unterstützte Modell zurück.
+Das konfigurierte Modell wird zum Standard im Katalog, wenn es aktiviert und sein Anbieter verfügbar ist. Andernfalls
+nutzt OpenCode das neueste unterstützte Modell, das verfügbar ist.
 
 - Ein bereits für eine Session gewähltes Modell hat Vorrang vor dem konfigurierten Standard.
-- Das Wechseln des Modells einer Session schreibt die Konfigurationsdatei nicht um.
-- Das oberste `model` behält derzeit nur Standard-Anbieter und -Modell, keine Variante.
+- Ein Modellwechsel in der Session ändert die Konfigurationsdatei nicht.
+- `model` auf der obersten Ebene speichert derzeit nur den Standardanbieter und das Standardmodell, keine Variante.
 
 Siehe [Konfiguration](/config) für Speicherorte und Rangfolge der Konfiguration.
 
@@ -72,24 +72,25 @@ Für den gemeinsamen Hintergrundserver:
 opencode service set env OPENCODE_DISABLE_FREE_MODELS 1
 ```
 
-Kostenlos bedeutet ein `opencode`- oder `opencode-go`-Modell ohne Input-Preis. Diese Modelle verschwinden aus Katalog und Standards;
-die ausdrückliche Auswahl eines solchen schlägt mit `Model unavailable` fehl. Abgemeldet fehlt der Anbieter `opencode`, bis du
-ein OpenCode Console-Konto verbindest oder `OPENCODE_API_KEY` setzt, was seine kostenpflichtigen Modelle wiederherstellt.
+Modelle von `opencode` oder `opencode-go` gelten als kostenlos, wenn für Eingabetokens kein Preis anfällt. Sie sind
+dann weder im Katalog noch als Standard verfügbar. Wählst du ein solches Modell ausdrücklich aus, erscheint
+`Model unavailable`. Wenn du abgemeldet bist, fehlt der Anbieter `opencode`. Verbinde ein Konto in OpenCode Console
+oder setze `OPENCODE_API_KEY`, damit seine kostenpflichtigen Modelle wieder verfügbar sind.
 
 Um kostenlose Modelle für alle in einer Organisation zu blockieren, nutze stattdessen eine Policy. Siehe
 [Enterprise](/enterprise#block-free-models).
 
 ## Varianten
 
-Varianten sind benannte Optionen für ein Modell, oft für Reasoning-Effort oder Token-Budgets. Füge `#variant` hinzu, wenn du
-eine für einen Lauf, eine Session, einen Agenten oder einen Befehl wählst:
+Mit Varianten legst du benannte Einstellungen für ein Modell fest, etwa für den Reasoning-Effort oder das Token-Budget.
+Hänge `#variant` an, wenn du eine Variante für einen Aufruf, eine Session, einen Agenten oder einen Befehl auswählst:
 
 ```bash
 opencode run --model openai/gpt-6.1-sol#high "Review this migration plan"
 ```
 
-Variantennamen stammen aus den aktuellen Katalogmetadaten des gewählten Modells. Namen wie `low`, `high` und `max` sind nicht
-für jedes Modell verfügbar, und eine unbekannte Variante erzeugt einen Modellauflösungsfehler.
+Die Variantennamen stammen aus den aktuellen Katalogdaten des gewählten Modells. Nicht jedes Modell bietet `low`, `high`
+und `max` an. Ist die Variante unbekannt, schlägt die Modellauswahl fehl.
 
 Definiere neue Varianten oder ersetze Katalogvarianten mit derselben ID im `variants`-Array des Modells:
 
@@ -127,8 +128,8 @@ Definiere neue Varianten oder ersetze Katalogvarianten mit derselben ID im `vari
 
 Jede Variante kann `settings`, `headers` und `body` enthalten. Ihre Werte werden nach Anbieter- und Modellwerten angewendet.
 
-Um die Reasoning-Varianten eines Modells zu ersetzen, beschreibe seine Reasoning-Steuerung in `capabilities.reasoning` in der
-v2-Form von [models.dev](https://models.dev). OpenCode baut daraus die Varianten für das Paket des Modells:
+Um die Reasoning-Varianten eines Modells zu ersetzen, gib unter `capabilities.reasoning` die Reasoning-Einstellungen
+im V2-Format von [models.dev](https://models.dev) an. OpenCode erzeugt daraus die Varianten für das Paket des Modells:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -153,10 +154,10 @@ v2-Form von [models.dev](https://models.dev). OpenCode baut daraus die Varianten
 | ----------- | ------------------------------------------------------------------------- |
 | `supported` | Gibt an, ob das Modell Reasoning unterstützt. Bei `false` oder bei `true` ohne weitere Reasoning-Einstellungen kommen keine Varianten hinzu. |
 | `toggle`    | Fügt eine Variante `none` hinzu, die Reasoning abschaltet.               |
-| `effort`    | Anzubietende Effort-Stufen. `default` behält den Anbieterstandard und fügt keine Variante hinzu. |
-| `budget`    | Optionale `min` und `max` Thinking-Tokens. Wird ignoriert, wenn `effort` gesetzt ist. |
+| `effort`    | Effort-Stufen, die zur Auswahl stehen. `default` übernimmt die Vorgabe des Anbieters und fügt keine Variante hinzu. |
+| `budget`    | Optionale Unter- und Obergrenze für Thinking-Tokens: `min` und `max`. Das Feld wird ignoriert, wenn `effort` gesetzt ist. |
 
-In `variants` aufgeführte Varianten werden zusätzlich zu denen angewendet, die aus `capabilities.reasoning` gebaut wurden.
+OpenCode wendet die Varianten in `variants` auf die Varianten an, die es aus `capabilities.reasoning` erzeugt hat.
 
 ## Optionen
 
@@ -190,8 +191,8 @@ Anbieter- und Modelleinträge können Anfragen mit `settings`, `headers` und `bo
 | Feld       | Zweck                                                            |
 | ---------- | ---------------------------------------------------------------- |
 | `settings` | Optionen des Anbieterpakets wie `baseURL` oder `reasoningEffort`. |
-| `headers`  | Zusätzliche HTTP-Request-Header.                                 |
-| `body`     | Anbieterspezifische Request-Body-Felder.                         |
+| `headers`  | Zusätzliche HTTP-Anfrage-Header.                                  |
+| `body`     | Anbieterspezifische Felder im Anfrage-Body.                        |
 
 OpenCode wendet zuerst Anbieterwerte, dann Modellwerte und zuletzt die gewählte Variante an.
 
@@ -202,7 +203,7 @@ OpenCode wendet zuerst Anbieterwerte, dann Modellwerte und zuletzt die gewählte
 
 ## Aliase
 
-Nutze `modelID`, um einem API-Modell eine freundlichere Katalog-ID zu geben:
+Nutze `modelID`, um für ein API-Modell eine besser lesbare Katalog-ID zu vergeben:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -234,14 +235,17 @@ Nutze `modelID`, um einem API-Modell eine freundlichere Katalog-ID zu geben:
 Hier ist `openai/coding-default` die wählbare Referenz und `gpt-6.1-sol` wird an den Anbieter gesendet. Für ein Modell, das noch
 nicht im Katalog ist, nimmt OpenCode an:
 
-- JSON-Tool-Unterstützung, Text- und Bildeingabe sowie Textausgabe. Keine freie Tool-Eingabe, sofern `capabilities.freeform` das Format nicht aufführt.
+- Unterstützung für Tools mit JSON-Eingabe, für Text- und Bildeingabe sowie für Textausgabe. Freie Tool-Eingaben sind nur möglich, wenn `capabilities.freeform` das Format aufführt.
 - Ein Kontextlimit von 200.000 Tokens und ein Ausgabelimit von 32.000 Tokens.
 - Kein festgelegtes Eingabelimit.
 
-OpenCode erkennt `text`, `regex` und `lark`. Andere Formatnamen von models.dev werden ignoriert, ohne das Modell oder seine Tools zu verwerfen. Wenn ein Proxy vor einem Katalogmodell freie Tools ablehnt, setze `capabilities.freeform` für dieses Modell auf `[]`.
+OpenCode erkennt `text`, `regex` und `lark`. Andere Formatnamen von models.dev ignoriert es, ohne das Modell oder seine Tools
+zu entfernen. Wenn ein vorgeschalteter Proxy Tools mit freier Eingabe für ein Katalogmodell ablehnt, setze
+`capabilities.freeform` für dieses Modell auf `[]`.
 
-Das sind Fallback-Annahmen, keine erkannten Fähigkeiten. Setze genaue `capabilities`- und `limit`-Werte, wenn du sie kennst;
-explizite Werte ersetzen die Fallbacks. Die automatische Compaction nutzt `limit.input`, höchstens aber `limit.context`.
+Das sind Ersatzwerte und keine automatisch ermittelten Fähigkeiten. Wenn du die tatsächlichen Werte kennst, setze
+`capabilities` und `limit` ausdrücklich. Sie ersetzen die Vorgaben. Die automatische Compaction nutzt `limit.input`,
+jedoch höchstens `limit.context`.
 Siehe [Kontextfenster](/compaction#window). Füge `disabled: true` hinzu, um ein Modell aus dem verfügbaren Katalog auszublenden:
 
 ```jsonc title="opencode.jsonc"
@@ -260,7 +264,7 @@ Siehe [Kontextfenster](/compaction#window). Füge `disabled: true` hinzu, um ein
 
 ## Reasoning
 
-Für ein OpenAI-kompatibles Modell, das Reasoning in einem eigenen Feld der Assistenten-Nachricht streamt, setze
+Wenn ein OpenAI-kompatibles Modell Reasoning gestreamt in einem eigenen Feld der Assistentennachricht überträgt, setze
 `compatibility.reasoningField`:
 
 ```jsonc title="opencode.jsonc"
@@ -280,14 +284,14 @@ Für ein OpenAI-kompatibles Modell, das Reasoning in einem eigenen Feld der Assi
 ```
 
 OpenCode erkennt `reasoning`, `reasoning_content` und `reasoning_text` und akzeptiert außerdem einen anderen anbieterspezifischen
-String. Es liest gestreamtes Reasoning aus diesem Feld und stellt das Feld wieder her, wenn frühere Assistenten-Nachrichten an
-das Modell zurückgesendet werden. Siehe [Kompatibilität](#compatibility) für das verwandte Feld `requireReasoning`.
+String. OpenCode liest das gestreamte Reasoning aus diesem Feld und ergänzt es wieder, wenn es frühere
+Assistentennachrichten an das Modell sendet. Siehe [Kompatibilität](#compatibility) für das verwandte Feld `requireReasoning`.
 
 ## Prompt-Caching
 
-OpenCode setzt Prompt-Cache-Breakpoints automatisch auf Routen, die bekanntermaßen welche brauchen, etwa Anthropic. Wenn
-Claude-Modelle über einen OpenAI-kompatiblen Proxy wie LiteLLM bereitgestellt werden, kann OpenCode nicht erkennen, dass sie
-Anthropic-artige `cache_control`-Breakpoints brauchen. Setze `compatibility.cacheFormat` für diese Claude-Modelle:
+Für Routen, die bekanntermaßen Breakpoints für den Prompt-Cache brauchen, etwa bei Anthropic, setzt OpenCode sie
+automatisch. Laufen Claude-Modelle über einen OpenAI-kompatiblen Proxy wie LiteLLM, erkennt OpenCode nicht, dass
+sie `cache_control`-Breakpoints im Anthropic-Format brauchen. Setze für diese Claude-Modelle `compatibility.cacheFormat`:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -311,16 +315,16 @@ Anthropic-artige `cache_control`-Breakpoints brauchen. Setze `compatibility.cach
 ```
 
 OpenCode markiert dann die letzte Tool-Definition, den System-Prompt und die letzte Nachricht mit
-`cache_control: { "type": "ephemeral" }`, was die Standard-Cache-Lebensdauer von fünf Minuten des Endpunkts nutzt. Nutze `"alibaba"`
+`cache_control: { "type": "ephemeral" }`. Dadurch gilt die Cache-Lebensdauer des Endpunkts von standardmäßig fünf Minuten. Nutze `"alibaba"`
 für Modelle von Alibaba Model Studio, die dieselben Marker akzeptieren, sie bei Tool-Definitionen aber ignorieren. Setze
 `compatibility.cacheFormat` stattdessen am Anbieter, wenn jedes von ihm bereitgestellte Modell dasselbe Format akzeptiert. Siehe
 [Kompatibilität](#compatibility) für die anderen Felder.
 
 ### Cache-Lebensdauer
 
-OpenCode sendet standardmäßig keine Cache-Lebensdauer, daher nutzt jeder Anbieter seinen eigenen Standard, etwa fünf Minuten bei
-Anthropic. Setze `settings.cache.ttl` an einem Anbieter oder Modell, um eine andere anzufordern. Eine Modelleinstellung überschreibt die
-Anbietereinstellung.
+OpenCode gibt standardmäßig keine Cache-Lebensdauer vor. Daher gilt die Vorgabe des Anbieters, etwa fünf Minuten
+bei Anthropic. Wenn du eine andere Lebensdauer anfordern möchtest, setze `settings.cache.ttl` für den Anbieter oder
+das Modell. Die Einstellung am Modell hat Vorrang.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -335,26 +339,26 @@ Anbietereinstellung.
 }
 ```
 
-`ttl` nimmt eine Zahl und eine Einheit: `ms`, `s`, `m`, `h` oder `d`, etwa `"5m"`, `"1h"` oder `"24h"`. OpenCode sendet sie wie
-angegeben, nutze also einen Wert, den der Anbieter akzeptiert:
+Gib für `ttl` eine Zahl mit Einheit an: `ms`, `s`, `m`, `h` oder `d`, etwa `"5m"`, `"1h"` oder `"24h"`.
+OpenCode übergibt den Wert unverändert. Verwende daher einen Wert, den der Anbieter akzeptiert:
 
-| API | Wohin die Lebensdauer geht |
+| API | Feld für die Cache-Lebensdauer |
 | --- | --- |
 | Anthropic Messages | `cache_control.ttl` an jedem Cache-Marker. Anthropic akzeptiert `"5m"` und `"1h"`. |
 | Bedrock Converse | `ttl` an jedem `cachePoint`. Ältere Claude-Modelle, die nur fünf Minuten cachen, ignorieren `"1h"`. |
 | OpenAI Chat und Responses | `"24h"` geht an `prompt_cache_retention`; andere Werte gehen an `prompt_cache_options.ttl`. |
 
-Anbieter, die automatisch ohne Marker cachen, etwa Gemini, ignorieren sie. Eine längere Lebensdauer kostet beim Schreiben meist mehr:
-Anthropic berechnet beim Schreiben in den Cache das Zweifache des Eingabepreises für eine Stunde Cache-Lebensdauer und
-das 1,25-Fache für fünf Minuten.
+Anbieter wie Gemini, die automatisch ohne Marker cachen, ignorieren die eingestellte Cache-Lebensdauer. Eine längere
+Lebensdauer macht das Schreiben in den Cache meist teurer: Anthropic berechnet für eine Stunde den doppelten
+Preis für Eingabetokens und für fünf Minuten das 1,25-Fache.
 
-[Warming](/warming) kann die Lebensdauer nutzen, um seine Anfragen mit `interval: "auto"` zu timen.
+[Warming](/warming) kann die Abstände zwischen den Anfragen mit `interval: "auto"` an die Cache-Lebensdauer anpassen.
 
 ## Kompatibilität
 
-`compatibility` beschreibt Eigenheiten von Anfrage und Antwort der API, über die ein Modell bedient wird, etwa welches Feld
-Reasoning trägt oder ob der Endpunkt `prompt_cache_key` akzeptiert. Jedes Modell wird über eine API bedient, und ein Feld
-wirkt nur, wenn diese API es liest. Andere Felder werden ignoriert.
+`compatibility` beschreibt Besonderheiten bei Anfragen und Antworten der API, die ein Modell bereitstellt: etwa
+in welchem Feld das Reasoning steht oder ob der Endpunkt `prompt_cache_key` akzeptiert. Jedes Modell nutzt eine
+API. Ein Feld hat nur dann eine Wirkung, wenn diese API es auswertet. Andere Felder werden ignoriert.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -371,31 +375,32 @@ wirkt nur, wenn diese API es liest. Andere Felder werden ignoriert.
 }
 ```
 
-`compatibility` des Anbieters gilt für jedes Modell dieses Anbieters. Das eigene `compatibility` eines Modells überschreibt es Feld
-für Feld: OpenCode startet mit den Werten, die [models.dev](https://models.dev) für die API des Modells veröffentlicht (`reasoningField`,
-`maxTokensField` und `mediaInput` sowie `supportsEffortUpdates` und `supportsSystemUpdates`, wenn models.dev die
-API als unterstützend markiert), und wendet dann die Konfiguration des Modells an. Nicht gesetzte Felder behalten den eingebauten
-Standard oder die Erkennung des Anbieterpakets. `supportsThinkingBlockBinding`, `supportsEffortUpdates` und `supportsSystemUpdates` sind
-nur modellspezifisch.
+Die `compatibility`-Einstellungen des Anbieters gelten für alle seine Modelle. Ein Modell kann sie über sein eigenes
+`compatibility` Feld für Feld überschreiben: OpenCode übernimmt zunächst die Werte, die [models.dev](https://models.dev)
+für die API des Modells veröffentlicht (`reasoningField`, `maxTokensField` und `mediaInput` sowie `supportsEffortUpdates`
+und `supportsSystemUpdates`, wenn models.dev diese Funktionen für die API als unterstützt ausweist). Danach wendet
+OpenCode die Modellkonfiguration an. Ist ein Feld nicht gesetzt, gelten die Vorgaben oder die automatische Erkennung
+des Anbieterpakets. `supportsThinkingBlockBinding`, `supportsEffortUpdates` und `supportsSystemUpdates` lassen sich nur
+pro Modell einstellen.
 
-| Feld | Was es tut | Gelesen von | Werte und Standard |
+| Feld | Wirkung | Unterstützt von | Werte und Standard |
 | --- | --- | --- | --- |
-| `reasoningField` | Feld der Assistenten-Nachricht, das Reasoning trägt. Wird zuerst geprüft, wenn gestreamtes Reasoning gelesen wird, und beim Zurücksenden früheren Reasonings genutzt. | OpenAI Chat | Jeder Feldname außer `role`, `content`, `refusal` oder `tool_calls`. Ungesetzt nutzt es das im Stream gesehene Feld, sonst `reasoning_content`. |
+| `reasoningField` | Feld für das Reasoning in der Assistentennachricht. OpenCode prüft es zuerst, wenn es gestreamtes Reasoning liest, und verwendet es beim erneuten Senden früheren Reasonings. | OpenAI Chat | Jeder Feldname außer `role`, `content`, `refusal` und `tool_calls`. Ohne Angabe nutzt OpenCode das Feld aus dem Stream, falls vorhanden, andernfalls `reasoning_content`. |
 | `requireReasoning` | Sendet das Reasoning-Feld bei jeder früheren Assistenten-Nachricht, als leeren String, wenn es kein Reasoning gab. | OpenAI Chat | `true` oder `false`. Standard ist `true`, wenn `reasoningField` gesetzt ist oder das Modell DeepSeek ist, sonst `false`. |
-| `maxTokensField` | Body-Feld, das das Output-Token-Limit trägt. | OpenAI Chat | `max_completion_tokens` oder `max_tokens`. Ungesetzt erkennt es `max_tokens` für Anbieter, die es brauchen, etwa DeepSeek, Moonshot, Together AI, Z.AI und Cerebras, sonst `max_completion_tokens`. |
-| `requireFinishReason` | Behandelt einen Stream, der ohne `finish_reason` endet, als Fehler einer unvollständigen Antwort. `false` akzeptiert ihn als beendet. | OpenAI Chat | `true` oder `false`. Standard ist `true`. |
+| `maxTokensField` | Feld für das Limit der Ausgabetokens im Anfrage-Body. | OpenAI Chat | `max_completion_tokens` oder `max_tokens`. Ohne Angabe nutzt OpenCode `max_tokens` bei Anbietern, die es benötigen, etwa DeepSeek, Moonshot, Together AI, Z.AI und Cerebras. Sonst nutzt es `max_completion_tokens`. |
+| `requireFinishReason` | Endet ein Stream ohne `finish_reason`, meldet OpenCode eine unvollständige Antwort. Bei `false` gilt der Stream als abgeschlossen. | OpenAI Chat | `true` oder `false`. Standard ist `true`. |
 | `requireAssistantAfterTool` | Fügt eine Assistenten-Nachricht zwischen ein Tool-Ergebnis und die nächste Nutzernachricht ein, für Endpunkte, die diese Reihenfolge ablehnen. | OpenAI Chat | `true` oder `false`. Standard ist `true` für Modell-IDs der Mistral-Familie, sonst `false`. |
 | `supportsPromptCacheKey` | Ob der Endpunkt das Body-Feld `prompt_cache_key` akzeptiert. | OpenAI Chat, OpenAI Responses, Mistral | `true` oder `false`. OpenAI Chat sendet den Schlüssel nur bei `true`, was manche Anbieterpakete standardmäßig setzen. Andere APIs senden ihn, sofern nicht `false`. |
-| `streamUsage` | Fordert Token-Nutzung im Stream mit `stream_options.include_usage` an. | OpenAI Chat | `true` oder `false`. Standard ist `true`. |
+| `streamUsage` | Fordert mit `stream_options.include_usage` Angaben zum Tokenverbrauch im Stream an. | OpenAI Chat | `true` oder `false`. Standard ist `true`. |
 | `cacheFormat` | Syntax der Prompt-Cache-Marker, die der Endpunkt akzeptiert. Überschreibt die automatische Breakpoint-Platzierung des Anbieters. `alibaba` überspringt Tool-Definitionen. | Jede API mit Prompt-Cache-Markern, einschließlich OpenAI Chat, Anthropic Messages und Bedrock Converse | `anthropic` oder `alibaba`. Ungesetzt nutzt es den Anbieterstandard. Siehe [Prompt-Caching](#prompt-caching). |
 | `supportsThinkingBlockBinding` | Bittet die API, Thinking-Blöcke zu verwerfen, deren früherer Kontext sich geändert hat, statt die Anfrage abzulehnen. | Anthropic Messages, Bedrock Converse | `true` oder `false`. Ungesetzt erkennt es Claude 5.1 und neuer. |
-| `supportsEffortUpdates` | Sendet Änderungen des Reasoning-Efforts als Updates pro Nachricht, die den Prompt-Cache bewahren. Andernfalls ändert sich der Effort für die ganze Anfrage. | Anthropic Messages, OpenAI Responses | `true` oder `false`. Ungesetzt erkennt es Claude Opus 5, Claude 5.1 und neuer sowie GPT-6 und neuer. |
-| `supportsSystemUpdates` | Sendet Systemnachrichten, die mitten in der Unterhaltung hinzugefügt werden, als native Systemnachrichten. Andernfalls werden sie als Text in den nächsten Nutzer-Turn eingebettet. | Anthropic Messages | `true` oder `false`. Ungesetzt erkennt es Claude Opus 4.8 und Claude 5 und neuer. |
+| `supportsEffortUpdates` | Sendet Änderungen des Reasoning-Efforts für die jeweilige Nachricht. Der Prompt-Cache bleibt erhalten. Andernfalls ändert sich der Effort für die gesamte Anfrage. | Anthropic Messages, OpenAI Responses | `true` oder `false`. Ohne Angabe erkennt OpenCode Claude Opus 5, Claude 5.1 und neuer sowie GPT-6 und neuer. |
+| `supportsSystemUpdates` | Sendet Systemnachrichten, die im laufenden Gespräch hinzukommen, als native Systemnachrichten. Andernfalls fügt OpenCode sie als Text in die nächste Nutzernachricht ein. | Anthropic Messages | `true` oder `false`. Ohne Angabe erkennt OpenCode Claude Opus 4.8 sowie Claude 5 und neuer. |
 | `mediaInput` | Wohin Bilder und andere Medien in einer Entscheidungsanfrage gehen. | System One | `assets` (Bilder, auf die aus dem State verwiesen wird), `state` (inline im State) oder `root` (Listen `images`, `audio` und `videos` auf oberster Ebene). Ungesetzt nutzt es den Anbieterstandard. |
 
 ## Lokal
 
-OpenCode entdeckt Modelle von Ollama, LM Studio und vLLM automatisch an ihren lokalen Standardadressen. Du kannst auch
+OpenCode erkennt Modelle von Ollama, LM Studio und vLLM automatisch unter ihren lokalen Standardadressen. Du kannst auch
 jeden OpenAI-kompatiblen Server von Hand konfigurieren.
 
 ```text
@@ -406,7 +411,7 @@ vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct
 
 ### Ollama
 
-Wenn Ollama auf `http://127.0.0.1:11434` lauscht, wähle ein entdecktes Modell mit der Anbieter-ID `ollama`:
+Wenn Ollama auf `http://127.0.0.1:11434` lauscht, wähle ein erkanntes Modell mit der Anbieter-ID `ollama`:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -415,11 +420,11 @@ Wenn Ollama auf `http://127.0.0.1:11434` lauscht, wähle ein entdecktes Modell m
 }
 ```
 
-OpenCode aktualisiert das Inventar im Hintergrund und liest Kontext-, Vision- und Tool-Fähigkeiten aus Ollama.
-Reine Embedding-Modelle werden ausgeschlossen.
+OpenCode aktualisiert die Modellliste im Hintergrund und liest aus Ollama die Angaben zum Kontext sowie zur
+Unterstützung von Bildern und Tools. Reine Embedding-Modelle erscheinen nicht in der Liste.
 
-Für einen anderen Host oder Port setze die OpenAI-kompatible URL von Ollama. Die Entdeckung nutzt weiterhin die native Ollama-API am selben
-Pfadpräfix:
+Gib die OpenAI-kompatible URL von Ollama an, wenn du einen anderen Host oder Port nutzt. Die automatische Erkennung
+verwendet weiterhin die native Ollama-API mit demselben Pfadpräfix:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -435,11 +440,11 @@ Pfadpräfix:
 ```
 
 - Lass `apiKey` weg, wenn der Endpunkt keine Bearer-Authentifizierung verlangt.
-- Deaktiviere die Entdeckung mit `"plugins": ["-opencode.provider.ollama"]`.
+- Schalte die automatische Erkennung mit `"plugins": ["-opencode.provider.ollama"]` ab.
 
 ### LM Studio
 
-Wenn ein nicht authentifizierter LM Studio-Server auf `http://127.0.0.1:1234` läuft, wähle ein entdecktes Modell mit der Anbieter-ID
+Wenn ein LM Studio-Server ohne Authentifizierung auf `http://127.0.0.1:1234` läuft, wähle ein erkanntes Modell mit der Anbieter-ID
 `lmstudio`:
 
 ```jsonc title="opencode.jsonc"
@@ -449,10 +454,11 @@ Wenn ein nicht authentifizierter LM Studio-Server auf `http://127.0.0.1:1234` l�
 }
 ```
 
-OpenCode aktualisiert das Inventar im Hintergrund und liest Kontext-, Vision- und Tool-Fähigkeiten aus LM Studio.
-Embedding-Modelle werden ausgeschlossen.
+OpenCode aktualisiert die Modellliste im Hintergrund und liest aus LM Studio die Angaben zum Kontext sowie zur
+Unterstützung von Bildern und Tools. Embedding-Modelle erscheinen nicht in der Liste.
 
-Für einen anderen Host oder Port setze die OpenAI-kompatible URL. Modelle werden weiterhin automatisch entdeckt:
+Gib die OpenAI-kompatible URL an, wenn du einen anderen Host oder Port nutzt. OpenCode erkennt die Modelle weiterhin
+automatisch:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -468,11 +474,11 @@ Für einen anderen Host oder Port setze die OpenAI-kompatible URL. Modelle werde
 ```
 
 - Lass `apiKey` weg, wenn die Authentifizierung von LM Studio deaktiviert ist.
-- Deaktiviere die Entdeckung mit `"plugins": ["-opencode.provider.lmstudio"]`.
+- Schalte die automatische Erkennung mit `"plugins": ["-opencode.provider.lmstudio"]` ab.
 
 ### vLLM
 
-Wenn vLLM auf `http://127.0.0.1:8000` lauscht, wähle ein entdecktes Modell mit der Anbieter-ID `vllm`:
+Wenn vLLM auf `http://127.0.0.1:8000` lauscht, wähle ein erkanntes Modell mit der Anbieter-ID `vllm`:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -481,11 +487,12 @@ Wenn vLLM auf `http://127.0.0.1:8000` lauscht, wähle ein entdecktes Modell mit 
 }
 ```
 
-OpenCode prüft `/health`, aktualisiert `/v1/models` im Hintergrund, nutzt das gemeldete `max_model_len` als Kontext-
-limit und schließt nur Modellkarten ein, die `vllm` gehören.
+OpenCode prüft `/health`, ruft `/v1/models` im Hintergrund erneut ab und verwendet den gemeldeten Wert
+`max_model_len` als Kontextlimit. Es berücksichtigt nur Modellkarten, für die `vllm` als Eigentümer angegeben ist.
 
-Entdeckte Modelle werben mit Text-Eingabe und -Ausgabe, aber nicht mit Vision oder Tools. vLLM aktiviert Tool-Aufrufe mit Server-Flags
-wie `--enable-auto-tool-choice` und `--tool-call-parser`, die die Entdeckung nicht meldet.
+Die automatisch erkannten Modelle melden Texteingabe und -ausgabe, aber keine Unterstützung für Bilder oder Tools.
+vLLM aktiviert Tool-Aufrufe über Server-Flags wie `--enable-auto-tool-choice` und `--tool-call-parser`. Die automatische
+Erkennung erfasst diese Flags nicht.
 
 Für einen anderen Endpunkt oder einen authentifizierten Server setze seine OpenAI-kompatible URL:
 
@@ -503,9 +510,9 @@ Für einen anderen Endpunkt oder einen authentifizierten Server setze seine Open
 ```
 
 - Lass `apiKey` weg, wenn die Authentifizierung deaktiviert ist.
-- Deaktiviere die Entdeckung mit `"plugins": ["-opencode.provider.vllm"]`.
-- Proxys mit Pfadpräfix werden unterstützt. `https://example.com/vllm/v1` prüft zum Beispiel `/vllm/health` und entdeckt
-  `/vllm/v1/models`.
+- Schalte die automatische Erkennung mit `"plugins": ["-opencode.provider.vllm"]` ab.
+- Proxys mit Pfadpräfix werden unterstützt. Bei `https://example.com/vllm/v1` prüft OpenCode beispielsweise
+  `/vllm/health` und ruft die Modellliste über `/vllm/v1/models` ab.
 
 ### Kompatibel
 
@@ -541,13 +548,14 @@ Definiere für einen anderen OpenAI-kompatiblen Server sein Anbieterpaket, seine
 }
 ```
 
-Nutze den echten Modellnamen des Servers, seine Limits, Eingabe- und Ausgabetypen und Tool-Unterstützung. OpenCode kann nicht erkennen, ob die
-Fallback-Werte für eigene Modelle korrekt sind. Wenn der Endpunkt einen Schlüssel verlangt, füge `apiKey` zu `settings` mit einer Umgebungs-
-ersetzung wie `"apiKey": "{env:LOCAL_API_KEY}"` hinzu; committe keine Geheimnisse.
+Gib den tatsächlichen Modellnamen des Servers, seine Limits, die Ein- und Ausgabetypen und die Tool-Unterstützung an.
+OpenCode kann nicht erkennen, ob die Ersatzwerte für eigene Modelle stimmen. Wenn der Endpunkt einen Schlüssel
+verlangt, füge `apiKey` unter `settings` hinzu und verweise auf eine Umgebungsvariable, etwa mit
+`"apiKey": "{env:LOCAL_API_KEY}"`. Committe keine Geheimnisse.
 
 ## Referenzen
 
-Modellwähler nutzen `provider/model` mit optionaler `#variant`:
+Modellreferenzen haben das Format `provider/model`, optional gefolgt von `#variant`:
 
 ```text
 openai/gpt-6.1-sol
@@ -562,8 +570,8 @@ openrouter/anthropic/claude-sonnet-5.5#high
 | Variante   | Folgt auf `#`, wenn vorhanden.                             |
 | Groß-/Kleinschreibung | Anbieter- und Modell-IDs unterscheiden zwischen Groß- und Kleinschreibung. |
 
-Nutze Katalog-IDs statt Anzeigenamen von Anbietern. Die `model`-Felder auf oberster Ebene, von Agenten und Befehlen akzeptieren die obige String-Form
-oder ein ausgeschriebenes Objekt:
+Nutze Katalog-IDs statt der Anzeigenamen von Anbietern. `model` akzeptiert auf der obersten Ebene sowie in Agenten-
+und Befehlskonfigurationen entweder den oben beschriebenen String oder die ausführliche Form als Objekt:
 
 ```jsonc
 {
@@ -574,11 +582,11 @@ oder ein ausgeschriebenes Objekt:
 }
 ```
 
-Die ausgeschriebene Form ist für generierte oder programmatische Konfiguration nützlich.
+Die Objektform eignet sich für Konfigurationen, die du generierst oder per Code erstellst.
 
 ## Hinweise
 
-Behalte diese Regeln beim Konfigurieren von Modellen im Kopf:
+Beachte beim Konfigurieren von Modellen diese Regeln:
 
 ```jsonc
 {
@@ -586,11 +594,11 @@ Behalte diese Regeln beim Konfigurieren von Modellen im Kopf:
 }
 ```
 
-- Ein Wählerobjekt nutzt `model`; ein Anbieterkatalogeintrag nutzt `modelID` für die an den Anbieter gesendete ID.
-- Obwohl die Auswahlform auf oberster Ebene eine Variante akzeptiert, behält der V2-Katalogstandard sie nicht. Wähle Varianten für eine
-  Session, einen Lauf, einen Agenten oder einen Befehl.
+- In der Modellreferenz als Objekt steht `model`. Ein Katalogeintrag des Anbieters nutzt dagegen `modelID` für die ID, die OpenCode an den Anbieter sendet.
+- Eine Modellreferenz auf der obersten Ebene kann zwar eine Variante enthalten, V2 speichert sie aber nicht als
+  Teil des Katalogstandards. Wähle Varianten stattdessen für eine Session, einen Aufruf, einen Agenten oder einen Befehl.
 - Modelloptionen sind anbieterspezifisch. Ein anderes Anbieterpaket kann sie ignorieren oder ablehnen.
 - Katalogdaten, Zugangsdaten und Konfiguration sind an die Location gebunden. Ein Modell, das in einem Projekt verfügbar ist, kann in
   einem anderen nicht verfügbar sein.
-- Konfigurationsdateien laden normalerweise automatisch neu. Eine bereits laufende Modellanfrage behält die Einstellungen, mit denen sie
-  gestartet ist.
+- OpenCode lädt Konfigurationsdateien in der Regel automatisch neu. Für eine bereits laufende Modellanfrage gelten
+  weiterhin die Einstellungen, mit denen sie gestartet ist.

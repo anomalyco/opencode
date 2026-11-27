@@ -59,10 +59,10 @@ OpenCode erhält Anbieter-Zugangsdaten über vier Integrationsmethoden:
 
 | Methode | Verhalten |
 | --- | --- |
-| API key | Fragt nach einem Geheimnis und speichert es als Anbieterkonto. |
+| API-Schlüssel | Fragt nach einem geheimen Schlüssel und speichert ihn als Zugangsdaten für das Anbieterkonto. |
 | OAuth | Stellt eine Browser-URL, einen Device-Code oder eine Abfrage für einen Autorisierungscode bereit und speichert dann Tokens, die bei Unterstützung erneuert werden. |
-| Command | Führt einen vom Anbieter bereitgestellten Authentifizierungsbefehl aus und speichert seine Standardausgabe als Schlüssel. |
-| Environment | Liest eine unterstützte Variable aus dem Serverprozess, ohne sie zu speichern. |
+| Befehl | Führt einen vom Anbieter bereitgestellten Authentifizierungsbefehl aus und speichert seine Standardausgabe als Schlüssel. |
+| Umgebungsvariable | Liest eine unterstützte Variable aus dem Serverprozess, ohne sie zu speichern. |
 
 Anbieter können bei der Anmeldung per API-Schlüssel oder OAuth weitere Pflichtangaben abfragen, etwa einen
 Azure-Ressourcennamen oder eine GitHub-Enterprise-Domain. CLI und TUI zeigen diese Formulare vor der Authentifizierung an.

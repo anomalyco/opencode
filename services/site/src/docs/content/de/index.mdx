@@ -1,9 +1,9 @@
 ---
 title: "Einführung"
-description: "Installiere OpenCode, den Open-Source-Coding-Agent, als CLI, Desktop-App, Web-App oder Docker-Image, und verbinde dann einen Modellanbieter."
+description: "Installiere OpenCode, den Open-Source-Coding-Agenten, als CLI, Desktop-App, Web-App oder Docker-Image und verbinde dann einen Modellanbieter."
 ---
 
-OpenCode ist ein Open-Source-Coding-Agent. Er ist als Terminal-Oberfläche, Desktop-App oder Web-App verfügbar.
+OpenCode ist ein Open-Source-Coding-Agent. Du kannst ihn im Terminal, als Desktop-App oder als Web-App nutzen.
 
 
 ## CLI
@@ -24,12 +24,11 @@ OpenCode ist ein Open-Source-Coding-Agent. Er ist als Terminal-Oberfläche, Desk
   ]}
 />
 
-Das npm-Paket nutzt ein Postinstall-Skript, um die native Binärdatei `opencode` für deine Plattform
-auszuwählen. Die Befehle für Bun und pnpm erlauben das erforderliche Skript ausdrücklich; Vite+ braucht kein
-zusätzliches Flag. Der mise-Befehl erfordert mise 2026.10.9 oder neuer;
-ältere Versionen installieren OpenCode 1.
+Das npm-Paket wählt über ein Postinstall-Skript die passende native Binärdatei `opencode` für deine Plattform aus.
+Die Befehle für Bun und pnpm erlauben die Ausführung des Skripts ausdrücklich. Vite+ braucht dafür kein
+zusätzliches Flag. Der mise-Befehl setzt mindestens mise 2026.10.9 voraus. Ältere Versionen installieren OpenCode 1.
 
-Windows-Paketmanager werden nicht unterstützt.
+Paketmanager für Windows werden nicht unterstützt.
 
 
 Lade eine eigenständige CLI-Binärdatei für deine Plattform herunter.
@@ -52,7 +51,7 @@ Lade den neuesten OpenCode Desktop-Build für deine Plattform herunter.
 
 ## Web
 
-Erreiche die Weboberfläche von OpenCode mit dem Befehl `opencode pair`.
+Öffne die Weboberfläche von OpenCode mit dem Befehl `opencode pair`.
 
 ```bash
 $ opencode pair
@@ -71,10 +70,10 @@ erfährst du, wie du den Server in einem Container startest.
 
 ## Verbinden
 
-OpenCode unterstützt viele LLM-Anbieter von Haus aus. Du kannst dich direkt
-[in der TUI](/cli/providers) mit `/connect` mit ihnen verbinden.
+OpenCode unterstützt von Haus aus viele LLM-Anbieter. Verbinde einen Anbieter direkt
+[in der TUI](/cli/providers) über `/connect`.
 
-Siehe [Anbieter](/providers), um eigene Anbieter zu konfigurieren.
+Wie du eigene Anbieter einrichtest, erfährst du unter [Anbieter](/providers).
 
 Wenn du einfachen Zugriff auf die besten Coding-Modelle möchtest, probiere
 [OpenCode Console](/console).
@@ -94,7 +93,7 @@ Terminaloberfläche findest du in den [CLI-Einstellungen](/cli/config).
 
 ## Lernen
 
-Wenn du an einem ausführlichen Kurs zu OpenCode interessiert bist, hat Boot.dev einen hervorragenden
-[AI Coding with OpenCode](https://www.boot.dev/courses/learn-ai-coding)-Kurs in Absprache mit unserem Team erstellt.
-Alle Informationen im Kurs kannst du kostenlos lesen und ansehen, einige interaktive Funktionen können jedoch eine
-Zahlung erfordern.
+Wenn du OpenCode gründlich kennenlernen möchtest, empfehlen wir dir den Kurs
+[AI Coding with OpenCode](https://www.boot.dev/courses/learn-ai-coding), den Boot.dev in Absprache mit unserem Team
+entwickelt hat. Du kannst alle Kursinhalte kostenlos lesen und ansehen. Manche interaktiven Funktionen sind
+möglicherweise kostenpflichtig.

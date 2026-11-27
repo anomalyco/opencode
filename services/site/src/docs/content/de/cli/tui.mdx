@@ -1,9 +1,9 @@
 ---
 title: "TUI"
-description: "Starte eine Session und nutze die alltäglichen Workflows in der Terminal-Oberfläche."
+description: "Starte eine Session und lerne die wichtigsten Abläufe in der Terminaloberfläche kennen."
 ---
 
-Führe OpenCode in deinem Projekt aus, tippe eine Anfrage und drücke **Enter**.
+Starte OpenCode in deinem Projekt, gib eine Anfrage ein und drücke **Enter**.
 
 ```bash
 cd ~/code/my-project
@@ -14,15 +14,15 @@ opencode
 Explain how authentication works in this project
 ```
 
-Drücke **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** oder **Ctrl+J** für eine neue Zeile. Während OpenCode arbeitet,
-kannst du mit **Enter** einen Prompt senden, um die laufende Session zu steuern. Drücke **Ctrl+X** und dann **Enter**,
-um den Prompt für später einzureihen.
+Beginne mit **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** oder **Ctrl+J** eine neue Zeile. Während OpenCode arbeitet,
+sendest du mit **Enter** einen Prompt, der die laufende Session steuert. Drücke **Ctrl+X** und dann **Enter**,
+um den Prompt stattdessen für später in die Warteschlange zu stellen.
 
 ## Projekte und Verzeichnisse
 
 OpenCode sucht in dem Verzeichnis, in dem du es startest, nach Dateien und führt dort Shell-Befehle aus. Verzeichnisse
-im selben Git-Repository gehören zum selben Projekt, einschließlich seiner Worktrees. Ein Verzeichnis ohne
-Versionsverwaltung bildet ein eigenes Projekt.
+im selben Git-Repository gehören zum selben Projekt, auch wenn sie in unterschiedlichen Worktrees liegen.
+Ein Verzeichnis ohne Versionsverwaltung bildet ein eigenes Projekt.
 
 Gib ein Verzeichnis an, um OpenCode in einem anderen Projekt zu starten:
 
@@ -30,8 +30,8 @@ Gib ein Verzeichnis an, um OpenCode in einem anderen Projekt zu starten:
 opencode ~/code/another-project
 ```
 
-Drücke **Ctrl+O**, um zuletzt genutzte Sessions und Projekte zu öffnen. Drücke bei einem Projekt **Right**, um seine
-Worktrees aufzulisten, und dort **Ctrl+N**, um einen neuen anzulegen.
+Drücke **Ctrl+O**, um die Liste der zuletzt genutzten Sessions und Projekte zu öffnen. Drücke bei einem Projekt
+**Right**, um seine Worktrees anzuzeigen, und dort **Ctrl+N**, um einen neuen anzulegen.
 
 ## Kontext
 
@@ -57,7 +57,7 @@ drücke **Esc**, um den Shell-Modus zu verlassen, ohne einen auszuführen.
 !git status
 ```
 
-Shell-Befehle laufen im Arbeitsverzeichnis der Session, und ihre Ausgabe bleibt in der Session.
+Shell-Befehle laufen im Arbeitsverzeichnis der Session. Die Ausgabe bleibt in der Session.
 
 ## Befehle
 
@@ -69,18 +69,17 @@ ausgewählten Befehl auszuführen.
 ```
 
 Häufige Befehle sind `/new`, `/sessions`, `/models`, `/agents`, `/undo`, `/redo` und `/editor`. Drücke **Ctrl+P**, um die
-Befehlspalette mit jeder in der aktuellen Ansicht verfügbaren Aktion zu öffnen.
+Befehlspalette mit allen Aktionen zu öffnen, die in der aktuellen Ansicht verfügbar sind.
 
-Nach einem Update zeigt OpenCode einmal auf dem Startbildschirm, was im Release neu ist. Führe `/highlights` aus, um es
-erneut zu sehen, oder setze `"highlights": false` in [`cli.json`](/cli/config#alerts), damit es sich nicht mehr
-automatisch öffnet.
+Nach einem Update zeigt OpenCode die Neuerungen einmal auf dem Startbildschirm an. Mit `/highlights` rufst du sie
+erneut auf. Setze `"highlights": false` in [`cli.json`](/cli/config#alerts), wenn sie nicht automatisch erscheinen sollen.
 
 ## Nebenfragen
 
-Führe `/btw <question>` aus, um eine schnelle Frage zur bisherigen Unterhaltung zu stellen. Die Antwort nutzt den Kontext
-der Session und das aktuelle Modell, wird aber nicht zur Unterhaltung hinzugefügt und beeinflusst daher spätere Prompts
-nicht. Während sie läuft, zeigt die Prompt-Fußzeile einen `/btw`-Hinweis, und die Antwort öffnet sich in einem Dialog;
-drücke **C**, um sie zu kopieren.
+Stell mit `/btw <question>` eine kurze Frage zur bisherigen Unterhaltung. OpenCode beantwortet sie mit dem aktuellen
+Modell und dem Kontext der Session. Die Antwort landet nicht im Verlauf und beeinflusst spätere Prompts nicht.
+Solange die Antwort aussteht, erscheint unter dem Eingabefeld ein `/btw`-Hinweis. Die Antwort erscheint in einem Dialog.
+Mit **C** kopierst du sie.
 
 ```text
 /btw why did the test in step 2 fail?
@@ -88,8 +87,8 @@ drücke **C**, um sie zu kopieren.
 
 ## Modelle
 
-Drücke **Ctrl+X** und dann **M**, um ein Modell zu wählen, oder führe `/models` aus. Drücke **F2**, um durch zuletzt
-genutzte Modelle zu wechseln.
+Drücke **Ctrl+X** und dann **M**, um ein Modell zu wählen, oder führe `/models` aus. Mit **F2** wechselst du zwischen
+den zuletzt genutzten Modellen.
 
 Drücke **Ctrl+X** und dann **A**, um einen Agenten zu wählen, oder führe `/agents` aus. Drücke **Shift+Tab**, um Agenten
 zu wechseln.
@@ -110,17 +109,17 @@ Tabs sind standardmäßig aktiviert. Wechsle mit **Ctrl+Tab** und **Ctrl+Shift+T
 
 ## Verlauf
 
-Drücke **Ctrl+X** und dann **U**, oder führe `/undo` aus, um die letzte Nutzernachricht und die darauf folgende Arbeit
+Drücke **Ctrl+X** und dann **U** oder führe `/undo` aus, um die letzte Nutzernachricht und die darauf folgende Arbeit
 zurückzunehmen. Der zurückgenommene Prompt erscheint wieder im Eingabefeld, sodass du ihn bearbeiten kannst.
 
-Drücke **Ctrl+X** und dann **R**, oder führe `/redo` aus, um die zurückgenommene Arbeit wiederherzustellen. Wenn du
-stattdessen einen neuen Prompt sendest, akzeptierst du das Zurücknehmen und machst von diesem Punkt aus weiter.
+Drücke **Ctrl+X** und dann **R** oder führe `/redo` aus, um die rückgängig gemachte Arbeit wiederherzustellen. Wenn du
+stattdessen einen neuen Prompt sendest, bleibt die Arbeit rückgängig gemacht und die Session setzt an diesem Punkt fort.
 
 ## Editor
 
-Setze `VISUAL` oder `EDITOR`, drücke dann **Ctrl+X** und dann **E**, oder führe `/editor` aus, um den aktuellen Prompt in
-diesem Editor zu bearbeiten. Speichere den Text und schließe den Editor, um den Text ins Eingabefeld zu übernehmen.
-Drücke dann **Enter**, um ihn zu senden.
+Lege mit `VISUAL` oder `EDITOR` fest, welchen Editor du nutzen willst. Drücke **Ctrl+X** und dann **E** oder führe
+`/editor` aus, um den aktuellen Prompt darin zu bearbeiten. Speichere den Text und schließe den Editor, um ihn ins
+Eingabefeld zu übernehmen. Sende ihn mit **Enter**.
 
 ```bash
 export EDITOR="nvim"

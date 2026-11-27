@@ -99,7 +99,7 @@ zusammen; Lesezugriffe werden dadurch nie verzögert. Status-APIs melden weiterh
 Ressourcen. Eine registrierte Definition bedeutet nicht, dass bereits eine Verbindung besteht oder dass andere
 Arbeiten an der Ressource abgeschlossen sind.
 
-Quellen tragen Anbieter und unveränderliche Modelldefinitionen über `ctx.provider.transform` bei.
+Quellen stellen Anbieter und unveränderliche Modelldefinitionen über `ctx.provider.transform` bereit.
 
 ```ts title="plugins/models/index.ts"
 import { Model, Plugin, Provider } from "@opencode/plugin"
@@ -307,7 +307,7 @@ await ctx.provider.transform((editor) => {
 
 #### Referenz
 
-Schemas: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info)
+Schemata: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info)
 
 ```ts
 interface ProviderDomain extends ProviderApi {
@@ -436,7 +436,7 @@ await ctx.command.reload()
 
 #### Referenz
 
-Schemas: [`Command.Info`](/api#schema-Command.Info),
+Schemata: [`Command.Info`](/api#schema-Command.Info),
 [`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery)
 
 ```ts
@@ -530,7 +530,7 @@ await ctx.integration.reload()
 
 #### Referenz
 
-Schemas: [`Integration.Info`](/api#schema-Integration.Info), [`Integration.Method`](/api#schema-Integration.Method),
+Schemata: [`Integration.Info`](/api#schema-Integration.Info), [`Integration.Method`](/api#schema-Integration.Method),
 [`Connection.Info`](/api#schema-Connection.Info), [`Form.Answer`](/api#schema-Form.Answer)
 
 ```ts
@@ -631,7 +631,7 @@ await ctx.mcp.reload()
 
 #### Referenz
 
-Schemas: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded),
+Schemata: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded),
 [`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded)
 
 ```ts
@@ -660,7 +660,7 @@ const plugins = await ctx.plugin.list()
 
 #### Referenz
 
-Schemas: [`Plugin.Info`](/api#schema-Plugin.Info), [`Plugin.Source`](/api#schema-Plugin.Source)
+Schemata: [`Plugin.Info`](/api#schema-Plugin.Info), [`Plugin.Source`](/api#schema-Plugin.Source)
 
 ```ts
 interface PluginContext {
@@ -697,7 +697,7 @@ await ctx.reference.reload()
 
 #### Referenz
 
-Schemas: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource`](/api#schema-Reference.LocalSource),
+Schemata: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource`](/api#schema-Reference.LocalSource),
 [`Reference.GitSource`](/api#schema-Reference.GitSource)
 
 ```ts
@@ -742,7 +742,7 @@ const { answers } = await ctx.experimental.generate.decisions({
 ### Berechtigungen
 
 Hole vor einer Aktion die Berechtigung ein. `assert` wertet die [Berechtigungsregeln](/permissions) der
-Session einschließlich gespeicherter Freigaben aus. Ergibt eine Regel `ask`, fragt OpenCode beim Nutzer nach.
+Session einschließlich gespeicherter Zustimmungen aus. Ergibt eine Regel `ask`, fragt OpenCode beim Nutzer nach.
 Sobald die Aktion erlaubt ist, wird das Promise erfüllt.
 
 ```ts
@@ -759,14 +759,15 @@ execute: async (input, context) => {
 }
 ```
 
-- `action` und `resources` werden gegen die Regeln abgeglichen. Jedes `deny` blockiert die Aktion; andernfalls fragt jedes `ask`.
+- OpenCode gleicht `action` und `resources` mit den Regeln ab. Sobald `deny` gilt, blockiert OpenCode die Aktion.
+  Andernfalls genügt ein `ask`, damit OpenCode nachfragt.
 - `save` listet die Muster, die gespeichert werden, wenn der Nutzer „immer erlauben“ wählt.
 - `agent` wählt, wessen Regeln gelten, und ist standardmäßig der Agent der Session. `source` hängt die Abfrage an einen Tool-Aufruf.
 - `metadata` übergibt zusätzliche Details an Berechtigungsabfragen und `evaluate`-Hooks.
 
-Eine deny-Regel oder eine Ablehnung mit Feedback lehnt mit einem `Tool.Error` ab, der den Grund trägt, sodass das Modell ihn sieht und
-fortfährt. Eine einfache Ablehnung beendet den aktuellen Schritt. Lass diese Fehler weiterlaufen, statt sie als Tool-
-Ausgabe zurückzugeben.
+Bei einer deny-Regel oder einer Ablehnung mit Rückmeldung gibt OpenCode einen `Tool.Error` mit der Begründung weiter.
+Das Modell sieht die Begründung und arbeitet weiter. Eine einfache Ablehnung beendet den aktuellen Schritt.
+Lass diese Fehler bis zum Aufrufer gelangen, statt sie als Tool-Ausgabe zurückzugeben.
 
 Prüfe oder beantworte ausstehende Berechtigungsanfragen.
 
@@ -857,7 +858,7 @@ await ctx.session.instructions.entry.remove({ sessionID, key: "deploy-target" })
 
 #### Referenz
 
-Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
+Schemata: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
 [`Session.Inbox.User`](/api#schema-Session.Inbox.User), [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic),
 [`InstructionEntry.Info`](/api#schema-InstructionEntry.Info)
 
@@ -1095,7 +1096,7 @@ diese Definition gebunden bleiben muss.
 
 #### Referenz
 
-Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
+Schemata: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
 [`Tool.FileContent`](/api#schema-Tool.FileContent)
 
 ```ts
@@ -1154,7 +1155,7 @@ und entdeckt dann das Projekt neu. Neue Repository-Formate brauchen weiterhin En
 
 #### Referenz
 
-Schemas: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
+Schemata: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
 [`FileDiff.Info`](/api#schema-FileDiff.Info)
 
 ```ts
@@ -1233,19 +1234,19 @@ await ctx.worktree.refresh({ projectID })
 await ctx.worktree.remove({ projectID, directory: created.directory, force: false })
 ```
 
-Create lädt Konfiguration und Plugins aus dem gespeicherten `canonical`-Verzeichnis des Projekts und nutzt deren gewählte Strategie.
-Es akzeptiert ein optionales übergeordnetes `directory`, eine Quelle `from`, einen Start-`branch` und einen `name`.
+Beim Erstellen lädt OpenCode Konfiguration und Plugins aus dem gespeicherten `canonical`-Verzeichnis des Projekts und nutzt
+die dort gewählte Strategie. Du kannst ein übergeordnetes `directory`, eine Quelle `from`, einen Start-`branch` und einen `name` angeben.
 Die Quelle ist standardmäßig der kanonische Checkout, und ein `from`-Override muss zu diesem Projekt gehören. Die Wahl einer Quelle
 ändert das Konfigurationsstammverzeichnis nicht.
 Ein übergebener Start-Ref muss von der gewählten Strategie unterstützt werden;
 Rifts native Snapshot-Operation hat zum Beispiel keine Option zur Ref-Wahl.
 
-Create und Refresh warten, bis die Plugins des kanonischen Checkouts aktiviert sind. Aufrufe während des Plugin-
-Setups dieses Checkouts sehen die bisherigen Registrierungen und warten nicht auf ihre eigene Aktivierung.
+Beim Erstellen und Aktualisieren wartet OpenCode, bis die Plugins des kanonischen Checkouts aktiviert sind.
+Aufrufe während des Plugin-Setups dieses Checkouts sehen die bisherigen Registrierungen und warten nicht auf ihre eigene Aktivierung.
 
-Remove lädt die kanonische Konfiguration und aktiviert ihre Plugins und nutzt dann die aufgezeichnete Strategie des Worktrees statt
-des aktuell gewählten Standards. Ein nicht verfügbarer aufgezeichneter Owner erzeugt einen Fehler. Das Ziel des Worktrees kann
-woanders liegen:
+Beim Entfernen lädt OpenCode die kanonische Konfiguration und aktiviert deren Plugins. Dann nutzt es die für den Worktree
+gespeicherte Strategie statt der aktuellen Standardstrategie. Ist die zuständige Strategie nicht verfügbar, schlägt das Entfernen fehl.
+Das Zielverzeichnis des Worktrees kann an einem anderen Ort liegen:
 
 ```ts
 await ctx.worktree.remove({
@@ -1261,10 +1262,11 @@ message: "Uncommitted changes", forceRequired: true })` auslösen
 und dazu `Worktree` aus `@opencode/plugin` importieren. So fordert sie eine Bestätigung an, bevor das
 Entfernen erzwungen wird, ohne sich auf Fehler aus Core oder Git zu stützen.
 
-Refresh lädt die kanonische Konfiguration und bittet alle verfügbaren Strategien, Worktrees über bekannte Checkout-Wurzeln zu finden.
-Es kombiniert die Ergebnisse, bewahrt aufgezeichnete Ownership und entfernt fehlende Verzeichnisse. Eine fehlgeschlagene Entdeckungsquelle wird protokolliert,
-während andere Quellen weiterlaufen. Bestehende Verzeichnisse bleiben gespeichert, auch wenn keine verfügbare Strategie sie meldet. Beobachte
-`worktree.updated` und rufe `list` erneut auf, um geändertes Inventar zu lesen.
+Beim Aktualisieren lädt OpenCode die kanonische Konfiguration und lässt alle verfügbaren Strategien in den bekannten
+Checkout-Wurzeln nach Worktrees suchen. Es führt die Ergebnisse zusammen, behält die Zuordnung zu den zuständigen Strategien
+bei und entfernt nicht mehr vorhandene Verzeichnisse aus der Liste. Schlägt die Suche bei einer Quelle fehl, protokolliert
+OpenCode den Fehler, während die anderen Suchen weiterlaufen. Bestehende Verzeichnisse bleiben gespeichert, auch wenn sie
+keine verfügbare Strategie meldet. Achte auf `worktree.updated` und rufe `list` erneut auf, um die aktualisierte Liste abzurufen.
 
 ```ts
 await ctx.worktree.refresh({ projectID })
@@ -1343,7 +1345,7 @@ await ctx.websearch.reload()
 
 #### Referenz
 
-Schemas: [`WebSearch.Provider`](/api#schema-WebSearch.Provider), [`WebSearch.Result`](/api#schema-WebSearch.Result)
+Schemata: [`WebSearch.Provider`](/api#schema-WebSearch.Provider), [`WebSearch.Result`](/api#schema-WebSearch.Result)
 
 ```ts
 interface WebSearchContext {
@@ -1454,9 +1456,9 @@ Prompt-Hooks laufen unter diesen Bedingungen:
 Änderungen werden zur kanonischen gespeicherten Nutzereingabe. Wenn die Vorbereitung fehlschlägt oder
 unterbrochen wird, nimmt OpenCode den Prompt nicht an.
 
-Halte Prompt-Hooks retry-sicher. Sie sind keine Exactly-once-Grenze für Nebenwirkungen:
+Schreibe Prompt-Hooks so, dass sie Wiederholungen vertragen. Nebenwirkungen sind nicht auf eine einmalige Ausführung beschränkt:
 
-- Das erneute Versuchen einer bereits ausstehenden oder zugestellten ID gibt die ursprüngliche Annahme zurück, ohne Hooks erneut auszuführen.
+- Wenn du eine ausstehende oder bereits zugestellte ID erneut sendest, erhältst du die ursprüngliche Annahme zurück. Die Hooks laufen nicht erneut.
 - Gleichzeitige Übermittlungen können Hooks mehr als einmal ausführen, aber nur die erste erfolgreiche Annahme gewinnt.
 - Prompt-Hooks transformieren Eingaben und legen keine typisierte Ablehnungs-API offen.
 

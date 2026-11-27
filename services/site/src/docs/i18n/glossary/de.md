@@ -25,7 +25,10 @@ Product names: OpenCode, Zen, Go, Go Plus, Go Teams, Desktop, Console, Models (O
 | provider (model provider) | Anbieter | Keep Provider where it is a literal identifier, UI label or config/API name |
 | authentication / authenticate | Authentifizierung / authentifizieren | |
 | authorization | Autorisierung | |
+| API key | API-Schlüssel | Preserve literal UI labels and identifiers such as `apiKey` |
+| service account | Service-Konto | |
 | token | Token | plural Tokens; stays English |
+| input / output tokens | Eingabetokens / Ausgabetokens | |
 | session | Session | die Session, plural Sessions |
 | prompt | Prompt | plural Prompts |
 | tool / tool call | Tool / Tool-Aufruf | |
@@ -34,11 +37,13 @@ Product names: OpenCode, Zen, Go, Go Plus, Go Teams, Desktop, Console, Models (O
 | inference | Inference | die Inference |
 | usage | Nutzung | usage limits → Nutzungslimits |
 | request | Anfrage | |
+| request body | Anfrage-Body | |
 | response | Antwort | |
 | endpoint | Endpunkt | |
 | config / configuration | Konfiguration | config file → Konfigurationsdatei; `opencode.json` unchanged |
 | command | Befehl | slash command → Slash-Befehl |
 | permissions | Berechtigungen | |
+| approval / saved approval | Zustimmung / gespeicherte Zustimmung | Keep English labels such as „Allow always“ when quoting the UI |
 | policy / policies | Policy / Policies | Console feature; ordinary "rule" → Regel |
 | budget | Budget | |
 | subscription | Abo | |
@@ -50,6 +55,7 @@ Product names: OpenCode, Zen, Go, Go Plus, Go Teams, Desktop, Console, Models (O
 | invoice | Rechnung | |
 | refund | Erstattung | |
 | model | Modell | |
+| model discovery | automatische Modellerkennung | Prefer a verb in prose: „OpenCode erkennt lokale Modelle automatisch“ |
 | context | Kontext | |
 | gateway | Gateway | |
 | proxy | Proxy | network proxy only |
