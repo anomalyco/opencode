@@ -11,9 +11,7 @@ import { Permission } from "../permission.js"
 
 const plan = Agent.ID.make("plan")
 
-const selected = (
-  directory: string,
-) => `You are in Plan mode. Discuss the plan with the user directly in the conversation. Do not create or update plan files unless the user explicitly asks you to; when they do, write them only in:
+const selected = (directory: string) => `You are in Plan mode. Discuss the plan with the user directly in the conversation. Do not create or update plan files unless the user explicitly asks you to; when they do, write them only in:
 ${directory}
 
 Do not modify any other files or ask a subagent to do so.
