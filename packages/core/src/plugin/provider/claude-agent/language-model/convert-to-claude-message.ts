@@ -2,23 +2,29 @@ export * as ConvertToClaudeMessage from "./convert-to-claude-message.js"
 
 import type { LanguageModelV3FilePart, LanguageModelV3Prompt } from "@ai-sdk/provider"
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
+import { Fingerprint } from "../sync/fingerprint.js"
 
 export type ContentBlock = Exclude<SDKUserMessage["message"]["content"], string>[number]
 
 // Claude can't be given earlier turns, so their roles become text tags. Attachments stay real content blocks.
 export function content(prompt: LanguageModelV3Prompt): ContentBlock[] {
   const blocks: ContentBlock[] = []
-  const history = prompt.some((message) => message.role === "assistant" || message.role === "tool")
-  for (const message of prompt) {
+  // Everything up to the last assistant or tool message is history. User messages after it are being sent now.
+  const last = prompt.findLastIndex((message) => message.role === "assistant" || message.role === "tool")
+  const history = last >= 0
+  for (const [index, message] of prompt.entries()) {
     if (message.role === "system") continue
-    if (history) blocks.push({ type: "text", text: `<${message.role}>` })
+    // OpenCode moves files a tool returned into a user message. The user never sent them, so they are shown as tool output.
+    const media = Fingerprint.isToolMedia(message)
+    const role = media ? "tool" : message.role
+    if (history) blocks.push({ type: "text", text: `<${role}>` })
     for (const part of message.content) {
       if (part.type === "text") {
         blocks.push({ type: "text", text: part.text })
         continue
       }
       if (part.type === "file") {
-        blocks.push(file(part))
+        blocks.push(media || index < last ? past(file(part)) : file(part))
         continue
       }
       if (part.type === "tool-call") {
@@ -31,7 +37,7 @@ export function content(prompt: LanguageModelV3Prompt): ContentBlock[] {
         blocks.push({ type: "text", text: `<tool-result>\n${result}\n</tool-result>` })
       }
     }
-    if (history) blocks.push({ type: "text", text: `</${message.role}>` })
+    if (history) blocks.push({ type: "text", text: `</${role}>` })
   }
   return blocks
 }
@@ -47,6 +53,14 @@ function file(part: LanguageModelV3FilePart): ContentBlock {
     return { type: "image", source: { type: "base64", media_type: type, data: base64(part.data) } }
   }
   throw new Error(`Claude Code does not support ${type} attachments`)
+}
+
+// Claude Code treats an image block in a user message as one the user just pasted: it saves a copy and adds an
+// "[Image: source: ...]" line after the new prompt, so Claude takes an old image for a new attachment. An image inside a
+// document block reaches Claude as it is.
+function past(block: ContentBlock): ContentBlock {
+  if (block.type !== "image") return block
+  return { type: "document", source: { type: "content", content: [block] } }
 }
 
 function base64(data: string | Uint8Array) {
