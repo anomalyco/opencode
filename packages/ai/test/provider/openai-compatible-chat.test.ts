@@ -737,6 +737,16 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("maps Z.AI's model_context_window_exceeded finish to a length finish", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({}, "model_context_window_exceeded")))),
+      )
+
+      expect(response.finishReason).toEqual({ normalized: "length", raw: "model_context_window_exceeded" })
+    }),
+  )
+
   it.effect("preserves content-filter finishes in the common reason algebra", () =>
     Effect.gen(function* () {
       const filtered = yield* LLMClient.generate(request).pipe(
@@ -744,6 +754,16 @@ describe("OpenAI-compatible Chat route", () => {
       )
 
       expect(filtered.finishReason).toEqual({ normalized: "content-filter", raw: "content_filter" })
+    }),
+  )
+
+  it.effect("maps Z.AI's sensitive finish to a content-filter finish", () =>
+    Effect.gen(function* () {
+      const filtered = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({}, "sensitive")))),
+      )
+
+      expect(filtered.finishReason).toEqual({ normalized: "content-filter", raw: "sensitive" })
     }),
   )
 

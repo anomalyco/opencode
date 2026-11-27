@@ -293,6 +293,8 @@ pub fn failure(state: &TurnState) -> Option<Failure> {
             .to_owned(),
         service: Some("session".to_owned()),
         error_name: Some(error.r#type.clone()),
+        status: error.status,
+        retry_after_ms: error.retry_after_ms,
     })
 }
 

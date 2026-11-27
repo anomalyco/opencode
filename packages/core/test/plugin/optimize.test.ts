@@ -18,7 +18,6 @@ import PROMPT_META from "../../src/plugin/system-prompt/meta.txt"
 import PROMPT_GPT from "../../src/plugin/system-prompt/gpt.txt"
 import PROMPT_GPT_6_2 from "../../src/plugin/system-prompt/gpt-6.2.txt"
 import PROMPT_ASTRA from "../../src/plugin/system-prompt/gpt-astra.txt"
-import PROMPT_KIMI from "../../src/plugin/system-prompt/kimi.txt"
 import PROMPT_TRINITY from "../../src/plugin/system-prompt/trinity.txt"
 import PROMPT_ANTHROPIC from "../../src/plugin/system-prompt/anthropic.txt"
 
@@ -108,7 +107,7 @@ describe("OptimizePlugin", () => {
         ["gpt-7", PROMPT_GPT],
         ["gemini-2.5-pro", fallback],
         ["claude-sonnet-4", appended],
-        ["kimi-k2", PROMPT_KIMI],
+        ["kimi-k2", fallback],
         ["trinity", PROMPT_TRINITY],
         ["meta/muse-spark-1.1", PROMPT_META.replaceAll("{{MODEL_NAME}}", "Muse Spark")],
         ["llama-3.3", fallback],
@@ -248,15 +247,15 @@ describe("OptimizePlugin", () => {
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
-      yield* OptimizePlugin.KimiPlugin.effect(pluginHost)
+      yield* OptimizePlugin.ArceePlugin.effect(pluginHost)
       const gemini = context("gemini-2.5-pro")
-      const kimi = context("kimi-k2")
+      const trinity = context("trinity")
 
       yield* hooks.trigger("session", "context", gemini)
-      yield* hooks.trigger("session", "context", kimi)
+      yield* hooks.trigger("session", "context", trinity)
 
       expect(gemini.system[0]?.text).toBe(fallback)
-      expect(kimi.system[0]?.text).toBe(SessionSystemPrompt.render(PROMPT_KIMI, Object.keys(kimi.tools)))
+      expect(trinity.system[0]?.text).toBe(SessionSystemPrompt.render(PROMPT_TRINITY, Object.keys(trinity.tools)))
     }),
   )
 

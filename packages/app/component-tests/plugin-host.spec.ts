@@ -752,7 +752,7 @@ story(
 
       const read = () => ({
         state: reads.state?.(),
-        font: reads.font?.().startsWith('"JetBrainsMono Nerd Font Mono"') ? "default mono" : reads.font?.(),
+        font: reads.font?.().startsWith('"OpenMono"') ? "default mono" : reads.font?.(),
         prefs: reads.prefs?.value?.count,
         ready: reads.prefs?.ready(),
         writes: [...host.writes],
@@ -1765,7 +1765,7 @@ story(
 
     expect(result).toEqual({
       // Alphabetical among the app's themes, not appended after them.
-      neighbors: ["Mercury", "Midnight", "Monokai"],
+      neighbors: ["Mercury", "Midnight", "Modus"],
       withdrawn: { listed: false, selected: "oc-2", stored: "acme:midnight" },
       restored: "acme:midnight",
     })

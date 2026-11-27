@@ -97,7 +97,8 @@ export const withCompletedDiffs = Effect.fnUntraced(function* (
         const path = absolutePath(file.file, cwd)
         const newText = file.status === "deleted" ? "" : yield* Effect.tryPromise(() => Bun.file(path).text())
         if (file.status === "added") return [diff(path, null, newText)]
-        const recorded = parsePatch(file.patch)[0]
+        // A file name with a newline breaks the patch header, and `parsePatch` throws on it.
+        const recorded = (yield* Effect.try(() => parsePatch(file.patch)))[0]
         if (!recorded) return []
         const oldText = yield* Effect.try(() => applyPatch(newText, reversePatch(recorded)))
         if (oldText !== false) return [diff(path, oldText, newText)]
@@ -109,7 +110,7 @@ export const withCompletedDiffs = Effect.fnUntraced(function* (
           return []
         const chunks = hunk.chunks.map((chunk) => ({ ...chunk, oldLines: chunk.newLines, newLines: chunk.oldLines }))
         const rebuilt = (yield* Effect.try(() => Patch.derive(hunk.path, chunks, newText))).content
-        return ranges(structuredPatch(path, path, rebuilt, newText)) === ranges(recorded)
+        return ranges(yield* Effect.try(() => structuredPatch(path, path, rebuilt, newText))) === ranges(recorded)
           ? [diff(path, rebuilt, newText)]
           : []
       }).pipe(Effect.orElseSucceed((): Preview[] => [])),

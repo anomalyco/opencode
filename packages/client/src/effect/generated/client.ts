@@ -298,6 +298,15 @@ import type {
   ExperimentalPushSessionRemoveOutput,
   ExperimentalPushSettingsSetInput,
   ExperimentalPushSettingsSetOutput,
+  ExperimentalSpaceWriteInput,
+  ExperimentalSpaceWriteOutput,
+  ExperimentalSpaceSyncInput,
+  ExperimentalSpaceSyncOutput,
+  ExperimentalSpaceSubscribeInput,
+  ExperimentalSpaceSubscribeOutput,
+  ExperimentalSpaceUnsubscribeInput,
+  ExperimentalSpaceUnsubscribeOutput,
+  ExperimentalSpaceResetOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1901,6 +1910,36 @@ const EndpointExperimentalPushSettingsSet =
       ),
     )
 
+const EndpointExperimentalSpaceWrite =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceWriteInput) =>
+    preserveEffect<ExperimentalSpaceWriteOutput>()(
+      raw["space.write"]({ payload: { changes: input["changes"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalSpaceSync = (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceSyncInput) =>
+  preserveEffect<ExperimentalSpaceSyncOutput>()(
+    raw["space.sync"]({ payload: { spaces: input["spaces"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointExperimentalSpaceSubscribe =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceSubscribeInput) =>
+    preserveEffect<ExperimentalSpaceSubscribeOutput>()(
+      raw["space.subscribe"]({ payload: { stream: input["stream"], spaces: input["spaces"] } }).pipe(
+        Effect.mapError(mapClientError),
+      ),
+    )
+
+const EndpointExperimentalSpaceUnsubscribe =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceUnsubscribeInput) =>
+    preserveEffect<ExperimentalSpaceUnsubscribeOutput>()(
+      raw["space.unsubscribe"]({ payload: { stream: input["stream"], spaces: input["spaces"] } }).pipe(
+        Effect.mapError(mapClientError),
+      ),
+    )
+
+const EndpointExperimentalSpaceReset = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalSpaceResetOutput>()(raw["space.reset"]({}).pipe(Effect.mapError(mapClientError)))
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1950,6 +1989,13 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     },
     session: { set: EndpointExperimentalPushSessionSet(raw), remove: EndpointExperimentalPushSessionRemove(raw) },
     settings: { set: EndpointExperimentalPushSettingsSet(raw) },
+  },
+  space: {
+    write: EndpointExperimentalSpaceWrite(raw),
+    sync: EndpointExperimentalSpaceSync(raw),
+    subscribe: EndpointExperimentalSpaceSubscribe(raw),
+    unsubscribe: EndpointExperimentalSpaceUnsubscribe(raw),
+    reset: EndpointExperimentalSpaceReset(raw),
   },
 })
 

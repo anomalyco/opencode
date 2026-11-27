@@ -32,6 +32,7 @@ interface PaletteInput {
 interface HueScaleAnchors {
   bgBase: HexColor
   textContrast: HexColor
+  monochrome?: boolean
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -97,11 +98,11 @@ function generateV2NeutralScale(neutral: HexColor, ink: HexColor, isDark: boolea
     })
   }
 
-  const l50 = clamp(n.l, 0.91, 1)
-  const l100 = l50 - 0.018
-  const l200 = l50 - 0.042
-  const l300 = l50 - 0.062
-  const l400 = l50 - 0.108
+  const l50 = clamp(n.l, 0.87, 1)
+  const l100 = l50 - 0.022
+  const l200 = l50 - 0.048
+  const l300 = l50 - 0.072
+  const l400 = l50 - 0.118
 
   const l1100 = clamp(k.l, 0.16, 0.28)
   const l1200 = Math.max(0.11, l1100 - 0.06)
@@ -109,6 +110,8 @@ function generateV2NeutralScale(neutral: HexColor, ink: HexColor, isDark: boolea
   const l900 = l1100 + 0.1
   const l800 = l1100 + 0.15
   const midSpan = l400 - l800
+  const darkHue = k.c >= 0.01 ? k.h : hue
+  const darkC = Math.max(baseC, Math.min(k.c, 0.055))
 
   const lightSteps = [
     l50,
@@ -127,9 +130,15 @@ function generateV2NeutralScale(neutral: HexColor, ink: HexColor, isDark: boolea
   ]
 
   return lightSteps.map((l, idx) => {
-    const chromaScale = idx === 0 ? 1 : idx <= 4 ? 0.95 : idx <= 7 ? 0.65 : 0.5
+    if (idx >= 8) {
+      const darkScale = idx === 10 ? 1.1 : 0.9
 
-    return oklchToHexExact({ l, c: baseC * chromaScale, h: hue })
+      return oklchToHexExact({ l, c: Math.min(darkC * darkScale, 0.062), h: darkHue })
+    }
+
+    const chromaScale = idx === 0 ? 1 : idx === 1 ? 1.14 : idx === 2 ? 1.24 : idx <= 4 ? 1.28 : 0.85
+
+    return oklchToHexExact({ l, c: Math.min(baseC * chromaScale, 0.072), h: hue })
   })
 }
 
@@ -141,7 +150,8 @@ function generateV2NeutralScale(neutral: HexColor, ink: HexColor, isDark: boolea
 function generateV2HueScale(seed: HexColor, isDark: boolean, anchors: HueScaleAnchors): HexColor[] {
   const base = hexToOklch(seed)
   const bgBaseL = hexToOklch(anchors.bgBase).l
-  const chroma = clamp(base.c, 0.075, 0.22)
+  const mono = Boolean(anchors.monochrome) && base.c < 0.025
+  const chroma = mono ? base.c : clamp(base.c, 0.075, 0.22)
   const h = base.h
 
   const step100 = oklchToHexExact({
@@ -163,7 +173,7 @@ function generateV2HueScale(seed: HexColor, isDark: boolean, anchors: HueScaleAn
 
   const raw1200 = oklchToHexExact({
     l: isDark ? clamp(bgBaseL + 0.035, 0.2, 0.31) : 0.23,
-    c: clamp(chroma * 0.42, 0.035, 0.072),
+    c: mono ? chroma * 0.42 : clamp(chroma * 0.42, 0.035, 0.072),
     h,
   })
 
@@ -269,9 +279,12 @@ export function generateV2Primitives(variant: ThemeVariant, isDark: boolean): Re
   const colors = readPalette(variant)
   const grey = generateV2NeutralScale(colors.neutral, colors.ink, isDark)
 
+  const monochrome = hexToOklch(colors.primary).c < 0.025 && hexToOklch(colors.interactive).c < 0.025
+
   const anchors: HueScaleAnchors = {
     bgBase: isDark ? grey[11]! : grey[0]!,
     textContrast: grey[0]!,
+    monochrome,
   }
 
   const blue = generateV2HueScale(colors.interactive, isDark, anchors)

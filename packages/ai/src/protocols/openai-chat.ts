@@ -953,8 +953,12 @@ const mapFinishReason = Effect.fnUntraced(function* (event: OpenAIChatEvent, rea
     case "end":
       return "stop" as const
     case "length":
+    // Z.AI stops with this when the prompt plus the generated output fill the context window.
+    case "model_context_window_exceeded":
       return "length" as const
     case "content_filter":
+    // Z.AI ends a response its safety review blocked with "sensitive".
+    case "sensitive":
       return "content-filter" as const
     case "function_call":
     case "tool_calls":

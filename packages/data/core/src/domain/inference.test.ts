@@ -71,6 +71,13 @@ describe("inference stat normalization", () => {
     ])
   })
 
+  test("ignores Object.prototype keys when resolving model aliases", () => {
+    ;["__proto__", "constructor", "toString", "valueOf", "hasOwnProperty"].forEach((key) => {
+      expect(statModel(key, undefined)).toBe(key.toLowerCase())
+      expect(statProvider(key, undefined, key)).toBe(key)
+    })
+  })
+
   test("maps oversized model ids to unknown before aggregation", () => {
     expect(statModel("x".repeat(256), "")).toBe("x".repeat(256))
     expect(statModel("x".repeat(257), "")).toBe("unknown")
@@ -106,7 +113,13 @@ describe("inference stat normalization", () => {
     expect(toRetentionAggregate({ ...row, cohort_date: "2026-08-10", eligible_users: "12" })).toMatchObject([
       { model: "omen-alpha", provider: "unknown", eligibleUsers: 12 },
     ])
-    ;["hungerg", "hungerg-free", "opencode/hungerg-free", "opencode-go/hungerg-free", "OPENCODE-GO/HungerG-free:global"].forEach((model) => {
+    ;[
+      "hungerg",
+      "hungerg-free",
+      "opencode/hungerg-free",
+      "opencode-go/hungerg-free",
+      "OPENCODE-GO/HungerG-free:global",
+    ].forEach((model) => {
       expect(statModel(model, "")).toBe("hungerg")
       expect(statProvider(model, "hidden-route-model", "hidden-provider")).toBe("unknown")
 

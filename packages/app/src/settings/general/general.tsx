@@ -263,6 +263,7 @@ export const SettingsGeneral: Component = () => {
   const settings = useSettings()
   const mobile = createMediaQuery("(max-width: 767px)")
   const desktop = createMemo(() => platform.platform === "desktop")
+  const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
 
   const pinchZoom = createOptimisticSetting({
     source: () => (desktop() && "getPinchZoomEnabled" in platform) || undefined,
@@ -278,6 +279,14 @@ export const SettingsGeneral: Component = () => {
     initialMeta: undefined,
     load: async () => ({ value: (await platform.getSpellcheckEnabled?.()) ?? true, meta: undefined }),
     write: (checked) => platform.setSpellcheckEnabled?.(checked),
+  })
+
+  const smoothScrolling = createOptimisticSetting({
+    source: () => (linux() && "getSmoothScrollingEnabled" in platform) || undefined,
+    initial: false,
+    initialMeta: undefined,
+    load: async () => ({ value: (await platform.getSmoothScrollingEnabled?.()) ?? false, meta: undefined }),
+    write: (checked) => platform.setSmoothScrollingEnabled?.(checked),
   })
 
   const GeneralSection = () => (
@@ -332,6 +341,17 @@ export const SettingsGeneral: Component = () => {
           >
             <div data-action="settings-spellcheck">
               <Switch checked={spellcheck.value()} onChange={spellcheck.select} />
+            </div>
+          </SettingsRow>
+        </Show>
+
+        <Show when={linux()}>
+          <SettingsRow
+            title={language.t("settings.general.row.smoothScrolling.title")}
+            description={language.t("settings.general.row.smoothScrolling.description")}
+          >
+            <div data-action="settings-smooth-scrolling">
+              <Switch checked={smoothScrolling.value()} onChange={smoothScrolling.select} />
             </div>
           </SettingsRow>
         </Show>

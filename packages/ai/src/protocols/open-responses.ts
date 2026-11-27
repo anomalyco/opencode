@@ -30,7 +30,7 @@ import {
   withUntypedFrames,
 } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
-import { effortUpdate } from "../effort-updates.js"
+import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
 import { toolsUpdate } from "../tool-updates.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
@@ -656,11 +656,18 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
 
 const DEFAULT_EFFORT = "medium"
 
+// A call's output only follows the whole assistant turn, and Meta's Muse models, directly or through a gateway,
+// reject a commentary message replayed while a call is waiting for it. Text after a call keeps its place without
+// the phase there; other providers accept it and keep the phase.
+const rejectsPendingCommentary = (request: LLMRequest) =>
+  request.model.provider === "meta" || /(?:^|\/)muse-/i.test(request.model.id)
+
 export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
   const input: OpenResponsesInputItem[] = []
   const replay = ToolCallIDReplay.normalizer(request)
   const providerMetadataKey = metadataKey(request.model)
   const custom = OpenAIFreeform.tools(request)
+  const pendingCommentaryRejected = rejectsPendingCommentary(request)
   const customTool = (part: ToolCallPart | ToolResultPart) =>
     part.namespace === undefined ? custom.get(part.name) : undefined
 
@@ -706,6 +713,7 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
       const content: TextPart[] = []
       const reasoningItems: Record<string, OpenResponsesReasoningInput> = {}
       const hostedToolItems = new Set<string>()
+      let calledTool = false
       const flushText = () => {
         if (content.length === 0) return
         const groups = content.reduce<
@@ -714,7 +722,8 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
           const partMetadata = part.providerMetadata?.[providerMetadataKey]
           const id = itemID(part.providerMetadata, providerMetadataKey) ?? metadata?.itemId
           const partPhase = messagePhase(partMetadata?.phase)
-          const phase = partPhase === undefined ? metadata?.phase : partPhase
+          const declared = partPhase === undefined ? metadata?.phase : partPhase
+          const phase = calledTool && declared === "commentary" && pendingCommentaryRejected ? undefined : declared
           const group = groups.at(-1)
           if (group && group.id === id && group.phase === phase) group.parts.push(part)
           else groups.push({ id, phase, parts: [part] })
@@ -766,6 +775,7 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
           flushText()
           if (part.providerExecuted === true) continue
           input.push(lowerToolCall(part, providerMetadataKey, customTool(part), callID(part.id)))
+          calledTool = true
           continue
         }
         if (part.type === "tool-result" && part.providerExecuted === true) {
@@ -899,9 +909,10 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
   const definitions = ProviderShared.flattenTools(request.tools)
   const options = OpenResponsesOptions.resolve(request)
   const custom = OpenAIFreeform.tools(request)
+  const updates = resolveEffortUpdates(request, options.reasoningEffort)
   return {
-    ...(yield* lowerConversation(request, adapter)),
-    ...lowerGeneration(request, options),
+    ...(yield* lowerConversation(updates.request, adapter)),
+    ...lowerGeneration(request, { ...options, reasoningEffort: updates.effort }),
     tools: definitions.length === 0 ? undefined : yield* lowerTools(definitions, adapter, custom),
     tool_choice:
       allowedToolChoice(options, custom) ??
@@ -1634,6 +1645,8 @@ export const protocol = Protocol.make({
     step: (state: ParserState, event: Event) => step(state, normalize(state, event)),
     terminal,
   },
+  // Not every Open Responses server accepts `configuration_update`, so only models that opt in get it.
+  supportsEffortUpdates: (request) => request.model.capabilities?.reasoning?.updates === true,
 })
 
 export const httpTransport = HttpTransport.sseJson.with<OpenResponsesBody>()

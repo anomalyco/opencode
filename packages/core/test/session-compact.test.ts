@@ -20,7 +20,7 @@ import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionStore } from "@opencode/core/session/store"
-import { Effect, Layer, LayerMap, Stream } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
 
@@ -51,7 +51,7 @@ const models = Layer.mock(SessionRunnerModel.Service)({
 })
 const locations = Layer.effect(
   LocationServiceMap.Service,
-  LayerMap.make(
+  LocationServiceMap.make(
     () =>
       // The test only needs the compaction location service used by Session.compact.
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion

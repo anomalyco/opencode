@@ -110,6 +110,8 @@ export function createNextTimelineProjection(input: {
   queuedCompactionIDs?: Accessor<readonly string[]>
   /** Summarize each finished turn's changed files after it. */
   turnDiffs?: Accessor<boolean>
+  /** The server's `full_codemode` flag: without it, a script's changes neither show nor count. */
+  scriptDiffs?: Accessor<boolean>
 }) {
   const sessionMessageByID = createMemo(
     () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
@@ -141,7 +143,7 @@ export function createNextTimelineProjection(input: {
   )
 
   const textVisible = createMemo(() => new Map<Content, Accessor<boolean>>(textParts()))
-  const factOf = placeFacts(input.sessionMessages)
+  const factOf = placeFacts(input.sessionMessages, input.scriptDiffs)
 
   const projection = createMemo(() => {
     const detail = input.timelineDetail()

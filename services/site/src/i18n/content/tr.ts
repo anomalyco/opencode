@@ -680,7 +680,7 @@ export const content = {
       badges: {
         body: "README'nize, dokümanlarınıza ya da sitenize bir rozet koyun ve opencode.ai'ye bağlayın. Arka planınıza göre açık ya da koyu dosyayı seçin (HTML kendiliğinden geçiş yapar) ve renkleri ya da metni değiştirmeyin.",
         sizes: "Her stil 20, 32 ve 44px boyutlarında (Shields yalnızca 20px), SVG ve 2× PNG olarak gelir.",
-        mono: "Her dosyanın OpenTUI Mono metinli bir sürümü de var. Uzantıdan önce -mono ekleyin, örneğin opencode-works-with-a-light-20-mono.svg, ya da büyük harfli OpenTUI Mono için -mono-caps.",
+        mono: "Her dosyanın OpenMono metinli bir sürümü de var. Uzantıdan önce -mono ekleyin, örneğin opencode-works-with-a-light-20-mono.svg, ya da büyük harfli OpenMono için -mono-caps.",
         groups: {
           "works-with": {
             title: "Uyumlu",

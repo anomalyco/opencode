@@ -253,12 +253,12 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 /// The metadata of `dir`'s own files and of its dependencies' packages: what a change of the tree changes. And whether
-/// it is racy: a file changed within [`RACY`], whose next change may keep its size and, on a coarse clock, its time,
-/// so the stamp cannot vouch for it (as git's racy-clean entries).
+/// it is racy: a file changed within [`approval::RACY`], whose next change may keep its size and, on a coarse clock,
+/// its time, so the stamp cannot vouch for it (as git's racy-clean entries).
 fn stamp(dir: &Path) -> Result<(u64, bool), String> {
     let mut hasher = DefaultHasher::new();
     let mut racy = false;
-    let recent = std::time::SystemTime::now() - RACY;
+    let recent = approval::now() - approval::RACY;
     let mut visit = |_: &Path, metadata: &std::fs::Metadata, hasher: &mut DefaultHasher| {
         meta(metadata, hasher);
         racy |= metadata.modified().map_or(true, |modified| modified >= recent);
@@ -275,9 +275,6 @@ fn stamp(dir: &Path) -> Result<(u64, bool), String> {
     }
     Ok((hasher.finish(), racy))
 }
-
-/// How recent a change makes a stamp racy.
-const RACY: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// The bytes of `dir`'s own files, and its dependencies by their `package.json`.
 pub(crate) fn light(dir: &Path) -> Result<u64, String> {

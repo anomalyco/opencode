@@ -262,7 +262,7 @@ for (const scenario of scenarios) {
   }
 }
 
-// The header rests on its group's top in the current timeline, and 6px above it in the New timeline.
+// The header rests 6px above its group's top in both timelines.
 for (const newTimeline of [false, true]) {
   test(`collapsing a group from its stuck header leaves the header where it was (${newTimeline ? "New" : "current"} timeline)`, async ({
     page,
