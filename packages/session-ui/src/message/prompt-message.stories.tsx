@@ -147,3 +147,58 @@ export const SendingAttachment = { ...Pending, args: { status: "sending", text: 
 export const DeliveredVoice = { ...Pending, args: { status: "delivered", voice: true } }
 
 export const StrandedSteer = { ...Pending, args: { status: "stranded", grouped: true } }
+
+const wrappingStory = (id: string, text: string) => ({
+  render: () => {
+    const message = createMemo<SessionMessageUser>(() => ({
+      id,
+      type: "user",
+      text,
+      time: { created: STORY_TIME },
+      files: [],
+    }))
+
+    const document = createMemo(() => ({
+      sessionID: CURRENT_SESSION_ID,
+      messages: [message()],
+      status: { type: "idle" as const },
+      diffs: [],
+    }))
+
+    const actions = {
+      revert: () => {},
+      fork: () => {},
+      pending: {
+        status: () => undefined,
+        queue: () => {},
+        remove: () => {},
+      },
+    } satisfies SessionUserActions
+
+    return (
+      <section class="mx-auto flex w-full max-w-[840px] flex-col p-6">
+        <CurrentSessionProviders document={document()}>
+          <CurrentUserMessageDisplay
+            sessionID={CURRENT_SESSION_ID}
+            message={message()}
+            text={message().text}
+            agent="build"
+            model={STORY_MODEL}
+            actions={actions}
+            run={{ above: false, below: false }}
+          />
+        </CurrentSessionProviders>
+      </section>
+    )
+  },
+})
+
+export const WidthCapWrapping = wrappingStory(
+  "msg_width_cap_prompt_story",
+  "opencode web ui messages wrap, check github issues for the same problem",
+)
+
+export const CharacterCapWrapping = wrappingStory(
+  "msg_character_cap_prompt_story",
+  "opencode web ui messages wrap, check github issues for the same problem here",
+)
