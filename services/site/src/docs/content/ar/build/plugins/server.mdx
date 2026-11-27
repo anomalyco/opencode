@@ -1243,7 +1243,7 @@ await ctx.worktree.remove({
 ```
 
 والملكية الغائبة تفشل الإزالة بدل العودة إلى Git. ويمكن للاستراتيجية رفع `new Worktree.OperationError({
-message: "Uncommitted changes", forceRequired: true })`, importing `Worktree` from `@opencode/plugin`, to request
+message: "Uncommitted changes", forceRequired: true })`، مع استيراد `Worktree` من `@opencode/plugin`، لطلب
 تأكيد الإجبار دون الاعتماد على أخطاء Core أو Git.
 
 والتحديث يحمّل الإعداد الأساسي ويطلب من كل الاستراتيجيات المتاحة إيجاد worktrees عبر جذور نسخ السحب المعروفة.
