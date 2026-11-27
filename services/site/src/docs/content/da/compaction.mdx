@@ -103,6 +103,29 @@ Føj `compaction` til enhver [OpenCode-konfigurationsfil](/config):
 - Et tokenantal som `20000` virker også. Det samme antal er en stor andel af et lille vindue og en lille andel af et stort.
 - Et tokenantal, der mindst er så stort som modellens vindue, ignoreres, og standarden anvendes.
 
+### Kontekstvindue
+
+Kontekstvinduet svarer til modellens inputgrænse (`limit.input`), dog højst dens kontekstgrænse (`limit.context`). Hvis modellen
+kun har den ene grænse, bruges den. Hvis modellen ikke har nogen af grænserne, komprimerer OpenCode ikke automatisk, men
+komprimerer én gang, hvis udbyderen afviser en anmodning, fordi den er for lang.
+
+En grænse i konfigurationen erstatter kun det tilsvarende felt. Hvis kataloget angiver begge grænser, forbliver vinduet
+på katalogets inputgrænse, hvis du kun hæver `limit.context`. Angiv derfor også `limit.input`:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "limit": { "context": 1050000, "input": 1000000 },
+        },
+      },
+    },
+  },
+}
+```
+
 ## Model
 
 Som standard skriver OpenCode selv resuméet med sessionens model. Angiv

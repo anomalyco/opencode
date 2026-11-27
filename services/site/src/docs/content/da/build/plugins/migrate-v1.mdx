@@ -94,8 +94,33 @@ ligge på en separat `client`-egenskab.
 `ctx.location` beskriver den location, hvor denne plugininstans blev indlæst. Det er ikke location for hver session eller hændelse,
 som pluginet kan observere. Læs session- eller hændelsesdata, når den forskel er vigtig.
 
-Konteksten eksponerer mange flere domæner, end tabellen viser, inklusive kataloger, kommandoer, integrationer, MCP-servere,
+Konteksten giver adgang til mange flere domæner, end tabellen viser, bl.a. kommandoer, integrationer, MCP-servere,
 referencer, skills, lagring, VCS, worktrees og websøgning. Se den [komplette plugin-kontekst](/build/plugins/server#api).
+
+### Migrér katalogdomænet
+
+Tidligere pluginbuilds gjorde udbydere og modeller tilgængelige via `ctx.catalog`. OpenCode stiller nu `ctx.provider` og
+`ctx.model` til rådighed som separate domæner, så et plugin, der kalder `ctx.catalog.transform`, ikke kan indlæses.
+
+| Tidligere katalog-API                         | Nuværende pendant                                                            |
+| --------------------------------------------- | ---------------------------------------------------------------------------- |
+| `ctx.catalog.transform(draft => …)`           | `ctx.provider.transform(editor => …)` og `ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)`               | `editor.update(id, fn)` på `ctx.provider`                                    |
+| `draft.model.update(providerID, modelID, fn)` | `editor.update(providerID, modelID, fn)` på `ctx.model`                      |
+| `ctx.catalog.reload()`                        | `ctx.provider.reload()` og `ctx.model.reload()`                             |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+Se [Udbydere](/build/plugins/server#providers) og [Modeller](/build/plugins/server#models) for de fulde editor-API'er.
 
 ## Registrér hooks i `setup`
 

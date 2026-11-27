@@ -16,6 +16,20 @@ Explain how authentication works in this project
 
 Tryk på **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** eller **Ctrl+J** for at indsætte et linjeskift. Mens OpenCode arbejder, sender **Enter** din prompt som en ny instruktion til den aktive session; tryk på **Ctrl+X** og derefter **Enter** for at sætte prompten i kø til senere.
 
+## Projekter og mapper
+
+OpenCode søger efter filer og kører shellkommandoer i den mappe, du starter det i. Mapper i samme Git-repo hører til ét
+projekt, også repoets worktrees. En mappe uden versionsstyring er sit eget projekt.
+
+Angiv en mappe for at starte i et andet projekt:
+
+```bash
+opencode ~/code/another-project
+```
+
+Tryk på **Ctrl+O** for at åbne listen over seneste sessioner og projekter. Vælg et projekt, og tryk på **Right** for
+at se dets worktrees. Tryk på **Ctrl+N** på listen for at oprette en ny worktree.
+
 ## Kontekst
 
 Skriv `@` for at søge efter en fil, og vælg den for at vedhæfte filen til prompten. Bliv ved med at skrive efter `@` for at indsnævre resultaterne.
@@ -68,7 +82,13 @@ Tryk på **Ctrl+X** og derefter **A** for at vælge en agent, eller kør `/agent
 
 ## Sessioner
 
-Tryk på **Ctrl+X** og derefter **N** for at starte en ny session. Tryk på **Ctrl+X** og derefter **L**, eller kør `/sessions`, for at vende tilbage til en eksisterende session; **Ctrl+O** åbner nylige sessioner og projekter samlet.
+Hver session er en separat samtale med sin egen historik og mappe. Kør `/new`, eller tryk på **Ctrl+X** og derefter **N** for
+at starte en ny session til en anden opgave. Tidligere sessioner er stadig tilgængelige. Nye sessioner starter i den mappe,
+du startede OpenCode i, eller i den aktuelle sessions mappe, hvis [`session.new_location`](/cli/config#sessions) er sat til `inherit`.
+
+Tryk på **Ctrl+X** og derefter **L**, eller kør `/sessions` for at vende tilbage til en eksisterende session. Tryk på
+**Ctrl+A** på listen for at skifte mellem sessioner i den aktuelle mappe og sessioner i alle projekter. **Ctrl+O** åbner en
+samlet liste over de seneste sessioner og projekter.
 
 Faner er aktiveret som standard. Brug **Ctrl+Tab** og **Ctrl+Shift+Tab** til at skifte mellem dem, **Ctrl+X** og derefter **W** til at lukke en fane og **Ctrl+Shift+T** til at genåbne den senest lukkede fane.
 

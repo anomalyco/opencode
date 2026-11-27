@@ -239,8 +239,9 @@ allerede findes i kataloget, antager OpenCode:
 
 OpenCode genkender `text`, `regex` og `lark`. Andre formatnavne fra models.dev ignoreres uden at droppe modellen eller dens værktøjer. Hvis en proxy foran en katalogmodel afviser freeform-værktøjer, skal du sætte `capabilities.freeform` til `[]` på den model.
 
-Dette er fallbackantagelser, ikke registrerede kapaciteter. Angiv præcise `capabilities`- og `limit`-værdier, når de kendes;
-eksplicitte værdier erstatter fallbackene. Tilføj `disabled: true` for at skjule en model fra det tilgængelige katalog:
+Disse værdier er antagelser, ikke egenskaber, OpenCode selv har registreret. Angiv de korrekte værdier for `capabilities` og
+`limit`, hvis du kender dem. De erstatter de værdier, OpenCode ellers antager. Automatisk komprimering bruger `limit.input`,
+dog højst `limit.context`. Se [Kontekstvindue](/compaction#window). Tilføj `disabled: true` for at skjule en model fra det tilgængelige katalog:
 
 ```jsonc title="opencode.jsonc"
 {

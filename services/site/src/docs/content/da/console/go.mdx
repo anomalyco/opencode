@@ -91,12 +91,13 @@ med OpenCode Go, selvom vi ikke garanterer, at de vil blive ved med at virke i f
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Hermes**        | Opdater til **v0.21.6 eller nyere**, som sender headeren på primære og sekundære OpenCode-anmodninger ([PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864)).                                                             |
 | **Claude Code**   | Go genkender dens native sessionsheader. Der er ikke brug for en wrapper til en brugerdefineret header.                                                                                                                                      |
-| **Codex**         | Go genkender dens native sessionsheader. Nogle versioner og proxyopsætninger udelader den stadig; bevar sessionsheadereren, når du videresender anmodninger.                                                                                 |
+| **Codex**         | Go genkender klientens egen sessionsheader. Nogle versioner og proxyopsætninger udelader den stadig. Bevar sessionsheaderen, når du videresender anmodninger. |
 | **ZCode**         | Go genkender dens native sessionsheader. Vores [anmodning om `x-opencode-session`](https://github.com/zai-org/feedback/issues/492) er stadig åben, men det er ikke længere nødvendigt at sende netop den header.                              |
 | **Pi**            | Aktuelle builds sender sessionsoplysninger for OpenCode. Opdater ældre installationer.                                                                                                                                                        |
-| **jcode**         | Opdater til **v0.81.6 eller nyere**, som indeholder [rettelsen af sessionsheadereren](https://github.com/1jehuang/jcode/issues/1167).                                                                                                        |
+| **jcode**         | Opdater til **v0.81.6 eller nyere**, som indeholder [rettelsen af sessionsheaderen](https://github.com/1jehuang/jcode/issues/1167).                                                                                                        |
 | **OpenClaw**      | Aktuelle builds sender `x-opencode-session` på Go-anmodninger. Login i browseren kræver **2026.11.7 eller nyere**.                                                                                                                            |
 | **Kilo Code CLI** | Builds med [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) gendanner OpenCode-sessionsheadere. Rettelsen gælder CLI'en, ikke VS Code-udvidelsen. Se [issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723).           |
+| **MiMo Code**     | Opdater til **v0.1.16 eller nyere**. Fra den version sender klienten `x-opencode-session` med anmodninger til Go ([PR #2655](https://github.com/XiaomiMiMo/MiMo-Code/pull/2655)). |
 
 ### Kendte problematiske klienter
 
@@ -106,9 +107,8 @@ undersøgte. De linkede rapporter følger rettelser og workarounds.
 | Klient                  | Status og opfølgning                                                                                                                                                                                                                                    |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **DeepSeek Harness**    | Sessionsoplysninger ankommer på nogle modelstier, men mangler på andre. Vi genkender dens native header; det resterende arbejde er at sende den på tværs af alle adaptere. [Discussion #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495). |
-| **GitHub Copilot Chat** | Automatisk understøttelse af sessionsheadereren er efterspurgt i [VS Code-issue #334186](https://github.com/microsoft/vscode/issues/334186).                                                                                                            |
-| **Kimi Code**           | Anmodningen om sessionsheadereren i [issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506) blev lukket som ikke planlagt.                                                                                                                  |
-| **MiMo Code**           | [Issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) er lukket, og [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327) blev lukket uden at blive flettet.                                                                       |
+| **GitHub Copilot Chat** | [VS Code-issue #334186](https://github.com/microsoft/vscode/issues/334186) efterspørger automatisk understøttelse af sessionsheaderen. |
+| **Kimi Code**           | Anmodningen om understøttelse af sessionsheaderen blev lukket i [issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506), fordi ændringen ikke er planlagt. |
 
 ## Forbrugsgrænser
 

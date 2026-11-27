@@ -424,10 +424,10 @@ await context.ui.dialog.select({
 - Escape, `clear()` eller åbning af en anden dialog giver `undefined` som resultat.
 - Bind ikke `ctrl+n` eller `ctrl+p`. Dialogen reserverer dem til navigation, og dens egne bindinger har forrang.
 
-Brugerdefinerede JSX-dialoger kan angive deres størrelse og lukke sig selv.
+Brugerdefinerede JSX-dialoger kan angive deres størrelse og lukke sig selv. Kald `set` efter `show`: Når du viser en dialog,
+nulstilles størrelsen til `medium`, og centreringen slås fra. `medium`, `large` og `xlarge` er henholdsvis 60, 88 og 116 kolonner brede.
 
 ```tsx
-context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.show(
   () => (
     <box>
@@ -436,6 +436,7 @@ context.ui.dialog.show(
   ),
   () => console.log("closed"),
 )
+context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.clear()
 ```
 
@@ -642,8 +643,8 @@ Eksponér TUI-pluginet gennem `./tui`; tilføj OpenTUI-peers, når pluginet rend
     "@opencode/plugin": "latest"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.6.6",
-    "@opentui/solid": ">=0.6.6",
+    "@opentui/core": ">=0.8.0",
+    "@opentui/solid": ">=0.8.0",
     "solid-js": ">=1.9.0"
   }
 }

@@ -121,10 +121,13 @@ bruger i øjeblikket disse handlinger og ressourcer:
 | `websearch`            | Søgeforespørgsel                                                             |
 | `generate_image`       | Den valgte billedmodel som `providerID/modelID` plus `#variant`, når den er angivet |
 | `external_directory`   | Kanonisk grænse for ekstern mappe, normalt med `/*` til sidst                |
-| `<server>_<tool>`      | `*` for et MCP-værktøj; tegn, der ikke understøttes i begge navne, bliver `_` |
+| `<server>_<tool>`      | `*` for et MCP-værktøj. Bogstaver, cifre, `_` og `-` bevares i begge navne, mens alle andre tegn erstattes med `_`. |
 | `opencode_list_mcp_resources` | MCP-servernavn                                                         |
 | `opencode_read_mcp_resource`  | `<server>:<uri>`                                                       |
 | `execute`              | `*`; en deny fjerner Code Mode og viser dets værktøjer direkte, mens indlejrede værktøjer håndhæver deres regler |
+
+MCP-handlinger bevarer bindestreger, så værktøjer fra en server med navnet `mcp-atlassian` matcher `mcp-atlassian_*`, ikke
+`mcp_atlassian_*`.
 
 Tillad f.eks. én skill og afvis alle andre skills:
 

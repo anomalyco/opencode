@@ -44,8 +44,9 @@ JSON Schema og Standard Schema understøttes også.
 
 ### Input og output
 
-Brug `input` til metodeargumentet og `output` til dets returværdi. Udelad
-en af dem, når der ikke er nogen værdi.
+Brug `input` til metodens argument og `output` til dens returværdi. Begge er påkrævet.
+Hvis en metode ikke modtager eller returnerer en værdi, skal du bruge `Schema.Struct({})`, kalde den med `{}`
+og returnere `{}`.
 
 ```ts
 search: {
@@ -67,6 +68,7 @@ errors: {
 ### Hændelser
 
 Tilføj hændelser til opslagstabellen `events` på øverste niveau. Hændelsesdata skal være et objekt.
+Opslagstabellen er påkrævet. Brug `events: {}`, hvis RPC'en ikke har nogen hændelser.
 
 ```ts
 events: {

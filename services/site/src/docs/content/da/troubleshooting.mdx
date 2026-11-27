@@ -112,6 +112,36 @@ grep 'role=server' ~/.local/share/opencode/log/opencode.log
 grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
 ```
 
+## Eksportér telemetri
+
+OpenCode kan sende sine logs og traces til en OpenTelemetry-collector eller en APM-backend, der modtager OTLP over HTTP.
+Angiv collectorens base URL uden sti:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer example-token"
+export OTEL_RESOURCE_ATTRIBUTES="team=platform,host.name=dev-laptop"
+opencode
+```
+
+| Variabel                      | Virkning |
+| ----------------------------- | -------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Base URL. Logs sendes til `<endpoint>/v1/logs` og traces til `<endpoint>/v1/traces`. Hvis variablen ikke er sat, er eksport slået fra. |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | Kommaseparerede headere på formen `key=value`, der sendes med hver eksport, f.eks. en API-nøgle. |
+| `OTEL_RESOURCE_ATTRIBUTES`   | Kommaseparerede, URL-kodede attributter på formen `key=value`, der føjes til hver post. Hvis én attribut har forkert format, udelades de alle. |
+
+Hver post indeholder også `service.name` (`opencode`), `service.version`, `deployment.environment.name` (udgivelseskanalen),
+`opencode.client` og `opencode.run`, som er samme kørsels-ID som i logfilen.
+
+Baggrundstjenesten kører i en separat proces og arver ikke din shells miljøvariabler. Angiv også variablerne for tjenesten,
+så traces omfatter modelkald og værktøjskørsler:
+
+```bash
+opencode service set env OTEL_EXPORTER_OTLP_ENDPOINT http://localhost:4318
+opencode service set env OTEL_EXPORTER_OTLP_HEADERS "authorization=Bearer example-token"
+opencode service start
+```
+
 ## Tag et heap-snapshot
 
 Gem et heap-snapshot af den kørende baggrundsservers hukommelse, uanset platform:

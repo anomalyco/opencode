@@ -3,19 +3,19 @@ title: "Netværk"
 description: "Konfigurer proxyer, brugerdefinerede certifikatmyndigheder og klientcertifikater."
 ---
 
-Angiv standardproxyvariablerne, og udelad loopback-adresser. OpenCode bruger lokale HTTP-forbindelser mellem CLI'en og
-dens baggrundstjeneste, så loopback-undtagelsen er nødvendig, når der er konfigureret en proxy i CLI-miljøet.
+Angiv de almindelige proxymiljøvariabler. OpenCode bruger lokale HTTP-forbindelser mellem CLI'en og baggrundstjenesten,
+og CLI'en undtager automatisk loopback-adresser fra proxyen.
 
 ```bash
 export HTTP_PROXY=http://proxy.example.com:8080
 export HTTPS_PROXY=http://proxy.example.com:8080
-export NO_PROXY=localhost,127.0.0.1,::1
 
 opencode
 ```
 
 `HTTP_PROXY` håndterer HTTP-destinationer, og `HTTPS_PROXY` håndterer HTTPS-destinationer. Selve proxy-URL'en kan bruge `http://`
-for begge variabler. `NO_PROXY` er en kommasepareret liste over hosts og adresser, der forbinder direkte.
+for begge variabler. Ved opstart tilføjer CLI'en `127.0.0.1`, `localhost` og `::1` til både `NO_PROXY` og `no_proxy`.
+Brug `NO_PROXY` til at angive en kommasepareret liste over andre værter, der skal forbindes direkte.
 
 ## Tjeneste
 
@@ -25,13 +25,13 @@ tjenestekonfiguration, så senere tjenestestarter bruger de samme netværksindst
 ```bash
 opencode service set env HTTP_PROXY http://proxy.example.com:8080
 opencode service set env HTTPS_PROXY http://proxy.example.com:8080
-opencode service set env NO_PROXY localhost,127.0.0.1,::1
+opencode service set env NO_PROXY llm.company.example
 opencode service start
 ```
 
 Ændring af en administreret miljøvariabel stopper den kørende tjeneste. `service start` starter den igen med det nye miljø.
-Behold også `NO_PROXY` i CLI-shellen, når den shell angiver en proxy, fordi administrerede tjenestevariabler gælder for serverprocessen,
-ikke CLI-processen.
+CLI'ens shell skal have sine egne proxyvariabler, fordi tjenestens miljøvariabler gælder for serverprocessen, ikke CLI-processen.
+Loopback-undtagelser tilføjes automatisk begge steder.
 
 Fjern en varig variabel med `service unset env`:
 
@@ -132,7 +132,6 @@ processer.
 ```bash
 HTTP_PROXY=http://proxy.example.com:8080 \
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode --standalone
 ```
 
@@ -140,7 +139,6 @@ Anvend samme mønster på en forgrundsserver:
 
 ```bash
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode serve
 ```
 

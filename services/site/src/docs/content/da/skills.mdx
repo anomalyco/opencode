@@ -48,7 +48,7 @@ OpenCode søger automatisk disse placeringer:
 | Projekt               | `.opencode/skills`                     |
 | Projektkompatibilitet | `.claude/skills`, `.agents/skills`     |
 
-For projektkilder søger OpenCode fra den aktuelle mappe op til projektroden og medtager matchende mapper på hvert niveau.
+For projektkilder søger OpenCode fra den aktuelle mappe helt op til filsystemets rod og medtager matchende mapper på hvert niveau.
 
 Hver kilde kan indeholde en af formerne:
 
@@ -177,7 +177,7 @@ Kilder registreres fra lavere til højere prioritet:
 2. `.claude/skills`, først globalt og derefter fra den fjerneste overordnede mappe mod den aktuelle mappe
 3. `.agents/skills`, først globalt og derefter fra den fjerneste overordnede mappe mod den aktuelle mappe
 4. `~/.config/opencode/skills`
-5. Projektets `.opencode/skills`, fra projektroden mod den aktuelle mappe
+5. Projektets `.opencode/skills`, fra den fjerneste overordnede mappe mod den aktuelle mappe
 6. Eksplicitte `skills`-poster efter konfigurationsfilernes prioritet og derefter efter rækkefølgen i hvert array
 
 Undgå dublerede ID'er, medmindre du vil tilsidesætte en tidligere skill.

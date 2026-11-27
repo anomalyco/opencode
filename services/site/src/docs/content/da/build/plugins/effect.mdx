@@ -1027,7 +1027,8 @@ Effect-værktøjer accepterer samme [freeform-inputdeklaration](/build/plugins/s
 
 Værktøjer har et `id`, der indeholder deres effektive navn, og `get()` returnerer `undefined`, når ID'et ikke findes. Brug
 `update` og `remove` med det effektive værktøjsnavn, inklusive dets navnerum (`acme_greeting` ovenfor). Punktummer i
-navnerum og ikke-understøttede tegn i værktøjsnavne bliver `_`. Manglende navne ignoreres; oprettelse af et værktøj kræver
+navnerum erstattes med `_`. I værktøjsnavne erstattes alle tegn undtagen bogstaver, cifre, `_` og `-` med `_`.
+Manglende navne ignoreres; oprettelse af et værktøj kræver
 `add` med en komplet definition. Opdateringer bevarer navn og navnerum. Tildel nye skemaer eller indstillinger for at erstatte
 dem i stedet for at mutere indlejrede værdier. Ugyldige opdateringer logges og lader den tidligere definition være intakt.
 

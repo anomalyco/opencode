@@ -180,7 +180,7 @@ const agents = await ctx.agent.list()
 const build = await ctx.agent.get({ agentID: "build" })
 ```
 
-Registrér en transform for at se, opdatere eller fjerne agenter eller vælge standardagenten.
+Registrér en transform for at se, oprette, opdatere eller fjerne agenter eller vælge standardagenten.
 
 ```ts
 await ctx.agent.transform((editor) => {
@@ -192,6 +192,19 @@ await ctx.agent.transform((editor) => {
     agent.description = "Builds features and fixes bugs"
   })
   editor.remove("legacy")
+})
+```
+
+Registrér en ny agent med `editor.update`. Hvis ID'et allerede findes, redigerer metoden den eksisterende agent.
+Ellers opretter den en med `Agent.Info.default(id)`, før den kalder callbacken.
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
 })
 ```
 
@@ -1023,7 +1036,8 @@ await ctx.tool.reload()
 Brug `list()` og `get()` til at inspicere værktøjer, der aktuelt er i editoren. Værktøjer har et `id`, der indeholder deres effektive navn,
 og `get()` returnerer `undefined`, når ID'et ikke findes. Brug `update` og `remove` med det effektive værktøjsnavn,
 inklusive dets navnerum (`acme_greeting` ovenfor). Punktummer i
-navnerum og ikke-understøttede tegn i værktøjsnavne bliver `_`. Manglende navne ignoreres; oprettelse af et værktøj kræver
+navnerum erstattes med `_`. I værktøjsnavne erstattes alle tegn undtagen bogstaver, cifre, `_` og `-` med `_`.
+Manglende navne ignoreres; oprettelse af et værktøj kræver
 `add` med en komplet definition. Opdateringer bevarer navn og navnerum. Tildel nye skemaer eller indstillinger for at erstatte
 dem i stedet for at mutere indlejrede værdier. Ugyldige opdateringer logges og lader den tidligere definition være intakt.
 

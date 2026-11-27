@@ -66,9 +66,18 @@ En RPC-definition beskriver strukturen på input og output for metoder, hændels
 
 ### Input og output
 
-Hver metode kan definere et `input`-schema for sit argument og et `output`-schema
-for sin returværdi. Udelad en af dem, hvis metoden ikke accepterer eller
-returnerer en værdi.
+Hver metode skal have et `input`-skema til sit argument og et `output`-skema til sin returværdi.
+Hvis en metode ikke modtager eller returnerer en værdi, skal du bruge et tomt objektskema, kalde metoden med `{}`
+og returnere `{}`:
+
+```ts
+refresh: {
+  input: { type: "object", additionalProperties: false },
+  output: { type: "object", additionalProperties: false },
+}
+```
+
+En metode, der returnerer `undefined`, fejler med `rpc.invalid_output`.
 
 ```ts
 search: {
@@ -108,8 +117,8 @@ Fejlnavne, der begynder med `rpc.`, er reserveret af OpenCode.
 
 ### Hændelser
 
-Tilføj hændelser til `events`-mappet på topniveau. Hver hændelse har et schema for de data,
-der sendes til abonnenter.
+Tilføj hændelser til opslagstabellen `events` på øverste niveau. Hver hændelse har et skema for de data,
+der sendes til abonnenter. Opslagstabellen er påkrævet. Brug `events: {}`, hvis RPC'en ikke har nogen hændelser.
 
 Hændelsesdata skal være et objekt. Brug et tomt objektskema, når der ikke er data:
 
