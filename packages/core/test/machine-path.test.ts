@@ -19,6 +19,7 @@ import { Job } from "@opencode/core/job"
 import { Location } from "@opencode/core/location"
 import { Machine } from "@opencode/core/machine/index"
 import { EnvironmentPath } from "@opencode/core/environment/path"
+import { Join } from "@opencode/core/machine/join"
 import { Machines } from "@opencode/core/machine/machines"
 import { Permission } from "@opencode/core/permission"
 import { PersistentPty } from "@opencode/core/persistent-pty"
@@ -45,7 +46,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { Deferred, Effect, Fiber, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer, Option } from "effect"
 import { TestClock } from "effect/testing"
 import type { ChildProcess } from "effect/process"
 import { makeWorker } from "./fixture/machine-worker"
@@ -177,6 +178,9 @@ const fixture = (directory: string): Fixture => ({ directory, assertions: [], pr
 const connected = (machines: Machines.Interface, name: string) =>
   Effect.gen(function* () {
     const id = yield* machines.add(name)
+    const invite = yield* machines.invite(id, { reach: [{ type: "url", url: "https://home.example" }] })
+    const secret = Option.getOrThrow(Join.decode(invite)).secret
+    yield* machines.join({ secret, key: crypto.getRandomValues(new Uint8Array(32)) })
     const worker = yield* makeWorker({ connect: (connection) => machines.connect(id, connection) })
     yield* worker.restore
     return { id, worker }

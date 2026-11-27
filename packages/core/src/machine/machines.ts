@@ -100,6 +100,26 @@ export interface Port {
 
 export type PeerError = NotFound | Machine.PeerFailed | Machine.NotSent | Machine.Unknown
 
+/** A machine waits for its worker to join; once paired, it has a link. */
+export type Status = { readonly _tag: "AwaitingJoin" } | { readonly _tag: "Paired"; readonly link: Machine.Link }
+
+/** Whether a request sent now reaches a worker. */
+export const canSend = (status: Status) => status._tag === "Paired" && status.link._tag === "Connected"
+
+/** Coarse and slow to change, so the system prompt can list it: "away" may come back on its own, "needs-you" won't. */
+export const availability = (status: Status): "ready" | "away" | "needs-you" => {
+  if (status._tag === "AwaitingJoin") return "needs-you"
+  switch (status.link._tag) {
+    case "Connected":
+      return "ready"
+    case "Refused":
+      return "needs-you"
+    case "Never":
+    case "Disconnected":
+      return "away"
+  }
+}
+
 export interface Interface {
   /** Makes the machine known for good, returning its validated ID. Its live state is whatever its next connection reports. */
   readonly add: (name: string) => Effect.Effect<Environment.ID, InvalidName | AlreadyExists>
@@ -109,6 +129,8 @@ export interface Interface {
    */
   readonly remove: (id: Environment.ID) => Effect.Effect<boolean>
   readonly list: () => Effect.Effect<ReadonlyArray<Info>>
+  /** Every machine's status, sorted by id. */
+  readonly statuses: () => Effect.Effect<ReadonlyArray<{ readonly id: Environment.ID; readonly status: Status }>>
   /** The machine's environment, connected or not: calls on an offline machine fail with `NotSent`. */
   readonly get: (id: Environment.ID) => Effect.Effect<Environment.Interface, NotFound>
   /** The home directory in the hello of the machine's connection, failing with `NotSent` while it is offline. */
@@ -299,6 +321,16 @@ const layer = Layer.effect(
                 return new Info({ id, online: false, paired })
             }
           })
+      }),
+      statuses: Effect.fn("Machines.statuses")(function* () {
+        return [...instances]
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([id, machine]) => ({
+            id,
+            status: keys.has(id)
+              ? { _tag: "Paired" as const, link: machine.state() }
+              : { _tag: "AwaitingJoin" as const },
+          }))
       }),
       get: Effect.fn("Machines.get")(function* (id) {
         const machine = instances.get(id)
