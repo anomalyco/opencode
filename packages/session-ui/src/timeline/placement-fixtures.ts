@@ -256,6 +256,84 @@ export const placementMessages: SessionMessageInfo[] = [
       { type: "reasoning", text: "Still thinking", time: { created: 112 } },
     ],
   },
+  { id: "msg_u12", type: "user", text: "script edits", time: { created: 120 } },
+  {
+    id: "msg_a12",
+    type: "assistant",
+    agent: "build",
+    model: { id: "model", providerID: "provider" },
+    time: { created: 121, completed: 121 },
+    content: [
+      storyTool(
+        "exec_files",
+        "execute",
+        "completed",
+        { code: "await edit()" },
+        {
+          metadata: {
+            toolCalls: [],
+            files: [
+              {
+                file: "/repo/merged.ts",
+                status: "modified",
+                additions: 1,
+                deletions: 1,
+                patch: "--- a/repo/merged.ts\n+++ b/repo/merged.ts\n@@ -1 +1 @@\n-a\n+b\n",
+              },
+              {
+                file: "/repo/merged.ts",
+                status: "modified",
+                additions: 2,
+                deletions: 0,
+                patch: "--- a/repo/merged.ts\n+++ b/repo/merged.ts\n@@ -1 +1,3 @@\n b\n+c\n+d\n",
+              },
+              {
+                file: "/repo/created.ts",
+                status: "added",
+                additions: 1,
+                deletions: 0,
+                patch: "--- /dev/null\n+++ b/repo/created.ts\n@@ -0,0 +1 @@\n+new\n",
+              },
+              { file: "/repo/removed.bin", status: "deleted" },
+            ],
+          },
+        },
+      ),
+      storyTool("patch_2", "patch", "completed", {}, { metadata: { files: [{ file: "/repo/direct.ts" }] } }),
+      { type: "text", text: "Script done." },
+    ],
+  },
+  { id: "msg_u13", type: "user", text: "live script edits", time: { created: 130 } },
+  {
+    id: "msg_a13",
+    type: "assistant",
+    agent: "build",
+    model: { id: "model", providerID: "provider" },
+    time: { created: 131 },
+    content: [
+      storyTool(
+        "exec_live",
+        "execute",
+        "running",
+        { code: "await patch(); await write()" },
+        {
+          metadata: {
+            background: true,
+            toolCalls: [{ tool: "patch", status: "completed" }],
+            files: [
+              {
+                file: "/repo/live.ts",
+                status: "modified",
+                additions: 1,
+                deletions: 1,
+                patch: "--- a/repo/live.ts\n+++ b/repo/live.ts\n@@ -1 +1 @@\n-a\n+b\n",
+              },
+            ],
+          },
+        },
+      ),
+    ],
+  },
 ]
 
 const preset = (id: string): TimelineDetail => timelinePresets.find((item) => item.id === id)!.value

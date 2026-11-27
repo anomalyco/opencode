@@ -341,11 +341,15 @@ export const make = Effect.fn("BackgroundServiceMachine.make")(function* (input:
       return Effect.sync(() => dispatch({ type: "waiter.cancelled", reply }))
     })
 
-  yield* Effect.addFinalizer(() => Effect.sync(() => dispatch({ type: "disposed" })))
+  const dispose = Effect.sync(() => dispatch({ type: "disposed" }))
+
+  yield* Effect.addFinalizer(() => dispose)
   initial.commands.forEach(perform)
 
   return {
     connection: request("connection.requested"),
     reconnect: request("reconnect.requested"),
+    /** Refuses every later request, so nothing starts the service again. */
+    dispose,
   }
 })

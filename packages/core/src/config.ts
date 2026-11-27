@@ -152,10 +152,10 @@ export const layer = (options?: Options) =>
           return
         }
         const result = ConfigNormalize.normalize(input)
-        // Every reload repeats the routine notes on a config that loads. A rejected config or a dropped malformed
-        // setting is the user's to fix, so those stay warnings.
+        // Every reload repeats routine notes. Rejected configs and dropped malformed or removed settings need a warning.
         yield* Effect.forEach(result.diagnostics, (diagnostic) => {
-          const log = result.type === "rejected" || diagnostic.kind === "invalid" ? Effect.logWarning : Effect.logDebug
+          const warn = result.type === "rejected" || diagnostic.kind === "invalid" || diagnostic.kind === "removed"
+          const log = warn ? Effect.logWarning : Effect.logDebug
           return log("configuration normalization diagnostic", {
             source,
             path: diagnostic.path[0] === "$" ? "$" : `$.${diagnostic.path.join(".")}`,

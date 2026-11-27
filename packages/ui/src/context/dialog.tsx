@@ -29,11 +29,10 @@ import {
   type DialogStackEffect,
   type DialogStackEvent,
 } from "./dialog-machine"
-import { focusField } from "./field-focus"
 
 type DialogElement = () => JSX.Element
 
-export type FocusReturn = { element: HTMLElement; visible: boolean; fieldRing?: boolean; range?: Range }
+export type FocusReturn = { element: HTMLElement; visible: boolean; range?: Range }
 
 /** What an open mounts: its content, the owner it renders under, and who hears that it closed. */
 type DialogRequest = { element: DialogElement; owner: Owner; onClose?: () => void }
@@ -175,6 +174,11 @@ function init(container: () => HTMLElement | undefined) {
     let ref: HTMLDivElement | undefined
     let dispose = () => {}
 
+    // Kobalte's scroll lock stays on touch devices, where it also stops a touch from scrolling the page behind the
+    // dialog. With a mouse or trackpad the shell's own lock is enough (its body does not scroll), and Kobalte's reads
+    // layout as the dialog opens and puts a non-passive wheel listener on the document.
+    const touch = window.matchMedia("(hover: none) and (pointer: coarse)").matches
+
     const node = runWithOwner(effect.request.owner, () =>
       createRoot((d: () => void) => {
         dispose = d
@@ -183,6 +187,7 @@ function init(container: () => HTMLElement | undefined) {
         return (
           <Kobalte
             modal={modal()}
+            preventScroll={touch}
             open={!closing()}
             onOpenChange={(open: boolean) => {
               if (!open) dispatch({ type: "layer.dismiss", attempt })
@@ -253,9 +258,10 @@ function init(container: () => HTMLElement | undefined) {
 
       const first = state.status === "active" ? state.entries[0] : undefined
 
-      // A new open can happen during the exit animation, after the user is already back in the opener.
+      // A new open can happen during the exit animation, after the user is already back in the opener and has moved
+      // its caret.
       const refreshFocus =
-        first?.status === "closing" && focus?.fieldRing !== undefined && focus.element === first.focus?.element
+        first?.status === "closing" && focus?.range !== undefined && focus.element === first.focus?.element
 
       return dispatch({ type: "open", mode, id: id ?? uuid(), aborted, focus, refreshFocus, request })
     },
@@ -277,13 +283,11 @@ function captureFocus(): FocusReturn | undefined {
   // Closing with Escape counts as keyboard use, so Chromium would ring a control the pointer had focused.
   const visible = element.matches(":focus-visible")
 
-  const fieldRing = element.hasAttribute("data-field-focus") ? element.hasAttribute("data-keyboard-focus") : undefined
-
   if (!element.isContentEditable || !selection?.rangeCount || !element.contains(selection.anchorNode)) {
-    return { element, visible, fieldRing }
+    return { element, visible }
   }
 
-  return { element, visible, fieldRing, range: selection.getRangeAt(0).cloneRange() }
+  return { element, visible, range: selection.getRangeAt(0).cloneRange() }
 }
 
 /** Kobalte only returns focus to a dialog trigger, and these dialogs open without one. */
@@ -293,17 +297,9 @@ function returnFocus(focus: FocusReturn | undefined, layer: HTMLElement | undefi
   if (!focus?.element.isConnected) return
 
   // Something outside the closed dialog already has focus, for example because the dialog's onClose moved it.
-  if (active && active !== document.body && !layer?.contains(active)) {
-    // An outside click can put focus back before the dialog's return runs.
-    if (active === focus.element && focus.fieldRing !== undefined) focusField(focus.element, focus.fieldRing)
+  if (active && active !== document.body && !layer?.contains(active)) return
 
-    return
-  }
-
-  const options = { preventScroll: true, focusVisible: focus.visible }
-
-  if (focus.fieldRing === undefined) focus.element.focus(options)
-  else focusField(focus.element, focus.fieldRing, options)
+  focus.element.focus({ preventScroll: true, focusVisible: focus.visible })
 
   if (!focus.range || !focus.element.contains(focus.range.commonAncestorContainer)) return
   const selection = document.getSelection()

@@ -11,14 +11,19 @@ import { CURRENT_SESSION_ID, STORY_TIME } from "./current-session-fixtures"
 
 export function CurrentSessionProviders(props: {
   document: SessionDocument
+  /** The session's directory, which paths in the timeline are shown relative to. */
+  directory?: string
+  /** The location's resolved feature flags, as the app passes them. */
+  flags?: Readonly<Record<string, boolean>>
   readMedia?: ReadMediaUrlFn
   turnDiff?: TurnDiffSource
   children: JSX.Element
 }) {
   return (
     <DataProvider
-      directory="C:/workspaces/opencode"
+      directory={props.directory ?? "C:/workspaces/opencode"}
       sessionID={props.document.sessionID}
+      flags={props.flags}
       readMedia={props.readMedia}
       data={{
         agent: [
@@ -140,6 +145,8 @@ export function CurrentSessionTimelineStory(props: {
                   shellToolDefaultOpen={props.shellToolDefaultOpen}
                   editToolDefaultOpen={props.editToolDefaultOpen}
                   turnDiffs={props.turnDiffs}
+                  // Stories show the timeline as local and dev builds do.
+                  inlineQuotes
                 />
               </CurrentSessionProviders>
             </div>

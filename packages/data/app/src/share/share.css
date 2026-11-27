@@ -1,0 +1,1722 @@
+/* OpenMono Condensed Medium, cut down to the letters of the Explicit badge (OpenMono 1.000, OFL: asset/fonts). */
+@font-face {
+  font-family: "OpenMono Condensed";
+  src: url("../asset/fonts/openmono-condensed-medium-explicit.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* The share icon in section headings, and the share dialog (share.tsx). */
+
+[data-page="stats"] [data-slot="section-actions"] {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 16px;
+  margin-top: 9px;
+}
+
+[data-page="stats"] [data-slot="section-actions"] > [data-component="usage-filter"] {
+  margin-top: 0;
+}
+
+/* A neutral button, as tall as the Daily and Weekly toggle beside it. Scoped to a section heading's actions or the
+   leaderboard's toolbar so it outranks the page's reset for buttons in [data-component="content"] (routes/index.css). */
+[data-page="stats"]
+  :is([data-slot="section-actions"], [data-slot="leaderboard-period"])
+  [data-component="share-button"] {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px 0 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--stats-text);
+  /* As the leaderboard's cards: a hairline over the layer, lit faintly from the top. */
+  background: linear-gradient(180deg, #ffffff0a 0%, #ffffff00 100%), var(--stats-layer);
+  border: 1px solid var(--stats-line);
+  border-radius: 0;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  -webkit-tap-highlight-color: transparent;
+
+  /* A 40px target around the 28px button. */
+  &::after {
+    content: "";
+    position: absolute;
+    inset: -6px 0;
+  }
+
+  svg {
+    color: var(--stats-faint);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      background: var(--stats-layer-2);
+      border-color: var(--stats-line-strong);
+    }
+  }
+
+  &:active {
+    transform: scale(0.97);
+  }
+
+  &[aria-expanded="true"] {
+    background: var(--stats-layer-2);
+  }
+
+  /* As tall as the toggle beside it: its 32px buttons on narrow screens, 38px on a touch screen, in the 2px padded
+     frame (routes/index.css). */
+  @media (max-width: 47.999rem) {
+    height: 38px;
+  }
+
+  @media (pointer: coarse) {
+    height: 44px;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+
+    &::after {
+      inset: 0;
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--stats-accent);
+    outline-offset: 2px;
+  }
+}
+
+/* The share editor (share.tsx): a top bar, the card on a stage, and an inspector beside it. On phones it fills the
+   screen and the inspector sits under the card, one group at a time behind tabs. */
+
+/* While the share editor is open the page behind it stays put; the scrollbar's room is kept so nothing shifts. */
+html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+
+[data-page="stats"] dialog[data-component="share-editor"] {
+  --editor-inset: 12px;
+  /* The option cards, track rows and code: on the light panel a white card with a firm line; on the dark one a fill
+     and line only just off the panel, so the choices don't shout. */
+  --editor-control: light-dark(var(--stats-layer), color-mix(in srgb, var(--stats-bg) 50%, var(--stats-layer)));
+  --editor-control-line: light-dark(var(--stats-line-strong), var(--stats-line));
+  box-sizing: border-box;
+  /* Smaller than the window, so the page stays in view around it. */
+  width: min(1200px, calc(100vw - 160px));
+  max-width: none;
+  height: min(800px, calc(100dvh - 128px));
+  max-height: none;
+  padding: 0;
+  color: var(--stats-text);
+  background: var(--stats-bg);
+  border: 0;
+  /* Not clipped, so the bar's tooltips can show above it. */
+  overflow: visible;
+  /* No border: a 1px ring of shadow is its edge, stacked over a contact shadow, a near one and a far, soft one. */
+  box-shadow:
+    0 0 0 1px light-dark(rgb(0 0 0 / 0.12), rgb(255 255 255 / 0.1)),
+    0 1px 2px rgb(0 0 0 / 0.12),
+    0 8px 24px -8px rgb(0 0 0 / 0.2),
+    0 24px 80px rgb(0 0 0 / 0.35);
+
+  /* Opens with a short rise and settle from 97%, eased out; closes faster than it opens. Transitions rather than
+     keyframes, so closing mid-open reverses from where it is. Only opacity and transform animate. */
+  --editor-from: translateY(8px) scale(0.97);
+  opacity: 0;
+  transform: var(--editor-from);
+  transition:
+    opacity 140ms ease-out,
+    transform 140ms ease-out,
+    overlay 140ms allow-discrete,
+    display 140ms allow-discrete;
+
+  &[open] {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 220ms cubic-bezier(0.23, 1, 0.32, 1),
+      transform 280ms cubic-bezier(0.23, 1, 0.32, 1),
+      overlay 280ms allow-discrete,
+      display 280ms allow-discrete;
+
+    /* Only Customize animates the size: opening again, the modal is at once the size its card needs. */
+    &[data-customize] {
+      transition:
+        opacity 220ms cubic-bezier(0.23, 1, 0.32, 1),
+        transform 280ms cubic-bezier(0.23, 1, 0.32, 1),
+        width 320ms cubic-bezier(0.23, 1, 0.32, 1),
+        height 320ms cubic-bezier(0.23, 1, 0.32, 1),
+        overlay 280ms allow-discrete,
+        display 280ms allow-discrete;
+    }
+
+    @starting-style {
+      opacity: 0;
+      transform: var(--editor-from);
+    }
+  }
+
+  /* grey-ok: the backdrop is outside the page, so the page's tokens don't reach it; this is the dark page colour */
+  &::backdrop {
+    background: rgb(12 12 12 / 0);
+    transition:
+      background-color 140ms ease-out,
+      overlay 140ms allow-discrete,
+      display 140ms allow-discrete;
+  }
+
+  &[open]::backdrop {
+    background: rgb(12 12 12 / 0.6);
+    transition-duration: 240ms;
+
+    @starting-style {
+      background: rgb(12 12 12 / 0);
+    }
+  }
+  /* grey-ok-end */
+
+  &:focus-visible {
+    outline: none;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    border-radius: 0;
+    -webkit-tap-highlight-color: transparent;
+
+    &:focus-visible {
+      outline: 2px solid var(--stats-accent);
+      outline-offset: 2px;
+    }
+  }
+
+  /* The bar across the top, the stage under it. */
+  [data-slot="editor"] {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  [data-slot="icon-button"] {
+    position: relative;
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    color: var(--stats-faint);
+    background: transparent;
+    border: 0;
+
+    /* A see-through wash over the stage: it darkens the dots under it on the light stage, lightens them on the dark. */
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--stats-text);
+        background: light-dark(rgb(0 0 0 / 0.07), rgb(255 255 255 / 0.1));
+      }
+    }
+  }
+
+  [data-slot="bar-button"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 14px;
+    font-size: 13px;
+    background: var(--stats-layer);
+    border: 1px solid var(--stats-line-strong);
+    border-radius: 0;
+    white-space: nowrap;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover:not(:disabled) {
+        background: var(--stats-layer-2);
+      }
+    }
+
+    &:active:not(:disabled) {
+      background: var(--stats-layer-2);
+    }
+
+    &:disabled {
+      opacity: 0.55;
+      cursor: progress;
+    }
+
+    &[data-variant="primary"] {
+      color: var(--stats-on-accent);
+      background: var(--stats-accent);
+      border-color: var(--stats-accent);
+
+      /* Rendering: the button fills with the full accent from the left as the video renders, over a slightly muted one. */
+      &[data-rendering] {
+        background: linear-gradient(var(--stats-accent), var(--stats-accent)) left / var(--progress) 100% no-repeat
+          color-mix(in srgb, var(--stats-accent) 62%, var(--stats-bg));
+        border-color: transparent;
+        /* At full strength, though it's disabled while it renders. */
+        opacity: 1;
+        cursor: progress;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Not while it renders: the pointer that pressed it is still over it, and the progress must show at once. */
+      @media (hover: hover) and (pointer: fine) {
+        &:hover:not(:disabled, [data-rendering]) {
+          background: color-mix(in srgb, var(--stats-accent) 88%, black);
+        }
+      }
+
+      &[aria-expanded="true"] {
+        background: color-mix(in srgb, var(--stats-accent) 80%, black);
+
+        svg {
+          rotate: 180deg;
+        }
+      }
+
+      svg {
+        transition: rotate 150ms ease;
+      }
+    }
+  }
+
+  /* The stage: the card on the site's dot grid, with the format and play controls under it. */
+  [data-slot="editor-stage"] {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    min-height: 0;
+    /* As much room either side of the card, and under the section arrows, as between the bar and the card. */
+    padding: 32px;
+    /* Grey on the light page; on the dark one a step lighter than the card (#0c0c0c), so it stands out, but well below
+       the page's second layer, which glared. */
+    background-color: light-dark(var(--stats-layer-2), color-mix(in srgb, var(--stats-bg) 50%, var(--stats-layer)));
+
+    /* A light card would sit pale on the light stage; the stage darkens a step under it. */
+    &[data-card-theme="light"] {
+      background-color: light-dark(
+        color-mix(in srgb, var(--stats-layer-2) 88%, var(--stats-text)),
+        color-mix(in srgb, var(--stats-bg) 50%, var(--stats-layer))
+      );
+    }
+    background-image: radial-gradient(
+      light-dark(var(--stats-line-strong), rgb(255 255 255 / 0.06)) 1px,
+      transparent 1px
+    );
+    background-size: 16px 16px;
+  }
+
+  [data-slot="editor-canvas"] {
+    position: relative;
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 0;
+  }
+
+  /* The video preview's timeline: a 2px line 6px under the card, its fill growing as it plays, in a 16px band that takes
+     presses and drags to seek. Hovered, the line thickens a touch. */
+  [data-slot="playback"] {
+    position: absolute;
+    height: 16px;
+    cursor: pointer;
+    touch-action: none;
+    outline: none;
+
+    &:focus-visible [data-slot="playback-track"] {
+      box-shadow: 0 0 0 2px var(--stats-accent);
+    }
+  }
+
+  [data-slot="playback-track"] {
+    position: absolute;
+    top: 7px;
+    right: 0;
+    left: 0;
+    display: block;
+    height: 2px;
+    overflow: hidden;
+    background: var(--stats-line);
+    transition:
+      top 120ms ease,
+      height 120ms ease;
+
+    i {
+      display: block;
+      height: 100%;
+      background: var(--stats-faint);
+      transform-origin: left;
+      scale: 0 1;
+    }
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    [data-slot="playback"]:hover [data-slot="playback-track"] {
+      top: 6px;
+      height: 4px;
+
+      i {
+        background: var(--stats-muted);
+      }
+    }
+  }
+
+  [data-slot="share-preview"] {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+    /* Layered, tight shadows: a hairline, then contact, near and far shade. On the dark stage the hairline is light, so
+       the card's edge still shows. */
+    box-shadow:
+      0 0 0 1px light-dark(rgb(0 0 0 / 0.06), rgb(255 255 255 / 0.1)),
+      0 1px 1px rgb(0 0 0 / 0.08),
+      0 2px 4px -1px rgb(0 0 0 / 0.08),
+      0 6px 12px -4px rgb(0 0 0 / 0.1),
+      0 14px 24px -10px rgb(0 0 0 / 0.14);
+  }
+
+  /* The card's size in plain grey under it, on a fixed-height line so the stage never shifts. */
+  /* Well clear of the card and its playback bar: as far under the bar as the stage's edge is below. */
+  [data-slot="editor-toolbar"] {
+    margin-top: 28px;
+    display: flex;
+    flex: none;
+    gap: 4px;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    max-width: 100%;
+
+    [data-slot="icon-button"] {
+      width: 36px;
+      height: 36px;
+    }
+
+    /* But for the wide card, the arrows at its corners: the row as wide as the card, its buttons on the card's edges. */
+    &[data-spread] {
+      justify-content: space-between;
+      width: var(--card-width);
+      max-width: none;
+    }
+  }
+
+  /* The section's name, a fixed width so the arrows stay put as it changes. */
+  [data-slot="editor-meta"] {
+    width: 200px;
+    padding: 0 8px;
+    overflow: hidden;
+    font-size: 13px;
+    color: var(--stats-text);
+    text-align: center;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The code to paste: the whole snippet, wrapped, as tall as it needs, on the option buttons' fill and highlighted. */
+  /* The embed code's drawer: closed, no height and none of the stage's gap above it; open, the code's height. The rows
+     ease, so the card above shrinks to make room smoothly. */
+  [data-slot="embed-drawer"] {
+    display: grid;
+    flex: none;
+    grid-template-rows: 0fr;
+    max-width: 100%;
+    margin-top: -12px;
+    opacity: 0;
+    transition:
+      grid-template-rows 280ms cubic-bezier(0.23, 1, 0.32, 1),
+      margin-top 280ms cubic-bezier(0.23, 1, 0.32, 1),
+      opacity 200ms ease;
+
+    &[data-open] {
+      grid-template-rows: 1fr;
+      margin-top: 0;
+      opacity: 1;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
+  }
+
+  [data-slot="embed-drawer-inner"] {
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  [data-slot="embed-copied"] {
+    position: absolute;
+    top: 8px;
+    inset-inline-end: 8px;
+    z-index: 1;
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 1;
+    color: var(--stats-bg);
+    pointer-events: none;
+    background: color-mix(in srgb, var(--stats-text) 85%, transparent);
+    animation: share-label-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
+
+    @media (prefers-reduced-motion: reduce) {
+      animation: none;
+    }
+  }
+
+  /* An embed's code: a few wrapped lines at most, scrolling past that. */
+  [data-slot="embed-code"] {
+    display: block;
+    width: 100%;
+    max-height: 88px;
+    padding: 10px 12px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* Code reads left to right in every language. */
+    direction: ltr;
+    text-align: left;
+    cursor: pointer;
+    background: var(--stats-bg);
+    border: 1px solid var(--stats-line-strong);
+    border-radius: 0;
+    transition: background-color 120ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--stats-layer-2);
+      }
+    }
+
+    code {
+      display: block;
+      font: 11px/1.5 var(--font-mono, monospace);
+      color: var(--stats-text);
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    [data-token="tag"] {
+      color: var(--stats-accent);
+    }
+
+    [data-token="attribute"] {
+      color: light-dark(#8b3fd9, #c4a5ff);
+    }
+
+    [data-token="string"] {
+      color: light-dark(#0b7a55, #3ddbb8);
+    }
+
+    [data-token="punctuation"] {
+      color: var(--stats-faint);
+    }
+  }
+
+  /* 14px across with its border. */
+  /* grey-ok: each swatch shows its card's own background, the same whatever the page's theme */
+  [data-slot="swatch"] {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--stats-line-strong);
+    border-radius: 50%;
+    background: #161616;
+
+    &[data-theme="light"] {
+      background: #fbfbfb;
+    }
+  }
+  /* grey-ok-end */
+
+  /* The explicit-lyrics badge, on the right of its track: solid black with bold white capitals, like the label on a
+     CD sleeve. A hairline keeps its edge on a dark page. */
+  /* grey-ok: the Explicit badge is white on black on purpose, like the label on a CD sleeve */
+  /* In OpenMono's condensed medium, a step under the track names, so the word stays short. */
+  [data-slot="explicit"] {
+    flex: none;
+    padding: 4px 5px;
+    font-family: "OpenMono Condensed", "OpenMono", ui-monospace, monospace;
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #fff;
+    background: #000;
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.18);
+  }
+  /* grey-ok-end */
+
+  /* A small equaliser on the chosen track. */
+  /* Three bars made of 2px dots, like the card's equaliser, that climb and fall dot by dot from the bottom. */
+  [data-slot="eq"] {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 14px;
+
+    b {
+      width: 2px;
+      height: 100%;
+      background: repeating-linear-gradient(to top, currentColor 0 2px, transparent 2px 3px);
+      animation: share-eq 900ms steps(4, jump-none) infinite alternate;
+
+      &:nth-child(2) {
+        animation-delay: -300ms;
+      }
+
+      &:nth-child(3) {
+        animation-delay: -600ms;
+      }
+    }
+  }
+
+  /* The bar across the top: a line under it, its options in a row, Export at the far end. */
+  /* When the editor is too narrow for one row, the bar wraps onto another and the stage gives up the room. */
+  [data-slot="editor-bar"] {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    /* The same space above and below the controls as at either end. */
+    padding: 8px;
+    background: var(--stats-bg);
+    box-shadow: 0 1px 0 var(--stats-line);
+
+    [data-variant="primary"] {
+      justify-content: center;
+      min-width: 96px;
+      margin-inline-start: 4px;
+    }
+
+    /* Shuffle as far from Customize as Customize is from Save. */
+    [data-variant="customize"] {
+      margin-inline-start: 4px;
+    }
+
+    [data-slot="button-label"] {
+      animation: share-label-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
+
+      @media (prefers-reduced-motion: reduce) {
+        animation: none;
+      }
+    }
+  }
+
+  /* The bar's icon buttons as tall as its dropdowns and Export, their hover and target area too. */
+  [data-slot="editor-bar"] [data-slot="icon-button"] {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* The bar's tooltips: the control's name above it, after a short wait on hover, at once on keyboard focus; never
+     over an open dropdown. */
+  [data-tooltip] {
+    position: relative;
+
+    &::after {
+      position: absolute;
+      bottom: calc(100% + 4px);
+      left: 50%;
+      z-index: 4;
+      padding: 5px 8px;
+      font-size: 12px;
+      line-height: 1;
+      color: var(--stats-bg);
+      white-space: nowrap;
+      pointer-events: none;
+      content: attr(data-tooltip);
+      background: color-mix(in srgb, var(--stats-text) 85%, transparent);
+      opacity: 0;
+      translate: -50% 2px;
+      transition:
+        opacity 120ms ease,
+        translate 120ms ease;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover:not([aria-expanded="true"])::after {
+        opacity: 1;
+        translate: -50% 0;
+        transition-delay: 400ms;
+      }
+    }
+
+    &:focus-visible:not([aria-expanded="true"])::after {
+      opacity: 1;
+      translate: -50% 0;
+    }
+
+    /* Opening the dropdown under it: the tooltip fades away where it is, a little slower, rather than dropping. */
+    &[aria-expanded="true"]::after {
+      translate: -50% 0;
+      transition: opacity 180ms ease;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      &::after {
+        translate: -50% 0;
+      }
+    }
+  }
+
+  /* Mute and Shuffle keep their grey on hover; only the wash behind them changes. */
+  [data-slot="bar-end"] [data-slot="icon-button"]:hover {
+    color: var(--stats-faint);
+  }
+
+  /* Every icon in the editor's controls drawn with 1px lines: the bar, its lists, the calendar and the section arrows. */
+  :is([data-slot="editor-bar"], [data-slot="editor-toolbar"]) svg :is(path, rect, circle) {
+    stroke-width: 1px;
+  }
+
+  /* Close as far from the first dropdown as Shuffle is from Export: the gap and 4px more. */
+  [data-slot="editor-bar"] > [data-slot="icon-button"]:first-child {
+    margin-inline-end: 4px;
+  }
+
+  /* Rendering, the button cancels: its percentage gives way to Cancel under the pointer (once it has left and come
+     back, share.tsx) or keyboard focus. Only a pointer that hovers: a tap leaves :hover on the button, which would hide
+     the percentage for the whole render; a tap still cancels. */
+  [data-slot="bar-button"][data-rendering] {
+    position: relative;
+    cursor: pointer;
+
+    [data-slot="button-cancel"] {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      opacity: 0;
+    }
+
+    &:focus-visible {
+      [data-slot="button-cancel"] {
+        opacity: 1;
+      }
+
+      [data-slot="button-label"] {
+        opacity: 0;
+      }
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &[data-cancel]:hover {
+        [data-slot="button-cancel"] {
+          opacity: 1;
+        }
+
+        [data-slot="button-label"] {
+          opacity: 0;
+        }
+      }
+    }
+  }
+
+  /* On wider screens the settings sit in the bar itself; the sheet's parts and labels are for phones only. An icon
+     dropdown shows its icon alone. */
+  [data-slot="bar-settings"] {
+    display: contents;
+  }
+
+  :is([data-slot="sheet-head"], [data-slot="sheet-label"], [data-slot="sheet-backdrop"]) {
+    display: none;
+  }
+
+  [data-component="dropdown"][data-show="icon"] [data-slot="dropdown-trigger"] [data-slot="dropdown-value"] {
+    display: none;
+  }
+
+  /* Sizes are their ratio alone in the bar and its list; on phones the sheet adds their shapes and names. */
+  [data-component="dropdown"][data-id="size"]
+    :is([data-slot="dropdown-trigger"], [data-slot="dropdown-item"])
+    [data-slot="tool-icon"],
+  [data-slot="dropdown-detail"] {
+    display: none;
+  }
+
+  /* Shuffle's odometer: a changed setting shows a reel of choices in a window a row tall, scrolling up fast and
+     slowing to rest on its new value. The first row is where it was, the last where it lands. */
+  [data-slot="reel"] {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    height: 24px;
+    overflow: hidden;
+  }
+
+  [data-component="dropdown"][data-show="icon"] [data-slot="reel"] {
+    flex: none;
+    width: 20px;
+  }
+
+  [data-slot="reel-strip"] {
+    display: flex;
+    flex-direction: column;
+    animation: share-odometer 900ms cubic-bezier(0.16, 0.84, 0.24, 1) both;
+  }
+
+  [data-slot="reel-row"] {
+    display: flex;
+    flex: none;
+    gap: 6px;
+    align-items: center;
+    height: 24px;
+    white-space: nowrap;
+
+    [data-slot="dropdown-value"] {
+      display: block;
+    }
+  }
+
+  /* Only as far as the full bar needs to fit on one row (share.tsx measures), a step at a time: 1, the date hugs its
+     label and Export takes less room; 2, the music shows its cover alone; 3, the date is its calendar alone. */
+  [data-slot="editor-bar"]:is([data-compact="1"], [data-compact="2"], [data-compact="3"]) {
+    [data-slot="date-tool"] [data-slot="dropdown-trigger"] {
+      width: auto;
+    }
+
+    [data-slot="bar-end"] [data-variant="primary"] {
+      min-width: 0;
+      padding-inline: 12px;
+    }
+  }
+
+  [data-slot="editor-bar"]:is([data-compact="2"], [data-compact="3"])
+    [data-slot="music-tool"]
+    [data-slot="dropdown-trigger"] {
+    width: auto;
+    padding-inline-end: 6px;
+
+    :is([data-slot="dropdown-value"], [data-slot="explicit"]) {
+      display: none;
+    }
+  }
+
+  [data-slot="editor-bar"][data-compact="3"]
+    [data-slot="date-tool"]
+    [data-slot="dropdown-trigger"]
+    [data-slot="dropdown-value"] {
+    display: none;
+  }
+
+  /* Mute, Shuffle and Export, together at the far end. */
+  [data-slot="bar-end"] {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    margin-inline-start: auto;
+  }
+
+  [data-component="dropdown"],
+  [data-slot="date-tool"] {
+    position: relative;
+    display: flex;
+  }
+
+  /* A dropdown's button: icon, value, chevron; no label, the icon says what it is. */
+  [data-slot="dropdown-trigger"] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 36px;
+    padding: 0 6px 0 8px;
+    font-size: 13px;
+    color: var(--stats-text);
+    white-space: nowrap;
+    background: var(--stats-bg);
+    /* A soft line, so the bar reads light. */
+    border: 1px solid var(--stats-line);
+    border-radius: 0;
+    transition: background-color 120ms ease;
+
+    /* Hover: a light grey wash, the border unchanged. */
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--stats-layer);
+      }
+    }
+
+    &[aria-expanded="true"] {
+      background: color-mix(in srgb, var(--stats-accent) 7%, var(--stats-bg));
+      border-color: var(--stats-accent);
+    }
+
+    [data-slot="chevron"] {
+      flex: none;
+      color: var(--stats-faint);
+      transition: scale 160ms cubic-bezier(0.23, 1, 0.32, 1);
+
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+      }
+    }
+
+    /* Open: the chevron flips over to point up, through flat rather than turning round. */
+    &[aria-expanded="true"] [data-slot="chevron"] {
+      scale: 1 -1;
+    }
+  }
+
+  /* The badge keeps its size; the name gives way to it. */
+  [data-slot="dropdown-trigger"] [data-slot="explicit"] {
+    flex: none;
+  }
+
+  [data-slot="dropdown-value"] {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-align: start;
+    text-overflow: ellipsis;
+  }
+
+  /* Fixed widths, so the bar never shifts as the choices change: an icon and its chevron, a size's value, the date
+     (its longest label, a week), and the music. */
+  [data-component="dropdown"][data-show="icon"] [data-slot="dropdown-trigger"] {
+    gap: 4px;
+    width: 52px;
+  }
+
+  [data-component="dropdown"][data-show="value"] [data-slot="dropdown-trigger"] {
+    width: 72px;
+    padding-inline-start: 12px;
+  }
+
+  [data-slot="date-tool"] [data-slot="dropdown-trigger"] {
+    width: 212px;
+  }
+
+  [data-slot="dropdown-menu"] {
+    position: absolute;
+    top: calc(100% + 6px);
+    inset-inline-start: 0;
+    width: max-content;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    min-width: 100%;
+    max-height: min(420px, 60dvh);
+    padding: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--stats-bg);
+    box-shadow:
+      0 0 0 1px light-dark(rgb(0 0 0 / 0.12), rgb(255 255 255 / 0.08)),
+      0 4px 12px -4px rgb(0 0 0 / 0.14),
+      0 16px 32px -12px rgb(0 0 0 / 0.2);
+    animation: share-menu-in 140ms cubic-bezier(0.23, 1, 0.32, 1);
+    /* It grows from the corner at its button: the start edge, the right in a right-to-left language. */
+    transform-origin: top left;
+
+    &:dir(rtl) {
+      transform-origin: top right;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      animation: none;
+    }
+  }
+
+  /* The choices, as the OpenCode docs' menus set them: every name in the text colour; hover or keyboard focus gives a
+     grey row and a faint bar down its leading edge; the chosen one keeps a darker bar. No checkmarks. */
+  [data-slot="dropdown-item"] {
+    position: relative;
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 10px;
+    min-height: 36px;
+    /* Each choice's icon starts where its button's does: the border and the button's 8px. */
+    padding-block: 8px;
+    padding-inline: 9px 14px;
+    font-size: 13px;
+    color: var(--stats-text);
+    text-align: start;
+    white-space: nowrap;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    outline: none;
+
+    /* grey-ok: the docs menus' hint bar, a step of the shared scale with no token of its own */
+    &::before {
+      position: absolute;
+      inset-block: 0;
+      inset-inline-start: -1px;
+      width: 3px;
+      content: "";
+      background: light-dark(#888888, #6a6a6a);
+      opacity: 0;
+    }
+    /* grey-ok-end */
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--stats-layer-2);
+
+        &::before {
+          opacity: 1;
+        }
+      }
+    }
+
+    &:focus-visible {
+      background: var(--stats-layer-2);
+
+      &::before {
+        opacity: 1;
+      }
+    }
+
+    /* grey-ok: the docs menus' pressed row, a step of the shared scale with no token of its own */
+    &:active {
+      background: light-dark(#e0e0e0, #2e2e2e);
+    }
+    /* grey-ok-end */
+
+    &[aria-selected="true"]::before {
+      background: var(--stats-muted);
+      opacity: 1;
+    }
+
+    [data-slot="explicit"] {
+      margin-inline-start: 16px;
+    }
+  }
+
+  /* The music list's covers and names in line with the cover and name in its button. */
+  [data-component="dropdown"][data-id="music"] [data-slot="dropdown-item"] {
+    gap: 6px;
+    padding-inline-start: 6px;
+  }
+
+  /* The name takes the row's spare width, so the Explicit badges and the checks line up on the right. */
+  [data-slot="dropdown-label"] {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+
+    small {
+      font-size: 11px;
+      color: var(--stats-faint);
+    }
+  }
+
+  /* Sizes: each ratio where its button's value starts, with its name to its right, the names in a column. */
+  [data-component="dropdown"][data-id="size"] [data-slot="dropdown-item"] {
+    padding-inline-start: 13px;
+  }
+
+  [data-component="dropdown"][data-id="size"] [data-slot="dropdown-label"] {
+    flex-direction: row;
+    gap: 12px;
+    align-items: baseline;
+
+    > span {
+      min-width: 4ch;
+    }
+
+    /* The name as large as its ratio, only greyer. */
+    small {
+      font-size: inherit;
+    }
+  }
+
+  /* The music: its dropdown shows the cover and the name. */
+  [data-slot="music-tool"] {
+    display: flex;
+    align-items: center;
+
+    /* The cover as far from the left edge as from the top and bottom: (36 - 24) / 2, less the border. */
+    /* As wide as its list, the longest name with its Explicit badge. */
+    [data-slot="dropdown-trigger"] {
+      width: 250px;
+      padding-inline-start: 5px;
+    }
+  }
+
+  /* The music's icon boxes are a cover's size, so covers sit centred and No music's speaker lines up with them. */
+  [data-component="dropdown"][data-id="music"] [data-slot="tool-icon"] {
+    width: 24px;
+    height: 24px;
+  }
+
+  [data-slot="music-cover"] {
+    position: relative;
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    overflow: hidden;
+    /* On the dark page a faint light edge, drawn over the cover, so dark covers keep their shape. */
+    outline: 1px solid light-dark(transparent, rgb(255 255 255 / 0.12));
+    outline-offset: -1px;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    [data-slot="eq"] {
+      scale: 0.7;
+    }
+  }
+
+  [data-slot="tool-icon"] {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+
+    /* The icons fill their box, so they read as large as the style circles. */
+    > svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    /* Lines stay their width on screen at the larger size, rather than scaling up with it. */
+    > svg * {
+      vector-effect: non-scaling-stroke;
+    }
+  }
+
+  /* The date: the calendar opens under its button. */
+  [data-slot="date-tool"] {
+    position: relative;
+    display: flex;
+  }
+
+  [data-component="share-calendar"] {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    z-index: 3;
+    width: 280px;
+    padding: 12px;
+    translate: -50% 0;
+    background: var(--stats-bg);
+    box-shadow:
+      0 0 0 1px light-dark(rgb(0 0 0 / 0.12), rgb(255 255 255 / 0.08)),
+      0 4px 12px -4px rgb(0 0 0 / 0.14),
+      0 16px 32px -12px rgb(0 0 0 / 0.2);
+    animation: share-calendar-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
+    transform-origin: top center;
+
+    @media (prefers-reduced-motion: reduce) {
+      animation: none;
+    }
+  }
+
+  [data-slot="calendar-head"] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 13px;
+
+    button {
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      color: var(--stats-text);
+      background: transparent;
+      border: 0;
+
+      &:disabled {
+        color: var(--stats-faint);
+        opacity: 0.4;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover:not(:disabled) {
+          background: var(--stats-layer);
+        }
+      }
+    }
+  }
+
+  [data-slot="calendar-grid"] {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+  }
+
+  [data-slot="weekday"] {
+    padding: 4px 0;
+    font-size: 10px;
+    color: var(--stats-faint);
+    text-align: center;
+  }
+
+  [data-slot="calendar-day"] {
+    height: 34px;
+    padding: 0;
+    font-size: 12px;
+    color: var(--stats-faint);
+    font-variant-numeric: tabular-nums;
+    background: transparent;
+    border: 1px solid transparent;
+
+    &[data-outside] {
+      opacity: 0.45;
+    }
+
+    /* The days the chart covers: in the text colour; the rest stay grey. */
+    &[data-range] {
+      color: var(--stats-text);
+    }
+
+    &:disabled {
+      opacity: 0.35;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover:not(:disabled) {
+        border-color: var(--stats-faint);
+      }
+    }
+
+    &[aria-pressed="true"] {
+      color: var(--stats-on-accent);
+      background: var(--stats-accent);
+      border-color: var(--stats-accent);
+    }
+  }
+
+  [data-slot="calendar-range"] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    height: 40px;
+    margin-top: 10px;
+    padding: 0 12px;
+    font-size: 13px;
+    color: var(--stats-text);
+    background: var(--editor-control);
+    border: 1px solid var(--editor-control-line);
+
+    small {
+      font-size: 11px;
+      color: var(--stats-faint);
+    }
+
+    &[aria-pressed="true"] {
+      background: color-mix(in srgb, var(--stats-accent) 7%, var(--editor-control));
+      border-color: var(--stats-accent);
+    }
+  }
+
+  /* grey-ok: the play state sits on the cover art, white whatever the theme */
+  [data-slot="music-state"] {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    background: rgb(0 0 0 / 0.35);
+  }
+  @media (max-width: 760px) {
+    width: 100vw;
+    height: 100dvh;
+    margin: 0;
+    border: 0;
+    box-shadow: none;
+
+    /* A sheet: it rises from below on the iOS drawer curve, without the scale. */
+    --editor-from: translateY(32px);
+
+    &[open] {
+      transition:
+        opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),
+        transform 360ms cubic-bezier(0.32, 0.72, 0, 1),
+        overlay 360ms allow-discrete,
+        display 360ms allow-discrete;
+    }
+
+    --editor-inset: 8px;
+
+    /* The canvas on top, the panel under it, still inset. */
+    [data-slot="editor"] {
+      display: flex;
+      flex-direction: column;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      background-color: var(--stats-layer-2);
+    }
+
+    [data-slot="editor-stage"] {
+      position: relative;
+      flex: 1;
+      gap: 10px;
+      padding: 16px 16px 8px;
+    }
+
+    /* On a phone the bar holds Close, then Mute, Shuffle, Customize and Save, as on wider screens; Customize slides
+       the settings up in a sheet from the bottom, every one a full row with its name. */
+    [data-slot="editor-bar"] {
+      flex-wrap: nowrap;
+      padding: calc(8px + env(safe-area-inset-top, 0px)) 8px 8px;
+
+      [data-variant="customize"][aria-expanded="true"] {
+        background: var(--stats-layer-2);
+      }
+
+      [data-slot="bar-end"] [data-variant="primary"] {
+        min-width: 72px;
+      }
+    }
+
+    /* No tooltips on a touch screen: they'd only show on focus, and at the top of the screen they'd be cut off. */
+    [data-tooltip]::after {
+      display: none;
+    }
+
+    /* Below the bar, so Mute, Shuffle and Export stay in reach with the sheet open. */
+    [data-slot="sheet-backdrop"] {
+      position: fixed;
+      inset: calc(52px + env(safe-area-inset-top, 0px)) 0 0;
+      z-index: 5;
+      display: block;
+      background: rgb(0 0 0 / 0.32);
+      animation: share-fade-in 200ms ease;
+    }
+
+    [data-slot="bar-settings"] {
+      position: fixed;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 6;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px));
+      visibility: hidden;
+      background: var(--stats-bg);
+      box-shadow:
+        0 -1px 0 var(--stats-line),
+        0 -12px 32px -12px rgb(0 0 0 / 0.24);
+      translate: 0 100%;
+      transition:
+        translate 360ms cubic-bezier(0.32, 0.72, 0, 1),
+        visibility 0s 360ms;
+
+      &[data-open] {
+        visibility: visible;
+        translate: 0 0;
+        transition:
+          translate 360ms cubic-bezier(0.32, 0.72, 0, 1),
+          visibility 0s;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+
+        &[data-open] {
+          transition: none;
+        }
+      }
+
+      /* Each setting a row: its name, then its control filling the rest. */
+      > :is([data-component="dropdown"], [data-slot="date-tool"], [data-slot="music-tool"]) {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+
+      [data-slot="sheet-label"] {
+        display: block;
+        flex: none;
+        width: 72px;
+        font-size: 12px;
+        color: var(--stats-faint);
+        white-space: nowrap;
+      }
+
+      [data-slot="dropdown-trigger"],
+      [data-component="dropdown"][data-show] [data-slot="dropdown-trigger"],
+      [data-slot="date-tool"] [data-slot="dropdown-trigger"],
+      [data-slot="music-tool"] [data-slot="dropdown-trigger"] {
+        flex: 1;
+        width: auto;
+        min-width: 0;
+        height: 44px;
+      }
+
+      [data-slot="music-tool"] [data-component="dropdown"] {
+        flex: 1;
+        min-width: 0;
+      }
+
+      [data-component="dropdown"][data-show="icon"] [data-slot="dropdown-trigger"] [data-slot="dropdown-value"] {
+        display: block;
+      }
+
+      /* No outlines in the sheet: the rows read as a list, the hover and open fills still showing. */
+      [data-slot="dropdown-trigger"] {
+        border-color: transparent;
+      }
+
+      /* Sizes with their shapes, so every value lines up after an icon, and their names after the ratio. */
+      [data-component="dropdown"][data-id="size"]
+        :is([data-slot="dropdown-trigger"], [data-slot="dropdown-item"])
+        [data-slot="tool-icon"] {
+        display: grid;
+      }
+
+      [data-component="dropdown"][data-id="size"] [data-slot="dropdown-trigger"] {
+        padding-inline-start: 8px;
+      }
+
+      [data-slot="dropdown-detail"] {
+        display: inline;
+        font-size: inherit;
+        color: var(--stats-faint);
+      }
+
+      /* More room between each icon and its label, in the controls and their lists alike, so they line up. */
+      :is([data-slot="dropdown-trigger"], [data-slot="dropdown-item"]),
+      [data-component="dropdown"][data-id="music"] [data-slot="dropdown-item"] {
+        gap: 12px;
+      }
+
+      [data-component="dropdown"][data-id="size"] [data-slot="dropdown-item"] {
+        padding-inline-start: 9px;
+      }
+
+      /* Lists open upwards in the sheet, over the rows above, as wide as their control: past the row's name (72px and
+         the 12px gap) where the name is inside the dropdown, the music's being outside it. */
+      [data-slot="dropdown-menu"] {
+        top: auto;
+        inset-inline-end: 0;
+        bottom: calc(100% + 6px);
+        inset-inline-start: auto;
+        width: 100%;
+        transform-origin: bottom left;
+
+        &:dir(rtl) {
+          transform-origin: bottom right;
+        }
+      }
+
+      > [data-component="dropdown"] [data-slot="dropdown-menu"] {
+        width: calc(100% - 84px);
+        min-width: 0;
+      }
+
+      /* The calendar is taller than the room above or below the date, so it rises from the foot of the sheet, across
+         its width: every day a 44px target. */
+      [data-slot="date-tool"] {
+        position: static;
+      }
+
+      [data-component="share-calendar"] {
+        top: auto;
+        right: auto;
+        bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+        left: auto;
+        inset-inline: 16px;
+        box-sizing: border-box;
+        width: auto;
+        translate: none;
+        animation-name: share-fade-in;
+      }
+    }
+
+    [data-slot="sheet-head"] {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 52px;
+      font-size: 15px;
+
+      [data-slot="sheet-done"] {
+        height: 44px;
+        padding: 0 4px;
+        font-size: 15px;
+        color: var(--stats-accent);
+        background: transparent;
+        border: 0;
+      }
+    }
+  }
+}
+
+@keyframes share-odometer {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: 0 calc(-100% + 24px);
+  }
+}
+
+@keyframes share-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes share-menu-in {
+  from {
+    opacity: 0;
+    scale: 0.97;
+    translate: 0 -4px;
+  }
+}
+
+@keyframes share-calendar-in {
+  from {
+    opacity: 0;
+    scale: 0.96;
+    translate: -50% -6px;
+  }
+}
+
+@keyframes share-label-in {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+
+@keyframes share-eq {
+  from {
+    clip-path: inset(80% 0 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-page="stats"] dialog[data-component="share-editor"] {
+    --editor-from: none;
+
+    [data-slot="eq"] b {
+      animation: none;
+      clip-path: inset(40% 0 0 0);
+    }
+  }
+}
+
+/* Design mode's controls, styled like opencode.ai's (services/site design-mode.css): blue, above the preview. */
+/* grey-ok: Design mode: an internal overlay, only in development */
+[data-page="stats"] [data-component="share-design"] {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1;
+
+  [data-slot="control"] {
+    display: flex;
+    align-items: center;
+    height: 24px;
+    color: #fff;
+    background: #3b5cf6;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+  }
+
+  button {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 100%;
+    padding: 0;
+    font: inherit;
+    font-size: 14px;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: rgb(255 255 255 / 0.18);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid #fff;
+      outline-offset: -3px;
+    }
+  }
+
+  [data-slot="value"] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-inline: 2px;
+    white-space: nowrap;
+  }
+
+  [data-slot="label"],
+  [data-slot="count"] {
+    opacity: 0.75;
+  }
+}
+/* grey-ok-end */
+
+/* Arrows that mean previous and next point the other way in a right-to-left language. */
+[data-component="share-editor"] svg[data-mirror]:dir(rtl) {
+  scale: -1 1;
+}
+
+/* Until Customize: the card alone, the modal hugging it (share.tsx hug), with Close, Mute, Shuffle, Customize and Export
+   in the bar. Customize grows the modal to its full size and reveals the settings one after another. Phones keep their
+   sheet. */
+@media (min-width: 761px) {
+  [data-page="stats"] dialog[data-component="share-editor"] {
+    &:not([data-customize]) {
+      width: var(--hug-width, min(1200px, calc(100vw - 160px)));
+      height: var(--hug-height, min(800px, calc(100dvh - 128px)));
+
+      [data-slot="bar-settings"] {
+        display: none;
+      }
+    }
+
+    &[data-customize] [data-slot="bar-settings"] > * {
+      animation: share-reveal 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
+    }
+
+    &[data-customize] [data-slot="bar-settings"] > * {
+      &:nth-child(2) {
+        animation-delay: 100ms;
+      }
+      &:nth-child(3) {
+        animation-delay: 125ms;
+      }
+      &:nth-child(4) {
+        animation-delay: 150ms;
+      }
+      &:nth-child(5) {
+        animation-delay: 175ms;
+      }
+      &:nth-child(6) {
+        animation-delay: 200ms;
+      }
+      &:nth-child(7) {
+        animation-delay: 225ms;
+      }
+      &:nth-child(8) {
+        animation-delay: 250ms;
+      }
+      &:nth-child(9) {
+        animation-delay: 275ms;
+      }
+      &:nth-child(10) {
+        animation-delay: 300ms;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      &[data-customize] [data-slot="bar-settings"] > * {
+        animation: none;
+      }
+    }
+  }
+}
+
+@keyframes share-reveal {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+
+/* On a touch screen every control in the editor is a 44px target: the bar's buttons, the section arrows, the settings'
+   lists and the calendar, and the timeline's band reaches past its line. Controls answer the press, don't select their
+   labels on a long press, and fire without the double-tap wait. */
+@media (pointer: coarse) {
+  [data-page="stats"] dialog[data-component="share-editor"] {
+    button,
+    [data-slot="playback"] {
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    :is([data-slot="editor-bar"], [data-slot="editor-toolbar"]) [data-slot="icon-button"] {
+      width: 44px;
+      height: 44px;
+
+      &:active {
+        background: light-dark(rgb(0 0 0 / 0.07), rgb(255 255 255 / 0.1));
+      }
+    }
+
+    [data-slot="bar-button"] {
+      height: 44px;
+    }
+
+    /* The bar is 60px tall now, so the sheet's backdrop starts under it. */
+    [data-slot="sheet-backdrop"] {
+      inset: calc(60px + env(safe-area-inset-top, 0px)) 0 0;
+    }
+
+    [data-slot="dropdown-trigger"]:active {
+      background: var(--stats-layer-2);
+    }
+
+    [data-slot="dropdown-item"] {
+      min-height: 44px;
+    }
+
+    [data-slot="playback"]::before {
+      content: "";
+      position: absolute;
+      inset: -14px 0;
+    }
+
+    [data-slot="calendar-head"] button {
+      width: 44px;
+      height: 44px;
+    }
+
+    [data-slot="calendar-day"] {
+      height: 44px;
+    }
+
+    [data-slot="calendar-range"] {
+      height: 44px;
+    }
+  }
+}

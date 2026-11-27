@@ -1,12 +1,25 @@
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
+import { posix } from "node:path"
 import { Cause, Deferred, Effect, PlatformError, Queue, Redacted, Schema, Sink, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { Environment } from "../environment/index.js"
 import { Failed, NotFound, WrongKind, type DirEntry, type FileInfo } from "../environment/files.js"
-import { ProcessID, Signal, type FileCall, type FromWorker, type Hello, type Instance, type ToWorker } from "./wire.js"
+import {
+  ProcessID,
+  Signal,
+  type FileCall,
+  type FromWorker,
+  type Hello,
+  type Instance,
+  type PeerCall,
+  type PeerLink,
+  type ToWorker,
+} from "./wire.js"
 
 /** How long a start whose connection was lost waits for the worker to come back before it is reported unknown. */
 const START_GRACE = "15 seconds"
+/** The worker refuses a stdin write larger than 64 KiB. */
+const MAX_STDIN_CHUNK_SIZE = 64 * 1024
 
 export class NotSent extends Schema.TaggedError<NotSent>()("Machine.NotSent", { machine: Environment.ID }) {
   override get message() {
@@ -32,8 +45,29 @@ export class ProcessLost extends Schema.TaggedError<ProcessLost>()("Machine.Proc
   }
 }
 
+/** A worker refused or could not finish a peer request. */
+export class PeerFailed extends Schema.TaggedError<PeerFailed>()("Machine.PeerFailed", {
+  machine: Environment.ID,
+  reason: Schema.String,
+}) {
+  override get message() {
+    return `${this.machine}: ${this.reason}`
+  }
+}
+
+/** A peer request as the home asks for it, before it is given a `req`. */
+export type PeerRequest<M = PeerCall> = M extends unknown ? Omit<M, "req"> : never
+
+export const ConnectionInfo = Schema.Struct({
+  kind: Schema.Literals(["websocket", "iroh"]),
+  path: Schema.optionalKey(Schema.Literals(["direct", "relayed"])),
+  /** Round-trip time in milliseconds. */
+  rtt: Schema.optionalKey(Schema.Number),
+})
+
 /** One connection from the worker, as the endpoint that accepted it hands it over. */
 export interface Connection {
+  readonly describe?: () => typeof ConnectionInfo.Type
   readonly hello: Hello
   /** Queues the message and returns. A message queued on a connection that is lost is dropped. */
   readonly send: (message: ToWorker) => void
@@ -55,24 +89,42 @@ export interface Interface {
   readonly close: (error: Error) => void
   /** The hello of the connection being served, if there is one. */
   readonly hello: () => Hello | undefined
+  readonly describe: () => typeof ConnectionInfo.Type | undefined
+  /** Sends one peer request on the current connection and waits for its answer. */
+  readonly peer: (request: PeerRequest) => Effect.Effect<void, PeerFailed | NotSent | Unknown>
+  /** The peer links that are up, as the current connection's hello and messages since report them. */
+  readonly links: () => ReadonlySet<PeerLink>
 }
 
 type Reply = Extract<FromWorker, { type: "fs" }>
+type PeerReply = Extract<FromWorker, { type: "peer" }>
 
 interface Link {
+  readonly describe: Connection["describe"]
   readonly hello: Hello
   readonly send: Connection["send"]
   readonly lost: Deferred.Deferred<void>
   /** File calls sent on this connection and not yet answered. */
   readonly calls: Map<number, Deferred.Deferred<Reply, Unknown>>
+  readonly inputs: Map<number, { id: ProcessID; reply: Deferred.Deferred<void, Error> }>
+  /** Peer requests sent on this connection and not yet answered. */
+  readonly peers: Map<number, Deferred.Deferred<PeerReply, Unknown>>
+  readonly links: Set<PeerLink>
 }
+
+type OutputQueue = Queue.Queue<Uint8Array, PlatformError.PlatformError | Cause.Done>
 
 interface Process {
   readonly started: Deferred.Deferred<number, Error>
-  readonly output: Queue.Queue<Uint8Array, PlatformError.PlatformError | Cause.Done>
+  readonly output: {
+    readonly stdout: OutputQueue
+    readonly stderr: OutputQueue
+    readonly all: OutputQueue
+  }
   readonly exited: Deferred.Deferred<Extract<FromWorker, { type: "exit" }>, Error>
   /** Bytes of output passed on so far, which is where an attach resumes. */
   delivered: number
+  selectedView?: "merged" | "separate"
 }
 
 /** A file call as the files ask for it, before it is given a `req`. */
@@ -100,6 +152,10 @@ export const make = (id: Environment.ID): Interface => {
     if (link === current) link = undefined
     Deferred.doneUnsafe(current.lost, Effect.void)
     current.calls.forEach((call) => Deferred.doneUnsafe(call, Effect.fail(new Unknown({ machine: id }))))
+    current.inputs.forEach((input) => Deferred.doneUnsafe(input.reply, Effect.fail(new Unknown({ machine: id }))))
+    current.inputs.clear()
+    current.peers.forEach((reply) => Deferred.doneUnsafe(reply, Effect.fail(new Unknown({ machine: id }))))
+    current.links.clear()
   }
 
   // The process will not be heard from again: whoever waits on it gets `error`.
@@ -107,7 +163,9 @@ export const make = (id: Environment.ID): Interface => {
     processes.delete(processID)
     Deferred.doneUnsafe(process.started, Effect.fail(error))
     Deferred.doneUnsafe(process.exited, Effect.fail(error))
-    Queue.failCauseUnsafe(process.output, Cause.fail(platform("output")(error)))
+    Object.values(process.output).forEach((queue) =>
+      Queue.failCauseUnsafe(queue, Cause.fail(platform("output")(error))),
+    )
   }
 
   // Ends the machine for good: once its instance is dropped, nothing else can settle what it still tracks.
@@ -120,17 +178,25 @@ export const make = (id: Environment.ID): Interface => {
     Effect.suspend(() => {
       if (link) lose(link)
       const current: Link = {
+        describe: connection.describe,
         hello: connection.hello,
         send: connection.send,
         lost: Deferred.makeUnsafe(),
         calls: new Map(),
+        inputs: new Map(),
+        peers: new Map(),
+        links: new Set(connection.hello.links),
       }
       const restarted = connection.hello.instance !== instance
       instance = connection.hello.instance
       const listed = new Map(connection.hello.processes.map((entry) => [entry.id, entry]))
-      // A release is safe to repeat, so one lost with an earlier connection is sent again. Running ones are left alone.
-      for (const entry of connection.hello.processes)
-        if (entry.state === "exited" && !processes.has(entry.id)) current.send({ type: "release", id: entry.id })
+      // Nothing here will ever read a process this home does not know, so it is stopped and forgotten. The worker
+      // signals at once and the release drops it, so its exit is never reported. A release is safe to repeat.
+      for (const entry of connection.hello.processes) {
+        if (processes.has(entry.id)) continue
+        if (entry.state === "running") current.send({ type: "kill", id: entry.id, signal: "SIGKILL" })
+        current.send({ type: "release", id: entry.id })
+      }
       for (const [processID, process] of processes) {
         const entry = listed.get(processID)
         if (entry && !restarted) {
@@ -163,9 +229,25 @@ export const make = (id: Environment.ID): Interface => {
 
   const receive = (current: Link, message: Exclude<FromWorker, Hello>) => {
     if (link !== current) return
+    if (message.type === "stdin") {
+      const input = current.inputs.get(message.req)
+      if (input?.id !== message.id) return
+      current.inputs.delete(message.req)
+      Deferred.doneUnsafe(input.reply, message.ok ? Effect.void : Effect.fail(new Error(message.message)))
+      return
+    }
     if (message.type === "fs") {
       const call = current.calls.get(message.req)
       if (call) Deferred.doneUnsafe(call, Effect.succeed(message))
+      return
+    }
+    if (message.type === "peer") {
+      const reply = current.peers.get(message.req)
+      if (reply) Deferred.doneUnsafe(reply, Effect.succeed(message))
+      return
+    }
+    if (message.type === "peer-closed") {
+      current.links.delete(message.link)
       return
     }
     const process = processes.get(message.id)
@@ -185,7 +267,10 @@ export const make = (id: Environment.ID): Interface => {
         if (message.offset > process.delivered) return
         const fresh = message.data.subarray(process.delivered - message.offset)
         process.delivered += fresh.length
-        if (fresh.length > 0) Queue.offerUnsafe(process.output, fresh)
+        if (fresh.length > 0) {
+          Queue.offerUnsafe(process.output[message.stream], fresh)
+          Queue.offerUnsafe(process.output.all, fresh)
+        }
         return
       }
       case "exit":
@@ -196,7 +281,7 @@ export const make = (id: Environment.ID): Interface => {
         processes.delete(message.id)
         current.send({ type: "release", id: message.id })
         Deferred.doneUnsafe(process.exited, Effect.succeed(message))
-        Queue.endUnsafe(process.output)
+        Object.values(process.output).forEach(Queue.endUnsafe)
     }
   }
 
@@ -205,7 +290,12 @@ export const make = (id: Environment.ID): Interface => {
       if (command._tag === "PipedCommand") return yield* unsupported("piped commands are")
       const options = command.options
       const killSignal = options.killSignal ?? "SIGTERM"
-      if (options.stdin !== undefined && options.stdin !== "ignore") return yield* unsupported("stdin is")
+      const input =
+        options.stdin === undefined || typeof options.stdin === "string" || Stream.isStream(options.stdin)
+          ? { stream: options.stdin ?? "ignore", endOnDone: true }
+          : options.stdin
+      const piped = input.stream === "pipe" || Stream.isStream(input.stream)
+      if (input.stream !== "ignore" && !piped) return yield* unsupported("stdin is")
       if (options.shell) return yield* unsupported("the shell option is")
       if (options.additionalFds) return yield* unsupported("extra file descriptors are")
       if (options.cwd === undefined) return yield* unsupported("a command without a working directory is")
@@ -214,7 +304,11 @@ export const make = (id: Environment.ID): Interface => {
       const processID = ProcessID.make(crypto.randomUUID())
       const process: Process = {
         started: Deferred.makeUnsafe(),
-        output: yield* Queue.unbounded<Uint8Array, PlatformError.PlatformError | Cause.Done>(),
+        output: yield* Effect.all({
+          stdout: Queue.unbounded<Uint8Array, PlatformError.PlatformError | Cause.Done>(),
+          stderr: Queue.unbounded<Uint8Array, PlatformError.PlatformError | Cause.Done>(),
+          all: Queue.unbounded<Uint8Array, PlatformError.PlatformError | Cause.Done>(),
+        }),
         exited: Deferred.makeUnsafe(),
         delivered: 0,
       }
@@ -246,6 +340,7 @@ export const make = (id: Environment.ID): Interface => {
       }
       const start: ToWorker = {
         type: "start",
+        stdin: piped,
         id: processID,
         argv: [command.command, ...command.args.map(reveal)],
         cwd: options.cwd,
@@ -258,7 +353,7 @@ export const make = (id: Environment.ID): Interface => {
       }
       // Registered and sent in one step, on the connection that is current in that step. Stopped like a local process
       // when the scope that spawned it closes, a start still unanswered included, but never waiting for a machine that
-      // is away: a process still there is forgotten, so nothing collects output no one will read.
+      // is away: a process still there is forgotten, and stopped when the machine's next hello lists it.
       const live = yield* Effect.acquireRelease(
         Effect.suspend(() => {
           if (!link) return Effect.fail(platform("spawn")(new NotSent({ machine: id })))
@@ -284,7 +379,72 @@ export const make = (id: Environment.ID): Interface => {
         Effect.mapError(platform("spawn")),
       )
 
-      const all = Stream.fromQueue(process.output)
+      const write = (data: Uint8Array | null) =>
+        Effect.suspend(() => {
+          if (!link) return Effect.fail(new NotSent({ machine: id }))
+          if ([...link.inputs.values()].some((input) => input.id === processID))
+            return Effect.fail(new Error("stdin write already pending"))
+          const reply = Deferred.makeUnsafe<void, Error>()
+          const request = ++req
+          link.inputs.set(request, { id: processID, reply })
+          link.send({ type: "stdin", id: processID, req: request, data })
+          return Deferred.await(reply)
+        }).pipe(
+          Effect.mapError((cause) =>
+            PlatformError.systemError({
+              _tag: "Unknown",
+              module: "Machine",
+              method: "stdin",
+              description:
+                cause instanceof Unknown
+                  ? `Lost connection to ${id}. The stdin operation's outcome is unknown.`
+                  : cause.message,
+              cause,
+            }),
+          ),
+        )
+      const stdin = piped
+        ? Sink.forEach((data: Uint8Array) =>
+            Effect.forEach(
+              Array.from({ length: Math.ceil(data.length / MAX_STDIN_CHUNK_SIZE) }, (_, index) =>
+                data.subarray(index * MAX_STDIN_CHUNK_SIZE, (index + 1) * MAX_STDIN_CHUNK_SIZE),
+              ),
+              write,
+              { discard: true },
+            ),
+          ).pipe(Sink.mapEffect(() => (input.endOnDone === false ? Effect.void : write(null))))
+        : Sink.fail(unsupported("stdin is"))
+      // Stop only when delivery was lost: unsent or unacknowledged input cannot be replayed.
+      if (Stream.isStream(input.stream))
+        yield* Effect.forkScoped(
+          Stream.run(input.stream, stdin).pipe(
+            Effect.tapError((error) =>
+              error.reason.cause instanceof NotSent || error.reason.cause instanceof Unknown ? stop() : Effect.void,
+            ),
+          ),
+        )
+      // As with local pipes, consume either all or stdout/stderr. Drop the unused view,
+      // so a long-lived stdio server does not retain a second, unread copy forever.
+      const output = (stream: keyof Process["output"]) =>
+        Stream.suspend(() => {
+          if (process.selectedView === undefined) {
+            process.selectedView = stream === "all" ? "merged" : "separate"
+            if (process.selectedView === "merged") {
+              Queue.shutdownUnsafe(process.output.stdout)
+              Queue.shutdownUnsafe(process.output.stderr)
+            }
+            if (process.selectedView === "separate") Queue.shutdownUnsafe(process.output.all)
+          }
+          if ((process.selectedView === "merged") !== (stream === "all"))
+            return Stream.fail(
+              PlatformError.badArgument({
+                module: "Machine",
+                method: "output",
+                description: "read either all, or stdout and stderr, not both",
+              }),
+            )
+          return Stream.fromQueue(process.output[stream])
+        })
       return ChildProcessSpawner.makeHandle({
         pid: ChildProcessSpawner.ProcessId(pid),
         exitCode: Deferred.await(process.exited).pipe(
@@ -297,10 +457,10 @@ export const make = (id: Environment.ID): Interface => {
         ),
         isRunning: Effect.map(Deferred.isDone(process.exited), (done) => !done),
         kill: stop,
-        stdin: Sink.fail(unsupported("stdin is")),
-        stdout: all,
-        stderr: Stream.empty,
-        all,
+        stdin,
+        stdout: output("stdout"),
+        stderr: output("stderr"),
+        all: output("all"),
         getInputFd: () => Sink.fail(unsupported("extra file descriptors are")),
         getOutputFd: () => Stream.fail(unsupported("extra file descriptors are")),
         unref: Effect.succeed(Effect.void),
@@ -331,24 +491,59 @@ export const make = (id: Environment.ID): Interface => {
       }),
     )
 
+  const peer = (request: PeerRequest) =>
+    Effect.suspend((): Effect.Effect<void, PeerFailed | NotSent | Unknown> => {
+      const current = link
+      if (!current) return Effect.fail(new NotSent({ machine: id }))
+      const peerID = ++req
+      const reply = Deferred.makeUnsafe<PeerReply, Unknown>()
+      current.peers.set(peerID, reply)
+      current.send({ ...request, req: peerID })
+      return Deferred.await(reply).pipe(
+        Effect.ensuring(Effect.sync(() => current.peers.delete(peerID))),
+        Effect.flatMap((answer) => {
+          if (!answer.ok) return Effect.fail(new PeerFailed({ machine: id, reason: answer.message }))
+          if (link !== current) return Effect.void
+          if (request.type === "peer-accept" || request.type === "peer-connect") current.links.add(request.link)
+          if (request.type === "peer-close") current.links.delete(request.link)
+          return Effect.void
+        }),
+      )
+    })
+
   return {
     connect,
     close,
+    peer,
+    links: () => link?.links ?? new Set(),
     hello: () => link?.hello,
-    environment: Environment.make(id, {
-      spawner,
-      overrides: {
-        stat: (path) => call<FileInfo, NotFound>(path, { call: "stat", path }),
-        list: (path) => call<ReadonlyArray<DirEntry>, NotFound | WrongKind>(path, { call: "list", path }),
-        read: (path, range) =>
-          call<{ info: FileInfo; bytes: Uint8Array }, NotFound | WrongKind>(path, { call: "read", path, range }),
-        write: (path, bytes) => call<void>(path, { call: "write", path, bytes }),
-        append: (path, bytes) => call<void>(path, { call: "append", path, bytes }),
-        remove: (path) => call<void>(path, { call: "remove", path }),
-        mkdir: (path) => call<void>(path, { call: "mkdir", path }),
-        move: (from, to) => call<void, NotFound>(from, { call: "move", from, to }),
+    describe: () => link?.describe?.(),
+    environment: Environment.make(
+      id,
+      {
+        spawner,
+        overrides: {
+          stat: (path) => call<FileInfo, NotFound>(path, { call: "stat", path }),
+          list: (path) => call<ReadonlyArray<DirEntry>, NotFound | WrongKind>(path, { call: "list", path }),
+          read: (path, range) =>
+            call<{ info: FileInfo; bytes: Uint8Array }, NotFound | WrongKind>(path, { call: "read", path, range }),
+          write: (path, bytes) => call<void>(path, { call: "write", path, bytes }),
+          append: (path, bytes) => call<void>(path, { call: "append", path, bytes }),
+          remove: (path) => call<void>(path, { call: "remove", path }),
+          mkdir: (path) => call<void>(path, { call: "mkdir", path }),
+          move: (from, to) => call<void, NotFound>(from, { call: "move", from, to }),
+        },
       },
-    }),
+      // A worker is a POSIX machine with none of this server's shell paths, and its driver runs only argv, cwd and
+      // env: `sh -c` is the contract every worker can meet.
+      {
+        path: posix,
+        shell: "sh",
+        home: Effect.suspend(() =>
+          link ? Effect.succeed(link.hello.home) : Effect.fail(new NotSent({ machine: id })),
+        ),
+      },
+    ),
   }
 }
 

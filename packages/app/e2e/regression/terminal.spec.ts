@@ -42,6 +42,56 @@ test("restores a terminal from the server's snapshot after a reload", async ({ p
   ])
 })
 
+test("draws terminal characters whose font files arrive after the first paint", async ({ page }) => {
+  // The Nerd Fonts icons and the characters outside Latin and Cyrillic are font files of their own, which load when
+  // a terminal first draws one of their characters.
+  const icons = await holdRoute(page, /OpenMono-icons[^/]*\.woff2/)
+  const rest = await holdRoute(page, /OpenMono-Regular-rest[^/]*\.woff2/)
+
+  // A folder icon and a Greek letter (λ, in the "rest" file) on the first row, with the cursor, whose row the terminal
+  // redraws by itself, on the last one.
+  const { persistentPty } = await openSession(page, {
+    name: "Terminals",
+    persistentPty: {
+      initial: [{ id: "pty_icons", sessionID: SESSION, title: "Build", output: "ls \uf07b \u03bb\x1b[999;1H" }],
+    },
+  })
+
+  await openSide(page)
+  await showTerminal(page, "Build", "pty_icons")
+  await Promise.all([icons.arrived, rest.arrived])
+
+  // What the first cells of a row show: undefined while they are blank, else a checksum of their pixels.
+  const row = (index: number) =>
+    terminalScreen(page, "pty_icons")
+      .locator("canvas")
+      .evaluate(
+        (canvas: HTMLCanvasElement, input) => {
+          const height = Math.round(canvas.height / input.rows)
+          const pixels = canvas.getContext("2d")!.getImageData(0, input.index * height, 80, height).data
+
+          if (pixels.every((value, index) => value === pixels[index % 4])) return
+
+          return pixels.reduce((sum, value) => (sum * 31 + value) >>> 0, 0)
+        },
+        { index, rows: persistentPty.terminals[0]!.size.rows },
+      )
+
+  await expect.poll(() => row(0)).toBeDefined()
+  const fallback = await row(0)
+  icons.release()
+  rest.release()
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+
+  // The same text on the third row, first drawn with the files loaded, is what the first row must now show.
+  persistentPty.output("pty_icons", "\x1b[3;1Hls \uf07b \u03bb\x1b[999;1H")
+  await expect.poll(() => row(2)).toBeDefined()
+  const loaded = await row(2)
+  expect(loaded).not.toBe(fallback)
+
+  await expect.poll(() => row(0)).toBe(loaded)
+})
+
 test("after a reload, the close shortcut closes the restored terminal", async ({ page }) => {
   // Elsewhere Ctrl+W reaches the shell, so the terminal hands only macOS's Cmd+W to the app.
   await page.addInitScript(() => Object.defineProperty(navigator, "platform", { get: () => "MacIntel" }))

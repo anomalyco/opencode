@@ -24,7 +24,7 @@ import { SessionMessage } from "../../session/message.js"
 import { SessionSchema } from "../../session/schema.js"
 import { collectBoundedResponseBody } from "../http-body.js"
 
-export const name = "experimental_image_generate"
+export const name = "generate_image"
 export const MAX_INPUT_BYTES = 20 * 1024 * 1024
 const DOWNLOAD_TIMEOUT = Duration.seconds(30)
 const GENERATE_TIMEOUT = Duration.minutes(30)
@@ -66,11 +66,7 @@ export const Input = Schema.Struct({
   }),
 })
 
-export const Output = Schema.Struct({
-  id: Schema.String.annotate({ description: "The image job's ID, repeated in its completion notice" }),
-  path: Schema.String.annotate({ description: "Where the image is saved, without its extension" }),
-  model: Schema.String.annotate({ description: "providerID/modelID" }),
-})
+export const Output = Schema.String
 
 export const Plugin = {
   id: "opencode.tool.image-generate",
@@ -163,7 +159,7 @@ export const Plugin = {
             yield* permission.assert({
               action: "webfetch",
               resources: [source],
-              save: ["*"],
+              save: Permission.site(source),
               metadata: { url: source },
               ...Permission.invocation(context),
             })
@@ -256,7 +252,7 @@ export const Plugin = {
         if (!enabled || imageGenerate(loaded.entries) === false) return
         editor.add({
           name,
-          options: { codemode: false },
+          options: { codemode: true },
           description,
           input: Input,
           output: Output,
@@ -285,7 +281,7 @@ export const Plugin = {
                 yield* permission.assert({
                   action: "edit",
                   resources: [target.resource],
-                  save: ["*"],
+                  save: [FileAccess.always(target)],
                   ...Permission.invocation(context),
                 })
               }
@@ -330,7 +326,9 @@ export const Plugin = {
                     resources: [actual.resource],
                     ...Permission.invocation(context),
                   }
-                  yield* replaces ? permission.assert({ ...request, save: ["*"] }) : permission.assertNotDenied(request)
+                  yield* replaces
+                    ? permission.assert({ ...request, save: [FileAccess.always(actual)] })
+                    : permission.assertNotDenied(request)
                 }
                 yield* files.write(file, bytes)
                 return `Image request finished. Saved image: ${file} (${ref}).\nUse the read tool on this path to view the image.`
@@ -352,8 +350,7 @@ export const Plugin = {
               })
               yield* notifyWhenDone({ sessionID: context.sessionID, id, notificationID, file: stem })
               return {
-                output: { id, path: stem, model: ref },
-                content: [
+                output: [
                   `Image job ${id} started in the background with ${ref}. It will be saved as ${stem} with the extension of its real format (.png, .jpg, .webp or .gif); the notice gives the exact path.${resolved.note ?? ""}`,
                   "You will be notified automatically when it finishes or fails.",
                   "DO NOT sleep, poll, check whether the file exists, or request the same image again while it runs.",

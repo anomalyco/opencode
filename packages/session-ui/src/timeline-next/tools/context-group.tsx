@@ -5,9 +5,11 @@ import { type UiI18n, useI18n } from "@opencode/ui/context/i18n"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { createMemo, For, Index, Match, Show, Switch } from "solid-js"
 import { BasicTool } from "../../components/basic-tool"
+import { useData } from "../../context"
 import {
   currentToolError,
   currentToolGroupedRead,
+  currentToolImages,
   currentToolInput,
   currentToolMetadata,
   currentToolOutput,
@@ -16,7 +18,7 @@ import { AssistantReasoningContent } from "../../message/message-content"
 import {
   CurrentReadToolGroup,
   currentSkillName,
-  displayDirectory,
+  displayFolder,
   scrollParent,
   toolInput,
   toolMetadata,
@@ -25,9 +27,10 @@ import {
 import { TimelineEventRow } from "../event-row"
 import { toolEvent, workKey, type TimelineEvent } from "../events"
 import { toolRule } from "../rules"
-import { toolStopped } from "../../timeline/facts"
+import { sameFileFact, toolStopped } from "../../timeline/facts"
 import { activityLabel, activityText, usedLabel } from "./activity-label"
 import { FileGroup } from "./file-group"
+import { ToolResultImages } from "../../tools/tool-result-images"
 import { ThoughtRow } from "./thought"
 import { ToolDisplay } from "./tool-display"
 
@@ -36,6 +39,11 @@ export type ActivityGroupPart = ContextGroupPart | { type: "event"; id: string; 
 
 // Subagents and background work listed one after another in an opened group, as one nested events row.
 type WorkRun = { type: "work"; id: string; events: TimelineEvent[] }
+
+type ThoughtPart = Extract<ActivityGroupPart, { type: "reasoning" }>
+
+// Thoughts one after another in an opened group, as one thought.
+type ThoughtRun = { type: "thoughts"; id: string; parts: ThoughtPart[] }
 
 /**
  * A stretch of the agent's work folded into one row, named by what it did: "Explored 3 files · 2 commands". It only
@@ -59,13 +67,14 @@ export function ContextGroup(props: {
   onRevealShell?: (shellID: string) => void
 }) {
   const i18n = useI18n()
+  const data = useData()
   const reasoning = createMemo(() => props.parts.flatMap((part) => (part.type === "reasoning" ? [part] : [])))
   const thoughtsOnly = createMemo(() => reasoning().length > 0 && reasoning().length === props.parts.length)
   const events = createMemo(() => [...workEvents(props.parts).values()])
 
   const workOnly = createMemo(() => events().length > 0 && props.parts.every((part) => part.type === "event"))
 
-  const activity = createMemo(() => activityLabel(props.parts, i18n))
+  const activity = createMemo(() => activityLabel(props.parts, i18n, data.flag("full_codemode")))
 
   const label = createMemo(() => activityText(activity()) ?? usedLabel(props.parts, i18n))
 
@@ -73,8 +82,9 @@ export function ContextGroup(props: {
     (props.open ? props.parts : []).reduce<
       (
         | SessionMessageAssistantTool[]
-        | Exclude<ActivityGroupPart, SessionMessageAssistantTool | { type: "event" }>
+        | Exclude<ActivityGroupPart, SessionMessageAssistantTool | { type: "event" } | { type: "reasoning" }>
         | WorkRun
+        | ThoughtRun
       )[]
     >((groups, tool) => {
       const previous = groups.at(-1)
@@ -90,6 +100,19 @@ export function ContextGroup(props: {
         }
 
         groups.push({ type: "work", id: tool.id, events: [event] })
+
+        return groups
+      }
+
+      // Thoughts one after another open as one.
+      if (tool.type === "reasoning") {
+        if (previous && !Array.isArray(previous) && previous.type === "thoughts") {
+          previous.parts.push(tool)
+
+          return groups
+        }
+
+        groups.push({ type: "thoughts", id: tool.id, parts: [tool] })
 
         return groups
       }
@@ -129,7 +152,14 @@ export function ContextGroup(props: {
     // Collapsing from the stuck header would leave the viewport far below the group, so keep the header in place.
     // Scroll before collapsing because the shorter content would clamp the scroll position first.
     const trigger = root?.querySelector(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
-    const stuck = !open && root && trigger ? trigger.getBoundingClientRect().top - root.getBoundingClientRect().top : 0
+
+    // The header rests its top margin away from the group's top, above it here. Anything past that is how far it is stuck.
+    const stuck =
+      !open && root && trigger
+        ? trigger.getBoundingClientRect().top -
+          root.getBoundingClientRect().top -
+          parseFloat(getComputedStyle(trigger).marginTop)
+        : 0
 
     if (stuck > 0 && root) scrollParent(root)?.scrollBy({ top: -stuck, behavior: "instant" })
     props.onOpenChange(open)
@@ -140,21 +170,14 @@ export function ContextGroup(props: {
     <Show
       when={!thoughtsOnly()}
       fallback={
-        <div data-component="thought-rows" data-timeline-part-ids={props.parts.map((part) => part.id).join(",")}>
-          <For each={reasoning()}>
-            {(part) => (
-              <ThoughtRow
-                id={part.id}
-                content={part}
-                streaming={part.streaming ?? false}
-                defaultOpen={props.reasoningDefaultOpen}
-                open={props.reasoningOpen?.(part.id)}
-                onOpenChange={(open) => props.onReasoningOpenChange?.(part.id, open)}
-                onContentRendered={props.onSizeChange}
-              />
-            )}
-          </For>
-        </div>
+        <ThoughtRow
+          parts={reasoning()}
+          streaming={reasoning().some((part) => part.streaming)}
+          defaultOpen={props.reasoningDefaultOpen}
+          open={props.reasoningOpen?.(reasoning()[0]!.id)}
+          onOpenChange={(open) => props.onReasoningOpenChange?.(reasoning()[0]!.id, open)}
+          onContentRendered={props.onSizeChange}
+        />
       }
     >
       <Show
@@ -216,8 +239,22 @@ export function ContextGroup(props: {
                   const reasoning = createMemo(() => {
                     const value = item()
 
-                    return !Array.isArray(value) && value.type === "reasoning" ? value : undefined
+                    return !Array.isArray(value) && value.type === "thoughts" ? value : undefined
                   })
+
+                  // A change keeps its card while progress reports rebuild the list around it.
+                  const file = createMemo(
+                    () => {
+                      const value = item()
+
+                      return !Array.isArray(value) && value.type === "file" ? value : undefined
+                    },
+                    undefined,
+                    {
+                      equals: (previous, next) =>
+                        previous === next || (!!previous && !!next && sameFileFact(previous.file, next.file)),
+                    },
+                  )
 
                   const callback = createMemo(() => {
                     const value = item()
@@ -244,8 +281,23 @@ export function ContextGroup(props: {
                             <Show
                               when={work()}
                               fallback={
-                                <Show when={callback()}>
-                                  {(part) => <div data-slot="context-tool-group-item">{part().render()}</div>}
+                                <Show
+                                  when={file()}
+                                  keyed
+                                  fallback={
+                                    <Show when={callback()}>
+                                      {(part) => <div data-slot="context-tool-group-item">{part().render()}</div>}
+                                    </Show>
+                                  }
+                                >
+                                  {(part) => (
+                                    <div
+                                      data-slot="context-tool-group-item"
+                                      data-script-change={part.file.via === "script" ? "" : undefined}
+                                    >
+                                      {part.render()}
+                                    </div>
+                                  )}
                                 </Show>
                               }
                             >
@@ -269,8 +321,11 @@ export function ContextGroup(props: {
                             <div data-slot="context-tool-group-item">
                               <AssistantReasoningContent
                                 id={part().id}
-                                content={part()}
-                                streaming={part().streaming ?? false}
+                                content={part().parts[0]!}
+                                more={part()
+                                  .parts.slice(1)
+                                  .map((item) => ({ id: item.id, content: item }))}
+                                streaming={part().parts.some((item) => item.streaming)}
                                 defaultOpen={props.reasoningDefaultOpen}
                                 open={props.reasoningOpen?.(part().id)}
                                 onOpenChange={(open) => props.onReasoningOpenChange?.(part().id, open)}
@@ -301,6 +356,10 @@ export function ContextGroup(props: {
               </Index>
             </div>
           </BasicTool>
+          <ToolResultImages
+            images={props.parts.flatMap((part) => (part.type === "tool" ? currentToolImages(part) : []))}
+            onContentRendered={props.onSizeChange}
+          />
         </div>
       </Show>
     </Show>
@@ -533,7 +592,7 @@ function workEvents(parts: ActivityGroupPart[]) {
 function searchTrigger(tool: SessionMessageAssistantTool, i18n: UiI18n) {
   const input = toolInput(currentToolInput(tool))
   const metadata = toolMetadata(currentToolMetadata(tool))
-  const subtitle = displayDirectory(input.path ?? "/")
+  const subtitle = displayFolder(input.path)
   const name = toolRule(tool).name
 
   if (name === "list") return { title: i18n.t("ui.tool.list"), subtitle, args: [], count: undefined }

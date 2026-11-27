@@ -4,6 +4,7 @@ import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { type Accessor, createEffect, on, onCleanup } from "solid-js"
 import { createApiForServer, type ServerApi } from "@/runtime/server/api"
 import { createMediaCache, type MediaCache } from "@/runtime/server/media"
+import { createToolFileCache, type ToolFileCache } from "@/runtime/server/tool-file"
 import { setMediaBlobLoader } from "@/runtime/persistence/drafts"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "./registry"
@@ -69,6 +70,7 @@ type ServerSDKBase = {
   http: ServerConnection.HttpBase
   api: ServerApi
   media: MediaCache
+  toolFiles: ToolFileCache
   connection: {
     status: Accessor<ServerConnectionStatus>
     attempt: Accessor<number>
@@ -85,10 +87,12 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   const platform = usePlatform()
   const transport = createServerTransport({ http: ServerConnection.http(server) ?? unready, fetch: platform.fetch })
   const media = createMediaCache(() => transport.api)
+  const toolFiles = createToolFileCache(() => transport.api, media)
   const serverKey = ServerConnection.key(server)
   setMediaBlobLoader(serverKey, (uri) => media.load(uri))
   onCleanup(() => {
     setMediaBlobLoader(serverKey, undefined)
+    toolFiles.dispose()
     media.dispose()
   })
 
@@ -166,6 +170,12 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     transport.dispose()
   })
 
+  // After sleep a stream can still read as connected while its socket is gone; replace it now rather than at its idle
+  // watchdog.
+  const stopResume = platform.onSystemResume?.(() => connection.internal.resync("System resumed from sleep"))
+
+  if (stopResume) onCleanup(stopResume)
+
   return {
     server,
     scope,
@@ -179,6 +189,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
       return transport.api
     },
     media,
+    toolFiles,
     connection,
     event: events.event,
   }

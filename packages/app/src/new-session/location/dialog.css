@@ -29,9 +29,8 @@
   color: inherit;
   cursor: default;
 
-  &:is(:hover, :focus-visible) {
+  &:hover {
     background: var(--v2-overlay-simple-overlay-hover);
-    outline: none;
   }
 }
 
@@ -80,21 +79,6 @@
   font-size: 12px;
   line-height: 18px;
   letter-spacing: 0.05px;
-}
-
-.new-session-location-back {
-  border: 0;
-  border-radius: 2px;
-  background: transparent;
-  font: inherit;
-  font-size: 13px;
-  text-align: start;
-  cursor: pointer;
-}
-
-.new-session-location-back:focus-visible {
-  outline: 2px solid var(--v2-border-border-focus);
-  outline-offset: 2px;
 }
 
 .new-session-location .palette-menu-row[data-size="compact"] {

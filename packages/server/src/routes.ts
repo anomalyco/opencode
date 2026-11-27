@@ -1,6 +1,7 @@
 import { Database } from "@opencode/core/database/database"
 import { V1Migration } from "@opencode/core/database/v1-migration"
 import { App } from "@opencode/core/app"
+import { CodeModeApi } from "@opencode/core/codemode/api"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Node } from "@opencode/util/effect/app-node"
 import { fetchLayer, httpClient, httpFetch } from "@opencode/util/effect/app-node-platform"
@@ -11,6 +12,7 @@ import { FileSystemSearch } from "@opencode/core/filesystem/search"
 import { Credential } from "@opencode/core/credential"
 import { Config } from "@opencode/core/config"
 import { PermissionSaved } from "@opencode/core/permission/saved"
+import { BrowserTunnelGateway } from "@opencode/core/experimental/browser-tunnel"
 import { PtyTicket } from "@opencode/core/pty/ticket"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Project } from "@opencode/core/project"
@@ -31,6 +33,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { LocationActivity } from "@opencode/core/location-activity"
+import { Identity } from "@opencode/core/machine/identity"
 import { Machines } from "@opencode/core/machine/machines"
 import { SessionSearchBuild } from "@opencode/core/session/search-build"
 import { ModelsDev } from "@opencode/core/models-dev"
@@ -39,14 +42,20 @@ import { Automation } from "@opencode/core/automation"
 import { PluginUpdate } from "@opencode/core/plugin/update"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { WellKnown } from "@opencode/core/wellknown"
+import { PushList } from "@opencode/core/push/list"
+import { PushSender } from "@opencode/core/push/sender"
+import { PushWatcher } from "@opencode/core/push/watcher"
 import { Workspace } from "@opencode/core/workspace"
+import { WorkspaceConnector } from "@opencode/core/environment/workspace-connector"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { FileWatch } from "@opencode/core/filesystem/file-watch"
-import { HttpRouter } from "effect/http"
+import { HttpEffect, HttpRouter } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { Context, Effect, Layer, Option } from "effect"
+import { Base64 } from "effect/encoding"
 import { Api } from "./api"
 import { ServerAuth } from "./auth"
+import { SpaceStore } from "./space-store"
 import { CorsConfig } from "./cors"
 import { handlers } from "./handlers"
 import { authorizationLayer } from "./middleware/authorization"
@@ -61,6 +70,7 @@ import type { ServerOptions } from "./options"
 
 const applicationServiceNodes = [
   App.node,
+  CodeModeApi.node,
   Global.node,
   FSUtil.node,
   Database.node,
@@ -85,9 +95,11 @@ const applicationServiceNodes = [
   PluginUpdate.node,
   PermissionSaved.node,
   PtyTicket.node,
+  BrowserTunnelGateway.node,
   Credential.node,
   WellKnown.node,
   ServerPairing.node,
+  SpaceStore.node,
   LocationServiceMap.node,
   LocationActivity.node,
   SessionRestart.node,
@@ -100,7 +112,12 @@ const applicationServiceNodes = [
   Workspace.node,
   // The machine list: where a carrier hands over the workers dialing in from other computers.
   Machines.node,
+  // The home's key, which the link's handshake signs with.
+  Identity.node,
   FileWatch.node,
+  PushList.node,
+  PushSender.node,
+  PushWatcher.node,
 ] as const
 const applicationServices = LayerNode.group(applicationServiceNodes)
 
@@ -109,38 +126,52 @@ export function createRoutes(
   serviceURLs: () => ReadonlyArray<string> = () => [],
   overrides: LayerNode.Replacements = [],
 ) {
-  return makeRoutes(
-    options.password
-      ? ServerAuth.Config.configLayer({ password: Option.some(options.password) })
-      : ServerAuth.Config.layer,
-    options,
-    serviceURLs,
-    overrides,
-  )
+  return makeRoutes(options.password ? Option.some(options.password) : Option.none(), options, serviceURLs, overrides)
 }
 
-type InstanceNode = (
-  replacements: () => LayerNode.Replacements,
-) => LayerNode.Provider<Instance.Service, never, typeof Node.tags.values.global>
+type InstanceNode = LayerNode.Provider<Instance.Service, never, typeof Node.tags.values.global>
 
 export function createEmbeddedRoutes(
   options: ServerOptions = {},
   overrides: LayerNode.Replacements = [],
   instances?: InstanceNode,
 ) {
-  return makeRoutes(ServerAuth.Config.configLayer({ password: Option.none() }), options, () => [], overrides, instances)
+  return makeRoutes(Option.none(), options, () => [], overrides, instances)
 }
 
-function makeRoutes<AuthError, AuthServices>(
-  auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>,
+function makeRoutes(
+  password: Option.Option<string>,
   options: ServerOptions,
   serviceURLs: () => ReadonlyArray<string>,
   // Runtime-profile replacements (e.g. workerd) applied after the standard set, so later entries win.
   overrides: LayerNode.Replacements,
   instances?: InstanceNode,
 ) {
+  const auth = ServerAuth.Config.configLayer({ password })
+  // Code Mode `opencode://` fetches go straight to this router, set once the router below is built. They carry the
+  // server's own credential, added here after the script handed the request over, so the script never sees it.
+  const credential = Option.map(password, (value) => `Basic ${Base64.encode(`opencode:${value}`)}`)
+  let internal: ((request: Request) => Promise<Response>) | undefined
   const standard: LayerNode.Replacements = [
+    CodeModeApi.node.replace(
+      Layer.succeed(
+        CodeModeApi.Service,
+        CodeModeApi.Service.of({
+          fetch: (request) =>
+            Effect.suspend(() => {
+              const handle = internal
+              if (!handle) return Effect.fail(new Error("The OpenCode API is not ready yet."))
+              if (Option.isSome(credential)) request.headers.set("authorization", credential.value)
+              return Effect.tryPromise({
+                try: () => handle(request),
+                catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+              })
+            }),
+        }),
+      ),
+    ),
     Database.node.replace(Database.configured(options.database)),
+    WorkspaceConnector.node.replace(Workspace.connectorNode),
     PersistentPty.node.replace(PersistentPty.configured(options.pty)),
     Bus.node.replace(Bus.configured({ persist: options.events?.persist })),
     App.node.replace(App.configured(options.app)),
@@ -174,15 +205,12 @@ function makeRoutes<AuthError, AuthServices>(
       }),
     ),
   ]
-  const build = (overrides: LayerNode.Replacements) => {
-    const replacements: LayerNode.Replacements = [
+  const build = (overrides: LayerNode.Replacements) =>
+    AppNodeBuilder.build(applicationServices, [
       ...standard,
-      // Private instances resolve this list lazily so they inherit the complete host graph, including the selector.
-      ...(instances ? [Instance.node.replace(instances(() => replacements))] : []),
+      ...(instances ? [Instance.node.replace(instances)] : []),
       ...overrides,
-    ]
-    return AppNodeBuilder.build(applicationServices, replacements)
-  }
+    ])
   const serviceLayer = options.simulation
     ? Layer.unwrap(
         Effect.gen(function* () {
@@ -220,6 +248,13 @@ function makeRoutes<AuthError, AuthServices>(
         Layer.merge(defectResponseLayer),
         Layer.provideMerge(services),
         Layer.provideMerge(HttpRouter.layer),
+        Layer.tap((context) =>
+          Effect.sync(() => {
+            internal = Context.get(context, HttpRouter.HttpRouter)
+              .asHttpEffect()
+              .pipe(HttpEffect.toWebHandlerWith(context))
+          }),
+        ),
       )
       return Layer.merge(api, V1Migration.layer.pipe(Layer.provide(services)))
     }),

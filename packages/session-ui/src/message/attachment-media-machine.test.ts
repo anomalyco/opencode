@@ -5,6 +5,7 @@ import {
   DISPOSED_ATTACHMENT_MEDIA_EVENT,
   INITIAL_ATTACHMENT_MEDIA_STATE,
   resolveAttachmentMediaTarget,
+  resolveToolImageTarget,
   transitionAttachmentMedia,
   viewAttachmentMedia,
   type AttachmentMediaEvent,
@@ -191,5 +192,40 @@ describe("transitionAttachmentMedia", () => {
       effects: [],
     })
     expect(transitionAttachmentMedia(readyA, DISPOSED_ATTACHMENT_MEDIA_EVENT).effects).toEqual([])
+  })
+})
+
+describe("resolveToolImageTarget", () => {
+  const dropped = { uri: "data:image/png;base64,", mime: "image/png", callID: "call_1", index: 2 }
+
+  test("reads a file the host kept without its bytes from its call, under a key of its own", () => {
+    const target = resolveToolImageTarget(dropped, { hasReader: true, hasToolFileReader: true })
+
+    expect(target).toEqual({ kind: "remote", key: "tool:call_1:2", uri: dropped.uri, mime: "image/png" })
+    expect(resolveToolImageTarget({ ...dropped, index: 3 }, { hasReader: true, hasToolFileReader: true })).not.toEqual(
+      target,
+    )
+  })
+
+  test("never shows the emptied URI as an image", () => {
+    // Without a tool file reader, the media reader would hand the empty URI straight back as the image to show.
+    expect(resolveToolImageTarget(dropped, { hasReader: true, hasToolFileReader: false })).toEqual({
+      kind: "unreadable",
+    })
+    expect(
+      resolveToolImageTarget(dropped, { hasReader: true, hasToolFileReader: true, peekToolFile: () => "blob:read" }),
+    ).toEqual({ kind: "direct", src: "blob:read" })
+  })
+
+  test("shows a file with its bytes, or reads its media ref, as an attachment's", () => {
+    const inline = { ...dropped, uri: "data:image/png;base64,AAAA" }
+
+    expect(resolveToolImageTarget(inline, { hasReader: false, hasToolFileReader: true })).toEqual({
+      kind: "direct",
+      src: inline.uri,
+    })
+    expect(resolveToolImageTarget({ ...dropped, uri: hashA }, { hasReader: true, hasToolFileReader: true })).toEqual(
+      targetA,
+    )
   })
 })

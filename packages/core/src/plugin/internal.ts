@@ -1,13 +1,11 @@
 export * as PluginInternal from "./internal.js"
 
-import { LLMClient } from "@opencode/ai/effect"
 import type { Plugin } from "@opencode/plugin/effect/plugin"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import type { Generation } from "./service.js"
 import { httpClient, httpFetch } from "@opencode/util/effect/app-node-platform"
 import { AppProcess } from "@opencode/util/process"
 import { Context, Effect, Exit, Scope, Semaphore, Stream } from "effect"
-import { FetchHttpClient, HttpClient } from "effect/http"
 import { Agent } from "../agent.js"
 import { App } from "../app.js"
 import { Artifact } from "../artifact.js"
@@ -59,6 +57,7 @@ import { Integration } from "../integration.js"
 import { Job } from "../job.js"
 import { KV } from "../kv.js"
 import { Location } from "../location.js"
+import { Machines } from "../machine/machines.js"
 import { ModelsDev } from "../models-dev.js"
 import { Mcp } from "../mcp/index.js"
 import { Npm } from "@opencode/util/npm"
@@ -86,6 +85,8 @@ import { GlobTool } from "../tool/plugin/glob.js"
 import { GrepTool } from "../tool/plugin/grep.js"
 import { ImageGenerateTool } from "../tool/plugin/image-generate.js"
 import { VideoGenerateTool } from "../tool/plugin/video-generate.js"
+import { CdTool } from "../tool/plugin/cd.js"
+import { MachineTools } from "../tool/plugin/machine.js"
 import { McpEventTools } from "../tool/plugin/mcp-events.js"
 import { McpResourceTools } from "../tool/plugin/mcp-resource.js"
 import { OpenCodeTools } from "../tool/plugin/opencode.js"
@@ -93,10 +94,13 @@ import { QuestionTool } from "../tool/plugin/question.js"
 import { ReadTool } from "../tool/plugin/read.js"
 import { ArtifactTools } from "../tool/plugin/artifact.js"
 import { AutomationTools } from "../tool/plugin/automation.js"
+import { SessionInterruptTool } from "../tool/plugin/session-interrupt.js"
 import { SessionSearchTools } from "../tool/plugin/session-search.js"
 import { ShellTool } from "../tool/plugin/shell.js"
 import { SkillTool } from "../tool/plugin/skill.js"
 import { SubagentTool } from "../tool/plugin/subagent.js"
+import { CodeModeAgentsPlugin } from "../tool/plugin/codemode-agents.js"
+import { CodeModeAgents } from "../codemode/agents.js"
 import { TodoTool } from "../tool/plugin/todo.js"
 import { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
@@ -107,6 +111,8 @@ import { WriteTool } from "../tool/plugin/write.js"
 import { AgentPlugin } from "./agent.js"
 import BrowserPlugin from "@opencode/plugin-browser"
 import WidgetsPlugin from "@opencode/plugin-widgets"
+import { BrowserTunnelHost } from "@opencode/plugin-browser/experimental/tunnel-host"
+import { BrowserTunnelGateway } from "../experimental/browser-tunnel.js"
 import { CommandPlugin } from "./command.js"
 import { IdentityPlugin } from "./identity.js"
 import { ForkNoticePlugin } from "./fork-notice.js"
@@ -120,6 +126,7 @@ import { DynamicProviderPlugin } from "./provider/dynamic.js"
 import { OpencodePlugin } from "./provider/opencode.js"
 import { WebSearchPlugins } from "./websearch/index.js"
 import { SkillPlugin } from "./skill.js"
+import { McpSkillPlugin } from "./mcp-skill.js"
 import { VcsHgPlugin } from "./vcs/hg.js"
 import { ToolInputRepairPlugin } from "./tool-input-repair.js"
 import { OptimizePlugin } from "./optimize.js"
@@ -128,77 +135,15 @@ import { VerbosityPlugin } from "./verbosity.js"
 import { WarmingPlugin } from "./warming.js"
 import { WellKnownPlugin } from "../wellknown/plugin.js"
 
-const services = [
-  Agent.Service,
-  // Activation clears the ambient context, so built-ins see the configured build channel only through this.
-  App.Service,
-  FetchHttpClient.Fetch,
-  Artifact.Service,
-  AppProcess.Service,
-  BlobStore.Service,
-  Provider.Service,
-  Model.Service,
-  Command.Service,
-  Config.Service,
-  Credential.Service,
-  Bus.Service,
-  Environment.Service,
-  FileAccess.Service,
-  FileMutation.Service,
-  FileWrite.Service,
-  Flag.Service,
-  Formatter.Service,
-  Generate.Service,
-  LocationWatcherPolicy.Service,
-  FileSystem.Service,
-  FSUtil.Service,
-  Global.Service,
-  HttpClient.HttpClient,
-  Image.Service,
-  InstructionDiscovery.Service,
-  Integration.Service,
-  Job.Service,
-  KV.Service,
-  LLMClient.Service,
-  Location.Service,
-  ModelsDev.Service,
-  Mcp.Service,
-  Npm.Service,
-  Permission.Service,
-  Form.Service,
-  Reference.Service,
-  WebSearch.Service,
-  Ripgrep.Service,
-  Automation.Service,
-  Session.Service,
-  SessionCompaction.Service,
-  SessionInstructions.Service,
-  SessionSearch.Service,
-  SessionSearchBuild.Service,
-  SubagentJob.Service,
-  SharedCache.Service,
-  Shell.Service,
-  ShellSelect.Service,
-  Snapshot.Service,
-  Skill.Service,
-  SkillDiscovery.Service,
-  Tool.Service,
-  ToolOutput.Service,
-  Watcher.Service,
-  WellKnown.Service,
-  VideoGeneration.Service,
-  Worktree.Service,
-  WorktreeStrategies.Service,
-] as const
-
-export type Requirements = Context.Service.Identifier<(typeof services)[number]>
-
-export const requirements = LayerNode.group([
+const nodes = [
   Agent.node,
+  // Activation clears the ambient context, so built-ins see the configured build channel only through this.
   App.node,
   Artifact.node,
   AppProcess.node,
+  BrowserTunnelGateway.node,
   BlobStore.node,
+  CodeModeAgents.node,
   Provider.node,
   Model.node,
   Command.node,
@@ -222,10 +167,10 @@ export const requirements = LayerNode.group([
   InstructionDiscovery.node,
   Integration.node,
   Job.node,
-  Shell.daemonNode,
   KV.node,
   llmClient,
   Location.node,
+  Machines.node,
   ModelsDev.node,
   Mcp.node,
   Npm.node,
@@ -254,7 +199,12 @@ export const requirements = LayerNode.group([
   VideoGeneration.node,
   Worktree.node,
   WorktreeStrategies.node,
-])
+] as const
+
+// Built-in plugins see exactly these nodes' services, each declared with its `service` so it can be picked.
+export const requirements = LayerNode.group(nodes)
+
+export type Requirements = LayerNode.Output<typeof requirements>
 
 export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
@@ -321,10 +271,14 @@ const pre = [
   ReadTool.Plugin,
   ArtifactTools.Plugin,
   AutomationTools.Plugin,
+  CdTool.Plugin,
+  MachineTools.Plugin,
+  SessionInterruptTool.Plugin,
   SessionSearchTools.Plugin,
   ShellTool.Plugin,
   SkillTool.Plugin,
   SubagentTool.Plugin,
+  CodeModeAgentsPlugin.Plugin,
   TodoTool.Plugin,
   WebFetchTool.Plugin,
   WebSearchTool.Plugin,
@@ -349,6 +303,7 @@ const post = [
   ConfigToolOutputPlugin.Plugin,
   ConfigCompatibilityPlugin.Plugin,
   ConfigSkillPlugin.Plugin,
+  McpSkillPlugin.Plugin,
   ConfigProviderPlugin.Plugin,
   // Run the dynamic npm SDK loader after SDK, instance, and external plugins register their `sdk` hooks.
   DynamicProviderPlugin,
@@ -362,13 +317,21 @@ export const guarded: ReadonlySet<string> = new Set([OpencodePlugin.id, ConfigPo
 
 export const list = Effect.fn("PluginInternal.list")(function* () {
   // Capture only services; activation supplies the child Scope and batching context.
-  const context = Context.pick(...services)(yield* Effect.context<Requirements>())
+  const context = Context.pick(...nodes.map((node) => node.service))(yield* Effect.context<Requirements>())
+  const gateway = Context.get(context, BrowserTunnelGateway.Service)
+  const flags = Context.get(context, Flag.Service)
+  const browserContext = Context.add(
+    context,
+    BrowserTunnelHost.Reference,
+    gateway.hostForLocation(flags.enabled("browser_stream_tunnel")),
+  )
   const resolve = (plugins: readonly InternalPlugin[]) =>
     plugins.map(
       (plugin) =>
         ({
           id: plugin.id,
-          effect: (host) => plugin.effect(host).pipe(Effect.provide(context)),
+          effect: (host) =>
+            plugin.effect(host).pipe(Effect.provide(plugin.id === BrowserPlugin.id ? browserContext : context)),
           revision: "internal",
           source: { type: "builtin" },
         }) satisfies Generation,

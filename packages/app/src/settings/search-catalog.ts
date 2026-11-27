@@ -12,7 +12,7 @@ type Entry<Tab> = {
   description?: Label
   section?: Label
   subtab?: "mcps" | "plugins" | "skills" | "lsps"
-  available?: "desktop" | "browser" | "mobile"
+  available?: "desktop" | "linux" | "browser" | "mobile"
 }
 
 export const clientSettings: Entry<SettingsRootTab>[] = [
@@ -65,6 +65,12 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
+    label: "settings.general.row.questionSubmitKey.title",
+    target: "settings-question-submit-key",
+    keywords: "question answer enter shift submit send keyboard newline multiline custom",
+  },
+  {
+    tab: "general",
     label: "settings.general.row.pinchZoom.title",
     target: "settings-pinch-zoom",
     available: "desktop",
@@ -74,6 +80,20 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     label: "settings.general.row.spellcheck.title",
     target: "settings-spellcheck",
     keywords: "spelling spell check dictionary",
+    available: "desktop",
+  },
+  {
+    tab: "general",
+    label: "settings.general.row.smoothScrolling.title",
+    target: "settings-smooth-scrolling",
+    keywords: "scroll wheel mouse animation smooth",
+    available: "linux",
+  },
+  {
+    tab: "general",
+    label: "settings.general.row.keepServiceRunning.title",
+    target: "settings-keep-service-running",
+    keywords: "background service server quit exit close tray stop",
     available: "desktop",
   },
   {
@@ -132,6 +152,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     target: "settings-new-timeline",
     description: "settings.experimental.row.newTimeline.description",
     keywords: "new timeline redesign activity explored edited ran grouping status",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.automations.title",
+    target: "settings-automations",
+    description: "settings.experimental.row.automations.description",
+    keywords: "automations schedules timers cron watches events",
   },
   {
     tab: "experimental",

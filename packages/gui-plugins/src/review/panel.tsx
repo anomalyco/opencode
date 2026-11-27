@@ -11,6 +11,7 @@ import {
   type SessionReviewExpandMode,
 } from "@opencode/session-ui/v2/session-review-v2"
 import { SessionReviewFilePreviewV2 } from "@opencode/session-ui/v2/session-review-file-preview-v2"
+import type { LineCommentSendAction } from "@opencode/session-ui/v2/line-comment-annotations-v2"
 import { DiffChanges } from "@opencode/ui/diff-changes"
 import type {
   SessionReviewComment,
@@ -89,6 +90,7 @@ type ReviewPanelProps = {
   onLineCommentUpdate?: (comment: SessionReviewCommentUpdate) => void
   onLineCommentDelete?: (comment: SessionReviewCommentDelete) => void
   lineCommentActions?: SessionReviewCommentActions
+  lineCommentSend?: LineCommentSendAction
   comments?: SessionReviewComment[]
   focusedComment?: SessionReviewFocus | null
   onFocusedCommentChange?: (focus: SessionReviewFocus | null) => void
@@ -133,6 +135,7 @@ export default function ReviewPanelContent(props: {
       onLineCommentUpdate={props.review.comments.update}
       onLineCommentDelete={props.review.comments.remove}
       lineCommentActions={props.review.comments.actions()}
+      lineCommentSend={props.review.comments.send()}
       comments={props.review.comments.all()}
       focusedComment={props.review.comments.focus()}
       onFocusedCommentChange={props.review.comments.changeFocus}
@@ -316,6 +319,8 @@ function ReviewPanel(props: ReviewPanelProps) {
       stats={<DiffChanges changes={diffs()} />}
       empty={props.empty}
       sidebarOpen={props.state.sidebar.opened()}
+      sidebarSide={props.state.sidebar.side()}
+      onSidebarSideChange={props.state.sidebar.move}
       sidebarToggle={
         <SessionReviewV2SidebarToggle opened={props.state.sidebar.opened()} onToggle={props.state.sidebar.toggle} />
       }
@@ -366,6 +371,7 @@ function ReviewPanel(props: ReviewPanelProps) {
                   onLineCommentUpdate={props.onLineCommentUpdate}
                   onLineCommentDelete={props.onLineCommentDelete}
                   lineCommentActions={props.lineCommentActions}
+                  lineCommentSend={props.lineCommentSend}
                   comments={props.comments}
                   focusedComment={props.focusedComment}
                   onFocusedCommentChange={props.onFocusedCommentChange}
@@ -429,6 +435,7 @@ function ReviewPanelSidebar(props: {
     <SessionReviewV2Sidebar
       open={props.state.sidebar.opened()}
       transition={props.state.sidebar.transition()}
+      side={props.state.sidebar.side()}
       title={props.title}
       stats={<DiffChanges changes={props.diffs} />}
       actions={props.actions}

@@ -8,6 +8,7 @@ import { Titlebar } from "@/shell/titlebar/titlebar"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ToastRegion } from "@/shell/notifications/toast"
 import { createTipToasts } from "@/tips/model"
+import { useDeepLinks } from "@/shell/deep-links/deep-links"
 import { UploadToastHost } from "@/composer/attachments/uploads"
 import { useSettingsSurface } from "@/settings/surface"
 import { useSettings } from "@/settings/model"
@@ -45,6 +46,8 @@ export default function Layout(props: ParentProps) {
   const mobile = createMediaQuery("(max-width: 767px)")
 
   createTipToasts()
+
+  useDeepLinks()
 
   const [state, setState] = createStore<{
     tabsWidth: number

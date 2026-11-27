@@ -237,6 +237,7 @@ const responsesProtocol = Protocol.make({
       ),
   },
   stream: OpenResponses.protocol.stream,
+  supportsEffortUpdates: OpenResponses.protocol.supportsEffortUpdates,
 })
 
 export const route = Route.make({

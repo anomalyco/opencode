@@ -416,7 +416,7 @@ export const content = {
       badges: {
         body: "README、ドキュメント、Webサイトにバッジを置き、opencode.aiにリンクしてください。背景に合わせてライトかダークのファイルを選び（HTMLは自動で切り替わります）、色やテキストは変更しないでください。",
         sizes: "どのスタイルも20、32、44px（Shieldsは20pxのみ）で、SVGと2倍サイズのPNGがあります。",
-        mono: "各ファイルには、テキストをOpenTUI Monoにした版もあります。opencode-works-with-a-light-20-mono.svg のように拡張子の前に -mono を付けます。大文字のOpenTUI Monoなら -mono-caps を付けます。",
+        mono: "各ファイルには、テキストをOpenMonoにした版もあります。opencode-works-with-a-light-20-mono.svg のように拡張子の前に -mono を付けます。大文字のOpenMonoなら -mono-caps を付けます。",
         groups: {
           "works-with": {
             title: "Works with",

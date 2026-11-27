@@ -1,0 +1,587 @@
+// Writes crates/plugin/src/luau/opencode/plugin.luau: the types of a Luau plugin, as a stub of the module
+// `@opencode/plugin` that luau-analyze and luau-lsp resolve through a `.luaurc` alias (a definitions file cannot type a
+// `require`). Every definition of contract 2.0's schema (crates/plugin-abi/schema/v2.json, which plugin-schema.ts
+// writes first) becomes an `export type`, so a Luau plugin's tables are the contract's own shapes; the module and the
+// `setup`, `read`, `host` and `view` objects are written here by hand, as crates/plugin/src/luau/bind.rs binds them.
+type Schema = {
+  $ref?: string
+  type?: string | string[]
+  enum?: (string | number | boolean | null)[]
+  const?: string | number | boolean
+  description?: string
+  properties?: Record<string, Schema>
+  required?: string[]
+  additionalProperties?: boolean | Schema
+  items?: Schema
+  prefixItems?: Schema[]
+  oneOf?: Schema[]
+  anyOf?: Schema[]
+  not?: Schema
+  allOf?: Schema[]
+}
+
+const root = new URL("../..", import.meta.url).pathname
+const schema = (await Bun.file(`${root}crates/plugin-abi/schema/v2.json`).json()) as {
+  $defs: Record<string, Schema>
+  "x-abi": { major: number; minor: number }
+}
+// The HTTP API's document, which the schema's references into `openapi.json` name (messages, sessions, models, events).
+type Route = {
+  operationId: string
+  parameters?: Array<{ name: string; in: string; schema: Schema; required?: boolean }>
+  requestBody?: { content: Record<string, { schema: Schema }> }
+  responses: Record<string, { content?: Record<string, { schema: Schema }> }>
+}
+const openapi = (await Bun.file(`${root}../protocol/openapi.json`).json()) as {
+  components: { schemas: Record<string, Schema> }
+  paths: Record<string, Record<string, Route>>
+}
+const components = openapi.components.schemas
+
+// The operations `plugin.client` sends, as script/gen/api.ts writes them from the generated client: each input field's
+// name, where it goes, whether it may be left out, and the Luau type of a field that is not the body's.
+type Operation = {
+  method: string
+  path: string
+  fields: Array<[string, "params" | "query" | "headers" | "payload" | "wildcard", boolean, string | null]>
+  body: "object" | "json" | "bytes" | null
+  reply: "json" | "data" | "empty" | "binary" | "sse"
+}
+const operations = (await Bun.file(`${root}crates/plugin/src/luau/operations.json`).json()) as Record<string, Operation>
+
+// The HTTP API's schemas the stub writes, by the Luau name of each: what the contract's schema and the reads reach.
+const reached = new Map<string, string>()
+
+// The Luau name of the API's schema `name` (`Session.Message.Info` is `SessionMessageInfo`), which the stub then
+// writes, with everything it reaches.
+function server(name: string) {
+  if (!components[name]) throw new Error(`plugin-types-luau: openapi.json has no schema ${name}`)
+  const joined = name
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join("")
+  // The contract's own type keeps the plain name (`LocationRef`); the API's of that name is `ApiLocationRef`.
+  const luauName = schema.$defs[joined] ? `Api${joined}` : joined
+  const known = reached.get(luauName)
+  if (known !== undefined && known !== name)
+    throw new Error(`plugin-types-luau: ${known} and ${name} are both ${luauName}`)
+  reached.set(luauName, name)
+  return luauName
+}
+
+// A reference into the API's document: a schema by name, or a part of one (`Tool/properties/id`), written in place.
+function reference(fragment: string, indent: string): string {
+  const [name, ...rest] = fragment.replace(/^\/components\/schemas\//, "").split("/")
+  if (rest.length === 0) return server(name)
+  const part = rest.reduce<any>((at, step) => at?.[step.replace(/~1/g, "/").replace(/~0/g, "~")], components[name])
+  if (!part) throw new Error(`plugin-types-luau: openapi.json has no ${fragment}`)
+  return luau(part, indent)
+}
+
+// `{ not: {} }` holds no value: an alternative that never matches.
+function never(schema: Schema) {
+  return schema.not !== undefined && Object.keys(schema.not).length === 0
+}
+
+// A schema with its reference into the API's document followed, to read its properties.
+function resolved(schema: Schema): Schema {
+  const fragment = schema.$ref?.split("#")[1]
+  if (!fragment?.startsWith("/components/schemas/")) return schema
+  return resolved(components[fragment.slice("/components/schemas/".length)])
+}
+
+// `plugin.client`'s type: a table of namespaces by the operations' names (`session.inbox.list`), each operation a
+// function of its input that returns its output or `nil` and the error. The input's path, query and header fields have
+// the generated client's types (the OpenAPI document has their encoded forms); its body and the output have the
+// document's, which are what goes over the wire.
+function client(indent: string): string {
+  type Tree = { operation?: string; children: Map<string, Tree> }
+  const top: Tree = { children: new Map() }
+  for (const name of Object.keys(operations).toSorted()) {
+    const node = name.split(".").reduce((at, part) => {
+      if (!at.children.has(part)) at.children.set(part, { children: new Map() })
+      return at.children.get(part)!
+    }, top)
+    node.operation = name
+  }
+  const write = (tree: Tree, at: string): string => {
+    const inner = `${at}    `
+    const lines = [...tree.children].map(([name, child]) => {
+      const type = child.children.size === 0 ? callable(child.operation!, inner) : write(child, inner)
+      return `${inner}${key(name)}: ${type},`
+    })
+    const table = `{\n${lines.join("\n")}\n${at}}`
+    return tree.operation === undefined ? table : `(${callable(tree.operation, at)}) & ${table}`
+  }
+  return write(top, indent)
+}
+
+// The function type of operation `name`.
+function callable(name: string, indent: string): string {
+  const operation = operations[name]
+  const route =
+    openapi.paths[operation.path.replace(/:([A-Za-z_][A-Za-z0-9_]*)/g, "{$1}")]?.[operation.method.toLowerCase()]
+  // By method and path: a few groups are named otherwise in the document (the client's `file` is its `fs`).
+  if (!route) throw new Error(`plugin-types-luau: openapi.json has no ${operation.method} ${operation.path} (${name})`)
+  const body = route.requestBody?.content["application/json"]?.schema
+  const inner = `${indent}    `
+  const fields = operation.fields.map(([field, source, optional, type]) => {
+    const written =
+      source !== "payload"
+        ? type!
+        : operation.body === "bytes"
+          ? "string"
+          : operation.body === "json"
+            ? luau(body!, inner)
+            : luau(resolved(body!).properties![field], inner)
+    const bare = written.replace(/\?+$/, "")
+    return `${inner}${key(field)}: ${bare}${optional || bare !== written ? "?" : ""},`
+  })
+  const input = fields.length === 0 ? "{}" : `{\n${fields.join("\n")}\n${indent}}`
+  const blank = operation.fields.every(([, , optional]) => optional)
+  const out = output(operation, route, indent)
+  return `(input: ${input}${blank ? "?" : ""}) -> (${out === "nil" ? out : `${out}?`}, string?)`
+}
+
+// The output type of an operation: its reply's, or the reply's `data`.
+function output(operation: Operation, route: Route, indent: string): string {
+  if (operation.reply === "empty" || operation.reply === "sse") return "nil"
+  if (operation.reply === "binary") return "string"
+  const status = Object.keys(route.responses).find((code) => code.startsWith("2"))!
+  const reply = route.responses[status].content?.["application/json"]?.schema
+  if (!reply) return "any"
+  const data = operation.reply === "data" ? resolved(reply).properties?.data : reply
+  if (!data) throw new Error(`plugin-types-luau: ${route.operationId} answers in data, which its reply lacks`)
+  const type = luau(data, indent)
+  return type.endsWith("?")
+    ? `(${type.slice(0, -1)})`
+    : type.includes("|") && !type.startsWith("(")
+      ? `(${type})`
+      : type
+}
+
+// Luau's reserved words, which a table type names in brackets.
+const reserved = new Set(
+  "and break do else elseif end false for function if in local nil not or repeat return then true until while".split(
+    " ",
+  ),
+)
+
+function key(name: string) {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) && !reserved.has(name) ? name : `[${JSON.stringify(name)}]`
+}
+
+function literal(value: string | number | boolean | null) {
+  if (value === null) return "nil"
+  return typeof value === "string" ? JSON.stringify(value) : typeof value === "boolean" ? String(value) : "number"
+}
+
+function nullable(schema: Schema) {
+  return schema.type === "null"
+}
+
+function union(types: string[]) {
+  const unique = [...new Set(types)]
+  return unique.length === 1 ? unique[0] : `(${unique.join(" | ")})`
+}
+
+// The Luau type of `schema`, indented by `indent` for its nested table types.
+function luau(schema: Schema, indent: string): string {
+  if (schema.$ref) {
+    if (schema.$ref.startsWith("#/$defs/")) return schema.$ref.slice("#/$defs/".length)
+    // `#/components/...` inside the API's document, `…/openapi.json#/components/...` from the contract's schema.
+    const fragment = schema.$ref.split("#")[1]
+    if (fragment?.startsWith("/components/schemas/")) return reference(fragment, indent)
+    throw new Error(`plugin-types-luau: a reference this writer does not follow: ${schema.$ref}`)
+  }
+  if (schema.const !== undefined) return literal(schema.const)
+  if (schema.enum) return union(schema.enum.map(literal))
+  const alternatives = schema.oneOf ?? schema.anyOf
+  if (alternatives) {
+    const present = alternatives.filter((alternative) => !nullable(alternative) && !never(alternative))
+    const type = union(present.map((alternative) => luau(alternative, indent)))
+    // `any` holds `nil` already, and `any?` as a read-write field is invariant: a table built in a local fails it.
+    return present.length < alternatives.length && type !== "any" ? `${type}?` : type
+  }
+  // Parenthesized, because Luau refuses `A & B` beside `|` in one type.
+  if (schema.allOf) {
+    const parts = schema.allOf.map((part) => luau(part, indent))
+    return parts.length === 1 ? parts[0] : `(${parts.join(" & ")})`
+  }
+  const type = Array.isArray(schema.type) ? schema.type[0] : schema.type
+  switch (type) {
+    case "string":
+      return "string"
+    case "integer":
+    case "number":
+      return "number"
+    case "boolean":
+      return "boolean"
+    case "null":
+      return "nil"
+    case "array": {
+      const items = schema.items ?? (schema.prefixItems ? { anyOf: schema.prefixItems } : {})
+      return `{ ${luau(items, indent)} }`
+    }
+    case "object":
+    case undefined: {
+      if (!schema.properties) {
+        if (typeof schema.additionalProperties === "object")
+          return `{ [string]: ${luau(schema.additionalProperties, indent)} }`
+        return type === "object" ? "{ [string]: any }" : "any"
+      }
+      return fields(schema.properties, new Set(schema.required ?? []), indent)
+    }
+  }
+  return "any"
+}
+
+// A table type of `properties`, each optional unless `required` names it.
+function fields(
+  properties: Record<string, Schema>,
+  required: Set<string>,
+  indent: string,
+  params?: Record<string, string>,
+) {
+  const inner = indent + "    "
+  const lines = Object.entries(properties).map(([name, field]) => {
+    const type = params?.[name] ?? luau(field, inner)
+    const optional = required.has(name) || type.endsWith("?") || type === "any" ? "" : "?"
+    return `${inner}${key(name)}: ${type}${optional},`
+  })
+  return `{\n${lines.join("\n")}\n${indent}}`
+}
+
+// What a helper's `props` may set: the fields of `schema` (or of its `oneOf` variant whose `type` is `kind`) but
+// `omit`, all optional.
+function props(schema: Schema, omit: string[], kind?: string) {
+  const variant = kind ? schema.oneOf?.find((variant) => variant.properties?.type?.const === kind) : schema
+  if (!variant?.properties) throw new Error(`plugin-types-luau: no ${kind ?? "object"} in the schema for the helpers`)
+  return fields(
+    Object.fromEntries(Object.entries(variant.properties).filter(([name]) => !omit.includes(name))),
+    new Set(),
+    "",
+  )
+}
+
+// The fields of `schema` (or of its `oneOf` variant whose `type` is `kind`) but `omit`, required as the schema says.
+function shape(schema: Schema, omit: string[], kind?: string) {
+  const variant = kind ? schema.oneOf?.find((variant) => variant.properties?.type?.const === kind) : schema
+  if (!variant?.properties) throw new Error(`plugin-types-luau: no ${kind ?? "object"} in the schema for a dialog`)
+  return fields(
+    Object.fromEntries(Object.entries(variant.properties).filter(([name]) => !omit.includes(name))),
+    new Set(variant.required ?? []),
+    "",
+  )
+}
+
+function comment(text: string | undefined, indent = "") {
+  if (!text) return []
+  return text.split("\n").map((line) => `${indent}--- ${line}`)
+}
+
+const generated = Object.keys(schema.$defs)
+  .toSorted()
+  .flatMap((name) => [
+    ...comment(schema.$defs[name].description),
+    `export type ${name} = ${luau(schema.$defs[name], "")}`,
+    "",
+  ])
+
+// The reads, as `Read` and `Host` both carry them. `Host` repeats them with `self: Read` instead of being `Read & {…}`:
+// one table type is a subtype of `Read` by width, where an intersection of method tables trips the solver.
+const reads = `    themeMode: (self: Read) -> "dark" | "light",
+    color: (self: Read, token: string) -> Rgba?,
+    storageGet: (self: Read, key: string) -> any,
+    session: (self: Read, id: string) -> Session?,
+    sessions: (self: Read) -> { Session },
+    family: (self: Read, id: string) -> Family,
+    messages: (self: Read, id: string) -> { ${server("Session.Message.Info")} },
+    --- The inbox items of session \`id\` the server has not delivered yet, oldest first; empty while its inbox is not loaded.
+    pending: (self: Read, id: string) -> { ${server("Session.Inbox.Info")} },
+    --- The models of \`location\`, or where the TUI works; \`nil\` while they are not loaded.
+    models: (self: Read, location: LocationRef?) -> { ${server("Model.Info")} }?,
+    --- The providers of \`location\`, or where the TUI works; \`nil\` while they are not loaded.
+    providers: (self: Read, location: LocationRef?) -> { ${server("Provider.Info")} }?,
+    --- The OpenCode Console workspace's usage limits; \`nil\` while they are not loaded.
+    limits: (self: Read) -> ${server("UsageLimits.Info")}?,
+    model: (self: Read) -> ${server("Model.Ref")}?,
+    info: (self: Read) -> Info,
+    route: (self: Read) -> Route,
+    interactive: (self: Read) -> boolean,
+    shortcut: (self: Read, name: string) -> string?,
+    dialogOpen: (self: Read, key: string) -> boolean,
+    --- The pending key sequence, one entry a stroke; empty when none is pending.
+    keymapPending: (self: Read) -> { KeymapPending },
+    composer: (self: Read) -> Composer?,
+    tabs: (self: Read) -> { Tab },
+    --- Whether session tabs are on in this TUI.
+    tabsEnabled: (self: Read) -> boolean,
+    theme: (self: Read) -> string?,
+    themes: (self: Read) -> { string },
+    selection: (self: Read) -> string?,
+    rect: (self: Read, id: string) -> NodeRect?,
+    focused: (self: Read) -> Focused,
+    mode: (self: Read) -> string?,
+    mount: (self: Read) -> MountId?,
+    setting: (self: Read, name: string) -> any,
+    plugins: (self: Read) -> { PluginEntry },
+    --- The host's version and its optional features.
+    abi: (self: Read) -> Abi,
+    --- Whether the host has optional feature \`name\` (\`plugin.FOCUS_INPUT\`, \`plugin.FENCE_NODE\`).
+    hasFeature: (self: Read, name: string) -> boolean,
+    --- The seconds local time is east of UTC at \`at\`, in milliseconds since the epoch: it depends on the date.
+    utcOffset: (self: Read, at: number) -> number,
+    --- The cells \`text\` takes in a row and its graphemes, as the host draws it: pad and cut columns by it.
+    measure: (self: Read, text: string) -> Measure,
+`
+
+// The module and the objects a plugin's calls are handed, as bind.rs binds them.
+const api = `-- The plugin's objects -------------------------------------------------------------------------------------------
+
+--- What a render or a view reads; every read of one call sees one store snapshot.
+export type Read = {
+${reads}}
+
+--- The version a host serves the plugin: its major, its minor of that major, and its optional features.
+export type Abi = { major: number, minor: number, features: { string } }
+
+--- What a handler acts with: the reads, and effects, which wait until the outermost call returns. A render or a view
+--- that calls an effect fails. The waiting calls (\`fetch\`, \`foreground\`, \`select\`, \`prompt\`, \`confirm\`, \`alert\`) park
+--- the task that calls them and return its answer.
+export type Host = {
+${reads}    storageSet: (self: Host, key: string, value: { [any]: any }) -> (),
+    storageMerge: (self: Host, key: string, fields: { [string]: any }) -> (),
+    dispatch: (self: Host, name: string, input: string?) -> (),
+    --- Enables or disables the plugin's own command \`name\`, once the call returns: a disabled command binds no key and
+    --- is in neither the palette nor the slash list.
+    setEnabled: (self: Host, name: string, enabled: boolean) -> (),
+    toast: (self: Host, toast: Toast) -> (),
+    attention: (self: Host, attention: Attention) -> (),
+    openRoute: (self: Host, name: string) -> (),
+    navigate: (self: Host, route: Route) -> (),
+    dialog: (self: Host, dialog: Dialog) -> (),
+    copy: (self: Host, text: string, thenAction: Action?) -> (),
+    editComposer: (self: Host, edit: ComposerEdit) -> (),
+    setTitle: (self: Host, title: string) -> (),
+    setVariant: (self: Host, variant: string?) -> boolean,
+    setModel: (self: Host, provider: string, model: string) -> (),
+    editTab: (self: Host, edit: TabEdit) -> boolean,
+    clearSelection: (self: Host) -> (),
+    setTheme: (self: Host, name: string) -> boolean,
+    setSetting: (self: Host, name: string, value: any) -> (),
+    scroll: (self: Host, target: Target, verb: Scroll) -> (),
+    openPanel: (self: Host, open: OpenPanel) -> (),
+    closePanel: (self: Host, surface: string) -> (),
+    overlay: (self: Host, overlay: Overlay) -> (),
+    closeOverlay: (self: Host, surface: string) -> (),
+    focus: (self: Host, id: string) -> (),
+    blur: (self: Host) -> (),
+    setMode: (self: Host, mode: string?) -> (),
+    releaseKeys: (self: Host) -> (),
+    --- Waits for the reply: its body (\`nil\` without one), or \`nil\` and the error, also when the host did not take
+    --- the request. Only a task waits (\`plugin.spawn\`).
+    fetch: (self: Host, fetch: Fetch) -> (any, string?),
+    --- Waits until the program exits: its exit code (\`nil\` when a signal ended it, which \`signal\` names), or \`nil\`
+    --- and why it did not start.
+    foreground: (self: Host, program: Foreground) -> ({ code: number?, signal: string? }?, string?),
+    --- Shows a select and waits: the value of the option picked, or \`nil\` when it closed without one.
+    select: (self: Host, select: SelectSpec) -> string?,
+    --- Shows a one-line prompt and waits: the text entered, or \`nil\` when it closed without one.
+    prompt: (self: Host, prompt: PromptSpec) -> string?,
+    --- Shows a confirm and waits: \`true\` or \`false\`, or \`nil\` when it closed without an answer.
+    confirm: (self: Host, confirm: ConfirmSpec) -> boolean?,
+    --- Shows an alert and waits until it closed.
+    alert: (self: Host, alert: AlertSpec) -> (),
+}
+
+--- A select as \`host:select\` shows it: the contract's \`Select\` without its \`action\`.
+export type SelectSpec = ${shape(schema.$defs.Select, ["action"])}
+
+--- A prompt as \`host:prompt\` shows it.
+export type PromptSpec = ${shape(schema.$defs.Dialog, ["type", "action"], "prompt")}
+
+--- A confirm as \`host:confirm\` shows it: the contract's \`Confirm\` without its \`action\`.
+export type ConfirmSpec = ${shape(schema.$defs.Confirm, ["action"])}
+
+--- An alert as \`host:alert\` shows it.
+export type AlertSpec = ${shape(schema.$defs.Alert, ["action"])}
+
+--- A surface's view: what it reads, its input, and a memo that keeps a subtree while its value stays.
+export type View = {
+    read: Read,
+    input: SurfaceInput,
+    memo: (self: View, key: string, value: any, build: (view: View) -> Node) -> Node,
+}
+
+--- Where a slot claim goes; \`kind\` is \`append\` when left out.
+export type At = { path: string, kind: SlotKind? }
+
+--- A command; only \`name\` is needed, the rest are the contract's defaults.
+export type CommandSpec = { name: string, title: string?, palette: boolean?, group: string?, slash: string?, keybind: string?, description: string?, arguments: boolean?, scope: Scope?, enabled: boolean? }
+
+--- A surface as \`setup:surface\` takes it.
+export type SurfaceSpec = { name: string, place: SurfacePlace, layers: { Layer }?, mounts: boolean?, palette: boolean? }
+
+--- What setup registers on; each method holds only while setup runs. A handler given a \`host\` (a command's, an
+--- event's, a mount's, a layer's or a surface's) runs as a task, so it may wait; a key handler that waits has taken its
+--- key. A command that returns \`"pass"\` declines the key that ran it, which goes on to whatever else takes it.
+--- Renders, views, code blocks and \`onDispose\` read only and cannot wait.
+export type Setup = {
+    id: string,
+    --- The \`options\` of the plugin's \`plugins\` entry, decoded.
+    options: any,
+    host: Host,
+    storageKey: (self: Setup, key: string) -> (),
+    command: (self: Setup, command: CommandSpec, run: (host: Host, input: string?) -> ...("pass")) -> (),
+    slot: (self: Setup, at: At, render: (read: Read, input: SlotInput, changed: Changed) -> Render?) -> (),
+    --- Calls \`run\` as the host mounts the claim registered last at \`at\` (\`true\`, before it first renders) and as it
+    --- unmounts it (\`false\`).
+    onMount: (self: Setup, at: At, run: (host: Host, input: SlotInput, mounted: boolean) -> ()) -> (),
+    route: (self: Setup, name: string, render: (read: Read, changed: Changed) -> Render?) -> (),
+    onRouteMount: (self: Setup, name: string, run: (host: Host, mounted: boolean) -> ()) -> (),
+    codeBlock: (self: Setup, language: string, render: (read: Read, fence: Fence) -> Fenced?) -> (),
+    --- \`event\` is one of the API's events, a union tagged by \`type\`: \`if event.type == "…" then\` narrows it.
+    onEvent: (self: Setup, types: { string }, run: (host: Host, event: ${server("V2Event")}) -> ()) -> (),
+    onDispose: (self: Setup, run: (host: Host) -> ()) -> (),
+    layer: (self: Setup, layer: Layer, handler: (host: Host, event: InputEvent) -> Handled?) -> (),
+    surface: (self: Setup, surface: SurfaceSpec, view: (view: View) -> Node, handler: ((host: Host, event: InputEvent) -> Handled?)?) -> (),
+}
+
+--- The style \`plugin.span\` adds to a span's text.
+export type SpanStyle = ${props(schema.$defs.Span, ["text"])}
+
+--- The fields \`plugin.text\` adds to a text node.
+export type TextProps = ${props(schema.$defs.Node, ["type", "spans"], "text")}
+
+--- The fields \`plugin.column\` and \`plugin.row\` add to a box.
+export type BoxProps = ${props(schema.$defs.Node, ["type", "row", "children"], "box")}
+
+--- The API's operations, by the generated client's names: \`plugin.client.session.inbox.list({ sessionID = id })\` waits,
+--- as \`host:fetch\` does, and returns the operation's output (the reply's \`data\` where it answers in \`data\`) or \`nil\`
+--- and the error. Only a task can call one.
+export type Client = ${client("")}
+
+--- \`require("@opencode/plugin")\`.
+export type Plugin = {
+    contract: string,
+    client: Client,
+    IMAGE_BOUNDS: string,
+    FOCUS_INPUT: string,
+    FENCE_NODE: string,
+    KEEP: Render,
+    HIDE: Render,
+    define: (setup: (setup: Setup) -> ()) -> any,
+    span: (text: string, style: SpanStyle?) -> Span,
+    text: (content: string | { Span }, props: TextProps?) -> Node,
+    column: (children: { Node }, props: BoxProps?) -> Node,
+    row: (children: { Node }, props: BoxProps?) -> Node,
+    --- A slot or route render of \`node\`; the host draws it with the node kinds a render takes (box, text, slot,
+    --- markdown and spinner).
+    show: (node: Node) -> Render,
+    command: (name: string, input: string?) -> Action,
+    click: (name: string, input: string?) -> Click,
+    --- Starts \`f(...)\` as a task of its own, from a handler, a task or setup; it runs until it ends or waits.
+    spawn: (f: (...any) -> ...any, ...any) -> (),
+    --- Runs each function as a task and waits until all ended: their values in order, or \`nil\` and the error of the
+    --- first that returned one. Only a task waits.
+    all: (fns: { () -> (any, any) }) -> ({ any }?, any),
+    --- JSON with the host's reader and writer, under the bounds of any value a plugin hands the host.
+    json: Json,
+    --- Sorts \`list\` in place by \`less\` (\`a < b\` when left out) and returns it; equal items keep their order.
+    sort: <T>(list: { T }, less: ((T, T) -> boolean)?) -> { T },
+    --- Waits \`ms\` milliseconds on the host's clock, at least 20 and a part of one kept (\`math.huge\` waits for ever):
+    --- \`true\`, or \`nil\` and why the host took no timer (32 of the plugin wait) or cancelled it (\`"cancelled"\`). Only
+    --- a task waits.
+    sleep: (ms: number) -> (boolean?, string?),
+    --- Runs \`f(host)\` every \`ms\` milliseconds in a task of its own, until \`f\` returns \`false\` or a sleep fails.
+    --- Started from a mount's handler, it is that mount's and ends when the mount closes.
+    every: (ms: number, f: (host: Host) -> boolean?) -> (),
+}
+
+--- \`plugin.json\`. A table is a JSON array when its keys are \`1..n\` (an empty table is one), an object otherwise, and a
+--- table with the object marker is an object whatever its keys; a table the host builds from JSON carries its marker.
+export type Json = {
+    --- JSON's \`null\` where a table must hold it: what \`decode\` gives with \`{ null = true }\`.
+    null: any,
+    --- \`text\` as a value and \`nil\`, or \`nil\` and why. A \`null\` field is left out and a \`null\` item is \`null\`; with
+    --- \`{ null = true }\` every \`null\` is \`null\`.
+    decode: (text: string, options: { null: boolean? }?) -> (any, string?),
+    --- The JSON text of \`value\`: an object's keys in byte order (a number key as its text), an array's items in order,
+    --- the same in every VM. \`pairs\` walks a table in no set order, which differs from VM to VM.
+    encode: (value: any) -> string,
+    --- Whether table \`t\` goes to JSON as an array.
+    isArray: (t: { [any]: any }) -> boolean,
+    --- Marks \`t\` an array, and returns it: an empty one goes as \`[]\`.
+    array: <T>(t: T) -> T,
+    --- Marks \`t\` an object, and returns it: an empty one goes as \`{}\`.
+    object: <T>(t: T) -> T,
+}
+`
+
+const header = `--!strict
+-- OpenCode plugin contract ${schema["x-abi"].major}.${schema["x-abi"].minor}: the types of a Luau plugin, as the module \`@opencode/plugin\`.
+-- Generated from crates/plugin-abi/schema/v2.json by \`bun run generate\` (script/gen/plugin-types-luau.ts). Do not edit.
+--
+-- The host registers the real module; this file only types it for luau-analyze and luau-lsp. Point the alias
+-- \`opencode\` at this directory in a \`.luaurc\` beside your plugin or above it:
+--   { "languageMode": "strict", "aliases": { "opencode": "<path to crates/plugin/src/luau/opencode>" } }
+-- then \`luau-analyze --formatter=gnu <your .luau files>\` or open the plugin in luau-lsp. At run time the host keeps
+-- \`@opencode\` its own whatever a \`.luaurc\` says, and reads no \`.luaurc\` outside the plugin. Require your own modules
+-- by Luau's rules: \`@self/x\` in \`init.luau\`, \`./x\` in the other modules.
+--
+-- A handler that acts is a task: \`local ok = host:confirm({ ... })\` and \`local body, err = host:fetch({ ... })\` wait in
+-- a straight line, and the plugin goes on with other calls meanwhile. A fetch its mount asked for, when that mount
+-- closes before the reply, returns \`nil, "cancelled"\` once: the host cancelled the request. A task keeps the owner of
+-- the handler that started it: what it asks for after a wait is still that mount's, or the activation's.
+-- \`plugin.sleep\` and \`plugin.every\` keep time on the host's clock, with no thread.
+
+-- The contract's definitions ----------------------------------------------------------------------------------------
+`
+
+const footer = `
+local plugin: Plugin = nil :: any
+return plugin
+`
+
+// The API's schemas the contract and the reads reached, and what those reach in turn, by Luau name.
+const envelopes = new Map<string, string>()
+function apiType(source: Schema) {
+  const props = source.properties
+  if (props?.id?.$ref !== "#/components/schemas/Event.ID" || !props.type?.enum || !props.data) return luau(source, "")
+  const required = new Set(source.required)
+  if (!required.has("type") || !required.has("data")) return luau(source, "")
+  // Match the whole table, not just its field names: durable versions and optional fields differ.
+  const shape = fields(props, required, "", { type: "Kind", data: "Payload" })
+  const name = envelopes.get(shape) ?? `_Event${envelopes.size + 1}`
+  envelopes.set(shape, name)
+  return `${name}<${luau(props.type, "")}, ${luau(props.data, "")}>`
+}
+
+const written = new Map<string, string>()
+for (
+  let pending = [...reached.keys()];
+  pending.length > 0;
+  pending = [...reached.keys()].filter((name) => !written.has(name))
+)
+  for (const name of pending) {
+    const source = reached.get(name)!
+    written.set(
+      name,
+      [...comment(components[source].description), `export type ${name} = ${apiType(components[source])}`, ""].join(
+        "\n",
+      ),
+    )
+  }
+const served = [
+  ...[...envelopes].map(([shape, name]) => `type ${name}<Kind, Payload> = ${shape}\n`),
+  ...[...written.keys()].toSorted().map((name) => written.get(name)!),
+]
+
+const file = `${root}crates/plugin/src/luau/opencode/plugin.luau`
+await Bun.write(
+  file,
+  `${header}\n${generated.join("\n")}\n-- The HTTP API's types (packages/protocol/openapi.json) ${"-".repeat(57)}\n\n${served.join("\n")}\n${api}${footer}`,
+)
+console.log(`plugin-types-luau: ${Object.keys(schema.$defs).length} definitions, ${written.size} of the API's schemas`)

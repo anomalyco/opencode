@@ -1,6 +1,7 @@
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
+import { untrack } from "solid-js"
 import { timelineNoticeRequired, type TimelineDetail, type TimelinePlacement } from "./detail"
-import { placeFactOf, type Fact, type PlaceFact } from "./facts"
+import { placeFactOf, scriptChangePaths, scriptFilePartID, type Fact, type PlaceFact } from "./facts"
 
 /**
  * Where each fact shows, under the Timeline detail setting: its category, whether it stands alone, joins a group or
@@ -83,6 +84,43 @@ export function placer(detail: TimelineDetail, timeline: TimelineKind, factOf: P
 
     return result
   }
+}
+
+/** Where a change a script made to a file shows: under the Edits setting, as a direct edit's file does. */
+export function placeScriptChange(detail: TimelineDetail): Place {
+  const placement = detail.edit.placement
+
+  return {
+    category: "edit",
+    placement,
+    group: placement === "grouped" ? "context" : "file",
+    opens: detail.edit.details === "expanded",
+  }
+}
+
+/**
+ * The changes a finished script made, as items of their own right after it, where edits show. Placement learns the
+ * script finished with changes through `factOf`, so a running script's progress never rebuilds the rows.
+ */
+export function scriptChangeItems(
+  messageID: string,
+  messageIndex: number,
+  content: Content,
+  detail?: TimelineDetail,
+  factOf: PlaceFactOf = placeFactOf,
+) {
+  if (!detail || detail.edit.placement === "hidden" || content.type !== "tool" || content.name !== "execute") return []
+
+  if (factOf(content).changes === 0) return []
+
+  // Changes only append, so their count says when the paths change and a progress report that adds none moves nothing.
+  return untrack(() => scriptChangePaths(content)).map((path, index) => ({
+    messageID,
+    messageIndex,
+    partID: scriptFilePartID(content.id, index, path),
+    content,
+    script: true as const,
+  }))
 }
 
 function placeableOf(content: Content, factOf: PlaceFactOf): Placeable {

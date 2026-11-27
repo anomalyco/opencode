@@ -3,6 +3,7 @@ import { Match, Switch } from "solid-js"
 import { AssistantTextContent } from "../../message/message-content"
 import {
   currentToolError,
+  currentToolImages,
   currentToolInput,
   currentToolMetadata,
   currentToolOutput,
@@ -50,8 +51,7 @@ export function AssistantContent(props: {
       <Match when={props.content.type === "reasoning" ? props.content : undefined}>
         {(content) => (
           <ThoughtRow
-            id={props.contentID}
-            content={content()}
+            parts={[{ ...content(), id: props.contentID }]}
             streaming={false}
             defaultOpen={props.reasoningDefaultOpen}
             open={props.toolOpen}
@@ -68,6 +68,7 @@ export function AssistantContent(props: {
             input={currentToolInput(tool())}
             metadata={currentToolMetadata(tool())}
             output={currentToolOutput(tool())}
+            images={currentToolImages(tool())}
             status={tool().state.status}
             error={currentToolError(tool())}
             stopped={toolStopped(tool())}

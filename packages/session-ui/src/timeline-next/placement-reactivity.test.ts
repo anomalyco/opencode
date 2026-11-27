@@ -14,6 +14,6 @@ describe.skipIf(isServer)("New timeline placement reactivity", () => {
         createNextTimelineProjection({ sessionMessages: messages, status, timelineDetail: () => detail }).rows,
     )
 
-    expect(runs).toEqual({ streamed: 0, moved: 1 })
+    expect(runs).toEqual({ streamed: 0, moved: 1, changed: [1, 1], scripted: 1 })
   })
 })

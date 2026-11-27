@@ -53,6 +53,8 @@ export type PlaceFact = {
   groupedRead: boolean
   /** Runs on after the call returns, reporting back as an outcome. */
   background: boolean
+  /** The changes a finished foreground script made to files, each placed like a direct edit's file. */
+  changes: number
 }
 
 export type CallFact = PlaceFact & {
@@ -72,8 +74,12 @@ export type FileFact = {
   status: Tool["state"]["status"]
   additions?: number
   deletions?: number
+  /** How the file changed, and its diff, where the call recorded them. */
+  change?: "added" | "deleted" | "modified"
+  patch?: string
   by: string
-  via: "direct"
+  /** A call that edits files, or a script that changed them as it ran. */
+  via: "direct" | "script"
 }
 
 export type Fact =
@@ -114,13 +120,15 @@ const modes = new Map<string, FactMode>(
 
 /**
  * The facts in a list of parts, in order. Not cached: stores update a part in place as it streams, so its identity
- * says nothing about whether its facts changed. Callers read it inside a memo.
+ * says nothing about whether its facts changed. Callers read it inside a memo. Without `scriptDiffs` (the server's
+ * `full_codemode` flag off), a script's changes are not facts: they neither show nor count. With `scriptSteps`, a script
+ * counts as the calls it made rather than as itself.
  */
-export function factsOf(parts: readonly FactPart[]): Fact[] {
-  return parts.flatMap(partFacts)
+export function factsOf(parts: readonly FactPart[], scriptDiffs = true, scriptSteps = false): Fact[] {
+  return parts.flatMap((part) => partFacts(part, scriptDiffs, scriptSteps))
 }
 
-function partFacts(part: FactPart): Fact[] {
+function partFacts(part: FactPart, scriptDiffs: boolean, scriptSteps: boolean): Fact[] {
   const id = part.messageID ? `${part.messageID}:${part.id ?? ""}` : (part.id ?? "")
 
   if (part.type === "text") return [{ kind: "text", id }]
@@ -145,10 +153,11 @@ function partFacts(part: FactPart): Fact[] {
         called: true,
         groupedRead: false,
         background: false,
+        changes: 0,
       },
     ]
 
-  return toolFacts(part, id)
+  return toolFacts(part, id, scriptDiffs, scriptSteps)
 }
 
 const decodeFile = Schema.decodeUnknownOption(
@@ -156,7 +165,13 @@ const decodeFile = Schema.decodeUnknownOption(
     file: Schema.String,
     additions: Schema.optional(Schema.Number),
     deletions: Schema.optional(Schema.Number),
+    status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
+    patch: Schema.optional(Schema.String),
   }),
+)
+
+const decodeScript = Schema.decodeUnknownOption(
+  Schema.Struct({ background: Schema.optional(Schema.Unknown), jobID: Schema.optional(Schema.Unknown) }),
 )
 
 const decodeFiles = Schema.decodeUnknownOption(Schema.Array(Schema.Unknown))
@@ -177,12 +192,15 @@ function reads(tool: Tool): Reads {
   }
 }
 
-/** What placing a call reads of it. Reads input and metadata only where they can move the call or open it. */
-export function placeFactOf(tool: Tool, id = tool.id): PlaceFact {
-  return placeFact(tool, id, reads(tool))
+/**
+ * What placing a call reads of it. Reads input and metadata only where they can move the call or open it. Without
+ * `scriptDiffs`, a script places no changes.
+ */
+export function placeFactOf(tool: Tool, id = tool.id, scriptDiffs = true): PlaceFact {
+  return placeFact(tool, id, reads(tool), scriptDiffs)
 }
 
-function placeFact(tool: Tool, id: string, read: Reads): PlaceFact {
+function placeFact(tool: Tool, id: string, read: Reads, scriptDiffs = true): PlaceFact {
   const name = toolName(tool.name)
   const state = tool.state
   const stopped = toolStopped(tool)
@@ -203,7 +221,34 @@ function placeFact(tool: Tool, id: string, read: Reads): PlaceFact {
       !readImagePath(read.input()) &&
       !currentToolHasLoadedFiles(tool),
     background: name === "subagent" || (name === "shell" && read.input().background === true),
+    changes: name === "execute" && scriptDiffs ? scriptChanges(tool, read).length : 0,
   }
+}
+
+// Whether a script that fails or is stopped keeps the changes it made, which really happened.
+const keepFailedScriptChanges = true
+
+// A script reports the files it changes as it runs and when it ends in the foreground; one moved to the background has
+// none. Placement reads only their count, so progress reports that add no change never move it. Entries that don't
+// decode are dropped here, so every reader numbers the changes alike.
+function scriptChanges(tool: Tool, read: Reads) {
+  const status = tool.state.status
+
+  if (status !== "running" && status !== "completed" && !(status === "error" && keepFailedScriptChanges)) return []
+  const metadata = read.metadata()
+  const script = Option.getOrUndefined(decodeScript(metadata))
+
+  // Until a script finishes, its background flag says only that it can move there: one stopped or declined keeps it.
+  if (script?.jobID !== undefined || (status === "completed" && script?.background === true)) return []
+
+  return Option.getOrElse(decodeFiles(metadata.files), () => [])
+    .flatMap((file) => Option.toArray(decodeFile(file)))
+    .filter((file) => file.file !== "")
+}
+
+/** The paths of the changes a finished script made, in order. */
+export function scriptChangePaths(tool: Tool) {
+  return scriptChanges(tool, reads(tool)).map((file) => file.file)
 }
 
 /** How a call that launches background work ended, or undefined for any other call or while it is still written. */
@@ -213,9 +258,9 @@ export function launchOf(tool: Tool) {
   return placeFact(tool, tool.id, read).background ? launch(tool, toolName(tool.name), read) : undefined
 }
 
-function toolFacts(tool: Tool, id: string): Fact[] {
+function toolFacts(tool: Tool, id: string, scriptDiffs: boolean, scriptSteps = false): Fact[] {
   const read = reads(tool)
-  const fact = placeFact(tool, id, read)
+  const fact = placeFact(tool, id, read, scriptDiffs)
   const raw = read.input().path
   const path = Predicate.isString(raw) && raw ? raw : undefined
   const metadata = read.metadata()
@@ -236,6 +281,18 @@ function toolFacts(tool: Tool, id: string): Fact[] {
 
   if (Predicate.isNumber(metadata.matches)) call.matches = metadata.matches
 
+  if (fact.name === "execute" && !scriptDiffs) return [call]
+
+  const steps = fact.name === "execute" && scriptSteps ? stepFacts(metadata, id) : []
+
+  if (fact.name === "execute")
+    return [
+      // A script with no steps to count yet, or none at all, counts as itself.
+      ...(steps.length ? steps : [call]),
+      // One fact per change, in order: a script can change the same file more than once.
+      ...scriptChanges(tool, read).map((file, index) => scriptFileFactOf(file, index, id, state.status)),
+    ]
+
   if (fact.mode !== "edit") return [call]
 
   const changed = Option.getOrElse(decodeFiles(metadata.files), () => []).flatMap((file) =>
@@ -244,25 +301,73 @@ function toolFacts(tool: Tool, id: string): Fact[] {
 
   const files = changed.length ? changed : path ? [{ file: path }] : []
 
-  return [
-    call,
-    ...files.map((file): FileFact => {
-      const fact: FileFact = {
-        kind: "file",
-        id: `${id}:file:${file.file}`,
-        path: file.file,
-        status: state.status,
-        by: id,
-        via: "direct",
-      }
+  return [call, ...files.map((file) => fileFact(file, id, state.status, "direct"))]
+}
 
-      if (file.additions !== undefined) fact.additions = file.additions
+// The tool a script's `Bun` file call counts as: `Bun.write` edits a file and `Bun.file` reads one.
+const bunTools = new Map([
+  ["write", "edit"],
+  ["file", "read"],
+])
 
-      if (file.deletions !== undefined) fact.deletions = file.deletions
+// A script's steps, each counted as a direct call of its tool. Other `Bun` calls count nothing. A script can make
+// thousands of calls, so they are read as they are rather than decoded.
+function stepFacts(metadata: Schema.JsonObject, id: string): CallFact[] {
+  const calls = Array.isArray(metadata.toolCalls) ? metadata.toolCalls : []
 
-      return fact
-    }),
-  ]
+  return calls.flatMap((call, index) => {
+    if (!Predicate.isObject(call) || !Predicate.isString(call.tool)) return []
+
+    const status = call.status
+
+    if (status !== "running" && status !== "completed" && status !== "error") return []
+
+    const input = Predicate.isObject(call.input) ? call.input : {}
+    const bun = call.tool === "Bun" && Predicate.isString(input.method) ? bunTools.get(input.method) : undefined
+
+    if (call.tool === "Bun" && !bun) return []
+
+    const name = bun ?? toolName(call.tool)
+
+    const fact: CallFact = {
+      kind: "call",
+      id: `${id}:step:${index}`,
+      name,
+      tool: bun ?? call.tool,
+      mode: modes.get(name) ?? "tool",
+      status,
+      failed: status === "error",
+      stopped: false,
+      called: true,
+      groupedRead: name === "read",
+      // Code Mode's shell has no background.
+      background: false,
+      changes: 0,
+    }
+
+    if (Predicate.isString(input.path) && input.path) fact.path = input.path
+
+    return [fact]
+  })
+}
+
+function fileFact(
+  file: { file: string; additions?: number; deletions?: number; status?: FileFact["change"]; patch?: string },
+  by: string,
+  status: Tool["state"]["status"],
+  via: FileFact["via"],
+): FileFact {
+  const fact: FileFact = { kind: "file", id: `${by}:file:${file.file}`, path: file.file, status, by, via }
+
+  if (file.additions !== undefined) fact.additions = file.additions
+
+  if (file.deletions !== undefined) fact.deletions = file.deletions
+
+  if (file.status !== undefined) fact.change = file.status
+
+  if (file.patch !== undefined) fact.patch = file.patch
+
+  return fact
 }
 
 // How a call that launches background work ended. Older sessions marked a foreground subagent's result as completed.
@@ -405,4 +510,46 @@ function shells(facts: readonly Fact[]) {
     verbs: Array.from(counts, ([verb, count]) => ({ verb, count })),
     failed: list.filter((outcome) => outcome.failed).length,
   }
+}
+
+/** Where a script's change stands in a message: its part id is the script's, then the change's place and path. */
+export function scriptFilePartID(scriptID: string, index: number, path: string) {
+  return `${scriptID}:file:${index}:${path}`
+}
+
+function scriptFileFactOf(
+  file: Parameters<typeof fileFact>[0],
+  index: number,
+  by: string,
+  status: Tool["state"]["status"],
+): FileFact {
+  return { ...fileFact(file, by, status, "script"), id: `${by}:file:${index}:${file.file}` }
+}
+
+const fileFactKeys = ["id", "path", "status", "additions", "deletions", "change", "patch", "by", "via"] as const
+
+/** Whether two reads of a change show the same: a script's changes never change once made, only its status does. */
+export function sameFileFact(previous: FileFact, next: FileFact) {
+  return fileFactKeys.every((key) => previous[key] === next[key])
+}
+
+const scriptFilePart = /^(.*?):file:(\d+):/
+
+/** Whether a part id names a change a script made, which draws as part of the script's block. */
+export function isScriptFilePartID(partID: string) {
+  return scriptFilePart.test(partID)
+}
+
+/** The change a script made that a part id names, read from that one entry of the script's part in the message. */
+export function scriptFileFact(content: readonly Content[], messageID: string, partID: string) {
+  const match = scriptFilePart.exec(partID)
+
+  if (!match) return undefined
+  const [, scriptID, index] = match
+  const tool = content.find((item) => item.type === "tool" && item.id === scriptID)
+
+  if (tool?.type !== "tool") return undefined
+  const file = scriptChanges(tool, reads(tool))[Number(index)]
+
+  return file ? scriptFileFactOf(file, Number(index), `${messageID}:${scriptID}`, tool.state.status) : undefined
 }

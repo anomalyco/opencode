@@ -2,8 +2,11 @@ export * as Join from "./join.js"
 
 import { Option, Schema } from "effect"
 
-/** A way to reach the home, as the worker's transport understands it. */
-export const Reach = Schema.Union([Schema.Struct({ type: Schema.Literal("url"), url: Schema.String })])
+/** A way to reach the home, as the worker's transport understands it. `iroh` dials the join string's `home` key. */
+export const Reach = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("url"), url: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("iroh") }),
+])
 export type Reach = typeof Reach.Type
 
 const PREFIX = "ocjoin_"

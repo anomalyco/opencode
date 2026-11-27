@@ -30,6 +30,7 @@ export const docsSections: DocsSection[] = [
           { title: "Intro", slug: "index" },
           { title: "Config", slug: "config" },
           { title: "Migrate from V1", slug: "migrate-v1" },
+          { title: "Enterprise", slug: "enterprise" },
           { title: "Troubleshooting", slug: "troubleshooting" },
         ],
       },
@@ -165,6 +166,7 @@ export const docsSections: DocsSection[] = [
           { title: "Models", slug: "console/api/models" },
           { title: "Inference", slug: "console/api/inference" },
           { title: "Providers", slug: "console/api/providers" },
+          { title: "Usage export", slug: "console/api/usage-export" },
         ],
       },
       {
@@ -174,6 +176,7 @@ export const docsSections: DocsSection[] = [
           { title: "Claude Code", slug: "console/harnesses/claude-code" },
           { title: "Codex", slug: "console/harnesses/codex" },
           { title: "Hermes", slug: "console/harnesses/hermes" },
+          { title: "OpenClaw", slug: "console/harnesses/openclaw" },
           { title: "Pi", slug: "console/harnesses/pi" },
           { title: "Raycast", slug: "console/harnesses/raycast" },
         ],

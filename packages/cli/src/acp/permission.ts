@@ -86,6 +86,9 @@ export const withCompletedDiffs = Effect.fnUntraced(function* (
   cwd: string,
 ) {
   if (!source || update.sessionUpdate !== "tool_call_update") return update
+  // A script lists each change it made, some without a diff, and the same file more than once; rebuilding them from the
+  // file on disk would show its final text for every change.
+  if (canonicalName(source.toolName) === "execute") return update
   const hunks = canonicalName(source.toolName) === "patch" ? patchHunks(source.input) : []
   const diffs = yield* Effect.forEach(
     Option.getOrElse(decodeFiles(source.metadata?.files), () => []),
@@ -94,7 +97,8 @@ export const withCompletedDiffs = Effect.fnUntraced(function* (
         const path = absolutePath(file.file, cwd)
         const newText = file.status === "deleted" ? "" : yield* Effect.tryPromise(() => Bun.file(path).text())
         if (file.status === "added") return [diff(path, null, newText)]
-        const recorded = parsePatch(file.patch)[0]
+        // A file name with a newline breaks the patch header, and `parsePatch` throws on it.
+        const recorded = (yield* Effect.try(() => parsePatch(file.patch)))[0]
         if (!recorded) return []
         const oldText = yield* Effect.try(() => applyPatch(newText, reversePatch(recorded)))
         if (oldText !== false) return [diff(path, oldText, newText)]
@@ -106,7 +110,7 @@ export const withCompletedDiffs = Effect.fnUntraced(function* (
           return []
         const chunks = hunk.chunks.map((chunk) => ({ ...chunk, oldLines: chunk.newLines, newLines: chunk.oldLines }))
         const rebuilt = (yield* Effect.try(() => Patch.derive(hunk.path, chunks, newText))).content
-        return ranges(structuredPatch(path, path, rebuilt, newText)) === ranges(recorded)
+        return ranges(yield* Effect.try(() => structuredPatch(path, path, rebuilt, newText))) === ranges(recorded)
           ? [diff(path, rebuilt, newText)]
           : []
       }).pipe(Effect.orElseSucceed((): Preview[] => [])),
@@ -148,10 +152,7 @@ function patchPreviews(input: ToolInput, cwd: string) {
     (hunk) =>
       Effect.gen(function* () {
         const path = absolutePath(hunk.path, cwd)
-        if (hunk.type === "add") {
-          const newText = hunk.contents.endsWith("\n") || hunk.contents === "" ? hunk.contents : `${hunk.contents}\n`
-          return diff(path, null, newText)
-        }
+        if (hunk.type === "add") return diff(path, null, hunk.contents)
         const oldText = yield* Effect.tryPromise(() => Bun.file(path).text())
         if (hunk.type === "delete") return diff(path, oldText, "")
         const derived = yield* Effect.try(() => Patch.derive(hunk.path, hunk.chunks, oldText))

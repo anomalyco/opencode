@@ -5,9 +5,11 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Global } from "@opencode/util/global"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Schema, Semaphore } from "effect"
+import { KV } from "../kv.js"
 
 const FILE = path.join("machine", "home-key")
+const KV_KEY = "machine.home-key"
 const SEED_BYTES = 32
 const KEY_BYTES = 32
 const SIGNATURE_BYTES = 64
@@ -27,6 +29,8 @@ export class InvalidKey extends Schema.TaggedError<InvalidKey>()("Identity.Inval
 export interface Interface {
   readonly publicKey: () => Effect.Effect<Uint8Array, InvalidKey>
   readonly sign: (bytes: Uint8Array) => Effect.Effect<Uint8Array, InvalidKey>
+  /** The raw 32-byte seed, for the home's Iroh endpoint, whose endpoint id is then the home's public key. */
+  readonly seed: () => Effect.Effect<Uint8Array, InvalidKey>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Identity") {}
@@ -86,12 +90,11 @@ const read = (file: string) =>
     catch: (cause) => cause,
   })
 
+const generateSeed = () => new Uint8Array(crypto.randomBytes(SEED_BYTES))
+
 const create = (file: string) =>
   Effect.gen(function* () {
-    const seed = crypto
-      .generateKeyPairSync("ed25519")
-      .privateKey.export({ format: "der", type: "pkcs8" })
-      .subarray(PKCS8.length)
+    const seed = generateSeed()
     yield* Effect.tryPromise({
       try: async () => {
         await mkdir(path.dirname(file), { recursive: true, mode: 0o700 })
@@ -128,26 +131,57 @@ const load = (file: string) =>
           `its mode ${(mode & 0o777).toString(8)} lets other users read it; run "chmod 600 ${file}"`,
         )
     }
-    return fromSeed(seed)
+    return { ...fromSeed(seed), seed: new Uint8Array(seed) }
   })
+
+type Loaded = Key & { readonly seed: Uint8Array }
+
+const makeService = (loadKey: Effect.Effect<Loaded, InvalidKey>) => {
+  const lock = Semaphore.makeUnsafe(1)
+  // Success only: a failed load is tried again next call, so a fixed key works without a restart.
+  let loaded: Loaded | undefined
+  const current = Effect.suspend(() =>
+    loaded
+      ? Effect.succeed(loaded)
+      : lock.withPermits(1)(
+          Effect.suspend(() =>
+            loaded ? Effect.succeed(loaded) : Effect.tap(loadKey, (key) => Effect.sync(() => (loaded = key))),
+          ),
+        ),
+  )
+  return Service.of({
+    publicKey: () => Effect.map(current, (key) => key.publicKey),
+    sign: (bytes) => Effect.map(current, (key) => key.sign(bytes)),
+    seed: () => Effect.map(current, (key) => new Uint8Array(key.seed)),
+  })
+}
+
+const loadFromKv = Effect.fnUntraced(function* (kv: KV.Interface) {
+  const existing = yield* kv.get(KV_KEY)
+  if (existing === undefined) {
+    const seed = generateSeed()
+    yield* kv.set(KV_KEY, Buffer.from(seed).toString("base64url"))
+    return { ...fromSeed(seed), seed }
+  }
+  if (typeof existing !== "string") return yield* invalid(KV_KEY, "stored home key is not a string")
+  const seed = Buffer.from(existing, "base64url")
+  // Buffer.from(..., "base64url") silently ignores non-base64url characters, so verify an exact round-trip.
+  if (seed.length !== SEED_BYTES || Buffer.from(seed).toString("base64url") !== existing)
+    return yield* invalid(KV_KEY, `expected a ${SEED_BYTES}-byte base64url key`)
+  return { ...fromSeed(seed), seed: new Uint8Array(seed) }
+})
 
 const layer = Layer.effect(
   Service,
-  Effect.gen(function* () {
-    const global = yield* Global.Service
-    const file = path.join(global.state, FILE)
-    // Success only: a failed load is tried again next call, so a fixed file works without a restart.
-    let loaded: Effect.Success<ReturnType<typeof load>> | undefined
-    const identity = () =>
-      Effect.suspend(() => {
-        if (loaded) return Effect.succeed(loaded)
-        return load(file).pipe(Effect.tap((key) => Effect.sync(() => (loaded = key))))
-      })
-    return Service.of({
-      publicKey: () => Effect.map(identity(), (key) => key.publicKey),
-      sign: (bytes) => Effect.map(identity(), (key) => key.sign(bytes)),
-    })
-  }),
+  Effect.map(Global.Service, (global) => makeService(load(path.join(global.state, FILE)))),
 )
+
+/** Persistent identity stored in `KV.Service` (base64url seed) for runtimes without local disk (e.g. workerd). */
+export const kvLayer = Layer.effect(
+  Service,
+  Effect.map(KV.Service, (kv) => makeService(loadFromKv(kv))),
+)
+
+export const kvNode = makeGlobalNode({ service: Service, layer: kvLayer, deps: [KV.node] })
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [Global.node] })

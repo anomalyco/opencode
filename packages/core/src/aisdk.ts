@@ -488,9 +488,9 @@ function callOptions(
   modelID: ID,
   optionKey: string,
 ): LanguageModelV3CallOptions {
-  const flattened = ProviderShared.flattenToolRequest(request)
+  const flat = ProviderShared.flattenRequest(request)
   return {
-    prompt: prompt(flattened.request),
+    prompt: prompt(flat),
     maxOutputTokens: request.maxTokens,
     temperature: request.temperature,
     stopSequences: request.stop === undefined ? undefined : [...request.stop],
@@ -499,8 +499,8 @@ function callOptions(
     presencePenalty: request.presencePenalty,
     frequencyPenalty: request.frequencyPenalty,
     seed: request.seed,
-    tools: flattened.tools.map(tool),
-    toolChoice: toolChoice(request.toolChoice),
+    tools: ProviderShared.flattenTools(flat.tools).map(tool),
+    toolChoice: toolChoice(flat.toolChoice),
     headers: request.headers,
     providerOptions: requestProviderOptions(request.providerOptions, packageName, modelID, optionKey),
   }
@@ -907,7 +907,7 @@ function jsonObject(input: Record<string, unknown>) {
 function jsonValue(input: unknown): JSONValue {
   try {
     const encoded = JSON.stringify(input)
-    return encoded === undefined ? null : (JSON.parse(encoded) as JSONValue)
+    return encoded === undefined ? null : (Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(encoded) as JSONValue)
   } catch {
     return stringify(input)
   }

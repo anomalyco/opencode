@@ -1,6 +1,6 @@
 {
   "name": "@opencode/app",
-  "version": "2.3.0",
+  "version": "2.4.1",
   "description": "",
   "type": "module",
   "exports": {
@@ -59,7 +59,6 @@
     "@dnd-kit/abstract": "0.5.0",
     "@dnd-kit/dom": "0.5.0",
     "@dnd-kit/solid": "0.5.0",
-    "@ibm/plex": "6.4.1",
     "@kobalte/core": "catalog:",
     "@opencode/client": "workspace:*",
     "@opencode/schema": "workspace:*",

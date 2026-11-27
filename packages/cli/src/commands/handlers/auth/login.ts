@@ -22,9 +22,10 @@ const integrationPriority = new Map([
   ["opencode-go", 0],
   ["opencode", 1],
   ["openai", 2],
-  ["github-copilot", 3],
-  ["anthropic", 4],
-  ["google", 5],
+  ["anthropic", 3],
+  ["claude-agent", 4],
+  ["github-copilot", 5],
+  ["google", 6],
 ])
 
 export default Runtime.handler(
@@ -76,9 +77,15 @@ const findIntegration = Effect.fn("cli.auth.login.integration")(function* (clien
   return yield* resolveIntegration(integrations, id)
 })
 
+// OpenCode Go connects through OpenCode, so it's only offered to people who already saved a Go key.
 export function loginChoices(integrations: IntegrationInfo[]): IntegrationChoice[] {
   return integrations
     .filter((integration) => connectMethods(integration).length > 0)
+    .filter(
+      (integration) =>
+        integration.id !== "opencode-go" ||
+        integration.connections.some((connection) => connection.type === "credential"),
+    )
     .toSorted(
       (a, b) =>
         Number(b.metadata?.source === "mcp") - Number(a.metadata?.source === "mcp") ||

@@ -5,7 +5,6 @@ import { ChildProcess } from "effect/process"
 import path from "path"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { AppProcess } from "@opencode/util/process"
-import { Environment } from "./environment/index.js"
 import type { FileAccess } from "./file-access.js"
 import { Location } from "./location.js"
 import type { Info } from "./formatter/builtins.js"
@@ -56,8 +55,8 @@ const layer = Layer.effect(
     })
 
     const file = Effect.fn("Formatter.file")(function* (target: FileAccess.Target) {
-      // A formatter is a process on this machine acting on this machine's disk.
-      if (target.environment.id !== Environment.localID) return false
+      // A formatter is the server's own child, acting on the server's own disk.
+      if (!target.environment.local) return false
       const filepath = target.absolute
       const extension = path.extname(filepath)
       const matching = state.get().formatters.filter((formatter) => formatter.extensions.includes(extension))

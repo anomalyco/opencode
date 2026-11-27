@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { FileSystem } from "@opencode/core/filesystem"
-import { Clock, DateTime, Effect, Fiber, Latch, Layer, LayerMap, Queue, Schema, Stream } from "effect"
+import { Clock, DateTime, Effect, Fiber, Latch, Layer, Queue, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { eq } from "drizzle-orm"
 import { Agent } from "@opencode/core/agent"
@@ -18,6 +18,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "@opencode/core/bus"
 import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
+import { PermissionPolicy } from "@opencode/core/permission/policy"
 import { PermissionSaved } from "@opencode/core/permission/saved"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
@@ -31,6 +32,7 @@ import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { Tool } from "@opencode/core/tool"
 import { McpTool } from "@opencode/core/tool/mcp"
+import { AutomationTools } from "@opencode/core/tool/plugin/automation"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
 import { Plugin } from "@opencode/core/plugin"
@@ -38,9 +40,9 @@ import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Skill } from "@opencode/core/skill"
 import { Config } from "@opencode/core/config"
 import { Document, Info } from "@opencode/schema/config"
-import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
+import { registerToolPlugin } from "./lib/tool"
 
 const enabledDirectory = "/enabled"
 const disabledDirectory = "/disabled"
@@ -72,7 +74,6 @@ const enabledEntries = [
     type: "document",
     info: new Info({
       timezone: "America/New_York",
-      experimental: new ConfigExperimental.Info({ automations: true }),
     }),
   }),
 ]
@@ -80,13 +81,13 @@ const disabledEntries = [
   new Document({
     type: "document",
     info: new Info({
-      experimental: new ConfigExperimental.Info({ automations: false }),
+      automations: false,
     }),
   }),
 ]
 const enabled = Config.testLayer(enabledEntries)
 const disabled = Config.testLayer(disabledEntries)
-/** A location whose flag the test turns on, counting every config read. */
+/** A location whose config the test changes, counting every config read. */
 const toggle = { on: false, reads: 0 }
 const toggled = Layer.succeed(
   Config.Service,
@@ -104,6 +105,7 @@ const slack = { replies: 0, reads: 0, posts: [] as string[], failing: false, mes
 let agentRules: Permission.Ruleset = [{ action: "*", resource: "*", effect: "allow" }]
 let activationGate: Effect.Effect<void> = Effect.void
 let helperGone = false
+let threadGone = false
 
 const configureAgent = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -147,6 +149,15 @@ const configureAgent = Layer.effectDiscard(
                 return Effect.succeed({ output: { replies: slack.replies } })
               }),
             ),
+      })
+      if (threadGone) editor.remove("slack_read_thread")
+      editor.add({
+        name: "automation",
+        description: "The automation making the call, if any",
+        input: Schema.Struct({}),
+        output: Schema.NullOr(Schema.String),
+        options: { namespace: "probe" },
+        execute: (_input, context) => Effect.succeed({ output: context.automation?.id ?? null }),
       })
       editor.add({
         name: "post",
@@ -192,7 +203,7 @@ const locations = makeGlobalNode({
             .pipe(Effect.map((project) => [dir, project] as const)),
         ),
       )
-      return yield* LayerMap.make(
+      return yield* LocationServiceMap.make(
         (ref: Location.Ref): Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError> => {
           const project = places.get(ref.directory)
           if (!project) throw new Error(`Unknown test location: ${ref.directory}`)
@@ -257,6 +268,7 @@ const it = testEffect(
       Bus.node,
       SessionProjector.node,
       SessionStore.node,
+      SessionInbox.node,
       Session.node,
       Automation.node,
       Instance.node,
@@ -300,10 +312,23 @@ const setup = (directory = enabledDirectory) =>
     agentRules = [{ action: "*", resource: "*", effect: "allow" }]
     activationGate = Effect.void
     helperGone = false
+    threadGone = false
     return yield* Automation.Service
   })
 
 const setTime = (iso: string) => TestClock.setTime(Date.parse(iso))
+const failures = (id: Automation.ID) =>
+  Database.Service.use(({ db }) =>
+    db
+      .select({ failures: AutomationTable.failures })
+      .from(AutomationTable)
+      .where(eq(AutomationTable.id, id))
+      .get()
+      .pipe(
+        Effect.orDie,
+        Effect.map((row) => row?.failures),
+      ),
+  )
 const pending = Database.Service.use(({ db }) =>
   db
     .select({ id: SessionInboxTable.id, sessionID: SessionInboxTable.session_id })
@@ -403,7 +428,9 @@ describe("Automation", () => {
       expect((yield* automations.list({ projectID: (yield* creator).projectID })).map((item) => item.id)).toEqual([
         automation.id,
       ])
-      expect((yield* automations.list({ sessionID: otherID })).map((item) => item.id)).toEqual([])
+      expect(yield* Effect.flip(automations.list({ sessionID: otherID }))).toMatchObject({
+        _tag: "Session.NotFoundError",
+      })
 
       expect((yield* automations.pause(automation.id)).status).toBe("paused")
       yield* TestClock.adjust("150 seconds")
@@ -866,7 +893,7 @@ describe("Automation", () => {
     }),
   )
 
-  it.effect("rejects creation when experimental.automations is off", () =>
+  it.effect("rejects creation when automations is false", () =>
     Effect.gen(function* () {
       const automations = yield* setup(disabledDirectory)
       expect(
@@ -879,7 +906,97 @@ describe("Automation", () => {
     }),
   )
 
-  it.effect("rechecks hourly while its location has the flag off, then catches up once it is on", () =>
+  it.effect("hides and refuses automations while their location has automations off", () =>
+    Effect.gen(function* () {
+      const automations = yield* setup(toggleDirectory)
+      toggle.on = true
+      const { id } = yield* automations.create({
+        sessionID,
+        name: "poll",
+        trigger: every("1 minute"),
+        action: prompt("poll"),
+      })
+      expect((yield* automations.list({ directory: toggleDirectory })).map((item) => item.id)).toEqual([id])
+      expect(yield* Effect.flip(automations.list({ directory: "relative" }))).toMatchObject({
+        _tag: "Automation.InvalidError",
+      })
+
+      toggle.on = false
+      expect(yield* automations.list()).toEqual([])
+      expect(yield* Effect.flip(automations.list({ directory: toggleDirectory }))).toMatchObject({
+        _tag: "Automation.DisabledError",
+      })
+      expect(yield* Effect.flip(automations.list({ sessionID }))).toMatchObject({ _tag: "Automation.DisabledError" })
+      expect(yield* Effect.flip(automations.pause(id))).toMatchObject({ _tag: "Automation.DisabledError" })
+      expect(yield* Effect.flip(automations.remove(id))).toMatchObject({ _tag: "Automation.DisabledError" })
+
+      toggle.on = true
+      yield* automations.remove(id)
+      expect(yield* automations.list()).toEqual([])
+    }),
+  )
+
+  it.effect("tools treat another project's automation as missing even while its location has automations off", () =>
+    Effect.gen(function* () {
+      const automations = yield* setup(toggleDirectory)
+      toggle.on = true
+      const { id } = yield* automations.create({
+        sessionID,
+        name: "poll",
+        trigger: every("1 hour"),
+        action: prompt("x"),
+      })
+      toggle.on = false
+
+      // The caller lives in another project whose location has automations on.
+      yield* insertSession(otherID, enabledDirectory)
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.make("prj_elsewhere"), worktree: AbsolutePath.make("/elsewhere"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .update(SessionTable)
+        .set({ project_id: Project.ID.make("prj_elsewhere") })
+        .where(eq(SessionTable.id, otherID))
+        .run()
+        .pipe(Effect.orDie)
+
+      const map = yield* LocationServiceMap.Service
+      const errors = yield* Effect.gen(function* () {
+        yield* registerToolPlugin(AutomationTools.Plugin, {
+          event: { subscribe: () => Stream.never },
+          command: {
+            list: () => Effect.die("unused command.list"),
+            reload: () => Effect.void,
+            transform: () => Effect.succeed({ dispose: Effect.void }),
+          },
+        })
+        const registry = yield* Tool.Service
+        const tools = yield* registry.snapshot(
+          PermissionPolicy.fromRules([{ action: "execute", resource: "*", effect: "deny" }]),
+        )
+        return yield* Effect.forEach(["automation_pause", "automation_resume", "automation_delete"], (name) =>
+          tools
+            .execute({
+              sessionID: otherID,
+              agent: Agent.defaultID,
+              messageID: SessionMessage.ID.make("msg_other"),
+              call: { type: "tool-call", id: `call-${name}`, name, input: { id } },
+            })
+            .pipe(
+              Effect.flip,
+              Effect.map((error) => error.message),
+            ),
+        )
+      }).pipe(Effect.provide(map.get(Location.Ref.make({ directory: AbsolutePath.make(enabledDirectory) }))))
+
+      expect(errors).toEqual([0, 1, 2].map(() => `Automation not found: ${id}`))
+    }),
+  )
+
+  it.effect("rechecks hourly while automations are disabled in its location, then catches up when enabled", () =>
     Effect.gen(function* () {
       const automations = yield* setup(toggleDirectory)
       toggle.on = true
@@ -893,17 +1010,23 @@ describe("Automation", () => {
       const before = toggle.reads
       yield* TestClock.adjust("1 minute")
       yield* automations.tick
-      expect(yield* automations.get(id)).toMatchObject({ status: "active", runCount: 0, lastOutcome: "disabled" })
+      // Callers can't read an automation while its location has automations off, so read the row.
+      const { db } = yield* Database.Service
+      expect(
+        yield* db.select().from(AutomationTable).where(eq(AutomationTable.id, id)).get().pipe(Effect.orDie),
+      ).toMatchObject({ status: "active", run_count: 0, last_outcome: "disabled" })
+      expect(yield* Effect.flip(automations.get(id))).toMatchObject({ _tag: "Automation.DisabledError" })
+      expect(yield* automations.list()).toEqual([])
       expect(yield* pendingIDs).toEqual([])
       const reads = toggle.reads
       expect(reads).toBeGreaterThan(before)
 
-      // Within the hour the location is not booted to read the flag again.
+      // Within the hour the location is not booted to read config again.
       yield* TestClock.adjust("59 minutes")
       yield* automations.tick
       expect(toggle.reads).toBe(reads)
 
-      // Once the flag is on and the hour has passed, the missed slot runs once, late, and keeps the phase.
+      // Once automations are enabled and the hour has passed, the missed slot runs once, late, and keeps the phase.
       toggle.on = true
       yield* TestClock.adjust("2 minutes")
       yield* automations.tick
@@ -1239,6 +1362,23 @@ describe("Automation", () => {
       }),
     )
 
+    // Tools rely on this to know no model is waiting, e.g. the shell tool stops a timed-out command instead of
+    // moving it to the background.
+    it.effect("names the automation on each of its program's tool calls", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        const automation = yield* automations.create({
+          sessionID,
+          name: "probe",
+          trigger: every("1 minute"),
+          action: code(`return { state: await tools.probe.automation({}) }`),
+        })
+        yield* TestClock.adjust("1 minute")
+        yield* automations.tick
+        expect(yield* automations.get(automation.id)).toMatchObject({ lastOutcome: "fired", state: automation.id })
+      }),
+    )
+
     it.effect("a program that returns nothing leaves state unchanged", () =>
       Effect.gen(function* () {
         const automations = yield* setup()
@@ -1261,7 +1401,7 @@ describe("Automation", () => {
       }),
     )
 
-    it.effect("keeps state on failure, retries a minute later, and pauses after 3 failed runs", () =>
+    it.effect("keeps state and its schedule on failed runs, never pauses, and runs again once it works", () =>
       Effect.gen(function* () {
         const automations = yield* setup()
         const automation = yield* automations.create({
@@ -1277,46 +1417,109 @@ describe("Automation", () => {
 
         slack.failing = true
         slack.replies = 5
-        for (const _ of [1, 2]) {
+        for (const minute of [3, 4, 5, 6]) {
           yield* TestClock.adjust("1 minute")
           yield* automations.tick
-          expect(yield* automations.get(automation.id)).toMatchObject({
+          const failed = yield* automations.get(automation.id)
+          expect(failed).toMatchObject({
             status: "active",
             runCount: 1,
             lastOutcome: "failed",
-            lastOutput: expect.stringContaining("Slack is down"),
+            lastOutput: "Slack is down",
             state: { replies: 2 },
           })
+          expect(iso(failed.nextDueAt)).toBe(new Date(minute * 60_000).toISOString())
+          expect(yield* failures(automation.id)).toBe(minute - 2)
         }
+
+        slack.failing = false
         yield* TestClock.adjust("1 minute")
         yield* automations.tick
         expect(yield* automations.get(automation.id)).toMatchObject({
-          status: "paused",
-          runCount: 1,
-          lastOutcome: "failed",
-          lastOutput: expect.stringContaining("Paused after 3 failed runs"),
-          state: { replies: 2 },
+          status: "active",
+          runCount: 2,
+          lastOutcome: "fired",
+          state: { replies: 5 },
         })
+        expect(yield* failures(automation.id)).toBe(0)
       }),
     )
 
-    it.effect("pauses at once when a run returns an invalid shape", () =>
+    it.effect("records an invalid result as a failed run and keeps its schedule", () =>
       Effect.gen(function* () {
         const automations = yield* setup()
         const automation = yield* automations.create({
           sessionID,
           name: "bad",
           trigger: every("1 minute"),
-          action: code(`return "not-a-result"`),
+          action: code(
+            `const t = await tools.slack.read_thread({}); return t.replies > 0 ? { state: t.replies } : "not-a-result"`,
+          ),
         })
         yield* TestClock.adjust("1 minute")
         yield* automations.tick
-        expect(yield* automations.get(automation.id)).toMatchObject({
-          status: "paused",
+        const failed = yield* automations.get(automation.id)
+        expect(failed).toMatchObject({
+          status: "active",
           runCount: 0,
           lastOutcome: "failed",
           lastOutput: expect.stringContaining("must return nothing or { state?, done?, send? }"),
         })
+        expect(iso(failed.nextDueAt)).toBe(new Date(2 * 60_000).toISOString())
+
+        slack.replies = 1
+        yield* TestClock.adjust("1 minute")
+        yield* automations.tick
+        expect(yield* automations.get(automation.id)).toMatchObject({
+          status: "active",
+          runCount: 1,
+          lastOutcome: "fired",
+          state: 1,
+        })
+      }),
+    )
+
+    it.effect("skips runs while a tool its program names is unavailable, then runs once it is back", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        const automation = yield* automations.create({
+          sessionID,
+          name: "thread",
+          trigger: every("1 minute"),
+          action: code(`const t = await tools.slack.read_thread({}); return { state: { replies: t.replies } }`),
+        })
+        const map = yield* LocationServiceMap.Service
+        const ref = Location.Ref.make({ directory: AbsolutePath.make(enabledDirectory) })
+        threadGone = true
+        yield* map.invalidate(ref)
+        // More skips than the failures that would pause it.
+        for (const minute of [2, 3, 4]) {
+          yield* TestClock.adjust("1 minute")
+          yield* automations.tick
+          const skipped = yield* automations.get(automation.id)
+          expect(skipped).toMatchObject({
+            status: "active",
+            runCount: 0,
+            lastOutcome: "skipped",
+            lastOutput: "skipped: slack.read_thread unavailable",
+          })
+          expect(iso(skipped.nextDueAt)).toBe(new Date(minute * 60_000).toISOString())
+          expect(yield* failures(automation.id)).toBe(0)
+        }
+        expect(slack.reads).toBe(0)
+
+        threadGone = false
+        yield* map.invalidate(ref)
+        slack.replies = 2
+        yield* TestClock.adjust("1 minute")
+        yield* automations.tick
+        expect(yield* automations.get(automation.id)).toMatchObject({
+          status: "active",
+          runCount: 1,
+          lastOutcome: "fired",
+          state: { replies: 2 },
+        })
+        expect(slack.reads).toBe(1)
       }),
     )
 
@@ -1416,7 +1619,7 @@ describe("Automation", () => {
       }),
     )
 
-    it.effect("bounds failed code output including the pause reason in UTF-8 bytes", () =>
+    it.effect("bounds failed code output in UTF-8 bytes", () =>
       Effect.gen(function* () {
         const automations = yield* setup()
         const automation = yield* automations.create({
@@ -1425,16 +1628,13 @@ describe("Automation", () => {
           trigger: every("1 minute"),
           action: code(`console.log("starting check"); throw new Error("check failed: " + "🧪".repeat(20000))`),
         })
-        for (const strike of [1, 2, 3]) {
-          yield* tick(automations)
-          const row = yield* automations.get(automation.id)
-          const output = row.lastOutput ?? ""
-          expect(Buffer.byteLength(output)).toBeLessThanOrEqual(32 * 1024)
-          expect(row.status).toBe(strike === 3 ? "paused" : "active")
-          expect(output).toContain("check failed: ")
-          expect(output.endsWith("🧪…")).toBe(true)
-          if (strike === 3) expect(output.startsWith("Paused after 3 failed runs: ")).toBe(true)
-        }
+        yield* tick(automations)
+        const row = yield* automations.get(automation.id)
+        const output = row.lastOutput ?? ""
+        expect(Buffer.byteLength(output)).toBeLessThanOrEqual(32 * 1024)
+        expect(row.status).toBe("active")
+        expect(output).toContain("check failed: ")
+        expect(output.endsWith("🧪…")).toBe(true)
       }),
     )
 
@@ -1475,23 +1675,31 @@ describe("Automation", () => {
         const blocked = yield* create(denied.id, { subagent: "helper" })
         yield* tick(automations)
         yield* tick(automations)
-        for (const row of [...rows, deep, blocked])
+        // A result that doesn't decode is a failed run; a target that can't be reached is a setup problem.
+        expect(yield* automations.get(rows[0]!.id)).toMatchObject({
+          status: "active",
+          lastOutcome: "failed",
+          lastOutput: expect.stringContaining("must return nothing or"),
+          runCount: 1,
+          state: "before",
+        })
+        for (const row of [...rows.slice(1), deep, blocked])
           expect(yield* automations.get(row.id)).toMatchObject({
             status: "paused",
             lastOutcome: "failed",
-            lastOutput: expect.stringContaining("Paused:"),
             runCount: 1,
             state: "before",
           })
-        expect((yield* automations.get(deep.id)).lastOutput).toBe("Paused: Subagent depth limit reached (1)")
+        expect((yield* automations.get(deep.id)).lastOutput).toBe("Subagent depth limit reached (1)")
         expect((yield* automations.get(blocked.id)).lastOutput).toBe(
-          "Paused: Cannot start subagent helper: Permission denied: subagent",
+          "Cannot start subagent helper: Permission denied: subagent",
         )
-        expect((yield* Effect.forEach(rows, (row) => automations.get(row.id))).map((row) => row.lastOutput)).toEqual([
-          expect.stringContaining("must return nothing or"),
-          "Paused: Subagent internal is hidden",
-          `Paused: Agent ${Agent.defaultID} is primary-only`,
-          "Paused: Unknown subagent: missing",
+        expect(
+          (yield* Effect.forEach(rows.slice(1), (row) => automations.get(row.id))).map((row) => row.lastOutput),
+        ).toEqual([
+          "Subagent internal is hidden",
+          `Agent ${Agent.defaultID} is primary-only`,
+          "Unknown subagent: missing",
           expect.stringContaining("subagent helper: Permission subagent needs approval"),
         ])
         expect(yield* pending).toEqual([])
@@ -1764,7 +1972,7 @@ describe("Automation", () => {
       }),
     )
 
-    it.effect("rejects dynamic tool access, unknown tools, shell, recursive automation tools and denied permissions", () =>
+    it.effect("rejects dynamic tool access, unknown tools, recursive automation tools and denied permissions", () =>
       Effect.gen(function* () {
         const automations = yield* setup()
         const bad = (text: string) =>
@@ -1774,9 +1982,6 @@ describe("Automation", () => {
         expect(yield* bad("return await tools.slack[name]({})")).toMatchObject({ _tag: "Automation.InvalidError" })
         expect(yield* bad("return await tools.slack.missing({})")).toMatchObject({
           reason: "Unknown Code Mode tool: slack.missing",
-        })
-        expect(yield* bad('await tools.shell({ command: "pwd" })')).toMatchObject({
-          reason: "Tool shell cannot be used inside an automation",
         })
         expect(yield* bad("return await tools.automation.create({})")).toMatchObject({
           reason: "Tool automation.create cannot be used inside an automation",

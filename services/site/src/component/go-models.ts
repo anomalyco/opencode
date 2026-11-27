@@ -54,7 +54,7 @@ export const goModels: GoModel[] = [
     allowance: 100,
     featured: true,
   },
-  { id: "longcat-2.0", name: "LongCat-2.0", requests: 11400, allowance: 60 },
+  { id: "longcat-2.5", name: "LongCat 2.5", requests: 11400, allowance: 60, fresh: true },
   {
     id: "mimo-v2.6-flash",
     name: "MiMo-V2.6-Flash",
@@ -92,15 +92,17 @@ export const goModels: GoModel[] = [
     limitedTime: true,
   },
   {
-    id: "longcat-2.5-free",
-    name: "LongCat 2.5 Free",
+    id: "hy4-flash-free",
+    name: "Hy4 flash Free",
     requests: Infinity,
     allowance: Infinity,
+    featured: true,
+    fresh: true,
     limitedTime: true,
   },
   {
-    id: "hy4-flash-free",
-    name: "Hy4 flash Free",
+    id: "hungerg-free",
+    name: "HungerG Free",
     requests: Infinity,
     allowance: Infinity,
     featured: true,
@@ -135,14 +137,14 @@ const plusLimits: Record<string, [number, number]> = {
   "qwen3.8-flash": [16200, 90],
   "glm-5.3-flash": [18960, 180],
   "deepseek-v4.1-flash": [86670, 200],
-  "longcat-2.0": [45600, 240],
+  "longcat-2.5": [45600, 240],
   "mimo-v2.6-flash": [60200, 120],
   "muse-spark-1.3-contributor": [90600, 120],
   "muse-spark-1.2-contributor": [90600, 120],
   "beam-free": [Infinity, Infinity],
   "iceman-contributor-free": [Infinity, Infinity],
-  "longcat-2.5-free": [Infinity, Infinity],
   "hy4-flash-free": [Infinity, Infinity],
+  "hungerg-free": [Infinity, Infinity],
 }
 
 const teamsLimits: Record<string, [number, number]> = {
@@ -170,14 +172,14 @@ const teamsLimits: Record<string, [number, number]> = {
   "qwen3.8-flash": [6300, 35],
   "glm-5.3-flash": [6847, 65],
   "deepseek-v4.1-flash": [45500, 105],
-  "longcat-2.0": [12350, 65],
+  "longcat-2.5": [12350, 65],
   "mimo-v2.6-flash": [32608, 65],
   "muse-spark-1.3-contributor": [49075, 65],
   "muse-spark-1.2-contributor": [49075, 65],
   "beam-free": [Infinity, Infinity],
   "iceman-contributor-free": [Infinity, Infinity],
-  "longcat-2.5-free": [Infinity, Infinity],
   "hy4-flash-free": [Infinity, Infinity],
+  "hungerg-free": [Infinity, Infinity],
 }
 
 // A bonus multiplies a model's usual allowance, which is shown crossed out beside the current limits.

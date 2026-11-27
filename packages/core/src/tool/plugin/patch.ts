@@ -118,16 +118,14 @@ export const Plugin = {
                   const target = yield* resolveTarget(hunk.path)
                   const file = FileAccess.key(target)
                   if (hunk.type === "add") {
-                    const content =
-                      hunk.contents.endsWith("\n") || hunk.contents === "" ? hunk.contents : `${hunk.contents}\n`
                     prepared.push({
                       ...hunk,
                       target,
-                      content,
+                      content: hunk.contents,
                       before: "",
-                      after: Bom.split(content).text,
+                      after: Bom.split(hunk.contents).text,
                     })
-                    updates.set(file, { target, content })
+                    updates.set(file, { target, content: hunk.contents })
                     return
                   }
                   if (hunk.type === "delete") {
@@ -207,7 +205,7 @@ export const Plugin = {
               yield* permission.assert({
                 action: "edit",
                 resources: [...new Set(targets.map((target) => target.resource))],
-                save: ["*"],
+                save: [...new Set(targets.map(FileAccess.always))],
                 metadata: {
                   filepath: targets.map((target) => target.resource).join(", "),
                   diff: patchFiles.map((file) => `${file.patch}\n`).join(""),

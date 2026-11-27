@@ -61,13 +61,6 @@ const exitLag = async (mode: string) => {
 }
 
 describe("Image.Photon", () => {
-  it.live("resizes in a worker to the same bytes as before", () =>
-    Effect.gen(function* () {
-      const normalize = Photon.makeWith(Photon.spawnWorker())
-      expect(digest(yield* normalize("fixture.png", content, limits))).toEqual(expected)
-    }),
-  )
-
   it.live("shares one resizer across the process", () =>
     Effect.gen(function* () {
       expect(yield* Photon.make).toBe(yield* Photon.make)

@@ -50,8 +50,9 @@ function cancel(client: OpenCodeClient, form: Form.Info, message?: string) {
 export function requestedSchema(form: AskedForm, capabilities: Capabilities): ElicitationSchema | undefined {
   if (!capabilities.formElicitation) return undefined
   if (Option.isNone(Schema.decodeUnknownOption(ElicitedKind)(form.metadata))) return undefined
-  if (form.fields.some(credentialLike)) return undefined
-  const fields = form.fields.filter((field): field is InputField => field.type !== "external")
+  const elicitedFields = form.fields.map(elicited)
+  if (elicitedFields.some(collectsSecret)) return undefined
+  const fields = elicitedFields.filter((field): field is InputField => field.type !== "external")
   if (fields.length !== form.fields.length || fields.some((field) => field.when?.length)) return undefined
   if (fields.some((field) => field.hidden && field.required && field.default === undefined)) return undefined
   const keys = new Set(fields.map((field) => field.key))
@@ -76,7 +77,7 @@ function answer(form: AskedForm, response: CreateElicitationResponse): Form.Answ
   const content = Schema.decodeUnknownOption(Form.Answer)(response.content ?? {})
   if (Option.isNone(content)) return undefined
   return Object.fromEntries(
-    form.fields.flatMap((field) => {
+    form.fields.map(elicited).flatMap((field) => {
       const value = fieldAnswer(field, content.value)
       return value === undefined ? [] : [[field.key, value]]
     }),
@@ -106,6 +107,22 @@ export function respond(input: Input, outcome: Form.Answer | "cancel") {
         Effect.logWarning("ACP form reply failed", cause).pipe(Effect.andThen(cancel(input.client, input.form))),
       ),
     )
+}
+
+// A choice can't carry a secret, so a choice worded like one is still asked, without its typed answer.
+function elicited(field: Form.Field): Form.Field {
+  if (!isSelect(field) || !field.custom || !credentialLike(field)) return field
+  return { ...field, custom: false }
+}
+
+function collectsSecret(field: Form.Field) {
+  if (field.type === "boolean") return false
+  if (isSelect(field) && !field.custom) return false
+  return credentialLike(field)
+}
+
+function isSelect(field: Form.Field): field is SelectField {
+  return (field.type === "string" || field.type === "multiselect") && hasOptions(field)
 }
 
 function credentialLike(field: Form.Field) {

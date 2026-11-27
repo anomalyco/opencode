@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Clock, Deferred, Duration, Effect, Layer, LayerMap, Stream } from "effect"
+import { Clock, Deferred, Duration, Effect, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { define } from "@opencode/plugin/effect/plugin"
@@ -51,13 +51,14 @@ const sourceLayer = Layer.succeed(
   }),
 )
 
-// Package checks report `available` after `delay`; updates are recorded instead of installed.
-const packages = { available: false, delay: Duration.zero, checks: 0, updated: [] as string[] }
+// Package checks report `available` after `delay`, and packages in `stays` don't follow updates; updates are recorded
+// instead of installed.
+const packages = { available: false, delay: Duration.zero, checks: 0, stays: [] as string[], updated: [] as string[] }
 
 const instances = Layer.effect(
   LocationServiceMap.Service,
   Effect.gen(function* () {
-    const map = yield* LayerMap.make(
+    const map = yield* LocationServiceMap.make(
       (ref: Location.Ref) =>
         Instance.layer(ref, { discovery: false, plugins: [greeter("instance-greet")], replacements: bindings }),
       { idleTimeToLive: Duration.infinity },
@@ -97,6 +98,7 @@ const instances = Layer.effect(
                       cause: new Error(`Unexpected Npm.update(${pkg})`),
                     }),
                   ),
+            follows: (pkg) => Effect.succeed(!packages.stays.includes(pkg)),
             reject: () => Effect.succeed(false),
             which: () => Effect.undefined,
           }),
@@ -206,18 +208,29 @@ describe("PluginSupervisor", () => {
     }),
   )
 
-  it.effect("updates only packages written as name@latest when a newer version is out", () =>
+  it.effect("updates only packages that follow updates, once per check interval", () =>
     Effect.gen(function* () {
-      source.operations = ["latest-plugin@latest", "plain-plugin", "ranged-plugin@^1.0.0", "next-plugin@next"].map(
-        (target) => ({ type: "add" as const, target, options: {} }),
-      )
+      const follows = ["latest-plugin@latest", "ranged-plugin@^1.0.0", "github:acme/branch-plugin#dev"]
+      packages.stays = ["plain-plugin", "next-plugin@next", "github:acme/default-plugin"]
+      source.operations = [...follows, ...packages.stays].map((target) => ({
+        type: "add" as const,
+        target,
+        options: {},
+      }))
       packages.available = true
       packages.updated = []
       const directory = yield* tmpdirScoped()
       const locations = yield* LocationServiceMap.Service
       yield* Effect.gen(function* () {
         yield* Plugin.Service
-        yield* advance(() => packages.updated.length > 0)
+        yield* advance(() => packages.updated.length >= follows.length)
+        // Each update reloads and checks again; the newer version is still reported but isn't installed twice.
+        yield* drain
+        expect(packages.updated.toSorted()).toEqual(follows.toSorted())
+        // The next interval's scheduled check installs again.
+        yield* TestClock.adjust(PluginUpdate.interval)
+        yield* advance(() => packages.updated.length >= follows.length * 2)
+        yield* drain
       }).pipe(
         Effect.scoped,
         Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
@@ -225,10 +238,11 @@ describe("PluginSupervisor", () => {
           Effect.sync(() => {
             source.operations = []
             packages.available = false
+            packages.stays = []
           }),
         ),
       )
-      expect(packages.updated).toEqual(["latest-plugin@latest"])
+      expect(packages.updated.toSorted()).toEqual([...follows, ...follows].toSorted())
     }),
   )
 

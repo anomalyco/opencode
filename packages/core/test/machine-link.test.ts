@@ -5,6 +5,7 @@ import path from "node:path"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Environment } from "@opencode/core/environment/index"
+import { Frames } from "@opencode/core/machine/frames"
 import { Identity } from "@opencode/core/machine/identity"
 import { Join } from "@opencode/core/machine/join"
 import { Link } from "@opencode/core/machine/link"
@@ -243,9 +244,17 @@ it.effect("never writes message 3 to a home that does not prove the pinned key",
       const other = newWorker()
       const impostors: ReadonlyArray<Identity.Interface> = [
         // A valid signature by a key that is not the pinned one.
-        { publicKey: () => Effect.succeed(other.publicKey), sign: (bytes) => Effect.succeed(other.sign(bytes)) },
+        {
+          publicKey: () => Effect.succeed(other.publicKey),
+          sign: (bytes) => Effect.succeed(other.sign(bytes)),
+          seed: () => Effect.die("unused"),
+        },
         // The pinned key, with a signature another key made.
-        { publicKey: () => identity.publicKey(), sign: (bytes) => Effect.succeed(other.sign(bytes)) },
+        {
+          publicKey: () => identity.publicKey(),
+          sign: (bytes) => Effect.succeed(other.sign(bytes)),
+          seed: () => Effect.die("unused"),
+        },
       ]
       for (const impostor of impostors) {
         const link = yield* connect(
@@ -280,12 +289,17 @@ it.effect("refuses a signature from another handshake, over the static key alone
           publicKey: () => identity.publicKey(),
           sign: (bytes) =>
             identity.sign(bytes).pipe(Effect.tap((signature) => Effect.sync(() => homeSignatures.push(signature)))),
+          seed: () => Effect.die("unused"),
         },
       })
       ok(recorded.worker)
       const homeReplay = yield* connect(options, {
         fixed: { static: homeStatic },
-        identity: { publicKey: () => identity.publicKey(), sign: () => Effect.succeed(homeSignatures[0]) },
+        identity: {
+          publicKey: () => identity.publicKey(),
+          sign: () => Effect.succeed(homeSignatures[0]),
+          seed: () => Effect.die("unused"),
+        },
       })
       refused(homeReplay.worker)
       expect(homeReplay.sent.byWorker).toHaveLength(1)
@@ -319,7 +333,9 @@ it.effect("refuses a signature from another handshake, over the static key alone
         (bytes: Uint8Array) => identity.sign(bytes.subarray(label, label + 32)),
         (bytes: Uint8Array) => identity.sign(concat(MACHINE_LABEL, bytes.subarray(label))),
       ]) {
-        const link = yield* connect(options, { identity: { publicKey: () => identity.publicKey(), sign } })
+        const link = yield* connect(options, {
+          identity: { publicKey: () => identity.publicKey(), sign, seed: () => Effect.die("unused") },
+        })
         refused(link.worker)
         expect(link.sent.byWorker).toHaveLength(1)
       }
@@ -476,4 +492,36 @@ it.effect("stays interrupted when its caller interrupts it, on either side", () 
       }
     }),
   ),
+)
+
+it.effect("refuses an invalid welcome label in Link.dial, matching Rust opencode-worker", () =>
+  Effect.gen(function* () {
+    const homeKey = Identity.fromSeed(new Uint8Array(randomBytes(32)))
+    const workerKey = newWorker()
+    for (const invalidWelcome of ["wrk_Upper", "local", "a"]) {
+      const toHome = yield* Queue.unbounded<Uint8Array, Cause.Done>()
+      const toWorker = yield* Queue.unbounded<Uint8Array, Cause.Done>()
+      const dialing = yield* Effect.forkChild(
+        Link.dial(
+          {
+            send: (message) => Queue.offer(toHome, message).pipe(Effect.asVoid),
+            receive: Queue.take(toWorker).pipe(Effect.mapError(() => new Link.Closed())),
+          },
+          { home: homeKey.publicKey, identity: workerKey },
+        ),
+        { startImmediately: true },
+      )
+      const local = Noise.generateKeyPair()
+      const noise = ok(Noise.handshake({ initiator: false, prologue: text("opencode-link-v1"), static: local }))
+      ok(noise.read(yield* Queue.take(toHome)))
+      const sig = homeKey.sign(
+        new Uint8Array([...text("opencode-link-v1/home:"), ...local.publicKey, ...(noise.hash ?? [])]),
+      )
+      yield* Queue.offer(toWorker, ok(noise.write(new Uint8Array([...homeKey.publicKey, ...sig]))))
+      ok(noise.read(yield* Queue.take(toHome)))
+      const ciphers = Frames.rekeying(ok(noise.split()), 2 ** 20)
+      yield* Queue.offer(toWorker, ok(ciphers.send.encrypt(text(invalidWelcome))))
+      expect(yield* Fiber.join(dialing).pipe(Effect.flip)).toEqual(new Link.Refused())
+    }
+  }),
 )

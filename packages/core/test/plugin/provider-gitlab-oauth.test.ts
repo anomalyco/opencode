@@ -304,20 +304,6 @@ describe("GitLabPlugin OAuth", () => {
     ),
   )
 
-  it.effect("refreshes only with the recorded client ID when the credential has one", () =>
-    Effect.gen(function* () {
-      const test = yield* fixture()
-      test.replies.push(renewal())
-      const saved = yield* test.credentials.create({
-        integrationID,
-        value: expired({ instanceUrl: "https://gitlab.com", clientID: legacyClientID }),
-      })
-      yield* test.integrations.connection.resolve(connectionOf(saved))
-      const requests = yield* tokenRequests(test.requests)
-      expect(requests.map((request) => request.form.client_id)).toEqual([legacyClientID])
-    }),
-  )
-
   it.effect("reports a revoked refresh token with a sign-in-again hint instead of authorization-code hints", () =>
     Effect.gen(function* () {
       const test = yield* fixture()

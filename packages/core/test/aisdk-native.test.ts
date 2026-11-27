@@ -140,25 +140,6 @@ describe("AISDKNative", () => {
     }
   })
 
-  test("maps Google Vertex settings to the native provider", () => {
-    expect(
-      map("@ai-sdk/google-vertex", {
-        project: "project",
-        location: "us-central1",
-        labels: { environment: "test" },
-        thinkingConfig: { thinkingLevel: "high" },
-      }),
-    ).toEqual({
-      package: "@opencode/ai/providers/google-vertex",
-      settings: {
-        project: "project",
-        location: "us-central1",
-        labels: { environment: "test" },
-        thinkingConfig: { thinkingLevel: "high" },
-      },
-    })
-  })
-
   test("maps supported Mistral settings and request overlays to the native provider", () => {
     expect(
       map("@ai-sdk/mistral", {
@@ -536,22 +517,6 @@ describe("AISDKNative", () => {
         settings: { thinkingConfig },
       })
     }
-  })
-
-  test("maps Google request options without thinking settings", () => {
-    expect(
-      map("@ai-sdk/google", {
-        cachedContent: "cachedContents/example",
-        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
-        serviceTier: "future-tier",
-      }),
-    ).toMatchObject({
-      settings: {
-        cachedContent: "cachedContents/example",
-        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
-        serviceTier: "future-tier",
-      },
-    })
   })
 
   test("maps Vertex Gemini settings to the native Gemini route", () => {

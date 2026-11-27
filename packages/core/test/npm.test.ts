@@ -57,7 +57,7 @@ async function createGitFixture(directory: string) {
 
 async function createRegistryFixture(directory: string) {
   const tarballs = new Map<string, Uint8Array>()
-  for (const version of ["1.0.0", "1.1.0"]) {
+  for (const version of ["1.0.0", "1.1.0", "2.0.0"]) {
     const root = path.join(directory, version)
     await fs.mkdir(path.join(root, "package"), { recursive: true })
     await writePackage(path.join(root, "package"), {
@@ -165,6 +165,43 @@ describe("Npm.cacheKey", () => {
   })
 })
 
+describe("Npm.follows", () => {
+  test("follows only @latest, ranges and Git branches", async () => {
+    await using tmp = await tmpdir()
+    const fixture = await createGitFixture(tmp.path)
+    await Bun.$`git -C ${fixture.repository} tag fixture-tag`
+    const repository = `git+${pathToFileURL(fixture.repository).href}`
+    const commit = "0123456789abcdef0123456789abcdef01234567"
+    const specs = {
+      plugin: false,
+      "plugin@latest": true,
+      "@acme/plugin@latest": true,
+      "plugin@next": false,
+      "plugin@^1.2.0": true,
+      "plugin@~1.2.0": true,
+      "plugin@1.x": true,
+      "plugin@>=1.2.0 <2": true,
+      "plugin@1.2.0": false,
+      "github:acme/plugin": false,
+      "github:acme/plugins#::path:packages/plugin": false,
+      [`github:acme/plugin#${commit}`]: false,
+      "github:acme/plugin#semver:^1.2.0": true,
+      [`${repository}#fixture-branch`]: true,
+      [`${repository}#fixture-branch::path:packages/subdirectory-plugin`]: true,
+      [`${repository}#fixture-tag`]: false,
+      [`${repository}#${fixture.commit.slice(0, 7)}`]: false,
+      "./plugin": false,
+    }
+    const followed = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* Effect.forEach(Object.keys(specs), (spec) =>
+        npm.follows(spec).pipe(Effect.map((value) => [spec, value])),
+      )
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
+    expect(Object.fromEntries(followed)).toEqual(specs)
+  })
+})
+
 describe("Npm.add", () => {
   test("locates cached scoped package specs without reifying", async () => {
     await using tmp = await tmpdir()
@@ -248,10 +285,10 @@ describe("Npm.add", () => {
     expect(entries.added.directory).toContain("node_modules")
   })
 
-  test.each(["commit", "branch"])("installs a Git package from an npm ::path: subdirectory at a %s", async (ref) => {
+  test("installs a Git package from an npm ::path: subdirectory at a branch", async () => {
     await using tmp = await tmpdir()
     const fixture = await createGitFixture(tmp.path)
-    const spec = `git+file://${fixture.repository}#${ref === "commit" ? fixture.commit : "fixture-branch"}::path:packages/subdirectory-plugin`
+    const spec = `git+file://${fixture.repository}#fixture-branch::path:packages/subdirectory-plugin`
     const result = await Effect.gen(function* () {
       const npm = yield* Npm.Service
       return { added: yield* npm.add(spec), outdated: yield* npm.check(spec) }
@@ -468,6 +505,25 @@ describe("Npm.check and Npm.update", () => {
     expect(result.generations).not.toContain("1")
     expect(result.generations).not.toContain("2")
     expect(result.updated).toBeFalse()
+  })
+
+  test("updates a range only within it", async () => {
+    await using tmp = await tmpdir()
+    await using registry = await createRegistryFixture(tmp.path)
+    const cache = path.join(tmp.path, "cache")
+    const range = "@fixture/registry-plugin@^1.0.0"
+    await registry.configure(cache, range)
+
+    const result = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      const installed = yield* npm.add(range)
+      registry.state.latest = "2.0.0"
+      const outdated = yield* npm.check(range)
+      const updated = yield* npm.update(range)
+      return { installed: installed.version, outdated, updated: updated.version, current: yield* npm.check(range) }
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+
+    expect(result).toEqual({ installed: "1.0.0", outdated: true, updated: "1.1.0", current: false })
   })
 
   test("never reports a pinned registry target as outdated", async () => {

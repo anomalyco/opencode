@@ -8,7 +8,7 @@ import { Mcp } from "@opencode/core/mcp/index"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { McpTool } from "@opencode/core/tool/mcp"
-import { Context, Effect, Exit, Layer, MutableHashMap, Option, Schedule, Scope } from "effect"
+import { Context, Effect, Exit, Layer, Schedule, Scope } from "effect"
 import { HttpRouter, HttpServer } from "effect/http"
 import { createServer } from "node:http"
 import path from "node:path"
@@ -203,12 +203,7 @@ it.live(
       yield* until(() => events.includes("attached"))
       const locations = Context.get(server.context, LocationServiceMap.Service)
       const ref = LocationServiceMap.canonical(Location.Ref.make({ directory: AbsolutePath.make(server.directory) }))
-      const entry = () =>
-        locations.rcMap.state._tag === "Open"
-          ? Option.getOrUndefined(MutableHashMap.get(locations.rcMap.state.map, ref))
-          : undefined
-      const old = entry()
-      expect(old).toBeDefined()
+      expect(yield* locations.has(ref)).toBe(true)
       // An attached client keeps the idle sweep away from its location.
       const lifecycle = Context.get(yield* locations.contextEffect(ref).pipe(Effect.scoped), LocationLifecycle.Service)
       expect(lifecycle.isRetained()).toBe(true)
@@ -217,13 +212,15 @@ it.live(
         fetch(new URL("/api/location/reload", server.base), { method: "POST", headers: { authorization } }),
       )
       expect(response.status).toBe(204)
-      // The socket was the old location's last borrower, so closing it let the old location close.
-      yield* until(() => old?.scope.state._tag === "Closed")
+      // The old location shut down and its socket, the last borrower, let go of it.
+      yield* until(() => lifecycle.isClosed() && !lifecycle.isRetained())
       // The client reconnected on its own and the replacement location attached it.
       yield* until(() => events.length === 3)
       expect(events).toEqual(["attached", "close 1012", "attached"])
-      expect(entry()).toBeDefined()
-      expect(entry()).not.toBe(old)
+      // A fresh location replaced the old one and attached the client again.
+      const current = Context.get(yield* locations.contextEffect(ref).pipe(Effect.scoped), LocationLifecycle.Service)
+      expect(current).not.toBe(lifecycle)
+      expect(current.isRetained()).toBe(true)
 
       // Disconnect before the server stops, like the other tests here.
       yield* Effect.promise(() => connection.close())

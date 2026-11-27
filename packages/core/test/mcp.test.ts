@@ -2,13 +2,7 @@ import path from "node:path"
 import fs from "node:fs/promises"
 import os from "node:os"
 import { describe, expect, spyOn, test } from "bun:test"
-import {
-  Client,
-  InMemoryTransport,
-  StreamableHTTPClientTransport,
-  isJSONRPCRequest,
-  type ListToolsResult,
-} from "@modelcontextprotocol/client"
+import { StreamableHTTPClientTransport, isJSONRPCRequest, type ListToolsResult } from "@modelcontextprotocol/client"
 import {
   createMcpHandler,
   inputRequired,
@@ -376,7 +370,7 @@ function resourceMcpLayer(
     name?: string
     credentials?: Partial<Credential.Interface>
     bus?: Layer.Layer<Bus.Service>
-    /** `OPENCODE_FLAGS`, such as `-mcp_events`. */
+    /** `OPENCODE_FLAGS`, such as `-machines`. */
     flags?: string
   },
 ) {
@@ -639,17 +633,6 @@ const it = testEffect(
   ]),
 )
 
-describe("MCP errors", () => {
-  test("expose useful messages", () => {
-    expect(new Mcp.NotFoundError({ server: Mcp.ServerName.make("demo") }).message).toBe("MCP server not found: demo")
-    expect(
-      new Mcp.ToolCallError({ server: Mcp.ServerName.make("demo"), tool: "search", message: "failed" }).message,
-    ).toBe("failed")
-    expect(new McpClient.NeedsAuthError({ server: "demo", message: "Unauthorized" }).message).toBe("Unauthorized")
-    expect(new McpClient.ConnectError({ server: "demo", message: "offline" }).message).toBe("offline")
-  })
-})
-
 test("MCP tool names match V1 sanitization", () => {
   expect(McpTool.namespace("context 7")).toBe("context_7")
   expect(McpTool.name("context 7", "resolve.library/id")).toBe("context_7_resolve_library_id")
@@ -690,104 +673,6 @@ test("passes session IDs as MCP request metadata", async () => {
       }),
     ),
   )
-})
-
-test("preserves output schema validation across paginated tool discovery", async () => {
-  const server = new Server({ name: "pagination", version: "1.0.0" }, { capabilities: { tools: {} } })
-  server.setRequestHandler("tools/list", ({ params }) =>
-    Promise.resolve(
-      params?.cursor === "page-2"
-        ? {
-            tools: [
-              {
-                name: "second",
-                inputSchema: { type: "object" },
-                outputSchema: {
-                  type: "object",
-                  properties: { value: { type: "number" } },
-                  required: ["value"],
-                },
-              },
-            ],
-          }
-        : {
-            tools: [
-              {
-                name: "first",
-                inputSchema: { type: "object" },
-                outputSchema: {
-                  type: "object",
-                  properties: { value: { type: "string" } },
-                  required: ["value"],
-                },
-              },
-            ],
-            nextCursor: "page-2",
-          },
-    ),
-  )
-  server.setRequestHandler("tools/call", ({ params }) =>
-    Promise.resolve({
-      content: [],
-      structuredContent: { value: params.name === "first" ? 42 : 1 },
-    }),
-  )
-
-  const client = new Client({ name: "pagination-test", version: "1.0.0" })
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
-  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
-
-  try {
-    // Without a cursor the SDK walks every page; the page-1 validator must survive the page-2 fetch.
-    const listed = await client.listTools()
-    expect(listed.tools.map((tool) => tool.name)).toEqual(["first", "second"])
-    expect(listed.nextCursor).toBeUndefined()
-    await expect(client.callTool({ name: "first", arguments: {} })).rejects.toThrow(
-      "Structured content does not match the tool's output schema",
-    )
-    await expect(client.callTool({ name: "second", arguments: {} })).resolves.toMatchObject({
-      structuredContent: { value: 1 },
-    })
-  } finally {
-    await Promise.all([client.close(), server.close()])
-  }
-})
-
-test("retains output schemas across paginated MCP discovery", async () => {
-  const tools = await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const connection = yield* connect(
-          "pagination",
-          new ConfigMCP.Local({
-            type: "local",
-            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
-          }),
-          import.meta.dir,
-        )
-        return yield* connection.tools()
-      }),
-    ),
-  )
-
-  expect(tools.map((tool) => ({ name: tool.name, outputSchema: tool.outputSchema }))).toEqual([
-    {
-      name: "first",
-      outputSchema: {
-        type: "object",
-        properties: { value: { type: "string" } },
-        required: ["value"],
-      },
-    },
-    {
-      name: "second",
-      outputSchema: {
-        type: "object",
-        properties: { value: { type: "number" } },
-        required: ["value"],
-      },
-    },
-  ])
 })
 
 test("accepts legacy MCP tools whose output schema is not a root object", async () => {
@@ -881,6 +766,7 @@ test("reports a local MCP server as failed when the location has no execution pl
     Environment.Service,
     Environment.Service.of({
       id: Environment.localID,
+      local: false,
       files: Environment.makeFiles(driver),
       spawner: EnvironmentUnavailable.spawner,
     }),
@@ -991,6 +877,7 @@ test("closes a stdio process that finishes spawning after close", async () => {
     Environment.Service,
     Environment.Service.of({
       id: Environment.localID,
+      local: true,
       files: Environment.makeFiles(driver),
       spawner: ChildProcessSpawner.make(() =>
         Effect.gen(function* () {
@@ -1050,7 +937,7 @@ test("falls back to legacy when a stdio server ignores the version probe", async
             type: "local",
             command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-legacy-silent.ts")],
             protocol: "auto",
-            // The probe waits out the startup timeout before falling back; Windows needs room to start Bun.
+            // The probe waits out the startup timeout, when shorter than the probe's own, before falling back; Windows needs room to start Bun.
             timeout: new ConfigMCP.Timeout({ startup: 1_000 }),
           }),
           import.meta.dir,
@@ -1063,6 +950,34 @@ test("falls back to legacy when a stdio server ignores the version probe", async
   expect(result.modern).toBe(false)
   expect(result.tools.map((tool) => tool.name)).toEqual(["echo"])
 })
+
+testEffect(Layer.empty).live("falls back to legacy when a remote server answers the version probe with HTTP 500", () =>
+  Effect.gen(function* () {
+    const probes = { count: 0 }
+    // Spring AI answers methods it has no handler for, server/discover included, with a 500.
+    const server = yield* resourceServer({
+      resources: false,
+      respond: async (request) => {
+        if (request.method !== "POST") return undefined
+        const body: unknown = await request.clone().json()
+        if (typeof body !== "object" || body === null || !("method" in body) || body.method !== "server/discover")
+          return undefined
+        probes.count += 1
+        return new Response("Missing handler for request type: server/discover", { status: 500 })
+      },
+    })
+    const connection = yield* connect(
+      "resources",
+      new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
+      import.meta.dir,
+    )
+
+    expect(connection.modern).toBe(false)
+    expect((yield* connection.tools()).map((tool) => tool.name)).toEqual(["echo"])
+    expect(probes.count).toBe(1)
+    expect(server.state.initializations).toBe(1)
+  }),
+)
 
 test("applies the configured MCP catalog timeout", async () => {
   const result = Effect.runPromise(
@@ -1170,8 +1085,6 @@ test("applies configured MCP timeouts to resource operations", async () => {
 for (const entry of [
   { name: "direct tools", query: "", codemode: false, expected: "" },
   { name: "explicit remote code mode", query: "?codemode=true", codemode: undefined, expected: "?codemode=true" },
-  { name: "explicit remote opt-out", query: "?codemode=false", codemode: undefined, expected: "?codemode=false" },
-  { name: "portal opt-out", query: "?codemode=off", codemode: undefined, expected: "?codemode=off" },
 ]) {
   testEffect(Layer.empty).live(`remote MCP code mode preference: ${entry.name}`, () =>
     Effect.gen(function* () {
@@ -1198,13 +1111,8 @@ for (const entry of [
   { name: "403", status: 403, query: "", codemode: undefined, attempts: 1 },
   { name: "501", status: 501, query: "", codemode: undefined, attempts: 1 },
   { name: "user codemode=true", status: 404, query: "?codemode=true", codemode: undefined, attempts: 1 },
-  { name: "user codemode=false", status: 404, query: "?codemode=false", codemode: undefined, attempts: 1 },
-  { name: "empty user codemode", status: 404, query: "?codemode=", codemode: undefined, attempts: 1 },
   { name: "direct tools", status: 404, query: "", codemode: false, attempts: 1 },
   { name: "400 with user codemode=true", status: 400, query: "?codemode=true", codemode: undefined, attempts: 1 },
-  { name: "400 with user codemode=false", status: 400, query: "?codemode=false", codemode: undefined, attempts: 1 },
-  { name: "400 with empty user codemode", status: 400, query: "?codemode=", codemode: undefined, attempts: 1 },
-  { name: "400 with direct tools", status: 400, query: "", codemode: false, attempts: 1 },
 ]) {
   testEffect(Layer.empty).live(`does not retry MCP beyond the query fallback: ${entry.name}`, () =>
     Effect.gen(function* () {
@@ -1216,6 +1124,7 @@ for (const entry of [
         url: server.url + entry.query,
         codemode: entry.codemode,
         oauth: false,
+        protocol: "legacy",
       })
       const error = yield* connect("resources", config, import.meta.dir).pipe(Effect.flip)
 
@@ -1420,55 +1329,6 @@ test("retries a modern MCP tool call whose listed header declaration went stale"
         // The stale Region header is rejected once; the relisted definition then sends Zone.
         expect(rejected).toEqual(["eu"])
         expect(server.state.toolLists).toBe(2)
-      }),
-    ),
-  )
-})
-
-test("lists, reads, and reports MCP resource changes", async () => {
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const server = yield* resourceServer({ listChanged: true })
-        server.state.resourcePages = {
-          initial: {
-            items: [{ name: "Readme", uri: "docs://readme", description: "Project docs" }],
-            nextCursor: "resources-2",
-          },
-          "resources-2": { items: [{ name: "Logo", uri: "docs://logo", mimeType: "image/png" }] },
-        }
-        server.state.templatePages = {
-          initial: {
-            items: [{ name: "File", uriTemplate: "docs://{path}" }],
-            nextCursor: "templates-2",
-          },
-          "templates-2": { items: [{ name: "Issue", uriTemplate: "issue://{id}", description: "Issue" }] },
-        }
-        const connection = yield* connect(
-          "resources",
-          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
-          import.meta.dir,
-        )
-
-        expect(yield* connection.resources()).toEqual([
-          { name: "Readme", uri: "docs://readme", description: "Project docs", mimeType: undefined },
-          { name: "Logo", uri: "docs://logo", description: undefined, mimeType: "image/png" },
-        ])
-        expect(yield* connection.resourceTemplates()).toEqual([
-          { name: "File", uriTemplate: "docs://{path}", description: undefined, mimeType: undefined },
-          { name: "Issue", uriTemplate: "issue://{id}", description: "Issue", mimeType: undefined },
-        ])
-        expect(yield* connection.readResource({ uri: "docs://readme" })).toEqual({
-          contents: [
-            { uri: "docs://readme", text: "hello", mimeType: "text/plain" },
-            { uri: "docs://logo", blob: "aGVsbG8=", mimeType: "image/png" },
-          ],
-        })
-
-        const changed = yield* Deferred.make<void>()
-        connection.onResourcesChanged(() => Deferred.doneUnsafe(changed, Exit.void))
-        yield* Effect.promise(server.sendResourceListChanged)
-        yield* Deferred.await(changed)
       }),
     ),
   )
@@ -2961,19 +2821,6 @@ it.effect("parses JSON text results from MCP tools without an output schema", ()
   }),
 )
 
-it.effect("advertises MCP tools directly when Code Mode is disabled for the server", () =>
-  Effect.gen(function* () {
-    const registry = yield* Tool.Service
-    const registration = yield* McpTool.Service
-    yield* registration.flush
-    const definitions = yield* toolDefinitions(registry)
-    const execute = definitions.find((tool) => tool.name === "execute")
-
-    expect(definitions.some((tool) => tool.name === "direct_lookup")).toBe(true)
-    expect(execute?.description).not.toContain("tools.direct.lookup")
-  }),
-)
-
 // Baseline (PLAN.md step 1): MCP isError must become one failed tool call, not a
 // success whose text happens to describe an error.
 it.effect("fails the call when MCP reports isError", () =>
@@ -3169,41 +3016,37 @@ it.effect("returns permission feedback instead of calling MCP", () =>
   }),
 )
 
-for (const modern of [false, true]) {
-  testEffect(Layer.empty).live(`integration policy denies MCP startup (${modern ? "modern" : "legacy"})`, () =>
-    Effect.gen(function* () {
-      const server = yield* resourceServer({ modern })
-      yield* Effect.gen(function* () {
-        const service = yield* Mcp.Service
-        expect(yield* service.servers()).toEqual([])
-        expect(Exit.isFailure(yield* service.connect("resources").pipe(Effect.exit))).toBe(true)
-        yield* service.add("resources", { type: "remote", url: server.url, oauth: false })
-        expect(yield* service.servers()).toEqual([])
-        expect(yield* service.tools()).toEqual([])
-        expect(yield* service.instructions()).toEqual([])
-        expect(yield* service.prompts()).toEqual([])
-        expect(yield* service.resourceCatalog()).toEqual({ resources: [], templates: [] })
-        expect(Exit.isFailure(yield* service.resources({ server: "resources" }).pipe(Effect.exit))).toBe(true)
-        expect(Exit.isFailure(yield* service.prompt({ server: "resources", name: "greet" }).pipe(Effect.exit))).toBe(
-          true,
-        )
-        expect(
-          Exit.isFailure(yield* service.readResource({ server: "resources", uri: "docs://readme" }).pipe(Effect.exit)),
-        ).toBe(true)
-        expect(Exit.isFailure(yield* service.callTool({ server: "resources", name: "echo" }).pipe(Effect.exit))).toBe(
-          true,
-        )
-        expect(server.state.initializations).toBe(0)
-      }).pipe(
-        Effect.provide(
-          resourceMcpLayer(server.url, undefined, undefined, {
-            policies: [{ action: "mcp.use", resource: "*", effect: "deny" }],
-          }),
-        ),
+testEffect(Layer.empty).live("integration policy denies MCP startup", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer()
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      expect(yield* service.servers()).toEqual([])
+      expect(Exit.isFailure(yield* service.connect("resources").pipe(Effect.exit))).toBe(true)
+      yield* service.add("resources", { type: "remote", url: server.url, oauth: false })
+      expect(yield* service.servers()).toEqual([])
+      expect(yield* service.tools()).toEqual([])
+      expect(yield* service.instructions()).toEqual([])
+      expect(yield* service.prompts()).toEqual([])
+      expect(yield* service.resourceCatalog()).toEqual({ resources: [], templates: [] })
+      expect(Exit.isFailure(yield* service.resources({ server: "resources" }).pipe(Effect.exit))).toBe(true)
+      expect(Exit.isFailure(yield* service.prompt({ server: "resources", name: "greet" }).pipe(Effect.exit))).toBe(true)
+      expect(
+        Exit.isFailure(yield* service.readResource({ server: "resources", uri: "docs://readme" }).pipe(Effect.exit)),
+      ).toBe(true)
+      expect(Exit.isFailure(yield* service.callTool({ server: "resources", name: "echo" }).pipe(Effect.exit))).toBe(
+        true,
       )
-    }),
-  )
-}
+      expect(server.state.initializations).toBe(0)
+    }).pipe(
+      Effect.provide(
+        resourceMcpLayer(server.url, undefined, undefined, {
+          policies: [{ action: "mcp.use", resource: "*", effect: "deny" }],
+        }),
+      ),
+    )
+  }),
+)
 
 for (const source of ["config", "organization"] as const) {
   testEffect(Config.testLayer()).live(`revokes and restores a connected MCP through ${source} policy`, () =>
@@ -3470,8 +3313,9 @@ describe("MCP pool", () => {
   })
 
   // A server that is down, or that refuses this client, would refuse a private connection too.
+  // Each of the 3 attempts at a server that is down probes, then tries initialize in case it is legacy.
   for (const [code, what, attempts] of [
-    [503, "was down", 3],
+    [503, "was down", 6],
     [401, "rejected the credentials", 1],
     [403, "refused access", 1],
   ] as const)
@@ -3542,8 +3386,9 @@ describe("MCP pool", () => {
       expect((yield* status(a.mcp))?.status).toBe("failed")
       expect(probes).toHaveLength(1)
       // On Windows the spawn succeeds through the shell and the missing command shows up only as an exit
-      // during the handshake, which can't be told apart from a server refusing it, so it tries once more.
-      expect(spawns).toHaveLength(process.platform === "win32" ? 1 : 0)
+      // during the handshake, which can't be told apart from a server refusing it, so it connects on its own.
+      // That exit also looks like a legacy server quitting on the version probe, so it respawns once for initialize.
+      expect(spawns).toHaveLength(process.platform === "win32" ? 2 : 0)
     }),
   )
 
@@ -3964,59 +3809,88 @@ describe("MCP events", () => {
       Effect.map((all) => all[0]?.status),
     )
 
-  // Answers `events/stream` with one `active` notification, then closes the stream.
+  // Lists "job.finished", from the second listing on with its `job` argument mirrored into a header, rejects a stream
+  // without that header, and answers any other `events/stream` with one `active` notification, then closes the stream.
   const eventServer = (input: { events?: boolean } = {}) => {
-    const streams: Array<{ name: string | null; params: unknown }> = []
+    const streams: Array<{ name: string | null; job: string | null; params: unknown }> = []
+    let lists = 0
     return resourceServer({
       modern: true,
       events: input.events,
       respond: async (request) => {
         if (request.method !== "POST") return undefined
         const body: unknown = await request.clone().json()
-        if (!isRecord(body) || body.method !== "events/stream") return undefined
-        streams.push({ name: request.headers.get("mcp-name"), params: body.params })
+        if (!isRecord(body)) return undefined
+        if (body.method === "events/list" && ++lists)
+          return Response.json({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: {
+              resultType: "complete",
+              events: [
+                {
+                  name: "job.finished",
+                  delivery: ["push"],
+                  inputSchema: {
+                    type: "object",
+                    properties: { job: { type: "string", ...(lists > 1 ? { "x-mcp-header": "Job" } : {}) } },
+                  },
+                  payloadSchema: { type: "object" },
+                },
+              ],
+            },
+          })
+        if (body.method !== "events/stream") return undefined
+        const job = request.headers.get("mcp-param-job")
+        streams.push({ name: request.headers.get("mcp-name"), job, params: body.params })
+        if (job === null)
+          return Response.json(
+            { jsonrpc: "2.0", id: body.id, error: { code: -32020, message: "Header mismatch" } },
+            { status: 400 },
+          )
         const meta = { "io.modelcontextprotocol/subscriptionId": body.id }
         const frame = (message: Record<string, unknown>) =>
           `data: ${JSON.stringify({ jsonrpc: "2.0", ...message })}\n\n`
         return new Response(
-          frame({ method: "notifications/events/active", params: { cursor: "c1", truncated: false, _meta: meta } }) +
-            frame({ id: body.id, result: { resultType: "complete", _meta: meta } }),
+          frame({
+            method: "notifications/events/active",
+            params: { cursor: "c1", truncated: false, heartbeatMs: 30_000, _meta: meta },
+          }) + frame({ id: body.id, result: { resultType: "complete", _meta: meta } }),
           { headers: { "content-type": "text/event-stream" } },
         )
       },
     }).pipe(Effect.map((server) => ({ ...server, streams })))
   }
-  const layer = (url: string, flags: string) =>
-    resourceMcpLayer(
-      new ConfigMCP.Remote({ type: "remote", url, oauth: false, protocol: "2026-07-28" }),
-      undefined,
-      undefined,
-      {
-        flags,
-      },
-    )
+  const layer = (url: string) =>
+    resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url, oauth: false, protocol: "2026-07-28" }))
 
-  testEffect(Layer.empty).live("streams a server's events over Streamable HTTP, naming the event in Mcp-Name", () =>
-    Effect.gen(function* () {
-      const server = yield* eventServer({ events: true })
-      yield* Effect.gen(function* () {
-        const mcp = yield* Mcp.Service
-        expect(yield* ready(mcp)).toEqual({ status: "connected" })
-        const events = yield* mcp.events("resources")
-        if (!events) throw new Error("expected MCP events")
-        const messages = yield* Stream.runCollect(events.stream({ name: "job.finished", arguments: { job: "j1" } }))
-        expect(messages).toEqual([{ type: "active", cursor: "c1", truncated: false }])
-        expect(server.streams).toEqual([
-          { name: "job.finished", params: expect.objectContaining({ name: "job.finished", arguments: { job: "j1" } }) },
-        ])
-      }).pipe(Effect.provide(layer(server.url, "mcp_events")))
-    }),
+  testEffect(Layer.empty).live(
+    "streams a server's events over Streamable HTTP with Mcp-Name and Mcp-Param headers",
+    () =>
+      Effect.gen(function* () {
+        const server = yield* eventServer({ events: true })
+        yield* Effect.gen(function* () {
+          const mcp = yield* Mcp.Service
+          expect(yield* ready(mcp)).toEqual({ status: "connected" })
+          const events = yield* mcp.events("resources")
+          if (!events) throw new Error("expected MCP events")
+          const messages = yield* Stream.runCollect(events.stream({ name: "job.finished", arguments: { job: "j1" } }))
+          expect(messages).toEqual([{ type: "active", cursor: "c1", truncated: false }])
+          // The first listing has no annotation, so the stream relists after the server rejects it for the missing header.
+          const params = expect.objectContaining({ name: "job.finished", arguments: { job: "j1" } })
+          expect(server.streams).toEqual([
+            { name: "job.finished", job: null, params },
+            { name: "job.finished", job: "j1", params },
+          ])
+        }).pipe(Effect.provide(layer(server.url)))
+      }),
   )
 
-  // Holds each `events/stream` open so a test can send notifications on it or close it. An event named "missing"
-  // is refused with NotFound.
+  // Lists "job.finished" and holds each `events/stream` open so a test can send notifications on it or close it.
+  // The first `failedOpens` opens fail, each only once the test releases it with `failOpen`.
   const streamServer = Effect.fnUntraced(function* (input: { events?: boolean; failedOpens?: number } = {}) {
     const attempts: unknown[] = []
+    const failures = yield* Queue.unbounded<void>()
     const streams = yield* Queue.unbounded<{
       params: unknown
       aborted: Effect.Effect<void>
@@ -4031,12 +3905,21 @@ describe("MCP events", () => {
       respond: async (request) => {
         if (request.method !== "POST") return undefined
         const body: unknown = await request.clone().json()
+        if (isRecord(body) && body.method === "events/list")
+          return Response.json({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: {
+              resultType: "complete",
+              events: [{ name: "job.finished", delivery: ["push"], inputSchema: {}, payloadSchema: {} }],
+            },
+          })
         if (!isRecord(body) || body.method !== "events/stream") return undefined
         attempts.push(body.params)
-        if (attempts.length <= (input.failedOpens ?? 0))
+        if (attempts.length <= (input.failedOpens ?? 0)) {
+          await Effect.runPromise(Queue.take(failures))
           return Response.json({ jsonrpc: "2.0", id: body.id, error: { code: -32603, message: "Temporary failure" } })
-        if (isRecord(body.params) && body.params.name === "missing")
-          return Response.json({ jsonrpc: "2.0", id: body.id, error: { code: -32023, message: "Unknown event type" } })
+        }
         const meta = { "io.modelcontextprotocol/subscriptionId": body.id }
         const controller = Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>()
         const aborted = Deferred.makeUnsafe<void>()
@@ -4064,7 +3947,7 @@ describe("MCP events", () => {
         )
       },
     })
-    return { url: server.url, attempts, opened: Queue.take(streams) }
+    return { url: server.url, attempts, opened: Queue.take(streams), failOpen: Queue.offer(failures, undefined) }
   })
 
   // A bus whose published events reach its subscribers, recorded in order.
@@ -4102,12 +3985,12 @@ describe("MCP events", () => {
     return { layer, published, until, delivered }
   })
 
-  const subscriptionLayer = (url: string, bus: Layer.Layer<Bus.Service>, flags = "mcp_events") =>
+  const subscriptionLayer = (url: string, bus: Layer.Layer<Bus.Service>) =>
     resourceMcpLayer(
       new ConfigMCP.Remote({ type: "remote", url, oauth: false, protocol: "2026-07-28" }),
       undefined,
       undefined,
-      { flags, bus },
+      { bus },
     )
 
   const only = (mcp: Mcp.Interface) => mcp.subscriptions().pipe(Effect.map((all) => all[0]))
@@ -4130,13 +4013,13 @@ describe("MCP events", () => {
           cursor: null,
         })
         const stream = yield* server.opened
-        stream.send("notifications/events/active", { cursor: "c1", truncated: false })
+        stream.send("notifications/events/active", { cursor: "c1", truncated: false, heartbeatMs: 30_000 })
         yield* bus.until(only(mcp), (sub) => sub?.status.status === "active")
         stream.send("notifications/events/event", {
           eventId: "e1",
           name: "job.finished",
           timestamp: "2026-11-11T00:00:00Z",
-          data: [null, { job: "j1" }, false],
+          data: { job: "j1", ok: false, note: null },
           cursor: "c2",
         })
         expect(yield* bus.delivered(1)).toEqual([
@@ -4148,7 +4031,7 @@ describe("MCP events", () => {
               name: "job.finished",
               eventId: "e1",
               timestamp: "2026-11-11T00:00:00Z",
-              data: [null, { job: "j1" }, false],
+              data: { job: "j1", ok: false, note: null },
               cursor: "c2",
             },
           },
@@ -4202,25 +4085,42 @@ describe("MCP events", () => {
             openedAt.push(clock.currentTimeMillisUnsafe())
             return open(input).pipe(Stream.onError(() => Queue.offer(failed, undefined)))
           })
+          // Each reopen waits its backoff delay after the stream ended, jittered to between 0.8 and 1.2 times it.
+          // The test clock only moves when adjusted, so reading it once the end is seen gives the exact time. A failed
+          // open is released only after the adjust that started it returns: an HTTP reply that landed mid-adjust would
+          // start the next delay at an earlier clock time than the one read here.
+          const waited = (delay: number, since: number) => {
+            const gap = openedAt[openedAt.length - 1] - since
+            expect(gap).toBeGreaterThanOrEqual(delay * 0.8)
+            expect(gap).toBeLessThanOrEqual(delay * 1.2)
+          }
           yield* mcp.subscribe("resources", { name: "job.finished" })
+          yield* server.failOpen
           yield* Queue.take(failed)
-          yield* TestClock.adjust("1 second")
-          expect(openedAt).toEqual([0, 1000])
+          const firstFailure = clock.currentTimeMillisUnsafe()
+          yield* TestClock.adjust("1200 millis")
+          expect(openedAt).toHaveLength(2)
+          waited(1000, firstFailure)
+          yield* server.failOpen
           yield* Queue.take(failed)
-          yield* TestClock.adjust("2 seconds")
-          expect(openedAt).toEqual([0, 1000, 3000])
+          const secondFailure = clock.currentTimeMillisUnsafe()
+          yield* TestClock.adjust("2400 millis")
+          expect(openedAt).toHaveLength(3)
+          waited(2000, secondFailure)
           const first = yield* server.opened
-          first.send("notifications/events/active", { cursor: "c1", truncated: false })
+          first.send("notifications/events/active", { cursor: "c1", truncated: false, heartbeatMs: 30_000 })
           yield* bus.until(only(mcp), (sub) => sub?.status.status === "active")
           first.send("notifications/events/heartbeat", { cursor: "c5" })
+          const closedAt = clock.currentTimeMillisUnsafe()
           first.close()
           expect(yield* bus.until(only(mcp), (sub) => sub?.status.status === "pending")).toMatchObject({ cursor: "c5" })
-          yield* TestClock.adjust("1 second")
-          expect(openedAt).toEqual([0, 1000, 3000, 4000])
+          yield* TestClock.adjust("1200 millis")
+          expect(openedAt).toHaveLength(4)
+          waited(1000, closedAt)
           const reopened = yield* server.opened
           expect(server.attempts).toHaveLength(4)
           expect(reopened.params).toMatchObject({ name: "job.finished", cursor: "c5" })
-          reopened.send("notifications/events/active", { cursor: "c8", truncated: true })
+          reopened.send("notifications/events/active", { cursor: "c8", truncated: true, heartbeatMs: 30_000 })
           reopened.send("notifications/events/event", finishedEvent("e9", "c9"))
           reopened.send("notifications/events/event", finishedEvent("e10", "c10"))
           const delivered = yield* bus.delivered(2)
@@ -4259,7 +4159,8 @@ describe("MCP events", () => {
           error: { code: -32023 },
         })
         yield* TestClock.adjust("30 seconds")
-        expect(server.attempts).toMatchObject([{ name: "job.finished" }, { name: "missing" }])
+        // "missing" isn't listed, so the client refuses it without asking the server.
+        expect(server.attempts).toMatchObject([{ name: "job.finished" }])
       }).pipe(Effect.provide(subscriptionLayer(server.url, bus.layer)))
     }),
   )
@@ -4273,7 +4174,7 @@ describe("MCP events", () => {
         expect(yield* ready(mcp)).toEqual({ status: "connected" })
         yield* mcp.subscribe("resources", { name: "job.finished" })
         const first = yield* server.opened
-        first.send("notifications/events/active", { cursor: null })
+        first.send("notifications/events/active", { cursor: null, heartbeatMs: 30_000 })
         yield* bus.until(only(mcp), (sub) => sub?.status.status === "active")
 
         yield* mcp.connect("resources")
@@ -4281,7 +4182,7 @@ describe("MCP events", () => {
         yield* first.aborted
         expect(reopened.params).toMatchObject({ cursor: null })
         // The null cursor means replay is unsupported; reconnecting is not evidence of a gap.
-        reopened.send("notifications/events/active", { cursor: null, truncated: false })
+        reopened.send("notifications/events/active", { cursor: null, truncated: false, heartbeatMs: 30_000 })
         reopened.send("notifications/events/event", finishedEvent("e2", "c2"))
         const delivered = yield* bus.delivered(1)
         expect(delivered).toMatchObject([{ data: { eventId: "e2" } }])
@@ -4296,17 +4197,10 @@ describe("MCP events", () => {
     }),
   )
 
-  testEffect(Layer.empty).live("refuses to subscribe with the flag off, and ends at a server without events", () =>
+  testEffect(Layer.empty).live("ends a subscription at a server without events", () =>
     Effect.gen(function* () {
-      const offering = yield* streamServer()
       const plain = yield* streamServer({ events: false })
       const bus = yield* workingBus
-      const refused = yield* Effect.gen(function* () {
-        const mcp = yield* Mcp.Service
-        return yield* mcp.subscribe("resources", { name: "job.finished" }).pipe(Effect.flip)
-      }).pipe(Effect.provide(subscriptionLayer(offering.url, bus.layer, "-mcp_events")))
-      expect(refused).toBeInstanceOf(Mcp.EventsUnavailableError)
-
       yield* Effect.gen(function* () {
         const mcp = yield* Mcp.Service
         expect(yield* ready(mcp)).toEqual({ status: "connected" })
@@ -4318,18 +4212,14 @@ describe("MCP events", () => {
     }),
   )
 
-  testEffect(Layer.empty).live("offers no events with the mcp_events flag off, or from a server without them", () =>
+  testEffect(Layer.empty).live("offers no events from a server without them", () =>
     Effect.gen(function* () {
-      const offering = yield* eventServer({ events: true })
       const plain = yield* eventServer()
-      const events = (url: string, flags: string) =>
-        Effect.gen(function* () {
-          const mcp = yield* Mcp.Service
-          expect(yield* ready(mcp)).toEqual({ status: "connected" })
-          return yield* mcp.events("resources")
-        }).pipe(Effect.provide(layer(url, flags)))
-      expect(yield* events(offering.url, "-mcp_events")).toBeUndefined()
-      expect(yield* events(plain.url, "mcp_events")).toBeUndefined()
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        expect(yield* ready(mcp)).toEqual({ status: "connected" })
+        expect(yield* mcp.events("resources")).toBeUndefined()
+      }).pipe(Effect.provide(layer(plain.url)))
     }),
   )
 })

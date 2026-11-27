@@ -57,7 +57,8 @@ export const dict = {
   "home.promo.close": "Cerrar el anuncio de la aplicación Desktop",
   "home.hero.title": "El agente de programación de código abierto",
   "home.hero.subtitle.a": "Empieza con modelos gratuitos o usa cualquiera de más de 200 proveedores.",
-  "home.hero.subtitle.b": "OpenCode funciona en tu máquina, y puedes usarlo desde el escritorio, la terminal, el móvil o tu propio código.",
+  "home.hero.subtitle.b":
+    "OpenCode funciona en tu máquina, y puedes usarlo desde el escritorio, la terminal, el móvil o tu propio código.",
   "home.install.ariaLabel": "Opciones de instalación",
   "home.what.title": "¿Qué es OpenCode?",
   "home.what.body": "OpenCode es un agente de programación de código abierto.",
@@ -73,7 +74,8 @@ export const dict = {
   "home.what.anyEditor.body": "Disponible como interfaz de terminal, aplicación de escritorio y extensión de IDE",
   "home.what.readDocs": "Leer documentación",
   "home.growth.title": "El agente de programación de código abierto",
-  "home.growth.body": "Con más de <strong>{{stars}}</strong> estrellas en GitHub, <strong>{{contributors}}</strong> colaboradores y más de <strong>{{commits}}</strong> commits, OpenCode es usado y confiado por más de <strong>{{monthlyUsers}}</strong> desarrolladores cada mes.",
+  "home.growth.body":
+    "Con más de <strong>{{stars}}</strong> estrellas en GitHub, <strong>{{contributors}}</strong> colaboradores y más de <strong>{{commits}}</strong> commits, OpenCode es usado y confiado por más de <strong>{{monthlyUsers}}</strong> desarrolladores cada mes.",
   "home.growth.githubStars": "Estrellas de GitHub",
   "home.growth.contributors": "Colaboradores",
   "home.growth.monthlyDevs": "Devs al mes",
@@ -82,13 +84,15 @@ export const dict = {
   "home.faq.a2.before": "La forma más fácil de empezar es leer la",
   "home.faq.a2.link": "introducción",
   "home.faq.q3": "¿Necesito suscripciones extra de IA para usar OpenCode?",
-  "home.faq.a3.p1": "No necesariamente. OpenCode incluye un conjunto de modelos gratuitos que puedes usar sin crear una cuenta.",
+  "home.faq.a3.p1":
+    "No necesariamente. OpenCode incluye un conjunto de modelos gratuitos que puedes usar sin crear una cuenta.",
   "home.faq.a3.p4.beforeLocal": "Incluso puedes conectar tus [modelos locales](local).",
   "home.faq.q4": "¿Puedo usar mis suscripciones de IA existentes con OpenCode?",
   "home.faq.a4.p1": "Sí, puedes usar tus suscripciones de ChatGPT Plus/Pro o GitHub Copilot.",
   "home.faq.q5": "¿Solo puedo usar OpenCode en la terminal?",
   "home.faq.q6": "¿Cuánto cuesta OpenCode?",
-  "home.faq.a6": "OpenCode es 100% gratuito de usar. También viene con un conjunto de modelos gratuitos. Puede haber costos adicionales si conectas cualquier otro proveedor.",
+  "home.faq.a6":
+    "OpenCode es 100% gratuito de usar. También viene con un conjunto de modelos gratuitos. Puede haber costos adicionales si conectas cualquier otro proveedor.",
   "home.faq.q7": "¿Qué hay sobre datos y privacidad?",
   "home.faq.a7.p1": "Tus datos e información solo se almacenan cuando usas nuestros modelos gratuitos.",
   "home.faq.a7.p2.beforeModels": "Más información sobre",
@@ -97,44 +101,55 @@ export const dict = {
   "home.faq.a8.p1": "Sí, OpenCode es totalmente de código abierto. El código fuente es público en",
   "home.faq.a8.p2": "bajo la",
   "home.faq.a8.mitLicense": "Licencia MIT",
-  "home.faq.a8.p3": ", lo que significa que cualquiera puede usar, modificar o contribuir a su desarrollo. Cualquiera de la comunidad puede abrir problemas, enviar solicitudes de extracción y extender la funcionalidad.",
-  "zen.title": "OpenCode Models | Un conjunto seleccionado de modelos optimizados y confiables para agentes de codificación",
+  "home.faq.a8.p3":
+    ", lo que significa que cualquiera puede usar, modificar o contribuir a su desarrollo. Cualquiera de la comunidad puede abrir problemas, enviar solicitudes de extracción y extender la funcionalidad.",
+  "zen.title":
+    "OpenCode Models | Un conjunto seleccionado de modelos optimizados y confiables para agentes de codificación",
   "zen.hero.title": "Modelos optimizados y confiables para agentes de codificación",
-  "zen.hero.body": "OpenCode Models te da acceso a un conjunto seleccionado de modelos de IA que OpenCode ha probado y evaluado específicamente para agentes de codificación. No necesitas preocuparte por el rendimiento y la calidad inconsistentes, usa modelos validados que funcionan.",
+  "zen.hero.body":
+    "OpenCode Models te da acceso a un conjunto seleccionado de modelos de IA que OpenCode ha probado y evaluado específicamente para agentes de codificación. No necesitas preocuparte por el rendimiento y la calidad inconsistentes, usa modelos validados que funcionan.",
   "zen.faq.q1": "¿Qué es OpenCode Models?",
-  "zen.faq.a1": "OpenCode Models es un conjunto seleccionado de modelos de IA probados y evaluados para agentes de codificación, creado por el equipo detrás de OpenCode.",
+  "zen.faq.a1":
+    "OpenCode Models es un conjunto seleccionado de modelos de IA probados y evaluados para agentes de codificación, creado por el equipo detrás de OpenCode.",
   "zen.faq.q2": "¿Qué hace a OpenCode Models más preciso?",
-  "zen.faq.a2": "OpenCode Models solo proporciona modelos que han sido específicamente probados y evaluados para agentes de codificación. No usarías un cuchillo de mantequilla para cortar carne, no uses modelos pobres para codificar.",
+  "zen.faq.a2":
+    "OpenCode Models solo proporciona modelos que han sido específicamente probados y evaluados para agentes de codificación. No usarías un cuchillo de mantequilla para cortar carne, no uses modelos pobres para codificar.",
   "zen.faq.q3": "¿Es OpenCode Models más barato?",
-  "zen.faq.a3": "OpenCode Models no tiene fines de lucro. OpenCode Models te transfiere los costos de los proveedores de modelos. Cuanto mayor sea el uso de OpenCode Models, más podrá OpenCode negociar mejores tarifas y transferírtelas.",
+  "zen.faq.a3":
+    "OpenCode Models no tiene fines de lucro. OpenCode Models te transfiere los costos de los proveedores de modelos. Cuanto mayor sea el uso de OpenCode Models, más podrá OpenCode negociar mejores tarifas y transferírtelas.",
   "zen.faq.q4": "¿Cuánto cuesta OpenCode Models?",
   "zen.faq.a4.p1.beforePricing": "OpenCode",
   "zen.faq.a4.p1.pricingLink": "cobra por solicitud",
   "zen.faq.a4.p1.afterPricing": "sin recargos, así que pagas exactamente lo que cobra el proveedor del modelo.",
   "zen.faq.a4.p2.beforeAccount": "Tu costo total depende del uso, y puedes establecer límites de gasto mensuales en tu",
   "zen.faq.a4.p2.accountLink": "cuenta",
-  "zen.faq.a4.p3": "Para cubrir costos, OpenCode añade solo una pequeña tarifa de procesamiento de pagos de $1.23 por cada recarga de saldo de $20.",
+  "zen.faq.a4.p3":
+    "Para cubrir costos, OpenCode añade solo una pequeña tarifa de procesamiento de pagos de $1.23 por cada recarga de saldo de $20.",
   "zen.faq.q5": "¿Qué hay sobre datos y privacidad?",
-  "zen.faq.a5.beforeExceptions": "Todos los modelos de OpenCode Models están alojados en EE. UU. y la UE Los proveedores siguen una política de cero retención y no usan tus datos para entrenamiento de modelos, con las",
+  "zen.faq.a5.beforeExceptions":
+    "Todos los modelos de OpenCode Models están alojados en EE. UU. y la UE Los proveedores siguen una política de cero retención y no usan tus datos para entrenamiento de modelos, con las",
   "zen.faq.a5.exceptionsLink": "siguientes excepciones",
   "zen.faq.q6": "¿Puedo establecer límites de gasto?",
   "zen.faq.a6": "Sí, puedes establecer límites de gasto mensuales en tu cuenta.",
   "zen.faq.q7": "¿Puedo cancelar?",
   "zen.faq.a7": "Sí, puedes deshabilitar la facturación en cualquier momento y usar tu saldo restante.",
   "zen.faq.q8": "¿Puedo usar OpenCode Models con otros agentes de codificación?",
-  "zen.faq.a8": "Aunque OpenCode Models funciona genial con OpenCode, puedes usar OpenCode Models con cualquier agente. Sigue las instrucciones de configuración en tu agente de codificación preferido.",
+  "zen.faq.a8":
+    "Aunque OpenCode Models funciona genial con OpenCode, puedes usar OpenCode Models con cualquier agente. Sigue las instrucciones de configuración en tu agente de codificación preferido.",
   "zen.cta.start": "Empieza con OpenCode Models",
   "zen.pricing.title": "Añade $20 de saldo prepago",
   "zen.pricing.fee": "(+$1.23 tarifa de procesamiento de tarjeta)",
   "zen.pricing.body": "Úsalo con cualquier agente. Establece límites de gasto mensual. Cancela en cualquier momento.",
   "zen.problem.title": "¿Qué problema está resolviendo OpenCode Models?",
-  "zen.problem.body": "Hay muchos modelos disponibles, pero solo unos pocos funcionan bien con agentes de codificación. La mayoría de los proveedores los configuran de manera diferente con resultados variables.",
+  "zen.problem.body":
+    "Hay muchos modelos disponibles, pero solo unos pocos funcionan bien con agentes de codificación. La mayoría de los proveedores los configuran de manera diferente con resultados variables.",
   "zen.problem.subtitle": "Estamos arreglando esto para todos, no solo para usuarios de OpenCode.",
   "zen.problem.item1": "Probando modelos seleccionados y consultando a sus equipos",
   "zen.problem.item2": "Trabajando con proveedores para asegurar que se entreguen correctamente",
   "zen.problem.item3": "Evaluando todas las combinaciones modelo-proveedor que recomendamos",
   "zen.how.title": "Cómo funciona OpenCode Models",
-  "zen.how.body": "Aunque sugerimos usar OpenCode Models con OpenCode, puedes usar OpenCode Models con cualquier agente.",
+  "zen.how.body":
+    "Aunque sugerimos usar OpenCode Models con OpenCode, puedes usar OpenCode Models con cualquier agente.",
   "zen.how.step1.title": "Regístrate y añade $20 de saldo",
   "zen.how.step1.beforeLink": "sigue las",
   "zen.how.step1.link": "instrucciones de configuración",
@@ -144,16 +159,20 @@ export const dict = {
   "zen.how.step3.title": "Auto-recarga",
   "zen.how.step3.body": "activa la recarga automática opcional y elige el umbral de saldo y el importe de la recarga",
   "zen.privacy.title": "Tu privacidad es importante para nosotros",
-  "zen.privacy.beforeExceptions": "Todos los modelos de OpenCode Models están alojados en EE. UU. y la UE Los proveedores siguen una política de cero retención y no usan tus datos para entrenamiento de modelos, con las",
+  "zen.privacy.beforeExceptions":
+    "Todos los modelos de OpenCode Models están alojados en EE. UU. y la UE Los proveedores siguen una política de cero retención y no usan tus datos para entrenamiento de modelos, con las",
   "zen.privacy.exceptionsLink": "siguientes excepciones",
   "go.title": "OpenCode Go | Modelos de programación de bajo coste para todos",
-  "go.meta.description": "Go cuesta 10 $/mes, con límites de uso generosos y acceso fiable a modelos de programación líderes.",
+  "go.meta.description":
+    "Go cuesta 10 $/mes, con límites de uso generosos y acceso fiable a modelos de programación líderes.",
   "go.hero.title": "Modelos de programación de bajo coste para todos",
-  "go.hero.body": "Go lleva la programación agéntica a programadores de todo el mundo. Ofrece límites generosos y acceso fiable a los modelos de código abierto más capaces, para que puedas crear con agentes potentes sin preocuparte por el coste o la disponibilidad.",
+  "go.hero.body":
+    "Go lleva la programación agéntica a programadores de todo el mundo. Ofrece límites generosos y acceso fiable a los modelos de código abierto más capaces, para que puedas crear con agentes potentes sin preocuparte por el coste o la disponibilidad.",
   "go.cta.text": "Suscribirse a Go",
   "go.graph.usageLimits": "Límites de uso",
   "go.problem.title": "¿Qué problema resuelve Go?",
-  "go.problem.body": "Nos enfocamos en llevar la experiencia de OpenCode a tantas personas como sea posible. OpenCode Go es una suscripción de bajo coste de 10 $/mes. Proporciona límites generosos y acceso fiable a los modelos de código abierto más capaces.",
+  "go.problem.body":
+    "Nos enfocamos en llevar la experiencia de OpenCode a tantas personas como sea posible. OpenCode Go es una suscripción de bajo coste de 10 $/mes. Proporciona límites generosos y acceso fiable a los modelos de código abierto más capaces.",
   "go.problem.item1": "Precios de suscripción de bajo coste",
   "go.problem.item2": "Límites generosos y acceso fiable",
   "go.problem.item3": "Creado para tantos programadores como sea posible",
@@ -169,11 +188,13 @@ export const dict = {
   "go.how.step3.title": "Empezar a programar",
   "go.how.step3.body": "con acceso fiable a modelos de código abierto",
   "go.faq.q1": "¿Qué es OpenCode Go?",
-  "go.faq.a1": "Go es una suscripción de bajo coste que te da acceso fiable a modelos de código abierto capaces para programación agéntica.",
+  "go.faq.a1":
+    "Go es una suscripción de bajo coste que te da acceso fiable a modelos de código abierto capaces para programación agéntica.",
   "go.faq.q2": "¿Qué modelos incluye Go?",
   "go.faq.a2": "Go incluye los modelos que se indican abajo, con límites generosos y acceso confiable.",
   "go.faq.q3": "¿Es Go lo mismo que OpenCode Models?",
-  "go.faq.a3": "No. OpenCode Models es de pago por uso, mientras que Go cuesta 10 $/mes, con límites generosos y acceso fiable a una selección de modelos.",
+  "go.faq.a3":
+    "No. OpenCode Models es de pago por uso, mientras que Go cuesta 10 $/mes, con límites generosos y acceso fiable a una selección de modelos.",
   "go.faq.q4": "¿Cuánto cuesta Go?",
   "go.faq.a4.p1.beforePricing": "Go cuesta",
   "go.faq.a4.p1.pricingLink": "10 $/mes",
@@ -189,22 +210,29 @@ export const dict = {
   "go.faq.a5.retention0": "0 días",
   "go.faq.a5.used": "Utilizado",
   "go.faq.a5.notUsed": "No utilizado",
-  "go.faq.a5.grokRetention": "ZDR deshabilita funciones importantes de la API que dependen de datos almacenados, incluidas la Responses API con estado, Files and Collections y la Batch API.",
-  "go.faq.a5.gptRetention": "Se generan registros de supervisión de abusos para todo el uso de funciones de la API y se conservan durante un máximo de 30 días.",
+  "go.faq.a5.grokRetention":
+    "ZDR deshabilita funciones importantes de la API que dependen de datos almacenados, incluidas la Responses API con estado, Files and Collections y la Batch API.",
+  "go.faq.a5.gptRetention":
+    "Se generan registros de supervisión de abusos para todo el uso de funciones de la API y se conservan durante un máximo de 30 días.",
   "go.faq.a5.learnMore": "Más información",
-  "go.faq.a5.deepseekRetention": "El acuerdo de ZDR se renueva mensualmente. El acuerdo actual es válido hasta el 30 de noviembre de 2026.",
+  "go.faq.a5.deepseekRetention":
+    "El acuerdo de ZDR se renueva mensualmente. El acuerdo actual es válido hasta el 31 de diciembre de 2026.",
   "go.faq.q6": "¿Puedo recargar crédito?",
   "go.faq.a6": "Si necesitas más uso, puedes recargar crédito en tu cuenta.",
   "go.faq.q7": "¿Puedo cancelar?",
   "go.faq.a7": "Sí, puedes cancelar en cualquier momento.",
   "go.faq.q8": "¿Puedo usar Go con otros agentes de programación?",
-  "go.faq.a8": "Sí, puedes usar Go con cualquier agente. Sigue las instrucciones de configuración en tu agente de programación preferido.",
+  "go.faq.a8":
+    "Sí, puedes usar Go con cualquier agente. Sigue las instrucciones de configuración en tu agente de programación preferido.",
   "go.faq.q9": "¿Cuál es la diferencia entre los modelos gratuitos y Go?",
-  "go.faq.a9": "Los modelos gratuitos incluyen Big Pickle y los modelos promocionales disponibles en ese momento. Go ofrece una selección de modelos con cuotas de solicitudes más altas en ventanas móviles: el 20 % de la cuota mensual cada 5 horas, el 50 % por semana y el 100 % por mes. Las cuotas específicas pueden variar según el modelo (la cantidad real de solicitudes varía según el modelo y el uso).",
+  "go.faq.a9":
+    "Los modelos gratuitos incluyen Big Pickle y los modelos promocionales disponibles en ese momento. Go ofrece una selección de modelos con cuotas de solicitudes más altas en ventanas móviles: el 20 % de la cuota mensual cada 5 horas, el 50 % por semana y el 100 % por mes. Las cuotas específicas pueden variar según el modelo (la cantidad real de solicitudes varía según el modelo y el uso).",
   "workspace.nav.zen": "OpenCode Models",
-  "workspace.newUser.feature.lockin.body": "Usa OpenCode Models con cualquier agente de codificación, y continúa usando otros proveedores con opencode cuando quieras.",
+  "workspace.newUser.feature.lockin.body":
+    "Usa OpenCode Models con cualquier agente de codificación, y continúa usando otros proveedores con opencode cuando quieras.",
   "download.title": "OpenCode | Descarga para macOS, Windows, Linux y móvil",
-  "download.meta.description": "Descarga OpenCode para macOS, Windows y Linux, consigue las apps de iOS y Android o instala la app de terminal con un comando. Gratis y de código abierto.",
+  "download.meta.description":
+    "Descarga OpenCode para macOS, Windows y Linux, consigue las apps de iOS y Android o instala la app de terminal con un comando. Gratis y de código abierto.",
   "download.hero.title": "Descargar OpenCode Desktop",
   "download.hero.subtitle": "Disponible en Beta para macOS, Windows y Linux",
   "download.hero.button": "Descargar para {{os}}",
@@ -227,12 +255,14 @@ export const dict = {
   "enterprise.form.error.invalidEmailFormat": "Formato de correo inválido.",
   "enterprise.form.error.internalServer": "Error interno del servidor.",
   "brand.title": "OpenCode | Guía de marca, logos, logotipos y colores",
-  "brand.meta.description": "La guía de marca de OpenCode. Descarga el logo y los logotipos en versión clara y oscura, consulta los colores de marca y aprende las reglas para usarlos.",
+  "brand.meta.description":
+    "La guía de marca de OpenCode. Descarga el logo y los logotipos en versión clara y oscura, consulta los colores de marca y aprende las reglas para usarlos.",
   "brand.heading": "Guías de marca",
   "brand.subtitle": "Recursos y activos para ayudarte a trabajar con la marca OpenCode.",
   "brand.downloadAll": "Descargar todos los activos",
   "changelog.title": "OpenCode | Novedades y notas de versión de cada lanzamiento",
-  "changelog.meta.description": "Las notas de cada versión de OpenCode, con las novedades, mejoras y correcciones de la app de escritorio, la interfaz de terminal, la app móvil y el SDK.",
+  "changelog.meta.description":
+    "Las notas de cada versión de OpenCode, con las novedades, mejoras y correcciones de la app de escritorio, la interfaz de terminal, la app móvil y el SDK.",
   "changelog.hero.title": "Novedades",
   "changelog.hero.subtitle": "Nuevas actualizaciones y mejoras para OpenCode",
   "nav.data": "Data",
@@ -240,7 +270,8 @@ export const dict = {
   "footer.feishu": "Feishu",
   "footer.wordmark.letters": "Letras del logotipo de OpenCode",
   "footer.wordmark.roleLetter": "letra arrastrable",
-  "footer.wordmark.instructions": "Arrastra una letra para moverla. Con el teclado, pulsa Espacio para coger una letra, las flechas para moverla y Espacio para soltarla, o Alt y una flecha para moverla de una vez.",
+  "footer.wordmark.instructions":
+    "Arrastra una letra para moverla. Con el teclado, pulsa Espacio para coger una letra, las flechas para moverla y Espacio para soltarla, o Alt y una flecha para moverla de una vez.",
   "footer.wordmark.option": "{{letter}}, posición {{position}} de {{count}}",
   "footer.wordmark.picked": "{{letter}} cogida en la posición {{position}}",
   "footer.wordmark.moved": "{{letter}} movida a la posición {{position}}",
@@ -250,9 +281,12 @@ export const dict = {
   "footer.wordmark.fontLabel": "¿Te gustan? Descubre la fuente de OpenCode",
   "legal.englishGoverns": "Si una traducción difiere del inglés, prevalece la versión en inglés.",
   "common.contactUs": "Contáctanos",
-  "home.faq.a3.providers": "OpenCode también funciona con todos los proveedores populares, como OpenAI, Anthropic y xAI.",
-  "home.faq.a3.models.after": "[OpenCode Models](models) te da acceso a modelos de programación populares que hemos probado y evaluado para agentes de programación.",
-  "download.meta.descriptionAndroidSoon": "Descarga OpenCode para macOS, Windows y Linux, consigue la app de iOS o instala la app de terminal con un comando. Android llegará pronto.",
+  "home.faq.a3.providers":
+    "OpenCode también funciona con todos los proveedores populares, como OpenAI, Anthropic y xAI.",
+  "home.faq.a3.models.after":
+    "[OpenCode Models](models) te da acceso a modelos de programación populares que hemos probado y evaluado para agentes de programación.",
+  "download.meta.descriptionAndroidSoon":
+    "Descarga OpenCode para macOS, Windows y Linux, consigue la app de iOS o instala la app de terminal con un comando. Android llegará pronto.",
   "changelog.unavailable": "No se han podido cargar las novedades.",
   "changelog.viewReleases": "Ver versiones en GitHub",
   "changelog.entry.title": "{{title}} | Novedades de OpenCode",
@@ -318,6 +352,7 @@ export const dict = {
   "site.product.isNew": "{{name}} es nuevo. Sus novedades aparecerán aquí.",
   "site.extensions": "Extensiones",
   "site.contents": "Contenido",
+  "docs.section.overview": "Resumen",
   "docs.section.build": "Desarrollar",
   "docs.lockup.sectionDocs": "Docs de {{section}}",
   "docs.lockup.switchLabel": "{{name}}, cambiar de docs",
@@ -353,10 +388,12 @@ export const dict = {
   "docs.callout.tip": "Consejo",
   "docs.callout.caution": "Precaución",
   "docs.callout.danger": "Peligro",
-  "docs.v1.markdownNote": "Estos son los docs de OpenCode V1. Los docs actuales, de OpenCode V2, están en https://opencode.ai/docs/llms.txt.",
+  "docs.v1.markdownNote":
+    "Estos son los docs de OpenCode V1. Los docs actuales, de OpenCode V2, están en https://opencode.ai/docs/llms.txt.",
   "site.companions": "Funciona genial con OpenCode",
   "site.notFound.title": "Página no encontrada",
-  "site.arcade.alt": "Un salón recreativo abandonado de noche. La pantalla de una máquina aún brilla y muestra 404, y hay una ficha en el suelo delante de ella.",
+  "site.arcade.alt":
+    "Un salón recreativo abandonado de noche. La pantalla de una máquina aún brilla y muestra 404, y hay una ficha en el suelo delante de ella.",
   "site.arcade.token": "Ficha de arcade. Pulsa Intro para meterla en la máquina.",
   "site.arcade.credit": "Crédito 1. La máquina se está encendiendo.",
   "site.arcade.pressStart": "Pulsa Start.",
@@ -434,10 +471,13 @@ export const dict = {
   "home.companies.labelShort": "Elegido por 22M+ devs",
   "home.providers.label": "Funciona con",
   "home.tools.title": "Usa tus herramientas",
-  "home.tools.lead": "Conecta los servicios que ya usas con [servidores MCP](mcp), amplía OpenCode con [plugins](plugins) y enseña tus flujos de trabajo a los agentes con [skills](skills).",
-  "home.what.lead": "OpenCode es un agente de programación de código abierto. Úsalo en la app de escritorio, en la terminal, en el móvil o desde tu propio código con el SDK. [Lee la documentación](docs).",
+  "home.tools.lead":
+    "Conecta los servicios que ya usas con [servidores MCP](mcp), amplía OpenCode con [plugins](plugins) y enseña tus flujos de trabajo a los agentes con [skills](skills).",
+  "home.what.lead":
+    "OpenCode es un agente de programación de código abierto. Úsalo en la app de escritorio, en la terminal, en el móvil o desde tu propio código con el SDK. [Lee la documentación](docs).",
   "home.what.anyDevice.title": "Dispositivos",
-  "home.what.anyDevice.body": "Una app de escritorio, una interfaz de terminal, una app móvil y un SDK para tus herramientas",
+  "home.what.anyDevice.body":
+    "Una app de escritorio, una interfaz de terminal, una app móvil y un SDK para tus herramientas",
   "home.what.plugins.title": "Plugins",
   "home.what.plugins.body": "Escribe plugins para engancharte a eventos y ampliar OpenCode con tu propia lógica",
   "home.what.mcp.title": "Servidores MCP",
@@ -454,7 +494,8 @@ export const dict = {
   "home.what.undo.body": "Revierte los cambios recientes en tus archivos y en la conversación con /undo",
   "home.openSource.title": "Código abierto",
   "home.tools.label": "Servicios con servidores MCP",
-  "home.openSource.licence": "[Licencia MIT](license). Desarrollado en abierto por [Anomaly](anomaly) y [{{count}} colaboradores](contributors).",
+  "home.openSource.licence":
+    "[Licencia MIT](license). Desarrollado en abierto por [Anomaly](anomaly) y [{{count}} colaboradores](contributors).",
   "home.openSource.contributors": "Colaboradores de OpenCode",
   "home.openSource.avatars": "Avatares de los colaboradores de OpenCode",
   "home.openSource.avatarCommits": "Commits de {{login}} en OpenCode",
@@ -462,12 +503,15 @@ export const dict = {
   "home.byos.providersLabel": "Proveedores de modelos en los planes de OpenCode",
   "home.getStarted.freeModels": "Modelos gratis",
   "home.console.headline": "Todo lo que necesitas para trabajar con IA",
-  "home.console.body": "Inferencia de alta calidad para modelos frontier y de pesos abiertos, suscripciones económicas con límites generosos y las herramientas que tu equipo necesita para gestionar el gasto y colaborar con eficacia.",
+  "home.console.body":
+    "Inferencia de alta calidad para modelos frontier y de pesos abiertos, suscripciones económicas con límites generosos y las herramientas que tu equipo necesita para gestionar el gasto y colaborar con eficacia.",
   "home.console.cta": "Empieza gratis",
   "home.console.slimHeadline": "Console tiene todo lo que necesitas para trabajar con IA",
   "home.console.sales": "Hablar con ventas",
-  "home.faq.a1.body": "OpenCode es un agente de código abierto que te ayuda a escribir y ejecutar código con cualquier modelo de IA. Está disponible como app de escritorio, interfaz de terminal, app móvil y SDK.",
-  "home.faq.a5.body": "No. OpenCode también está disponible como [app de escritorio](desktop) y [app móvil](mobile), y el [SDK](sdk) te permite controlarlo desde tu propio código.",
+  "home.faq.a1.body":
+    "OpenCode es un agente de código abierto que te ayuda a escribir y ejecutar código con cualquier modelo de IA. Está disponible como app de escritorio, interfaz de terminal, app móvil y SDK.",
+  "home.faq.a5.body":
+    "No. OpenCode también está disponible como [app de escritorio](desktop) y [app móvil](mobile), y el [SDK](sdk) te permite controlarlo desde tu propio código.",
   "brand.ui.downloadLabel": "Descargar {{label}}",
   "brand.ui.downloadItem": "Descargar {{label}} de {{detail}}",
   "brand.ui.moreFormats": "Más formatos para {{detail}}",
@@ -484,8 +528,10 @@ export const dict = {
   "brand.ui.avatarAlt": "Avatar de OpenCode, {{name}}",
   "brand.ui.lockupAlt": "El logo de OpenCode × el logo de {{partner}}, con 3 trazos de espacio a cada lado de la ×.",
   "brand.ui.strokeAlt": "Un trazo es el grosor del contorno del logo, una cuarta parte de su anchura.",
-  "brand.ui.clearSpaceAlt": "El logo con dos trazos de espacio libre en cada lado. Un trazo es el grosor del contorno del logo, una cuarta parte de su anchura.",
-  "brand.ui.clearSpaceWordmarkAlt": "El logotipo con dos trazos de espacio libre en cada lado. Un trazo es el grosor de las letras del logotipo, una séptima parte de su altura.",
+  "brand.ui.clearSpaceAlt":
+    "El logo con dos trazos de espacio libre en cada lado. Un trazo es el grosor del contorno del logo, una cuarta parte de su anchura.",
+  "brand.ui.clearSpaceWordmarkAlt":
+    "El logotipo con dos trazos de espacio libre en cada lado. Un trazo es el grosor de las letras del logotipo, una séptima parte de su altura.",
   "press.ui.copy": "Copiar «{{label}}»",
   "press.ui.copyFor": "Copiar «{{label}}» de {{product}}",
   "press.ui.copyText": "Copiar texto",
@@ -506,9 +552,12 @@ export const dict = {
   "changelog.media.next": "Siguiente",
   "changelog.releaseOnGithub": "{{tag}}[ (versión en GitHub)](sr)",
   "product.title": "OpenCode | Escritorio, terminal, móvil, SDK y extensiones",
-  "product.meta.description": "Todos los productos de OpenCode en un solo lugar. Las apps de escritorio, terminal y móvil, el SDK y las extensiones, y más herramientas abiertas de Anomaly.",
-  "product.hero.subtitle": "Un agente, en todas partes. Empieza una sesión en el escritorio, guíala desde el móvil, retómala en la terminal o contrólala desde tu propio código.",
-  "home.meta.description": "OpenCode es el agente de programación de código abierto que va contigo. Conecta modelos de IA de 200+ proveedores, como Claude, GPT y Gemini, o empieza gratis.",
+  "product.meta.description":
+    "Todos los productos de OpenCode en un solo lugar. Las apps de escritorio, terminal y móvil, el SDK y las extensiones, y más herramientas abiertas de Anomaly.",
+  "product.hero.subtitle":
+    "Un agente, en todas partes. Empieza una sesión en el escritorio, guíala desde el móvil, retómala en la terminal o contrólala desde tu propio código.",
+  "home.meta.description":
+    "OpenCode es el agente de programación de código abierto que va contigo. Conecta modelos de IA de 200+ proveedores, como Claude, GPT y Gemini, o empieza gratis.",
   "site.action.copyCommand": "Copiar[ el comando de {{method}}](sr)",
   "site.action.copiedCommand": "Copiado[ el comando de {{method}}](sr)",
   "site.action.copyThisCommand": "Copiar[ el comando](sr)",
@@ -548,8 +597,10 @@ export const dict = {
   "site.settings": "Ajustes",
   "home.providers.aria": "Proveedores de modelos",
   "home.providers.inline": "Usa [list](list) o cualquiera de los más de 200 modelos restantes.",
-  "home.providers.grid": "Más de 200 proveedores a través de [models.dev](modelsdev), y modelos locales. [Conecta un proveedor](providers)",
-  "home.getStarted.moreModels": "Para más modelos, inicia sesión con {{subs}}, o usa [OpenCode Go](go) (10 $/mes) u [OpenCode Go Plus](goPlus) (40 $/mes).",
+  "home.providers.grid":
+    "Más de 200 proveedores a través de [models.dev](modelsdev), y modelos locales. [Conecta un proveedor](providers)",
+  "home.getStarted.moreModels":
+    "Para más modelos, inicia sesión con {{subs}}, o usa [OpenCode Go](go) (10 $/mes) u [OpenCode Go Plus](goPlus) (40 $/mes).",
   "home.getStarted.free": "Gratis",
   "home.getStarted.mostPeople": "Casi todos empiezan aquí",
   "home.getStarted.freeDetail": "{{model}} y otros modelos gratuitos",
@@ -581,11 +632,13 @@ export const dict = {
   "home.fork.copy": "Copiar comandos",
   "home.fork.button": "Fork en GitHub",
   "home.fork.interface.title": "Cambia la interfaz",
-  "home.fork.interface.body": "La interfaz de terminal, la app web y la app de escritorio están todas en el repositorio.",
+  "home.fork.interface.body":
+    "La interfaz de terminal, la app web y la app de escritorio están todas en el repositorio.",
   "home.fork.agents.title": "Añade un agente o un plugin",
   "home.fork.agents.body": "Define agentes en Markdown o escribe [plugins](plugins) para los eventos de OpenCode.",
   "home.fork.build.title": "Publica tu propia build",
-  "home.fork.build.body": "Tiene licencia MIT, así que puedes compilar la CLI o la app de escritorio y publicarla como tuya.",
+  "home.fork.build.body":
+    "Tiene licencia MIT, así que puedes compilar la CLI o la app de escritorio y publicarla como tuya.",
   "brand.ui.downloadAsset": "Descargar {{detail}}",
   "brand.ui.actionFor": "{{label}} para {{detail}}",
   "brand.ui.actionOf": "{{label}} de {{detail}}",
@@ -608,13 +661,15 @@ export const dict = {
   "site.action.forOsBeta": "Descargar para {{os}}, beta de Apple TestFlight",
   "site.action.storeBeta": "{{os}}, beta de Apple TestFlight",
   "go.referral.ended.label": "Advertencia",
-  "go.referral.ended": "El programa de referidos ha terminado. Los enlaces de referido ya no otorgan crédito ni a ti ni a quien los compartió.",
+  "go.referral.ended":
+    "El programa de referidos ha terminado. Los enlaces de referido ya no otorgan crédito ni a ti ni a quien los compartió.",
   "legal.status.operational": "Todos los sistemas están operativos",
   "legal.status.degraded": "Rendimiento degradado",
   "legal.status.outage": "Interrupción del servicio",
   "legal.status.unknown": "Estado del sistema",
   "zen.faq.q9": "¿Puedo obtener un reembolso?",
-  "zen.faq.a9": "Podrías tener derecho a un reembolso si el cargo se realizó en los últimos 14 días y no has utilizado el crédito de esa compra. {{contact}} para solicitar un reembolso.",
+  "zen.faq.a9":
+    "Podrías tener derecho a un reembolso si el cargo se realizó en los últimos 14 días y no has utilizado el crédito de esa compra. {{contact}} para solicitar un reembolso.",
   "go.promo.hy4": "Hy4 ya está disponible en Go.",
   "go.hero.tagline": "Úsalo con cualquier agente. Recarga crédito si lo necesitas. Cancela cuando quieras.",
   "go.plans.audience": "Planes de Go para",
@@ -652,9 +707,11 @@ export const dict = {
   "go.graph.limitedRegions": "regiones limitadas",
   "go.graph.limitedTime": "tiempo limitado",
   "go.faq.a5.notZdr": "Sin ZDR",
-  "go.faq.a5.museRetention": "Precios de tokens muy reducidos a cambio de permitir que tus prompts y las respuestas generadas se utilicen para entrenar futuros modelos de Meta.",
+  "go.faq.a5.museRetention":
+    "Precios de tokens muy reducidos a cambio de permitir que tus prompts y las respuestas generadas se utilicen para entrenar futuros modelos de Meta.",
   "go.faq.q10": "¿Puedo obtener un reembolso?",
-  "go.faq.a10": "Podrías tener derecho a un reembolso si el cargo se realizó en los últimos 14 días y no has utilizado tu cuota de Go durante ese periodo de facturación. {{contact}} para solicitar un reembolso.",
+  "go.faq.a10":
+    "Podrías tener derecho a un reembolso si el cargo se realizó en los últimos 14 días y no has utilizado tu cuota de Go durante ese periodo de facturación. {{contact}} para solicitar un reembolso.",
   "download.platform.windowsArm64": "Windows (ARM64)",
   "enterprise.form.inferenceSpend.label": "¿Cuál es el gasto mensual actual de tu empresa en inferencia (USD)?",
   "enterprise.form.inferenceSpend.placeholder": "Selecciona un rango (opcional)",

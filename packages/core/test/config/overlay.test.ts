@@ -1,7 +1,7 @@
 import { afterAll, describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Duration, Effect, Layer, LayerMap, Schedule, Stream } from "effect"
+import { Duration, Effect, Layer, Schedule, Stream } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { App } from "@opencode/core/app"
 import { Config } from "@opencode/core/config"
@@ -50,7 +50,7 @@ const unexpected = (pkg: string) =>
 const instances = Layer.effect(
   LocationServiceMap.Service,
   Effect.gen(function* () {
-    const map = yield* LayerMap.make((ref: Location.Ref) => Instance.layer(ref, { replacements: bindings }), {
+    const map = yield* LocationServiceMap.make((ref: Location.Ref) => Instance.layer(ref, { replacements: bindings }), {
       idleTimeToLive: Duration.infinity,
     })
     const bindings: LayerNode.Replacements = [
@@ -74,6 +74,7 @@ const instances = Layer.effect(
             update: unexpected,
             reject: () => Effect.succeed(false),
             which: () => Effect.undefined,
+            follows: () => Effect.succeed(false),
           }),
         ),
       ),

@@ -1,0 +1,1002 @@
+//! Parses TeX math into a layout tree, optionally accepting an incomplete streaming prefix.
+
+use unicode_segmentation::UnicodeSegmentation;
+
+use crate::symbols;
+
+/// Maximum input length in characters.
+const MAX_SOURCE_LENGTH: usize = 100_000;
+/// Maximum depth of nested braces and constructs.
+const MAX_DEPTH: usize = 256;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Role {
+    Ordinary,
+    Binary,
+    Relation,
+    Operator,
+    Punctuation,
+    Opening,
+    Closing,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Variant {
+    Normal,
+    Bold,
+    Italic,
+    Sans,
+    Monospace,
+    DoubleStruck,
+    Script,
+    Fraktur,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Environment {
+    Matrix,
+    Pmatrix,
+    Bmatrix,
+    BigBmatrix,
+    Vmatrix,
+    BigVmatrix,
+    Cases,
+    Aligned,
+    Align,
+    Gathered,
+    Gather,
+    Smallmatrix,
+    Array,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Accent {
+    Hat,
+    Widehat,
+    Bar,
+    Overline,
+    Underline,
+    Vec,
+    Tilde,
+    Dot,
+    Ddot,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Align {
+    Left,
+    Right,
+}
+
+/// Where an operator places its scripts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Limits {
+    /// Beside it: `\int`, `\sin`, `\nolimits`.
+    Never,
+    /// Above and below in display math, beside it inline: `\sum`, `\lim`.
+    Display,
+    /// Above and below: `\limits`, `\operatorname*`.
+    Always,
+}
+
+/// Parser options for unsupported commands and streaming input.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Mode {
+    /// Treat unsupported commands and delimiters as literal text.
+    pub permissive: bool,
+    /// Fill a missing operand at end of input with `□`. Earlier syntax errors still fail.
+    pub incomplete: bool,
+}
+
+/// What an incomplete formula shows for a missing part.
+pub const PLACEHOLDER: &str = "\u{25a1}";
+
+/// A parsed formula.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Node {
+    Row(Vec<Node>),
+    Symbol { value: String, role: Option<Role> },
+    Text(String),
+    Space(usize),
+    Fraction { numerator: Box<Node>, denominator: Box<Node>, bar: bool, align: Option<Align> },
+    Root { body: Box<Node>, index: Option<Box<Node>> },
+    Scripts { base: Box<Node>, superscript: Option<Box<Node>>, subscript: Option<Box<Node>> },
+    Delimited { left: String, body: Box<Node>, right: String },
+    Matrix { rows: Vec<Vec<Node>>, environment: Environment, columns: Option<String> },
+    Brace { body: Box<Node>, over: bool },
+    Accent { accent: Accent, body: Box<Node> },
+    Variant { variant: Variant, body: Box<Node> },
+    Operator { value: String, limits: Limits },
+    OverUnder { base: Box<Node>, over: Option<Box<Node>>, under: Option<Box<Node>> },
+    Color { color: String, body: Box<Node> },
+}
+
+/// An error parsing or laying out a formula.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParseError {
+    pub message: String,
+    /// The offset in characters.
+    pub position: usize,
+}
+
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} at offset {}", self.message, self.position)
+    }
+}
+
+impl std::error::Error for ParseError {}
+
+type Result<T> = std::result::Result<T, ParseError>;
+
+/// Parses a whole formula strictly, the plugin's mode.
+pub fn parse(source: &str) -> Result<Node> {
+    parse_with(source, Mode::default())
+}
+
+pub fn parse_with(source: &str, mode: Mode) -> Result<Node> {
+    let source: Vec<char> = source.chars().collect();
+    if source.len() > MAX_SOURCE_LENGTH {
+        return Err(ParseError {
+            message: format!("LaTeX source exceeds the {MAX_SOURCE_LENGTH}-character limit"),
+            position: MAX_SOURCE_LENGTH,
+        });
+    }
+    check_nesting(&source)?;
+    let mut parser = Parser { boundaries: boundaries(&source), source, position: 0, depth: 0, mode };
+    let body = parser.row(&|_| false)?;
+    parser.skip_whitespace();
+    if parser.peek() == Some('}') {
+        return parser.fail("Unexpected closing group".into());
+    }
+    if !parser.done() {
+        return parser.fail(format!("Unexpected \"{}\"", parser.peek_str()));
+    }
+    Ok(row(body))
+}
+
+/// Whether each character starts a grapheme, and the end: a literal is the rest of its grapheme.
+fn boundaries(source: &[char]) -> Vec<bool> {
+    let text: String = source.iter().collect();
+    let mut starts = vec![false; source.len() + 1];
+    let mut index = 0;
+    for grapheme in text.graphemes(true) {
+        starts[index] = true;
+        index += grapheme.chars().count();
+    }
+    starts[source.len()] = true;
+    starts
+}
+
+fn check_nesting(source: &[char]) -> Result<()> {
+    let mut depth = 0usize;
+    let mut slashes = 0usize;
+    for (index, &char) in source.iter().enumerate() {
+        if char == '\\' {
+            slashes += 1;
+            continue;
+        }
+        let escaped = slashes % 2 == 1;
+        slashes = 0;
+        if char == '{' && !escaped {
+            depth += 1;
+            if depth > MAX_DEPTH {
+                return Err(ParseError {
+                    message: format!("LaTeX nesting exceeds the {MAX_DEPTH}-level limit"),
+                    position: index,
+                });
+            }
+        } else if char == '}' && !escaped {
+            depth = depth.saturating_sub(1);
+        }
+    }
+    Ok(())
+}
+
+struct Parser {
+    source: Vec<char>,
+    boundaries: Vec<bool>,
+    position: usize,
+    depth: usize,
+    mode: Mode,
+}
+
+type Stop<'a> = &'a dyn Fn(&Parser) -> bool;
+
+impl Parser {
+    fn row(&mut self, stop: Stop<'_>) -> Result<Vec<Node>> {
+        let mut body = Vec::new();
+        while !self.done() {
+            self.skip_whitespace();
+            if self.done() || stop(self) {
+                break;
+            }
+            let current = self.peek();
+            if current == Some('}') {
+                break;
+            }
+            if current == Some('^') || current == Some('_') {
+                self.position += 1;
+                let script = Box::new(self.argument()?);
+                let previous = body.pop().unwrap_or(Node::Row(Vec::new()));
+                let mut scripts = match previous {
+                    scripts @ Node::Scripts { .. } => scripts,
+                    base => Node::Scripts { base: Box::new(base), superscript: None, subscript: None },
+                };
+                if let Node::Scripts { superscript, subscript, .. } = &mut scripts {
+                    match current {
+                        Some('^') => *superscript = Some(script),
+                        _ => *subscript = Some(script),
+                    }
+                }
+                body.push(scripts);
+                continue;
+            }
+            if current == Some('\\') && self.limits_modifier(&mut body) {
+                continue;
+            }
+            if let Some(atom) = self.atom(stop)? {
+                body.push(atom);
+            }
+        }
+        Ok(body)
+    }
+
+    /// The next atom, or `None` for a directive that makes none, such as `\displaystyle`.
+    fn atom(&mut self, stop: Stop<'_>) -> Result<Option<Node>> {
+        self.depth += 1;
+        let result = if self.depth > MAX_DEPTH {
+            self.fail(format!("LaTeX nesting exceeds the {MAX_DEPTH}-level limit"))
+        } else {
+            self.atom_inner(stop)
+        };
+        self.depth -= 1;
+        result
+    }
+
+    fn atom_inner(&mut self, stop: Stop<'_>) -> Result<Option<Node>> {
+        match self.peek() {
+            Some('{') => self.group().map(Some),
+            Some('\\') => {
+                let mut atom = self.command(stop)?;
+                if let Some(value) = atom.as_mut().and_then(unwrap_value) {
+                    value.push_str(&self.read_marks());
+                }
+                Ok(atom)
+            }
+            Some('~') => {
+                self.position += 1;
+                Ok(Some(Node::Space(1)))
+            }
+            _ => {
+                let value = self.read_literal();
+                let role = infer_role(value.get(..value.chars().next().map_or(0, char::len_utf8)).unwrap_or(""));
+                Ok(Some(Node::Symbol { value, role: Some(role) }))
+            }
+        }
+    }
+
+    fn command(&mut self, stop: Stop<'_>) -> Result<Option<Node>> {
+        let start = self.position;
+        let command = self.read_command()?;
+        let command = command.as_str();
+        Ok(Some(match command {
+            "\\" => Node::Row(Vec::new()),
+            "limits" | "nolimits" | "displaystyle" | "textstyle" | "scriptstyle" | "scriptscriptstyle" => {
+                return Ok(None);
+            }
+            _ => self.command_node(command, start, stop)?,
+        }))
+    }
+
+    fn command_node(&mut self, command: &str, start: usize, stop: Stop<'_>) -> Result<Node> {
+        match command {
+            "begin" => return self.environment(),
+            "frac" | "dfrac" | "tfrac" | "cfrac" => {
+                self.skip_whitespace();
+                let mut align = None;
+                if command == "cfrac" && self.peek() == Some('[') {
+                    // `[`, `l` or `r` or nothing, then `]`; an incomplete source may end before the `]`.
+                    let side = self.source.get(self.position + 1).copied().filter(|c| *c == 'l' || *c == 'r');
+                    let close = self.position + 1 + usize::from(side.is_some());
+                    let closed = self.source.get(close) == Some(&']');
+                    if !closed && !(self.mode.incomplete && close == self.source.len()) {
+                        return self.fail("Unsupported \\cfrac alignment; expected [l], [r], or []".into());
+                    }
+                    self.position = close + usize::from(closed);
+                    align = match side {
+                        Some('l') => Some(Align::Left),
+                        Some('r') => Some(Align::Right),
+                        _ => None,
+                    };
+                }
+                return Ok(Node::Fraction {
+                    numerator: Box::new(self.argument()?),
+                    denominator: Box::new(self.argument()?),
+                    bar: true,
+                    align,
+                });
+            }
+            "binom" | "dbinom" | "tbinom" => {
+                let fraction = Node::Fraction {
+                    numerator: Box::new(self.argument()?),
+                    denominator: Box::new(self.argument()?),
+                    bar: false,
+                    align: None,
+                };
+                return Ok(Node::Delimited { left: "(".into(), body: Box::new(fraction), right: ")".into() });
+            }
+            "sqrt" => {
+                let index = self.optional_argument()?.map(Box::new);
+                return Ok(Node::Root { body: Box::new(self.argument()?), index });
+            }
+            "left" => return self.left_right(),
+            "middle" => {
+                return Ok(Node::Symbol { value: self.read_delimiter()?, role: None });
+            }
+            "right" | "end" => {
+                self.position = start;
+                return self.fail(format!("Unexpected \\{command}"));
+            }
+            _ => {}
+        }
+        if let Some(accent) = accent(command) {
+            return Ok(Node::Accent { accent, body: Box::new(self.argument()?) });
+        }
+        if let Some(variant) = variant(command) {
+            let body = match command {
+                "textrm" => Node::Text(self.read_text_group()?),
+                _ => self.argument()?,
+            };
+            return Ok(Node::Variant { variant, body: Box::new(body) });
+        }
+        match command {
+            "text" | "mbox" => return Ok(Node::Text(self.read_text_group()?)),
+            "operatorname" => {
+                let star = self.peek() == Some('*');
+                if star {
+                    self.position += 1;
+                }
+                let limits = if star { Limits::Always } else { Limits::Never };
+                return Ok(Node::Operator { value: self.read_text_group()?, limits });
+            }
+            "overset" | "stackrel" => {
+                let over = Box::new(self.argument()?);
+                let base = Box::new(self.argument()?);
+                return Ok(Node::OverUnder { base, over: Some(over), under: None });
+            }
+            "underset" => {
+                let under = Box::new(self.argument()?);
+                let base = Box::new(self.argument()?);
+                return Ok(Node::OverUnder { base, over: None, under: Some(under) });
+            }
+            "overbrace" | "underbrace" => {
+                return Ok(Node::Brace { body: Box::new(self.argument()?), over: command == "overbrace" });
+            }
+            "textcolor" => {
+                let color = self.read_raw_group()?;
+                return Ok(Node::Color { color, body: Box::new(self.argument()?) });
+            }
+            "color" => {
+                let color = self.read_raw_group()?;
+                return Ok(Node::Color { color, body: Box::new(row(self.row(stop)?)) });
+            }
+            "not" => {
+                self.skip_whitespace();
+                // A trailing negation applies to the empty symbol.
+                if self.done() {
+                    return Ok(Node::Symbol { value: negate(""), role: Some(infer_role("")) });
+                }
+                let mut target = self.argument()?;
+                if let Node::Symbol { value, .. } = unwrap_style(&mut target) {
+                    *value = negate(value);
+                    return Ok(target);
+                }
+                return Ok(Node::Row(vec![Node::Symbol { value: "¬".into(), role: None }, target]));
+            }
+            "pmod" => {
+                return Ok(Node::Row(vec![
+                    Node::Space(1),
+                    Node::Text("(mod ".into()),
+                    self.argument()?,
+                    Node::Text(")".into()),
+                ]));
+            }
+            "mod" | "bmod" => {
+                return Ok(Node::Operator { value: "mod".into(), limits: Limits::Never });
+            }
+            "displaylines" => {
+                self.skip_whitespace();
+                if self.mode.incomplete && self.done() {
+                    let rows = vec![vec![placeholder()]];
+                    return Ok(Node::Matrix { rows, environment: Environment::Gathered, columns: None });
+                }
+                self.expect("{")?;
+                return self.matrix(Environment::Gathered, "}", None);
+            }
+            _ => {}
+        }
+        if matches!(command.strip_suffix(['l', 'r', 'm']).unwrap_or(command), "big" | "Big" | "bigg" | "Bigg") {
+            return Ok(Node::Symbol { value: self.read_delimiter()?, role: None });
+        }
+        if let Some(width) = symbols::spacing(command) {
+            return Ok(Node::Space(width));
+        }
+        if let Some((value, role)) = symbols::symbol(command) {
+            return Ok(Node::Symbol { value: value.into(), role: Some(role) });
+        }
+        if let Some(value) = symbols::large_operator(command) {
+            let limits = if command.contains("int") { Limits::Never } else { Limits::Display };
+            return Ok(Node::Operator { value: value.into(), limits });
+        }
+        if symbols::is_named_operator(command) {
+            let display = command.starts_with("lim") || command == "min" || command == "max";
+            let limits = if display { Limits::Display } else { Limits::Never };
+            return Ok(Node::Operator { value: command.into(), limits });
+        }
+        if command == "backslash" {
+            return Ok(Node::Symbol { value: "\\".into(), role: None });
+        }
+        if let Some(value) = symbols::delimiter(&format!("\\{command}")).or_else(|| symbols::delimiter(command)) {
+            return Ok(Node::Symbol { value: value.into(), role: None });
+        }
+        if matches!(command, "{" | "}" | "%" | "#" | "$" | "&" | "_") {
+            return Ok(Node::Symbol { value: command.into(), role: None });
+        }
+        if self.mode.permissive {
+            return Ok(Node::Text(format!("\\{command}")));
+        }
+        self.fail_at(format!("Unsupported command \\{command}"), start)
+    }
+
+    fn environment(&mut self) -> Result<Node> {
+        let raw = self.read_raw_group()?;
+        let name = raw.strip_suffix('*').unwrap_or(&raw);
+        let Some(environment) = environment(name) else { return self.fail(format!("Unsupported environment {name}")) };
+        let columns = match environment {
+            Environment::Array => {
+                let (columns, closed) = self.read_raw(false)?;
+                let columns: String = columns.chars().filter(|c| !c.is_whitespace()).collect();
+                // An incomplete source may end in the columns before their first alignment.
+                let valid = columns.chars().all(|c| "lcr|".contains(c))
+                    && (columns.chars().any(|c| "lcr".contains(c)) || !closed);
+                if !valid {
+                    return self.fail("Unsupported array columns; expected l, c, r, and |".into());
+                }
+                Some(columns)
+            }
+            _ => None,
+        };
+        self.matrix(environment, &format!("\\end{{{raw}}}"), columns)
+    }
+
+    fn matrix(&mut self, environment: Environment, end: &str, columns: Option<String>) -> Result<Node> {
+        let mut rows = Vec::new();
+        let mut cells = Vec::new();
+        while !self.done() {
+            self.skip_whitespace();
+            if self.done() || (self.starts_with(end) && cells.is_empty()) {
+                break;
+            }
+            let cell_start = self.position;
+            let cell = self.row(&|parser| {
+                parser.peek() == Some('&')
+                    || parser.starts_with("\\\\")
+                    || parser.starts_with(end)
+                    || parser.is_command("end")
+            })?;
+            cells.push(row(cell));
+            self.skip_whitespace();
+            if self.peek() == Some('&') {
+                self.position += 1;
+                self.skip_whitespace();
+                if self.mode.incomplete && self.done() {
+                    cells.push(placeholder());
+                }
+                continue;
+            }
+            if self.starts_with("\\\\") {
+                self.position += 2;
+                self.skip_optional_bracket();
+                rows.push(std::mem::take(&mut cells));
+                continue;
+            }
+            if self.starts_with(end) {
+                break;
+            }
+            // Empty cells are valid only when a cell, row, or closing delimiter advances the parser.
+            if self.position == cell_start {
+                let name = ENVIRONMENTS.iter().find(|(_, value)| *value == environment).map_or("", |(name, _)| name);
+                return self.fail(format!("Unexpected \"{}\" in {name}", self.peek_str()));
+            }
+        }
+        let closed = self.starts_with(end);
+        if !closed && !(self.mode.incomplete && self.done()) {
+            return self.fail(format!("Missing {end}"));
+        }
+        if closed {
+            self.position += end.chars().count();
+        } else if rows.is_empty() && cells.is_empty() {
+            cells.push(placeholder());
+        }
+        if !cells.is_empty() || rows.is_empty() {
+            rows.push(cells);
+        }
+        Ok(Node::Matrix { rows, environment, columns })
+    }
+
+    fn left_right(&mut self) -> Result<Node> {
+        let left = self.read_delimiter()?;
+        let at_right = |parser: &Parser| parser.is_command("right");
+        let nodes = self.row(&at_right)?;
+        if !at_right(self) {
+            if self.mode.incomplete && self.done() {
+                let body = if nodes.is_empty() { placeholder() } else { row(nodes) };
+                return Ok(Node::Delimited { left, body: Box::new(body), right: String::new() });
+            }
+            return self.fail("Missing \\right".into());
+        }
+        let body = row(nodes);
+        self.read_command()?;
+        let right = self.read_delimiter()?;
+        Ok(Node::Delimited { left, body: Box::new(body), right })
+    }
+
+    fn argument(&mut self) -> Result<Node> {
+        loop {
+            self.skip_whitespace();
+            if self.peek() == Some('{') {
+                return self.group();
+            }
+            if self.done() {
+                if self.mode.incomplete {
+                    return Ok(placeholder());
+                }
+                return self.fail("Expected an argument".into());
+            }
+            if self.peek() == Some('}') {
+                return self.fail("Unexpected closing group".into());
+            }
+            if let Some(atom) = self.atom(&|_| false)? {
+                return Ok(atom);
+            }
+        }
+    }
+
+    fn group(&mut self) -> Result<Node> {
+        self.expect("{")?;
+        let body = self.row(&|_| false)?;
+        self.close("}", body)
+    }
+
+    fn optional_argument(&mut self) -> Result<Option<Node>> {
+        self.skip_whitespace();
+        if self.peek() != Some('[') {
+            return Ok(None);
+        }
+        self.position += 1;
+        let body = self.row(&|parser| parser.peek() == Some(']'))?;
+        self.close("]", body).map(Some)
+    }
+
+    /// `body` once `close` ends it; an incomplete source may end first, an empty body then being a placeholder.
+    fn close(&mut self, close: &str, body: Vec<Node>) -> Result<Node> {
+        if self.mode.incomplete && self.done() {
+            return Ok(if body.is_empty() { placeholder() } else { row(body) });
+        }
+        self.expect(close)?;
+        Ok(row(body))
+    }
+
+    fn skip_optional_bracket(&mut self) {
+        self.skip_whitespace();
+        if self.peek() != Some('[') {
+            return;
+        }
+        let mut depth = 0usize;
+        while let Some(char) = self.next() {
+            if char == '[' {
+                depth += 1;
+            }
+            if char == ']' {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return;
+                }
+            }
+        }
+    }
+
+    fn read_delimiter(&mut self) -> Result<String> {
+        self.skip_whitespace();
+        if self.done() {
+            if self.mode.incomplete {
+                return Ok(String::new());
+            }
+            return self.fail("Expected a delimiter".into());
+        }
+        if self.peek() == Some('}') {
+            return self.fail("Unexpected closing group".into());
+        }
+        let start = self.position;
+        if self.peek() == Some('\\') {
+            let command = self.read_command()?;
+            if let Some(delimiter) =
+                symbols::delimiter(&format!("\\{command}")).or_else(|| symbols::delimiter(&command))
+            {
+                return Ok(self.with_marks(delimiter.to_owned()));
+            }
+            // A lone `\` that ends an incomplete source may still become one.
+            if self.mode.incomplete && self.done() && self.position == start + 1 {
+                return Ok(String::new());
+            }
+            if !self.mode.permissive {
+                return self.fail_at(format!("Unsupported delimiter \\{command}"), start);
+            }
+            return Ok(self.with_marks(command));
+        }
+        let token = self.peek_str();
+        if let Some(delimiter) = symbols::delimiter(&token) {
+            self.position += 1;
+            return Ok(self.with_marks(delimiter.to_owned()));
+        }
+        if !self.mode.permissive {
+            return self.fail(format!("Unsupported delimiter {token}"));
+        }
+        Ok(self.read_literal())
+    }
+
+    /// `delimiter` with the marks after it; an invisible one (`.`) takes them away too.
+    fn with_marks(&mut self, delimiter: String) -> String {
+        let marks = self.read_marks();
+        if delimiter.is_empty() {
+            return delimiter;
+        }
+        delimiter + &marks
+    }
+
+    /// The rest of the grapheme at the position, cut before TeX syntax so a prepended character does not take it.
+    fn read_literal(&mut self) -> String {
+        let start = self.position;
+        let mut end = start + 1;
+        while !self.boundaries[end] && !is_syntax(self.source[end]) {
+            end += 1;
+        }
+        self.position = end;
+        self.source[start..end].iter().collect()
+    }
+
+    /// The combining marks that continue the grapheme at the position, which stay on the atom before them. Like a
+    /// literal, they stop before TeX syntax that a prepended character joins to its grapheme.
+    fn read_marks(&mut self) -> String {
+        let start = self.position;
+        while self.position < self.source.len()
+            && !self.boundaries[self.position]
+            && !is_syntax(self.source[self.position])
+        {
+            self.position += 1;
+        }
+        self.source[start..self.position].iter().collect()
+    }
+
+    fn read_command(&mut self) -> Result<String> {
+        self.expect("\\")?;
+        let Some(next) = self.peek() else { return Ok("\\".into()) };
+        if !is_command_letter(next) {
+            self.position += 1;
+            return Ok(next.into());
+        }
+        let start = self.position;
+        while self.peek().is_some_and(is_command_letter) {
+            self.position += 1;
+        }
+        let command = self.source[start..self.position].iter().collect();
+        if self.peek() == Some(' ') {
+            self.position += 1;
+        }
+        Ok(command)
+    }
+
+    /// The source of a `{…}` group without its comments.
+    fn read_raw_group(&mut self) -> Result<String> {
+        self.read_raw(false).map(|(value, _)| value)
+    }
+
+    /// The source of a `{…}` group, without its comments unless `comments`, and whether it closed: an incomplete
+    /// source may end inside it.
+    fn read_raw(&mut self, comments: bool) -> Result<(String, bool)> {
+        self.skip_whitespace();
+        if self.mode.incomplete && self.done() {
+            return Ok((String::new(), false));
+        }
+        self.expect("{")?;
+        let start = self.position;
+        let mut value = String::new();
+        let mut depth = 1usize;
+        while let Some(char) = self.next() {
+            let escaped = matches!(char, '{' | '}' | '%') && self.is_escaped(self.position - 1);
+            if char == '%' && !escaped && !comments {
+                while self.peek().is_some_and(|c| c != '\n' && c != '\r') {
+                    self.position += 1;
+                }
+                if self.peek() == Some('\r') {
+                    self.position += 1;
+                }
+                if self.peek() == Some('\n') {
+                    self.position += 1;
+                }
+                continue;
+            }
+            if char == '{' && !escaped {
+                depth += 1;
+            }
+            if char == '}' && !escaped {
+                depth -= 1;
+                if depth == 0 {
+                    return Ok((value, true));
+                }
+            }
+            value.push(char);
+        }
+        if self.mode.incomplete {
+            return Ok((value, false));
+        }
+        self.fail_at("Unterminated group".into(), start)
+    }
+
+    fn limits_modifier(&mut self, body: &mut [Node]) -> bool {
+        let Some(name) = ["limits", "nolimits"].into_iter().find(|name| {
+            self.starts_with(&format!("\\{name}"))
+                && !self.source.get(self.position + 1 + name.len()).is_some_and(|&c| is_command_letter(c))
+        }) else {
+            return false;
+        };
+        self.position += 1 + name.len();
+        if let Some(Node::Operator { limits, .. }) = body.last_mut().map(limits_target) {
+            *limits = if name == "limits" { Limits::Always } else { Limits::Never };
+        }
+        true
+    }
+
+    /// Whether `\name` starts here, not a longer command.
+    fn is_command(&self, name: &str) -> bool {
+        self.starts_with(&format!("\\{name}"))
+            && !self.source.get(self.position + 1 + name.len()).is_some_and(|&c| is_command_letter(c))
+    }
+
+    fn is_escaped(&self, index: usize) -> bool {
+        self.source[..index].iter().rev().take_while(|&&c| c == '\\').count() % 2 == 1
+    }
+
+    fn read_text_group(&mut self) -> Result<String> {
+        let (raw, closed) = self.read_raw(true)?;
+        let raw: Vec<char> =
+            if raw.is_empty() && !closed { PLACEHOLDER.chars().collect() } else { raw.chars().collect() };
+        let mut text = String::new();
+        let mut index = 0;
+        while index < raw.len() {
+            let char = raw[index];
+            // The escaped-character pattern excludes line breaks.
+            if char != '\\' || raw.get(index + 1).is_none_or(|&c| c == '\n' || c == '\r') {
+                text.push(if char == '~' { ' ' } else { char });
+                index += 1;
+                continue;
+            }
+            let start = index + 1;
+            let mut end = start;
+            while raw.get(end).is_some_and(|&c| is_command_letter(c)) {
+                end += 1;
+            }
+            let end = if end == start { start + 1 } else { end };
+            let command: String = raw[start..end].iter().collect();
+            if command.chars().count() == 1 && "{}%#$&_ ".contains(command.as_str()) {
+                text.push_str(&command);
+            } else if command == "textbackslash" {
+                text.push('\\');
+            } else if command == "!" {
+            } else if let Some(width) = symbols::spacing(&command) {
+                text.push_str(&" ".repeat(width.max(1)));
+            } else {
+                text.push('\\');
+                text.extend(command.chars().map(|c| if c == '~' { ' ' } else { c }));
+            }
+            index = end;
+        }
+        Ok(text)
+    }
+
+    fn skip_whitespace(&mut self) {
+        while let Some(char) = self.peek() {
+            if char.is_whitespace() {
+                self.position += 1;
+            } else if char == '%' {
+                while self.peek().is_some_and(|c| c != '\n' && c != '\r') {
+                    self.position += 1;
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn expect(&mut self, value: &str) -> Result<()> {
+        if !self.starts_with(value) {
+            return self.fail(format!("Expected \"{value}\""));
+        }
+        self.position += value.chars().count();
+        Ok(())
+    }
+
+    fn starts_with(&self, value: &str) -> bool {
+        let mut index = self.position;
+        value.chars().all(|char| {
+            let matched = self.source.get(index) == Some(&char);
+            index += 1;
+            matched
+        })
+    }
+
+    fn peek(&self) -> Option<char> {
+        self.source.get(self.position).copied()
+    }
+
+    fn peek_str(&self) -> String {
+        self.peek().map(String::from).unwrap_or_default()
+    }
+
+    fn next(&mut self) -> Option<char> {
+        let char = self.peek();
+        if char.is_some() {
+            self.position += 1;
+        }
+        char
+    }
+
+    fn done(&self) -> bool {
+        self.position >= self.source.len()
+    }
+
+    fn fail<T>(&self, message: String) -> Result<T> {
+        self.fail_at(message, self.position)
+    }
+
+    fn fail_at<T>(&self, message: String, position: usize) -> Result<T> {
+        Err(ParseError { message, position })
+    }
+}
+
+fn placeholder() -> Node {
+    Node::Symbol { value: PLACEHOLDER.into(), role: None }
+}
+
+fn row(mut body: Vec<Node>) -> Node {
+    if body.len() == 1 {
+        return body.remove(0);
+    }
+    Node::Row(body)
+}
+
+/// The characters a literal stops at.
+fn is_syntax(char: char) -> bool {
+    "\\{}[]^_~&%".contains(char) || char.is_whitespace()
+}
+
+/// The value of an atom under its styles, to which marks after it belong.
+fn unwrap_value(node: &mut Node) -> Option<&mut String> {
+    match unwrap_style(node) {
+        Node::Symbol { value, .. } | Node::Text(value) | Node::Operator { value, .. } => Some(value),
+        _ => None,
+    }
+}
+
+/// `node` under its variants and colors.
+fn unwrap_style(node: &mut Node) -> &mut Node {
+    match node {
+        Node::Variant { body, .. } | Node::Color { body, .. } => unwrap_style(body),
+        node => node,
+    }
+}
+
+/// What `\limits` after `node` changes: the operator under its styles and scripts.
+fn limits_target(node: &mut Node) -> &mut Node {
+    match node {
+        Node::Variant { body, .. } | Node::Color { body, .. } | Node::Scripts { base: body, .. } => limits_target(body),
+        node => node,
+    }
+}
+
+fn is_command_letter(char: char) -> bool {
+    char.is_ascii_alphabetic() || char == '@'
+}
+
+/// An empty literal at end of input has binary spacing.
+fn infer_role(value: &str) -> Role {
+    if "+-*/×÷±∓".contains(value) {
+        return Role::Binary;
+    }
+    if "=<>≤≥≠≈∈∉⊂⊃".contains(value) {
+        return Role::Relation;
+    }
+    if ",;:".contains(value) {
+        return Role::Punctuation;
+    }
+    if "([{".contains(value) {
+        return Role::Opening;
+    }
+    if ")]}".contains(value) {
+        return Role::Closing;
+    }
+    Role::Ordinary
+}
+
+fn negate(value: &str) -> String {
+    let negated = match value {
+        "=" => "≠",
+        "∈" => "∉",
+        "∋" => "∌",
+        "≡" => "≢",
+        "≈" => "≉",
+        "∼" => "≁",
+        "<" => "≮",
+        ">" => "≯",
+        "≤" => "≰",
+        "≥" => "≱",
+        "⊂" => "⊄",
+        "⊃" => "⊅",
+        "⊆" => "⊈",
+        "⊇" => "⊉",
+        "∣" => "∤",
+        "∥" => "∦",
+        _ => return format!("{value}\u{338}"),
+    };
+    negated.into()
+}
+
+fn accent(command: &str) -> Option<Accent> {
+    Some(match command {
+        "hat" => Accent::Hat,
+        "widehat" => Accent::Widehat,
+        "bar" => Accent::Bar,
+        "overline" => Accent::Overline,
+        "underline" => Accent::Underline,
+        "vec" => Accent::Vec,
+        "tilde" | "widetilde" => Accent::Tilde,
+        "dot" => Accent::Dot,
+        "ddot" => Accent::Ddot,
+        _ => return None,
+    })
+}
+
+fn variant(command: &str) -> Option<Variant> {
+    Some(match command {
+        "mathrm" | "textrm" | "mathnormal" => Variant::Normal,
+        "mathbf" | "boldsymbol" | "bm" => Variant::Bold,
+        "mathit" => Variant::Italic,
+        "mathsf" => Variant::Sans,
+        "mathtt" => Variant::Monospace,
+        "mathbb" => Variant::DoubleStruck,
+        "mathcal" | "mathscr" => Variant::Script,
+        "mathfrak" => Variant::Fraktur,
+        _ => return None,
+    })
+}
+
+const ENVIRONMENTS: &[(&str, Environment)] = &[
+    ("matrix", Environment::Matrix),
+    ("pmatrix", Environment::Pmatrix),
+    ("bmatrix", Environment::Bmatrix),
+    ("Bmatrix", Environment::BigBmatrix),
+    ("vmatrix", Environment::Vmatrix),
+    ("Vmatrix", Environment::BigVmatrix),
+    ("cases", Environment::Cases),
+    ("aligned", Environment::Aligned),
+    ("align", Environment::Align),
+    ("gathered", Environment::Gathered),
+    ("gather", Environment::Gather),
+    ("smallmatrix", Environment::Smallmatrix),
+    ("array", Environment::Array),
+];
+
+fn environment(name: &str) -> Option<Environment> {
+    ENVIRONMENTS.iter().find(|(key, _)| *key == name).map(|(_, environment)| *environment)
+}

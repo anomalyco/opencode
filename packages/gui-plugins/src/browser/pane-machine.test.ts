@@ -19,6 +19,7 @@ import {
   type PaneEffect,
   type PaneMachineEvent,
   type PaneState,
+  type StoredRestore,
 } from "./pane-machine"
 
 const connectionID = "connection-1"
@@ -67,6 +68,7 @@ function frame(data: {
   readonly type: string
   readonly connectionID: string
   readonly version?: number
+  readonly capabilities?: readonly string[]
   readonly requestID?: string
 }) {
   return resolveControlFrame(connectionID, decodeControlHeader(data), decodeControl(data))
@@ -125,6 +127,47 @@ test("reconnect tears down the previous native pages before restoring the same w
   const next = transitionPane(opened.state, {...replacement, storageKey:"server\nb1"})
   expect(selectBinding(next.state,"b1")).toBeUndefined()
   expect(next.effects.map(effect => effect.type)).toEqual(["emit", "release-pages", "teardown", "start-timer"])
+})
+
+// The window registers again with the inventory it last heard, as after its session moves or its server signs in
+// again. A tab opened since is not in it, and the new binding started from that inventory alone: the tab left the
+// desktop, the saved tabs and the strip, and nobody had closed it.
+describe("a registration keeps the tabs the window had not heard of", () => {
+  const tabX = Browser.TabID.make("tab_00000000-0000-0000-0000-0000000000cc")
+  const heard: Browser.State = { tabs: [tab(tabA, dashboard, "A", 3), tab(tabB, dashboard, "B", 1)], focusedTabID: tabB }
+  const again = (saved: StoredRestore = { tabs: [], focusedTabID: null }): PaneMachineEvent => ({ type: "registered", binding: "b2", window: 1, storageKey: "server\nb1", restore: heard, saved })
+  const listed = (state: PaneState) => selectInventory(entry(state, "b2")).tabs.map((item) => [item.id, item.title, item.generation])
+  // What main saved for the session with its last report.
+  const saved = (effects: readonly PaneEffect[]) => effects.flatMap((effect) => (effect.type === "save-restore" ? [effect.snapshot] : [])).at(-1)
+
+  test("a tab opened in the binding it replaces, reported or not, stands after the tab it was opened beside", () => {
+    const start = attached(heard)
+    // A link in A opens X, which main reports; the report is on its way when the window registers again.
+    const opened = play(start, on({ type: "tab.opened", tabID: tabX, attempt: 1, tab: tab(tabX, "about:blank"), beside: { tabID: tabA, front: false } }))
+    expect(listed(transitionPane(opened.state, again()).state)).toEqual([[tabA, "A", 4], [tabX, "", 1], [tabB, "B", 2]])
+    // One the agent opened says nothing until its page does, or it is shown.
+    const quiet = play(start, on({ type: "tab.opened", tabID: tabX, attempt: 1, tab: tab(tabX, "about:blank") }))
+    expect(quiet.effects).toEqual([])
+    const next = transitionPane(quiet.state, again())
+    expect(listed(next.state)).toEqual([[tabA, "A", 4], [tabB, "B", 2], [tabX, "", 1]])
+    expect(selectBinding(next.state, "b1")).toBeUndefined()
+  })
+
+  test("a tab main saved after the window's last report comes back when the old binding has closed already", () => {
+    const start = attached(heard)
+    const opened = play(start, on({ type: "tab.opened", tabID: tabX, attempt: 1, tab: tab(tabX, "about:blank"), beside: { tabID: tabA, front: false } }))
+    const closed = play(opened.state, on({ type: "owner.closed" }))
+    const kept = saved(opened.effects)
+
+    if (!kept) throw new Error("main saved nothing")
+    expect(listed(transitionPane(closed.state, again(kept)).state)).toEqual([[tabA, "A", 4], [tabX, "", 1], [tabB, "B", 2]])
+    // A tab the person closed before that is in neither, and stays closed.
+    const shut = play(opened.state, on({ type: "tab.closed", tabID: tabX }), on({ type: "owner.closed" }))
+    const rest = saved(shut.effects)
+
+    if (!rest) throw new Error("main saved nothing")
+    expect(listed(transitionPane(shut.state, again(rest)).state)).toEqual([[tabA, "A", 4], [tabB, "B", 2]])
+  })
 })
 
 test("a restored preview retries the failed attempt when the server returns", () => {
@@ -213,7 +256,11 @@ describe("control events", () => {
 
   test("decodes this connection's handshake and requests and ignores other connections", () => {
     expect(frame({ type: "attached", connectionID: "other", version: 5 })).toEqual({ kind: "foreign" })
-    expect(frame({ type: "attached", connectionID, version: 4 })).toEqual({ kind: "attached" })
+    expect(frame({ type: "attached", connectionID, version: 4 })).toEqual({ kind: "attached", capabilities: [] })
+    expect(frame({ type: "attached", connectionID, version: 4, capabilities: ["tunnel.ws.v1"] })).toEqual({
+      kind: "attached",
+      capabilities: ["tunnel.ws.v1"],
+    })
     expect(frame({ type: "command", connectionID, requestID: "r1" })).toEqual({ kind: "command", requestID: "r1" })
     expect(frame({ type: "cancel", connectionID, requestID: "r1" })).toEqual({ kind: "cancel", requestID: "r1" })
   })

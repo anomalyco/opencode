@@ -30,6 +30,7 @@ export class Info extends Schema.Class<Info>("Machines.Info")({
   /** Last reported by the worker's hello, while it is online. */
   os: Schema.optionalKey(Schema.String),
   arch: Schema.optionalKey(Schema.String),
+  connection: Schema.optionalKey(Machine.ConnectionInfo),
 }) {}
 
 export class NotFound extends Schema.TaggedError<NotFound>()("Machines.NotFound", {
@@ -83,11 +84,28 @@ export interface InviteOptions {
   readonly replace?: boolean
 }
 
+/** A file on a machine, at an absolute path. */
+export interface File {
+  readonly machine: Environment.ID
+  readonly path: string
+}
+
+/** A port on a machine's loopback. */
+export interface Port {
+  readonly machine: Environment.ID
+  readonly port: number
+}
+
+export type PeerError = NotFound | Machine.PeerFailed | Machine.NotSent | Machine.Unknown
+
 export interface Interface {
   /** Makes the machine known for good, returning its validated ID. Its live state is whatever its next connection reports. */
   readonly add: (name: string) => Effect.Effect<Environment.ID, InvalidName | AlreadyExists>
-  /** Forgets the machine and ends it, failing what waits on it as `NotFound` and its processes at once. */
-  readonly remove: (id: Environment.ID) => Effect.Effect<void>
+  /**
+   * Forgets the machine and ends it, failing what waits on it as `NotFound` and its processes at once. False when there
+   * was no such machine.
+   */
+  readonly remove: (id: Environment.ID) => Effect.Effect<boolean>
   readonly list: () => Effect.Effect<ReadonlyArray<Info>>
   /** The machine's environment, connected or not: calls on an offline machine fail with `NotSent`. */
   readonly get: (id: Environment.ID) => Effect.Effect<Environment.Interface, NotFound>
@@ -110,6 +128,15 @@ export interface Interface {
   }) => Effect.Effect<Environment.ID, InvalidJoin>
   /** The machine a paired worker's key belongs to, for its next connection. */
   readonly identify: (key: Uint8Array) => Effect.Effect<Environment.ID, UnknownKey>
+  /**
+   * Copies one file from one machine to another over a peer link between their workers, which it opens when there is
+   * none. The receiving worker writes only the path the home named, and only a file the sender presents its token for.
+   */
+  readonly copy: (from: File, to: File) => Effect.Effect<void, PeerError>
+  /** Maps `from`'s loopback port to `to`'s over their peer link, returning the forward's id. */
+  readonly forward: (from: Port, to: Port) => Effect.Effect<string, PeerError>
+  /** Ends a forward. False when there was no such forward. */
+  readonly unforward: (id: string) => Effect.Effect<boolean>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Machines") {}
@@ -119,6 +146,7 @@ const KEY_BYTES = 32
 /** How long a printed join string stays good. */
 const INVITE_TTL = 5 * 60 * 1000
 const digest = (secret: Uint8Array) => createHash("sha256").update(secret).digest("base64url")
+const token = () => randomBytes(SECRET_BYTES).toString("base64url")
 
 const layer = Layer.effect(
   Service,
@@ -147,6 +175,65 @@ const layer = Layer.effect(
       Environment.ID,
       { readonly hash: string; readonly expires: number; readonly replace: boolean }
     >()
+    // The peer link between two machines, by the pair. It counts only while both workers report it up.
+    const links = new Map<string, Machine.PeerLink>()
+    const linking = KeyedMutex.makeUnsafe<string>()
+    const forwards = new Map<
+      string,
+      { readonly from: Machine.Interface; readonly to: Machine.Interface; readonly token: string }
+    >()
+
+    const revoke = (machine: Machine.Interface, grant: string) =>
+      machine.peer({ type: "peer-revoke", token: grant }).pipe(Effect.ignore)
+
+    const paired = (id: Environment.ID) =>
+      Effect.gen(function* () {
+        const machine = instances.get(id)
+        if (!machine) return yield* new NotFound({ machine: id })
+        const key = keys.get(id)
+        if (!key) return yield* new Machine.PeerFailed({ machine: id, reason: "not paired" })
+        return { machine, key }
+      })
+
+    // The link `from` dials and `to` accepts, reused while both still have it.
+    const link = (fromID: Environment.ID, toID: Environment.ID) =>
+      Effect.gen(function* () {
+        if (fromID === toID)
+          return yield* new Machine.PeerFailed({ machine: fromID, reason: "both ends are on the same machine" })
+        const from = yield* paired(fromID)
+        const to = yield* paired(toID)
+        const pair = [fromID, toID].toSorted().join(" ")
+        const id = yield* linking.withLock(pair)(
+          Effect.gen(function* () {
+            const current = links.get(pair)
+            if (current && from.machine.links().has(current) && to.machine.links().has(current)) return current
+            if (current)
+              yield* Effect.all(
+                [from, to].map((side) => side.machine.peer({ type: "peer-close", link: current }).pipe(Effect.ignore)),
+                { concurrency: "unbounded" },
+              )
+            links.delete(pair)
+            const next = Machine.PeerLink.make(crypto.randomUUID())
+            yield* Effect.all(
+              [
+                to.machine.peer({ type: "peer-accept", link: next, key: from.key }),
+                from.machine.peer({ type: "peer-connect", link: next, key: to.key }),
+              ],
+              { concurrency: "unbounded" },
+            ).pipe(
+              Effect.onError(() =>
+                Effect.all(
+                  [from, to].map((side) => side.machine.peer({ type: "peer-close", link: next }).pipe(Effect.ignore)),
+                  { concurrency: "unbounded" },
+                ),
+              ),
+            )
+            links.set(pair, next)
+            return next
+          }),
+        )
+        return { id, from: from.machine, to: to.machine }
+      })
 
     return Service.of({
       add: Effect.fn("Machines.add")(function* (name) {
@@ -170,15 +257,16 @@ const layer = Layer.effect(
         return id
       }),
       remove: Effect.fn("Machines.remove")(function* (id) {
-        yield* locks.withLock(id)(
+        return yield* locks.withLock(id)(
           Effect.gen(function* () {
             const machine = instances.get(id)
-            if (!machine) return
+            if (!machine) return false
             yield* db.delete(MachineTable).where(eq(MachineTable.id, id)).run().pipe(Effect.orDie)
             invitations.delete(id)
             keys.delete(id)
             instances.delete(id)
             machine.close(new NotFound({ machine: id }))
+            return true
           }).pipe(Effect.uninterruptible),
         )
       }),
@@ -187,8 +275,16 @@ const layer = Layer.effect(
           .sort(([left], [right]) => left.localeCompare(right))
           .map(([id, machine]) => {
             const hello = machine.hello()
+            const connection = machine.describe()
             return hello
-              ? new Info({ id, online: true, paired: keys.has(id), os: hello.os, arch: hello.arch })
+              ? new Info({
+                  id,
+                  online: true,
+                  paired: keys.has(id),
+                  os: hello.os,
+                  arch: hello.arch,
+                  ...(connection ? { connection } : {}),
+                })
               : new Info({ id, online: false, paired: keys.has(id) })
           })
       }),
@@ -259,6 +355,43 @@ const layer = Layer.effect(
         const paired = [...keys].find(([, stored]) => stored === encoded)
         if (!paired) return yield* new UnknownKey()
         return paired[0]
+      }),
+      copy: Effect.fn("Machines.copy")(function* (from, to) {
+        const shared = yield* link(from.machine, to.machine)
+        const grant = token()
+        yield* Effect.all(
+          [
+            shared.to.peer({ type: "peer-receive", link: shared.id, token: grant, path: to.path }),
+            shared.from.peer({ type: "peer-send", link: shared.id, token: grant, path: from.path }),
+          ],
+          { concurrency: "unbounded" },
+          // A lost answer is no failure: the transfer goes on between the workers.
+        ).pipe(
+          Effect.tapError((error) => (error._tag === "Machine.PeerFailed" ? revoke(shared.to, grant) : Effect.void)),
+        )
+      }),
+      forward: Effect.fn("Machines.forward")(function* (from, to) {
+        const shared = yield* link(from.machine, to.machine)
+        const grant = token()
+        yield* shared.to.peer({ type: "peer-allow", link: shared.id, token: grant, port: to.port })
+        yield* shared.from
+          .peer({ type: "peer-forward", link: shared.id, token: grant, port: from.port })
+          .pipe(
+            Effect.tapError((error) => (error._tag === "Machine.PeerFailed" ? revoke(shared.to, grant) : Effect.void)),
+          )
+        const id = crypto.randomUUID()
+        forwards.set(id, { from: shared.from, to: shared.to, token: grant })
+        return id
+      }),
+      unforward: Effect.fn("Machines.unforward")(function* (id) {
+        const forward = forwards.get(id)
+        if (!forward) return false
+        forwards.delete(id)
+        yield* Effect.all(
+          [forward.from, forward.to].map((side) => revoke(side, forward.token)),
+          { concurrency: "unbounded" },
+        )
+        return true
       }),
     })
   }),

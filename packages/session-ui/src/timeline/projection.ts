@@ -14,7 +14,15 @@ import { turnCommentary } from "./commentary"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
 import { timelineNoticeRequired, type TimelineDetail } from "./detail"
 import { placeFactOf, type PlaceFact } from "./facts"
-import { placeContent, placeNotice, placer, type Place, type PlaceFactOf } from "./place"
+import {
+  placeContent,
+  placeNotice,
+  placer,
+  placeScriptChange,
+  scriptChangeItems,
+  type Place,
+  type PlaceFactOf,
+} from "./place"
 import {
   IDLE_TURN_PHASE,
   isInterruptedError,
@@ -150,6 +158,8 @@ export function createReactiveTimelineProjection(input: {
   queuedCompactionIDs?: Accessor<readonly string[]>
   /** Summarize each finished turn's changed files after it. */
   turnDiffs?: Accessor<boolean>
+  /** The server's `full_codemode` flag: without it, a script's changes neither show nor count. */
+  scriptDiffs?: Accessor<boolean>
 }) {
   const sessionMessageByID = createMemo(
     () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
@@ -161,12 +171,9 @@ export function createReactiveTimelineProjection(input: {
   // Row structure depends on the empty/non-empty boundary, not each text delta.
   // Keep the original content objects so row renderers still read live text.
   const textParts = mapArray(
-    () =>
-      input
-        .sessionMessages()
-        .flatMap((message) =>
-          message.type === "assistant" ? message.content.filter((content) => content.type !== "tool") : [],
-        ),
+    messageParts(input.sessionMessages, (message) =>
+      message.type === "assistant" ? message.content.filter((content) => content.type !== "tool") : [],
+    ),
     (content) => {
       // A memo here went stale on every streamed delta, which marked the projection below pending; Solid then
       // re-checked each of its thousands of sources to find nothing changed. A signal set from a computation
@@ -179,7 +186,7 @@ export function createReactiveTimelineProjection(input: {
   )
 
   const textVisible = createMemo(() => new Map<Content, Accessor<boolean>>(textParts()))
-  const factOf = placeFacts(input.sessionMessages)
+  const factOf = placeFacts(input.sessionMessages, input.scriptDiffs)
 
   const projection = createMemo(() =>
     Timeline.constructSessionMessageRows(
@@ -477,6 +484,7 @@ export namespace Timeline {
           detail,
           commentary,
           placeOf,
+          factOf,
         )
       }),
     ]
@@ -536,6 +544,7 @@ export namespace Timeline {
     detail?: TimelineDetail,
     commentary: ReadonlySet<Content> = new Set(),
     placeOf = detail ? placer(detail, "current") : undefined,
+    factOf?: PlaceFactOf,
   ) {
     const rows: TimelineRow.TimelineRow[] = []
     const assistantMessages = entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
@@ -557,13 +566,14 @@ export namespace Timeline {
     // rendered separately. Notices end a segment so none of those rows cross it.
     const appendAssistantSegment = (messages: SessionMessageAssistant[]) => {
       const refs = messages.flatMap((message, messageIndex) =>
-        contentEntries(message)
-          .filter(
-            (entry) =>
-              isRenderable(entry.content, showReasoning, detail) &&
-              !(thinking?.messageID === message.id && thinking.partID === entry.id),
-          )
-          .map((entry) => ({ messageID: message.id, messageIndex, partID: entry.id, content: entry.content })),
+        contentEntries(message).flatMap((entry) => [
+          ...(isRenderable(entry.content, showReasoning, detail) &&
+          !(thinking?.messageID === message.id && thinking.partID === entry.id)
+            ? [{ messageID: message.id, messageIndex, partID: entry.id, content: entry.content, script: false }]
+            : []),
+          // A script's changes follow it, placed by the Edits setting even where the script itself hides.
+          ...scriptChangeItems(message.id, messageIndex, entry.content, detail, factOf),
+        ]),
       )
 
       const interruptedAt = messages.findIndex((message) => isInterruptedError(message.error))
@@ -988,7 +998,7 @@ function renderable(
 }
 
 function groupContent(
-  items: { messageID: string; partID: string; content: Content }[],
+  items: { messageID: string; partID: string; content: Content; script?: boolean }[],
   shellToolDefaultOpen: boolean,
   editToolDefaultOpen: boolean,
   commentary: ReadonlySet<Content>,
@@ -1024,7 +1034,12 @@ function groupContent(
     adjacent = undefined
   }
 
-  const placed = placeOf ? items.map((item) => placeOf(item.content, commentary.has(item.content))) : undefined
+  const placed =
+    placeOf && detail
+      ? items.map((item) =>
+          item.script ? placeScriptChange(detail) : placeOf(item.content, commentary.has(item.content)),
+        )
+      : undefined
 
   items.forEach((item, index) => {
     const group = placed?.[index]?.group
@@ -1190,34 +1205,48 @@ function isNotice(message: SessionMessageInfo): message is Notice {
 }
 
 /**
+ * The picked parts of every message, in order. A message is read again only when it changes, so a history page that
+ * lands reads its own messages and not the loaded transcript.
+ */
+function messageParts<Part>(
+  messages: Accessor<SessionMessageInfo[]>,
+  pick: (message: SessionMessageInfo) => Part[],
+): Accessor<Part[]> {
+  const each = mapArray(messages, (message) => createMemo(() => pick(message)))
+
+  return createMemo(() => each().flatMap((parts) => parts()))
+}
+
+/**
  * Reads what placing each call needs through a signal per call. Streamed input and progress reports change a call many
  * times a second without moving it, and a signal notifies the rows only when what they read of it changes.
  */
-export function placeFacts(messages: Accessor<SessionMessageInfo[]>): PlaceFactOf {
+export function placeFacts(
+  messages: Accessor<SessionMessageInfo[]>,
+  /** The server's `full_codemode` flag: without it, a script places no changes. */
+  scriptDiffs: Accessor<boolean> = () => true,
+): PlaceFactOf {
   const parts = mapArray(
-    () =>
-      messages().flatMap((message) =>
-        message.type === "assistant"
-          ? message.content.filter((content): content is Tool => content.type === "tool")
-          : [],
-      ),
+    messageParts(messages, (message) =>
+      message.type === "assistant" ? message.content.filter((content): content is Tool => content.type === "tool") : [],
+    ),
     (tool) => {
       const [fact, setFact] = createSignal(
-        untrack(() => placeFactOf(tool)),
+        untrack(() => placeFactOf(tool, tool.id, scriptDiffs())),
         { equals: samePlaceFact },
       )
 
-      createComputed(() => setFact(placeFactOf(tool)))
+      createComputed(() => setFact(placeFactOf(tool, tool.id, scriptDiffs())))
 
       // The signal only says when the fact changes, one computation after the write that changed it, so the value
       // comes from the part itself.
-      return [tool, () => (fact(), untrack(() => placeFactOf(tool)))] as const
+      return [tool, () => (fact(), untrack(() => placeFactOf(tool, tool.id, scriptDiffs())))] as const
     },
   )
 
   const byTool = createMemo(() => new Map<Tool, Accessor<PlaceFact>>(parts()))
 
-  return (tool) => byTool().get(tool)?.() ?? placeFactOf(tool)
+  return (tool) => byTool().get(tool)?.() ?? placeFactOf(tool, tool.id, scriptDiffs())
 }
 
 const placeFactKeys = [
@@ -1230,6 +1259,7 @@ const placeFactKeys = [
   "called",
   "groupedRead",
   "background",
+  "changes",
 ] as const
 
 function samePlaceFact(previous: PlaceFact, next: PlaceFact) {

@@ -178,7 +178,15 @@ export type SessionMessageToolStateRunning1 = {
   metadata: { [x: string]: JsonValue }
 }
 
-export type ModelType = "chat" | "decision" | "image" | "video" | (string & {})
+export type ModelType =
+  | "chat"
+  | "decision"
+  | "image"
+  | "video"
+  | "realtime"
+  | "embedding"
+  | "transcription"
+  | (string & {})
 
 export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
 
@@ -189,6 +197,8 @@ export type ModelCacheFormat = "anthropic" | "alibaba"
 export type ModelMediaInput = "assets" | "state" | "root"
 
 export type ToolFreeformFormat = "text" | "regex" | "lark"
+
+export type ModelSpeed = { base: string; id: string; faster: boolean }
 
 export type MoneyUSDPerMillionTokens = number
 
@@ -329,6 +339,14 @@ export type SessionStatus =
     }
   | { type: "busy" }
 
+export type SpaceName = string
+
+export type SpaceKey = string
+
+export type SpaceValue = string
+
+export type SpaceRevision = number
+
 export type PersistentPtyHandoff = { directory: string; instanceID: string; ticket: string; expiresAt: number }
 
 export type AutomationID = string
@@ -354,6 +372,31 @@ export type ArtifactCapability = "static" | "server-code" | "sqlite" | "durable-
 export type ArtifactID = string
 
 export type ArtifactTime = { created: number; updated: number }
+
+export type MachineInfo = {
+  id: string
+  online: boolean
+  paired: boolean
+  os?: string
+  arch?: string
+  connection?: { kind: "websocket" | "iroh"; path?: "direct" | "relayed"; rtt?: number }
+}
+
+export type MachineReach = { type: "url"; url: string }
+
+export type PushSettings = { paused: boolean; until?: number }
+
+export type PushDeviceID = string
+
+export type PushPlatform = "android" | "ios"
+
+export type PushLevel = "all" | "attention" | "none"
+
+export type PushRegistered = { publicKey: string }
+
+export type SpaceCursor = string
+
+export type SpaceEpoch = string
 
 export type ReferenceGitSource = { type: "git"; repository: string; branch?: string }
 
@@ -708,6 +751,7 @@ export type ModelCompatibility = {
   cacheFormat?: ModelCacheFormat
   supportsThinkingBlockBinding?: boolean
   supportsEffortUpdates?: boolean
+  supportsSystemUpdates?: boolean
   mediaInput?: ModelMediaInput
 }
 
@@ -757,7 +801,14 @@ export type GenerateChoiceAnswer = {
   confidence: number
 }
 
-export type VoiceModel = { model: string; provider: string; transports: Array<VoiceTransportType>; available: boolean }
+export type VoiceModel = {
+  model: string
+  name: string
+  engine: string
+  provider: string
+  transports: Array<VoiceTransportType>
+  available: boolean
+}
 
 export type VoiceTransport = VoiceWebRTCTransport | VoiceWebSocketTransport
 
@@ -1003,6 +1054,8 @@ export type FormMultiselectField1 = {
 
 export type FormAnswer1 = { [x: string]: FormValue1 }
 
+export type SpaceEntry = { key: SpaceKey; value: SpaceValue }
+
 export type AutomationTriggerEvery = { type: "every"; every: AutomationDuration; tz?: string }
 
 export type ArtifactProvider = { id: string; name: string; capabilities: Array<ArtifactCapability>; default: boolean }
@@ -1016,6 +1069,17 @@ export type ArtifactInfo = {
   url: string
   time: ArtifactTime
 }
+
+export type MachineInvite = {
+  name: string
+  join: string
+  expires: number
+  reach: Array<MachineReach | { type: "iroh" }>
+}
+
+export type PushDeviceSettings = { default: PushLevel }
+
+export type PushBell = { level: PushLevel; until?: number }
 
 export type VcsInfo = { provider?: string; branch: VcsBranch }
 
@@ -1059,7 +1123,7 @@ export type V2EventServerConnected = {
   metadata?: { [x: string]: any } | undefined
   location?: LocationPublicRef | undefined
   type: "server.connected"
-  data: {}
+  data: { stream?: string | undefined }
 }
 
 export type ReferenceSource = ReferenceLocalSource | ReferenceGitSource
@@ -2027,6 +2091,15 @@ export type WebsearchUpdated = {
   data: {}
 }
 
+export type ExperimentalPushUpdated = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "experimental.push.updated"
+  location?: LocationRef
+  data: {}
+}
+
 export type ArtifactUpdated = {
   id: EventID
   created: number
@@ -2177,6 +2250,33 @@ export type ExperimentalMcpEvent = {
   }
 }
 
+export type ExperimentalSpaceResync = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "experimental.space.resync"
+  location?: LocationRef
+  data: { space: SpaceName }
+}
+
+export type ExperimentalSpaceUpdated = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "experimental.space.updated"
+  location?: LocationRef
+  data: { space: SpaceName; key: SpaceKey; value: SpaceValue; revision: SpaceRevision }
+}
+
+export type ExperimentalSpaceDeleted = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "experimental.space.deleted"
+  location?: LocationRef
+  data: { space: SpaceName; key: SpaceKey; revision: SpaceRevision }
+}
+
 export type SessionToolSuccess = {
   id: EventID
   created: number
@@ -2309,6 +2409,27 @@ export type FormReplied = {
   data: { id: FormID; sessionID: string; answer: FormAnswer1 }
 }
 
+export type SpaceSnapshot = {
+  type: "snapshot"
+  space: SpaceName
+  epoch: SpaceEpoch
+  revision: SpaceRevision
+  entries: Array<SpaceEntry>
+  cursor: SpaceCursor
+  next?: SpaceCursor
+}
+
+export type SpaceDelta = {
+  type: "delta"
+  space: SpaceName
+  epoch: SpaceEpoch
+  revision: SpaceRevision
+  entries: Array<SpaceEntry>
+  cursor: SpaceCursor
+  next?: SpaceCursor
+  deleted: Array<SpaceKey>
+}
+
 export type AutomationTrigger =
   | AutomationTriggerAt
   | AutomationTriggerEvery
@@ -2316,6 +2437,17 @@ export type AutomationTrigger =
   | AutomationTriggerEvent
 
 export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
+
+export type PushDevice = {
+  id: PushDeviceID
+  name: string
+  platform: PushPlatform
+  expiresAt: number
+  settings: PushDeviceSettings
+  paused: boolean
+  sessions: { [x: string]: PushBell }
+  time: { created: number; updated: number }
+}
 
 export type SessionInboxMove = {
   id: SessionMessageID
@@ -2388,6 +2520,7 @@ export type ModelInfo = {
   body?: { [x: string]: any }
   capabilities: ModelCapabilities
   variants: Array<ModelVariant>
+  experimental?: { speed?: ModelSpeed }
   time: { released: number }
   cost: Array<ModelCost>
   status: "alpha" | "beta" | "deprecated" | "active"
@@ -2461,6 +2594,7 @@ export type ConfigEntry =
         enterprise?: { url?: string }
         username?: string
         timezone?: string
+        automations?: boolean
         permissions?: PermissionRuleset
         policies?: Array<{
           action:
@@ -2637,19 +2771,21 @@ export type ConfigEntry =
           all_flags?: boolean
           todo?: boolean
           media_blob?: boolean
-          automations?: boolean
           artifacts?: boolean
-          video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           console_watches?: boolean
-          mcp_events?: boolean
           widgets?: boolean
           recommended_api?: boolean
           full_codemode?: boolean
+          codemode_agents?: boolean
           machines?: boolean
           home_memory?: boolean
           project_overlay?: boolean
+          opencode_api?: boolean
+          mcp_skills?: boolean
+          compaction_jobs?: boolean
           sqlite_fts?: boolean
-          schedules?: boolean
+          browser_stream_tunnel?: boolean
+          video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
@@ -2755,12 +2891,17 @@ export type ExperimentalJobUpdated = {
 
 export type FormFields1 = [FormField1, ...Array<FormField1>]
 
+export type SpacePage = SpaceSnapshot | SpaceDelta
+
+export type PushInfo = { settings: PushSettings; devices: Array<PushDevice>; sessions: { [x: string]: PushBell } }
+
 export type AgentInfo = {
   id: AgentID
   name: string
   model?: ModelRef
   request: ProviderRequest
   system?: string
+  instructions?: string | { selected: string; unselected: string }
   description?: string
   mode: "subagent" | "primary" | "all"
   hidden: boolean
@@ -3043,6 +3184,7 @@ export type V2Event =
   | FormReplied
   | FormCancelled
   | WebsearchUpdated
+  | ExperimentalPushUpdated
   | ArtifactUpdated
   | SessionStatusUpdated
   | SessionIdle
@@ -3056,6 +3198,9 @@ export type V2Event =
   | McpStatusChanged
   | McpResourcesChanged
   | ExperimentalMcpEvent
+  | ExperimentalSpaceResync
+  | ExperimentalSpaceUpdated
+  | ExperimentalSpaceDeleted
   | V2EventRpc
   | V2EventServerConnected
 
@@ -3134,6 +3279,10 @@ export type ConflictError = {
 }
 export const isConflictError = (value: unknown): value is ConflictError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ConflictError"
+
+export type SkillLoadError = { readonly _tag: "SkillLoadError"; readonly skill: string; readonly message: string }
+export const isSkillLoadError = (value: unknown): value is SkillLoadError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SkillLoadError"
 
 export type CommandNotFoundError = {
   readonly _tag: "CommandNotFoundError"
@@ -3245,10 +3394,6 @@ export type ProviderRequestError = {
 export const isProviderRequestError = (value: unknown): value is ProviderRequestError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ProviderRequestError"
 
-export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
-export const isForbiddenError = (value: unknown): value is ForbiddenError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
-
 export type VideoNotFoundError = {
   readonly _tag: "VideoNotFoundError"
   readonly videoID: string
@@ -3290,6 +3435,10 @@ export type McpServerNotFoundError = {
 }
 export const isMcpServerNotFoundError = (value: unknown): value is McpServerNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "McpServerNotFoundError"
+
+export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
+export const isForbiddenError = (value: unknown): value is ForbiddenError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
 
 export type ProjectNotFoundError = {
   readonly _tag: "ProjectNotFoundError"
@@ -3372,6 +3521,22 @@ export type ArtifactNotFoundError = {
 }
 export const isArtifactNotFoundError = (value: unknown): value is ArtifactNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ArtifactNotFoundError"
+
+export type MachineNotFoundError = {
+  readonly _tag: "MachineNotFoundError"
+  readonly machine: string
+  readonly message: string
+}
+export const isMachineNotFoundError = (value: unknown): value is MachineNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "MachineNotFoundError"
+
+export type PushDeviceNotFoundError = {
+  readonly _tag: "PushDeviceNotFoundError"
+  readonly deviceID: string
+  readonly message: string
+}
+export const isPushDeviceNotFoundError = (value: unknown): value is PushDeviceNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PushDeviceNotFoundError"
 
 export type ShellNotFoundError = { readonly _tag: "ShellNotFoundError"; readonly id: string; readonly message: string }
 export const isShellNotFoundError = (value: unknown): value is ShellNotFoundError =>
@@ -4051,7 +4216,11 @@ export type MessageListOutput = SessionMessagesResponse
 
 export type ModelListInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
-  readonly types?: ReadonlyArray<"chat" | "decision" | "image" | "video" | (string & {})> | undefined
+  readonly types?:
+    | ReadonlyArray<
+        "chat" | "decision" | "image" | "video" | "realtime" | "embedding" | "transcription" | (string & {})
+      >
+    | undefined
 }
 
 export type ModelListOutput = { location: LocationPublicRef; data: Array<ModelInfo> }
@@ -4481,6 +4650,14 @@ export type SkillListInput = { readonly location?: { readonly directory?: string
 
 export type SkillListOutput = { location: LocationPublicRef; data: Array<SkillInfo> }
 
+export type ExperimentalSkillFileInput = {
+  readonly skillID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly path: string
+}
+
+export type ExperimentalSkillFileOutput = globalThis.Uint8Array
+
 export type RpcCallInput = {
   readonly rpcID: string
   readonly method: string
@@ -4579,6 +4756,7 @@ export type EventSubscribeInput = {
         | "form.replied"
         | "form.cancelled"
         | "websearch.updated"
+        | "experimental.push.updated"
         | "artifact.updated"
         | "session.status"
         | "session.idle"
@@ -4705,6 +4883,8 @@ export type ExperimentalBlobGetInput = { readonly id: string }
 
 export type ExperimentalBlobGetOutput = globalThis.Uint8Array
 
+export type ExperimentalBrowserTunnelOutput = boolean
+
 export type ExperimentalAutomationCreateInput = {
   readonly sessionID?: string | undefined
   readonly directory?: string | undefined
@@ -4827,6 +5007,102 @@ export type ExperimentalJobListOutput = { data: Array<JobInfo> }["data"]
 export type ExperimentalJobCancelInput = { readonly id: string }
 
 export type ExperimentalJobCancelOutput = void
+
+export type ExperimentalMachineListOutput = { data: Array<MachineInfo> }["data"]
+
+export type ExperimentalMachineAddInput = {
+  readonly name: string
+  readonly reach: ReadonlyArray<{ readonly type: "url"; readonly url: string }>
+  readonly replace?: boolean | undefined
+}
+
+export type ExperimentalMachineAddOutput = { data: MachineInvite }["data"]
+
+export type ExperimentalMachineRemoveInput = { readonly name: string }
+
+export type ExperimentalMachineRemoveOutput = void
+
+export type ExperimentalPushGetOutput = { data: PushInfo }["data"]
+
+export type ExperimentalPushDeviceRegisterInput = {
+  readonly deviceID: string
+  readonly callbackURL: string
+  readonly expiresAt: number
+  readonly publicKey: string
+  readonly platform: "android" | "ios"
+  readonly name: string
+  readonly settings?: { readonly default: "all" | "attention" | "none" } | undefined
+}
+
+export type ExperimentalPushDeviceRegisterOutput = { data: PushRegistered }["data"]
+
+export type ExperimentalPushDeviceRemoveInput = { readonly deviceID: string }
+
+export type ExperimentalPushDeviceRemoveOutput = void
+
+export type ExperimentalPushDeviceUpdateInput = {
+  readonly deviceID: string
+  readonly paused?: boolean | undefined
+  readonly settings?: { readonly default: "all" | "attention" | "none" } | undefined
+}
+
+export type ExperimentalPushDeviceUpdateOutput = { data: PushDevice }["data"]
+
+export type ExperimentalPushDeviceSessionSetInput = {
+  readonly deviceID: string
+  readonly sessionID: string
+  readonly level: "all" | "attention" | "none"
+  readonly until?: number | undefined
+}
+
+export type ExperimentalPushDeviceSessionSetOutput = { data: PushBell }["data"]
+
+export type ExperimentalPushDeviceSessionRemoveInput = { readonly deviceID: string; readonly sessionID: string }
+
+export type ExperimentalPushDeviceSessionRemoveOutput = void
+
+export type ExperimentalPushSessionSetInput = {
+  readonly sessionID: string
+  readonly level: "all" | "attention" | "none"
+  readonly until?: number | undefined
+}
+
+export type ExperimentalPushSessionSetOutput = { data: PushBell }["data"]
+
+export type ExperimentalPushSessionRemoveInput = { readonly sessionID: string }
+
+export type ExperimentalPushSessionRemoveOutput = void
+
+export type ExperimentalPushSettingsSetInput = { readonly paused: boolean; readonly until?: number | undefined }
+
+export type ExperimentalPushSettingsSetOutput = { data: PushSettings }["data"]
+
+export type ExperimentalSpaceWriteInput = {
+  readonly changes: ReadonlyArray<{ readonly space: string; readonly key: string; readonly value: string | null }>
+}
+
+export type ExperimentalSpaceWriteOutput = {
+  spaces: Array<{ space: SpaceName; revision: SpaceRevision; cursor: SpaceCursor }>
+}
+
+export type ExperimentalSpaceSyncInput = {
+  readonly spaces: ReadonlyArray<{ readonly space: string; readonly cursor?: string }>
+}
+
+export type ExperimentalSpaceSyncOutput = { pages: Array<SpacePage> }
+
+export type ExperimentalSpaceSubscribeInput = {
+  readonly stream: string
+  readonly spaces: ReadonlyArray<{ readonly space: string; readonly cursor: string }>
+}
+
+export type ExperimentalSpaceSubscribeOutput = void
+
+export type ExperimentalSpaceUnsubscribeInput = { readonly stream: string; readonly spaces: ReadonlyArray<string> }
+
+export type ExperimentalSpaceUnsubscribeOutput = void
+
+export type ExperimentalSpaceResetOutput = void
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
@@ -4970,6 +5246,10 @@ export type ExperimentalUsageLimitsInput = {
 }
 
 export type ExperimentalUsageLimitsOutput = { location: LocationPublicRef; data: UsageLimitsInfo | null }
+
+export type ExperimentalFlagGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+
+export type ExperimentalFlagGetOutput = { location: LocationPublicRef; data: { [x: string]: boolean } }
 
 export type ConfigGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 

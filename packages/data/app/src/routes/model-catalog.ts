@@ -60,25 +60,19 @@ export type ModelCatalog = {
   labs: ModelCatalogLab[]
   // Stealth models stay out of the lab catalog, but their OpenCode listings publish limits and modalities.
   stealthSpecs: Record<string, ModelCatalogSpecs>
+  freeModels: string[]
 }
 
 const catalogTtlMs = 5 * 60 * 1000
-let cachedCatalog: { expiresAt: number; value: Promise<ModelCatalog> } | undefined
+let cachedCatalog: { expiresAt: number; value: ModelCatalog } | undefined
 
 // The catalog is about 11 MB of JSON to fetch and parse and rarely changes, so share it across requests.
-export function loadModelCatalog() {
-  const now = Date.now()
-  if (cachedCatalog && cachedCatalog.expiresAt > now) return cachedCatalog.value
-  const value = fetchModelCatalog()
-  const entry = { expiresAt: now + catalogTtlMs, value }
-  cachedCatalog = entry
+// Only the resolved catalog is shared: a Worker request cannot await I/O started by another request that has ended.
+export async function loadModelCatalog() {
+  if (cachedCatalog && cachedCatalog.expiresAt > Date.now()) return cachedCatalog.value
+  const value = await fetchModelCatalog()
   // An empty catalog means a source failed, so retry on the next request instead of serving it for the TTL.
-  const evict = () => {
-    if (cachedCatalog === entry) cachedCatalog = undefined
-  }
-  value.then((catalog) => {
-    if (catalog.models.length === 0) evict()
-  }, evict)
+  if (value.models.length > 0) cachedCatalog = { expiresAt: Date.now() + catalogTtlMs, value }
   return value
 }
 
@@ -136,43 +130,47 @@ export function modelPagePath(catalog: ModelCatalog, lab: string, model: string)
   return `/data/${catalogSlug(lab)}/${catalogSlug(model)}`
 }
 
+const knownCatalogLabNames = new Map([
+  ["ai21", "AI21"],
+  ["aisingapore", "AI Singapore"],
+  ["alibaba", "Alibaba"],
+  ["anthropic", "Anthropic"],
+  ["arcee-ai", "Arcee AI"],
+  ["bytedance-seed", "ByteDance Seed"],
+  ["cohere", "Cohere"],
+  ["deepreinforce", "DeepReinforce"],
+  ["deepseek", "DeepSeek"],
+  ["google", "Google"],
+  ["ibm", "IBM"],
+  ["inclusionai", "inclusionAI"],
+  ["meta", "Meta"],
+  ["minimax", "MiniMax"],
+  ["mistral", "Mistral"],
+  ["moonshotai", "Moonshot"],
+  ["nex-agi", "Nex AGI"],
+  ["nvidia", "NVIDIA"],
+  ["openai", "OpenAI"],
+  ["openbmb", "OpenBMB"],
+  ["perplexity", "Perplexity"],
+  ["quiverai", "QuiverAI"],
+  ["sdaia", "SDAIA"],
+  ["stepfun", "StepFun"],
+  ["swiss-ai", "Swiss AI"],
+  ["tencent", "Tencent"],
+  ["thinkingmachines", "Thinking Machines"],
+  ["xai", "xAI"],
+  ["xiaomi", "Xiaomi"],
+  ["zai", "Z.ai"],
+  ["qwen", "Qwen"],
+  ["zhipu", "Zhipu"],
+  ["zhipuai", "Zhipu"],
+])
+
 export function formatCatalogLabName(lab: string) {
-  const known: Record<string, string> = {
-    ai21: "AI21",
-    aisingapore: "AI Singapore",
-    alibaba: "Alibaba",
-    anthropic: "Anthropic",
-    "arcee-ai": "Arcee AI",
-    "bytedance-seed": "ByteDance Seed",
-    cohere: "Cohere",
-    deepreinforce: "DeepReinforce",
-    deepseek: "DeepSeek",
-    google: "Google",
-    ibm: "IBM",
-    inclusionai: "inclusionAI",
-    meta: "Meta",
-    minimax: "MiniMax",
-    mistral: "Mistral",
-    moonshotai: "Moonshot",
-    "nex-agi": "Nex AGI",
-    nvidia: "NVIDIA",
-    openai: "OpenAI",
-    openbmb: "OpenBMB",
-    perplexity: "Perplexity",
-    quiverai: "QuiverAI",
-    sdaia: "SDAIA",
-    stepfun: "StepFun",
-    "swiss-ai": "Swiss AI",
-    tencent: "Tencent",
-    thinkingmachines: "Thinking Machines",
-    xai: "xAI",
-    xiaomi: "Xiaomi",
-    zai: "Z.ai",
-    qwen: "Qwen",
-    zhipu: "Zhipu",
-    zhipuai: "Zhipu",
-  }
-  return known[catalogSlug(lab)] ?? lab.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+  return (
+    knownCatalogLabNames.get(catalogSlug(lab)) ??
+    lab.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+  )
 }
 
 export function isProviderlessLab(lab: string | undefined) {
@@ -243,7 +241,21 @@ export function buildModelCatalog(payload: unknown, pricingPayload?: unknown, la
       }, {}),
     ).toSorted((a, b) => a.name.localeCompare(b.name)),
     stealthSpecs: readStealthModelSpecs(pricingPayload),
+    freeModels: readFreeModels(pricingPayload),
   }
+}
+
+// A free window that ended stays listed at $0 and is marked deprecated.
+function readFreeModels(payload: unknown) {
+  if (!isRecord(payload)) return []
+  return ["opencode", "opencode-go"]
+    .map((provider) => payload[provider])
+    .flatMap((provider) => (isRecord(provider) && isRecord(provider.models) ? Object.entries(provider.models) : []))
+    .flatMap(([id, value]) => {
+      if (!isRecord(value) || value.status === "deprecated") return []
+      const cost = readCatalogCost(value.cost)
+      return cost?.input === 0 && cost.output === 0 ? [statModel(id, undefined)] : []
+    })
 }
 
 function readStealthModelSpecs(payload: unknown): Record<string, ModelCatalogSpecs> {
@@ -469,15 +481,16 @@ function catalogIdKey(value: string) {
   return value.split("/").map(catalogSlug).join("/")
 }
 
+const catalogLabSlugAliases = new Map([
+  ["moonshot", "moonshotai"],
+  ["qwen", "alibaba"],
+  ["zhipu", "zhipuai"],
+  ["zai", "zhipuai"],
+])
+
 function catalogLabSlug(value: string) {
   const slug = catalogSlug(value)
-  const aliases: Record<string, string> = {
-    moonshot: "moonshotai",
-    qwen: "alibaba",
-    zhipu: "zhipuai",
-    zai: "zhipuai",
-  }
-  return aliases[slug] ?? slug
+  return catalogLabSlugAliases.get(slug) ?? slug
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

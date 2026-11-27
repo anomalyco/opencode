@@ -2,7 +2,7 @@ import { FileVerificationError } from "./file-verification"
 import { builtinContext } from "@opencode/plugin/gui/builtin"
 import { FileSource } from "../file/contract"
 import { ACTIVATION_DELAY_MS } from "./activation-delay"
-import { attachable } from "./prompt-gate"
+import { attachable, attachesUnopened, unheld } from "./prompt-gate"
 import { batch, createRoot, createSignal, getOwner, onCleanup, untrack } from "solid-js"
 import { createStore, reconcile, unwrap } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -49,6 +49,8 @@ import {
   sessionPending,
   sessionRegistration,
   sessionAttaching,
+  sessionOpenable,
+  sessionReplaced,
   sessionSuspended,
   sessionTab,
   sessionTabs,
@@ -162,9 +164,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const key = (tabID: string) => `${ctx.id}:${tabID}`
 
   // A failure code `failure.ts` has no sentence for still reads as what the person tried. It is logged with its code,
-  // so a new one is noticed and gets a sentence of its own.
+  // which is main's message, and the action, so a new one is noticed and gets a sentence of its own. As one string:
+  // the desktop log writes each argument with `String()`, which turns an object of fields into "[object Object]".
   const noteFailure = (code: string, action: Browser.Action | undefined) => {
-    if (!commandFailure(code, action?.type).known) console.warn("[browser] unmapped failure", { code, action: action?.type })
+    if (!commandFailure(code, action?.type).known)
+      console.warn(`[browser] unmapped failure: ${code.slice(0, 300)} (action: ${action?.type ?? "none"})`)
   }
 
   const dispatch = (event: Event) => {
@@ -194,11 +198,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (effect.type === "present-held") {
       const drive = drives.get(effect.sessionKey)
 
-      // Asked again as a request that arrives now, so the screen, the pane and the setting are read now.
-      if (drive)
-        dispatch({ ...presentation(drive), type: "pane.activity", attempt: effect.attempt, tabID: effect.tabID, reveal: effect.reveal, visible: layout.state(key(effect.tabID), drive.ref) === "visible" })
+      if (!drive) return
+      restore(drive.ref)
 
-      return
+      // Asked again as a request that arrives now, so the screen, the pane and the setting are read now.
+      return dispatch({ ...presentation(drive), type: "pane.activity", attempt: effect.attempt, tabID: effect.tabID, reveal: effect.reveal, visible: layout.state(key(effect.tabID), drive.ref) === "visible" })
     }
 
     if (effect.type === "present-file") {
@@ -351,6 +355,17 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     opened: layout.side.opened(drive.ref),
   })
 
+  // The browser tabs the session's strip stores, once the stored layout has loaded: before that it reads as empty.
+  const stored = (ref: SessionRef) => (layout.ready() ? untrack(() => layout.stored(ref)) : undefined)
+
+  // The host can drop a session's strip with no plugin hearing of it. Before the strip is written for one tab, and
+  // when the person comes to the session, it gets back the tabs the desktop still holds, so no tab stands alone.
+  const restore = (ref: SessionRef) => {
+    const kept = stored(ref)
+
+    if (kept) dispatch({ type: "strip.read", sessionKey: ref.key, stored: kept })
+  }
+
   const receive = (drive: Drive, attempt: number, event: PaneEvent) => {
     const sessionKey = drive.ref.key
 
@@ -386,16 +401,21 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       if (event.error !== undefined) noteFailure(event.error, undefined)
 
-      return dispatch({ type: "pane.state", sessionKey, attempt, state: event.state, error: event.error, unnamed: event.unnamed, placed: event.placed })
+      return dispatch({ type: "pane.state", sessionKey, attempt, state: event.state, error: event.error, unnamed: event.unnamed, placed: event.placed, stored: stored(drive.ref) })
     }
 
     if (event.type === "embed")
       return dispatch({ type: "pane.embed", sessionKey, attempt, tabID: event.tabID, embed: event.embed })
 
-    if (event.type === "focus") return dispatch({ type: "pane.focus", sessionKey, attempt, tabID: event.tabID })
+    if (event.type === "focus") {
+      restore(drive.ref)
+
+      return dispatch({ type: "pane.focus", sessionKey, attempt, tabID: event.tabID })
+    }
 
     if (event.type === "activity" || event.type === "preview") {
       if (event.type === "preview") return dispatch({ ...presentation(drive), attempt, type: "pane.file", path: event.path })
+      restore(drive.ref)
 
       return dispatch({ ...presentation(drive), attempt, type: "pane.activity", tabID: event.tabID, reveal: event.reveal, visible: layout.state(key(event.tabID), drive.ref) === "visible" })
     }
@@ -454,7 +474,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     )
   }
 
-  // Closes every stored tab a native inventory lacks, then adds the tabs it newly lists.
+  // Closes every stored tab a native inventory lacks, then adds the tabs it newly lists and the ones the strip lost.
   const syncStrip = (effect: Extract<MachineEffect, { type: "sync-strip" }>) => {
     const ref = drives.get(effect.sessionKey)?.ref
 
@@ -478,9 +498,10 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       effect.open.forEach((tabID) => {
         if (layout.state(key(tabID), ref) !== "closed") return
-        // A tab a page or link opened stands after the tab it came from; the strip holds other panels' tabs too.
-        const after = effect.placed?.tabID === tabID ? key(effect.placed.after) : undefined
-        builtinContext(ctx).layout.open(key(tabID), ref, { tab: "append", after })
+        // A tab a page or link opened stands after the tab it came from, and one the strip lost after the tab before
+        // it; the strip holds other panels' tabs too.
+        const after = effect.placed?.find((item) => item.tabID === tabID)?.after
+        builtinContext(ctx).layout.open(key(tabID), ref, { tab: "append", after: after && key(after) })
       })
     })
   }
@@ -553,11 +574,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   // The SDK removes the listener when the Ipc's generation ends.
   createKeyed(pane, (current) => current.on("event", (value) => listeners.get(value.binding)?.(value.event)))
 
-  const wakeCurrent = () => {
+  const wakeCurrent = (takes: boolean) => {
     if (document.visibilityState !== "visible") return
     const view = sessions.current()
 
-    if (view) dispatch({ type: "session.wake", sessionKey: view.key })
+    if (view) dispatch({ type: "session.wake", sessionKey: view.key, takes })
   }
 
   // The pane's Ipc goes away while its main plugin reloads or is not active, taking every binding with it.
@@ -565,7 +586,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     pane,
     () => {
       dispatch({ type: "ipc.changed", ipc: untrack(ipc) })
-      wakeCurrent()
+      wakeCurrent(false)
     },
     {
       // A pane that is starting and one that does not run are both no pane here, and they differ: a starting one
@@ -627,7 +648,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           )
           onCleanup(
             data.on("session.execution.started", (event) => {
-              if (event.data.sessionID === ref.id) dispatch({ type: "session.wake", sessionKey })
+              if (event.data.sessionID === ref.id) dispatch({ type: "session.wake", sessionKey, takes: false })
             }),
           )
         },
@@ -646,7 +667,14 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       // The server finished creating the session.
       createKeyed(
         () => !ref.pending,
-        () => dispatch({ type: "session.wake", sessionKey }),
+        () => dispatch({ type: "session.wake", sessionKey, takes: false }),
+      )
+
+      // The window that took the session let it go, as when it closed: the server revoked the grant its attachment
+      // held. The session's details are read only while it is taken.
+      createKeyed(
+        () => sessionReplaced(machine(), sessionKey) && unheld(ref),
+        () => dispatch({ type: "session.released", sessionKey }),
       )
 
       // The strip can be written once the server reports the session's location.
@@ -680,15 +708,24 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   createKeyed(
     () => sessions.current()?.key,
     (sessionKey) => {
+      const drive = drives.get(sessionKey)
+
       dispatch({ type: "session.routed", sessionKey })
-      wakeCurrent()
+
+      // Now, not with the desktop's next report, which a quiet page never sends.
+      if (drive) restore(drive.ref)
+      // The person came to this session here, so one another window took comes back.
+      wakeCurrent(true)
       // The route moved on: the person no longer sees this session.
       onCleanup(() => dispatch({ type: "screen.left", sessionKey }))
     },
     { otherwise: () => dispatch({ type: "session.routed", sessionKey: undefined }) },
   )
-  makeEventListener(window, "focus", wakeCurrent)
-  makeEventListener(document, "visibilitychange", wakeCurrent)
+  // Focus, a press and a key wake a suspended pane and never take a session from the window that holds it: that
+  // would fail the commands an agent has in flight there.
+  const stir = () => wakeCurrent(false)
+  makeEventListener(window, "focus", stir)
+  makeEventListener(document, "visibilitychange", stir)
   // The window is neither hidden nor minimized, so the person sees what a pane draws.
   const [windowShown, setWindowShown] = createSignal(document.visibilityState === "visible")
   makeEventListener(document, "visibilitychange", () => {
@@ -699,10 +736,12 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     if (!shown && view) dispatch({ type: "screen.left", sessionKey: view.key })
   })
-  makeEventListener(document, "pointerdown", wakeCurrent)
-  makeEventListener(document, "keydown", wakeCurrent)
+  makeEventListener(document, "pointerdown", stir)
+  makeEventListener(document, "keydown", stir)
 
   const attached = (session: Session) => sessionAttached(machine(), session.key)
+
+  const openable = (session: Session) => sessionOpenable(machine(), session.key)
 
   const available = (session: SessionRef) =>
     sessionSupported(machine(), session.key) && !!session.id && session.server.compatible && !layout.narrow()
@@ -755,6 +794,14 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   // A prompt waits only while an attachment for its session is in flight on a server that can answer it.
   const attaching = (session: SessionRef) => sessionAttaching(machine(), session.key, attachable(session, online()))
 
+  // A session that runs in a tab nobody has opened since the app started attaches as the routed one does. Keyed by the
+  // sessions it applies to, so each attaches once when it starts to run, and a later run wakes its attachment itself.
+  const unopened = () => sessions.list().filter((ref) => attachesUnopened(ref, online()))
+  createKeyed(
+    () => unopened().map((ref) => ref.key).join("\n"),
+    () => unopened().forEach(attach),
+  )
+
   // A prompt is about to go to the session. Its first step lists the browser tools only if the server already holds
   // this desktop's attachment, so the session attaches now, routed or not, and the send waits while that is in flight
   // and can still succeed. In every other state it resolves at once: a server that is not connected or not compatible,
@@ -764,7 +811,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const ready = (session: SessionRef, signal: AbortSignal) => {
     if (!untrack(() => attachable(session, online()))) return Promise.resolve()
     attach(session)
-    dispatch({ type: "session.wake", sessionKey: session.key })
+    // The person's prompt goes out from this window, so its session's browser is this window's.
+    dispatch({ type: "session.wake", sessionKey: session.key, takes: true })
 
     if (!untrack(() => attaching(session)) || signal.aborted) return Promise.resolve()
     const settled = Promise.withResolvers<void>()
@@ -789,6 +837,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   return {
     available,
     attached,
+    openable,
     ready,
     canOpen,
     openFile,
@@ -798,7 +847,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       const ref = sessions.list().find(item => item.key === sessionKey)
 
       if (ref?.server.compatible) attach(ref)
-      dispatch({ type: "session.wake", sessionKey })
+      dispatch({ type: "session.wake", sessionKey, takes: false })
       const target = registrations.get(sessionKey)
 
       if (!target) throw new Error("browser.pane.unavailable")
@@ -806,7 +855,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       return target.registration.createTab(owner, url, () => sessions.current()?.key === sessionKey)
     },
     async closeOwned(sessionKey: string, owner: string, id: ExperimentalBrowserTab) {
-      dispatch({ type: "session.wake", sessionKey })
+      dispatch({ type: "session.wake", sessionKey, takes: false })
       const target = registrations.get(sessionKey)
 
       if (!target) return false
@@ -818,6 +867,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     /** Opens a blank tab for the user, whose pane then focuses the address field. */
     open(session: SessionRef) {
       if (!available(session)) return
+      // Opening the browser here takes it back from another window, which would otherwise answer the command.
+      dispatch({ type: "session.wake", sessionKey: session.key, takes: true })
       dispatch({ type: "session.command", sessionKey: session.key, action: { type: "tabs.open" }, focusAddress: true })
     },
     /** Whether the user just opened this blank tab; true once, for the pane that focuses its address. */

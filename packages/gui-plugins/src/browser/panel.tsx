@@ -16,7 +16,6 @@ import { debounce } from "@solid-primitives/scheduled"
 import {
   createMemo,
   createSignal,
-  createUniqueId,
   For,
   getOwner,
   Index,
@@ -34,6 +33,7 @@ import {
   createKeyed,
   usePlugin,
   usePanel,
+  type ComposerNote,
   type PanelTab,
   type MountedSession,
   type SessionScreen,
@@ -103,6 +103,10 @@ const RECENT = 5
 
 /** How long a notice about a command that did not work stays before it goes by itself. */
 const FAILURE_NOTICE_MS = 8_000
+
+const sendLabels = { send: "comment.send", steer: "comment.steer", queue: "comment.queue" } as const
+
+const mac = /(Mac|iPhone|iPad)/.test(navigator.platform)
 
 /** An element a component reads after render, such as a button a native view anchors to. */
 type ElementRef = { element?: HTMLElement }
@@ -210,8 +214,6 @@ export default function SessionBrowserPane(props: {
   const [addressState, setAddressState] = createSignal(initialAddressState)
   const [available, setAvailable] = createSignal({ width: 0, height: 0 })
   const [toolbar, setToolbar] = createSignal(initialViewportToolbar)
-  const [pointerFocusedToggle, setPointerFocusedToggle] = createSignal(false)
-  const viewportID = createUniqueId()
   const [overlay, setOverlay] = createSignal(initialOverlayState)
 
   // The page's reports, counted; a submitted address in the field ends at the next one.
@@ -319,7 +321,7 @@ export default function SessionBrowserPane(props: {
   }
 
   let root: HTMLElement | undefined
-  let toolbarToggle: HTMLButtonElement | undefined
+  let options: HTMLElement | undefined
   let input: HTMLInputElement | undefined
   let anchor: HTMLFormElement | undefined
   let findInput: HTMLInputElement | undefined
@@ -489,6 +491,12 @@ export default function SessionBrowserPane(props: {
     inspectable: inspectable(),
   })
 
+  const attach = (send: boolean, note: ComposerNote) => {
+    props.screen.composer.attach(note)
+
+    if (send) props.screen.composer.send(note.commentID)
+  }
+
   const dispatchOverlay = (event: OverlayEvent) => {
     const next = transitionOverlay(untrack(overlay), event)
     setOverlay(next.state)
@@ -500,7 +508,8 @@ export default function SessionBrowserPane(props: {
 
       // The owning screen's composer serves the session the pane shows.
       if (effect.type === "attach-comment")
-        return props.screen.composer.attach(
+        return attach(
+          effect.send,
           commentNote({
             origin: plugin.id,
             tabID: effect.tabID,
@@ -518,7 +527,8 @@ export default function SessionBrowserPane(props: {
           }),
         )
 
-      props.screen.composer.attach(
+      attach(
+        effect.send,
         pageNote({
           origin: plugin.id,
           tabID: effect.tabID,
@@ -605,6 +615,19 @@ export default function SessionBrowserPane(props: {
     )
 
   const submitOverlay = (value: string) => dispatchOverlay({ type: "overlay.submitted", value, context: context() })
+
+  const sendOverlay = createMemo(() => {
+    const delivery = props.screen.composer.delivery()
+
+    return {
+      label: plugin.t(sendLabels[delivery ?? "send"]),
+      keys: [mac ? "⌘" : plugin.t("common.key.ctrl"), "⏎"],
+      disabled: delivery === undefined,
+      onSubmit: (value: string) =>
+        dispatchOverlay({ type: "overlay.submitted", value, context: context(), send: true }),
+    }
+  })
+
   const openNote = () => dispatchOverlay({ type: "note.opened", context: context() })
 
   const zoomed = () => !!address() && (page()?.zoom ?? 1) !== 1
@@ -754,8 +777,9 @@ export default function SessionBrowserPane(props: {
       inspect: toggleInspect,
       toggleToolbar: () => {
         toggleToolbar()
-        setPointerFocusedToggle(false)
-        toolbarToggle?.focus({ preventScroll: true, focusVisible: true })
+        // The toggle is an item of the options menu, so the shortcut leaves the keyboard where choosing that item
+        // does: on the menu's button, which stays when a closing toolbar takes the focused control with it.
+        options?.focus({ preventScroll: true, focusVisible: true })
       },
       focusAddress,
       find: () => find({ type: "open" }),
@@ -1180,47 +1204,32 @@ export default function SessionBrowserPane(props: {
               </Menu.Portal>
             </Menu>
           </Show>
-          <Show when={viewportToolbarAvailable(plugin.app.channel)}>
-            <Tooltip
-              placement="top"
-              value={tip(plugin.t("command.toggleToolbar"), keybinds.keybind("browser.toggleToolbar"))}
-            >
-              <IconButton
-                ref={toolbarToggle}
-                variant="ghost-muted"
-                size="large"
-                classList={{ "!outline-none": pointerFocusedToggle() }}
-                onPointerDown={() => setPointerFocusedToggle(true)}
-                onBlur={() => setPointerFocusedToggle(false)}
-                onKeyDown={() => setPointerFocusedToggle(false)}
-                aria-label={plugin.t("command.toggleToolbar")}
-                aria-expanded={toolbarVisible()}
-                aria-controls={toolbarVisible() ? viewportID : undefined}
-                disabled={!inspectable()}
-                state={toolbarVisible() ? "pressed" : undefined}
-                onClick={toggleToolbar}
-                icon={
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                    <path
-                      d="M1 12.5H8M13.5 4V2.5H3.49997V12M14.5 5.5H9.5C9.5 8.0362 9.5 10.9638 9.5 13.5H14.5C14.5 10.9638 14.5 8.0362 14.5 5.5Z"
-                      stroke="currentColor"
-                    />
-                  </svg>
-                }
-              />
-            </Tooltip>
-          </Show>
+          <Tooltip placement="top" value={tip(plugin.t("inspect"), keybinds.keybind("browser.inspect"))}>
+            {/* The ghost variant sets the button color, so the active accent needs precedence over it. */}
+            <IconButton
+              variant="ghost-muted"
+              size="large"
+              disabled={!inspectable()}
+              state={picking() ? "pressed" : undefined}
+              classList={{ "!text-v2-icon-icon-accent": overlayed().accent }}
+              aria-pressed={picking()}
+              aria-label={plugin.t("inspect")}
+              onClick={toggleInspect}
+              icon={<Icon name="select-element" />}
+            />
+          </Tooltip>
           {/* Keyed by the tab, as the extensions menu is: an open menu is of the tab it opened on, and closes with it. */}
           <Show when={props.tab().id} keyed>
             <Menu gutter={4} modal={false} placement="bottom-end" onOpenChange={open => setMenuPage(open ? pageTarget() : undefined)}>
               <Tooltip placement="top" value={plugin.t("options")}>
-                {/* The comment tool lives in this menu, so the button shows it while it waits for a pick. */}
                 <Menu.Trigger
                   as={IconButton}
+                  ref={(element: HTMLElement) => {
+                    options = element
+                  }}
                   variant="ghost-muted"
                   size="large"
                   disabled={!state()}
-                  classList={{ "!text-v2-icon-icon-accent": overlayed().accent }}
                   icon={<Icon name="outline-dots" />}
                   aria-label={plugin.t("options")}
                 />
@@ -1270,13 +1279,15 @@ export default function SessionBrowserPane(props: {
                     <Menu.SubTrigger>{plugin.t("menu.more")}</Menu.SubTrigger>
                     <Menu.Portal>
                       <Menu.SubContent class="w-max min-w-[220px] max-w-[calc(100vw-32px)]" aria-label={plugin.t("menu.more")} data-browser-popup>
-                        <Menu.Item
-                          disabled={!inspectable()}
-                          onSelect={toggleInspect}
-                          shortcut={<Keybind keys={[...keybinds.keybind("browser.inspect")]} variant="neutral" />}
-                        >
-                          {plugin.t("inspect")}
-                        </Menu.Item>
+                        <Show when={viewportToolbarAvailable(plugin.app.channel)}>
+                          <Menu.Item
+                            disabled={!inspectable()}
+                            onSelect={toggleToolbar}
+                            shortcut={<Keybind keys={[...keybinds.keybind("browser.toggleToolbar")]} variant="neutral" />}
+                          >
+                            {plugin.t("command.toggleToolbar")}
+                          </Menu.Item>
+                        </Show>
                         <Menu.Group>
                           <Menu.Item disabled={!menuPage()?.open} onSelect={() => menuPage()?.openPage()}>
                             {plugin.t("menu.openPage")}
@@ -1379,7 +1390,7 @@ export default function SessionBrowserPane(props: {
         )}
       </Show>
       <Show when={toolbarVisible()}>
-        <section id={viewportID} data-component="browser-viewport" aria-label={plugin.t("viewport.label")}>
+        <section data-component="browser-viewport" aria-label={plugin.t("viewport.label")}>
           <Show when={state()?.id} keyed>
             {(tabID) => (
               <Show when={props.session.key} keyed>
@@ -1571,6 +1582,7 @@ export default function SessionBrowserPane(props: {
                         onInput={(value) => dispatchOverlay({ type: "draft.changed", value })}
                         onCancel={closeOverlay}
                         onSubmit={submitOverlay}
+                        alternateSubmit={sendOverlay()}
                         mention={{
                           items: (query) => props.screen.file.search(query, { kind: "any" }),
                         }}
@@ -1639,6 +1651,7 @@ export default function SessionBrowserPane(props: {
                     onInput={(value) => dispatchOverlay({ type: "draft.changed", value })}
                     onCancel={closeOverlay}
                     onSubmit={submitOverlay}
+                    alternateSubmit={sendOverlay()}
                     placeholder={plugin.t("page.placeholder")}
                     mention={{
                       items: (query) => props.screen.file.search(query, { kind: "any" }),

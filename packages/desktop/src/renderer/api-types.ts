@@ -10,6 +10,7 @@ import type {
   PickedFiles,
   SaveFilePickerOptions,
   ServerReadyData,
+  TaskbarProgressMode,
   TitlebarTheme,
 } from "../shared/ipc-contract"
 
@@ -17,6 +18,7 @@ export type ElectronAPI = {
   awaitInitialization(): Promise<ServerReadyData>
   reconnectService(signal?: AbortSignal): Promise<ServerReadyData>
   onSidecarChanged(cb: (data: ServerReadyData) => void): () => void
+  onSystemResumed(cb: () => void): () => void
   readyDeepLinks(): void
   acknowledgeDeepLinks(attempt: number): void
   isFirstLaunchOnboardingPending(): Promise<boolean>
@@ -51,15 +53,20 @@ export type ElectronAPI = {
   openBrowser(url: string): Promise<boolean>
   openPath(path: string, app?: string): Promise<string | undefined>
   revealPath(path: string): Promise<boolean>
+  startFileDrag(path: string): Promise<boolean>
   readClipboardImage(): Promise<ClipboardImage | null>
   writeClipboardText(text: string): Promise<void>
   getWindowFocused(): Promise<boolean>
+  requestAttention(): Promise<void>
   requestMicrophone(): Promise<boolean>
   setVoiceCallActive(active: boolean): Promise<void>
   getWindowFullscreen(): Promise<boolean>
   onWindowFullscreenChanged(cb: (fullscreen: boolean) => void): () => void
   setWindowFocus(): Promise<void>
   showWindow(): Promise<void>
+  showToast(toast: { tag: string; title: string; body: string }): Promise<void>
+  dismissToast(tag: string): Promise<void>
+  onToastActivated(cb: (tag: string) => void): () => void
   relaunch(): void
   getZoomFactor(): Promise<number>
   setZoomFactor(factor: number): Promise<void>
@@ -71,12 +78,18 @@ export type ElectronAPI = {
   onZoomChanged(cb: (zoom: { factor: number; level: DesktopZoomLevel }) => void): () => void
   setTitlebar(theme: TitlebarTheme): Promise<void>
   setTrafficLightsPosition(position: { x: number; y: number }): Promise<void>
+  setTaskbarBadge(count: number, description: string): Promise<void>
+  setTaskbarProgress(mode: TaskbarProgressMode): Promise<void>
   runDesktopMenuAction(action: DesktopMenuAction): Promise<void>
   setBackgroundColor(color: string): Promise<void>
   exportDebugLogs(): Promise<string>
   setForceFocus(enabled: boolean): Promise<void>
   getSpellcheckEnabled(): Promise<boolean>
   setSpellcheckEnabled(enabled: boolean): Promise<void>
+  getSmoothScrollingEnabled(): Promise<boolean>
+  setSmoothScrollingEnabled(enabled: boolean): Promise<void>
+  getKeepServiceRunning(): Promise<boolean>
+  setKeepServiceRunning(enabled: boolean): Promise<void>
   recordFatalRendererError(error: FatalRendererError): Promise<void>
   setNativeTranslations(bundle: DesktopNativeBundle): Promise<void>
 }

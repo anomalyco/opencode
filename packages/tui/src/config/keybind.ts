@@ -177,6 +177,8 @@ export const Definitions = {
   "agent.cycle.reverse": keybind("none", "Previous agent"),
   "variant.cycle": keybind("ctrl+t", "Cycle model variants"),
   "variant.list": keybind("none", "List model variants"),
+  "speed.cycle": keybind("none", "Cycle model speeds"),
+  "speed.list": keybind("none", "List model speeds"),
 
   "session.page.up": keybind("pageup,ctrl+alt+b,kppageup", "Scroll messages up by one page"),
   "session.page.down": keybind("pagedown,ctrl+alt+f,kppagedown", "Scroll messages down by one page"),

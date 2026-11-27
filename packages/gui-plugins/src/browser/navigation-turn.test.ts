@@ -30,6 +30,35 @@ test.each([true, false])("an abort waits for the replacement document, not the o
   expect(next.after(new Error("network error"))).toBeUndefined()
 })
 
+test("a client redirect that rejects with -3 while loading commits cleanly, while a no-commit stop still fails", async () => {
+  const start = { isMainFrame: true, isSameDocument: false }
+  const aborted = Object.assign(new Error("ERR_ABORTED"), { errno: -3 })
+
+  // 1. Late-starting client redirect: loadURL rejects with -3 while stillLoading is true, then commits.
+  const redirect = replacementNavigation()
+  redirect.start(start)
+  const waiting = redirect.after(aborted, true)
+  expect(waiting).toBeDefined()
+  // Intermediate stop while Chromium is still loading the replacement hop does not fail it.
+  redirect.stop(true)
+  redirect.start(start)
+  redirect.commit()
+  expect(await waiting).toBe(true)
+
+  // 2. Actual no-commit abort (e.g. download, 204, or user Stop): loading stops without a commit -> false.
+  const noCommit = replacementNavigation()
+  noCommit.start(start)
+  const abortedWait = noCommit.after(aborted, true)
+  expect(abortedWait).toBeDefined()
+  noCommit.stop(false)
+  expect(await abortedWait).toBe(false)
+
+  // 3. Abort after loading already stopped returns undefined immediately (never unconditional success).
+  const idleAbort = replacementNavigation()
+  idleAbort.start(start)
+  expect(idleAbort.after(aborted, false)).toBeUndefined()
+})
+
 test.each(["stop", "oc-preview://private/report", "https://next.test"])('a later %s wins over a deferred web navigation', async next => {
   const gate = Promise.withResolvers<void>()
   const issued: string[] = []

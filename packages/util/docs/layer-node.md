@@ -12,7 +12,7 @@ There are three values to compose:
 - A **Graph** is a node or an ordered `group` of graphs. Grouping exposes the
   selected roots, not their transitive dependencies. Groups are not replacement
   targets.
-- A **Replacement** is a checked instruction made by `node.replace(...)`.
+- A **Replacement** is a checked instruction made by `node.replace(...)` or `node.mock(...)`.
   Replacement arrays can be stored and concatenated without losing their checks.
 
 ```ts
@@ -40,7 +40,7 @@ const users = location({
   deps: [database],
 })
 
-const replacements: LayerNode.Replacements = [database.replace(Layer.succeed(Database, { name: "test" }))]
+const replacements: LayerNode.Replacements = [database.mock({ name: "test" })]
 
 const layer = LayerNode.compile(LayerNode.group([database, users]), {
   replacements,

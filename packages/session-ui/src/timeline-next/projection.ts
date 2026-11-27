@@ -24,7 +24,15 @@ import {
 } from "../timeline/turn-phase-machine"
 import { errorInfo } from "./errors"
 import { launchOf } from "../timeline/facts"
-import { hidesActivity, placeNotice, placer, type Place } from "../timeline/place"
+import {
+  hidesActivity,
+  placeNotice,
+  placer,
+  placeScriptChange,
+  scriptChangeItems,
+  type Place,
+  type PlaceFactOf,
+} from "../timeline/place"
 import { placeFacts } from "../timeline/projection"
 import { noticeEvent, workKey, type TimelineEvent } from "./events"
 import { echoesUserShell, liveThinkingShows, movedInPlace, textShows } from "./rules"
@@ -68,6 +76,8 @@ type Input = {
   shows: (content: Content) => boolean
   /** Where a part shows, each call placed once per build. */
   place: (content: Content, commentary?: boolean) => Place
+  /** What placing a call reads, through a signal per call. */
+  factOf?: PlaceFactOf
 }
 
 // A field of the wrong type decodes as absent, so one bad field does not discard its neighbours.
@@ -100,6 +110,8 @@ export function createNextTimelineProjection(input: {
   queuedCompactionIDs?: Accessor<readonly string[]>
   /** Summarize each finished turn's changed files after it. */
   turnDiffs?: Accessor<boolean>
+  /** The server's `full_codemode` flag: without it, a script's changes neither show nor count. */
+  scriptDiffs?: Accessor<boolean>
 }) {
   const sessionMessageByID = createMemo(
     () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
@@ -131,7 +143,7 @@ export function createNextTimelineProjection(input: {
   )
 
   const textVisible = createMemo(() => new Map<Content, Accessor<boolean>>(textParts()))
-  const factOf = placeFacts(input.sessionMessages)
+  const factOf = placeFacts(input.sessionMessages, input.scriptDiffs)
 
   const projection = createMemo(() => {
     const detail = input.timelineDetail()
@@ -145,6 +157,7 @@ export function createNextTimelineProjection(input: {
       queuedCompactionIDs: input.queuedCompactionIDs?.() ?? [],
       turnDiffs: input.turnDiffs?.() ?? false,
       place,
+      factOf,
       shows: (content) =>
         content.type === "tool"
           ? place(content).placement !== "hidden"
@@ -304,14 +317,20 @@ function constructRows(input: Input) {
       ),
   )
 
+  const leadingRows = leading
+    .filter(noticeShows)
+    .map((message) => new TimelineRow.Notice({ userMessageID: turns[0]?.id ?? message.id, messageID: message.id }))
+
+  // A turn gap holds the gap above its turn. A turn the user started stays a turn when older history loads, so it has
+  // its gap unless it is the first row: after leading notices too, which then join the turn that loads above them.
+  const gapped = (turn: Turn, index: number) => index > 0 || (leadingRows.length > 0 && !!(turn.user || turn.shell))
+
   const rows: TimelineRow.TimelineRow[] = [
-    ...leading
-      .filter(noticeShows)
-      .map((message) => new TimelineRow.Notice({ userMessageID: turns[0]?.id ?? message.id, messageID: message.id })),
+    ...leadingRows,
     ...visibleTurns.flatMap((turn, index) => {
       if (turn.shell)
         return [
-          ...(index > 0 ? [new TimelineRow.TurnGap({ userMessageID: turn.id })] : []),
+          ...(gapped(turn, index) ? [new TimelineRow.TurnGap({ userMessageID: turn.id })] : []),
           new TimelineRow.Shell({ userMessageID: turn.id, messageID: turn.shell.id }),
           ...turn.entries.flatMap((entry) =>
             entry.type === "notice" && noticeShows(entry.message)
@@ -320,7 +339,16 @@ function constructRows(input: Input) {
           ),
         ]
 
-      return turnRows(turn, index > 0, phaseOf(turn), input.detail, visible, commentary, input.place)
+      return turnRows(
+        turn,
+        gapped(turn, index),
+        phaseOf(turn),
+        input.detail,
+        visible,
+        commentary,
+        input.place,
+        input.factOf,
+      )
     }),
   ]
 
@@ -462,6 +490,7 @@ function turnRows(
   isVisible: (content: Content) => boolean,
   commentary: ReadonlySet<Content>,
   place: Input["place"],
+  factOf?: PlaceFactOf,
 ) {
   const rows: TimelineRow.TimelineRow[] = []
   const assistantMessages = turn.entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
@@ -469,6 +498,11 @@ function turnRows(
   const lastStep = turn.entries.findLast((entry) => entry.type === "assistant" || entry.type === "idle")
   const view = viewTurnPhase(phase)
   const thinking = view.separateThinkingRef
+  const lastAssistantEntry = turn.entries.findLastIndex((entry) => entry.type === "assistant")
+
+  const quietTail = turn.entries
+    .slice(lastAssistantEntry + 1)
+    .every((entry) => entry.type === "notice" && placeNotice(entry.message, detail, "next") === "hidden")
 
   if (previousTurn) rows.push(new TimelineRow.TurnGap({ userMessageID: turn.id }))
 
@@ -480,13 +514,22 @@ function turnRows(
   // An assistant message can produce several rows because its content parts are rendered separately. Notices end a
   // segment so none of those rows cross it.
   const appendAssistantSegment = (messages: SessionMessageAssistant[]) => {
-    const refs = messages.flatMap((message, messageIndex) =>
-      contentEntries(message)
-        .filter(
-          (entry) => isVisible(entry.content) && !(thinking?.messageID === message.id && thinking.partID === entry.id),
-        )
-        .map((entry) => ({ messageID: message.id, messageIndex, partID: entry.id, content: entry.content })),
+    const visibleRefs = messages.flatMap((message, messageIndex) =>
+      contentEntries(message).flatMap((entry) => [
+        ...(isVisible(entry.content) && !(thinking?.messageID === message.id && thinking.partID === entry.id)
+          ? [{ messageID: message.id, messageIndex, partID: entry.id, content: entry.content, script: false }]
+          : []),
+        // A script's changes follow it, placed by the Edits setting even where the script itself hides.
+        ...scriptChangeItems(message.id, messageIndex, entry.content, detail, factOf),
+      ]),
     )
+
+    // While the turn runs, the thoughts it ends on read as Thinking until something else shows, since the model may
+    // think again in its next step. A notice after them ends the run.
+    const tail = messages.at(-1) === lastAssistant && view.live ? trailingThoughts(visibleRefs) : []
+    const live = thinking ?? (quietTail ? tail.at(-1) : undefined)
+    const settled = !live ? [] : thinking ? tail : tail.slice(0, -1)
+    const refs = live ? visibleRefs.slice(0, visibleRefs.length - tail.length) : visibleRefs
 
     const interruptedAt = messages.findIndex((message) => isInterruptedError(message.error))
     const before = interruptedAt < 0 ? refs : refs.filter((ref) => ref.messageIndex <= interruptedAt)
@@ -494,7 +537,7 @@ function turnRows(
 
     const appendGroups = (items: typeof refs) => {
       let offset = 0
-      groupContent(items, place, commentary).forEach((group) => {
+      groupContent(items, place, commentary, detail).forEach((group) => {
         const tool = group.type !== "part" || items[offset]?.content.type !== "text"
         offset += group.type === "part" ? 1 : group.refs.length
         rows.push(
@@ -524,7 +567,14 @@ function turnRows(
     if (messages.at(-1) !== lastAssistant) return
 
     // The live thought closes its own step, so notices that arrive meanwhile follow it.
-    if (thinking) rows.push(new TimelineRow.Thinking({ userMessageID: turn.id, ref: thinking }))
+    if (live)
+      rows.push(
+        new TimelineRow.Thinking({
+          userMessageID: turn.id,
+          ref: live,
+          before: settled.map((ref) => ({ messageID: ref.messageID, partID: ref.partID })),
+        }),
+      )
 
     if (lastStep?.type !== "assistant") return
 
@@ -579,6 +629,13 @@ function turnRows(
   appendAssistantSegment(assistantSegment)
 
   return rows
+}
+
+// The thoughts a list of parts ends on, oldest first.
+function trailingThoughts<T extends { content: Content; script: boolean }>(refs: T[]) {
+  const start = refs.findLastIndex((ref) => ref.script || ref.content.type !== "reasoning") + 1
+
+  return refs.slice(start)
 }
 
 // Each step replaces the phase the steps before it left, so the turn ends in the phase of its last step.
@@ -892,18 +949,27 @@ function groupPartKey(ref: PartRef) {
 }
 
 function groupContent(
-  items: { messageID: string; partID: string; content: Content }[],
+  items: { messageID: string; partID: string; content: Content; script?: boolean }[],
   place: Input["place"],
   commentary: ReadonlySet<Content>,
+  detail: TimelineDetail,
 ): PartGroup[] {
   const groups: PartGroup[] = []
-  let adjacent: { type: "context" | "file" | "read" | "events"; refs: PartRef[] } | undefined
+  let adjacent: { type: "context" | "file" | "read" | "events" | "thought"; refs: PartRef[] } | undefined
 
   const flush = () => {
     const current = adjacent
     const first = current?.refs[0]
 
     if (!first) return
+    adjacent = undefined
+
+    // A thought alone keeps its own row; thoughts one after another read as one.
+    if (current.type === "thought" && current.refs.length === 1) {
+      groups.push({ type: "part", key: `part:${first.messageID}:${first.partID}`, ref: first })
+
+      return
+    }
 
     groups.push({
       type: current.type,
@@ -913,14 +979,15 @@ function groupContent(
           : `context:${first.messageID}:${first.partID}`,
       refs: current.refs,
     })
-    adjacent = undefined
   }
 
-  const placed = items.map((item) => place(item.content, commentary.has(item.content)))
+  const placed = items.map((item) =>
+    item.script ? placeScriptChange(detail) : place(item.content, commentary.has(item.content)),
+  )
 
   items.forEach((item, index) => {
     const group = placed[index]!.group
-    const type = group === "part" ? undefined : group
+    const type = group !== "part" ? group : item.content.type === "reasoning" && !item.script ? "thought" : undefined
 
     if (type === "subagent") {
       flush()
