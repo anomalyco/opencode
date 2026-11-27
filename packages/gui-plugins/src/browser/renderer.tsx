@@ -13,8 +13,8 @@ import {
 } from "solid-js"
 import { Button } from "@opencode/ui/button"
 import { Loader } from "@opencode/ui/loader"
-import { Command, createKeyed, LinkHandler, MenuItem, SettingsPage, Style, type Plugin } from "@opencode/plugin/gui"
-import { BuiltinAppLink, builtinContext, BuiltinCommand, BuiltinPanel, BuiltinPromptGate, onIdle, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
+import { Command, createKeyed, LinkHandler, SettingsPage, Style, type Plugin, type SessionRef } from "@opencode/plugin/gui"
+import { BuiltinAppLink, builtinContext, BuiltinCommand, BuiltinPanel, BuiltinPromptGate, BuiltinSlot, onIdle, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import { Browser, type ExperimentalBrowserTab } from "@opencode/plugin/gui/browser"
 import type definition from "./index"
 import type { Model } from "./model"
@@ -387,27 +387,6 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     }
   })
 
-  // As in a browser, mod+t opens a tab inside the pane; everywhere else it keeps the app's new session.
-  ctx.add(Command, (): Command | undefined => {
-    const view = sessions.current()
-    const value = model()
-    const pane = value?.pane()
-
-    if (!view || !value || !pane) return undefined
-
-    return {
-      id: "newTab",
-      title: ctx.t("command.newTab"),
-      group: ctx.t("command.category.view"),
-      bind: "mod+t",
-      scope: "#browser-panel",
-      hidden: true,
-      editable: true,
-      enabled: pane.visible() && value.available(view),
-      run: () => value.open(view),
-    }
-  })
-
   // Chromium's element picker chord. While the page has focus, the page claims it itself; here it covers focus elsewhere
   // in the pane. Ctrl+Shift+C copies in the terminal outside the pane.
   ctx.add(Command, (): Command | undefined => {
@@ -427,24 +406,45 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     }
   })
 
-  ctx.add(MenuItem, (): MenuItem | undefined => {
-    const view = sessions.current()
-    const value = model()
+  // The side panel's New tab page draws the browser bar across its top and the pages the browser showed last under
+  // its launchers. Only once the desktop's pane answers, and still while another window holds the session's browser:
+  // opening a page here takes it back.
+  const NewTabBar = lazy(() => import("./new-tab").then((module) => ({ default: module.NewTabBar })))
+  const NewTabRecent = lazy(() => import("./new-tab").then((module) => ({ default: module.NewTabRecent })))
+  onCleanup(onIdle(() => void NewTabBar.preload()))
 
-    // Only once the desktop's pane answers, and still while another window holds the session's browser: opening it
-    // here takes it back.
-    if (!view || !value?.available(view) || !value.openable(view)) return undefined
+  const openable = (session: SessionRef) => !!model()?.available(session) && !!model()?.openable(session)
 
-    // A launcher of the side panel's new tab view, between Review and Terminal.
-    return {
-      menu: "session.panel",
-      id: "open",
-      title: ctx.t("tab.title"),
-      icon: "globe",
-      keybind: "browser.open",
-      order: 15,
-      run: () => value.open(view),
-    }
+  // The page's tab opens in this New tab's pane and replaces the New tab.
+  const opener = (input: { session: SessionRef; target(plugin: string): void }) => (url: string) => {
+    input.target(ctx.id)
+    model()?.open(input.session, url)
+  }
+
+  ctx.add(BuiltinSlot, {
+    at: "session.panel.new",
+    render: (input) => (
+      <Show when={openable(input.session) && model()}>
+        {(value) => (
+          <Suspense>
+            <NewTabBar model={value()} open={opener(input)} autofocus={input.autofocus} />
+          </Suspense>
+        )}
+      </Show>
+    ),
+  })
+
+  ctx.add(BuiltinSlot, {
+    at: "session.panel.new.list",
+    render: (input) => (
+      <Show when={openable(input.session) && model()}>
+        {(value) => (
+          <Suspense>
+            <NewTabRecent model={value()} open={opener(input)} />
+          </Suspense>
+        )}
+      </Show>
+    ),
   })
 
   // Workspace HTML links reach the pane through the file plugin, which resolves the path first.

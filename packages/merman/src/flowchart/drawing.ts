@@ -63,7 +63,8 @@ function setRichText(
 ): number {
   let offset = 0
   for (const run of runs) {
-    grid.setText(x + offset, y, run.text, style, run.italic ? { attributes: TextAttributes.ITALIC } : undefined)
+    const attributes = (run.italic ? TextAttributes.ITALIC : 0) | (run.bold ? TextAttributes.BOLD : 0)
+    grid.setText(x + offset, y, run.text, style, attributes ? { attributes } : undefined)
     offset += visualLength(run.text)
   }
   return offset

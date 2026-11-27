@@ -30,7 +30,6 @@ import { containsDirectory } from "@opencode/util/path"
 import { isWorkspaceDirectory } from "@/workspaces/paths"
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
 import { parseVoiceDelegation } from "./voice-delegation"
-import { inlineQuotes } from "./inline-quotes"
 import { useCommand } from "@/shell/commands/command"
 import { usePluginScoped } from "@/runtime/plugin/commands"
 import {
@@ -339,7 +338,6 @@ function MessageTimelineView(
 
   const rowInput = {
     foldUserMessages: settings.general.foldUserMessages,
-    inlineQuotes: () => inlineQuotes,
     sessionID: () => sessionID()!,
     status: sessionStatus,
     projection,

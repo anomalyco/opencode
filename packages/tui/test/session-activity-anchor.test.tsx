@@ -71,6 +71,34 @@ const running: SessionMessageInfo[] = [
   },
 ]
 
+// One turn whose expanded commands are taller than the viewport, while its summary fits.
+const tall: SessionMessageInfo[] = [
+  { type: "user", id: "user-tall", text: "Tall prompt", time: { created: 200 } },
+  {
+    type: "assistant",
+    id: "assistant-tall",
+    agent: "build",
+    model,
+    finish: "stop",
+    time: { created: 201, completed: 203 },
+    content: [
+      ...Array.from({ length: 24 }, (_, index) => ({
+        type: "tool" as const,
+        id: `shell-tall-${index}`,
+        name: "shell",
+        time: { created: 201, completed: 202 },
+        state: {
+          status: "completed" as const,
+          input: { command: `echo tall step ${index}` },
+          content: [{ type: "text" as const, text: `tall step ${index} output` }] as [{ type: "text"; text: string }],
+          metadata: {},
+        },
+      })),
+      { type: "text" as const, text: "Tall answer" },
+    ],
+  },
+]
+
 async function withSession(run: (setup: Setup) => Promise<void>, history = messages) {
   await using state = await tmpdir()
   const setup = await createTestRenderer({ width: 100, height: 30, kittyKeyboard: true })
@@ -100,7 +128,9 @@ async function withSession(run: (setup: Setup) => Promise<void>, history = messa
     }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
   )
   try {
-    await setup.waitForFrame((frame) => frame.includes(history === messages ? "Turn 5 answer" : "1 command"))
+    await setup.waitForFrame((frame) =>
+      frame.includes(history === messages ? "Turn 5 answer" : history === tall ? "Tall answer" : "1 command"),
+    )
     await setup.waitForVisualIdle({ quietFrames: 3 })
     await run(setup)
   } finally {
@@ -177,4 +207,28 @@ test("a low activity summary that ends the transcript opens like v2 at the botto
     },
     [...messages, ...running],
   )
+}, 20000)
+
+test("collapsing details that no longer overflow hides Jump to latest", async () => {
+  await withSession(async (setup) => {
+    const label = "24 commands"
+    const click = async () => {
+      // A second click on the same cell within 500ms would select a word instead.
+      setup.renderer.clearSelection()
+      await setup.mockMouse.click(8, rowOf(setup.captureCharFrame(), label))
+    }
+    expect(setup.captureCharFrame()).not.toContain("Jump to latest")
+
+    await click()
+    await setup.waitForFrame((frame) => frame.includes(`− ${label}`) && frame.includes("echo tall step 0"))
+    await Array.from({ length: 10 }).reduce<Promise<void>>(
+      (previous) => previous.then(() => setup.mockMouse.scroll(30, 10, "up")),
+      Promise.resolve(),
+    )
+    await setup.waitForFrame((frame) => frame.includes("Tall prompt") && frame.includes("Jump to latest"))
+
+    await click()
+    await setup.waitForFrame((frame) => frame.includes(`+ ${label}`) && frame.includes("Tall answer"))
+    await setup.waitForFrame((frame) => !frame.includes("Jump to latest"))
+  }, tall)
 }, 20000)
