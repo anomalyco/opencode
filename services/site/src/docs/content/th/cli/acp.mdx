@@ -1,0 +1,393 @@
+---
+title: "ACP"
+description: "ใช้ OpenCode กับไคลเอนต์ Agent Client Protocol"
+---
+
+`opencode acp` รัน OpenCode เป็นเอเจนต์ [Agent Client Protocol](https://agentclientprotocol.com) คุณจึงใช้จาก
+ไคลเอนต์ ACP เช่น Zed ได้ ตัวอย่างนี้เพิ่ม OpenCode ใน Zed
+
+```json title="~/.config/zed/settings.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+ไคลเอนต์ ACP อื่นใช้คำสั่งและอาร์กิวเมนต์ `acp` เดียวกัน แต่ไฟล์กำหนดค่าและชื่อฟิลด์อาจต่างกัน หาก
+ไคลเอนต์แบบกราฟิกหา `opencode` ไม่พบ ให้ตั้ง `command` เป็นพาธสัมบูรณ์ที่ `which opencode` พิมพ์
+
+## การตรวจสอบสิทธิ์
+
+OpenCode ใช้ข้อมูลรับรองผู้ให้บริการที่มีอยู่แล้ว ให้ลงชื่อเข้าใช้จากเทอร์มินัลก่อนเริ่มไคลเอนต์ ACP
+
+```bash
+opencode auth login
+```
+
+OpenCode เสนอวิธีตรวจสอบสิทธิ์หนึ่งวิธี `opencode-login` โดยค่าเริ่มต้นเป็นวิธีตรวจสอบสิทธิ์ของเอเจนต์ คำขอ
+`authenticate` รับเฉพาะวิธีนั้นและไม่เก็บข้อมูลรับรอง หากพรอมต์ล้มเหลวเพราะผู้ให้บริการต้องตรวจสอบสิทธิ์
+OpenCode จะคืนข้อผิดพลาด `auth_required` ของ ACP
+
+หากไคลเอนต์ตั้ง `clientCapabilities.auth.terminal` เป็น `true` วิธีตรวจสอบสิทธิ์จะเป็นวิธีแบบเทอร์มินัล
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "type": "terminal",
+  "args": ["--login"]
+}
+```
+
+ไคลเอนต์ต้องไม่ส่งวิธีนี้ไปยัง `authenticate` แต่ให้เพิ่ม `--login` ในคำสั่งที่เริ่ม OpenCode
+เช่น `opencode acp --login` และรันในเทอร์มินัล OpenCode จะรันขั้นตอน `opencode auth login` แล้วออก
+สถานะออก 0 หมายถึงลงชื่อเข้าใช้สำเร็จ ไคลเอนต์จึงเชื่อมต่อใหม่และส่ง `initialize` อีกครั้ง
+
+หากไคลเอนต์ตั้ง `clientCapabilities._meta["terminal-auth"]` เป็น `true` วิธีตรวจสอบสิทธิ์จะมีคำสั่งลงชื่อเข้าใช้
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "_meta": { "terminal-auth": { "command": "opencode", "args": ["auth", "login"], "label": "OpenCode Login" } }
+}
+```
+
+## การแก้ปัญหา
+
+`opencode acp` รอข้อความ ACP บน stdin จึงดูเหมือนค้างเมื่อคุณรันในเทอร์มินัลโดยตรง ให้เริ่มจาก
+ไคลเอนต์ ACP แทน
+
+หากไคลเอนต์รายงานว่าโปรเซสออกหรือเขียนเอาต์พุตโปรโตคอลที่ไม่ถูกต้อง ให้เพิ่ม `--print-logs` ก่อน `acp` ใน
+อาร์กิวเมนต์ของไคลเอนต์ OpenCode จะเขียนบันทึก ACP และเซิร์ฟเวอร์ส่วนตัวไปยัง stderr ส่วน stdout มีเฉพาะข้อความ ACP
+
+```bash
+opencode --print-logs acp
+```
+
+## เอกสารอ้างอิงโปรโตคอล
+
+ส่วนนี้สำหรับผู้เขียนไคลเอนต์ ACP ระบุส่วนของ ACP ที่ OpenCode รองรับและคีย์ `_meta` ที่
+OpenCode เพิ่ม ไคลเอนต์ที่ไม่รู้จักคีย์เหล่านี้สามารถเพิกเฉยได้
+[เอกสาร ACP](https://agentclientprotocol.com) กำหนดข้อความ
+
+### การรับส่ง
+
+ไคลเอนต์เริ่ม `opencode acp` เป็นโปรเซสลูก ทั้งสองแลกเปลี่ยนข้อความ JSON-RPC แบบขึ้นบรรทัดใหม่ผ่าน stdin และ
+stdout โดยใช้ ACP โปรโตคอลเวอร์ชัน 1
+
+`opencode acp` เริ่มเซิร์ฟเวอร์ OpenCode ส่วนตัวเพื่อใช้เอง ไม่เชื่อมต่อกับบริการเบื้องหลังที่ใช้ร่วมกัน
+และไม่เปิดพอร์ตเครือข่ายสำหรับ ACP หนึ่งโปรเซสให้บริการได้หลายเซสชัน ACP จะออกเมื่อไคลเอนต์ปิด
+stdin
+
+### ความสามารถ
+
+การตอบกลับ `initialize` ของ OpenCode มีความสามารถของเอเจนต์เหล่านี้
+
+```json
+{
+  "loadSession": true,
+  "mcpCapabilities": { "http": true, "sse": false },
+  "promptCapabilities": { "embeddedContext": true, "image": true },
+  "sessionCapabilities": {
+    "additionalDirectories": {},
+    "close": {},
+    "delete": {},
+    "fork": {},
+    "list": {},
+    "resume": {}
+  }
+}
+```
+
+OpenCode อ่านความสามารถของไคลเอนต์เหล่านี้
+
+| ความสามารถ                             | ผล                                                         |
+| -------------------------------------- | -------------------------------------------------------------- |
+| `auth.terminal` ตั้งเป็น `true`          | วิธีตรวจสอบสิทธิ์เป็น[วิธีแบบเทอร์มินัล](#authentication)  |
+| `elicitation.form`                     | OpenCode ถาม[คำถาม](#questions)เป็นแบบฟอร์ม                |
+| `session.compaction`                   | OpenCode รายงาน[การบีบอัด](#compaction)ด้วยอัปเดตของ ACP |
+| `_meta["terminal-auth"]` ตั้งเป็น `true` | วิธีตรวจสอบสิทธิ์มี[คำสั่งลงชื่อเข้าใช้](#authentication) |
+
+### เซสชัน
+
+ไคลเอนต์ตั้งไดเรกทอรีทำงานเมื่อสร้างเซสชัน OpenCode ใช้การกำหนดค่าของไดเรกทอรีนั้น
+รวมถึงโมเดล เอเจนต์ คำสั่ง สกิล คำแนะนำ ปลั๊กอิน และเซิร์ฟเวอร์ MCP
+
+- `cwd` ต้องเป็นพาธสัมบูรณ์ OpenCode ปฏิเสธ `cwd` สัมพัทธ์ด้วยข้อผิดพลาดพารามิเตอร์ไม่ถูกต้อง
+- `session/load` ส่งข้อความที่บันทึกไว้กลับมาอีกครั้ง ส่วน `session/resume` และ `session/fork` ไม่ส่งข้อความเหล่านั้น
+- หากต้องการโหลด ทำต่อ หรือแยกเซสชัน ไคลเอนต์ต้องส่งไดเรกทอรีของเซสชันนั้นเป็น `cwd` หรือไดเรกทอรีอื่นของ
+  โปรเจกต์เดียวกัน เช่นเช็กเอาต์หลักของเซสชันที่ย้ายเข้าเวิร์กทรี OpenCode ปฏิเสธ `cwd`
+  อื่นด้วยข้อผิดพลาดพารามิเตอร์ไม่ถูกต้องที่ `data.directory` เป็นไดเรกทอรีของเซสชัน
+- `session/list` คืนสูงสุด 100 เซสชันต่อหน้า รับตัวกรอง `cwd` และ `cursor` เซสชันซับเอเจนต์
+  แต่ละรายการมี `_meta["opencode/child-session"]` พร้อม `id`, `parentID` และ `title`
+- เมื่อ OpenCode เปลี่ยนชื่อเซสชัน เช่นหลังสร้างชื่อเรื่อง จะส่ง `session_info_update` พร้อม `title`
+  ใหม่
+- `session/close` ขัดจังหวะงานที่ทำงานอยู่และแยกเซสชันออกจากโปรเซส ACP OpenCode ยังเก็บเซสชัน
+  ที่บันทึกไว้
+- `session/delete` จบพรอมต์ที่ทำงานอยู่เหมือน `session/cancel` แล้วนำเซสชันออก การลบเซสชันที่
+  ไม่มีอยู่จะสำเร็จ
+- เซสชันรันพรอมต์ทีละหนึ่ง OpenCode คืนข้อผิดพลาดสำหรับ `session/prompt` ครั้งที่สองขณะแรก
+  ทำงานอยู่
+- หากพรอมต์ล้มเหลว `data` ของข้อผิดพลาดมี `errorName` ของความล้มเหลว และยังมี `status` กับ `retryAfterMs`
+  เมื่อผู้ให้บริการส่งมา
+
+### การยกเลิก
+
+`session/cancel` จบพรอมต์ที่ทำงานอยู่ด้วย `stopReason: "cancelled"` และ `$/cancel_request` สำหรับคำขอพรอมต์ก็
+ทำเช่นเดียวกัน OpenCode ปฏิเสธคำขอสิทธิ์ที่รอดำเนินการ และรายงานการเรียกเครื่องมือที่ไม่เสร็จหลังการยกเลิกเป็น
+`failed`
+
+### ไดเรกทอรีเพิ่มเติม
+
+ไคลเอนต์ส่ง `additionalDirectories` ใน `session/new`, `session/load`, `session/resume` และ `session/fork` ได้
+
+```json
+{ "cwd": "/work/app", "additionalDirectories": ["/work/shared"], "mcpServers": [] }
+```
+
+- แต่ละรายการต้องเป็นพาธสัมบูรณ์ที่ไม่มี `*` หรือ `?`
+- OpenCode อนุญาตการเข้าถึงไดเรกทอรีภายนอกภายในแต่ละราก กฎสิทธิ์ read, edit และ shell ยังมีผล
+- รายการของแต่ละคำขอแทนที่รายการก่อนหน้าของเซสชัน ตามที่
+  [RFD ไดเรกทอรีเพิ่มเติม](https://agentclientprotocol.com/rfds/additional-directories)กำหนด
+- OpenCode เก็บสิทธิ์บนเซสชัน สิทธิ์จึงมีผลเมื่อไคลเอนต์ OpenCode อื่นใช้เซสชันด้วย เซสชันลูก
+  คัดลอกสิทธิ์เมื่อ OpenCode สร้าง
+
+`session/list` คืนรายการที่เก็บไว้ของแต่ละเซสชันใน `additionalDirectories`
+
+### ตัวเลือกการกำหนดค่า
+
+เซสชันใหม่ใช้โมเดลเริ่มต้นและเอเจนต์หลักของไดเรกทอรี การตอบกลับ `session/new`, `session/load`,
+`session/resume` และ `session/fork` มีตัวเลือกการกำหนดค่าเหล่านี้
+
+| ID       | หมวด        | ค่า                                                                        |
+| -------- | --------------- | ----------------------------------------------------------------------------- |
+| `model`  | `model`         | โมเดลที่เปิดใช้งานเป็น `provider/model` ส่วนต่อท้าย `/variant` ยังตั้งระดับด้วย |
+| `effort` | `thought_level` | ตัวเลือกย่อยของโมเดลและ `default` แสดงเฉพาะเมื่อโมเดลมีตัวเลือกย่อย |
+| `mode`   | `mode`          | เอเจนต์หลักที่มองเห็น                                                       |
+
+ตัวเลือก `model` แต่ละตัวตั้งชื่อตามชื่อที่แสดงของผู้ให้บริการและชื่อโมเดล เช่น
+`Anthropic / Claude Sonnet 5.5` `session/set_config_option` รับค่าสตริง
+
+```json
+{ "sessionId": "ses_123", "configId": "model", "value": "anthropic/claude-sonnet-5-5" }
+```
+
+`session/set_mode` ตั้งเอเจนต์ด้วย OpenCode ส่ง `config_option_update` เมื่อโมเดลหรือเอเจนต์ที่ใช้ได้
+เปลี่ยน และยังส่งเมื่อไคลเอนต์อื่นเปลี่ยนโมเดลหรือเอเจนต์ของเซสชัน
+
+### เนื้อหาพรอมต์
+
+พรอมต์มีข้อความ ภาพ ทรัพยากรฝัง และลิงก์ทรัพยากรได้ OpenCode เพิกเฉยบล็อกเสียง และจัดการ
+บล็อกอื่นเช่นนี้
+
+| บล็อก                                                 | สิ่งที่ OpenCode ทำ                                                                     |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `text`                                                | ส่งให้โมเดล                                                                 |
+| `text` ที่มี audience `assistant` เท่านั้น                 | ส่งให้โมเดลเป็นบริบทแยก นอกข้อความของผู้ใช้                 |
+| `text` ที่มี audience `user` เท่านั้น                      | ไม่ใส่ในอินพุตของโมเดล                                                    |
+| `image` ที่มี `data`                                   | แนบกับพรอมต์                                                             |
+| `image` ที่มีเฉพาะ `uri`                               | จัดการเป็นลิงก์ทรัพยากร                                                         |
+| `resource` ที่มี `text`                                | แทรกข้อความแบบอินไลน์หลังพาธหรือ URI ของทรัพยากร                                     |
+| `resource` ที่มี `blob`                                | แนบ หากไม่มี `mimeType` จะอนุมานจากชื่อไฟล์ของ URI                 |
+| `resource_link` ไปยัง URI `file:`                      | แนบไฟล์ ส่งลิงก์ Markdown แทนหากไฟล์หายหรืออ่านไม่ได้ |
+| `resource_link` ไปยัง URI `zed://` ที่มีคำค้น `path` | แนบไฟล์ที่ `path`                                                           |
+| `resource_link` ไปยัง URI อื่น                        | ส่งลิงก์ Markdown เช่น `[spec](https://example.com/spec.md)`                   |
+
+audience มาจาก `annotations` ของบล็อก OpenCode ปฏิเสธบล็อก `image` ที่ไม่มีทั้ง `data` และ `uri`
+บล็อกนี้เป็นบริบทสำหรับโมเดลเท่านั้น
+
+```json
+{ "type": "text", "text": "Open file: src/app.ts", "annotations": { "audience": ["assistant"] } }
+```
+
+### คำสั่ง
+
+หลัง `session/new`, `session/load`, `session/resume` หรือ `session/fork` OpenCode ส่ง `available_commands_update`
+พร้อมคำสั่งของไดเรกทอรี คำสั่ง `compact` ในตัว และสกิลของไดเรกทอรี จะส่งอัปเดตอีกครั้ง
+เมื่อคำสั่งหรือสกิลเปลี่ยน
+
+```json
+{
+  "sessionUpdate": "available_commands_update",
+  "availableCommands": [{ "name": "compact", "description": "Compact the session" }]
+}
+```
+
+หากพรอมต์ขึ้นต้นด้วย `/` และชื่อคำสั่งที่ใช้ได้ OpenCode จะรันคำสั่งนั้นโดยใช้ข้อความที่เหลือ
+เป็นอาร์กิวเมนต์ หากขึ้นต้นด้วย `/` และ ID ของสกิล OpenCode จะส่งพรอมต์พร้อมแนบสกิลนั้น OpenCode ส่ง
+ข้อความอื่นที่ขึ้นต้นด้วย `/` เป็นพรอมต์ปกติ `/compact` รัน[การบีบอัด](/compaction) สกิล
+ที่ ID ตรงกับคำสั่งจะไม่แสดง
+
+หากคำสั่งล้มเหลว พรอมต์จะล้มเหลวด้วยข้อความของคำสั่งเอง เช่นวิธีใช้ และ `data.service` เป็น
+`command`
+
+### เซิร์ฟเวอร์ MCP
+
+ไคลเอนต์ส่งเซิร์ฟเวอร์ MCP แบบ stdio และ HTTP ใน `session/new`, `session/load`, `session/resume` และ `session/fork` ได้
+OpenCode เพิ่มในไดเรกทอรีของเซสชันตลอดอายุโปรเซส `opencode acp` เซสชันอื่นในไดเรกทอรีนั้น
+จึงใช้ได้ หาก OpenCode ถอนไดเรกทอรีที่ว่าง จะเพิ่มอีกครั้งก่อนพรอมต์ถัดไปของเซสชัน
+OpenCode ส่งเฮดเดอร์ HTTP ผ่านและไม่ใช้ OAuth สำหรับเซิร์ฟเวอร์เหล่านี้ ไม่ประกาศ
+MCP ผ่าน SSE และไม่รองรับ MCP ผ่าน ACP
+
+| กรณี                             | ลักษณะการทำงาน                                                           |
+| -------------------------------- | ------------------------------------------------------------------ |
+| ชื่อเดียวกับเซิร์ฟเวอร์ที่กำหนดค่าไว้ | เซิร์ฟเวอร์ของไคลเอนต์แทนที่เซิร์ฟเวอร์ที่กำหนดในไดเรกทอรีนั้น |
+| [นโยบาย](/policies)            | กฎ `integration.use` ยังมีผล                               |
+
+```json
+{ "type": "http", "name": "docs", "url": "https://mcp.example.com", "headers": [] }
+```
+
+### สิทธิ์
+
+คำขอสิทธิ์เสนอสามตัวเลือก
+
+```json
+[
+  { "optionId": "once", "kind": "allow_once", "name": "Allow once" },
+  { "optionId": "always", "kind": "allow_always", "name": "Always allow" },
+  { "optionId": "reject", "kind": "reject_once", "name": "Reject" }
+]
+```
+
+เมื่อคำขอเปลี่ยนไฟล์ OpenCode จะรวมเนื้อหา `diff` หากสร้างตัวอย่างการเปลี่ยนแปลงได้
+
+### คำถาม
+
+หากไคลเอนต์ประกาศ `elicitation.form` OpenCode จะถามคำถามด้วย `elicitation/create` ในโหมดฟอร์ม คำขอ
+มี `toolCallId` เมื่อ OpenCode ส่งการเรียกเครื่องมือนั้นเป็น `session/update` สำหรับเซสชันนี้
+
+```json
+{
+  "mode": "form",
+  "sessionId": "ses_123",
+  "toolCallId": "call_1",
+  "message": "Which package manager?",
+  "requestedSchema": {
+    "type": "object",
+    "properties": { "pm": { "type": "string", "oneOf": [{ "const": "bun", "title": "Bun" }] } },
+    "required": ["pm"]
+  }
+}
+```
+
+- OpenCode จะไม่ส่งฟอร์มที่อาจขอข้อมูลลับ แต่ถ้าเป็นคำถามแบบมีตัวเลือกที่ดูเหมือนขอข้อมูลลับ เช่น "Which API token should I use?" ระบบยังส่งคำถามให้ โดยไม่มีช่องให้พิมพ์คำตอบ
+- หากฟิลด์ให้พิมพ์คำตอบนอกเหนือจากตัวเลือกที่มีให้ schema จะเพิ่มพร็อพเพอร์ตี `<key>_custom` ชนิดสตริงที่ไม่บังคับ
+  ถ้าเลือกได้ข้อเดียว ข้อความที่พิมพ์และไม่ใช่สตริงว่างจะแทนที่ตัวเลือกที่เลือกไว้ ถ้าเลือกได้หลายข้อ OpenCode จะเพิ่มคำตอบที่พิมพ์เข้าไปในรายการที่เลือก
+- หากผู้ใช้ปฏิเสธหรือยกเลิกฟอร์ม OpenCode จะยกเลิกคำถาม
+
+หาก OpenCode แสดงคำถามไม่ได้ จะยกเลิกคำถามและบอกโมเดลให้ดำเนินต่อโดยไม่มีคำตอบ
+
+### การบีบอัด
+
+หากไคลเอนต์ประกาศ `session.compaction` OpenCode จะรายงานการบีบอัดด้วยอัปเดต `compaction_update` และ
+`compaction_summary_chunk` จาก RFD [session compaction](https://agentclientprotocol.com/rfds/session-compaction)
+ของ ACP ซึ่งอยู่ใน Preview เมื่อไคลเอนต์โหลดเซสชัน OpenCode จะเล่นการบีบอัดที่เสร็จหรือล้มเหลวแต่ละครั้งเป็นการอัปเดตเดียว
+
+```json
+{
+  "sessionUpdate": "compaction_update",
+  "compactionId": "msg_123",
+  "status": "completed",
+  "summary": [{ "type": "text", "text": "..." }]
+}
+```
+
+ไคลเอนต์อื่นได้รับ[เครื่องหมายการบีบอัด](#compaction-marker)แทน การบีบอัดของเซสชันลูกก็เช่นกัน
+
+### การใช้งาน
+
+การตอบกลับพรอมต์มี `usage` จาก RFD
+[end-turn usage](https://agentclientprotocol.com/rfds/end-turn-token-usage) ซึ่งเป็นฉบับร่าง `usage` รวมการเรียกโมเดลของพรอมต์ในเซสชันนี้
+ไม่รวมเซสชันลูก
+
+```json
+{ "stopReason": "end_turn", "usage": { "inputTokens": 1200, "outputTokens": 340, "totalTokens": 1540 }, "_meta": {} }
+```
+
+ก่อนการตอบกลับ OpenCode ส่ง `usage_update` จาก RFD
+[session usage](https://agentclientprotocol.com/rfds/session-usage) ส่งเฉพาะเมื่อพรอมต์ใช้โทเคนและ
+OpenCode รู้ขนาดบริบทของโมเดล `cost` คือค่าใช้จ่ายรวมเป็น USD ของเซสชันและเซสชันลูก
+
+```json
+{ "sessionUpdate": "usage_update", "used": 1540, "size": 200000, "cost": { "amount": 0.012, "currency": "USD" } }
+```
+
+### เซสชันลูก
+
+ขณะพรอมต์ทำงาน OpenCode ส่งอัปเดตจากเซสชันลูกเป็นการแจ้งเตือน `session/update` บนเซสชันของพรอมต์
+แต่ละอัปเดตมี `_meta["opencode/child-session"]` OpenCode เติมคำนำหน้า ID การเรียกเครื่องมือด้วย
+`<childSessionId>:` และเติมชื่อการเรียกเครื่องมือด้วยชื่อเซสชันลูกหากมี
+
+```json
+{
+  "sessionUpdate": "tool_call",
+  "toolCallId": "ses_child:call_1",
+  "title": "Explore the codebase: src/app.ts",
+  "_meta": {
+    "opencode/child-session": { "id": "ses_child", "parentID": "ses_123", "depth": 1, "title": "Explore the codebase" }
+  }
+}
+```
+
+| ฟิลด์      | ชนิด     | คำอธิบาย                                                                            |
+| ---------- | -------- | -------------------------------------------------------------------------------------- |
+| `id`       | `string` | ID ของเซสชันลูก                                                                |
+| `parentID` | `string` | ID ของเซสชันแม่ของเซสชันลูก                                          |
+| `depth`    | `number` | 1 สำหรับลูกของเซสชันของพรอมต์ 2 สำหรับลูกของเซสชันลูกนั้น และต่อไป |
+| `title`    | `string` | ชื่อเซสชันลูก OpenCode ละเมื่อเซสชันลูกไม่มีชื่อ      |
+
+คำขอสิทธิ์จากเซสชันลูกมีคีย์เดียวกันบน `toolCall._meta` หลังพรอมต์จบ OpenCode หยุด
+ส่งอัปเดตเซสชันลูก แต่คำขอสิทธิ์และคำถามจากเซสชันลูกยังถึงไคลเอนต์
+
+### สถานะการลองใหม่
+
+เมื่อการเรียกโมเดลล้มเหลวและ OpenCode กำหนดเวลาลองใหม่ จะส่ง `session_info_update` พร้อม `_meta["opencode/retry"]`
+เมื่อการลองใหม่เริ่ม OpenCode ส่ง `"opencode/retry": null` ให้ล้างสถานะการลองใหม่เมื่อการตอบกลับพรอมต์มาถึง
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": {
+    "opencode/retry": {
+      "attempt": 1,
+      "nextRetryAt": "2026-10-02T12:00:05.000Z",
+      "error": { "type": "provider.rate-limit", "message": "Rate limit exceeded", "status": 429 }
+    }
+  }
+}
+```
+
+| ฟิลด์         | ชนิด     | คำอธิบาย                                                                                |
+| ------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `attempt`     | `number` | จำนวนครั้งที่ลองใหม่                                                                  |
+| `nextRetryAt` | `string` | เวลาของครั้งถัดไป ในรูปแบบ ISO 8601                                          |
+| `error`       | `object` | มี `type` และ `message` และมี `status` กับ `response.body` หากผู้ให้บริการส่งมา |
+
+### เครื่องหมายการบีบอัด
+
+หากไคลเอนต์ไม่ประกาศ `session.compaction` OpenCode จะรายงานความคืบหน้าการบีบอัดเป็น `session_info_update` พร้อม
+`_meta["opencode/compaction"]` OpenCode ใช้เครื่องหมายนี้เสมอสำหรับการบีบอัดของเซสชันลูก
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": { "opencode/compaction": { "status": "started", "messageId": "msg_123", "reason": "auto" } }
+}
+```
+
+| ฟิลด์       | ชนิด     | คำอธิบาย                                                                          |
+| ----------- | -------- | ------------------------------------------------------------------------------------ |
+| `status`    | `string` | `started`, `completed` หรือ `failed` การบีบอัดที่ถูกยกเลิกเป็น `failed`             |
+| `messageId` | `string` | จับคู่จุดเริ่มกับการจบของการบีบอัด ให้ถือเป็นคีย์ทึบ                  |
+| `reason`    | `string` | `auto` หรือ `manual`                                                                  |
+| `error`     | `object` | มีเมื่อ `status` เป็น `failed` รูปร่างเดียวกับ `error` ของ[การลองใหม่](#retry-status) |
+
+เครื่องหมายนี้ไม่มีข้อความสรุป การบีบอัดอัตโนมัติอาจล้มเหลวโดยไม่มีเครื่องหมาย `started` เมื่อไคลเอนต์โหลดเซสชัน OpenCode จะส่งเครื่องหมายย้อนหลังหนึ่งรายการต่อการบีบอัดแต่ละครั้งที่สำเร็จหรือล้มเหลว

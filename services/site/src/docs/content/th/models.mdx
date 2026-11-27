@@ -1,0 +1,588 @@
+---
+title: "โมเดล"
+description: "เลือกโมเดลสำหรับแต่ละเซสชันหรือการรัน ตั้งโมเดลเริ่มต้น และกำหนดตัวเลือกย่อยของโมเดล การให้เหตุผล พรอมต์แคช และโมเดลในเครื่อง"
+---
+
+เลือกโมเดลสำหรับเซสชันปัจจุบันด้วย `/models`
+
+```text
+/models
+```
+
+OpenCode แสดงรายการโมเดลจาก [models.dev](https://models.dev) การเชื่อมต่อผู้ให้บริการ และการกำหนดค่าของคุณ ตัวเลือก
+จะแสดงเฉพาะโมเดลที่เปิดใช้งานและผู้ให้บริการพร้อมใช้ในโปรเจกต์ปัจจุบัน เชื่อมต่อผู้ให้บริการใน
+[ผู้ให้บริการ](/providers)
+
+## การเลือก
+
+เลือกจาก `/models` แทนการเดาผู้ให้บริการหรือ ID โมเดล ตัวเลือกมีผลกับเซสชันปัจจุบัน
+และไม่เปลี่ยนการกำหนดค่าของคุณ
+
+```text
+anthropic/claude-sonnet-5-5
+```
+
+ความพร้อมใช้งานขึ้นกับโปรเจกต์
+
+- โมเดลต้องเปิดใช้งาน
+- ผู้ให้บริการต้องพร้อมใช้ในโปรเจกต์ปัจจุบัน
+- ข้อมูลรับรองและการกำหนดค่าจากโปรเจกต์อื่นไม่ถูกส่งต่อโดยอัตโนมัติ
+
+## การรัน
+
+ใช้ `--model` เพื่อเลือกโมเดลสำหรับการรันบรรทัดคำสั่งครั้งเดียวโดยไม่เปลี่ยนค่าเริ่มต้นที่กำหนดไว้
+
+```bash
+opencode run --model anthropic/claude-sonnet-5-5 "Refactor parseToken"
+```
+
+เอเจนต์และคำสั่งยังเลือกโมเดลของตัวเองได้ ดู[เอเจนต์](/agents)และ[คำสั่ง](/commands)
+
+## ค่าเริ่มต้น
+
+ตั้ง `model` ใน `opencode.json` หรือ `opencode.jsonc` เพื่อเลือกค่าเริ่มต้นสำหรับงานใหม่
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-5-5",
+}
+```
+
+โมเดลที่กำหนดค่าจะเป็นค่าเริ่มต้นของแคตตาล็อกเมื่อเปิดใช้งานและผู้ให้บริการพร้อมใช้งาน มิฉะนั้น OpenCode
+จะถอยไปใช้โมเดลที่รองรับใหม่สุดที่ใช้ได้
+
+- โมเดลที่เลือกไว้ในเซสชันแล้วมีลำดับเหนือกว่าค่าเริ่มต้นที่กำหนด
+- การสลับโมเดลของเซสชันไม่เขียนไฟล์กำหนดค่าใหม่
+- ปัจจุบัน `model` ระดับรากจะเก็บเฉพาะผู้ให้บริการและโมเดลเริ่มต้น ไม่เก็บตัวเลือกย่อย
+
+ดู[การกำหนดค่า](/config)สำหรับตำแหน่งการกำหนดค่าและลำดับความสำคัญ
+
+## โมเดลฟรี
+
+ตั้ง `OPENCODE_DISABLE_FREE_MODELS=1` (หรือ `true`) ในโปรเซสเซิร์ฟเวอร์เพื่อซ่อน[โมเดลฟรีของ OpenCode](/console/models#free-models)
+
+```bash
+OPENCODE_DISABLE_FREE_MODELS=1 opencode serve
+```
+
+สำหรับเซิร์ฟเวอร์เบื้องหลังที่ใช้ร่วมกัน
+
+```bash
+opencode service set env OPENCODE_DISABLE_FREE_MODELS 1
+```
+
+ฟรีหมายถึงโมเดล `opencode` หรือ `opencode-go` ที่ไม่มีราคาอินพุต โมเดลเหล่านี้จะหายจากแคตตาล็อกและค่าเริ่มต้น
+การเลือกอย่างชัดเจนจะล้มเหลวด้วย `Model unavailable` เมื่อไม่ได้ลงชื่อเข้าใช้ ผู้ให้บริการ `opencode` จะไม่มีจนกว่าคุณจะเชื่อมต่อ
+บัญชี OpenCode Console หรือตั้ง `OPENCODE_API_KEY` ซึ่งคืนโมเดลแบบเสียค่าใช้จ่าย
+
+หากต้องการบล็อกโมเดลฟรีสำหรับทุกคนในองค์กร ให้ใช้[นโยบาย](/enterprise#block-free-models)แทน
+
+## ตัวเลือกย่อยของโมเดล
+
+ตัวเลือกย่อยคือชุดการตั้งค่าที่ตั้งชื่อไว้สำหรับโมเดลหนึ่ง ๆ มักใช้เลือกระดับการให้เหตุผลหรือกำหนดจำนวนโทเคน เติม `#variant` เมื่อเลือกโมเดลสำหรับการรัน เซสชัน เอเจนต์ หรือคำสั่ง
+
+```bash
+opencode run --model openai/gpt-6.1-sol#high "Review this migration plan"
+```
+
+ชื่อตัวเลือกย่อยมาจากข้อมูลเมตาล่าสุดในแคตตาล็อกของโมเดลที่เลือก ไม่ใช่ทุกโมเดลจะมี `low`, `high` และ `max` หากระบุชื่อที่ระบบไม่รู้จัก ระบบจะเลือกโมเดลไม่ได้และแจ้งข้อผิดพลาด
+
+ใช้อาร์เรย์ `variants` ของโมเดลเพื่อเพิ่มตัวเลือกย่อยใหม่หรือแทนที่ตัวเลือกในแคตตาล็อกที่มี ID เดียวกัน
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "settings": {
+            "reasoningEffort": "medium",
+          },
+          "variants": [
+            {
+              "id": "fast",
+              "settings": {
+                "reasoningEffort": "low",
+              },
+            },
+            {
+              "id": "deep",
+              "settings": {
+                "reasoningEffort": "high",
+                "reasoningSummary": "auto",
+              },
+            },
+          ],
+        },
+      },
+    },
+  },
+}
+```
+
+แต่ละตัวเลือกย่อยระบุ `settings`, `headers` และ `body` ได้ ระบบจะใช้ค่าเหล่านี้หลังจากใช้ค่าของผู้ให้บริการและโมเดล
+
+หากต้องการแทนที่ตัวเลือกย่อยสำหรับการให้เหตุผลของโมเดล ให้ระบุตัวควบคุมการให้เหตุผลใน `capabilities.reasoning` ตามรูปแบบ v2 ของ [models.dev](https://models.dev) OpenCode จะสร้างตัวเลือกย่อยสำหรับแพ็กเกจของโมเดลตามข้อมูลนั้น
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "capabilities": {
+            "reasoning": {
+              "supported": true,
+              "effort": ["low", "medium", "high"],
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+| ฟิลด์       | จุดประสงค์                                                                    |
+| ----------- | -------------------------------------------------------------------------- |
+| `supported` | ระบุว่าโมเดลรองรับการให้เหตุผลหรือไม่ หากเป็น `false` หรือเป็น `true` โดยไม่ระบุตัวควบคุม ระบบจะไม่เพิ่มตัวเลือกย่อย |
+| `toggle`    | เพิ่มตัวเลือกย่อย `none` เพื่อปิดการให้เหตุผล |
+| `effort`    | ระดับการให้เหตุผลที่ให้เลือก `default` จะใช้ค่าเริ่มต้นของผู้ให้บริการและไม่เพิ่มตัวเลือกย่อย |
+| `budget`    | จำนวนโทเคนสำหรับการคิด ไม่จำเป็นต้องระบุ ระบบจะข้าม `min` และ `max` เมื่อตั้ง `effort` |
+
+ตัวเลือกย่อยที่ระบุใน `variants` จะแทนที่ตัวเลือกย่อยที่สร้างจาก `capabilities.reasoning`
+
+## ตัวเลือก
+
+รายการผู้ให้บริการและโมเดลปรับแต่งคำขอได้ด้วย `settings`, `headers` และ `body`
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "settings": {
+        "baseURL": "https://api.example.com/v1",
+      },
+      "headers": {
+        "X-Team": "platform",
+      },
+      "models": {
+        "gpt-6.1-sol": {
+          "settings": {
+            "reasoningEffort": "high",
+          },
+          "body": {
+            "store": false,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+| ฟิลด์      | จุดประสงค์                                                            |
+| ---------- | ------------------------------------------------------------------ |
+| `settings` | ตัวเลือกแพ็กเกจผู้ให้บริการเช่น `baseURL` หรือ `reasoningEffort`  |
+| `headers`  | เฮดเดอร์คำขอ HTTP เพิ่มเติม                                 |
+| `body`     | ฟิลด์บอดีคำขอเฉพาะผู้ให้บริการ                            |
+
+OpenCode ใช้ค่าของผู้ให้บริการก่อน ตามด้วยค่าของโมเดล แล้วจึงใช้ค่าจากตัวเลือกย่อยที่เลือก
+
+- ออบเจกต์ `settings` และ `body` ที่ซ้อนกันจะถูกวม
+- อาร์เรย์และค่าสเกลาร์ที่โหลดทีหลังจะแทนที่ค่าเดิม
+- ชื่อเฮดเดอร์จับคู่โดยไม่แยกตัวพิมพ์เล็กใหญ่
+- ตัวเลือกขึ้นกับผู้ให้บริการ และแพ็กเกจผู้ให้บริการอื่นอาจเพิกเฉยหรือปฏิเสธ
+
+## Alias
+
+ใช้ `modelID` เพื่อให้โมเดล API มี ID แคตตาล็อกที่เป็นมิตรขึ้น
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/coding-default",
+  "providers": {
+    "openai": {
+      "models": {
+        "coding-default": {
+          "modelID": "gpt-6.1-sol",
+          "name": "Coding default",
+          "capabilities": {
+            "tools": true,
+            "freeform": ["text", "lark"],
+            "input": ["text", "image"],
+            "output": ["text"],
+          },
+          "limit": {
+            "context": 200000,
+            "output": 32000,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+ในที่นี้ `openai/coding-default` เป็นการอ้างอิงที่เลือกได้ และ `gpt-6.1-sol` ถูกส่งไปยังผู้ให้บริการ สำหรับโมเดลที่ยังไม่
+อยู่ในแคตตาล็อก OpenCode จะถือว่า
+
+- รองรับเครื่องมือ JSON อินพุตข้อความและภาพ และเอาต์พุตข้อความ ไม่มีอินพุตเครื่องมือ freeform เว้นแต่ `capabilities.freeform` ระบุรูปแบบ
+- ขีดจำกัดบริบท 200,000 โทเคน และขีดจำกัดเอาต์พุต 32,000 โทเคน
+- ขีดจำกัดอินพุตที่ไม่ได้ระบุ
+
+OpenCode รู้จัก `text`, `regex` และ `lark` ชื่อรูปแบบอื่นจาก models.dev จะถูกเพิกเฉยโดยไม่ตัดโมเดลหรือเครื่องมือออก หากพร็อกซี
+หน้าโมเดลในแคตตาล็อกปฏิเสธเครื่องมือ freeform ให้ตั้ง `capabilities.freeform` เป็น `[]` ในโมเดลนั้น
+
+ระบบใช้ค่าเหล่านี้เป็นค่าทดแทน ไม่ได้ตรวจพบความสามารถจริง หากทราบค่าที่ถูกต้อง ให้ระบุ `capabilities` และ `limit`
+ค่าที่ระบุจะแทนที่ค่าทดแทน เพิ่ม `disabled: true` เพื่อซ่อนโมเดลจากแคตตาล็อกโมเดลที่เลือกใช้ได้
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "legacy-model": {
+          "disabled": true,
+        },
+      },
+    },
+  },
+}
+```
+
+## การให้เหตุผล
+
+สำหรับโมเดลที่เข้ากันได้กับ OpenAI ซึ่งสตรีมการให้เหตุผลในฟิลด์ข้อความผู้ช่วยกำหนดเอง ให้ตั้ง
+`compatibility.reasoningField`
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "local": {
+      "models": {
+        "reasoner": {
+          "compatibility": {
+            "reasoningField": "reasoning_content",
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+OpenCode รู้จัก `reasoning`, `reasoning_content` และ `reasoning_text` และรับสตริงเฉพาะผู้ให้บริการอื่นได้ด้วย
+อ่านการให้เหตุผลที่สตรีมจากฟิลด์นั้นและคืนฟิลด์เมื่อส่งข้อความผู้ช่วยก่อนหน้ากลับไปยัง
+โมเดล ดู[ความเข้ากันได้](#compatibility)สำหรับฟิลด์ `requireReasoning` ที่เกี่ยวข้อง
+
+## พรอมต์แคช
+
+OpenCode วางจุดหยุดพรอมต์แคชโดยอัตโนมัติในเส้นทางที่รู้ว่าต้องใช้ เช่น Anthropic เมื่อ
+โมเดล Claude ให้บริการผ่านพร็อกซีที่เข้ากันได้กับ OpenAI เช่น LiteLLM OpenCode บอกไม่ได้ว่าต้องใช้
+จุดหยุด `cache_control` แบบ Anthropic ให้ตั้ง `compatibility.cacheFormat` ในโมเดล Claude เหล่านั้น
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "litellm": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://litellm.example.com/v1" },
+      "models": {
+        "claude-sonnet-5-5": {
+          "compatibility": { "cacheFormat": "anthropic" },
+        },
+        "claude-opus-5-5": {
+          "compatibility": { "cacheFormat": "anthropic" },
+        },
+        // Other models on the same proxy cache automatically and need no setting.
+        "gpt-6.1-sol": {},
+      },
+    },
+  },
+}
+```
+
+OpenCode จะทำเครื่องหมายคำจำกัดความเครื่องมือสุดท้าย พรอมต์ระบบ และข้อความล่าสุดด้วย
+`cache_control: { "type": "ephemeral" }` ซึ่งใช้อายุแคชเริ่มต้นห้านาทีของเอนด์พอยต์ ใช้ `"alibaba"`
+สำหรับโมเดล Alibaba Model Studio ซึ่งรับเครื่องหมายเดียวกันแต่เพิกเฉยกับคำจำกัดความเครื่องมือ ให้ตั้ง
+`compatibility.cacheFormat` ในผู้ให้บริการแทนเมื่อทุกโมเดลที่ให้บริการรับรูปแบบเดียวกัน ดู
+[ความเข้ากันได้](#compatibility)สำหรับฟิลด์อื่น
+
+### อายุแคช
+
+OpenCode ไม่ส่งอายุแคชโดยค่าเริ่มต้น ผู้ให้บริการแต่ละรายจึงใช้ค่าเริ่มต้นของตัวเอง เช่นห้านาทีบน
+Anthropic ตั้ง `settings.cache.ttl` ในผู้ให้บริการหรือโมเดลเพื่อขออายุอื่น การตั้งค่าในโมเดลแทนที่
+การตั้งค่าในผู้ให้บริการ
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "anthropic": {
+      "settings": { "cache": { "ttl": "1h" } },
+      "models": {
+        "claude-haiku-5-5": { "settings": { "cache": { "ttl": "5m" } } },
+      },
+    },
+  },
+}
+```
+
+`ttl` รับตัวเลขและหน่วย: `ms`, `s`, `m`, `h` หรือ `d` เช่น `"5m"`, `"1h"` หรือ `"24h"` OpenCode ส่งตามที่
+ระบุ จึงควรใช้ค่าที่ผู้ให้บริการรับ
+
+| API | ที่อยู่อายุ |
+| --- | --- |
+| Anthropic Messages | `cache_control.ttl` ในแต่ละจุดแคช Anthropic รับ `"5m"` และ `"1h"` |
+| Bedrock Converse | `ttl` ในแต่ละ `cachePoint` โมเดล Claude เก่าที่แคชเพียงห้านาทีจะเพิกเฉย `"1h"` |
+| OpenAI Chat และ Responses | `"24h"` ไปที่ `prompt_cache_retention` ค่าอื่นไปที่ `prompt_cache_options.ttl` |
+
+ผู้ให้บริการที่แคชอัตโนมัติโดยไม่ใช้จุดแคช เช่น Gemini จะเพิกเฉย อายุที่ยาวขึ้นมักมีค่าเขียนสูงขึ้น:
+Anthropic คิดราคาอินพุต 2 เท่าสำหรับการเขียนแคชหนึ่งชั่วโมง และ 1.25 เท่าสำหรับห้านาที
+
+[การอุ่นเซสชัน](/warming)ใช้อายุนี้กำหนดเวลาคำขอด้วย `interval: "auto"` ได้
+
+## ความเข้ากันได้
+
+`compatibility` อธิบายลักษณะเฉพาะของคำขอและการตอบกลับของ API ที่โมเดลให้บริการผ่าน เช่นฟิลด์ใดนำ
+การให้เหตุผล หรือเอนด์พอยต์รับ `prompt_cache_key` หรือไม่ แต่ละโมเดลให้บริการผ่าน API เดียว และฟิลด์
+จะมีผลเมื่อ API นั้นอ่านเท่านั้น ฟิลด์อื่นถูกเพิกเฉย
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "local": {
+      "compatibility": { "streamUsage": false },
+      "models": {
+        "reasoner": {
+          "compatibility": { "reasoningField": "reasoning_content", "maxTokensField": "max_tokens" },
+        },
+      },
+    },
+  },
+}
+```
+
+`compatibility` ของผู้ให้บริการมีผลกับทุกโมเดลของผู้ให้บริการนั้น `compatibility` ของโมเดลเองจะแทนที่ทีละ
+ฟิลด์: OpenCode เริ่มจากค่าที่ [models.dev](https://models.dev) เผยแพร่สำหรับ API ของโมเดล (`reasoningField`,
+`maxTokensField` และ `mediaInput` รวมถึง `supportsEffortUpdates` และ `supportsSystemUpdates` เมื่อ models.dev ระบุว่า
+API รองรับ) แล้วใช้การกำหนดค่าของโมเดล ฟิลด์ที่ไม่ตั้งจะคงค่าเริ่มต้นในตัวของแพ็กเกจผู้ให้บริการหรือการตรวจพบ
+`supportsThinkingBlockBinding`, `supportsEffortUpdates` และ `supportsSystemUpdates` ใช้กับโมเดลเท่านั้น
+
+| ฟิลด์ | สิ่งที่ทำ | อ่านโดย | ค่าและค่าเริ่มต้น |
+| --- | --- | --- | --- |
+| `reasoningField` | ฟิลด์ข้อความผู้ช่วยที่นำการให้เหตุผล ตรวจก่อนเมื่ออ่านการให้เหตุผลที่สตรีม และใช้เมื่อส่งการให้เหตุผลก่อนหน้ากลับ | OpenAI Chat | ชื่อฟิลด์ใดก็ได้ยกเว้น `role`, `content`, `refusal` หรือ `tool_calls` หากไม่ตั้ง จะใช้ฟิลด์ที่เห็นในสตรีม มิฉะนั้น `reasoning_content` |
+| `requireReasoning` | ส่งฟิลด์การให้เหตุผลในทุกข้อความผู้ช่วยก่อนหน้า เป็นสตริงว่างเมื่อไม่มีการให้เหตุผล | OpenAI Chat | `true` หรือ `false` ค่าเริ่มต้นคือ `true` เมื่อตั้ง `reasoningField` หรือโมเดลเป็น DeepSeek มิฉะนั้น `false` |
+| `maxTokensField` | ฟิลด์ในบอดีสำหรับระบุขีดจำกัดโทเคนเอาต์พุต | OpenAI Chat | `max_completion_tokens` หรือ `max_tokens` หากไม่ตั้ง ระบบจะตรวจว่าผู้ให้บริการต้องใช้ `max_tokens` หรือไม่ เช่น DeepSeek, Moonshot, Together AI, Z.AI และ Cerebras กรณีอื่นจะใช้ `max_completion_tokens` |
+| `requireFinishReason` | ถือว่าสตรีมที่จบโดยไม่มี `finish_reason` เป็นข้อผิดพลาดการตอบกลับไม่สมบูรณ์ `false` ยอมรับว่าเสร็จแล้ว | OpenAI Chat | `true` หรือ `false` ค่าเริ่มต้น `true` |
+| `requireAssistantAfterTool` | แทรกข้อความผู้ช่วยระหว่างผลเครื่องมือกับข้อความผู้ใช้ถัดไป สำหรับเอนด์พอยต์ที่ปฏิเสธลำดับนั้น | OpenAI Chat | `true` หรือ `false` ค่าเริ่มต้นคือ `true` สำหรับ ID โมเดลตระกูล Mistral มิฉะนั้น `false` |
+| `supportsPromptCacheKey` | เอนด์พอยต์รับฟิลด์บอดี `prompt_cache_key` หรือไม่ | OpenAI Chat, OpenAI Responses, Mistral | `true` หรือ `false` OpenAI Chat ส่งคีย์เฉพาะเมื่อ `true` ซึ่งแพ็กเกจผู้ให้บริการบางตัวตั้งเป็นค่าเริ่มต้น API อื่นส่งเว้นแต่ `false` |
+| `streamUsage` | ขอข้อมูลการใช้โทเคนในสตรีมด้วย `stream_options.include_usage` | OpenAI Chat | `true` หรือ `false` ค่าเริ่มต้น `true` |
+| `cacheFormat` | ไวยากรณ์จุดแคชพรอมต์ที่เอนด์พอยต์รับ แทนที่การวางจุดหยุดอัตโนมัติของผู้ให้บริการ `alibaba` ข้ามคำจำกัดความเครื่องมือ | ทุก API ที่มีจุดแคชพรอมต์ รวมถึง OpenAI Chat, Anthropic Messages และ Bedrock Converse | `anthropic` หรือ `alibaba` หากไม่ตั้ง ใช้ค่าเริ่มต้นของผู้ให้บริการ ดู[พรอมต์แคช](#prompt-caching) |
+| `supportsThinkingBlockBinding` | ขอให้ API ทิ้งบล็อกการคิดที่บริบทก่อนหน้าเปลี่ยน แทนการปฏิเสธคำขอ | Anthropic Messages, Bedrock Converse | `true` หรือ `false` หากไม่ตั้ง จะตรวจพบ Claude 5.1 ขึ้นไป |
+| `supportsEffortUpdates` | ส่งการเปลี่ยนแปลงระดับการให้เหตุผลเป็นการอัปเดตต่อข้อความ ซึ่งคงพรอมต์แคช มิฉะนั้นระดับจะเปลี่ยนทั้งคำขอ | Anthropic Messages, OpenAI Responses | `true` หรือ `false` หากไม่ตั้ง จะตรวจพบ Claude Opus 5, Claude 5.1 ขึ้นไป และ GPT-6 ขึ้นไป |
+| `supportsSystemUpdates` | ส่งข้อความระบบที่เพิ่มกลางบทสนทนาเป็นข้อความระบบเนทีฟ มิฉะนั้นจะถูกห่อเป็นข้อความในเทิร์นผู้ใช้ถัดไป | Anthropic Messages | `true` หรือ `false` หากไม่ตั้ง จะตรวจพบ Claude Opus 4.8 และ Claude 5 ขึ้นไป |
+| `mediaInput` | ตำแหน่งของภาพและสื่ออื่นในคำขอการตัดสินใจ | System One | `assets` (ภาพที่อ้างจาก state), `state` (อินไลน์ใน state) หรือ `root` (รายการ `images`, `audio` และ `videos` ระดับบนสุด) หากไม่ตั้ง ใช้ค่าเริ่มต้นของผู้ให้บริการ |
+
+## ในเครื่อง
+
+OpenCode ค้นพบโมเดลจาก Ollama, LM Studio และ vLLM ที่ที่อยู่ในเครื่องเริ่มต้นโดยอัตโนมัติ คุณยัง
+กำหนดเซิร์ฟเวอร์ที่เข้ากันได้กับ OpenAI ได้ด้วยตัวเอง
+
+```text
+ollama/gemma3:4b
+lmstudio/google/gemma-4-26b-a4b
+vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct
+```
+
+### Ollama
+
+เมื่อ Ollama ฟังที่ `http://127.0.0.1:11434` ให้เลือกโมเดลที่ค้นพบด้วย ID ผู้ให้บริการ `ollama`
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "ollama/gemma3:4b",
+}
+```
+
+OpenCode รีเฟรชรายการในเบื้องหลังและอ่านความสามารถด้านบริบท ภาพ และการใช้เครื่องมือจาก Ollama
+โมเดล embedding อย่างเดียวจะถูกตัดออก
+
+สำหรับโฮสต์หรือพอร์ตอื่น ให้ตั้ง URL ที่เข้ากันได้กับ OpenAI ของ Ollama การค้นพบยังใช้ API Ollama เนทีฟที่คำนำหน้า
+พาธเดียวกัน
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "ollama": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:5678/v1",
+        "apiKey": "{env:OLLAMA_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+- ละ `apiKey` เมื่อเอนด์พอยต์ไม่ต้องใช้ bearer authentication
+- ปิดการค้นพบด้วย `"plugins": ["-opencode.provider.ollama"]`
+
+### LM Studio
+
+เมื่อเซิร์ฟเวอร์ LM Studio ที่ไม่ต้องตรวจสอบสิทธิ์อยู่ที่ `http://127.0.0.1:1234` ให้เลือกโมเดลที่ค้นพบด้วย ID ผู้ให้บริการ
+`lmstudio`
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-4-26b-a4b",
+}
+```
+
+OpenCode รีเฟรชรายการในเบื้องหลังและอ่านความสามารถด้านบริบท ภาพ และการใช้เครื่องมือจาก LM Studio
+โมเดล embedding จะถูกตัดออก
+
+สำหรับโฮสต์หรือพอร์ตอื่น ให้ตั้ง URL ที่เข้ากันได้กับ OpenAI โมเดลยังถูกค้นพบโดยอัตโนมัติ
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "lmstudio": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:5678/v1",
+        "apiKey": "{env:LMSTUDIO_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+- ละ `apiKey` เมื่อปิดการตรวจสอบสิทธิ์ของ LM Studio
+- ปิดการค้นพบด้วย `"plugins": ["-opencode.provider.lmstudio"]`
+
+### vLLM
+
+เมื่อ vLLM ฟังที่ `http://127.0.0.1:8000` ให้เลือกโมเดลที่ค้นพบด้วย ID ผู้ให้บริการ `vllm`
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct",
+}
+```
+
+OpenCode ตรวจ `/health` รีเฟรช `/v1/models` ในเบื้องหลัง ใช้ `max_model_len` ที่รายงานเป็นขีดจำกัด
+บริบท และรวมเฉพาะการ์ดโมเดลที่เป็นของ `vllm`
+
+โมเดลที่ค้นพบประกาศอินพุตและเอาต์พุตข้อความ แต่ไม่ใช่ภาพหรือเครื่องมือ vLLM เปิดการใช้เครื่องมือด้วยแฟล็ก
+เซิร์ฟเวอร์เช่น `--enable-auto-tool-choice` และ `--tool-call-parser` ซึ่งการค้นพบไม่ได้รายงาน
+
+สำหรับเอนด์พอยต์อื่นหรือเซิร์ฟเวอร์ที่ต้องตรวจสอบสิทธิ์ ให้ตั้ง URL ที่เข้ากันได้กับ OpenAI
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "vllm": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:9000/v1",
+        "apiKey": "{env:VLLM_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+- ละ `apiKey` เมื่อปิดการตรวจสอบสิทธิ์
+- ปิดการค้นพบด้วย `"plugins": ["-opencode.provider.vllm"]`
+- รองรับพร็อกซีที่มีคำนำหน้าพาธ ตัวอย่างเช่น `https://example.com/vllm/v1` ตรวจ `/vllm/health` และค้นพบ
+  `/vllm/v1/models`
+
+### แบบเข้ากันได้
+
+สำหรับเซิร์ฟเวอร์อื่นที่เข้ากันได้กับ OpenAI ให้กำหนดแพ็กเกจผู้ให้บริการ เอนด์พอยต์ และโมเดลอย่างน้อยหนึ่งตัว
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "local/coder",
+  "providers": {
+    "local": {
+      "name": "Local server",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "http://127.0.0.1:1234/v1",
+      },
+      "models": {
+        "coder": {
+          "modelID": "model-name-on-server",
+          "capabilities": {
+            "tools": true,
+            "input": ["text"],
+            "output": ["text"],
+          },
+          "limit": {
+            "context": 32768,
+            "output": 8192,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+ใช้ชื่อโมเดลจริงของเซิร์ฟเวอร์ ขีดจำกัด ชนิดอินพุตและเอาต์พุต และการรองรับเครื่องมือ OpenCode ตรวจไม่ได้ว่า
+ค่าทดแทนของโมเดลที่กำหนดเองถูกต้องหรือไม่ หากเอนด์พอยต์ต้องใช้คีย์ ให้เพิ่ม `apiKey` ใน `settings` ด้วยการแทนที่
+ตัวแปรสภาพแวดล้อมเช่น `"apiKey": "{env:LOCAL_API_KEY}"` อย่าคอมมิตความลับ
+
+## การอ้างอิง
+
+ตัวเลือกโมเดลใช้ `provider/model` พร้อม `#variant` ที่ไม่บังคับ
+
+```text
+openai/gpt-6.1-sol
+openai/gpt-6.1-sol#high
+openrouter/anthropic/claude-sonnet-5.5#high
+```
+
+| ส่วน       | กฎ                                                       |
+| ---------- | ---------------------------------------------------------- |
+| ผู้ให้บริการ   | สิ้นสุดที่ `/` แรก ต้องไม่มี `/` หรือ `#`          |
+| โมเดล      | มี `/` เพิ่มได้ ต้องไม่มี `#` |
+| ตัวเลือกย่อยของโมเดล | ตามหลัง `#` เมื่อระบุ |
+| ตัวพิมพ์     | ID ผู้ให้บริการและโมเดลแยกตัวพิมพ์เล็กใหญ่                 |
+
+ใช้ ID แคตตาล็อกแทนชื่อที่แสดงของผู้ให้บริการ ฟิลด์ `model` ระดับราก เอเจนต์ และคำสั่งรับรูปแบบสตริงข้างต้น
+หรือออบเจกต์ขยาย
+
+```jsonc
+{
+  "model": {
+    "providerID": "openrouter",
+    "model": "anthropic/claude-sonnet-5.5",
+  },
+}
+```
+
+รูปแบบขยายมีประโยชน์สำหรับการกำหนดค่าที่สร้างขึ้นหรือโดยโปรแกรม
+
+## ข้อควรระวัง
+
+จำกฎเหล่านี้เมื่อกำหนดค่าโมเดล
+
+```jsonc
+{
+  "model": "openai/gpt-6.1-sol"
+}
+```
+
+- ออบเจกต์ตัวเลือกใช้ `model` ส่วนรายการแคตตาล็อกของผู้ให้บริการใช้ `modelID` สำหรับ ID ที่ส่งไปยังผู้ให้บริการ
+- แม้รูปแบบการเลือกระดับรากจะรับตัวเลือกย่อย แต่ค่าเริ่มต้นของแคตตาล็อก V2 จะไม่เก็บตัวเลือกนั้น ให้ระบุตัวเลือกย่อยสำหรับเซสชัน การรัน เอเจนต์ หรือคำสั่งแทน
+- ตัวเลือกโมเดลขึ้นกับผู้ให้บริการ แพ็กเกจผู้ให้บริการอื่นอาจเพิกเฉยหรือปฏิเสธ
+- ข้อมูลแคตตาล็อก ข้อมูลรับรอง และการกำหนดค่าขึ้นกับตำแหน่ง โมเดลที่ใช้ได้ในโปรเจกต์หนึ่งอาจใช้ไม่ได้
+  ในอีกโปรเจกต์
+- ไฟล์กำหนดค่าปกติโหลดใหม่โดยอัตโนมัติ คำขอโมเดลที่กำลังดำเนินการอยู่จะคงการตั้งค่าที่เริ่มไว้

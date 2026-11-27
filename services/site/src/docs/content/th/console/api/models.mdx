@@ -1,0 +1,201 @@
+---
+title: "API รายการโมเดล"
+description: "แสดงรายการโมเดลที่เวิร์กสเปซใช้ได้ พร้อมขีดจำกัด ราคา ความสามารถ และ URL ของ Console สำหรับเรียกแต่ละโมเดล"
+---
+
+รายการโมเดลมีสองแบบ [รายการ Console](#console-model-list) คืนทุกอย่างที่เวิร์กสเปซใช้ได้
+รวมถึงผู้ให้บริการที่เชื่อมต่อไว้ [รายการ inference](#inference-model-lists) คืนแคตตาล็อกสาธารณะของ OpenCode Models และ
+Go ในรูปแบบรายการของ OpenAI
+
+| รายการ                                                | คืนค่า                                                                                        | คีย์      |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------- |
+| [`/console/api/v1/models`](#console-model-list)     | ผู้ให้บริการและโมเดลทั้งหมดที่ผู้เรียกมีสิทธิ์ใช้ โดยรวมการปรับแต่งของเวิร์กสเปซแล้ว | จำเป็น |
+| [`/inference/v1/models`](#inference-model-lists)    | OpenCode Models โมเดลสาธารณะทั้งหมดเมื่อไม่มีคีย์ และเมื่อมีคีย์คือโมเดลที่เวิร์กสเปซใช้ได้ | ไม่บังคับ |
+| [`/inference/go/v1/models`](#inference-model-lists) | โมเดล [Go](/console/go) ในรูปแบบเดียวกัน                                                  | ไม่บังคับ |
+
+ใช้รายการ Console เมื่อไคลเอนต์ของคุณควรเสนอโมเดลเดียวกับที่ OpenCode เสนอ รวมถึงผู้ให้บริการที่เชื่อมต่อ ใช้
+รายการ inference เมื่อคุณต้องการเฉพาะ OpenCode Models หรือ Go หรือเมื่อยังไม่มีคีย์และต้องการแคตตาล็อกสาธารณะ
+
+## รายการโมเดลของ Console
+
+`GET https://opencode.ai/console/api/v1/models` คืนผู้ให้บริการทั้งหมดที่ผู้เรียกมีสิทธิ์ใช้ พร้อมรายการโมเดลที่เรียกใช้ได้ของผู้ให้บริการแต่ละราย
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+สมาชิกเวิร์กสเปซคนใดก็เรียกได้: จากเซสชันเบราว์เซอร์ การลงชื่อเข้าใช้ OpenCode [คีย์ API ส่วนตัว](/console/api#personal-api-keys)
+หรือ[คีย์บัญชีบริการ](/console/api#service-accounts)ที่มี **Models › Read** ใช้กฎเดียวกับ config ของ OpenCode
+ที่ Console สร้าง รายการจึงตรงกับที่ `/models` แสดงใน OpenCode การตอบกลับจะไม่ถูกแคช
+(`Cache-Control: private, no-store`)
+
+### ผู้ให้บริการ
+
+การตอบกลับเป็นออบเจกต์ที่คีย์ด้วย ID ผู้ให้บริการ ซึ่งเป็น ID ที่ OpenCode ใช้
+
+| ID ผู้ให้บริการ                 | ผู้ให้บริการ                                                                                                                         |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `opencode`                  | [OpenCode Models](/console/models) จ่ายจากเครดิตของเวิร์กสเปซ                                                                 |
+| `opencode-go`               | โมเดล [Go](/console/go) แสดงเฉพาะเมื่อมีการสมัครสมาชิก Go                                                                   |
+| `console-<connection slug>` | [การเชื่อมต่อ](/console/providers)ที่เวิร์กสเปซเพิ่ม เช่น `console-openai`, `console-anthropic` หรือ `console-aws-bedrock` |
+
+แต่ละผู้ให้บริการมี `id`, `name` และ `models` `name` คือชื่อที่ OpenCode แสดง มักเป็นชื่อเวิร์กสเปซตามด้วย
+ชื่อผู้ให้บริการ `models` เป็นออบเจกต์ที่คีย์ด้วย ID โมเดล
+
+### ตัวอย่าง
+
+ตัดให้เหลือผู้ให้บริการเดียวและโมเดลเดียว
+
+```json
+{
+  "opencode": {
+    "id": "opencode",
+    "name": "Acme Inc. / OpenCode",
+    "models": {
+      "claude-sonnet-5-5": {
+        "type": "chat",
+        "id": "claude-sonnet-5-5",
+        "canonical_id": "anthropic/claude-sonnet-5-5",
+        "name": "Claude Sonnet 5.5",
+        "description": "Fast Claude model for everyday coding, agents, and knowledge work",
+        "family": "claude-sonnet",
+        "open_weights": false,
+        "knowledge": "2026-06",
+        "release_date": "2026-09-28",
+        "last_updated": "2026-09-28",
+        "modalities": {
+          "input": ["text", "image/jpeg", "image/png", "application/pdf"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": { "supported": true },
+          "reasoning": {
+            "supported": true,
+            "effort": ["low", "medium", "high", "xhigh", "max"]
+          }
+        },
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 2,
+              "cache": { "read": 0.1, "write": 2.5 }
+            },
+            "output": { "price": 10 }
+          }
+        },
+        "api": {
+          "messages": {
+            "base_url": "https://opencode.ai/inference/anthropic/v1",
+            "sdk": {
+              "aisdk": "@ai-sdk/anthropic",
+              "opencodeai": "@opencode/ai/providers/anthropic"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### ฟิลด์
+
+แต่ละโมเดลคือรายการ v2 ของ [models.dev](https://models.dev) ที่มีการแก้ไขของเวิร์กสเปซแล้ว ฟิลด์จึงเป็นฟิลด์ที่
+[models.dev เผยแพร่](https://models.dev/experimental/v2.0/api.json) โมเดลที่ปิดใช้งานและโมเดลที่ models.dev ทำเครื่องหมาย
+ว่าล้าสมัยจะถูกตัดออก
+
+| ฟิลด์          | ความหมาย                                                                                                                                                                                                                                                                             |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`         | ชนิดของโมเดล เช่น `chat`, `embedding`, `image` หรือ `decision`                                                                                                                                                                                                             |
+| `id`           | ID โมเดลที่ส่งในคำขอ และเป็นคีย์ใน `models` ด้วย                                                                                                                                                                                                                   |
+| `name`         | ชื่อที่แสดง                                                                                                                                                                                                                                                                       |
+| `limit`        | `context` คือหน้าต่างบริบท `input` จำกัดอินพุตของคำขอเมื่อโมเดลกำหนดไว้ `output` จำกัดการตอบกลับ                                                                                                                                                                |
+| `cost`         | ราคาเป็นดอลลาร์สหรัฐต่อ 1M โทเคน ได้แก่ `text.input.price`, `text.input.cache.read`, `text.input.cache.write` และ `text.output.price` ค่า `0` หมายถึงฟรี หากไม่มีฟิลด์แคช แสดงว่าโมเดลไม่ได้ตั้งราคาสำหรับแคช โมเดลบางตัวมี `cost.multipliers` เพื่อเพิ่มราคาในช่วงเวลาที่ระบุ |
+| `capabilities` | สิ่งที่โมเดลทำได้ เช่น การเรียกเครื่องมือและระดับการให้เหตุผล                                                                                                                                                                                                                     |
+| `modalities`   | ชนิดอินพุตที่รับ เช่น `text`, `image/png` หรือ `application/pdf` และชนิดเอาต์พุต                                                                                                                                                                                          |
+| `api`          | URL ของ Console และ SDK ที่ใช้กับโมเดลนี้ ดู[Model API](#model-api)                                                                                                                                                                                                         |
+
+### Model API
+
+`api` มีหนึ่งรายการ คีย์ตามโปรโตคอลที่โมเดลใช้: `chat-completions` สำหรับ OpenAI Chat Completions, `responses`
+สำหรับ OpenAI Responses, `messages` สำหรับ Anthropic Messages, `generate-content` สำหรับ Gemini และ `embeddings` สำหรับ
+[OpenAI Embeddings](/console/models#embedding-models) เป็นรายการ models.dev ของโปรโตคอลนั้น
+โดยแทน URL ของผู้ขายด้วยของ Console และตัดโปรโตคอลอื่นออก
+
+| ฟิลด์            | ความหมาย                                                                                                                                                                                                                                            |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base_url`       | ที่ส่งคำขอสำหรับโมเดลนี้ OpenCode Models ใช้ `https://opencode.ai/inference/...` Go ใช้ `https://opencode.ai/inference/go/...` และการเชื่อมต่อใช้ Console API URL ของตัวเอง `https://opencode.ai/inference/custom/<connection_id>` |
+| `sdk.aisdk`      | แพ็กเกจ AI SDK ของโปรโตคอล เดียวกับในตาราง[เอนด์พอยต์ของโมเดล](/console/models#endpoints)                                                                                                                                       |
+| `sdk.opencodeai` | โมดูลผู้ให้บริการที่ตรงกันซึ่ง OpenCode โหลด                                                                                                                                                                                                       |
+
+โมเดลบนการเชื่อมต่อที่คุณเพิ่มมีลักษณะเช่นนี้ ต่อท้ายด้วยพาธของโปรโตคอล เช่น `/chat/completions` หรือ
+`/responses` ตามที่อธิบายใน [Providers API](/console/api/providers#endpoints)
+
+```json
+"api": {
+  "responses": {
+    "base_url": "https://opencode.ai/inference/custom/conn_...",
+    "sdk": {
+      "aisdk": "@ai-sdk/openai",
+      "opencodeai": "@opencode/ai/providers/openai/responses"
+    }
+  }
+}
+```
+
+## รายการโมเดลของ inference
+
+`GET https://opencode.ai/inference/v1/models` แสดงรายการ OpenCode Models และ `GET https://opencode.ai/inference/go/v1/models`
+แสดงรายการโมเดล Go ทั้งสองคืนรูปแบบรายการของ OpenAI
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+ตัดให้เหลือหนึ่งโมเดลและฟิลด์ทั่วไป
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "claude-sonnet-5-5",
+      "object": "model",
+      "created": 1795006281,
+      "owned_by": "opencode",
+      "name": "Claude Sonnet 5.5",
+      "type": "chat",
+      "limit": { "context": 1000000, "output": 128000 },
+      "cost": {
+        "text": {
+          "input": { "price": 2, "cache": { "read": 0.1, "write": 2.5 } },
+          "output": { "price": 10 }
+        }
+      }
+    }
+  ]
+}
+```
+
+หากไม่มีคีย์ รายการจะมีโมเดลสาธารณะทั้งหมด หากมีคีย์ จะมีเฉพาะโมเดลที่เวิร์กสเปซของคีย์นั้นใช้ได้ คีย์บัญชีบริการ
+จึงต้องมี **Models › Read** ส่งคีย์ใน `Authorization: Bearer` หรือ `x-api-key` โมเดลที่เป็นส่วนตัวหรือ
+ล้าสมัยจะถูกตัดออก
+
+แต่ละรายการเริ่มด้วย `id`, `object`, `created` และ `owned_by` ของ OpenAI จากนั้นเป็นฟิลด์ models.dev เดียวกับที่
+[รายการ Console](#fields)ใช้: `name`, `type`, `limit`, `cost`, `capabilities`, `modalities`, `api`, `family`,
+`release_date` และอื่นๆ ต่างจากรายการ Console รายการ inference ไม่รวมการเชื่อมต่อของเวิร์กสเปซ หาก
+ข้อมูล models.dev ไม่พร้อมชั่วคราว รายการยังปรากฏโดยมีเฉพาะฟิลด์ของ OpenAI และ `name` เท่ากับ ID
+
+โมเดล Go แต่ละตัวยังมี `go` ซึ่งระบุขีดจำกัดการใช้งานรายเดือนของแต่ละแพ็กเกจ (`monthly_usage`) ว่าใช้ข้อมูลคำขอฝึกโมเดลหรือไม่ (`training`) ไม่มีการเก็บข้อมูลของคุณเลยหรือไม่ (`zdr`) และมีประเทศที่ไม่เปิดให้ใช้งานหรือไม่ (`limited_regions`)
+
+## ข้อผิดพลาด
+
+| สถานะ | ความหมาย                                                                                |
+| ------ | -------------------------------------------------------------------------------------- |
+| `401`  | ไม่มีข้อมูลรับรอง หรือคีย์หมดอายุหรือถูกเพิกถอน                                          |
+| `403`  | คีย์แสดงรายการโมเดลไม่ได้ คีย์บัญชีบริการและคีย์แบบกำหนดขอบเขตต้องมี **Models › Read** |

@@ -1,0 +1,259 @@
+---
+title: "คำสั่ง"
+description: "เปลี่ยนพรอมต์เป็นคำสั่ง slash ที่ใช้ซ้ำได้ใน Markdown หรือ JSON พร้อมอาร์กิวเมนต์ ผลลัพธ์ shell และไฟล์แนบ"
+---
+
+สร้าง `.opencode/commands/review.md` เพื่อเปลี่ยนพรอมต์เป็น `/review`
+
+```md title=".opencode/commands/review.md"
+Review $ARGUMENTS for bugs and missing tests.
+```
+
+รันจาก TUI พร้อมเป้าหมาย
+
+```text
+/review src/auth.ts
+```
+
+OpenCode ส่ง `Review src/auth.ts for bugs and missing tests.` เป็นพรอมต์ผู้ใช้
+
+## Markdown
+
+วางคำสั่งส่วนกลางใน `~/.config/opencode/commands/` และคำสั่งโปรเจกต์ใน `.opencode/commands/`
+
+```text
+~/.config/opencode/commands/review.md
+.opencode/commands/review.md
+```
+
+ค้นพบเฉพาะไฟล์ `.md` พาธที่ซ้อนกันกลายเป็นชื่อคำสั่งโดยคั่นด้วย `/`
+
+```md title=".opencode/commands/team/review.md"
+Review $ARGUMENTS using the team's checklist.
+```
+
+รันคำสั่งที่ซ้อนเป็น `/team/review src/auth.ts` ไดเรกทอรีเอกพจน์แบบเดิม `command/` ก็ถูกค้นพบด้วย
+แต่ให้ใช้ `commands/` สำหรับไฟล์ใหม่
+
+เพิ่ม YAML frontmatter เมื่อคำสั่งต้องมีข้อมูลเมตา เนื้อหา Markdown ที่ตัดช่องว่างหัวท้ายแล้วจะเป็นเทมเพลตพรอมต์เสมอ
+
+```md title=".opencode/commands/review.md"
+---
+description: Review code for correctness
+agent: plan
+model: anthropic/claude-sonnet-5-5#high
+---
+
+Review $ARGUMENTS. Report bugs first.
+```
+
+## JSON
+
+กำหนดคำสั่งภายใต้ `commands` ใน[ไฟล์กำหนดค่า](/config) JSON หรือ JSONC ของ OpenCode ใดก็ได้ แต่ละคำสั่งต้องมี
+`template`
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "commands": {
+    "review": {
+      "description": "Review code for correctness",
+      "template": "Review $ARGUMENTS. Report bugs first.",
+    },
+  },
+}
+```
+
+## ฟิลด์
+
+frontmatter ของ Markdown และรายการ JSON รับฟิลด์เดียวกัน ยกเว้น Markdown ได้ `template` จากเนื้อหาไฟล์
+
+| ฟิลด์ | จำเป็น | ลักษณะการทำงาน |
+| --- | --- | --- |
+| `template` | JSON เท่านั้น | เทมเพลตพรอมต์ |
+| `description` | ไม่ | ข้อความที่แสดงในรายการคำสั่งและการค้นพบ |
+| `agent` | ไม่ | เอเจนต์ที่เลือกเมื่อรันคำสั่ง |
+| `model` | ไม่ | โมเดลแทนที่ในรูปแบบ `provider/model` หรือ `provider/model#variant` |
+| `subagent` | ไม่ | `true` รันในเซสชันลูกเบื้องหลัง `false` บังคับให้ใช้เซสชันปัจจุบัน |
+| `subtask` | ไม่ | นามแฝงที่เลิกใช้ของ `subagent` |
+
+ตัวอย่างเช่น คำสั่ง JSON นี้ตั้งทุกฟิลด์ที่ไม่บังคับในปัจจุบัน
+
+```jsonc title="opencode.jsonc"
+{
+  "commands": {
+    "audit": {
+      "template": "Audit $ARGUMENTS.",
+      "description": "Audit a package",
+      "agent": "general",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "subagent": true,
+    },
+  },
+}
+```
+
+อย่าใส่ `template` ใน frontmatter ของ Markdown เนื้อหาเป็นตัวให้ค่า
+
+## อาร์กิวเมนต์
+
+ใช้ `$ARGUMENTS` สำหรับสตริงอาร์กิวเมนต์ทั้งหมดตามที่ป้อน
+
+```md title=".opencode/commands/component.md"
+Create a typed React component named $ARGUMENTS.
+```
+
+สำหรับ `/component Account Settings` ตัวแทนจะกลายเป็น `Account Settings`
+
+## ตำแหน่ง
+
+ใช้ `$1`, `$2` และหมายเลขถัดไปแทนอาร์กิวเมนต์แต่ละตำแหน่งหลังแยกสตริง ใช้เครื่องหมายอัญประกาศเดี่ยวหรือคู่ครอบหลายคำให้เป็นอาร์กิวเมนต์เดียว ระบบจะตัดเครื่องหมายออก
+
+```md title=".opencode/commands/check.md"
+Check $1. Focus on $2.
+```
+
+สำหรับ `/check src/auth.ts "error handling"` `$1` กลายเป็น `src/auth.ts` และ `$2` กลายเป็น `error handling`
+
+ตัวแทนที่มีหมายเลขสูงสุดจะรับอาร์กิวเมนต์ตั้งแต่ตำแหน่งนั้นไปจนจบ ตำแหน่งที่ไม่มีอาร์กิวเมนต์จะได้สตริงว่าง
+
+```md title=".opencode/commands/compare.md"
+Compare $1 with $2.
+```
+
+สำหรับ `/compare api stable branch` OpenCode ส่ง `Compare api with stable branch.`
+
+## เมื่อไม่มีตัวแทนอาร์กิวเมนต์
+
+เมื่อเทมเพลตไม่มี `$ARGUMENTS` หรือตัวแทนตามตำแหน่ง OpenCode จะต่อท้ายอาร์กิวเมนต์ที่ไม่ว่างหลังบรรทัดว่าง
+
+```md title=".opencode/commands/explain.md"
+Explain this code clearly.
+```
+
+สำหรับ `/explain src/cache.ts` พรอมต์จะกลายเป็น
+
+```text
+Explain this code clearly.
+
+src/cache.ts
+```
+
+## Shell
+
+ใส่คำสั่ง shell ไว้ระหว่างแบ็กทิก แล้วนำหน้าด้วย `!` เพื่อแทรกผลลัพธ์ของคำสั่งก่อนส่งพรอมต์
+
+```md title=".opencode/commands/review-diff.md"
+Review this diff:
+
+!`git diff --stat && git diff`
+```
+
+OpenCode รันแต่ละบล็อกด้วย shell ที่กำหนดในตำแหน่งโปรเจกต์ที่ใช้งานและแทรกผลลัพธ์รวม
+ตัวแทนอาร์กิวเมนต์จะถูกขยายก่อน
+
+```md title=".opencode/commands/history.md"
+Summarize these commits:
+
+!`git log --oneline -$1`
+```
+
+สำหรับ `/history 5` shell จะได้รับ `git log --oneline -5` อย่าวางอาร์กิวเมนต์ที่ไม่น่าเชื่อถือในบล็อก shell
+
+<Callout type="warning">
+  บล็อก shell ทำงานเมื่อ OpenCode ประเมินคำสั่ง นอกขั้นตอนสิทธิ์เครื่องมือของเอเจนต์ ใช้คำสั่งจาก
+  แหล่งที่คุณเชื่อถือเท่านั้น
+</Callout>
+
+## ไฟล์แนบ
+
+เทมเพลตที่จัดเก็บไว้ไม่ขยาย `@path` โดยยังเป็นข้อความพรอมต์ธรรมดา
+
+```md title=".opencode/commands/readme.md"
+Review @README.md.
+```
+
+หากต้องการแนบไฟล์ ให้เพิ่มผ่านช่องพิมพ์เมื่อเรียกคำสั่ง OpenCode จะคงไฟล์แนบจากช่องพิมพ์นั้นไว้
+เมื่อส่งพรอมต์ที่ขยายแล้ว
+
+## การทำงาน
+
+คำสั่งขยายอาร์กิวเมนต์และบล็อก shell ก่อนส่งพรอมต์ผู้ใช้แบบถาวร โดยค่าเริ่มต้นจะรันในเซสชันปัจจุบัน
+
+```md title=".opencode/commands/plan.md"
+---
+agent: plan
+---
+
+Plan $ARGUMENTS.
+```
+
+การรัน `/plan migration` จะสลับเซสชันปัจจุบันเป็น `plan` ก่อนส่งพรอมต์
+
+การเลือกโมเดลเป็นไปตามกฎเหล่านี้
+
+1. `model` ของคำสั่งแทนที่โมเดลอื่นทั้งหมด
+2. มิฉะนั้น โมเดลที่กำหนดค่าไว้ของเอเจนต์คำสั่งที่เลือกจะแทนที่โมเดลที่ใช้งานตอนเรียก
+3. มิฉะนั้น โมเดลของเซสชันปัจจุบันยังใช้งานอยู่
+
+ตัวอย่างเช่น คำสั่งนี้เลือกทั้งเอเจนต์และโมเดลอย่างชัดเจน
+
+```md title=".opencode/commands/design.md"
+---
+agent: plan
+model: openai/gpt-6.1-sol#high
+---
+
+Design $ARGUMENTS.
+```
+
+## เบื้องหลัง
+
+ตั้ง `subagent: true` เพื่อรันคำสั่งในเซสชันลูกเบื้องหลัง
+
+```md title=".opencode/commands/audit.md"
+---
+description: Audit changes
+agent: general
+subagent: true
+---
+
+Audit $ARGUMENTS for bugs and missing tests.
+```
+
+เซสชันแม่ยังใช้งานได้และคงเอเจนต์และโมเดลไว้ OpenCode จะส่งผลลัพธ์หรือความล้มเหลวของเซสชันลูกกลับไปยังเซสชันแม่
+เมื่อเซสชันลูกเสร็จ
+
+| ค่า | ลักษณะการทำงาน |
+| --- | --- |
+| `true` | ใช้เซสชันลูกเสมอ แม้เอเจนต์ที่เลือกมี `mode: primary` |
+| `false` | ใช้เซสชันปัจจุบันเสมอ แม้เอเจนต์ที่เลือกมี `mode: subagent` |
+| ไม่ระบุ | ใช้เซสชันลูกเฉพาะเมื่อเอเจนต์ที่เลือกมี `mode: subagent` |
+
+เซสชันลูกเลือกใช้โมเดลตามลำดับนี้: โมเดลของคำสั่ง โมเดลของเอเจนต์ที่เลือก แล้วจึงเป็นโมเดลของเซสชันแม่ ระบบยังรองรับ `subtask` แบบเดิม
+แต่ถ้าระบุทั้งสองฟิลด์ ระบบจะใช้ `subagent`
+
+```yaml
+subagent: false
+subtask: true
+```
+
+ตัวอย่างนี้รันในเซสชันปัจจุบันเพราะ `subagent` มีลำดับเหนือกว่า
+
+## การโหลด
+
+คำสั่ง Markdown และ JSON ใช้ registry เดียวกัน คำสั่งที่โหลดทีหลังจะแทนที่คำสั่งชื่อเดียวกันที่โหลดมาก่อน
+
+```text
+~/.config/opencode/commands/review.md   # Lower priority
+.opencode/commands/review.md           # Replaces the global command
+```
+
+คำสั่งของโปรเจกต์มีลำดับสูงกว่าคำสั่งส่วนกลาง และภายในโปรเจกต์ คำสั่งจากไดเรกทอรีที่ใกล้กว่ามีลำดับสูงกว่าคำสั่งจากไดเรกทอรีระดับบน
+คำสั่งที่กำหนดเองยังแทนที่คำสั่งในตัวที่โหลดก่อนหน้าได้ OpenCode โหลดไฟล์คำสั่งและไฟล์กำหนดค่าที่เปลี่ยนแปลงใหม่โดยอัตโนมัติ
+
+```md title=".opencode/commands/review.md"
+Review only the staged changes: !`git diff --cached`
+```
+
+การบันทึกไฟล์นี้อัปเดต `/review` โดยไม่ต้องรีสตาร์ต OpenCode

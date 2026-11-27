@@ -1,0 +1,121 @@
+---
+title: "การสร้างปลั๊กอิน"
+description: "สร้างปลั๊กอิน OpenCode: แพ็กเกจเดียวที่มีส่วนเซิร์ฟเวอร์ ส่วน TUI ส่วน GUI หรือผสมกัน"
+---
+
+ปลั๊กอินปรับเปลี่ยนพฤติกรรมของ OpenCode และเพิ่มฟีเจอร์ใหม่ ปลั๊กอินคือแพ็กเกจเดียวที่มีส่วนเซิร์ฟเวอร์ ส่วน TUI
+ส่วน GUI หรือผสมกัน
+
+```ts title=".opencode/plugins/example/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})
+```
+
+หากต้องการย้ายปลั๊กอินเดิมจาก OpenCode 1 ให้ทำตาม[คู่มือย้ายปลั๊กอิน V1](/build/plugins/migrate-v1)
+
+## ส่วนต่างๆ
+
+แพ็กเกจส่งออกแต่ละส่วนแยกกัน แต่ SDK ของทุกส่วนมาจากแพ็กเกจ `@opencode/plugin` เดียวกัน
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./gui-experimental": "./dist/gui-experimental.cjs",
+    "./rpc": "./src/rpc.ts"
+  },
+  "files": ["src", "dist"],
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  }
+}
+```
+
+- **เซิร์ฟเวอร์** (`.` หรือ `./server`) ทำงานในเซิร์ฟเวอร์ OpenCode ด้วย `@opencode/plugin` เพิ่มเครื่องมือ ฮุก
+  การเชื่อมต่อ คำสั่ง และเอเจนต์ ดู[เซิร์ฟเวอร์](/build/plugins/server) หรือ[ปลั๊กอิน Effect](/build/plugins/effect)
+  สำหรับ API ของ Effect
+- **TUI** (`./tui`) ทำงานใน UI เทอร์มินัลด้วย `@opencode/plugin/tui` ดู [TUI](/build/plugins/cli)
+- **GUI** (`./gui-experimental`) รัน `setup` ในทุกหน้าต่างของ OpenCode Desktop และรัน `main` ในโปรเซสหลักของ
+  แอปเดสก์ท็อปด้วย `@opencode/plugin/gui` ดู [GUI](/build/plugins/gui)
+- **RPC** (`./rpc`) เป็นสัญญาที่มีชนิดซึ่งส่วนเซิร์ฟเวอร์ใช้งาน และส่วนอื่นกับไคลเอนต์เรียก ดู
+  [RPC](/build/plugins/rpc)
+
+`id` ของปลั๊กอินมาจาก `Plugin.define` ของส่วนเซิร์ฟเวอร์ แพ็กเกจที่มีส่วน GUI และไม่มีส่วนเซิร์ฟเวอร์ใช้
+ชื่อแพ็กเกจ (หรือชื่อไดเรกทอรีในเครื่อง) เป็น `id` ส่วน TUI ประกาศ `id` ของตัวเอง ส่วน GUI ไม่ประกาศและ
+ใช้ของปลั๊กอิน
+
+## การโหลด
+
+ปลั๊กอินใต้ `.opencode/plugins/` โหลดอัตโนมัติเหมือนตัวอย่างในเครื่องด้านบน หากต้องการโหลดแพ็กเกจที่เผยแพร่หรือ
+ไดเรกทอรีปลั๊กอินจากที่อื่น ให้เพิ่มใน `plugins` ใน `opencode.json(c)`
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+- รายการเดียวโหลดทุกส่วน TUI โหลดส่วน TUI ของปลั๊กอินที่เซิร์ฟเวอร์โหลด และ OpenCode Desktop โหลด
+  ส่วน GUI ของปลั๊กอินใน `opencode.json(c)` ส่วนกลาง
+- แพ็กเกจที่มีเฉพาะส่วน TUI ให้ใส่ใน [`cli.json`](/cli/plugins) แทน
+- ถ้า `package.json` ของปลั๊กอินในเครื่องระบุ `name` และ `exports` ระบบจะโหลดแต่ละส่วนตามค่าเหล่านี้เหมือนแพ็กเกจ
+  ที่เผยแพร่ หากไม่มี จะใช้ชื่อไฟล์ที่ราก: `server` (หรือ `index`), `tui` และ `rpc` ที่มีนามสกุล `.ts`,
+  `.tsx` หรือ `.js` และ `gui-experimental.cjs` (หรือ `.js`)
+- ดู[กำหนดค่าปลั๊กอิน](/plugins)สำหรับตัวเลือกการโหลดและการกำหนดค่าเพิ่มเติม
+
+## การเผยแพร่
+
+ปลั๊กอินที่เผยแพร่คือแพ็กเกจ npm ที่มี `package.json` ข้างต้น ส่วนต่างๆ ใช้ default export เดียวกับปลั๊กอิน
+ในเครื่อง
+
+```bash
+npm publish
+```
+
+- ส่งออก `./rpc` เมื่อปลั๊กอินและไคลเอนต์อื่นควรนำเข้า[สัญญา RPC](/build/plugins/rpc)โดยไม่โหลด
+  การใช้งาน
+- สร้างบันเดิล GUI ก่อนเผยแพร่ และรวมผ่าน `files` ดู
+  [สร้างบันเดิล](/build/plugins/gui#build-the-bundle)
+- ใช้เวอร์ชันที่เข้ากันได้กับรุ่น OpenCode ที่คุณกำหนดเป้าหมาย และทดสอบแพ็กเกจที่ติดตั้ง ไม่ใช่เฉพาะ
+  สำเนาที่ลิงก์กับเวิร์กสเปซ เผยแพร่อัปเดตปลั๊กอินที่เข้ากันได้เมื่อคุณใช้สัญญา API ใหม่
+
+<CardGroup cols={2}>
+  <Card title="Server" href="/build/plugins/server">
+    เพิ่มเครื่องมือ ฮุก การเชื่อมต่อ คำสั่ง และเอเจนต์ในเซิร์ฟเวอร์ OpenCode
+  </Card>
+  <Card title="TUI" href="/build/plugins/cli">
+    เพิ่มคำสั่ง เส้นทาง สล็อต และตัวแสดงผล Markdown ใน UI เทอร์มินัล
+  </Card>
+  <Card title="GUI" href="/build/plugins/gui">
+    เพิ่มแผง คำสั่ง หน้าการตั้งค่า และการเชื่อมต่อเนทีฟใน OpenCode Desktop
+  </Card>
+  <Card title="RPC" href="/build/plugins/rpc">
+    เปิดเมธอดและอีเวนต์ที่มีชนิดจากส่วนเซิร์ฟเวอร์ให้ส่วนอื่นและไคลเอนต์
+  </Card>
+</CardGroup>

@@ -1,0 +1,3792 @@
+---
+title: "GUI"
+description: "สร้างส่วน GUI ของปลั๊กอิน OpenCode สำหรับ OpenCode Desktop ด้วย @opencode/plugin/gui"
+---
+
+ปลั๊กอิน GUI เพิ่มแผง คำสั่ง หน้าการตั้งค่า และการเชื่อมต่อเนทีฟใน OpenCode Desktop ด้วย SDK ปลั๊กอิน GUI
+`@opencode/plugin/gui` เป็นส่วน `./gui-experimental` ของ[แพ็กเกจปลั๊กอิน](/build/plugins) เดี่ยวๆ หรือข้าง
+[ส่วนเซิร์ฟเวอร์](/build/plugins/server)และ[ส่วน TUI](/build/plugins/cli)
+
+<Callout type="note">
+  API ปลั๊กอิน GUI เป็นฟีเจอร์ทดลองและอาจเปลี่ยนระหว่างรุ่น ชื่อ export `-experimental` บอกเรื่องนี้ใน
+  แพ็กเกจของคุณ
+</Callout>
+
+ไฟล์ `./gui-experimental` ส่งออกค่าเริ่มต้น `Plugin.define` เช่นเดียวกับส่วนเซิร์ฟเวอร์และ TUI
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+import { Acme } from "./rpc"
+
+export default Plugin.define({
+  i18n: { en: { "command.open": "Open Acme" } },
+  setup(ctx) {
+    ctx.add(Command, () => ({
+      id: "open",
+      title: ctx.t("command.open"),
+      run: () => void ctx.client.rpc(Acme).open({}),
+    }))
+  },
+  main(ctx) {
+    ctx.log.write("info", "acme started")
+  },
+})
+```
+
+ปลั๊กอิน GUI ทำงานได้ในสองโปรเซส
+
+- **`setup`** ทำงานทุกหน้าต่างของแอปเดสก์ท็อป ให้แผง คำสั่ง หน้าการตั้งค่า สล็อต แหล่งเซิร์ฟเวอร์
+  ตัวจัดการลิงก์ และสไตล์ ดู[หน้าต่าง](#the-window)
+- **`main`** ทำงานครั้งเดียวในโปรเซสหลักของ Electron และรองรับสัญญา `Ipc` ที่ระบุชนิดข้อมูล รายการเมนูเนทีฟ
+  การฝัง `WebContentsView` และการผสานงานกับ Node และ Electron ดู[โปรเซสหลัก](#the-main-process)
+
+## แพ็กเกจ
+
+แพ็กเกจปลั๊กอินส่งโค้ดเซิร์ฟเวอร์ TUI และ GUI จากแพ็กเกจ npm เดียวได้ เพิ่ม export `./gui-experimental` ข้าง
+`./tui` แล้ว OpenCode Desktop จะโหลดให้แต่ละปลั๊กอินบนเซิร์ฟเวอร์เบื้องหลังของตัวเอง
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./gui-experimental": "./dist/gui-experimental.cjs"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "devDependencies": {
+    "solid-js": "^1.9.0",
+    "vite": "^7.0.0",
+    "vite-plugin-solid": "^2.11.0"
+  }
+}
+```
+
+ผู้ใช้ติดตั้งเหมือนปลั๊กอินอื่น ไม่มีขั้นตอนติดตั้ง GUI แยก
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["opencode-acme-plugin"],
+}
+```
+
+GUI ไม่ประกาศ id: ใช้ของปลั๊กอิน `id` ของส่วนเซิร์ฟเวอร์ หรือสำหรับแพ็กเกจที่ไม่มีส่วนเซิร์ฟเวอร์คือ
+ชื่อแพ็กเกจ (ไดเรกทอรีในเครื่องที่ไม่มี `name` ใช้ชื่อไดเรกทอรี) อ่านเป็น `ctx.id`
+
+### ไฟล์เดียว สองโปรเซส
+
+แต่ละโปรเซสประเมินไฟล์ `./gui-experimental` ทั้งหมดและอ่าน default export หน้าต่างรัน `setup` และ
+โปรเซสหลักของแอปเดสก์ท็อปรัน `main`
+
+```tsx title="src/gui.tsx"
+import { shell } from "electron"
+import { Plugin } from "@opencode/plugin/gui"
+
+export default Plugin.define({
+  setup(ctx) {
+    // Window code: Solid components, ctx.layout, ctx.add(Command, …).
+  },
+  main(ctx) {
+    // Main code: electron, Node built-ins, ctx.windows.
+    ctx.windows.on("open", () => shell.beep())
+  },
+})
+```
+
+ทั้งสองโปรเซสประมวลผลไฟล์เดียวกัน จึงใช้ค่าตัวแทนที่ไม่ทำงานจริงสำหรับโมดูลของอีกโปรเซส
+
+- **ในหน้าต่าง** `electron` และโมดูลในตัวของ Node เป็นค่าตัวแทนที่ไม่ทำงานจริง
+- **ในโปรเซสหลัก** Solid และโมดูลเฉพาะหน้าต่างเป็นค่าตัวแทนที่ไม่ทำงานจริง
+
+ตัวแทนรับการอ่านพร็อพเพอร์ตี การเรียก หรือการสร้างที่ระดับโมดูลได้ เช่นเทมเพลตที่ถูกยกของ Solid หรือการเรียก `require`
+ที่ถูกยกของบันเดิลเลอร์ ให้เก็บโค้ดของแต่ละโปรเซสไว้ใน setup ของตัวเอง: โค้ดที่ทำงานในโปรเซสผิดจะได้
+ตัวแทนแทนค่าที่ใช้งานได้
+
+`Plugin.define` และตัวช่วยสัญญามาจาก SDK เดียวในทั้งสองโปรเซส ในโปรเซสหลัก
+`@opencode/plugin/gui` ชี้ไปยัง SDK หลัก ซึ่งส่งออก `Plugin`, `Store`, `Ipc`, `Contract` และ
+`Registry` เดียวกัน คำจำกัดความเดียวให้บริการทั้งสองโปรเซส export เฉพาะหน้าต่างเช่น `Command`, `bindPlugin` และ
+`createKeyed` เป็น `undefined` ในโปรเซสหลัก จึงควรใช้เฉพาะใน `setup`
+
+## สร้างบันเดิล
+
+`./gui-experimental` ต้องเป็นไฟล์ CommonJS ที่สร้างไว้ล่วงหน้าหนึ่งไฟล์ สร้างด้วยพรีเซ็ต Vite จาก `@opencode/plugin/gui/vite`
+
+```ts title="vite.config.ts"
+import { defineConfig } from "vite"
+import { gui } from "@opencode/plugin/gui/vite"
+
+export default defineConfig({ plugins: [gui()] })
+```
+
+```bash
+vite build
+```
+
+พรีเซ็ตทำสิ่งต่อไปนี้
+
+- คอมไพล์ Solid JSX ด้วย `vite-plugin-solid`
+- ส่งออกไฟล์ CommonJS หนึ่งไฟล์และฝัง `import()` แบบไดนามิกทั้งหมด เพราะแอปโหลดชังก์ที่สองไม่ได้
+- กัน[โมดูลที่ใช้ร่วมกัน](#shared-modules)ของแอป รวมถึง Electron และโมดูลในตัวของ Node ไว้นอกบันเดิล แล้วรวม
+  แพ็กเกจอื่นที่ต้องใช้ทั้งหมดไว้ในบันเดิล
+- ทำให้บิลด์ล้มเหลวเมื่อมีโมดูล `effect/*`, `solid-js/*` หรือ `@opencode/*` อื่น แอปไม่ได้ให้โมดูลนั้น และ
+  สำเนาที่รวมมาจะไม่แชร์อินสแตนซ์ของแอป
+
+```text
+effect/Schema is not a module the OpenCode app provides to plugin GUIs: effect, @opencode/plugin/gui, …
+```
+
+ให้นำเข้าจากจุดนำเข้าที่ใช้ร่วมกันแทน เช่น `import { Schema } from "effect"`
+
+### ตัวเลือกพรีเซ็ต
+
+ส่งตัวเลือกให้ `gui()` เพื่อเปลี่ยนจุดเข้าหรือไฟล์เอาต์พุต
+
+```ts title="vite.config.ts"
+export default defineConfig({ plugins: [gui({ entry: "src/desktop.tsx", outFile: "dist/desktop.cjs" })] })
+```
+
+- `entry` คือไฟล์ที่ default export `Plugin.define` ค่าเริ่มต้น `src/gui.tsx`
+- `outFile` คือบันเดิลที่ export `./gui-experimental` ชี้ไป ค่าเริ่มต้น `dist/gui-experimental.cjs`
+
+#### Reference
+
+```ts
+function gui(options?: GuiOptions): Plugin[]
+
+interface GuiOptions {
+  entry?: string
+  outFile?: string
+}
+```
+
+### แพ็กเกจที่ต้องใช้
+
+เพิ่มเครื่องมือบิลด์เป็น devDependencies แอปให้ `@opencode/plugin/gui` ขณะรัน บันเดิลจึงต้องการเพียง
+ชนิดข้อมูลจากแพ็กเกจ `@opencode/plugin`
+
+```bash
+bun add -d vite vite-plugin-solid solid-js
+```
+
+สำหรับชนิด Electron และ Node ใน `main` ให้เพิ่ม `electron` และ `@types/node` ด้วย
+
+```bash
+bun add -d electron @types/node
+```
+
+### โมดูลที่ใช้ร่วมกัน
+
+แต่ละโปรเซสให้โมดูลเหล่านี้แก่บันเดิล การ require โมดูลที่ไม่มีโปรเซสใดให้จะทำให้ GUI ของปลั๊กอิน
+ล้มเหลว
+
+```ts
+import { Schema } from "effect" // Both processes
+import { createSignal } from "solid-js" // Windows; an inert placeholder in the main process
+import { readFile } from "node:fs/promises" // The main process; an inert placeholder in windows
+```
+
+- **ทั้งสองโปรเซส:** `effect`, `@opencode/plugin/gui`, `@opencode/plugin/gui/main`, `@opencode/plugin/rpc`,
+  `@opencode/schema/rpc`, `@opencode/client` และ `@opencode/client/effect`
+- **เฉพาะหน้าต่าง:** `solid-js`, `solid-js/web`, `solid-js/store`, `@opencode/client/solid` และ
+  `@opencode/plugin/gui/{file,review,browser}` โปรเซสหลักจะได้ค่าตัวแทนที่ไม่ทำงานจริง
+- **เฉพาะโปรเซสหลัก:** `electron` และโมดูลในตัวของ Node เช่น `node:fs` หน้าต่างจะได้ค่าตัวแทนที่ไม่ทำงานจริง
+
+## ตำแหน่งที่ GUI โหลด
+
+OpenCode Desktop โหลดรายการ GUI จากเซิร์ฟเวอร์เบื้องหลังของตัวเอง ซึ่งโหลดปลั๊กอินจากการกำหนดค่าของคุณอยู่แล้ว
+จึงไม่เพิ่มแหล่งโค้ดใหม่ กำหนดปลั๊กอินใน `opencode.json(c)` ส่วนกลางเพื่อให้ GUI ใช้ได้ใน
+ทุกหน้าต่าง
+
+<Callout type="note">
+  TUI อ่านปลั๊กอินจาก `cli.json` แต่แอปเดสก์ท็อปอ่านเฉพาะ `opencode.json(c)` แพ็กเกจที่ส่งเฉพาะ
+  ส่วน TUI และผู้ใช้ระบุใน `cli.json` ต้องระบุใน `opencode.json(c)` ด้วยเมื่อเพิ่ม
+  `./gui-experimental`
+</Callout>
+
+โปรเซสหลักของแอปเดสก์ท็อปแสดงรายการปลั๊กอินและอ่านบันเดิลจากเซิร์ฟเวอร์ของตัวเอง ด้วยข้อมูลรับรอง
+ที่มันถืออยู่เท่านั้น และส่งชุดเดียวกันให้หน้าต่าง หน้าต่างให้โค้ดโปรเซสหลักไม่ได้
+
+ปลั๊กอินที่ส่วนเซิร์ฟเวอร์โหลดไม่สำเร็จไม่มี GUI
+
+## การโหลดใหม่และการอัปเดต
+
+โหลดปลั๊กอินจากไดเรกทอรีในเครื่องและสร้างใหม่ทุกการเปลี่ยนแปลง
+
+```bash
+vite build --watch
+```
+
+- ถ้า `package.json` ในไดเรกทอรีในเครื่องมี `name` และ `exports` ระบบจะใช้ค่าเหล่านั้นเพื่อหา `./gui-experimental` หากไม่มี
+  ระบบจะโหลด `gui-experimental.cjs` (หรือ `.js`) จากไดเรกทอรีราก ไฟล์หลักต้องเป็น `.cjs` หรือ `.js` ระบบจะไม่โหลดไฟล์ประเภทอื่น
+- การสร้างใหม่แต่ละครั้งโหลด GUI ของปลั๊กอินใหม่ในทุกหน้าต่างและในโปรเซสหลัก ส่วนเซิร์ฟเวอร์ไม่รีสตาร์ต
+- GUI ของแพ็กเกจที่ติดตั้งเปลี่ยนเฉพาะตามเวอร์ชัน
+- การเปลี่ยน `options` ของปลั๊กอินใน `opencode.json(c)` โหลดปลั๊กอินใหม่
+- `opencode plugin update` แทนที่ GUI ของแพ็กเกจเมื่ออัปเดตเสร็จ
+- [**Settings > Extensions > Plugins**](/plugins#desktop) แสดงปลั๊กอินพร้อมสวิตช์ที่ปิด GUI หากต้องการ
+  นำออก ให้ลบจาก `opencode.json(c)` หรือรัน `opencode plugin remove <package>`
+
+<Callout type="note">
+  ปลั๊กอินของแอปเองสงวน id ไว้ หาก id ของปลั๊กอินคุณเป็นหนึ่งในนั้น ซ้อนอยู่ใต้ id หนึ่งด้วย `.` มี id หนึ่ง
+  ซ้อนอยู่ใต้มัน หรืออยู่ในเนมสเปซ `opencode` GUI จะไม่โหลด และ **Settings > Extensions > Plugins**
+  จะแสดงว่าไม่ได้โหลด
+</Callout>
+
+## กำหนดปลั๊กอิน GUI
+
+`Plugin.define` ประกาศระบบที่ปลั๊กอินทำงาน สถานะหน้าต่างที่จัดเก็บ ไอคอน และข้อความ โฮสต์
+อ่านคำประกาศเหล่านี้ก่อน setup ใดๆ ทำงาน
+
+```ts title="src/gui/definition.ts"
+import { Schema } from "effect"
+import { Plugin, Store } from "@opencode/plugin/gui"
+
+export const definition = Plugin.define({
+  os: ["macos", "linux"],
+  stores: {
+    prefs: Store.global(Schema.Struct({ enabled: Schema.Boolean }), { enabled: true }),
+  },
+  i18n: {
+    en: { title: "Acme", "command.open": "Open Acme" },
+    de: { title: "Acme", "command.open": "Acme öffnen" },
+  },
+})
+```
+
+- โฮสต์ให้ id แก่ปลั๊กอินเป็น `ctx.id`: `id` ของส่วนเซิร์ฟเวอร์ หรือชื่อแพ็กเกจสำหรับแพ็กเกจที่ไม่มี
+  ส่วนเซิร์ฟเวอร์ (ชื่อไดเรกทอรีสำหรับไดเรกทอรีในเครื่องที่ไม่มี `name`) มันเติมคำนำหน้าให้ทุก id ที่ปลั๊กอินสร้าง: คำสั่ง (`<id>.<command>`), คีย์แผง (`<id>:<tab>`), คีย์ที่จัดเก็บ
+  (`plugin.<id>.<key>`) และ id ของ[สัญญาและ Ipc](#contracts-and-tokens)ที่มันให้
+- `os` จำกัดปลั๊กอินให้บางระบบปฏิบัติการ ละเพื่อทำงานบนทุก OS ปลั๊กอินที่ `os` ไม่รวม
+  ระบบนี้จะไม่ทำงาน และ **Settings > Extensions > Plugins** คงแถวไว้พร้อม "Not available on this system."
+- `stores` ประกาศ[สถานะที่จัดเก็บ](#stored-state)สำหรับหน้าต่าง อ่านเป็น `ctx.stores.<key>`
+- `icons` ประกาศ[ไอคอนของตัวเอง](#icons) แต่ละรายการเป็นข้อความในไฟล์ SVG อ่านชื่อไอคอนเป็น
+  `ctx.icons.<name>`
+- `i18n` เก็บข้อความตามภาษา เขียนทุกภาษาแบบอินไลน์ ภาษาอังกฤษเติมทุกคีย์ที่ภาษานั้นขาด อ่านด้วย
+  `ctx.t(key, params)` และ `ctx.plural(key, count)` ในหน้าต่าง `ctx.t` ยังอ่านคีย์ที่แอปใช้ร่วมกันเช่น `common.*` ใน `main` คีย์ที่ขาดจะคืนคีย์
+- กำหนด `setup`, `main` หรือทั้งสอง GUI ที่ไม่มีทั้งสองโหลดไม่สำเร็จ
+- หากไม่มี setup `Plugin.define` คืนคำประกาศเป็น `Plugin.Declarations` setup ในไฟล์อื่นจึงกำหนดชนิดจากคำประกาศได้ `Plugin.Definition` เป็นชนิดของคำจำกัดความเต็ม
+- ปลั๊กอินไม่ประกาศสัญญาที่ให้หรือใช้ มันให้และอ่านขณะรัน ดู
+  [สัญญาและโทเคน](#contracts-and-tokens)
+
+#### Reference
+
+```ts
+interface Declarations {
+  os?: ("macos" | "windows" | "linux")[]
+  stores?: Record<string, StoreDeclaration>
+  icons?: Record<string, string>
+  i18n?: { en: Messages; [locale: string]: Messages }
+}
+
+interface Definition extends Declarations {
+  setup?(ctx: SetupContext<this>): Cleanup | void
+  main?(ctx: MainContext): Cleanup | void | Promise<Cleanup | void>
+}
+
+type Messages = Record<string, string>
+
+type Cleanup = () => void | Promise<void>
+```
+
+### แบ่งโค้ดเป็นหลายไฟล์
+
+ปลั๊กอิน GUI ขนาดเล็กอยู่ได้ใน `src/gui.tsx` สำหรับขนาดใหญ่ ให้ประกาศปลั๊กอินใน `definition.ts` ใส่โทเคนที่ใช้ร่วมกันใน
+`contract.ts` เขียนแต่ละ setup ในไฟล์ของตัวเอง และรวมใน `src/gui.tsx`
+
+```text
+src/
+├── index.ts            Server part: Plugin.define from @opencode/plugin
+├── rpc.ts              RPC contract between the server part and its clients
+├── gui.tsx             ./gui-experimental entry: export default Plugin.define({ ...definition, setup, main })
+└── gui/
+    ├── definition.ts   Plugin.define: os, stores, icons, i18n
+    ├── contract.ts     Tokens other code may import: Ipc, Contract, Registry
+    ├── window.tsx      Window setup: Plugin.Setup<typeof definition>
+    ├── main.ts         Main setup: Plugin.MainSetup (desktop only)
+    ├── page.tsx        Components that panels and pages render
+    ├── icons/logo.svg  The plugin's own icons
+    └── i18n/en.ts      English copy
+```
+
+ไฟล์ `./gui-experimental` ทั้งไฟล์ถูกประเมินเมื่อหน้าต่างเริ่ม จึงควรเก็บขอบเขตโมดูลและ `setup` ให้เบา ลงทะเบียน
+ส่วนร่วมที่นั่นและทำงานหนักในคอมโพเนนต์ `createKeyed` หรือ `createLatest`
+
+สำหรับปลั๊กอินขนาดใหญ่ ให้ประกาศปลั๊กอินก่อน กำหนดชนิดแต่ละ setup จากคำประกาศ แล้วจึงกำหนดปลั๊กอินด้วยค่าเหล่านั้น
+
+```ts title="src/gui/definition.ts"
+import { Schema } from "effect"
+import { Plugin, Store } from "@opencode/plugin/gui"
+
+export const definition = Plugin.define({
+  stores: { notes: Store.global(Schema.Struct({ count: Schema.Number }), { count: 0 }) },
+})
+```
+
+```tsx title="src/gui/window.tsx"
+import type { Plugin } from "@opencode/plugin/gui"
+import { Notes } from "./contract"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.provide(Notes, { count: () => ctx.stores.notes.value.count })
+}
+```
+
+```ts title="src/gui/main.ts"
+import type { Plugin } from "@opencode/plugin/gui"
+
+export const main: Plugin.MainSetup = (ctx) => {
+  ctx.log.write("info", "acme started")
+}
+```
+
+```tsx title="src/gui.tsx"
+import { Plugin } from "@opencode/plugin/gui"
+import { definition } from "./gui/definition"
+import { main } from "./gui/main"
+import { setup } from "./gui/window"
+
+export default Plugin.define({ ...definition, setup, main })
+```
+
+- `Plugin.Setup<typeof definition>` เป็นชนิดของ setup หน้าต่าง กำหนดชนิด `ctx.stores` จาก stores ที่ประกาศ และ
+  `ctx.icons` จากไอคอนที่ประกาศ
+- `Plugin.MainSetup` เป็นชนิดของฟังก์ชันตั้งค่าฝั่งโปรเซสหลัก ส่วน `Plugin.Cleanup` เป็นชนิดของฟังก์ชันสำหรับคืนทรัพยากรที่ฟังก์ชันตั้งค่าทั้งสองฝั่งสามารถคืนได้
+- นำเข้า registry โทเคน และตัวช่วย เช่น `Command`, `SettingsPage`, `Panel`, `Slot`, `Contract`, `Ipc`,
+  `Registry`, `Store`, `createKeyed`, `usePlugin` และ `bindPlugin` จาก `@opencode/plugin/gui`
+- นำเข้า registry ที่ใช้ได้เฉพาะในโปรเซสหลัก เช่น `MenubarItem` จาก `@opencode/plugin/gui/main`
+
+## บริบทที่ใช้ร่วมกัน
+
+ทั้งสอง setup ได้รับตัวเลือกของปลั๊กอิน ไคลเอนต์สำหรับเซิร์ฟเวอร์ OpenCode และข้อมูลเมตาแอป เช่นเดียวกับส่วนเซิร์ฟเวอร์
+และ TUI
+
+### ตัวเลือก
+
+`ctx.options` เก็บ `options` จากรายการ `opencode.json(c)` ของปลั๊กอิน: ค่าเดียวกับที่ส่วนเซิร์ฟเวอร์ได้รับ
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [{ "package": "opencode-acme-plugin", "options": { "team": "core" } }],
+}
+```
+
+```ts
+setup(ctx) {
+  const team = ctx.options.team
+}
+```
+
+- การเปลี่ยนตัวเลือกโหลดปลั๊กอินใหม่
+
+### ไคลเอนต์เซิร์ฟเวอร์
+
+`ctx.client` เป็นไคลเอนต์ OpenCode ของเซิร์ฟเวอร์ที่รันปลั๊กอิน: เซิร์ฟเวอร์ของแอปเดสก์ท็อปเอง ใช้เรียก
+ส่วนเซิร์ฟเวอร์ของคุณผ่าน [RPC](/build/plugins/rpc)
+
+```ts
+import { Command } from "@opencode/plugin/gui"
+import { Acme } from "./rpc"
+
+ctx.add(Command, () => ({
+  id: "search",
+  title: ctx.t("command.search"),
+  run: async () => {
+    const result = await ctx.client.rpc(Acme).search({ query: "todo" })
+    console.log(result)
+  },
+}))
+```
+
+- อ่าน `ctx.client` ตรงจุดที่เรียกใช้ เพราะไคลเอนต์จะเปลี่ยนหลังเซิร์ฟเวอร์รีสตาร์ต
+- เมื่อเข้าถึงเซิร์ฟเวอร์ไม่ได้ Promise จากทุกการเรียกจะถูกปฏิเสธ
+
+### ข้อมูลเมตาแอป
+
+`ctx.app` อธิบายแอปที่กำลังทำงาน
+
+```ts
+if (!ctx.app.packaged) console.log(`Acme on ${ctx.app.name} ${ctx.app.version} (${ctx.app.channel})`)
+```
+
+- `name` คือ `"opencode"` เช่น `ctx.app.name` ของปลั๊กอินเซิร์ฟเวอร์
+- `platform` คือ `"desktop"` ในแอป Electron และใน `main` และ `"web"` ในแท็บเบราว์เซอร์
+- `packaged` เป็น `true` เมื่อแอปเดสก์ท็อปทำงานแบบแพ็กเกจ บนเว็บเป็น `false` เสมอ
+- ปลั๊กอินเซิร์ฟเวอร์ได้ `name`, `version` และ `channel` ส่วนปลั๊กอิน TUI ได้ `version` และ `channel`
+
+#### Reference
+
+```ts
+interface App {
+  name: string
+  version: string
+  channel: "local" | "dev" | "beta" | "prod"
+  platform: "web" | "desktop"
+  packaged: boolean
+}
+```
+
+## สัญญาและโทเคน
+
+โทเคนช่วยให้ปลั๊กอิน GUI สื่อสารกันได้แม้อยู่คนละโปรเซส โดยไม่ต้องนำเข้าโค้ดรันไทม์ของกันและกัน ให้เก็บโทเคนทั้งหมดไว้ใน `contract.ts` แต่ละโทเคนเก็บเพียงชนิดและ ID ของตัวเอง รวมถึง schema ในกรณีของ `Ipc` ปลั๊กอินอื่นจึงนำเข้าโทเคนได้โดยไม่ต้องใช้โค้ดรันไทม์ของคุณ
+
+- `ctx.provide(token, impl)` ลงทะเบียนส่วนให้บริการตามโทเคนของคุณเอง โดยเป็น `Contract` จากฟังก์ชันตั้งค่าฝั่งหน้าต่าง หรือ `Ipc` จาก
+  `main`
+- `ctx.use(token)` ติดตามสัญญาหรือ `Ipc` ที่ปลั๊กอินอื่นให้ คืนตัวเข้าถึง
+  [`Live`](#live-dependencies-and-failure-handling)
+- `ctx.main(ipc)` คืนไคลเอนต์สำหรับ `Ipc` ที่ `main` ของคุณให้
+
+ปลั๊กอินให้บริการได้เฉพาะโทเคนที่มี ID ตรงกับ ID ของปลั๊กอินหรือขึ้นต้นด้วย ID นั้นในรูป `<id>.<name>` `ctx.provide` จะโยนข้อผิดพลาดหากใช้ ID อื่น และ `ctx.main` จะโยนข้อผิดพลาดหาก `Ipc` ไม่อยู่ภายใต้ ID ของปลั๊กอิน ตัวอย่างในหน้านี้ใช้ ID ปลั๊กอิน `acme` ดังนั้น ID ของโทเคนจึงขึ้นต้นด้วย `acme.`
+
+```ts
+Contract.define<AcmeBadge, "acme.badge">("acme.badge") // Plugin acme can provide it.
+Contract.define<AcmeBadge, "badge">("badge") // ctx.provide throws in plugin acme.
+```
+
+### สัญญา
+
+ใช้ `Contract.define` เมื่อฟังก์ชันตั้งค่าฝั่งหน้าต่างของปลั๊กอินหนึ่งเปิดให้ฟังก์ชันตั้งค่าฝั่งหน้าต่างของปลั๊กอินอื่นใช้ API หรือคอมโพเนนต์ Solid
+
+```ts title="src/gui/contract.ts"
+import type { JSX } from "solid-js"
+import { Contract } from "@opencode/plugin/gui"
+
+export interface AcmeBadge {
+  Badge(props: { readonly label: string }): JSX.Element
+  count(): number
+}
+
+export const AcmeBadge = Contract.define<AcmeBadge, "acme.badge">("acme.badge")
+```
+
+ใช้ `ctx.provide` เปิดให้เรียกสัญญาจากฟังก์ชันตั้งค่าฝั่งหน้าต่าง ถ้าสัญญามีคอมโพเนนต์ ให้ห่อคอมโพเนนต์ด้วย `bindPlugin` ในขั้นตอนตั้งค่า จากนั้น `usePlugin()` ภายในคอมโพเนนต์จะอ่านบริบทของปลั๊กอินที่ให้บริการ ไม่ใช่ของปลั๊กอินที่เรียกใช้
+
+```tsx title="src/gui.tsx"
+import { bindPlugin, Plugin } from "@opencode/plugin/gui"
+import { AcmeBadge } from "./gui/contract"
+
+export default Plugin.define({
+  i18n: { en: { title: "Acme" } },
+  setup(ctx) {
+    ctx.provide(AcmeBadge, {
+      Badge: bindPlugin((props: { readonly label: string }) => (
+        <span>
+          {ctx.t("title")}: {props.label}
+        </span>
+      )),
+      count: () => 42,
+    })
+  },
+})
+```
+
+- ระบุชนิดพร็อพของคอมโพเนนต์ที่ห่อด้วย `bindPlugin` เช่น `bindPlugin((props: FileTreeProps) => ...)`
+  TypeScript อนุมานภายใน `ctx.provide` ไม่ได้
+- ปล่อยเมธอดข้อมูลเช่น `count` โดยไม่ห่อ
+- `ctx.provide` คืนฟังก์ชันที่ถอนสัญญาก่อนกำหนด โฮสต์ยังถอนด้วยเจ้าของปัจจุบัน
+  หรือเมื่อปลั๊กอินหยุด
+
+### ใช้สัญญาของปลั๊กอินอื่น
+
+ส่งออก `contract.ts` จากแพ็กเกจของคุณ เช่น เป็น `./contract` เพื่อให้ปลั๊กอินอื่นนำเข้าโทเคนได้ ปลั๊กอินอื่น
+ติดตามสัญญาด้วย `ctx.use(token)` ค่าของตัวเข้าถึงเปลี่ยนเมื่อผู้ให้เริ่ม หยุด และ
+เริ่มใหม่ จึงควรอ่าน ณ จุดที่ใช้
+
+```tsx title="src/gui.tsx"
+import { Plugin, Slot } from "@opencode/plugin/gui"
+import { AcmeBadge } from "opencode-acme-plugin/contract"
+
+export default Plugin.define({
+  setup(ctx) {
+    const badge = ctx.use(AcmeBadge)
+
+    const count = () => {
+      const live = badge()
+
+      return live.status === "active" ? live.value.count() : 0
+    }
+
+    ctx.add(Slot, { at: "window.bottom", render: () => <span>{count()}</span> })
+  },
+})
+```
+
+- `ctx.use` คืนตัวเข้าถึงเดิมทุกครั้งที่เรียกด้วยโทเคนเดียวกัน
+- ผู้บริโภคทำงานต่อขณะผู้ให้ปิด ดู
+  [การติดตามสถานะปลั๊กอินที่ใช้และการจัดการข้อผิดพลาด](#live-dependencies-and-failure-handling)
+
+### IPC ระหว่างโปรเซสหลักกับหน้าต่าง
+
+ใช้ `Ipc.define` กับตัวเข้ารหัสและถอดรหัส `Schema` ของ Effect เพื่อสร้างช่องทางสื่อสารที่ระบุชนิดข้อมูลระหว่าง `main` กับ `setup` ให้ `main`
+จัดเตรียมการทำงานด้วย `ctx.provide` แล้วเรียกจากหน้าต่างผ่าน `ctx.main`
+
+```ts title="src/gui/contract.ts"
+import { Schema } from "effect"
+import { Ipc } from "@opencode/plugin/gui"
+
+export const KeepAwake = Ipc.define({
+  id: "acme.awake",
+  methods: {
+    screenActive: { output: Schema.Boolean },
+    setScreenActive: { input: Schema.Boolean },
+  },
+})
+```
+
+```ts
+const awake = ctx.main(KeepAwake)
+
+await awake.setScreenActive(true)
+```
+
+- ปลั๊กอินอื่นติดตาม `Ipc` ของคุณด้วย `ctx.use(KeepAwake)` เหมือนสัญญา
+- ดู[กำหนดและให้ Ipc](#define-and-provide-an-ipc)สำหรับสถานะ อีเวนต์ และผู้ให้
+
+### registry ของปลั๊กอิน
+
+ใช้ `Registry.define` สำหรับรายการที่ปลั๊กอินคุณเป็นเจ้าของ ปลั๊กอินอื่นเพิ่มรายการด้วย `ctx.add` และปลั๊กอินคุณอ่าน
+ด้วย `ctx.list`
+
+```ts title="src/gui/contract.ts"
+import { Registry } from "@opencode/plugin/gui"
+
+export interface Exporter {
+  readonly id: string
+  readonly title: string
+  run(text: string): void
+}
+
+export const Exporter = Registry.define<Exporter>("acme.exporter")
+```
+
+```tsx
+// Another plugin contributes an item.
+ctx.add(Exporter, () => ({ id: "gist", title: ctx.t("exporter.gist"), run: (text) => upload(text) }))
+
+// The owner lists every contribution. Reactive: read it in render or in a memo.
+const exporters = () => ctx.list(Exporter)
+```
+
+## หน้าต่าง
+
+`setup` ของปลั๊กอินทำงานทุกหน้าต่างของแอปเดสก์ท็อป ส่งให้ `Plugin.define` จาก `@opencode/plugin/gui` ใน
+[ไฟล์ `./gui-experimental`](#define-the-gui-plugin)ของปลั๊กอิน `setup` เป็นซิงโครนัสและอาจคืน
+ฟังก์ชันสำหรับคืนทรัพยากร ดู[อายุการทำงานและการคืนทรัพยากร](#lifetimes-and-cleanup)
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+
+export default Plugin.define({
+  i18n: { en: { open: "Open Acme" } },
+  setup(ctx) {
+    ctx.add(Command, () => ({
+      id: "open",
+      title: ctx.t("open"),
+      run: () => ctx.system.openExternal("https://acme.example"),
+    }))
+  },
+})
+```
+
+## คอมโพเนนต์
+
+ภายในคอมโพเนนต์ Solid ให้เรียก `usePlugin<typeof definition>()` เพื่อรับออบเจกต์บริบทเดียวกับที่ `setup` ได้รับ กำหนด
+ชนิดจากคำประกาศในไฟล์ของตัวเอง ([แยกข้ามไฟล์](#split-across-files)) คอมโพเนนต์
+และคำจำกัดความจึงไม่นำเข้ากันและกัน
+
+```tsx title="src/gui/window.tsx"
+import { Slot, usePlugin, type Plugin } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+function StatusLabel() {
+  const ctx = usePlugin<typeof definition>()
+
+  return <span>{ctx.t("title")}</span>
+}
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.add(Slot, { at: "window.bottom", render: () => <StatusLabel /> })
+}
+```
+
+`usePlugin` จะโยนข้อผิดพลาดหากเรียกจากส่วนที่ไม่ได้มาจากปลั๊กอิน หากปลั๊กอินอื่นแสดงคอมโพเนนต์นี้ จะได้บริบทของปลั๊กอินนั้น
+จึงควรห่อคอมโพเนนต์ที่เปิดให้ใช้ผ่านสัญญาด้วย `bindPlugin` ดู[สัญญา](#contracts)
+
+## ไอคอน
+
+ฟิลด์ `icon` ทุกฟิลด์ของ SDK และ `ctx.ui.Icon` รับ `IconName`: ชื่อไอคอนของแอปเอง หรือ
+ไอคอนที่ปลั๊กอินคุณประกาศ สตริงอื่นคอมไพล์ไม่ผ่าน
+
+```ts
+ctx.add(TitlebarItem, () => ({ id: "sync", label: ctx.t("sync"), icon: "server", run: () => sync() }))
+```
+
+### ประกาศไอคอนของคุณเอง
+
+สำหรับภาพที่แอปไม่มี เช่นเครื่องหมายผลิตภัณฑ์ของคุณ ให้เก็บไฟล์ SVG ในแพ็กเกจและประกาศใน
+`icons` นำเข้าไฟล์ด้วย `?raw` ซึ่งพรีเซ็ต `gui()` รวมเป็นข้อความ
+
+```ts title="src/gui/definition.ts"
+import { Plugin } from "@opencode/plugin/gui"
+import logo from "./icons/logo.svg?raw"
+
+export const definition = Plugin.define({
+  icons: { logo },
+})
+```
+
+จากนั้นส่งชื่อไอคอนจาก `ctx.icons` ทุกที่ที่ต้องใช้ `IconName`
+
+```tsx title="src/gui/window.tsx"
+import { ComposerPill, Slot, type Plugin } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.add(ComposerPill, {
+    id: "sync",
+    show: () => ({ label: ctx.t("synced"), icon: ctx.icons.logo, tone: "success" }),
+  })
+
+  ctx.add(Slot, { at: "window.bottom", render: () => <ctx.ui.Icon name={ctx.icons.logo} size="small" /> })
+}
+```
+
+- `ctx.icons` มีชื่อหนึ่งชื่อต่อไอคอนที่ประกาศ ชื่อที่ไม่ได้ประกาศคอมไพล์ไม่ผ่าน
+- โฮสต์ลงทะเบียนไอคอนก่อน `setup` ทำงานและถอนเมื่อปลั๊กอินจากไป
+- ค่าที่ไม่ใช่เอกสาร SVG ทำให้ปลั๊กอินล้มเหลวเมื่อเริ่ม
+- หากต้องการให้การนำเข้า `?raw` ตรวจชนิดได้ ให้เพิ่ม `"vite/client"` ใน `types` ของ `tsconfig.json`
+
+### วาดไอคอน
+
+โฮสต์วาดไอคอนของคุณเหมือนของตัวเอง: ตามขนาดและสีของตำแหน่งที่แสดง
+
+```xml title="src/gui/icons/logo.svg"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+  <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
+  <path d="M5 8.5 7 10.5 11 6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
+```
+
+- `viewBox` กำหนดกรอบภาพ ถ้าไม่ได้ระบุจะใช้ `width` กับ `height` โฮสต์ปรับขนาดเป็น 14, 16 หรือ
+  20 พิกเซล จึงควรวาดบนกริด 16 พิกเซล
+- วาดด้วย `currentColor` เพื่อให้ไอคอนใช้สีตามตำแหน่งที่แสดง เช่น `tone` ของป้ายทรงแคปซูลหรือสีไอคอนจางของแถวเมนู
+- `id` ในการวาดเป็นของทั้งหน้าต่าง ให้ id ไม่ซ้ำหรือไม่ต้องใส่
+
+### ทำไอคอนเคลื่อนไหว
+
+ไอคอนเคลื่อนไหวได้ เช่นเพื่อแสดงว่ากำลังทำงาน ใช้องค์ประกอบแอนิเมชัน SVG เช่น `animate` และ
+`animateTransform` ในไฟล์
+
+```xml title="src/gui/icons/working.svg"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+  <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
+  <circle cx="8" cy="8" r="2" fill="currentColor">
+    <animate attributeName="r" values="2;4.5;2" dur="2.4s" repeatCount="indefinite" />
+  </circle>
+</svg>
+```
+
+- ทุกที่ที่แสดงไอคอนเคลื่อนไหวพร้อมกัน
+- แอนิเมชันเล่นต่อเนื่องแม้โฮสต์จะแสดงส่วนนั้นใหม่ เช่น เมื่อเรียก `show` ของป้ายทรงแคปซูลอีกครั้ง
+- ภายใต้การตั้งค่าลดการเคลื่อนไหวของผู้ใช้ โฮสต์หยุดทุกไอคอนที่เฟรมแรก ให้เฟรมแรกเป็น
+  ภาพนิ่ง
+- ไอคอนที่ไม่ได้แสดงไม่ใช้ทรัพยากร
+
+### ชื่อไอคอนที่จัดเก็บ
+
+ชื่อไอคอนเป็นสตริง `<plugin id>:<name>` โฮสต์จึงเก็บเหมือนชื่อไอคอนของตัวเอง
+[บันทึกหรือคำพูดในช่องพิมพ์](#attach-to-the-composer)เก็บไว้กับฉบับร่างและข้อความที่ส่ง และ
+[แท็บที่ปิด](#reopen-closed-tabs)เก็บไว้กับเลย์เอาต์ของเซสชัน
+
+```ts
+ctx.screen.current()?.composer.attach({
+  type: "note",
+  origin: ctx.id,
+  commentID: crypto.randomUUID(),
+  label: "button#submit",
+  icon: ctx.icons.logo,
+  subject: 'element <button id="submit">Save</button>',
+  comment: "",
+})
+```
+
+- ขณะปลั๊กอินไม่ทำงาน ไอคอนวาดไม่แสดงและคงขนาด
+- อ่านชื่อจาก `ctx.icons` ณ จุดที่ใช้ ชื่อที่เขียนด้วยมือคอมไพล์ไม่ผ่าน
+
+#### Reference
+
+```ts
+type IconName = AppIconName | PluginIconName
+
+// One of the app's own icons, such as "folder", "github" or "terminal".
+type AppIconName = string
+
+// The name of an icon the plugin declared, from ctx.icons.
+type PluginIconName = string
+
+interface Declarations {
+  icons?: Record<string, string>
+}
+
+interface SetupContext<D> extends Context {
+  icons: Record<string, PluginIconName>
+}
+```
+
+## การลงทะเบียนรายการกับ registry
+
+ส่งโทเคน registry พร้อมรายการให้ `ctx.add` เพื่อเพิ่มรายการในเชลล์หน้าต่าง ส่งรายการเป็นฟังก์ชัน
+`() => item | undefined` เมื่อมันตามสถานะรีแอกทีฟเช่นภาษา โฮสต์รันฟังก์ชันอีกครั้งเมื่อ
+สิ่งที่อ่านเปลี่ยน คืน `undefined` เพื่อถอนรายการจนกว่าฟังก์ชันจะคืนอีกครั้ง
+
+```ts
+ctx.add(Command, () => ({ id: "open", title: ctx.t("command.open"), run: () => open() }))
+```
+
+- อ่านป้ายด้วย `ctx.t` ภายในฟังก์ชัน ป้ายที่อ่านครั้งเดียวในรายการคงที่คงภาษาที่อ่าน
+- เมื่อรายการมีฟิลด์ชนิดลิเทอรัล เช่น `hidden: true`, `section`, `icon` หรือชื่อเมนู ให้ระบุ
+  ชนิดผลลัพธ์ของฟังก์ชัน: `(): Command => ({ ... })` หากไม่มี TypeScript จะขยายฟิลด์เป็น `string` หรือ
+  `boolean` และไม่ตรง overload ใด
+- ส่งรายการคงที่เมื่อไม่เปลี่ยน เช่น [สไตล์](#styles)
+- โฮสต์เก็บบางออบเจกต์ให้คงที่: แท็บที่แผงคืนจาก `list` และรายการที่มี `render` เช่นแผง
+  และหน้าการตั้งค่า อ่านป้ายจาก getter เช่น `get title() { return ctx.t("title") }`
+- `ctx.add` คืนฟังก์ชันที่ถอนรายการก่อนกำหนด
+
+### คำสั่ง
+
+`Command` เพิ่มการกระทำในพาเลตต์คำสั่ง **Settings > Shortcuts** และเมนู `/` ของช่องพิมพ์หากเลือก
+โฮสต์เผยแพร่คำสั่งเป็น `<plugin id>.<command id>`
+
+```ts
+import { Command } from "@opencode/plugin/gui"
+
+ctx.add(
+  Command,
+  (): Command => ({
+    id: "toggle",
+    title: ctx.t("command.toggle"),
+    keywords: "notes scratch",
+    group: ctx.t("command.category.view"),
+    section: "terminal",
+    bind: "ctrl+`",
+    slash: { name: "notes", after: "open" },
+    featured: true,
+    enabled: !!ctx.sessions.current(),
+    run: () => {
+      const session = ctx.sessions.current()
+
+      if (session) ctx.layout.toggle(`${ctx.id}:main`, session)
+    },
+  }),
+)
+```
+
+- `title` เป็นป้ายพาเลตต์ `description` บรรทัดที่สอง และ `group` หมวด เป็นข้อความที่แปล
+- `keywords` เก็บคำเพิ่มเติมที่พาเลตต์จับ คั่นด้วยช่องว่าง
+- `section` เป็นส่วนใน **Settings > Shortcuts** ค่าเริ่มต้น `general`
+- `bind` เป็นคีย์ลัดเริ่มต้น เช่น `mod+shift+t` ผู้ใช้เปลี่ยนได้
+- `slash` เสนอคำสั่งในเมนู `/` ด้วย เมื่อ `arguments: true` ข้อความหลังชื่อส่งไปที่
+  `run(input)`
+- `hidden` เก็บคำสั่งออกจากพาเลตต์ แต่คีย์ลัดยังทำงาน
+- `suggested` แสดงคำสั่งใต้ **Suggested** ขณะเปิดใช้งาน `featured` แสดงเมื่อพาเลตต์เปิด
+  โดยไม่มีคำค้น
+- `enabled: false` นำคำสั่งออกจากพาเลตต์และปิดคีย์ลัด เป็นรีแอกทีฟ
+- `scope` เป็นตัวเลือก CSS ที่โฟกัสแป้นพิมพ์ต้องอยู่ภายในเพื่อให้การผูกมีผล เมื่อ `editable` การผูก
+  ยังทำงานขณะช่องข้อความโฟกัส
+- หากต้องการรันคำสั่งจากโค้ดของคุณเอง ให้ใช้ `ctx.commands.run` ดู[รันคำสั่ง](#run-commands)
+
+จากคีย์ลัด `run` คืน `false` เพื่อปฏิเสธคีย์ได้ อีเวนต์จะไปยังเป้าหมายต่อ ราวกับคำสั่ง
+ไม่มีคีย์ลัด คำสั่งนี้ทำเซสชันต่อเมื่อผู้ใช้กด Enter ในพรอมต์ว่าง และปล่อย Enter อื่นทั้งหมด
+ให้พรอมต์
+
+```ts
+ctx.add(Command, () => ({
+  id: "continue",
+  title: ctx.t("command.continue"),
+  bind: "enter",
+  editable: true,
+  hidden: true,
+  run: () => {
+    const composer = ctx.screen.current()?.composer
+    const session = ctx.sessions.current()
+
+    if (!composer?.focused() || composer.text().trim() || !session) return false
+    void session.server.client.session.prompt({ sessionID: session.id, text: ctx.t("continue") })
+  },
+}))
+```
+
+- ต้องคืน `false` แบบซิงโครนัส หากคืน Promise คำสั่งจะรับเหตุการณ์กดปุ่มไปจัดการ
+- `false` จากพาเลตต์หรือคำสั่ง slash ไม่ทำอะไรต่อ
+
+#### Reference
+
+```ts
+interface Command {
+  id: string
+  title: string
+  description?: string
+  keywords?: string
+  group?: string
+  section?: "general" | "session" | "navigation" | "model" | "terminal" | "prompt"
+  bind?: string
+  slash?: { name: string; arguments?: true; after?: string }
+  hidden?: true
+  suggested?: boolean
+  featured?: true
+  enabled?: boolean
+  scope?: string
+  editable?: true
+  run(input?: string): void | false | Promise<void>
+}
+```
+
+### แผง
+
+`Panel` เพิ่มแท็บในพื้นที่ด้านข้างของเซสชัน (`region: "side"`) ผู้ใช้ลากแท็บไปยังบานหน้าต่างล่างใต้
+ไทม์ไลน์ได้
+
+```tsx
+import { Panel, type PanelTab } from "@opencode/plugin/gui"
+
+const mainTab: PanelTab = {
+  id: "main",
+  get title() {
+    return ctx.t("panel.title")
+  },
+  closable: "compact",
+  fallback: true,
+}
+
+ctx.add(Panel, {
+  id: "main",
+  region: "side",
+  mobile: {
+    get title() {
+      return ctx.t("panel.title")
+    },
+    order: 45,
+    kind: "menu",
+    icon: "file-tree",
+  },
+  list: (input) => (input.open.includes("main") ? [mainTab] : []),
+  render: (props) => <NotesView session={props.session} screen={props.screen} tab={props.tab} />,
+})
+```
+
+คอลแบ็กแผงทั้งหมด (`list`, `render`, `focus`, `enter`, `close`, `closed`, `restore`, `normalize`) รับ
+ออบเจกต์อินพุตเดียว
+
+- อ่าน `props.session` และ `props.tab` ผ่าน getter แบบรีแอกทีฟตรงจุดที่ใช้ อย่าแยกพร็อพเพอร์ตีออกมาเป็นตัวแปรที่ต้น
+  `render` เพราะเมื่อผู้ใช้สลับจากเซสชัน A ไป B แผงเดิมยังอยู่ แต่ค่า `props.session` จะเปลี่ยนโดยไม่ต้องสร้างแผงใหม่
+- `props.screen` คือ `SessionScreen` เจ้าของแผงซึ่งไม่เปลี่ยน (`file`, `comment`, `composer`) การทำงานผ่านออบเจกต์นี้จะมีผลกับ
+  เซสชันที่เส้นทางปัจจุบันชี้ไปเสมอ
+- ให้ `list` คืนออบเจกต์ `PanelTab` เดิมตราบใดที่แท็บไม่เปลี่ยน เพื่อให้โฮสต์ไม่ต้องสร้างตัวเปิดแท็บใหม่
+  ใช้ getter อ่านป้ายเพื่อให้ข้อความเปลี่ยนตามภาษาโดยไม่ต้องสร้างออบเจกต์ใหม่
+
+คอลแบ็กของแผง
+
+- `list` คืนแท็บที่จะแสดง `input.open` เก็บ id แท็บของปลั๊กอินนี้ที่จัดเก็บในเซสชัน เป็นรีแอกทีฟ
+- `render` แสดงเนื้อหาแท็บครั้งเดียว
+- `focus` ทำงานเมื่อเลือกแท็บ ค่า `restored` เป็น `true` สำหรับแท็บที่ถูกเลือกอยู่แล้วตอนสร้างพื้นที่แสดงผล
+- `enter` ทำงานเมื่อผู้ใช้เปิดพื้นที่ด้านข้างบนแท็บด้วยท็อกเกิล เมื่อแท็บอยู่บนจอ ย้ายโฟกัส
+  แป้นพิมพ์ไปยังเป้าหมายของแท็บ เช่นช่องข้อความ เมื่อโฟกัสยังนอกพื้นที่ โฮสต์จะโฟกัส
+  พื้นที่
+- `close` ทำงานหลังโฮสต์นำแท็บออก
+- `closed` และ `restore` ให้ผู้ใช้เปิดแท็บที่ปิดอีกครั้ง ดู[เปิดแท็บที่ปิดอีกครั้ง](#reopen-closed-tabs)
+- `normalize` คืนรูปแบบมาตรฐานของ id แท็บที่จัดเก็บซึ่งอาจเก็บได้หลายแบบ
+
+ตัวเลือกของแผง
+
+- `mobile` เพิ่มมุมมองจอแคบให้แผง เมื่อใช้ `cached: true` ระบบจะเก็บมุมมองเดิมไว้แม้ผู้ใช้สลับไปดูมุมมองอื่น
+  โดยค่าเริ่มต้น ระบบจะสร้างมุมมองใหม่ทุกครั้งที่แสดง
+- `wide` ขอขนาดต่ำสุดของเซสชันที่กว้างขึ้นขณะพื้นที่ด้านข้างเปิด
+- `width` ให้ความกว้างพื้นที่ด้านข้างของแผงเอง ดู[ความกว้างแผง](#panel-width)
+- แท็บของแผง `transient` ไม่ถูกคืนค่า
+
+#### ความกว้างแผง
+
+โดยค่าเริ่มต้น ทุกแท็บในพื้นที่ด้านข้างใช้ความกว้างของบทสนทนา ตั้ง `width` เมื่อแผงต้องการพื้นที่น้อยกว่า
+รีวิวหรือเบราว์เซอร์ หรือมากกว่า ส่งพิกเซล CSS หรือ `"narrow"` สำหรับแคบสุดที่พื้นที่ไปถึง
+
+```ts
+ctx.add(Panel, {
+  id: "quota",
+  region: "side",
+  width: "narrow",
+  list: (input) => (input.open.includes("quota") ? [tab] : []),
+  render: () => <Quota />,
+})
+```
+
+- ความกว้างมีผลขณะบานข้างแสดงแท็บของแผง แท็บอื่นคงความกว้างของบทสนทนา
+- เมื่อผู้ใช้ลากเส้นแบ่งบนแท็บของแผง โฮสต์เก็บความกว้างนั้นให้แผงทั่วแอปแทน
+  `width`
+- โฮสต์คงบทสนทนาที่ความกว้างต่ำสุดและพื้นที่อย่างน้อย `"narrow"`
+- `ctx.layout.side.width(panel)` อ่านความกว้างที่จัดเก็บ และ `ctx.layout.side.resize(panel, width)` จัดเก็บ
+  เหมือนการลาก ความกว้างที่จัดเก็บมีผลแม้แผงไม่มี `width`
+
+ตัวเลือกของแท็บ
+
+- `id` เป็น id แท็บ คีย์โฮสต์คือ `<plugin id>:<id>` `title` เป็นชื่อที่เข้าถึงได้ และ `label` แสดงเนื้อหา
+  ทริกเกอร์กำหนดเอง
+- แท็บ `pinned` แสดงโดยไม่เปิด มาแรก และไม่ถูกปิดหรือลาก
+- `draggable` ให้ผู้ใช้เรียงแท็บใหม่ ค่าเริ่มต้น `true`
+- `closable` กำหนดรูปลักษณ์ปุ่มปิด: `"compact"`, `"hover"` หรือ `false` สำหรับไม่มี
+- `transient` ระบุว่าเป็นแท็บสำหรับเปิดเนื้อหา เช่น **Open file** เมื่อเปิดดูตัวอย่างถัดไป แท็บนี้จะถูกแทนที่
+- `fallback` เลือกใช้การเลือกสำรองเมื่อการเลือกที่จัดเก็บขาด
+- แท็บใน `group` เดียวกันใช้คอมโพเนนต์แสดงผลเดียวกัน โดยไม่ต้องสร้างใหม่เมื่อสลับแท็บ
+- `missing` ขีดทับชื่อแท็บ เช่น เมื่อไฟล์นั้นไม่มีแล้ว
+- `hidden` เก็บแท็บที่คืนค่าไว้ในรายการและเลือกได้แต่ไม่วาด ขณะยังไม่รู้เนื้อหา
+- `file` เป็นพาธเวิร์กสเปซที่แท็บแสดง ระบุเป็นหนึ่งในไฟล์ที่เปิดของเซสชัน
+- `tabbable` ใส่แผงแท็บในลำดับแท็บ สำหรับเนื้อหาที่ไม่มีองค์ประกอบโฟกัส
+
+#### Reference
+
+```ts
+interface Panel {
+  id: string
+  region: "side"
+  mobile?: MobileView
+  wide?: boolean
+  width?: number | "narrow"
+  transient?: boolean
+  list(input: { session: MountedSession; screen: SessionScreen; open: string[] }): PanelTab[]
+  render(props: PanelProps): JSX.Element
+  focus?(input: PanelProps & { restored: boolean }): void
+  enter?(input: PanelProps): void
+  close?(input: PanelProps): void
+  closed?(input: PanelProps): ClosedPanelTab | false | undefined
+  restore?(input: { session: MountedSession; screen: SessionScreen; id: string; data?: string }): void
+  normalize?(input: { id: string; session: MountedSession; screen: SessionScreen }): string
+}
+
+interface PanelProps {
+  tab: PanelTab
+  session: MountedSession
+  screen: SessionScreen
+}
+
+interface PanelTab {
+  id: string
+  title: string
+  label?(state: { active: boolean; preview: boolean; session: MountedSession }): JSX.Element
+  pinned?: boolean
+  draggable?: boolean
+  closable?: "compact" | "hover" | false
+  transient?: boolean
+  fallback?: boolean
+  group?: string
+  missing?: boolean
+  hidden?: boolean
+  file?: string
+  tabbable?: boolean
+}
+
+interface MobileView {
+  title: string
+  order: number
+  kind: "tab" | "menu" | "drawer"
+  icon?: IconName
+  cached?: boolean
+}
+```
+
+### เปิดแท็บที่ปิดอีกครั้ง
+
+โฮสต์เก็บรายการสำหรับแต่ละแท็บด้านข้างที่ผู้ใช้ปิด ขณะโฟกัสอยู่ในพื้นที่ด้านข้าง ⌘⇧T เปิดใหม่
+รายการล่าสุด มุมมอง **New tab** ของพื้นที่ด้านข้างแสดงแท็บที่ปิดซึ่งมี `file` ใต้ **Recently closed** เพิ่ม `closed` และ
+`restore` เพื่อควบคุมวิธีที่แท็บอ่านที่นั่นและวิธีกลับมา
+
+```tsx
+ctx.add(Panel, {
+  id: "page",
+  region: "side",
+  list: (input) => input.open.map(pageTab),
+  render: (props) => <PageView tab={props.tab} />,
+  closed: (input) => {
+    const url = pages.get(input.tab.id)
+
+    return url ? { icon: "globe", detail: new URL(url).host, data: url } : false
+  },
+  restore: (input) => {
+    if (input.data) openPage(input.session, input.data)
+  },
+})
+```
+
+- `closed` ทำงานเมื่อผู้ใช้ปิดแท็บ เก็บสิ่งที่การเปิดใหม่ต้องใช้ตอนนี้: คืนวิธีที่แถวอ่านและ `data`
+  ที่ `restore` ต้องใช้ หรือ `false` เมื่อแท็บกลับมาไม่ได้
+- `title` มีค่าเริ่มต้นเป็นชื่อแท็บ และ `icon` เป็นไอคอนมือถือของแผง แท็บที่มี `file` แสดงไอคอนไฟล์
+  และโฟลเดอร์เป็น `detail`
+- โฮสต์เก็บรายการ จึงควรเก็บ `data` ให้เล็ก เช่น URL
+- `restore` ได้รับ `id` ของแท็บที่ปิดและ `data` ที่ `closed` คืน หากไม่มี `restore` โฮสต์จะเปิด
+  คีย์เดิมอีกครั้ง
+- หากไม่มี `closed` แท็บที่ไม่ใช่ `transient` จะแสดงใต้ชื่อและเปิดใหม่ใต้คีย์เดิม
+
+#### Reference
+
+```ts
+interface ClosedPanelTab {
+  title?: string
+  icon?: IconName
+  detail?: string
+  data?: string
+}
+```
+
+### หน้าการตั้งค่า
+
+`SettingsPage` เพิ่มหน้าใน **Settings** ส่วนในหน้าโฮสต์ (`page: "general"` หรือ `page: "servers"`) หรือ
+แถวในส่วน General ของโฮสต์ (`page: "general", section: "general"`)
+
+```tsx
+import { SettingsPage } from "@opencode/plugin/gui"
+import { AcmeSettings } from "./settings"
+
+ctx.add(SettingsPage, {
+  id: "acme",
+  icon: "server",
+  get title() {
+    return ctx.t("title")
+  },
+  get entries() {
+    return [{ id: "sync", title: ctx.t("settings.sync"), keywords: "sync remote" }]
+  },
+  render: (input) => <AcmeSettings highlight={input.target} />,
+})
+```
+
+- `id` เป็นค่าของแท็บการตั้งค่าของหน้า (`/settings?tab=<id>`) และอาร์กิวเมนต์ของ `ctx.layout.settings`
+- `page` เพิ่มส่วนในหน้าโฮสต์แทนหน้า เมื่อ `section: "general"` จะเพิ่มแถวในส่วน General
+  ของหน้านั้น
+- `title` และ `icon` เป็นป้ายนำทางและไอคอนของหน้า
+- `entries` คือข้อมูลเมตาสำหรับการค้นหา ระบบจัดทำดัชนีได้โดยไม่ต้องสร้างหน้าจริง เมื่อการค้นหาเจอรายการ `render` จะได้รับ
+  id เป็น `target`
+- หน้าการตั้งค่ามี `render` โฮสต์จึงเก็บให้คงที่ อ่านป้ายและรายการจาก getter
+
+แสดงหน้าด้วยคอมโพเนนต์การตั้งค่าของแอป เพื่อให้ดูเหมือนหน้าของแอปและการค้นพบแถวได้
+
+```tsx
+const ui = ctx.ui
+
+const AcmeSettings = () => (
+  <ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")}>
+    <ui.SettingsSection title={ctx.t("settings.section")}>
+      <ui.SettingsRow id="sync" title={ctx.t("settings.sync")} description={ctx.t("settings.sync.description")}>
+        <ui.Switch label={ctx.t("settings.sync")} hideLabel checked={sync()} onChange={setSync} />
+      </ui.SettingsRow>
+    </ui.SettingsSection>
+  </ui.SettingsLayout>
+)
+```
+
+- หน้าของคุณเองแสดง `SettingsLayout` ส่วนในหน้าโฮสต์ (`page`) แสดง `SettingsSection` และแถว
+  ในส่วนของโฮสต์ (`section`) แสดง `SettingsRow`
+- `id` ของแถวต้องตรงกับ `SettingEntry.id` ที่ใช้แสดงแถวนั้น เมื่อผู้ใช้เปิดผลค้นหา ระบบจะเลื่อนไปที่แถวและไฮไลต์แถวนั้น
+- ดู[คอมโพเนนต์การตั้งค่า](#settings-components)สำหรับพร็อพ
+
+#### Reference
+
+```ts
+interface SettingsPage {
+  id: string
+  page?: "general" | "servers"
+  section?: "general"
+  title: string
+  icon?: IconName
+  entries?: SettingEntry[]
+  render(input: { target?: string }): JSX.Element
+}
+
+interface SettingEntry {
+  id: string
+  title: string
+  description?: string
+  keywords?: string
+}
+```
+
+### สล็อต
+
+`Slot` แสดง UI ในหนึ่งในสี่สล็อตของหน้าต่าง
+
+```tsx
+import { Slot } from "@opencode/plugin/gui"
+
+ctx.add(Slot, {
+  at: "session.header",
+  order: 10,
+  render: (input) => <UsageRing session={input.session} active={input.active} />,
+})
+```
+
+- `window.bottom` เป็นแถบเต็มความกว้างที่ด้านล่างหน้าต่าง เหนือทอสต์
+- `session.header` คือแถวชื่อเรื่องในไทม์ไลน์ของเซสชัน ระบบเก็บไทม์ไลน์ที่แคชไว้แม้จะซ่อนอยู่ โดย `active`
+  เป็น `false`
+- `session.location.menu` เพิ่มรายการในเมนูโปรเจกต์ หลังรายละเอียด location
+- `session.panel.end` เก็บการกระทำที่ปลายแถบแท็บของพื้นที่ด้านข้าง
+- `order` เรียงรายการในสล็อตเดียว
+
+`session.location.menu` ได้รับ `shown` ซึ่งเป็น `true` ขณะเมนูโปรเจกต์เปิด ให้สมัครรับข้อมูล location
+เฉพาะขณะเป็น `true`
+
+```tsx
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => <BranchStatus session={input.session} screen={input.screen} shown={input.shown} />,
+})
+```
+
+เมนูโปรเจกต์เป็นเมนูของโฮสต์: แสดงแถวด้วย `ctx.ui.MenuItem`, `MenuSub`, `MenuGroup` และ `MenuSeparator`
+เพื่อให้นำทางด้วยแป้นพิมพ์และปิดเมนูเหมือนแถวของโฮสต์ ดู[แถวเมนู](#menu-rows)
+
+```tsx
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => <ctx.ui.MenuItem label={ctx.t("usage")} icon="status" onSelect={() => openUsage(input.session)} />,
+})
+```
+
+#### Reference
+
+```ts
+type Slot = {
+  [At in keyof SlotMap]: { at: At; order?: number; render(input: SlotMap[At]): JSX.Element }
+}[keyof SlotMap]
+
+interface SlotMap {
+  "window.bottom": Record<string, never>
+  "session.header": { screen: SessionScreen; session: MountedSession; active: boolean }
+  "session.location.menu": { screen: SessionScreen; session: MountedSession; shown: boolean }
+  "session.panel.end": { screen: SessionScreen; session: MountedSession }
+}
+```
+
+### รายการเมนู
+
+`MenuItem` เพิ่มรายการในเมนู **+** ของแผงด้านข้าง (`"session.panel"`), เมนู **Add server** (`"server.add"`)
+หรือเมนูแถวของแต่ละเซิร์ฟเวอร์ในการตั้งค่า (`"server.row"`)
+
+```ts
+import { MenuItem } from "@opencode/plugin/gui"
+
+ctx.add(MenuItem, (): MenuItem => {
+  const session = ctx.sessions.current()
+
+  return {
+    menu: "session.panel",
+    id: "open",
+    title: ctx.t("menu.open"),
+    icon: "folder",
+    keybind: `${ctx.id}.open`,
+    opened: !!session && ctx.layout.state(`${ctx.id}:main`, session) !== "closed",
+    run: () => {
+      if (session) ctx.layout.open(`${ctx.id}:main`, session)
+    },
+  }
+})
+```
+
+- `order` เรียงรายการจากน้อยไปมาก ค่าเริ่มต้น `0`
+- `run` ของรายการ `server.row` ได้รับคีย์เซิร์ฟเวอร์ของแถว `when` แสดงเฉพาะบางแถว และ `enabled`
+  แสดงแบบปิดใช้งานในแถวอื่น
+
+รายการ `session.panel` เป็นตัวเปิดด้วย เมื่อผู้ใช้เปิดพื้นที่ด้านข้างโดยไม่มีแท็บ หรือคลิก **+** ขณะไม่มี
+รายการเป็น `primary` โฮสต์จะแสดงมุมมอง **New tab** ที่แสดงตัวเปิด
+
+- `icon` เป็นไอคอนของรายการ และ `keybind` เป็น id คำสั่งที่เผยแพร่ซึ่งรายการแสดงทางลัด
+- `description` เป็นรายละเอียดจางสั้นหลังชื่อในแถวตัวเปิด เช่นจำนวน
+- `opened: true` หมายถึงแท็บที่รายการเปิดอยู่แล้ว รายการตัวเปิดจะละรายการนั้น และเมนู **+**
+  ยังแสดง
+- `primary: true` ทำให้ **+** รันรายการโดยตรงแทนการแสดงตัวเปิด รายการ primary แรกตาม `order`
+  ชนะ การเปิดพื้นที่ด้านข้างโดยไม่มีแท็บยังแสดงมุมมอง **New tab** ซึ่งแสดงรายการที่ไม่ใช่
+  primary และไม่เปิดอยู่
+- `ctx.layout.side.menu()` แสดงรายการ `session.panel` ของทุกปลั๊กอิน สำหรับตัวเปิดของคุณเอง ดู
+  [เลย์เอาต์](#layout)
+
+#### Reference
+
+```ts
+type MenuItem = SessionPanelMenuItem | ServerAddMenuItem | ServerRowMenuItem
+
+interface SessionPanelMenuItem {
+  menu: "session.panel"
+  id: string
+  title: string
+  order?: number
+  icon?: IconName
+  keybind?: string
+  description?: string
+  opened?: boolean
+  primary?: true
+  run(): void
+}
+
+interface ServerAddMenuItem {
+  menu: "server.add"
+  id: string
+  title: string
+  order?: number
+  run(): void
+}
+
+interface ServerRowMenuItem {
+  menu: "server.row"
+  id: string
+  title: string
+  order?: number
+  when?(server: string): boolean
+  enabled?(server: string): boolean
+  run(server: string): void
+}
+```
+
+### รายการบนแถบชื่อหน้าต่าง
+
+`TitlebarItem` แสดงปุ่มทรงแคปซูลบนแถบชื่อหน้าต่างหรือส่วนท้ายแท็บ ป้ายจะปรากฏเมื่อวางเมาส์เหนือปุ่ม
+
+```ts
+import { TitlebarItem } from "@opencode/plugin/gui"
+
+ctx.add(TitlebarItem, (): TitlebarItem | undefined =>
+  syncing() ? { id: "sync", label: ctx.t("syncing"), icon: "server", busy: true, run: () => sync() } : undefined,
+)
+```
+
+- `title` เป็นชื่อที่เข้าถึงได้เมื่อต่างจาก `label`
+- `busy` แสดงตัวบ่งชี้ว่ากำลังโหลดและปิดการใช้งานปุ่ม ส่วน `pressed` แสดงปุ่มในสถานะกดอยู่
+- `run` ทำงานเมื่อคลิก ละสำหรับรายการที่แสดงอย่างเดียว
+
+#### Reference
+
+```ts
+interface TitlebarItem {
+  id: string
+  label: string
+  title?: string
+  icon?: IconName
+  busy?: boolean
+  pressed?: boolean
+  run?(): void
+}
+```
+
+### ป้ายทรงแคปซูลเหนือช่องพิมพ์
+
+`ComposerPill` เพิ่มป้ายทรงแคปซูลในแถวเหนือช่องพิมพ์ของเซสชัน ข้างป้ายงานเบื้องหลังและรายการสิ่งที่ต้องทำของแอป
+ใช้แสดงสถานะของเซสชันที่ผู้ใช้กำลังทำงานอยู่ เช่น pull request ของสาขานั้น ป้ายลอยอยู่เหนือไทม์ไลน์ จึงไม่ทำให้ช่องพิมพ์เปลี่ยนขนาดเมื่อแสดงหรือหายไป
+แถวนี้จัดวางตามการตั้งค่าตำแหน่งกิจกรรมเบื้องหลังของผู้ใช้ และไม่แสดงในเซสชันของซับเอเจนต์
+
+`show` คืนป้ายของเซสชันนั้น หรือ `undefined` หากไม่ต้องการแสดง โฮสต์เรียกฟังก์ชันนี้ให้แต่ละช่องพิมพ์ที่สร้างแล้ว และเรียกซ้ำเมื่อข้อมูลที่อ่านเปลี่ยน
+ปลั๊กอินนี้ดึงรายการ pull request ที่ยังเปิดอยู่ของไดเรกทอรีแต่ละเซสชันผ่าน [RPC](/build/plugins/rpc) ของส่วนเซิร์ฟเวอร์ แล้วแสดงรวมในป้ายเดียว
+
+```tsx
+import { createStore } from "solid-js/store"
+import { ComposerPill, createKeyed } from "@opencode/plugin/gui"
+import { GitHub, type Pull } from "./rpc"
+
+const [pulls, setPulls] = createStore<Record<string, readonly Pull[]>>({})
+
+createKeyed(
+  () => ctx.sessions.current()?.directory,
+  (directory) =>
+    void ctx.client
+      .rpc(GitHub)
+      .pulls({ directory })
+      .then((list) => setPulls(directory, list)),
+)
+
+ctx.add(ComposerPill, {
+  id: "pulls",
+  show: (input) => {
+    const list = pulls[input.session.directory] ?? []
+
+    if (list.length === 0) return undefined
+
+    return {
+      icon: "github",
+      label: ctx.plural("pulls", list.length),
+      tone: list.some((pull) => pull.checks === "failure") ? "danger" : undefined,
+      title: ctx.t("pulls.title"),
+      rows: list.map((pull) => ({
+        id: String(pull.number),
+        label: `#${pull.number} ${pull.title}`,
+        icon: pull.checks === "failure" ? "circle-x" : "circle-check",
+        tone: pull.checks === "failure" ? "danger" : "success",
+        detail: pull.branch,
+        run: () => ctx.system.openExternal(pull.url),
+      })),
+    }
+  },
+})
+```
+
+- `label` คือข้อความบนป้าย ระบบจะตัดข้อความที่ยาวเกินพื้นที่ ไม่จำเป็นต้องระบุ `icon`
+- `tone` กำหนดสีไอคอน: `"success"`, `"warning"` หรือ `"danger"`
+- สำหรับสัญลักษณ์ที่แอปไม่มี เช่นเครื่องหมายสถานะที่เคลื่อนไหว ให้[ประกาศไอคอนเอง](#icons)และส่ง
+  `ctx.icons.<name>` รับ `tone` เหมือนไอคอนอื่น และแอนิเมชันดำเนินต่อเมื่อ `show` ทำงานอีก
+- เมื่อกำหนด `rows` การคลิกป้ายจะเปิดเมนู โดยใช้ `title` เป็นหัวข้อ หรือใช้ `label` ถ้าไม่ได้กำหนด แต่ละแถวมี `icon`,
+  `tone` และ `detail` สีจางของตัวเอง เมื่อเลือกแถวจะเรียก `run` แถวที่ไม่มี `run` จะแสดงข้อมูลอย่างเดียว
+- หากไม่กำหนด `rows` การคลิกป้ายจะเรียก `run` โดยตรง
+- `title` ยังเป็นชื่อของป้ายสำหรับการช่วยการเข้าถึงเมื่อชื่อนั้นต่างจาก `label`
+- `order` ใช้เรียงป้ายจากปลั๊กอินต่าง ๆ จากน้อยไปมาก โดยป้ายของแอปจะแสดงก่อนเสมอ
+- หาก `show` โยนข้อผิดพลาด จะกระทบเฉพาะป้ายที่ปลั๊กอินของคุณเพิ่ม
+
+#### Reference
+
+```ts
+interface ComposerPill {
+  id: string
+  order?: number
+  show(input: ComposerPillProps): ComposerPillView | undefined
+}
+
+interface ComposerPillProps {
+  session: MountedSession
+  screen: SessionScreen
+}
+
+interface ComposerPillView {
+  label: string
+  icon?: IconName
+  tone?: ComposerPillTone
+  title?: string
+  rows?: ComposerPillRow[]
+  run?(): void
+}
+
+interface ComposerPillRow {
+  id: string
+  label: string
+  icon?: IconName
+  tone?: ComposerPillTone
+  detail?: string
+  run?(): void
+}
+
+type ComposerPillTone = "success" | "warning" | "danger"
+```
+
+### บล็อกโค้ด
+
+`CodeBlock` แสดงบล็อกโค้ดแบบมีรั้วของภาษาที่คุณระบุเป็น UI ของตัวเอง แทนโค้ดที่ไฮไลต์
+ใช้สำหรับเนื้อหาที่อ่านได้ดีกว่าการวาดเป็นซอร์ส เช่นตาราง ` ```csv ` หรือสูตร ` ```latex `
+
+```tsx
+import { For } from "solid-js"
+import { CodeBlock } from "@opencode/plugin/gui"
+
+ctx.add(CodeBlock, {
+  languages: ["csv"],
+  render: (props) => {
+    const rows = props.code.split("\n").map((line) => line.split(","))
+
+    if (rows.length < 2) return undefined
+
+    return (
+      <table>
+        <tbody>
+          <For each={rows}>
+            {(row) => (
+              <tr>
+                <For each={row}>{(cell) => <td>{cell}</td>}</For>
+              </tr>
+            )}
+          </For>
+        </tbody>
+      </table>
+    )
+  },
+})
+```
+
+- `languages` เปรียบเทียบกับคำแรกของ info string ของรั้ว เป็นตัวพิมพ์เล็ก: ` ```CSV title="Q3" `
+  ตรงกับ `csv` โฮสต์ไม่จับคู่นามแฝง จึงต้องระบุทุกชื่อที่รองรับ
+- `render` ได้รับ `code` ของบล็อก `language` และ `session` ที่แสดง คืน `undefined` หรือ `null` เพื่อ
+  คงโค้ดที่ไฮไลต์ เช่นเมื่อซอร์สแยกวิเคราะห์ไม่ได้
+- หากตัวแสดงผลโยนข้อผิดพลาด ระบบจะบันทึกข้อผิดพลาดไว้ในชื่อปลั๊กอินของคุณและแสดงโค้ดในบล็อกตามเดิม ส่วนอื่นที่ปลั๊กอินเพิ่มไว้ยังทำงานต่อ
+- เมื่อหลายปลั๊กอินระบุภาษาเดียวกัน ตัวแรกที่เพิ่มจะแสดงผล ตัวแสดงผลของคุณยังแทนไดอะแกรม Mermaid
+  ของแอปเองเมื่อคุณระบุ `mermaid`
+
+#### การสตรีม
+
+โฮสต์จะแสดงบล็อกด้วย UI ของคุณเมื่อได้รับเครื่องหมายปิดบล็อกเท่านั้น ระหว่างสตรีมบล็อก หรือหากข้อความหยุดกลางบล็อก ผู้ใช้จะเห็นโค้ดที่เน้นไวยากรณ์ เมื่อได้รับบล็อกครบ UI ของคุณจะแทนที่โค้ดตรงตำแหน่งเดิม ตัวแสดงผลจึงไม่ได้รับบล็อกที่ยังไม่สมบูรณ์
+
+#### พื้นที่ที่แสดง UI ของบล็อกโค้ด
+
+| พื้นที่แสดงผล | ใช้ UI ของบล็อกโค้ด |
+| -------------------------------------------------------------- | ------------------ |
+| ไทม์ไลน์: ข้อความผู้ช่วยและเอาต์พุตเครื่องมือ                       | ใช่                |
+| แผงด้านข้างบนหน้าจอเซสชัน เช่นตัวอย่าง Markdown   | ใช่                |
+| `ctx.ui.Markdown` ที่แสดงบนหน้าจอเซสชัน               | ใช่                |
+| `ctx.ui.Code` และ Markdown ภายในตัวแสดงผล `CodeBlock` ของคุณ | ไม่ |
+| หน้าการตั้งค่า กล่องโต้ตอบ และพื้นผิวอื่นนอกจอ      | ไม่                 |
+
+#### เลย์เอาต์และประสิทธิภาพ
+
+- บล็อกของภาษาที่ไม่มีปลั๊กอินระบุจะไม่ใช้ทรัพยากรเพิ่ม ระบบจะแสดง UI ของคุณเฉพาะบล็อกของภาษาที่ระบุและเมื่อแถวนั้นอยู่บนจอ
+- บล็อกขยายและหดตาม UI ของคุณ ให้เนื้อหาแบบอะซิงโครนัสมีความสูงต่ำสุด เพื่อให้ไทม์ไลน์เลื่อนน้อยลง
+  เมื่อมาถึง
+- บล็อกยังคงมีปุ่ม Copy สำหรับคัดลอกซอร์ส และปุ่ม `CodeBlockAction` ของคุณที่มุมบนด้านท้ายตามทิศทางการเขียน
+
+### ปุ่มคำสั่งบนบล็อกโค้ด
+
+`CodeBlockAction` เพิ่มปุ่มข้างปุ่ม Copy ของบล็อกโค้ดในภาษาที่คุณระบุ `run` ได้รับ
+บล็อกเดียวกับที่ render `CodeBlock` ได้รับ
+
+```ts
+import { CodeBlockAction } from "@opencode/plugin/gui"
+
+ctx.add(CodeBlockAction, {
+  id: "run",
+  languages: ["sh", "bash", "shell", "zsh"],
+  icon: "terminal",
+  get title() {
+    return ctx.t("run")
+  },
+  run: (input) => runInTerminal(input.code, input.session),
+})
+```
+
+- ปุ่มแสดงเมื่อรั้วปิดของบล็อกมาถึง จึงไม่ทำงานกับคำสั่งครึ่งเดียว
+- เมื่อวางเมาส์เหนือบล็อกหรือเลื่อนโฟกัสมาที่บล็อกด้วยแป้นพิมพ์ ปุ่มเหล่านี้จะแสดงก่อนปุ่ม Copy ตาม `order` จากน้อยไปมาก
+- อ่าน `title` จาก getter เพื่อตามภาษา
+- หาก `run` โยนข้อผิดพลาดหรือคืน Promise ที่ถูกปฏิเสธ ระบบจะบันทึกข้อผิดพลาดไว้ในชื่อปลั๊กอินโดยไม่กระทบส่วนอื่น
+
+#### Reference
+
+```ts
+interface CodeBlock {
+  languages: string[]
+  render(props: CodeBlockProps): JSX.Element | undefined
+}
+
+interface CodeBlockAction {
+  id: string
+  languages: string[]
+  icon: IconName
+  title: string
+  order?: number
+  run(input: CodeBlockProps): void | Promise<void>
+}
+
+interface CodeBlockProps {
+  code: string
+  language: string
+  session?: MountedSession
+}
+```
+
+### ตัวจัดการลิงก์
+
+`LinkHandler` เปิดไฟล์ในเครื่องหรือลิงก์กำหนดเองที่ผู้ใช้คลิกในข้อความหรือชิปของช่องพิมพ์ ตัวจัดการที่มี
+`priority` สูงสุดซึ่ง `match` คืน true จะเปิดลิงก์
+
+```ts
+import { LinkHandler } from "@opencode/plugin/gui"
+
+ctx.add(LinkHandler, {
+  priority: 10,
+  match: (link) => link.href.endsWith(".acme"),
+  open: (link) => openAcmeFile(link.href, link.session),
+  exists: (link) => acmeFileExists(link.href),
+})
+```
+
+- `href` เป็นเป้าหมาย: พาธ URL หรือลิงก์ `file://`
+- `origin` เป็นปลั๊กอินที่สร้างรายการที่ลิงก์
+- `exact` หมายถึงพาธเป็นไฟล์เวิร์กสเปซที่รู้จัก ไม่ใช่การเดาจากข้อความ
+- ลิงก์ `background` ต้องไม่สลับมุมมองจอแคบ
+- `base` เป็นไดเรกทอรีสัมพัทธ์กับเวิร์กสเปซที่ลิงก์ถูกเขียน
+- หากไม่มี `exists` `ctx.links.exists` ตอบ `false` ข้อความจึงไม่ดูเป็นลิงก์ที่ตัวจัดการเปิดไม่ได้
+
+#### Reference
+
+```ts
+interface LinkHandler {
+  priority?: number
+  match(link: Link): boolean
+  open(link: Link): void
+  exists?(link: Link): boolean | Promise<boolean>
+}
+
+interface Link {
+  href: string
+  origin?: string
+  exact?: boolean
+  background?: boolean
+  base?: string
+  session?: SessionRef
+}
+```
+
+### เซิร์ฟเวอร์
+
+`Server` เพิ่มรายการเชื่อมต่อเซิร์ฟเวอร์ เช่นเซิร์ฟเวอร์ที่ปลั๊กอินเริ่มบนเครื่องอื่น
+
+```ts
+import { Server } from "@opencode/plugin/gui"
+
+ctx.add(
+  Server,
+  (): Server => ({
+    ready: loaded(),
+    entries: machines().map((machine) => ({
+      id: machine.id,
+      name: machine.name,
+      label: "Acme",
+      state: machine.url ? "ready" : "starting",
+      http: machine.url ? { url: machine.url } : undefined,
+    })),
+  }),
+)
+```
+
+- การเริ่มต้นรอให้ทุกแหล่งเป็น `ready` รายการของแหล่งที่พร้อมคือรายการทั้งหมดของมัน
+- `order` เรียงแหล่งจากน้อยไปมาก
+- คีย์ของแต่ละรายการคือ `<plugin id>:<id>` `label` เป็นป้ายสั้นข้าง `name`
+- `auth` หมายถึงเซิร์ฟเวอร์รอให้ผู้ใช้ลงชื่อเข้าใช้ และ `incompatible` หมายถึงรันเวอร์ชันที่แอปนี้ไม่
+  รองรับ
+- `listed: false` เก็บรายการออกจากรายการเซิร์ฟเวอร์ของแอป การตั้งค่ายังแสดง
+- `http` เป็นเอนด์พอยต์เมื่อเซิร์ฟเวอร์ `ready`
+- `reconnect` หาเอนด์พอยต์ใหม่เมื่อการเชื่อมต่อหลุด `connect` เตรียมเซิร์ฟเวอร์ที่ยังไม่พร้อม และ `remove` ทำงานก่อน
+  นำรายการออก
+- `row` แสดงแถวการตั้งค่าของเซิร์ฟเวอร์ ส่วน `cover` แสดงเนื้อหาซ้อนทับเซสชันที่เส้นทางปัจจุบันชี้ไปในระหว่างที่เซิร์ฟเวอร์ยังไม่พร้อม
+- `row` ได้รับ `Indicator` สถานะของโฮสต์ การตรวจ `health()` ล่าสุด และ `Items` เมนู `server.row` ของแถว
+  `remove()` ของมันรัน `remove` ของรายการ แล้วปิดแท็บของเซิร์ฟเวอร์
+
+#### Reference
+
+```ts
+interface Server {
+  ready: boolean
+  order?: number
+  entries: ServerEntry[]
+}
+
+interface ServerEntry {
+  id: string
+  name: string
+  label?: string
+  state: "stopped" | "starting" | "auth" | "ready" | "failed" | "incompatible"
+  listed?: boolean
+  http?: { url: string; password?: string }
+  reconnect?(signal: AbortSignal): Promise<{ url: string; password?: string }>
+  connect?(): Promise<boolean>
+  remove?(): Promise<void>
+  row?(row: ServerRow): JSX.Element
+  cover?(input: { tab: string }): JSX.Element
+}
+
+interface ServerRow {
+  key: string
+  health(): ServerHealth | undefined
+  Indicator(props: { health?: ServerHealth; connecting?: boolean; auth?: boolean }): JSX.Element
+  remove(): Promise<void>
+  Items(): JSX.Element
+}
+
+interface ServerHealth {
+  healthy: boolean
+  version?: string
+  incompatible?: boolean
+  checking?: boolean
+}
+```
+
+### สไตล์
+
+`Style` แทรกสตริง CSS ลงในเอกสารตราบที่สไตล์ที่เพิ่มนี้ยังใช้งานอยู่
+
+```ts
+import { Style } from "@opencode/plugin/gui"
+import css from "./panel.css?inline"
+
+ctx.add(Style, css)
+```
+
+### ธีม
+
+`Theme` เพิ่มธีมสีใน Settings › Appearance › Theme รับรูปแบบเดียวกับไฟล์ธีมของแอป ไฟล์ธีม
+จึงนำเข้าได้ตามเดิม
+
+```ts
+import { Theme } from "@opencode/plugin/gui"
+import midnight from "./midnight.json"
+
+ctx.add(Theme, midnight)
+```
+
+ไฟล์ธีมระบุชื่อธีมและรูปแบบสว่างกับมืด แต่ละรูปแบบใช้ `palette` หรือ `seeds`
+อย่างใดอย่างหนึ่งเท่านั้น และสามารถกำหนดค่าโทเคนแต่ละตัวโดยตรงด้วย `overrides`
+
+```json
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Midnight",
+  "id": "midnight",
+  "light": {
+    "palette": {
+      "neutral": "#eceff4",
+      "ink": "#2e3440",
+      "primary": "#5e81ac",
+      "success": "#8fbcbb",
+      "warning": "#d08770",
+      "error": "#bf616a",
+      "info": "#81a1c1"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#1b1f27",
+      "ink": "#e5e9f0",
+      "primary": "#88c0d0",
+      "success": "#a3be8c",
+      "warning": "#d08770",
+      "error": "#bf616a",
+      "info": "#81a1c1"
+    },
+    "overrides": { "syntax-keyword": "#88c0d0" }
+  }
+}
+```
+
+- ตัวเลือกแสดงธีมของปลั๊กอินท่ามกลางธีมของแอป เรียงตาม `name`
+- โฮสต์ตั้งคีย์ธีมเป็น `<plugin id>:<theme id>` จึงไม่เคยแทนธีมของแอปหรือของปลั๊กอินอื่น
+- การถอนธีมหรือการปิดปลั๊กอินนำออกจากตัวเลือก ผู้ใช้ที่เลือกไว้ยังคงตัวเลือก: หน้าต่าง
+  แสดงธีมเริ่มต้นจนธีมกลับมา
+- ตอนเริ่ม หน้าต่างแสดงสีที่แคชจากการรันล่าสุดจนปลั๊กอินให้ธีมอีกครั้ง
+
+## API ของโฮสต์
+
+API ของโฮสต์เป็นพร็อพเพอร์ตีของ `ctx` และจะไม่โยนข้อผิดพลาดแม้เรียกก่อนที่ UI ของแอปจะพร้อม การอ่านจะคืนค่าเริ่มต้นตามที่เอกสารระบุ ส่วนคำสั่งที่เปลี่ยนสถานะ เช่น `ctx.layout.open`, `ctx.dialogs.open` และการอัปเดต store จะรอให้เส้นทางแรกแสดงผลก่อน แล้วจึงทำงานตามลำดับที่เรียก
+
+```ts
+ctx.add(Command, () => ({
+  id: "copy-directory",
+  title: ctx.t("command.copyDirectory"),
+  run: () => {
+    const session = ctx.sessions.current()
+
+    if (session) void ctx.system.copy(session.directory)
+  },
+}))
+```
+
+ส่วนด้านล่างครอบคลุมแต่ละ API `ctx.options`, `ctx.client` และ `ctx.app` เป็น
+[บริบทที่ใช้ร่วมกัน](#shared-context) `ctx.provide`, `ctx.use` และ `ctx.main` ทำงานกับ
+[สัญญาและโทเคน](#contracts-and-tokens) `ctx.stores` เก็บ store ที่ปลั๊กอิน
+[ประกาศ](#define-the-gui-plugin) และ `ctx.icons` เก็บชื่อ[ไอคอน](#icons)ที่ประกาศ
+
+#### Reference
+
+```ts
+interface SetupContext<D> extends Context {
+  stores: Record<string, Persisted<unknown> | ((session: SessionRef) => Persisted<unknown>)>
+  icons: Record<string, PluginIconName>
+}
+
+interface Context {
+  id: string
+  options: PluginOptions
+  client: OpenCodeClient
+  app: App
+  signal: AbortSignal
+  add<T>(registry: Registry<T>, item: () => T | undefined): Cleanup
+  add<T>(registry: Registry<T>, item: T): Cleanup
+  list<T>(registry: Registry<T>): T[]
+  provide<T>(token: Contract<T>, impl: T): Cleanup
+  use<T>(token: Contract<T>): () => Live<T>
+  use<S extends IpcSpec>(token: Ipc<S>): () => Live<IpcClient<S>>
+  main<S extends IpcSpec>(token: Ipc<S>): IpcClient<S>
+  t(key: string, params?: Record<string, string | number | boolean>): string
+  plural(key: string, count: number, params?: Record<string, string | number | boolean>): string
+  layout: Layout
+  sessions: Sessions
+  screen: Screen
+  servers: Servers
+  storage: Storage
+  dialogs: Dialogs
+  toast: Toasts
+  attention: Attention
+  tabs: Tabs
+  keybinds: Keybinds
+  commands: Commands
+  links: Links
+  embeds: Embeds
+  ui: Ui
+  system: System
+  desktop: Desktop | undefined
+  locale: Locale
+  appearance: Appearance
+  router: Router
+  workspaces: Workspaces
+}
+```
+
+### เลย์เอาต์
+
+`ctx.layout.open(key, session, options?)` เปิดแท็บแผงตามคีย์ `<plugin id>:<tab id>` ใช้ได้แม้ยังไม่ได้สร้างหน้าจอของเซสชันนั้น
+
+```ts
+const session = ctx.sessions.current()
+
+if (session) ctx.layout.open(`${ctx.id}:main`, session, { tab: "select", background: true })
+```
+
+- `tab: "open"` ค่าเริ่มต้น เลือกแท็บในช่องตัวอย่าง `"preview"` ทำให้เป็นตัวอย่างใหม่ `"append"` เพิ่ม
+  โดยไม่เลือก และ `"select"` เพิ่มและเลือกโดยคงตัวอย่าง
+- `background: true` คงมุมมองปัจจุบันบนจอแคบและเปิดพื้นที่ด้านข้าง สำหรับการกระทำที่ผู้ใช้
+  ไม่ได้เริ่มจากแผง
+- `close(key, session)` นำแท็บออกและเรียก `close` ของแผง `toggle(key, session)` ปิดแท็บที่มองเห็น มิฉะนั้น
+  เปิด
+- `hide(key, session)` ซ่อนบานที่แสดงแท็บที่มองเห็น โดยไม่ปิดแท็บ: พื้นที่ด้านข้าง หรือบานล่าง
+  สำหรับแท็บที่ผู้ใช้ย้ายไป การเปิดแท็บอีกครั้งแสดงบานของมัน
+- `state(key, session)` เป็น `"closed"` เมื่อแท็บไม่อยู่ในแถบ `"open"` เมื่ออยู่แต่บานแสดงแท็บอื่น
+  `"active"` เมื่อบานแสดงมันแต่บานถูกซ่อน (พื้นที่ด้านข้างปิด หรือบานล่างถูกซ่อน) และ `"visible"` เมื่อ
+  อยู่บนจอ
+- `stored(session)` เป็น id แท็บของปลั๊กอินนี้ที่จัดเก็บในแถบด้านข้างของเซสชัน
+- `ready()` เป็น `true` เมื่อเลย์เอาต์ที่จัดเก็บโหลดแล้ว และ `narrow()` ขณะวิวพอร์ตต่ำกว่า 768px
+- `side.opened(session)` เป็น `true` ขณะพื้นที่ด้านข้างเปิด และ `side.toggle(session)` เปิดหรือปิด
+- `side.menu()` แสดง[รายการเมนู](#menu-items) `session.panel` ของทุกปลั๊กอินตาม `order` สำหรับตัวเปิดของคุณเอง
+- `side.width(panel)` และ `side.resize(panel, width)` อ่านและจัดเก็บความกว้างพื้นที่ด้านข้างของแผงคุณ ดู
+  [ความกว้างแผง](#panel-width)
+- `sidebar.opened()` เป็นค่ากำหนดแถบข้างในที่ทุกแผงด้านข้างใช้ร่วมกัน
+- `scroll` เก็บ offset การเลื่อนต่อเซสชันและคีย์
+- `settings(page?)` เปิด Settings `project(server, title)` เปิดตัวเลือกไดเรกทอรีของโปรเจกต์และฉบับร่างใหม่
+- `draft({ server, directory, prompt })` เปิดเซสชันฉบับร่างใหม่ในแท็บของตัวเอง พร้อมพรอมต์ที่เติมไว้ให้
+  ผู้ใช้ตรวจและส่ง
+
+```ts
+const session = ctx.sessions.current()
+const launchers = () => ctx.layout.side.menu().filter((item) => !item.primary && !item.opened)
+
+if (session) {
+  ctx.layout.draft({ server: session.server.id, directory: session.directory, prompt: ctx.t("setup.prompt") })
+}
+```
+
+#### Reference
+
+```ts
+interface Layout {
+  open(key: string, session: SessionRef, options?: OpenOptions): void
+  close(key: string, session: SessionRef): void
+  toggle(key: string, session: SessionRef): void
+  hide(key: string, session: SessionRef): void
+  state(key: string, session: SessionRef): PanelState
+  stored(session: SessionRef): string[]
+  ready(): boolean
+  narrow(): boolean
+  side: {
+    opened(session: SessionRef): boolean
+    toggle(session: SessionRef): void
+    menu(): SessionPanelMenuItem[]
+    width(panel: string): number | undefined
+    resize(panel: string, width: number): void
+  }
+  sidebar: {
+    opened(): boolean
+  }
+  scroll: {
+    get(session: SessionRef, key: string): { x: number; y: number } | undefined
+    set(session: SessionRef, key: string, value: { x: number; y: number }): void
+  }
+  settings(page?: string): void
+  project(server: string, title: string): void
+  draft(input: { server: string; directory: string; prompt: string }): void
+}
+
+type PanelState = "closed" | "open" | "active" | "visible"
+
+interface OpenOptions {
+  tab?: "open" | "preview" | "append" | "select"
+  background?: boolean
+}
+```
+
+### เซสชันและหน้าจอเซสชัน
+
+`ctx.sessions.current()` เป็นเซสชันที่กำหนดเส้นทาง และ `ctx.screen.current()` เป็นหน้าจอของมัน ทั้งสองเป็น `undefined` บน Home
+และบนฉบับร่าง อ่าน ณ จุดที่ทำ ไม่ใช่อ่านครั้งเดียวใน `setup`
+
+```ts
+const session = ctx.sessions.current()
+const file = ctx.screen.current()?.file
+
+if (session && file) void file.sync("README.md")
+```
+
+- `key` คือ `<server id>\n<session id>` ไม่ซ้ำข้ามเซิร์ฟเวอร์ ให้ตั้งคีย์สถานะต่อเซสชันด้วยมัน
+- `tab` เป็นคีย์ของแท็บเชลล์ที่เป็นเจ้าของเซสชัน `pending` เป็น `true` ขณะเซิร์ฟเวอร์ยังสร้าง
+- `directory` เป็นไดเรกทอรีเวิร์กสเปซของเซสชัน และ `local` เป็น `true` เมื่อเป็นรากโปรเจกต์
+- `listedProject` เป็นโปรเจกต์ในแถบข้างที่เซสชันเป็นสมาชิก
+- `visit` เป็นออบเจกต์ใหม่ทุกครั้งที่เซสชันถูกกำหนดเส้นทาง
+- `background` แสดงรายการซับเอเจนต์และคำสั่ง shell ที่ทำงานของเซสชัน
+- `ctx.sessions.list()` คืนเซสชันของแท็บเชลล์ที่เปิด
+- `file` ของหน้าจออ่านไฟล์เวิร์กสเปซ และ `comment` เก็บความคิดเห็นรายบรรทัดของพรอมต์ถัดไป
+  `composer` เป็นพรอมต์ถัดไป: ข้อความ ชิ้นส่วนที่แนบ และโมเดล ดู
+  [แนบกับช่องพิมพ์](#attach-to-the-composer)
+- `file.sync(path)` โหลดไฟล์และขอให้เซิร์ฟเวอร์เฝ้าดูการเปลี่ยนแปลง เรียก `file.unwatch(path)` เมื่อแท็บของไฟล์
+  ปิด
+
+#### Reference
+
+```ts
+interface Sessions {
+  list(): SessionRef[]
+  current(): MountedSession | undefined
+}
+
+interface SessionRef {
+  key: string
+  id: string
+  tab: string
+  server: ServerRef
+  pending: boolean
+  location: LocationRef | undefined
+}
+
+interface MountedSession extends SessionRef {
+  visit: object
+  project: Project | undefined
+  listedProject: { worktree: string; name?: string; icon?: Project["icon"] } | undefined
+  directory: string
+  local: boolean
+  background: BackgroundTask[]
+}
+
+interface Screen {
+  current(): SessionScreen | undefined
+}
+
+interface SessionScreen {
+  file: Files
+  comment: Comments
+  composer: Composer
+}
+
+interface Files {
+  root: string
+  ready(): boolean
+  resolve(path: string): string
+  absolute(path: string): boolean
+  get(path: string): FileState | undefined
+  missing(path: string): boolean
+  sync(path: string, options?: { force?: boolean; silent?: boolean }): Promise<void>
+  unwatch(path: string): void
+  exists(path: string): Promise<boolean>
+  search(query: string, options?: { kind?: "file" | "any"; limit?: number; signal?: AbortSignal }): Promise<string[]>
+  selection: {
+    get(path: string): LineRange | null | undefined
+    set(path: string, range: LineRange | null): void
+  }
+  scroll: {
+    get(path: string): { top?: number; left?: number }
+    set(path: string, value: { top?: number; left?: number }): void
+  }
+  tree: {
+    list(path: string): FileNode[]
+    state(path: string): { expanded: boolean; loaded?: boolean; loading?: boolean; error?: string } | undefined
+    sync(path: string, options?: { force?: boolean }): Promise<void>
+    expand(path: string, options?: { list?: boolean }): void
+    collapse(path: string): void
+  }
+}
+
+interface Comments {
+  list(file?: string): Comment[]
+  add(input: Omit<Comment, "id" | "time">): Comment
+  update(id: string, comment: string): void
+  remove(id: string): void
+  focus: {
+    current(): { file: string; id: string } | null
+    set(value: { file: string; id: string } | null): void
+  }
+  active: {
+    current(): { file: string; id: string } | null
+    set(value: { file: string; id: string } | null): void
+  }
+}
+```
+
+### แนบกับช่องพิมพ์
+
+ใช้ `ctx.screen.current()?.composer` ในตัวจัดการอีเวนต์หรือคำสั่งเพื่อแนบไฟล์ บันทึก หรือคำพูดกับพรอมต์ถัดไป
+ของผู้ใช้
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+composer?.attach({
+  type: "note",
+  origin: ctx.id,
+  commentID: crypto.randomUUID(),
+  label: "button#submit",
+  icon: "globe",
+  subject: 'element <button id="submit">Save</button>',
+  comment: "Make this button primary and disable it while saving.",
+  href: "http://localhost:3000/settings",
+})
+```
+
+- `attach` ปล่อยโฟกัสแป้นพิมพ์ไว้ที่เดิม เรียก `focus()` เพื่อย้ายไปพรอมต์
+- `update(commentID, { comment?, preview? })` เปลี่ยนชิ้นส่วนที่แนบ บันทึกหรือคำพูดรับเฉพาะ `comment` ใหม่
+- `detach(commentID)` นำชิ้นส่วนที่แนบออก
+- `live` ของบันทึกแทน `subject` และ `href` ขณะบันทึกอยู่ในโปรเซสแอปนี้ สำหรับการอ้างอิงที่
+  โปรเซสนี้แก้ไขได้ เช่นองค์ประกอบหน้า ฉบับร่างที่จัดเก็บจะทิ้งมัน และข้อความที่ส่งซึ่งการย้อนกลับหรือ
+  fork คืนมาก็เช่นกัน
+
+คำพูดคือข้อความที่ผู้ใช้คัดลอกมาจากสิ่งที่ปลั๊กอินแสดง เช่นเอาต์พุตบันทึก พร้อมความคิดเห็นที่ไม่บังคับ
+แสดงเหมือนคำพูดจากไทม์ไลน์เซสชัน ใต้ไอคอนและป้ายของแหล่ง ตรวจ `quotable()` ก่อน: เป็น
+`false` ในเซสชันของซับเอเจนต์ซึ่งไม่มีช่องพิมพ์ และขณะช่องพิมพ์รันคำสั่ง shell
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+if (composer?.quotable()) {
+  const commentID = crypto.randomUUID()
+
+  composer.attach({
+    type: "quote",
+    commentID,
+    text: selection,
+    source: { label: ctx.t("source.label"), icon: "console", subject: "the Acme log" },
+  })
+  composer.focus(commentID)
+}
+```
+
+- `source.subject` ตั้งชื่อแหล่งให้โมเดล เช่น `the terminal` ไม่ได้แปล
+- ละ `comment` เพื่อให้ผู้ใช้เพิ่มจากชิป
+- `focus(commentID)` เปิดตัวแก้ไขความคิดเห็นของคำพูดที่แนบ ขณะช่องพิมพ์ไม่แสดง เช่นบนจอแคบ
+  ที่แสดงแผง ตัวแก้ไขจะเปิดเมื่อช่องพิมพ์แสดง
+- โมเดลอ่าน `The user quoted the following from <subject>:`, แล้วข้อความที่แต่ละบรรทัดมีคำนำหน้า `> `,
+  แล้วความคิดเห็น หากมี
+
+#### Reference
+
+```ts
+interface ComposerFile {
+  type: "file"
+  path: string
+  selection?: { startLine: number; endLine: number; startChar: number; endChar: number }
+  preview?: string
+  comment?: string
+  commentID?: string
+  commentOrigin?: "review" | "file"
+}
+
+interface ComposerNote {
+  type: "note"
+  origin: string
+  commentID: string
+  label: string
+  icon: IconName
+  subject: string
+  comment: string
+  href?: string
+  live?: { subject: string; href?: string }
+}
+
+interface ComposerQuote {
+  type: "quote"
+  commentID: string
+  text: string
+  comment?: string
+  source: { label: string; icon: IconName; subject: string }
+}
+```
+
+### อ่านและเขียนพรอมต์
+
+อ่านสิ่งที่ผู้ใช้พิมพ์ด้วย `text()` และกำลังพิมพ์หรือไม่ด้วย `focused()`
+
+```ts
+const composer = ctx.screen.current()?.composer
+const empty = !composer?.text().trim()
+```
+
+- `text()` เป็นพรอมต์แบบข้อความล้วน: การกล่าวถึงอ่านเป็นข้อความ `@` และไฟล์แนบกับชิ้นส่วนที่แนบถูก
+  ละ ในโหมด shell เป็นคำสั่ง shell เป็น `""` จนฉบับร่างของเซสชันโหลด และในเซสชันของซับเอเจนต์
+  ซึ่งไม่มีช่องพิมพ์ เป็นรีแอกทีฟ
+- `focused()` เป็น `true` ขณะโฟกัสแป้นพิมพ์อยู่ในพรอมต์ ไม่รีแอกทีฟ จึงควรอ่าน ณ จุดที่ทำ เช่นใน
+  `run` ของคำสั่ง
+
+`insert(text)` พิมพ์ข้อความลงพรอมต์ให้ผู้ใช้ตรวจและส่ง ไม่มีสิ่งใดในช่องพิมพ์ส่งพรอมต์
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+composer?.insert(`Explain ${path}`)
+composer?.focus()
+```
+
+- `insert` เพิ่มข้อความที่เคอร์เซอร์ที่ผู้ใช้ทิ้งไว้ในพรอมต์ มิฉะนั้นที่ท้าย และเลื่อนเคอร์เซอร์ตาม
+  ไม่แทนที่ข้อความที่เลือก
+- ข้อความไม่ถูกแยกวิเคราะห์: `@path` ยังเป็นข้อความ ไม่ใช่การกล่าวถึง
+- `setText(text)` แทนข้อความของพรอมต์ รวมการกล่าวถึง ไฟล์แนบและชิ้นส่วนที่แนบยังอยู่ `setText("")`
+  ล้างข้อความ
+- ทั้งสองปล่อยโฟกัสแป้นพิมพ์ไว้ที่เดิม เรียก `focus()` เพื่อย้ายไปพรอมต์
+- การเขียนก่อนฉบับร่างที่จัดเก็บของเซสชันโหลด (`insert`, `setText`, `attach`, `update` หรือ `detach`) รอ
+  แล้วจึงใช้กับเซสชันที่กำหนดเส้นทางเมื่อเรียก ตามลำดับการเรียก ไม่แทนที่ฉบับร่างที่จัดเก็บ
+- ในเซสชันของซับเอเจนต์ซึ่งไม่มีช่องพิมพ์ การเขียนไม่ทำอะไร
+
+### เลือกโมเดล
+
+`model()` เป็นโมเดลที่พรอมต์ถัดไปส่งด้วย และ `setModel` เลือกเหมือนตัวเลือกโมเดล
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+if (composer && !composer.setModel({ providerID: "anthropic", modelID: "claude-sonnet-4-5", variant: "high" })) {
+  ctx.toast.show({ variant: "error", title: ctx.t("model.unavailable") })
+}
+```
+
+- `model()` เป็นตัวเลือกของผู้ใช้สำหรับเซสชันที่กำหนดเส้นทาง มิฉะนั้นค่าเริ่มต้นของเอเจนต์ มิฉะนั้นค่าเริ่มต้นของแอป
+  เป็น `undefined` ขณะแคตตาล็อกโมเดลโหลด เมื่อไม่มีผู้ให้บริการที่เชื่อมต่อเสนอโมเดล และในเซสชันของซับเอเจนต์
+  เป็นรีแอกทีฟ
+- `setModel` เลือกโมเดลสำหรับเซสชันและย้ายโมเดลนั้นขึ้นเป็นรายการแรกในหมวดที่ใช้ล่าสุด หากไม่ระบุ `variant` จะคงตัวเลือกย่อยของโมเดลตามที่หน้าต่างเลือกโมเดลจะแสดง
+- `setVariant(variant)` เลือกตัวเลือกย่อยของโมเดลปัจจุบัน หากส่ง `undefined` จะใช้ตัวเลือกย่อยเริ่มต้นของโมเดล
+- `setModel` คืน `false` โดยไม่เปลี่ยนค่า หากยังโหลดแคตตาล็อกอยู่ ไม่มีผู้ให้บริการที่เชื่อมต่อรายใดให้บริการโมเดลนั้น หรือโมเดลนั้นไม่มีตัวเลือกย่อยที่ระบุ
+- `setVariant` คืน `false` โดยไม่เปลี่ยนค่า หากไม่มีโมเดลปัจจุบันหรือโมเดลนั้นไม่มีตัวเลือกย่อยที่ระบุ
+- ทั้งสองคืน `false` ในเซสชันของซับเอเจนต์
+
+#### Reference
+
+```ts
+interface Composer {
+  text(): string
+  insert(text: string): void
+  setText(text: string): void
+  model(): ComposerModel | undefined
+  setModel(model: ComposerModel): boolean
+  setVariant(variant: string | undefined): boolean
+  attach(part: ComposerFile | ComposerNote | ComposerQuote): void
+  quotable(): boolean
+  focus(commentID?: string): void
+  update(id: string, patch: { comment?: string; preview?: string }): void
+  detach(id: string): void
+  focused(): boolean
+}
+
+interface ComposerModel {
+  providerID: string
+  modelID: string
+  variant?: string
+}
+```
+
+### เซิร์ฟเวอร์และอีเวนต์เซิร์ฟเวอร์
+
+`ctx.servers.get(id)` คืน `ServerRef` แบบสด เซิร์ฟเวอร์ของแอปเดสก์ท็อปที่รันปลั๊กอินมี id
+`"sidecar"` ตอบสนองอีเวนต์ด้วย `data.on`
+
+```ts
+import { onCleanup } from "solid-js"
+import { createKeyed } from "@opencode/plugin/gui"
+
+createKeyed(
+  () => ctx.servers.get("sidecar")?.data,
+  (data) => onCleanup(data.on("session.created", (event) => console.log(event))),
+)
+```
+
+- `id` เป็นคีย์โฮสต์: `"sidecar"`, URL http หรือ `<plugin id>:<id>` สำหรับ[เซิร์ฟเวอร์ที่เพิ่ม](#servers)
+- `data` เป็นข้อมูลที่ซิงค์ของเซิร์ฟเวอร์ เช่นเซสชันและโปรเจกต์ และ `on(type, handler)` สำหรับอีเวนต์ เป็น
+  รีแอกทีฟ
+- `builtin` เป็น `true` สำหรับเซิร์ฟเวอร์ของแอปเอง
+- `compatible` เป็น `true` เมื่อเวอร์ชันของเซิร์ฟเวอร์ใช้ได้กับแอปนี้ และ `connected` ขณะการเชื่อมต่ออีเวนต์
+  ทำงาน
+- `password` เป็นรหัสผ่าน HTTP basic ที่ผู้ใช้กำหนด หากมี
+- อ่าน `client`, `data` และ `url` จาก `ServerRef` แบบสดทุกครั้ง: เซิร์ฟเวอร์ที่รีสตาร์ตได้ไคลเอนต์ใหม่ใต้
+  id เดิม
+- `ctx.servers.list()` คืน id ของเซิร์ฟเวอร์ที่แอปแสดง
+
+#### Reference
+
+```ts
+interface Servers {
+  list(): string[]
+  get(id: string): ServerRef | undefined
+}
+
+interface ServerRef {
+  id: string
+  name: string
+  url: string
+  password?: string
+  client: OpenCodeClient
+  data: Data
+  local: boolean
+  builtin: boolean
+  compatible: boolean
+  connected: boolean
+}
+```
+
+### กล่องโต้ตอบ
+
+`ctx.dialogs.open(render, { replace? })` เปิดกล่องโต้ตอบเหนือกล่องที่เปิดอยู่และคืนแฮนเดิลที่ `close()` ปิด
+กล่องโต้ตอบยังปิดเมื่อ Scope ที่เป็นเจ้าของจบ
+
+```tsx
+const handle = ctx.dialogs.open((dialog) => <ConfirmDialog onDone={dialog.close} />)
+```
+
+- `replace: true` ปิดทุกกล่องโต้ตอบที่เปิดก่อน รวมถึงของโฮสต์และปลั๊กอินอื่น
+- `ctx.dialogs.active()` เป็น `true` ขณะมีกล่องโต้ตอบเปิด
+- แสดงเนื้อหาใน `ctx.ui.Dialog` สำหรับกรอบกล่องโต้ตอบของแอป ดู[คอมโพเนนต์แอป](#app-components)
+
+### ขอข้อมูลหรือคำยืนยันจากผู้ใช้
+
+`confirm`, `alert`, `prompt` และ `select` ถามในกล่องโต้ตอบของแอปเอง ปลั๊กอินจึงไม่ต้องมี UI กล่องโต้ตอบเอง
+แต่ละตัวคืน Promise ของคำตอบ
+
+```ts
+const ok = await ctx.dialogs.confirm({ title: ctx.t("end.title"), confirm: ctx.t("end"), danger: true })
+```
+
+- Promise จาก `confirm` ให้ค่า `true` เฉพาะเมื่อผู้ใช้ยืนยัน ส่วน `danger` ใช้รูปแบบปุ่มสำหรับการกระทำที่มีผลทำลายและตั้งโฟกัสเริ่มต้นที่ Cancel
+- แต่ละกล่องเปิดเหมือน `open` และปิดพร้อมเจ้าของที่ถาม มิฉะนั้นพร้อมปลั๊กอิน
+- เมื่อยกเลิก กด Escape คลิกนอกกล่อง เปิดกล่องใหม่แทน หรือขอบเขตของผู้เรียกสิ้นสุดลง Promise จะให้ค่า `false` สำหรับ `confirm`
+  และ `undefined` สำหรับ `prompt` กับ `select`
+
+`alert` แสดงข้อความให้ผู้ใช้รับทราบและมีปุ่มเดียว Promise จะเสร็จสมบูรณ์เมื่อกล่องปิด ไม่ว่าจะปิดด้วยวิธีใด
+
+```ts
+await ctx.dialogs.alert({ title: ctx.t("export.done"), description: path })
+```
+
+`prompt` ขอให้ผู้ใช้กรอกข้อความหนึ่งบรรทัด ระบบจะเลือก `value` เริ่มต้นไว้เพื่อให้พิมพ์ทับได้ทันที Promise จะไม่ให้สตริงว่าง เพราะการกดส่งขณะช่องว่างจะไม่มีผล ใช้ `secret: true` เพื่อซ่อนข้อความที่พิมพ์ เช่น รหัสผ่านหรือโทเคน
+
+```ts
+const token = await ctx.dialogs.prompt({ title: ctx.t("token.title"), placeholder: "ghp_…", secret: true })
+```
+
+`select` แสดงรายการที่ค้นหาได้เหมือนพาเลตต์คำสั่ง โดย Promise จะให้ `value` ของรายการที่ผู้ใช้เลือก
+
+```ts
+const url = await ctx.dialogs.select({
+  title: ctx.t("links.title"),
+  options: links.map((link) => ({ title: link.title, description: link.url, value: link.url, group: link.host })),
+})
+
+if (url) ctx.system.openExternal(url)
+```
+
+- การค้นหาจับ `title` และ `description` ของแต่ละตัวเลือก
+- ตัวเลือกที่มี `group` เดียวกันแสดงด้วยกันใต้หัวข้อนั้น
+- `current` เป็นค่าของตัวเลือกที่จะไฮไลต์ก่อน
+
+#### Reference
+
+```ts
+interface Dialogs {
+  open(render: (dialog: DialogHandle) => JSX.Element, options?: { replace?: boolean }): DialogHandle
+  confirm(options: ConfirmOptions): Promise<boolean>
+  alert(options: AlertOptions): Promise<void>
+  prompt(options: PromptOptions): Promise<string | undefined>
+  select<T>(options: SelectOptions<T>): Promise<T | undefined>
+  active(): boolean
+}
+
+interface DialogHandle {
+  close(): void
+}
+
+interface ConfirmOptions {
+  title: string
+  description?: string
+  confirm?: string
+  cancel?: string
+  danger?: boolean
+}
+
+interface AlertOptions {
+  title: string
+  description?: string
+  ok?: string
+}
+
+interface PromptOptions {
+  title: string
+  description?: string
+  placeholder?: string
+  value?: string
+  secret?: boolean
+  submit?: string
+}
+
+interface SelectOptions<T> {
+  title: string
+  placeholder?: string
+  options: { title: string; value: T; description?: string; group?: string }[]
+  current?: T
+}
+```
+
+### คอมโพเนนต์แอป
+
+บันเดิลปลั๊กอินนำเข้า `@opencode/ui` ไม่ได้ `ctx.ui` จึงให้คอมโพเนนต์ของแอปเอง แสดงใน
+ธีม ฟอนต์ และภาษาของผู้ใช้ UI ของปลั๊กอินจึงดูและทำงานเหมือนของแอป
+
+```tsx
+import { Show } from "solid-js"
+import { createLatest, Panel } from "@opencode/plugin/gui"
+
+const ui = ctx.ui
+const summary = createLatest(
+  () => ctx.sessions.current()?.directory,
+  (directory, signal) => fetchSummary(directory, signal),
+)
+
+ctx.add(Panel, {
+  id: "summary",
+  region: "side",
+  list: () => [summaryTab],
+  render: () => (
+    <div>
+      <ui.Tooltip value={ctx.t("copy")}>
+        <ui.IconButton icon="copy" label={ctx.t("copy")} onClick={() => void ctx.system.copy(summary.latest ?? "")} />
+      </ui.Tooltip>
+      <Show when={summary.latest} fallback={<ui.Loader size="large" />}>
+        {(text) => <ui.Markdown text={text()} />}
+      </Show>
+    </div>
+  ),
+})
+```
+
+- `Icon`, `Button` และ `IconButton` รับ `IconName` ใดก็ได้ เหมือนทุกฟิลด์ `icon` ของ SDK: ไอคอนของแอป
+  หรือ[ไอคอนของคุณเอง](#icons)จาก `ctx.icons` `label` ของ `IconButton` เป็นชื่อที่เข้าถึงได้ ให้ห่อด้วย
+  `Tooltip` เพื่อแสดงชื่อเมื่อวางเมาส์เหนือปุ่ม
+- `busy` บนปุ่มแทนไอคอนด้วยตัวบ่งชี้การโหลดและปิดใช้งานจนเป็น `false` อีกครั้ง
+- ใช้ `Loader` สำหรับทุกสถานะการโหลดที่ไม่ใช่ AI กำลังทำงาน เช่นบาน การค้นหา หรือการเชื่อมต่อที่
+  โหลด
+- `Menu` เปิดเมนูจาก `items` ซึ่งมีได้ทั้งคำสั่ง เส้นคั่น `{ type: "separator" }` และกลุ่ม `{ type: "group", label, items }`
+- `Switch` และ `TextInput` ไม่เก็บสถานะ: ส่งค่าจาก `onChange` หรือ `onInput` กลับไปที่ `checked` หรือ `value`
+- `Keybind` แสดงคีย์เป็นชิป เช่น `ctx.keybinds.keybind(command)`
+- `Markdown` แสดงข้อความแบบเดียวกับไทม์ไลน์ ส่วน `Code` แสดงบล็อกโค้ดแบบอ่านอย่างเดียวพร้อมการเน้นไวยากรณ์
+  เนื้อหาของทั้งสองจะปรากฏหลังจากสร้างคอมโพเนนต์ได้ไม่นาน
+
+`Dialog` เป็นกรอบกล่องโต้ตอบของแอป: ชื่อ เนื้อหา และปุ่ม แสดงจาก `ctx.dialogs.open` ที่อื่น
+ไม่แสดงอะไรที่มีประโยชน์
+
+```tsx
+const ui = ctx.ui
+
+ctx.dialogs.open((dialog) => (
+  <ui.Dialog
+    title={ctx.t("rename.title")}
+    footer={
+      <ui.Button variant="contrast" onClick={dialog.close}>
+        {ctx.t("done")}
+      </ui.Button>
+    }
+  >
+    <ui.TextInput label={ctx.t("rename.label")} value={name()} onInput={setName} onSubmit={dialog.close} autofocus />
+  </ui.Dialog>
+))
+```
+
+- `size` เป็น `"fit"` โดยค่าเริ่มต้น: กว้าง 480px และสูงตามเนื้อหา `"normal"`, `"large"` และ `"x-large"` เป็นขนาด
+  คงที่
+- Escape และการคลิกนอกปิดกล่อง `closable: false` ซ่อนปุ่มปิดในส่วนหัว
+
+#### แถวเมนู
+
+`MenuItem`, `MenuSub`, `MenuGroup` และ `MenuSeparator` เป็นแถวสำหรับเมนูที่โฮสต์แสดง เช่น
+สล็อต `session.location.menu` นำทางด้วยแป้นพิมพ์ แสดงไอคอนจางและชิปทางลัดของโฮสต์ และปิด
+เมนูเมื่อเลือก
+
+```tsx
+import { For } from "solid-js"
+
+const ui = ctx.ui
+
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => (
+    <>
+      <ui.MenuItem
+        label={ctx.t("usage")}
+        icon="status"
+        keys={["Ctrl", "U"]}
+        onSelect={() => openUsage(input.session)}
+      />
+      <ui.MenuSub label={ctx.t("openIn")} icon="outline-share">
+        <For each={apps()}>{(app) => <ui.MenuItem label={app.name} onSelect={() => launch(app, input.session)} />}</For>
+      </ui.MenuSub>
+    </>
+  ),
+})
+```
+
+- `MenuItem` รับฟิลด์เดียวกับรายการของ `Menu` `items`
+- `MenuSub` เปิดลูกในเมนูย่อยข้างแถว `onOpenChange` บอกเมื่อเปิด จึงโหลดแถวได้เฉพาะขณะเปิด
+- `MenuGroup` วางแถวใต้หัวข้อ และ `MenuSeparator` วาดเส้นระหว่างแถว
+- หากใช้ `MenuItem`, `MenuSub` และ `MenuGroup` นอกเมนู คอมโพเนนต์จะโยนข้อผิดพลาด โฮสต์จะบันทึกข้อผิดพลาดและไม่แสดงรายการนั้น
+
+#### ช่องเลือก
+
+`Select` เลือกหนึ่งในรายการตัวเลือกเหมือนแถวการตั้งค่าของแอปเลือกภาษา ค่าเป็นสตริง ชนิดของ
+`options` จำกัดมัน
+
+```tsx
+const [period, setPeriod] = createSignal<"day" | "month">("day")
+
+<ui.Select
+  label={ctx.t("period")}
+  options={[
+    { value: "day", label: ctx.t("period.day") },
+    { value: "month", label: ctx.t("period.month") },
+  ]}
+  value={period()}
+  onChange={setPeriod}
+/>
+```
+
+- `label` เป็นชื่อที่เข้าถึงได้ของ select ส่วน `label` ของตัวเลือกที่เลือกคือสิ่งที่แสดง
+- `value` ที่ไม่มีตัวเลือกใดมีจะแสดง `placeholder` การเลือกตัวเลือกที่เลือกอยู่อีกครั้งไม่เรียก `onChange`
+
+#### คอมโพเนนต์การตั้งค่า
+
+`SettingsLayout`, `SettingsSection` และ `SettingsRow` แสดง[หน้าการตั้งค่า](#settings-pages)เหมือนที่แอปแสดง
+ของตัวเอง: ส่วนหัวหน้า ส่วนที่มีหัวข้อเหนือรายการมีขอบ และแถวที่มีชื่อ คำอธิบาย และ
+ตัวควบคุมที่ท้าย
+
+```tsx
+<ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")} actions={<HelpButton />}>
+  <ui.SettingsSection title={ctx.t("section.display")} footer={<Show when={error()}>{ctx.t("error")}</Show>}>
+    <ui.SettingsRow id="acme-period" title={ctx.t("period")} description={ctx.t("period.description")}>
+      <ui.Select label={ctx.t("period")} options={periods()} value={period()} onChange={setPeriod} />
+    </ui.SettingsRow>
+  </ui.SettingsSection>
+</ui.SettingsLayout>
+```
+
+- ใช้ `SettingsLayout` สำหรับหน้าของคุณเอง `SettingsSection` สำหรับส่วนในหน้าโฮสต์ และ `SettingsRow` เดี่ยวๆ
+  สำหรับแถวในส่วนของโฮสต์ แถวจะเรียงตรงกับแถวของโฮสต์ในทุกกรณี
+- `id` ของแถวต้องตรงกับ `SettingEntry.id` ที่ใช้แสดงแถวนั้น หากผลค้นหาพาไปยัง ID ของหน้าเอง ระบบจะไฮไลต์ส่วนหัว
+- `actions` อยู่ท้ายแถวชื่อ `footer` ของส่วนอยู่ใต้รายการ นอกขอบ
+- รูปลักษณ์มาจากสไตล์ของหน้าจอ Settings จึงควรแสดงจาก `SettingsPage`
+
+#### Reference
+
+```ts
+interface Ui {
+  Icon(props: UiIconProps): JSX.Element
+  Button(props: UiButtonProps): JSX.Element
+  IconButton(props: UiIconButtonProps): JSX.Element
+  Tooltip(props: UiTooltipProps): JSX.Element
+  Menu(props: UiMenuProps): JSX.Element
+  MenuItem(props: UiMenuItem): JSX.Element
+  MenuSeparator(): JSX.Element
+  MenuGroup(props: UiMenuGroupProps): JSX.Element
+  MenuSub(props: UiMenuSubProps): JSX.Element
+  Loader(props: UiLoaderProps): JSX.Element
+  Dialog(props: UiDialogProps): JSX.Element
+  Switch(props: UiSwitchProps): JSX.Element
+  TextInput(props: UiTextInputProps): JSX.Element
+  Select<T extends string>(props: UiSelectProps<T>): JSX.Element
+  Keybind(props: UiKeybindProps): JSX.Element
+  Markdown(props: UiMarkdownProps): JSX.Element
+  Code(props: UiCodeProps): JSX.Element
+  SettingsLayout(props: UiSettingsLayoutProps): JSX.Element
+  SettingsSection(props: UiSettingsSectionProps): JSX.Element
+  SettingsRow(props: UiSettingsRowProps): JSX.Element
+}
+
+interface UiIconProps {
+  name: IconName
+  size?: "small" | "normal" | "large"
+  class?: string
+}
+
+interface UiButtonProps {
+  children: JSX.Element
+  onClick?: (event: MouseEvent) => void
+  variant?: "neutral" | "contrast" | "ghost" | "ghost-muted" | "danger"
+  size?: "small" | "normal" | "large"
+  icon?: IconName
+  disabled?: boolean
+  busy?: boolean
+  type?: "button" | "submit"
+  autofocus?: boolean
+  class?: string
+}
+
+interface UiIconButtonProps {
+  icon: IconName
+  label: string
+  onClick?: (event: MouseEvent) => void
+  variant?: "neutral" | "ghost" | "ghost-muted"
+  size?: "small" | "normal" | "large"
+  disabled?: boolean
+  pressed?: boolean
+  busy?: boolean
+  class?: string
+}
+
+interface UiTooltipProps {
+  value: JSX.Element
+  keys?: string[]
+  placement?: "top" | "bottom" | "left" | "right"
+  children: JSX.Element
+}
+
+interface UiMenuProps {
+  label: string
+  items: UiMenuEntry[]
+  trigger?: "icon" | "button"
+  icon?: IconName
+  placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"
+  disabled?: boolean
+}
+
+type UiMenuEntry = UiMenuItem | UiMenuSeparator | UiMenuGroup
+
+interface UiMenuItem {
+  type?: "item"
+  label: string
+  icon?: IconName
+  keys?: string[]
+  disabled?: boolean
+  onSelect(): void
+}
+
+interface UiMenuSeparator {
+  type: "separator"
+}
+
+interface UiMenuGroup {
+  type: "group"
+  label: string
+  items: UiMenuItem[]
+}
+
+interface UiMenuGroupProps {
+  label: string
+  children: JSX.Element
+}
+
+interface UiMenuSubProps {
+  label: string
+  icon?: IconName
+  disabled?: boolean
+  onOpenChange?: (open: boolean) => void
+  children: JSX.Element
+}
+
+interface UiLoaderProps {
+  size?: "small" | "normal" | "large"
+  class?: string
+}
+
+interface UiDialogProps {
+  title: string
+  description?: string
+  children?: JSX.Element
+  footer?: JSX.Element
+  size?: "fit" | "normal" | "large" | "x-large"
+  closable?: boolean
+}
+
+interface UiSwitchProps {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  label: string
+  hideLabel?: boolean
+  description?: string
+  disabled?: boolean
+}
+
+interface UiTextInputProps {
+  value: string
+  onInput: (value: string) => void
+  label: string
+  placeholder?: string
+  onSubmit?: (value: string) => void
+  type?: "text" | "password" | "search" | "url"
+  size?: "normal" | "large"
+  disabled?: boolean
+  invalid?: boolean
+  autofocus?: boolean
+  class?: string
+}
+
+interface UiKeybindProps {
+  keys: string[]
+  class?: string
+}
+
+interface UiMarkdownProps {
+  text: string
+  class?: string
+}
+
+interface UiCodeProps {
+  content: string
+  language?: string
+  class?: string
+}
+
+interface UiSelectProps<T extends string> {
+  options: UiSelectOption<T>[]
+  value: T | undefined
+  onChange: (value: T) => void
+  label: string
+  placeholder?: string
+  disabled?: boolean
+  invalid?: boolean
+  placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"
+  class?: string
+}
+
+interface UiSelectOption<T extends string> {
+  value: T
+  label: string
+}
+
+interface UiSettingsLayoutProps {
+  title: string
+  description?: string
+  actions?: JSX.Element
+  children: JSX.Element
+}
+
+interface UiSettingsSectionProps {
+  title?: string
+  children: JSX.Element
+  footer?: JSX.Element
+}
+
+interface UiSettingsRowProps {
+  title: JSX.Element
+  description?: JSX.Element
+  id?: string
+  children?: JSX.Element
+}
+```
+
+### ทอสต์
+
+`ctx.toast.show` แสดงข้อความสั้นที่มุมหน้าต่างและคืนแฮนเดิลที่ `dismiss()` ปิด
+
+```ts
+ctx.toast.show({ variant: "success", title: ctx.t("invite.copied") })
+```
+
+- `variant` เป็น `"default"`, `"success"`, `"error"` หรือ `"loading"` ทอสต์ `success` แสดงไอคอนถูกเว้นแต่ตั้ง
+  `icon`
+- `duration` เป็นระยะที่ทอสต์แสดง เป็นมิลลิวินาที ค่าเริ่มต้น 5 วินาที
+- `persistent: true` คงทอสต์จนผู้ใช้หรือ `dismiss()` ปิด และเพิกเฉย `duration`
+- ทอสต์ที่เหมือนกับที่ยังแสดงจะแทนที่ ไม่ซ้อนสำเนา
+- ทอสต์ของปลั๊กอินปิดเมื่อปลั๊กอินหยุด ปุ่มจึงไม่อยู่รอดโค้ดที่รัน ทอสต์ไม่ปิดตามคอมโพเนนต์หรือ
+  การรัน `createKeyed` ที่แสดงมัน
+
+แสดงทอสต์ `loading` ขณะงานทำงาน และ dismiss เมื่อจบ
+
+```ts
+const saving = ctx.toast.show({ variant: "loading", title: ctx.t("saving"), persistent: true })
+await save()
+saving.dismiss()
+```
+
+`actions` เพิ่มปุ่ม การคลิกรันการกระทำและปิดทอสต์
+
+```ts
+ctx.toast.show({
+  variant: "error",
+  title: ctx.t("sync.failed"),
+  actions: [{ label: ctx.t("retry"), run: () => void sync() }],
+})
+```
+
+#### Reference
+
+```ts
+interface Toasts {
+  show(options: ToastOptions): ToastHandle
+}
+
+interface ToastHandle {
+  dismiss(): void
+}
+
+interface ToastOptions {
+  title: string
+  description?: string
+  variant?: "default" | "success" | "error" | "loading"
+  icon?: IconName
+  duration?: number
+  persistent?: boolean
+  actions?: ToastAction[]
+}
+
+interface ToastAction {
+  label: string
+  run(): void
+}
+```
+
+### การแจ้งเตือน
+
+`ctx.attention.notify` ดึงความสนใจของผู้ใช้ขณะมองที่อื่น: การแจ้งเตือนของระบบและเสียง ตาม
+กฎเดียวกับการแจ้งเตือนของแอปเอง
+
+```ts
+const session = ctx.sessions.current()
+
+if (session) {
+  void ctx.attention.notify({
+    title: ctx.t("tests.done"),
+    message: ctx.t("tests.summary", { failed: 0 }),
+    session: { server: session.server.id, id: session.id },
+    id: run.id,
+  })
+}
+```
+
+- การแจ้งเตือนของระบบแสดงเฉพาะขณะไม่มีหน้าต่างแอปโฟกัส เสียงเล่นทั้งสองทาง
+- ทั้งสองเป็นไปตาม **Settings > Notifications** `variant: "default"` ตามแถว **Agent** และ `variant: "error"` ตาม
+  แถว **Errors** การแจ้งเตือนเดสก์ท็อปของทั้งสองปิดโดยค่าเริ่มต้น เสียงเปิด
+- `sound: false` ไม่เล่นเสียงเลย
+- การคลิกการแจ้งเตือนนำแอปขึ้นมาและเปิด `session` เมื่อให้มา
+- หน้าต่างแอปแต่ละบานรันสำเนาปลั๊กอินของตัวเอง ส่ง `id` ของอีเวนต์ เช่น id ของการรัน เพื่อให้เฉพาะ
+  หน้าต่างแรกที่ส่งแจ้งเตือนและเล่นเสียง หากไม่มี `id` ทุกการเรียกแจ้งเตือน
+- หาก UI ของแอปยังไม่พร้อม `notify` จะรอก่อน
+
+Promise จาก `notify` จะไม่ถูกปฏิเสธ แต่จะรายงานผลการทำงาน โดย `notification` เป็น `true` เมื่อแอปขอให้ระบบแสดงการแจ้งเตือน และ `sound` เป็น `true` เมื่อเริ่มเล่นเสียง
+
+```ts
+const result = await ctx.attention.notify({ title: ctx.t("deploy.failed"), variant: "error" })
+
+if (!result.notification) ctx.toast.show({ variant: "error", title: ctx.t("deploy.failed") })
+```
+
+- `notification` เป็น `false` เมื่อผู้ใช้ปิด หน้าต่างแอปโฟกัส หรือหน้าต่างอื่นส่ง `id` แล้ว
+  ระบบยังซ่อนการแจ้งเตือนที่แอปขอให้แสดงได้ เช่นเมื่อผู้ใช้ปฏิเสธสิทธิ์ของเบราว์เซอร์
+
+#### Reference
+
+```ts
+interface Attention {
+  notify(options: NotifyOptions): Promise<NotifyResult>
+}
+
+interface NotifyOptions {
+  title: string
+  message?: string
+  variant?: "default" | "error"
+  session?: { server: string; id: string }
+  sound?: boolean
+  id?: string
+}
+
+interface NotifyResult {
+  notification: boolean
+  sound: boolean
+}
+```
+
+### ข้อมูลการใช้งาน
+
+จำนวนโทเคน ค่าใช้จ่าย และตัวเลขตามแพ็กเกจของเซสชันอยู่ในข้อมูลของเซิร์ฟเวอร์ โดยใช้ store แบบรีแอกทีฟชุดเดียวกับที่แอปอ่าน
+เพื่อแสดง "28k · $0.28" ในส่วนหัว ให้ใช้ข้อมูลจาก store นี้แทนการอ่านฐานข้อมูลของ opencode
+
+```ts
+import { lastAssistantWithUsage } from "@opencode/client/solid"
+
+const data = session.server.data
+const info = () => data.session.get(session.id)
+
+const tokens = () => info()?.tokens // this session's tokens by kind
+const cost = () => data.session.cost(session.id) // USD, with subagent sessions
+const step = () => lastAssistantWithUsage(data.session.message.list(session.id), info()?.revert?.messageID)
+const limits = () => (session.location ? data.location.usage.limits(session.location) : undefined)
+```
+
+- `step()` คือขั้นการทำงานของผู้ช่วยที่เป็นแหล่งของโทเคนในหน้าต่างบริบทปัจจุบัน ซึ่งเป็นข้อมูลเดียวกับที่วงแหวนแสดงบริบทของแอปใช้ เทียบ
+  `tokens` กับ `limit.context` ของโมเดลจาก `data.location.model.list`
+- `limits()` เก็บงบประมาณ OpenCode Console และวงเงินแพ็กเกจ Go เมื่อ `data.location.usage.sync(location)`
+  โหลดแล้ว เป็น `null` เมื่อเซิร์ฟเวอร์ไม่รายงาน
+
+### แท็บ
+
+`ctx.tabs` อ่านและเปลี่ยนแถบแท็บของเชลล์: เซสชันและฉบับร่างที่เปิดเป็นแท็บ ตัวอย่างนี้ย้ายแท็บของเซสชันไป
+ด้านหน้าเมื่อการรันเสร็จ
+
+```ts
+import { onCleanup } from "solid-js"
+import { createKeyed } from "@opencode/plugin/gui"
+
+createKeyed(
+  () => ctx.servers.get("sidecar")?.data,
+  (data) =>
+    onCleanup(
+      data.on("session.execution.succeeded", (event) => {
+        const tab = ctx.tabs.list().find((item) => item.session?.id === event.data.sessionID)
+
+        if (tab) ctx.tabs.move(tab.key, 0)
+      }),
+    ),
+)
+```
+
+- `list()` คืนแท็บที่เปิดตามลำดับแถบ เป็นรีแอกทีฟ `session` ของแท็บเป็น `undefined` สำหรับฉบับร่าง และ
+  `active` เป็น `true` สำหรับแท็บบนจอ
+- `open({ server, id }, { focus? })` เปิดเซสชันเป็นแท็บที่ท้ายแถบ เบื้องหลังเว้นแต่ `focus`
+  เป็น `true` เซสชันที่เปิดอยู่แล้วคงแท็บ เช่นเดียวกับซับเอเจนต์ที่แท็บแม่แสดง
+- `focus(key)` แสดงแท็บ `move(key, index)` ย้าย และ `close(key)` ปิดเหมือนที่ผู้ใช้ทำ
+- หากไม่มีแท็บที่เปิดอยู่ตรงกับคีย์นั้น คำสั่งจะไม่มีผล คำสั่งที่เปลี่ยนสถานะก่อน UI ของแอปพร้อมจะรอไว้ก่อน
+
+#### Reference
+
+```ts
+interface Tabs {
+  list(): ShellTab[]
+  open(session: { server: string; id: string }, options?: { focus?: boolean }): void
+  focus(key: string): void
+  move(key: string, index: number): void
+  close(key: string): void
+}
+
+interface ShellTab {
+  key: string
+  session: SessionRef | undefined
+  active: boolean
+}
+```
+
+### คีย์ลัด
+
+`ctx.keybinds` อ่านทางลัดของผู้ใช้สำหรับ id คำสั่งที่เผยแพร่
+
+```ts
+const label = ctx.keybinds.keybind(`${ctx.id}.open`)
+const chord = ctx.keybinds.keys("mod+k")
+const pressed = (event: KeyboardEvent) => ctx.keybinds.matches(`${ctx.id}.open`, event)
+```
+
+- `keybind(command)` คืนส่วนที่แสดงของคีย์ลัดที่มีผลของคำสั่ง เช่น `["Ctrl", "K"]` ว่างเมื่อ
+  คำสั่งไม่ได้ผูก
+- `keys(bind)` คืนส่วนที่แสดงของคอร์ดที่แอปไม่ได้เป็นเจ้าของ เช่นที่หน้าจัดการเอง
+- `matches(command, event)` เป็น `true` เมื่ออีเวนต์ตรงกับคีย์ลัดที่มีผลของคำสั่ง
+
+#### Reference
+
+```ts
+interface Keybinds {
+  keybind(command: string): string[]
+  keys(bind: string): string[]
+  matches(command: string, event: KeyboardEvent): boolean
+}
+```
+
+### รันคำสั่ง
+
+`ctx.commands.run(id)` รันคำสั่งเหมือนเลือกในพาเลตต์คำสั่ง คืน `false` เมื่อคำสั่ง
+รันไม่ได้
+
+```ts
+if (!ctx.commands.run("terminal.toggle")) ctx.toast.show({ title: ctx.t("terminal.unavailable") })
+```
+
+- `id` เป็นคำสั่งปลั๊กอินที่เผยแพร่ `<plugin id>.<command id>` ของปลั๊กอินใดก็ได้ หรือคำสั่งของแอปเอง
+  เช่น `command.palette`
+- id คำสั่งของแอปไม่ใช่ API ที่เสถียรและอาจเปลี่ยนระหว่างรุ่น
+- `run` คืน `false` เมื่อไม่มีคำสั่งที่เปิดใช้งานมี id นั้น คำสั่งที่แสดงแต่ปิดใช้งานไม่รัน
+- ก่อนที่ UI ของแอปจะพร้อม ยังไม่มีคำสั่งลงทะเบียนไว้ `run` จึงคืน `false`
+- `run` ไม่รอการทำงานแบบ async ของคำสั่ง
+
+#### Reference
+
+```ts
+interface Commands {
+  run(id: string): boolean
+}
+```
+
+### ระบบและสภาพแวดล้อม
+
+`ctx.system` ทำงานทุกแพลตฟอร์ม `ctx.desktop` เพิ่มความสามารถเฉพาะเดสก์ท็อปและเป็น `undefined` บนเว็บ
+
+```ts
+const show = async (path: string) => {
+  if (ctx.desktop && (await ctx.desktop.reveal(path))) return
+  await ctx.system.copy(path)
+}
+```
+
+- `system.save` แสดงกล่องบันทึกบนเดสก์ท็อปและดาวน์โหลดบนเว็บ คืน `false` เมื่อผู้ใช้ยกเลิก
+  กล่อง
+- `system.openExternal` เปิด URL ในเบราว์เซอร์ระบบ สำหรับลิงก์ในแอป ให้ใช้ `ctx.links.open` ซึ่งกำหนดเส้นทาง
+  `Link` ไปยัง[ตัวจัดการลิงก์](#link-handlers)
+- `desktop.launch(path, app?)` เปิดพาธด้วยแอป หรือแอปเริ่มต้น `desktop.reveal(path)` แสดงใน
+  ตัวจัดการไฟล์
+- `ctx.embeds` แสดงเว็บวิวของโปรเซสหลักในหน้าต่าง ดู
+  [เว็บวิวแบบฝัง](#embedded-web-views)
+- `ctx.locale` อ่านภาษาของอินเทอร์เฟซและทิศการเขียน `ctx.appearance.font("mono")` เป็นฟอนต์ CSS
+  ของฟอนต์เทอร์มินัลของผู้ใช้
+- `ctx.router` อ่านพาธเส้นทางปัจจุบันและว่ากำลังเปลี่ยนเส้นทางหรือไม่
+- `ctx.workspaces.on("remove", handler)` ทำงานเมื่อผู้ใช้เอาไดเรกทอรีเวิร์กสเปซออกจากเซิร์ฟเวอร์ เพื่อให้
+  ล้าง store ที่ผูกกับมันได้
+
+`desktop.pick(options)` เปิดกล่องโต้ตอบของระบบให้ผู้ใช้เลือกไฟล์หรือโฟลเดอร์ แล้วคืนพาธสัมบูรณ์ผ่าน Promise
+
+```ts
+const [folder] = (await ctx.desktop?.pick({ directory: true, title: ctx.t("pick.folder") })) ?? []
+
+if (folder) await ctx.client.rpc(Acme).index({ directory: folder })
+```
+
+- `directory: true` เลือกโฟลเดอร์แทนไฟล์ และ `multiple: true` ให้เลือกมากกว่าหนึ่ง
+- `extensions` จำกัดไฟล์ที่เสนอ โดยไม่มีจุด เช่น `["json"]` โฟลเดอร์เพิกเฉย
+- `title` เป็นชื่อกล่องโต้ตอบ ไม่ใช่ทุกระบบแสดง
+- รายการพาธจะว่างเมื่อผู้ใช้ยกเลิก หากเปิดกล่องโต้ตอบไม่ได้ Promise จาก `pick` จะถูกปฏิเสธ
+- `pick` เฉพาะเดสก์ท็อป: เบราว์เซอร์ไม่เคยบอกหน้าเว็บว่าตำแหน่งไฟล์ที่เลือกคือใด
+
+`ctx.appearance.mode()` เป็นโหมดสีที่อินเทอร์เฟซแสดง `"light"` หรือ `"dark"` เป็นรีแอกทีฟ
+
+```ts
+const background = () => (ctx.appearance.mode() === "dark" ? "#000" : "#fff")
+```
+
+- ค่านี้เป็นไปตามตัวเลือกของผู้ใช้ใน **Settings > Appearance** หากเลือก **System** จะใช้โหมดปัจจุบันของระบบ
+- ก่อนที่ UI ของแอปจะพร้อม จะใช้โหมดของระบบ
+
+#### Reference
+
+```ts
+interface System {
+  copy(text: string): Promise<void>
+  save(file: { name: string; content: string }): Promise<boolean>
+  openExternal(url: string): void
+}
+
+interface Desktop {
+  os: "macos" | "windows" | "linux"
+  zoom(): number
+  launch(path: string, app?: string): Promise<void>
+  reveal(path: string): Promise<boolean>
+  installed(app: string): Promise<boolean>
+  pick(options?: PickOptions): Promise<string[]>
+}
+
+interface PickOptions {
+  directory?: boolean
+  multiple?: boolean
+  title?: string
+  extensions?: string[]
+}
+
+interface Links {
+  open(link: Link): boolean
+  exists(link: Link): boolean | Promise<boolean>
+}
+
+interface Locale {
+  locale(): string
+  direction(): "ltr" | "rtl"
+}
+
+interface Appearance {
+  font(kind: "mono"): string
+  mode(): "light" | "dark"
+}
+
+interface Router {
+  path(): string
+  routing(): boolean
+}
+
+interface Workspaces {
+  on(event: "remove", handler: (value: { server: string; directory: string }) => void): Cleanup
+}
+```
+
+## สถานะที่จัดเก็บ
+
+หน้าต่างเดสก์ท็อปโหลดสถานะที่จัดเก็บผ่าน IPC ขณะเว็บอ่าน `localStorage` ทันที ประกาศ store ใน
+`Plugin.define({ stores })` โฮสต์จะโหลดให้
+
+- **`Store.global`** เก็บค่าเดียวสำหรับแอป โหลดก่อน `setup` ทำงาน `ctx.stores.name.value` จึงไม่เป็น
+  `undefined`
+- **`Store.session`** เก็บค่าเดียวต่อเซสชันและโหลดเมื่อสร้างหน้าจอของเซสชัน `ctx.stores.name(session).value`
+  เป็น `undefined` จนถึงตอนนั้น
+
+store ที่ประกาศใช้กับหน้าต่าง `main` เปิดสถานะด้วย `ctx.storage.store` ซึ่งอ่านแบบซิงโครนัส ดู
+[บริบทของโปรเซสหลัก](#main-context)
+
+แก้ค่าในที่ด้วย `update(draft => …)` ซึ่งต้องไม่คืนอะไร หรือแทนด้วย `set(next)`
+
+```ts
+const enabled = ctx.stores.prefs.value.enabled
+
+ctx.stores.prefs.update((draft) => {
+  draft.enabled = !draft.enabled
+})
+```
+
+- `ready()` เป็น `true` เมื่อค่าโหลดแล้ว การเขียนก่อนนั้นจะรอและใช้ตามลำดับการเรียก
+- `from` ระบุคีย์ที่จัดเก็บอื่นเพื่อนำเข้าค่าครั้งเดียว ขณะ store ยังไม่มีค่า เช่นคีย์ของ
+  store ที่เปลี่ยนชื่อ: `"plugin.acme.settings"` ส่งรายการเพื่อลองหลายคีย์ ใหม่สุดก่อน คีย์อื่นคง
+  สำเนาไว้จน store ถูกลบ
+
+```ts
+stores: {
+  prefs: Store.global(Prefs, { enabled: true }, ["plugin.acme.settings.v2", "plugin.acme.settings"]),
+}
+```
+
+#### Reference
+
+```ts
+const Store: {
+  global(schema: Schema, initial: T, from?: string | string[]): StoreDeclaration
+  session(schema: Schema, initial: T, from?: string | string[]): StoreDeclaration
+}
+
+interface Persisted<T, V = T | undefined> {
+  value: V
+  ready(): boolean
+  update(mutate: (draft: T) => undefined): void
+  set(next: T): void
+}
+```
+
+### ที่เก็บสถานะขณะรัน
+
+`ctx.storage.store(key, options)` เปิดที่เก็บสถานะสำหรับคีย์ที่ทราบตอนรัน ใช้ `scope` เพื่อกำหนดให้เก็บหนึ่งค่าต่อเซิร์ฟเวอร์ ไดเรกทอรี หรือเซสชัน
+
+```tsx
+import { Schema } from "effect"
+import { usePlugin, type MountedSession } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+function DraftView(props: { readonly session: MountedSession }) {
+  const ctx = usePlugin<typeof definition>()
+
+  const draft = ctx.storage.store("draft", {
+    schema: Schema.Struct({ text: Schema.String }),
+    initial: { text: "" },
+    scope: { server: props.session.server.id, directory: props.session.directory },
+  })
+
+  return <p>{draft.value?.text}</p>
+}
+```
+
+- `scope: "global"` ค่าเริ่มต้น เก็บค่าเดียวสำหรับแอป
+- `scope: { server, directory? }` เก็บค่าเดียวต่อเซิร์ฟเวอร์ หรือต่อไดเรกทอรีเวิร์กสเปซบนมัน
+- `scope: { session }` เก็บค่าเดียวต่อเซสชัน เปิดอีกครั้งเมื่อเซสชันย้ายไปไดเรกทอรีใหม่
+- `value` ของ runtime store เป็น `undefined` จนโหลด
+- `ctx.storage.memory(key, { initial })` เก็บสถานะในหน้าต่างที่อยู่รอดการโหลดปลั๊กอินใหม่แต่ไม่รอดการโหลดหน้าต่างใหม่
+- `ctx.storage.remove(key, { scope, from })` ลบค่า คีย์จึงอ่านเป็น `initial` อีกครั้ง
+
+#### Reference
+
+```ts
+interface Storage {
+  store(key: string, options: StoreOptions): Persisted<T>
+  memory(key: string, options: { initial: T }): [Store<T>, (mutation: (draft: T) => void) => void]
+  remove(key: string, options?: { scope?: StorageScope; from?: string | string[] }): void
+}
+
+interface StoreOptions {
+  schema: Schema
+  initial: T
+  scope?: StorageScope
+  from?: string | string[]
+}
+
+type StorageScope = "global" | { server: string; directory?: string } | { session: SessionRef }
+```
+
+## ตัวช่วยรีแอกทีฟพื้นฐาน
+
+ใช้ตัวช่วยเหล่านี้แทน `createEffect`, `createRenderEffect` และ `createComputed` ดิบ ตัวช่วยตามอายุ
+ปลั๊กอินและการเริ่มใหม่ของ Dependency ซึ่งเอฟเฟกต์ที่เขียนมือมักทำผิด
+
+### createKeyed
+
+`createKeyed(source, fn, { otherwise?, equals? })` รัน `fn` ในเจ้าของใหม่สำหรับแต่ละคีย์: แต่ละรุ่นที่ใช้งานของ
+ตัวเข้าถึง `ctx.use` หรือแต่ละค่าของตัวเข้าถึงธรรมดา สิ่งที่ลงทะเบียนใน `fn` จบพร้อมการรันนั้น
+
+```tsx
+import { onCleanup } from "solid-js"
+import { createKeyed, usePlugin, type SessionScreen } from "@opencode/plugin/gui"
+import { Changes } from "@opencode/plugin/gui/review"
+
+function ChangedFiles(props: { readonly screen: SessionScreen }) {
+  const ctx = usePlugin()
+
+  // Each active generation of Changes keeps this view's changes loaded; the watch ends with it.
+  createKeyed(ctx.use(Changes), (changes) => onCleanup(changes.watch(props.screen, "files")))
+
+  return <FileMarkers screen={props.screen} />
+}
+```
+
+- `otherwise` ทำงานขณะแหล่งไม่มีคีย์: ตัวเข้าถึง `Live` ที่ไม่ทำงาน หรือตัวเข้าถึงธรรมดาที่ค่า
+  เป็น `undefined`, `null` หรือ `false`
+- `equals` ตัดสินว่าค่าใหม่ของตัวเข้าถึงธรรมดาเป็นคีย์เดิมหรือไม่ `fn` จึงไม่รันอีก ใช้เมื่อ
+  แหล่งสร้างออบเจกต์ใหม่ทุกครั้ง ตัวเข้าถึง `Live` ใช้คีย์ตามรุ่นเสมอ
+
+#### Reference
+
+```ts
+function createKeyed<T>(
+  source: () => Live<T> | T,
+  fn: (value: T) => void,
+  options?: { otherwise?(): void; equals?(previous: T, next: T): boolean },
+): void
+```
+
+### createLatest
+
+`createLatest(source, (value, signal) => promise)` ดึงเมื่อ `source` เปลี่ยน ยกเลิกคำขอเก่า และไม่
+หยุดชั่วคราว
+
+```ts
+const summary = createLatest(
+  () => ctx.sessions.current()?.directory,
+  (directory, signal) => fetchSummary(directory, signal),
+)
+const text = () => summary.latest ?? ""
+```
+
+- `latest` เป็นผลล่าสุด เก็บไว้ขณะคำขอใหม่รัน เป็น `undefined` ก่อนครั้งแรก
+- `loading` เป็น `true` ขณะคำขอสำหรับค่าปัจจุบันกำลังทำงาน
+- `error` คือค่าที่ใช้ปฏิเสธ Promise ของคำขอปัจจุบัน หากมี
+
+#### Reference
+
+```ts
+function createLatest<S, T>(
+  source: () => Live<S> | S,
+  fetch: (value: S, signal: AbortSignal) => Promise<T>,
+): { latest: T | undefined; loading: boolean; error: unknown }
+```
+
+### createVisitState
+
+`createVisitState(initial)` สร้างสัญญาณ `[value, setValue]` ที่รีเซ็ตทุกครั้งที่ผู้ใช้ออกจากเซสชันและ
+กลับมา
+
+```ts
+const [expanded, setExpanded] = createVisitState(false)
+```
+
+#### Reference
+
+```ts
+function createVisitState<T>(initial: T): [value: () => T, set: (next: T) => void]
+```
+
+### usePanel และ useDrawer
+
+`usePanel()` อ่านกรอบของแผงปัจจุบันและจะโยนข้อผิดพลาดหากเรียกนอกส่วนแสดงผลของแผง `useDrawer()` คืนแผงเลื่อนบนมือถือที่ครอบส่วนที่ปลั๊กอินเพิ่มไว้ หรือ `undefined` หากเรียกนอกแผงเลื่อน
+
+```ts
+const panel = usePanel()
+const drawer = useDrawer()
+const compact = () => panel.placement() === "mobile"
+const close = () => drawer?.close()
+```
+
+- `placement()` เป็น `"side"` ในพื้นที่ด้านข้าง และ `"mobile"` ในมุมมองจอแคบ
+- `visible()` เป็น `true` ขณะพื้นที่เปิดและแท็บนี้ถูกเลือก `present()` ยังเป็น `true` ขณะพื้นที่
+  กำลังปิดแบบแอนิเมชัน
+- `reserve()` ขอให้เว้นที่ท้ายส่วนหัวสำหรับท็อกเกิลพื้นที่ของโฮสต์
+- `sidebar` เป็นค่ากำหนดแถบข้างในที่ทุกแผงด้านข้างใช้ร่วมกัน แผงที่มีแถบข้างแสดงท็อกเกิล
+  ของตัวเอง
+- `drawer.open(view)` แสดงเนื้อหาแทนมุมมองของลิ้นชัก พร้อมตัวควบคุมย้อนกลับ
+
+#### Reference
+
+```ts
+function usePanel(): PanelFrame
+function useDrawer(): { close(): void; open(view: DrawerView): void } | undefined
+
+interface PanelFrame {
+  visible(): boolean
+  present(): boolean
+  placement(): "side" | "mobile"
+  reserve(): boolean
+  animate(): boolean
+  open(): string[]
+  sidebar: {
+    opened(): boolean
+    width(): number
+    transition(): boolean
+    resize(width: number): void
+    toggle(): void
+  }
+}
+
+interface DrawerView {
+  title: string
+  content: JSX.Element
+  trigger: HTMLElement
+}
+```
+
+## สัญญาของแอป
+
+แอปให้สัญญาเหล่านี้แก่ทุกปลั๊กอิน ให้ติดตามด้วย `ctx.use(token)` และจัดการขณะไม่
+`active` เช่นสัญญาของปลั๊กอินอื่น ตัวอย่างเช่น `Browser` เป็น `inactive` บนเว็บ
+
+### ไฟล์
+
+`@opencode/plugin/gui/file` ส่งออกต้นไม้ไฟล์และปุ่ม **Open in** ของแอป พร้อม registry `FileViewer`
+
+```tsx
+import { bindPlugin } from "@opencode/plugin/gui"
+import { FileViewer, type FileViewerProps } from "@opencode/plugin/gui/file"
+
+// A viewer for a kind of file the file view does not render itself.
+ctx.add(FileViewer, {
+  kinds: ["document"],
+  View: bindPlugin((props: FileViewerProps) => <AcmeDoc bytes={props.bytes} onError={props.onError} />),
+})
+```
+
+- **`FileTree`** เป็นสัญญา `Tree` และ `List` แสดงต้นไม้หรือรายการไฟล์เวิร์กสเปซแบบเสมือนพร้อมเครื่องหมาย
+  การเปลี่ยนแปลง อ่านด้วย `ctx.use(FileTree)` `labels` ของต้นไม้เพิ่มข้อความหลังชื่อโฟลเดอร์ เช่นจำนวน
+  รายการ
+- **`OpenInApp`** เป็นสัญญา `Button` เป็นปุ่ม **Open in** บนเดสก์ท็อปสำหรับเวิร์กสเปซของเซสชัน
+- **`FileViewer`** เป็น registry ตัวแสดงผลระบุ `kinds` ที่รองรับ ปฏิเสธข้อมูลไบต์ได้ด้วย `problem` และแสดง
+  `View` ที่รายงาน `onDetails` และ `onError`
+
+#### Reference
+
+```ts
+interface FileTree {
+  Tree(props: FileTreeProps): JSX.Element
+  List(props: FileListProps): JSX.Element
+}
+
+interface FileTreeProps {
+  screen: SessionScreen
+  session: MountedSession
+  allowed: string[]
+  kinds?: Map<string, ChangeKind>
+  labels?: Map<string, string>
+  active?: string
+  onFileClick(path: string): void
+}
+
+interface FileListProps {
+  screen: SessionScreen
+  session: MountedSession
+  files: string[]
+  kinds?: Map<string, ChangeKind>
+  active?: string
+  highlighted?: string
+  onFileClick(path: string): void
+}
+
+interface OpenInApp {
+  Button(props: { screen: SessionScreen; session: MountedSession }): JSX.Element
+}
+
+interface FileViewer {
+  kinds: ArtifactKind[]
+  problem?(bytes: Uint8Array): string | undefined
+  View: Component<FileViewerProps>
+}
+
+interface FileViewerProps {
+  bytes: Uint8Array
+  onDetails(details: string[]): void
+  onError(reason?: string): void
+}
+```
+
+### รีวิวการเปลี่ยนแปลง
+
+`@opencode/plugin/gui/review` ส่งออก `Changes` มุมมองการเปลี่ยนแปลงของเซสชันในแอป และ `ChangeKind`
+(`"add"`, `"del"` หรือ `"mix"`)
+
+```ts
+import { Changes } from "@opencode/plugin/gui/review"
+
+const changes = ctx.use(Changes)
+
+const count = () => {
+  const live = changes()
+  const session = ctx.sessions.current()
+
+  return live.status === "active" && session ? live.value.diffs(session).length : 0
+}
+```
+
+- `diffs(session)` เป็น diff ของโหมดรีวิวปัจจุบัน และ `ready(session)` เป็น `true` เมื่อโหลดแล้ว ทั้งสองเป็น
+  รีแอกทีฟ เฉพาะเซสชันที่กำหนดเส้นทางมีการเปลี่ยนแปลง เซสชันอื่นอ่านเป็นว่าง
+- `kinds(session)` แมปแต่ละไฟล์และไดเรกทอรีที่เปลี่ยนเป็น `ChangeKind`
+- `active(session)` เป็นไฟล์ที่แผงรีวิวแสดง
+- `details(session)` เป็นการเปลี่ยนแปลงที่ยังไม่คอมมิตของไดเรกทอรีเซสชัน ไม่ว่าโหมดรีวิวใด
+- `focus(session, path)` แสดงไฟล์ในแผงรีวิว และ `open(session)` แสดงการเปลี่ยนแปลงทั้งหมด
+- `watch(screen, source)` คงการเปลี่ยนแปลงของมุมมองให้โหลดขณะแสดง ข้ามการสลับเซสชันของมุมมอง
+  ส่งหน้าจอที่เป็นเจ้าของจากอินพุตแผงหรือสล็อต คืนฟังก์ชันที่หยุดเฝ้าดู ดู
+  [createKeyed](#createkeyed)
+- การเฝ้าดูแบบ `tree` จะเก็บรายการการเปลี่ยนแปลงต่อเนื่องและรีเฟรชเมื่อเปิดพื้นที่ด้านข้าง ส่วนแบบ `details` จะโหลด
+  `details(session)`
+
+#### Reference
+
+```ts
+interface Changes {
+  diffs(session: SessionRef): FileDiffInfo[]
+  ready(session: SessionRef): boolean
+  kinds(session: SessionRef): Map<string, ChangeKind>
+  active(session: SessionRef): string | undefined
+  details(session: SessionRef): FileDiffInfo[] | undefined
+  focus(session: SessionRef, path: string): void
+  open(session: SessionRef): void
+  watch(screen: SessionScreen, source: "tree" | "files" | "details"): () => void
+}
+
+type ChangeKind = "add" | "del" | "mix"
+```
+
+### เบราว์เซอร์
+
+`@opencode/plugin/gui/browser` ส่งออก `Browser` บานเบราว์เซอร์เดสก์ท็อปของเซสชัน
+
+```ts
+import { Browser } from "@opencode/plugin/gui/browser"
+
+const session = ctx.sessions.current()
+const live = ctx.use(Browser)()
+const url = "http://localhost:3000"
+
+if (session && live.status === "active" && live.value.canOpen(session, url)) live.value.open(session, url)
+```
+
+- `attached(session)` เป็น `true` เมื่อเซสชันมีบานเบราว์เซอร์
+- `canOpen(session, path?)` เป็น `true` เมื่อไฟล์เวิร์กสเปซหรือ URL http(s) เปิดในบานได้
+- `open(session, url)` เปิด URL เป็นแท็บเบราว์เซอร์ในแผงด้านข้างของเซสชัน
+- `openFile(session, path)` เปิดไฟล์เวิร์กสเปซเป็นแท็บ `file://`
+
+#### Reference
+
+```ts
+interface Browser {
+  attached(session: SessionRef): boolean
+  canOpen(session: SessionRef, path?: string): boolean
+  open(session: SessionRef, url: string): void
+  openFile(session: SessionRef, path: string): void
+}
+```
+
+## โปรเซสหลัก
+
+บน OpenCode Desktop `main` ของปลั๊กอินทำงานครั้งเดียวในโปรเซสหลักของ Electron เป็นซิงเกิลตันทัวแอป เข้าถึง
+Node.js built-ins, `electron` และ main host API ได้เต็มที่ ส่งให้ `Plugin.define` ใน
+[ไฟล์ `./gui-experimental`](#define-the-gui-plugin)ของปลั๊กอิน ข้าง `setup` ของหน้าต่างหรือเดี่ยวๆ
+
+```tsx title="src/gui.tsx"
+import { Schema } from "effect"
+import { powerSaveBlocker } from "electron"
+import { Plugin } from "@opencode/plugin/gui"
+import { KeepAwake } from "./gui/contract"
+
+export default Plugin.define({
+  main(ctx) {
+    const stored = ctx.storage.store("keepScreenActive", { schema: Schema.Boolean, initial: false })
+    let blockerId: number | undefined
+
+    const release = () => {
+      if (blockerId === undefined) return
+      powerSaveBlocker.stop(blockerId)
+      blockerId = undefined
+    }
+
+    const setActive = (enabled: boolean) => {
+      if (enabled && blockerId === undefined) blockerId = powerSaveBlocker.start("prevent-display-sleep")
+      if (!enabled) release()
+      stored.set(enabled)
+    }
+
+    if (stored.value) setActive(true)
+
+    ctx.provide(KeepAwake, {
+      screenActive: () => blockerId !== undefined && powerSaveBlocker.isStarted(blockerId),
+      setScreenActive: (enabled) => setActive(enabled),
+    })
+
+    return release
+  },
+})
+```
+
+ในหน้าต่าง `electron` เป็นตัวแทนเฉยๆ การนำเข้าจึงปลอดภัยในไฟล์ `./gui-experimental` ที่ใช้ร่วมกัน ดู
+[ไฟล์เดียว สองโปรเซส](#one-file-two-processes)
+
+## บริบทของโปรเซสหลัก
+
+`main` ได้รับ `MainContext` โดยต่างจาก `setup` ของหน้าต่างตรงที่ `main` เขียนเป็น `async` ได้ ทั้งยังคืนฟังก์ชันสำหรับคืนทรัพยากรได้ทั้งโดยตรงและผ่าน Promise
+
+```ts
+main(ctx) {
+  ctx.log.write("info", "acme started", { version: ctx.app.version })
+}
+```
+
+- `ctx.options`, `ctx.client` และ `ctx.app` เป็น[บริบทที่ใช้ร่วมกัน](#shared-context) ใน `main`
+  `ctx.app.platform` เป็น `"desktop"` เสมอ
+- `ctx.storage.store(key, { schema, initial })` เปิด store แบบซิงโครนัสในเนมสเปซของปลั๊กอิน `value` ของมัน
+  มีค่าเสมอ และแต่ละ `set` หรือ `update` ถึงฐานข้อมูลก่อนคืน `ctx.storage.remove(key)` ลบ
+  ค่า
+- `ctx.signal` ยกเลิกเมื่อปลั๊กอินถูกปิด โหลดใหม่ หรือนำออก หรือแอปออก `ctx.onCleanup(fn)` รัน `fn`
+  เมื่อเกิดเหตุการณ์นั้น ดู[อายุการทำงานและการคืนทรัพยากร](#lifetimes-and-cleanup)
+- `ctx.provide` ใช้งาน `Ipc` ภายใต้ id ของปลั๊กอิน ดู[กำหนดและให้ Ipc](#define-and-provide-an-ipc)
+- `ctx.add` เพิ่มรายการใน registry ของโปรเซสหลัก เช่น [`MenubarItem`](#native-app-menu)
+- `ctx.windows` แสดงรายการหน้าต่างของแอปและรายงานเมื่อเปิดหรือปิด
+- `ctx.embeds` วาง `WebContentsView` ในเลย์เอาต์ของหน้าต่าง ดู[เว็บวิวแบบฝัง](#embedded-web-views)
+- `ctx.serverEndpoints.get(id)` คืน URL และข้อมูลรับรองของเซิร์ฟเวอร์ เซิร์ฟเวอร์ของแอปเดสก์ท็อปคือ `"sidecar"`
+- `ctx.cli` อธิบาย OpenCode CLI ที่แอปเดสก์ท็อปรัน
+- `ctx.log.write` เขียนลงไฟล์บันทึกของเดสก์ท็อป
+
+#### Reference
+
+`@opencode/plugin/gui/main` ส่งออก `MainStorage` และ `MainEmbeds` ด้านล่างเป็น `Storage` และ `Embeds`
+
+```ts
+interface MainContext {
+  id: string
+  options: PluginOptions
+  client: OpenCodeClient
+  app: App
+  signal: AbortSignal
+  onCleanup(fn: Cleanup): void
+  storage: MainStorage
+  provide<S extends IpcSpec>(token: Ipc<S>, impl: IpcImpl<S>): IpcProvider<S>
+  add<T>(registry: Registry<T>, item: () => T | undefined): Cleanup
+  add<T>(registry: Registry<T>, item: T): Cleanup
+  list<T>(registry: Registry<T>): T[]
+  t(key: string, params?: Record<string, string | number | boolean>): string
+  plural(key: string, count: number, params?: Record<string, string | number | boolean>): string
+  windows: Windows
+  embeds: MainEmbeds
+  serverEndpoints: { get(id: string): ServerEndpoint | undefined }
+  cli: { version: string; command: string[]; binary?: string; development: boolean }
+  log: { write(level: "debug" | "info" | "warn" | "error", message: string, data?: Record<string, unknown>): void }
+}
+
+interface MainStorage {
+  store(key: string, options: { schema: Schema; initial: T }): Persisted<T, T>
+  remove(key: string): void
+}
+
+interface Windows {
+  get(id: number): BrowserWindow | undefined
+  list(): BrowserWindow[]
+  focused(): BrowserWindow | undefined
+  on(event: "open" | "close", handler: (window: BrowserWindow) => void): Cleanup
+}
+
+interface ServerEndpoint {
+  id: string
+  url: string
+  headers: Record<string, string>
+  sameMachine: boolean
+  password?: string
+}
+```
+
+## กำหนดและให้ Ipc
+
+สเปก `Ipc` ระบุ `state` แยกตามหน้าต่าง `methods` ที่เรียกได้ และ `events` ที่ส่งไปยังหน้าต่างได้ `Schema` ของ Effect ตรวจสอบและเข้ารหัสทุกค่าที่ส่งผ่านช่องทางนี้
+
+```ts title="src/gui/contract.ts"
+import { Schema } from "effect"
+import { Ipc } from "@opencode/plugin/gui"
+
+export const Counter = Ipc.define({
+  id: "acme.counter",
+  state: Schema.Struct({ count: Schema.Number }),
+  methods: {
+    increment: {
+      input: Schema.Number,
+      output: Schema.Number,
+    },
+    reset: {},
+  },
+  events: {
+    overflow: Schema.Struct({ limit: Schema.Number }),
+  },
+})
+```
+
+- ID ต้องตรงกับ ID ของปลั๊กอินหรือขึ้นต้นด้วย ID นั้น เช่น `acme.counter` ทั้ง `ctx.provide` ใน `main` และ `ctx.main` ในหน้าต่างจะโยนข้อผิดพลาดหากระบุ ID อื่น
+- ละ `input` สำหรับเมธอดที่ไม่รับอาร์กิวเมนต์ และ `output` สำหรับเมธอดที่ไม่คืนค่า
+
+#### Reference
+
+```ts
+interface IpcSpec {
+  id: string
+  state?: Schema
+  methods: Record<string, { input?: Schema; output?: Schema }>
+  events?: Record<string, Schema>
+}
+```
+
+### เขียนส่วนให้บริการในโปรเซสหลัก
+
+แต่ละเมธอดได้รับอินพุตที่ถอดรหัสและ `Caller` (`{ window, signal }`) เรียก `provider.changed(window?)` เมื่อ
+`state` เปลี่ยนเพื่อส่งสแนปช็อตใหม่ให้หน้าต่างที่สมัครรับไว้ หรือเรียก `provider.emit(name, payload, window?)` เพื่อส่ง
+อีเวนต์
+
+```ts title="src/gui/main.ts"
+import type { Plugin } from "@opencode/plugin/gui"
+import { Counter } from "./contract"
+
+export const main: Plugin.MainSetup = (ctx) => {
+  const counts = new Map<number, number>()
+
+  const provider = ctx.provide(Counter, {
+    state: (window: number) => ({ count: counts.get(window) ?? 0 }),
+    increment: (step, caller) => {
+      const next = (counts.get(caller.window) ?? 0) + step
+      counts.set(caller.window, next)
+      provider.changed(caller.window)
+
+      if (next > 100) provider.emit("overflow", { limit: 100 }, caller.window)
+
+      return next
+    },
+    reset: (_input, caller) => {
+      counts.set(caller.window, 0)
+      provider.changed(caller.window)
+    },
+  })
+}
+```
+
+- สเปกที่มี `state` ต้องมี `state(window)` ในการใช้งานด้วย main อ่านเมื่อหน้าต่างสมัครและทุกครั้งที่
+  `changed`
+- หากเมธอดโยนข้อผิดพลาด Promise จากการเรียกของหน้าต่างจะถูกปฏิเสธ
+- `changed` และ `emit` ถึงทุกหน้าต่างเมื่อละ `window`
+- `dispose()` ถอน `Ipc` ก่อนกำหนด หน้าต่างเห็นเป็น `pending` และการเรียก `ctx.main` รอ จนกว่าปลั๊กอินจะให้
+  อีกครั้งหรือหยุด โฮสต์ยังถอนเมื่อปลั๊กอินหยุด
+
+#### Reference
+
+```ts
+type IpcImpl<S extends IpcSpec> = {
+  [Name in keyof S["methods"]]: (input: Input<Name>, caller: Caller) => Output<Name> | Promise<Output<Name>>
+} & { state(window: number): State }
+
+interface Caller {
+  window: number
+  signal: AbortSignal
+}
+
+interface IpcProvider<S extends IpcSpec> {
+  changed(window?: number): void
+  emit(name: keyof S["events"], data: EventData, window?: number): void
+  dispose(): void
+}
+```
+
+### ใช้ Ipc ในหน้าต่าง
+
+ฝั่งหน้าต่าง `ctx.main(Counter)` คืนไคลเอนต์ของ `Ipc` ที่ `main` เปิดให้ใช้ เมธอดที่ไม่มี schema ของ `input`
+รับเพียงตัวเลือกการเรียก `{ signal }` ที่ไม่บังคับ อย่าส่ง `undefined` เป็นอาร์กิวเมนต์แรก
+
+```tsx title="src/gui/window.tsx"
+import { Command, type Plugin } from "@opencode/plugin/gui"
+import { Counter } from "./contract"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  const counter = ctx.main(Counter)
+
+  // Follows main across restarts; removed when the plugin stops.
+  counter.on("overflow", (data) => console.log(`Counter exceeded ${data.limit}`))
+
+  ctx.add(Command, () => ({
+    id: "increment",
+    title: ctx.t("command.increment"),
+    enabled: ctx.app.platform === "desktop",
+    run: async () => {
+      await counter.increment(1, { signal: ctx.signal })
+      await counter.reset({ signal: ctx.signal })
+    },
+  }))
+}
+```
+
+- การเรียกจะรอให้ `main` เริ่มทำงานก่อน แต่ Promise จะถูกปฏิเสธเมื่อ `main` ตอบไม่ได้ เช่น บนเว็บ เมื่อ `main` ของปลั๊กอินถูกปิดหรือทำงานไม่สำเร็จ หรือเมื่อเมธอดโยนข้อผิดพลาด ให้ดักข้อผิดพลาดตรงจุดที่ต้องแจ้งผลแก่ผู้ใช้
+- `state()` และ `on()` ติดตาม `main` ข้ามการรีสตาร์ต ตัวรับฟังจบพร้อมเจ้าของปัจจุบัน มิฉะนั้นพร้อมปลั๊กอิน
+- `ctx.main` คืนไคลเอนต์เดิมทุกครั้งที่เรียกด้วยโทเคนเดียวกัน
+
+อ่าน `state` ของหน้าต่างนี้ด้วย `client.state()` เป็น `undefined` จนสแนปช็อตแรกมาถึง และอัปเดตทุก
+ครั้งที่ `main` เรียก `changed`
+
+```tsx
+const count = () => ctx.main(Counter).state()?.count ?? 0
+```
+
+#### Reference
+
+```ts
+type IpcClient<S extends IpcSpec> = {
+  [Name in keyof S["methods"]]: S["methods"][Name] extends { input: Schema }
+    ? (input: Input<Name>, options?: { signal?: AbortSignal }) => Promise<Output<Name>>
+    : (options?: { signal?: AbortSignal }) => Promise<Output<Name>>
+} & {
+  state(): State | undefined
+  on(name: keyof S["events"], listener: (data: EventData) => void): Cleanup
+}
+```
+
+กำหนดปลั๊กอินด้วยทั้งสอง setup ใน `src/gui.tsx`: `Plugin.define({ ...definition, setup, main })`
+
+### ปลั๊กอินอื่น
+
+ปลั๊กอินอื่นติดตาม `Ipc` ของคุณด้วย `ctx.use(Counter)` เหมือนสัญญา ขณะ `active` ค่าของมันคือ
+`IpcClient` เดียวกัน
+
+```ts
+const counter = ctx.use(Counter)
+
+const count = () => {
+  const live = counter()
+
+  return live.status === "active" ? (live.value.state()?.count ?? 0) : 0
+}
+```
+
+- ทุก `Ipc` เป็น `inactive` บนเว็บ ซึ่งไม่มีโปรเซสหลัก
+
+## เมนูแอปเนทีฟ
+
+`main` เพิ่มรายการในเมนูเนทีฟ (เมนูแอป macOS, File, Edit, View, Go, Window และ Help) และใน
+เมนูในแอปบน Windows และ Linux ด้วย `MenubarItem` จาก `@opencode/plugin/gui/main`
+
+```ts
+import { MenubarItem } from "@opencode/plugin/gui/main"
+
+ctx.add(
+  MenubarItem,
+  (): MenubarItem => ({
+    menu: "help",
+    id: "diagnostics",
+    after: "logs.export",
+    label: ctx.t("menu.diagnostics"),
+    enabled: () => true,
+    run: (focusedWindow) => {
+      focusedWindow?.webContents.focus()
+    },
+  }),
+)
+```
+
+- `after` ระบุรายการที่ตาม: รายการของปลั๊กอินนี้ตาม id หรือรายการในตัวตามคำสั่ง มิฉะนั้นตาม
+  การกระทำ มิฉะนั้นตามบทบาท เช่น `logs.export`, `edit.copy` หรือ `about` เมื่อไม่มีอะไรตรง รายการจะอยู่ที่
+  ท้ายเมนู
+- รายการ `app` ปรากฏเฉพาะบน macOS
+- `run` ได้รับหน้าต่างที่โฟกัส หากมี
+- main อ่านฟังก์ชันทุกครั้งที่สร้างเมนู ป้ายจึงตามภาษา
+
+#### Reference
+
+```ts
+interface MenubarItem {
+  menu: "app" | "file" | "edit" | "view" | "go" | "window" | "help"
+  id: string
+  label: string
+  after?: string
+  enabled?(): boolean
+  run(window: BrowserWindow | undefined): void
+}
+```
+
+## เว็บวิวแบบฝัง
+
+หากต้องการฝัง `WebContentsView` แยกในแผง ให้สร้างใน `main` และแสดงกล่องของมันจากหน้าต่าง
+
+```ts title="src/gui/main.ts"
+import { type BrowserWindow, WebContentsView } from "electron"
+import type { Plugin } from "@opencode/plugin/gui"
+
+export const main: Plugin.MainSetup = (ctx) => {
+  const attach = (window: BrowserWindow) => {
+    const view = new WebContentsView()
+    const embed = ctx.embeds.create(view, window)
+    void view.webContents.loadURL("https://acme.example")
+    embed.show(true)
+    // Send embed.id to the window over your Ipc.
+  }
+  ctx.windows.list().forEach(attach)
+  ctx.windows.on("open", attach)
+}
+```
+
+```tsx title="src/gui/pane.tsx"
+<ctx.embeds.View id={embedId} visible radius={8} />
+```
+
+- `"open"` เกิดเฉพาะหน้าต่างที่เปิดภายหลัง ให้ผูกกับ `ctx.windows.list()` ก่อน
+- หน้าต่างส่ง `id` ของ embed ให้ `ctx.embeds.View` และ `ctx.embeds.capture`
+- `show(visible)` เป็นฝั่งหน้าของการมองเห็น: วิวแสดงเฉพาะขณะหน้าต่างจัดวางและ `show(true)`
+  ทำงาน
+- `on("visible", handler)` ทำงานเมื่อวิวขึ้นหรือลงจอ รวมถึงเมื่อหน้าต่างวาดภาพนิ่งแทน
+- `capture()` คืนภาพนิ่งของหน้า หรือ `undefined` ขณะซ่อน
+- `dispose()` นำวิวออกจากหน้าต่าง แต่ไม่ปิดหน้า เรียก `view.webContents.close()` เมื่อ
+  ใช้เสร็จ โฮสต์จะนำเว็บวิวแบบฝังออกด้วยเมื่อเลิกโหลดปลั๊กอิน
+- ในหน้าต่าง `View` เติมกล่องด้วย embed โฮสต์คุมขอบเขต ซูม มุมโค้ง และ
+  การบดบังโดยกล่องโต้ตอบให้ตรง และซ่อนขณะหน้าต่างซ่อนหรือกล่องโต้ตอบเปิด
+- `frozen` วาดภาพนิ่งแทนวิวสด เนื้อหา DOM จึงลอยเหนือได้ `radius` ทำให้มุมล่างโค้ง
+  และ `background` เป็นสีที่มุมแสดง
+- `page` เป็นสิ่งที่ embed แสดง เช่น URL ขณะแผงย้าย โฮสต์วาดภาพนิ่งของ embed แทน
+  และทิ้งภาพนิ่งที่ถ่ายขณะ `page` มีค่าอื่น
+- `capture(id)` ของหน้าต่างคืนภาพนิ่ง JPEG หรือ `undefined` ขณะ embed ซ่อนและบนเว็บเสมอ
+
+#### Reference
+
+```ts
+interface MainEmbeds {
+  create(view: WebContentsView, window: BrowserWindow): Embed
+}
+
+interface Embed {
+  id: string
+  show(visible: boolean): void
+  on(event: "visible", handler: (visible: boolean) => void): Cleanup
+  capture(): Promise<NativeImage | undefined>
+  dispose(): void
+}
+
+interface Embeds {
+  View(props: EmbedProps): JSX.Element
+  capture(id: string): Promise<Uint8Array | undefined>
+}
+
+interface EmbedProps {
+  id: string | undefined
+  visible: boolean
+  frozen?: boolean
+  page?: string
+  radius?: number
+  background?: string
+  class?: string
+  children?: JSX.Element
+}
+```
+
+## การติดตามสถานะปลั๊กอินที่ใช้และการจัดการข้อผิดพลาด
+
+`ctx.use(token)` คืนตัวเข้าถึง `Live<T>` แบบรีแอกทีฟซึ่งบอกสถานะของปลั๊กอินที่ให้บริการตามโทเคน ปลั๊กอินของคุณยังทำงานต่อได้แม้ผู้ให้บริการปิดอยู่ จึงต้องรองรับสถานะอื่นนอกจาก `active` ไม่ควรปล่อยให้ตัวควบคุมกดแล้วไม่ตอบสนอง หรือแสดงตัวบ่งชี้การโหลดไม่รู้จบ
+
+```ts
+import { Browser } from "@opencode/plugin/gui/browser"
+
+const browser = ctx.use(Browser)
+
+ctx.add(Command, () => {
+  const live = browser()
+  const session = ctx.sessions.current()
+
+  return {
+    id: "preview",
+    title: ctx.t("command.preview"),
+    enabled: live.status === "active" && !!session,
+    run: () => {
+      if (live.status === "active" && session) live.value.open(session, "http://localhost:3000")
+    },
+  }
+})
+```
+
+- **`pending`:** ผู้ให้ยังไม่เริ่ม เช่นขณะปลั๊กอินโหลดหรือรีสตาร์ต แสดงสถานะโหลด หรือซ่อนตัวควบคุมที่ไม่บังคับ
+- **`active`:** ผู้ให้ทำงาน และ `value` เป็นสัญญาหรือไคลเอนต์ `Ipc` `generation` นับการเปิดใช้งาน ผู้ให้
+  ที่รีสตาร์ตจึงกลับมาพร้อมค่าใหม่
+- **`inactive`, `disabled`:** ผู้ให้ถูกปิด ไม่มี หรือไม่พร้อมบนแพลตฟอร์มนี้ เช่นทุก `Ipc` บนเว็บ แสดงสถานะ
+  ไม่พร้อมใช้ หรือละตัวควบคุม
+- **`inactive`, `failed`:** ฟังก์ชันตั้งค่าของผู้ให้บริการโยนข้อผิดพลาด ให้แสดงสถานะไม่พร้อมใช้งาน
+- `main` ของคุณไม่มีสถานะ `Live` การเรียกผ่าน [`ctx.main`](#use-the-ipc-in-a-window) จะรอให้โปรเซสเริ่มทำงาน และ Promise จะถูกปฏิเสธหากโปรเซสตอบไม่ได้
+
+#### Reference
+
+```ts
+type Live<T> =
+  | { status: "pending" }
+  | { status: "active"; value: T; generation: number }
+  | { status: "inactive"; reason: "disabled" | "failed" }
+```
+
+## อายุการทำงานและการคืนทรัพยากร
+
+ทุกอย่างที่ลงทะเบียนผ่าน `ctx` (`ctx.add`, `ctx.provide`, `ctx.dialogs.open`, `ctx.embeds.create` และตัวรับฟัง
+อีเวนต์ `Ipc`) ถูกถอนเมื่อ Scope ที่เป็นเจ้าของจบ
+
+- ภายในคอมโพเนนต์หรือคอลแบ็ก `createKeyed` ระบบจะยกเลิกการลงทะเบียนเมื่อคืนทรัพยากรของคอมโพเนนต์หรือการรัน `createKeyed` รอบนั้น
+- ที่ระดับบนสุดของ `setup` การลงทะเบียนจบเมื่อปลั๊กอินถูกปิด โหลดใหม่ หรือนำออก หรือหน้าต่างปิด
+- ใน `main` การลงทะเบียนจบเมื่อปลั๊กอินถูกปิด โหลดใหม่ หรือนำออก หรือแอปออก embed ยังจบ
+  เมื่อหน้าต่างปิด
+
+สำหรับทรัพยากรอื่น เช่น ตัวจับเวลาหรือซ็อกเก็ต ให้ฟังก์ชันตั้งค่าคืนฟังก์ชันสำหรับคืนทรัพยากร ซึ่งจะทำงานพร้อมกับขั้นตอนข้างต้น
+
+- **`setup` ของหน้าต่าง** เป็น `async` ไม่ได้ เพราะทำงานภายใต้เจ้าของของ Solid ให้คืนฟังก์ชันสำหรับคืนทรัพยากร หรือใช้
+  `onCleanup` หรือ `ctx.signal`
+- **`main`** เป็น `async` ได้ ให้คืนฟังก์ชันสำหรับคืนทรัพยากรโดยตรงหรือผ่าน Promise หรือใช้ `ctx.onCleanup(fn)`
+
+### การตั้งค่าฝั่งหน้าต่าง
+
+`setup` ของหน้าต่างต้องซิงโครนัส เริ่มงานอะซิงโครนัสใน `createKeyed` หรือ `createLatest`
+
+```tsx title="src/gui.tsx"
+import { Command, createKeyed, Plugin } from "@opencode/plugin/gui"
+import { Changes } from "@opencode/plugin/gui/review"
+
+export default Plugin.define({
+  i18n: { en: { changes: "Show changes" } },
+  setup(ctx) {
+    // Runs once per active generation of Changes; the command is withdrawn with it.
+    createKeyed(ctx.use(Changes), (changes) => {
+      ctx.add(Command, () => ({
+        id: "changes",
+        title: ctx.t("changes"),
+        run: () => {
+          const session = ctx.sessions.current()
+
+          if (session) changes.open(session)
+        },
+      }))
+    })
+
+    const timer = setInterval(() => console.log("still here"), 60_000)
+
+    return () => clearInterval(timer)
+  },
+})
+```
+
+### การตั้งค่าฝั่งโปรเซสหลัก
+
+`main` เป็น `async` ได้ ให้คืนฟังก์ชันสำหรับคืนทรัพยากรที่เปิดไว้โดยตรงหรือผ่าน Promise หรือใช้ `ctx.onCleanup(fn)` เพื่อลงทะเบียนฟังก์ชันนั้น
+
+```ts
+async main(ctx) {
+  const socket = await connect(ctx.options)
+
+  ctx.onCleanup(() => socket.close())
+}
+```
+
+- `ctx.onCleanup` รันฟังก์ชันเมื่อปลั๊กอินถูกปิด โหลดใหม่ หรือนำออก หรือแอปออก โดยลงทะเบียนล่าสุด
+  ก่อน รันฟังก์ชันทันทีเมื่อปลั๊กอินจากไปแล้ว
+- หลัง `await` ให้ return หาก `ctx.signal` ถูกยกเลิก ก่อนลงทะเบียนหรือเปลี่ยนสิ่งใด
+- เมื่อคืนทรัพยากรแบบ `async` แอปจะรอให้ Promise สิ้นสุดก่อนปิด โดยรอไม่เกิน 3 วินาที

@@ -1,0 +1,671 @@
+---
+title: "การสร้างปลั๊กอิน TUI"
+description: "สร้างส่วน TUI ของปลั๊กอิน OpenCode สำหรับ UI เทอร์มินัลด้วย @opencode/plugin/tui"
+---
+
+ปลั๊กอิน TUI ขยาย UI เทอร์มินัลด้วยคำสั่ง เส้นทาง สล็อต ตัวแสดงผล Markdown การแจ้งเตือน และสถานะ
+ในเครื่อง ปลั๊กอิน TUI คือส่วน `./tui` ของ[แพ็กเกจปลั๊กอิน](/build/plugins) ซึ่งมักอยู่ข้าง[ส่วน
+เซิร์ฟเวอร์](/build/plugins/server)
+
+```ts title="src/tui.tsx"
+import { Plugin } from "@opencode/plugin/tui"
+
+export default Plugin.define({
+  id: "acme.cli",
+  setup(context) {
+    context.ui.toast.show({ message: "TUI plugin loaded", variant: "success" })
+  },
+})
+```
+
+นำเข้า `@opencode/plugin/tui` โดยตรง OpenCode จะหาโมดูลนี้ให้ขณะรัน ปลั๊กอิน TUI ในเครื่องจึงไม่ต้องใช้
+พาธสัมบูรณ์ไปยังเช็กเอาต์ OpenCode
+
+## บริบท
+
+`setup` รับการกำหนดค่า ข้อมูลเมตาแอป location ปัจจุบัน ไคลเอนต์ OpenCode ข้อมูลแคช โทเคนธีม
+ตัวแสดงผล OpenTUI และ API UI ที่อธิบายด้านล่าง
+
+```ts
+setup(context) {
+  const compact = context.options.compact === true
+  const location = context.location ?? context.data.location.default()
+  const version = context.app.version
+  const channel = context.app.channel
+  const client = context.client
+  const renderer = context.renderer
+  const theme = context.theme
+}
+```
+
+คืนฟังก์ชันสำหรับคืนทรัพยากรที่ปลั๊กอินเป็นเจ้าของ
+
+```ts
+setup(context) {
+  const stop = context.data.on("session.execution.succeeded", () => {})
+  return () => stop()
+}
+```
+
+## ไคลเอนต์
+
+`context.client` เป็นไคลเอนต์ OpenCode ที่สร้างขึ้นและเรียกเซิร์ฟเวอร์ที่เชื่อมต่อได้ รวมถึงเซิร์ฟเวอร์ระยะไกล
+
+```ts
+const response = await context.client.plugin.list({
+  location: context.location ?? context.data.location.default(),
+})
+const plugins = response.data
+```
+
+## อีเวนต์
+
+ใช้ `data.on` สำหรับอีเวนต์ที่มีชนิดหนึ่ง หรือ `data.listen` สำหรับทุกอีเวนต์เซิร์ฟเวอร์ ทั้งสองคืนฟังก์ชันยกเลิกการสมัคร
+
+```ts
+const stopPermission = context.data.on("permission.asked", (event) => {
+  context.ui.toast.show({ message: `Permission ${event.data.id}` })
+})
+const stopAll = context.data.listen(({ details }) => console.log(details.type))
+
+return () => {
+  stopPermission()
+  stopAll()
+}
+```
+
+## เซสชัน
+
+API ข้อมูลเซสชันใช้แสดงรายการ ค้นหา ดูลำดับชั้น ค่าใช้จ่ายและสถานะ รวมถึงซิงค์ข้อมูลและทำเครื่องหมายว่าข้อมูลเดิมไม่เป็นปัจจุบัน
+
+```ts
+const sessions = context.data.session.list()
+const session = context.data.session.get(sessionID)
+const rootID = context.data.session.root(sessionID)
+const familyIDs = context.data.session.family(sessionID)
+const cost = context.data.session.cost(sessionID)
+const status = context.data.session.status(sessionID)
+await context.data.session.sync(sessionID)
+context.data.session.invalidate(sessionID)
+```
+
+API สำหรับรายการค้างในอินบ็อกซ์และข้อความใช้แสดงรายการ ค้นหา ซิงค์ และทำเครื่องหมายว่าข้อมูลเดิมไม่เป็นปัจจุบัน
+
+```ts
+await context.data.session.pending.sync(sessionID)
+const pending = context.data.session.pending.list(sessionID)
+context.data.session.pending.invalidate(sessionID)
+
+await context.data.session.message.sync(sessionID)
+const messages = context.data.session.message.list(sessionID)
+const message = context.data.session.message.get(sessionID, messageID)
+context.data.session.message.invalidate(sessionID)
+```
+
+คำขอสิทธิ์อ่านและรีเฟรชได้สำหรับเซสชัน
+
+```ts
+await context.data.session.permission.sync(sessionID)
+const requests = context.data.session.permission.list(sessionID) ?? []
+context.data.session.permission.invalidate(sessionID)
+```
+
+ฟอร์มแสดงรายการ รีเฟรช ตอบกลับ หรือยกเลิกได้ที่ location
+
+```ts
+import type { SessionFormCancelInput, SessionFormReplyInput } from "@opencode/client"
+
+async function handleForm(reply: SessionFormReplyInput, cancel: SessionFormCancelInput) {
+  const location = context.location
+  await context.data.session.form.sync(sessionID, location)
+  const forms = context.data.session.form.list(sessionID, location) ?? []
+  await context.data.session.form.reply(reply, location)
+  await context.data.session.form.cancel(cancel, location)
+  context.data.session.form.invalidate(sessionID, location)
+}
+```
+
+## โปรเจกต์และ shell
+
+ข้อมูลโปรเจกต์และสิทธิ์ที่บันทึกไว้รองรับการแสดงรายการ ค้นหา ซิงค์ และทำเครื่องหมายว่าข้อมูลเดิมไม่เป็นปัจจุบัน
+
+```ts
+await context.data.project.sync()
+const projects = context.data.project.list()
+const project = context.data.project.get(projectID)
+context.data.project.invalidate()
+
+await context.data.project.permission.sync(projectID)
+const saved = context.data.project.permission.list(projectID) ?? []
+context.data.project.permission.invalidate(projectID)
+```
+
+ข้อมูล shell รองรับการแสดงรายการ ค้นหา ซิงค์ และทำเครื่องหมายว่าข้อมูลเดิมไม่เป็นปัจจุบันภายในขอบเขต location
+
+```ts
+await context.data.shell.sync(context.location)
+const shells = context.data.shell.list(context.location)
+const shell = context.data.shell.get(shellID)
+context.data.shell.invalidate(context.location)
+```
+
+## ข้อมูล Location
+
+API สถานะ location ให้ข้อมูล location เริ่มต้นและมีเมธอดสำหรับรีเฟรช
+
+```ts
+const location = context.data.location.default()
+await context.data.location.sync(location)
+context.data.location.invalidate(location)
+```
+
+สถานะควบคุมเวอร์ชันเปิดข้อมูลรีโพที่ location
+
+```ts
+await context.data.location.vcs.sync(context.location)
+const vcs = context.data.location.vcs.info(context.location)
+const branch = vcs?.branch.current
+context.data.location.vcs.invalidate(context.location)
+```
+
+ข้อมูลเอเจนต์ คำสั่ง การเชื่อมต่อ โมเดล ผู้ให้บริการ การอ้างอิง สกิล และ MCP ใช้เมธอด `list`, `sync` และ
+`invalidate` ร่วมกัน
+
+```ts
+const location = context.location
+await Promise.all([
+  context.data.location.agent.sync(location),
+  context.data.location.command.sync(location),
+  context.data.location.integration.sync(location),
+  context.data.location.model.sync(location),
+  context.data.location.provider.sync(location),
+  context.data.location.reference.sync(location),
+  context.data.location.skill.sync(location),
+  context.data.location.mcp.server.sync(location),
+  context.data.location.mcp.resource.sync(location),
+])
+
+const agents = context.data.location.agent.list(location) ?? []
+const commands = context.data.location.command.list(location) ?? []
+const integrations = context.data.location.integration.list(location) ?? []
+const models = context.data.location.model.list(location) ?? []
+const providers = context.data.location.provider.list(location) ?? []
+const references = context.data.location.reference.list(location) ?? []
+const skills = context.data.location.skill.list(location) ?? []
+const servers = context.data.location.mcp.server.list(location) ?? []
+const resources = context.data.location.mcp.resource.list(location) ?? []
+
+context.data.location.model.invalidate(location)
+```
+
+## การแจ้งเตือนผู้ใช้
+
+คำขอแจ้งเตือนผู้ใช้สามารถแสดงการแจ้งเตือนของระบบ เล่นเสียงที่ตั้งไว้ หรือทำทั้งสองอย่าง ขึ้นอยู่กับว่าเทอร์มินัลมีโฟกัสอยู่หรือไม่
+
+```ts
+const result = await context.attention.notify({
+  title: "OpenCode",
+  message: "Session done",
+  notification: { when: "blurred" },
+  sound: { name: "done", volume: 0.5, when: "always" },
+})
+console.log(result.ok, result.notification, result.sound, result.skipped)
+```
+
+## ธีมและตัวแสดงผล
+
+ใช้โทเคนธีมตามความหมายกับองค์ประกอบ OpenTUI และส่ง `context.renderer` ให้ฟังก์ชันช่วยที่ใช้กับตัวแสดงผลนั้น
+
+```tsx
+const Status = () => <text fg={context.theme.text.base}>Ready</text>
+const renderer = context.renderer
+```
+
+ทรัพยากร OpenTUI ที่ตัวแสดงผลวาดต้องมี `context.renderer.nativeScene` เป็นเจ้าของ เช่น `<markdown>`
+และ `<code>` ต้องมี `SyntaxStyle` ทำลายทรัพยากรเมื่อตัวแสดงผลว่าง หลังเฟรมสุดท้ายที่วาดมัน
+
+```tsx
+import { SyntaxStyle } from "@opentui/core"
+
+const style = SyntaxStyle.fromStyles({ default: { fg: context.theme.text.base } }, context.renderer.nativeScene)
+context.ui.slot({ append: "home.footer", render: () => <markdown content="Ready" syntaxStyle={style} /> })
+return () => context.renderer.idle().then(() => style.destroy())
+```
+
+หากต้องการอ่านสไตล์เลย์เอาต์ของ renderable ให้เรียกเมธอดตามชื่อ getter ของ Yoga Node เช่น
+`box.getPadding(Yoga.Edge.Bottom)` หรือ `box.getMaxWidth()` renderable ของโฮสต์ไม่ใช่ส่วนหนึ่งของ API ปลั๊กอิน
+โครงสร้างและสไตล์อาจเปลี่ยนได้ในทุกรุ่น
+
+### ปลั๊กอินที่สร้างสำหรับ OpenTUI 0.5
+
+OpenCode รันปลั๊กอินด้วย OpenTUI ของตัวเอง ตั้งแต่ OpenTUI 0.6
+
+- `SyntaxStyle.create()`, `SyntaxStyle.fromStyles()`, `SyntaxStyle.fromTheme()`, `TextBuffer.create()` และ
+  `EditBuffer.create()` รับเจ้าของเป็นอาร์กิวเมนต์สุดท้าย `OptimizedBuffer.create()` รับในตัวเลือก `owner`
+  ส่ง `context.renderer.nativeScene` OpenTUI 0.5 เพิกเฉยต่ออาร์กิวเมนต์พิเศษ ปลั๊กอินจึงยังทำงานบน OpenCode
+  รุ่นเก่า
+- `generateSyntax()` จาก `@opencode/theme/tui` รับเจ้าของเป็นอาร์กิวเมนต์ที่สอง:
+  `generateSyntax(context.theme, context.renderer.nativeScene)` `@opencode/theme` รุ่นเก่าสร้างสไตล์
+  โดยไม่มีเจ้าของ จึงควรอัปเดตแพ็กเกจด้วย
+- `getLayoutNode()` ถูกนำออก แทน `getLayoutNode().getMaxWidth()` และ getter สไตล์อื่นด้วย
+  เมธอด renderable ชื่อเดียวกัน บน OpenTUI 0.6.5 ขึ้นไป แทน `getComputedLayout()` และ getter
+  ตำแหน่งและขนาดที่คำนวณแล้วด้วย `getLayout()` และ `markDirty()` ด้วย `invalidateIntrinsicSize()` padding,
+  margin และ border ที่คำนวณแล้วไม่มีตัวแทน และ `getPadding(edge)` อ่านเฉพาะ padding ที่ตั้งไว้สำหรับขอบนั้น หากต้องการคืน
+  สไตล์ที่ getter รายงานว่าไม่ได้ตั้ง (`Unit.Undefined`) ให้กำหนด `undefined` ให้พร็อพเพอร์ตี บน OpenTUI 0.6.6 หรือ
+ ใหม่กว่า
+
+บันทึกการออกรุ่น [OpenTUI 0.6.0](https://opentui.com/docs/releases/0.6.0) แสดงทุกการเปลี่ยนแปลง
+
+## คอมโพเนนต์ Solid
+
+ใช้ `usePlugin` เพื่อเข้าถึงบริบทปัจจุบันภายใน JSX ที่เส้นทาง กล่องโต้ตอบ หรือสล็อตแสดงผล
+
+```tsx
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>{context.app.version}</text>
+}
+```
+
+## Markdown
+
+ลงทะเบียนตัวแสดงผลบล็อกโค้ดตามภาษา ฟังก์ชันที่คืนจะยกเลิกการลงทะเบียน
+
+```ts
+const unregister = context.markdown.registerCodeBlockRenderer("acme", (_token, render) => render.defaultRender())
+return unregister
+```
+
+## คำสั่งและคีย์แมป
+
+ลงทะเบียนคำสั่งพาเลตต์ slash และแป้นพิมพ์ในชั้นคีย์แมปแบบรีแอกทีฟ
+
+```ts
+context.keymap.layer(() => ({
+  mode: "global",
+  priority: 10,
+  commands: [
+    {
+      id: "acme.status",
+      title: "Show Acme status",
+      group: "Acme",
+      bind: "ctrl+g",
+      palette: true,
+      slash: { name: "acme", aliases: ["status"], arguments: true },
+      enabled: () => true,
+      suggested: true,
+      run: async (input) => context.ui.toast.show({ message: input ?? "Ready" }),
+    },
+  ],
+  bindings: ["acme.status"],
+}))
+```
+
+เรียก `layer` จาก `setup` รวมถึงหลัง `await` หรือจากคอมโพเนนต์ แต่ละชั้นถูกนำออกเมื่อสิ่งแรกเกิดขึ้น
+
+- ปลั๊กอินถูกปิด โหลดใหม่ หรือ setup ล้มเหลว
+- คอมโพเนนต์หรือการคำนวณรีแอกทีฟที่สร้างมัน เช่น สล็อต เส้นทาง หรือกล่องโต้ตอบ ถูก dispose
+
+ฟังก์ชันสร้างเลเยอร์ต้องไม่มีผลข้างเคียง OpenCode จะเรียกครั้งแรกโดยไม่ติดตามค่าที่ฟังก์ชันอ่าน เพื่อตรวจโครงสร้างคำสั่งเริ่มต้น จากนั้นจึงเรียกแบบรีแอกทีฟ หากโครงสร้างเริ่มต้นไม่ถูกต้อง เช่น คำสั่งในพาเลตต์ไม่มี ID `layer()` จะโยนข้อผิดพลาด ส่วนข้อผิดพลาดจากการอ่านรูปแบบคีย์ลัดจัดการโดย OpenTUI และข้อผิดพลาดจากการอัปเดตแบบรีแอกทีฟภายหลังเป็นไปตามกลไกของ Solid
+
+```ts
+async setup(context) {
+  const settings = await loadSettings()
+  context.keymap.layer(() => ({
+    mode: "global",
+    commands: [{ id: "acme.sync", title: "Sync Acme", palette: true, run: () => sync(settings) }],
+  }))
+}
+```
+
+ชั้นอาจกำหนดเป้าหมาย renderable ของ OpenTUI หนึ่งตัว และคืน `false` จากคำสั่งเพื่อส่งต่อการกระจายแป้นพิมพ์
+
+```ts
+context.keymap.layer(() => ({
+  target: () => panel,
+  commands: [{ bind: "escape", run: (_input, event) => (event ? false : undefined) }],
+}))
+```
+
+ส่งคำสั่ง ตรวจทางลัดและสถานะคำสั่ง หรือ push โหมดอินพุตชั่วคราว
+
+```ts
+context.keymap.dispatch("acme.status", "verbose")
+const shortcuts = context.keymap.shortcuts("acme.status")
+const commands = context.keymap.commands()
+const pending = context.keymap.pending()
+const active = context.keymap.active()
+const currentMode = context.keymap.mode.current()
+const popMode = context.keymap.mode.push("acme-search")
+popMode()
+```
+
+## ที่เก็บข้อมูล
+
+ที่เก็บข้อมูลถาวรคงค่า JSON ข้ามการรีสตาร์ตและซิงค์ระหว่างอินสแตนซ์ TUI
+
+```ts
+const [settings, updateSettings] = context.storage.store("settings", {
+  initial: { compact: false },
+})
+await updateSettings((draft) => {
+  draft.compact = true
+})
+```
+
+ที่เก็บในหน่วยความจำอยู่รอดการโหลดปลั๊กอินใหม่แต่ถูกทิ้งเมื่อ TUI ออก
+
+```ts
+const [state, updateState] = context.storage.memory("state", {
+  initial: { count: 0 },
+})
+updateState((draft) => {
+  draft.count++
+})
+```
+
+## กล่องโต้ตอบและทอสต์
+
+ใช้กล่องโต้ตอบแบบ Promise สำหรับการแจ้งเตือน การยืนยัน การป้อนข้อความ และการเลือก
+
+```ts
+await context.ui.dialog.alert({ title: "Acme", message: "Ready" })
+const confirmed = await context.ui.dialog.confirm({
+  title: "Continue?",
+  message: "Run the Acme action?",
+  label: { confirm: "Run", cancel: "Cancel" },
+})
+const name = await context.ui.dialog.prompt({ title: "Name", placeholder: "release" })
+const mode = await context.ui.dialog.select({
+  title: "Mode",
+  current: "safe",
+  options: [
+    { title: "Safe", value: "safe", description: "Ask before changes" },
+    { title: "Fast", value: "fast", disabled: false, category: "Advanced" },
+  ],
+})
+```
+
+### การค้นหาใน Select
+
+ส่ง `search` เพื่อกำหนดวิธีจับคู่และเรียงผลลัพธ์เอง ฟังก์ชันนี้ทำงานกับทุกคำค้น รวมถึงคำค้นว่าง และรับเฉพาะตัวเลือกที่เปิดใช้งาน ผลลัพธ์จะแสดงตามลำดับที่ฟังก์ชันคืน โดยแสดงชื่อหมวดแทรกในรายการ
+
+```ts
+const project = await context.ui.dialog.select({
+  title: "Projects",
+  options: [
+    { title: "Alpha", value: "alpha", category: "Recent" },
+    { title: "Beta", value: "beta", category: "Pinned" },
+  ],
+  search: (query, options) =>
+    options
+      .filter((option) => option.title.toLowerCase().includes(query.toLowerCase()))
+      .toSorted((left, right) => right.title.localeCompare(left.title)),
+})
+```
+
+### การกระทำใน Select
+
+การกระทำปรากฏในส่วนท้ายและทำงานจากคีย์ผูก คลิก หรือโฟกัสด้วย Tab แล้ว Enter โดยค่าเริ่มต้นจะได้รับค่าที่เลือกและใช้ไม่ได้เมื่อไม่มีการเลือก ใช้ `selection: "none"` สำหรับการกระทำที่ไม่ต้องเลือก
+
+```ts
+await context.ui.dialog.select({
+  title: "Projects",
+  options: [{ title: "Alpha", value: "alpha" }],
+  actions: [
+    { bind: "ctrl+o", title: "Inspect", onTrigger: (value) => context.ui.toast.show({ message: value }) },
+    { bind: "ctrl+a", title: "Close", side: "right", selection: "none", onTrigger: () => context.ui.dialog.clear() },
+  ],
+})
+```
+
+- การกระทำไม่ปิดกล่องโต้ตอบหรือทำให้ Promise เสร็จสิ้น
+- Enter หรือคลิกตัวเลือกจะคืนค่าที่เลือก
+- Escape, `clear()` หรือการแสดงกล่องโต้ตอบอื่นจะคืน `undefined`
+- อย่าผูก `ctrl+n` หรือ `ctrl+p` กล่องโต้ตอบสงวนไว้สำหรับการนำทาง และการผูกของมันเองมีลำดับเหนือกว่า
+
+กล่องโต้ตอบ JSX กำหนดเองกำหนดขนาดและปิดตัวเองได้
+
+```tsx
+context.ui.dialog.set({ size: "large", centered: true })
+context.ui.dialog.show(
+  () => (
+    <box>
+      <text>Acme</text>
+    </box>
+  ),
+  () => console.log("closed"),
+)
+context.ui.dialog.clear()
+```
+
+ทอสต์รองรับหัวข้อ ข้อความ รูปแบบ และระยะเวลาที่แสดง
+
+```ts
+context.ui.toast.show({
+  title: "Acme",
+  message: "Saved",
+  variant: "success",
+  duration: 3000,
+})
+```
+
+## เส้นทางและแท็บ
+
+ลงทะเบียนเส้นทาง JSX ตรวจเส้นทางปัจจุบัน และนำทางไปหน้าหลัก เซสชัน หรือหน้าปลั๊กอิน
+
+```tsx
+const unregister = context.ui.router.register({
+  name: "dashboard",
+  render: ({ data }) => <text>{String(data?.title ?? "Acme")}</text>,
+})
+const current = context.ui.router.current()
+context.ui.router.navigate({ type: "plugin", name: "dashboard", data: { title: "Status" } })
+context.ui.router.navigate({ type: "session", sessionID })
+context.ui.router.navigate({ type: "home" })
+return unregister
+```
+
+แท็บแสดงรายการ เปิด โฟกัส ย้าย และปิดได้เมื่อเปิดแท็บเซสชัน `open` ไม่เปลี่ยนโฟกัส
+ส่วน `focus` จะเปิดแท็บเมื่อจำเป็น
+
+```ts
+if (context.ui.tabs.enabled()) {
+  context.ui.tabs.open(backgroundSessionID)
+  context.ui.tabs.focus(sessionID)
+  const tabs = context.ui.tabs.list()
+  context.ui.tabs.move(backgroundSessionID, tabs.length - 1)
+  context.ui.tabs.close(sessionID)
+  context.ui.tabs.close()
+}
+```
+
+## โมเดล
+
+อ่านโมเดลที่เลือกสำหรับพรอมต์และเปลี่ยนตัวเลือกย่อยของโมเดล `current()` และ `variant.list()` ทำงานแบบรีแอกทีฟเมื่ออ่านใน
+การคำนวณของ Solid หาก `variant` เป็น `undefined` จะใช้ตัวเลือกย่อยเริ่มต้นของโมเดล
+
+```ts
+const selected = context.ui.model.current()
+const variants = context.ui.model.variant.list()
+context.ui.model.variant.set("high")
+context.ui.model.variant.set(undefined)
+```
+
+`variant.set` คืน `false` หากยังไม่ได้เลือกโมเดลหรือโมเดลนั้นไม่มีตัวเลือกย่อยที่ระบุ ผูกเมธอดนี้กับคำสั่งเพื่อใช้แทนการสลับตัวเลือกย่อยตามลำดับที่มีในตัว เช่น เมื่อต้องการข้ามตัวเลือกย่อยเริ่มต้นของโมเดล
+
+```ts
+context.keymap.layer(() => ({
+  commands: [
+    {
+      id: "acme.variant.cycle",
+      title: "Cycle variants",
+      bind: "tab",
+      run() {
+        const variants = context.ui.model.variant.list()
+        if (variants.length === 0) return
+        const index = variants.indexOf(context.ui.model.current()?.variant ?? "")
+        context.ui.model.variant.set(variants[(index + 1) % variants.length])
+      },
+    },
+  ],
+}))
+```
+
+## สล็อต
+
+สล็อตแทรกหรือแทนที่ JSX ที่ `app`, `home.footer`, `home.footer.status`, `prompt.footer`, `prompt.footer.status`,
+`prompt.footer.file`, `session.composer.top`, `sidebar.content` หรือ `sidebar.footer`
+
+```tsx
+return context.ui.slot({
+  append: "sidebar.content",
+  render: ({ sessionID }) => <text>{context.data.session.get(sessionID)?.title}</text>,
+})
+```
+
+ใช้ `prepend`, `append`, `before`, `after` หรือ `replace` สำหรับตำแหน่ง
+
+```tsx
+context.ui.slot({ prepend: "home.footer", render: () => <text>Before footer content</text> })
+context.ui.slot({ append: "home.footer", render: () => <text>After footer content</text> })
+context.ui.slot({ before: "home.footer", render: () => <text>Before footer slot</text> })
+context.ui.slot({ after: "home.footer", render: () => <text>After footer slot</text> })
+context.ui.slot({ replace: "home.footer", render: () => <text>New footer</text> })
+```
+
+ใช้ `home.footer.status` เพื่อเพิ่มเนื้อหาในแถวส่วนท้ายในตัวโดยไม่แทนที่ ส่วนร่วมสถานะจะปรากฏ
+หลังตัวบ่งชี้สุขภาพของ OpenCode และก่อนเวอร์ชัน
+
+```tsx
+context.ui.slot({ append: "home.footer.status", render: () => <text>SYNCED</text> })
+```
+
+### แผงเซสชัน
+
+ลงทะเบียนส่วนร่วมใน `session.panel` แล้วเปิดแผงจากคำสั่ง โฮสต์เป็นเจ้าของขนาด โฟกัส และ
+การนำเสนอเต็มหน้าจอ ส่วนปลั๊กอินเป็นเจ้าของเนื้อหา ชื่อที่เลือกถูกส่งให้ทุกส่วนร่วมเป็น
+`panel.name` และแต่ละส่วนร่วมตัดสินว่าจะแสดงหรือไม่
+
+```tsx
+import { Show } from "solid-js"
+
+context.ui.slot({
+  append: "session.panel",
+  render: (panel) => (
+    <Show when={panel.name === "acme.review"}>
+      <ReviewPanel panel={panel} />
+    </Show>
+  ),
+})
+
+context.ui.slot({
+  append: "app",
+  render: () => {
+    context.keymap.layer(() => ({
+      mode: "global",
+      commands: [
+        {
+          id: "acme.review",
+          title: "Open review",
+          slash: { name: "review" },
+          run: () => {
+            context.ui.panel.open("acme.review")
+          },
+        },
+      ],
+    }))
+    return null
+  },
+})
+```
+
+- การเปิดนอกเซสชันคืน `false`
+- นี่เป็นสล็อตธรรมดา: ตำแหน่งทั้งห้าและกฎลำดับการแทนที่ที่มีอยู่มีผล
+- ใช้ `append` สำหรับส่วนร่วมที่เลือกได้แยกกันเพื่อให้อยู่ร่วมกัน `replace` ยังยึดสล็อต
+- ชื่อเป็นค่าการเลือกที่ใช้ร่วมกัน ไม่ใช่การอ้างสิทธิ์ ให้ใช้ชื่อนำหน้าปลั๊กอินเช่น `acme.review` เพื่อหลีกเลี่ยงการชนกัน การเปิดชื่อที่ไม่มีการแสดงผลตรงกันจะทิ้งสล็อตว่าง
+- เมื่อเปลี่ยนวิธีแสดงแผง ระบบจะเก็บคอมโพเนนต์ที่ปลั๊กอินเพิ่มไว้โดยไม่สร้างใหม่ เมื่อปิดแผง ระบบจะคืนทรัพยากรของคอมโพเนนต์เหล่านั้น และเมื่อปิดใช้งานปลั๊กอิน ระบบจะนำคอมโพเนนต์ของปลั๊กอินออกตามกลไกปกติของสล็อต
+- ชั้นคีย์แมปและโหมดอินพุตของมันทำงานเฉพาะขณะแผงเป็นเจ้าของอินพุต
+
+สล็อตได้รับพร็อพเพอร์ตีรีแอกทีฟ `name`, `sessionID`, `width`, `presentation` และ `focused` พร้อมการกระทำ `focus`,
+`close` และ `toggleFullscreen` โฮสต์คงเทอร์มินัลแคบไว้เต็มหน้าจอ `toggleFullscreen` ไม่มีผล
+จนมีพื้นที่พอสำหรับแผงด้านข้าง
+
+```tsx
+import type { PanelInput } from "@opencode/plugin/tui/context"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function ReviewPanel(props: { panel: PanelInput }) {
+  const context = usePlugin()
+  context.keymap.layer(() => ({
+    commands: [
+      {
+        id: "acme.review.fullscreen",
+        bind: "f",
+        run: props.panel.toggleFullscreen,
+      },
+    ],
+  }))
+  return <text>Reviewing {props.panel.sessionID}</text>
+}
+```
+
+คุณขอให้เปิดแผงแบบเต็มหน้าจอตั้งแต่แรก ตรวจสอบแผงที่กำลังใช้งาน หรือปิดแผงได้โดยไม่กระทบแผงของปลั๊กอินอื่น
+
+```ts
+context.ui.panel.open("acme.review", { presentation: "fullscreen" })
+const current = context.ui.panel.current()
+context.ui.panel.close()
+```
+
+## การจัดรูปแบบ
+
+จัดรูปแบบพาธระบบไฟล์เพื่อแสดง รวมถึงการย่อไดเรกทอรีบ้าน
+
+```ts
+const displayPath = context.ui.format.path(context.location?.directory ?? "/home/me/project")
+```
+
+## การเผยแพร่และการโหลด
+
+เปิดปลั๊กอิน TUI ผ่าน `./tui` เพิ่ม peer ของ OpenTUI เมื่อปลั๊กอินแสดง JSX
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.6.6",
+    "@opentui/solid": ">=0.6.6",
+    "solid-js": ">=1.9.0"
+  }
+}
+```
+
+ส่งออก `./tui` ข้าง[ส่วนเซิร์ฟเวอร์](/build/plugins/server)หรือ[ส่วน GUI](/build/plugins/gui)เพื่อโหลดอัตโนมัติ
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "acme.server",
+  setup() {},
+})
+```
+
+กำหนดแพ็กเกจเฉพาะ TUI ใน [`cli.json`](/cli/plugins) เพื่อให้ยังทำงานกับเซิร์ฟเวอร์ระยะไกล
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-plugin"]
+}
+```
