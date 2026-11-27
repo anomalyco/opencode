@@ -119,10 +119,13 @@ Aktionen und Ressourcen:
 | `websearch`          | Suchabfrage                                                                  |
 | `generate_image` | Gewähltes Bildmodell als `providerID/modelID`, plus `#variant`, wenn gesetzt |
 | `external_directory` | Kanonische externe Verzeichnisgrenze, normalerweise endend auf `/*`          |
-| `<server>_<tool>`    | `*` für ein MCP-Tool; nicht unterstützte Zeichen in beiden Namen werden zu `_` |
+| `<server>_<tool>`    | `*` für ein MCP-Tool. In beiden Namen bleiben Buchstaben, Ziffern, `_` und `-` erhalten. Alle anderen Zeichen werden durch `_` ersetzt. |
 | `opencode_list_mcp_resources` | MCP-Servername                                                     |
 | `opencode_read_mcp_resource`  | `<server>:<uri>`                                                   |
 | `execute`            | `*`; ein deny entfernt den Code Mode und listet seine Tools direkt auf, während verschachtelte Tools ihre Regeln durchsetzen |
+
+MCP-Aktionen behalten Bindestriche bei. Die Tools eines Servers namens `mcp-atlassian` passen daher zu `mcp-atlassian_*`,
+nicht zu `mcp_atlassian_*`.
 
 Erlaube zum Beispiel einen Skill und verweigere alle anderen Skills:
 

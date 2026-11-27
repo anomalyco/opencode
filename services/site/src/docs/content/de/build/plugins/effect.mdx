@@ -1044,7 +1044,8 @@ Effect-Tools akzeptieren dieselbe [freie Eingabedeklaration](/build/plugins/serv
 
 Tools haben eine `id`, die ihren effektiven Namen enthält, und `get()` gibt `undefined` zurück, wenn diese ID nicht vorhanden ist. Nutze
 `update` und `remove` mit dem effektiven Tool-Namen, einschließlich seines Namespace (`acme_greeting` oben). Punkte in
-Namespaces und nicht unterstützte Zeichen in Tool-Namen werden zu `_`. Fehlende Namen werden ignoriert; das Erstellen eines Tools erfordert
+Namespaces werden zu `_`. In Tool-Namen bleiben Buchstaben, Ziffern, `_` und `-` erhalten. Alle anderen Zeichen werden
+durch `_` ersetzt. Fehlende Namen werden ignoriert. Zum Erstellen eines Tools brauchst du
 `add` mit einer vollständigen Definition. Updates bewahren Name und Namespace. Weise neue Schemas oder Optionen zu, um
 sie zu ersetzen, statt verschachtelte Werte zu verändern. Ungültige Updates werden protokolliert und lassen die vorherige Definition intakt.
 

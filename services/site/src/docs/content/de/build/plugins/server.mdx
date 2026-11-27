@@ -194,8 +194,8 @@ const agents = await ctx.agent.list()
 const build = await ctx.agent.get({ agentID: "build" })
 ```
 
-Registriere einen Transform, um Agenten zu prüfen, zu aktualisieren oder zu entfernen oder um den
-Standardagenten auszuwählen.
+Registriere einen Transform, um Agenten zu prüfen, zu erstellen, zu aktualisieren oder zu entfernen. Damit kannst du
+auch den Standardagenten auswählen.
 
 ```ts
 await ctx.agent.transform((editor) => {
@@ -207,6 +207,19 @@ await ctx.agent.transform((editor) => {
     agent.description = "Builds features and fixes bugs"
   })
   editor.remove("legacy")
+})
+```
+
+Registriere einen neuen Agenten mit `editor.update`. Wenn die ID schon existiert, bearbeitet der Aufruf den Agenten
+mit dieser ID. Andernfalls erstellt er vor dem Callback einen Agenten mit `Agent.Info.default(id)`.
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
 })
 ```
 
@@ -1051,7 +1064,8 @@ await ctx.tool.reload()
 Nutze `list()` und `get()`, um Tools zu prüfen, die derzeit im Editor sind. Tools haben eine `id` mit ihrem effektiven Namen,
 und `get()` gibt `undefined` zurück, wenn diese ID nicht vorhanden ist. Nutze `update` und `remove` mit dem effektiven Tool-Namen,
 einschließlich seines Namespace (`acme_greeting` oben). Punkte in
-Namespaces und nicht unterstützte Zeichen in Tool-Namen werden zu `_`. Fehlende Namen werden ignoriert; das Erstellen eines Tools erfordert
+Namespaces werden zu `_`. In Tool-Namen bleiben Buchstaben, Ziffern, `_` und `-` erhalten. Alle anderen Zeichen werden
+durch `_` ersetzt. Fehlende Namen werden ignoriert. Zum Erstellen eines Tools brauchst du
 `add` mit einer vollständigen Definition. Updates bewahren Name und Namespace. Weise neue Schemas oder Optionen zu, um
 sie zu ersetzen, statt verschachtelte Werte zu verändern. Ungültige Updates werden protokolliert und lassen die vorherige Definition intakt.
 

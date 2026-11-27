@@ -45,8 +45,8 @@ JSON Schema und Standard Schema werden ebenfalls unterstützt.
 
 ### Eingabe und Ausgabe
 
-Nutze `input` für das Methodenargument und `output` für den Rückgabewert. Lass das jeweilige Feld weg, wenn es
-keinen entsprechenden Wert gibt.
+Nutze `input` für das Methodenargument und `output` für den Rückgabewert. Beide Felder sind Pflicht. Wenn eine Methode
+kein Argument erwartet oder nichts zurückgibt, verwende `Schema.Struct({})`, rufe sie mit `{}` auf und gib `{}` zurück.
 
 ```ts
 search: {
@@ -67,7 +67,8 @@ errors: {
 
 ### Events
 
-Füge Events zur `events`-Zuordnung auf oberster Ebene hinzu. Event-Daten müssen ein Objekt sein.
+Füge Events zur `events`-Zuordnung auf oberster Ebene hinzu. Event-Daten müssen ein Objekt sein. Die Zuordnung ist
+Pflicht. Verwende `events: {}`, wenn der RPC keine Events hat.
 
 ```ts
 events: {

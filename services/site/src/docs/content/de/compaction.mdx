@@ -103,6 +103,30 @@ Füge `compaction` zu einer beliebigen [OpenCode-Konfigurationsdatei](/config) h
 - Eine Tokenzahl wie `20000` funktioniert ebenfalls. Dieselbe Zahl ist ein großer Anteil eines kleinen Fensters und ein kleiner Anteil eines großen.
 - Eine Tokenzahl, die mindestens so groß wie das Fenster des Modells ist, wird ignoriert, und der Standard gilt.
 
+### Kontextfenster
+
+Die Größe des Fensters entspricht dem Eingabelimit des Modells (`limit.input`), höchstens aber seinem Kontextlimit
+(`limit.context`). Ist nur eines der beiden Limits gesetzt, gilt dieses. Ist keines von beiden gesetzt, gibt es keine
+automatische Compaction. Lehnt der Anbieter eine Anfrage als zu lang ab, kompaktiert OpenCode einmal.
+
+Jeder Grenzwert in der Konfiguration überschreibt nur das jeweilige Feld. Sind im Katalog beide Limits gesetzt und
+erhöhst du nur `limit.context`, bleibt das Eingabelimit aus dem Katalog für das Fenster maßgeblich. Setze deshalb auch
+`limit.input`:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "limit": { "context": 1050000, "input": 1000000 },
+        },
+      },
+    },
+  },
+}
+```
+
 ## Modell
 
 Standardmäßig schreibt OpenCode die Zusammenfassung selbst mit dem Modell der Session. Setze

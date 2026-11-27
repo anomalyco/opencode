@@ -96,8 +96,35 @@ auf einer eigenen `client`-Eigenschaft zu liegen.
 `ctx.location` beschreibt die Location, an der diese Plugin-Instanz geladen wurde. Es ist nicht die Location jeder Session oder jedes Events,
 das das Plugin beobachten kann. Lies die Session- oder Event-Daten, wenn diese Unterscheidung wichtig ist.
 
-Der Kontext stellt viel mehr Domains bereit als die Tabelle auflistet, darunter Kataloge, Befehle, Integrationen, MCP-Server,
-Referenzen, Skills, Speicher, VCS, Worktrees und Websuche. Siehe den [vollständigen Plugin-Kontext](/build/plugins/server#api).
+Der Kontext stellt viele weitere Domains bereit, etwa für Befehle, Integrationen, MCP-Server, Referenzen, Skills,
+Speicher, VCS, Worktrees und Websuche. Siehe den [vollständigen Plugin-Kontext](/build/plugins/server#api).
+
+### Katalog-Domain migrieren
+
+Frühere Plugin-Builds stellten Anbieter und Modelle über `ctx.catalog` bereit. OpenCode stellt jetzt `ctx.provider`
+und `ctx.model` als getrennte Domains bereit. Ein Plugin, das `ctx.catalog.transform` aufruft, lässt sich daher nicht
+laden.
+
+| Bisherige Katalog-API                         | Aktuelle Entsprechung                                                        |
+| --------------------------------------------- | ---------------------------------------------------------------------------- |
+| `ctx.catalog.transform(draft => …)`           | `ctx.provider.transform(editor => …)` und `ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)`               | `editor.update(id, fn)` auf `ctx.provider`                                    |
+| `draft.model.update(providerID, modelID, fn)` | `editor.update(providerID, modelID, fn)` auf `ctx.model`                      |
+| `ctx.catalog.reload()`                        | `ctx.provider.reload()` und `ctx.model.reload()`                             |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+Die vollständigen Editor-APIs findest du unter [Anbieter](/build/plugins/server#providers) und
+[Modelle](/build/plugins/server#models).
 
 ## Hooks in `setup` registrieren
 

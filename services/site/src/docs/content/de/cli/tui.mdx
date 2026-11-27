@@ -18,6 +18,21 @@ Drücke **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** oder **Ctrl+J** für eine
 kannst du mit **Enter** einen Prompt senden, um die laufende Session zu steuern. Drücke **Ctrl+X** und dann **Enter**,
 um den Prompt für später einzureihen.
 
+## Projekte und Verzeichnisse
+
+OpenCode sucht in dem Verzeichnis, in dem du es startest, nach Dateien und führt dort Shell-Befehle aus. Verzeichnisse
+im selben Git-Repository gehören zum selben Projekt, einschließlich seiner Worktrees. Ein Verzeichnis ohne
+Versionsverwaltung bildet ein eigenes Projekt.
+
+Gib ein Verzeichnis an, um OpenCode in einem anderen Projekt zu starten:
+
+```bash
+opencode ~/code/another-project
+```
+
+Drücke **Ctrl+O**, um zuletzt genutzte Sessions und Projekte zu öffnen. Drücke bei einem Projekt **Right**, um seine
+Worktrees aufzulisten, und dort **Ctrl+N**, um einen neuen anzulegen.
+
 ## Kontext
 
 Tippe `@`, um nach einer Datei zu suchen, und wähle sie dann aus, um sie an den Prompt anzuhängen. Tippe nach `@` weiter,
@@ -81,9 +96,14 @@ zu wechseln.
 
 ## Sessions
 
-Drücke **Ctrl+X** und dann **N**, um eine neue Session zu starten. Drücke **Ctrl+X** und dann **L** oder führe
-`/sessions` aus, um zu einer bestehenden Session zurückzukehren. **Ctrl+O** öffnet eine gemeinsame Liste der zuletzt
-genutzten Sessions und Projekte.
+Jede Session ist eine eigene Unterhaltung mit eigenem Verlauf und Verzeichnis. Führe `/new` aus oder drücke **Ctrl+X**
+und dann **N**, um für eine andere Aufgabe eine neue Session zu starten. Frühere Sessions bleiben verfügbar. Neue
+Sessions beginnen in dem Verzeichnis, in dem du OpenCode gestartet hast. Wenn du
+[`session.new_location`](/cli/config#sessions) auf `inherit` setzt, beginnen sie im Verzeichnis der aktuellen Session.
+
+Drücke **Ctrl+X** und dann **L** oder führe `/sessions` aus, um zu einer bestehenden Session zurückzukehren. Mit
+**Ctrl+A** wechselst du in dieser Liste zwischen den Sessions im aktuellen Verzeichnis und denen in allen Projekten.
+**Ctrl+O** öffnet eine gemeinsame Liste der zuletzt genutzten Sessions und Projekte.
 
 Tabs sind standardmäßig aktiviert. Wechsle mit **Ctrl+Tab** und **Ctrl+Shift+Tab** zwischen ihnen, schließe einen mit
 **Ctrl+X** und dann **W**, und öffne den zuletzt geschlossenen Tab mit **Ctrl+Shift+T** wieder.

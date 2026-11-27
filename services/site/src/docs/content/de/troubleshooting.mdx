@@ -117,6 +117,36 @@ grep 'role=server' ~/.local/share/opencode/log/opencode.log
 grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
 ```
 
+## Telemetrie exportieren
+
+OpenCode kann seine Logs und Traces an einen OpenTelemetry Collector oder ein APM-Backend senden, das OTLP über HTTP
+akzeptiert. Gib die Basis-URL des Collectors ohne Pfad an:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer example-token"
+export OTEL_RESOURCE_ATTRIBUTES="team=platform,host.name=dev-laptop"
+opencode
+```
+
+| Variable                      | Verhalten |
+| ----------------------------- | --------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Basis-URL. Logs gehen an `<endpoint>/v1/logs`, Traces an `<endpoint>/v1/traces`. Ist die Variable nicht gesetzt, bleibt der Export aus. |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | Kommagetrennte `key=value`-Header, die bei jedem Export mitgesendet werden, etwa für einen API-Schlüssel. |
+| `OTEL_RESOURCE_ATTRIBUTES`    | Kommagetrennte, URL-kodierte `key=value`-Attribute für jeden Datensatz. Ist ein Eintrag ungültig, verwirft OpenCode alle Attribute aus der Liste. |
+
+Jeder Datensatz enthält außerdem `service.name` (`opencode`), `service.version`, `deployment.environment.name`
+(den Release-Kanal), `opencode.client` und `opencode.run`, dieselbe Lauf-ID wie in der Logdatei.
+
+Der Hintergrunddienst läuft in einem eigenen Prozess und übernimmt die Variablen deiner Shell nicht. Setze sie auch
+für den Dienst, damit er Modell- und Tool-Aufrufe in den Traces erfasst:
+
+```bash
+opencode service set env OTEL_EXPORTER_OTLP_ENDPOINT http://localhost:4318
+opencode service set env OTEL_EXPORTER_OTLP_HEADERS "authorization=Bearer example-token"
+opencode service start
+```
+
 ## Heap-Snapshot aufzeichnen
 
 Schreibe einen Speicher-(Heap-)Snapshot des laufenden Hintergrundservers auf jeder Plattform:

@@ -241,7 +241,8 @@ nicht im Katalog ist, nimmt OpenCode an:
 OpenCode erkennt `text`, `regex` und `lark`. Andere Formatnamen von models.dev werden ignoriert, ohne das Modell oder seine Tools zu verwerfen. Wenn ein Proxy vor einem Katalogmodell freie Tools ablehnt, setze `capabilities.freeform` für dieses Modell auf `[]`.
 
 Das sind Fallback-Annahmen, keine erkannten Fähigkeiten. Setze genaue `capabilities`- und `limit`-Werte, wenn du sie kennst;
-ausdrückliche Werte ersetzen die Fallbacks. Füge `disabled: true` hinzu, um ein Modell aus dem verfügbaren Katalog auszublenden:
+explizite Werte ersetzen die Fallbacks. Die automatische Compaction nutzt `limit.input`, höchstens aber `limit.context`.
+Siehe [Kontextfenster](/compaction#window). Füge `disabled: true` hinzu, um ein Modell aus dem verfügbaren Katalog auszublenden:
 
 ```jsonc title="opencode.jsonc"
 {

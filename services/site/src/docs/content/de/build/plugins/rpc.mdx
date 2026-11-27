@@ -68,9 +68,18 @@ unterstützt zwei Schemaformate:
 
 ### Eingabe und Ausgabe
 
-Jede Methode kann ein `input`-Schema für ihr Argument und ein `output`-Schema für
-ihren Rückgabewert definieren. Lass eines davon weg, wenn die Methode keinen Wert
-akzeptiert oder zurückgibt.
+Jede Methode braucht ein `input`-Schema für ihr Argument und ein `output`-Schema für ihren Rückgabewert. Wenn eine
+Methode kein Argument erwartet oder nichts zurückgibt, verwende ein leeres Objektschema, rufe sie mit `{}` auf und
+gib `{}` zurück:
+
+```ts
+refresh: {
+  input: { type: "object", additionalProperties: false },
+  output: { type: "object", additionalProperties: false },
+}
+```
+
+Gibt eine Methode `undefined` zurück, schlägt sie mit `rpc.invalid_output` fehl.
 
 ```ts
 search: {
@@ -111,7 +120,7 @@ Fehlernamen, die mit `rpc.` beginnen, sind von OpenCode reserviert.
 ### Events
 
 Füge Events zur `events`-Zuordnung auf oberster Ebene hinzu. Jedes Event hat ein Schema für die Daten,
-die an Abonnenten gesendet werden.
+die an Abonnenten gesendet werden. Die Zuordnung ist Pflicht. Verwende `events: {}`, wenn der RPC keine Events hat.
 
 Event-Daten müssen ein Objekt sein. Verwende ein leeres Objektschema, wenn es keine Daten gibt:
 

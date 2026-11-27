@@ -110,6 +110,7 @@ dass sie auch in Zukunft funktionieren.
 | **jcode**         | Aktualisiere auf **v0.81.6 oder neuer**, das den [Fix für den Session-Header](https://github.com/1jehuang/jcode/issues/1167) enthält.                                                                                                      |
 | **OpenClaw**      | Aktuelle Builds senden `x-opencode-session` bei Go-Anfragen. Die Browser-Anmeldung braucht **2026.11.7 oder neuer**.                                                                                                                       |
 | **Kilo Code CLI** | Builds mit [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) stellen die Session-Header von OpenCode wieder her. Der Fix gilt für die CLI, nicht für die VS Code-Extension. Siehe [Issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723). |
+| **MiMo Code**     | Aktualisiere auf **v0.1.16 oder neuer**. Ab dieser Version sendet MiMo Code bei Go-Anfragen `x-opencode-session` ([PR #2655](https://github.com/XiaomiMiMo/MiMo-Code/pull/2655)). |
 
 ### Bekannte problematische Clients
 
@@ -121,7 +122,6 @@ verlinkten Berichte dokumentieren den Stand der Fehlerbehebung und mögliche Umg
 | **DeepSeek Harness**    | Session-Informationen kommen auf manchen Modellpfaden an, auf anderen fehlen sie. Wir erkennen seinen nativen Header; offen bleibt, ihn über alle Adapter zu senden. [Diskussion #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495). |
 | **GitHub Copilot Chat** | Automatische Session-Header-Unterstützung wird in [VS Code Issue #334186](https://github.com/microsoft/vscode/issues/334186) gefordert.                                                                                                                |
 | **Kimi Code**           | Die Anfrage für den Session-Header in [Issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506) wurde als nicht geplant geschlossen.                                                                                                          |
-| **MiMo Code**           | [Issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) ist geschlossen, und [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327) wurde ohne Merge geschlossen.                                                                      |
 
 ## Nutzungslimits
 

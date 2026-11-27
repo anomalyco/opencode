@@ -51,8 +51,8 @@ OpenCode durchsucht automatisch diese Orte:
 | Projekt                | `.opencode/skills`                     |
 | Projektkompatibilität  | `.claude/skills`, `.agents/skills`     |
 
-Bei Projektquellen durchsucht OpenCode das aktuelle Verzeichnis bis zur Projektwurzel und schließt passende Verzeichnisse
-auf jeder Ebene ein.
+Bei Projektquellen sucht OpenCode vom aktuellen Verzeichnis bis zur Wurzel des Dateisystems und berücksichtigt dabei
+auf jeder Ebene die passenden Verzeichnisse.
 
 Jede Quelle kann eine der beiden Formen enthalten:
 
@@ -188,10 +188,10 @@ den Skill, den OpenCode lädt:
 Quellen werden von niedrigerer zu höherer Rangfolge registriert:
 
 1. Eingebaute Skills
-2. `.claude/skills`, zuerst global und dann vom fernsten Vorfahren in Richtung aktuelles Verzeichnis
-3. `.agents/skills`, zuerst global und dann vom fernsten Vorfahren in Richtung aktuelles Verzeichnis
+2. `.claude/skills`, zuerst global, dann vom am weitesten entfernten übergeordneten Verzeichnis bis zum aktuellen Verzeichnis
+3. `.agents/skills`, zuerst global, dann vom am weitesten entfernten übergeordneten Verzeichnis bis zum aktuellen Verzeichnis
 4. `~/.config/opencode/skills`
-5. Projekt-`.opencode/skills`, von der Projektwurzel in Richtung aktuelles Verzeichnis
+5. `.opencode/skills`-Verzeichnisse der Projekte, vom am weitesten entfernten übergeordneten Verzeichnis bis zum aktuellen Verzeichnis
 6. Ausdrückliche `skills`-Konfigurationseinträge, in Konfigurationspriorität und Array-Reihenfolge
 
 Vermeide doppelte IDs, es sei denn, du willst einen früheren Skill überschreiben.
