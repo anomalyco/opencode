@@ -87,7 +87,6 @@ describe("Claude conversions", () => {
     ])
     expect(blocks).toEqual([
       { type: "text", text: "/compact @README.md are literal text" },
-      // An image block has no field for a name, so the name goes in a line before it.
       { type: "text", text: "Attached image: chart.png" },
       { type: "image", source: { type: "base64", media_type: "image/png", data: "AQID" } },
       {
