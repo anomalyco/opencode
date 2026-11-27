@@ -10,7 +10,8 @@ import {
   TransportError,
   type LLMRequest,
 } from "@opencode/ai/effect"
-import { OpenAIChat, OpenAIResponses } from "@opencode/ai/protocols"
+import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "@opencode/ai/protocols"
+import { compileRequest } from "@opencode/ai/testing"
 import { Agent } from "@opencode/core/agent"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -497,6 +498,48 @@ it.effect("generates from the first user message after later messages exist", ()
     expect(JSON.stringify(requests[0]?.messages)).toContain("First message")
     expect(JSON.stringify(requests[0]?.messages)).not.toContain("Second message")
     expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
+  }),
+)
+
+it.effect("bounds the first message of an untitled session", () =>
+  Effect.gen(function* () {
+    yield* enableTitleAgent
+    const sessionID = Session.ID.make("ses_title_first_bounded")
+    yield* insertSession(sessionID)
+    yield* prompt(sessionID, `ORIGINAL_GOAL ${"a".repeat(3_000)} OMITTED_ORIGINAL_END`)
+
+    const title = yield* SessionTitle.Service
+    yield* title.generate(sessionID)
+
+    expect(requests).toHaveLength(1)
+    const content = requests[0]?.messages[0]?.content[0]
+    expect(content?.type).toBe("text")
+    if (content?.type !== "text") return
+    expect(content.text).toContain("ORIGINAL_GOAL")
+    expect(content.text).not.toContain("OMITTED_ORIGINAL_END")
+    expect(content.text.length).toBeLessThan(2_200)
+    const store = yield* SessionStore.Service
+    expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
+  }),
+)
+
+it.effect("omits prompt-cache markers from a one-shot title request", () =>
+  Effect.gen(function* () {
+    yield* enableTitleAgent
+    const sessionID = Session.ID.make("ses_title_no_cache")
+    yield* insertSession(sessionID)
+    yield* prompt(sessionID, "Help me debug the failing build")
+
+    const title = yield* SessionTitle.Service
+    yield* title.generate(sessionID)
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.cache).toBe("none")
+    const compiled = yield* compileRequest({
+      ...requests[0]!,
+      model: LanguageModel.update(requests[0]!.model, { route: AnthropicMessages.route }),
+    })
+    expect(JSON.stringify(compiled.body)).not.toContain("cache_control")
   }),
 )
 

@@ -119,10 +119,11 @@ export const layer = Layer.effect(
       if (!session) return
       const firstUser = yield* SessionHistory.firstUserMessage(db, session.id)
       if (!firstUser) return
+      const first = TextBoundary.head(firstUser.text, MAX_FIRST_MESSAGE_LENGTH)
       const text = !isUntitled(session)
         ? yield* store.context(session.id).pipe(
             Effect.map((messages) => {
-              const original = `Original request:\n${TextBoundary.head(firstUser.text, MAX_FIRST_MESSAGE_LENGTH)}`
+              const original = `Original request:\n${first}`
               const recent = messages
                 .flatMap((message) => {
                   if (message.type === "user" && message.id !== firstUser.id) return [`User: ${message.text.trim()}`]
@@ -139,9 +140,9 @@ export const layer = Layer.effect(
               const budget = MAX_CONTEXT_LENGTH - conversationPrompt("").length - prefix.length
               return conversationPrompt(`${prefix}${TextBoundary.tail(recent, budget)}`)
             }),
-            Effect.orElseSucceed(() => messagePrompt(firstUser.text)),
+            Effect.orElseSucceed(() => messagePrompt(first)),
           )
-        : messagePrompt(firstUser.text)
+        : messagePrompt(first)
       const selection = yield* context.selectTitle(session)
       if (!selection) return
       const title =

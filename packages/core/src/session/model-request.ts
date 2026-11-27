@@ -332,7 +332,8 @@ export const layer = Layer.effect(
         },
         // TODO: Persist cache lineage so nested forks reuse the root session's cache key.
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
-        cache: model.cache?.ttl === undefined ? undefined : { ttl: model.cache.ttl },
+        // A title request is never a prefix of a later request, so cache markers would only add write cost.
+        cache: kind === "title" ? "none" : model.cache?.ttl === undefined ? undefined : { ttl: model.cache.ttl },
         system: shaped.system,
         // Strip the stored metadata hooks could read, so it never reaches the provider.
         messages: boundImages(
