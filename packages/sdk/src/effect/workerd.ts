@@ -2,6 +2,7 @@ export * as OpenCodeWorkerd from "./workerd"
 
 import { Effect, Layer } from "effect"
 import type { Config, Scope } from "effect"
+import { EffectSdk } from "../internal/effect"
 import { WorkerdProfile } from "../internal/workerd"
 import { OpenCode } from "./opencode"
 
@@ -23,7 +24,7 @@ export const create = <R = never>(
   options: CreateOptions<R>,
 ): Effect.Effect<Interface, Config.ConfigError | Error, Scope.Scope | R> => {
   const profile = WorkerdProfile.make(options)
-  return OpenCode.create(
+  return EffectSdk.create(
     {
       ...profile.options,
       log: options.log,

@@ -1,18 +1,19 @@
 export * as OpenCodeWorkerd from "./workerd"
 
+import { PromiseSdk } from "./internal/promise"
 import { WorkerdProfile } from "./internal/workerd"
 import type { LogOptions } from "./logging"
-import { PromiseSdk } from "./promise"
+import { OpenCode } from "./opencode"
 
 export type Configuration = WorkerdProfile.Configuration
 
 export interface CreateOptions extends WorkerdProfile.Options {
   readonly log?: LogOptions
-  readonly plugins?: PromiseSdk.CreateOptions["plugins"]
-  readonly instances?: PromiseSdk.CreateOptions["instances"]
+  readonly plugins?: OpenCode.CreateOptions["plugins"]
+  readonly instances?: OpenCode.CreateOptions["instances"]
 }
 
-export type Interface = PromiseSdk.Interface & {
+export type Interface = OpenCode.Interface & {
   /** Suspends any workspaces past their idle threshold; call from the Durable Object's `alarm()` method. */
   readonly alarm: () => Promise<void>
 }

@@ -1,4 +1,4 @@
-import { Context, Formatter, Layer, Logger, References } from "effect"
+import { Formatter, Layer, Logger, References } from "effect"
 
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal"
 
@@ -66,11 +66,5 @@ export function layer(log?: LogOptions) {
   return Layer.merge(
     Logger.layer([logger], { mergeWithExisting: false }),
     Layer.succeed(References.MinimumLogLevel, levels[log?.level ?? "info"]),
-  )
-}
-
-export function context(source: Context.Context<never>) {
-  return Context.make(Logger.CurrentLoggers, Context.get(source, Logger.CurrentLoggers)).pipe(
-    Context.add(References.MinimumLogLevel, Context.get(source, References.MinimumLogLevel)),
   )
 }

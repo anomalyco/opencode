@@ -8,6 +8,7 @@ import { makeMemoryDriver } from "@opencode/core/environment/index"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SharedCache } from "@opencode/core/shared-cache"
 import { WorkspaceDriver } from "@opencode/core/workspace/driver"
+import { EffectSdk } from "../src/internal/effect"
 import { EmbeddedHost } from "../src/internal/host"
 import { Plugin } from "@opencode/plugin/effect"
 import { Context, Deferred, Effect, Exit, Layer, Schema, Scope } from "effect"
@@ -110,7 +111,7 @@ it.live(
         ],
       }
       yield* llm.push(TestLLM.hangAfter())
-      const first = yield* OpenCode.create(options, embed).pipe(Scope.provide(firstScope))
+      const first = yield* EffectSdk.create(options, embed).pipe(Scope.provide(firstScope))
       const session = yield* first.sessions.create({
         title: "Recovery fixture",
         location: Location.Ref.make({ directory: AbsolutePath.make(directory.path) }),
@@ -126,7 +127,7 @@ it.live(
       yield* Scope.close(firstScope, Exit.void)
       expect(closed).toEqual([1])
       yield* llm.push(TestLLM.toolCall("recovered-tool", "thread_echo", {}), TestLLM.text("Recovered", "answer"))
-      const second = yield* OpenCode.create(options, embed).pipe(Scope.provide(secondScope))
+      const second = yield* EffectSdk.create(options, embed).pipe(Scope.provide(secondScope))
       yield* Deferred.await(started).pipe(Effect.timeout("5 seconds"))
       expect((yield* llm.requests()).length).toBe(1)
       yield* Deferred.succeed(release, undefined)
@@ -164,7 +165,7 @@ it.live(
         suspendForIdle: () => Effect.void,
         destroy: () => Effect.void,
       })
-      const opencode = yield* OpenCode.create(
+      const opencode = yield* EffectSdk.create(
         {
           config: { directory: directory.path, project: false, content: "{}" },
           models: { fetch: false },
