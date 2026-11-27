@@ -37,6 +37,7 @@ import {
   type SessionMessageUser,
   type SessionInfo,
   type ModelInfo,
+  type PermissionRequest,
 } from "@opencode/client"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
@@ -209,6 +210,11 @@ export function Session(props: {
     )
   })
   const promptedPermissions = createMemo(() => (local.permission.mode === "autoaccept" ? [] : permissions()))
+  // The shown request stays until it is answered, so a newer one can't take its place under the cursor.
+  const promptedPermission = createMemo((previous?: PermissionRequest) => {
+    const requests = promptedPermissions()
+    return requests.find((request) => request.id === previous?.id) ?? requests[0]
+  })
   const forms = createMemo(() => {
     const global = data.session.form.list("global", location()) ?? []
     if (session()?.parentID) return global
@@ -1754,9 +1760,9 @@ export function Session(props: {
               <Switch>
                 <Match when={composerVisible()}>{null}</Match>
                 <Match when={promptedPermissions().length > 0}>
-                  <Show when={promptedPermissions()[0]?.id} keyed>
+                  <Show when={promptedPermission()?.id} keyed>
                     {(_) => {
-                      const request = promptedPermissions()[0]
+                      const request = promptedPermission()
                       return request ? (
                         <PermissionPrompt request={request} directory={session()?.location.directory} />
                       ) : null
@@ -2390,7 +2396,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
             renderBlock={plugins.markdown()}
             streaming={status() === "running"}
             content={content()}
-            tableOptions={{ style: "grid", cellPaddingX: 1 }}
+            tableOptions={{ style: "grid", cellPaddingX: 1, borderColor: theme.border.base }}
             conceal={ctx.markdownMode() === "rendered"}
             fg={theme.markdown.text}
             bg={theme.background.base}

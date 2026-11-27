@@ -349,10 +349,11 @@ export function parse(keybinds: KeybindOverrides): Keybinds {
   const invalid = unknownKeys(keybinds)
   if (invalid.length) throw new Error(`Unrecognized keybind${invalid.length === 1 ? "" : "s"}: ${invalid.join(", ")}`)
   return Object.fromEntries(
-    Object.entries(Definitions).map(([name, item]) => [
-      name,
-      decodeBindingValue(keybinds[name as KeybindName] ?? item.default),
-    ]),
+    Object.entries(Definitions).map(([name, item]) => {
+      const value = decodeBindingValue(keybinds[name as KeybindName] ?? item.default)
+      // "none" inside an array disables that entry instead of becoming the key sequence n-o-n-e.
+      return [name, Array.isArray(value) ? value.filter((entry) => entry !== "none") : value]
+    }),
   ) as Keybinds
 }
 
