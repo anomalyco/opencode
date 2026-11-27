@@ -304,7 +304,7 @@ const layer = (options: Options) =>
           scope,
         }
         connections.set(workspaceID, connection)
-        if (environment.options?.home) {
+        if (!(driver.options && "home" in driver.options) && environment.options?.home) {
           const resolved = yield* environment.options.home.pipe(Effect.catchCause(() => Effect.undefined))
           if (resolved !== undefined) homes.set(workspaceID, resolved)
         }

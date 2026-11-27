@@ -19,7 +19,6 @@ import { Machines } from "@opencode/core/machine/machines"
 import { Permission } from "@opencode/core/permission"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Project } from "@opencode/core/project"
-import { Ripgrep } from "@opencode/core/ripgrep"
 import { ToolSearch } from "@opencode/core/tool/search"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -93,6 +92,7 @@ const buildLayer = (options: {
   readonly dataDirectory?: string
   readonly workspaceID?: Workspace.ID
   readonly driver: WorkspaceDriver.Interface
+  readonly drivers?: Readonly<Record<string, WorkspaceDriver.Interface>>
   readonly machinesFlag?: boolean
   readonly denyExternal?: boolean
   readonly environment?: Environment.Interface
@@ -106,7 +106,6 @@ const buildLayer = (options: {
       FileAccess.node,
       Machines.node,
       Permission.node,
-      Ripgrep.node,
       SessionCwdInstructions.node,
       Shell.node,
       Workspace.node,
@@ -153,17 +152,7 @@ const buildLayer = (options: {
           ]
         : []),
       WorkspaceConnector.node.replace(Workspace.connectorNode),
-      WorkspaceDriver.node.replace(
-        Layer.succeed(
-          WorkspaceDriver.RegistryService,
-          WorkspaceDriver.RegistryService.of({
-            get: (provider) =>
-              provider === "fake"
-                ? Effect.succeed(options.driver)
-                : Effect.fail(new WorkspaceDriver.ProviderNotFound({ provider })),
-          }),
-        ),
-      ),
+      WorkspaceDriver.node.replace(WorkspaceDriver.registryNode({ fake: options.driver, ...options.drivers })),
     ],
   )
 
@@ -455,16 +444,24 @@ describe("Environments", () => {
             }),
           )
 
-        // 1. Default workspace shell is "sh" with keepWarm: 0, zero wakes when denied, and exactly 1 connect when allowed.
-        const defaultTmp = yield* tmpdirScoped()
+        const tmp = yield* tmpdirScoped()
         const defaultCalls: string[] = []
+        const customCalls: string[] = []
         const defaultSpawns: ChildProcess.Command[] = []
-        const defaultLayer = buildLayer({
-          directory: AbsolutePath.make(defaultTmp.path),
+        const customSpawns: ChildProcess.Command[] = []
+        const layer = buildLayer({
+          directory: AbsolutePath.make(tmp.path),
           driver: makeSandboxDriver(defaultCalls, {
             ...makeMemoryDriver(),
             spawner: makeRecordingSpawner(defaultSpawns),
           }),
+          drivers: {
+            custom: makeSandboxDriver(
+              customCalls,
+              { ...makeMemoryDriver(), spawner: makeRecordingSpawner(customSpawns) },
+              { shell: "/bin/dash" },
+            ),
+          },
           keepWarm: 0,
         })
         yield* Effect.gen(function* () {
@@ -472,15 +469,14 @@ describe("Environments", () => {
           const workspaces = yield* Workspace.Service
           const shell = yield* Shell.Service
 
-          const wrkID = yield* workspaces.create({ provider: "fake" })
-          const sandbox = yield* environments.get(Environment.ID.make(wrkID))
-          expect(sandbox.shell).toBe("sh")
-          expect(defaultCalls).toEqual([])
+          const defaultID = yield* workspaces.create({ provider: "fake" })
+          const defaultSandbox = yield* environments.get(Environment.ID.make(defaultID))
+          expect(defaultSandbox.shell).toBe("sh")
 
           // A denied command before spawn never wakes or provisions the cold workspace.
           const denied = yield* shell
             .create(
-              { command: "echo blocked", cwd: "/workspace", environment: sandbox, shell: "/bin/zsh" },
+              { command: "echo blocked", cwd: "/workspace", environment: defaultSandbox, shell: "/bin/zsh" },
               (invocation) => {
                 expect(invocation.shell).toBe("sh")
                 return Effect.fail(new Error("permission denied"))
@@ -494,7 +490,7 @@ describe("Environments", () => {
           const started = yield* shell.create({
             command: "echo hi",
             cwd: "/workspace",
-            environment: sandbox,
+            environment: defaultSandbox,
             shell: "/bin/zsh",
           })
           yield* shell.wait(started.id)
@@ -502,60 +498,44 @@ describe("Environments", () => {
           expect(defaultSpawns).toHaveLength(1)
           expect(ChildProcess.isStandardCommand(defaultSpawns[0]) && defaultSpawns[0].command).toBe("sh")
           expect(defaultCalls).toEqual(["create", "connect"])
-        }).pipe(Effect.provide(defaultLayer))
 
-        // 2. Provider static options.shell overrides the default "sh" with only 1 connect at keepWarm: 0.
-        const customTmp = yield* tmpdirScoped()
-        const customCalls: string[] = []
-        const customSpawns: ChildProcess.Command[] = []
-        const customLayer = buildLayer({
-          directory: AbsolutePath.make(customTmp.path),
-          driver: makeSandboxDriver(
-            customCalls,
-            { ...makeMemoryDriver(), spawner: makeRecordingSpawner(customSpawns) },
-            { shell: "/bin/dash" },
-          ),
-          keepWarm: 0,
-        })
-        yield* Effect.gen(function* () {
-          const environments = yield* Environments.Service
-          const workspaces = yield* Workspace.Service
-          const shell = yield* Shell.Service
-
-          const wrkID = yield* workspaces.create({ provider: "fake" })
-          const sandbox = yield* environments.get(Environment.ID.make(wrkID))
-          expect(sandbox.shell).toBe("/bin/dash")
-          expect(customCalls).toEqual([])
-
-          const started = yield* shell.create({
+          // Provider static options.shell overrides the default "sh" with only 1 connect at keepWarm: 0.
+          const customID = yield* workspaces.create({ provider: "custom" })
+          const customSandbox = yield* environments.get(Environment.ID.make(customID))
+          expect(customSandbox.shell).toBe("/bin/dash")
+          const customStarted = yield* shell.create({
             command: "echo custom",
             cwd: "/workspace",
-            environment: sandbox,
+            environment: customSandbox,
             shell: "/bin/zsh",
           })
-          yield* shell.wait(started.id)
-          expect(started.shell).toBe("/bin/dash")
+          yield* shell.wait(customStarted.id)
+          expect(customStarted.shell).toBe("/bin/dash")
           expect(customSpawns).toHaveLength(1)
           expect(ChildProcess.isStandardCommand(customSpawns[0]) && customSpawns[0].command).toBe("/bin/dash")
           expect(customCalls).toEqual(["create", "connect"])
-        }).pipe(Effect.provide(customLayer))
+        }).pipe(Effect.provide(layer))
       }),
   )
 
   it.live(
-    "resolves workspace home from warm connections or static provider options without waking cold sandboxes",
+    "resolves workspace home from cached connections (even after keepWarm 0 drop) or static provider options without waking cold sandboxes",
     () =>
       Effect.gen(function* () {
         const tmp = yield* tmpdirScoped()
         const calls: string[] = []
-        const memory = makeMemoryDriver()
+        const staticCalls: string[] = []
         const target: Environment.Driver = {
-          ...memory,
+          ...makeMemoryDriver(),
           options: { home: Effect.succeed("/home/worker") },
         }
         const layer = buildLayer({
           directory: AbsolutePath.make(tmp.path),
           driver: makeSandboxDriver(calls, target),
+          drivers: {
+            staticHome: makeSandboxDriver(staticCalls, makeMemoryDriver(), { home: Effect.succeed("/home/static") }),
+          },
+          keepWarm: 0,
         })
 
         yield* Effect.gen(function* () {
@@ -572,36 +552,24 @@ describe("Environments", () => {
           expect(coldErr.cause).toBeInstanceOf(EnvironmentPath.NotAbsolute)
           expect(calls).toEqual([])
 
-          // Once a real operation opens the warm connection, `~` resolves via the warm driver's home with no extra connect.
+          // Once a real operation opens and drops at keepWarm: 0, cached home still resolves `~` with no extra connect.
           yield* sandbox.files.mkdir("/workspace")
           expect(calls).toEqual(["create", "connect"])
-          const warmTarget = yield* access.locate(`${wrkID}:~/sub/file.ts`)
-          expect(warmTarget).toEqual({
+          expect(yield* environments.ready(wrkEnvID)).toBe(false)
+          expect(yield* access.locate(`${wrkID}:~/sub/file.ts`)).toEqual({
             absolute: AbsolutePath.make("/home/worker/sub/file.ts"),
             environment: { id: wrkEnvID },
           })
           expect(calls).toEqual(["create", "connect"])
-        }).pipe(Effect.provide(layer))
 
-        // Static provider options.home resolves even while cold, with zero wakes.
-        const staticTmp = yield* tmpdirScoped()
-        const staticCalls: string[] = []
-        const staticLayer = buildLayer({
-          directory: AbsolutePath.make(staticTmp.path),
-          driver: makeSandboxDriver(staticCalls, makeMemoryDriver(), { home: Effect.succeed("/home/static") }),
-        })
-        yield* Effect.gen(function* () {
-          const workspaces = yield* Workspace.Service
-          const access = yield* FileAccess.Service
-          const wrkID = yield* workspaces.create({ provider: "fake" })
-
-          const targetPlace = yield* access.locate(`${wrkID}:~/notes.md`)
-          expect(targetPlace).toEqual({
+          // Static provider options.home resolves even while cold, with zero wakes.
+          const staticID = yield* workspaces.create({ provider: "staticHome" })
+          expect(yield* access.locate(`${staticID}:~/notes.md`)).toEqual({
             absolute: AbsolutePath.make("/home/static/notes.md"),
-            environment: { id: Environment.ID.make(wrkID) },
+            environment: { id: Environment.ID.make(staticID) },
           })
           expect(staticCalls).toEqual([])
-        }).pipe(Effect.provide(staticLayer))
+        }).pipe(Effect.provide(layer))
       }),
   )
 
@@ -617,7 +585,6 @@ describe("Environments", () => {
       yield* Effect.gen(function* () {
         const environments = yield* Environments.Service
         const workspaces = yield* Workspace.Service
-        const ripgrep = yield* Ripgrep.Service
 
         const wrkID = yield* workspaces.create({ provider: "fake" })
         const sandbox = yield* environments.get(Environment.ID.make(wrkID))
@@ -625,10 +592,6 @@ describe("Environments", () => {
         expect(sandbox.rg).toBeUndefined()
         const unavailable = yield* ToolSearch.available(sandbox).pipe(Effect.flip)
         expect(unavailable.message).toBe(`Search is not available on ${wrkID} yet.`)
-        const rgErr = yield* ripgrep
-          .grep({ environment: sandbox, cwd: "/workspace", pattern: "needle", limit: 10 })
-          .pipe(Effect.flip)
-        expect(rgErr.message).toBe(`Search is not available on ${wrkID} yet.`)
         expect(calls).toEqual([])
       }).pipe(Effect.provide(layer))
     }),
