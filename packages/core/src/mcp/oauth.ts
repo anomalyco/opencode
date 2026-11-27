@@ -7,6 +7,7 @@ import {
   discoverAuthorizationServerMetadata,
   discoverOAuthServerInfo,
   extractWWWAuthenticateParams,
+  IssuerMismatchError,
   OAuthError,
   OAuthErrorCode,
   parseErrorResponse,
@@ -122,6 +123,37 @@ const configuredDiscovery = async (input: {
     authorizationServerMetadata: metadata,
     resourceMetadata: { resource: resourceUrlFromServerUrl(input.config.url).toString() },
   }
+}
+
+const discoverServer = async (url: string, options: { readonly resourceMetadataUrl: URL | undefined; readonly fetchFn: FetchLike }) => {
+  const info = await discoverOAuthServerInfo(url, { ...options, skipIssuerMetadataValidation: true })
+  return {
+    ...info,
+    authorizationServerMetadata: checkIssuer(info.authorizationServerUrl, info.authorizationServerMetadata),
+  }
+}
+
+// The SDK's RFC 8414 §3.3 check, plus Microsoft Entra's multi-tenant authorities (common, organizations, consumers):
+// their metadata names the literal `{tenantid}` template as the issuer. Only that shape is accepted on top.
+const checkIssuer = <T extends { readonly issuer: string } | undefined>(expected: string, metadata: T) => {
+  if (!metadata) return metadata
+  const received = metadata.issuer
+  if (received === expected || (expected.endsWith("/") && received === expected.slice(0, -1))) return metadata
+  if (URL.canParse(received) && tenantTemplate(new URL(expected), new URL(received))) return metadata
+  throw new IssuerMismatchError("metadata", expected, received)
+}
+
+// Same origin and path, except the tenant (first) segment is the template. URL percent-encodes the braces.
+const tenantTemplate = (expected: URL, received: URL) => {
+  const want = expected.pathname.split("/")
+  const got = received.pathname.split("/")
+  return (
+    expected.origin === received.origin &&
+    want.length === got.length &&
+    Boolean(want[1]) &&
+    got[1] === "%7Btenantid%7D" &&
+    want.every((segment, i) => i === 1 || segment === got[i])
+  )
 }
 
 interface Store {
@@ -380,12 +412,16 @@ const exchange = (input: {
         (saved
           ? {
               authorizationServerUrl: saved.authorizationServer,
-              authorizationServerMetadata: await discoverAuthorizationServerMetadata(saved.authorizationServer, {
-                fetchFn,
-              }),
+              authorizationServerMetadata: checkIssuer(
+                saved.authorizationServer,
+                await discoverAuthorizationServerMetadata(saved.authorizationServer, {
+                  fetchFn,
+                  skipIssuerValidation: true,
+                }),
+              ),
               resourceMetadata: undefined,
             }
-          : await discoverOAuthServerInfo(input.config.url, {
+          : await discoverServer(input.config.url, {
               resourceMetadataUrl: input.resourceMetadataUrl,
               fetchFn,
             }))
@@ -535,7 +571,7 @@ export const authorize = (input: {
     const discovery = yield* Effect.tryPromise({
       try: async () =>
         (await configuredDiscovery({ config: input.config, fetchFn })) ??
-        discoverOAuthServerInfo(input.config.url, { resourceMetadataUrl, fetchFn }),
+        discoverServer(input.config.url, { resourceMetadataUrl, fetchFn }),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     })
     const cimd =

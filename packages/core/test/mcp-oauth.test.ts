@@ -89,6 +89,37 @@ const authorizationServer = (metadata: Record<string, unknown>) => {
   return { server, registrations, tokenRequests }
 }
 
+// An MCP server behind an authority like Microsoft Entra's `organizations`, whose OpenID metadata names the issuer
+// `issuer(origin)`; Entra's names the literal `{tenantid}` template.
+const tenantAuthority = (issuer: (origin: string) => string) => {
+  const tokenRequests: URLSearchParams[] = []
+  const server = Bun.serve({
+    port: 0,
+    async fetch(request) {
+      const url = new URL(request.url)
+      if (url.pathname === "/.well-known/oauth-protected-resource/mcp")
+        return Response.json({ resource: `${url.origin}/mcp`, authorization_servers: [`${url.origin}/organizations/v2.0`] })
+      if (url.pathname === "/organizations/v2.0/.well-known/openid-configuration")
+        return Response.json({
+          issuer: issuer(url.origin),
+          authorization_endpoint: `${url.origin}/organizations/oauth2/v2.0/authorize`,
+          token_endpoint: `${url.origin}/organizations/oauth2/v2.0/token`,
+          jwks_uri: `${url.origin}/organizations/discovery/v2.0/keys`,
+          response_types_supported: ["code"],
+          subject_types_supported: ["pairwise"],
+          id_token_signing_alg_values_supported: ["RS256"],
+        })
+      if (request.method === "POST" && url.pathname === "/organizations/oauth2/v2.0/token") {
+        tokenRequests.push(new URLSearchParams(await request.text()))
+        return Response.json({ access_token: "a2", token_type: "Bearer", refresh_token: "r2", expires_in: 3600 })
+      }
+      return new Response(null, { status: 404 })
+    },
+  })
+  const origin = server.url.origin
+  return { server, tokenRequests, url: `${origin}/mcp`, authority: `${origin}/organizations/v2.0` }
+}
+
 const start = (
   target: string | ReturnType<typeof Bun.serve>,
   oauth?: ConfigMCP.OAuth,
@@ -424,6 +455,43 @@ describe("MCP OAuth", () => {
     expect(result.access).toBe("access")
   })
 
+  test("signs in through an authority whose metadata names the {tenantid} issuer template", async () => {
+    const entra = tenantAuthority((origin) => `${origin}/{tenantid}/v2.0`)
+    const credential = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { authorization, url } = yield* start(entra.url, { client_id: "client" })
+          expect(url.pathname).toBe("/organizations/oauth2/v2.0/authorize")
+          const redirect = new URL(url.searchParams.get("redirect_uri")!)
+          redirect.searchParams.set("code", "accepted")
+          redirect.searchParams.set("state", url.searchParams.get("state")!)
+          yield* Effect.promise(() => fetch(redirect))
+          return yield* authorization.callback
+        }),
+      ),
+    ).finally(() => entra.server.stop(true))
+
+    expect(credential.access).toBe("a2")
+    expect(entra.tokenRequests.map((request) => request.get("code"))).toEqual(["accepted"])
+    expect(credential.metadata?.discovery).toEqual({ authorizationServer: entra.authority, resource: entra.url })
+  })
+
+  test("rejects an issuer that differs from the authorization server in more than the tenant template", async () => {
+    const issuers = [
+      (origin: string) => `${origin}/other/v2.0`,
+      (origin: string) => `${origin}/{tenantid}/v1.0`,
+      () => "https://login.example/{tenantid}/v2.0",
+    ]
+    for (const issuer of issuers) {
+      const entra = tenantAuthority(issuer)
+      await expect(
+        Effect.runPromise(Effect.scoped(start(entra.url, { client_id: "client" }))).finally(() =>
+          entra.server.stop(true),
+        ),
+      ).rejects.toThrow("Issuer mismatch")
+    }
+  })
+
   describe("client registration", () => {
     const cimd = { client_id_metadata_document_supported: true, token_endpoint_auth_methods_supported: ["none"] }
 
@@ -646,6 +714,26 @@ describe("MCP OAuth connections", () => {
       "r2",
       guarded.server.url.origin,
     ])
+  })
+
+  test("refreshes through an authority whose metadata names the {tenantid} issuer template", async () => {
+    const entra = tenantAuthority((origin) => `${origin}/{tenantid}/v2.0`)
+    const issuer = `${entra.server.url.origin}/{tenantid}/v2.0`
+    // Ahead of expiry with the saved discovery, then after a 401 for a login saved without it.
+    await using saved = await setup(entra.url, {
+      expires: Date.now() + 10_000,
+      metadata: { issuer, discovery: { authorizationServer: entra.authority, resource: entra.url } },
+    })
+    await using discovered = await setup(entra.url, { metadata: { issuer } })
+
+    const token = await (await saved.provider(saved.first)).token()
+    const provider = await discovered.provider(discovered.first)
+    await provider.token()
+    await Promise.resolve(unauthorized(provider, entra.url)).finally(() => entra.server.stop(true))
+
+    expect(token).toBe("a2")
+    expect(entra.tokenRequests.map((request) => request.get("refresh_token"))).toEqual(["r1", "r1"])
+    expect(await stored(discovered.second)).toEqual({ access: "a2", refresh: "r2" })
   })
 
   describe("ahead of expiry", () => {
