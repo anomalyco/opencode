@@ -52,7 +52,7 @@ export interface Options {
   readonly password?: string
   /** Inline opencode config content (JSON), same as `ServerOptions.config.content`. */
   readonly config?: { readonly content?: string }
-  /** models.dev catalog options; the bundled snapshot is the boot-time floor either way. */
+  /** models.dev catalog options. Fetching is off by default, so a wake serves the bundled snapshot with no network. */
   readonly models?: ServerOptions["models"]
   /** Replaces `globalThis.fetch` for OpenCode's own HTTP requests, e.g. to route them through a Service Binding. */
   readonly fetch?: ServerOptions["fetch"]
@@ -98,7 +98,7 @@ export function serverOptions(options: Options): ServerOptions {
     // cannot opt out of it, so this is not exposed as an option.
     events: { persist: true },
     config: { content: options.config?.content },
-    models: options.models,
+    models: { ...options.models, fetch: options.models?.fetch ?? false },
     fetch: options.fetch,
   }
 }

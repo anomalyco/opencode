@@ -733,7 +733,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode เอเจนต์การเข้ารหัสโอเพ่นซอร์ส",
   "settings.about.trademark": "OpenCode เป็นเครื่องหมายการค้าจดทะเบียนของ Anomaly Innovations, Inc.",
-  "settings.about.typeset": "เรียงพิมพ์ใน Inter และ IBM Plex Mono",
+  "settings.about.typeset": "เรียงพิมพ์ใน Inter และ OpenMono",
   "settings.about.tagline": "AI ไม่สามารถสร้างซอฟต์แวร์ที่ยอดเยี่ยมได้หากไม่มีคุณ",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "แก้ไขโครงการ",

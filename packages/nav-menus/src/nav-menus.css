@@ -8,7 +8,7 @@
      --nav-menu-link      the link blue: hover and focus
      --nav-menu-bar       the active bar
      --nav-menu-icon      the Brand, ZIP and Press drawings
-     --nav-menu-mono      OpenTUI Mono (the host loads it) */
+     --nav-menu-mono      OpenMono (the host loads it) */
 [data-nav-menu] {
   --ink: var(--nav-menu-ink, light-dark(#161616, #fafafa));
   --weak: var(--nav-menu-weak, light-dark(#5c5c5c, #aeaeae));
@@ -45,7 +45,7 @@
   border: 0;
   background: none;
   color: var(--ink);
-  font: 400 12px/16px var(--nav-menu-mono, "OpenTUI Mono", ui-monospace, monospace);
+  font: 400 12px/16px var(--nav-menu-mono, "OpenMono", ui-monospace, monospace);
   letter-spacing: 0;
   text-align: start;
   -webkit-font-smoothing: antialiased;
@@ -205,7 +205,7 @@
   /* The product name's hover fill, opencode.ai's lockup hover: the hover step of the shared grey scale. Fixed, so it
      is the same on every page background. */
   --nav-name-hover: light-dark(#eeeeee, #242424);
-  /* The product name after the mark (and the docs' DOCS): its size, and the padding under it that puts OpenTUI Mono's
+  /* The product name after the mark (and the docs' DOCS): its size, and the padding under it that puts OpenMono's
      caps (0.69 of the size) where they belong in the 25px row. */
   --nav-name-size: 15px;
   --nav-name-pad: 0.65px;
@@ -228,7 +228,7 @@
 }
 
 /* The lockup: the logo (`data-nav-logo`, a 20 × 25 mark at whole pixels in its box, as on opencode.ai), then the
-   product's name (`data-nav-name`) 12px after the box: OpenTUI Mono Bold 15px caps whose 6px padding is the
+   product's name (`data-nav-name`) 12px after the box: OpenMono Bold 15px caps whose 6px padding is the
    highlight, --nav-name-hover while hovered or pressed. Placed at --nav-edge, centred in the bar. */
 [data-nav-lockup] {
   --nav-lockup-ink: light-dark(#161616, #fafafa);
@@ -281,7 +281,7 @@
     padding: 0 6px var(--nav-name-pad);
     background: none;
     color: var(--nav-lockup-ink);
-    font: 700 var(--nav-name-size) / 1 var(--nav-menu-mono, "OpenTUI Mono", ui-monospace, monospace);
+    font: 700 var(--nav-name-size) / 1 var(--nav-menu-mono, "OpenMono", ui-monospace, monospace);
     letter-spacing: 0;
     text-decoration: none;
     text-transform: uppercase;

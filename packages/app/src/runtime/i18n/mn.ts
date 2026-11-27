@@ -677,7 +677,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, нээлттэй эхийн кодчиллын агент",
   "settings.about.trademark": "OpenCode нь Anomaly Innovations, Inc.-ийн бүртгэлтэй барааны тэмдэг юм.",
-  "settings.about.typeset": "Inter болон IBM Plex Mono үсгийн хэвээр өрсөн",
+  "settings.about.typeset": "Inter болон OpenMono үсгийн хэвээр өрсөн",
   "settings.about.tagline": "Тангүйгээр AI гайхалтай програм хангамж бүтээж чадахгүй",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "Төслийг засах",

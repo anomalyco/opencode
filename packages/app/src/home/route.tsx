@@ -1,6 +1,8 @@
 import { ScrollView } from "@opencode/ui/scroll-view"
 import { createMediaQuery } from "@solid-primitives/media"
+import { useNavigate } from "@solidjs/router"
 import { createMemo, onMount, Show } from "solid-js"
+import { useAutomationSource } from "@/automations/source"
 import { useLayout } from "@/shell/state/layout"
 import { useSettings } from "@/settings/model"
 import { useProjectNavigation } from "@/shell/project-navigation"
@@ -35,7 +37,13 @@ function HomeOverview() {
   const layout = useLayout()
   const settings = useSettings()
   const home = createHomeController()
-  const projects = createHomeProjectsController(home)
+  const automations = useAutomationSource()
+  const navigate = useNavigate()
+
+  const projects = createHomeProjectsController(home, {
+    automations: { available: automations.available, open: () => navigate("/automations") },
+  })
+
   const sessions = createHomeSessionsController(home)
   const search = createHomeSessionSearchController(home, sessions, settings.appearance.navigationPrototype)
 
@@ -138,6 +146,7 @@ export function HomeView(props: {
           class="flex"
           onOpenSettings={props.projects.utility.settings}
           onOpenHelp={props.projects.utility.help}
+          automations={props.projects.utility.automations}
           language={props.projects.copy.language}
         />
       </div>

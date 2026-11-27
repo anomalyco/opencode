@@ -10,15 +10,20 @@ export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers)
     const feed = yield* EventFeed.Service
     return handlers.handleRaw("event.subscribe", (ctx) =>
       Effect.gen(function* () {
-        const connected = {
-          id: Event.ID.create(),
-          type: "server.connected",
-          data: {},
-        } as const
         const output = Stream.unwrap(
           feed
             .subscribe(ctx.query.types)
-            .pipe(Effect.map((live) => Stream.make(EventFeed.frame(connected)).pipe(Stream.concat(live)))),
+            .pipe(
+              Effect.map((subscription) =>
+                Stream.make(
+                  EventFeed.frame({
+                    id: Event.ID.create(),
+                    type: "server.connected",
+                    data: { stream: subscription.id },
+                  }),
+                ).pipe(Stream.concat(subscription.events)),
+              ),
+            ),
         )
         const heartbeat = Stream.tick("15 seconds").pipe(Stream.map(() => ": heartbeat\n\n"))
         return HttpServerResponse.stream(

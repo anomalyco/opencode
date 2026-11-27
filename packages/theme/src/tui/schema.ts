@@ -90,6 +90,7 @@ const TextDefinition = Schema.Struct({
   base: Schema.optional(ColorValue),
   muted: Schema.optional(ColorValue),
   faint: Schema.optional(ColorValue),
+  selection: Schema.optional(ColorValue),
   action: Schema.optional(ActionColorDefinition),
   formfield: Schema.optional(StatefulColorDefinition),
   feedback: Schema.optional(
@@ -105,6 +106,7 @@ export type TextDefinition = Schema.Schema.Type<typeof TextDefinition>
 
 const BackgroundDefinition = Schema.Struct({
   base: Schema.optional(ColorValue),
+  selection: Schema.optional(ColorValue),
   raised: Schema.optional(
     Schema.Struct({
       base: Schema.optional(ColorValue),
@@ -230,6 +232,7 @@ const CompleteThemeTokensDefinition = Schema.Struct({
     base: ColorValue,
     muted: ColorValue,
     faint: Schema.optional(ColorValue),
+    selection: Schema.optional(ColorValue),
     action: CompleteActionColorDefinition,
     formfield: CompleteStatefulColorDefinition,
     feedback: Schema.Struct({
@@ -241,6 +244,7 @@ const CompleteThemeTokensDefinition = Schema.Struct({
   }),
   background: Schema.Struct({
     base: ColorValue,
+    selection: Schema.optional(ColorValue),
     raised: Schema.Struct({ base: ColorValue, high: ColorValue, max: ColorValue }),
     action: CompleteActionColorDefinition,
     formfield: CompleteStatefulColorDefinition,

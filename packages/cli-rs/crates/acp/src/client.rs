@@ -26,6 +26,18 @@ pub fn classify(error: &Error) -> Failure {
                     message: declared.message.clone().unwrap_or_default(),
                     field: Some("cursor".to_owned()),
                 },
+                Some("CommandNotFoundError") => Failure::InvalidRequest {
+                    message: declared.message.clone().unwrap_or_default(),
+                    field: Some("prompt".to_owned()),
+                },
+                // The message is the command's own, such as its usage, so the client shows it instead of a generic failure.
+                Some("CommandExecutionError") => Failure::ServiceFailure {
+                    safe_message: declared.message.clone().unwrap_or_default(),
+                    service: Some("command".to_owned()),
+                    error_name: Some("CommandExecutionError".to_owned()),
+                    status: None,
+                    retry_after_ms: None,
+                },
                 tag => Failure::Defect { name: tag.map(str::to_owned), detail: error.to_string() },
             }
         }

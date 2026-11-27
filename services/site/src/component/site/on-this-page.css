@@ -1,5 +1,5 @@
 /* "Contents": the docs' table of contents, the one definition for every page that has one (docs,
-   Brand, Press, legal, and the phone Contents menu below). OpenTUI Mono at the mono size: the label in
+   Brand, Press, legal, and the phone Contents menu below). OpenMono at the mono size: the label in
    --text-faint, the items in --text-weak. The items touch, with their spacing inside them as
    padding (--rail-pad), so a pointer moving down the list is always over one and hover never drops
    out between items. Each item has a gutter on the left (--rail-gutter) that holds its pipe: the

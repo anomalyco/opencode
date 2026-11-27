@@ -1,5 +1,6 @@
 import type { CancelNotification, PromptRequest, PromptResponse, RequestError } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
+import type { Session } from "@opencode/schema/session"
 import { TokenUsage } from "@opencode/schema/token-usage"
 import {
   Cause,
@@ -173,9 +174,7 @@ export const make = Effect.fnUntraced(function* (input: {
           return yield* input.connection.extNotification(ACPChild.UpdateMethod, { ...output.update, update })
         }).pipe(
           Effect.catchCause((cause) =>
-            Cause.hasInterruptsOnly(cause)
-              ? Effect.void
-              : Effect.logWarning("ACP child session update failed", cause),
+            Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP child session update failed", cause),
           ),
         )
       case "PermissionAsk": {
@@ -283,7 +282,14 @@ export const make = Effect.fnUntraced(function* (input: {
       return
     }
     yield* input.client.session
-      .prompt({ sessionID, id: prompt.start.id, text: prompt.text, files: prompt.files, delivery: "steer" })
+      .prompt({
+        sessionID,
+        id: prompt.start.id,
+        text: prompt.text,
+        files: prompt.files,
+        ...(prompt.skills.length > 0 ? { skills: prompt.skills } : {}),
+        delivery: "steer",
+      })
       .pipe(Effect.catch(ACPClient.classify))
   })
 
@@ -370,14 +376,21 @@ export const make = Effect.fnUntraced(function* (input: {
       const catalog = yield* input.catalog.get(attached.cwd)
       const model = findModel(catalog.models, currentModel(catalog, yield* Ref.get(attached.selection)))
       if (!model?.limit.context) return
-      const info = yield* input.client.session.get({ sessionID: attached.id }).pipe(Effect.catch(ACPClient.classify))
+      const [info, subagents] = yield* Effect.all(
+        [
+          input.client.session.get({ sessionID: attached.id }).pipe(Effect.catch(ACPClient.classify)),
+          subagentCost(input.client, attached.id),
+        ],
+        { concurrency: "unbounded" },
+      )
       yield* input.connection.sessionUpdate({
         sessionId: attached.id,
         update: {
           sessionUpdate: "usage_update",
           used,
           size: model.limit.context,
-          cost: { amount: info.cost, currency: "USD" },
+          // Subagents record their spend on their own sessions; the session's cost includes them, as the TUI's does.
+          cost: { amount: info.cost + subagents, currency: "USD" },
         },
       })
     },
@@ -389,6 +402,7 @@ export const make = Effect.fnUntraced(function* (input: {
   // Forked uninterruptible: interruption lands only in `execute` and the last check in `settle`, so a response follows.
   const run = Effect.fn("cli.acp.turn.run")(function* (params: PromptRequest) {
     const attached = yield* input.sessions.require(params.sessionId)
+    yield* input.sessions.restoreMcp(attached)
     const prompt = yield* ACPPrompt.prepare(yield* input.catalog.get(attached.cwd), params.prompt)
     const capabilities = yield* Ref.get(input.capabilities)
     const state = yield* Ref.make(ACPTranslate.initial)
@@ -443,6 +457,7 @@ export const make = Effect.fnUntraced(function* (input: {
           id: prompt.start.id,
           text: prompt.text,
           files: prompt.files,
+          ...(prompt.skills.length > 0 ? { skills: prompt.skills } : {}),
           delivery: "steer",
           resume: false,
         })
@@ -462,6 +477,23 @@ export const make = Effect.fnUntraced(function* (input: {
     }),
   } satisfies Interface
 })
+
+function subagentCost(client: OpenCodeClient, sessionID: Session.ID): Effect.Effect<number, ACPError.Error> {
+  return Stream.paginate(undefined, (cursor: Session.ListCursor | undefined) =>
+    client.session.list(cursor ? { cursor, limit: 100 } : { parentID: sessionID, limit: 100 }).pipe(
+      Effect.catch(ACPClient.classify),
+      Effect.map((page) => [page.data, Option.fromNullishOr(page.cursor.next)] as const),
+    ),
+  ).pipe(
+    Stream.mapEffect((child) => subagentCost(client, child.id).pipe(Effect.map((cost) => child.cost + cost)), {
+      concurrency: 4,
+    }),
+    Stream.runFold(
+      () => 0,
+      (total, cost) => total + cost,
+    ),
+  )
+}
 
 function aborted(signal: AbortSignal) {
   return Effect.callback<void>((resume) => {

@@ -282,9 +282,8 @@ const layer = (options: Options) =>
         if (existing) return existing
 
         const row = yield* load(workspaceID)
-        // Bindings are persisted before provision resolves and never nulled; a raced
-        // destroy deletes the whole row and surfaces as NotFound from load above.
-        if (!row.binding) return yield* Effect.die(new Error(`workspace ${workspaceID} has no binding after provision`))
+        // Unbound (fresh create, or destroy+create raced while waiting): caller provisions outside the lock.
+        if (!row.binding) return undefined
         const driver = yield* registry.get(row.provider)
         const scope = yield* Scope.fork(lifetime)
         const environment = yield* driver
@@ -479,19 +478,22 @@ const layer = (options: Options) =>
         connect: (workspaceID) =>
           Effect.sync(() => {
             const acquire = Effect.acquireRelease(
-              // A live connection implies the binding is already persisted, so skip the provision hop.
-              Effect.suspend(() => (connections.has(workspaceID) ? Effect.void : provision(workspaceID))).pipe(
-                Effect.andThen(
-                  locks.withLock(workspaceID)(
+              Effect.gen(function* () {
+                while (true) {
+                  const connection = yield* locks.withLock(workspaceID)(
                     Effect.gen(function* () {
                       const connection = yield* open(workspaceID)
+                      if (!connection) return undefined
                       yield* Ref.set(connection.lastActivity, yield* Clock.currentTimeMillis)
                       yield* Ref.update(connection.active, (active) => active + 1)
                       return connection
                     }),
-                  ),
-                ),
-              ),
+                  )
+                  if (connection) return connection
+                  // Provision takes the same lock. Release it first, then recheck in case destroy/create raced again.
+                  yield* provision(workspaceID)
+                }
+              }),
               (connection) =>
                 locks.withLock(workspaceID)(
                   Effect.gen(function* () {

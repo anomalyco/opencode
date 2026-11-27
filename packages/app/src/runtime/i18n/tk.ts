@@ -671,7 +671,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, açyk çeşmeli kodlaşdyrma agenti",
   "settings.about.trademark": "OpenCode Anomaly Innovations, Inc. kompaniýasynyň bellige alnan söwda nyşanydyr.",
-  "settings.about.typeset": "Inter we IBM Plex Mono bilen düzüldi",
+  "settings.about.typeset": "Inter we OpenMono bilen düzüldi",
   "settings.about.tagline": "AI sizsiz ajaýyp programma üpjünçiligini döredip bilmez",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "Taslamany redaktirle",

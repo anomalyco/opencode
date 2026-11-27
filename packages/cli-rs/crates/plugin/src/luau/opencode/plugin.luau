@@ -1993,8 +1993,8 @@ export type ConfigInfoEncoded = {
         artifacts: boolean?,
         console_watches: boolean?,
         recommended_api: boolean?,
-        model_speeds: boolean?,
         full_codemode: boolean?,
+        codemode_agents: boolean?,
         machines: boolean?,
         home_memory: boolean?,
         project_overlay: boolean?,
@@ -2002,6 +2002,7 @@ export type ConfigInfoEncoded = {
         mcp_skills: boolean?,
         compaction_jobs: boolean?,
         sqlite_fts: boolean?,
+        browser_stream_tunnel: boolean?,
         video_generate: (boolean | {
             model: (string | {
                 providerID: string,
@@ -2243,6 +2244,23 @@ export type ExperimentalMcpEvent = _Event1<"experimental.mcp.event", {
 }>
 
 export type ExperimentalPushUpdated = _Event1<"experimental.push.updated", any>
+
+export type ExperimentalSpaceDeleted = _Event1<"experimental.space.deleted", {
+    space: SpaceName,
+    key: SpaceKey,
+    revision: SpaceRevision,
+}>
+
+export type ExperimentalSpaceResync = _Event1<"experimental.space.resync", {
+    space: SpaceName,
+}>
+
+export type ExperimentalSpaceUpdated = _Event1<"experimental.space.updated", {
+    space: SpaceName,
+    key: SpaceKey,
+    value: SpaceValue,
+    revision: SpaceRevision,
+}>
 
 export type FileDiffInfo = {
     file: string,
@@ -3120,7 +3138,7 @@ export type ModelSpeed = {
     faster: boolean,
 }
 
-export type ModelType = (("chat" | "decision" | "image" | "video") | string)
+export type ModelType = (("chat" | "decision" | "image" | "video" | "realtime" | "embedding" | "transcription") | string)
 
 export type ModelUpdated = _Event1<"model.updated", any>
 
@@ -4484,6 +4502,58 @@ export type SkillUpdated = _Event1<"skill.updated", any>
 
 export type SnapshotID = string
 
+export type SpaceChange = {
+    key: SpaceKey,
+    value: SpaceValue?,
+}
+
+--- Covers this write and every change before it.
+export type SpaceCursor = string
+
+export type SpaceCursor1 = string
+
+--- Covers every change up to this page; save it to subscribe or sync from.
+export type SpaceCursor2 = string
+
+export type SpaceDelta = {
+    type: "delta",
+    space: SpaceName,
+    epoch: SpaceEpoch,
+    revision: SpaceRevision,
+    entries: { SpaceEntry },
+    cursor: SpaceCursor2,
+    next: SpaceCursor1?,
+    deleted: { SpaceKey },
+}
+
+export type SpaceEntry = {
+    key: SpaceKey,
+    value: SpaceValue,
+}
+
+export type SpaceEpoch = string
+
+export type SpaceKey = string
+
+--- Client-chosen namespace: 1-128 letters, digits, '.', '_' or '-'.
+export type SpaceName = string
+
+export type SpacePage = (SpaceSnapshot | SpaceDelta)
+
+export type SpaceRevision = number
+
+export type SpaceSnapshot = {
+    type: "snapshot",
+    space: SpaceName,
+    epoch: SpaceEpoch,
+    revision: SpaceRevision,
+    entries: { SpaceEntry },
+    cursor: SpaceCursor2,
+    next: SpaceCursor1?,
+}
+
+export type SpaceValue = string
+
 export type TokenUsageInfo = {
     input: number,
     output: number,
@@ -4573,7 +4643,7 @@ export type UsageLimitsMeter = {
     resetsAt: number,
 }
 
-export type V2Event = (LocationShutdown | ModelsDevRefreshed | CredentialUpdated | CredentialSwitched | IntegrationUpdated | ProviderUpdated | ModelUpdated | AgentUpdated | SessionCreated | SessionAgentSelected | SessionModelSelected | SessionMoved | SessionRenamed | SessionMetadataUpdated | SessionPermissions | SessionViewed | SessionArchived | SessionUnarchived | SessionUsageUpdated | SessionDeleted | SessionForked | SessionInboxDelivered | SessionInboxEnqueued | SessionInboxCancelled | SessionInboxDeliveryChanged | SessionExecutionStarted | SessionExecutionSucceeded | SessionExecutionFailed | SessionExecutionInterrupted | SessionInstructionsUpdated | SessionSynthetic | SessionSkillActivated | SessionShellStarted | SessionShellEnded | SessionStepStarted | SessionStepFirstToken | SessionStepStreamed | SessionStepEnded | SessionStepFailed | SessionTextStarted | SessionTextDelta | SessionTextEnded | SessionReasoningStarted | SessionReasoningDelta | SessionReasoningEnded | SessionToolInputStarted | SessionToolInputDelta | SessionToolInputEnded | SessionToolCalled | SessionToolProgress | SessionToolSuccess | SessionToolFailed | SessionRetryScheduled | SessionCompactionStarted | SessionCompactionDelta | SessionCompactionEnded | SessionCompactionFailed | SessionRevertStaged | SessionRevertCleared | SessionRevertCommitted | FilesystemChanged | ReferenceUpdated | PermissionAsked | PermissionReplied | PluginUpdated | ProjectUpdated | WorktreeUpdated | WorktreeResolved | CommandUpdated | ConfigUpdated | SkillUpdated | PtyCreated | PtyUpdated | PtyExited | PtyDeleted | PersistentPtyAdded | PersistentPtyRemoved | PersistentPtyUpdated | ShellCreated | ShellExited | ShellDeleted | ExperimentalJobUpdated | FormCreated | FormReplied | FormCancelled | WebsearchUpdated | ExperimentalPushUpdated | ArtifactUpdated | SessionStatusUpdated | SessionIdle | TuiPromptAppend | TuiCommandExecute | TuiToastShow | TuiSessionSelect | InstallationUpdated | InstallationUpdateAvailable | VcsBranchUpdated | McpStatusChanged | McpResourcesChanged | ExperimentalMcpEvent | V2EventRpc | V2EventServerConnected)
+export type V2Event = (LocationShutdown | ModelsDevRefreshed | CredentialUpdated | CredentialSwitched | IntegrationUpdated | ProviderUpdated | ModelUpdated | AgentUpdated | SessionCreated | SessionAgentSelected | SessionModelSelected | SessionMoved | SessionRenamed | SessionMetadataUpdated | SessionPermissions | SessionViewed | SessionArchived | SessionUnarchived | SessionUsageUpdated | SessionDeleted | SessionForked | SessionInboxDelivered | SessionInboxEnqueued | SessionInboxCancelled | SessionInboxDeliveryChanged | SessionExecutionStarted | SessionExecutionSucceeded | SessionExecutionFailed | SessionExecutionInterrupted | SessionInstructionsUpdated | SessionSynthetic | SessionSkillActivated | SessionShellStarted | SessionShellEnded | SessionStepStarted | SessionStepFirstToken | SessionStepStreamed | SessionStepEnded | SessionStepFailed | SessionTextStarted | SessionTextDelta | SessionTextEnded | SessionReasoningStarted | SessionReasoningDelta | SessionReasoningEnded | SessionToolInputStarted | SessionToolInputDelta | SessionToolInputEnded | SessionToolCalled | SessionToolProgress | SessionToolSuccess | SessionToolFailed | SessionRetryScheduled | SessionCompactionStarted | SessionCompactionDelta | SessionCompactionEnded | SessionCompactionFailed | SessionRevertStaged | SessionRevertCleared | SessionRevertCommitted | FilesystemChanged | ReferenceUpdated | PermissionAsked | PermissionReplied | PluginUpdated | ProjectUpdated | WorktreeUpdated | WorktreeResolved | CommandUpdated | ConfigUpdated | SkillUpdated | PtyCreated | PtyUpdated | PtyExited | PtyDeleted | PersistentPtyAdded | PersistentPtyRemoved | PersistentPtyUpdated | ShellCreated | ShellExited | ShellDeleted | ExperimentalJobUpdated | FormCreated | FormReplied | FormCancelled | WebsearchUpdated | ExperimentalPushUpdated | ArtifactUpdated | SessionStatusUpdated | SessionIdle | TuiPromptAppend | TuiCommandExecute | TuiToastShow | TuiSessionSelect | InstallationUpdated | InstallationUpdateAvailable | VcsBranchUpdated | McpStatusChanged | McpResourcesChanged | ExperimentalMcpEvent | ExperimentalSpaceResync | ExperimentalSpaceUpdated | ExperimentalSpaceDeleted | V2EventRpc | V2EventServerConnected)
 
 export type V2EventRpc = {
     id: EventID,
@@ -4584,7 +4654,9 @@ export type V2EventRpc = {
     data: { [string]: any },
 }
 
-export type V2EventServerConnected = _Event4<"server.connected", any>
+export type V2EventServerConnected = _Event4<"server.connected", {
+    stream: string?,
+}>
 
 export type VcsBase = {
     name: string,
@@ -5145,6 +5217,9 @@ export type Client = {
                 id: string,
             }) -> (string?, string?),
         },
+        browser: {
+            tunnel: (input: {}?) -> (boolean?, string?),
+        },
         config: {
             update: (input: {
                 shell: string?,
@@ -5166,6 +5241,14 @@ export type Client = {
             }) -> ({
                 location: LocationPublicRef,
                 data: FileSystemWrite,
+            }?, string?),
+        },
+        flag: {
+            get: (input: {
+                location: { directory: string? }?,
+            }?) -> ({
+                location: LocationPublicRef,
+                data: { [string]: boolean },
             }?, string?),
         },
         generate: {
@@ -5437,6 +5520,31 @@ export type Client = {
                 path: string,
             }) -> (string?, string?),
         },
+        space: {
+            reset: (input: {}?) -> (nil, string?),
+            subscribe: (input: {
+                stream: string,
+                spaces: { {
+                    space: SpaceName,
+                    cursor: SpaceCursor1,
+                } },
+            }) -> (nil, string?),
+            sync: (input: {
+                space: string,
+                cursor: string?,
+            }) -> (SpacePage?, string?),
+            unsubscribe: (input: {
+                stream: string,
+                spaces: { SpaceName },
+            }) -> (nil, string?),
+            write: (input: {
+                space: string,
+                changes: { SpaceChange },
+            }) -> ({
+                revision: SpaceRevision,
+                cursor: SpaceCursor,
+            }?, string?),
+        },
         usage: {
             limits: (input: {
                 location: { directory: string? }?,
@@ -5615,7 +5723,7 @@ export type Client = {
         }?, string?),
         list: (input: {
             location: { directory: string? }?,
-            types: { (("chat" | "decision" | "image" | "video") | string) }?,
+            types: { (("chat" | "decision" | "image" | "video" | "realtime" | "embedding" | "transcription") | string) }?,
         }?) -> ({
             location: LocationPublicRef,
             data: { ModelInfo },

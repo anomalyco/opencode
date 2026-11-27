@@ -99,10 +99,10 @@ export const Plugin = define({
         state.registered.set(key(skill.server, skill.entry.uri), id)
         const root = skill.entry.uri.slice(0, skill.entry.uri.lastIndexOf("/") + 1)
         const files = skill.entry.resources.flatMap((resource) => {
-          const file = resource.uri.startsWith(root) ? resource.uri.slice(root.length) : ""
-          return SkillDiscovery.isSafeRelativePath(file) ? [{ file, digest: resource.digest }] : []
+          const file = resource.uri.startsWith(root) ? Skill.parseFilePath(resource.uri.slice(root.length)) : undefined
+          return file ? [{ file, digest: resource.digest }] : []
         })
-        const digest = files.find((item) => item.file === "SKILL.md")?.digest ?? ""
+        const digest = files.find((item) => item.file === Skill.manifest)?.digest ?? ""
         editor.add(
           {
             id,

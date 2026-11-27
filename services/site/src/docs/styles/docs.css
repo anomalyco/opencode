@@ -41,7 +41,7 @@
    The current section's pages in the footer's bracket list: "[ ]" before each, "[-]" and ink on the
    current page with the titles' faux medium, a dash on hover. 20px lines on a 30px pitch, like the
    Contents rail. The first item's text top sits on the content line, level with the page title's and
-   the search box's top (DESIGN.md): OpenTUI Mono's cap top sits 0.3253em less than half the line
+   the search box's top (DESIGN.md): OpenMono's cap top sits 0.3253em less than half the line
    below the line's top, and the first row's 5px hit area hangs above it (its margin collapses into
    this one). */
 [data-site] [data-component="docs-nav"] {
@@ -211,7 +211,7 @@
       display: none;
     }
 
-    /* The Contents bar and its list in the nav's type: OpenTUI Mono at the nav's size. */
+    /* The Contents bar and its list in the nav's type: OpenMono at the nav's size. */
     [data-component="contents-menu"] :is(summary, a) {
       font-family: var(--font-mono);
       font-size: var(--mono-size);
@@ -465,8 +465,8 @@
 }
 
 /* ───────────── Article ─────────────
-   Reading text in Inter at the reading size, capped at about 90 characters, section titles in OpenTUI
-   Mono. Typography 4 (docs-variants.css) sets h3 to h6 and the heading rhythm. */
+   Reading text in Inter at the reading size, capped at about 90 characters, section titles in
+   OpenMono. Typography 4 (docs-variants.css) sets h3 to h6 and the heading rhythm. */
 [data-site] [data-component="docs-article"] {
   font: 400 var(--fs-read) / 1.6 var(--font-sans);
   color: var(--text);

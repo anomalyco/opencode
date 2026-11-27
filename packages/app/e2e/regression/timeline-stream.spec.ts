@@ -250,7 +250,7 @@ test.describe("static projection", () => {
       "aria-label",
       "Used 2 Patch, Read",
     )
-    await expect(page.locator('[data-timeline-spacing="tool"]')).toHaveCSS("padding-top", "8px")
+    await expect(page.locator('[data-timeline-spacing="tool"]')).toHaveCSS("padding-top", "16px")
   })
 })
 

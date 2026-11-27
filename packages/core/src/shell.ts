@@ -9,6 +9,7 @@ import {
   Effect,
   Exit,
   Fiber,
+  FiberSet,
   Latch,
   Layer,
   Option,
@@ -684,8 +685,8 @@ const layer = () =>
       const environments = yield* SessionEnvironment.Service
       const config = yield* Config.Service
       const daemon = yield* Daemon
-      const context = yield* Effect.context()
-      const runFork = Effect.runForkWith(context)
+      // Command fibers belong to the Location: closing it interrupts them, which releases (kills) their processes.
+      const runFork = yield* FiberSet.makeRuntime()
       // Commands this server spawned for the Location; daemon commands live in `runs`, owned by the server.
       const commands = new Map<Shell.ID, Spawned>()
       const exitOrder: Shell.ID[] = []
@@ -699,7 +700,6 @@ const layer = () =>
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
           for (const command of commands.values()) {
-            if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
             // Teardown interrupts pending commands; it is not a terminal command failure. Daemon commands are left
             // to the server.
             yield* Deferred.interrupt(command.done)
@@ -1042,7 +1042,7 @@ const layer = () =>
         // the managing fiber keeps its scope open until the command terminates (it awaits `done` at the
         // end). `create` returns once `ready` resolves with the registered command.
         const ready = Deferred.makeUnsafe<Spawned, AppProcess.AppProcessError>()
-        runFork(
+        const manager = runFork(
           Effect.scoped(
             Effect.gen(function* () {
               const handle = yield* target.spawner
@@ -1087,16 +1087,19 @@ const layer = () =>
                 ),
               )
               runFork(
-                Effect.gen(function* () {
-                  yield* pump.pipe(Effect.catch(() => Effect.void))
-                  yield* Effect.promise(
-                    () =>
-                      new Promise<void>((resolve) => {
-                        stream.end(() => resolve())
-                      }),
-                  )
-                  yield* outputDone.open
-                }),
+                pump.pipe(
+                  Effect.catch(() => Effect.void),
+                  // Close the file even when the Location closing interrupts the pump.
+                  Effect.ensuring(
+                    Effect.promise(
+                      () =>
+                        new Promise<void>((resolve) => {
+                          stream.end(() => resolve())
+                        }),
+                    ),
+                  ),
+                  Effect.andThen(outputDone.open),
+                ),
               )
               yield* Effect.promise(
                 () =>
@@ -1191,8 +1194,13 @@ const layer = () =>
               // release (kill) the process before its exit is observed.
               yield* Deferred.await(command.done).pipe(Effect.catch(() => Effect.void))
             }),
-          ).pipe(Effect.catchTag("AppProcessError", (error) => Deferred.fail(ready, error))),
+          ),
         )
+        // Forward any pre-registration failure (AppProcessError, interruption, or closed Location) to `ready`
+        // instead of leaving `create` waiting forever.
+        manager.addObserver((exit) => {
+          if (Exit.isFailure(exit)) Deferred.doneUnsafe(ready, Exit.failCause(exit.cause))
+        })
 
         const command = yield* Deferred.await(ready)
         return command.info

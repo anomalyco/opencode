@@ -334,6 +334,7 @@ for (const [tabLayout, direction, label] of [
     await tabB.click({ button: "right" })
     await expect(menu.getByRole("menuitem")).toHaveText([
       "Rename",
+      "Copy",
       "Export…",
       "Close tab",
       "Close other tabs",
@@ -786,8 +787,9 @@ test("an unread tab whose run failed shows the failed dot, as the inbox does", a
   await tab(c.id).locator("[data-titlebar-tab-link]").click({ button: "right" })
   await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText([
     "Rename",
-    "Export…",
     "Mark as unread",
+    "Copy",
+    "Export…",
     "Close tab",
     "Close other tabs",
     "Close tabs to the right",
@@ -811,6 +813,32 @@ test("an unread tab whose run failed shows the failed dot, as the inbox does", a
   await tab(a.id).locator("[data-titlebar-tab-link]").click()
   await expectPath(page, sessionHref(a.id))
   await expect(tab(c.id).locator('[data-mark="unread"]')).toBeHidden()
+})
+
+test("the tab menu copies the session ID, title and project ID", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"])
+
+  const workspace = await mockWorkspace(page, { name: "CopyTabs", sessions: [a, b] })
+
+  await page.goto(sessionHref(a.id))
+
+  const link = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"]) [data-titlebar-tab-link]`)
+
+  const copy = async (item: string) => {
+    await link.click({ button: "right" })
+    await page.getByRole("menuitem", { name: "Copy", exact: true }).hover()
+    await page.getByRole("menu").last().getByRole("menuitem", { name: item, exact: true }).click()
+    await expect(page.getByRole("menu")).toHaveCount(0)
+  }
+
+  const clipboard = () => page.evaluate(() => navigator.clipboard.readText())
+
+  await copy("Session ID")
+  await expect.poll(clipboard).toBe(b.id)
+  await copy("Session title")
+  await expect.poll(clipboard).toBe(b.title)
+  await copy("Project ID")
+  await expect.poll(clipboard).toBe(workspace.projectID)
 })
 
 test("Recent and Pinned rows show the side tabs' status dots and shortcuts for sessions that aren't open as tabs", async ({
@@ -2469,6 +2497,17 @@ test("the inbox lists archived sessions in a collapsed section and pins sessions
   ])
 
   await rows.filter({ hasText: "Older inbox session" }).click({ button: "right" })
+  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText([
+    "Rename",
+    "Pin",
+    "Mark as read",
+    "Copy",
+    "Export…",
+    "Archive",
+    "Delete…",
+  ])
+  // One separator before Copy and Export, and one before Archive and Delete.
+  await expect(page.getByRole("menu").getByRole("separator")).toHaveCount(2)
   await page.getByRole("menuitem", { name: "Pin", exact: true }).click()
 
   const recent = inbox.getByRole("group", { name: "Recent", exact: true }).locator('[data-slot="sidebar-inbox-item"]')

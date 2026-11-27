@@ -54,6 +54,14 @@ it.live("boots the workerd profile over durable object storage", () =>
   }),
 )
 
+it.effect("serves the bundled models.dev snapshot unless fetching is turned back on", () =>
+  Effect.sync(() => {
+    const storage = makeDurableObjectStorage()
+    expect(ServerWorkerd.serverOptions({ storage }).models).toEqual({ fetch: false })
+    expect(ServerWorkerd.serverOptions({ storage, models: { fetch: true } }).models).toEqual({ fetch: true })
+  }),
+)
+
 it.effect("fails Npm.add with a clear workerd error instead of running the installer", () =>
   Effect.gen(function* () {
     const npm = yield* Npm.Service

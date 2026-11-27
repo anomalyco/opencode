@@ -1,5 +1,6 @@
 import type { ContentBlock } from "@agentclientprotocol/sdk"
 import type { Command } from "@opencode/schema/command"
+import type { Skill } from "@opencode/schema/skill"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Effect } from "effect"
 import { access, constants } from "node:fs/promises"
@@ -16,6 +17,8 @@ export type Prepared = {
   readonly synthetic: ReadonlyArray<string>
   readonly slash?: { readonly name: string; readonly args: string }
   readonly command?: Command.Info
+  /** A `/skill` prompt sends its text with the skill attached, as an `@skill` mention does elsewhere. */
+  readonly skills: ReadonlyArray<{ readonly id: Skill.ID }>
 }
 
 export const prepare = Effect.fnUntraced(function* (catalog: Catalog, content: readonly ContentBlock[]) {
@@ -39,6 +42,7 @@ export const prepare = Effect.fnUntraced(function* (catalog: Catalog, content: r
     synthetic: parts.flatMap((part) => (part.type === "text" && part.synthetic ? [part.text] : [])),
     slash,
     command: slash ? catalog.commands.find((item) => item.name === slash.name) : undefined,
+    skills: catalog.skills.flatMap((skill) => (skill.id === slash?.name ? [{ id: skill.id }] : [])),
   } satisfies Prepared
 })
 
