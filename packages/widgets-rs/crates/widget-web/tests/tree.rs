@@ -169,7 +169,7 @@ fn fixtures() -> Vec<Fixture> {
         });
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));
-    assert_eq!(out.len(), 58);
+    assert_eq!(out.len(), 59);
     out
 }
 
@@ -240,7 +240,7 @@ fn every_fixture_walks_from_its_built_view() {
         }
         walked += 1;
     }
-    assert_eq!(walked, 57);
+    assert_eq!(walked, 58);
 }
 
 /// Each fixture's program run natively on its input with real function markers: the view `__widget_emit` gets is
@@ -330,7 +330,7 @@ fn every_fixture_runs_natively_to_its_view_result_or_error() {
         }
         count += 1;
     }
-    assert_eq!(count, 58);
+    assert_eq!(count, 59);
 }
 
 /// The walk counts levels itself, for views the boundary lets through (its default depth stops them at 16 levels).

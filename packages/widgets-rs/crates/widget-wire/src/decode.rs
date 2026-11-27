@@ -11,8 +11,8 @@ use crate::draw::{
 };
 use crate::gpu::{self, Batch};
 use crate::node::{
-    Align, ButtonVariant, Inset, Layer, Layers, Node, Place, SelectOption, SelectValue, TextStyle,
-    Tone,
+    Align, ButtonVariant, Cell, ColumnAlign, Inset, Layer, Layers, Node, Place, SelectOption,
+    SelectValue, TableColumn, TableSort, TextStyle, Tone,
 };
 use crate::schema::*;
 use crate::step::{SendMessage, StepOutput};
@@ -391,6 +391,13 @@ struct Props {
     gpu: bool,
     place: Option<u32>,
     inset: Option<Inset>,
+    columns: Option<Vec<String>>,
+    aligns: Vec<f64>,
+    cells: Option<Vec<String>>,
+    sort: Option<Vec<f64>>,
+    row: Option<u32>,
+    selectable: bool,
+    sortable: bool,
 }
 
 fn read_prop(s: &mut Streams, p: &mut Props, tag: u32) -> Result<(), Malformed> {
@@ -435,6 +442,13 @@ fn read_prop(s: &mut Streams, p: &mut Props, tag: u32) -> Result<(), Malformed> 
         (34, K_STR) => p.capture = Some(s.str()?),
         (35, K_INT) => p.pointer = b(s)?,
         (38, K_INT) => p.gpu = b(s)?,
+        (39, K_STRS) => p.columns = Some(s.strs()?),
+        (40, K_F64S) => p.aligns = s.f64s()?,
+        (41, K_STRS) => p.cells = Some(s.strs()?),
+        (42, K_F64S) => p.sort = Some(s.f64s()?),
+        (43, K_INT) => p.row = Some(s.ints.int()?),
+        (44, K_INT) => p.selectable = b(s)?,
+        (45, K_INT) => p.sortable = b(s)?,
         (36, K_INT) => p.place = Some(s.ints.int()?),
         (37, K_F64) => {
             let v = s.floats.f64()?;
@@ -502,7 +516,7 @@ fn node(s: &mut Streams) -> Result<(Node, Layer), DecodeError> {
             s.strs.str()?;
             (Node::Unknown, Layer::default())
         } else {
-            if !matches!(t, 1..=14 | T_STACK) {
+            if !matches!(t, 1..=14 | T_STACK | T_TABLE) {
                 return Err(Malformed(format!("unknown node type {t}")).into());
             }
             // The node without its children; its failure waits for the children's reading, which may find the bytes
@@ -715,6 +729,48 @@ fn shell(t: u32, mut p: Props) -> Result<(Node, Layer), DecodeError> {
             multiline: p.multiline,
         },
         13 => Node::Divider,
+        17 => {
+            let labels = need(p.columns.take(), "columns")?;
+            let cells = need(p.cells.take(), "rows")?;
+            if labels.is_empty() || cells.len() % labels.len() != 0 {
+                return invalid("a table's cells don't fill its rows");
+            }
+            let columns = labels
+                .into_iter()
+                .enumerate()
+                .map(|(i, label)| TableColumn {
+                    label,
+                    align: if p.aligns.get(i) == Some(&1.0) {
+                        ColumnAlign::End
+                    } else {
+                        ColumnAlign::Start
+                    },
+                })
+                .collect::<Vec<_>>();
+            let rows = cells
+                .chunks(columns.len())
+                .map(|row| row.iter().cloned().map(Cell).collect())
+                .collect();
+            let sort = match p.sort.as_deref() {
+                None => None,
+                Some([column, descending]) if column.fract() == 0.0 && *column >= 0.0 => {
+                    Some(TableSort {
+                        column: *column as usize,
+                        descending: *descending == 1.0,
+                    })
+                }
+                Some(_) => return invalid("a table's sort is a column and a direction"),
+            };
+            Node::Table {
+                id: p.id,
+                columns,
+                rows,
+                sort,
+                selected: p.row.map(|r| r as usize),
+                selectable: p.selectable,
+                sortable: p.sortable,
+            }
+        }
         14 => Node::Canvas {
             id: p.id,
             height: need(p.height, "height")?,

@@ -192,4 +192,14 @@ export const cases: ReadonlyArray<{
       `ui.column({ gap: 1 }, [ui.row({ wrap: true, gap: 1 }, Array.from({ length: 200 }, (_, i) => ui.card({ selected: i === 3, onPress: (s) => s }, [ui.row({ gap: 1 }, [ui.text("Item " + i, { style: "body" }), ui.text(String(i * 7), { tone: "muted" })]), ui.text("Note " + i, { style: "caption" }), ui.button("Go", { onPress: (s) => s })])))])`,
     ),
   },
+  {
+    // Tables: rows and a header that take presses (selectable, sortable, in that order, after the id), one that takes
+    // only header presses, and one with no handlers (no id). Numbers stay numbers in the view. Protocol 1's prelude
+    // doesn't know tables or onSort.
+    name: "tables",
+    source: view(
+      `ui.column([ui.table(["Day", { label: "kg", align: "end" }, { label: "kcal", align: "end" }], [["Nov 27", 79.6, 1150], ["Nov 26", 80.1]], { sort: { column: 0, descending: true }, selected: 0, onPress: (s, row) => s, onSort: (s, column) => s }), ui.table(["a"], [["x"]], { key: "sorted", onSort: (s) => s }), ui.table([{ label: "n", align: "end" }], [[1e21], [0.1]])])`,
+    ),
+    newer: true,
+  },
 ]

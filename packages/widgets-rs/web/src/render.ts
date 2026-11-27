@@ -79,6 +79,7 @@ const KNOWN = new Set([
   "select",
   "input",
   "divider",
+  "table",
   "canvas",
   "stack",
 ])
@@ -520,6 +521,49 @@ const BUILDERS: Record<string, Builder> = {
       },
       destroy() {
         if (timer !== undefined) clearTimeout(timer)
+      },
+    }
+    return { el, rec }
+  },
+  // A table (widgets.md, Table): a header with the sort indicator, rows as text, scrolling sideways when it is wider
+  // than the widget; a row press sends `press` with its index and a header press `change` with the column's.
+  table(ctx) {
+    const el = h(ctx, "div", "pw-table")
+    const rec: Rec = {
+      type: "table",
+      node: { type: "table" },
+      update(n) {
+        const columns = (Array.isArray(n.columns) ? n.columns : []) as { label?: unknown; align?: unknown }[]
+        const rows = (Array.isArray(n.rows) ? n.rows : []) as unknown[][]
+        const sort = n.sort as { column?: unknown; descending?: unknown } | undefined
+        const table = h(ctx, "table")
+        const head = table.createTHead().insertRow()
+        columns.forEach((column, index) => {
+          const cell = h(ctx, "th")
+          cell.textContent = str(column.label)
+          if (sort?.column === index) cell.textContent += sort.descending === true ? " ▼" : " ▲"
+          if (column.align === "end") cell.className = "pw-end"
+          if (n.sortable === true && !ctx.readOnly()) {
+            cell.classList.add("pw-press")
+            cell.addEventListener("click", () => ctx.emit({ id: str(rec.node.id), type: "change", value: index }))
+          }
+          head.append(cell)
+        })
+        const body = table.createTBody()
+        rows.forEach((cells, row) => {
+          const tr = body.insertRow()
+          if (n.selected === row) tr.className = "pw-on"
+          if (n.selectable === true && !ctx.readOnly()) {
+            tr.classList.add("pw-press")
+            tr.addEventListener("click", () => ctx.emit({ id: str(rec.node.id), type: "press", value: row }))
+          }
+          columns.forEach((column, index) => {
+            const cell = tr.insertCell()
+            cell.textContent = str(Array.isArray(cells) ? cells[index] : undefined)
+            if (column.align === "end") cell.className = "pw-end"
+          })
+        })
+        el.replaceChildren(table)
       },
     }
     return { el, rec }

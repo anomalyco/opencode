@@ -124,7 +124,8 @@ for (const file of files) {
 
   test(`wire fixture ${file}, handlers by path`, async () => {
     const fixture = await Bun.file(path.join(dir, file)).json()
-    if (fixture.error || fixture.input.phase !== "init") return
+    // Protocol 1's prelude has no handlers for what it doesn't know (a table's).
+    if (fixture.error || fixture.input.phase !== "init" || newer.has(file.replace(/\.json$/, ""))) return
     const checked = await handlers(fixture.source, fixture.input)
     for (const [id, table, found] of checked) expect({ id, found }).toEqual({ id, found: table })
     expect(checked.filter(([, table]) => table !== null).length).toBe(Object.keys(fixture.handlers).length)

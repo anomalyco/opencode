@@ -11,6 +11,7 @@ pub(crate) const K_OPTS: u32 = 5;
 /// A node type the host doesn't know; its name follows in the string stream.
 pub(crate) const T_UNKNOWN: u32 = 63;
 pub(crate) const T_STACK: u32 = 16;
+pub(crate) const T_TABLE: u32 = 17;
 
 /// Top-level message kinds, after the version byte.
 pub(crate) const STEP: u8 = b'S';
@@ -43,6 +44,7 @@ pub(crate) fn type_id(name: &str) -> u32 {
         "divider" => 13,
         "canvas" => 14,
         "stack" => T_STACK,
+        "table" => T_TABLE,
         _ => T_UNKNOWN,
     }
 }
@@ -91,6 +93,10 @@ pub(crate) fn prop_id(key: &str) -> u32 {
         "place" => 36,
         "inset" => 37,
         "gpu" => 38,
+        // A table's `columns`, `rows`, `sort` and row `selected` (39 to 43) are written from the whole node
+        // (`encode::table_props`).
+        "selectable" => 44,
+        "sortable" => 45,
         _ => 0,
     }
 }
@@ -135,7 +141,7 @@ pub(crate) fn shape(id: u32) -> Shape {
         6 => Shape::Enum(TONE),
         14 => Shape::Enum(VARIANT),
         36 => Shape::Enum(PLACE),
-        3 | 12 | 15 | 16 | 22 | 24 | 32 | 33 | 35 | 38 => Shape::Bool,
+        3 | 12 | 15 | 16 | 22 | 24 | 32 | 33 | 35 | 38 | 44 | 45 => Shape::Bool,
         4 | 7 | 8 | 10 | 13 | 23 | 29 | 31 | 34 => Shape::Str,
         17 => Shape::Value,
         21 => Shape::Options,

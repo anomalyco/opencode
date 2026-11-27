@@ -11,6 +11,7 @@ const ui = (() => {
   const container = (type) => (props, nodes) =>
     Array.isArray(props) ? { type, children: props } : { ...props, type, children: nodes ?? [] }
   const option = (item) => (typeof item === "string" ? { value: item, label: item } : item)
+  const column = (item) => (typeof item === "string" ? { label: item } : item)
   return {
     column: container("column"),
     row: container("row"),
@@ -31,6 +32,12 @@ const ui = (() => {
     select: (options, props) => ({ ...props, type: "select", options: (options ?? []).map(option) }),
     input: (value, props) => ({ ...props, type: "input", value: value ?? "" }),
     divider: () => ({ type: "divider" }),
+    table: (columns, rows, props) => ({
+      ...props,
+      type: "table",
+      columns: (columns ?? []).map(column),
+      rows: rows ?? [],
+    }),
     canvas: (props) => ({ ...props, type: "canvas" }),
     draw: () => new __WidgetDraw(),
   }
@@ -46,6 +53,11 @@ const __WIDGET_CONTROLS = {
   input: { event: "change", handler: "onChange" },
   carousel: { event: "change", handler: "onChange" },
   canvas: { event: "pointer", handler: "onPointer" },
+  // A table takes two: a row's press, and a header's press as `change`.
+  table: [
+    { event: "press", handler: "onPress" },
+    { event: "change", handler: "onSort" },
+  ],
 }
 
 // A view nests at most 100 levels (specs/v2/widgets.md, Keys and depth): the root is level 1, the items of a node's
@@ -73,17 +85,18 @@ function __widget_deep(list, level) {
 // The handler of the node with id `id` in the view `root` as built, found by following the id's path (the host assigns
 // the ids, specs/v2/widgets.md, Native hosts). Where two siblings share a segment (a key that looks like a repeat,
 // `k~2`), the later one's subtree wins.
-function __widget_find(root, id) {
+function __widget_find(root, id, type) {
   if (!root || typeof root !== "object" || Array.isArray(root)) return undefined
   const segments = String(id).split("/")
   const named = root.key !== undefined && root.key !== null
   if (segments[0] !== (named ? ":" + encodeURIComponent(String(root.key)) : "0")) return undefined
-  return __widget_found(root, segments, 1)
+  return __widget_found(root, segments, 1, type)
 }
 
-function __widget_found(node, segments, at) {
+function __widget_found(node, segments, at, type) {
   if (at === segments.length) {
-    const control = __WIDGET_CONTROLS[node.type]
+    const controls = __WIDGET_CONTROLS[node.type]
+    const control = Array.isArray(controls) ? controls.find((each) => each.event === type) : controls
     const handler = control ? node[control.handler] : undefined
     if (typeof handler !== "function") return undefined
     if (node.type !== "carousel" || node.children === undefined) return { event: control.event, handler, node }
@@ -98,7 +111,7 @@ function __widget_found(node, segments, at) {
   const matches = []
   __widget_segments(__widget_list(node.children), "", segments[at], matches, null)
   for (let index = matches.length - 1; index >= 0; index--) {
-    const found = __widget_found(matches[index], segments, at + 1)
+    const found = __widget_found(matches[index], segments, at + 1, type)
     if (found) return found
   }
   return undefined
@@ -142,6 +155,10 @@ function __widget_segments(list, prefix, segment, into, seen) {
 // The value a handler gets for a client event, checked against the node; undefined drops the event.
 function __widget_value(entry, value) {
   const node = entry.node
+  if (node.type === "table") {
+    const count = (entry.event === "press" ? node.rows : node.columns)?.length ?? 0
+    return Number.isInteger(value) && value >= 0 && value < count ? value : undefined
+  }
   if (entry.event === "press") return true
   if (entry.event === "pointer") return __widget_pointer(value)
   if (node.type === "checkbox") return typeof value === "boolean" ? value : undefined
@@ -355,9 +372,9 @@ function __widget_dispatch(state, event, data) {
   if (event.type === "capture")
     return typeof onCapture === "function" ? onCapture(state, event.value === true) : undefined
   if (event.type !== "press" && event.type !== "change" && event.type !== "pointer") return undefined
-  const entry = __widget_find(view(state, data), event.id)
+  const entry = __widget_find(view(state, data), event.id, event.type)
   if (!entry || entry.event !== event.type) return undefined
   const value = __widget_value(entry, event.value)
   if (value === undefined) return undefined
-  return event.type === "press" ? entry.handler(state) : entry.handler(state, value)
+  return event.type === "press" && entry.node.type !== "table" ? entry.handler(state) : entry.handler(state, value)
 }

@@ -29,7 +29,7 @@ cargo test --locked --workspace                                 # on a Mac: --fe
 
 The shorthand's tests (`widget-wire/tests/shorthand.rs`) run on Vulkan (lavapipe on a machine without a GPU, or a real
 one), or on Metal with `--features widget-wire/metal`. widget-wire's tests read `packages/widget/test/fixtures/wire`
-(the 58 native-host fixtures) and `draw.json` in place; widget-mobile's are in its `README.md`, Tests.
+(the 59 native-host fixtures) and `draw.json` in place; widget-mobile's are in its `README.md`, Tests.
 
 The apps' libraries are built by `crates/widget-mobile/scripts/build-ios.sh` and `build-android.sh`
 (`crates/widget-mobile/README.md`, Building).

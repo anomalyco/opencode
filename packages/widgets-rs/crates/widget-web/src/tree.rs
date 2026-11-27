@@ -77,11 +77,13 @@ fn control(kind: &str) -> Option<(&'static str, &'static str, bool, bool)> {
         "input" => ("onChange", "change", true, false),
         "carousel" => ("onChange", "change", false, false),
         "canvas" => ("onPointer", "pointer", false, true),
+        // A table's rows; its headers' handler is `onSort` (`change`).
+        "table" => ("onPress", "press", false, false),
         _ => return None,
     })
 }
 
-const HANDLERS: [&str; 3] = ["onPress", "onChange", "onPointer"];
+const HANDLERS: [&str; 4] = ["onPress", "onChange", "onPointer", "onSort"];
 
 /// What the walk learned of a view besides its JSON.
 #[derive(Debug, Default)]
@@ -166,7 +168,7 @@ impl Walk {
             match name {
                 Some("type") if prop.kind() == Kind::String => {
                     if let Text::Str(s) = prop.text() {
-                        kind = control(s).map(|c| (s == "canvas", c));
+                        kind = control(s).map(|c| (s == "canvas", s == "table", c));
                     }
                 }
                 Some("children") => {
@@ -174,7 +176,7 @@ impl Walk {
                     continue;
                 }
                 Some(n) if HANDLERS.contains(&n) => continue,
-                Some("key" | "id" | "pointer") => {
+                Some("key" | "id" | "pointer" | "selectable" | "sortable") => {
                     if carries_function(prop) {
                         return Err(WalkError::Function);
                     }
@@ -195,15 +197,16 @@ impl Walk {
             out.push(':');
             write_json(prop, out)?;
         }
-        if let Some((canvas, (handler, event, always, by_key))) = kind {
+        if let Some((canvas, table, (handler, event, always, by_key))) = kind {
             let handled = v.get(handler).is_some_and(|h| h.kind() == Kind::Function);
+            let sorted = table && v.get("onSort").is_some_and(|h| h.kind() == Kind::Function);
             let key = if by_key {
                 v.get("key")
                     .filter(|k| !matches!(k.kind(), Kind::Undefined | Kind::Null))
             } else {
                 None
             };
-            if handled || always || key.is_some() {
+            if handled || sorted || always || key.is_some() {
                 if !first {
                     out.push(',');
                 }
@@ -212,14 +215,21 @@ impl Walk {
                 out.push_str("\"id\":\"");
                 out.push_str(&self.path);
                 out.push('"');
-                if handled {
+                if handled || sorted {
                     self.tree.has_handlers = true;
                     if let Some(list) = &mut self.tree.handlers {
-                        list.push((self.path.clone(), event));
+                        // A table with both handlers is listed by its row press.
+                        list.push((self.path.clone(), if handled { event } else { "change" }));
                     }
-                    if canvas {
-                        out.push_str(",\"pointer\":true");
-                    }
+                }
+                if handled && canvas {
+                    out.push_str(",\"pointer\":true");
+                }
+                if handled && table {
+                    out.push_str(",\"selectable\":true");
+                }
+                if sorted {
+                    out.push_str(",\"sortable\":true");
                 }
                 if let Some(key) = key {
                     let name = string_of(key);

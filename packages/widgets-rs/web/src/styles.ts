@@ -108,6 +108,14 @@ export const CSS: string = /* css */ `
 .pw-option[aria-checked="true"] .pw-mark { border-color: var(--pw-accent); background: var(--pw-accent); box-shadow: inset 0 0 0 2px var(--pw-bg); }
 .pw-option-text { display: flex; flex-direction: column; min-width: 0; }
 .pw-option-desc { font-size: 12px; color: var(--pw-muted); }
+.pw-table { overflow-x: auto; max-width: 100%; }
+.pw-table table { border-collapse: collapse; font-size: 13px; line-height: 1.4; }
+.pw-table th, .pw-table td { border: 1px solid var(--pw-border); padding: 6px 10px; text-align: left; white-space: nowrap; }
+.pw-table th { font-weight: 600; background: var(--pw-surface); }
+.pw-table .pw-end { text-align: right; font-variant-numeric: tabular-nums; }
+.pw-table .pw-press { cursor: pointer; }
+.pw-table tr.pw-press:hover td, .pw-table th.pw-press:hover { background: var(--pw-surface); }
+.pw-table tr.pw-on td { background: color-mix(in srgb, var(--pw-accent) 14%, transparent); }
 .pw-divider { border: 0; border-top: 1px solid var(--pw-border); margin: 2px 0; width: 100%; }
 .pw-carousel { position: relative; overflow: hidden; border-radius: calc(var(--pw-radius) - 2px); touch-action: pan-y; outline: none; min-width: 0; }
 .pw-carousel:focus-visible { box-shadow: 0 0 0 2px var(--pw-accent); }

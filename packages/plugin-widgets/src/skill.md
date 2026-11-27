@@ -107,6 +107,10 @@ async function main(data) {
 · `carousel({ index, onChange }, children)` · `card({ selected, onPress }, children)` · `button(label, { variant,
 disabled, onPress })` · `checkbox(label, checked, { onChange })` · `slider({ label, value, min, max, step, onChange })`
 · `select(options, { value, multiple, onChange })` · `input(value, { placeholder, multiline, onChange })` · `divider()`
+· `table(columns, rows, { sort, selected, onPress, onSort })`: data as a real table, drawn like the client's markdown
+tables; columns are labels or `{ label, align: "end" }` (numbers), rows arrays of strings and numbers (≤ 16 columns,
+≤ 500 rows). `onPress(state, row)` on a row; `onSort(state, column)` on a header, and `sort: { column, descending }`
+shows the indicator: sort `rows` yourself
 · `stack(props, children)`: layers children, the last on top, each placed by its `place` (`top-left` … `bottom-right`,
 `center`, `fill`) and `inset`; taps pass through text and images to what's below (a HUD over a canvas)
 · `canvas({ height, width, fps, duration, alt, poster, fill, key, onPointer, wgsl, values })`: drawn by `draw` with 2D

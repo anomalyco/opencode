@@ -959,6 +959,87 @@ fn option(o: &Option<HostValue>) -> Option<SelectOption<'_>> {
 }
 
 /// One prop, when the format knows its key and its value has a shape the prop takes; otherwise it's left out.
+/// A table's `columns` (props 39 and 40), `rows` (41, as many cells per row as there are columns), `sort` (42) and a
+/// number `selected` (43) (`widgets-binary.md`), written from the whole node, since a row is as wide as `columns`.
+/// `columns` or `rows` that aren't lists of the right things are left out, and the client takes the view as invalid.
+pub(crate) fn table_props(s: &mut Streams, v: &HostValue) {
+    let Some(HostValue::Array(columns)) = field(v, "columns") else {
+        return;
+    };
+    let Some(labels) = columns
+        .iter()
+        .map(|c| match c.as_ref().and_then(|c| field(c, "label")) {
+            Some(HostValue::String(t)) => Some(lossy(t)),
+            _ => None,
+        })
+        .collect::<Option<Vec<_>>>()
+    else {
+        return;
+    };
+    s.tag(39, K_STRS);
+    s.int(labels.len() as u32);
+    for label in &labels {
+        s.str(label);
+    }
+    s.tag(40, K_F64S);
+    s.int(columns.len() as u32);
+    for c in columns.iter().flatten() {
+        let end =
+            matches!(field(c, "align"), Some(HostValue::String(a)) if a.as_str() == Some("end"));
+        s.f64(if end { 1.0 } else { 0.0 });
+    }
+    fn cell(c: Option<&HostValue>) -> Option<Cow<'_, str>> {
+        match c {
+            None | Some(HostValue::Undefined) => Some(Cow::Borrowed("")),
+            Some(HostValue::String(t)) => Some(lossy(t)),
+            Some(HostValue::Number(n)) if n.is_finite() => {
+                Some(Cow::Owned(crate::native::js_number(*n)))
+            }
+            _ => None,
+        }
+    }
+    let rows = match field(v, "rows") {
+        Some(HostValue::Array(rows)) => rows
+            .iter()
+            .map(|row| match row {
+                Some(HostValue::Array(cells)) if cells.len() <= labels.len() => (0..labels.len())
+                    .map(|i| cell(cells.get(i).and_then(Option::as_ref)))
+                    .collect::<Option<Vec<_>>>(),
+                _ => None,
+            })
+            .collect::<Option<Vec<_>>>(),
+        _ => None,
+    };
+    if let Some(rows) = rows {
+        s.tag(41, K_STRS);
+        s.int((rows.len() * labels.len()) as u32);
+        for c in rows.iter().flatten() {
+            s.str(c);
+        }
+    }
+    if let Some(sort) = field(v, "sort")
+        && let Some(column) = field(sort, "column").and_then(finite)
+    {
+        s.tag(42, K_F64S);
+        s.int(2);
+        s.f64(column);
+        s.f64(
+            if matches!(field(sort, "descending"), Some(HostValue::Bool(true))) {
+                1.0
+            } else {
+                0.0
+            },
+        );
+    }
+    if let Some(row) = field(v, "selected")
+        .and_then(finite)
+        .filter(|r| *r >= 0.0 && r.fract() == 0.0)
+    {
+        s.tag(43, K_INT);
+        s.int(row as u32);
+    }
+}
+
 pub(crate) fn prop(s: &mut Streams, key: &str, v: &HostValue) {
     let id = prop_id(key);
     if id == 0 {
@@ -1083,6 +1164,10 @@ pub(crate) fn write_node(s: &mut Streams, v: &HostValue, depth: usize) -> Result
         return Ok(());
     }
     let mut kids: &[Option<HostValue>] = &[];
+    // A table's columns and rows first, as the native walk writes them.
+    if t == T_TABLE {
+        table_props(s, v);
+    }
     for (k, v) in fields {
         let Some(k) = k.as_str() else { continue };
         match k {

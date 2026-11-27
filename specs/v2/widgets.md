@@ -96,7 +96,8 @@ programs use (`widget`, with `widget.gpu`, and `__widget_live`; `widgets-live.md
 - `ui`: pure node builders, one per node type. Required fields are positional, optional ones and handlers go in
   `props`: `column|row|carousel|card(props, children)` (or `(children)`), `text(text, props?)`, `markdown(text)`,
   `image(src, props?)`, `button(label, props?)`, `checkbox(label, checked, props?)`, `slider(props)` (`props` holds
-  `value`, `min`, `max`), `select(options, props?)` (options may be strings), `input(value, props?)`, `divider()`.
+  `value`, `min`, `max`), `select(options, props?)` (options may be strings), `input(value, props?)`, `divider()`,
+  `table(columns, rows, props?)` (columns may be strings).
   `children` may nest arrays and contain `null`/`undefined`/`false`, which are dropped (`cond && ui.text(...)`).
   Also `canvas(props)` (with `wgsl` in `props` for a GPU canvas) and `draw()`, the draw command builder (see Canvas). Authors never set
   `id`; a node's `key` (a string, a number or a boolean) names it among its siblings (Keys and depth).
@@ -264,10 +265,12 @@ the widget encoder of `widget-mobile`, Rune's reader, the web host) and the Type
   1. The root's path is `:` + enc(root `key`) when the root is an object (not an array) with a key (Keys and depth);
      otherwise `0`.
   2. A value that isn't an object, or is an array, goes out as in 5. An object (a node) goes out with its props in their
-     order, leaving out `key`, `id`, `pointer`, `onPress`, `onChange`, `onPointer` and `children`. If its `type` is in
-     the Events table, its handler prop is that type's (`onPress`, `onChange` or `onPointer`); when that prop is a
-     marker, or the type is `button`, `checkbox`, `slider`, `select` or `input`, or it is a `canvas` with a key, the
-     node gets `id` (its path) after its props. A `canvas` with a handler then gets `pointer: true`. If `children`
+     order, leaving out `key`, `id`, `pointer`, `selectable`, `sortable`, `onPress`, `onChange`, `onPointer`, `onSort`
+     and `children`. If its `type` is in the Events table, its handler props are that type's (`onPress`, `onChange` or
+     `onPointer`; a `table`'s `onPress` and `onSort`); when one is a marker, or the type is `button`, `checkbox`,
+     `slider`, `select` or `input`, or it is a `canvas` with a key, the node gets `id` (its path) after its props. A
+     `canvas` with a handler then gets `pointer: true`; a `table` gets `selectable: true` with an `onPress` and
+     `sortable: true` with an `onSort`, in that order. If `children`
      isn't `undefined`, the node gets `children` last: the items below.
   3. A `children` value that isn't an array is a list of one. Its items in order, at index `i`: a falsy item (a hole,
      `undefined`, `null`, `false`, `0`, `NaN`, `""`) is skipped and keeps its index; an array's items come in its place
@@ -282,7 +285,7 @@ the widget encoder of `widget-mobile`, Rune's reader, the web host) and the Type
   5. Every value goes out as JSON holds it: an `undefined` prop is left out and an `undefined` item is `null`, a
      non-finite number is `null`.
 - **Functions where none may go.** A marker in a host call's argument anywhere but the value of a node's `onPress`,
-  `onChange` or `onPointer` (a node: the view's root, or an object among `children` or an array in them) fails the
+  `onChange`, `onPointer` or `onSort` (a node: the view's root, or an object among `children` or an array in them) fails the
   call as a function did without `"mark"`: the host throws, from that call, its runtime's `TypeError` `Argument <n> to
   <name> contains a function, which cannot be passed to the host.`, with `<n>` the argument's position from 1 and
   `<name>` the function as the program called it (`__widget_emit`, `__host.post`, `__host.fetch`, ...). So a function
@@ -343,6 +346,8 @@ handlers and never see them. The value a client sends, and what the handler gets
 | `select` | `change`, `value: string` or `string[]` when `multiple` | `onChange(state, value)`, only known option values |
 | `input` | `change`, `value: string` (on commit / blur / debounce >= 300 ms) | `onChange(state, text)` |
 | `carousel` | `change`, `value: number` (new page index) | `onChange(state, index)` |
+| `table` | `press`, `value: number` (the row pressed, an index into `rows`) | `onPress(state, row)` |
+| `table` | `change`, `value: number` (the column whose header was pressed) | `onSort(state, column)` |
 | `canvas` | `pointer`, `value: { kind, x, y, width, height }` in the node's logical pixels; `move` only while down, at most once per frame (see Canvas) | `onPointer(state, p)`; under pointer capture `p` is `{ kind, dx, dy, button }`, or a wheel's `{ kind, dx, dy }` (`widgets-input.md`, Wheel) |
 | none (`id: ""`) | `key`, `focus`, `fullscreen`, `capture` | the hooks (Widget template source) |
 
@@ -373,6 +378,10 @@ type Node = (
       value?: string | string[]; multiple?: boolean }
   | { type: "input"; id: string; label?: string; value: string; placeholder?: string; multiline?: boolean }
   | { type: "divider" }
+  | { type: "table"; id?: string; columns: { label: string; align?: "start" | "end" }[]; rows: (string | number)[][];
+      sort?: { column: number; descending?: boolean }; selected?: number
+      selectable?: true  // set by the prelude when it has onPress: only then do its rows take presses
+      sortable?: true }  // set by the prelude when it has onSort: only then do its headers take presses
   | { type: "canvas"; id?: string; height: number; width?: number; fps?: number; duration?: number; alt?: string;
       poster?: string; wgsl?: string; values?: number[]      // values only with wgsl
       pointer?: true     // set by the prelude when it has onPointer: only then does it take input
@@ -393,6 +402,17 @@ Gap units are client-relative (TUI: rows/cols; GUI: 4/8/12 px).
 Image `src`: an `https:`/`http:` URL, a `data:` URI, or a path relative to the session's directory. Clients resolve
 relative paths through the server's existing file content endpoint for the session's location. TUI shows `alt` (or the
 file name) plus the source instead of pixels where it cannot draw images.
+
+Table: a grid of text with a header row, for data (a history, a comparison, a list of records). `columns` holds 1 to
+16 columns, each with a `label` and an `align` (`start`, the default, or `end`: use `end` for numbers); `rows` at most
+500 rows of at most that many cells, each a string or a number, which shows as JavaScript's `String(number)` (a row
+with fewer cells leaves the rest empty). `sort` marks the header of column `sort.column` with an ascending (or, with
+`descending`, a descending) indicator; the program sorts `rows` itself. `selected` highlights that row. A table with
+more columns or cells, a `sort.column` or `selected` outside them, or a cell that is neither a string nor a number is
+an invalid view. With `onPress`, pressing a row sends `press` with its index; with `onSort`, pressing a header sends
+`change` with the column's index. Clients draw it like the tables in their markdown (the same fonts, borders, header,
+colors and spacing), scroll it sideways when it is wider than the widget, and give it no height limit of its own; the
+TUI writes it as aligned text, a line per row.
 
 Carousel: one child visible at a time with paging (swipe on touch, arrows on desktop, left/right keys in the TUI) and a
 page indicator. A carousel without `id` pages locally; with one (it has an `onChange`) it also emits `change`.

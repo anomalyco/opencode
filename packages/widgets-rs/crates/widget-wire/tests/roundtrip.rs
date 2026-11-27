@@ -301,6 +301,7 @@ fn every_post_kind_decodes_as_its_json() {
   return [
     {{ type: "render", node: {EVERY_NODE}.view }},
     {{ type: "render", node: {{ type: "text", text: "small" }} }},
+    {{ type: "render", node: {{ type: "table", columns: [{{ label: "Day" }}, {{ label: "kg", align: "end" }}], rows: [["Nov 27", 79.6], ["Nov 26", 1e21]], sort: {{ column: 1, descending: true }}, selected: 1, id: "0/:t", selectable: true, sortable: true }} }},
     {{ type: "draw", id: "0/:chart", commands: {EVERY_COMMAND} }},
     {{ type: "draw", id: "", commands: [] }},
     {{ type: "frame" }},
@@ -327,11 +328,11 @@ fn every_post_kind_decodes_as_its_json() {
   }})
 }})()"##
     ));
-    assert_eq!(pairs.len(), 21);
+    assert_eq!(pairs.len(), 22);
     for (i, (bin, json)) in pairs.iter().enumerate() {
         assert_eq!(bin, json, "post {i}");
     }
-    let Post::FrameGpu(b) = &pairs[5].0 else {
+    let Post::FrameGpu(b) = &pairs[6].0 else {
         panic!()
     };
     assert_eq!(&b.bytes[..4], &0.5f32.to_le_bytes());

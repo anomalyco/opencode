@@ -693,11 +693,11 @@ const widget = (() => {
     // A wheel isn't where the pointer is held: `widget.pointer` keeps the last down, move or up.
     if (event.type === "pointer" && event.value?.kind !== "wheel")
       api.pointer = __widget_pointer(event.value) ?? api.pointer
-    const entry = __widget_find(live.root, event.id)
+    const entry = __widget_find(live.root, event.id, event.type)
     if (!entry || entry.event !== event.type) return
     const value = __widget_value(entry, event.value)
     if (value === undefined) return
-    if (event.type === "press") call(entry.handler)
+    if (event.type === "press" && entry.node.type !== "table") call(entry.handler)
     else call(entry.handler, value)
   }
   const accept = (message) => {

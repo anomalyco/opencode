@@ -1,0 +1,159 @@
+{
+  "name": "tables",
+  "source": "function view(state, data) {\n  return ui.column([ui.table([\"Day\", { label: \"kg\", align: \"end\" }, { label: \"kcal\", align: \"end\" }], [[\"Nov 27\", 79.6, 1150], [\"Nov 26\", 80.1]], { sort: { column: 0, descending: true }, selected: 0, onPress: (s, row) => s, onSort: (s, column) => s }), ui.table([\"a\"], [[\"x\"]], { key: \"sorted\", onSort: (s) => s }), ui.table([{ label: \"n\", align: \"end\" }], [[1e21], [0.1]])])\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "type": "column",
+    "children": [
+      {
+        "sort": {
+          "column": 0,
+          "descending": true
+        },
+        "selected": 0,
+        "onPress": "$function",
+        "onSort": "$function",
+        "type": "table",
+        "columns": [
+          {
+            "label": "Day"
+          },
+          {
+            "label": "kg",
+            "align": "end"
+          },
+          {
+            "label": "kcal",
+            "align": "end"
+          }
+        ],
+        "rows": [
+          [
+            "Nov 27",
+            79.6,
+            1150
+          ],
+          [
+            "Nov 26",
+            80.1
+          ]
+        ]
+      },
+      {
+        "key": "sorted",
+        "onSort": "$function",
+        "type": "table",
+        "columns": [
+          {
+            "label": "a"
+          }
+        ],
+        "rows": [
+          [
+            "x"
+          ]
+        ]
+      },
+      {
+        "type": "table",
+        "columns": [
+          {
+            "label": "n",
+            "align": "end"
+          }
+        ],
+        "rows": [
+          [
+            1e+21
+          ],
+          [
+            0.1
+          ]
+        ]
+      }
+    ]
+  },
+  "view": {
+    "type": "column",
+    "children": [
+      {
+        "sort": {
+          "column": 0,
+          "descending": true
+        },
+        "selected": 0,
+        "type": "table",
+        "columns": [
+          {
+            "label": "Day"
+          },
+          {
+            "label": "kg",
+            "align": "end"
+          },
+          {
+            "label": "kcal",
+            "align": "end"
+          }
+        ],
+        "rows": [
+          [
+            "Nov 27",
+            79.6,
+            1150
+          ],
+          [
+            "Nov 26",
+            80.1
+          ]
+        ],
+        "id": "0/0",
+        "selectable": true,
+        "sortable": true
+      },
+      {
+        "type": "table",
+        "columns": [
+          {
+            "label": "a"
+          }
+        ],
+        "rows": [
+          [
+            "x"
+          ]
+        ],
+        "id": "0/:sorted",
+        "sortable": true
+      },
+      {
+        "type": "table",
+        "columns": [
+          {
+            "label": "n",
+            "align": "end"
+          }
+        ],
+        "rows": [
+          [
+            1e+21
+          ],
+          [
+            0.1
+          ]
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/0": "press",
+    "0/:sorted": "change"
+  },
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
+}

@@ -58,7 +58,8 @@ The prelude exposes a `widget` object inside `main` (implemented with `__host`):
 handlers, and `widget.frame()`, `widget.sleep()` and `Promise.race` cover waiting.
 
 **Handlers.** The node props are the same as in step mode (`onPress`, `onChange`, `onPointer`; `widgets.md`, Events),
-but a live handler gets only the value (`onPress()`, `onChange(value)`, `onPointer(p)`) and its return value is
+but a live handler gets only the value (`onPress()`, `onChange(value)`, `onPointer(p)`; a table's `onPress(row)` and
+`onSort(column)`) and its return value is
 ignored: it changes the program's variables or calls `widget.*`. `render` keeps the node, whose handlers the prelude finds by
 the ids' paths, and whether the host found any. While
 the view has handlers, hooks are registered or a frame is awaited, the prelude keeps a `__host.receive()` in flight and

@@ -72,7 +72,7 @@ varint type, (varint tag, value)*, varint 0, [varint childCount, node × childCo
 ```
 
 **Types:** 1 column, 2 row, 3 text, 4 markdown, 5 image, 6 carousel, 7 card, 8 button, 9 checkbox, 10 slider,
-11 select, 12 input, 13 divider, 14 canvas, 16 stack. Containers: 1, 2, 6, 7, 16. Type 63 is a node type the host
+11 select, 12 input, 13 divider, 14 canvas, 16 stack, 17 table. Containers: 1, 2, 6, 7, 16. Type 63 is a node type the host
 doesn't know: the I stream holds 63 and then 0, and the S stream holds its name. Clients drop it like an unknown type
 today.
 
@@ -111,6 +111,13 @@ today.
 | 18 | min | f64 | 36 | place | int: top-left 0, top 1, top-right 2, left 3, center 4, right 5, bottom-left 6, bottom 7, bottom-right 8, fill 9 |
 | | | | 37 | inset | f64 (all sides) or f64 list of 4 (top, right, bottom, left) |
 | | | | 38 | gpu | int (a GPU canvas, `widgets-gpu.md`) |
+| | | | 39 | columns | str list: the columns' labels |
+| | | | 40 | columns' `align` | f64 list, one per column: start 0, end 1 |
+| | | | 41 | rows | str list: the cells row by row, each row as wide as `columns` (a missing cell is `""`; a number as `String(number)`) |
+| | | | 42 | sort | f64 list: column, then 1 when `descending` else 0 |
+| | | | 43 | table's `selected` | int: the row |
+| | | | 44 | selectable | int |
+| | | | 45 | sortable | int |
 
 **Rules for the encoder** (`write_node`). It writes the props the tree has, in its key order:
 - `type` and `children` are never props.
@@ -119,6 +126,9 @@ today.
   knows (the client then uses its default), or a value of the wrong JSON type.
 - It doesn't check required props: the client does, as today, and an invalid view stays a program error.
 - `place`/`inset` go on any node. They mean something only for a stack's children: the reader keeps them per child.
+- A table's `columns` go out as props 39 and 40, its `rows` as prop 41 (as many cells per row as there are columns),
+  `sort` as 42 and a number `selected` as 43. A table whose `columns` or `rows` aren't lists, or whose cells aren't
+  strings or numbers, has them left out, and the client takes the view as invalid.
 
 **Rules for the decoder.** It skips a tag whose id it doesn't know, by kind. That is the forward-compatibility rule:
 new props get new ids, and a changed meaning gets a new id.

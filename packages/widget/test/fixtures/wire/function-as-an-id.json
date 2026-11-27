@@ -12,6 +12,6 @@
   },
   "error": {
     "view": false,
-    "message": "TypeError: Argument 1 to __widget_emit contains a function, which cannot be passed to the host. (line 335, col 5)"
+    "message": "TypeError: Argument 1 to __widget_emit contains a function, which cannot be passed to the host. (line 352, col 5)"
   }
 }

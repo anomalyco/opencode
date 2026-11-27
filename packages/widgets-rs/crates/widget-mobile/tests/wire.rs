@@ -762,7 +762,7 @@ fn native_steps_give_the_conformance_fixtures() {
             "{name}"
         );
     }
-    assert_eq!(n, 58);
+    assert_eq!(n, 59);
 }
 
 /// A fixture's JSON, read without serde_json's recursion limit: views nest up to 150 levels (`depth-150`).

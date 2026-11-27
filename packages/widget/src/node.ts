@@ -92,6 +92,21 @@ export interface Input {
 export interface Divider {
   readonly type: "divider"
 }
+/** Text in rows and columns with a header (see the spec's Table): 1 to 16 columns, at most 500 rows. */
+export interface Table {
+  readonly type: "table"
+  readonly id?: string
+  readonly columns: ReadonlyArray<{ readonly label: string; readonly align?: "start" | "end" }>
+  /** At most as many cells as columns; a number shows as `String(number)`. */
+  readonly rows: ReadonlyArray<ReadonlyArray<string | number>>
+  /** The column whose header shows the sort indicator; the program sorts `rows`. */
+  readonly sort?: { readonly column: number; readonly descending?: boolean }
+  readonly selected?: number
+  /** Set by the prelude when the table has an `onPress` handler: only then do its rows take presses. */
+  readonly selectable?: true
+  /** Set by the prelude when the table has an `onSort` handler: only then do its headers take presses. */
+  readonly sortable?: true
+}
 /**
  * A drawing surface, drawn one of two ways, never both: with 2D commands from the widget template's
  * `draw(state, data, frame)`, or, when it has `wgsl`, by that WGSL fragment shader on the GPU (see the spec's Canvas
@@ -161,6 +176,7 @@ export type Node = (
   | Select
   | Input
   | Divider
+  | Table
   | Canvas
   | Stack
 ) &
@@ -447,6 +463,36 @@ export const Node: Schema.Codec<Node> = Schema.Union([
   }),
   Schema.Struct({ type: Schema.Literal("divider"), ...layer }),
   Schema.Struct({
+    type: Schema.Literal("table"),
+    ...layer,
+    id: optional(Schema.String),
+    columns: Schema.Array(
+      Schema.Struct({ label: Schema.String, align: optional(Schema.Literals(["start", "end"])) }),
+    ).check(Schema.isMinLength(1), Schema.isMaxLength(16)),
+    rows: Schema.Array(Schema.Array(Schema.Union([Schema.String, Schema.Finite]))).check(Schema.isMaxLength(500)),
+    sort: optional(Schema.Struct({ column: Schema.Int, descending: optional(Schema.Boolean) })),
+    selected: optional(Schema.Int),
+    selectable: optional(Schema.Literal(true)),
+    sortable: optional(Schema.Literal(true)),
+  }).check(
+    Schema.makeFilter(
+      (table: { readonly columns: ReadonlyArray<unknown>; readonly rows: ReadonlyArray<ReadonlyArray<unknown>> }) =>
+        table.rows.every((row) => row.length <= table.columns.length) || "a row has more cells than there are columns",
+    ),
+    Schema.makeFilter(
+      (table: { readonly columns: ReadonlyArray<unknown>; readonly sort?: { readonly column: number } }) =>
+        table.sort === undefined ||
+        (table.sort.column >= 0 && table.sort.column < table.columns.length) ||
+        "`sort.column` must be one of the columns",
+    ),
+    Schema.makeFilter(
+      (table: { readonly rows: ReadonlyArray<unknown>; readonly selected?: number }) =>
+        table.selected === undefined ||
+        (table.selected >= 0 && table.selected < table.rows.length) ||
+        "`selected` must be one of the rows",
+    ),
+  ),
+  Schema.Struct({
     type: Schema.Literal("canvas"),
     ...layer,
     id: optional(Schema.String),
@@ -490,6 +536,7 @@ export const types: ReadonlyArray<Node["type"]> = [
   "select",
   "input",
   "divider",
+  "table",
   "canvas",
   "stack",
 ]

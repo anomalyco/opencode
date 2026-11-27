@@ -4,7 +4,10 @@ import { Host } from "psychoscript"
 // program built it, which crossed under `translate: { functions: "mark" }` with `Host.functionMarker` where each
 // function was.
 
-const CONTROLS: Record<string, { readonly handler: string; readonly always?: boolean; readonly keyed?: boolean }> = {
+const CONTROLS: Record<
+  string,
+  { readonly handler: string; readonly sort?: string; readonly always?: boolean; readonly keyed?: boolean }
+> = {
   button: { handler: "onPress", always: true },
   card: { handler: "onPress" },
   checkbox: { handler: "onChange", always: true },
@@ -13,9 +16,12 @@ const CONTROLS: Record<string, { readonly handler: string; readonly always?: boo
   input: { handler: "onChange", always: true },
   carousel: { handler: "onChange" },
   canvas: { handler: "onPointer", keyed: true },
+  table: { handler: "onPress", sort: "onSort" },
 }
 
-const HANDLERS = new Set(["onPress", "onChange", "onPointer"])
+const HANDLERS = new Set(["onPress", "onChange", "onPointer", "onSort"])
+// Props the host sets from the handlers, never the program's.
+const SET = new Set(["key", "id", "pointer", "selectable", "sortable"])
 
 /** The most levels a view nests (specs/v2/widgets.md, Keys and depth), and the failures of a view that breaks the rules. */
 export const LEVELS = 100
@@ -115,17 +121,20 @@ export function tree(root: unknown, label: string): Tree {
     for (const name in value) {
       if (name === "children" || HANDLERS.has(name)) continue
       const item = clean(value[name], label, true)
-      if (item !== omitted && name !== "key" && name !== "id" && name !== "pointer") out[name] = item
+      if (item !== omitted && !SET.has(name)) out[name] = item
     }
     const control =
       typeof value.type === "string" && Object.hasOwn(CONTROLS, value.type) ? CONTROLS[value.type] : undefined
     if (control) {
       const handled = value[control.handler] === marker
+      const sorted = control.sort !== undefined && value[control.sort] === marker
       const canvas = control.keyed === true && keyed
-      if (handled || control.always || canvas) {
+      if (handled || sorted || control.always || canvas) {
         out.id = path
-        if (handled) handlers.add(path)
+        if (handled || sorted) handlers.add(path)
         if (value.type === "canvas" && handled) out.pointer = true
+        if (value.type === "table" && handled) out.selectable = true
+        if (sorted) out.sortable = true
         if (canvas && !canvases.has(String(value.key)))
           canvases.set(String(value.key), { id: path, wgsl: typeof value.wgsl === "string", gpu: value.gpu === true })
       }

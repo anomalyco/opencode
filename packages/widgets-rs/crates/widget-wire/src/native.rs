@@ -10,7 +10,7 @@ use std::fmt::Write as _;
 use psychoscript::HostValue;
 
 use crate::encode::{Streams, field, json_value, prop, write_node};
-use crate::schema::{K_INT, K_STR, T_UNKNOWN, is_container, type_id};
+use crate::schema::{K_INT, K_STR, T_TABLE, T_UNKNOWN, is_container, type_id};
 
 /// The most levels a view nests (`widgets.md`, Keys and depth).
 pub const LEVELS: usize = 100;
@@ -51,6 +51,8 @@ pub(crate) enum Stop {
 struct Control {
     handler: &'static str,
     event: &'static str,
+    /// A table's second handler, a header's press (`change`).
+    sort: Option<&'static str>,
     always: bool,
     canvas: bool,
 }
@@ -62,18 +64,20 @@ fn control(ty: &str) -> Option<Control> {
         "checkbox" | "slider" | "select" | "input" => ("onChange", "change", true, false),
         "carousel" => ("onChange", "change", false, false),
         "canvas" => ("onPointer", "pointer", false, true),
+        "table" => ("onPress", "press", false, false),
         _ => return None,
     };
     Some(Control {
         handler,
         event,
+        sort: (ty == "table").then_some("onSort"),
         always,
         canvas,
     })
 }
 
 fn handler_prop(k: &str) -> bool {
-    matches!(k, "onPress" | "onChange" | "onPointer")
+    matches!(k, "onPress" | "onChange" | "onPointer" | "onSort")
 }
 
 /// Whether `v` holds a function marker anywhere.
@@ -267,6 +271,12 @@ impl Walk {
             Some(s) if t != T_UNKNOWN => Some(s),
             _ => None,
         };
+        // A table's columns and rows first (`encode::table_props`).
+        if t == T_TABLE
+            && let Some(st) = props.as_deref_mut()
+        {
+            crate::encode::table_props(st, &json_value(v));
+        }
         for (k, pv) in fields {
             let Some(k) = k.as_str() else {
                 if marked(pv) {
@@ -281,15 +291,21 @@ impl Walk {
                 return Err(Stop::Function);
             }
             if let Some(st) = props.as_deref_mut()
-                && !matches!(k, "type" | "key" | "id" | "pointer")
+                && !matches!(
+                    k,
+                    "type" | "key" | "id" | "pointer" | "selectable" | "sortable"
+                )
             {
                 prop(st, k, &json_value(pv));
             }
         }
         if let Some(c) = control(&name) {
             let handled = matches!(field(v, c.handler), Some(HostValue::FunctionMarker));
+            let sorted = c
+                .sort
+                .is_some_and(|k| matches!(field(v, k), Some(HostValue::FunctionMarker)));
             let keyed = if c.canvas { key(v)? } else { None };
-            if handled || c.always || keyed.is_some() {
+            if handled || sorted || c.always || keyed.is_some() {
                 if let Some(st) = props.as_deref_mut() {
                     st.tag(10, K_STR);
                     st.str(&self.path);
@@ -297,9 +313,20 @@ impl Walk {
                         st.tag(35, K_INT);
                         st.int(1);
                     }
+                    if t == T_TABLE && handled {
+                        st.tag(44, K_INT);
+                        st.int(1);
+                    }
+                    if sorted {
+                        st.tag(45, K_INT);
+                        st.int(1);
+                    }
                 }
-                if handled {
-                    self.found.handlers.push((self.path.clone(), c.event));
+                // A table with both handlers is listed by its row press.
+                if handled || sorted {
+                    self.found
+                        .handlers
+                        .push((self.path.clone(), if handled { c.event } else { "change" }));
                 }
                 if let Some(k) = keyed {
                     let k = key_string(k);

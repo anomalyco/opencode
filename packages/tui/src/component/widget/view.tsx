@@ -323,6 +323,9 @@ function NodeView(props: { item: Item }): JSX.Element {
       <Match when={node().type === "divider"}>
         <DividerNode />
       </Match>
+      <Match when={node().type === "table"}>
+        <TableNode item={props.item} />
+      </Match>
       <Match when={node().type === "canvas"}>
         <SurfaceNode item={props.item} />
       </Match>
@@ -801,6 +804,47 @@ function InputNode(props: { item: Item }) {
           </Show>
         </box>
       </Show>
+    </box>
+  )
+}
+
+// A terminal writes a table as aligned text, a line per row (widgets.md, Table): the header in bold with the sort
+// indicator, numbers aligned to the end of their column.
+function TableNode(props: { item: Item }) {
+  const theme = useTheme()
+  const node = () => props.item.node as Extract<Node, { type: "table" }>
+  const lines = () => {
+    const table = node()
+    const header = table.columns.map((column, index) =>
+      table.sort?.column === index ? column.label + (table.sort.descending ? " ▼" : " ▲") : column.label,
+    )
+    const rows = table.rows.map((row) => table.columns.map((_, index) => String(row[index] ?? "")))
+    const widths = header.map((label, index) => Math.max(label.length, ...rows.map((row) => row[index]!.length)))
+    const line = (cells: ReadonlyArray<string>) =>
+      cells
+        .map((cell, index) =>
+          table.columns[index]!.align === "end" ? cell.padStart(widths[index]!) : cell.padEnd(widths[index]!),
+        )
+        .join("  ")
+        .trimEnd()
+    return { header: line(header), rows: rows.map(line) }
+  }
+  return (
+    <box flexDirection="column" flexShrink={0}>
+      <text fg={theme.text.base} attributes={TextAttributes.BOLD} wrapMode="none">
+        {lines().header}
+      </text>
+      <For each={lines().rows}>
+        {(row, index) => (
+          <text
+            fg={index() === node().selected ? theme.text.base : theme.markdown.text}
+            attributes={index() === node().selected ? TextAttributes.BOLD : undefined}
+            wrapMode="none"
+          >
+            {row}
+          </text>
+        )}
+      </For>
     </box>
   )
 }

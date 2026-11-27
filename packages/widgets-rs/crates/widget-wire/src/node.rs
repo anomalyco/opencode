@@ -55,6 +55,53 @@ pub enum ButtonVariant {
     Secondary,
 }
 
+/// Where a table column's cells sit.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ColumnAlign {
+    End,
+    #[default]
+    #[serde(other)]
+    Start,
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct TableColumn {
+    pub label: String,
+    #[serde(default)]
+    pub align: ColumnAlign,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+pub struct TableSort {
+    pub column: usize,
+    #[serde(default)]
+    pub descending: bool,
+}
+
+/// A table cell as it shows: a string, or a number as `String(number)`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Cell(pub String);
+
+impl<'de> Deserialize<'de> for Cell {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Cell, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            Text(String),
+            Number(f64),
+        }
+        Ok(Cell(match Raw::deserialize(d)? {
+            Raw::Text(t) => t,
+            Raw::Number(n) => crate::native::js_number(n),
+        }))
+    }
+}
+
+/// A table's limits (`widgets.md`, Table).
+pub const MAX_COLUMNS: usize = 16;
+pub const MAX_ROWS: usize = 500;
+
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct SelectOption {
     pub value: String,
@@ -187,6 +234,21 @@ pub enum Node {
         multiline: bool,
     },
     Divider,
+    /// Rows of text under a header (`widgets.md`, Table). Decoded, every row is as wide as `columns`.
+    Table {
+        #[serde(default)]
+        id: Option<String>,
+        columns: Vec<TableColumn>,
+        rows: Vec<Vec<Cell>>,
+        #[serde(default)]
+        sort: Option<TableSort>,
+        #[serde(default)]
+        selected: Option<usize>,
+        #[serde(default)]
+        selectable: bool,
+        #[serde(default)]
+        sortable: bool,
+    },
     Canvas {
         #[serde(default)]
         id: Option<String>,
@@ -260,6 +322,31 @@ impl Node {
     pub(crate) fn check(&self) -> Result<(), String> {
         let mut bad = None;
         self.walk(&mut |n| {
+            if let Node::Table {
+                columns,
+                rows,
+                sort,
+                selected,
+                ..
+            } = n
+            {
+                let why = if columns.is_empty() || columns.len() > MAX_COLUMNS {
+                    Some(format!("a table has 1 to {MAX_COLUMNS} columns"))
+                } else if rows.len() > MAX_ROWS {
+                    Some(format!("a table has at most {MAX_ROWS} rows"))
+                } else if rows.iter().any(|r| r.len() > columns.len()) {
+                    Some("a row has more cells than there are columns".to_owned())
+                } else if sort.is_some_and(|s| s.column >= columns.len()) {
+                    Some("`sort.column` must be one of the columns".to_owned())
+                } else if selected.is_some_and(|r| r >= rows.len()) {
+                    Some("`selected` must be one of the rows".to_owned())
+                } else {
+                    None
+                };
+                if let Some(why) = why {
+                    bad.get_or_insert(why);
+                }
+            }
             if let Node::Canvas {
                 wgsl, values, gpu, ..
             } = n

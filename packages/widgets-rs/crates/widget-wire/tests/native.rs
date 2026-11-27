@@ -37,7 +37,7 @@ fn fixtures() -> Vec<(String, Value)> {
         })
         .collect();
     list.sort_by(|a, b| a.0.cmp(&b.0));
-    assert_eq!(list.len(), 58);
+    assert_eq!(list.len(), 59);
     list
 }
 
@@ -107,7 +107,7 @@ fn steps_encode_the_fixtures() {
         }
         checked += 1;
     }
-    assert_eq!(checked, 57);
+    assert_eq!(checked, 58);
 }
 
 #[test]

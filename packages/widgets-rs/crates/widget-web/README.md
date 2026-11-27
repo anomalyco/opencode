@@ -54,7 +54,7 @@ error raised in the preludes, a batch's `at` and an invalid draw are then at the
 89 shared cases of `packages/widget/test/fixtures/draw.json`). A key that isn't a string, number or boolean, or a view over 100 levels, fails with type `view` (a step
 once it has run; a live run at once); a function anywhere but a node's handler props, in any host call's argument,
 throws the runtime's `TypeError` `Argument <n> to <name> contains a function, which cannot be passed to the host.`,
-located at the call (`HostError::located`, sync and async calls alike), as the host's other errors are. `tests/tree.rs` runs the 58 conformance fixtures (`packages/widget/test/fixtures/wire`). The tests read the fixtures
+located at the call (`HostError::located`, sync and async calls alike), as the host's other errors are. `tests/tree.rs` runs the 59 conformance fixtures (`packages/widget/test/fixtures/wire`). The tests read the fixtures
 and preludes in place from `packages/widget`.
 
 A live run has `__host.post/receive/sleep/now/fetch` as in `psychoscript-mobile` (and `widgets-live.md`), but nothing
