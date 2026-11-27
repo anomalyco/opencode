@@ -48,9 +48,9 @@ OpenCode підтримує JSON і JSONC. Використовуйте JSONC, �
 └── skills/deploy/SKILL.md
 ```
 
-На macOS OpenCode також читає керовані налаштування (managed preferences), які MDM-інструменти
-розгортають для домену `ai.opencode.managed`. Профіль конкретного користувача перекриває
-загальномашинний:
+На macOS OpenCode також читає керовані налаштування, які інструменти MDM розгортають
+для домену `ai.opencode.managed`. Профіль окремого користувача має перевагу над
+профілем для всіх користувачів пристрою:
 
 ```text
 /Library/Managed Preferences/<user>/ai.opencode.managed.plist

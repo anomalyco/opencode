@@ -40,7 +40,7 @@ $ ssh -L 49374:127.0.0.1:49374 my-server
 | macOS, Linux і WSL    | 49374        |
 | Windows               | 28894        |
 
-Windows резервує порти від 49152 і вище, а WSL у режимі mirrored networking резервує
+Windows резервує порти від 49152 і вище, а WSL у режимі дзеркального підключення до мережі резервує
 ще один блок нижче. Виведіть поточну адресу за допомогою
 `opencode service status`:
 
@@ -138,7 +138,7 @@ $ OPENCODE_PASSWORD="a-long-secret" opencode serve --port 4096
 $ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
 ```
 
-Інші HTTP-клієнти використовують Basic auth. Ім'я користувача завжди `opencode`, і змінити можна
+Інші HTTP-клієнти використовують автентифікацію HTTP Basic. Ім'я користувача завжди `opencode`, і змінити можна
 лише пароль.
 
 ```bash

@@ -233,7 +233,7 @@ OpenCode ідентифікує себе серверу авторизації �
 | --- | --- |
 | Попередньо зареєстрований клієнт | Налаштовано `oauth.client_id`. |
 | [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents) (CIMD) | Сервер авторизації підтримує CIMD і публічні клієнти, а `oauth.redirect_uri` не задано. |
-| [Dynamic client registration](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | Жоден із наведених вище варіантів не підходить. OpenCode реєструє клієнта й використовує його для наступних входів, слухаючи порт, указаний під час реєстрації. Якщо порт зайнято, OpenCode повторює реєстрацію. |
+| [Динамічна реєстрація клієнта](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | Жоден із наведених вище варіантів не підходить. OpenCode реєструє клієнта й використовує його для наступних входів, слухаючи порт, указаний під час реєстрації. Якщо порт зайнято, OpenCode повторює реєстрацію. |
 
 Сервер авторизації вмикає CIMD через свої метадані:
 
