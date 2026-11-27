@@ -11348,6 +11348,61 @@ pub struct MachineInfoConnection {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MachineInfoRefusedReasonProtocolMismatch {
+    pub r#type: tag::ProtocolMismatch,
+    pub worker: i64,
+    pub home: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MachineInfoRefusedReasonInvalidHello {
+    pub r#type: tag::InvalidHello,
+    pub issue: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum MachineInfoRefusedReason {
+    ProtocolMismatch(MachineInfoRefusedReasonProtocolMismatch),
+    InvalidHello(MachineInfoRefusedReasonInvalidHello),
+    /// A member this client does not know, kept as it arrived.
+    Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for MachineInfoRefusedReason {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl MachineInfoRefusedReason {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+        match raw.field("type").as_str() {
+            Some("protocol-mismatch") => raw.variant().map(Self::ProtocolMismatch),
+            Some("invalid-hello") => raw.variant().map(Self::InvalidHello),
+            _ => raw.unknown().map(Self::Unknown),
+        }
+    }
+}
+
+impl MachineInfoRefusedReason {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::ProtocolMismatch(value) => value.r#type.as_str(),
+            Self::InvalidHello(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MachineInfoRefused {
+    pub at: i64,
+    pub reason: MachineInfoRefusedReason,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct MachineInfo {
     pub id: String,
     pub online: bool,
@@ -11358,6 +11413,8 @@ pub struct MachineInfo {
     pub arch: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub connection: Option<MachineInfoConnection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refused: Option<MachineInfoRefused>,
 }
 
 /// Output of `Client::experimental_machine_list`.
@@ -14145,18 +14202,20 @@ pub mod tag {
         FormCreated = "form.created", FormReplied = "form.replied", Git = "git", Idle = "idle", Image = "image",
         Inline = "inline", InstallationUpdateAvailable = "installation.update-available",
         InstallationUpdated = "installation.updated", Integer = "integer", IntegrationUpdated = "integration.updated",
-        Iroh = "iroh", Json = "json", Key = "key", Local = "local", LocationShutdown = "location.shutdown",
-        LocationSwitched = "location-switched", LogSynced = "log.synced", McpResourcesChanged = "mcp.resources.changed",
-        McpStatusChanged = "mcp.status.changed", ModelSwitched = "model-switched", ModelUpdated = "model.updated",
-        ModelsDevRefreshed = "models-dev.refreshed", Move = "move", Multiselect = "multiselect", Native = "native",
-        NeedsAuth = "needs_auth", None = "none", Number = "number", Oauth = "oauth", Package = "package",
-        Pending = "pending", PermissionAsked = "permission.asked", PermissionReplied = "permission.replied",
+        InvalidHello = "invalid-hello", Iroh = "iroh", Json = "json", Key = "key", Local = "local",
+        LocationShutdown = "location.shutdown", LocationSwitched = "location-switched", LogSynced = "log.synced",
+        McpResourcesChanged = "mcp.resources.changed", McpStatusChanged = "mcp.status.changed",
+        ModelSwitched = "model-switched", ModelUpdated = "model.updated", ModelsDevRefreshed = "models-dev.refreshed",
+        Move = "move", Multiselect = "multiselect", Native = "native", NeedsAuth = "needs_auth", None = "none",
+        Number = "number", Oauth = "oauth", Package = "package", Pending = "pending",
+        PermissionAsked = "permission.asked", PermissionReplied = "permission.replied",
         PersistentPtyAdded = "persistent-pty.added", PersistentPtyRemoved = "persistent-pty.removed",
         PersistentPtyUpdated = "persistent-pty.updated", PluginUpdated = "plugin.updated", Predicate = "predicate",
-        ProjectUpdated = "project.updated", Prompt = "prompt", ProviderUpdated = "provider.updated",
-        PtyCreated = "pty.created", PtyDeleted = "pty.deleted", PtyExited = "pty.exited", PtyUpdated = "pty.updated",
-        Reasoning = "reasoning", ReferenceUpdated = "reference.updated", Remote = "remote", Retry = "retry",
-        Running = "running", Score = "score", Sdk = "sdk", ServerConnected = "server.connected",
+        ProjectUpdated = "project.updated", Prompt = "prompt", ProtocolMismatch = "protocol-mismatch",
+        ProviderUpdated = "provider.updated", PtyCreated = "pty.created", PtyDeleted = "pty.deleted",
+        PtyExited = "pty.exited", PtyUpdated = "pty.updated", Reasoning = "reasoning",
+        ReferenceUpdated = "reference.updated", Remote = "remote", Retry = "retry", Running = "running",
+        Score = "score", Sdk = "sdk", ServerConnected = "server.connected",
         SessionAgentSelected = "session.agent.selected", SessionArchived = "session.archived",
         SessionCompactionDelta = "session.compaction.delta", SessionCompactionEnded = "session.compaction.ended",
         SessionCompactionFailed = "session.compaction.failed", SessionCompactionStarted = "session.compaction.started",

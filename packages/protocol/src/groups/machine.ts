@@ -28,6 +28,18 @@ export const MachineInfo = Schema.Struct({
       rtt: Schema.optionalKey(Schema.Number),
     }),
   ),
+  /** The machine's last connection was refused after it proved its key, and it has not connected since. */
+  refused: Schema.optionalKey(
+    Schema.Struct({
+      /** Milliseconds since the epoch. */
+      at: Schema.Int,
+      reason: Schema.Union([
+        /** The worker speaks a different link protocol than this server: update whichever is older. */
+        Schema.Struct({ type: Schema.Literal("protocol-mismatch"), worker: Schema.Int, home: Schema.Int }),
+        Schema.Struct({ type: Schema.Literal("invalid-hello"), issue: Schema.String }),
+      ]),
+    }),
+  ),
 }).annotate({ identifier: "Machine.Info" })
 export type MachineInfo = typeof MachineInfo.Type
 

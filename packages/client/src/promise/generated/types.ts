@@ -380,6 +380,10 @@ export type MachineInfo = {
   os?: string
   arch?: string
   connection?: { kind: "websocket" | "iroh"; path?: "direct" | "relayed"; rtt?: number }
+  refused?: {
+    at: number
+    reason: { type: "protocol-mismatch"; worker: number; home: number } | { type: "invalid-hello"; issue: string }
+  }
 }
 
 export type MachineReach = { type: "url"; url: string }

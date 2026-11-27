@@ -1,10 +1,10 @@
 export * as Link from "./link.js"
 
-import { Effect, Schema } from "effect"
+import { Effect, Result, Schema } from "effect"
 import type { Environment } from "../environment/index.js"
 import { Frames } from "./frames.js"
 import { Identity } from "./identity.js"
-import type { Machine } from "./index.js"
+import { Machine } from "./index.js"
 import { Machines } from "./machines.js"
 import { Noise } from "./noise.js"
 import { FromWorker, Hello, ToWorker } from "./wire.js"
@@ -141,23 +141,48 @@ export const accept = Effect.fn("Link.accept")(
   Effect.catchCause(() => Effect.fail(new Refused())),
 )
 
-export const decodeHello = Effect.fnUntraced(function* (machine: Environment.ID, bytes: Uint8Array) {
-  const message = yield* helloMessage.decode(bytes)
-  const version = yield* Schema.decodeUnknownEffect(helloProtocol)(message)
-  if (version.protocol !== PROTOCOL) {
-    yield* Effect.logWarning(
-      `Machine ${machine} uses protocol ${version.protocol}; this home requires protocol ${PROTOCOL}. The worker and the home must be the same version.`,
-    )
-    return yield* new Refused()
-  }
-  return yield* Schema.decodeUnknownEffect(Hello)(message)
-})
+export type HelloResult =
+  | { readonly _tag: "Accepted"; readonly hello: Hello }
+  | { readonly _tag: "Rejected"; readonly refusal: Machine.Refusal }
 
-const serveWith = Effect.fnUntraced(function* (carrier: Carrier, authenticate: Authenticate, fixed: Fixed) {
+const rejected = (refusal: Machine.Refusal): HelloResult => ({ _tag: "Rejected", refusal })
+
+/** A worker's first message, read once: its hello, or why it is refused. */
+export const parseHello = (bytes: Uint8Array): HelloResult => {
+  const json = Result.try(() => utf8.decode(bytes))
+  if (Result.isFailure(json)) return rejected({ _tag: "InvalidHello", issue: "not UTF-8" })
+  const version = decodeProtocol(json.success)
+  if (Result.isFailure(version)) return rejected({ _tag: "InvalidHello", issue: version.failure.message })
+  if (version.success.protocol !== PROTOCOL)
+    return rejected({ _tag: "ProtocolMismatch", worker: version.success.protocol, home: PROTOCOL })
+  const hello = decodeHelloJson(json.success)
+  if (Result.isFailure(hello)) return rejected({ _tag: "InvalidHello", issue: hello.failure.message })
+  return { _tag: "Accepted", hello: hello.success }
+}
+
+/** Logs why a worker's hello was refused, and refuses it. */
+export const reject = (machine: Environment.ID, refusal: Machine.Refusal) =>
+  Effect.logWarning(`Refused machine ${machine}: ${Machine.describeRefusal(refusal)}`).pipe(
+    Effect.andThen(Effect.fail(new Refused())),
+  )
+
+/** Told that a machine that passed the handshake was refused. */
+type Refuse = (machine: Environment.ID, refusal: Machine.Refusal) => Effect.Effect<void>
+
+const serveWith = Effect.fnUntraced(function* (
+  carrier: Carrier,
+  authenticate: Authenticate,
+  fixed: Fixed,
+  refuse: Refuse = () => Effect.void,
+) {
   const link = yield* Effect.gen(function* () {
     const accepted = yield* handshake(carrier, authenticate, fixed)
-    const hello = yield* decodeHello(accepted.machine, yield* Frames.read(carrier, accepted.receive))
-    return { ...accepted, hello }
+    const parsed = parseHello(yield* Frames.read(carrier, accepted.receive))
+    if (parsed._tag === "Rejected") {
+      yield* refuse(accepted.machine, parsed.refusal)
+      return yield* reject(accepted.machine, parsed.refusal)
+    }
+    return { ...accepted, hello: parsed.hello }
   }).pipe(
     Effect.timeout(DEADLINE),
     Effect.catchCause(() => Effect.fail(new Refused())),
@@ -179,7 +204,7 @@ const serveWith = Effect.fnUntraced(function* (carrier: Carrier, authenticate: A
  */
 export const serve = Effect.fn("Link.serve")(function* (carrier: Carrier, fixed: Fixed = {}) {
   const machines = yield* Machines.Service
-  return yield* serveWith(carrier, authenticateMachine(machines), fixed)
+  return yield* serveWith(carrier, authenticateMachine(machines), fixed, machines.refuse)
 })
 
 /**
@@ -294,8 +319,10 @@ const json = <T>(schema: Schema.Codec<T, string>): Frames.Codec<T, T> => ({
     ),
   encode: (message) => Effect.map(Schema.encodeEffect(schema)(message), text),
 })
-const helloMessage = json(Schema.fromJsonString(Schema.Unknown))
-const helloProtocol = Schema.Struct({ type: Schema.Literal("hello"), protocol: Schema.Number })
+const decodeProtocol = Schema.decodeUnknownResult(
+  Schema.fromJsonString(Schema.Struct({ type: Schema.Literal("hello"), protocol: Schema.Int })),
+)
+const decodeHelloJson = Schema.decodeUnknownResult(Schema.fromJsonString(Hello))
 const fromWorker = json(Schema.fromJsonString(FromWorker))
 const toWorker = json(Schema.fromJsonString(ToWorker))
 

@@ -89,7 +89,7 @@ export const Plugin = {
         editor.add({
           name: "list",
           description:
-            "List the machines: each one's name (`id`), whether it is connected (`online`), whether it has joined (`paired`, false while it is still waiting to join), and its system and chip (`os`, `arch`) while it is connected.",
+            "List the machines: each one's name (`id`), whether it is connected (`online`), whether it has joined (`paired`, false while it is still waiting to join), its system and chip (`os`, `arch`) while it is connected, and why its last connection was refused (`refused`) when that is why it is offline.",
           input: Schema.Struct({}),
           output: ListOutput,
           options: { namespace: "machine", codemode: true },
