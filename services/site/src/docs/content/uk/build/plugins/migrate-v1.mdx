@@ -96,8 +96,33 @@ export default Plugin.define({
 `ctx.location` описує Location, де завантажився цей екземпляр плагіна. Це не Location кожної сесії чи події,
 які плагін може спостерігати. Читайте дані сесії або події, коли ця різниця важлива.
 
-Контекст надає значно більше доменів, ніж перелічено в таблиці, зокрема каталоги, команди, інтеграції, сервери MCP,
+Контекст надає значно більше доменів, ніж перелічено в таблиці, зокрема команди, інтеграції, сервери MCP,
 посилання, навички, сховище, VCS, робочі дерева й вебпошук. Дивіться [повний контекст плагіна](/build/plugins/server#api).
+
+### Перехід із домену каталогу
+
+У попередніх збірках плагіни публікували провайдерів і моделі через `ctx.catalog`. Тепер OpenCode надає
+окремі домени `ctx.provider` і `ctx.model`, тож плагін, який викликає `ctx.catalog.transform`, не завантажиться.
+
+| Попередній API каталогу                         | Поточний відповідник                                                     |
+| --------------------------------------------- | ---------------------------------------------------------------------------- |
+| `ctx.catalog.transform(draft => …)`           | `ctx.provider.transform(editor => …)` і `ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)`               | `editor.update(id, fn)` у `ctx.provider`                                  |
+| `draft.model.update(providerID, modelID, fn)` | `editor.update(providerID, modelID, fn)` у `ctx.model`                    |
+| `ctx.catalog.reload()`                        | `ctx.provider.reload()` і `ctx.model.reload()`                            |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+Повний опис API редакторів дивіться в розділах [Провайдери](/build/plugins/server#providers) і [Моделі](/build/plugins/server#models).
 
 ## Реєстрація хуків у `setup`
 

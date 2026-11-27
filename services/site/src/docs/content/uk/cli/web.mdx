@@ -144,3 +144,27 @@ $ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
 ```bash
 $ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
 ```
+
+`opencode service set password` діє лише для керованого фонового сервісу. `opencode serve` читає пароль зі змінної
+`OPENCODE_PASSWORD`, а якщо її не задано, генерує новий пароль під час кожного запуску.
+
+### Docker
+
+З кожним випуском у `ghcr.io/anomalyco/opencode` публікується образ із тегом версії. Точка входу образу —
+команда `opencode`, яка запускає TUI, тому передайте `serve`. Прив'яжіть сервер до `0.0.0.0`: типова адреса
+`127.0.0.1` доступна лише зсередини контейнера.
+
+```bash
+$ docker run -d --name opencode -p 4096:4096 \
+    -e OPENCODE_PASSWORD="a-long-secret" \
+    -e ANTHROPIC_API_KEY \
+    -v opencode-data:/root/.local/share/opencode \
+    -v opencode-config:/root/.config/opencode \
+    -v "$PWD":/workspace -w /workspace \
+    ghcr.io/anomalyco/opencode:<version> serve --hostname 0.0.0.0 --port 4096
+```
+
+- Задайте `OPENCODE_PASSWORD`, щоб пароль не змінювався після перезапуску.
+- Змонтуйте каталог даних `/root/.local/share/opencode`. У ньому зберігається база даних із вашими сесіями, які
+  інакше буде втрачено разом із контейнером. Щоб зберегти глобальну конфігурацію, змонтуйте каталог `/root/.config/opencode`.
+- Перевірте, чи готовий сервер приймати запити, командою `curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info`.

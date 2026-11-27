@@ -112,6 +112,36 @@ grep 'role=server' ~/.local/share/opencode/log/opencode.log
 grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
 ```
 
+## Експорт телеметрії
+
+OpenCode може надсилати журнали й дані трасування до колектора OpenTelemetry або до бекенду APM, який приймає дані OTLP через HTTP.
+Задайте базову URL-адресу колектора без шляху:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer example-token"
+export OTEL_RESOURCE_ATTRIBUTES="team=platform,host.name=dev-laptop"
+opencode
+```
+
+| Змінна | Поведінка |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Базова URL-адреса. Журнали надсилаються до `<endpoint>/v1/logs`, а дані трасування — до `<endpoint>/v1/traces`. Якщо змінну не задано, експорт вимкнено. |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Розділені комами заголовки у форматі `key=value`. Надсилаються з кожним експортом; наприклад, тут можна вказати API-ключ. |
+| `OTEL_RESOURCE_ATTRIBUTES` | Розділені комами атрибути у форматі `key=value` з URL-кодуванням. Додаються до кожного запису. Якщо хоча б один атрибут має хибний формат, OpenCode відкидає всі. |
+
+Кожен запис також містить `service.name` (`opencode`), `service.version`, `deployment.environment.name` (канал
+випуску), `opencode.client` і `opencode.run` — той самий ID запуску, що й у файлі журналу.
+
+Фонова служба працює в окремому процесі й не успадковує середовище вашої оболонки. Задайте змінні й для служби,
+щоб трасувати виклики моделей і виконання інструментів:
+
+```bash
+opencode service set env OTEL_EXPORTER_OTLP_ENDPOINT http://localhost:4318
+opencode service set env OTEL_EXPORTER_OTLP_HEADERS "authorization=Bearer example-token"
+opencode service start
+```
+
 ## Знімок купи пам'яті
 
 Запишіть знімок пам'яті (купи) запущеної фонової служби на будь-якій платформі:
