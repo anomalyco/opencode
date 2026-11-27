@@ -16,7 +16,7 @@ export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }
     if (status === "connected") return theme.text.feedback.success.base
     if (status === "failed") return theme.text.feedback.error.base
     if (status === "disabled") return theme.text.muted
-    if (status === "needs_auth") return theme.text.feedback.warning.base
+    if (status === "needs_auth" || status === "disconnected") return theme.text.feedback.warning.base
     return theme.text.muted
   }
 
@@ -55,7 +55,10 @@ export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }
                 minWidth={0}
                 onMouseUp={() =>
                   props.context.ui.dialog.show(() => (
-                    <DialogMcp initialServer={item.name} details={item.status.status === "failed"} />
+                    <DialogMcp
+                      initialServer={item.name}
+                      details={item.status.status === "failed" || item.status.status === "disconnected"}
+                    />
                   ))
                 }
               >
@@ -79,6 +82,7 @@ export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }
                     <Match when={item.status.status === "connected"}>Connected</Match>
                     <Match when={item.status.status === "pending"}>Connecting</Match>
                     <Match when={item.status.status === "failed"}>Error</Match>
+                    <Match when={item.status.status === "disconnected"}>Disconnected</Match>
                     <Match when={item.status.status === "disabled"}>Disabled</Match>
                     <Match when={item.status.status === "needs_auth"}>Sign in</Match>
                   </Switch>

@@ -2003,6 +2003,7 @@ export type ConfigInfoEncoded = {
         compaction_jobs: boolean?,
         sqlite_fts: boolean?,
         browser_stream_tunnel: boolean?,
+        mcp_resilience: boolean?,
         video_generate: (boolean | {
             model: (string | {
                 providerID: string,
@@ -3019,7 +3020,7 @@ export type McpResourcesChanged = _Event1<"mcp.resources.changed", {
 
 export type McpServer = {
     name: string,
-    status: (McpStatusConnected | McpStatusPending | McpStatusDisabled | McpStatusFailed | McpStatusNeedsAuth),
+    status: (McpStatusConnected | McpStatusPending | McpStatusDisabled | McpStatusFailed | McpStatusDisconnected | McpStatusNeedsAuth),
     title: string?,
     integrationID: IntegrationID?,
 }
@@ -3034,6 +3035,11 @@ export type McpStatusConnected = {
 
 export type McpStatusDisabled = {
     status: "disabled",
+}
+
+export type McpStatusDisconnected = {
+    status: "disconnected",
+    error: string,
 }
 
 export type McpStatusFailed = {
@@ -4504,11 +4510,12 @@ export type SkillUpdated = _Event1<"skill.updated", any>
 export type SnapshotID = string
 
 export type SpaceChange = {
+    space: SpaceName,
     key: SpaceKey,
     value: SpaceValue?,
 }
 
---- Covers this write and every change before it.
+--- Covers this write and every change of the space before it.
 export type SpaceCursor = string
 
 export type SpaceCursor1 = string
@@ -5531,19 +5538,25 @@ export type Client = {
                 } },
             }) -> (nil, string?),
             sync: (input: {
-                space: string,
-                cursor: string?,
-            }) -> (SpacePage?, string?),
+                spaces: { {
+                    space: SpaceName,
+                    cursor: SpaceCursor1?,
+                } },
+            }) -> ({
+                pages: { SpacePage },
+            }?, string?),
             unsubscribe: (input: {
                 stream: string,
                 spaces: { SpaceName },
             }) -> (nil, string?),
             write: (input: {
-                space: string,
                 changes: { SpaceChange },
             }) -> ({
-                revision: SpaceRevision,
-                cursor: SpaceCursor,
+                spaces: { {
+                    space: SpaceName,
+                    revision: SpaceRevision,
+                    cursor: SpaceCursor,
+                } },
             }?, string?),
         },
         usage: {

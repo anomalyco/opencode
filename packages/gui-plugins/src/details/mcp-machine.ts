@@ -4,7 +4,7 @@ export const MCP_TOGGLE_TIMEOUT_MS = 60_000
 /** An MCP server's status, as the server lists it. */
 export type McpServerStatus =
   | { readonly status: "connected" | "pending" | "disabled" }
-  | { readonly status: "failed" | "needs_auth"; readonly error: string }
+  | { readonly status: "failed" | "disconnected" | "needs_auth"; readonly error: string }
 
 /** A sign-in that also accepts the redirect URL pasted from the browser. */
 export type McpSignIn = {
@@ -214,9 +214,11 @@ function step(state: Live, event: Exclude<McpEvent, { type: "disposed" }>): McpT
     return { state: { ...state, dialog: CLOSED }, effects: closeDialog(dialog) }
 
   // A retry stays open while it connects, and a new failure replaces the error in place.
-  if (status.status !== "failed" || status.error === dialog.error) return { state, effects: NONE }
+  const error = mcpError(status)
 
-  return { state: { ...state, dialog: { ...dialog, error: status.error } }, effects: NONE }
+  if (error === undefined || error === dialog.error) return { state, effects: NONE }
+
+  return { state: { ...state, dialog: { ...dialog, error } }, effects: NONE }
 }
 
 function settled(
@@ -267,6 +269,11 @@ function release(transition: McpTransition): McpTransition {
     return transition
 
   return { state: { status: "disposed" }, effects: transition.effects }
+}
+
+/** The error a failed or disconnected server shows; a sign-in prompt is not one. */
+export function mcpError(status: McpServerStatus | undefined) {
+  return status?.status === "failed" || status?.status === "disconnected" ? status.error : undefined
 }
 
 function closeDialog(dialog: McpErrorDialog): readonly McpEffect[] {

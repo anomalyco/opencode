@@ -46,6 +46,7 @@ const ExtensionCard: Component<{ children: JSX.Element }> = (props) => (
 const statusLabels = {
   connected: "mcp.status.connected",
   failed: "mcp.status.failed",
+  disconnected: "mcp.status.disconnected",
   needs_auth: "mcp.status.needs_auth",
   disabled: "mcp.status.disabled",
 } as const

@@ -2,7 +2,14 @@ import path from "node:path"
 import fs from "node:fs/promises"
 import os from "node:os"
 import { describe, expect, spyOn, test } from "bun:test"
-import { StreamableHTTPClientTransport, isJSONRPCRequest, type ListToolsResult } from "@modelcontextprotocol/client"
+import {
+  InMemoryTransport,
+  StreamableHTTPClientTransport,
+  deserializeMessage,
+  isJSONRPCRequest,
+  serializeMessage,
+  type ListToolsResult,
+} from "@modelcontextprotocol/client"
 import {
   createMcpHandler,
   inputRequired,
@@ -44,6 +51,7 @@ import { Tool } from "@opencode/core/tool"
 import { ToolOutput } from "@opencode/core/tool-output"
 import {
   Clock,
+  Cause,
   Context,
   Deferred,
   Effect,
@@ -67,6 +75,11 @@ import { TestClock } from "effect/testing"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
 import { Global } from "@opencode/util/global"
+import { KV } from "@opencode/core/kv"
+import { Database } from "@opencode/core/database/database"
+import { TestDatabase } from "./lib/database"
+import BunSqlite from "bun:sqlite"
+import fsSync from "node:fs"
 import { isRecord } from "@opencode/util/record"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { advance, drain } from "./lib/clock"
@@ -370,6 +383,8 @@ function resourceMcpLayer(
     name?: string
     credentials?: Partial<Credential.Interface>
     bus?: Layer.Layer<Bus.Service>
+    /** A directory whose database keeps saved MCP tools across layers; a fresh in-memory one unless given. */
+    cache?: string
     /** `OPENCODE_FLAGS`, such as `-machines`. */
     flags?: string
   },
@@ -465,10 +480,39 @@ function resourceMcpLayer(
         }),
         Layer.mock(Credential.Service, { list: () => Effect.succeed([]), ...overrides?.credentials }),
         overrides?.environment ?? hostEnvironmentLayer,
+        savedLayer(overrides?.cache),
       ),
     ),
   )
 }
+
+// Each MCP layer saves tools in its own database unless a test shares a directory, so one test's saved tools never
+// feed another's startup.
+const savedLayer = (cache?: string) =>
+  AppNodeBuilder.build(LayerNode.group([KV.node, Database.node]), [
+    cache
+      ? Database.node.replace(
+          Database.layer({ path: path.join(cache, "opencode.db") }).pipe(
+            Layer.provide(Layer.succeed(Global.Service, Global.make())),
+          ),
+        )
+      : TestDatabase.replacement,
+  ])
+
+// The saved MCP entries in a test's shared database, read without holding it open.
+const savedEntries = (cache: string) =>
+  Effect.sync(() => {
+    const file = path.join(cache, "opencode.db")
+    if (!fsSync.existsSync(file)) return []
+    const database = new BunSqlite(file, { readonly: true })
+    try {
+      return database
+        .query<{ key: string; value: string }, []>("select key, value from kv where key like 'mcp/tools/%'")
+        .all()
+    } finally {
+      database.close()
+    }
+  })
 
 const connect = (server: string, config: typeof ConfigMCP.Server.Type, directory: string) =>
   McpClient.connect({ server, config, directory }).pipe(Effect.provide(hostEnvironmentLayer))
@@ -2339,8 +2383,12 @@ const shutdownIt = testEffect(
       Location.node,
       Flag.node,
       McpPool.node,
+      KV.node,
+      Database.node,
+      Flag.node,
     ]),
     [
+      TestDatabase.replacement,
       Location.node.replace(
         Layer.succeed(
           Location.Service,
@@ -4373,3 +4421,480 @@ describe("MCP events", () => {
     }),
   )
 })
+
+// A stdio server that runs in-process behind a fake spawner, so a test can end it as a crash would and hold or break
+// the next spawn. Each spawn is a fresh server with one `echo` tool.
+function fakeStdio() {
+  const state = {
+    spawns: 0,
+    /** Holds the next spawn until it is completed. */
+    gate: undefined as Deferred.Deferred<void> | undefined,
+    /** Spawned servers write this to stderr and exit before answering, as one that can't start would. */
+    broken: undefined as string | undefined,
+    /** Ends the running server with this exit code, after writing `stderr`. */
+    exit: (code: number, stderr?: string) => {
+      void code
+      void stderr
+    },
+  }
+  const encoder = new TextEncoder()
+  const spawn = (command: ChildProcess.Command) =>
+    Effect.gen(function* () {
+      state.spawns += 1
+      const gate = state.gate
+      state.gate = undefined
+      if (gate) yield* Deferred.await(gate)
+      const stdout = yield* Queue.unbounded<Uint8Array, Cause.Done>()
+      const stderr = yield* Queue.unbounded<Uint8Array, Cause.Done>()
+      const exited = Deferred.makeUnsafe<ExitCode>()
+      const exit = (code: number, output?: string) => {
+        if (output) Queue.offerUnsafe(stderr, encoder.encode(output))
+        Queue.endUnsafe(stderr)
+        Queue.endUnsafe(stdout)
+        Deferred.doneUnsafe(exited, Exit.succeed(ExitCode(code)))
+      }
+      const handle = makeHandle({
+        pid: ProcessId(state.spawns),
+        exitCode: Deferred.await(exited),
+        isRunning: Deferred.isDone(exited).pipe(Effect.map((done) => !done)),
+        kill: () => Effect.sync(() => exit(143)),
+        stdin: Sink.drain,
+        stdout: Stream.fromQueue(stdout),
+        stderr: Stream.fromQueue(stderr),
+        all: Stream.never,
+        getInputFd: () => Sink.drain,
+        getOutputFd: () => Stream.empty,
+        unref: Effect.succeed(Effect.void),
+      })
+      if (state.broken !== undefined) {
+        exit(1, state.broken)
+        return handle
+      }
+      const protocol = new Server(
+        { name: "fake", version: "1.0.0" },
+        { capabilities: { tools: {} }, instructions: "Call echo to check the server." },
+      )
+      protocol.setRequestHandler("tools/list", () =>
+        Promise.resolve({ tools: [{ name: "echo", inputSchema: { type: "object" as const, properties: {} } }] }),
+      )
+      protocol.setRequestHandler("tools/call", () =>
+        Promise.resolve({ content: [{ type: "text" as const, text: "ok" }] }),
+      )
+      const [client, server] = InMemoryTransport.createLinkedPair()
+      client.onmessage = (message) => Queue.offerUnsafe(stdout, encoder.encode(serializeMessage(message)))
+      yield* Effect.promise(() => protocol.connect(server))
+      yield* Effect.promise(() => client.start())
+      state.exit = (code, output) => {
+        exit(code, output)
+        void protocol.close()
+      }
+      const input = ChildProcess.isStandardCommand(command) ? command.options.stdin : undefined
+      const stdin =
+        typeof input === "object" && "stream" in input && typeof input.stream === "object" ? input.stream : Stream.empty
+      yield* stdin.pipe(
+        Stream.decodeText(),
+        Stream.splitLines,
+        Stream.runForEach((line) => Effect.promise(() => client.send(deserializeMessage(line)))),
+        Effect.ignore,
+        // Like a real server, it exits once its stdin closes.
+        Effect.ensuring(Effect.sync(() => exit(0))),
+        Effect.forkDetach,
+      )
+      return handle
+    })
+  return {
+    state,
+    environment: Layer.succeed(
+      Environment.Service,
+      Environment.Service.of({
+        id: Environment.localID,
+        local: true,
+        files: Environment.makeFiles(Environment.makeMemoryDriver()),
+        spawner: ChildProcessSpawner.make(spawn),
+      }),
+    ),
+  }
+}
+
+describe("MCP reconnect", () => {
+  const config = new ConfigMCP.Local({ type: "local", command: ["fake-mcp"], protocol: "legacy" })
+  const server = (service: Mcp.Interface) =>
+    service.servers().pipe(Effect.map((servers) => servers.find((item) => item.name === "resources")?.status))
+  // Polls on real time without moving the test clock, so only the test decides when a reconnect delay passes.
+  const eventually = <A>(effect: Effect.Effect<A>, check: (value: A) => boolean) =>
+    Effect.gen(function* () {
+      const deadline = performance.now() + 10_000
+      while (performance.now() < deadline) {
+        const value = yield* effect
+        if (check(value)) return value
+        yield* TestClock.withLive(Effect.sleep("5 millis"))
+      }
+      return yield* Effect.die(new Error("condition never held within 10s"))
+    })
+  const reconnecting = testEffect(Layer.empty)
+
+  const resilient = (fake: ReturnType<typeof fakeStdio>) =>
+    resourceMcpLayer(config, undefined, undefined, { environment: fake.environment, flags: "mcp_resilience" })
+  const echo = (service: Mcp.Interface) => service.callTool({ server: "resources", name: "echo" })
+
+  reconnecting.effect("keeps a dropped server's tools, shows why it went, and reconnects on the next call", () =>
+    Effect.gen(function* () {
+      const fake = fakeStdio()
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* eventually(server(service), (status) => status?.status === "connected")
+        const tools = yield* service.tools()
+        expect(tools.map((tool) => tool.name)).toEqual(["echo"])
+
+        fake.state.exit(1, "database is locked")
+        const status = yield* eventually(server(service), (status) => status?.status === "disconnected")
+        expect(status?.status === "disconnected" ? status.error : "").toContain(
+          "MCP server process exited with code 1: database is locked",
+        )
+        // The very same tool objects, so the registry and Code Mode see no change.
+        expect((yield* service.tools())[0]).toBe(tools[0]!)
+        // Nothing reconnects in the background.
+        yield* TestClock.adjust("1 minute")
+        yield* drainLive
+        expect(fake.state.spawns).toBe(1)
+
+        // Concurrent calls share one reconnect.
+        const gate = yield* Deferred.make<void>()
+        fake.state.gate = gate
+        const calls = yield* Effect.all([echo(service), echo(service)], { concurrency: "unbounded" }).pipe(
+          Effect.forkChild,
+        )
+        yield* eventually(
+          Effect.sync(() => fake.state.spawns),
+          (spawns) => spawns === 2,
+        )
+        yield* Deferred.succeed(gate, undefined)
+        expect((yield* Fiber.join(calls)).map((result) => result.isError)).toEqual([false, false])
+        expect(fake.state.spawns).toBe(2)
+        expect(yield* server(service)).toEqual({ status: "connected" })
+        expect(yield* service.tools()).toEqual(tools)
+      }).pipe(Effect.provide(resilient(fake)))
+    }),
+  )
+
+  reconnecting.effect("fails a call whose reconnect fails, then fails at once until its backoff passes", () =>
+    Effect.gen(function* () {
+      const fake = fakeStdio()
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* eventually(server(service), (status) => status?.status === "connected")
+        const tools = yield* service.tools()
+        fake.state.exit(1)
+        yield* eventually(server(service), (status) => status?.status === "disconnected")
+
+        fake.state.broken = "missing API key"
+        expect((yield* echo(service).pipe(Effect.flip)).message).toContain("missing API key")
+        expect(fake.state.spawns).toBe(2)
+        expect((yield* server(service))?.status).toBe("disconnected")
+        expect(yield* service.tools()).toEqual(tools)
+
+        // Within the 1 s backoff a call fails with the same error and nothing is spawned. The model is told the
+        // server reconnects on its own, not to reconnect it from /mcps.
+        const message = (yield* echo(service).pipe(Effect.flip)).message
+        expect(message).toContain("lost its connection: ")
+        expect(message).toContain("missing API key")
+        expect(message).toContain("It reconnects on the next call; try again shortly.")
+        expect(message).not.toContain("/mcps")
+        yield* TestClock.adjust("999 millis")
+        yield* echo(service).pipe(Effect.flip)
+        expect(fake.state.spawns).toBe(2)
+
+        // After it, the next call tries again; a second failure doubles the backoff.
+        yield* TestClock.adjust("1 millis")
+        yield* echo(service).pipe(Effect.flip)
+        expect(fake.state.spawns).toBe(3)
+        yield* TestClock.adjust("1999 millis")
+        yield* echo(service).pipe(Effect.flip)
+        expect(fake.state.spawns).toBe(3)
+
+        fake.state.broken = undefined
+        yield* TestClock.adjust("1 millis")
+        expect((yield* echo(service)).isError).toBe(false)
+        expect(fake.state.spawns).toBe(4)
+        expect(yield* server(service)).toEqual({ status: "connected" })
+      }).pipe(Effect.provide(resilient(fake)))
+    }),
+  )
+
+  reconnecting.effect("clears a dropped server's tools when the user disconnects it", () =>
+    Effect.gen(function* () {
+      const fake = fakeStdio()
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* eventually(server(service), (status) => status?.status === "connected")
+        fake.state.exit(1)
+        yield* eventually(server(service), (status) => status?.status === "disconnected")
+
+        yield* service.disconnect("resources")
+        expect(yield* service.tools()).toEqual([])
+        expect(yield* server(service)).toEqual({ status: "disabled" })
+        yield* echo(service).pipe(Effect.flip)
+        expect(fake.state.spawns).toBe(1)
+      }).pipe(Effect.provide(resilient(fake)))
+    }),
+  )
+
+  reconnecting.effect("drops a server's tools when its process exits and the flag is off", () =>
+    Effect.gen(function* () {
+      const fake = fakeStdio()
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* eventually(server(service), (status) => status?.status === "connected")
+        fake.state.exit(1)
+        yield* eventually(server(service), (status) => status?.status === "failed")
+        expect(yield* service.tools()).toEqual([])
+        yield* echo(service).pipe(Effect.flip)
+        expect(fake.state.spawns).toBe(1)
+      }).pipe(
+        Effect.provide(
+          resourceMcpLayer(config, undefined, undefined, { environment: fake.environment, flags: "-mcp_resilience" }),
+        ),
+      )
+    }),
+  )
+
+  reconnecting.effect("keeps the tools of a server whose reconnect needs authorization and waits for a sign-in", () =>
+    Effect.gen(function* () {
+      const denied = { value: false }
+      const remote = yield* resourceServer({
+        respond: (request) => {
+          if (!denied.value) return undefined
+          if (new URL(request.url).pathname !== "/") return new Response(null, { status: 404 })
+          if (request.headers.get("mcp-session-id") === null) return new Response(null, { status: 401 })
+          return undefined
+        },
+      })
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* eventually(server(service), (status) => status?.status === "connected")
+        yield* echo(service)
+        const tools = yield* service.tools()
+
+        // The restarted server no longer knows the session and refuses a new one without a login.
+        denied.value = true
+        yield* Effect.promise(remote.restart)
+        yield* echo(service).pipe(Effect.flip)
+        expect((yield* server(service))?.status).toBe("needs_auth")
+        expect(yield* service.tools()).toEqual(tools)
+
+        // Only a sign-in brings it back, so later calls say so instead of reconnecting.
+        const initializations = remote.state.initializations
+        yield* TestClock.adjust("1 minute")
+        expect((yield* echo(service).pipe(Effect.flip)).message).toContain("needs authentication")
+        expect(remote.state.initializations).toBe(initializations)
+      }).pipe(
+        Effect.provide(
+          resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url: remote.url }), undefined, undefined, {
+            flags: "mcp_resilience",
+          }),
+        ),
+      )
+    }),
+  )
+
+  reconnecting.effect("offers cached tools while a server starts and reads a new cache when its config changes", () =>
+    Effect.gen(function* () {
+      const fake = fakeStdio()
+      const cache = yield* tmpdirScoped()
+      const secret = new ConfigMCP.Local({ ...config, environment: { TOKEN: "do-not-store" } })
+      const open = (server: typeof ConfigMCP.Server.Type) =>
+        resourceMcpLayer(server, undefined, undefined, {
+          environment: fake.environment,
+          flags: "mcp_resilience",
+          cache: cache.path,
+        })
+      const files = savedEntries(cache.path)
+
+      const listed = yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* eventually(server(service), (status) => status?.status === "connected")
+        // One file for this directory and one any directory can start from.
+        yield* eventually(files, (names) => names.length === 2)
+        return yield* service.tools()
+      }).pipe(Effect.provide(open(secret)))
+      for (const entry of yield* files) {
+        expect(entry.key).not.toContain("do-not-store")
+        expect(entry.value).not.toContain("do-not-store")
+      }
+
+      // The same config offers the cached tools before its server answers.
+      const gate = yield* Deferred.make<void>()
+      fake.state.gate = gate
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        const cached = yield* eventually(service.tools(), (tools) => tools.length > 0)
+        expect(cached).toEqual(listed)
+        expect((yield* service.instructions()).map((item) => item.instructions)).toEqual([
+          "Call echo to check the server.",
+        ])
+        expect(yield* server(service)).toEqual({ status: "pending" })
+        yield* service.awaitStartup()
+        yield* Deferred.succeed(gate, undefined)
+        yield* eventually(server(service), (status) => status?.status === "connected")
+        expect(yield* service.tools()).toEqual(listed)
+      }).pipe(Effect.provide(open(secret)))
+
+      // A changed environment is a different server: nothing cached until it lists its own tools.
+      fake.state.gate = yield* Deferred.make<void>()
+      const changed = fake.state.gate
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* eventually(
+          Effect.sync(() => fake.state.spawns),
+          (spawns) => spawns === 3,
+        )
+        expect(yield* service.tools()).toEqual([])
+        yield* Deferred.succeed(changed, undefined)
+        yield* eventually(server(service), (status) => status?.status === "connected")
+      }).pipe(Effect.provide(open(new ConfigMCP.Local({ ...config, environment: { TOKEN: "rotated" } }))))
+      expect(yield* files).toHaveLength(4)
+    }),
+  )
+
+  reconnecting.effect("deletes saved tools no server has saved for 30 days", () =>
+    Effect.gen(function* () {
+      const fake = fakeStdio()
+      const cache = yield* tmpdirScoped()
+      const open = () =>
+        resourceMcpLayer(config, undefined, undefined, {
+          environment: fake.environment,
+          flags: "mcp_resilience",
+          cache: cache.path,
+        })
+      const files = savedEntries(cache.path)
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* eventually(server(service), (status) => status?.status === "connected")
+        yield* eventually(files, (entries) => entries.length === 2)
+      }).pipe(Effect.provide(open()))
+
+      const old = Date.now() - 31 * 24 * 60 * 60 * 1000
+      yield* Effect.sync(() => {
+        const database = new BunSqlite(path.join(cache.path, "opencode.db"))
+        const insert = database.query(
+          "insert into kv (key, value, time_created, time_updated) values (?1, '{}', ?2, ?2)",
+        )
+        insert.run("mcp/tools/removed-server", old)
+        insert.run("mcp/tools/recent-server", Date.now())
+        insert.run("other/old", old)
+        database.close()
+      })
+      // The test clock starts at 0, so move it to now to measure the 30 days against the saved times.
+      yield* TestClock.setTime(Date.now())
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* eventually(files, (entries) => !entries.some((entry) => entry.key === "mcp/tools/removed-server"))
+        yield* eventually(server(service), (status) => status?.status === "connected")
+      }).pipe(Effect.provide(open()))
+      const keys = (yield* files).map((entry) => entry.key)
+      expect(keys).toContain("mcp/tools/recent-server")
+      expect(keys).toHaveLength(3)
+      const other = yield* Effect.sync(() => {
+        const database = new BunSqlite(path.join(cache.path, "opencode.db"), { readonly: true })
+        const row = database.query("select key from kv where key = 'other/old'").get()
+        database.close()
+        return row
+      })
+      expect(other).toEqual({ key: "other/old" })
+    }),
+  )
+
+  reconnecting.effect("offers a local server's cached tools in a directory it has not run in yet", () =>
+    Effect.gen(function* () {
+      const fake = fakeStdio()
+      const cache = yield* tmpdirScoped()
+      const other = yield* tmpdirScoped()
+      const open = (directory?: string) =>
+        resourceMcpLayer(config, undefined, undefined, {
+          environment: fake.environment,
+          flags: "mcp_resilience",
+          cache: cache.path,
+          directory,
+        })
+      const files = savedEntries(cache.path)
+      const listed = yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* eventually(server(service), (status) => status?.status === "connected")
+        yield* eventually(files, (names) => names.length === 2)
+        return yield* service.tools()
+      }).pipe(Effect.provide(open()))
+
+      const gate = yield* Deferred.make<void>()
+      fake.state.gate = gate
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        expect(yield* eventually(service.tools(), (tools) => tools.length > 0)).toEqual(listed)
+        yield* Deferred.succeed(gate, undefined)
+        yield* eventually(server(service), (status) => status?.status === "connected")
+        expect(yield* service.tools()).toEqual(listed)
+      }).pipe(Effect.provide(open(other.path)))
+      // Its own directory now has a file of its own.
+      expect(yield* files).toHaveLength(3)
+    }),
+  )
+
+  reconnecting.effect("keeps cached tools when a server fails to start and reconnects on the next call", () =>
+    Effect.gen(function* () {
+      const fake = fakeStdio()
+      const cache = yield* tmpdirScoped()
+      const open = () =>
+        resourceMcpLayer(config, undefined, undefined, {
+          environment: fake.environment,
+          flags: "mcp_resilience",
+          cache: cache.path,
+        })
+      const files = savedEntries(cache.path)
+      const listed = yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* eventually(server(service), (status) => status?.status === "connected")
+        yield* eventually(files, (names) => names.length === 2)
+        return yield* service.tools()
+      }).pipe(Effect.provide(open()))
+
+      fake.state.broken = "missing API key"
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        const status = yield* eventually(server(service), (status) => status?.status === "disconnected")
+        expect(status?.status === "disconnected" ? status.error : "").toContain("missing API key")
+        expect(yield* service.tools()).toEqual(listed)
+
+        fake.state.broken = undefined
+        yield* TestClock.adjust("1 second")
+        expect((yield* echo(service)).isError).toBe(false)
+        expect(yield* server(service)).toEqual({ status: "connected" })
+      }).pipe(Effect.provide(open()))
+    }),
+  )
+
+  reconnecting.effect("keeps the same tools while the user reconnects a server", () =>
+    Effect.gen(function* () {
+      const fake = fakeStdio()
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* eventually(server(service), (status) => status?.status === "connected")
+        const tools = yield* service.tools()
+
+        const gate = yield* Deferred.make<void>()
+        fake.state.gate = gate
+        const reconnect = yield* service.connect("resources").pipe(Effect.forkChild)
+        yield* eventually(
+          Effect.sync(() => fake.state.spawns),
+          (spawns) => spawns === 2,
+        )
+        expect((yield* service.tools())[0]).toBe(tools[0]!)
+        yield* Deferred.succeed(gate, undefined)
+        yield* Fiber.join(reconnect)
+        expect(yield* server(service)).toEqual({ status: "connected" })
+        expect(yield* service.tools()).toEqual(tools)
+      }).pipe(Effect.provide(resilient(fake)))
+    }),
+  )
+})
+
+// Lets in-flight real work, such as a spawn the clock released, run before a test asserts nothing more happened.
+const drainLive = TestClock.withLive(Effect.sleep("50 millis"))

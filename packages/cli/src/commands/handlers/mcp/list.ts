@@ -30,6 +30,7 @@ function icon(status: McpServer["status"]) {
     case "connected":
       return "✓"
     case "needs_auth":
+    case "disconnected":
       return "⚠"
     case "failed":
       return "✗"
@@ -44,6 +45,8 @@ function describe(status: McpServer["status"]) {
       return "needs authentication"
     case "failed":
       return `failed: ${status.error}`
+    case "disconnected":
+      return `disconnected: ${status.error}`
     default:
       return status.status
   }

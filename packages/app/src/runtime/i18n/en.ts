@@ -462,6 +462,7 @@ export const dict = {
 
   "mcp.status.connected": "Connected",
   "mcp.status.failed": "Failed",
+  "mcp.status.disconnected": "Disconnected",
   "mcp.status.needs_auth": "Needs auth",
   "mcp.status.disabled": "Disabled",
   "mcp.auth.interactiveForm": "MCP server {{name}} requires an interactive authentication form",

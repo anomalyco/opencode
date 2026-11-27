@@ -51,6 +51,7 @@ fn list(context: &Context) -> error::Result<()> {
                 McpServerStatus::Connected(_) => ("✓", "connected".to_owned()),
                 McpServerStatus::NeedsAuth(_) => ("⚠", "needs authentication".to_owned()),
                 McpServerStatus::Failed(failed) => ("✗", format!("failed: {}", failed.error)),
+                McpServerStatus::Disconnected(disconnected) => ("⚠", format!("disconnected: {}", disconnected.error)),
                 status => ("○", status.tag().to_owned()),
             };
             format!("{icon} {}  {description}", pad_end(&server.name, width))
@@ -226,6 +227,7 @@ fn auth_choices(servers: &[McpServer], integrations: &[IntegrationInfo]) -> Vec<
                     hint: match &server.status {
                         McpServerStatus::NeedsAuth(_) => Some("needs authentication".to_owned()),
                         McpServerStatus::Failed(_) => Some("failed".to_owned()),
+                        McpServerStatus::Disconnected(_) => Some("disconnected".to_owned()),
                         McpServerStatus::Disabled(_) => Some("disabled".to_owned()),
                         _ => None,
                     },

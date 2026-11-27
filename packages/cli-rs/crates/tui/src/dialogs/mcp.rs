@@ -39,7 +39,7 @@ pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
     });
     if details
         && let Some(server) =
-            initial.as_ref().and_then(|name| mcp.server(name)).filter(|server| kind(&server.status) == "failed")
+            initial.as_ref().and_then(|name| mcp.server(name)).filter(|server| matches!(kind(&server.status), "failed" | "disconnected"))
     {
         mcp.detail(server);
         return;
@@ -274,6 +274,7 @@ fn kind(status: &McpServerStatus) -> &str {
         McpServerStatus::Pending(_) => "pending",
         McpServerStatus::Disabled(_) => "disabled",
         McpServerStatus::Failed(_) => "failed",
+        McpServerStatus::Disconnected(_) => "disconnected",
         McpServerStatus::NeedsAuth(_) => "needs_auth",
         McpServerStatus::Unknown(value) => value.get("status").and_then(serde_json::Value::as_str).unwrap_or_default(),
     }
@@ -282,6 +283,7 @@ fn kind(status: &McpServerStatus) -> &str {
 fn status_error(status: &McpServerStatus) -> Option<&str> {
     match status {
         McpServerStatus::Failed(failed) => Some(&failed.error),
+        McpServerStatus::Disconnected(disconnected) => Some(&disconnected.error),
         McpServerStatus::NeedsAuth(auth) => Some(&auth.error),
         _ => None,
     }
@@ -301,6 +303,7 @@ fn status_label(status: &str, pending: bool) -> &'static str {
     match status {
         "connected" => "Connected ✓",
         "failed" => "Failed !",
+        "disconnected" => "Disconnected ↻",
         "needs_auth" => "Sign in required →",
         _ => "Disabled ○",
     }
@@ -310,7 +313,7 @@ fn status_color(theme: &Theme, status: &str) -> Color {
     match status {
         "connected" => theme.text.feedback.success.base,
         "failed" => theme.text.feedback.error.base,
-        "needs_auth" => theme.text.feedback.warning.base,
+        "needs_auth" | "disconnected" => theme.text.feedback.warning.base,
         _ => theme.text.muted,
     }
 }
@@ -319,6 +322,7 @@ fn toggle_title(server: Option<&McpServer>) -> &'static str {
     match server.map(|server| kind(&server.status)) {
         Some("connected") => "disconnect",
         Some("failed") => "retry",
+        Some("disconnected") => "reconnect",
         Some("needs_auth") => "sign in",
         _ => "connect",
     }

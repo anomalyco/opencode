@@ -6861,6 +6861,12 @@ pub struct McpStatusFailed {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct McpStatusDisconnected {
+    pub status: tag::Disconnected,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct McpStatusNeedsAuth {
     pub status: tag::NeedsAuth,
     pub error: String,
@@ -6873,6 +6879,7 @@ pub enum McpServerStatus {
     Pending(McpStatusPending),
     Disabled(McpStatusDisabled),
     Failed(McpStatusFailed),
+    Disconnected(McpStatusDisconnected),
     NeedsAuth(McpStatusNeedsAuth),
     /// A member this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
@@ -6891,6 +6898,7 @@ impl McpServerStatus {
             Some("pending") => raw.variant().map(Self::Pending),
             Some("disabled") => raw.variant().map(Self::Disabled),
             Some("failed") => raw.variant().map(Self::Failed),
+            Some("disconnected") => raw.variant().map(Self::Disconnected),
             Some("needs_auth") => raw.variant().map(Self::NeedsAuth),
             _ => raw.unknown().map(Self::Unknown),
         }
@@ -6905,6 +6913,7 @@ impl McpServerStatus {
             Self::Pending(value) => value.status.as_str(),
             Self::Disabled(value) => value.status.as_str(),
             Self::Failed(value) => value.status.as_str(),
+            Self::Disconnected(value) => value.status.as_str(),
             Self::NeedsAuth(value) => value.status.as_str(),
             Self::Unknown(value) => value.get("status").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
@@ -6914,6 +6923,7 @@ impl McpServerStatus {
     pub fn error(&self) -> Option<&str> {
         match self {
             Self::Failed(value) => Some(value.error.as_str()),
+            Self::Disconnected(value) => Some(value.error.as_str()),
             Self::NeedsAuth(value) => Some(value.error.as_str()),
             Self::Connected(_) | Self::Pending(_) | Self::Disabled(_) | Self::Unknown(_) => None,
         }
@@ -11588,6 +11598,7 @@ pub type ExperimentalPushSettingsSetOutput = PushSettings;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SpaceChange {
+    pub space: SpaceName,
     pub key: SpaceKey,
     #[serde(default)]
     pub value: Option<SpaceValue>,
@@ -11596,23 +11607,34 @@ pub struct SpaceChange {
 /// Input of `Client::experimental_space_write`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalSpaceWriteInput {
-    pub space: SpaceName,
     pub changes: Vec<SpaceChange>,
 }
 
 string_type!(SpaceCursor, "`Space.Cursor`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalSpaceWriteOutput {
+pub struct ExperimentalSpaceWriteOutputSpacesItem {
+    pub space: SpaceName,
     pub revision: SpaceRevision,
     pub cursor: SpaceCursor,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceWriteOutput {
+    pub spaces: Vec<ExperimentalSpaceWriteOutputSpacesItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceSyncInputSpacesItem {
+    pub space: SpaceName,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<SpaceCursor>,
 }
 
 /// Input of `Client::experimental_space_sync`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalSpaceSyncInput {
-    pub space: SpaceName,
-    pub cursor: Option<SpaceCursor>,
+    pub spaces: Vec<ExperimentalSpaceSyncInputSpacesItem>,
 }
 
 string_type!(SpaceEpoch, "`Space.Epoch`");
@@ -11739,8 +11761,10 @@ impl SpacePage {
     }
 }
 
-/// Output of `Client::experimental_space_sync`.
-pub type ExperimentalSpaceSyncOutput = SpacePage;
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceSyncOutput {
+    pub pages: Vec<SpacePage>,
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ExperimentalSpaceSubscribeInputSpacesItem {
@@ -13167,6 +13191,8 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub browser_stream_tunnel: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_resilience: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub video_generate: Option<ConfigEntryDocumentInfoExperimentalVideoGenerate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub part_rows: Option<bool>,
@@ -14122,17 +14148,18 @@ pub mod tag {
         Compaction = "compaction", Complete = "complete", Completed = "completed", ConfigUpdated = "config.updated",
         Connected = "connected", Credential = "credential", CredentialSwitched = "credential.switched",
         CredentialUpdated = "credential.updated", Cron = "cron", Delta = "delta", Detail = "detail",
-        Directory = "directory", Disabled = "disabled", Document = "document", Env = "env", Error = "error",
-        Event = "event", Every = "every", ExperimentalJobUpdated = "experimental.job.updated",
-        ExperimentalMcpEvent = "experimental.mcp.event", ExperimentalPushUpdated = "experimental.push.updated",
-        ExperimentalSpaceDeleted = "experimental.space.deleted", ExperimentalSpaceResync = "experimental.space.resync",
-        ExperimentalSpaceUpdated = "experimental.space.updated", Expired = "expired", External = "external",
-        Failed = "failed", File = "file", FilesystemChanged = "filesystem.changed", FormCancelled = "form.cancelled",
-        FormCreated = "form.created", FormReplied = "form.replied", Git = "git", Idle = "idle", Image = "image",
-        Inline = "inline", InstallationUpdateAvailable = "installation.update-available",
-        InstallationUpdated = "installation.updated", Integer = "integer", IntegrationUpdated = "integration.updated",
-        Iroh = "iroh", Json = "json", Key = "key", Local = "local", LocationShutdown = "location.shutdown",
-        LocationSwitched = "location-switched", LogSynced = "log.synced", McpResourcesChanged = "mcp.resources.changed",
+        Directory = "directory", Disabled = "disabled", Disconnected = "disconnected", Document = "document",
+        Env = "env", Error = "error", Event = "event", Every = "every",
+        ExperimentalJobUpdated = "experimental.job.updated", ExperimentalMcpEvent = "experimental.mcp.event",
+        ExperimentalPushUpdated = "experimental.push.updated", ExperimentalSpaceDeleted = "experimental.space.deleted",
+        ExperimentalSpaceResync = "experimental.space.resync", ExperimentalSpaceUpdated = "experimental.space.updated",
+        Expired = "expired", External = "external", Failed = "failed", File = "file",
+        FilesystemChanged = "filesystem.changed", FormCancelled = "form.cancelled", FormCreated = "form.created",
+        FormReplied = "form.replied", Git = "git", Idle = "idle", Image = "image", Inline = "inline",
+        InstallationUpdateAvailable = "installation.update-available", InstallationUpdated = "installation.updated",
+        Integer = "integer", IntegrationUpdated = "integration.updated", Iroh = "iroh", Json = "json", Key = "key",
+        Local = "local", LocationShutdown = "location.shutdown", LocationSwitched = "location-switched",
+        LogSynced = "log.synced", McpResourcesChanged = "mcp.resources.changed",
         McpStatusChanged = "mcp.status.changed", ModelSwitched = "model-switched", ModelUpdated = "model.updated",
         ModelsDevRefreshed = "models-dev.refreshed", Move = "move", Multiselect = "multiselect", Native = "native",
         NeedsAuth = "needs_auth", None = "none", Number = "number", Oauth = "oauth", Package = "package",

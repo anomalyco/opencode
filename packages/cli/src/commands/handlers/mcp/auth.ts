@@ -106,6 +106,7 @@ export function mcpAuthChoices(servers: McpServer[], integrations: IntegrationIn
 
 function statusHint(status: McpServer["status"]) {
   if (status.status === "needs_auth") return "needs authentication"
-  if (status.status === "failed" || status.status === "disabled") return status.status
+  if (status.status === "failed" || status.status === "disconnected" || status.status === "disabled")
+    return status.status
   return undefined
 }

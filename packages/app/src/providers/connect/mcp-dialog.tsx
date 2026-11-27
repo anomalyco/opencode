@@ -12,7 +12,7 @@ import { Switch } from "@opencode/ui/switch"
 import { TruncatedText } from "@opencode/ui/truncated-text"
 import { useLanguage } from "@/runtime/i18n/language"
 import { type McpController, useMcpController } from "@/providers/connect/mcp"
-import { mcpDetailAttempt, mcpDetailView, mcpRowView } from "@/providers/connect/mcp-machine"
+import { mcpDetailAttempt, mcpDetailView, mcpError, mcpRowView } from "@/providers/connect/mcp-machine"
 import { usePlatform } from "@/runtime/platform/platform"
 import { showToast } from "@/shell/notifications/toast"
 import "@/shell/commands/dialog.css"
@@ -21,6 +21,7 @@ import "@/shell/search-list.css"
 const statusLabels = {
   connected: "mcp.status.connected",
   failed: "mcp.status.failed",
+  disconnected: "mcp.status.disconnected",
   needs_auth: "mcp.status.needs_auth",
   disabled: "mcp.status.disabled",
 } as const
@@ -91,11 +92,11 @@ export function McpDialog(props: {
   const toggle = (name: string, enabled: boolean) =>
     props.mcp.dispatch({ type: "toggle.requested", name, enabled, status: statusOf(name)?.status })
 
-  // Like the TUI, a failed server's row opens its error; retrying and disabling happen there.
+  // Like the TUI, a failed or disconnected server's row opens its error; retrying and disabling happen there.
   const select = (name: string) => {
     const status = statusOf(name)
 
-    if (status?.status !== "failed") return toggle(name, status?.status !== "connected")
+    if (mcpError(status) === undefined) return toggle(name, status?.status !== "connected")
     props.mcp.dispatch({ type: "detail.opened", name, loaded: true, status, focus: true })
   }
 
@@ -241,11 +242,7 @@ export function McpDialog(props: {
               const server = () => servers().find((entry) => entry.name === item().name)
               const status = () => server()?.status
 
-              const error = () => {
-                const current = status()
-
-                return current?.status === "failed" ? current.error : undefined
-              }
+              const error = () => mcpError(status())
 
               // The switch would start sign-in anyway, so an auth-gated server shows that action instead.
               const signIn = () => status()?.status === "needs_auth" && !!server()?.integrationID

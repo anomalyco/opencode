@@ -280,6 +280,8 @@ export type McpStatusDisabled = { status: "disabled" }
 
 export type McpStatusFailed = { status: "failed"; error: string }
 
+export type McpStatusDisconnected = { status: "disconnected"; error: string }
+
 export type McpStatusNeedsAuth = { status: "needs_auth"; error: string }
 
 export type McpResource = { server: string; name: string; uri: string; description?: string; mimeType?: string }
@@ -857,7 +859,13 @@ export type IntegrationCommandAttempt = { attemptID: IntegrationAttemptID; time:
 
 export type McpServer = {
   name: string
-  status: McpStatusConnected | McpStatusPending | McpStatusDisabled | McpStatusFailed | McpStatusNeedsAuth
+  status:
+    | McpStatusConnected
+    | McpStatusPending
+    | McpStatusDisabled
+    | McpStatusFailed
+    | McpStatusDisconnected
+    | McpStatusNeedsAuth
   title?: string
   integrationID?: IntegrationID
 }
@@ -2784,6 +2792,7 @@ export type ConfigEntry =
           compaction_jobs?: boolean
           sqlite_fts?: boolean
           browser_stream_tunnel?: boolean
+          mcp_resilience?: boolean
           video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
