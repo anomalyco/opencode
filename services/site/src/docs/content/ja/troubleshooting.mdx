@@ -104,6 +104,33 @@ grep 'role=server' ~/.local/share/opencode/log/opencode.log
 grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
 ```
 
+## テレメトリーのエクスポート
+
+OpenCode は、ログとトレースを OpenTelemetry コレクターや、HTTP 経由で OTLP を受け付ける APM バックエンドに送信できます。コレクターのベース URL を、パスを含めずに設定します。
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer example-token"
+export OTEL_RESOURCE_ATTRIBUTES="team=platform,host.name=dev-laptop"
+opencode
+```
+
+| 変数 | 動作 |
+| --- | --- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | ベース URL。ログは `<endpoint>/v1/logs` に、トレースは `<endpoint>/v1/traces` に送信されます。未設定の場合はエクスポートしません。 |
+| `OTEL_EXPORTER_OTLP_HEADERS` | エクスポートのたびに送信する `key=value` 形式のヘッダー。API キーなどをカンマ区切りで指定します。 |
+| `OTEL_RESOURCE_ATTRIBUTES` | すべてのレコードに追加する属性。URL エンコードした `key=value` 形式の属性をカンマ区切りで指定します。形式が不正な項目が 1 つでもあると、すべての属性を無視します。 |
+
+各レコードには `service.name`（`opencode`）、`service.version`、`deployment.environment.name`（リリースチャンネル）、`opencode.client`、`opencode.run`（ログファイルと同じ実行 ID）も含まれます。
+
+バックグラウンドサービスは別のプロセスで動作し、シェルの環境変数を引き継ぎません。モデルの呼び出しやツールの実行もトレースするには、サービスにも環境変数を設定してください。
+
+```bash
+opencode service set env OTEL_EXPORTER_OTLP_ENDPOINT http://localhost:4318
+opencode service set env OTEL_EXPORTER_OTLP_HEADERS "authorization=Bearer example-token"
+opencode service start
+```
+
 ## ヒープスナップショットを取得する
 
 任意のプラットフォームで、実行中のバックグラウンドサーバーのメモリ（ヒープ）スナップショットを書き出します。

@@ -113,10 +113,12 @@ V2 のアクション名は文字列であるため、プラグインがアク�
 | `websearch`                   | 検索クエリ                                                               |
 | `generate_image`              | 選択した画像モデル（`providerID/modelID`）。設定されている場合は `#variant` も付きます |
 | `external_directory`          | 正規化された外部ディレクトリの境界。通常は `/*` で終わります             |
-| `<server>_<tool>`             | MCP ツールの場合は `*`。両方の名前に含まれるサポートされない文字は `_` に置き換わります |
+| `<server>_<tool>`             | MCP ツールの場合は `*`。サーバー名とツール名では、英字、数字、`_`、`-` をそのまま使い、それ以外の文字は `_` に置き換えます |
 | `opencode_list_mcp_resources` | MCP サーバー名                                                           |
 | `opencode_read_mcp_resource`  | `<server>:<uri>`                                                         |
 | `execute`                     | `*`。deny の場合は Code Mode が削除されてツールが直接一覧表示され、ネストされたツールはそれぞれのルールを適用します |
+
+MCP のアクション名ではハイフンがそのまま残ります。たとえば、`mcp-atlassian` というサーバーのツールに一致するのは `mcp-atlassian_*` であり、`mcp_atlassian_*` ではありません。
 
 たとえば、1 つのスキルだけを許可し、他のすべてのスキルを拒否するには次のようにします。
 

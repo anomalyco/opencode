@@ -85,7 +85,31 @@ V2 のコンテキストは OpenCode クライアントであり、プラグイ�
 
 `ctx.location` は、このプラグインインスタンスが読み込まれた location を表します。プラグインが観測するすべてのセッションやイベントの location ではありません。その区別が重要な場合は、セッションまたはイベントのデータを読み取ってください。
 
-コンテキストは表に挙げたより多くのドメインを公開しており、カタログ、コマンド、連携、MCP サーバー、参照、スキル、ストレージ、VCS、worktree、Web 検索などが含まれます。[完全なプラグインコンテキスト](/build/plugins/server#api)を参照してください。
+コンテキストは、表にあるもの以外にも、コマンド、連携、MCP サーバー、参照、スキル、ストレージ、VCS、ワークツリー、Web 検索などのドメインを公開します。詳しくは[プラグインコンテキストの全 API](/build/plugins/server#api)を参照してください。
+
+### カタログドメインの移行
+
+以前のプラグインでは、プロバイダーとモデルを `ctx.catalog` 経由で公開していました。現在の OpenCode は `ctx.provider` と `ctx.model` を別々のドメインとして公開するため、`ctx.catalog.transform` を呼び出すプラグインは読み込みに失敗します。
+
+| 以前のカタログ API | 現在の対応 API |
+| --- | --- |
+| `ctx.catalog.transform(draft => …)` | `ctx.provider.transform(editor => …)` と `ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)` | `ctx.provider` の `editor.update(id, fn)` |
+| `draft.model.update(providerID, modelID, fn)` | `ctx.model` の `editor.update(providerID, modelID, fn)` |
+| `ctx.catalog.reload()` | `ctx.provider.reload()` と `ctx.model.reload()` |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+エディタ API の詳細は、[プロバイダー](/build/plugins/server#providers)と[モデル](/build/plugins/server#models)を参照してください。
 
 ## `setup` でフックを登録する
 

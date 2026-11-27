@@ -3,17 +3,16 @@ title: "ネットワーク"
 description: "プロキシ、カスタムの証明書認証局、クライアント証明書を設定します。"
 ---
 
-標準のプロキシ変数を設定し、ループバックアドレスを除外します。OpenCode は CLI とバックグラウンドサービスの間でローカルの HTTP 接続を使用するため、CLI の環境でプロキシを設定する場合はループバックの除外が必要です。
+標準のプロキシ用環境変数を設定します。OpenCode は CLI とバックグラウンドサービスの間でローカルの HTTP 接続を使います。CLI はループバックアドレスをプロキシの対象から自動で除外します。
 
 ```bash
 export HTTP_PROXY=http://proxy.example.com:8080
 export HTTPS_PROXY=http://proxy.example.com:8080
-export NO_PROXY=localhost,127.0.0.1,::1
 
 opencode
 ```
 
-`HTTP_PROXY` は HTTP の宛先を、`HTTPS_PROXY` は HTTPS の宛先を処理します。どちらの変数でも、プロキシ URL 自体に `http://` を使用できます。`NO_PROXY` は直接接続するホストとアドレスのカンマ区切りのリストです。
+`HTTP_PROXY` は HTTP の宛先に、`HTTPS_PROXY` は HTTPS の宛先に適用されます。どちらの変数でも、プロキシ URL 自体に `http://` を使えます。CLI は起動時に `127.0.0.1`、`localhost`、`::1` を `NO_PROXY` と `no_proxy` の両方に追加します。ほかにも直接接続する必要があるホストがあれば、`NO_PROXY` にカンマ区切りで指定してください。
 
 ## サービス
 
@@ -22,11 +21,11 @@ opencode
 ```bash
 opencode service set env HTTP_PROXY http://proxy.example.com:8080
 opencode service set env HTTPS_PROXY http://proxy.example.com:8080
-opencode service set env NO_PROXY localhost,127.0.0.1,::1
+opencode service set env NO_PROXY llm.company.example
 opencode service start
 ```
 
-サービスに保存した環境変数を変更すると、実行中のサービスが停止します。`service start` を実行すると、新しい環境変数で再起動します。CLI を起動するシェルでプロキシを設定する場合は、そのシェルにも `NO_PROXY` を設定しておいてください。サービスに保存した変数が適用されるのはサーバープロセスだけで、CLI プロセスには適用されません。
+サービスに保存した環境変数を変更すると、実行中のサービスが停止します。`service start` を実行すると、新しい環境変数で起動します。サービスに保存した変数はサーバープロセスにしか適用されないため、CLI を起動するシェルにもプロキシ用の環境変数を設定してください。ループバックアドレスはどちらのプロセスでも自動で除外されます。
 
 永続化した変数を削除するには `service unset env` を使用します。
 
@@ -116,7 +115,6 @@ CERT_SIGNATURE_FAILURE
 ```bash
 HTTP_PROXY=http://proxy.example.com:8080 \
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode --standalone
 ```
 
@@ -124,7 +122,6 @@ opencode --standalone
 
 ```bash
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode serve
 ```
 

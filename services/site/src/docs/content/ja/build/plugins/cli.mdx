@@ -408,10 +408,9 @@ await context.ui.dialog.select({
 - Escape を押すか、`clear()` を呼び出すか、別のダイアログを表示すると、Promise の結果として `undefined` が返ります。
 - `ctrl+n` や `ctrl+p` はバインドしないでください。ダイアログがナビゲーション用に予約しており、ダイアログ自身のバインドが優先されます。
 
-カスタムの JSX ダイアログは、サイズを設定して自身を閉じられます。
+カスタムの JSX ダイアログは、サイズを設定したり、自身を閉じたりできます。`set` は `show` の後に呼び出してください。ダイアログを表示すると、サイズは `medium` に戻り、中央揃えも解除されます。`medium`、`large`、`xlarge` の幅は、それぞれ 60、88、116 列です。
 
 ```tsx
-context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.show(
   () => (
     <box>
@@ -420,6 +419,7 @@ context.ui.dialog.show(
   ),
   () => console.log("closed"),
 )
+context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.clear()
 ```
 
@@ -618,8 +618,8 @@ TUI プラグインは `./tui` で公開します。プラグインが JSX を�
     "@opencode/plugin": "latest"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.6.6",
-    "@opentui/solid": ">=0.6.6",
+    "@opentui/core": ">=0.8.0",
+    "@opentui/solid": ">=0.8.0",
     "solid-js": ">=1.9.0"
   }
 }

@@ -128,3 +128,23 @@ $ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
 ```bash
 $ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
 ```
+
+`opencode service set password` が適用されるのは、マネージドのバックグラウンドサービスだけです。`opencode serve` は `OPENCODE_PASSWORD` を読み取り、未設定の場合は起動のたびに新しいパスワードを生成します。
+
+### Docker
+
+リリースごとに、バージョンをタグに付けたイメージが `ghcr.io/anomalyco/opencode` に公開されます。イメージのエントリーポイントは `opencode` です。そのままでは TUI が起動するため、`serve` を渡します。デフォルトの `127.0.0.1` ではコンテナ内からしか接続できないので、`0.0.0.0` で待ち受けるようにします。
+
+```bash
+$ docker run -d --name opencode -p 4096:4096 \
+    -e OPENCODE_PASSWORD="a-long-secret" \
+    -e ANTHROPIC_API_KEY \
+    -v opencode-data:/root/.local/share/opencode \
+    -v opencode-config:/root/.config/opencode \
+    -v "$PWD":/workspace -w /workspace \
+    ghcr.io/anomalyco/opencode:<version> serve --hostname 0.0.0.0 --port 4096
+```
+
+- 再起動後も同じパスワードを使えるよう、`OPENCODE_PASSWORD` を設定します。
+- データディレクトリ `/root/.local/share/opencode` をマウントします。セッションを保存するデータベースがここにあり、マウントしないとコンテナの削除時にセッションも失われます。グローバル設定を保持するには、設定ディレクトリ `/root/.config/opencode` もマウントします。
+- `curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info` で、サーバーがリクエストに応答できる状態か確認します。

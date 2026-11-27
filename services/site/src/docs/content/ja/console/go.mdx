@@ -85,6 +85,7 @@ OpenCode 以外に、次のクライアントが OpenCode Go で正しく動作�
 | **jcode**        | **v0.81.6 以降**に更新してください。[セッションヘッダーの修正](https://github.com/1jehuang/jcode/issues/1167)が含まれています。                                                                                                            |
 | **OpenClaw**     | 最新のビルドは Go のリクエストで `x-opencode-session` を送信します。ブラウザでのサインインには **2026.11.7 以降**が必要です。                                                                                                                |
 | **Kilo Code CLI** | [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) を含むビルドでは OpenCode のセッションヘッダーが復元されます。この修正は CLI が対象で、VS Code 拡張機能は対象外です。[issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723) を参照してください。 |
+| **MiMo Code**     | **v0.1.16 以降**に更新してください。このバージョン以降は Go へのリクエストに `x-opencode-session` が付きます（[PR #2655](https://github.com/XiaomiMiMo/MiMo-Code/pull/2655)）。 |
 
 ### 既知の問題があるクライアント
 
@@ -95,7 +96,6 @@ OpenCode 以外に、次のクライアントが OpenCode Go で正しく動作�
 | **DeepSeek Harness**    | 一部のモデル経路ではセッション情報が届きますが、届かない経路もあります。ネイティブのヘッダーは認識しており、残る作業はすべてのアダプターで送信することです。[Discussion #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495)。        |
 | **GitHub Copilot Chat** | [VS Code issue #334186](https://github.com/microsoft/vscode/issues/334186) でセッションヘッダーの自動サポートが要望されています。                                                                                                                       |
 | **Kimi Code**           | [issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506) のセッションヘッダーの要望は、対応予定なしとしてクローズされました。                                                                                                                  |
-| **MiMo Code**           | [Issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) はクローズされ、[PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327) はマージされずにクローズされました。                                                                     |
 
 ## 使用量の上限
 
@@ -109,7 +109,7 @@ Go で使用する有料モデルは、1 つの利用枠を共有します。Go 
 
 各モデルの[月間上限](https://opencode.ai/console/go#limits)は、そのモデルだけを 1 か月使った場合にプランがカバーする使用量を示します。たとえば、上限が $15 のモデルで $1.50 使用すると、月間利用枠の 10% を消費します。上限が $60 のモデルで $6 使用した場合も同じです。Go のレスポンスでは、各リクエストが消費した量が [`opencode.allowance`](/console/api/inference#cost) で報告されます。
 
-[トークン料金](https://opencode.ai/console/go#pricing)は 100 万トークンあたりで、Go、Go Plus、Go Teams で共通です。
+[トークン料金](https://opencode.ai/console/go#pricing)は 1M トークンあたりで、Go、Go Plus、Go Teams で共通です。
 
 [Decision](#decision-models) と [embedding](#embedding-models) のモデルは定価で提供され、Go の割引はありません。月間上限は支払額と同じで、Go では $10、Go Plus では $40 です。Go Teams では $15 となり、どのモデルでも Go より $5 高くなります。
 
@@ -197,7 +197,7 @@ curl https://opencode.ai/inference/go/systemone/v1/systemone \
 | GPT 6 Luna Decision (≤ 272K tokens) | gpt-6-luna-decision | $0.10  | 無料 | $0.01              | $0.125             |
 | GPT 6 Luna Decision (> 272K tokens) | gpt-6-luna-decision | $0.20  | 無料 | $0.02              | $0.25              |
 
-- 料金は 100 万トークンあたりです。
+- 料金は 1M トークンあたりです。
 - OpenAI の Decisions 形式のリクエストは `https://opencode.ai/inference/go/openai/v1/decisions` で利用できます。
 - 質問の種類は [Jev](/console/models#jev)、`state` 内の画像、音声、動画、PDF は [GPT 6 Luna Decision と Gemini Decision 1](/console/models#gpt-6-luna-decision-and-gemini-decision-1) を参照してください。
 
@@ -221,7 +221,7 @@ curl https://opencode.ai/inference/go/openai/v1/embeddings \
 | Qwen3 Embedding 8B     | qwen3-embedding-8b     | $0.01 |
 | Gemini Embedding 2     | gemini-embedding-2     | $0.20 |
 
-- 料金は入力 100 万トークンあたりです。
+- 料金は入力 1M トークンあたりです。
 - リクエストでは `dimensions` と `encoding_format` も指定できます。[埋め込みモデル](/console/models#embedding-models)を参照してください。
 
 ### 使用量

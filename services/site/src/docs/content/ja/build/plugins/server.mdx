@@ -173,7 +173,7 @@ const agents = await ctx.agent.list()
 const build = await ctx.agent.get({ agentID: "build" })
 ```
 
-transform を登録して、エージェントの確認、更新、削除、デフォルトエージェントの選択を行います。
+transform を登録すると、エージェントの確認、作成、更新、削除や、デフォルトエージェントの選択ができます。
 
 ```ts
 await ctx.agent.transform((editor) => {
@@ -185,6 +185,18 @@ await ctx.agent.transform((editor) => {
     agent.description = "Builds features and fixes bugs"
   })
   editor.remove("legacy")
+})
+```
+
+新しいエージェントは `editor.update` で登録します。指定した ID のエージェントがすでにあれば、そのエージェントを編集します。なければ `Agent.Info.default(id)` で作成してからコールバックを実行します。
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
 })
 ```
 
@@ -992,7 +1004,7 @@ Code Mode（`codemode: true`）の内部では、自由形式のツールは `aw
 await ctx.tool.reload()
 ```
 
-エディタにある現在のツールを確認するには `list()` と `get()` を使用します。ツールは実効的な名前を含む `id` を持ち、その ID がない場合 `get()` は `undefined` を返します。`update` と `remove` には、名前空間を含む実効的なツール名（上記の `acme_greeting` など）を使用します。名前空間のドットと、ツール名のサポートされない文字は `_` になります。存在しない名前は無視され、ツールの作成には完全な定義を伴う `add` が必要です。更新は名前と名前空間を保ちます。ネストした値を変更するのではなく、新しいスキーマやオプションを代入して置き換えてください。無効な更新はログに記録され、以前の定義がそのまま残ります。
+エディタにあるツールを確認するには `list()` と `get()` を使います。ツールの `id` には実際に使われる名前が入ります。その ID のツールが存在しない場合、`get()` は `undefined` を返します。`update` と `remove` には、名前空間を含めた実際のツール名（上の例では `acme_greeting`）を渡します。名前空間のドットは `_` に変換されます。ツール名では英字、数字、`_`、`-` 以外の文字が `_` に置き換わります。存在しない名前は無視されます。新しいツールを作成するには、`add` に完全な定義を渡してください。更新しても名前と名前空間は変わりません。ネストした値を直接変更するのではなく、新しいスキーマやオプションを代入して置き換えてください。無効な更新はログに記録され、以前の定義がそのまま残ります。
 
 ```ts
 await ctx.tool.transform((editor) => {
