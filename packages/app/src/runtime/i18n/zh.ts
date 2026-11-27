@@ -888,6 +888,8 @@ export const dict = {
   "desktop.removableVolumesUsage": "OpenCode 会使用可移除宗卷上的文件，用于你在其中打开的项目和运行的命令。",
   "desktop.contextMenu.spellcheck": "拼写检查",
   "desktop.contextMenu.spellcheckLanguages": "拼写检查语言",
+  "desktop.contextMenu.openLink": "在外部浏览器中打开链接",
+  "desktop.contextMenu.copyLink": "复制链接",
   "session.location.unavailable": "会话位置不可用",
   "session.location.description": "选择另一个目录以继续此会话。",
   "session.location.choose": "选择目录",

@@ -862,6 +862,8 @@ export const dict = {
     "OpenCode gebruikt bestanden op verwisselbare volumes voor projecten die je opent en opdrachten die je daar uitvoert.",
   "desktop.contextMenu.spellcheck": "Spellingcontrole",
   "desktop.contextMenu.spellcheckLanguages": "Talen voor spellingcontrole",
+  "desktop.contextMenu.openLink": "Link openen in externe browser",
+  "desktop.contextMenu.copyLink": "Link kopiëren",
   "session.location.unavailable": "Sessielocatie niet beschikbaar",
   "session.location.description": "Kies een andere map om deze sessie voort te zetten.",
   "session.location.choose": "Map kiezen",

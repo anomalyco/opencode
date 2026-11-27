@@ -866,6 +866,8 @@ export const dict = {
     "OpenCode folosește fișiere de pe volume amovibile pentru proiectele pe care le deschizi și comenzile pe care le rulezi acolo.",
   "desktop.contextMenu.spellcheck": "Verificare ortografică",
   "desktop.contextMenu.spellcheckLanguages": "Limbi pentru verificarea ortografică",
+  "desktop.contextMenu.openLink": "Deschide linkul în browserul extern",
+  "desktop.contextMenu.copyLink": "Copiază linkul",
   "session.location.unavailable": "Locația sesiunii nu este disponibilă",
   "session.location.description": "Alege alt director pentru a continua această sesiune.",
   "session.location.choose": "Alege directorul",

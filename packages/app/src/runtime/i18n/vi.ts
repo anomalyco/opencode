@@ -854,6 +854,8 @@ export const dict = {
   "desktop.removableVolumesUsage": "OpenCode dùng các tệp trên ổ di động cho những dự án bạn mở và lệnh bạn chạy ở đó.",
   "desktop.contextMenu.spellcheck": "Kiểm tra chính tả",
   "desktop.contextMenu.spellcheckLanguages": "Ngôn ngữ kiểm tra chính tả",
+  "desktop.contextMenu.openLink": "Mở liên kết trong trình duyệt bên ngoài",
+  "desktop.contextMenu.copyLink": "Sao chép liên kết",
   "session.location.unavailable": "Vị trí phiên không khả dụng",
   "session.location.description": "Chọn thư mục khác để tiếp tục phiên này.",
   "session.location.choose": "Chọn thư mục",

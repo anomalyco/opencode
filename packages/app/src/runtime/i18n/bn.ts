@@ -855,6 +855,8 @@ export const dict = {
     "আপনি যে প্রকল্পগুলি খোলেন এবং সেখানে যে কমান্ডগুলি চালান তার জন্য OpenCode অপসারণযোগ্য ভলিউমের ফাইল ব্যবহার করে।",
   "desktop.contextMenu.spellcheck": "বানান পরীক্ষা",
   "desktop.contextMenu.spellcheckLanguages": "বানান পরীক্ষার ভাষা",
+  "desktop.contextMenu.openLink": "বাহ্যিক ব্রাউজারে লিঙ্ক খুলুন",
+  "desktop.contextMenu.copyLink": "লিঙ্ক কপি করুন",
   "session.location.unavailable": "সেশনের অবস্থান উপলব্ধ নয়",
   "session.location.description": "এই সেশন চালিয়ে যেতে অন্য একটি ডিরেক্টরি বেছে নিন।",
   "session.location.choose": "ডিরেক্টরি বেছে নিন",

@@ -850,6 +850,8 @@ export const dict = {
     "OpenCode برای پروژه‌هایی که باز می‌کنید و دستورهایی که در آن‌ها اجرا می‌کنید از فایل‌های درایوهای جداشدنی استفاده می‌کند.",
   "desktop.contextMenu.spellcheck": "غلط‌یابی",
   "desktop.contextMenu.spellcheckLanguages": "زبان‌های غلط‌یابی",
+  "desktop.contextMenu.openLink": "باز کردن پیوند در مرورگر خارجی",
+  "desktop.contextMenu.copyLink": "کپی پیوند",
   "session.location.unavailable": "مکان جلسه در دسترس نیست",
   "session.location.description": "برای ادامه این جلسه، پوشه دیگری انتخاب کنید.",
   "session.location.choose": "انتخاب پوشه",

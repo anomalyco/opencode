@@ -876,6 +876,8 @@ export const dict = {
   "desktop.picker.error.sizeLimit": "Pasirinkti priedai viršija {{limit}} MB ribą",
   "desktop.contextMenu.spellcheck": "Rašybos tikrinimas",
   "desktop.contextMenu.spellcheckLanguages": "Rašybos tikrinimo kalbos",
+  "desktop.contextMenu.openLink": "Atidaryti nuorodą išorinėje naršyklėje",
+  "desktop.contextMenu.copyLink": "Kopijuoti nuorodą",
   "session.location.unavailable": "Seanso vieta nepasiekiama",
   "session.location.description": "Pasirinkite kitą katalogą, kad galėtumėte tęsti šį seansą.",
   "session.location.choose": "Pasirinkti katalogą",

@@ -843,6 +843,8 @@ export const dict = {
     "OpenCode ប្រើឯកសារនៅលើឧបករណ៍ផ្ទុកចល័តសម្រាប់គម្រោងដែលអ្នកបើក និងពាក្យបញ្ជាដែលអ្នកដំណើរការនៅទីនោះ។",
   "desktop.contextMenu.spellcheck": "ពិនិត្យអក្ខរាវិរុទ្ធ",
   "desktop.contextMenu.spellcheckLanguages": "ភាសាពិនិត្យអក្ខរាវិរុទ្ធ",
+  "desktop.contextMenu.openLink": "បើកតំណក្នុងកម្មវិធីរុករកខាងក្រៅ",
+  "desktop.contextMenu.copyLink": "ចម្លងតំណ",
   "session.location.unavailable": "ទីតាំងសម័យមិនអាចប្រើបាន",
   "session.location.description": "ជ្រើសថតផ្សេងទៀតដើម្បីបន្តសម័យនេះ។",
   "session.location.choose": "ជ្រើសថត",

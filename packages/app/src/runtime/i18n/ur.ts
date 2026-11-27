@@ -867,6 +867,8 @@ export const dict = {
     "OpenCode قابلِ علیحدگی والیومز پر موجود فائلیں ان پروجیکٹس کے لیے استعمال کرتا ہے جو آپ وہاں کھولتے ہیں اور ان کمانڈز کے لیے جو آپ وہاں چلاتے ہیں۔",
   "desktop.contextMenu.spellcheck": "ہجے کی جانچ",
   "desktop.contextMenu.spellcheckLanguages": "ہجے کی جانچ کی زبانیں",
+  "desktop.contextMenu.openLink": "لنک بیرونی براؤزر میں کھولیں",
+  "desktop.contextMenu.copyLink": "لنک کاپی کریں",
   "session.location.unavailable": "سیشن کا مقام دستیاب نہیں",
   "session.location.description": "یہ سیشن جاری رکھنے کے لیے کوئی دوسری ڈائریکٹری منتخب کریں۔",
   "session.location.choose": "ڈائریکٹری منتخب کریں",

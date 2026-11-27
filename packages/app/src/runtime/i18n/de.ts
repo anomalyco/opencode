@@ -877,6 +877,8 @@ export const dict = {
     "OpenCode verwendet Dateien auf Wechseldatenträgern für Projekte, die Sie öffnen, und Befehle, die Sie dort ausführen.",
   "desktop.contextMenu.spellcheck": "Rechtschreibprüfung",
   "desktop.contextMenu.spellcheckLanguages": "Sprachen der Rechtschreibprüfung",
+  "desktop.contextMenu.openLink": "Link in externem Browser öffnen",
+  "desktop.contextMenu.copyLink": "Link kopieren",
   "session.location.unavailable": "Sitzungsort nicht verfügbar",
   "session.location.description": "Wählen Sie ein anderes Verzeichnis, um diese Sitzung fortzusetzen.",
   "session.location.choose": "Verzeichnis wählen",

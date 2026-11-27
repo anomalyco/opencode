@@ -862,6 +862,8 @@ export const dict = {
     "OpenCode користи датотеке на преносивим дисковима за пројекте које отварате и команде које тамо покрећете.",
   "desktop.contextMenu.spellcheck": "Провера правописа",
   "desktop.contextMenu.spellcheckLanguages": "Језици провере правописа",
+  "desktop.contextMenu.openLink": "Отвори везу у спољном прегледачу",
+  "desktop.contextMenu.copyLink": "Копирај везу",
   "session.location.unavailable": "Локација сесије није доступна",
   "session.location.description": "Изаберите други директоријум да бисте наставили ову сесију.",
   "session.location.choose": "Изаберите директоријум",

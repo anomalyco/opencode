@@ -899,6 +899,8 @@ export const dict = {
     "OpenCode ใช้ไฟล์บนไดรฟ์แบบถอดได้สำหรับโปรเจกต์ที่คุณเปิดและคำสั่งที่คุณเรียกใช้ที่นั่น",
   "desktop.contextMenu.spellcheck": "ตรวจการสะกด",
   "desktop.contextMenu.spellcheckLanguages": "ภาษาสำหรับตรวจการสะกด",
+  "desktop.contextMenu.openLink": "เปิดลิงก์ในเบราว์เซอร์ภายนอก",
+  "desktop.contextMenu.copyLink": "คัดลอกลิงก์",
   "session.location.unavailable": "ไม่พบตำแหน่งของเซสชัน",
   "session.location.description": "เลือกไดเรกทอรีอื่นเพื่อทำเซสชันนี้ต่อ",
   "session.location.choose": "เลือกไดเรกทอรี",

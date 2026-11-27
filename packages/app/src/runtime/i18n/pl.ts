@@ -889,6 +889,8 @@ export const dict = {
     "OpenCode używa plików z woluminów wymiennych dla otwieranych projektów i uruchamianych w nich poleceń.",
   "desktop.contextMenu.spellcheck": "Sprawdzanie pisowni",
   "desktop.contextMenu.spellcheckLanguages": "Języki sprawdzania pisowni",
+  "desktop.contextMenu.openLink": "Otwórz link w zewnętrznej przeglądarce",
+  "desktop.contextMenu.copyLink": "Kopiuj link",
   "session.location.unavailable": "Lokalizacja sesji jest niedostępna",
   "session.location.description": "Wybierz inny katalog, aby kontynuować tę sesję.",
   "session.location.choose": "Wybierz katalog",

@@ -857,6 +857,8 @@ export const dict = {
     "OpenCode रिमूवेबल वॉल्यूम की फ़ाइलों का उपयोग वहाँ खोले गए प्रोजेक्ट और वहाँ चलाए गए कमांड के लिए करता है।",
   "desktop.contextMenu.spellcheck": "वर्तनी जाँच",
   "desktop.contextMenu.spellcheckLanguages": "वर्तनी जाँच की भाषाएँ",
+  "desktop.contextMenu.openLink": "लिंक बाहरी ब्राउज़र में खोलें",
+  "desktop.contextMenu.copyLink": "लिंक कॉपी करें",
   "session.location.unavailable": "सेशन का स्थान उपलब्ध नहीं है",
   "session.location.description": "इस सेशन को जारी रखने के लिए कोई दूसरी निर्देशिका चुनें।",
   "session.location.choose": "निर्देशिका चुनें",

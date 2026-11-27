@@ -860,6 +860,8 @@ export const dict = {
     "OpenCode файлҳои дискҳои ҷудошавандаро барои лоиҳаҳое, ки мекушоед, ва фармонҳое, ки дар он ҷо иҷро мекунед, истифода мебарад.",
   "desktop.contextMenu.spellcheck": "Санҷиши имло",
   "desktop.contextMenu.spellcheckLanguages": "Забонҳои санҷиши имло",
+  "desktop.contextMenu.openLink": "Кушодани пайванд дар браузери берунӣ",
+  "desktop.contextMenu.copyLink": "Нусхабардории пайванд",
   "session.location.unavailable": "Ҷойгиршавии сессия дастрас нест",
   "session.location.description": "Барои идомаи ин сессия феҳристи дигарро интихоб кунед.",
   "session.location.choose": "Интихоби феҳрист",

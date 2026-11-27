@@ -941,6 +941,8 @@ export const dict = {
     "OpenCode використовує файли на знімних томах для проєктів, які ви відкриваєте, і команд, які ви там запускаєте.",
   "desktop.contextMenu.spellcheck": "Перевірка правопису",
   "desktop.contextMenu.spellcheckLanguages": "Мови перевірки правопису",
+  "desktop.contextMenu.openLink": "Відкрити посилання в зовнішньому браузері",
+  "desktop.contextMenu.copyLink": "Копіювати посилання",
   "session.location.unavailable": "Розташування сесії недоступне",
   "session.location.description": "Виберіть інший каталог, щоб продовжити цю сесію.",
   "session.location.choose": "Вибрати каталог",

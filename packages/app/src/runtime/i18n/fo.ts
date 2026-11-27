@@ -847,6 +847,8 @@ export const dict = {
     "OpenCode brúkar fílur á útskiftiligum drevum til verkætlanir, tú letur upp, og skipanir, tú koyrir har.",
   "desktop.contextMenu.spellcheck": "Stavikanning",
   "desktop.contextMenu.spellcheckLanguages": "Mál til stavikanning",
+  "desktop.contextMenu.openLink": "Lat leinki upp í uttanhýsis kaga",
+  "desktop.contextMenu.copyLink": "Avrita leinki",
   "session.location.unavailable": "Staðsetingin hjá setuni er ikki tøk",
   "session.location.description": "Vel eina aðra mappu fyri at halda fram við hesi setuni.",
   "session.location.choose": "Vel mappu",
