@@ -749,23 +749,37 @@ const layer = Layer.effect(
         Effect.flatMap((rows) => Effect.forEach(rows, (row) => execution.wake(row.sessionID), { discard: true })),
       )
 
-    const rawActiveRows = (timersOnly = false) =>
+    const hasActiveRows = (timersOnly = false) =>
       db
-        .select({ id: AutomationTable.id, directory: AutomationTable.directory })
+        .select({ id: AutomationTable.id })
         .from(AutomationTable)
         .where(
           and(eq(AutomationTable.status, "active"), timersOnly ? isNotNull(AutomationTable.next_due_at) : undefined),
         )
-        .all()
-        .pipe(Effect.orDie)
+        .limit(1)
+        .get()
+        .pipe(
+          Effect.orDie,
+          Effect.map((row) => row !== undefined),
+        )
 
-    // The lease belongs to a process that can actually run work. A row in a location with automations off must not
-    // make this process claim or renew it, or it blocks the process that is allowed to run the row.
-    const hasActiveRows = (timersOnly = false) =>
-      rawActiveRows(timersOnly).pipe(
-        Effect.flatMap((rows) => Effect.filter(rows, (row) => visible(row.directory))),
-        Effect.map((rows) => rows.length > 0),
-      )
+    // The lease belongs to a process that can actually run work. Config reads boot a location, so check each distinct
+    // directory once and stop at the first enabled one instead of scanning every row on every pass.
+    const hasRunnableRow = () =>
+      db
+        .selectDistinct({ directory: AutomationTable.directory })
+        .from(AutomationTable)
+        .where(eq(AutomationTable.status, "active"))
+        .all()
+        .pipe(
+          Effect.orDie,
+          Effect.flatMap((rows) =>
+            Effect.gen(function* () {
+              for (const row of rows) if (yield* visible(row.directory)) return true
+              return false
+            }),
+          ),
+        )
 
     const ownerID = randomUUID()
     // Claim once on startup even with nothing active: a finished automation may have left a prompt pending.
@@ -985,9 +999,11 @@ const layer = Layer.effect(
     const loop = Effect.gen(function* () {
       yield* doorbell.close
       const active = yield* hasActiveRows()
+      // Config reads are expensive and the result is stable for this pass, so reuse it for the checks below.
+      const runnable = active ? yield* hasRunnableRow() : false
       // Every active row belongs to a location with automations off. Never claim, and give up a lease we already hold.
       // An empty database still claims once on startup to recover a prompt left by a finished automation.
-      if (!active && (yield* rawActiveRows()).length > 0) {
+      if (active && !runnable) {
         if (leadership === "leader") yield* releaseLeader
         leadership = "follower"
         return yield* idle
