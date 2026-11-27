@@ -12,11 +12,11 @@ import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
 import { FileProvider } from "@/workspaces/files/model"
 import { LocationProvider } from "@/workspaces/location"
 import { LabBrowser } from "./browser"
-import { loadLabCatalog, type StoryModule } from "./catalog"
+import { loadLabCatalog, type PageModule } from "./catalog"
 
 // Standalone pages mount fixture runtimes that must not access the live app's storage.
 // Vite needs the patterns as literals in each call.
-const modules = import.meta.glob<StoryModule>([
+const modules = import.meta.glob<PageModule>([
   "../**/*.lab.tsx",
   "../../../ui/src/**/*.lab.tsx",
   "../../../session-ui/src/**/*.lab.tsx",
@@ -58,7 +58,7 @@ function Workspace(props: ParentProps) {
   const servers = useServers()
   const global = useGlobal()
 
-  // Kept once picked while the server stays listed: a new pick remounts the story, losing whatever it was showing.
+  // Kept once picked while the server stays listed: a new pick remounts the page, losing whatever it was showing.
   const healthy = createMemo((picked?: ServerConnection.Any) =>
     picked && servers.list.some((conn) => ServerConnection.key(conn) === ServerConnection.key(picked))
       ? picked
@@ -80,7 +80,7 @@ function Project(props: ParentProps) {
   const server = useServer()
 
   // The list puts the most recently active project first, and on a busy server that changes every few seconds. The
-  // story keeps the project it started in, so another session's activity never remounts it.
+  // page keeps the project it started in, so another session's activity never remounts it.
   const directory = createMemo((picked?: string) => {
     const list = server.ctx.projects.list()
 
@@ -106,7 +106,7 @@ function Project(props: ParentProps) {
   )
 }
 
-// A story of a plugin renders as its contributions do: inside that plugin's context from the app's host.
+// A page of a plugin renders as its contributions do: inside that plugin's context from the app's host.
 function Plugin(props: ParentProps<{ file: string }>) {
   const id = props.file.match(/gui-plugins\/src\/([^/]+)\//)?.[1]
 

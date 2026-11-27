@@ -1,6 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("opens a page from the standalone Lab and previews its states", async ({ page }) => {
+test("opens a page from the standalone Lab and previews its states", async ({ page }) => {
   await page.goto("/")
   await expect(page.getByRole("tree")).toBeVisible({ timeout: 30_000 })
   await page.getByRole("button", { name: /Search pages/ }).click()
@@ -13,7 +13,7 @@ story("opens a page from the standalone Lab and previews its states", async ({ p
   await expect(page.getByText("Rename the Alpha export", { exact: true })).toBeVisible()
 })
 
-story("edits a page's state argument from the inspector", async ({ page }) => {
+test("edits a page's state argument from the inspector", async ({ page }) => {
   await page.goto("/?page=../../app/src/composer/composer-touch.lab.tsx")
   await page
     .getByRole("region", { name: "lab controls" })

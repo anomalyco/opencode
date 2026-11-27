@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { useI18n } from "@opencode/ui/context/i18n"
-import { storyTool } from "../storybook/current-session-scenarios"
+import { labTool } from "../lab/current-session-scenarios"
 import { contextGroupLabel } from "../tools/context-group-label"
 import type { ContextGroupPart } from "../tools/tool-renderer"
 import { labelGroups } from "./group-label-fixtures"
@@ -27,7 +27,7 @@ describe("group labels", () => {
   test("the current timeline counts a user shell as a Shell call", () => {
     const parts: ContextGroupPart[] = [
       { type: "shell", id: "u1", render: () => null },
-      storyTool("r1", "read", "completed", { path: "/repo/a.ts" }),
+      labTool("r1", "read", "completed", { path: "/repo/a.ts" }),
       { type: "notice", id: "n1", render: () => null },
     ]
 
@@ -38,7 +38,7 @@ describe("group labels", () => {
   test("the current timeline counts a script's steps, without a patch for its changes, with scriptSteps", () => {
     const step = (tool: string, input: Record<string, string>) => ({ tool, status: "completed", input })
 
-    const script = storyTool(
+    const script = labTool(
       "x1",
       "execute",
       "completed",
@@ -64,7 +64,7 @@ describe("group labels", () => {
     const step = (tool: string) => ({ tool, status: "completed", input: {} })
 
     const script = (tools: string[]) =>
-      storyTool("x1", "execute", "completed", {}, { metadata: { toolCalls: tools.map(step) } })
+      labTool("x1", "execute", "completed", {}, { metadata: { toolCalls: tools.map(step) } })
 
     const mixed = script(["anomaly_slack.slack_search_users", "shell", "anomaly_slack.slack_read_thread", "search"])
 

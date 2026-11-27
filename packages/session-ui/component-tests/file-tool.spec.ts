@@ -1,6 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("keeps grouped file choices when the Used group reopens", async ({ mount }) => {
+test("keeps grouped file choices when the Used group reopens", async ({ mount }) => {
   const root = await mount("current-session-research-agents--agent-research", { args: { scenario: "workflow" } })
   const group = root.locator('[data-component="collapsed-tool-group"]').filter({ hasText: "Patch" })
   const disclosure = group.getByRole("button", { name: /^Used \d+ .*Edit.*Write.*Patch$/ })
@@ -31,7 +31,7 @@ story("keeps grouped file choices when the Used group reopens", async ({ mount }
 })
 
 for (const tool of ["edit", "write"]) {
-  story(`${tool} preserves input fallback and disclosure through completion`, async ({ mount }) => {
+  test(`${tool} preserves input fallback and disclosure through completion`, async ({ mount }) => {
     const root = await mount("current-session-file-changes--file-tool-fallbacks", { args: { tool } })
     const file = root.getByRole("button", { name: /example\.ts/ })
     await expect(file).toHaveAttribute("aria-expanded", "false")
@@ -47,7 +47,7 @@ for (const tool of ["edit", "write"]) {
 }
 
 // Product regression from 010cd6131e: an empty write renders no file row. Remove `fail` once it is fixed.
-story.fail("empty writes still show a file row", async ({ mount }) => {
+test.fail("empty writes still show a file row", async ({ mount }) => {
   const root = await mount("current-session-file-changes--file-tool-fallbacks", {
     args: { tool: "write", empty: true },
   })

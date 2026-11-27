@@ -9,7 +9,7 @@ const LODGER_TAP = 4
 
 /**
  * The new session wordmark and the lodger that lives in its final "e". `board` is the static pin board (the
- * `pins` story) with no lodger. Pulling the lodger out (`drag`) either snaps it back (`snap`) or pops the pin board
+ * `pins` page) with no lodger. Pulling the lodger out (`drag`) either snaps it back (`snap`) or pops the pin board
  * out (`show`); from its perch (`idle`) it can be carried (`carry`) back into the hole (`pack`), dropped on the
  * composer to play Brick Breaker (`game`), or let go to hop home (`hop`, `return`).
  *

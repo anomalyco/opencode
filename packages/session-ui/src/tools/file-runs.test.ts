@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { storyTool } from "../storybook/current-session-scenarios"
+import { labTool } from "../lab/current-session-scenarios"
 import type { FileFact } from "../timeline/facts"
 import { fileRuns, runDisclosureKey } from "./file-runs"
 
@@ -15,8 +15,8 @@ const change = (index: number, path: string): FileFact => ({
 
 describe("file runs", () => {
   test("direct changes and a script's changes stay in the order they happened", () => {
-    const edit = storyTool("edit_a", "edit", "completed", { path: "/repo/a.ts" })
-    const patch = storyTool("patch_c", "patch", "completed", {})
+    const edit = labTool("edit_a", "edit", "completed", { path: "/repo/a.ts" })
+    const patch = labTool("patch_c", "patch", "completed", {})
     const runs = fileRuns([edit, change(0, "/repo/b.ts"), change(1, "/repo/b2.ts"), patch])
 
     expect(
@@ -26,8 +26,8 @@ describe("file runs", () => {
 
   test("calls one after another stay one run", () => {
     const runs = fileRuns([
-      storyTool("edit_a", "edit", "completed", { path: "/repo/a.ts" }),
-      storyTool("write_b", "write", "completed", { path: "/repo/b.ts", content: "b" }),
+      labTool("edit_a", "edit", "completed", { path: "/repo/a.ts" }),
+      labTool("write_b", "write", "completed", { path: "/repo/b.ts", content: "b" }),
     ])
 
     expect(runs).toHaveLength(1)
@@ -35,8 +35,8 @@ describe("file runs", () => {
   })
 
   test("two runs that change the same file open on their own", () => {
-    const first = storyTool("edit_1", "edit", "completed", { path: "/repo/a.ts" })
-    const second = storyTool("edit_2", "edit", "completed", { path: "/repo/a.ts" })
+    const first = labTool("edit_1", "edit", "completed", { path: "/repo/a.ts" })
+    const second = labTool("edit_2", "edit", "completed", { path: "/repo/a.ts" })
     const runs = fileRuns([first, change(0, "/repo/b.ts"), second])
 
     const keys = runs.flatMap((run) =>

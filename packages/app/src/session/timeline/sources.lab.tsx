@@ -5,7 +5,7 @@ import { turnMessages, turnSources } from "@opencode/session-ui/sources"
 import type { SiteIconMode } from "@opencode/session-ui/sources/experiment"
 import { SourcesPanel } from "@opencode/session-ui/sources/panel"
 import { SourcesTitle } from "@opencode/session-ui/sources/title"
-import { CURRENT_SESSION_ID, STORY_MODEL, STORY_TIME } from "@opencode/session-ui/storybook"
+import { CURRENT_SESSION_ID, LAB_MODEL, LAB_TIME } from "@opencode/session-ui/lab"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -13,7 +13,7 @@ import { Tabs } from "@opencode/ui/tabs"
 import { createEffect, createMemo, on, onCleanup, Show, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
-import { SessionPreview } from "@/session/story-model"
+import { SessionPreview } from "@/session/lab-model"
 
 const timelineDetail = timelinePresets[2].value
 
@@ -36,7 +36,7 @@ let clock = 0
 const time = () => {
   clock += 1_000
 
-  return { created: STORY_TIME + clock, ran: STORY_TIME + clock + 100, completed: STORY_TIME + clock + 900 }
+  return { created: LAB_TIME + clock, ran: LAB_TIME + clock + 100, completed: LAB_TIME + clock + 900 }
 }
 
 const search = (id: string, query: string, results: readonly Result[]): SessionMessageAssistantTool => ({
@@ -214,16 +214,16 @@ function document(turn: Turn): SessionDocument {
       id: user,
       type: "user",
       text: "Who makes the 10,000 checkboxes thing, and what else have they built?",
-      time: { created: STORY_TIME },
-      metadata: { agent: "build", model: STORY_MODEL },
+      time: { created: LAB_TIME },
+      metadata: { agent: "build", model: LAB_MODEL },
     },
     {
       id: "msg_sources_assistant",
       type: "assistant",
       agent: "build",
-      model: STORY_MODEL,
+      model: LAB_MODEL,
       content,
-      time: { created: STORY_TIME + 500, completed: busy ? undefined : STORY_TIME + 60_000 },
+      time: { created: LAB_TIME + 500, completed: busy ? undefined : LAB_TIME + 60_000 },
     },
   ]
 

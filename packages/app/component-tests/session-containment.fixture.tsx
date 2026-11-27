@@ -1,13 +1,13 @@
 import { createSignal, Show } from "solid-js"
 import { render } from "solid-js/web"
 import type { SessionMessageAssistantText, SessionMessageAssistantTool } from "@opencode/client/promise"
-import { activePermissionRequest, permissionPendingDocument } from "@opencode/session-ui/storybook"
+import { activePermissionRequest, permissionPendingDocument } from "@opencode/session-ui/lab"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { ThemeProvider } from "@opencode/ui/theme"
 import { LanguageProvider, UiI18nBridge } from "../src/runtime/i18n/language"
 import { SettingsProvider } from "../src/settings/model"
-import { SessionPreview } from "../src/session/story-model"
+import { SessionPreview } from "../src/session/lab-model"
 
 const [pending, setPending] = createSignal(true)
 
@@ -18,7 +18,7 @@ export function mountContainment(markup: string, delivery: "text" | "tool") {
   host.dataset.testid = "containment-fixture"
   host.style.cssText = "position:fixed;inset:0"
   document.body.append(host)
-  document.getElementById("story-root")?.style.setProperty("display", "none")
+  document.getElementById("lab-root")?.style.setProperty("display", "none")
   const [user, assistant] = permissionPendingDocument.messages
 
   if (!user || assistant?.type !== "assistant") throw new Error("The permission document changed shape.")

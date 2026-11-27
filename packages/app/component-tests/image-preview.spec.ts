@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test"
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
 const paths = {
   Escape: (page) => page.keyboard.press("Escape"),
@@ -8,7 +8,7 @@ const paths = {
 } satisfies Record<string, (page: Page) => Promise<void>>
 
 for (const [path, close] of Object.entries(paths)) {
-  story(`takes the page's clicks as soon as the image preview closes with ${path}`, async ({ mount, page }) => {
+  test(`takes the page's clicks as soon as the image preview closes with ${path}`, async ({ mount, page }) => {
     await mount("components-image-preview--from-message")
     await open(page)
     await page.locator('[data-component="image-preview"][data-stage="rest"]').waitFor()
@@ -17,7 +17,7 @@ for (const [path, close] of Object.entries(paths)) {
   })
 }
 
-story("takes the page's clicks as soon as the image preview closes mid-flight", async ({ mount, page }) => {
+test("takes the page's clicks as soon as the image preview closes mid-flight", async ({ mount, page }) => {
   await mount("components-image-preview--from-message")
   await open(page)
   await page.locator('[data-component="image-preview"][data-stage="flying"]').waitFor()
@@ -25,7 +25,7 @@ story("takes the page's clicks as soon as the image preview closes mid-flight", 
   await expect(clickPage(page)).resolves.toBe(true)
 })
 
-story("a close mid-flight after the origin is gone fades out without landing at rest", async ({ mount, page }) => {
+test("a close mid-flight after the origin is gone fades out without landing at rest", async ({ mount, page }) => {
   await mount("components-image-preview--from-message")
   await open(page)
   const preview = page.locator('[data-component="image-preview"]')
@@ -40,7 +40,7 @@ story("a close mid-flight after the origin is gone fades out without landing at 
     const close = () => {
       if (closed || element.dataset.stage === "pending") return
       closed = true
-      document.querySelector('[data-story-image="inline"]')?.remove()
+      document.querySelector('[data-lab-image="inline"]')?.remove()
       document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
     }
 
@@ -59,7 +59,7 @@ story("a close mid-flight after the origin is gone fades out without landing at 
   expect(seen).not.toContain("rest")
 })
 
-story("a pan whose release never reaches the preview stops following the pointer", async ({ mount, page }) => {
+test("a pan whose release never reaches the preview stops following the pointer", async ({ mount, page }) => {
   await mount("components-image-preview--from-message")
   await open(page)
   const body = page.locator('[data-slot="image-preview-body"]')
@@ -99,7 +99,7 @@ story("a pan whose release never reaches the preview stops following the pointer
 })
 
 async function open(page: Page) {
-  await page.locator('[data-story-image="inline"]').click()
+  await page.locator('[data-lab-image="inline"]').click()
 }
 
 // A raw click, without Playwright waiting for the point to be clear, as a hand would make it while the image flies home.
@@ -116,7 +116,7 @@ async function clickPage(page: Page) {
   return text.evaluate((element) => element.hasAttribute("data-clicked"))
 }
 
-story("the first Escape zooms the image preview back to fit and the next closes it", async ({ mount, page }) => {
+test("the first Escape zooms the image preview back to fit and the next closes it", async ({ mount, page }) => {
   await mount("components-image-preview--from-message")
   await open(page)
   const preview = page.locator('[data-component="image-preview"]')
@@ -133,13 +133,13 @@ story("the first Escape zooms the image preview back to fit and the next closes 
   await expect(preview).toHaveCount(0)
 })
 
-story(
+test(
   "a video whose pane closes under the preview is let go on close instead of moved back",
   async ({ mount, page }) => {
     const errors: string[] = []
     page.on("pageerror", (error) => errors.push(error.message))
     await mount("components-image-preview--from-video")
-    const video = page.locator("[data-story-video]")
+    const video = page.locator("[data-lab-video]")
     await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.videoWidth)).toBeGreaterThan(0)
     await video.dblclick()
     const preview = page.locator('[data-component="image-preview"]')
@@ -147,7 +147,7 @@ story(
     await expect(preview.locator("video")).toHaveCount(1)
 
     // The pane goes the way a closed tab does, while the preview still shows its video.
-    await page.locator("[data-story-pane]").evaluate((element) => element.remove())
+    await page.locator("[data-lab-pane]").evaluate((element) => element.remove())
     await expect(preview.locator("video")).toHaveCount(1)
     await page.keyboard.press("Escape")
     await expect(preview).toHaveCount(0)

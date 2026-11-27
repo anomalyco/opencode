@@ -2,7 +2,7 @@ import type { UsageLimitsBudget, UsageLimitsInfo } from "@opencode/client/promis
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { onMount } from "solid-js"
-import { DialogStoryRuntime, STORY_DIRECTORY, STORY_LOCKED_SERVER } from "@/lab/dialog-story-runtime"
+import { DialogLabRuntime, LAB_DIRECTORY, LAB_LOCKED_SERVER } from "@/lab/dialog-runtime"
 import { DialogUsage, UsageDialogContent } from "./dialog"
 import type { CurrentModel } from "./limits"
 
@@ -47,7 +47,7 @@ const info = (budgets: UsageLimitsBudget[], go?: "available" | "limited"): Usage
   budgets,
 })
 
-function UsageStory(props: { info: UsageLimitsInfo; model?: CurrentModel; credits?: boolean }) {
+function UsageLab(props: { info: UsageLimitsInfo; model?: CurrentModel; credits?: boolean }) {
   const dialog = useDialog()
 
   const open = () => void dialog.show(() => <UsageDialogContent {...props} onSwitchModel={() => {}} />)
@@ -63,10 +63,10 @@ function UsageStory(props: { info: UsageLimitsInfo; model?: CurrentModel; credit
   )
 }
 
-function LiveUsageStory() {
+function LiveUsageLab() {
   const dialog = useDialog()
 
-  const open = () => void dialog.show(() => <DialogUsage location={{ directory: STORY_DIRECTORY }} />)
+  const open = () => void dialog.show(() => <DialogUsage location={{ directory: LAB_DIRECTORY }} />)
 
   onMount(open)
 
@@ -84,19 +84,19 @@ export default {
   id: "app-dialog-usage",
 }
 
-export const Default = { render: () => <UsageStory info={info([anthropic(123.14), pool(394.57)], "available")} /> }
+export const Default = { render: () => <UsageLab info={info([anthropic(123.14), pool(394.57)], "available")} /> }
 
 export const SignedOut = {
   render: () => (
-    <DialogStoryRuntime>
-      <LiveUsageStory />
-    </DialogStoryRuntime>
+    <DialogLabRuntime>
+      <LiveUsageLab />
+    </DialogLabRuntime>
   ),
 }
 
 export const PerModel = {
   render: () => (
-    <UsageStory
+    <UsageLab
       model={opus}
       info={info([
         budget({
@@ -117,21 +117,21 @@ export const PerModel = {
 }
 
 export const ModelBudgetReached = {
-  render: () => <UsageStory model={opus} info={info([anthropic(150.42), pool(394.57)])} />,
+  render: () => <UsageLab model={opus} info={info([anthropic(150.42), pool(394.57)])} />,
 }
 
-export const WorkspaceBudgetReached = { render: () => <UsageStory info={info([anthropic(80), pool(1_000.12)])} /> }
+export const WorkspaceBudgetReached = { render: () => <UsageLab info={info([anthropic(80), pool(1_000.12)])} /> }
 
-export const OutOfCredits = { render: () => <UsageStory credits info={info([anthropic(80), pool(394.57)])} /> }
+export const OutOfCredits = { render: () => <UsageLab credits info={info([anthropic(80), pool(394.57)])} /> }
 
-export const NoBudgets = { render: () => <UsageStory info={info([])} /> }
+export const NoBudgets = { render: () => <UsageLab info={info([])} /> }
 
-export const GoLimitReached = { render: () => <UsageStory info={info([pool(394.57)], "limited")} /> }
+export const GoLimitReached = { render: () => <UsageLab info={info([pool(394.57)], "limited")} /> }
 
 export const LoadFailed = {
   render: () => (
-    <DialogStoryRuntime servers={[STORY_LOCKED_SERVER]}>
-      <LiveUsageStory />
-    </DialogStoryRuntime>
+    <DialogLabRuntime servers={[LAB_LOCKED_SERVER]}>
+      <LiveUsageLab />
+    </DialogLabRuntime>
   ),
 }

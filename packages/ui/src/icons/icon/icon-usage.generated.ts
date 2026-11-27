@@ -139,7 +139,7 @@ export const iconUsageByFile = {
     "settings-gear",
   ],
   "packages/app/src/session/session-reference-menu.tsx": ["circle-check"],
-  "packages/app/src/session/story-model.tsx": ["folder"],
+  "packages/app/src/session/lab-model.tsx": ["folder"],
   "packages/app/src/session/timeline/message-timeline.tsx": ["outline-dots"],
   "packages/app/src/session/timeline/quote.tsx": ["outline-quote"],
   "packages/app/src/session/timeline/search-bar.tsx": ["chevron-down", "close", "magnifying-glass"],

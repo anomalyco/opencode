@@ -4,9 +4,9 @@ import { createEffect, createMemo, createSignal, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { DataProvider } from "../context/data"
 import { SessionShellMessage } from "../tools/tool-renderer"
-import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
+import { CurrentSessionProviders, CurrentSessionTimelineLab } from "../lab/current-session-lab"
 import {
-  STORY_TIME,
+  LAB_TIME,
   executeCodeDocument,
   executeLongDetailsDocument,
   executeManyCallsDocument,
@@ -17,8 +17,8 @@ import {
   terminalFailedDocument,
   terminalPassedDocument,
   terminalRunningDocument,
-} from "../storybook/current-session-fixtures"
-import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
+} from "../lab/current-session-fixtures"
+import { labDocument, labTool } from "../lab/current-session-scenarios"
 import { SessionTimeline } from "./session-timeline"
 
 export default {
@@ -38,7 +38,7 @@ export default {
 
 export const RunningTests = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Running tests"
       description="The active shell message keeps its progress treatment and can be opened while running."
       document={terminalRunningDocument}
@@ -50,7 +50,7 @@ export const RunningTests = {
 
 export const RunningAUserCommand = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Running a user command"
       description="A command entered directly in shell mode remains active and streams its captured output."
       document={standaloneShellRunningDocument}
@@ -62,7 +62,7 @@ export const RunningAUserCommand = {
 
 export const UserCommandCompleted = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="User command completed"
       description="A direct shell command keeps its final output and successful exit status in the transcript."
       document={standaloneShellCompletedDocument}
@@ -149,7 +149,7 @@ export const LiveUserCommand = {
 
 const CollapsedShell = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Collapsed completed shell"
       description="A focused shell disclosure responds to the keyboard without scrolling its containing surface."
       document={terminalPassedDocument}
@@ -160,7 +160,7 @@ const CollapsedShell = {
 
 export const TestsPassed = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Tests passed"
       description="A completed focused check shows its command, output, and successful tool state."
       document={terminalPassedDocument}
@@ -172,7 +172,7 @@ export const TestsPassed = {
 
 export const ExpandedShell = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Expanded shell"
       description="The expanded shell separates the command from its output in a full-width card without a detail rail."
       document={expandedShellDocument}
@@ -184,7 +184,7 @@ export const ExpandedShell = {
 
 export const ExecuteCode = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Execute code"
       description="Each Code Mode execution lists the tools its script called."
       document={executeCodeDocument}
@@ -196,7 +196,7 @@ export const ExecuteCode = {
 
 export const ExecuteManyCalls = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Execute many calls"
       description="A script that made 75 calls lists its latest 10; the row above them reveals earlier calls 50 at a time."
       document={executeManyCallsDocument}
@@ -208,7 +208,7 @@ export const ExecuteManyCalls = {
 
 export const ExecuteLongDetails = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Execute long details"
       description="A script and output taller than the details dialog scroll inside it and keep the dialog's bottom padding."
       document={executeLongDetailsDocument}
@@ -220,7 +220,7 @@ export const ExecuteLongDetails = {
 
 export const ExecuteGrouped = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Execute grouped"
       description="Executions inside a tool group open by default to the tools their scripts called."
       document={executeCodeDocument}
@@ -231,18 +231,18 @@ export const ExecuteGrouped = {
 
 export const ExecuteFailed = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Execute failed"
       description="Failed Code Mode executions mark the failed call, which expands to show its input and the full error message."
-      document={storyDocument([
-        storyTool(
+      document={labDocument([
+        labTool(
           "tool_execute_search",
           "execute",
           "completed",
           { code: 'const found = search({ namespace: "browser", offset: 20, limit: 30 });\nreturn found;\n' },
           { output: "[]", metadata: { toolCalls: [] } },
         ),
-        storyTool(
+        labTool(
           "tool_execute_failed_url",
           "execute",
           "completed",
@@ -267,9 +267,9 @@ export const ExecuteFailed = {
         {
           type: "reasoning",
           text: "## Serving the page\n\nThe browser needs an HTTP URL, so I will serve the file locally.",
-          time: { created: STORY_TIME + 150, completed: STORY_TIME + 1_150 },
+          time: { created: LAB_TIME + 150, completed: LAB_TIME + 1_150 },
         },
-        storyTool(
+        labTool(
           "tool_execute_serve",
           "shell",
           "completed",
@@ -279,7 +279,7 @@ export const ExecuteFailed = {
           },
           { output: "", metadata: { exit: 0 } },
         ),
-        storyTool(
+        labTool(
           "tool_execute_failed_screenshot",
           "execute",
           "completed",
@@ -307,7 +307,7 @@ export const ExecuteFailed = {
             },
           },
         ),
-        storyTool(
+        labTool(
           "tool_execute_list",
           "execute",
           "completed",
@@ -322,7 +322,7 @@ export const ExecuteFailed = {
 
 export const TestFailed = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Test failed"
       description="A normal non-zero test result keeps the command and actionable failure message together."
       document={terminalFailedDocument}
@@ -332,7 +332,7 @@ export const TestFailed = {
   ),
 }
 
-function InteractiveCommandStory(props: {
+function InteractiveCommandLab(props: {
   expanded?: boolean
   streaming?: boolean
   existingGroup?: boolean
@@ -355,7 +355,7 @@ function InteractiveCommandStory(props: {
   const document = createMemo(() => {
     const phase = state.phase
 
-    const options: NonNullable<Parameters<typeof storyTool>[4]> = {
+    const options: NonNullable<Parameters<typeof labTool>[4]> = {
       output:
         phase === "running"
           ? "still running"
@@ -366,11 +366,11 @@ function InteractiveCommandStory(props: {
 
     const content: SessionMessageAssistant["content"] = [
       ...(props.existingGroup
-        ? [storyTool("tool_context_lifecycle", "read", "completed", { filePath: "/workspace/README.md" })]
+        ? [labTool("tool_context_lifecycle", "read", "completed", { filePath: "/workspace/README.md" })]
         : []),
       ...(state.started
         ? [
-            storyTool(
+            labTool(
               "tool_shell_lifecycle",
               props.tool ?? "shell",
               phase === "input" ? "streaming" : phase,
@@ -389,7 +389,7 @@ function InteractiveCommandStory(props: {
     ]
 
     return {
-      ...storyDocument(content, state.started && phase !== "completed"),
+      ...labDocument(content, state.started && phase !== "completed"),
       status: { type: (state.started && phase !== "completed") || state.busy ? ("busy" as const) : ("idle" as const) },
     }
   })
@@ -445,14 +445,14 @@ export const TerminalCommands = {
     tool: "shell" | "execute" | "subagent"
   }) => (
     <Show when={args.scenario !== "collapsed"} fallback={<CollapsedShell.render />}>
-      <InteractiveCommandStory {...args} />
+      <InteractiveCommandLab {...args} />
     </Show>
   ),
 }
 
 export const FixedAndPassed = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Fixed and passed"
       description="The agent reproduces a failure, makes one correction, and reruns the package checks successfully."
       document={recoveryDocument}

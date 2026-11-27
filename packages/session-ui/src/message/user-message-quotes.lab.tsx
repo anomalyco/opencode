@@ -2,8 +2,8 @@ import { For, Show, type JSX } from "solid-js"
 import type { PromptAttachment, SessionMessageUser } from "@opencode/client/promise"
 import type { SessionUserActions, SessionUserComment } from "../actions"
 import { CurrentUserMessageDisplay } from "./message-content"
-import { CurrentSessionProviders } from "../storybook/current-session-story"
-import { CURRENT_SESSION_ID, STORY_MODEL, STORY_TIME } from "../storybook/current-session-fixtures"
+import { CurrentSessionProviders } from "../lab/current-session-lab"
+import { CURRENT_SESSION_ID, LAB_MODEL, LAB_TIME } from "../lab/current-session-fixtures"
 
 /*
  * A prompt's quotes, file comments and notes, inline in the bubble after the text. Every case renders the shipped
@@ -129,7 +129,7 @@ const cases = {
   mixed: {
     name: "Commented and bare quotes, text in the composer",
     description: "The composer text first, then each quote with its own comment when it has one.",
-    text: "and run the sidebar story at 360px after",
+    text: "and run the sidebar page at 360px after",
     comments: [
       quote("gap-2 on the Projects section", "drop it to gap 1"),
       quote("gap-2 in the Pinned group"),
@@ -139,7 +139,7 @@ const cases = {
   longText: {
     name: "Long composer text and a long comment",
     description: "Both wrap; the comment stays tied to its quote.",
-    text: "These are all in the sidebar, so please keep the change local to the sidebar CSS and do not touch the shared spacing tokens. After that, run the sidebar story at 360px and 1280px and attach screenshots of both to the PR.",
+    text: "These are all in the sidebar, so please keep the change local to the sidebar CSS and do not touch the shared spacing tokens. After that, run the sidebar page at 360px and 1280px and attach screenshots of both to the PR.",
     comments: [
       quote(
         "gap-2 on the Projects section",
@@ -173,10 +173,10 @@ const cases = {
     comments: [
       quote(
         "error: Cannot find module '@opencode/ui/tooltip' imported from packages/session-ui/src/message/comment-card.tsx",
-        "why does this only fail in the stories build?",
+        "why does this only fail in the pages build?",
         terminal,
       ),
-      quote("$ make\nmake: *** No rule to make target 'stories'.  Stop.", undefined, terminal),
+      quote("$ make\nmake: *** No rule to make target 'lab'.  Stop.", undefined, terminal),
     ],
   },
   overflow: {
@@ -255,7 +255,7 @@ const cases = {
   pending: {
     name: "Pending: steering",
     description: "A prompt the server has not delivered yet mutes the whole bubble, quotes included.",
-    text: "and run the sidebar story at 360px after",
+    text: "and run the sidebar page at 360px after",
     comments: [quote("gap-2 in the Pinned group", "make it gap 1")],
     status: "steering",
   },
@@ -329,28 +329,28 @@ const cases = {
   sending: {
     name: "Pending: sending",
     description: "Not yet admitted by the server: no actions chevron.",
-    text: "and run the sidebar story at 360px after",
+    text: "and run the sidebar page at 360px after",
     status: "sending",
     comments: [quote("gap-2 in the Pinned group", "make it gap 1")],
   },
   starting: {
     name: "Pending: starting",
     description: "Admitted, about to run.",
-    text: "and run the sidebar story at 360px after",
+    text: "and run the sidebar page at 360px after",
     status: "starting",
     comments: [quote("gap-2 in the Pinned group", "make it gap 1")],
   },
   queued: {
     name: "Pending: queued",
     description: "Waiting in the queue.",
-    text: "and run the sidebar story at 360px after",
+    text: "and run the sidebar page at 360px after",
     status: "queued",
     comments: [quote("gap-2 in the Pinned group", "make it gap 1")],
   },
   stranded: {
     name: "Pending: stranded",
     description: "A steer the run ended before delivering.",
-    text: "and run the sidebar story at 360px after",
+    text: "and run the sidebar page at 360px after",
     status: "stranded",
     comments: [quote("gap-2 in the Pinned group", "make it gap 1")],
   },
@@ -405,7 +405,7 @@ const cases = {
     name: "File without an extension, and a folder",
     description: "Each gets its own icon.",
     comments: [
-      { path: "Makefile", comment: "add a stories target" },
+      { path: "Makefile", comment: "add a pages target" },
       { path: "packages/app/src/sidebar/", comment: "everything in here" },
     ],
   },
@@ -416,7 +416,7 @@ const heMentions = "תשתמש ב-@review כדי לבדוק את @projects.tsx �
 const heLongQuote =
   "לפס הגלילה יש גובה מינימלי של 32 פיקסלים, מוגבל לגובה המסילה, כך שגם בשיחות ארוכות מאוד נשארת ידית שאפשר לתפוס. שאר המקום שמור לתוכן ציר הזמן, והפס נעלם אחרי 800 מילישניות בלי גלילה. במכשירי מגע הפס מוסתר לגמרי והגלילה המקורית לוקחת פיקוד, ולכן המרווח מתכווץ לאפס."
 
-/** English content keeps its own direction inside an RTL timeline, so the RTL stories need right-to-left content. */
+/** English content keeps its own direction inside an RTL timeline, so the RTL pages need right-to-left content. */
 const rtlCases = {
   oneCommented: {
     name: "RTL: one quote with a comment",
@@ -537,7 +537,7 @@ const rtlCases = {
 
 type Args = {
   width: number
-  /** The lab sets one scheme for every story, so a story forces its own here; "lab" follows the lab's toggle. */
+  /** The lab sets one scheme for every page, so a page forces its own here; "lab" follows the lab's toggle. */
   scheme: "lab" | "light" | "dark"
   direction: "ltr" | "rtl"
   fold: boolean
@@ -653,11 +653,11 @@ function Page(props: { args: Args; children: JSX.Element }) {
     <CurrentSessionProviders
       document={{ sessionID: CURRENT_SESSION_ID, messages: [], status: { type: "idle" }, diffs: [] }}
     >
-      <style>{STORY_CSS}</style>
+      <style>{LAB_CSS}</style>
       <section
         class="flex min-h-full w-max min-w-full flex-col gap-10 p-6"
-        data-story-page
-        data-story-touch={props.args.touch ? "" : undefined}
+        data-lab-page
+        data-lab-touch={props.args.touch ? "" : undefined}
         data-color-scheme={props.args.scheme === "lab" ? undefined : props.args.scheme}
       >
         {props.children}
@@ -673,15 +673,15 @@ function Example(props: { case: Case; args: Args }) {
     <article class="flex flex-col gap-3">
       <header class="flex flex-col gap-0.5">
         <h2 class="text-[14px] leading-5 [font-weight:530]">{props.case.name}</h2>
-        <p class="text-[13px] leading-5" data-story-muted>
+        <p class="text-[13px] leading-5" data-lab-muted>
           {props.case.description}
         </p>
       </header>
-      {/* Only the timeline area takes the direction; the story's headings stay put. */}
+      {/* Only the timeline area takes the direction; the page's headings stay put. */}
       <div
         class="flex shrink-0 flex-col gap-1 rounded-[8px] px-4 py-4"
         style={{ width: `${props.args.width}px` }}
-        data-story-surface
+        data-lab-surface
         dir={props.args.direction}
       >
         {/* The timeline puts 4px between the bubbles of a run. */}
@@ -692,12 +692,12 @@ function Example(props: { case: Case; args: Args }) {
               id: "msg_quotes_run_start",
               type: "user",
               text: "",
-              time: { created: STORY_TIME },
+              time: { created: LAB_TIME },
               files: [],
             }}
             text="tidy the sidebar spacing"
             agent="build"
-            model={STORY_MODEL}
+            model={LAB_MODEL}
             run={{ above: false, below: true }}
           />
         </Show>
@@ -716,7 +716,7 @@ function Message(props: { case: Case; fold: boolean }) {
       message={message(props.case)}
       text={props.case.text ?? ""}
       agent="build"
-      model={STORY_MODEL}
+      model={LAB_MODEL}
       comments={props.case.comments}
       fold={props.fold}
       voice={props.case.voice}
@@ -735,38 +735,38 @@ function message(item: Case): SessionMessageUser {
     id: `msg_quotes_${item.name.toLowerCase().replaceAll(/\W+/g, "_")}`,
     type: "user",
     text: item.text ?? "",
-    time: { created: STORY_TIME },
+    time: { created: LAB_TIME },
     files: item.files ?? [],
     agents: item.agents,
   }
 }
 
-const STORY_CSS = `
-/* Tailwind's color utilities resolve the theme at the root, so a forced scheme on the story would miss them. The
-   story's own chrome reads the theme variables directly instead. */
-[data-story-page] {
+const LAB_CSS = `
+/* Tailwind's color utilities resolve the theme at the root, so a forced scheme on the page would miss them. The
+   page's own chrome reads the theme variables directly instead. */
+[data-lab-page] {
   background: var(--v2-background-bg-layer-01);
   color: var(--v2-text-text-base);
 }
 
-[data-story-muted] {
+[data-lab-muted] {
   color: var(--v2-text-text-muted);
 }
 
-[data-story-surface] {
+[data-lab-surface] {
   background: var(--v2-background-bg-base);
   box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
 }
 
 /* Hover-less screens, which the lab can't emulate: the chevron always shows and keeps room on the first line. */
-[data-story-touch] [data-component="user-message"] [data-slot="user-message-text"] > [data-slot="user-message-menu"] {
+[data-lab-touch] [data-component="user-message"] [data-slot="user-message-text"] > [data-slot="user-message-menu"] {
   opacity: 1;
   pointer-events: auto;
   padding: 0;
   background: none;
 }
 
-[data-story-touch] [data-component="user-message"] [data-slot="user-message-text"]:has(> [data-slot="user-message-menu"])::before {
+[data-lab-touch] [data-component="user-message"] [data-slot="user-message-text"]:has(> [data-slot="user-message-menu"])::before {
   content: "";
   float: inline-end;
   width: 20px;

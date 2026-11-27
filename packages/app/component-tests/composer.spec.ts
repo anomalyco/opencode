@@ -1,6 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("outsets the Send ring without changing the scrolling toolbar rings", async ({ mount, page }) => {
+test("outsets the Send ring without changing the scrolling toolbar rings", async ({ mount, page }) => {
   const component = await mount("opencode-composer-flow--toolbar-overflow", { args: { alternate: "none" } })
 
   const send = component.locator('[data-action="composer-submit"]')
@@ -17,7 +17,7 @@ story("outsets the Send ring without changing the scrolling toolbar rings", asyn
   await expect(send).toHaveCSS("outline-offset", "2px")
 })
 
-story("cycles full prompts with plain arrows without opening the picker", async ({ mount, page }) => {
+test("cycles full prompts with plain arrows without opening the picker", async ({ mount, page }) => {
   const component = await mount("opencode-composer-flow--prompt-history")
   const input = component.getByRole("textbox", { name: "Prompt", exact: true })
   const options = component.getByRole("option")
@@ -103,7 +103,7 @@ story("cycles full prompts with plain arrows without opening the picker", async 
   await expect(component.getByRole("status")).toHaveText("Submitted: bun typecheck")
 })
 
-story(
+test(
   "previews history in the composer, accepts without sending, and cancels back to the original draft",
   async ({ mount, page }) => {
     const component = await mount("opencode-composer-flow--prompt-history")
@@ -240,7 +240,7 @@ story(
   },
 )
 
-story("searches history, cancels with Escape, and keeps shell history separate", async ({ mount, page }) => {
+test("searches history, cancels with Escape, and keeps shell history separate", async ({ mount, page }) => {
   const component = await mount("opencode-composer-flow--prompt-history")
   const input = component.getByRole("textbox", { name: "Prompt", exact: true })
   const search = component.getByRole("combobox", { name: "Prompt history", exact: true })
@@ -307,7 +307,7 @@ story("searches history, cancels with Escape, and keeps shell history separate",
   await expect(component.getByRole("status")).toHaveText("Ready")
 })
 
-story("pins history search above the scrolling prompts", async ({ mount }) => {
+test("pins history search above the scrolling prompts", async ({ mount }) => {
   const component = await mount("opencode-composer-flow--prompt-history", { args: { many: true } })
   const input = component.getByRole("textbox", { name: "Prompt", exact: true })
   await input.press("Shift+ArrowUp")
@@ -349,7 +349,7 @@ story("pins history search above the scrolling prompts", async ({ mount }) => {
 
 for (const direction of ["ltr", "rtl"]) {
   for (const alternate of ["none", "queue", "steer"]) {
-    story(`scrolls overflowing controls beside fixed ${alternate} actions in ${direction}`, async ({ mount, page }) => {
+    test(`scrolls overflowing controls beside fixed ${alternate} actions in ${direction}`, async ({ mount, page }) => {
       const component = await mount("opencode-composer-flow--toolbar-overflow", {
         args: { alternate },
         globals: { direction },
@@ -476,7 +476,7 @@ for (const direction of ["ltr", "rtl"]) {
   }
 }
 
-story("does not mask or pad controls when they fit", async ({ mount }) => {
+test("does not mask or pad controls when they fit", async ({ mount }) => {
   const component = await mount("opencode-composer-flow--model-and-variant")
   const controls = component.locator('[data-slot="composer-controls"]')
   await expect(controls).toHaveAttribute("data-overflow-start", "false")
@@ -486,7 +486,7 @@ story("does not mask or pad controls when they fit", async ({ mount }) => {
   await expect(controls).toHaveCSS("padding-inline-end", "0px")
 })
 
-story("keeps toolbar focus rings whole and keyboard-only", async ({ mount, page }) => {
+test("keeps toolbar focus rings whole and keyboard-only", async ({ mount, page }) => {
   const component = await mount("opencode-composer-flow--toolbar-overflow", { args: { alternate: "none" } })
   const controls = component.locator('[data-slot="composer-controls"]')
   const agent = controls.getByRole("button", { name: "Choose agent" })
@@ -514,19 +514,19 @@ story("keeps toolbar focus rings whole and keyboard-only", async ({ mount, page 
   await expect(variant).toHaveCSS("outline-style", "none")
 })
 
-story("keeps command selection on the keyboard until the pointer moves", async ({ mount, page }) => {
+test("keeps command selection on the keyboard until the pointer moves", async ({ mount, page }) => {
   const component = await mount("opencode-composer-flow--slash-suggestions")
 
   const input = component.getByRole("textbox", { name: "Prompt", exact: true })
 
   const menu = component.locator('[data-component="composer-suggestions"]')
 
-  const test = menu.getByRole("button", { name: "/test", exact: true })
+  const testCommand = menu.getByRole("button", { name: "/test", exact: true })
 
   const review = menu.getByRole("button", { name: "/review", exact: true })
 
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
-  await expect(test).toHaveAttribute("data-active", "")
+  await expect(testCommand).toHaveAttribute("data-active", "")
 
   const box = await review.boundingBox()
 
@@ -536,21 +536,21 @@ story("keeps command selection on the keyboard until the pointer moves", async (
   await expect(menu).toHaveCount(0)
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
   await input.fill("/")
-  await expect(test).toHaveAttribute("data-active", "")
+  await expect(testCommand).toHaveAttribute("data-active", "")
   await expect(review).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
 
   // Layout changes can deliver pointer events without any actual mouse movement.
   await review.dispatchEvent("pointermove", { movementX: 0, movementY: 0 })
-  await expect(test).toHaveAttribute("data-active", "")
+  await expect(testCommand).toHaveAttribute("data-active", "")
 
   await page.mouse.move(box.x + box.width / 2 + 2, box.y + box.height / 2)
   await expect(review).toHaveAttribute("data-active", "")
-  await expect(test).not.toHaveAttribute("data-active")
+  await expect(testCommand).not.toHaveAttribute("data-active")
 })
 
-story("grows suggestions while preserving visible timeline context", async ({ mount }) => {
+test("grows suggestions while preserving visible timeline context", async ({ mount }) => {
   const component = await mount("opencode-composer-flow--constrained-command-suggestions")
-  const boundary = component.locator('[data-slot="composer-suggestion-boundary-story"]')
+  const boundary = component.locator('[data-slot="composer-suggestion-boundary-lab"]')
   const suggestions = component.locator('[data-component="composer-suggestions"]')
 
   await expect(suggestions).toHaveCSS("max-height", "164px")
@@ -581,7 +581,7 @@ story("grows suggestions while preserving visible timeline context", async ({ mo
   await expect(suggestions).toHaveCSS("max-height", "304px")
 })
 
-story("keeps the @ menu and its last results open while the next search is pending", async ({ mount }) => {
+test("keeps the @ menu and its last results open while the next search is pending", async ({ mount }) => {
   const component = await mount("opencode-composer-flow--slow-file-search")
   const input = component.getByRole("textbox", { name: "Prompt", exact: true })
   const menu = component.locator('[data-component="composer-suggestions"]')
@@ -612,7 +612,7 @@ story("keeps the @ menu and its last results open while the next search is pendi
   await expect(menu.getByText("No matching items", { exact: true })).toBeVisible()
 })
 
-story("ignores a detached suggestion boundary", async ({ mount }) => {
+test("ignores a detached suggestion boundary", async ({ mount }) => {
   const component = await mount("opencode-composer-flow--detached-command-suggestion-boundary")
   await expect(component.locator('[data-component="composer-suggestions"]')).toHaveCSS("max-height", "304px")
 })
@@ -623,13 +623,13 @@ for (const [theme, background] of [
   ["light", "rgb(255, 255, 255)"],
   ["dark", "rgb(36, 36, 36)"],
 ] as const) {
-  story(`raises the docked composer only in dark mode (${theme})`, async ({ mount }) => {
+  test(`raises the docked composer only in dark mode (${theme})`, async ({ mount }) => {
     const component = await mount("opencode-composer-flow--empty-draft", { globals: { theme } })
     await expect(component.locator('[data-component="composer"]')).toHaveCSS("background-color", background)
   })
 }
 
-story("centers add menu shortcuts in a consistent column", async ({ mount, page }) => {
+test("centers add menu shortcuts in a consistent column", async ({ mount, page }) => {
   const component = await mount("opencode-composer-flow--empty-draft")
   await component.locator('[data-action="composer-attach"]').click()
 
@@ -649,7 +649,7 @@ story("centers add menu shortcuts in a consistent column", async ({ mount, page 
 })
 
 for (const draft of ["empty-draft", "multiline-draft", "mixed-attachments"]) {
-  story(`select all stays inside the composer with ${draft}`, async ({ mount, page }) => {
+  test(`select all stays inside the composer with ${draft}`, async ({ mount, page }) => {
     const component = await mount(`opencode-composer-flow--${draft}`)
     const input = component.getByRole("textbox", { name: "Prompt", exact: true })
     const text = await input.textContent()
@@ -680,10 +680,10 @@ for (const draft of ["empty-draft", "multiline-draft", "mixed-attachments"]) {
   })
 }
 
-story.describe("touch attachments", () => {
-  story.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
+test.describe("touch attachments", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
 
-  story("keeps attachment remove buttons visible without hover", async ({ mount, page }) => {
+  test("keeps attachment remove buttons visible without hover", async ({ mount, page }) => {
     const component = await mount("opencode-composer-flow--mixed-attachments")
     expect(await page.evaluate(() => matchMedia("(hover: none)").matches)).toBe(true)
 
@@ -698,7 +698,7 @@ story.describe("touch attachments", () => {
   })
 })
 
-story("renders a draft once and supports editing, caret restoration, and failure recovery", async ({ mount, page }) => {
+test("renders a draft once and supports editing, caret restoration, and failure recovery", async ({ mount, page }) => {
   await page.addInitScript(() => {
     const replace = Element.prototype.replaceChildren
     Element.prototype.replaceChildren = function (this: Element, ...nodes) {
@@ -733,7 +733,7 @@ story("renders a draft once and supports editing, caret restoration, and failure
   await expect(input).toHaveText("Preserve this draft on failure")
 })
 
-story("shows thinking on composer hover or when a non-default variant is selected", async ({ mount, page }) => {
+test("shows thinking on composer hover or when a non-default variant is selected", async ({ mount, page }) => {
   const component = await mount("opencode-composer-flow--model-and-variant")
   const composer = component.locator('[data-component="composer"]')
   const input = composer.getByRole("textbox", { name: "Prompt", exact: true })
@@ -778,7 +778,7 @@ story("shows thinking on composer hover or when a non-default variant is selecte
   await expect(control).toHaveCSS("opacity", "0")
 })
 
-story("keeps default thinking accessible by keyboard without composer hover", async ({ mount, page }) => {
+test("keeps default thinking accessible by keyboard without composer hover", async ({ mount, page }) => {
   const component = await mount("opencode-composer-flow--model-and-variant")
   const input = component.getByRole("textbox", { name: "Prompt", exact: true })
   const control = component.getByRole("button", { name: "Choose model variant" })
@@ -819,15 +819,15 @@ story("keeps default thinking accessible by keyboard without composer hover", as
   await expect(control).toHaveCSS("opacity", "0")
 })
 
-story.describe("mobile variant drawer", () => {
-  story.use({ viewport: { width: 360, height: 720 } })
+test.describe("mobile variant drawer", () => {
+  test.use({ viewport: { width: 360, height: 720 } })
 
   // Guards patches/@corvu%2Fdrawer@0.2.4.patch. The drawer starts its opening transition two frames after it opens.
   // Dismissing it before then used to slide it open anyway, and dismissing it in that frame left it closing off screen
   // for good, holding focus and disabling pointer input on the page. Playwright input cannot target those frames, so
   // the page dismisses it.
   for (const moment of ["before", "as"] as const) {
-    story(`closes and restores focus when dismissed ${moment} it starts opening`, async ({ mount, page }) => {
+    test(`closes and restores focus when dismissed ${moment} it starts opening`, async ({ mount, page }) => {
       const component = await mount("opencode-composer-flow--model-and-variant")
       const variant = component.getByRole("button", { name: "Choose model variant" })
       const drawer = page.getByRole("dialog", { name: "Choose model variant", exact: true })

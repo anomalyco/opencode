@@ -7,11 +7,11 @@ import type {
 } from "@opencode/client/promise"
 import { Predicate } from "effect"
 import { createRoot } from "solid-js"
-import { commentaryRuns, subagentReport } from "../storybook/current-session-fixtures"
+import { commentaryRuns, subagentReport } from "../lab/current-session-fixtures"
 import { timelinePresets, type TimelineDetail } from "../timeline/detail"
 import { TimelineRow } from "../timeline/timeline-row"
 import { createNextTimelineProjection, workedDuration } from "./projection"
-import { replayScript, scenarios } from "./stories/session-replay"
+import { replayScript, scenarios } from "./lab/session-replay"
 
 const messagesOnly = timelinePresets.find((preset) => preset.id === "text-only")!.value
 

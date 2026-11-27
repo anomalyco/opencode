@@ -14,7 +14,7 @@ const highlights: Highlight[] = [
 function Open(props: { highlights: Highlight[] }) {
   const dialog = useDialog()
 
-  // "Don't show these in the future" writes the app's real setting, so the story keeps it to itself.
+  // "Don't show these in the future" writes the app's real setting, so the page keeps it to itself.
   const context = Object.create(usePlugin(), {
     stores: { value: { releaseNotes: { update: () => {} } } },
   })

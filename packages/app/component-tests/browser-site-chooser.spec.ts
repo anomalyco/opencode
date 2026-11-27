@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test"
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 // What the fixture's faked browser profile answers; see `SiteScenario` in the fixture.
 type SiteScenario = {
@@ -24,7 +24,7 @@ const modules = {
   ui: source("../src/runtime/plugin/ui.tsx"),
 }
 
-// Any story loads the app styles; the fixture opens the real import dialog in the real dialog host beside it. Most
+// Any page loads the app styles; the fixture opens the real import dialog in the real dialog host beside it. Most
 // cases here are about the site list, so the dialog opens on "Only sites I choose" unless the case says otherwise. The
 // faked browser has two profiles, so the dialog offers a profile picker and its title names no browser.
 async function open(page: Page, given: SiteScenario, direction: "ltr" | "rtl" = "ltr") {
@@ -69,11 +69,11 @@ const press = (input: Locator) =>
     .locator('[data-slot$="-control"]')
     .click()
 
-story.beforeEach(async ({ mount }) => {
+test.beforeEach(async ({ mount }) => {
   await mount("ui-line-comment--editor")
 })
 
-story("lists 5,000 sites in a window of rows, as one keyboard stop with roving focus", async ({ page }) => {
+test("lists 5,000 sites in a window of rows, as one keyboard stop with roving focus", async ({ page }) => {
   const view = await open(page, { sites: 5_000 })
 
   await expect(view.options.first()).toHaveAttribute("data-site", "github.com")
@@ -132,7 +132,7 @@ story("lists 5,000 sites in a window of rows, as one keyboard stop with roving f
   await expect(view.record).toHaveAttribute("data-imported", "1")
 })
 
-story("the box that ticks every site acts on what a search shows, and says so", async ({ page }) => {
+test("the box that ticks every site acts on what a search shows, and says so", async ({ page }) => {
   const view = await open(page, { sites: 5_000 })
 
   await view.search.fill("site-01")
@@ -156,7 +156,7 @@ story("the box that ticks every site acts on what a search shows, and says so", 
   await expect(view.record).toHaveAttribute("data-closed", "true")
 })
 
-story("leaves Escape and ArrowDown to an input method while it composes", async ({ page }) => {
+test("leaves Escape and ArrowDown to an input method while it composes", async ({ page }) => {
   const view = await open(page, { sites: 5 })
   const composing = { key: "Escape", keyCode: 229, isComposing: true }
 
@@ -179,7 +179,7 @@ story("leaves Escape and ArrowDown to an input method while it composes", async 
   await expect(view.record).toHaveAttribute("data-closed", "true")
 })
 
-story("switches profiles at the top with none of another profile's sites chosen, and reads a profile only once while open", async ({ page }) => {
+test("switches profiles at the top with none of another profile's sites chosen, and reads a profile only once while open", async ({ page }) => {
   const view = await open(page, { sites: 5_000 })
 
   await view.options.first().click()
@@ -196,7 +196,7 @@ story("switches profiles at the top with none of another profile's sites chosen,
   await expect(view.record).toHaveAttribute("data-reads", "Default,Profile 1")
 })
 
-story("starts from the site a passkey request came from, brings its sign-in alone, and stays open to say that some stayed behind", async ({ page }) => {
+test("starts from the site a passkey request came from, brings its sign-in alone, and stays open to say that some stayed behind", async ({ page }) => {
   const view = await open(page, { sites: 5, site: { name: "github.com", choose: true }, partial: true, pages: 4210 })
 
   await expect(view.options).toHaveCount(1)
@@ -242,7 +242,7 @@ story("starts from the site a passkey request came from, brings its sign-in alon
   expect(layout.rightDeltas).toEqual([0])
 })
 
-story("opened for a site, moves on to the browser profile that has exactly it, and chooses only that one", async ({ page }) => {
+test("opened for a site, moves on to the browser profile that has exactly it, and chooses only that one", async ({ page }) => {
   const view = await open(page, { sites: 5, site: { name: "google.com", choose: true } })
 
   await expect(view.profile).toContainText("Home")
@@ -253,7 +253,7 @@ story("opened for a site, moves on to the browser profile that has exactly it, a
   await expect(view.dialog.locator('[data-site="google.com"]')).toHaveText("google.com")
 })
 
-story("a page's site that only another site contains chooses nothing, and says no sign-in was found", async ({ page }) => {
+test("a page's site that only another site contains chooses nothing, and says no sign-in was found", async ({ page }) => {
   const view = await open(page, { sites: 5, site: { name: "hub.com", choose: true } })
 
   // The search still shows github.com, which contains the name, but it is not the page's site.
@@ -264,7 +264,7 @@ story("a page's site that only another site contains chooses nothing, and says n
   await expect(view.importButton).toBeDisabled()
 })
 
-story("in a tab the agent drives, the page's site is shown but not chosen", async ({ page }) => {
+test("in a tab the agent drives, the page's site is shown but not chosen", async ({ page }) => {
   const view = await open(page, { sites: 5, site: { name: "github.com", choose: false } })
 
   await expect(view.options).toHaveCount(1)
@@ -273,7 +273,7 @@ story("in a tab the agent drives, the page's site is shown but not chosen", asyn
   await expect(view.importButton).toBeDisabled()
 })
 
-story("keeps the active row off the list's edges, and brings it into view from the search", async ({ page }) => {
+test("keeps the active row off the list's edges, and brings it into view from the search", async ({ page }) => {
   const view = await open(page, { sites: 5_000 })
 
   // How far the row is inside the list's frame, above and below.
@@ -305,7 +305,7 @@ story("keeps the active row off the list's edges, and brings it into view from t
   await expect(view.dialog.locator('[aria-live="polite"]')).toHaveText("1 of 5,000 selected")
 })
 
-story("shows what the list is doing in its place, with a way to try again", async ({ page }) => {
+test("shows what the list is doing in its place, with a way to try again", async ({ page }) => {
   const held = await open(page, { sites: 5, hold: true })
 
   await expect(held.dialog.getByRole("status")).toHaveText("Reading the sites in Google Chrome…")
@@ -316,7 +316,7 @@ story("shows what the list is doing in its place, with a way to try again", asyn
   await expect(held.dialog.getByRole("status")).toHaveText("No site matches your search.")
 })
 
-story("says why a profile has no list, and reads it again on Try again", async ({ page }) => {
+test("says why a profile has no list, and reads it again on Try again", async ({ page }) => {
   const view = await open(page, { sites: "locked" })
 
   await expect(view.dialog.getByRole("alert")).toHaveText("Quit Google Chrome and try again.")
@@ -324,7 +324,7 @@ story("says why a profile has no list, and reads it again on Try again", async (
   await expect(view.record).toHaveAttribute("data-reads", "Default,Default")
 })
 
-story("an empty profile says so", async ({ page }) => {
+test("an empty profile says so", async ({ page }) => {
   const view = await open(page, { sites: 0 })
 
   await expect(view.dialog.getByRole("status")).toHaveText("This profile has no sites to import.")
@@ -361,7 +361,7 @@ const boxes = (dialog: ReturnType<Page["getByRole"]>) =>
     }
   })
 
-story("opens on two ticked boxes, All sites and Import, which brings everything without the list", async ({ page }) => {
+test("opens on two ticked boxes, All sites and Import, which brings everything without the list", async ({ page }) => {
   const view = await open(page, { sites: 5, reveal: false, pages: 4210 })
 
   // No sentence: the title, the two boxes, the choice of sites and the buttons say it.
@@ -394,7 +394,7 @@ story("opens on two ticked boxes, All sites and Import, which brings everything 
   await expect(view.record).toHaveAttribute("data-closed", "true")
 })
 
-story("a box the person unticks stays behind, Import needs one of them, and Enter on a box imports", async ({ page }) => {
+test("a box the person unticks stays behind, Import needs one of them, and Enter on a box imports", async ({ page }) => {
   const view = await open(page, { sites: 5, reveal: false, pages: 4210 })
 
   // The dialog opens with the focus on itself. Tab reaches the boxes in reading order, after Close and the profile;
@@ -425,7 +425,7 @@ story("a box the person unticks stays behind, Import needs one of them, and Ente
   await expect(view.record).toHaveAttribute("data-closed", "true")
 })
 
-story("with Browsing history unticked the import brings sign-ins alone, of the chosen sites", async ({ page }) => {
+test("with Browsing history unticked the import brings sign-ins alone, of the chosen sites", async ({ page }) => {
   const view = await open(page, { sites: 5 })
 
   // A click on the label unticks its box.
@@ -437,7 +437,7 @@ story("with Browsing history unticked the import brings sign-ins alone, of the c
   await expect(view.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default", sites: ["github.com"], cookies: true, history: false })])
 })
 
-story("empty fallback uses a compact fit dialog when no browsers are found", async ({ page }) => {
+test("empty fallback uses a compact fit dialog when no browsers are found", async ({ page }) => {
   await page.evaluate(
     async (input) => {
       const [{ mountSiteChooser }, { ui }] = await Promise.all([import(input.modules.fixture), import(input.modules.ui)])
@@ -453,7 +453,7 @@ story("empty fallback uses a compact fit dialog when no browsers are found", asy
   expect(box && box.width <= 480 && box.height < 250).toBe(true)
 })
 
-story("Only sites I choose shows the list in place with none ticked, and the button then names how many it brings", async ({ page }) => {
+test("Only sites I choose shows the list in place with none ticked, and the button then names how many it brings", async ({ page }) => {
   const view = await open(page, { sites: 5, reveal: false })
 
   await press(view.only)
@@ -475,7 +475,7 @@ story("Only sites I choose shows the list in place with none ticked, and the but
   expect(sent.sites).not.toContain("github.com")
 })
 
-story("a list that Only sites I choose showed after its sites loaded still draws the rows it scrolls to", async ({ page }) => {
+test("a list that Only sites I choose showed after its sites loaded still draws the rows it scrolls to", async ({ page }) => {
   const view = await open(page, { sites: 5_000, reveal: false })
 
   await press(view.only)
@@ -487,7 +487,7 @@ story("a list that Only sites I choose showed after its sites loaded still draws
   await expect(view.dialog.locator('[role="option"][aria-posinset="130"]')).toBeInViewport()
 })
 
-story("keeps site names left to right in a right-to-left layout, the box at the start and long names cut at their start", async ({ page }) => {
+test("keeps site names left to right in a right-to-left layout, the box at the start and long names cut at their start", async ({ page }) => {
   const view = await open(page, { sites: 6 }, "rtl")
   const row = view.dialog.locator('[data-site="xn--mnchen-3ya.de"]')
   const box = await row.locator('[data-slot="checkbox-v2-control"]').boundingBox()
@@ -516,7 +516,7 @@ async function offer(page: Page, scenario: SiteScenario, card = false) {
   }
 }
 
-story("the sign-in bar names the browser, imports sign-ins and history in one click, and says in words what came", async ({ page }) => {
+test("the sign-in bar names the browser, imports sign-ins and history in one click, and says in words what came", async ({ page }) => {
   const bar = await offer(page, { sites: 5, pages: 4210 })
 
   await expect(page.getByText("Bring your sign-ins and history from Google Chrome · Work", { exact: true })).toBeVisible()
@@ -527,14 +527,14 @@ story("the sign-in bar names the browser, imports sign-ins and history in one cl
   await expect(bar.record).toHaveAttribute("data-imported", "1")
 })
 
-story("the sign-in bar says that some sites will ask again when sign-ins stayed behind", async ({ page }) => {
+test("the sign-in bar says that some sites will ask again when sign-ins stayed behind", async ({ page }) => {
   const bar = await offer(page, { sites: 5, pages: 4210, protected: 3 })
 
   await bar.importing.click()
   await expect(bar.confirmation).toHaveText("Imported from Google Chrome. Some sites will ask you to sign in again.")
 })
 
-story("the bar's own dialog brings history alone when Sign-ins is unticked, and the bar says so without loading the page again", async ({ page }) => {
+test("the bar's own dialog brings history alone when Sign-ins is unticked, and the bar says so without loading the page again", async ({ page }) => {
   const bar = await offer(page, { sites: 5, pages: 4210 })
 
   await page.getByRole("button", { name: "Import from another browser", exact: true }).click()
@@ -552,7 +552,7 @@ story("the bar's own dialog brings history alone when Sign-ins is unticked, and 
   await expect(bar.record).toHaveAttribute("data-imported", "0")
 })
 
-story("a browser's import never counts cookies: with none brought the bar says nothing was imported, or that the browser locks them", async ({ page }) => {
+test("a browser's import never counts cookies: with none brought the bar says nothing was imported, or that the browser locks them", async ({ page }) => {
   // One sign-in could not be written and none came: no history either, so nothing was imported.
   const bar = await offer(page, { sites: 5, none: true, partial: true })
 
@@ -561,7 +561,7 @@ story("a browser's import never counts cookies: with none brought the bar says n
   await expect(bar.confirmation).toHaveCount(0)
 })
 
-story("the import dialog stays open to say that the browser locks its sign-ins from other apps", async ({ page }) => {
+test("the import dialog stays open to say that the browser locks its sign-ins from other apps", async ({ page }) => {
   const view = await open(page, { sites: 5, reveal: false, none: true, protected: 12 })
 
   await view.importButton.click()
@@ -569,7 +569,7 @@ story("the import dialog stays open to say that the browser locks its sign-ins f
   await expect(view.record).toHaveAttribute("data-closed", "false")
 })
 
-story("a browser whose data cannot be read says so about the browser, with what to do", async ({ page }) => {
+test("a browser whose data cannot be read says so about the browser, with what to do", async ({ page }) => {
   const view = await open(page, { sites: 5, reveal: false, unreadable: true })
 
   await view.importButton.click()
@@ -577,7 +577,7 @@ story("a browser whose data cannot be read says so about the browser, with what 
   await expect(view.record).toHaveAttribute("data-closed", "false")
 })
 
-story("on macOS the dialog says what the Keychain prompt asks while a Chromium import waits, and not to choose Always Allow", async ({ page }) => {
+test("on macOS the dialog says what the Keychain prompt asks while a Chromium import waits, and not to choose Always Allow", async ({ page }) => {
   const view = await open(page, { sites: 5, reveal: false, keychain: true })
 
   await view.importButton.click()
@@ -588,7 +588,7 @@ story("on macOS the dialog says what the Keychain prompt asks while a Chromium i
   await expect(view.record).toHaveAttribute("data-closed", "true")
 })
 
-story("the offer card has a title and no paragraph, and its Import brings both", async ({ page }) => {
+test("the offer card has a title and no paragraph, and its Import brings both", async ({ page }) => {
   const card = await offer(page, { sites: 5, pages: 4210 }, true)
   const region = page.getByRole("region", { name: "Bring your sign-ins and history", exact: true })
 
@@ -600,7 +600,7 @@ story("the offer card has a title and no paragraph, and its Import brings both",
 })
 
 // The pane's sign-in bar says what an import brought for a few seconds, then goes by itself; Close ends it sooner.
-story("the sign-in bar's import confirmation goes by itself after 5 seconds, and Close ends it sooner", async ({ page }) => {
+test("the sign-in bar's import confirmation goes by itself after 5 seconds, and Close ends it sooner", async ({ page }) => {
   await page.clock.install()
   // No history in this profile: the line names the sign-ins alone.
   const { record, confirmation, importing } = await offer(page, { sites: 5, skipped: 318 })

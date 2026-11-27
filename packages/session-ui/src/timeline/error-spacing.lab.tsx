@@ -1,6 +1,6 @@
 import type { SessionDocument } from "../document"
-import { CURRENT_SESSION_ID, STORY_MODEL, STORY_TIME } from "../storybook/current-session-fixtures"
-import { CurrentSessionProviders } from "../storybook/current-session-story"
+import { CURRENT_SESSION_ID, LAB_MODEL, LAB_TIME } from "../lab/current-session-fixtures"
+import { CurrentSessionProviders } from "../lab/current-session-lab"
 import { timelinePresets } from "./detail"
 import { SessionTimeline } from "./session-timeline"
 
@@ -20,14 +20,14 @@ const document = {
       id: "msg_user_shell_error",
       type: "user",
       text: "Check the shell command and its result.",
-      metadata: { agent: "build", model: STORY_MODEL },
-      time: { created: STORY_TIME },
+      metadata: { agent: "build", model: LAB_MODEL },
+      time: { created: LAB_TIME },
     },
     {
       id: "msg_shell_error",
       type: "assistant",
       agent: "build",
-      model: STORY_MODEL,
+      model: LAB_MODEL,
       content: [
         {
           type: "tool",
@@ -39,18 +39,18 @@ const document = {
             content: [{ type: "text", text: "AGENTS.md\nbunfig.toml\nnode_modules\npackage.json\nsrc" }],
             metadata: {},
           },
-          time: { created: STORY_TIME + 100, ran: STORY_TIME + 150, completed: STORY_TIME + 300 },
+          time: { created: LAB_TIME + 100, ran: LAB_TIME + 150, completed: LAB_TIME + 300 },
         },
       ],
       error: { type: "ProviderError", message: "getaddrinfo ENOTFOUND opencode.ai" },
-      time: { created: STORY_TIME + 50, completed: STORY_TIME + 400 },
+      time: { created: LAB_TIME + 50, completed: LAB_TIME + 400 },
     },
     {
       id: "msg_after_error_updates",
       type: "system",
       description: "Instructions updated: core/codemode, core/mcp-guidance",
       text: "Instructions updated: core/codemode, core/mcp-guidance",
-      time: { created: STORY_TIME + 500 },
+      time: { created: LAB_TIME + 500 },
     },
   ],
 } satisfies SessionDocument

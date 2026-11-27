@@ -6,7 +6,7 @@ import { PluginSelectDialog } from "./dialogs"
 
 type Args = { optionCount: number; grouped: boolean; descriptions: boolean }
 
-function PluginSelectStory(props: Args) {
+function PluginSelectLab(props: Args) {
   const dialog = useDialog()
 
   const [store, setStore] = createStore({ selected: "Nothing selected" })
@@ -56,7 +56,7 @@ export default {
   id: "app-dialog-plugin-selection",
   args: { optionCount: 5, grouped: true, descriptions: true } satisfies Args,
   argTypes: { optionCount: { control: { type: "range", min: 0, max: 5, step: 1 } } },
-  render: (args: Args) => <PluginSelectStory {...args} />,
+  render: (args: Args) => <PluginSelectLab {...args} />,
 }
 
 export const Default = {}

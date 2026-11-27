@@ -2,18 +2,18 @@ import { Button } from "@opencode/ui/button"
 import { onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
-  DialogStoryRuntime,
-  STORY_DIRECTORY,
-  STORY_PROJECTS,
-  STORY_SERVER,
-} from "@/lab/dialog-story-runtime"
+  DialogLabRuntime,
+  LAB_DIRECTORY,
+  LAB_PROJECTS,
+  LAB_SERVER,
+} from "@/lab/dialog-runtime"
 import { createPromptProjectController, type PromptProject, type PromptServer } from "@/new-session/project/selector"
 import { createNewSessionWorkspaceController } from "@/new-session/workspace/controller"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useNewSessionLocationDialog } from "./dialog"
 
 const currentServer: PromptServer = {
-  key: ServerConnection.key(STORY_SERVER),
+  key: ServerConnection.key(LAB_SERVER),
   name: "MacBook-Pro",
   hint: "This computer",
   kind: "current",
@@ -28,17 +28,17 @@ const sshServer: PromptServer = {
 
 type LocationScenario = { multipleServers?: boolean; worktrees?: boolean }
 
-function LocationDialogStory(props: LocationScenario) {
+function LocationDialogLab(props: LocationScenario) {
   const [store, setStore] = createStore<{
     directory: string
     worktree?: string
     branch?: string
   }>({
-    directory: STORY_DIRECTORY,
+    directory: LAB_DIRECTORY,
   })
 
   const available = (): PromptProject[] => [
-    ...STORY_PROJECTS.map((project, index) => ({
+    ...LAB_PROJECTS.map((project, index) => ({
       id: project.id,
       name: project.name,
       worktree: project.worktree,
@@ -69,7 +69,7 @@ function LocationDialogStory(props: LocationScenario) {
       available: available(),
       servers: props.multipleServers ? [currentServer, sshServer] : [currentServer],
       directory: store.directory,
-      projectID: STORY_PROJECTS[0].id,
+      projectID: LAB_PROJECTS[0].id,
       server: currentServer.key,
       select: (directory, _server, workspace) => {
         setStore({ directory, worktree: workspace })
@@ -107,16 +107,16 @@ export default {
   id: "app-dialog-new-session-location",
 }
 
-const story = (scenario: LocationScenario = {}) => ({
+const state = (scenario: LocationScenario = {}) => ({
   render: () => (
-    <DialogStoryRuntime>
-      <LocationDialogStory {...scenario} />
-    </DialogStoryRuntime>
+    <DialogLabRuntime>
+      <LocationDialogLab {...scenario} />
+    </DialogLabRuntime>
   ),
 })
 
-export const Default = story()
+export const Default = state()
 
-export const MultipleServers = story({ multipleServers: true })
+export const MultipleServers = state({ multipleServers: true })
 
-export const Worktrees = story({ worktrees: true })
+export const Worktrees = state({ worktrees: true })

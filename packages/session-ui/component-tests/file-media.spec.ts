@@ -1,8 +1,8 @@
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const fixture = sourceURL(new URL("./file-media.fixture.tsx", import.meta.url))
 
-story("keeps a loaded image when re-reading the same file fails", async ({ mount, page }) => {
+test("keeps a loaded image when re-reading the same file fails", async ({ mount, page }) => {
   await mount("components-markdown--compact-result")
   await page.evaluate(async (fixture) => (await import(fixture)).mountFileMedia(), fixture)
   const root = page.getByTestId("file-media-fixture")

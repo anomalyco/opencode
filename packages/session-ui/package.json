@@ -47,7 +47,7 @@
     "./sources/panel": "./src/sources/sources-panel.tsx",
     "./sources/title": "./src/sources/sources-title.tsx",
     "./styles": "./src/styles/index.css",
-    "./storybook": "./src/storybook/index.ts",
+    "./lab": "./src/lab/index.ts",
     "./tools/ansi": "./src/tools/ansi.ts",
     "./tools/shell-output": "./src/tools/shell-output.ts",
     "./v2/*.css": "./src/v2/components/*.css",

@@ -3,8 +3,8 @@ import { createStore } from "solid-js/store"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import type { SessionUserActions } from "../actions"
 import { CurrentUserMessageDisplay } from "./message-content"
-import { CurrentSessionProviders } from "../storybook/current-session-story"
-import { CURRENT_SESSION_ID, STORY_MODEL, STORY_TIME } from "../storybook/current-session-fixtures"
+import { CurrentSessionProviders } from "../lab/current-session-lab"
+import { CURRENT_SESSION_ID, LAB_MODEL, LAB_TIME } from "../lab/current-session-fixtures"
 
 const statuses = ["delivered", "starting", "steering", "stranded", "queued", "sending"] as const
 
@@ -35,10 +35,10 @@ export const Pending = {
     }
 
     const message = createMemo<SessionMessageUser>(() => ({
-      id: "msg_pending_prompt_story",
+      id: "msg_pending_prompt_lab",
       type: "user",
       text: state.text ? "Keep the prompt styling consistent with the rest of the timeline." : "",
-      time: { created: STORY_TIME },
+      time: { created: LAB_TIME },
       files: state.text
         ? []
         : [{ name: "notes.json", mime: "application/json", data: "e30=", source: { type: "inline" } }],
@@ -121,7 +121,7 @@ export const Pending = {
               message={{ ...message(), id: "msg_pending_prompt_above" }}
               text="Keep the earlier prompt in the same run."
               agent="build"
-              model={STORY_MODEL}
+              model={LAB_MODEL}
               actions={actions}
               run={{ above: false, below: true }}
             />
@@ -131,7 +131,7 @@ export const Pending = {
             message={message()}
             text={message().text}
             agent="build"
-            model={STORY_MODEL}
+            model={LAB_MODEL}
             voice={state.voice}
             actions={actions}
             run={{ above: state.grouped && state.text, below: false }}

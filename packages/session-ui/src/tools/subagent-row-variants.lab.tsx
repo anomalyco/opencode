@@ -1,7 +1,7 @@
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { For, type JSX } from "solid-js"
-import { CurrentSessionProviders } from "../storybook/current-session-story"
-import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
+import { CurrentSessionProviders } from "../lab/current-session-lab"
+import { labDocument, labTool } from "../lab/current-session-scenarios"
 import { timelinePresets } from "../timeline/detail"
 import { SessionTimeline } from "../timeline/session-timeline"
 
@@ -13,32 +13,32 @@ export default {
     docs: {
       description: {
         component:
-          "Design alternatives for child-Session rows without the old agent square. Production is the first variant; the others are static story-only sketches.",
+          "Design alternatives for child-Session rows without the old agent square. Production is the first variant; the others are static lab-only sketches.",
       },
     },
   },
 }
 
-const productionDocument = storyDocument(
+const productionDocument = labDocument(
   [
-    storyTool("variant_glob", "glob", "completed", { pattern: "src/timeline/**/*.ts" }),
-    storyTool("variant_grep", "grep", "completed", { pattern: "timelineDetail" }),
-    storyTool("variant_read", "read", "completed", { path: "src/timeline/projection.ts" }),
-    storyTool(
+    labTool("variant_glob", "glob", "completed", { pattern: "src/timeline/**/*.ts" }),
+    labTool("variant_grep", "grep", "completed", { pattern: "timelineDetail" }),
+    labTool("variant_read", "read", "completed", { path: "src/timeline/projection.ts" }),
+    labTool(
       "variant_explore",
       "subagent",
       "completed",
       { agent: "explore", description: "Map the timeline grouping rules", prompt: "Find where tool rows are grouped." },
       { output: "Grouping lives in the timeline projection.", metadata: { sessionID: "session_child_explore" } },
     ),
-    storyTool(
+    labTool(
       "variant_test",
       "subagent",
       "running",
       { agent: "test", description: "Run the focused timeline tests", prompt: "Run the timeline tests." },
       { metadata: { sessionID: "session_child_test" } },
     ),
-    storyTool("variant_delegating", "subagent", "streaming", {}, { raw: "" }),
+    labTool("variant_delegating", "subagent", "streaming", {}, { raw: "" }),
   ],
   true,
 )

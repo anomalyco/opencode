@@ -30,11 +30,11 @@ type Preset = {
 
 type DialogPreset = Preset & { target?: Extract<ServerConnectTarget, { kind: "edit" }>; closed?: boolean }
 
-export function serverStory(preset: DialogPreset = {}) {
-  return { render: () => <DialogStory preset={preset} /> }
+export function serverLab(preset: DialogPreset = {}) {
+  return { render: () => <DialogLab preset={preset} /> }
 }
 
-function DialogStory(props: { preset: DialogPreset }) {
+function DialogLab(props: { preset: DialogPreset }) {
   const dialog = useDialog()
 
   const [saved, setSaved] = createSignal("")
@@ -70,11 +70,11 @@ function DialogStory(props: { preset: DialogPreset }) {
   )
 }
 
-export function screenStory(preset: Preset & { url?: string } = {}) {
-  return { render: () => <ScreenStory preset={preset} /> }
+export function screenLab(preset: Preset & { url?: string } = {}) {
+  return { render: () => <ScreenLab preset={preset} /> }
 }
 
-function ScreenStory(props: { preset: Preset & { url?: string } }) {
+function ScreenLab(props: { preset: Preset & { url?: string } }) {
   const [connected, setConnected] = createSignal("")
 
   // On success the app routes away. In the lab show the saved address and let the next run start with a fresh form.

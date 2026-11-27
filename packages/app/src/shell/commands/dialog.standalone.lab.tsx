@@ -2,11 +2,11 @@ import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { onMount } from "solid-js"
 import {
-  DialogStoryRuntime,
-  STORY_DIRECTORY,
-  STORY_PROJECTS,
-  STORY_SERVER,
-} from "@/lab/dialog-story-runtime"
+  DialogLabRuntime,
+  LAB_DIRECTORY,
+  LAB_PROJECTS,
+  LAB_SERVER,
+} from "@/lab/dialog-runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
@@ -15,16 +15,16 @@ import { createCommandPaletteFileEntry, type CommandPaletteEntry } from "./palet
 
 type Scenario = { query?: string; fileSearch?: "pending" | "failed" }
 
-function CommandPaletteStory(props: Scenario) {
+function CommandPaletteLab(props: Scenario) {
   const dialog = useDialog()
 
   const language = useLanguage()
 
   const tabs = useTabs()
 
-  const serverKey = ServerConnection.key(STORY_SERVER)
+  const serverKey = ServerConnection.key(LAB_SERVER)
 
-  const project = STORY_PROJECTS[0]
+  const project = LAB_PROJECTS[0]
 
   const preferredCommands = (): CommandPaletteEntry[] => {
     const category = language.t("palette.group.commands")
@@ -99,26 +99,26 @@ function CommandPaletteStory(props: Scenario) {
 
     return [
       {
-        id: "session:ses_story_1",
+        id: "session:ses_lab_1",
         type: "session",
         title: "Refactor the dialog primitives",
         description: project.name,
         category,
         server: serverKey,
-        directory: STORY_DIRECTORY,
-        sessionID: "ses_story_1",
+        directory: LAB_DIRECTORY,
+        sessionID: "ses_lab_1",
         project,
         updated: Date.now() - 18 * 60_000,
       },
       {
-        id: "session:ses_story_2",
+        id: "session:ses_lab_2",
         type: "session",
         title: "Fix scrollbar in menus",
         description: project.name,
         category,
         server: serverKey,
-        directory: STORY_DIRECTORY,
-        sessionID: "ses_story_2",
+        directory: LAB_DIRECTORY,
+        sessionID: "ses_lab_2",
         project,
         updated: Date.now() - 2 * 3_600_000,
       },
@@ -186,7 +186,7 @@ function CommandPaletteStory(props: Scenario) {
   }
 
   const open = () => {
-    tabs.addSessionTab({ server: serverKey, sessionId: "ses_story_1" })
+    tabs.addSessionTab({ server: serverKey, sessionId: "ses_lab_1" })
     void dialog.show(() => {
       let host!: HTMLDivElement
 
@@ -228,20 +228,20 @@ export default {
   id: "app-dialog-command-palette",
 }
 
-const story = (scenario: Scenario = {}) => ({
+const state = (scenario: Scenario = {}) => ({
   render: () => (
-    <DialogStoryRuntime>
-      <CommandPaletteStory {...scenario} />
-    </DialogStoryRuntime>
+    <DialogLabRuntime>
+      <CommandPaletteLab {...scenario} />
+    </DialogLabRuntime>
   ),
 })
 
-export const Default = story()
+export const Default = state()
 
-export const Searching = story({ query: "model" })
+export const Searching = state({ query: "model" })
 
-export const NoResults = story({ query: "changelog.md" })
+export const NoResults = state({ query: "changelog.md" })
 
-export const SearchingFiles = story({ query: "changelog.md", fileSearch: "pending" })
+export const SearchingFiles = state({ query: "changelog.md", fileSearch: "pending" })
 
-export const FileSearchFailed = story({ query: "changelog.md", fileSearch: "failed" })
+export const FileSearchFailed = state({ query: "changelog.md", fileSearch: "failed" })

@@ -35,7 +35,7 @@ export default {
   },
 }
 
-function StoryTabs(props: TabsProps) {
+function LabTabs(props: TabsProps) {
   const [value, setValue] = createSignal(props.defaultValue)
   createEffect(() => setValue(props.defaultValue))
 
@@ -49,7 +49,7 @@ export const Settings = {
     defaultValue: "general",
   },
   render: (props: TabsProps) => (
-    <StoryTabs {...props}>
+    <LabTabs {...props}>
       <Tabs.List>
         <Tabs.Trigger value="general">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -92,7 +92,7 @@ export const Settings = {
       <Tabs.Content value="appearance">
         <p class="text-[12px] text-[#5c5c5c] mx-4 my-3.5">Appearance settings</p>
       </Tabs.Content>
-    </StoryTabs>
+    </LabTabs>
   ),
 }
 
@@ -103,7 +103,7 @@ export const Normal = {
     defaultValue: "first",
   },
   render: (props: TabsProps) => (
-    <StoryTabs {...props}>
+    <LabTabs {...props}>
       <Tabs.List>
         <Tabs.Trigger value="first">First</Tabs.Trigger>
         <Tabs.Trigger value="second">Second</Tabs.Trigger>
@@ -114,13 +114,13 @@ export const Normal = {
       <Tabs.Content value="second">
         <p class="text-[12px] text-[#5c5c5c] mx-3.5 my-2">Some more alt content</p>
       </Tabs.Content>
-    </StoryTabs>
+    </LabTabs>
   ),
 }
 
-type StoryTab = { value: string; label: string; content: string; closable?: boolean }
+type LabTab = { value: string; label: string; content: string; closable?: boolean }
 
-function closableTabs(initialTabs: StoryTab[]) {
+function closableTabs(initialTabs: LabTab[]) {
   return (props: TabsProps) => {
     const [tabs, setTabs] = createSignal(initialTabs)
 
@@ -130,7 +130,7 @@ function closableTabs(initialTabs: StoryTab[]) {
       setTabs(initialTabs)
     })
 
-    function close(tab: StoryTab) {
+    function close(tab: LabTab) {
       if (props.disabled) return
       const index = tabs().indexOf(tab)
 

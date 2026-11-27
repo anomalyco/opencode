@@ -1,4 +1,4 @@
-import { NavigationStory } from "./navigation-story"
+import { NavigationLab } from "./navigation-lab"
 
 type Args = { width: number }
 
@@ -9,8 +9,8 @@ export default {
   argTypes: { width: { control: { type: "range", min: 192, max: 480, step: 8 } } },
 }
 
-export const ProjectGroups = { render: (args: Args) => <NavigationStory preset="projects" width={args.width} /> }
+export const ProjectGroups = { render: (args: Args) => <NavigationLab preset="projects" width={args.width} /> }
 
 export const CollapsedCurrentProject = {
-  render: (args: Args) => <NavigationStory preset="collapsed" width={args.width} />,
+  render: (args: Args) => <NavigationLab preset="collapsed" width={args.width} />,
 }

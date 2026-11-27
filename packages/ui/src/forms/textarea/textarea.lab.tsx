@@ -17,7 +17,7 @@ Multiline text field with the same neutral elevation, states, and tokens as Text
 - **Disabled**: 50% opacity.
 
 ### Field
-Compose with \`Field\` for label, helper prefix/suffix, and tooltip — see the **Field** story.
+Compose with \`Field\` for label, helper prefix/suffix, and tooltip — see the **Field** page.
 `
 
 export default {

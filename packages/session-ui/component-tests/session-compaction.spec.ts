@@ -1,8 +1,8 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
 const rows = "current-session-timeline-rows"
 
-story("shows a running automatic compaction as one Compacting divider", async ({ mount }) => {
+test("shows a running automatic compaction as one Compacting divider", async ({ mount }) => {
   const timeline = await mount(`${rows}--compaction-in-progress`)
   const message = timeline.locator('[data-component="session-compaction-message"]')
   const divider = message.locator('[data-slot="session-compaction-divider"]')
@@ -21,7 +21,7 @@ story("shows a running automatic compaction as one Compacting divider", async ({
   await expect(message.locator('[data-component="text-part"]')).toHaveCount(0)
 })
 
-story("opens a finished automatic compaction's summary from its divider", async ({ mount, page }) => {
+test("opens a finished automatic compaction's summary from its divider", async ({ mount, page }) => {
   const timeline = await mount(`${rows}--compaction-and-continuation`)
   const message = timeline.locator('[data-component="session-compaction-message"]')
   const divider = message.locator('[data-slot="session-compaction-divider"]')
@@ -68,7 +68,7 @@ story("opens a finished automatic compaction's summary from its divider", async 
   await expect(summary).toHaveCount(0)
 })
 
-story("fades in an instant automatic compaction as Compacted", async ({ mount }) => {
+test("fades in an instant automatic compaction as Compacted", async ({ mount }) => {
   const timeline = await mount(`${rows}--compaction-replay`, { args: { run: "instant" } })
   const message = timeline.locator('[data-component="session-compaction-message"]')
   const divider = message.locator('[data-slot="session-compaction-divider"]')
@@ -80,7 +80,7 @@ story("fades in an instant automatic compaction as Compacted", async ({ mount })
   await expect(message.locator('[data-slot="session-compaction-light"]').first()).toBeHidden()
 })
 
-story("fades in a compaction that ends inside the grace as Compacted only", async ({ mount, page }) => {
+test("fades in a compaction that ends inside the grace as Compacted only", async ({ mount, page }) => {
   await mount(`${rows}--compaction-replay`, { args: { run: "quick" } })
 
   // Sample the frame after it finishes: Compacting must already be gone rather than crossfading under Compacted.
@@ -111,7 +111,7 @@ story("fades in a compaction that ends inside the grace as Compacted only", asyn
   expect(ended).toEqual({ enter: "now", animation: "session-compaction-enter", running: "0", done: "1" })
 })
 
-story("warms the label only once the gathering light reaches it", async ({ mount }) => {
+test("warms the label only once the gathering light reaches it", async ({ mount }) => {
   const timeline = await mount(`${rows}--compaction-in-progress`)
   const message = timeline.locator('[data-component="session-compaction-message"]')
 
@@ -147,7 +147,7 @@ story("warms the label only once the gathering light reaches it", async ({ mount
   expect(cooled).toEqual([0, 0])
 })
 
-story("splits a translated label between whole characters", async ({ mount }) => {
+test("splits a translated label between whole characters", async ({ mount }) => {
   // Bengali's two words part at a vowel sign, which draws a dotted circle when it is cut from its consonant.
   const timeline = await mount(`${rows}--compaction-and-continuation`, { globals: { locale: "bn" } })
   const message = timeline.locator('[data-component="session-compaction-message"]')
@@ -156,7 +156,7 @@ story("splits a translated label between whole characters", async ({ mount }) =>
   await expect(message.locator('[data-slot="session-compaction-done"]')).toHaveText(/^\P{M}/u)
 })
 
-story("keeps the space where a translated label splits", async ({ mount, page }) => {
+test("keeps the space where a translated label splits", async ({ mount, page }) => {
   // Hindi's two phrases part after a space, which a label split into boxes drops unless it keeps its white space.
   const timeline = await mount(`${rows}--compaction-and-continuation`, { globals: { locale: "hi" } })
   const label = timeline.locator('[data-slot="session-compaction-label"]')
@@ -187,7 +187,7 @@ story("keeps the space where a translated label splits", async ({ mount, page })
   expect(Math.abs(split - whole)).toBeLessThan(1)
 })
 
-story("keeps the full record for a manual compaction", async ({ mount }) => {
+test("keeps the full record for a manual compaction", async ({ mount }) => {
   const timeline = await mount(`${rows}--compaction-manual`)
   const message = timeline.locator('[data-component="session-compaction-message"]')
 
@@ -197,7 +197,7 @@ story("keeps the full record for a manual compaction", async ({ mount }) => {
   await expect(message).toContainText("Session compacted · 11.9K in · 508 out")
 })
 
-story("keeps the full record for a failed automatic compaction", async ({ mount }) => {
+test("keeps the full record for a failed automatic compaction", async ({ mount }) => {
   const timeline = await mount(`${rows}--compaction-failed`)
   const message = timeline.locator('[data-component="session-compaction-message"]')
 
@@ -209,13 +209,13 @@ story("keeps the full record for a failed automatic compaction", async ({ mount 
   )
 })
 
-story("keeps the divider's box while an automatic compaction runs and finishes", async ({ mount, page }) => {
+test("keeps the divider's box while an automatic compaction runs and finishes", async ({ mount, page }) => {
   const timeline = await mount(`${rows}--conversation`, { args: { scenario: "compaction" } })
   const message = timeline.locator('[data-component="session-compaction-message"]')
   const label = message.locator('[data-slot="session-compaction-label"]')
   const stem = label.locator("span").first()
 
-  // The story's turn above gains its footer when the Session goes idle, so measure the divider against itself.
+  // The page's turn above gains its footer when the Session goes idle, so measure the divider against itself.
   const box = async () => {
     const [outer, text, start] = await Promise.all([message.boundingBox(), label.boundingBox(), stem.boundingBox()])
 
@@ -241,7 +241,7 @@ story("keeps the divider's box while an automatic compaction runs and finishes",
   expect(await box()).toEqual(running)
 })
 
-story("holds the lines still under reduced motion", async ({ mount, page }) => {
+test("holds the lines still under reduced motion", async ({ mount, page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" })
   const timeline = await mount(`${rows}--compaction-in-progress`)
   const message = timeline.locator('[data-component="session-compaction-message"]')

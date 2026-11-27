@@ -3,7 +3,7 @@ import {
   activeQuestionRequest,
   CurrentSessionProviders,
   editThenTestDocument,
-} from "@opencode/session-ui/storybook"
+} from "@opencode/session-ui/lab"
 import { SessionTimeline } from "@opencode/session-ui/timeline"
 import { motionTuning } from "@opencode/ui/motion-tuning"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
@@ -11,7 +11,7 @@ import { createEffect, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { FormInfo } from "@opencode/client/promise"
 import { Composer } from "@/composer/composer"
-import { createPromptController } from "@/session/story-model"
+import { createPromptController } from "@/session/lab-model"
 import type { WebSearchRequestModel } from "@/session/requests/websearch"
 import type { SessionQueueView } from "./queue"
 import { SessionQueuePanel } from "./queue-panel"
@@ -43,7 +43,7 @@ const websearchRequest: FormInfo = {
   fields: [{ key: "choice", type: "string", required: true, custom: false }],
 }
 
-// The real composer region with its docks, queue and subagent bar, driven by the story's args or by its replay
+// The real composer region with its docks, queue and subagent bar, driven by the page's args or by its replay
 // buttons (the Lab shows them under Knobs → Composer → Docks). Answering, dismissing and Esc close docks the way they do in the app.
 function ComposerDocksPreview(props: DockArgs) {
   const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } })

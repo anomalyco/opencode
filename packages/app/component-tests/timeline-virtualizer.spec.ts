@@ -1,13 +1,13 @@
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const fixture = sourceURL(new URL("./timeline-virtualizer.fixture.tsx", import.meta.url))
 
-story.beforeEach(async ({ mount }) => {
+test.beforeEach(async ({ mount }) => {
   const component = await mount("opencode-composer-flow--mixed-attachments")
   await expect(component.getByRole("textbox", { name: "Prompt", exact: true })).toBeVisible()
 })
 
-story("spaces the first mobile message without changing desktop spacing", async ({ page }) => {
+test("spaces the first mobile message without changing desktop spacing", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.evaluate(async (fixture) => {
     const { mountTimelineVirtualizer } = await import(fixture)
@@ -34,7 +34,7 @@ story("spaces the first mobile message without changing desktop spacing", async 
   await expect.poll(gap).toBe(16)
 })
 
-story("bounds the cheap suffix and reveals only ready measured rows", async ({ page }) => {
+test("bounds the cheap suffix and reveals only ready measured rows", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountTimelineVirtualizer } = await import(fixture)
     mountTimelineVirtualizer({ count: 100, rowHeight: 60, immediate: true })
@@ -55,7 +55,7 @@ story("bounds the cheap suffix and reveals only ready measured rows", async ({ p
   })
 })
 
-story("reveals at the end when Markdown never reports ready", async ({ page }) => {
+test("reveals at the end when Markdown never reports ready", async ({ page }) => {
   // A block that never set data-markdown-ready kept every reveal check waiting, and the timeline stayed invisible.
   await page.evaluate(async (fixture) => {
     const { mountTimelineVirtualizer } = await import(fixture)
@@ -74,7 +74,7 @@ story("reveals at the end when Markdown never reports ready", async ({ page }) =
     .toBeLessThanOrEqual(1)
 })
 
-story("treats the reachable end as the end under page zoom", async ({ page }) => {
+test("treats the reachable end as the end under page zoom", async ({ page }) => {
   // At 110% the browser stops scrolling more than a pixel short of scrollHeight - clientHeight. A mount that waited
   // for that distance to close stayed blank, or froze the renderer in a microtask loop, and scrolling back down to
   // the bottom never resumed following.
@@ -108,7 +108,7 @@ story("treats the reachable end as the end under page zoom", async ({ page }) =>
   await expect(controls).toHaveAttribute("data-pinned", "true")
 })
 
-story("leaves a reader who scrolled up in place after a scroll to the zoomed end", async ({ page }) => {
+test("leaves a reader who scrolled up in place after a scroll to the zoomed end", async ({ page }) => {
   // At 110% the end the browser reaches sits more than a pixel short of scrollHeight - clientHeight. TanStack kept
   // scrolling toward that max on every frame for five seconds, so a row that grew meanwhile pulled the reader back down.
   await page.evaluate(async (fixture) => {
@@ -147,7 +147,7 @@ story("leaves a reader who scrolled up in place after a scroll to the zoomed end
   expect(await distance()).toBeGreaterThan(70)
 })
 
-story("holds a revealed tool inside a group of several through a later resize", async ({ page }) => {
+test("holds a revealed tool inside a group of several through a later resize", async ({ page }) => {
   // The anchor looked only for an element naming the tool alone, so a grouped tool let go on the next resize.
   await page.evaluate(async (fixture) => {
     const { mountTimelineVirtualizer } = await import(fixture)
@@ -172,7 +172,7 @@ for (const input of [
   { name: "offset-only", count: 1, rowHeight: 600, reveal: { scrollTop: 0 } },
   { name: "zero-height", count: 4, rowHeight: 60, reveal: {} },
 ]) {
-  story(`reveals ready measured rows after an ${input.name} reconnect`, async ({ page }) => {
+  test(`reveals ready measured rows after an ${input.name} reconnect`, async ({ page }) => {
     await page.evaluate(
       async ({ fixture, input }) => {
         const { mountTimelineVirtualizer } = await import(fixture)
@@ -248,7 +248,7 @@ for (const input of [
     mounted: ["a", "b"],
   },
 ]) {
-  story(`mounts each row with its own row through ${input.name}`, async ({ page }) => {
+  test(`mounts each row with its own row through ${input.name}`, async ({ page }) => {
     const result = await page.evaluate(
       async ({ fixture, input }) => {
         const { mountTimelineRowChanges } = await import(fixture)

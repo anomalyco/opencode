@@ -3,18 +3,18 @@ import { createMemo } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"
-import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
+import { CurrentSessionProviders, CurrentSessionTimelineLab } from "../lab/current-session-lab"
 import {
   CURRENT_SESSION_ID,
-  STORY_MODEL,
-  STORY_TIME,
+  LAB_MODEL,
+  LAB_TIME,
   inspectAndExplainDocument,
   loadedResourcesDocument,
   subagentDocument,
   thinkingDocument,
   webResearchDocument,
-} from "../storybook/current-session-fixtures"
-import { storyDocument, storyPatchFile, storyTool } from "../storybook/current-session-scenarios"
+} from "../lab/current-session-fixtures"
+import { labDocument, labPatchFile, labTool } from "../lab/current-session-scenarios"
 import { timelinePresets, type TimelinePlacement } from "./detail"
 import { SessionTimeline } from "./session-timeline"
 
@@ -35,7 +35,7 @@ export default {
 
 export const InspectTheCodebase = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Inspect the codebase"
       description="Glob, grep, and read calls collapse into one context group before the explanation."
       document={inspectAndExplainDocument}
@@ -46,7 +46,7 @@ export const InspectTheCodebase = {
 
 export const ResearchTheWeb = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Research the web"
       description="A targeted search and source fetch precede a short answer with no code changes."
       document={webResearchDocument}
@@ -57,7 +57,7 @@ export const ResearchTheWeb = {
 
 export const LoadedResources = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Loaded instruction file and skill"
       description="The assistant reads project instructions, loads specialized guidance, and applies both to its response."
       document={loadedResourcesDocument}
@@ -68,7 +68,7 @@ export const LoadedResources = {
 
 export const DelegateFocusedTasks = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Delegate focused tasks"
       description="A completed review and an active test task show the two normal child-Session states together."
       document={subagentDocument}
@@ -77,27 +77,27 @@ export const DelegateFocusedTasks = {
   ),
 }
 
-const delegationDocument = storyDocument([
-  storyTool("tool_delegation_glob", "glob", "completed", { pattern: "src/timeline/**/*.ts" }),
-  storyTool("tool_delegation_grep", "grep", "completed", { pattern: "timelineDetail" }),
-  storyTool("tool_delegation_read", "read", "completed", { path: "src/timeline/projection.ts" }),
-  storyTool(
+const delegationDocument = labDocument([
+  labTool("tool_delegation_glob", "glob", "completed", { pattern: "src/timeline/**/*.ts" }),
+  labTool("tool_delegation_grep", "grep", "completed", { pattern: "timelineDetail" }),
+  labTool("tool_delegation_read", "read", "completed", { path: "src/timeline/projection.ts" }),
+  labTool(
     "tool_delegation_explore",
     "subagent",
     "completed",
     { agent: "explore", description: "Map the timeline grouping rules", prompt: "Find where tool rows are grouped." },
     { output: "Grouping lives in the timeline projection.", metadata: { sessionID: "session_child_explore" } },
   ),
-  storyTool(
+  labTool(
     "tool_delegation_review",
     "subagent",
     "completed",
     { agent: "review", description: "Review the detail presets", prompt: "Check each timeline preset." },
     { output: "Every preset is consistent.", metadata: { sessionID: "session_child_review" } },
   ),
-  storyTool("tool_delegation_read_tests", "read", "completed", { path: "src/timeline/rows-current.test.ts" }),
-  storyTool("tool_delegation_grep_tests", "grep", "completed", { pattern: "subagent" }),
-  storyTool(
+  labTool("tool_delegation_read_tests", "read", "completed", { path: "src/timeline/rows-current.test.ts" }),
+  labTool("tool_delegation_grep_tests", "grep", "completed", { pattern: "subagent" }),
+  labTool(
     "tool_delegation_general",
     "subagent",
     "completed",
@@ -125,7 +125,7 @@ export const DelegateBetweenTools = {
   ),
 }
 
-function CodebaseExplorationStory() {
+function CodebaseExplorationLab() {
   const [state, setState] = createStore({ read: false, glob: false })
 
   const tool = (name: "read" | "glob", completed: boolean) => {
@@ -139,8 +139,8 @@ function CodebaseExplorationStory() {
         ? { status: "completed", input, content: [{ type: "text", text: "Complete" }], metadata: {} }
         : { status: "running", input, metadata: {} },
       time: completed
-        ? { created: STORY_TIME, ran: STORY_TIME + 100, completed: STORY_TIME + 200 }
-        : { created: STORY_TIME, ran: STORY_TIME + 100 },
+        ? { created: LAB_TIME, ran: LAB_TIME + 100, completed: LAB_TIME + 200 }
+        : { created: LAB_TIME, ran: LAB_TIME + 100 },
     } satisfies SessionMessageAssistantTool
   }
 
@@ -154,10 +154,10 @@ function CodebaseExplorationStory() {
             id: "msg_codebase_exploration_assistant",
             type: "assistant",
             agent: "build",
-            model: STORY_MODEL,
+            model: LAB_MODEL,
             content: [tool("read", state.read), tool("glob", state.glob)],
             time:
-              state.read && state.glob ? { created: STORY_TIME, completed: STORY_TIME + 300 } : { created: STORY_TIME },
+              state.read && state.glob ? { created: LAB_TIME, completed: LAB_TIME + 300 } : { created: LAB_TIME },
           } satisfies SessionMessageAssistant,
         ],
         status: { type: state.read && state.glob ? "idle" : "busy" },
@@ -182,23 +182,23 @@ function CodebaseExplorationStory() {
   )
 }
 
-const ExploreTheCodebase = { render: () => <CodebaseExplorationStory /> }
+const ExploreTheCodebase = { render: () => <CodebaseExplorationLab /> }
 
 const CompareSearchProviders = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Compare web search providers"
       description="Search results identify Parallel, Exa, and the generic provider clearly."
-      document={storyDocument([
-        storyTool(
+      document={labDocument([
+        labTool(
           "tool_search_parallel",
           "websearch",
           "completed",
           { query: "parallel" },
           { metadata: { provider: "parallel" } },
         ),
-        storyTool("tool_search_exa", "websearch", "completed", { query: "exa" }, { metadata: { provider: "exa" } }),
-        storyTool("tool_search_generic", "websearch", "completed", { query: "generic" }),
+        labTool("tool_search_exa", "websearch", "completed", { query: "exa" }, { metadata: { provider: "exa" } }),
+        labTool("tool_search_generic", "websearch", "completed", { query: "generic" }),
       ])}
     />
   ),
@@ -206,25 +206,25 @@ const CompareSearchProviders = {
 
 const SearchResultsAndFiles = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Search results and opened files"
       description="Grouped file searches show their match counts and the filename that was inspected."
-      document={storyDocument([
-        storyTool(
+      document={labDocument([
+        labTool(
           "tool_label_glob",
           "glob",
           "completed",
           { path: ".", pattern: "**/*.ts" },
           { metadata: { count: 1 } },
         ),
-        storyTool(
+        labTool(
           "tool_label_grep",
           "grep",
           "completed",
           { path: ".", pattern: "value" },
           { metadata: { matches: 12 } },
         ),
-        storyTool("tool_label_read", "read", "completed", { path: "src/a.ts" }),
+        labTool("tool_label_read", "read", "completed", { path: "src/a.ts" }),
       ])}
     />
   ),
@@ -232,22 +232,22 @@ const SearchResultsAndFiles = {
 
 const ReadOneFile = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Read one source file"
       description="A single read opens its own file label without neighboring tool calls."
-      document={storyDocument([storyTool("prt_read_path", "read", "completed", { path: "src/a.ts" })])}
+      document={labDocument([labTool("prt_read_path", "read", "completed", { path: "src/a.ts" })])}
     />
   ),
 }
 
 const LoadingSpecializedSkills = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Loading specialized skills"
       description="Active and completed skills display their identifier or resolved name."
-      document={storyDocument([
-        storyTool("tool_skill_id", "skill", "running", { id: "frontend-design" }),
-        storyTool("tool_skill_name", "skill", "completed", { id: "opencode" }, { metadata: { name: "OpenCode" } }),
+      document={labDocument([
+        labTool("tool_skill_id", "skill", "running", { id: "frontend-design" }),
+        labTool("tool_skill_name", "skill", "completed", { id: "opencode" }, { metadata: { name: "OpenCode" } }),
       ])}
     />
   ),
@@ -255,16 +255,16 @@ const LoadingSpecializedSkills = {
 
 const ResearchAcrossSteps = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Research across separate steps"
       description="An explanation and command naturally separate independent file-investigation groups."
-      document={storyDocument([
-        storyTool("tool_boundary_read", "read", "completed", { path: "src/a.ts" }),
+      document={labDocument([
+        labTool("tool_boundary_read", "read", "completed", { path: "src/a.ts" }),
         { type: "text", text: "Boundary text" },
-        storyTool("tool_boundary_glob", "glob", "completed", { path: ".", pattern: "**/*.ts" }),
-        storyTool("tool_boundary_grep", "grep", "completed", { path: ".", pattern: "stable" }),
-        storyTool("tool_boundary_shell", "shell", "completed", { command: "printf done" }, { output: "done" }),
-        storyTool("tool_boundary_list", "list", "completed", { path: "src" }),
+        labTool("tool_boundary_glob", "glob", "completed", { path: ".", pattern: "**/*.ts" }),
+        labTool("tool_boundary_grep", "grep", "completed", { path: ".", pattern: "stable" }),
+        labTool("tool_boundary_shell", "shell", "completed", { command: "printf done" }, { output: "done" }),
+        labTool("tool_boundary_list", "list", "completed", { path: "src" }),
       ])}
     />
   ),
@@ -274,52 +274,52 @@ const questions = { questions: [{ header: "Stability", question: "Keep it stable
 
 const CompleteAgentWorkflow = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Complete agent workflow"
       description="A realistic investigation combines file research, web sources, delegation, commands, edits, and specialist guidance."
-      document={storyDocument([
-        storyTool("tool_family_read", "read", "completed", { path: "src/a.ts" }),
-        storyTool("tool_family_glob", "glob", "completed", { path: ".", pattern: "**/*.ts" }),
-        storyTool("tool_family_grep", "grep", "completed", { path: ".", pattern: "value" }),
-        storyTool("tool_family_list", "list", "completed", { path: "src" }),
-        storyTool("tool_family_webfetch", "webfetch", "completed", { url: "https://example.com" }),
-        storyTool("tool_family_websearch", "websearch", "completed", { query: "timeline stability" }),
-        storyTool("tool_family_subagent", "subagent", "completed", {
+      document={labDocument([
+        labTool("tool_family_read", "read", "completed", { path: "src/a.ts" }),
+        labTool("tool_family_glob", "glob", "completed", { path: ".", pattern: "**/*.ts" }),
+        labTool("tool_family_grep", "grep", "completed", { path: ".", pattern: "value" }),
+        labTool("tool_family_list", "list", "completed", { path: "src" }),
+        labTool("tool_family_webfetch", "webfetch", "completed", { url: "https://example.com" }),
+        labTool("tool_family_websearch", "websearch", "completed", { query: "timeline stability" }),
+        labTool("tool_family_subagent", "subagent", "completed", {
           description: "Inspect timeline",
           agent: "explore",
           prompt: "Inspect the timeline implementation.",
         }),
-        storyTool("tool_family_shell", "shell", "completed", { command: "printf stable" }, { output: "stable" }),
-        storyTool(
+        labTool("tool_family_shell", "shell", "completed", { command: "printf stable" }, { output: "stable" }),
+        labTool(
           "tool_family_edit",
           "edit",
           "completed",
           { path: "src/a.ts", oldString: "before", newString: "after" },
           {
-            metadata: { files: [storyPatchFile("src/a.ts")] },
+            metadata: { files: [labPatchFile("src/a.ts")] },
           },
         ),
-        storyTool("tool_family_write", "write", "completed", {
+        labTool("tool_family_write", "write", "completed", {
           path: "src/new.ts",
           content: "export const stable = true",
         }),
-        storyTool("tool_family_write_extra", "write", "completed", {
+        labTool("tool_family_write_extra", "write", "completed", {
           path: "src/extra.ts",
           content: "export const extra = true",
         }),
-        storyTool(
+        labTool(
           "tool_family_patch",
           "patch",
           "completed",
           { patchText: "Update the projected files" },
           {
-            metadata: { files: [storyPatchFile("src/a.ts")] },
+            metadata: { files: [labPatchFile("src/a.ts")] },
           },
         ),
-        storyTool("tool_family_todo", "todowrite", "completed", { todos: [{ content: "Hidden", status: "pending" }] }),
-        storyTool("tool_family_question", "question", "completed", questions, { metadata: { answers: [["Yes"]] } }),
-        storyTool("tool_family_skill", "skill", "completed", { name: "stability" }),
-        storyTool("tool_family_custom", "custom_mcp_tool", "completed", { target: "timeline" }),
+        labTool("tool_family_todo", "todowrite", "completed", { todos: [{ content: "Hidden", status: "pending" }] }),
+        labTool("tool_family_question", "question", "completed", questions, { metadata: { answers: [["Yes"]] } }),
+        labTool("tool_family_skill", "skill", "completed", { name: "stability" }),
+        labTool("tool_family_custom", "custom_mcp_tool", "completed", { target: "timeline" }),
       ])}
       width="860px"
     />
@@ -349,18 +349,18 @@ const RecoverFromToolFailures = {
     }
 
     return (
-      <CurrentSessionTimelineStory
+      <CurrentSessionTimelineLab
         title="Recover from failed work"
         description="Commands, edits, searches, and delegated work explain their failures while dismissed questions stay recognizable."
-        document={storyDocument([
-          ...names.map((name) => storyTool(`tool_error_${name}`, name, "error", input(name))),
-          storyTool("tool_error_question_dismissed", "question", "error", questions, {
+        document={labDocument([
+          ...names.map((name) => labTool(`tool_error_${name}`, name, "error", input(name))),
+          labTool("tool_error_question_dismissed", "question", "error", questions, {
             error: "The user dismissed this question",
           }),
-          storyTool("tool_error_question_transport", "question", "error", questions, {
+          labTool("tool_error_question_transport", "question", "error", questions, {
             error: "Question transport failed",
           }),
-          storyTool("tool_error_todo", "todowrite", "error", { todos: [] }, { error: "Hidden todo failure" }),
+          labTool("tool_error_todo", "todowrite", "error", { todos: [] }, { error: "Hidden todo failure" }),
         ])}
         width="860px"
       />
@@ -368,13 +368,13 @@ const RecoverFromToolFailures = {
   },
 }
 
-function FailedCommandAndQuestionStory() {
+function FailedCommandAndQuestionLab() {
   const [state, setState] = createStore({ failed: false })
 
   const document = createMemo(() =>
-    storyDocument(
+    labDocument(
       [
-        storyTool(
+        labTool(
           "tool_transition_shell",
           "shell",
           state.failed ? "error" : "running",
@@ -383,7 +383,7 @@ function FailedCommandAndQuestionStory() {
             error: "Command exited 1",
           },
         ),
-        storyTool("tool_transition_question", "question", state.failed ? "error" : "running", questions, {
+        labTool("tool_transition_question", "question", state.failed ? "error" : "running", questions, {
           error: "The user dismissed this question",
         }),
       ],
@@ -403,26 +403,26 @@ function FailedCommandAndQuestionStory() {
   )
 }
 
-const FailedCommandAndQuestion = { render: () => <FailedCommandAndQuestionStory /> }
+const FailedCommandAndQuestion = { render: () => <FailedCommandAndQuestionLab /> }
 
 const DelegatingAnAgent = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Delegating an agent"
       description="The assistant shows its compact delegation status while preparing a focused task."
-      document={storyDocument([storyTool("tool_notice_delegation", "subagent", "streaming", {}, { raw: "" })], true)}
+      document={labDocument([labTool("tool_notice_delegation", "subagent", "streaming", {}, { raw: "" })], true)}
     />
   ),
 }
 
 const StartingBackgroundWork = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Starting background work"
       description="A delegated task keeps its ordinary label until the background request completes."
-      document={storyDocument(
+      document={labDocument(
         [
-          storyTool(
+          labTool(
             "tool_notice_background",
             "subagent",
             "running",

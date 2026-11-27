@@ -1,14 +1,14 @@
 import { createStore } from "solid-js/store"
 import { parseDiffFromFile } from "@pierre/diffs"
-import { CurrentSessionProviders } from "../storybook/current-session-story"
-import { editThenTestDocument, reviewDiffs } from "../storybook/current-session-fixtures"
+import { CurrentSessionProviders } from "../lab/current-session-lab"
+import { editThenTestDocument, reviewDiffs } from "../lab/current-session-fixtures"
 import { File } from "./file"
 import { Button } from "@opencode/ui/button"
 import { SessionReview, type SessionReviewComment, type SessionReviewFocus } from "./session-review"
 
 type ReviewArgs = { split: boolean; empty: boolean; disableLineNumbers: boolean; overflow: "wrap" | "scroll" }
 
-function ReviewStory(props: ReviewArgs) {
+function ReviewLab(props: ReviewArgs) {
   return (
     <CurrentSessionProviders document={editThenTestDocument}>
       <div class="mx-auto h-screen min-h-[620px] w-full max-w-[1100px] overflow-hidden bg-background-base">
@@ -43,7 +43,7 @@ export default {
 export const Unified = {
   args: { split: false, empty: false, disableLineNumbers: false, overflow: "wrap" },
   argTypes: { overflow: { options: ["wrap", "scroll"] } },
-  render: (args: ReviewArgs) => <ReviewStory {...args} />,
+  render: (args: ReviewArgs) => <ReviewLab {...args} />,
 }
 
 export const Split = {
@@ -71,7 +71,7 @@ const commentDiffs = [
   },
 ]
 
-function InteractiveCommentsStory() {
+function InteractiveCommentsLab() {
   const [state, setState] = createStore<{ comments: SessionReviewComment[]; next: number }>({ comments: [], next: 1 })
 
   return (
@@ -105,11 +105,11 @@ function InteractiveCommentsStory() {
   )
 }
 
-export const InteractiveComments = { render: () => <InteractiveCommentsStory /> }
+export const InteractiveComments = { render: () => <InteractiveCommentsLab /> }
 
 // A parent asks the review to reveal a saved comment, as a composer chip does. "Focus missing comment" names a
 // comment that never renders, so the request settles by timing out.
-function FocusedCommentStory() {
+function FocusedCommentLab() {
   const [state, setState] = createStore<{ focus: SessionReviewFocus | null }>({ focus: null })
 
   const comments: SessionReviewComment[] = [
@@ -149,7 +149,7 @@ function FocusedCommentStory() {
   )
 }
 
-export const FocusedComment = { render: () => <FocusedCommentStory /> }
+export const FocusedComment = { render: () => <FocusedCommentLab /> }
 
 const gitDiffs = [
   {

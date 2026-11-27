@@ -6,7 +6,7 @@ import { ForkDialog } from "./fork-dialog"
 
 type Args = { messageCount: number; forking: boolean }
 
-function ForkDialogStory(props: Args) {
+function ForkDialogLab(props: Args) {
   const dialog = useDialog()
 
   const [store, setStore] = createStore({ selected: "No message selected" })
@@ -22,7 +22,7 @@ function ForkDialogStory(props: Args) {
     "Add a filter for archived sessions.",
   ]
     .map((text, index) => ({
-      id: `story-message-${index}`,
+      id: `lab-message-${index}`,
       text,
       time: new Date(Date.UTC(2026, 9, 28, 10, index * 5)).toLocaleTimeString(undefined, { timeStyle: "short" }),
     }))
@@ -58,7 +58,7 @@ export default {
   id: "app-dialog-fork-session",
   args: { messageCount: 8, forking: false } satisfies Args,
   argTypes: { messageCount: { control: { type: "range", min: 0, max: 8, step: 1 } } },
-  render: (args: Args) => <ForkDialogStory {...args} />,
+  render: (args: Args) => <ForkDialogLab {...args} />,
 }
 
 export const Default = {}

@@ -2,10 +2,10 @@ import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { onMount } from "solid-js"
 import { createStore } from "solid-js/store"
-import { DialogStoryRuntime, STORY_DIRECTORY, STORY_SERVER } from "@/lab/dialog-story-runtime"
+import { DialogLabRuntime, LAB_DIRECTORY, LAB_SERVER } from "@/lab/dialog-runtime"
 import { DirectoryPickerDialog } from "./dialog"
 
-function DirectoryPickerStory(props: { mode?: "directory" | "file"; start?: string }) {
+function DirectoryPickerLab(props: { mode?: "directory" | "file"; start?: string }) {
   const dialog = useDialog()
 
   const [store, setStore] = createStore({ selected: "No path selected" })
@@ -13,9 +13,9 @@ function DirectoryPickerStory(props: { mode?: "directory" | "file"; start?: stri
   const open = () =>
     void dialog.show(() => (
       <DirectoryPickerDialog
-        server={STORY_SERVER}
-        location={{ directory: STORY_DIRECTORY }}
-        start={props.start ?? STORY_DIRECTORY}
+        server={LAB_SERVER}
+        location={{ directory: LAB_DIRECTORY }}
+        start={props.start ?? LAB_DIRECTORY}
         mode={props.mode}
         onSelect={(result) => {
           const text = Array.isArray(result) ? result.join(", ") : (result ?? "Cancelled")
@@ -43,24 +43,24 @@ export default {
 
 export const OpenProject = {
   render: () => (
-    <DialogStoryRuntime>
-      <DirectoryPickerStory />
-    </DialogStoryRuntime>
+    <DialogLabRuntime>
+      <DirectoryPickerLab />
+    </DialogLabRuntime>
   ),
 }
 
 export const SelectFile = {
   render: () => (
-    <DialogStoryRuntime>
-      <DirectoryPickerStory mode="file" />
-    </DialogStoryRuntime>
+    <DialogLabRuntime>
+      <DirectoryPickerLab mode="file" />
+    </DialogLabRuntime>
   ),
 }
 
 export const MissingDirectory = {
   render: () => (
-    <DialogStoryRuntime>
-      <DirectoryPickerStory start={`${STORY_DIRECTORY}/removed-folder`} />
-    </DialogStoryRuntime>
+    <DialogLabRuntime>
+      <DirectoryPickerLab start={`${LAB_DIRECTORY}/removed-folder`} />
+    </DialogLabRuntime>
   ),
 }

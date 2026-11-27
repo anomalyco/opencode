@@ -1,11 +1,11 @@
 import { Show } from "solid-js"
-import { DialogStoryRuntime } from "@/lab/dialog-story-runtime"
+import { DialogLabRuntime } from "@/lab/dialog-runtime"
 import { SessionFreeLimitPanel } from "./free-limit-panel"
-import { RecoverySession, RestoredComposer } from "./recovery-story"
+import { RecoverySession, RestoredComposer } from "./recovery-lab"
 
 type Args = { reset: "today" | "tomorrow" | "unknown"; paid: boolean }
 
-function LimitStory(props: Args) {
+function LimitLab(props: Args) {
   const resetAt = () => {
     if (props.reset === "unknown") return null
     const at = new Date()
@@ -30,9 +30,9 @@ export default {
   args: { reset: "today", paid: false } satisfies Args,
   argTypes: { reset: { options: ["today", "tomorrow", "unknown"] } },
   render: (args: Args) => (
-    <DialogStoryRuntime>
-      <LimitStory {...args} />
-    </DialogStoryRuntime>
+    <DialogLabRuntime>
+      <LimitLab {...args} />
+    </DialogLabRuntime>
   ),
 }
 

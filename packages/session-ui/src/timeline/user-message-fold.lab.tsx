@@ -2,8 +2,8 @@ import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } 
 import { createMemo } from "solid-js"
 import type { SessionDocument } from "../document"
 import { SessionTimeline, type SessionUserPresentation } from "./session-timeline"
-import { CurrentSessionProviders } from "../storybook/current-session-story"
-import { CURRENT_SESSION_ID, STORY_MODEL, STORY_TIME } from "../storybook/current-session-fixtures"
+import { CurrentSessionProviders } from "../lab/current-session-lab"
+import { CURRENT_SESSION_ID, LAB_MODEL, LAB_TIME } from "../lab/current-session-fixtures"
 
 export default {
   title: "OpenCode/Conversation/Long user messages",
@@ -32,7 +32,7 @@ function LongUserMessages(props: { width: number; turn: string }) {
 
   return (
     <section
-      data-story="user-message-fold"
+      data-lab="user-message-fold"
       class="mx-auto w-full px-6 py-8"
       style={{ "max-width": `${props.width}px` }}
     >
@@ -53,8 +53,8 @@ function user(id: string, text: string, files?: SessionMessageUser["files"]): Se
     type: "user",
     text,
     files,
-    time: { created: STORY_TIME + offset },
-    metadata: { agent: "build", model: STORY_MODEL },
+    time: { created: LAB_TIME + offset },
+    metadata: { agent: "build", model: LAB_MODEL },
   }
 }
 
@@ -65,9 +65,9 @@ function reply(id: string, text: string): SessionMessageAssistant {
     id,
     type: "assistant",
     agent: "build",
-    model: STORY_MODEL,
+    model: LAB_MODEL,
     content: [{ type: "text", text }],
-    time: { created: STORY_TIME + offset, completed: STORY_TIME + offset + 9_000 },
+    time: { created: LAB_TIME + offset, completed: LAB_TIME + offset + 9_000 },
   }
 }
 

@@ -1,7 +1,7 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
 // Moved from packages/app/e2e/regression/session-timeline-projection.spec.ts
-story("renders every admitted tool family and hides timeline-only exclusions", async ({ mount }) => {
+test("renders every admitted tool family and hides timeline-only exclusions", async ({ mount }) => {
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "workflow" } })
 
   const first = timeline.locator(
@@ -32,7 +32,7 @@ story("renders every admitted tool family and hides timeline-only exclusions", a
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-tool-projection.spec.ts
-story("renders every tool error outcome without leaking hidden tools", async ({ mount }) => {
+test("renders every tool error outcome without leaking hidden tools", async ({ mount }) => {
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "failures" } })
   const names = ["shell", "edit", "write", "patch", "webfetch", "websearch", "subagent", "skill", "mcp_probe"]
   const group = timeline.locator(`[data-timeline-part-ids="${names.map((name) => `tool_error_${name}`).join(",")}"]`)
@@ -47,7 +47,7 @@ story("renders every tool error outcome without leaking hidden tools", async ({ 
   for (const name of names) await expect(timeline.locator(`[data-timeline-part-id="tool_error_${name}"]`)).toBeVisible()
 })
 
-story("lists a failed execute's calls and keeps its error under the failed call", async ({ mount }) => {
+test("lists a failed execute's calls and keeps its error under the failed call", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--execute-failed")
   await timeline.getByRole("button", { name: /^Used 5 / }).click()
   const failed = timeline.locator('[data-timeline-part-id="tool_execute_failed_url"]')
@@ -71,7 +71,7 @@ story("lists a failed execute's calls and keeps its error under the failed call"
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-tool-projection.spec.ts
-story("transitions shell and question through running error outcomes", async ({ mount }) => {
+test("transitions shell and question through running error outcomes", async ({ mount }) => {
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "transition" } })
   const shell = timeline.locator('[data-timeline-part-id="tool_transition_shell"]')
   const question = timeline.locator('[data-timeline-part-id="tool_transition_question"]')
@@ -84,7 +84,7 @@ story("transitions shell and question through running error outcomes", async ({ 
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-tool-projection.spec.ts
-story("labels all web search provider variants", async ({ mount }) => {
+test("labels all web search provider variants", async ({ mount }) => {
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "providers" } })
   await timeline.getByRole("button", { name: "Used 3 Parallel Web Search, Exa Web Search, Web Search" }).click()
   const tools = timeline.locator('[data-component="context-tool-group-list"]')
@@ -94,7 +94,7 @@ story("labels all web search provider variants", async ({ mount }) => {
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-tool-projection.spec.ts
-story("labels completed searches with result counts", async ({ mount }) => {
+test("labels completed searches with result counts", async ({ mount }) => {
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "results" } })
   const group = timeline.locator('[data-timeline-part-ids="tool_label_glob,tool_label_grep,tool_label_read"]')
   await group.locator('[data-slot="collapsible-trigger"]').click()
@@ -104,7 +104,7 @@ story("labels completed searches with result counts", async ({ mount }) => {
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-tool-projection.spec.ts
-story("labels read tools from their path input", async ({ mount }) => {
+test("labels read tools from their path input", async ({ mount }) => {
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "read" } })
   const group = timeline.locator('[data-timeline-part-ids="prt_read_path"]')
   await group.locator('[data-slot="collapsible-trigger"]').click()
@@ -116,7 +116,7 @@ story("labels read tools from their path input", async ({ mount }) => {
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-tool-projection.spec.ts
-story("labels skill tools from IDs and result metadata", async ({ mount }) => {
+test("labels skill tools from IDs and result metadata", async ({ mount }) => {
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "skills" } })
   const group = timeline.locator('[data-timeline-part-ids="tool_skill_id,tool_skill_name"]')
   await expect(group.getByRole("button")).toHaveAccessibleName("Used 2 Skill")
@@ -138,7 +138,7 @@ story("labels skill tools from IDs and result metadata", async ({ mount }) => {
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-reducer-projection.spec.ts
-story("groups every collapsed tool until visible text separates the stack", async ({ mount }) => {
+test("groups every collapsed tool until visible text separates the stack", async ({ mount }) => {
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "steps" } })
   await expect(timeline.locator('[data-timeline-part-ids="tool_boundary_read"]')).toBeVisible()
 
@@ -158,7 +158,7 @@ story("groups every collapsed tool until visible text separates the stack", asyn
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-projection.spec.ts
-story("combines adjacent edit calls and repeated files into one group", async ({ mount }) => {
+test("combines adjacent edit calls and repeated files into one group", async ({ mount }) => {
   const timeline = await mount("current-session-file-changes--changing-files", { args: { scenario: "repeated" } })
   const group = timeline.locator('[data-timeline-part-ids="tool_grouped_edit_first,tool_grouped_edit_second"]')
   await expect(group.locator('[data-slot="apply-patch-filename"]')).toHaveText(["first.ts"])
@@ -166,7 +166,7 @@ story("combines adjacent edit calls and repeated files into one group", async ({
   await expect(group.locator('[data-scope="apply-patch"] button')).toHaveAttribute("aria-expanded", "true")
 })
 
-story("opens an execution's code and output from its View code action", async ({ mount }) => {
+test("opens an execution's code and output from its View code action", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--execute-code")
   await timeline.getByRole("button", { name: "View code" }).first().click()
   const dialog = timeline.page().getByRole("dialog")
@@ -178,7 +178,7 @@ story("opens an execution's code and output from its View code action", async ({
   await expect(dialog.getByRole("button", { name: "Copy output" })).toBeVisible()
 })
 
-story("wraps execute details code, pads it evenly, and starts line numbers near the block edge", async ({ mount }) => {
+test("wraps execute details code, pads it evenly, and starts line numbers near the block edge", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--execute-code")
   const tool = timeline.locator('[data-timeline-part-id="tool_execute_long_call"]')
   await tool.hover()
@@ -208,7 +208,7 @@ story("wraps execute details code, pads it evenly, and starts line numbers near 
   expect(layout.paddingBottom).toBe(4)
 })
 
-story("reveals the View code action while hovering anywhere over the execution", async ({ mount }) => {
+test("reveals the View code action while hovering anywhere over the execution", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--execute-code")
   const tool = timeline.locator('[data-timeline-part-id="tool_execute_long_call"]')
   const action = tool.locator('[data-slot="basic-tool-action"]')
@@ -223,7 +223,7 @@ story("reveals the View code action while hovering anywhere over the execution",
   await expect(action).toHaveCSS("opacity", "0")
 })
 
-story("keeps long execute calls inside the tool and shows the script output", async ({ mount }) => {
+test("keeps long execute calls inside the tool and shows the script output", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--execute-code")
   const tool = timeline.locator('[data-timeline-part-id="tool_execute_long_call"]')
   const calls = tool.locator('[data-component="execute-tool-calls"]')
@@ -251,7 +251,7 @@ story("keeps long execute calls inside the tool and shows the script output", as
   expect(overflow).toBeLessThanOrEqual(0)
 })
 
-story("lists a long script's latest calls and reveals earlier ones on request", async ({ mount }) => {
+test("lists a long script's latest calls and reveals earlier ones on request", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--execute-many-calls")
   const tool = timeline.locator('[data-timeline-part-id="tool_execute_many_calls"]')
   const rows = tool.locator('[data-slot="execute-tool-call"]:not([data-kind="output"])')
@@ -268,7 +268,7 @@ story("lists a long script's latest calls and reveals earlier ones on request", 
   await expect(rows.first()).toBeFocused()
 })
 
-story("opens execute rows while a text field elsewhere keeps its selection", async ({ mount }) => {
+test("opens execute rows while a text field elsewhere keeps its selection", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--execute-code")
   const rows = timeline.locator('[data-timeline-part-id="tool_execute_long_call"] [data-slot="execute-tool-call"]')
 
@@ -292,7 +292,7 @@ story("opens execute rows while a text field elsewhere keeps its selection", asy
   expect(await timeline.evaluate(() => window.getSelection()?.toString())).toBe("https://alpha.example/")
 })
 
-story("keeps an execute row closed when the press selects its text", async ({ mount }) => {
+test("keeps an execute row closed when the press selects its text", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--execute-code")
   const row = timeline.locator('[data-timeline-part-id="tool_execute_long_call"] [data-slot="execute-tool-call"]').first()
   const name = await row.locator('[data-slot="execute-tool-call-name"]').boundingBox()
@@ -308,7 +308,7 @@ story("keeps an execute row closed when the press selects its text", async ({ mo
   await expect(row).toHaveAttribute("aria-expanded", "false")
 })
 
-story("shows a failed execution's error in place of its output", async ({ mount }) => {
+test("shows a failed execution's error in place of its output", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--execute-failed")
   await timeline.getByRole("button", { name: /^Used 5 / }).click()
   await timeline

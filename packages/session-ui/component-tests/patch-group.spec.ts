@@ -1,6 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("keeps file disclosures keyboard-accessible as the file list changes", async ({ mount }) => {
+test("keeps file disclosures keyboard-accessible as the file list changes", async ({ mount }) => {
   const root = await mount("current-tool-group--patch-follow-ups")
   const patch = root.locator('[data-component="apply-patch-tool"]')
   const first = patch.getByRole("button", { name: /a\.ts/ })
@@ -31,7 +31,7 @@ story("keeps file disclosures keyboard-accessible as the file list changes", asy
   await expect(second).toBeFocused()
 })
 
-story("merges follow-up patches into one stack with distinct files", async ({ mount }) => {
+test("merges follow-up patches into one stack with distinct files", async ({ mount }) => {
   const root = await mount("current-tool-group--patch-follow-ups")
   const group = root.locator('[data-component="collapsed-tool-group"]')
   const patches = group.locator('[data-component="apply-patch-tool"]')
@@ -55,7 +55,7 @@ story("merges follow-up patches into one stack with distinct files", async ({ mo
 })
 
 for (const separator of ["shell", "error", "reasoning"]) {
-  story(`does not merge patches across an intervening ${separator}`, async ({ mount }) => {
+  test(`does not merge patches across an intervening ${separator}`, async ({ mount }) => {
     const root = await mount("current-tool-group--patch-follow-ups", { args: { separator } })
     await root.getByRole("button", { name: "Finish follow-up patch" }).click()
     const group = root.locator('[data-component="collapsed-tool-group"]')
@@ -66,7 +66,7 @@ for (const separator of ["shell", "error", "reasoning"]) {
   })
 }
 
-story("does not retain patch files in the wrong batch when thoughts are shown", async ({ mount }) => {
+test("does not retain patch files in the wrong batch when thoughts are shown", async ({ mount }) => {
   const root = await mount("current-tool-group--patch-follow-ups", { args: { separator: "reasoning" } })
   await root.getByRole("button", { name: "Hide thoughts", exact: true }).click()
   await root.getByRole("button", { name: "Finish follow-up patch" }).click()

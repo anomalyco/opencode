@@ -1,6 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("shows a quote-only prompt as a bubble", async ({ mount }) => {
+test("shows a quote-only prompt as a bubble", async ({ mount }) => {
   const message = (await mount("current-prompt-quotes--one-commented")).locator('[data-component="user-message"]')
 
   const bubble = message.locator('[data-slot="user-message-text"]')
@@ -9,19 +9,19 @@ story("shows a quote-only prompt as a bubble", async ({ mount }) => {
   await expect(message.locator('[data-component="attachment-card"]')).toHaveCount(0)
 })
 
-story("puts the composer text before the quotes, each comment under its quote", async ({ mount }) => {
+test("puts the composer text before the quotes, each comment under its quote", async ({ mount }) => {
   const bubble = (await mount("current-prompt-quotes--mixed"))
     .locator('[data-component="user-message"]')
     .first()
     .locator('[data-slot="user-message-text"]')
 
-  await expect(bubble).toContainText("and run the sidebar story at 360px after")
+  await expect(bubble).toContainText("and run the sidebar page at 360px after")
 
   const order = await bubble.evaluate((element) => {
     const text = element.textContent ?? ""
 
     return [
-      text.indexOf("and run the sidebar story"),
+      text.indexOf("and run the sidebar page"),
       text.indexOf("gap-2 on the Projects section"),
       text.indexOf("drop it to gap 1"),
       text.indexOf("gap-2 in the Pinned group"),
@@ -32,7 +32,7 @@ story("puts the composer text before the quotes, each comment under its quote", 
   await expect(bubble.locator('[data-slot="user-message-quote-group"]')).toHaveCount(3)
 })
 
-story("clamps a long quote, which opens and closes by click and keyboard", async ({ mount, page }) => {
+test("clamps a long quote, which opens and closes by click and keyboard", async ({ mount, page }) => {
   const bubble = (await mount("current-prompt-quotes--short-and-long"))
     .locator('[data-component="user-message"]')
     .first()
@@ -58,7 +58,7 @@ story("clamps a long quote, which opens and closes by click and keyboard", async
   await expect(long).toHaveAttribute("aria-expanded", "false")
 })
 
-story("keeps a quote expandable after resizing its bubble", async ({ mount, page }) => {
+test("keeps a quote expandable after resizing its bubble", async ({ mount, page }) => {
   const message = (await mount("current-prompt-quotes--source", { args: { width: "840" } }))
     .locator('[data-component="user-message"]')
     .first()
@@ -77,7 +77,7 @@ story("keeps a quote expandable after resizing its bubble", async ({ mount, page
   expect(await quote.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(false)
 })
 
-story("folds the whole bubble, quotes included, with Collapse long messages", async ({ mount }) => {
+test("folds the whole bubble, quotes included, with Collapse long messages", async ({ mount }) => {
   const message = (await mount("current-prompt-quotes--fold-and-expand"))
     .locator('[data-component="user-message"]')
     .first()
@@ -91,7 +91,7 @@ story("folds the whole bubble, quotes included, with Collapse long messages", as
   await expect(fold).not.toHaveAttribute("data-folded", "")
 })
 
-story("puts the bar at the start of a right-to-left message", async ({ mount }) => {
+test("puts the bar at the start of a right-to-left message", async ({ mount }) => {
   const message = (await mount("current-prompt-quotes--all-cases-rtl"))
     .locator('[data-component="user-message"]')
     .first()

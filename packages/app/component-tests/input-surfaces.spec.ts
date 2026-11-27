@@ -1,6 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("active search options keep their system highlight in forced colours", async ({ mount, page }) => {
+test("active search options keep their system highlight in forced colours", async ({ mount, page }) => {
   await page.emulateMedia({ forcedColors: "active" })
 
   const root = await mount("review-focus-visibility--all-surfaces", { args: { forced: false } })
@@ -40,7 +40,7 @@ story("active search options keep their system highlight in forced colours", asy
   }
 })
 
-story("focus-only outlines stay off at rest in forced colours", async ({ mount, page }) => {
+test("focus-only outlines stay off at rest in forced colours", async ({ mount, page }) => {
   await page.emulateMedia({ forcedColors: "active" })
 
   const root = await mount("review-focus-visibility--all-surfaces", { args: { forced: false, locator: false } })
@@ -89,7 +89,7 @@ story("focus-only outlines stay off at rest in forced colours", async ({ mount, 
 })
 
 for (const control of ["text-input", "textarea"]) {
-  story(`${control} supports its surfaces with inset feedback and stable geometry`, async ({ mount, page }) => {
+  test(`${control} supports its surfaces with inset feedback and stable geometry`, async ({ mount, page }) => {
     const root = await mount(`ui-${control}--surfaces`)
 
     const fields = root.locator(`[data-component="${control}-v2"]`)
@@ -157,7 +157,7 @@ for (const control of ["text-input", "textarea"]) {
   })
 }
 
-story("select fields match the text input surfaces with inset feedback", async ({ mount, page }) => {
+test("select fields match the text input surfaces with inset feedback", async ({ mount, page }) => {
   const root = await mount("ui-select--surfaces")
 
   const fields = root.locator('[data-component="select-v2"]')
@@ -200,7 +200,7 @@ story("select fields match the text input surfaces with inset feedback", async (
   await expect(invalid).not.toHaveCSS("outline-color", "rgba(0, 0, 0, 0)")
 })
 
-story("select fields come in the text input sizes and default to the inline trigger", async ({ mount }) => {
+test("select fields come in the text input sizes and default to the inline trigger", async ({ mount }) => {
   const root = await mount("ui-select--appearances")
 
   const fields = root.locator('[data-component="select-v2"]')
@@ -213,7 +213,7 @@ story("select fields come in the text input sizes and default to the inline trig
   await expect(fields.nth(3)).toHaveCSS("box-shadow", "none")
 })
 
-story(
+test(
   "a select previews the highlighted option, reverts it on Escape, and keeps the chosen one",
   async ({ mount, page }) => {
     const root = await mount("ui-select--highlight-preview")
@@ -239,7 +239,7 @@ story(
   },
 )
 
-story("compact checkboxes use the design system control states and focus ring", async ({ mount, page }) => {
+test("compact checkboxes use the design system control states and focus ring", async ({ mount, page }) => {
   const root = await mount("ui-checkbox--compact")
 
   await page.addStyleTag({
@@ -267,7 +267,7 @@ story("compact checkboxes use the design system control states and focus ring", 
   await expect(controls.nth(0)).toHaveCSS("outline-offset", "2px")
 })
 
-story("radios support their surfaces with the design system control states", async ({ mount, page }) => {
+test("radios support their surfaces with the design system control states", async ({ mount, page }) => {
   const root = await mount("ui-radio--surfaces")
 
   await page.addStyleTag({
@@ -310,7 +310,7 @@ story("radios support their surfaces with the design system control states", asy
   )
 })
 
-story(
+test(
   "text inputs keep clear and copy actions equally sized and inset across sizes and directions",
   async ({ mount, page }) => {
     const root = await mount("ui-text-input--appearances")

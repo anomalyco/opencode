@@ -1,4 +1,4 @@
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const fixture = sourceURL(new URL("./read-image.fixture.tsx", import.meta.url))
 
@@ -7,13 +7,13 @@ const png = Buffer.from(
   "base64",
 )
 
-story.beforeEach(async ({ mount }) => {
+test.beforeEach(async ({ mount }) => {
   const root = await mount("current-tool-group--mixed-tools")
   await expect(root.getByRole("button", { name: "Used 4 Shell, Read, Agent", exact: true })).toBeVisible()
 })
 
 for (const grouped of [true, false]) {
-  story(
+  test(
     `lazily previews ${grouped ? "grouped" : "standalone"} image reads and releases them on collapse`,
     async ({ page }) => {
       const requests: string[] = []
@@ -104,7 +104,7 @@ for (const grouped of [true, false]) {
 
 for (const width of [840, 390]) {
   for (const dir of ["ltr", "rtl"]) {
-    story(`fits the server image inside the read row at ${width}px in ${dir}`, async ({ page }) => {
+    test(`fits the server image inside the read row at ${width}px in ${dir}`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 })
       await page.route("**/api/fs/read/**", (route) =>
         route.fulfill({
@@ -137,7 +137,7 @@ for (const width of [840, 390]) {
   }
 }
 
-story("keeps an unavailable image read collapsible", async ({ page }) => {
+test("keeps an unavailable image read collapsible", async ({ page }) => {
   await page.route("**/api/fs/read/**", (route) => route.fulfill({ status: 404, body: "Not found" }))
   await page.evaluate(async (fixture) => {
     const { mountReadImage } = await import(fixture)

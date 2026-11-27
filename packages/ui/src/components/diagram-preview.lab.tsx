@@ -3,7 +3,7 @@ import { Button } from "@opencode/ui/button"
 import { useDialog } from "../context/dialog"
 import { DiagramPreview } from "./diagram-preview"
 
-function DiagramStory(props: { wide: boolean; opened: boolean }) {
+function DiagramLab(props: { wide: boolean; opened: boolean }) {
   const dialog = useDialog()
 
   const nodes = () =>
@@ -55,8 +55,8 @@ function DiagramStory(props: { wide: boolean; opened: boolean }) {
 
 export default { title: "UI/DiagramPreview", id: "ui-diagram-preview" }
 
-export const Inline = { render: () => <DiagramStory wide={false} opened={false} /> }
+export const Inline = { render: () => <DiagramLab wide={false} opened={false} /> }
 
-export const Open = { render: () => <DiagramStory wide={false} opened /> }
+export const Open = { render: () => <DiagramLab wide={false} opened /> }
 
-export const Wide = { render: () => <DiagramStory wide opened /> }
+export const Wide = { render: () => <DiagramLab wide opened /> }

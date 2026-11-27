@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test"
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 
@@ -11,7 +11,7 @@ const modules = {
   language: source("../src/runtime/i18n/language.tsx"),
 }
 
-// Any story loads the app styles; the fixture mounts the real Settings > Browser page beside it. `target` is the entry
+// Any page loads the app styles; the fixture mounts the real Settings > Browser page beside it. `target` is the entry
 // a settings search or the command palette is revealing.
 async function open(
   page: Page,
@@ -63,11 +63,11 @@ async function open(
   }
 }
 
-story.beforeEach(async ({ mount }) => {
+test.beforeEach(async ({ mount }) => {
   await mount("ui-line-comment--editor")
 })
 
-story("a search that lands inside Advanced opens it once, and the person's toggle wins after that", async ({ page }) => {
+test("a search that lands inside Advanced opens it once, and the person's toggle wins after that", async ({ page }) => {
   const view = await open(page, { target: "settings-browser-sites" })
 
   // Open for the visit, without the device remembering it.
@@ -86,7 +86,7 @@ story("a search that lands inside Advanced opens it once, and the person's toggl
   await expect(view.advanced).toHaveAttribute("aria-expanded", "false")
 })
 
-story("no setting decides what an import brings: the import section has its browsers and no note, and Advanced no switch for it", async ({ page }) => {
+test("no setting decides what an import brings: the import section has its browsers and no note, and Advanced no switch for it", async ({ page }) => {
   const view = await open(page, { target: "settings-browser-remote", extensions: true })
   const section = view.root.getByRole("region", { name: "Import from another browser", exact: true })
 
@@ -100,7 +100,7 @@ story("no setting decides what an import brings: the import section has its brow
   await expect(view.stored).not.toContainText("importHistory")
 })
 
-story("each switch is named by its row's title, and each row says what it does in one sentence", async ({ page }) => {
+test("each switch is named by its row's title, and each row says what it does in one sentence", async ({ page }) => {
   const view = await open(page, { target: "settings-browser-remote", extensions: true })
   const row = (id: string) => view.root.locator(`[data-action="${id}"]`)
 
@@ -123,7 +123,7 @@ story("each switch is named by its row's title, and each row says what it does i
   await expect(sites.locator("p")).toHaveText("Agent and remote server tabs ask again. Clearing browsing data keeps saved permissions.")
 })
 
-story("the red button asks first: Cancel, Escape, Enter on Cancel and a click outside clear nothing, and the confirm clears once", async ({ page }) => {
+test("the red button asks first: Cancel, Escape, Enter on Cancel and a click outside clear nothing, and the confirm clears once", async ({ page }) => {
   const view = await open(page, { target: "settings-browser-cookies" })
   const cancel = view.confirm.getByRole("button", { name: "Cancel", exact: true })
   const confirm = view.confirm.getByRole("button", { name: "Clear data", exact: true })
@@ -169,7 +169,7 @@ story("the red button asks first: Cancel, Escape, Enter on Cancel and a click ou
   await expect(view.visits).toHaveText("0")
 })
 
-story("a confirmed clear that left the history behind says so in its row", async ({ page }) => {
+test("a confirmed clear that left the history behind says so in its row", async ({ page }) => {
   const kept = await open(page, { target: "settings-browser-cookies", historyKept: true })
 
   await kept.clear.click()
@@ -180,7 +180,7 @@ story("a confirmed clear that left the history behind says so in its row", async
   await expect(kept.clear).toBeEnabled()
 })
 
-story("a confirmed clear that main rejects says that it could not clear, and can be tried again", async ({ page }) => {
+test("a confirmed clear that main rejects says that it could not clear, and can be tried again", async ({ page }) => {
   const view = await open(page, { target: "settings-browser-cookies", clearFails: true })
 
   await view.clear.click()
@@ -199,7 +199,7 @@ for (const [name, file, line] of [
   // No browser's data, and no browser to close: the line is about the file.
   ["a cookie file that cannot be read", "unreadable", "Could not read this file."],
 ] as const)
-  story(`${name} says so in its row: ${line}`, async ({ page }) => {
+  test(`${name} says so in its row: ${line}`, async ({ page }) => {
     const view = await open(page, { target: "settings-browser-cookies", file })
 
     await expect(view.root.getByText("Import cookie file", { exact: true })).toBeVisible()
@@ -208,7 +208,7 @@ for (const [name, file, line] of [
     await expect(view.root.getByText(line, { exact: true })).toBeVisible()
   })
 
-story("Add an extension aligns controls without top clipping and switches cleanly into a confirmation step", async ({ page }) => {
+test("Add an extension aligns controls without top clipping and switches cleanly into a confirmation step", async ({ page }) => {
   const view = await open(page, { extensions: true })
 
   // The row is "Add an extension", so its button is "Add", with its plus.
@@ -283,7 +283,7 @@ story("Add an extension aligns controls without top clipping and switches cleanl
   await expect(dialog.getByRole("button", { name: "Added" })).toBeDisabled()
 })
 
-story("installed extension rows stack compatibility under the name and align controls cleanly", async ({ page }) => {
+test("installed extension rows stack compatibility under the name and align controls cleanly", async ({ page }) => {
   const view = await open(page, { extensions: true, installed: true })
   const section = view.root.locator('section.settings-section[aria-label="Extensions"]')
 

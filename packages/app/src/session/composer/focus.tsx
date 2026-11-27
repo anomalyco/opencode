@@ -38,7 +38,7 @@ export function ComposerFocusProvider(props: ParentProps<{ sessionID: string }>)
   return <ComposerFocusContext.Provider value={focus}>{props.children}</ComposerFocusContext.Provider>
 }
 
-// Outside the session route (stories), a session composer focuses itself as it does when a session opens.
+// Outside the session route (pages), a session composer focuses itself as it does when a session opens.
 export function useComposerFocus(sessionID: string) {
   const routed = useContext(ComposerFocusContext)
 

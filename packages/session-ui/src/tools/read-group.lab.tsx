@@ -1,8 +1,8 @@
 import type { JsonValue, SessionMessageAssistant } from "@opencode/client/promise"
 import { createEffect, createSignal } from "solid-js"
-import { CurrentSessionProviders } from "../storybook/current-session-story"
-import { STORY_TIME } from "../storybook/current-session-fixtures"
-import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
+import { CurrentSessionProviders } from "../lab/current-session-lab"
+import { LAB_TIME } from "../lab/current-session-fixtures"
+import { labDocument, labTool } from "../lab/current-session-scenarios"
 import { SessionTimeline } from "../timeline/session-timeline"
 import { timelinePresets } from "../timeline/detail"
 import { type ContextGroupPart, CurrentContextToolGroup } from "./tool-renderer"
@@ -101,17 +101,17 @@ const parts = steps.flatMap<ContextGroupPart>((step, index) => {
         type: "reasoning",
         id: `read_group_thought_${index}`,
         text: "Keep tracing where the renderer groups these tool rows before changing anything.",
-        time: { created: STORY_TIME, completed: STORY_TIME + step.thought * 1000 },
+        time: { created: LAB_TIME, completed: LAB_TIME + step.thought * 1000 },
       },
     ]
 
   if ("shell" in step)
-    return [storyTool(`read_group_shell_${index}`, "shell", "completed", { command: step.shell }, { output: "ok" })]
+    return [labTool(`read_group_shell_${index}`, "shell", "completed", { command: step.shell }, { output: "ok" })]
 
   return step.map((read, item) => {
     const [path, args] = Array.isArray(read) ? read : [read, {}]
 
-    return storyTool(`read_group_read_${index}_${item}`, "read", "completed", { path, ...args })
+    return labTool(`read_group_read_${index}_${item}`, "read", "completed", { path, ...args })
   })
 })
 
@@ -131,7 +131,7 @@ export const UsedGroup = {
 
     return (
       <section style={{ width: "100%", "max-width": `${args.width}px`, padding: "16px" }}>
-        <CurrentSessionProviders document={storyDocument(content)}>
+        <CurrentSessionProviders document={labDocument(content)}>
           <CurrentContextToolGroup parts={parts} busy={false} open={open()} onOpenChange={setOpen} />
         </CurrentSessionProviders>
       </section>
@@ -143,7 +143,7 @@ export const WithoutUsedGroup = {
   args: { preset: timelinePresets[0].id },
   argTypes: { preset: { options: timelinePresets.map((preset) => preset.id) } },
   render: (args: { width: number; preset: string }) => {
-    const document = storyDocument(content)
+    const document = labDocument(content)
 
     return (
       <section style={{ width: "100%", "max-width": `${args.width}px`, padding: "16px" }}>

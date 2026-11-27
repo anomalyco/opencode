@@ -162,7 +162,7 @@ function StackButton() {
     }
   }
 
-  // The region subscribes inside its portal after the surrounding story mounts.
+  // The region subscribes inside its portal after the surrounding page mounts.
   onMount(() => {
     const frame = requestAnimationFrame(show)
     onCleanup(() => cancelAnimationFrame(frame))

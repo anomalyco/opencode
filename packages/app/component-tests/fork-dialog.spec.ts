@@ -1,8 +1,8 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story.use({ viewport: { width: 1000, height: 400 } })
+test.use({ viewport: { width: 1000, height: 400 } })
 
-story("fork search anchors filtering and keyboard scrolling", async ({ mount, page }) => {
+test("fork search anchors filtering and keyboard scrolling", async ({ mount, page }) => {
   await mount("app-dialog-fork-session--default")
   const dialog = page.getByRole("dialog", { name: "Fork from message", exact: true })
   const input = dialog.getByRole("searchbox", { name: "Search", exact: true })
@@ -52,7 +52,7 @@ story("fork search anchors filtering and keyboard scrolling", async ({ mount, pa
   await expect(input).toBeFocused()
   await input.press("Enter")
   await expect(dialog).toBeHidden()
-  await expect(page.getByRole("status")).toHaveText("story-message-0")
+  await expect(page.getByRole("status")).toHaveText("lab-message-0")
 
   await page.getByRole("button", { name: "Open fork session dialog", exact: true }).click()
   await expect(input).toBeFocused()

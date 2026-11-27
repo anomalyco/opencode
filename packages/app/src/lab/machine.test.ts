@@ -30,10 +30,10 @@ test("focus moving inside the stage at rest stays at rest", () => {
   expect(focused.state).toBe(INITIAL_LAB_BROWSE_STATE)
   expect(focused.effects).toEqual([])
 
-  // Many focus moves later, a story opened from the tree still gets exactly three returns.
+  // Many focus moves later, a page opened from the tree still gets exactly three returns.
   const opened = browse(
     focused.state,
-    { type: "story.opened", fromTree: true },
+    { type: "page.opened", fromTree: true },
     ...Array.from({ length: 4 }, () => ({ type: "stage.focused" }) as const),
   )
 
@@ -78,7 +78,7 @@ test.each([
   { type: "key.down", key: "Tab", inTree: true },
   { type: "pointer.down", inTree: false },
 ] as const)("$type ends browsing before the stage takes focus", (exit) => {
-  const ended = browse(INITIAL_LAB_BROWSE_STATE, { type: "story.opened", fromTree: true }, exit, {
+  const ended = browse(INITIAL_LAB_BROWSE_STATE, { type: "page.opened", fromTree: true }, exit, {
     type: "stage.focused",
   })
 
@@ -102,7 +102,7 @@ test("an inspector rebuild after an advance keeps Play running", () => {
     { type: "timer.schedule", attempt: 2 },
   ])
 
-  // A story registering a motion knob rebuilds the panel, which restores the state it was showing.
+  // A page registering a motion knob rebuilds the panel, which restores the state it was showing.
   const rebuilt = transitionLabStage(advanced.state, { type: "panel.state", name: "Opening", fromPreset: true })
   expect(rebuilt.state).toBe(advanced.state)
   expect(rebuilt.effects).toEqual([])

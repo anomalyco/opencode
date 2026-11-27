@@ -26,7 +26,7 @@ import { canvas, commandPalette, restyle, split, toast, type CommandPalette } fr
 import { Tree } from "knobs/ui/solid"
 import { useLanguage } from "@/runtime/i18n/language"
 import { SessionRouteFrame } from "@/session/session-frame"
-import { fileName, knobArgs, labFields, stateArgs, type LabEntry, type StoryArgs } from "./catalog"
+import { fileName, knobArgs, labFields, stateArgs, type LabEntry, type LabArgs } from "./catalog"
 import {
   createLabStageState,
   INITIAL_LAB_BROWSE_STATE,
@@ -38,7 +38,7 @@ import {
   type LabStageEffect,
   type LabStageEvent,
 } from "./machine"
-import { applyMotionPatch, motionFields, motionScopes, motionValues, sameMotion, storyMotion } from "./motion"
+import { applyMotionPatch, motionFields, motionScopes, motionValues, sameMotion, pageMotion } from "./motion"
 import "./inspector.css"
 
 // How long Play holds each state at full speed. Slow motion doubles it while the motion itself runs 4× longer, so
@@ -88,7 +88,7 @@ export function LabBrowser(props: {
   const selected = createMemo(() => (grid() ? undefined : entries().find((entry) => entry.file === page())))
 
   const open = (file: string) => {
-    dispatchBrowse({ type: "story.opened", fromTree: pages.contains(document.activeElement) })
+    dispatchBrowse({ type: "page.opened", fromTree: pages.contains(document.activeElement) })
     props.setParams({ page: file, view: undefined })
   }
 
@@ -308,12 +308,12 @@ function Stage(props: {
   const entry = props.entry
   const fields = labFields(entry)
   const names = entry.states.map((state) => state.name)
-  const [args, setArgs] = createStore<StoryArgs>(stateArgs(entry, 0))
+  const [args, setArgs] = createStore<LabArgs>(stateArgs(entry, 0))
   const [stageState, setStageState] = createSignal(createLabStageState(names))
   const index = createMemo(() => labStageIndex(stageState()))
   const [canvas, setCanvas] = createSignal<HTMLDivElement>()
   const component = entry.component
-  const fallback = component && ((values: StoryArgs) => <Dynamic component={component} {...values} />)
+  const fallback = component && ((values: LabArgs) => <Dynamic component={component} {...values} />)
   // Switching to a state that shares the current render function keeps the mounted instance, so its transitions play.
   const render = () => entry.states[index()]?.render ?? entry.render ?? fallback
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -358,7 +358,7 @@ function Stage(props: {
 
     // Coalesced: a page registers its replay buttons one by one.
     if (effect.type === "motion.queue") return queueMicrotask(() => dispatch({ type: "motion.flushed" }))
-    const next = storyMotion(entry.motion)
+    const next = pageMotion(entry.motion)
 
     if (!sameMotion(next, motion)) return setShown(next)
     store.sync(motionValues(motion))
@@ -370,7 +370,7 @@ function Stage(props: {
     first === undefined || rest.length === 0
       ? {}
       : {
-          // Story args can themselves be named `state` (e.g. the touch composer) or `play`.
+          // Page args can themselves be named `state` (e.g. the touch composer) or `play`.
           "lab.preset": choice(first, [first, ...rest], { variants: true }),
           "lab.playback": toolbar(
             [
@@ -395,7 +395,7 @@ function Stage(props: {
 
   // The page's Knobs join its args here, so the inspector is the one place for its controls. Registering a knob or a
   // replay button (as the page mounts) rebuilds it where it was.
-  let motion = storyMotion(entry.motion)
+  let motion = pageMotion(entry.motion)
   const [shown, setShown] = createSignal(motion, { equals: sameMotion })
 
   const inspect = () => {

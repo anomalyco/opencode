@@ -21,7 +21,7 @@ const args = {
   footer: "",
 }
 
-function SearchListStory(props: typeof args) {
+function SearchListLab(props: typeof args) {
   const [store, setStore] = createStore({ query: props.query, selected: "" })
 
   createEffect(() => setStore("query", props.query))
@@ -89,7 +89,7 @@ function SearchListStory(props: typeof args) {
 export default {
   title: "UI/Search List",
   id: "ui-search-list",
-  component: SearchListStory,
+  component: SearchListLab,
   args,
   argTypes: {
     sections: { control: { type: "range", min: 1, max: 8, step: 1 } },

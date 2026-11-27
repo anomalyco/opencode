@@ -1,10 +1,10 @@
 import type { Page } from "@playwright/test"
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const fixture = sourceURL(new URL("./grow.fixture.tsx", import.meta.url))
 
-story.beforeEach(async ({ mount, page }) => {
-  // Any story loads the app's styles; the fixture mounts a `Grow` beside it.
+test.beforeEach(async ({ mount, page }) => {
+  // Any page loads the app's styles; the fixture mounts a `Grow` beside it.
   await mount("ui-line-comment--editor")
   await page.evaluate(async (fixture) => {
     const { mountGrow } = await import(fixture)
@@ -21,7 +21,7 @@ const motion = (page: Page) =>
 
 const still = { moving: false, height: "", opacity: "" }
 
-story("keeps its children mounted when it reopens and turns instant in one batch mid-close", async ({ page }) => {
+test("keeps its children mounted when it reopens and turns instant in one batch mid-close", async ({ page }) => {
   const root = page.getByTestId("grow-fixture")
   await page.evaluate(async (fixture) => {
     const { setGrow } = await import(fixture)
@@ -48,7 +48,7 @@ story("keeps its children mounted when it reopens and turns instant in one batch
   expect(await motion(page)).toEqual(still)
 })
 
-story("finishes opening and closing while detached like a cached session tab", async ({ page }) => {
+test("finishes opening and closing while detached like a cached session tab", async ({ page }) => {
   const root = page.getByTestId("grow-fixture")
 
   const toggleDetached = (when: boolean) =>

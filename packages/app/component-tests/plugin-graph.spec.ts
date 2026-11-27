@@ -1,4 +1,4 @@
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 import type { Entry } from "@opencode/plugin/gui/host"
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
@@ -8,14 +8,14 @@ const modules = {
   builtins: source("../../gui-plugins/src/renderer.ts"),
 }
 
-story.beforeEach(async ({ mount }) => {
-  // Any story loads the app; the fixture mounts the real host beside it.
+test.beforeEach(async ({ mount }) => {
+  // Any page loads the app; the fixture mounts the real host beside it.
   await mount("ui-line-comment--editor")
 })
 
 // Built-ins read each other's contracts at runtime with `ctx.use`, so each must keep working without any other. Every
 // row boots the real host with one built-in disabled; the first row disables nothing.
-story("built-ins: each activates without each other built-in", async ({ page }) => {
+test("built-ins: each activates without each other built-in", async ({ page }) => {
   const outcomes = await page.evaluate(async (modules) => {
     const [{ mountPlugins, until }, { builtins }] = await Promise.all([
       import(modules.fixture),

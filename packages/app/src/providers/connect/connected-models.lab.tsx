@@ -35,7 +35,7 @@ const workspace: Groups = [
 ]
 
 // The connect dialog's models step around the real picker. Picking only shows a toast here.
-function PickerStory(props: { providerName: string; groups: Groups; workspace?: { prefix: string }; server?: string }) {
+function PickerLab(props: { providerName: string; groups: Groups; workspace?: { prefix: string }; server?: string }) {
   const dialog = useDialog()
 
   const open = () =>
@@ -69,16 +69,16 @@ export default {
 }
 
 /** One provider: no section headers. Type to filter, Enter or click picks. */
-export const SingleProvider = { render: () => <PickerStory providerName="Google" groups={google} /> }
+export const SingleProvider = { render: () => <PickerLab providerName="Google" groups={google} /> }
 
 /** A Console workspace: one section per provider, named without the workspace prefix. */
 export const ConsoleWorkspace = {
-  render: () => <PickerStory providerName="OpenCode" groups={workspace} workspace={{ prefix: "Acme / " }} />,
+  render: () => <PickerLab providerName="OpenCode" groups={workspace} workspace={{ prefix: "Acme / " }} />,
 }
 
 /** A Console sign-in through a remote server names the server it is stored on. */
 export const ConsoleRemote = {
   render: () => (
-    <PickerStory providerName="OpenCode" groups={workspace} workspace={{ prefix: "Acme / " }} server="Dev box" />
+    <PickerLab providerName="OpenCode" groups={workspace} workspace={{ prefix: "Acme / " }} server="Dev box" />
   ),
 }

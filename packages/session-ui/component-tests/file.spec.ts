@@ -1,8 +1,8 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
 for (const split of [false, true]) {
   for (const theme of ["light", "dark"]) {
-    story(`highlights changed words in ${split ? "split" : "unified"} ${theme} diffs`, async ({ mount }) => {
+    test(`highlights changed words in ${split ? "split" : "unified"} ${theme} diffs`, async ({ mount }) => {
       const root = await mount("components-session-review--inline-changes", { args: { split }, globals: { theme } })
       const diffs = root.locator("diffs-container")
       await expect(diffs).toHaveCount(2)
@@ -22,7 +22,7 @@ for (const split of [false, true]) {
   }
 
   for (const source of ["files", "metadata"]) {
-    story(`skips word diffs for large ${split ? "split" : "unified"} ${source}`, async ({ mount }) => {
+    test(`skips word diffs for large ${split ? "split" : "unified"} ${source}`, async ({ mount }) => {
       const root = await mount("components-session-review--large-file", { args: { split, source } })
       const line = root.locator('[data-line][data-line-type="change-addition"]')
       await expect(line).toHaveText("export const value = 'after'")

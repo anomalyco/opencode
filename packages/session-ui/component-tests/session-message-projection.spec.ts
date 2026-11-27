@@ -1,6 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("reveals turn speed with the response footer", async ({ mount, page }) => {
+test("reveals turn speed with the response footer", async ({ mount, page }) => {
   const timeline = await mount("current-session-timeline-rows--response-speed", { args: { steered: true } })
 
   const footer = timeline.locator('[data-slot="text-part-copy-wrapper"]').last()
@@ -34,7 +34,7 @@ story("reveals turn speed with the response footer", async ({ mount, page }) => 
   }
 })
 
-story("omits turn speed when a model step has no streaming time", async ({ mount }) => {
+test("omits turn speed when a model step has no streaming time", async ({ mount }) => {
   const timeline = await mount("current-session-timeline-rows--response-speed", { args: { measured: false } })
 
   const meta = timeline.locator('[data-slot="text-part-meta"]')
@@ -45,10 +45,10 @@ story("omits turn speed when a model step has no streaming time", async ({ mount
   await expect(meta.locator('[data-slot="text-part-meta-speed"]')).toHaveCount(0)
 })
 
-story.describe("message actions menu", () => {
-  story.use({ timezoneId: "UTC" })
+test.describe("message actions menu", () => {
+  test.use({ timezoneId: "UTC" })
 
-  story(
+  test(
     "opens from a chevron in the bubble with the send time and the actions the message can take",
     async ({ mount, page }) => {
       const timeline = await mount("current-prompt-message--pending")
@@ -116,7 +116,7 @@ story.describe("message actions menu", () => {
     },
   )
 
-  story("opens upward, 4px from the chevron, with its trailing edge on the chevron's", async ({ mount, page }) => {
+  test("opens upward, 4px from the chevron, with its trailing edge on the chevron's", async ({ mount, page }) => {
     const timeline = await mount("current-session-timeline-rows--prompt-runs")
     await timeline.getByRole("button", { name: "Send next", exact: true }).click()
     const message = timeline.locator('[data-component="user-message"]').first()
@@ -135,7 +135,7 @@ story.describe("message actions menu", () => {
   })
 })
 
-story(
+test(
   "fades the footer and chevron out once, without flicker, as an outside click closes the menu",
   async ({ mount, page }) => {
     // The timeline keeps a run's meta line shown while one of its menus is open, so mount it rather than a bare message.
@@ -186,7 +186,7 @@ story(
   },
 )
 
-story("keeps pending steer actions usable after a request fails", async ({ mount, page }) => {
+test("keeps pending steer actions usable after a request fails", async ({ mount, page }) => {
   const timeline = await mount("current-prompt-message--pending")
   const more = timeline.getByRole("button", { name: "More actions", exact: true })
   const queue = page.getByRole("menuitem", { name: "Move to queue", exact: true })
@@ -213,7 +213,7 @@ story("keeps pending steer actions usable after a request fails", async ({ mount
   await expect(remove).toBeEnabled()
 })
 
-story("shows a run's meta line while the pointer is anywhere in the run, gaps included", async ({ mount, page }) => {
+test("shows a run's meta line while the pointer is anywhere in the run, gaps included", async ({ mount, page }) => {
   const timeline = await mount("current-session-timeline-rows--prompt-runs")
   const send = timeline.getByRole("button", { name: "Send next", exact: true })
   await send.click()
@@ -242,7 +242,7 @@ story("shows a run's meta line while the pointer is anywhere in the run, gaps in
   await expect(footer).toHaveCSS("opacity", "0")
 })
 
-story("names the newest prompt's revert Undo and earlier ones Revert to here", async ({ mount, page }) => {
+test("names the newest prompt's revert Undo and earlier ones Revert to here", async ({ mount, page }) => {
   const timeline = await mount("current-session-timeline-rows--prompt-runs")
   await timeline.getByRole("button", { name: "Send next", exact: true }).click()
   const messages = timeline.locator('[data-component="user-message"]')
@@ -260,7 +260,7 @@ story("names the newest prompt's revert Undo and earlier ones Revert to here", a
   }
 })
 
-story("drops a pending footer at once on delivery with and without hover", async ({ mount, page }) => {
+test("drops a pending footer at once on delivery with and without hover", async ({ mount, page }) => {
   const timeline = await mount("current-prompt-message--pending")
   const message = timeline.locator('[data-component="user-message"]')
   const footer = timeline.locator('[data-slot="user-message-copy-wrapper"]')
@@ -323,7 +323,7 @@ story("drops a pending footer at once on delivery with and without hover", async
   await expect(footer).toHaveCSS("opacity", "0")
 })
 
-story("marks pending metadata without badging delivered, starting, or queued prompts", async ({ mount, page }) => {
+test("marks pending metadata without badging delivered, starting, or queued prompts", async ({ mount, page }) => {
   const timeline = await mount("current-prompt-message--pending")
   const indicator = timeline.locator('[data-slot="user-message-meta"] [data-slot="user-message-pending"]')
   const text = timeline.locator('[data-slot="user-message-text"]')
@@ -410,12 +410,12 @@ story("marks pending metadata without badging delivered, starting, or queued pro
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-collapse-state.spec.ts
-story("keeps a manually collapsed tool collapsed when later assistant content streams", async ({ mount }) => {
+test("keeps a manually collapsed tool collapsed when later assistant content streams", async ({ mount }) => {
   const timeline = await mount("current-session-file-changes--changing-files", { args: { scenario: "streaming" } })
   const tool = timeline.locator('[data-timeline-part-id="tool_edit_status"]')
   const trigger = tool.locator('[data-scope="apply-patch"] button')
   await expect(trigger).toHaveAttribute("aria-expanded", "true")
-  // SAFETY: the locator targets a rendered DOM element, which is always an HTMLElement in the story.
+  // SAFETY: the locator targets a rendered DOM element, which is always an HTMLElement in the page.
   await tool.evaluate((element) => ((element as HTMLElement).dataset.regressionMarker = "before-stream"))
   await trigger.click()
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
@@ -430,7 +430,7 @@ story("keeps a manually collapsed tool collapsed when later assistant content st
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-projection.spec.ts
-story("renders interruption independently when the turn is not compacted", async ({ mount }) => {
+test("renders interruption independently when the turn is not compacted", async ({ mount }) => {
   const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "interruption" } })
   await expect(timeline.getByText("Interrupted", { exact: true })).toBeVisible()
   await expect(timeline.getByText("Before", { exact: true })).toBeVisible()
@@ -444,7 +444,7 @@ story("renders interruption independently when the turn is not compacted", async
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-projection.spec.ts
-story("renders aliased and long custom model notices", async ({ mount, page }) => {
+test("renders aliased and long custom model notices", async ({ mount, page }) => {
   await page.setViewportSize({ width: 420, height: 700 })
   const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "models" } })
   const shortName = "GPT-5.4 nano"
@@ -482,7 +482,7 @@ story("renders aliased and long custom model notices", async ({ mount, page }) =
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-projection.spec.ts
-story("renders user image, file attachment, file reference, and agent reference", async ({ mount }) => {
+test("renders user image, file attachment, file reference, and agent reference", async ({ mount }) => {
   const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "attachments" } })
   await expect(timeline.getByAltText("pixel.png")).toBeVisible()
   await expect(timeline.getByText("tsconfig.json")).toBeVisible()
@@ -516,7 +516,7 @@ story("renders user image, file attachment, file reference, and agent reference"
   expect(bodyBox!.y - (attachmentsBox!.y + attachmentsBox!.height)).toBe(8)
 })
 
-story("a stored image that fails to load shows a failed tile that retries", async ({ mount }) => {
+test("a stored image that fails to load shows a failed tile that retries", async ({ mount }) => {
   const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "media" } })
   const tiles = timeline.locator('[data-slot="user-message-attachment"]')
 
@@ -534,7 +534,7 @@ story("a stored image that fails to load shows a failed tile that retries", asyn
   expect(await failed.boundingBox()).toMatchObject(tileSize)
 })
 
-story("shows note selectors and keeps annotation subtitles with or without comments", async ({ mount, page }) => {
+test("shows note selectors and keeps annotation subtitles with or without comments", async ({ mount, page }) => {
   const gallery = await mount("current-session-timeline-rows--note-attachments")
 
   const cases = [
@@ -602,7 +602,7 @@ story("shows note selectors and keeps annotation subtitles with or without comme
   await expect(gallery.getByLabel("Selected attachment")).toHaveText("Named")
 })
 
-story("links URLs in user messages without swallowing punctuation or mentions", async ({ mount }) => {
+test("links URLs in user messages without swallowing punctuation or mentions", async ({ mount }) => {
   const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "links" } })
   const links = timeline.locator('[data-slot="user-message-text"] a[data-slot="user-message-link"]')
   await expect(links).toHaveCount(2)

@@ -1,6 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("maximizes a Mermaid diagram to zoom into and move around", async ({ mount, page }) => {
+test("maximizes a Mermaid diagram to zoom into and move around", async ({ mount, page }) => {
   await page.setViewportSize({ width: 1280, height: 860 })
   const root = await mount("current-session-mermaid--state-graph")
   const inline = root.locator('[data-component="markdown-mermaid"] > svg')
@@ -32,7 +32,7 @@ story("maximizes a Mermaid diagram to zoom into and move around", async ({ mount
   await expect(inline).toBeVisible()
 })
 
-story("opens a small diagram at its drawn size", async ({ mount, page }) => {
+test("opens a small diagram at its drawn size", async ({ mount, page }) => {
   await page.setViewportSize({ width: 1280, height: 860 })
   const root = await mount("current-session-mermaid--diagrams")
   await root.locator('[data-component="markdown-code"]').first().hover()

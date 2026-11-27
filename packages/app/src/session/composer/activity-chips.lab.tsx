@@ -2,15 +2,15 @@ import type { SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/
 import type { SessionDocument } from "@opencode/session-ui/document"
 import {
   CURRENT_SESSION_ID,
-  STORY_MODEL,
-  STORY_TIME,
+  LAB_MODEL,
+  LAB_TIME,
   editThenTestDocument,
   largeCompletedDocument,
   subagentReport,
-} from "@opencode/session-ui/storybook"
+} from "@opencode/session-ui/lab"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js"
-import { SessionPreview } from "@/session/story-model"
+import { SessionPreview } from "@/session/lab-model"
 import type { SessionActivityItem } from "./activity-chips"
 
 // The app's default timeline preset.
@@ -54,14 +54,14 @@ const shellItem = (index: number): SessionActivityItem => ({
 // Rows measure after the first frame, so wait past it.
 const pin = (behavior: ScrollBehavior) =>
   setTimeout(() => {
-    const timeline = document.querySelector('[data-slot="story-timeline"]')
+    const timeline = document.querySelector('[data-slot="lab-timeline"]')
 
     timeline?.scrollTo({ top: timeline.scrollHeight, behavior })
   }, 150)
 
 type PreviewArgs = { stage: number; subagents: number; shells: number }
 
-// Driven by args, so moving between these stories updates the same capsule and its transitions play.
+// Driven by args, so moving between these pages updates the same capsule and its transitions play.
 function Preview(props: PreviewArgs) {
   const value = createMemo(() => liveDocument(stages[props.stage] ?? stages[0]))
   // Built once per count, so each item keeps the start time it had when it appeared.
@@ -116,9 +116,9 @@ function liveDocument(stage: Stage): SessionDocument {
           metadata: { sessionID: value.id, status: "running" },
         },
         time: {
-          created: STORY_TIME + 301_000 + index * 1_000,
-          ran: STORY_TIME + 301_100 + index * 1_000,
-          completed: STORY_TIME + 301_200 + index * 1_000,
+          created: LAB_TIME + 301_000 + index * 1_000,
+          ran: LAB_TIME + 301_100 + index * 1_000,
+          completed: LAB_TIME + 301_200 + index * 1_000,
         },
       }),
     ),
@@ -133,7 +133,7 @@ function liveDocument(stage: Stage): SessionDocument {
           content: [{ type: "text", text: index === 0 ? "Local: http://localhost:4444/" : "Watching src/session" }],
           metadata: { shellID: value.id, status: index < stage.finishedShells ? "exited" : "running" },
         },
-        time: { created: STORY_TIME + 304_000 + index * 1_000, ran: STORY_TIME + 304_100 + index * 1_000 },
+        time: { created: LAB_TIME + 304_000 + index * 1_000, ran: LAB_TIME + 304_100 + index * 1_000 },
       }),
     ),
   ]
@@ -145,14 +145,14 @@ function liveDocument(stage: Stage): SessionDocument {
       id: "msg_user_activity",
       type: "user",
       text: "Audit the activity chips and keep the dev server and tests running while you work.",
-      time: { created: STORY_TIME + 300_000 },
-      metadata: { agent: "build", model: STORY_MODEL },
+      time: { created: LAB_TIME + 300_000 },
+      metadata: { agent: "build", model: LAB_MODEL },
     },
     {
       id: "msg_assistant_activity",
       type: "assistant",
       agent: "build",
-      model: STORY_MODEL,
+      model: LAB_MODEL,
       content: [
         {
           type: "text",
@@ -160,10 +160,10 @@ function liveDocument(stage: Stage): SessionDocument {
         },
         ...tools,
       ],
-      time: { created: STORY_TIME + 300_500, completed: stage.finished ? STORY_TIME + 306_000 : undefined },
+      time: { created: LAB_TIME + 300_500, completed: stage.finished ? LAB_TIME + 306_000 : undefined },
     },
     ...subagents.slice(0, stage.finished).map((value, index) =>
-      subagentReport(`msg_report_${value.id}`, STORY_TIME + 307_000 + index * 1_000, {
+      subagentReport(`msg_report_${value.id}`, LAB_TIME + 307_000 + index * 1_000, {
         childID: value.id,
         agent: value.agent,
         description: value.description,
@@ -178,15 +178,15 @@ function liveDocument(stage: Stage): SessionDocument {
       id: "msg_activity_summary",
       type: "assistant",
       agent: "build",
-      model: STORY_MODEL,
+      model: LAB_MODEL,
       content: [{ type: "text", text: "Both audits passed and the background commands have exited." }],
-      time: { created: STORY_TIME + 309_000, completed: STORY_TIME + 310_000 },
+      time: { created: LAB_TIME + 309_000, completed: LAB_TIME + 310_000 },
     })
 
   return { sessionID: CURRENT_SESSION_ID, messages, status: done ? { type: "idle" } : { type: "busy" }, diffs: [] }
 }
 
-// Scripted with `activity-story-stage` events on `document` so a recording can step through the work.
+// Scripted with `activity-lab-stage` events on `document` so a recording can step through the work.
 function LiveActivity(props: PreviewArgs) {
   const [recorded, setRecorded] = createSignal<Stage>()
   const value = createMemo(() => liveDocument(recorded() ?? stages[props.stage] ?? stages[0]))
@@ -210,8 +210,8 @@ function LiveActivity(props: PreviewArgs) {
       pin("smooth")
     }
 
-    document.addEventListener("activity-story-stage", step)
-    onCleanup(() => document.removeEventListener("activity-story-stage", step))
+    document.addEventListener("activity-lab-stage", step)
+    onCleanup(() => document.removeEventListener("activity-lab-stage", step))
     pin("auto")
   })
 
@@ -231,7 +231,7 @@ function LiveActivity(props: PreviewArgs) {
         onOpen: (item) => {
           // The preview has no child route, so show the launch in its timeline.
           const part = document.querySelector(
-            `[data-slot="story-timeline"] [data-timeline-part-ids*="tool_${item.target}"]`,
+            `[data-slot="lab-timeline"] [data-timeline-part-ids*="tool_${item.target}"]`,
           )
 
           const trigger = part?.querySelector<HTMLElement>('[data-slot="collapsible-trigger"][aria-expanded="false"]')

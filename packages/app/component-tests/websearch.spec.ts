@@ -1,6 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("enables Any only after confirmation and supports resetting the preview", async ({ mount }) => {
+test("enables Any only after confirmation and supports resetting the preview", async ({ mount }) => {
   const component = await mount("app-current-session-surface--web-search-request")
   const card = component.getByRole("region", { name: "Third-party web search" })
   await expect(card.getByRole("button", { name: "Enable", exact: true })).toBeEnabled()
@@ -12,7 +12,7 @@ story("enables Any only after confirmation and supports resetting the preview", 
   await expect(card.getByRole("button", { name: "Enable", exact: true })).toBeEnabled()
 })
 
-story("declining search is an explicit disabled selection", async ({ mount }) => {
+test("declining search is an explicit disabled selection", async ({ mount }) => {
   const component = await mount("app-current-session-surface--web-search-request")
   const card = component.getByRole("region", { name: "Third-party web search" })
   await card.getByRole("button", { name: "Don’t use search", exact: true }).click()
@@ -20,7 +20,7 @@ story("declining search is an explicit disabled selection", async ({ mount }) =>
   await expect(card).toHaveCount(0)
 })
 
-story("sizes provider options to their content", async ({ mount, page }) => {
+test("sizes provider options to their content", async ({ mount, page }) => {
   const component = await mount("app-current-session-surface--web-search-request")
   await component.getByRole("button", { name: "Search provider Any", exact: true }).click()
   const menu = page.getByRole("listbox", { name: "Search provider", exact: true })
@@ -51,7 +51,7 @@ story("sizes provider options to their content", async ({ mount, page }) => {
 for (const width of [360, 1200]) {
   for (const direction of ["ltr", "rtl"]) {
     for (const theme of ["light", "dark"]) {
-      story(`selects and confirms a provider at ${width}px in ${direction} ${theme}`, async ({ mount, page }) => {
+      test(`selects and confirms a provider at ${width}px in ${direction} ${theme}`, async ({ mount, page }) => {
         await page.setViewportSize({ width, height: 900 })
 
         const component = await mount("app-current-session-surface--web-search-request", {

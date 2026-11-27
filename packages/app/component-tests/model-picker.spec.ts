@@ -1,5 +1,5 @@
 import type { Locator } from "@playwright/test"
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
 // The list's scroll position, read from its scrolling viewport.
 const scrollTop = (list: Locator) =>
@@ -8,7 +8,7 @@ const scrollTop = (list: Locator) =>
 const frames = (list: Locator) =>
   list.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))))
 
-story("unfavoriting a model from its flyout keeps the list where it is", async ({ mount, page }) => {
+test("unfavoriting a model from its flyout keeps the list where it is", async ({ mount, page }) => {
   await mount("app-dialog-model-selector--long-list")
   const list = page.getByRole("dialog").getByRole("listbox")
   // The second favorite, so the pointer has to take the highlight. Its own group is far below the fold.
@@ -27,7 +27,7 @@ story("unfavoriting a model from its flyout keeps the list where it is", async (
   expect(await scrollTop(list)).toBe(0)
 })
 
-story("unfavoriting from the keyboard follows the model to its group", async ({ mount, page }) => {
+test("unfavoriting from the keyboard follows the model to its group", async ({ mount, page }) => {
   await mount("app-dialog-model-selector--long-list")
   const list = page.getByRole("dialog").getByRole("listbox")
   const search = page.getByRole("combobox", { name: "Search models" })

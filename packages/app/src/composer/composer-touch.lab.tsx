@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { ModelSelection } from "@/providers/models/selection"
-import { STORY_MODEL } from "@opencode/session-ui/storybook"
+import { LAB_MODEL } from "@opencode/session-ui/lab"
 import { Composer } from "./composer"
 import type { ComposerModel } from "./model"
 import { createComposerEditor } from "./editor/interaction"
@@ -42,9 +42,9 @@ const drafts: Record<State, string> = {
 }
 
 const selectedModel = {
-  id: STORY_MODEL.id,
-  providerID: STORY_MODEL.providerID,
-  api: { id: STORY_MODEL.id, url: "https://opencode.ai", npm: "@ai-sdk/anthropic" },
+  id: LAB_MODEL.id,
+  providerID: LAB_MODEL.providerID,
+  api: { id: LAB_MODEL.id, url: "https://opencode.ai", npm: "@ai-sdk/anthropic" },
   name: "Claude Opus 5.5",
   family: "claude-opus",
   capabilities: {
@@ -63,7 +63,7 @@ const selectedModel = {
   headers: {},
   release_date: "2026-05-22",
   variants: { medium: {}, high: {} },
-  provider: { id: STORY_MODEL.providerID, name: "OpenCode", source: "custom", env: [], options: {}, models: {} },
+  provider: { id: LAB_MODEL.providerID, name: "OpenCode", source: "custom", env: [], options: {}, models: {} },
   latest: true,
 } satisfies NonNullable<ReturnType<ModelSelection["current"]>>
 
@@ -110,7 +110,7 @@ function TouchComposer(props: { state: State }) {
     prompt,
     cursor: promptLength(prompt),
     mode: props.state === "shell" ? "shell" : "normal",
-    model: { providerID: STORY_MODEL.providerID, modelID: STORY_MODEL.id, variant: "high" },
+    model: { providerID: LAB_MODEL.providerID, modelID: LAB_MODEL.id, variant: "high" },
     context: { items: [] },
   })
 
@@ -122,7 +122,7 @@ function TouchComposer(props: { state: State }) {
     undoing: () => false,
     delivery: () => (props.state === "queue" ? ("queue" as const) : ("steer" as const)),
     alternate: () => (props.state === "queue" ? ("steer" as const) : ("queue" as const)),
-    editing: () => (props.state === "editing" ? "inb_story_editing" : undefined),
+    editing: () => (props.state === "editing" ? "inb_lab_editing" : undefined),
     confirmEdit: (delivery: "steer" | "queue") => record(`Edited queued prompt, ${delivery}`),
     cancelEdit: () => record("Cancelled the edit"),
     editFirst: () => false,

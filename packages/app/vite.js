@@ -72,7 +72,7 @@ const bundleNestedWorkerDeps = {
   },
 }
 
-// The Lab globs every story, and the dependency scan cannot parse a .tsx story that calls import.meta.glob
+// The Lab globs every page, and the dependency scan cannot parse a .tsx page that calls import.meta.glob
 // itself. The lab is a development tool, so its dependencies are found when it first opens rather than at startup.
 /** @type {import("rolldown").Plugin} */
 const skipLab = {

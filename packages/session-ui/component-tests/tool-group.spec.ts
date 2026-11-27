@@ -1,5 +1,5 @@
 import type { Locator } from "@playwright/test"
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
 // The digits drawn inside the count's clipped width, left to right. Each slot shows whichever visible glyph lines up
 // with it, so a slot mid-roll reads "_", and the spare leading zero outside the width is skipped.
@@ -27,7 +27,7 @@ const shown = (count: Locator) =>
   })
 
 for (const reasoningDefaultOpen of [false, true]) {
-  story(
+  test(
     `keeps ordered thoughts and tool-only counts with reasoning ${reasoningDefaultOpen ? "expanded" : "collapsed"}`,
     async ({ mount }) => {
       const root = await mount("current-tool-group--mixed-reasoning", { args: { reasoningDefaultOpen } })
@@ -98,7 +98,7 @@ for (const reasoningDefaultOpen of [false, true]) {
   )
 }
 
-story("summarizes subagents as Agent while retaining their card titles", async ({ mount }) => {
+test("summarizes subagents as Agent while retaining their card titles", async ({ mount }) => {
   const root = await mount("current-tool-group--mixed-tools")
   const group = root.locator('[data-component="collapsed-tool-group"]')
   await expect(group.getByRole("button", { name: "Used 4 Shell, Read, Agent", exact: true })).toBeVisible()
@@ -136,7 +136,7 @@ story("summarizes subagents as Agent while retaining their card titles", async (
 })
 
 for (const direction of ["ltr", "rtl"]) {
-  story(`reads and shows a two-digit count once, in order, in ${direction}`, async ({ mount, page }) => {
+  test(`reads and shows a two-digit count once, in order, in ${direction}`, async ({ mount, page }) => {
     const root = await mount("current-tool-group--sticky-header", { globals: { direction } })
     const count = root.locator('[data-component="context-tool-group-trigger"] [data-slot="context-tool-group-count"]')
     await expect(count).toHaveText("37")
@@ -147,7 +147,7 @@ for (const direction of ["ltr", "rtl"]) {
   })
 }
 
-story("does not animate the count on mount or when its font changes", async ({ mount }) => {
+test("does not animate the count on mount or when its font changes", async ({ mount }) => {
   const root = await mount("current-tool-group--sticky-header")
   const count = root.locator('[data-component="context-tool-group-trigger"] [data-slot="context-tool-group-count"]')
   await expect(count).toHaveText("37")
@@ -160,7 +160,7 @@ story("does not animate the count on mount or when its font changes", async ({ m
   expect(await count.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0)
 })
 
-story("settles count changes made while detached, without rolling", async ({ mount }) => {
+test("settles count changes made while detached, without rolling", async ({ mount }) => {
   const root = await mount("current-tool-group--count-rollover")
   const count = root.locator('[data-component="context-tool-group-trigger"] [data-slot="context-tool-group-count"]')
   await expect(count).toHaveText("9")
@@ -178,7 +178,7 @@ story("settles count changes made while detached, without rolling", async ({ mou
   expect(await shown(count)).toBe("21")
 })
 
-story("keeps a digit rolling when the count changes again mid-roll", async ({ mount, page }) => {
+test("keeps a digit rolling when the count changes again mid-roll", async ({ mount, page }) => {
   const root = await mount("current-tool-group--count-rollover")
   const count = root.locator('[data-component="context-tool-group-trigger"] [data-slot="context-tool-group-count"]')
   // A slow roll keeps the second change inside the first roll on a loaded machine.
@@ -192,7 +192,7 @@ story("keeps a digit rolling when the count changes again mid-roll", async ({ mo
   await expect(count.locator('[data-animating="true"]')).toHaveCount(2)
 })
 
-story("rolls the leading digit in and out when the count gains or loses a digit", async ({ mount }) => {
+test("rolls the leading digit in and out when the count gains or loses a digit", async ({ mount }) => {
   const root = await mount("current-tool-group--count-rollover")
   const count = root.locator('[data-component="context-tool-group-trigger"] [data-slot="context-tool-group-count"]')
   const rolling = count.locator('[data-animating="true"]')
@@ -212,7 +212,7 @@ story("rolls the leading digit in and out when the count gains or loses a digit"
   await expect(count).toHaveText("9")
 })
 
-story("rolls the count and exposes only its current value while rolling", async ({ mount }) => {
+test("rolls the count and exposes only its current value while rolling", async ({ mount }) => {
   const root = await mount("current-tool-group--mixed-reasoning")
   const count = root.locator('[data-component="context-tool-group-trigger"] [data-slot="context-tool-group-count"]')
   await expect(count).toHaveText("4")
@@ -224,7 +224,7 @@ story("rolls the count and exposes only its current value while rolling", async 
 })
 
 for (const width of [840, 390]) {
-  story(`keeps grouped cards inside their trigger bounds at ${width}px`, async ({ mount, page }) => {
+  test(`keeps grouped cards inside their trigger bounds at ${width}px`, async ({ mount, page }) => {
     await page.setViewportSize({ width, height: 600 })
     const root = await mount("current-tool-group--mixed-tools")
     const group = root.locator('[data-component="collapsed-tool-group"]')

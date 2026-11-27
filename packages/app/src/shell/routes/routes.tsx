@@ -33,7 +33,7 @@ const ConnectServerScreen = lazy(() =>
 )
 
 // The dev server and Beta only. Both are fixed at build time, so other builds, prod included, drop the import and never
-// contain the lab, its stories or knobs. Beta loads it as its own chunk, only when /components opens.
+// contain the lab, its pages or knobs. Beta loads it as its own chunk, only when /components opens.
 const Lab =
   import.meta.env.DEV || import.meta.env.VITE_OPENCODE_CHANNEL === "beta"
     ? lazy(() => import("@/lab/lab"))

@@ -1,5 +1,5 @@
 import type { JsonValue, SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
-import { storyTool } from "../storybook/current-session-scenarios"
+import { labTool } from "../lab/current-session-scenarios"
 import { timelinePresets, type TimelineDetail } from "./detail"
 
 // Turns and settings whose projected rows the placement tests pin for both timelines.
@@ -27,7 +27,7 @@ const stopped = (
   input: Record<string, string | boolean>,
   error = { type: "aborted", message: "Tool execution interrupted" },
 ): SessionMessageAssistant["content"][number] => ({
-  ...storyTool(id, name, "error", input),
+  ...labTool(id, name, "error", input),
   state: { status: "error", input, error, metadata: {} },
 })
 
@@ -39,33 +39,33 @@ export const placementMessages: SessionMessageInfo[] = [
   assistant("msg_a1", 2, [
     thought("Looking around"),
     text("Let me look first."),
-    storyTool("read_1", "read", "completed", { path: "/repo/a.ts" }),
-    storyTool("read_2", "read", "completed", { path: "/repo/b.ts" }),
-    storyTool("read_img", "read", "completed", { path: "/repo/logo.png" }),
-    storyTool("grep_1", "grep", "completed", { pattern: "x" }),
-    storyTool("glob_1", "glob", "completed", { pattern: "*.ts" }),
-    storyTool("fetch_1", "webfetch", "completed", { url: "https://a.dev" }),
-    storyTool("search_1", "websearch", "completed", { query: "q" }),
-    storyTool("skill_1", "skill", "completed", { name: "review" }),
+    labTool("read_1", "read", "completed", { path: "/repo/a.ts" }),
+    labTool("read_2", "read", "completed", { path: "/repo/b.ts" }),
+    labTool("read_img", "read", "completed", { path: "/repo/logo.png" }),
+    labTool("grep_1", "grep", "completed", { pattern: "x" }),
+    labTool("glob_1", "glob", "completed", { pattern: "*.ts" }),
+    labTool("fetch_1", "webfetch", "completed", { url: "https://a.dev" }),
+    labTool("search_1", "websearch", "completed", { query: "q" }),
+    labTool("skill_1", "skill", "completed", { name: "review" }),
     text("Now editing."),
-    storyTool("edit_1", "edit", "completed", { path: "/repo/a.ts" }, { metadata: { files: [{ file: "/repo/a.ts" }] } }),
-    storyTool("write_1", "write", "completed", { path: "/repo/c.ts", content: "c" }),
-    storyTool(
+    labTool("edit_1", "edit", "completed", { path: "/repo/a.ts" }, { metadata: { files: [{ file: "/repo/a.ts" }] } }),
+    labTool("write_1", "write", "completed", { path: "/repo/c.ts", content: "c" }),
+    labTool(
       "patch_1",
       "patch",
       "completed",
       {},
       { metadata: { files: [{ file: "/repo/d.ts", status: "deleted" }] } },
     ),
-    storyTool("edit_err", "edit", "error", { path: "/repo/e.ts" }),
-    storyTool("todo_1", "todowrite", "completed", { todos: [] }),
+    labTool("edit_err", "edit", "error", { path: "/repo/e.ts" }),
+    labTool("todo_1", "todowrite", "completed", { todos: [] }),
     text("Done editing, here is the answer."),
   ]),
   { id: "msg_u2", type: "user", text: "run things", time: { created: 10 } },
   assistant("msg_a2", 11, [
-    storyTool("shell_1", "shell", "completed", { command: "ls" }, { metadata: { exit: 0 } }),
-    storyTool("shell_fail", "shell", "completed", { command: "false" }, { metadata: { exit: 1 } }),
-    storyTool(
+    labTool("shell_1", "shell", "completed", { command: "ls" }, { metadata: { exit: 0 } }),
+    labTool("shell_fail", "shell", "completed", { command: "false" }, { metadata: { exit: 1 } }),
+    labTool(
       "shell_bg",
       "shell",
       "completed",
@@ -74,7 +74,7 @@ export const placementMessages: SessionMessageInfo[] = [
         metadata: { shellID: "sh_1", status: "running" },
       },
     ),
-    storyTool(
+    labTool(
       "sub_1",
       "subagent",
       "completed",
@@ -83,10 +83,10 @@ export const placementMessages: SessionMessageInfo[] = [
         metadata: { sessionID: "ses_child", status: "running" },
       },
     ),
-    storyTool("exec_1", "execute", "completed", { code: "1" }),
-    storyTool("question_1", "question", "completed", { questions: [] }),
-    storyTool("custom_1", "custom_tool", "completed", {}),
-    storyTool("custom_err", "custom_tool", "error", {}),
+    labTool("exec_1", "execute", "completed", { code: "1" }),
+    labTool("question_1", "question", "completed", { questions: [] }),
+    labTool("custom_1", "custom_tool", "completed", {}),
+    labTool("custom_err", "custom_tool", "error", {}),
   ]),
   {
     id: "msg_n_shell",
@@ -114,8 +114,8 @@ export const placementMessages: SessionMessageInfo[] = [
   assistant("msg_a3", 15, [text("All done.")]),
   { id: "msg_u3", type: "user", text: "v1 tools", time: { created: 20 } },
   assistant("msg_a4", 21, [
-    storyTool("bash_1", "bash", "completed", { command: "ls" }, { metadata: { exit: 1 } }),
-    storyTool(
+    labTool("bash_1", "bash", "completed", { command: "ls" }, { metadata: { exit: 1 } }),
+    labTool(
       "task_1",
       "task",
       "completed",
@@ -124,7 +124,7 @@ export const placementMessages: SessionMessageInfo[] = [
         metadata: { sessionID: "ses_old", status: "completed" },
       },
     ),
-    storyTool("apply_1", "apply_patch", "completed", {}, { metadata: { files: [{ file: "/repo/z.ts" }] } }),
+    labTool("apply_1", "apply_patch", "completed", {}, { metadata: { files: [{ file: "/repo/z.ts" }] } }),
     text("Old tools done."),
   ]),
   {
@@ -139,8 +139,8 @@ export const placementMessages: SessionMessageInfo[] = [
   },
   { id: "msg_u5", type: "user", text: "background in a group", time: { created: 40 } },
   assistant("msg_a5", 41, [
-    storyTool("read_5", "read", "completed", { path: "/repo/f.ts" }),
-    storyTool(
+    labTool("read_5", "read", "completed", { path: "/repo/f.ts" }),
+    labTool(
       "shell_bg_2",
       "shell",
       "completed",
@@ -162,15 +162,15 @@ export const placementMessages: SessionMessageInfo[] = [
   ]),
   { id: "msg_u7", type: "user", text: "failures", time: { created: 60 } },
   assistant("msg_a7", 61, [
-    storyTool("exec_err", "execute", "completed", { code: "x" }, { metadata: { error: true } }),
-    storyTool(
+    labTool("exec_err", "execute", "completed", { code: "x" }, { metadata: { error: true } }),
+    labTool(
       "exec_calls",
       "execute",
       "completed",
       { code: "y" },
       { metadata: { toolCalls: [{ tool: "read", status: "error" }] } },
     ),
-    storyTool(
+    labTool(
       "read_loaded",
       "read",
       "completed",
@@ -178,7 +178,7 @@ export const placementMessages: SessionMessageInfo[] = [
       { metadata: { loaded: ["/repo/AGENTS.md"] } },
     ),
     thought("Weighing it"),
-    storyTool("shell_timeout", "shell", "completed", { command: "sleep 99" }, { metadata: { timeout: true } }),
+    labTool("shell_timeout", "shell", "completed", { command: "sleep 99" }, { metadata: { timeout: true } }),
     text("Some failed."),
   ]),
   notice("msg_n_error", 62, "Background job failed", { state: "error" }),
@@ -225,16 +225,16 @@ export const placementMessages: SessionMessageInfo[] = [
   },
   { id: "msg_u10", type: "user", text: "v1 failures", time: { created: 100 } },
   assistant("msg_a10", 101, [
-    storyTool("bash_err", "bash", "error", { command: "make" }),
-    storyTool(
+    labTool("bash_err", "bash", "error", { command: "make" }),
+    labTool(
       "bash_bg",
       "bash",
       "completed",
       { command: "serve", background: true },
       { metadata: { shellID: "sh_v1", status: "running" } },
     ),
-    storyTool("task_err", "task", "error", { description: "old failed", subagent_type: "general" }),
-    storyTool("apply_err", "apply_patch", "error", {}),
+    labTool("task_err", "task", "error", { description: "old failed", subagent_type: "general" }),
+    labTool("apply_err", "apply_patch", "error", {}),
     text("Old failures."),
   ]),
   { id: "msg_u11", type: "user", text: "streaming", time: { created: 110 } },
@@ -245,14 +245,14 @@ export const placementMessages: SessionMessageInfo[] = [
     model: { id: "model", providerID: "provider" },
     time: { created: 111 },
     content: [
-      storyTool("write_stream", "write", "streaming", {}, { raw: '{"path":"/repo/i.ts","content":"i' }),
-      storyTool("edit_stream", "edit", "streaming", {}, { raw: '{"path":"/repo/j.ts"' }),
-      storyTool("read_stream", "read", "streaming", {}, { raw: '{"path":"/repo/k.png"' }),
-      storyTool("shell_stream", "shell", "streaming", {}, { raw: '{"command":"ls","background":tr' }),
-      storyTool("exec_run", "execute", "running", { code: "z" }, { metadata: { toolCalls: [] } }),
-      storyTool("shell_run", "shell", "running", { command: "make" }, { output: "building" }),
-      storyTool("sub_run", "subagent", "running", { description: "dig", agent: "explore" }, { metadata: {} }),
-      storyTool("question_run", "question", "running", { questions: [] }),
+      labTool("write_stream", "write", "streaming", {}, { raw: '{"path":"/repo/i.ts","content":"i' }),
+      labTool("edit_stream", "edit", "streaming", {}, { raw: '{"path":"/repo/j.ts"' }),
+      labTool("read_stream", "read", "streaming", {}, { raw: '{"path":"/repo/k.png"' }),
+      labTool("shell_stream", "shell", "streaming", {}, { raw: '{"command":"ls","background":tr' }),
+      labTool("exec_run", "execute", "running", { code: "z" }, { metadata: { toolCalls: [] } }),
+      labTool("shell_run", "shell", "running", { command: "make" }, { output: "building" }),
+      labTool("sub_run", "subagent", "running", { description: "dig", agent: "explore" }, { metadata: {} }),
+      labTool("question_run", "question", "running", { questions: [] }),
       { type: "reasoning", text: "Still thinking", time: { created: 112 } },
     ],
   },
@@ -264,7 +264,7 @@ export const placementMessages: SessionMessageInfo[] = [
     model: { id: "model", providerID: "provider" },
     time: { created: 121, completed: 121 },
     content: [
-      storyTool(
+      labTool(
         "exec_files",
         "execute",
         "completed",
@@ -299,7 +299,7 @@ export const placementMessages: SessionMessageInfo[] = [
           },
         },
       ),
-      storyTool("patch_2", "patch", "completed", {}, { metadata: { files: [{ file: "/repo/direct.ts" }] } }),
+      labTool("patch_2", "patch", "completed", {}, { metadata: { files: [{ file: "/repo/direct.ts" }] } }),
       { type: "text", text: "Script done." },
     ],
   },
@@ -311,7 +311,7 @@ export const placementMessages: SessionMessageInfo[] = [
     model: { id: "model", providerID: "provider" },
     time: { created: 131 },
     content: [
-      storyTool(
+      labTool(
         "exec_live",
         "execute",
         "running",

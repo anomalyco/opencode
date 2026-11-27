@@ -1,6 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("shows the fallback glyph when an icon chunk fails to load", async ({ mount, page }) => {
+test("shows the fallback glyph when an icon chunk fails to load", async ({ mount, page }) => {
   await page.route("**/file-types/typescript.svg*", (route) => route.abort())
   const root = await mount("components-file-icon--samples")
 

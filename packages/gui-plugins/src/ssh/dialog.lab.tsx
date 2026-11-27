@@ -16,12 +16,12 @@ import {
   type SshItem,
   type SshPlatform,
   type SshState,
-} from "../../../stories/mocks/gui-plugins/ssh"
+} from "../../../lab/mocks/gui-plugins/ssh"
 
 const challenges = {
   trust: {
     id: "host-key",
-    text: "The authenticity of host 'dev.example.com' can't be established.\nED25519 key fingerprint is SHA256:EXAMPLE-FINGERPRINT-FOR-STORY-ONLY.\nAre you sure you want to continue connecting?",
+    text: "The authenticity of host 'dev.example.com' can't be established.\nED25519 key fingerprint is SHA256:EXAMPLE-FINGERPRINT-FOR-LAB-ONLY.\nAre you sure you want to continue connecting?",
     confirm: true,
   },
   passphrase: { id: "passphrase", text: "Enter passphrase for key '~/.ssh/id_ed25519':", confirm: false },
@@ -51,7 +51,7 @@ function Fixture(props: {
     item:
       props.initial === "required"
         ? {
-            config: { id: "story", target: "ssh linuxbook", name: "" },
+            config: { id: "lab", target: "ssh linuxbook", name: "" },
             stage: props.session || props.settings ? "disconnected" : "authentication",
             saved: true,
             detail: "",
@@ -150,7 +150,7 @@ function Fixture(props: {
     <PlatformProvider
       value={{
         platform: "desktop",
-        windowID: "ssh-story",
+        windowID: "ssh-lab",
         sshServers: api,
         openExternal() {},
         restart: async () => {},
@@ -223,7 +223,7 @@ function AuthenticationHome() {
 
   const server: ServerConnection.Ssh = {
     type: "ssh",
-    id: "story",
+    id: "lab",
     host: "linuxbook",
     displayName: "linuxbook",
     label: "SSH",
@@ -293,7 +293,7 @@ function Open(props: { initial?: string }) {
   const open = () =>
     dialog.show(() => (
       <DialogSsh
-        config={props.initial ? { id: "story", target: "devbox", name: "Development" } : undefined}
+        config={props.initial ? { id: "lab", target: "devbox", name: "Development" } : undefined}
         connect={!!props.initial}
       />
     ))

@@ -16,7 +16,7 @@ const titles = [
   "Review keyboard navigation",
 ]
 
-function SessionListStory(props: {
+function SessionListLab(props: {
   currentCount: number
   needsCount: number
   recentCount: number
@@ -230,7 +230,7 @@ function SessionListStory(props: {
         <span aria-live="polite">{state.action}</span>
       </div>
       <span class="max-w-[360px] text-[12px] leading-4 text-v2-text-text-muted">
-        Click to select; right-click to archive or delete. Working and Archived collapse. All actions stay local to this story.
+        Click to select; right-click to archive or delete. Working and Archived collapse. All actions stay local to this page.
       </span>
     </div>
   )
@@ -239,7 +239,7 @@ function SessionListStory(props: {
 export default {
   title: "App/Inbox/Session lists",
   id: "app-inbox-session-lists",
-  render: SessionListStory,
+  render: SessionListLab,
   args: {
     currentCount: 0,
     needsCount: 2,

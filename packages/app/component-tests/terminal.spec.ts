@@ -1,5 +1,5 @@
 import type { Locator, Page, WebSocketRoute } from "@playwright/test"
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const fixture = sourceURL(new URL("../../gui-plugins/src/terminal/terminal.fixture.tsx", import.meta.url))
 
@@ -61,7 +61,7 @@ async function serveTerminal(page: Page, input: { ptyID: string; output?: string
     return route.fulfill({ headers, json: { data: { ticket: "component-ticket", expires_in: 60 } } })
   })
 
-  // The socket mock patches the page's WebSocket when it loads, so this runs before the story mounts.
+  // The socket mock patches the page's WebSocket when it loads, so this runs before the page mounts.
   await page.routeWebSocket(new RegExp(`/api/experimental/persistent-pty/${input.ptyID}/connect`), (ws) => {
     const url = new URL(ws.url())
     const attachmentID = url.searchParams.get("attachment_id") ?? ""
@@ -89,7 +89,7 @@ async function serveTerminal(page: Page, input: { ptyID: string; output?: string
 }
 
 async function mountTerminal(page: Page, mount: (id: string) => Promise<Locator>, ptyID: string) {
-  // Any story loads the app styles; the fixture mounts the pane beside it.
+  // Any page loads the app styles; the fixture mounts the pane beside it.
   await mount("ui-line-comment--editor")
   await page.evaluate(
     async (input) => {
@@ -102,7 +102,7 @@ async function mountTerminal(page: Page, mount: (id: string) => Promise<Locator>
   return page.getByTestId("terminal-fixture")
 }
 
-story("does not send the emulator's own answers to terminal queries as input", async ({ page, mount }) => {
+test("does not send the emulator's own answers to terminal queries as input", async ({ page, mount }) => {
   // Device status and attribute queries, in the restored screen and in live output. The daemon answers them.
   const server = await serveTerminal(page, { ptyID: "pty_queries", output: "restored\x1b[6n\x1b[c\r\n" })
   const root = await mountTerminal(page, mount, "pty_queries")
@@ -118,7 +118,7 @@ story("does not send the emulator's own answers to terminal queries as input", a
   expect(server.frames.filter((frame) => frame.type === 1).map((frame) => frame.data)).toEqual(["x"])
 })
 
-story("shows a terminal that has written nothing yet and stays silent", async ({ page, mount }) => {
+test("shows a terminal that has written nothing yet and stays silent", async ({ page, mount }) => {
   // An empty checkpoint and no output: nothing ever reaches the emulator.
   const server = await serveTerminal(page, { ptyID: "pty_silent", output: "" })
   const root = await mountTerminal(page, mount, "pty_silent")
@@ -128,7 +128,7 @@ story("shows a terminal that has written nothing yet and stays silent", async ({
   await expect(root.locator("[data-failures]")).toHaveAttribute("data-failures", "0")
 })
 
-story("tells the user a server that predates the input protocol is too old", async ({ page, mount }) => {
+test("tells the user a server that predates the input protocol is too old", async ({ page, mount }) => {
   await serveTerminal(page, { ptyID: "pty_old", output: "old server\r\n", inputProtocol: 0 })
   const root = await mountTerminal(page, mount, "pty_old")
 
@@ -138,7 +138,7 @@ story("tells the user a server that predates the input protocol is too old", asy
   await expect(root.locator("[data-failures]")).toHaveAttribute("data-failures", "1")
 })
 
-story("says the connection failed when the terminal cannot be restored", async ({ page, mount }) => {
+test("says the connection failed when the terminal cannot be restored", async ({ page, mount }) => {
   const server = await serveTerminal(page, { ptyID: "pty_missing" })
   const root = await mountTerminal(page, mount, "pty_missing")
 

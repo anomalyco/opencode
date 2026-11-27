@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test"
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 import type { ParentProps } from "solid-js"
 import type { Command } from "@opencode/plugin/gui"
 import type { Item } from "../src/runtime/plugin/host"
@@ -28,8 +28,8 @@ const modules = {
   layoutKeys: source("../src/shell/state/helpers.ts"),
 }
 
-story.beforeEach(async ({ mount, page }) => {
-  // Any story loads the app styles; the fixture mounts the real side region and plugins beside it.
+test.beforeEach(async ({ mount, page }) => {
+  // Any page loads the app styles; the fixture mounts the real side region and plugins beside it.
   await mount("ui-line-comment--editor")
   await page.evaluate(async (modules) => {
     const [
@@ -181,7 +181,7 @@ story.beforeEach(async ({ mount, page }) => {
             onSelect: props.review,
           },
         ])
-        // The story server aliases the app's command hook to a no-op. Bridge the real plugin contributions
+        // The Lab server aliases the app's command hook to a no-op. Bridge the real plugin contributions
         // to the real dispatcher imported by source URL, so the shortcut runs rather than its alias.
         command.register("fixture-plugins", () =>
           pluginHost.items(sdk.Command).map((item: Item<Command>) => {
@@ -225,7 +225,7 @@ story.beforeEach(async ({ mount, page }) => {
   }, modules)
 })
 
-story("routes an exact HTML file to the pane and reports an unavailable pane instead of opening a file preview", async ({ page }) => {
+test("routes an exact HTML file to the pane and reports an unavailable pane instead of opening a file preview", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
   const open = root.getByRole("button", { name: "Open workspace HTML" })
@@ -237,7 +237,7 @@ story("routes an exact HTML file to the pane and reports an unavailable pane ins
   await expect(root.getByRole("tab", { name: "report.html" })).toHaveCount(0)
 })
 
-story("closes a blank browser tab from its address field without closing the session", async ({ page }) => {
+test("closes a blank browser tab from its address field without closing the session", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const outside = root.getByRole("button", { name: "Beta", exact: true })
   await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
@@ -264,7 +264,7 @@ story("closes a blank browser tab from its address field without closing the ses
   await expect(root.getByTestId("session-state")).toHaveText("open")
 })
 
-story("toggles the element picker from the shortcut only inside the browser pane", async ({ page }) => {
+test("toggles the element picker from the shortcut only inside the browser pane", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const outside = root.getByRole("button", { name: "Beta", exact: true })
   await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
@@ -302,7 +302,7 @@ story("toggles the element picker from the shortcut only inside the browser pane
   )
 })
 
-story("keeps in-page shortcuts in the editor and forwards toolbar, review and close shortcuts", async ({ page }) => {
+test("keeps in-page shortcuts in the editor and forwards toolbar, review and close shortcuts", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
   const mod = mac ? "Meta" : "Control"
@@ -345,7 +345,7 @@ story("keeps in-page shortcuts in the editor and forwards toolbar, review and cl
   await expect(root.getByTestId("session-state")).toHaveText("open")
 })
 
-story("the pane's toolbar shortcut works from inside the options menu's More tools", async ({ page }) => {
+test("the pane's toolbar shortcut works from inside the options menu's More tools", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mod = (await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))) ? "Meta" : "Control"
   const toolbar = root.getByRole("region", { name: "Viewport", exact: true })
@@ -362,7 +362,7 @@ story("the pane's toolbar shortcut works from inside the options menu's More too
   await expect(toolbar).toBeVisible()
 })
 
-story(
+test(
   "reopening the side panel focuses a blank tab's address and closing it returns to the composer",
   async ({ page }) => {
     const root = page.getByTestId("browser-region-fixture")
@@ -390,7 +390,7 @@ story(
   },
 )
 
-story("⌘T inside the browser pane opens the side panel's New tab, and a session everywhere else", async ({ page }) => {
+test("⌘T inside the browser pane opens the side panel's New tab, and a session everywhere else", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
   const mod = mac ? "Meta" : "Control"
@@ -445,7 +445,7 @@ story("⌘T inside the browser pane opens the side panel's New tab, and a sessio
   await expect(opens).toHaveText("1")
 })
 
-story("the side panel's New tab opens what its address field names in a browser tab", async ({ page }) => {
+test("the side panel's New tab opens what its address field names in a browser tab", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mod = (await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))) ? "Meta" : "Control"
   const panel = page.locator("#review-panel")
@@ -473,7 +473,7 @@ story("the side panel's New tab opens what its address field names in a browser 
   await expect(root.getByRole("status").getByText("https://www.google.com/search?q=solid%20signals", { exact: true })).toBeVisible()
 })
 
-story("⌘T and ⌘W follow focus: side tabs inside the side panel, session tabs elsewhere", async ({ page }) => {
+test("⌘T and ⌘W follow focus: side tabs inside the side panel, session tabs elsewhere", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mod = (await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))) ? "Meta" : "Control"
   const outside = root.getByRole("button", { name: "Beta", exact: true })
@@ -518,7 +518,7 @@ story("⌘T and ⌘W follow focus: side tabs inside the side panel, session tabs
   await expect(sessions).toHaveText("1")
 })
 
-story("⌘L selects the browser address from the page and the pane, and nowhere else", async ({ page }) => {
+test("⌘L selects the browser address from the page and the pane, and nowhere else", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mod = (await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))) ? "Meta" : "Control"
   const outside = root.getByRole("button", { name: "Beta", exact: true })
@@ -557,7 +557,7 @@ story("⌘L selects the browser address from the page and the pane, and nowhere 
   await expect.poll(selected).toBe(true)
 })
 
-story("reloads the browser tab with ⌘R inside the pane and leaves it to the window elsewhere", async ({ page }) => {
+test("reloads the browser tab with ⌘R inside the pane and leaves it to the window elsewhere", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
   const outside = root.getByRole("button", { name: "Beta", exact: true })
@@ -593,7 +593,7 @@ story("reloads the browser tab with ⌘R inside the pane and leaves it to the wi
   await expect(reloads).toHaveText("1")
 })
 
-story("keeps blank browser tabs when adding tabs and selecting another panel", async ({ page }) => {
+test("keeps blank browser tabs when adding tabs and selecting another panel", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
   const address = root.locator("#browser-panel").getByRole("combobox", { name: "Browser address", exact: true })
@@ -617,7 +617,7 @@ story("keeps blank browser tabs when adding tabs and selecting another panel", a
   await expect(root.getByTestId("browser-closes")).toHaveText("[]")
 })
 
-story("a new tab request that opened no blank tab leaves a later blank page's address alone", async ({ page }) => {
+test("a new tab request that opened no blank tab leaves a later blank page's address alone", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
   const address = root.locator("#browser-panel").getByRole("combobox", { name: "Browser address", exact: true })
@@ -638,7 +638,7 @@ story("a new tab request that opened no blank tab leaves a later blank page's ad
   await expect(composer).toBeFocused()
 })
 
-story("reopens a closed browser tab with ⌘⇧T after the side panel and a session tab elsewhere", async ({ page }) => {
+test("reopens a closed browser tab with ⌘⇧T after the side panel and a session tab elsewhere", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
   const outside = root.getByRole("button", { name: "Beta", exact: true })
@@ -679,7 +679,7 @@ story("reopens a closed browser tab with ⌘⇧T after the side panel and a sess
   await expect(opens).toHaveText("1")
 })
 
-story("selects side tabs with ⌘1–9 and ⇧⌘[ ] inside the side panel and session tabs elsewhere", async ({ page }) => {
+test("selects side tabs with ⌘1–9 and ⇧⌘[ ] inside the side panel and session tabs elsewhere", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mod = (await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))) ? "Meta" : "Control"
   const outside = root.getByRole("button", { name: "Beta", exact: true })
@@ -714,7 +714,7 @@ story("selects side tabs with ⌘1–9 and ⇧⌘[ ] inside the side panel and s
   await expect(selected).toHaveText(/^browser:/)
 })
 
-story("keeps a restored browser tab with no saved page selected and undrawn until the desktop's first inventory", async ({ page }) => {
+test("keeps a restored browser tab with no saved page selected and undrawn until the desktop's first inventory", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const tabs = root.getByRole("tab")
   await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
@@ -832,7 +832,7 @@ const reopen = async (page: Page, quit: () => Promise<void> = async () => {}) =>
 
 // After a restart the strip showed no browser tab until the desktop had attached, and then each tab changed its label,
 // and so its width and the place of every tab after it, as its page loaded: saved title, address, title again.
-story("holds every restored tab's box, label and icon from the reopen until its page has loaded", async ({ page }) => {
+test("holds every restored tab's box, label and icon from the reopen until its page has loaded", async ({ page }) => {
   // The pane's Ipc is still starting when the window draws its first frame.
   const { root, first, stable } = await reopen(page, () => page.getByTestId("browser-region-fixture").getByRole("button", { name: "Pane away", exact: true }).click())
   const address = root.locator("#browser-panel").getByRole("combobox", { name: "Browser address", exact: true })
@@ -944,7 +944,7 @@ const linkPage = (id: string, path: string, title: string) => {
   return { id, blank, started: { ...blank, loading: true }, committed, named: { ...committed, title }, ended: { ...committed, title, loading: false } }
 }
 
-story("a tab a link opens behind appears at once beside the tab it came from, and its page's title is its only other change", async ({ page }) => {
+test("a tab a link opens behind appears at once beside the tab it came from, and its page's title is its only other change", async ({ page }) => {
   const { root, tabs, listed, selected } = await linkStrip(page)
   const one = linkPage("tab_88888888-8888-8888-8888-888888888888", "one", "One")
   const two = linkPage("tab_99999999-9999-9999-9999-999999999999", "two", "Second page")
@@ -1014,7 +1014,7 @@ story("a tab a link opens behind appears at once beside the tab it came from, an
   await expect(selected).toHaveText(`browser:${docs}`)
 })
 
-story("a tab a link opens in front appears at once, selected, beside the tab it came from, and its page's title is its only other change", async ({ page }) => {
+test("a tab a link opens in front appears at once, selected, beside the tab it came from, and its page's title is its only other change", async ({ page }) => {
   const { root, tabs, listed, selected } = await linkStrip(page)
   const front = linkPage("tab_88888888-8888-8888-8888-888888888888", "front", "In front")
   const address = root.locator("#browser-panel").getByRole("combobox", { name: "Browser address", exact: true })
@@ -1056,7 +1056,7 @@ story("a tab a link opens in front appears at once, selected, beside the tab it 
 // none. The desktop still held every tab, but the strip took only the tabs new to an inventory, so none came back. The
 // next tab the agent worked in, or the next one to open, then stood alone: every browser tab but one had gone, and
 // nobody had closed one.
-story("a strip the host forgot gets back every tab the desktop holds, so the tab the agent works in next does not stand alone", async ({ page }) => {
+test("a strip the host forgot gets back every tab the desktop holds, so the tab the agent works in next does not stand alone", async ({ page }) => {
   const { root, tabs, listed, selected } = await linkStrip(page)
   const guide = "tab_77777777-7777-7777-7777-777777777777"
   const pricing = reported({ id: "tab_88888888-8888-8888-8888-888888888888", url: "https://example.com/pricing", title: "Pricing", generation: 1 })
@@ -1102,7 +1102,7 @@ story("a strip the host forgot gets back every tab the desktop holds, so the tab
 
 // A page's icon arrives after its tab is drawn: Chromium lists it once the document's head has parsed, and main loads
 // it. The tab draws the globe until then. A site's SVG is drawn as an image, never put in the window as markup.
-story("a tab draws its page's icon in the globe's place as an image, and no tab moves", async ({ page }) => {
+test("a tab draws its page's icon in the globe's place as an image, and no tab moves", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const tabs = root.getByRole("tab")
   await root.getByRole("button", { name: "Beta", exact: true }).click()
@@ -1125,7 +1125,7 @@ story("a tab draws its page's icon in the globe's place as an image, and no tab 
 })
 
 // A server without a browser left its restored tabs on a loader with no end.
-story("a restored tab on a server without a browser says that the browser could not open, and keeps its box", async ({ page }) => {
+test("a restored tab on a server without a browser says that the browser could not open, and keeps its box", async ({ page }) => {
   const { root, stable } = await reopen(page)
   const failed = root.getByRole("alert").filter({ hasText: "The browser couldn't open" })
   const loading = root.getByRole("status", { name: "Loading", exact: true })
@@ -1148,7 +1148,7 @@ story("a restored tab on a server without a browser says that the browser could 
 })
 
 // An agent's tabs.open or tabs.focus shows its tab: it comes to the front over the file the person had selected.
-story("an agent show request selects its tab over the selected file, and a plugin open wakes the suspended binding", async ({ page }) => {
+test("an agent show request selects its tab over the selected file, and a plugin open wakes the suspended binding", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   await root.getByRole("button", { name: "Beta", exact: true }).click()
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
@@ -1163,7 +1163,7 @@ story("an agent show request selects its tab over the selected file, and a plugi
   await expect(root.getByText("Registrations: 3", { exact: true })).toBeVisible()
 })
 
-story("an agent show request opens the closed pane and leaves the keyboard in the composer", async ({ page }) => {
+test("an agent show request opens the closed pane and leaves the keyboard in the composer", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
   const composer = root.getByRole("textbox", { name: "Composer", exact: true })
@@ -1181,7 +1181,7 @@ story("an agent show request opens the closed pane and leaves the keyboard in th
   await expect(composer).toBeFocused()
 })
 
-story("?W right after an agent shows another page closes that browser tab, not the session", async ({ page }) => {
+test("?W right after an agent shows another page closes that browser tab, not the session", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   await root.getByRole("button", { name: "Beta", exact: true }).click()
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
@@ -1197,7 +1197,7 @@ story("?W right after an agent shows another page closes that browser tab, not t
   await expect(root.getByTestId("session-state")).toHaveText("open")
 })
 
-story("a browser tab behind a file tab says that its page waits for the person", async ({ page }) => {
+test("a browser tab behind a file tab says that its page waits for the person", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   await root.getByRole("button", { name: "Beta", exact: true }).click()
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
@@ -1206,7 +1206,7 @@ story("a browser tab behind a file tab says that its page waits for the person",
   await expect(root.getByRole("img", { name: "Waiting for you" })).toBeVisible()
 })
 
-story(
+test(
   "keeps the browser tabs while the pane's Ipc is away and registers them again when it returns",
   async ({ page }) => {
     const root = page.getByTestId("browser-region-fixture")
@@ -1230,7 +1230,7 @@ story(
   },
 )
 
-story(
+test(
   "runs no shortcut from a page prompt, even after a click on its dimmed page; the permission bar and a drawer keep theirs",
   async ({ page }) => {
     const root = page.getByTestId("browser-region-fixture")

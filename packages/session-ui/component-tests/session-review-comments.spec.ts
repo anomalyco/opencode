@@ -1,7 +1,7 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
 // Selecting text to copy it used to open the comment editor and move focus into it.
-story("selected code offers Add comment instead of opening the editor", async ({ mount, page }) => {
+test("selected code offers Add comment instead of opening the editor", async ({ mount, page }) => {
   const root = await mount("components-session-review--interactive-comments")
   const review = root.locator('[data-component="session-review"]')
   const code = review.locator('[data-line-type="change-addition"] [data-diff-span]')
@@ -26,7 +26,7 @@ story("selected code offers Add comment instead of opening the editor", async ({
 })
 
 // Moved from packages/app/e2e/regression/review-line-comment.spec.ts
-story("opens the comment editor when a line number is clicked", async ({ mount }) => {
+test("opens the comment editor when a line number is clicked", async ({ mount }) => {
   const root = await mount("components-session-review--interactive-comments")
   const review = root.locator('[data-component="session-review"]')
   await expect(review.getByText("export const first = 1", { exact: true })).toBeVisible()
@@ -38,7 +38,7 @@ story("opens the comment editor when a line number is clicked", async ({ mount }
 })
 
 // Moved from packages/app/e2e/regression/review-line-comment.spec.ts
-story("opens the comment editor for a line number range", async ({ mount }) => {
+test("opens the comment editor for a line number range", async ({ mount }) => {
   const root = await mount("components-session-review--interactive-comments")
   const review = root.locator('[data-component="session-review"]')
   const first = review.locator('[data-column-number="1"]')
@@ -51,7 +51,7 @@ story("opens the comment editor for a line number range", async ({ mount }) => {
 })
 
 // Moved from packages/app/e2e/regression/review-line-comment.spec.ts
-story("shows a comment button when a diff line is hovered", async ({ mount }) => {
+test("shows a comment button when a diff line is hovered", async ({ mount }) => {
   const root = await mount("components-session-review--interactive-comments")
   const review = root.locator('[data-component="session-review"]')
   const line = review.getByText("export const first = 1", { exact: true })
@@ -65,7 +65,7 @@ story("shows a comment button when a diff line is hovered", async ({ mount }) =>
   await expect(review.locator('[data-slot="line-comment-editor-label"]')).toHaveText("Commenting on line 1")
 })
 
-story("dragging the comment button down the gutter comments on every line it covers", async ({ mount, page }) => {
+test("dragging the comment button down the gutter comments on every line it covers", async ({ mount, page }) => {
   const root = await mount("components-session-review--interactive-comments")
   const review = root.locator('[data-component="session-review"]')
   const comment = review.getByRole("button", { name: "Comment", exact: true, includeHidden: true })
@@ -92,7 +92,7 @@ story("dragging the comment button down the gutter comments on every line it cov
   await expect(review.locator('[data-slot="line-comment-editor-label"]')).toHaveText("Commenting on lines 1-3")
 })
 
-story("keeps typed comment text while other lines and comments are used", async ({ mount, page }) => {
+test("keeps typed comment text while other lines and comments are used", async ({ mount, page }) => {
   const root = await mount("components-session-review--interactive-comments")
   const review = root.locator('[data-component="session-review"]')
   const textbox = review.getByRole("textbox")
@@ -129,7 +129,7 @@ story("keeps typed comment text while other lines and comments are used", async 
   await expect(textbox).toHaveValue("draft text")
 })
 
-story("mentions in a diff comment pick a path, and Escape without a list cancels", async ({ mount }) => {
+test("mentions in a diff comment pick a path, and Escape without a list cancels", async ({ mount }) => {
   const root = await mount("components-session-review--interactive-comments")
   const review = root.locator('[data-component="session-review"]')
   const textbox = review.getByRole("textbox")
@@ -150,7 +150,7 @@ story("mentions in a diff comment pick a path, and Escape without a list cancels
   await expect(textbox).toHaveCount(0)
 })
 
-story("a focus request opens the comment and clears once the comment shows", async ({ mount }) => {
+test("a focus request opens the comment and clears once the comment shows", async ({ mount }) => {
   const root = await mount("components-session-review--focused-comment")
   const comment = root.locator('[data-comment-id="comment-1"]')
   const request = root.locator("output")
@@ -162,7 +162,7 @@ story("a focus request opens the comment and clears once the comment shows", asy
   await expect(request).toHaveText("none")
 })
 
-story("a focus request for a comment that never renders clears after the reveal times out", async ({ mount, page }) => {
+test("a focus request for a comment that never renders clears after the reveal times out", async ({ mount, page }) => {
   const root = await mount("components-session-review--focused-comment")
   const request = root.locator("output")
 

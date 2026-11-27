@@ -1,8 +1,8 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
 const playground = "timeline-playground--playground"
 
-story("a subagent row leads with its status", async ({ mount }) => {
+test("a subagent row leads with its status", async ({ mount }) => {
   const timeline = await mount(playground, { args: { scenario: "Background work", activity: true } })
   const rows = timeline.locator('[data-component="timeline-subagent"] > [data-slot="timeline-event-item"]')
 
@@ -22,7 +22,7 @@ story("a subagent row leads with its status", async ({ mount }) => {
 })
 
 // The timeline is a list of events: a start stays a plain status even while its subagent has not reported back.
-story("a started subagent never spins", async ({ mount }) => {
+test("a started subagent never spins", async ({ mount }) => {
   const timeline = await mount(playground, { args: { scenario: "Subagent between tools", activity: true } })
   const status = timeline.locator('[data-component="timeline-subagent"] [data-slot="timeline-event-item-status"]')
 

@@ -1,6 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("spaces an error between a shell result and expanded updates", async ({ mount }) => {
+test("spaces an error between a shell result and expanded updates", async ({ mount }) => {
   const timeline = await mount("current-session-error-spacing--error-and-updates")
   const shell = timeline.locator('[data-component="bash-output"]')
   const error = timeline.locator('[data-kind="session-error-card"]')
@@ -25,7 +25,7 @@ story("spaces an error between a shell result and expanded updates", async ({ mo
 })
 
 for (const streaming of [false, true]) {
-  story(`renders Mermaid in the ${streaming ? "streaming" : "completed"} timeline`, async ({ mount, page }) => {
+  test(`renders Mermaid in the ${streaming ? "streaming" : "completed"} timeline`, async ({ mount, page }) => {
     await page.setViewportSize({ width: 390, height: 900 })
     const root = await mount("current-session-mermaid--diagrams", { args: { streaming } })
     const timeline = root.locator('[data-component="session-timeline"]')
@@ -48,7 +48,7 @@ for (const streaming of [false, true]) {
   })
 }
 
-story("aligns the retry icon with the error label", async ({ mount }) => {
+test("aligns the retry icon with the error label", async ({ mount }) => {
   const timeline = await mount("current-session-timeline-rows--provider-retry")
   const card = timeline.locator('[data-kind="session-retry-card"]')
   const icon = card.locator('[data-slot="icon-svg"]')
@@ -64,7 +64,7 @@ story("aligns the retry icon with the error label", async ({ mount }) => {
   expect(iconY).toBe(labelY)
 })
 
-story("centers the error icon on the first line of short and wrapped errors", async ({ mount }) => {
+test("centers the error icon on the first line of short and wrapped errors", async ({ mount }) => {
   const timeline = await mount("current-session-error-card--provider-errors")
   const cards = timeline.locator('[data-kind="session-error-card"]')
 
@@ -88,7 +88,7 @@ story("centers the error icon on the first line of short and wrapped errors", as
   geometry.forEach((card) => expect(card.offset).toBeCloseTo(0, 0))
 })
 
-story("links URLs in an error without splitting them at a colon", async ({ mount }) => {
+test("links URLs in an error without splitting them at a colon", async ({ mount }) => {
   const timeline = await mount("current-session-error-card--linked-error")
   const card = timeline.locator('[data-kind="session-error-card"]')
   const url = "http://localhost:11434/api"
@@ -98,7 +98,7 @@ story("links URLs in an error without splitting them at a colon", async ({ mount
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-context-state.spec.ts
-story("preserves a collapsed context group through count and status updates", async ({ mount }) => {
+test("preserves a collapsed context group through count and status updates", async ({ mount }) => {
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "exploration" } })
   const group = timeline.locator('[data-timeline-part-ids="tool_context_read,tool_context_glob"]')
   const trigger = group.locator('[data-slot="collapsible-trigger"]')
@@ -110,7 +110,7 @@ story("preserves a collapsed context group through count and status updates", as
 })
 
 // A failed turn diff load used to look like one still loading, with no way to retry until the row remounted.
-story("offers a retry for a turn diff that failed to load", async ({ mount }) => {
+test("offers a retry for a turn diff that failed to load", async ({ mount }) => {
   const timeline = await mount("current-session-file-changes--turn-change-summary-failed")
   const summary = timeline.locator('[data-slot="session-turn-diffs"]')
   const counts = summary.locator('[data-component="diff-changes"]')
@@ -128,7 +128,7 @@ story("offers a retry for a turn diff that failed to load", async ({ mount }) =>
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-file-projection.spec.ts
-story("renders a completed write through the production file component", async ({ mount }) => {
+test("renders a completed write through the production file component", async ({ mount }) => {
   const timeline = await mount("current-session-file-changes--changing-files", { args: { scenario: "write" } })
   const write = timeline.locator('[data-timeline-part-id="prt_file_projection_write"]')
   const file = write.getByRole("button", { name: /write\.ts/ })
@@ -138,7 +138,7 @@ story("renders a completed write through the production file component", async (
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-file-state.spec.ts
-story("keeps patch file disclosures independent", async ({ mount }) => {
+test("keeps patch file disclosures independent", async ({ mount }) => {
   const timeline = await mount("current-session-file-changes--changing-files", { args: { scenario: "patch" } })
   const wrapper = timeline.locator('[data-timeline-part-id="prt_nested_patch"]')
   const modified = wrapper.locator('[data-scope="apply-patch"] [data-type="update"] [data-slot="accordion-trigger"]')

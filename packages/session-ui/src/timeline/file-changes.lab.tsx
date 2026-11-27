@@ -3,15 +3,15 @@ import { createEffect, createMemo, createSignal, untrack } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { createStore } from "solid-js/store"
 import type { TurnDiffSource, TurnDiffState } from "../context/data"
-import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
+import { CurrentSessionProviders, CurrentSessionTimelineLab } from "../lab/current-session-lab"
 import {
   editThenTestDocument,
   fileChangeLoadingDocument,
   fileChangeRunningDocument,
   multiFilePatchDocument,
   writeFileDocument,
-} from "../storybook/current-session-fixtures"
-import { storyDocument, storyPatchFile, storyTool } from "../storybook/current-session-scenarios"
+} from "../lab/current-session-fixtures"
+import { labDocument, labPatchFile, labTool } from "../lab/current-session-scenarios"
 import type { SessionDocument } from "../document"
 import { SessionTimeline } from "./session-timeline"
 import { ToolDisplay } from "../tools/tool-renderer"
@@ -33,7 +33,7 @@ export default {
 
 export const PreparingAnEdit = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Preparing an edit"
       description="Tool input is still streaming, so the file change presents its loading state."
       document={fileChangeLoadingDocument}
@@ -44,7 +44,7 @@ export const PreparingAnEdit = {
 
 export const ApplyingAnEdit = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Applying an edit"
       description="The file is known and the edit is running, but no completed diff is available yet."
       document={fileChangeRunningDocument}
@@ -55,7 +55,7 @@ export const ApplyingAnEdit = {
 
 export const EditedAndVerified = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Edited and verified"
       description="A completed one-file edit shows its real diff before the focused test and result."
       document={editThenTestDocument}
@@ -68,7 +68,7 @@ export const EditedAndVerified = {
 
 export const PatchedTwoFiles = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Patched two files"
       description="A common implementation step updates one component and adds its focused test."
       document={multiFilePatchDocument}
@@ -80,26 +80,26 @@ export const PatchedTwoFiles = {
 
 const RepeatedEdits = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Repeated edits of one file"
       description="Consecutive improvements to the same source file remain together in one expanded change."
-      document={storyDocument([
-        storyTool(
+      document={labDocument([
+        labTool(
           "tool_grouped_edit_first",
           "edit",
           "completed",
           { path: "src/first.ts", oldString: "one", newString: "two" },
           {
-            metadata: { files: [storyPatchFile("src/first.ts")] },
+            metadata: { files: [labPatchFile("src/first.ts")] },
           },
         ),
-        storyTool(
+        labTool(
           "tool_grouped_edit_second",
           "edit",
           "completed",
           { path: "src/first.ts", oldString: "two", newString: "three" },
           {
-            metadata: { files: [storyPatchFile("src/first.ts")] },
+            metadata: { files: [labPatchFile("src/first.ts")] },
           },
         ),
       ])}
@@ -108,7 +108,7 @@ const RepeatedEdits = {
   ),
 }
 
-function EditSiblingUpdateStory() {
+function EditSiblingUpdateLab() {
   const [state, setState] = createStore({ sibling: false })
 
   const document = createMemo(() => ({
@@ -142,7 +142,7 @@ function EditSiblingUpdateStory() {
   )
 }
 
-const EditWithStreamedSibling = { render: () => <EditSiblingUpdateStory /> }
+const EditWithStreamedSibling = { render: () => <EditSiblingUpdateLab /> }
 
 const ThreeFilePatch = {
   render: () => {
@@ -167,11 +167,11 @@ const ThreeFilePatch = {
     }))
 
     return (
-      <CurrentSessionTimelineStory
+      <CurrentSessionTimelineLab
         title="Update, create, and remove files"
         description="Each changed file can be opened and closed independently."
-        document={storyDocument([
-          storyTool(
+        document={labDocument([
+          labTool(
             "prt_nested_patch",
             "patch",
             "completed",
@@ -187,11 +187,11 @@ const ThreeFilePatch = {
 
 const WrittenSource = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Create a source file"
       description="A completed TypeScript write renders its generated source."
-      document={storyDocument([
-        storyTool("prt_file_projection_write", "write", "completed", {
+      document={labDocument([
+        labTool("prt_file_projection_write", "write", "completed", {
           path: "src/write.ts",
           content: "export const written = true\n",
         }),
@@ -203,13 +203,13 @@ const WrittenSource = {
 
 // A finished turn: the step records which files changed, and the idle marker ends the turn.
 function finishedTurnDocument(files: { file: string; before: string; after: string }[]): SessionDocument {
-  const document = storyDocument([
-    storyTool("tool_turn_shell", "shell", "completed", { command: "bun run format" }, { output: "Formatted" }),
+  const document = labDocument([
+    labTool("tool_turn_shell", "shell", "completed", { command: "bun run format" }, { output: "Formatted" }),
   ])
 
   const step = document.messages.at(-1)
 
-  if (step?.type !== "assistant") throw new Error("Expected the story document to end with a step")
+  if (step?.type !== "assistant") throw new Error("Expected the page document to end with a step")
 
   return {
     ...document,
@@ -235,7 +235,7 @@ function finishedTurnDocument(files: { file: string; before: string; after: stri
 
 export const TurnChangeSummary = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Turn change summary"
       description="Once the turn ends, every file it changed is summarized below it, including changes made by shell commands."
       document={finishedTurnDocument([
@@ -255,7 +255,7 @@ export const TurnChangeSummary = {
 
 export const TurnChangeSummaryOverflow = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Turn change summary with many files"
       description="Past five files, the rest of the turn's changes wait behind Show all."
       document={finishedTurnDocument(
@@ -298,7 +298,7 @@ export const TurnChangeSummaryFailed = {
     const turnDiff = retryableTurnDiff(document)
 
     return (
-      <CurrentSessionTimelineStory
+      <CurrentSessionTimelineLab
         title="Turn change summary that failed to load"
         description="The turn's files stay listed without counts, and Retry loads them again."
         document={document}
@@ -325,14 +325,14 @@ export const AppendingToolCalls = {
     createEffect(() => setState("calls", args.calls))
 
     const files = ["src/a.ts", "src/b.ts"].map((file) => ({
-      ...storyPatchFile(file),
+      ...labPatchFile(file),
       patch: createTwoFilesPatch(file, file, "export const before = true\n", "export const after = true\n"),
     }))
 
     const document = createMemo(() =>
-      storyDocument([
-        storyTool("tool_shell_existing", "shell", "completed", { command: "printf checked" }, { output: "checked" }),
-        storyTool(
+      labDocument([
+        labTool("tool_shell_existing", "shell", "completed", { command: "printf checked" }, { output: "checked" }),
+        labTool(
           "tool_patch_existing",
           "patch",
           "completed",
@@ -342,7 +342,7 @@ export const AppendingToolCalls = {
           },
         ),
         ...Array.from({ length: state.calls }, (_, index) =>
-          storyTool(
+          labTool(
             `tool_patch_next_${index}`,
             "patch",
             "completed",
@@ -378,7 +378,7 @@ export const ChangingFiles = {
 
 export const CreatedANewFile = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Created a new file"
       description="A completed write renders the generated Markdown file through the production file viewer."
       document={writeFileDocument}
@@ -405,7 +405,7 @@ export const FileToolFallbacks = {
         <button type="button" onClick={() => setState("completed", true)}>
           Complete file tool
         </button>
-        <CurrentSessionProviders document={storyDocument([])}>
+        <CurrentSessionProviders document={labDocument([])}>
           <ToolDisplay
             id="tool_file_fallback"
             tool={args.tool}

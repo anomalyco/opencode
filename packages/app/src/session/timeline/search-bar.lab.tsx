@@ -1,6 +1,6 @@
 import type { SessionMessageInfo } from "@opencode/client/promise"
 import type { SessionDocument } from "@opencode/session-ui/document"
-import { CurrentSessionProviders, emptySessionDocument, STORY_MODEL, STORY_TIME } from "@opencode/session-ui/storybook"
+import { CurrentSessionProviders, emptySessionDocument, LAB_MODEL, LAB_TIME } from "@opencode/session-ui/lab"
 import { SessionTimeline } from "@opencode/session-ui/timeline"
 import { Button } from "@opencode/ui/button"
 import { createEffect, createSignal, on, Show } from "solid-js"
@@ -29,21 +29,21 @@ const turns = [
 const transcript: SessionDocument = {
   ...emptySessionDocument,
   messages: turns.flatMap(([question, answer], index): SessionMessageInfo[] => [
-    { id: `prompt_${index}`, type: "user", text: question, time: { created: STORY_TIME + index * 60_000 } },
+    { id: `prompt_${index}`, type: "user", text: question, time: { created: LAB_TIME + index * 60_000 } },
     {
       id: `answer_${index}`,
       type: "assistant",
       agent: "build",
-      model: STORY_MODEL,
+      model: LAB_MODEL,
       content: [{ type: "text", text: answer }],
-      time: { created: STORY_TIME + index * 60_000 + 1000, completed: STORY_TIME + index * 60_000 + 2000 },
+      time: { created: LAB_TIME + index * 60_000 + 1000, completed: LAB_TIME + index * 60_000 + 2000 },
     },
   ]),
 }
 
 type Args = { query: string; open: boolean; empty: boolean }
 
-function FindStory(props: Args) {
+function FindLab(props: Args) {
   const document = () => (props.empty ? emptySessionDocument : transcript)
 
   const [scroll, setScroll] = createSignal<HTMLDivElement>()
@@ -108,7 +108,7 @@ export default {
   title: "OpenCode/Session/Find in transcript",
   id: "session-transcript-find",
   args: { query: "trail", open: true, empty: false } satisfies Args,
-  render: (args: Args) => <FindStory {...args} />,
+  render: (args: Args) => <FindLab {...args} />,
 }
 
 export const Matches = {}

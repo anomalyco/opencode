@@ -1,4 +1,4 @@
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const modules = {
   fixture: sourceURL(new URL("./plugin-host.fixture.tsx", import.meta.url)),
@@ -6,12 +6,12 @@ const modules = {
   renderer: sourceURL(new URL("../../gui-plugins/src/debug/renderer.tsx", import.meta.url)),
 }
 
-story.beforeEach(async ({ mount }) => {
+test.beforeEach(async ({ mount }) => {
   await mount("ui-line-comment--editor")
 })
 
 // Reloads and updates are fresh mounts over the same storage, so a mount seeded with what the last one wrote is one.
-story("the debug bar stays open across a remount until its close button hides it", async ({ page }) => {
+test("the debug bar stays open across a remount until its close button hides it", async ({ page }) => {
   const result = await page.evaluate(async (modules) => {
     const { mountPlugins, until } = await import(modules.fixture)
     const debug = await import(modules.debug)
@@ -52,7 +52,7 @@ story("the debug bar stays open across a remount until its close button hides it
   expect(result).toEqual({ opened: true, saved: { visible: false, motion: false }, reopened: false })
 })
 
-story("running memory diagnostics pin the bar without a close button, and its Knobs still open", async ({ page }) => {
+test("running memory diagnostics pin the bar without a close button, and its Knobs still open", async ({ page }) => {
   const result = await page.evaluate(async (modules) => {
     const { mountPlugins, until } = await import(modules.fixture)
     const debug = await import(modules.debug)
@@ -83,7 +83,7 @@ story("running memory diagnostics pin the bar without a close button, and its Kn
   expect(result).toEqual({ close: false, knobs: true })
 })
 
-story("a feature page's Enabled switch turns that feature on after another feature's page", async ({ page }) => {
+test("a feature page's Enabled switch turns that feature on after another feature's page", async ({ page }) => {
   const result = await page.evaluate(
     async (modules) => {
       localStorage.setItem("opencode.motion.panel", JSON.stringify({ x: 0, y: 0, width: 680 }))
@@ -129,7 +129,7 @@ story("a feature page's Enabled switch turns that feature on after another featu
   expect(result).toEqual({ first: false, second: true })
 })
 
-story("a feature page's preset chips go through the feature model, modes included", async ({ page }) => {
+test("a feature page's preset chips go through the feature model, modes included", async ({ page }) => {
   const result = page.evaluate(
     async (modules) => {
       localStorage.setItem("opencode.motion.panel", JSON.stringify({ x: 0, y: 0, width: 680 }))

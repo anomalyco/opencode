@@ -6,7 +6,7 @@ type Phase = "editing" | "required" | "rejected" | "submitting" | "accepted"
 
 type Args = { value: string; phase: Phase; rejection: string }
 
-const callback = "http://localhost/callback?code=story-example"
+const callback = "http://localhost/callback?code=lab-example"
 
 function Preview(props: Args) {
   const [phase, setPhase] = createSignal(props.phase)

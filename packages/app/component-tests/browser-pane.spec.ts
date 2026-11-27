@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test"
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 
@@ -17,8 +17,8 @@ const pinPlatform = (page: Page, platform: string) =>
     Object.defineProperty(navigator, "platform", { value, configurable: true })
   }, platform)
 
-story.beforeEach(async ({ mount, page }) => {
-  // Any story loads the app styles; the fixture mounts the pane beside it on the real host embeds.
+test.beforeEach(async ({ mount, page }) => {
+  // Any page loads the app styles; the fixture mounts the pane beside it on the real host embeds.
   await mount("ui-line-comment--editor")
   await mountPane(page)
   await expect(page.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
@@ -46,7 +46,7 @@ async function mountPane(page: Page) {
   }, modules)
 }
 
-story("reviews the actual application target only after a trusted click", async ({ page }) => {
+test("reviews the actual application target only after a trusted click", async ({ page }) => {
   const sanitizer = sourceURL(new URL("../../session-ui/src/components/markdown-cache.tsx", import.meta.url))
   const url = "obsidian://open?vault=test&file=report"
   await page.evaluate(async ({ sanitizer, url }) => {
@@ -98,7 +98,7 @@ story("reviews the actual application target only after a trusted click", async 
   await expect(open).toHaveCount(0)
 })
 
-story("accepts an assistive activation of the focused link, not a synthetic or unfocused one", async ({ page }) => {
+test("accepts an assistive activation of the focused link, not a synthetic or unfocused one", async ({ page }) => {
   const sanitizer = sourceURL(new URL("../../session-ui/src/components/markdown-cache.tsx", import.meta.url))
   // A phone link keeps its href, so Chromium activates it on Enter.
   const url = "tel:+15555550100"
@@ -137,7 +137,7 @@ story("accepts an assistive activation of the focused link, not a synthetic or u
   await expect(pane.getByRole("status").filter({ hasText: "From the conversation" })).toContainText(url)
 })
 
-story("reviews an application link that carries download, and leaves a web download to the document", async ({ page }) => {
+test("reviews an application link that carries download, and leaves a web download to the document", async ({ page }) => {
   const sanitizer = sourceURL(new URL("../../session-ui/src/components/markdown-cache.tsx", import.meta.url))
   await page.evaluate(async (sanitizer) => {
     const { enableMarkdownAppLinks, sanitizeMarkdown } = await import(sanitizer)
@@ -171,7 +171,7 @@ story("reviews an application link that carries download, and leaves a web downl
   await expect(notice).toContainText("obsidian://open?vault=download")
 })
 
-story("opens a mail link in the system mail app, never in the pane", async ({ page }) => {
+test("opens a mail link in the system mail app, never in the pane", async ({ page }) => {
   const sanitizer = sourceURL(new URL("../../session-ui/src/components/markdown-cache.tsx", import.meta.url))
   const url = "mailto:hello@example.invalid?subject=Report"
   await page.evaluate(async ({ sanitizer, url }) => {
@@ -190,7 +190,7 @@ story("opens a mail link in the system mail app, never in the pane", async ({ pa
   await expect(page.locator("#browser-panel").getByRole("status").filter({ hasText: "From the conversation" })).toHaveCount(0)
 })
 
-story("moves the native page when a fixed-size pane changes position", async ({ page }) => {
+test("moves the native page when a fixed-size pane changes position", async ({ page }) => {
   const native = page.getByTestId("native-Alpha")
   const x = Number(await native.getAttribute("data-x"))
   const calls = Number(await native.getAttribute("data-layout-calls"))
@@ -203,7 +203,7 @@ story("moves the native page when a fixed-size pane changes position", async ({ 
   await expect(native).toHaveAttribute("data-layout-calls", String(calls + 1))
 })
 
-story("reconnects the observation spine after its panel reattaches", async ({ page }) => {
+test("reconnects the observation spine after its panel reattaches", async ({ page }) => {
   const native = page.getByTestId("native-Alpha")
   const x = Number(await native.getAttribute("data-x"))
 
@@ -223,7 +223,7 @@ story("reconnects the observation spine after its panel reattaches", async ({ pa
   await expect(native).toHaveAttribute("data-x", String(x - 31))
 })
 
-story("a spinner inside a persistent floating surface does not measure the pane each frame", async ({ page }) => {
+test("a spinner inside a persistent floating surface does not measure the pane each frame", async ({ page }) => {
   const native = page.getByTestId("native-Alpha")
 
   const reads = await page.locator("#browser-panel").evaluate(async (panel) => {
@@ -258,7 +258,7 @@ story("a spinner inside a persistent floating surface does not measure the pane 
   await expect(native).toHaveAttribute("data-visible", "true")
 })
 
-story("stops measuring the pane once a finite animation ends or is cancelled", async ({ page }) => {
+test("stops measuring the pane once a finite animation ends or is cancelled", async ({ page }) => {
   const native = page.getByTestId("native-Alpha")
   const x = Number(await native.getAttribute("data-x"))
 
@@ -302,7 +302,7 @@ story("stops measuring the pane once a finite animation ends or is cancelled", a
   await expect(native).toHaveAttribute("data-x", String(x - 20))
 })
 
-story("does not measure when the pane's own still enters or leaves its box", async ({ page }) => {
+test("does not measure when the pane's own still enters or leaves its box", async ({ page }) => {
   const reads = await page.locator("#browser-panel").evaluate(async (panel) => {
     const box = panel.querySelector<HTMLElement>('[data-component="browser-preview"] > :first-child')!
     const rect = box.getBoundingClientRect.bind(box)
@@ -327,7 +327,7 @@ story("does not measure when the pane's own still enters or leaves its box", asy
   expect(reads).toBe(0)
 })
 
-story("hides the page when a portalled surface grows over it by a text edit alone", async ({ page }) => {
+test("hides the page when a portalled surface grows over it by a text edit alone", async ({ page }) => {
   const native = page.getByTestId("native-Alpha")
   await page.emulateMedia({ reducedMotion: "reduce" })
 
@@ -352,7 +352,7 @@ story("hides the page when a portalled surface grows over it by a text edit alon
   await expect(native).toHaveAttribute("data-visible", "false")
 })
 
-story("covers the page with unmarked portalled surfaces but not tooltips or transparent wrappers", async ({ page }) => {
+test("covers the page with unmarked portalled surfaces but not tooltips or transparent wrappers", async ({ page }) => {
   const native = page.getByTestId("native-Alpha")
 
   const portal = await page.locator("#browser-panel").evaluateHandle((panel) => {
@@ -379,7 +379,7 @@ story("covers the page with unmarked portalled surfaces but not tooltips or tran
   await expect(native).toHaveAttribute("data-visible", "true")
 })
 
-story("covers the page with an app dialog's backdrop for as long as the backdrop is there", async ({ mount, page }) => {
+test("covers the page with an app dialog's backdrop for as long as the backdrop is there", async ({ mount, page }) => {
   // The fixture reports no open dialog to the embeds, and the dialog was portalled before the pane: only the marked
   // backdrop itself covers the page, independent of the dialog stack's open state, which ends as the exit starts.
   await mount("ui-dialog--with-popups")
@@ -394,7 +394,7 @@ story("covers the page with an app dialog's backdrop for as long as the backdrop
   await expect(native).toHaveAttribute("data-visible", "true")
 })
 
-story("tracks a fixed-size pane through a sibling resize, ancestor scroll and animation", async ({ page }) => {
+test("tracks a fixed-size pane through a sibling resize, ancestor scroll and animation", async ({ page }) => {
   const pane = page.locator("#browser-panel")
   const native = page.getByTestId("native-Alpha")
   const x = Number(await native.getAttribute("data-x"))
@@ -424,7 +424,7 @@ story("tracks a fixed-size pane through a sibling resize, ancestor scroll and an
   await expect(native).toHaveAttribute("data-x", String(x + 29))
 })
 
-story("hides a native page when another takes the pane, the pane hides, or it unmounts", async ({ page }) => {
+test("hides a native page when another takes the pane, the pane hides, or it unmounts", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const alpha = root.getByTestId("native-Alpha")
   const beta = root.getByTestId("native-Beta")
@@ -444,7 +444,7 @@ story("hides a native page when another takes the pane, the pane hides, or it un
   await expect(alpha).toHaveAttribute("data-visible", "false")
 })
 
-story("hides the native view immediately while the pane stays mounted", async ({ page }) => {
+test("hides the native view immediately while the pane stays mounted", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const toggle = root.getByRole("button", { name: "Toggle Review tab", exact: true })
   await expect(toggle).toBeEnabled()
@@ -462,7 +462,7 @@ story("hides the native view immediately while the pane stays mounted", async ({
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
 })
 
-story("updates the selected match while the same find field stays focused", async ({ page }) => {
+test("updates the selected match while the same find field stays focused", async ({ page }) => {
   const pane = page.locator("#browser-panel")
   await pane.getByRole("button", { name: "Browser options" }).click()
   await page.getByRole("menuitem", { name: "Find in page" }).click()
@@ -477,7 +477,7 @@ story("updates the selected match while the same find field stays focused", asyn
   await expect(field).toHaveCount(0)
 })
 
-story("paints a still of the page in place of the native view while a panel moves", async ({ page }) => {
+test("paints a still of the page in place of the native view while a panel moves", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const motion = root.getByRole("button", { name: "Toggle panel motion", exact: true })
   const pane = root.getByRole("button", { name: "Toggle Review tab", exact: true })
@@ -509,7 +509,7 @@ story("paints a still of the page in place of the native view while a panel move
   await expect(still).toHaveCount(0)
 })
 
-story("paints a still of the page in place of the native view while a resize handle is dragged", async ({ page }) => {
+test("paints a still of the page in place of the native view while a resize handle is dragged", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const handle = root.getByTestId("pane-resize-handle")
   const native = root.getByTestId("native-Alpha")
@@ -546,7 +546,7 @@ story("paints a still of the page in place of the native view while a resize han
 })
 
 for (const platform of ["MacIntel", "Win32"]) {
-  story(`keeps the native view live through a press, a drag and the release of a resize handle on ${platform}`, async ({ page }) => {
+  test(`keeps the native view live through a press, a drag and the release of a resize handle on ${platform}`, async ({ page }) => {
     const root = page.getByTestId("browser-pane-fixture")
     const handle = root.getByTestId("pane-resize-handle")
     const native = root.getByTestId("native-Alpha")
@@ -598,7 +598,7 @@ for (const platform of ["MacIntel", "Win32"]) {
   })
 }
 
-story("shows the native view again when the window loses focus mid-drag", async ({ page }) => {
+test("shows the native view again when the window loses focus mid-drag", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const handle = root.getByTestId("pane-resize-handle")
   const native = root.getByTestId("native-Alpha")
@@ -622,7 +622,7 @@ story("shows the native view again when the window loses focus mid-drag", async 
   expect(await handle.evaluate(() => document.body.style.userSelect)).toBe("")
 })
 
-story("never flies a still of a page the tab has navigated away from", async ({ page }) => {
+test("never flies a still of a page the tab has navigated away from", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const motion = root.getByRole("button", { name: "Toggle panel motion", exact: true })
   const native = root.getByTestId("native-Alpha")
@@ -647,7 +647,7 @@ story("never flies a still of a page the tab has navigated away from", async ({ 
   await expect(still).toBeVisible()
 })
 
-story("refreshes page stills by the window's focus, not the document's", async ({ page }) => {
+test("refreshes page stills by the window's focus, not the document's", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const captures = async () => Number((await root.getByText(/^Captures: \d+$/).textContent())?.split(": ")[1])
   await page.clock.install()
@@ -666,7 +666,7 @@ story("refreshes page stills by the window's focus, not the document's", async (
   await expect(root.getByText(`Captures: ${paused + 1}`, { exact: true })).toBeVisible()
 })
 
-story("keeps a still of the page under floating content that covers it", async ({ page }) => {
+test("keeps a still of the page under floating content that covers it", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const still = root.locator("#browser-panel img")
   const native = root.getByTestId("native-Alpha")
@@ -703,7 +703,7 @@ story("keeps a still of the page under floating content that covers it", async (
   await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
 })
 
-story("covers the page with its warm still only once the capture is back, and through the thaw", async ({ page }) => {
+test("covers the page with its warm still only once the capture is back, and through the thaw", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const still = root.locator("#browser-panel img")
   const native = root.getByTestId("native-Alpha")
@@ -758,7 +758,7 @@ story("covers the page with its warm still only once the capture is back, and th
   await expect(still).toHaveCount(0)
 })
 
-story(
+test(
   "freezes on the latest capture when floating content closes and reopens before a capture lands",
   async ({ page }) => {
     const root = page.getByTestId("browser-pane-fixture")
@@ -785,7 +785,7 @@ story(
   },
 )
 
-story("keeps a still of the page under an open dialog instead of blanking the pane", async ({ page }) => {
+test("keeps a still of the page under an open dialog instead of blanking the pane", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const still = root.locator("#browser-panel img")
   const native = root.getByTestId("native-Alpha")
@@ -814,7 +814,7 @@ story("keeps a still of the page under an open dialog instead of blanking the pa
   await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
 })
 
-story("hides the native page under a dialog even when its still never arrives", async ({ page }) => {
+test("hides the native page under a dialog even when its still never arrives", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const native = root.getByTestId("native-Alpha")
   const toggle = root.getByRole("button", { name: "Toggle dialog", exact: true })
@@ -834,7 +834,7 @@ story("hides the native page under a dialog even when its still never arrives", 
   await expect(native).toHaveAttribute("data-visible", "true")
 })
 
-story("comments on a picked element over a still of the page", async ({ page }) => {
+test("comments on a picked element over a still of the page", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("combobox", { name: "Picked element scenario" }).selectOption("zoomed")
   const picker = commentTool(root)
@@ -886,7 +886,7 @@ story("comments on a picked element over a still of the page", async ({ page }) 
   ])
 })
 
-story("cancels the picker and a comment with Escape", async ({ page }) => {
+test("cancels the picker and a comment with Escape", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const picker = commentTool(root)
   await picker.click()
@@ -905,7 +905,7 @@ story("cancels the picker and a comment with Escape", async ({ page }) => {
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
 })
 
-story("leaves the picker off and Escape to the app when main never answers", async ({ page }) => {
+test("leaves the picker off and Escape to the app when main never answers", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const picker = commentTool(root)
   await root.getByRole("button", { name: "Drop picker requests", exact: true }).click()
@@ -919,7 +919,7 @@ story("leaves the picker off and Escape to the app when main never answers", asy
   await expect(address).not.toBeFocused()
 })
 
-story("replaces an open page note with the comment for an element picked meanwhile", async ({ page }) => {
+test("replaces an open page note with the comment for an element picked meanwhile", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await addPage(page, root)
   await expect(root.locator('[data-slot="browser-comment-editor"] textarea')).toBeFocused()
@@ -929,7 +929,7 @@ story("replaces an open page note with the comment for an element picked meanwhi
   await expect(root.locator('[data-slot="browser-comment-editor"]')).toContainText("button.primary")
 })
 
-story("cleans up the originating session's picker and comment after a session switch", async ({ page }) => {
+test("cleans up the originating session's picker and comment after a session switch", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const picker = commentTool(root)
   await picker.click()
@@ -949,7 +949,7 @@ story("cleans up the originating session's picker and comment after a session sw
   await expect(root.getByText("Highlight owners: Alpha", { exact: true })).toBeVisible()
 })
 
-story("ends the native picker and highlight when the pane unmounts", async ({ page }) => {
+test("ends the native picker and highlight when the pane unmounts", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const picker = commentTool(root)
   await picker.click()
@@ -967,7 +967,7 @@ story("ends the native picker and highlight when the pane unmounts", async ({ pa
   await expect(root.getByText("Highlights: clear", { exact: true })).toBeVisible()
 })
 
-story("keeps a comment draft but drops its ref when the page navigates", async ({ page }) => {
+test("keeps a comment draft but drops its ref when the page navigates", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await commentTool(root).click()
   await root.getByRole("button", { name: "Pick element", exact: true }).click()
@@ -981,7 +981,7 @@ story("keeps a comment draft but drops its ref when the page navigates", async (
   )
 })
 
-story("grows the compact comment upward without flipping and keeps its actions inside the page", async ({ page }) => {
+test("grows the compact comment upward without flipping and keeps its actions inside the page", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("combobox", { name: "Picked element scenario" }).selectOption("low")
   await commentTool(root).click()
@@ -1058,7 +1058,7 @@ story("grows the compact comment upward without flipping and keeps its actions i
   await expect(submit).toBeInViewport()
 })
 
-story(
+test(
   "wraps the selector, attaches elements without comments, and cancels only empty drafts on clickaway",
   async ({ page }) => {
     const root = page.getByTestId("browser-pane-fixture")
@@ -1122,7 +1122,7 @@ story(
   },
 )
 
-story("shows the empty state over a blank native page and restores navigation", async ({ page }) => {
+test("shows the empty state over a blank native page and restores navigation", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Blank page", exact: true }).click()
   await expect(root.getByText("Open a page", { exact: true })).toBeVisible()
@@ -1140,7 +1140,7 @@ story("shows the empty state over a blank native page and restores navigation", 
   await expect(root.getByRole("button", { name: "Reload", exact: true })).toBeEnabled()
 })
 
-story("keeps Stop available and hides the empty state while a blank page loads", async ({ page }) => {
+test("keeps Stop available and hides the empty state while a blank page loads", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Loading page", exact: true }).click()
   await expect(root.getByText("Open a page", { exact: true })).toBeHidden()
@@ -1149,7 +1149,7 @@ story("keeps Stop available and hides the empty state while a blank page loads",
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
 })
 
-story("keeps the submitted URL visible until the browser reports navigation", async ({ page }) => {
+test("keeps the submitted URL visible until the browser reports navigation", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Blank page", exact: true }).click()
   await root.getByRole("button", { name: "Delay navigation", exact: true }).click()
@@ -1177,13 +1177,13 @@ story("keeps the submitted URL visible until the browser reports navigation", as
   await expect(address).toHaveValue("https://example.com/")
 })
 
-story("restores the current URL each time the same submitted navigation is blocked", async ({ page }) => {
+test("restores the current URL each time the same submitted navigation is blocked", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Delay navigation", exact: true }).click()
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
 
   for (const submission of [1, 2]) {
-    await story.step(`blocked submission ${submission}`, async () => {
+    await test.step(`blocked submission ${submission}`, async () => {
       await address.fill("https://blocked.example/")
       await address.press("Enter")
       await expect(address).toHaveValue("https://blocked.example/")
@@ -1195,7 +1195,7 @@ story("restores the current URL each time the same submitted navigation is block
   }
 })
 
-story("explains why a typed address cannot open instead of searching for it", async ({ page }) => {
+test("explains why a typed address cannot open instead of searching for it", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
 
@@ -1210,7 +1210,7 @@ story("explains why a typed address cannot open instead of searching for it", as
   }
 })
 
-story("shows a themed failure state for only the failed tab and allows retry", async ({ page }) => {
+test("shows a themed failure state for only the failed tab and allows retry", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Failed page", exact: true }).click()
   // The page area alone explains a load that failed: what happened in plain words, what to do, and Chromium's code
@@ -1236,7 +1236,7 @@ story("shows a themed failure state for only the failed tab and allows retry", a
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
 })
 
-story("a command that did not work says what was tried above the page and offers it again", async ({ page }) => {
+test("a command that did not work says what was tried above the page and offers it again", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Fail next command", exact: true }).click()
   await root.getByRole("button", { name: "Reload", exact: true }).click()
@@ -1251,7 +1251,7 @@ story("a command that did not work says what was tried above the page and offers
   await expect(notice).toHaveCount(0)
 })
 
-story("returns a failed tab to the empty state when an empty URL is submitted", async ({ page }) => {
+test("returns a failed tab to the empty state when an empty URL is submitted", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Failed page", exact: true }).click()
   await expect(root.getByText("This site can't be reached", { exact: true })).toBeVisible()
@@ -1271,7 +1271,7 @@ story("returns a failed tab to the empty state when an empty URL is submitted", 
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
 })
 
-story("selects the full URL when the address field gains focus", async ({ page }) => {
+test("selects the full URL when the address field gains focus", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.click()
@@ -1292,7 +1292,7 @@ story("selects the full URL when the address field gains focus", async ({ page }
     .toBe(true)
 })
 
-story("draws only the address at rest when focus leaves the window with the field selected", async ({ page }) => {
+test("draws only the address at rest when focus leaves the window with the field selected", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.click()
@@ -1337,7 +1337,7 @@ story("draws only the address at rest when focus leaves the window with the fiel
   expect(changed).toBe(0)
 })
 
-story("keeps the current page visible while a submitted URL loads", async ({ page }) => {
+test("keeps the current page visible while a submitted URL loads", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Delay navigation", exact: true }).click()
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
@@ -1354,7 +1354,7 @@ story("keeps the current page visible while a submitted URL loads", async ({ pag
   await expect(address).toHaveValue("https://example.com/")
 })
 
-story("keeps the current page and restores its URL when an empty address is submitted", async ({ page }) => {
+test("keeps the current page and restores its URL when an empty address is submitted", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.fill("")
@@ -1366,7 +1366,7 @@ story("keeps the current page and restores its URL when an empty address is subm
   await expect(root.getByRole("button", { name: "Reload", exact: true })).toBeEnabled()
 })
 
-story("lists the typed text with visited pages, and opens the first row: the page the typing completes, else the text", async ({ page }) => {
+test("lists the typed text with visited pages, and opens the first row: the page the typing completes, else the text", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Seed history", exact: true }).click()
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
@@ -1399,7 +1399,7 @@ story("lists the typed text with visited pages, and opens the first row: the pag
   await expect(address).toHaveValue("https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Colors/Color_format_converter")
 })
 
-story("finds imported pages by their words, completes the site a host begins, and forgets a page on Shift+Delete", async ({ page }) => {
+test("finds imported pages by their words, completes the site a host begins, and forgets a page on Shift+Delete", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Seed imported history", exact: true }).click()
   await expect(root.getByText("Main history: 59", { exact: true })).toBeVisible()
@@ -1459,7 +1459,7 @@ story("finds imported pages by their words, completes the site a host begins, an
   await expect(address).toHaveValue("https://github.com/")
 })
 
-story("keeps the first row chosen and moves through the list with Chrome's keys", async ({ page }) => {
+test("keeps the first row chosen and moves through the list with Chrome's keys", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Seed imported history", exact: true }).click()
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
@@ -1538,7 +1538,7 @@ story("keeps the first row chosen and moves through the list with Chrome's keys"
   await expect(address).not.toBeFocused()
 })
 
-story("keeps the address bar working, and says so, while main's history cannot be read or cleared", async ({ page }) => {
+test("keeps the address bar working, and says so, while main's history cannot be read or cleared", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Seed history", exact: true }).click()
   await root.getByRole("button", { name: "Seed imported history", exact: true }).click()
@@ -1574,7 +1574,7 @@ story("keeps the address bar working, and says so, while main's history cannot b
   await expect(root.getByText("Main history: 0", { exact: true })).toBeVisible()
 })
 
-story("lists recent pages on a blank tab and opens one", async ({ page }) => {
+test("lists recent pages on a blank tab and opens one", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await root.getByRole("button", { name: "Seed history", exact: true }).click()
@@ -1596,7 +1596,7 @@ story("lists recent pages on a blank tab and opens one", async ({ page }) => {
   await expect(address).toHaveValue("http://localhost:5173/settings")
 })
 
-story("keeps a page note editable beside a tiny viewport and attaches it to the session", async ({ page }) => {
+test("keeps a page note editable beside a tiny viewport and attaches it to the session", async ({ page }) => {
   const { root, viewport, width, height } = viewportControls(page)
   await viewport.click()
   await width.fill("8")
@@ -1615,7 +1615,7 @@ story("keeps a page note editable beside a tiny viewport and attaches it to the 
   await expect(root.getByTestId("fixture-comments").getByRole("listitem")).toHaveText([/: Check the header layout$/])
 })
 
-story("adds the whole page to the session and keeps the draft when the button is pressed again", async ({ page }) => {
+test("adds the whole page to the session and keeps the draft when the button is pressed again", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await addPage(page, root)
   const editor = root.locator('[data-slot="browser-comment-editor"] textarea')
@@ -1629,7 +1629,7 @@ story("adds the whole page to the session and keeps the draft when the button is
   await expect(root.getByTestId("fixture-comments").getByRole("listitem")).toHaveText([/: Check the header layout$/])
 })
 
-story("shows the page's cookies in the site information and clears them", async ({ page }) => {
+test("shows the page's cookies in the site information and clears them", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Site information", exact: true }).click()
   const site = page.getByRole("dialog")
@@ -1640,7 +1640,7 @@ story("shows the page's cookies in the site information and clears them", async 
   await expect(site.getByText("0 cookies", { exact: true })).toBeVisible()
 })
 
-story("site information opens on the site and its connection, with the rest one step away", async ({ page }) => {
+test("site information opens on the site and its connection, with the rest one step away", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Site information", exact: true }).click()
   const site = page.getByRole("dialog")
@@ -1664,7 +1664,7 @@ story("site information opens on the site and its connection, with the rest one 
   await expect(site).toBeHidden()
 })
 
-story("says a failed cookie read failed and reads again on retry", async ({ page }) => {
+test("says a failed cookie read failed and reads again on retry", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Fail next site read", exact: true }).click()
   await root.getByRole("button", { name: "Site information", exact: true }).click()
@@ -1678,7 +1678,7 @@ story("says a failed cookie read failed and reads again on retry", async ({ page
   await expect(site.getByRole("button", { name: "Clear", exact: true })).toBeEnabled()
 })
 
-story("Browser options keeps its original hand-off target until dismissed", async ({ page }) => {
+test("Browser options keeps its original hand-off target until dismissed", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Browser options" }).click()
   await page.getByRole("menuitem", { name: "More tools", exact: true }).click()
@@ -1690,7 +1690,7 @@ story("Browser options keeps its original hand-off target until dismissed", asyn
   await expect(root.getByText("External:", { exact: true })).toBeAttached()
 })
 
-story("Browser options says why a disabled hand-off is unavailable", async ({ page }) => {
+test("Browser options says why a disabled hand-off is unavailable", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Blank page", includeHidden: true }).dispatchEvent("click")
   await root.getByRole("button", { name: "Browser options" }).click()
@@ -1740,7 +1740,7 @@ async function expectSize(native: Locator, width: number, height: number) {
   await expect(native).toHaveAttribute("data-height", String(height))
 }
 
-story("zooms the page from the browser options in view and keeps its zoom in the address field", async ({ page }) => {
+test("zooms the page from the browser options in view and keeps its zoom in the address field", async ({ page }) => {
   const { root, controls, viewport, preset, option, scale } = viewportControls(page)
   await viewport.click()
   await preset.click()
@@ -1766,7 +1766,7 @@ story("zooms the page from the browser options in view and keeps its zoom in the
   await expect(preset).toBeEnabled()
 })
 
-story("restores the full pane when the toolbar closes and keeps the selected device on reopen", async ({ page }) => {
+test("restores the full pane when the toolbar closes and keeps the selected device on reopen", async ({ page }) => {
   const { root, controls, viewport, preset, option, moreDevices, width, height } = viewportControls(page)
 
   const native = root.getByTestId("native-Alpha")
@@ -1818,7 +1818,7 @@ story("restores the full pane when the toolbar closes and keeps the selected dev
   await expect(mini).not.toBeChecked()
 })
 
-story("fits an exact viewport while resizing and rejects invalid edits", async ({ page }) => {
+test("fits an exact viewport while resizing and rejects invalid edits", async ({ page }) => {
   const { root, viewport, preset, option, scale, width, height } = viewportControls(page)
 
   const native = root.getByTestId("native-Alpha")
@@ -1859,7 +1859,7 @@ story("fits an exact viewport while resizing and rejects invalid edits", async (
   await expect(native).toHaveAttribute("data-width", "624")
 })
 
-story("resizes a device with the RTL side grip by pointer and keyboard", async ({ page }) => {
+test("resizes a device with the RTL side grip by pointer and keyboard", async ({ page }) => {
   const { root, viewport, preset, option, scale, width, height } = viewportControls(page)
   await root.evaluate((element) => element.setAttribute("dir", "rtl"))
   await viewport.click()
@@ -1902,7 +1902,7 @@ story("resizes a device with the RTL side grip by pointer and keyboard", async (
   await expect(bottomGrip).toHaveCSS("outline-offset", "-2px")
 })
 
-story("pins the responsive dimensions when a manual preview scale is selected", async ({ page }) => {
+test("pins the responsive dimensions when a manual preview scale is selected", async ({ page }) => {
   const { root, viewport, preset, option, scale, width, height } = viewportControls(page)
 
   const native = root.getByTestId("native-Alpha")
@@ -1941,7 +1941,7 @@ story("pins the responsive dimensions when a manual preview scale is selected", 
   await expectSize(native, 120, 80)
 })
 
-story("keeps the selected device and its rotated viewport with its browser tab", async ({ page }) => {
+test("keeps the selected device and its rotated viewport with its browser tab", async ({ page }) => {
   const { root, viewport, preset, moreDevices, option, width, height, scale, rotate } = viewportControls(page)
 
   const switchTab = root.getByRole("button", { name: "Switch browser tab", exact: true })
@@ -1992,7 +1992,7 @@ story("keeps the selected device and its rotated viewport with its browser tab",
   await expect(pixel).toBeChecked()
 })
 
-story("the zoom row sits on the lines the other rows use, and Left and Right move between its buttons", async ({ page }) => {
+test("the zoom row sits on the lines the other rows use, and Left and Right move between its buttons", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Browser options", exact: true }).click()
   await expect(page.getByRole("menuitem", { name: "Zoom in", exact: true })).toBeVisible()
@@ -2042,7 +2042,7 @@ story("the zoom row sits on the lines the other rows use, and Left and Right mov
   await expect(page.getByRole("menuitem", { name: "Copy link", exact: true })).toBeFocused()
 })
 
-story("shows a page dialog in the pane instead of the page, and answers it with Escape", async ({ page }) => {
+test("shows a page dialog in the pane instead of the page, and answers it with Escape", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const native = root.getByTestId("native-Alpha")
   // The fixture's controls sit below the pane, outside the viewport.
@@ -2060,7 +2060,7 @@ story("shows a page dialog in the pane instead of the page, and answers it with 
   await expect(native).toHaveAttribute("data-visible", "true")
 })
 
-story("asks for a site's permission in a bar while the page stays usable", async ({ page }) => {
+test("asks for a site's permission in a bar while the page stays usable", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Permission request", exact: true }).evaluate((element: HTMLElement) => element.click())
   const bar = root.getByRole("alertdialog", { name: "Site permission request" })
@@ -2080,7 +2080,7 @@ story("asks for a site's permission in a bar while the page stays usable", async
   await expect(bar).toBeHidden()
 })
 
-story("starts the bar's input protection over when the page asks again", async ({ page }) => {
+test("starts the bar's input protection over when the page asks again", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Permission request", exact: true }).evaluate((element: HTMLElement) => element.click())
   const bar = root.getByRole("alertdialog", { name: "Site permission request" })
@@ -2101,7 +2101,7 @@ story("starts the bar's input protection over when the page asks again", async (
   }).toPass()
 })
 
-story("an agent's show request gives its page's permission bar no press that was on its way to the person's", async ({ page }) => {
+test("an agent's show request gives its page's permission bar no press that was on its way to the person's", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Permission request", exact: true }).evaluate((element: HTMLElement) => element.click())
   const bar = root.getByRole("alertdialog", { name: "Site permission request" })
@@ -2123,7 +2123,7 @@ story("an agent's show request gives its page's permission bar no press that was
   }).toPass()
 })
 
-story("an agent's show request leaves the keyboard where the person types, and its tab's bar answers no key or click meanwhile", async ({ page }) => {
+test("an agent's show request leaves the keyboard where the person types, and its tab's bar answers no key or click meanwhile", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.click()
@@ -2154,7 +2154,7 @@ story("an agent's show request leaves the keyboard where the person types, and i
   await expect(root.getByRole("textbox", { name: "Composer stand-in" })).toHaveValue("")
 })
 
-story("takes the keyboard from the window for a dialog and gives it back where it was", async ({ page }) => {
+test("takes the keyboard from the window for a dialog and gives it back where it was", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const composer = root.getByRole("textbox", { name: "Composer stand-in" })
   await composer.focus()
@@ -2166,7 +2166,7 @@ story("takes the keyboard from the window for a dialog and gives it back where i
   await expect(composer).toBeFocused()
 })
 
-story("asks again for an agent's request without offering to keep the answer, and says why", async ({ page }) => {
+test("asks again for an agent's request without offering to keep the answer, and says why", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Agent permission request", exact: true }).evaluate((element: HTMLElement) => element.click())
   const bar = root.getByRole("alertdialog", { name: "Site permission request" })
@@ -2184,7 +2184,7 @@ story("asks again for an agent's request without offering to keep the answer, an
   }).toPass()
 })
 
-story("asks for a page's prompt text and sends what the user typed", async ({ page }) => {
+test("asks for a page's prompt text and sends what the user typed", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Page prompt", exact: true }).evaluate((element: HTMLElement) => element.click())
   const dialog = page.getByRole("alertdialog", { name: "alpha.example says" })
@@ -2201,7 +2201,7 @@ story("asks for a page's prompt text and sends what the user typed", async ({ pa
   await expect(dialog).toBeHidden()
 })
 
-// What the key test below records in the story's window.
+// What the key test below records in the page's window.
 declare global {
   interface Window {
     keyLog: KeyboardEvent[]
@@ -2209,7 +2209,7 @@ declare global {
   }
 }
 
-story("keeps the keys inside a page prompt, and leaves them to the window once the keyboard is elsewhere", async ({ page }) => {
+test("keeps the keys inside a page prompt, and leaves them to the window once the keyboard is elsewhere", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   // Each key as the window saw it first, and whether its default was cancelled once every handler had seen it.
   await page.evaluate(() => {
@@ -2268,7 +2268,7 @@ story("keeps the keys inside a page prompt, and leaves them to the window once t
   }).toPass()
 })
 
-story("asks for a site's sign-in with its realm, says the last one failed, and keeps nothing on cancel", async ({ page }) => {
+test("asks for a site's sign-in with its realm, says the last one failed, and keeps nothing on cancel", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Sign-in request", exact: true }).evaluate((element: HTMLElement) => element.click())
   const dialog = page.getByRole("alertdialog", { name: "Sign in to intranet.alpha.example" })
@@ -2285,7 +2285,7 @@ story("asks for a site's sign-in with its realm, says the last one failed, and k
   await expect(root.getByText('Answers: [{"kind":"dismiss"}]', { exact: true })).toBeVisible()
 })
 
-story("the options menu lists everyday actions first and the rest under More tools, where each still runs", async ({ page }) => {
+test("the options menu lists everyday actions first and the rest under More tools, where each still runs", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Seed history", exact: true }).click()
   await root.getByRole("button", { name: "Seed imported history", exact: true }).click()

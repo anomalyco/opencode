@@ -1,8 +1,8 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
 for (const mode of ["hidden", "compact", "full"] as const) {
   for (const reasoning of ["blank", "heading"] as const) {
-    story(`projects ${mode} mode with ${reasoning} active reasoning`, async ({ mount }) => {
+    test(`projects ${mode} mode with ${reasoning} active reasoning`, async ({ mount }) => {
       const timeline = await mount("current-session-timeline-rows--conversation", {
         args: { scenario: "reasoning", mode, reasoning },
       })
@@ -42,7 +42,7 @@ for (const mode of ["hidden", "compact", "full"] as const) {
   }
 
   for (const following of ["tool", "text"] as const) {
-    story(`stops Thinking before ${following} in ${mode} mode`, async ({ mount }) => {
+    test(`stops Thinking before ${following} in ${mode} mode`, async ({ mount }) => {
       const timeline = await mount("current-session-timeline-rows--conversation", {
         args: {
           scenario: "reasoning",
@@ -96,7 +96,7 @@ for (const mode of ["hidden", "compact", "full"] as const) {
 }
 
 // Moved from packages/app/e2e/regression/session-timeline-reasoning-projection.spec.ts
-story("does not infer reasoning visibility from provider identity", async ({ mount }) => {
+test("does not infer reasoning visibility from provider identity", async ({ mount }) => {
   const timeline = await mount("current-session-timeline-rows--conversation", {
     args: { scenario: "reasoning", reasoning: "none", text: "No reasoning payload" },
   })

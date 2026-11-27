@@ -64,7 +64,7 @@ async function sources() {
     "app/src/**/*.{ts,tsx}",
     "session-ui/src/**/*.{ts,tsx}",
     "ui/src/**/*.{ts,tsx}",
-    "stories/src/**/*.{ts,tsx}",
+    "lab/src/**/*.{ts,tsx}",
   ]
 
   const paths = (

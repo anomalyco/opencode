@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test"
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4ioAAAAASUVORK5CYII=",
@@ -8,12 +8,12 @@ const png = Buffer.from(
 
 const fixture = sourceURL(new URL("./markdown.fixture.tsx", import.meta.url))
 
-story.beforeEach(async ({ mount }) => {
+test.beforeEach(async ({ mount }) => {
   const root = await mount("components-markdown--complete-response")
   await expect(root.locator('[data-component="markdown"]')).toHaveAttribute("data-markdown-ready", "")
 })
 
-story("renders small completed Markdown immediately without skipping sanitization", async ({ page }) => {
+test("renders small completed Markdown immediately without skipping sanitization", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({
@@ -36,7 +36,7 @@ story("renders small completed Markdown immediately without skipping sanitizatio
   await expect(harness.locator("pre.highlights")).toBeVisible()
 })
 
-story("keeps Markdown text selectable inside a container that disables selection", async ({ page }) => {
+test("keeps Markdown text selectable inside a container that disables selection", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     document.body.style.userSelect = "none"
     const { mountMarkdown } = await import(fixture)
@@ -47,7 +47,7 @@ story("keeps Markdown text selectable inside a container that disables selection
   expect(await page.evaluate(() => getSelection()?.toString().trim())).toBe("Selectable answer text")
 })
 
-story("sanitizes raw HTML while preserving supported Markdown markup", async ({ page }) => {
+test("sanitizes raw HTML while preserving supported Markdown markup", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { sanitizeMarkdown } = await import(fixture)
 
@@ -71,7 +71,7 @@ story("sanitizes raw HTML while preserving supported Markdown markup", async ({ 
   ])
 })
 
-story("authored HTML cannot supply application behavior attributes", async ({ page }) => {
+test("authored HTML cannot supply application behavior attributes", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { sanitizeMarkdown } = await import(fixture)
     const names = ["data-owns-keyboard", "data-owns-escape", "data-prevent-autofocus", "data-floating-overlay", "data-app-link", "data-local-link", "data-local-image", "data-slot", "data-component", "data-future-marker", "aria-owns", "aria-controls", "aria-modal", "aria-hidden", "role", "class", "tabindex", "contenteditable", "draggable", "inert", "hidden", "popover", "autofocus", "slot", "part", "exportparts", "for", "form", "formaction", "command", "commandfor", "accesskey"]
@@ -85,7 +85,7 @@ story("authored HTML cannot supply application behavior attributes", async ({ pa
   expect(result).toEqual({ retained: [], id: "user-content-sample", name: "user-content-legacy", labelFor: undefined, custom: "custom label" })
 })
 
-story("limits authored presentation to text and keeps application link hit areas inline", async ({ page }) => {
+test("limits authored presentation to text and keeps application link hit areas inline", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { sanitizeMarkdown } = await import(fixture)
     const fragment = document.createElement("template")
@@ -107,7 +107,7 @@ story("limits authored presentation to text and keeps application link hit areas
   expect(result).toEqual({ style: "color: teal; text-align: center;", active: 0, links: [["obsidian:fixture", false, false, "Label"], [undefined, false, false, "Block label"]] })
 })
 
-story("restores layout from the math renderer, never from markup claiming to be KaTeX", async ({ page }) => {
+test("restores layout from the math renderer, never from markup claiming to be KaTeX", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ text: 'Real: $\\frac{x}{y}$.\n\n<span id="0123456789abcdef0123456789abcdef" class="katex" data-markdown-renderer="math" style="position:relative;top:2px">Authored</span>' })
@@ -121,7 +121,7 @@ story("restores layout from the math renderer, never from markup claiming to be 
   await expect(authored).toHaveAttribute("data-markdown-contain", "")
 })
 
-story("renders task-list boxes but never authored form controls or embedded documents", async ({ page }) => {
+test("renders task-list boxes but never authored form controls or embedded documents", async ({ page }) => {
   await page.evaluate(async url => {
     const { mountMarkdown } = await import(url)
     await mountMarkdown({ text: '- [x] Complete\n- [ ] Pending\n\n<form><button>Sample label</button><input type="checkbox" checked disabled></form>\n\n<figure><figcaption>Caption</figcaption></figure>' })
@@ -140,7 +140,7 @@ story("renders task-list boxes but never authored form controls or embedded docu
   expect(await page.evaluate(() => "notReloaded" in window)).toBe(true)
 })
 
-story("keeps the document markup models write", async ({ page }) => {
+test("keeps the document markup models write", async ({ page }) => {
   await page.evaluate(async (url) => {
     const { mountMarkdown } = await import(url)
     await mountMarkdown({
@@ -161,7 +161,7 @@ story("keeps the document markup models write", async ({ page }) => {
 })
 
 // What chat rendered before its allow-list: text-level, legacy and sectioning tags, and their harmless attributes.
-story("keeps the text-level, legacy and sectioning markup chat rendered before", async ({ page }) => {
+test("keeps the text-level, legacy and sectioning markup chat rendered before", async ({ page }) => {
   await page.evaluate(async (url) => {
     const { mountMarkdown } = await import(url)
     await mountMarkdown({
@@ -180,7 +180,7 @@ story("keeps the text-level, legacy and sectioning markup chat rendered before",
 })
 
 // Media renders as it did before the allow-list, sized and painted inside its message.
-story("keeps video and audio inside their message", async ({ page }) => {
+test("keeps video and audio inside their message", async ({ page }) => {
   await page.route("https://example.invalid/**", (route) => route.fulfill({ status: 404, body: "" }))
   await page.evaluate(async (url) => {
     const { mountMarkdown } = await import(url)
@@ -210,7 +210,7 @@ story("keeps video and audio inside their message", async ({ page }) => {
   expect(fits).toEqual([true, true])
 })
 
-story("keeps safe presentation and labels on inline SVG, images and links", async ({ page }) => {
+test("keeps safe presentation and labels on inline SVG, images and links", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { sanitizeMarkdown } = await import(fixture)
     const box = document.createElement("div")
@@ -247,7 +247,7 @@ story("keeps safe presentation and labels on inline SVG, images and links", asyn
   })
 })
 
-story("keeps a formula inside an application link label", async ({ page }) => {
+test("keeps a formula inside an application link label", async ({ page }) => {
   await page.evaluate(async (url) => {
     const { mountMarkdown } = await import(url)
     await mountMarkdown({ text: "[See $x^2$ <b>bold</b>](obsidian://open?file=a)" })
@@ -259,7 +259,7 @@ story("keeps a formula inside an application link label", async ({ page }) => {
   await expect(link).toContainText("bold")
 })
 
-story("a display formula in an application link label disarms the link", async ({ page }) => {
+test("a display formula in an application link label disarms the link", async ({ page }) => {
   await page.evaluate(async (url) => {
     const { mountMarkdown } = await import(url)
     await mountMarkdown({
@@ -275,7 +275,7 @@ story("a display formula in an application link label disarms the link", async (
   await expect(md.locator("[data-display]")).toHaveCount(0)
 })
 
-story("bounds author-sized math to its own line box", async ({ page }) => {
+test("bounds author-sized math to its own line box", async ({ page }) => {
   await page.evaluate(async (url) => {
     const { mountMarkdown } = await import(url)
     await mountMarkdown({ text: "Before $\\raisebox{-40em}{\\colorbox{red}{\\rule{60em}{30em}}}$ after.\n\nNext paragraph." })
@@ -295,7 +295,7 @@ story("bounds author-sized math to its own line box", async ({ page }) => {
   expect(box.overflow).toBe("clip")
 })
 
-story("retains local and download link routing and bounds untrusted application metadata", async ({ page }) => {
+test("retains local and download link routing and bounds untrusted application metadata", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { sanitizeMarkdown } = await import(fixture)
 
@@ -322,7 +322,7 @@ story("retains local and download link routing and bounds untrusted application 
     [undefined, "mailto:fixture@example.invalid?attach=fixture", true, false], [undefined, undefined, true, true]])
 })
 
-story("keeps Markdown sanitization and link protections after Mermaid renders", async ({ page }) => {
+test("keeps Markdown sanitization and link protections after Mermaid renders", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { renderMermaidSvg, sanitizeMarkdown } = await import(fixture)
 
@@ -379,7 +379,7 @@ story("keeps Markdown sanitization and link protections after Mermaid renders", 
 })
 
 for (const cached of [false, true]) {
-  story(`decorates known inline paths before insertion with cached Markdown ${cached}`, async ({ page }) => {
+  test(`decorates known inline paths before insertion with cached Markdown ${cached}`, async ({ page }) => {
     const initial = await page.evaluate(
       async ({ fixture, cached }) => {
         const { mountMarkdown } = await import(fixture)
@@ -402,7 +402,7 @@ for (const cached of [false, true]) {
   })
 }
 
-story("does not report completed Markdown ready until all inline path checks settle", async ({ page }) => {
+test("does not report completed Markdown ready until all inline path checks settle", async ({ page }) => {
   const checks = await page.evaluateHandle(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     const existing = Promise.withResolvers<boolean>()
@@ -433,7 +433,7 @@ story("does not report completed Markdown ready until all inline path checks set
   await checks.dispose()
 })
 
-story("ignores stale inline path results when completed Markdown is replaced", async ({ page }) => {
+test("ignores stale inline path results when completed Markdown is replaced", async ({ page }) => {
   const checks = await page.evaluateHandle(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     const first = Promise.withResolvers<boolean>()
@@ -467,7 +467,7 @@ story("ignores stale inline path results when completed Markdown is replaced", a
   await checks.dispose()
 })
 
-story("keeps streaming Markdown ready while a completed prefix waits for a path check", async ({ page }) => {
+test("keeps streaming Markdown ready while a completed prefix waits for a path check", async ({ page }) => {
   const checks = await page.evaluateHandle(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     const existing = Promise.withResolvers<boolean>()
@@ -498,7 +498,7 @@ story("keeps streaming Markdown ready while a completed prefix waits for a path 
   await checks.dispose()
 })
 
-story("mounts cached completed Markdown with sanitized HTML and decorations", async ({ page }) => {
+test("mounts cached completed Markdown with sanitized HTML and decorations", async ({ page }) => {
   await page.evaluate(
     async ({ fixture, text }) => {
       const { mountMarkdown } = await import(fixture)
@@ -549,7 +549,7 @@ story("mounts cached completed Markdown with sanitized HTML and decorations", as
   await expect(markdown).toHaveAttribute("data-markdown-ready", "")
 })
 
-story("shows a stable GitHub mark without changing link text or other sites", async ({ page }) => {
+test("shows a stable GitHub mark without changing link text or other sites", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({
@@ -582,7 +582,7 @@ story("shows a stable GitHub mark without changing link text or other sites", as
 })
 
 for (const mode of ["cached", "streamed"] as const) {
-  story(`keeps the whole label of a link that contains inline code (${mode})`, async ({ page }) => {
+  test(`keeps the whole label of a link that contains inline code (${mode})`, async ({ page }) => {
     await page.evaluate(
       async ({ fixture, mode }) => {
         const { mountMarkdown } = await import(fixture)
@@ -627,7 +627,7 @@ for (const mode of ["cached", "streamed"] as const) {
 }
 
 for (const theme of ["light", "dark"]) {
-  story(`styles inline code inside a link like the link label in ${theme}`, async ({ mount, page }) => {
+  test(`styles inline code inside a link like the link label in ${theme}`, async ({ mount, page }) => {
     await mount("components-markdown--complete-response", { globals: { theme } })
     await expect(page.locator("html")).toHaveClass(new RegExp(theme))
     await page.evaluate(async (fixture) => {
@@ -677,7 +677,7 @@ for (const theme of ["light", "dark"]) {
   })
 }
 
-story("keeps favicon space stable across loading and failure without fetching private hosts", async ({ page }) => {
+test("keeps favicon space stable across loading and failure without fetching private hosts", async ({ page }) => {
   const requested: string[] = []
   let release: () => void = () => undefined
   const loading = new Promise<void>((resolve) => (release = resolve))
@@ -738,7 +738,7 @@ story("keeps favicon space stable across loading and failure without fetching pr
   await expect(markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon img")).toHaveCount(0)
 
   // Routing disables the browser cache, so a loaded favicon's CSS artwork requests its URL again here. That includes
-  // the story's own example.com link, whose favicon can load before this route exists and its artwork after.
+  // the page's own example.com link, whose favicon can load before this route exists and its artwork after.
   const domains = new Set(requested.map((url) => new URL(url).searchParams.get("domain")))
   domains.delete("example.com")
 
@@ -746,7 +746,7 @@ story("keeps favicon space stable across loading and failure without fetching pr
   expect(requested.every((url) => !url.includes("localhost") && !url.includes("github.com"))).toBe(true)
 })
 
-story("keeps link icons on the same line as the start of their label", async ({ page }) => {
+test("keeps link icons on the same line as the start of their label", async ({ page }) => {
   await page.route("https://www.google.com/s2/favicons?**", (route) =>
     route.fulfill({ status: 200, contentType: "image/png", body: png }),
   )
@@ -794,7 +794,7 @@ story("keeps link icons on the same line as the start of their label", async ({ 
   expect(result.long).toBeGreaterThan(1)
 })
 
-story("selects the whole paragraph on triple click across link icons", async ({ page }) => {
+test("selects the whole paragraph on triple click across link icons", async ({ page }) => {
   await page.route("https://www.google.com/s2/favicons?**", (route) =>
     route.fulfill({ status: 200, contentType: "image/png", body: png }),
   )
@@ -827,7 +827,7 @@ story("selects the whole paragraph on triple click across link icons", async ({ 
   )
 })
 
-story("scrolls fragment links to their heading inside the document's scroller", async ({ page }) => {
+test("scrolls fragment links to their heading inside the document's scroller", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     const filler = Array.from({ length: 40 }, (_, index) => `Paragraph ${index}`).join("\n\n")
@@ -872,7 +872,7 @@ async function resolvedColor(page: Page, token: string) {
   }, token)
 }
 
-story("keeps inline code backgrounds 18px tall", async ({ page }) => {
+test("keeps inline code backgrounds 18px tall", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ text: "`value` and `src/file.ts`" })
@@ -885,7 +885,7 @@ story("keeps inline code backgrounds 18px tall", async ({ page }) => {
   ).toEqual([18, 18])
 })
 
-story("keeps inline code geometry when a completed stream turns it into a file link", async ({ page }) => {
+test("keeps inline code geometry when a completed stream turns it into a file link", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ text: "Edit `src/file.ts` to fix it", streaming: true })
@@ -911,7 +911,7 @@ story("keeps inline code geometry when a completed stream turns it into a file l
   expect(await geometry()).toEqual(before)
 })
 
-story("shares in-flight Markdown rendering without overwriting a reclaimed cache entry", async ({ page }) => {
+test("shares in-flight Markdown rendering without overwriting a reclaimed cache entry", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { getCachedMarkdown, renderCachedMarkdown } = await import(fixture)
     const raw = "**Shared result**"
@@ -933,7 +933,7 @@ story("shares in-flight Markdown rendering without overwriting a reclaimed cache
   expect(result.html).toContain("<strong>Shared result</strong>")
 })
 
-story("keeps an in-flight parse shared after a readiness check reads the cached entry", async ({ page }) => {
+test("keeps an in-flight parse shared after a readiness check reads the cached entry", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { getCachedMarkdown, getReadyMarkdown, renderCachedMarkdown, touchCachedMarkdown } = await import(fixture)
     const previous = "**Previous answer**"
@@ -951,7 +951,7 @@ story("keeps an in-flight parse shared after a readiness check reads the cached 
   expect(result).toEqual({ ready: "<p>previous</p>", shared: true, cached: true })
 })
 
-story("settles an abandoned parse and permits immediate cache-key reuse", async ({ page }) => {
+test("settles an abandoned parse and permits immediate cache-key reuse", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { getCachedMarkdown, renderCachedMarkdown, MarkdownWorkerDisposedError } = await import(fixture)
     const controller = new AbortController()
@@ -976,7 +976,7 @@ story("settles an abandoned parse and permits immediate cache-key reuse", async 
 })
 
 for (const owned of [true, false]) {
-  story(
+  test(
     `preserves a shared parse for ${owned ? "another mounted consumer" : "an explicit preload"}`,
     async ({ page }) => {
       const result = await page.evaluate(
@@ -1024,7 +1024,7 @@ for (const owned of [true, false]) {
   )
 }
 
-story("does not admit an already disposed Markdown consumer", async ({ page }) => {
+test("does not admit an already disposed Markdown consumer", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { getCachedMarkdown, renderCachedMarkdown, MarkdownWorkerDisposedError } = await import(fixture)
     const controller = new AbortController()
@@ -1042,7 +1042,7 @@ story("does not admit an already disposed Markdown consumer", async ({ page }) =
   expect(result).toEqual({ rejected: true, empty: true })
 })
 
-story("releases a timeline preload without cancelling a mounted shared consumer", async ({ page }) => {
+test("releases a timeline preload without cancelling a mounted shared consumer", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { getCachedMarkdown, preloadMarkdown, renderCachedMarkdown, MarkdownWorkerDisposedError } = await import(
       fixture
@@ -1068,7 +1068,7 @@ story("releases a timeline preload without cancelling a mounted shared consumer"
   expect(result.html).toContain("preloaded")
 })
 
-story("keeps a reopened cached answer recent under cache pressure", async ({ page }) => {
+test("keeps a reopened cached answer recent under cache pressure", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown, touchCachedMarkdown } = await import(fixture)
     await mountMarkdown({ text: "**Cached answer**", cached: true })
@@ -1094,7 +1094,7 @@ story("keeps a reopened cached answer recent under cache pressure", async ({ pag
   expect(cached).toBe("**Cached answer**")
 })
 
-story("renders cached Mermaid blocks and falls back to code for invalid diagrams", async ({ page }) => {
+test("renders cached Mermaid blocks and falls back to code for invalid diagrams", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ text: "```mermaid\nflowchart LR\n A[Start] --> B[End]\n```", cached: true })
@@ -1113,7 +1113,7 @@ story("renders cached Mermaid blocks and falls back to code for invalid diagrams
   await expect(markdown.getByRole("button", { name: "Copy", exact: true })).toBeVisible()
 })
 
-story("renders the trailing chunk while the stream is paused", async ({ page }) => {
+test("renders the trailing chunk while the stream is paused", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ text: "Checking **the project** before running the comm", streaming: true, cached: true })
@@ -1129,7 +1129,7 @@ story("renders the trailing chunk while the stream is paused", async ({ page }) 
   await expect(harness.getByLabel("Streaming")).toBeChecked()
 })
 
-story("keeps live elements and selection when a stream completes and later changes", async ({ page }) => {
+test("keeps live elements and selection when a stream completes and later changes", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ text: "Hello **world**", streaming: true, synchronousFiles: true })
@@ -1166,7 +1166,7 @@ story("keeps live elements and selection when a stream completes and later chang
   await expect(markdown).toHaveCount(0)
 })
 
-story("replaces completed DOM before live rendering and retains streamed code copy actions", async ({ page }) => {
+test("replaces completed DOM before live rendering and retains streamed code copy actions", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ text: "Initial **content**" })
@@ -1196,7 +1196,7 @@ story("replaces completed DOM before live rendering and retains streamed code co
   await expect(markdown).toHaveCount(0)
 })
 
-story("relabels streamed code copy actions when the language changes", async ({ page }) => {
+test("relabels streamed code copy actions when the language changes", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ text: "```sh\necho hello\n", streaming: true })
@@ -1211,7 +1211,7 @@ story("relabels streamed code copy actions when the language changes", async ({ 
   await expect(markdown.getByRole("button", { name: "Copy" })).toHaveCount(0)
 })
 
-story("highlights streamed code across comment and string boundaries", async ({ page }) => {
+test("highlights streamed code across comment and string boundaries", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ text: "```ts\n", streaming: true })
@@ -1247,7 +1247,7 @@ story("highlights streamed code across comment and string boundaries", async ({ 
   await expect(code.locator("plain")).toHaveCount(0)
 })
 
-story("highlights every block of a streamed answer with more than 200 code blocks", async ({ page }) => {
+test("highlights every block of a streamed answer with more than 200 code blocks", async ({ page }) => {
   // The worker client used to keep 200 highlight keys and dispose the oldest, rejecting block 1's highlight in flight.
   const blocks = Array.from({ length: 205 }, (_, index) => `\`\`\`ts\nconst value${index} = ${index}\n\`\`\``)
   const text = blocks.join("\n\n")
@@ -1267,7 +1267,7 @@ story("highlights every block of a streamed answer with more than 200 code block
   await expect(code.last().locator('span[style*="color"]')).not.toHaveCount(0)
 })
 
-story("preserves streamed math through completion and a fresh render", async ({ page }) => {
+test("preserves streamed math through completion and a fresh render", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ text: "Formula: \\(P(x_{t+1})\\)", streaming: true })
@@ -1291,7 +1291,7 @@ story("preserves streamed math through completion and a fresh render", async ({ 
   await expect(markdown.locator(".katex-error")).toHaveCount(0)
 })
 
-story("keeps an unchanged streamed formula, and a selection in it, while text after it streams", async ({ page }) => {
+test("keeps an unchanged streamed formula, and a selection in it, while text after it streams", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ text: "Formula $x^2$ and", streaming: true })
@@ -1310,7 +1310,7 @@ story("keeps an unchanged streamed formula, and a selection in it, while text af
 })
 
 for (const theme of ["light", "dark"]) {
-  story(`renders class and connected subgraph diagrams in ${theme}`, async ({ mount, page }) => {
+  test(`renders class and connected subgraph diagrams in ${theme}`, async ({ mount, page }) => {
     await page.setViewportSize({ width: 390, height: 900 })
     await mount("components-markdown--complete-response", { globals: { theme } })
     await expect(page.locator("html")).toHaveClass(new RegExp(theme))
@@ -1341,7 +1341,7 @@ for (const theme of ["light", "dark"]) {
 }
 
 for (const streaming of [false, true]) {
-  story(
+  test(
     `loads local images in ${streaming ? "streaming" : "cached"} Markdown and releases their URLs`,
     async ({ page }) => {
       const requests: string[] = []
@@ -1410,7 +1410,7 @@ for (const streaming of [false, true]) {
   )
 }
 
-story("keeps remote images browser-owned and rejects unsafe image sources", async ({ page }) => {
+test("keeps remote images browser-owned and rejects unsafe image sources", async ({ page }) => {
   await page.route("https://images.example/chart.png", (route) => {
     expect(route.request().headers().authorization).toBeUndefined()
 
@@ -1436,7 +1436,7 @@ story("keeps remote images browser-owned and rejects unsafe image sources", asyn
   await expect(harness.locator("[onerror], [src^='javascript:'], [data-local-image]")).toHaveCount(0)
 })
 
-story("keeps scripts and external resources inactive inside local SVG images", async ({ page }) => {
+test("keeps scripts and external resources inactive inside local SVG images", async ({ page }) => {
   const external: string[] = []
   await page.context().route("https://images.example/**", async (route) => {
     external.push(route.request().url())
@@ -1468,7 +1468,7 @@ story("keeps scripts and external resources inactive inside local SVG images", a
   await preview.close()
 })
 
-story("loads file URLs and Windows paths, and leaves unreadable images as alt text", async ({ page }) => {
+test("loads file URLs and Windows paths, and leaves unreadable images as alt text", async ({ page }) => {
   const requested = new Set<string>()
   await page.route("**/api/fs/read/**", async (route) => {
     const url = new URL(route.request().url())
@@ -1524,7 +1524,7 @@ async function copySelection(page: Page, select: "markdown" | "harness") {
   return page.evaluate(() => ({ text: document.body.dataset.copiedText, html: document.body.dataset.copiedHtml }))
 }
 
-story("copies selected Markdown as semantic HTML without theme or highlight colours", async ({ page }) => {
+test("copies selected Markdown as semantic HTML without theme or highlight colours", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     document.body.style.color = "rgb(237, 237, 237)"
     const { mountMarkdown } = await import(fixture)
@@ -1547,7 +1547,7 @@ story("copies selected Markdown as semantic HTML without theme or highlight colo
   expect(copied.html).not.toMatch(/style=|class=|<button|<svg/)
 })
 
-story("keeps the browser copy for selections that leave the Markdown", async ({ page }) => {
+test("keeps the browser copy for selections that leave the Markdown", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ text: "Some **bold** text" })

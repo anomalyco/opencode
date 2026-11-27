@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode/client/promise"
 import { createRoot, createSignal } from "solid-js"
 import { isServer } from "solid-js/web"
-import { storyTool } from "../storybook/current-session-scenarios"
+import { labTool } from "../lab/current-session-scenarios"
 import { timelinePresets } from "./detail"
 import { createReactiveTimelineProjection, placeFacts } from "./projection"
 import { projectionRuns } from "./placement-reactivity"
@@ -31,7 +31,7 @@ describe.skipIf(isServer)("current timeline placement reactivity", () => {
       const reads: Record<string, number> = {}
 
       const message = (id: string): SessionMessageInfo => {
-        const content = [storyTool(id, "shell", "running", { command: "make" }, { metadata: { output: "a" } })]
+        const content = [labTool(id, "shell", "running", { command: "make" }, { metadata: { output: "a" } })]
 
         return {
           id,

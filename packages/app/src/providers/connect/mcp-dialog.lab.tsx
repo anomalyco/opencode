@@ -7,7 +7,7 @@ import type { McpController } from "./mcp"
 import { McpDialog } from "./mcp-dialog"
 import { createMcpState, type McpEvent, transitionMcp } from "./mcp-machine"
 
-function McpDialogStory(props: { server?: string; empty?: boolean; signingIn?: boolean }) {
+function McpDialogLab(props: { server?: string; empty?: boolean; signingIn?: boolean }) {
   const dialog = useDialog()
 
   const [servers, setServers] = createStore<McpServer[]>([
@@ -77,13 +77,13 @@ export default {
 }
 
 export const Default = {
-  render: () => <McpDialogStory />,
+  render: () => <McpDialogLab />,
 }
 
 export const ConnectionError = {
-  render: () => <McpDialogStory server="unreachable-server" />,
+  render: () => <McpDialogLab server="unreachable-server" />,
 }
 
-export const NoServers = { render: () => <McpDialogStory empty /> }
+export const NoServers = { render: () => <McpDialogLab empty /> }
 
-export const SigningIn = { render: () => <McpDialogStory signingIn /> }
+export const SigningIn = { render: () => <McpDialogLab signingIn /> }

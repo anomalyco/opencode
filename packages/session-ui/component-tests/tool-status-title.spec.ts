@@ -1,8 +1,8 @@
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const fixture = sourceURL(new URL("./tool-status-title.fixture.tsx", import.meta.url))
 
-story("shows a title that finished in a hidden tab at once when the tab shows again", async ({ mount, page }) => {
+test("shows a title that finished in a hidden tab at once when the tab shows again", async ({ mount, page }) => {
   await mount("components-animated-count-list--completed")
 
   const width = await page.evaluate(async (fixture) => {

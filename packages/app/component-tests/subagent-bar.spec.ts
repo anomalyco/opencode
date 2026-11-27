@@ -1,6 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("a subagent session shows its model where the composer would be", async ({ mount, page }) => {
+test("a subagent session shows its model where the composer would be", async ({ mount, page }) => {
   await mount("app-current-session-surface--child-session")
 
   const bar = page.locator('[data-component="subagent-bar"]')
@@ -18,7 +18,7 @@ story("a subagent session shows its model where the composer would be", async ({
   await expect(page.getByText("Opened the parent Session locally")).toBeVisible()
 })
 
-story("a subagent with no recorded outcome starts its line at the agent", async ({ mount, page }) => {
+test("a subagent with no recorded outcome starts its line at the agent", async ({ mount, page }) => {
   await mount("app-current-session-surface--child-session-no-outcome")
 
   const bar = page.locator('[data-component="subagent-bar"]')

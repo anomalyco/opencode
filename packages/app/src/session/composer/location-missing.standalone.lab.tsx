@@ -3,18 +3,18 @@ import { Button } from "@opencode/ui/button"
 import { createSignal, onMount, Show } from "solid-js"
 import {
   createMemoryStorage,
-  createStoryFetch,
-  DialogStoryRuntime,
-  STORY_DIRECTORY,
-  STORY_PROJECTS,
-} from "@/lab/dialog-story-runtime"
+  createLabFetch,
+  DialogLabRuntime,
+  LAB_DIRECTORY,
+  LAB_PROJECTS,
+} from "@/lab/dialog-runtime"
 import type { Platform } from "@/runtime/platform/platform"
 import { useData } from "@/runtime/server/current"
 import { ToastRegion } from "@/shell/notifications/toast"
 import { SessionLocationMissing } from "./location-missing"
-import { RecoverySession, RestoredComposer } from "./recovery-story"
+import { RecoverySession, RestoredComposer } from "./recovery-lab"
 
-const worktree = (name: string): WorktreeDirectory => ({ directory: `${STORY_DIRECTORY}-${name}`, strategy: "git" })
+const worktree = (name: string): WorktreeDirectory => ({ directory: `${LAB_DIRECTORY}-${name}`, strategy: "git" })
 
 // Ten or more other worktrees add a search field to the list.
 const worktrees = {
@@ -38,10 +38,10 @@ const worktrees = {
 
 type Args = { directory: string; git: boolean; worktrees: keyof typeof worktrees; failFirstMove: boolean }
 
-function RecoveryStory(props: Args) {
+function RecoveryLab(props: Args) {
   const session: SessionInfo = {
     id: "ses_missing",
-    projectID: STORY_PROJECTS[0].id,
+    projectID: LAB_PROJECTS[0].id,
     location: { directory: props.directory },
     title: "Timeline fixtures",
     time: { created: 1, updated: 2 },
@@ -49,7 +49,7 @@ function RecoveryStory(props: Args) {
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   }
 
-  const fallback = createStoryFetch()
+  const fallback = createLabFetch()
 
   let failed = false
 
@@ -59,10 +59,10 @@ function RecoveryStory(props: Args) {
     const path = new URL(request.url).pathname
 
     if (path === "/api/project")
-      return Response.json(STORY_PROJECTS.map((p) => ({ ...p, vcs: props.git ? "git" : undefined })))
+      return Response.json(LAB_PROJECTS.map((p) => ({ ...p, vcs: props.git ? "git" : undefined })))
 
     if (path === "/api/worktree" && request.method === "POST")
-      return Response.json({ directory: `${STORY_DIRECTORY}-new` })
+      return Response.json({ directory: `${LAB_DIRECTORY}-new` })
 
     if (path === "/api/worktree") return Response.json(worktrees[props.worktrees])
 
@@ -94,9 +94,9 @@ function RecoveryStory(props: Args) {
   }
 
   return (
-    <DialogStoryRuntime platform={platform}>
+    <DialogLabRuntime platform={platform}>
       <RecoveryDock session={session} directory={props.directory} />
-    </DialogStoryRuntime>
+    </DialogLabRuntime>
   )
 }
 
@@ -133,7 +133,7 @@ function Replay(props: Args) {
   return (
     <div class="mx-auto w-full max-w-[760px]">
       <Show when={{ ...props, revision: revision() }} keyed>
-        {(args) => <RecoveryStory {...args} />}
+        {(args) => <RecoveryLab {...args} />}
       </Show>
       <Button size="small" variant="ghost-muted" onClick={() => setRevision((value) => value + 1)}>
         Replay recovery
@@ -145,7 +145,7 @@ function Replay(props: Args) {
 export default {
   title: "OpenCode/Session/Missing location",
   id: "session-missing-location",
-  args: { directory: `${STORY_DIRECTORY}-old`, git: true, worktrees: "available", failFirstMove: false } satisfies Args,
+  args: { directory: `${LAB_DIRECTORY}-old`, git: true, worktrees: "available", failFirstMove: false } satisfies Args,
   argTypes: { worktrees: { options: ["available", "many", "none"] } },
   render: (args: Args) => <Replay {...args} />,
 }

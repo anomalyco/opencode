@@ -20,7 +20,7 @@ export const HomeServersSchema = Schema.Struct({
   collapsed: Persistence.record(Persistence.fallback(Schema.Boolean, () => false)),
 })
 
-// Automations come from the shell's AutomationSource; surfaces mounted without it (stories) leave the entry out.
+// Automations come from the shell's AutomationSource; surfaces mounted without it (pages) leave the entry out.
 export function createHomeProjectsController(home: HomeController, options?: { automations?: HomeAutomationsEntry }) {
   const platform = usePlatform()
 

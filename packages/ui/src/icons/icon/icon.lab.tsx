@@ -72,11 +72,11 @@ export const Sizes = {
 
 // Artwork outside the catalog, as a plugin declares it: one still drawing, and one that moves from its resting frame.
 const registered = {
-  "story:pair": `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+  "lab:pair": `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
     <path d="M2.5 9V2.5H13.5V3.5M2.5 9L0.5 12.5H7.5M2.5 9H7.5" stroke="currentColor" stroke-linecap="square" stroke-linejoin="round"/>
     <path d="M11.5 12.5H13.5M9.5 5.5V14.5H15.5V5.5H9.5Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`,
-  "story:pulse": `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+  "lab:pulse": `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
     <circle cx="8" cy="8" r="6.5" stroke="currentColor"/>
     <circle cx="8" cy="8" r="2" fill="currentColor">
       <animate attributeName="r" values="2;2;5.6;5.6" keyTimes="0;0.167;0.917;1" dur="2.4s" repeatCount="indefinite"/>
@@ -90,7 +90,7 @@ const registered = {
 
 /**
  * Registered artwork draws by name like a catalog icon: in each size, in the text color, and in step where it moves.
- * `story:missing` is not registered, so it draws nothing and keeps its box.
+ * `lab:missing` is not registered, so it draws nothing and keeps its box.
  */
 export const Registered = {
   render: () => {
@@ -98,7 +98,7 @@ export const Registered = {
 
     return (
       <div style={{ display: "grid", gap: "12px" }}>
-        <For each={["story:pair", "story:pulse", "story:missing"]}>
+        <For each={["lab:pair", "lab:pulse", "lab:missing"]}>
           {(name) => (
             <div style={{ display: "flex", gap: "12px", "align-items": "center" }}>
               <For each={sizes}>{(size) => <Icon name={name} size={size} />}</For>

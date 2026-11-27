@@ -493,6 +493,24 @@
         "@typescript/native": "catalog:",
       },
     },
+    "packages/lab": {
+      "name": "@opencode/stories",
+      "devDependencies": {
+        "@opencode/client": "workspace:*",
+        "@opencode/session-ui": "workspace:*",
+        "@opencode/ui": "workspace:*",
+        "@playwright/test": "catalog:",
+        "@solidjs/meta": "catalog:",
+        "@tailwindcss/vite": "catalog:",
+        "@tanstack/solid-query": "5.91.4",
+        "@tsconfig/node22": "catalog:",
+        "@types/node": "catalog:",
+        "solid-js": "catalog:",
+        "typescript": "catalog:",
+        "vite": "7.3.7",
+        "vite-plugin-solid": "2.11.12",
+      },
+    },
     "packages/latex": {
       "name": "@opencode/latex",
       "version": "2.4.1",
@@ -755,24 +773,6 @@
         "@types/bun": "catalog:",
         "@types/ws": "8.18.1",
         "@typescript/native": "catalog:",
-      },
-    },
-    "packages/stories": {
-      "name": "@opencode/stories",
-      "devDependencies": {
-        "@opencode/client": "workspace:*",
-        "@opencode/session-ui": "workspace:*",
-        "@opencode/ui": "workspace:*",
-        "@playwright/test": "catalog:",
-        "@solidjs/meta": "catalog:",
-        "@tailwindcss/vite": "catalog:",
-        "@tanstack/solid-query": "5.91.4",
-        "@tsconfig/node22": "catalog:",
-        "@types/node": "catalog:",
-        "solid-js": "catalog:",
-        "typescript": "catalog:",
-        "vite": "7.3.7",
-        "vite-plugin-solid": "2.11.12",
       },
     },
     "packages/theme": {
@@ -1923,7 +1923,7 @@
 
     "@opencode/site": ["@opencode/site@workspace:services/site"],
 
-    "@opencode/stories": ["@opencode/stories@workspace:packages/stories"],
+    "@opencode/stories": ["@opencode/stories@workspace:packages/lab"],
 
     "@opencode/theme": ["@opencode/theme@workspace:packages/theme"],
 

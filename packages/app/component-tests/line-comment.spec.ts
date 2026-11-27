@@ -1,6 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("keeps the comment options button pressed while its menu is open", async ({ mount, page }) => {
+test("keeps the comment options button pressed while its menu is open", async ({ mount, page }) => {
   const component = await mount("ui-line-comment--display")
   const trigger = component.locator('[data-slot="line-comment-v2-overflow"]')
   const rest = await trigger.evaluate((element) => getComputedStyle(element).backgroundColor)
@@ -12,7 +12,7 @@ story("keeps the comment options button pressed while its menu is open", async (
   await expect(trigger).not.toHaveCSS("background-color", rest)
 })
 
-story("autosizes compact comments without native field-sizing", async ({ mount, page }) => {
+test("autosizes compact comments without native field-sizing", async ({ mount, page }) => {
   // Mock only availability; disable native sizing so real layout exercises the JS fallback.
   await page.addInitScript(() => {
     const supports = CSS.supports.bind(CSS)
@@ -44,7 +44,7 @@ story("autosizes compact comments without native field-sizing", async ({ mount, 
   await expect.poll(() => textarea.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
 })
 
-story("Enter on a list whose refined search still runs waits instead of picking a stale row", async ({ mount }) => {
+test("Enter on a list whose refined search still runs waits instead of picking a stale row", async ({ mount }) => {
   const component = await mount("ui-line-comment--editor-with-mentions")
   const textarea = component.getByRole("textbox")
   const items = component.locator('[data-slot="line-comment-v2-mention-item"]')
@@ -66,7 +66,7 @@ story("Enter on a list whose refined search still runs waits instead of picking 
   await expect(items).toHaveCount(0)
 })
 
-story("Enter sends at once while a search runs with no list on screen", async ({ mount }) => {
+test("Enter sends at once while a search runs with no list on screen", async ({ mount }) => {
   const component = await mount("ui-line-comment--editor-with-mentions")
   const textarea = component.getByRole("textbox")
 
@@ -75,7 +75,7 @@ story("Enter sends at once while a search runs with no list on screen", async ({
   await expect(component.getByRole("status", { name: "Editor result" })).toHaveText("Submitted: Mail a@b.com")
 })
 
-story("Escape after a bare @ cancels the comment", async ({ mount }) => {
+test("Escape after a bare @ cancels the comment", async ({ mount }) => {
   const component = await mount("ui-line-comment--editor-with-mentions")
   const textarea = component.getByRole("textbox")
 
@@ -84,7 +84,7 @@ story("Escape after a bare @ cancels the comment", async ({ mount }) => {
   await expect(component.getByRole("status", { name: "Editor result" })).toHaveText("Cancelled")
 })
 
-story(
+test(
   "Escape in a popover's comment field cancels the comment, and on its buttons closes the popover",
   async ({ mount, page }) => {
     const component = await mount("ui-line-comment--editor-in-popover")
@@ -103,7 +103,7 @@ story(
   },
 )
 
-story("completes compact optional comments with or without text", async ({ mount }) => {
+test("completes compact optional comments with or without text", async ({ mount }) => {
   const component = await mount("ui-line-comment--editor", { args: { variant: "compact", allowEmpty: true } })
   const action = component.getByRole("button", { name: "Comment", exact: true })
   const result = component.getByRole("status", { name: "Editor result" })

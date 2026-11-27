@@ -67,7 +67,7 @@ Chromium matches `:focus-visible` on every focused text field, and on anything t
 
 ## Verify
 
-- A story is optional, for visual checks such as clipping, colour, and forced colours. Use one if the repo has a suitable focus story, or a local one you don't commit; don't add a case for every fix. Test focus order, removal and restoration in the app with real input, not in a story.
+- A page is optional, for visual checks such as clipping, colour, and forced colours. Use one if the repo has a suitable focus page, or a local one you don't commit; don't add a case for every fix. Test focus order, removal and restoration in the app with real input, not in a page.
 - Use real keyboard and pointer input for the behaviour you changed. Check Tab and Shift+Tab for order and clipping, and when you replace a control, remove a ring or reuse a picker, run them through the whole changed flow and check both where focus lands and whether you can see it. Check arrow keys for composites, and shortcuts for programmatic focus. For overlay return, check keyboard open with Escape, keyboard open with a pointer dismissal, pointer open with a backdrop click, and pointer open with Escape. Forced focus shows appearance, not whether navigation or restoration works.
 - After a change to focus in or near the timeline, click a tool header in it, then scroll up and down with the wheel. The timeline must follow the wheel.
 - Check light, dark, and forced colours when the indicator or its background changes. Report Chromium forced-colours emulation (DevTools → Rendering → `forced-colors: active`) separately from native Windows High Contrast or assistive-technology testing.

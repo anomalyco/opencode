@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test"
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
 const box = async (locator: Locator) => {
   const value = await locator.boundingBox()
@@ -28,7 +28,7 @@ for (const { name, id } of [
   { name: "Review", id: "plugins-review--changes-and-comments" },
   { name: "Open file", id: "plugins-files--source" },
 ]) {
-  story(`${name}: the Sidebar position submenu moves the file tree right and back`, async ({ mount, page }) => {
+  test(`${name}: the Sidebar position submenu moves the file tree right and back`, async ({ mount, page }) => {
     const component = await mount(id)
     const panel = component.locator('[data-component="session-review-v2"]')
     const sidebar = panel.locator('[data-slot="session-review-v2-sidebar"]')
@@ -73,7 +73,7 @@ const pickWithKeyboard = async (page: Page, side: "Left" | "Right") => {
   await expect(page.getByRole("menuitemradio")).toHaveCount(0)
 }
 
-story("Shift+F10 on the toggle opens the position menu and returns focus", async ({ mount, page }) => {
+test("Shift+F10 on the toggle opens the position menu and returns focus", async ({ mount, page }) => {
   const component = await mount("plugins-review--changes-and-comments")
   const panel = component.locator('[data-component="session-review-v2"]')
   const toggle = panel.getByRole("button", { name: "Toggle file tree" })
@@ -90,7 +90,7 @@ story("Shift+F10 on the toggle opens the position menu and returns focus", async
   await expect(toggle).toBeFocused()
 })
 
-story("the file tree filter keeps the system context menu", async ({ mount, page }) => {
+test("the file tree filter keeps the system context menu", async ({ mount, page }) => {
   const component = await mount("plugins-review--changes-and-comments")
   const filter = component.getByRole("searchbox", { name: "Filter files" })
 

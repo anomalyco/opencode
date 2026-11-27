@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test"
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
 // A cell of the "c" in the wordmark (column 40, row 2 of the 78×14 pin grid).
 const PIN = { x: 40.5 / 78, y: 2.5 / 14 }
@@ -7,7 +7,7 @@ const PIN = { x: 40.5 / 78, y: 2.5 / 14 }
 // An empty cell above the "o", clear of every pin, side and shadow at rest.
 const EMPTY = { x: 5.5 / 78, y: 0.5 / 14 }
 
-story("draws the wordmark as pins and stops animating once settled", async ({ mount, page }) => {
+test("draws the wordmark as pins and stops animating once settled", async ({ mount, page }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" })
   await mount("app-new-session-wordmark--pin-board")
 
@@ -16,7 +16,7 @@ story("draws the wordmark as pins and stops animating once settled", async ({ mo
   await expect.poll(() => requestedFrames(page)).toBe(0)
 })
 
-story("knocks pins out from the panel but never from the composer", async ({ mount, page }) => {
+test("knocks pins out from the panel but never from the composer", async ({ mount, page }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" })
   await mount("app-new-session-wordmark--pin-board")
   await expect.poll(() => requestedFrames(page)).toBe(0)
@@ -31,7 +31,7 @@ story("knocks pins out from the panel but never from the composer", async ({ mou
   await expect.poll(() => pinPixel(page)).not.toEqual(before)
 })
 
-story("shows a static pin board with reduced motion", async ({ mount, page }) => {
+test("shows a static pin board with reduced motion", async ({ mount, page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" })
   await mount("app-new-session-wordmark--pin-board")
   const empty = await pinPixel(page, EMPTY)
@@ -46,7 +46,7 @@ story("shows a static pin board with reduced motion", async ({ mount, page }) =>
   expect(await requestedFrames(page)).toBe(0)
 })
 
-story("the lodger pops the pin board out and packs it back into the e", async ({ mount, page }) => {
+test("the lodger pops the pin board out and packs it back into the e", async ({ mount, page }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" })
   await mount("app-new-session-wordmark--flat")
   const grip = page.locator('[data-slot="wordmark-lodger-grip"]')

@@ -1,9 +1,9 @@
 import type { SessionMessageInfo } from "@opencode/client/promise"
 import type { SessionDocument } from "@opencode/session-ui/document"
-import { CURRENT_SESSION_ID, STORY_MODEL, STORY_TIME, editThenTestDocument } from "@opencode/session-ui/storybook"
+import { CURRENT_SESSION_ID, LAB_MODEL, LAB_TIME, editThenTestDocument } from "@opencode/session-ui/lab"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { createMemo, onMount } from "solid-js"
-import { SessionPreview } from "@/session/story-model"
+import { SessionPreview } from "@/session/lab-model"
 import type { SessionActivityItem } from "./activity-chips"
 import { sessionTodos, todoFinished, type Todo } from "./todos"
 
@@ -14,7 +14,7 @@ const plan = [
   "Derive todos from the latest todowrite call",
   "Share one lane between the activity and todo pills",
   "Build the todo pill",
-  "Add a story for the todo pill",
+  "Add a page for the todo pill",
   "Check RTL and the right-aligned lane",
   "Run the app typecheck",
 ]
@@ -66,14 +66,14 @@ function document(todos: Todo[]): SessionDocument {
       id: "msg_user_todos",
       type: "user",
       text: "Bring the todo list back as a floating pill above the composer.",
-      time: { created: STORY_TIME + 300_000 },
-      metadata: { agent: "build", model: STORY_MODEL },
+      time: { created: LAB_TIME + 300_000 },
+      metadata: { agent: "build", model: LAB_MODEL },
     },
     {
       id: "msg_assistant_todos",
       type: "assistant",
       agent: "build",
-      model: STORY_MODEL,
+      model: LAB_MODEL,
       content: [
         { type: "text", text: "I'll plan the work, then build the pill next to the activity capsule." },
         {
@@ -86,10 +86,10 @@ function document(todos: Todo[]): SessionDocument {
             content: [{ type: "text", text: "Todos updated" }],
             metadata: { todos },
           },
-          time: { created: STORY_TIME + 301_000, ran: STORY_TIME + 301_100 },
+          time: { created: LAB_TIME + 301_000, ran: LAB_TIME + 301_100 },
         },
       ],
-      time: { created: STORY_TIME + 300_500 },
+      time: { created: LAB_TIME + 300_500 },
     },
   ]
 
@@ -104,7 +104,7 @@ function Preview(props: PreviewArgs) {
 
   onMount(() =>
     setTimeout(() => {
-      const timeline = window.document.querySelector('[data-slot="story-timeline"]')
+      const timeline = window.document.querySelector('[data-slot="lab-timeline"]')
       timeline?.scrollTo({ top: timeline.scrollHeight })
     }, 150),
   )

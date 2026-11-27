@@ -1,9 +1,9 @@
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const fixture = sourceURL(new URL("./presence.fixture.tsx", import.meta.url))
 
-story.beforeEach(async ({ mount, page }) => {
-  // Any story loads the app's styles; the fixture mounts the presences beside it.
+test.beforeEach(async ({ mount, page }) => {
+  // Any page loads the app's styles; the fixture mounts the presences beside it.
   await mount("ui-line-comment--editor")
   await page.evaluate(async (fixture) => {
     const { mountPresence } = await import(fixture)
@@ -11,7 +11,7 @@ story.beforeEach(async ({ mount, page }) => {
   }, fixture)
 })
 
-story("hides an exit whose element was unmounted mid-animation", async ({ page }) => {
+test("hides an exit whose element was unmounted mid-animation", async ({ page }) => {
   const root = page.getByTestId("presence-fixture")
   await page.evaluate(async (fixture) => {
     const { setPresence } = await import(fixture)
@@ -33,7 +33,7 @@ story("hides an exit whose element was unmounted mid-animation", async ({ page }
   await expect(root.getByTestId("presence-state")).toHaveText("hidden")
 })
 
-story("hides at once when its element is swapped mid-exit", async ({ page }) => {
+test("hides at once when its element is swapped mid-exit", async ({ page }) => {
   const root = page.getByTestId("presence-fixture")
   await page.evaluate(async (fixture) => {
     const { setPresence } = await import(fixture)
@@ -56,7 +56,7 @@ story("hides at once when its element is swapped mid-exit", async ({ page }) => 
   await expect(root.getByTestId("hint-row")).toHaveCount(0)
 })
 
-story("hides when Reduce Motion turns on mid-exit", async ({ page }) => {
+test("hides when Reduce Motion turns on mid-exit", async ({ page }) => {
   const root = page.getByTestId("presence-fixture")
   await page.evaluate(async (fixture) => {
     const { setPresence } = await import(fixture)
@@ -81,7 +81,7 @@ story("hides when Reduce Motion turns on mid-exit", async ({ page }) => {
   await expect(root.getByTestId("hint-bottom")).toHaveCount(0)
 })
 
-story("keeps the dropzone mounted while its fade-out transition plays", async ({ page }) => {
+test("keeps the dropzone mounted while its fade-out transition plays", async ({ page }) => {
   const dropzone = page.locator('[data-component="session-dropzone"]')
   await page.evaluate(async (fixture) => {
     const { setPresence } = await import(fixture)

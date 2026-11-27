@@ -1,8 +1,8 @@
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const fixture = sourceURL(new URL("./basic-tool.fixture.tsx", import.meta.url))
 
-story("does not render completed reasoning until it is opened", async ({ mount, page }) => {
+test("does not render completed reasoning until it is opened", async ({ mount, page }) => {
   const root = await mount("current-session-timeline-rows--conversation", {
     args: { scenario: "reasoning", mode: "compact", text: "Response after reasoning" },
   })
@@ -27,7 +27,7 @@ story("does not render completed reasoning until it is opened", async ({ mount, 
   expect(await cached()).toBe(true)
 })
 
-story("constructs declared tool details lazily and keeps trigger contracts reactive", async ({ mount, page }) => {
+test("constructs declared tool details lazily and keeps trigger contracts reactive", async ({ mount, page }) => {
   await mount("components-markdown--compact-result")
   await page.evaluate(async (fixture) => {
     const { mountBasicTool } = await import(fixture)

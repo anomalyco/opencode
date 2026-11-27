@@ -3,13 +3,13 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { onMount } from "solid-js"
 import type { IntegrationInfo } from "@opencode/client/promise"
 import type { ServerConnection } from "@/runtime/server/registry"
-import { DialogStoryRuntime, STORY_DIRECTORY, STORY_LOCKED_SERVER } from "@/lab/dialog-story-runtime"
+import { DialogLabRuntime, LAB_DIRECTORY, LAB_LOCKED_SERVER } from "@/lab/dialog-runtime"
 import { DialogConnectProvider, useProviderConnectController } from "./dialog"
 
-function ConnectProviderDialogStory() {
+function ConnectProviderDialogLab() {
   const dialog = useDialog()
 
-  const open = () => void dialog.show(() => <DialogConnectProvider directory={STORY_DIRECTORY} />)
+  const open = () => void dialog.show(() => <DialogConnectProvider directory={LAB_DIRECTORY} />)
 
   onMount(open)
 
@@ -20,14 +20,14 @@ function ConnectProviderDialogStory() {
   )
 }
 
-function ProviderConnectionDialogStory(props: { provider: string }) {
+function ProviderConnectionDialogLab(props: { provider: string }) {
   const dialog = useDialog()
 
   const controller = useProviderConnectController()
 
   const open = () => {
     controller.select(props.provider)
-    void dialog.show(() => <DialogConnectProvider directory={STORY_DIRECTORY} controller={controller} />)
+    void dialog.show(() => <DialogConnectProvider directory={LAB_DIRECTORY} controller={controller} />)
   }
 
   onMount(open)
@@ -45,9 +45,9 @@ function renderConnection(
 ) {
   return () => {
     return (
-      <DialogStoryRuntime integrations={options.integrations} servers={options.servers}>
-        <ProviderConnectionDialogStory provider={provider} />
-      </DialogStoryRuntime>
+      <DialogLabRuntime integrations={options.integrations} servers={options.servers}>
+        <ProviderConnectionDialogLab provider={provider} />
+      </DialogLabRuntime>
     )
   }
 }
@@ -82,9 +82,9 @@ export default {
 
 export const Picker = {
   render: () => (
-    <DialogStoryRuntime>
-      <ConnectProviderDialogStory />
-    </DialogStoryRuntime>
+    <DialogLabRuntime>
+      <ConnectProviderDialogLab />
+    </DialogLabRuntime>
   ),
 }
 
@@ -95,7 +95,7 @@ export const ChooseMethod = {
 /** OpenCode Console through a remote server: pick "API key (service account)" to see the note on a form. */
 export const ConsoleRemote = { render: renderConnection("opencode", { servers: [REMOTE_SERVER] }) }
 
-// Console with only its browser sign-in, so the story starts on the device code.
+// Console with only its browser sign-in, so the page starts on the device code.
 const consoleAccountOnly: IntegrationInfo[] = [
   {
     id: "opencode",
@@ -135,7 +135,7 @@ export const AwaitingBrowser = { render: renderConnection("github-copilot") }
 /** A choice between a device sign-in and an API key. */
 export const DeviceOrApiKey = { render: renderConnection("xai") }
 
-// OpenAI with only its ChatGPT method, so the story opens straight on the sign-in.
+// OpenAI with only its ChatGPT method, so the page opens straight on the sign-in.
 const chatgptOnly: IntegrationInfo[] = [
   {
     id: "openai",
@@ -180,8 +180,8 @@ export const Failed = { render: renderConnection("acme-broken") }
 // The fixture refuses requests to this server. Submitting a sample service key shows the real error and retry.
 export const LockedRemoteServer = {
   render: () => (
-    <DialogStoryRuntime servers={[STORY_LOCKED_SERVER]}>
-      <ProviderConnectionDialogStory provider="opencode" />
-    </DialogStoryRuntime>
+    <DialogLabRuntime servers={[LAB_LOCKED_SERVER]}>
+      <ProviderConnectionDialogLab provider="opencode" />
+    </DialogLabRuntime>
   ),
 }

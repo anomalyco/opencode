@@ -1,5 +1,5 @@
 import type { SessionMessageAssistantReasoning, SessionMessageAssistantTool } from "@opencode/client/promise"
-import { storyTool } from "../storybook/current-session-scenarios"
+import { labTool } from "../lab/current-session-scenarios"
 
 // Representative groups whose labels the timeline tests pin.
 
@@ -16,7 +16,7 @@ export type GroupFixturePart =
 
 const thought = (id: string): GroupFixturePart => ({ type: "reasoning", id, text: "hmm", time: { created: 1 } })
 
-const tool = storyTool
+const tool = labTool
 
 const shellOutcome = (id: string, shellID: string, verb: "finished" | "stopped", failed = false): Outcome => ({
   type: "event",
