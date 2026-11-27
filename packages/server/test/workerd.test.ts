@@ -54,6 +54,31 @@ it.live("boots the workerd profile over durable object storage", () =>
   }),
 )
 
+it.live("reads VCS for a cold workerd location without checking the host filesystem", () =>
+  Effect.gen(function* () {
+    const handler = yield* ServerWorkerd.create({
+      storage: makeDurableObjectStorage(),
+      password: "secret",
+      config: { content: "{}" },
+    })
+    const headers = { authorization: `Basic ${btoa("opencode:secret")}` }
+    const directory = `/workspace-${crypto.randomUUID()}`
+    const url = new URL("http://opencode.local/api/vcs")
+    url.searchParams.set("location[directory]", directory)
+    const result = yield* Effect.promise(() => handler(new Request(url, { headers })))
+    expect(result.status).toBe(200)
+    expect(yield* Effect.promise(() => result.json())).toEqual({
+      location: { directory },
+      data: { branch: {} },
+    })
+    const loaded = yield* Effect.promise(() =>
+      handler(new Request("http://opencode.local/api/debug/location", { headers })),
+    )
+    expect(loaded.status).toBe(200)
+    expect(yield* Effect.promise(() => loaded.json())).toEqual([])
+  }),
+)
+
 it.effect("serves the bundled models.dev snapshot unless fetching is turned back on", () =>
   Effect.sync(() => {
     const storage = makeDurableObjectStorage()

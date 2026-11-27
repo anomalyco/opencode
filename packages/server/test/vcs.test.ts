@@ -12,7 +12,13 @@ import { ServerFetch } from "../src/fetch"
 it.live("reads VCS info without loading a cold location", () =>
   Effect.gen(function* () {
     const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-vcs-cold-")))
-    yield* Effect.promise(() => $`git init -b main`.cwd(tmp.path).quiet())
+    yield* Effect.promise(async () => {
+      await $`git init -b main`.cwd(tmp.path).quiet()
+      await $`git -c user.name=Test -c user.email=test@opencode.test -c commit.gpgsign=false commit --allow-empty -m initial`
+        .cwd(tmp.path)
+        .quiet()
+      await $`git checkout -b feature`.cwd(tmp.path).quiet()
+    })
     const server = yield* serveRoutes({
       database: { path: ":memory:" },
       config: { directory: path.join(tmp.path, "config") },
@@ -29,7 +35,7 @@ it.live("reads VCS info without loading a cold location", () =>
     expect(loaded).toEqual([])
     const expected = {
       location: { directory: tmp.path },
-      data: { provider: "git", branch: { current: "main" } },
+      data: { provider: "git", branch: { current: "feature", default: "main" } },
     }
     expect(yield* Effect.promise(() => result.json())).toMatchObject(expected)
     const header = yield* Effect.promise(() =>
@@ -199,9 +205,15 @@ it.live("uses the loaded VCS provider and returns 501 when it has no initializer
         ),
       ],
     )
-    yield* server.pluginsLoaded(tmp.path)
     const url = new URL("http://opencode.local/api/vcs")
     url.searchParams.set("location[directory]", tmp.path)
+    const cold = yield* Effect.promise(() => server.fetch(url))
+    expect(cold.status).toBe(200)
+    expect(yield* Effect.promise(() => cold.json())).toEqual({
+      location: { directory: tmp.path },
+      data: { branch: {} },
+    })
+    yield* server.pluginsLoaded(tmp.path)
     const info = yield* Effect.promise(() => server.fetch(url))
     expect(info.status).toBe(200)
     expect(yield* Effect.promise(() => info.json())).toMatchObject({
