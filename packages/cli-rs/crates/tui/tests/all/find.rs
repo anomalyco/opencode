@@ -8,7 +8,7 @@ use std::sync::Arc;
 use opencode_api::generated::V2Event;
 use opencode_local::cli_config::{Info, Markdown as MarkdownMode, Session as SessionConfig, Tabs, TabsMode};
 use opencode_tui::Deps;
-use opencode_ui::markdown::{CodeBlockRenderers, MarkdownParser};
+use opencode_ui::markdown::{CodeBlockKind, CodeBlockRenderers, MarkdownParser, ShownBlock};
 use opentui::style::Color;
 use serde_json::{Value, json};
 
@@ -314,8 +314,11 @@ fn parser_count(
     });
     let mut total = 0usize;
     for block in &parsed.blocks {
+        if matches!(block, ShownBlock::Code { kind: CodeBlockKind::Drawn, .. }) {
+            continue;
+        }
         let count = opencode_tui::routes::session::find::find_ranges(block.text(), pattern.as_ref()).len();
-        if block.is_claimed_code() && count > 0 {
+        if block.is_dynamic_claimed() && count > 0 {
             return None;
         }
         total += count;
@@ -817,4 +820,157 @@ fn plugin_fence_find_never_makes_throwaway_calls_and_keeps_counts_stable() {
         );
     }
     assert!(recorded.gone.iter().all(|&key| key > 0), "never fence-gone(0): {:?}", recorded.gone);
+}
+
+#[test]
+fn find_unmounts_plugin_fences_on_query_change_and_close_and_keeps_builtins_static() {
+    use std::collections::{HashMap, HashSet};
+    use std::sync::Mutex;
+
+    use opencode_plugin_abi::{Fenced, Plugin, Setup, Span as AbiSpan};
+    use opentui::widget::Widget;
+
+    #[derive(Default)]
+    struct Log {
+        live: HashMap<u64, String>,
+        renders: Vec<(String, u64, String)>,
+        gone: Vec<u64>,
+    }
+
+    static LOG: std::sync::OnceLock<Mutex<Log>> = std::sync::OnceLock::new();
+    let log = LOG.get_or_init(|| Mutex::new(Log::default()));
+    *log.lock().unwrap() = Log::default();
+
+    fn setup(setup: &mut Setup) -> Result<(), String> {
+        let log = LOG.get().unwrap();
+        setup.on_fence_gone(move |key| {
+            let mut guard = log.lock().unwrap();
+            guard.gone.push(key);
+            guard.live.remove(&key);
+        });
+        setup.code_block("drawfence", move |_, fence| {
+            let mut guard = log.lock().unwrap();
+            guard.renders.push((fence.language.clone(), fence.key, fence.code.clone()));
+            guard.live.insert(fence.key, fence.code.clone());
+            Fenced::Lines { lines: vec![vec![AbiSpan::new("DRAWN-PLUGIN")]], fg: None, drag: false }
+        });
+        // Built-in static path (same mechanism Mermaid and LaTeX use): must never invoke render-fence while unmounted.
+        setup.code_block_draws("staticfence", |_, _| true);
+        setup.code_block("staticfence", move |_, fence| {
+            let mut guard = log.lock().unwrap();
+            guard.renders.push((fence.language.clone(), fence.key, fence.code.clone()));
+            guard.live.insert(fence.key, fence.code.clone());
+            Fenced::Lines { lines: vec![vec![AbiSpan::new("STATIC-DRAWN")]], fg: None, drag: false }
+        });
+        Ok(())
+    }
+
+    let mounted_height = |h: &Harness| -> f32 {
+        std::iter::successors(h.app.app().widget_at(4, 3), |widget| widget.parent())
+            .map(|widget| widget.rect().height)
+            .fold(0.0, f32::max)
+    };
+
+    let mut messages = vec![
+        assistant_msg("m_a1", "```drawfence\nalpha widget\n```", 1),
+        assistant_msg("m_a2", "```drawfence\napple widget\n```", 2),
+        assistant_msg("m_a3", "```drawfence\nacorn widget\n```", 3),
+        assistant_msg("m_a4", "```drawfence\nabacus widget\n```", 4),
+        assistant_msg("m_static", "```staticfence\nalpha static\n```", 5),
+        assistant_msg("m_mermaid", "```mermaid\ngraph TD\n  alpha --> beta\n```", 6),
+        assistant_msg("m_latex", "```latex\n\\alpha + a\n```", 7),
+    ];
+    for index in 0..70 {
+        messages.push(user_msg(&format!("uf_{index:03}"), &format!("Row {index}"), 20 + index as u64));
+    }
+    messages.push(assistant_msg("m_tail_fence", "```drawfence\nxyz end\n```", 199));
+    messages.push(assistant_msg("m_tail", "Tail prompt alpha", 200));
+
+    let mut info: Info = opencode_local::cli_config::decode_text(
+        &json!({ "animations": false, "experimental": { "session-find": true } }).to_string(),
+    )
+    .unwrap();
+    info.tabs = Some(Tabs { mode: Some(TabsMode::Off), ..Tabs::default() });
+    let fake = support::Fake::new(move |seen: &Seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/session/ses_find_test") => (200, json!({ "data": support::session(SESSION, "Find") })),
+        ("GET", "/api/session/ses_find_test/message") => {
+            let mut rev = messages.clone();
+            rev.reverse();
+            (200, json!({ "data": rev, "cursor": {} }))
+        }
+        ("GET", "/api/session/ses_find_test/inbox") => (200, json!({ "data": [] })),
+        _ => support::base(seen, DIRECTORY),
+    });
+    let deps = Deps {
+        config: support::config(info),
+        route: support::session_route(SESSION),
+        builtins: vec![
+            opencode_mermaid::plugin().into(),
+            opencode_latex::plugin().into(),
+            Plugin { id: "test.unmount", setup }.into(),
+        ],
+        ..support::deps(Arc::new(fake))
+    };
+    let h = support::mount(100, 30, deps);
+    assert!(h.app.wait_until(WAIT, || h.app.text().contains("Tail prompt alpha")));
+    h.app.render();
+
+    let height_before = mounted_height(&h);
+    let live_before: HashSet<u64> = log.lock().unwrap().live.keys().copied().collect();
+    assert_eq!(live_before.len(), 1, "only the mounted tail drawfence should be live before Find: {live_before:?}");
+
+    // Open Find and type "a": mounts the 4 off-window drawfence parts, keeps static/Mermaid/LaTeX unmounted.
+    h.app.press("ctrl+x");
+    h.app.press("f");
+    assert!(h.app.wait_until(WAIT, || h.app.text().contains("Find in session...")));
+    h.app.type_text("a");
+    assert!(h.app.wait_until(WAIT, || h.app.text().contains("Find · 1 of 3")), "{}", h.app.text());
+    h.app.render();
+    assert_eq!(mounted_height(&h), height_before);
+    {
+        let recorded = log.lock().unwrap();
+        assert_eq!(recorded.live.len(), 5, "expected tail + 4 off-window drawfences live: {:?}", recorded.live);
+        assert!(
+            !recorded.renders.iter().any(|(lang, _, _)| lang == "staticfence"),
+            "static client fences must never render when unmounted: {:?}",
+            recorded.renders
+        );
+    }
+
+    // Refine query to "alpha": m_a2, m_a3, m_a4 stop matching and must immediately unmount with fence-gone.
+    h.app.type_text("lpha");
+    assert!(h.app.wait_until(WAIT, || h.app.text().contains("Find · 1 of 1")), "{}", h.app.text());
+    h.app.render();
+    {
+        let recorded = log.lock().unwrap();
+        let codes: HashSet<&str> = recorded.live.values().map(String::as_str).collect();
+        assert_eq!(
+            codes,
+            HashSet::from(["xyz end", "alpha widget"]),
+            "non-matching off-window drawfences should have unmounted with fence-gone: {:?}",
+            recorded.live
+        );
+        assert_eq!(recorded.gone.len(), 3, "expected 3 fence-gone calls on query refinement: {:?}", recorded.gone);
+    }
+
+    // Backspace to "a" (re-mounts all 4), then Escape (closes Find): live keys & mounted height return to pre-Find state.
+    for _ in 0..4 {
+        h.app.press("backspace");
+    }
+    assert!(h.app.wait_until(WAIT, || h.app.text().contains("Find · 1 of 3")), "{}", h.app.text());
+    h.app.render();
+    assert_eq!(log.lock().unwrap().live.len(), 5);
+
+    h.app.press("escape");
+    assert!(h.app.wait_until(WAIT, || !h.app.text().contains("Find ·")));
+    h.app.render();
+    assert_eq!(mounted_height(&h), height_before);
+    let recorded = log.lock().unwrap();
+    let live_after: HashSet<u64> = recorded.live.keys().copied().collect();
+    assert_eq!(
+        live_after, live_before,
+        "after closing Find, live plugin keys must return to what they were before Find opened"
+    );
+    assert!(recorded.renders.iter().all(|(_, key, _)| *key > 0));
+    assert!(recorded.gone.iter().all(|&key| key > 0));
 }

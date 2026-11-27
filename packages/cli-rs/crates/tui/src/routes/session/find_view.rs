@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 use opencode_ui::markdown::{
-    CodeBlockRenderers, MarkdownParser, ParsedMarkdown, ShownBlock, hyperlinks, tag_untagged_code_blocks,
+    CodeBlockKind, CodeBlockRenderers, MarkdownParser, ParsedMarkdown, ShownBlock, hyperlinks, tag_untagged_code_blocks,
 };
 use opentui::syntax::SyntaxTheme;
 use opentui::widget::{CodeBlock, InlineContext, InlineSpan, Input, Markdown, MarkdownColors, WeakWidget};
@@ -357,6 +357,8 @@ impl FindInner {
             let bar = FindBar::new(tui, &this);
             *self.bar.borrow_mut() = Some(bar);
             self.resize.set(Some(tui.app.on_resize(bind!(self.this, |inner, _, width, _| {
+                inner.parsed_cache.borrow_mut().clear();
+                inner.parse_epoch.set(inner.parse_epoch.get().wrapping_add(1));
                 if let Some(bar) = inner.bar.borrow().as_ref() {
                     bar.layout_for_width(width);
                 }
@@ -496,7 +498,15 @@ impl FindInner {
         let blocks: Vec<CachedBlock> = parsed
             .blocks
             .into_iter()
-            .map(|block| CachedBlock { claimed: block.is_claimed_code(), text: block.text().to_owned() })
+            .filter_map(|block| match block {
+                ShownBlock::Code { kind: CodeBlockKind::Drawn, .. } => None,
+                ShownBlock::Code { kind: CodeBlockKind::Dynamic, text, .. } => {
+                    Some(CachedBlock { claimed: true, text })
+                }
+                ShownBlock::Code { text, .. } | ShownBlock::Prose { text, .. } | ShownBlock::TableCell { text, .. } => {
+                    Some(CachedBlock { claimed: false, text })
+                }
+            })
             .collect();
         let result = scan_cached_blocks(&blocks, pattern);
         self.parsed_cache
@@ -806,7 +816,8 @@ struct FindMarkdownInner {
     last_width: u16,
     last_parse_epoch: u64,
     last_parsed: Option<Rc<ParsedMarkdown>>,
-    has_claimed: bool,
+    has_custom: bool,
+    has_dynamic: bool,
     theme: Theme,
     syntax: Arc<SyntaxTheme>,
     md_colors: MarkdownColors,
@@ -866,6 +877,21 @@ impl FindMarkdown {
         let colors = (cx.theme.find.text.current, cx.theme.find.background.r#match, cx.theme.find.background.current);
         let has_links = hyperlinks(cx.app);
         let my_current = active.current_occurrence(&part_key);
+        let fresh_empty = markdown.with_markdown(str::is_empty);
+        let pre_parsed = if !self.active.get() && !fresh_empty {
+            let parsed = Rc::new(active.parse_markdown(cx.tui, source, cx.conceal));
+            let any_match = parsed.blocks.iter().any(|block| {
+                !matches!(block, ShownBlock::Code { kind: CodeBlockKind::Drawn, .. })
+                    && !find_ranges(block.text(), Some(&active.pattern)).is_empty()
+            });
+            if !any_match {
+                active.counted(part_key, source, cx.conceal, has_links, false, 0);
+                return;
+            }
+            Some(parsed)
+        } else {
+            None
+        };
         let state = {
             let mut slot = self.inner.borrow_mut();
             slot.get_or_insert_with(|| {
@@ -879,7 +905,8 @@ impl FindMarkdown {
                     last_width: cx.content,
                     last_parse_epoch: active.parse_epoch,
                     last_parsed: None,
-                    has_claimed: false,
+                    has_custom: false,
+                    has_dynamic: false,
                     theme: cx.theme.clone(),
                     syntax: cx.syntax.clone(),
                     md_colors: opencode_ui::markdown::view_colors(cx.theme, cx.syntax),
@@ -907,12 +934,11 @@ impl FindMarkdown {
                 && inner.last_hyperlinks == has_links
                 && inner.last_colors == colors
                 && inner.last_parse_epoch == active.parse_epoch
-                && (!inner.has_claimed || inner.last_width == cx.content)
+                && (!inner.has_custom || inner.last_width == cx.content)
         };
         if unchanged {
             return;
         }
-        let fresh_empty = markdown.with_markdown(str::is_empty);
         let reuse_parsed = {
             let inner = state.borrow();
             was_active
@@ -926,7 +952,7 @@ impl FindMarkdown {
         let parsed: Rc<ParsedMarkdown> = if reuse_parsed {
             state.borrow().last_parsed.clone().unwrap()
         } else {
-            let parsed = Rc::new(active.parse_markdown(cx.tui, source, cx.conceal));
+            let parsed = pre_parsed.unwrap_or_else(|| Rc::new(active.parse_markdown(cx.tui, source, cx.conceal)));
             state.borrow_mut().last_parsed = Some(parsed.clone());
             parsed
         };
@@ -1010,8 +1036,9 @@ impl FindMarkdown {
             let mut inner = state.borrow_mut();
             let source_changed = inner.last_source != source;
             let conceal_changed = inner.last_conceal != cx.conceal;
-            let has_claimed = parsed.blocks.iter().any(ShownBlock::is_claimed_code);
-            let width_changed = has_claimed && inner.last_width != cx.content;
+            let has_custom = parsed.blocks.iter().any(ShownBlock::has_custom_renderer);
+            let has_dynamic = parsed.blocks.iter().any(ShownBlock::is_dynamic_claimed);
+            let width_changed = has_custom && inner.last_width != cx.content;
             if source_changed {
                 inner.code_slots.clear();
             }
@@ -1062,7 +1089,8 @@ impl FindMarkdown {
             inner.last_colors = colors;
             inner.last_width = cx.content;
             inner.last_parse_epoch = active.parse_epoch;
-            inner.has_claimed = has_claimed;
+            inner.has_custom = has_custom;
+            inner.has_dynamic = has_dynamic;
             inner.theme = cx.theme.clone();
             inner.syntax = cx.syntax.clone();
             inner.md_colors = opencode_ui::markdown::view_colors(cx.theme, cx.syntax);
@@ -1177,11 +1205,11 @@ impl FindMarkdown {
                 state.borrow_mut().pass_active = false;
             }
         }
-        let (total, has_claimed, loc) = {
+        let (total, has_dynamic, loc) = {
             let inner = state.borrow();
-            (inner.actual_total, inner.has_claimed, inner.current_loc.clone())
+            (inner.actual_total, inner.has_dynamic, inner.current_loc.clone())
         };
-        active.counted(part_key.clone(), source, cx.conceal, has_links, has_claimed, total);
+        active.counted(part_key.clone(), source, cx.conceal, has_links, has_dynamic, total);
         if let Some(occurrence) = my_current {
             let md = markdown.clone();
             let row = move || -> Option<f64> {
@@ -1304,8 +1332,12 @@ fn prepare_pass(inner: &mut FindMarkdownInner, parsed: &ParsedMarkdown, pattern:
                 inner.table_plan.push_back((*top_index, *row, *total_rows, cursor));
                 cursor += count;
             }
-            ShownBlock::Code { claimed, text, .. } => {
-                let drawn = *claimed && inner.code_slots.get(code_index).is_none_or(|slot| slot.drawn);
+            ShownBlock::Code { kind, text, .. } => {
+                let drawn = match kind {
+                    CodeBlockKind::Code => false,
+                    CodeBlockKind::Drawn => true,
+                    CodeBlockKind::Dynamic => inner.code_slots.get(code_index).is_none_or(|slot| slot.drawn),
+                };
                 assumed.push(drawn);
                 code_index += 1;
                 inner.code_plan.push_back(cursor);

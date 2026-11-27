@@ -256,6 +256,83 @@ fn find_long() {
     assert!(!h.app.text().contains("Find in session..."));
 }
 
+/// Worst-case Find-in-session over a long session with `TURNS` (200) third-party plugin-claimed fences
+/// and a one-letter query (`"a"`) that matches every fence, mounting all off-window parts for real
+/// while the query is active and releasing them with `fence-gone` when Find closes.
+#[test]
+#[ignore = "performance scenario; run with `bun run perf`"]
+fn find_plugin_fences() {
+    use std::collections::HashSet;
+    use std::sync::Mutex;
+
+    use opencode_plugin_abi::{Fenced, Plugin, Setup, Span as AbiSpan};
+
+    static LIVE: std::sync::OnceLock<Mutex<HashSet<u64>>> = std::sync::OnceLock::new();
+    let live = LIVE.get_or_init(|| Mutex::new(HashSet::new()));
+    live.lock().unwrap().clear();
+
+    fn setup(setup: &mut Setup) -> Result<(), String> {
+        let live = LIVE.get().unwrap();
+        setup.on_fence_gone(move |key| {
+            live.lock().unwrap().remove(&key);
+        });
+        setup.code_block("customfence", move |_, fence| {
+            live.lock().unwrap().insert(fence.key);
+            Fenced::Lines {
+                lines: vec![
+                    vec![AbiSpan::new("╭──────────────╮")],
+                    vec![AbiSpan::new("│ custom block │")],
+                    vec![AbiSpan::new("╰──────────────╯")],
+                ],
+                fg: None,
+                drag: false,
+            }
+        });
+        Ok(())
+    }
+
+    let info = opencode_local::cli_config::Info {
+        experimental: Some([("session-find".to_owned(), true)].into_iter().collect()),
+        ..support::still()
+    };
+    let deps = Deps {
+        config: support::config(info),
+        route: support::session_route(LONG),
+        builtins: vec![
+            opencode_mermaid::plugin().into(),
+            opencode_latex::plugin().into(),
+            Plugin { id: "perf.customfence", setup }.into(),
+        ],
+        ..support::deps(Arc::new(Server::new().plugin_fences()))
+    };
+    let h = support::mount(120, 40, deps);
+    h.app.set_verify(false);
+    wait_tail(&h, LONG, TURNS);
+    first(&h);
+    h.dispatch("session.last");
+    settle(&h.app);
+    let live_before = live.lock().unwrap().len();
+    assert!(live_before < TURNS, "expected most plugin fences off-window before Find (live={live_before})");
+
+    let malloc = Malloc::start();
+    let probe = Probe::start();
+    h.dispatch("session.find");
+    frame(&h.app);
+    h.app.type_text("a");
+    frame(&h.app);
+    settle(&h.app);
+    malloc.sample();
+    let live_peak = live.lock().unwrap().len();
+    assert_eq!(live_peak, TURNS, "expected all {TURNS} matching plugin fences mounted while query is active");
+    h.app.press("escape");
+    settle(&h.app);
+    let live_after = live.lock().unwrap().len();
+    assert_eq!(live_after, live_before, "expected all extra plugin fences released on close");
+    let malloc = malloc.finish();
+    probe.finish_with("find_plugin_fences", 3, malloc);
+    assert!(!h.app.text().contains("Find ·"));
+}
+
 #[test]
 #[ignore = "performance scenario; run with `bun run perf`"]
 fn session_list() {
@@ -596,6 +673,42 @@ impl Server {
     fn short(mut self) -> Self {
         let messages = long_messages(20, 4).iter().map(Value::to_string).collect();
         self.messages.insert(SHORT.into(), messages);
+        self
+    }
+
+    fn plugin_fences(mut self) -> Self {
+        let mut messages = Vec::with_capacity(2 * TURNS);
+        for turn in 1..=TURNS {
+            let base = 1_700_000_000_000_u64 + turn as u64 * 10_000;
+            messages.push(
+                json!({
+                    "id": format!("msg_pf_u_{turn:04}"),
+                    "type": "user",
+                    "time": { "created": base },
+                    "agent": "build",
+                    "model": { "providerID": "provider-0", "modelID": "model-0-0" },
+                    "content": [{ "type": "text", "text": format!("Question {turn} prompt") }],
+                })
+                .to_string(),
+            );
+            let body = format!("Reply {turn}\n\n```customfence\nblock {turn} alpha payload\n```");
+            messages.push(
+                json!({
+                    "id": format!("msg_pf_a_{turn:04}"),
+                    "type": "assistant",
+                    "parentID": format!("msg_pf_u_{turn:04}"),
+                    "time": { "created": base + 100, "completed": base + 500 },
+                    "model": { "providerID": "provider-0", "modelID": "model-0-0" },
+                    "agent": "build",
+                    "cost": 0.0,
+                    "tokens": { "input": 10, "output": 10, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
+                    "finish": "stop",
+                    "content": [{ "type": "text", "text": body }],
+                })
+                .to_string(),
+            );
+        }
+        self.messages.insert(LONG.into(), messages);
         self
     }
 

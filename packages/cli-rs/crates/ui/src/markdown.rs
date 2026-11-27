@@ -18,6 +18,22 @@ use crate::theme::Theme;
 /// [`Markdown::code_block_renderer`].
 pub type CodeBlockRenderer = Rc<dyn Fn(&CodeBlock<'_>) -> Option<AnyWidget>>;
 
+/// Pure predicate telling whether a completed fence draws a custom view (`true`) or falls back
+/// to the code view (`false`) at terminal `width`, without calling any plugin renderer.
+pub type CodeBlockDraws = Rc<dyn Fn(&str, u16) -> bool>;
+
+/// How a fenced or indented code block behaves for unmounted Find counting.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CodeBlockKind {
+    /// Rendered as code (no custom renderer, or a static built-in renderer fell back to code).
+    Code,
+    /// Drawn as a custom view by a built-in client renderer (Mermaid, LaTeX): zero code matches,
+    /// evaluated statically without mounting or calling a plugin.
+    Drawn,
+    /// Claimed by a third-party plugin renderer whose decision requires a real mount.
+    Dynamic,
+}
+
 /// Renders inline math's TeX as one row of spans, or returns `None` to show the TeX as typed.
 pub type InlineMathRenderer = Rc<dyn Fn(&str) -> Option<Vec<Span<'static>>>>;
 
@@ -25,16 +41,30 @@ pub type InlineMathRenderer = Rc<dyn Fn(&str) -> Option<Vec<Span<'static>>>>;
 /// `renderNode` (`plugins.markdown()`), and the inline math renderer. Empty until a plugin registers one.
 #[derive(Clone, Default)]
 pub struct CodeBlockRenderers {
-    blocks: Vec<(String, CodeBlockRenderer)>,
+    blocks: Vec<(String, CodeBlockRenderer, Option<CodeBlockDraws>)>,
     math: Option<InlineMathRenderer>,
 }
 
 impl CodeBlockRenderers {
     /// Renders fences of `language` with `render`. A later registration for the same language replaces it.
     pub fn register(&mut self, language: impl Into<String>, render: CodeBlockRenderer) {
-        let language = language.into();
-        self.blocks.retain(|(key, _)| *key != language);
-        self.blocks.push((language, render));
+        self.register_entry(language.into(), render, None);
+    }
+
+    /// Renders fences of `language` with `render`, pairing a pure static `draws` predicate (used by
+    /// built-in Mermaid and LaTeX renderers so Find counts unmounted blocks without mounting them).
+    pub fn register_with_static(
+        &mut self,
+        language: impl Into<String>,
+        render: CodeBlockRenderer,
+        draws: CodeBlockDraws,
+    ) {
+        self.register_entry(language.into(), render, Some(draws));
+    }
+
+    fn register_entry(&mut self, language: String, render: CodeBlockRenderer, draws: Option<CodeBlockDraws>) {
+        self.blocks.retain(|(key, _, _)| *key != language);
+        self.blocks.push((language, render, draws));
     }
 
     /// Renders inline math with `render`, replacing an earlier one. A [`view`] with an inline math renderer parses
@@ -46,12 +76,20 @@ impl CodeBlockRenderers {
     /// Returns the custom code-block renderer registered for `language`, if any.
     pub fn get(&self, language: &str) -> Option<&CodeBlockRenderer> {
         let language = filetype_for_info_string(language).unwrap_or_else(|| language.to_owned());
-        self.blocks.iter().find(|(key, _)| *key == language).map(|(_, render)| render)
+        self.blocks.iter().find(|(key, _, _)| *key == language).map(|(_, render, _)| render)
     }
 
-    /// Whether a custom code-block renderer is registered for `language`, without calling it.
-    pub fn has(&self, language: &str) -> bool {
-        self.get(language).is_some()
+    /// Classifies `language` / `code` at terminal `width` without invoking any plugin renderer.
+    pub fn classify(&self, language: &str, code: &str, width: u16) -> CodeBlockKind {
+        let language = filetype_for_info_string(language).unwrap_or_else(|| language.to_owned());
+        let Some((_, _, draws)) = self.blocks.iter().find(|(key, _, _)| *key == language) else {
+            return CodeBlockKind::Code;
+        };
+        match draws {
+            Some(draws) if draws(code, width) => CodeBlockKind::Drawn,
+            Some(_) => CodeBlockKind::Code,
+            None => CodeBlockKind::Dynamic,
+        }
     }
 }
 
@@ -139,7 +177,7 @@ pub fn view(
         .table_options(table(theme))
         .conceal(conceal)
         .streaming(streaming);
-    for (language, render) in &renderers.blocks {
+    for (language, render, _) in &renderers.blocks {
         let render = render.clone();
         markdown.code_block_renderer(language, move |block| render(block));
     }
@@ -198,14 +236,13 @@ pub enum ShownBlock {
     Prose { top_index: usize, text: String },
     /// One GFM table cell after `inline_hook`.
     TableCell { top_index: usize, row: usize, total_rows: usize, text: String },
-    /// A fenced or indented code block. When `claimed` is true, a custom code-block renderer is
-    /// registered for `language` and only a real render decides whether it draws a custom view or
-    /// falls back to code.
+    /// A fenced or indented code block, classified as plain/fallback [`CodeBlockKind::Code`],
+    /// statically drawn built-in [`CodeBlockKind::Drawn`], or third-party [`CodeBlockKind::Dynamic`].
     Code {
         top_index: usize,
         language: Option<String>,
         has_info: bool,
-        claimed: bool,
+        kind: CodeBlockKind,
         source_range: Range<usize>,
         text: String,
     },
@@ -219,9 +256,14 @@ impl ShownBlock {
         }
     }
 
-    /// Whether a custom code-block renderer is registered for this block's language.
-    pub fn is_claimed_code(&self) -> bool {
-        matches!(self, Self::Code { claimed: true, .. })
+    /// Whether a third-party plugin code-block renderer claims this block (requiring a real mount).
+    pub fn is_dynamic_claimed(&self) -> bool {
+        matches!(self, Self::Code { kind: CodeBlockKind::Dynamic, .. })
+    }
+
+    /// Whether any custom code-block renderer (built-in static or third-party) handles this block.
+    pub fn has_custom_renderer(&self) -> bool {
+        matches!(self, Self::Code { kind: CodeBlockKind::Drawn | CodeBlockKind::Dynamic, .. })
     }
 }
 
@@ -341,14 +383,16 @@ impl MarkdownParser {
                     let is_math = u32::from(block.flags) & sys::OT_MD_BLOCK_MATH != 0;
                     let name = if is_math { Some("math") } else { (!info.is_empty()).then_some(info) };
                     let language = name.and_then(filetype_for_info_string);
-                    let claimed = language.as_deref().is_some_and(|lang| renderers.has(lang));
+                    let kind = language
+                        .as_deref()
+                        .map_or(CodeBlockKind::Code, |lang| renderers.classify(lang, &code, app.size().0));
                     let start = (block.source_start_byte as usize).min(source.len());
                     let end = (block.source_end_byte as usize).clamp(start, source.len());
                     shown.push(ShownBlock::Code {
                         top_index,
                         language,
                         has_info: name.is_some(),
-                        claimed,
+                        kind,
                         source_range: start..end,
                         text: code,
                     });
