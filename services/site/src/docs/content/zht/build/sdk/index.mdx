@@ -1,0 +1,92 @@
+---
+title: "SDK 總覽"
+description: "使用 @opencode/sdk 在應用程式內託管 OpenCode，它以記憶體內方式提供 API，不需要 HTTP 監聽器。"
+---
+
+`@opencode/sdk` 會在你的應用程式內直接託管 OpenCode。與
+[網路用戶端](/build/client)不同，它會組裝 OpenCode 伺服器，並在記憶體中透過其 HTTP 路由器路由 API
+呼叫。它不會開啟 HTTP 監聽器，用戶端與伺服器之間也不必經過網路。
+
+Cloudflare Durable Objects 請參閱 [Cloudflare 指南](/build/sdk/cloudflare)。
+
+安裝 SDK：
+
+```sh
+bun add @opencode/sdk
+```
+
+## 建立主機
+
+`OpenCode.create()` 會回傳由呼叫端負責管理的主機。使用 `await using` 釋放其路由器、Location 服務、fiber 與該作用域內的外掛註冊：
+
+```ts
+import { OpenCode } from "@opencode/sdk"
+
+await using opencode = await OpenCode.create()
+const session = await opencode.sessions.create({
+  location: { directory: "/workspace" },
+})
+
+await opencode.sessions.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+無法使用明確資源管理時，請明確呼叫 `await opencode.close()`。
+
+內嵌主機會使用與 `@opencode/client` 相同的 Promise 值、宣告錯誤、請求
+選項與 `AsyncIterable` 串流。它提供完整的自動產生用戶端，並為工作階段與事件群組提供 `sessions` 與 `events` 兩個別名。
+
+## Worktree
+
+Worktree 操作需要 `projectID`。建立與重新整理會從專案儲存的
+主要 checkout 載入設定與外掛。列出時只讀取已儲存的清單；移除時會啟用主要 checkout 的外掛，並使用記錄的策略，
+若該策略無法使用則失敗。
+
+```ts
+const projectID = session.projectID
+const worktree = await opencode.worktree.create({ projectID, name: "task" })
+await opencode.worktree.refresh({ projectID })
+await opencode.worktree.remove({ projectID, directory: worktree.directory, force: false })
+```
+
+重新整理會使用所有可用策略，在已知的 checkout 根目錄中尋找 worktree。透過
+[外掛的 worktree 轉換](/build/plugins/server#worktrees)註冊自訂策略。
+
+## 串流事件
+
+```ts
+for await (const event of opencode.events.subscribe()) {
+  console.log(event.type)
+}
+```
+
+透過產生的請求選項傳入 `AbortSignal`，或離開迭代以取消其回應主體。
+
+## 自訂
+
+透過註冊外掛自訂你的 OpenCode 執行個體。將外掛傳遞給
+`OpenCode.create()`，即可在內嵌主機啟動時自訂 agent、模型、工具與其他行為：
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCode } from "@opencode/sdk"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await using opencode = await OpenCode.create({ plugins: [plugin] })
+```
+
+呼叫 `await opencode.plugin(plugin)` 可在啟動後註冊另一個外掛。
+
+外掛掛鉤、轉換、工具與完整外掛上下文的說明請參閱[完整外掛文件](/build/plugins/server)。

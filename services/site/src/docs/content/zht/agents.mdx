@@ -1,0 +1,344 @@
+---
+title: "Agents"
+description: "用 Markdown 或設定定義可重用的 agent，每個 agent 都有自己的系統提示詞、模型、權限與模式。"
+---
+
+建立 Markdown 檔案即可新增可重用的 agent。以下範例新增一個唯讀的審查 agent，主要 agent 可以啟動它來審查程式碼：
+
+```md title=".opencode/agents/reviewer.md"
+---
+description: Reviews changes for correctness and regressions
+mode: subagent
+model: anthropic/claude-sonnet-5-5#high
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+  - action: shell
+    resource: "*"
+    effect: deny
+---
+
+Review the current changes. List findings in severity order with file and line references.
+```
+
+請主要 agent 使用它：
+
+```text
+Use the reviewer subagent to review my current changes.
+```
+
+agent 會把系統提示詞、模型偏好、權限與顯示資訊組合成一個具名的助理設定檔。
+
+## 位置
+
+Markdown agent 可以儲存在全域設定中供所有專案使用，也可以放在專案內：
+
+```text
+~/.config/opencode/agents/<name>.md
+.opencode/agents/<name>.md
+```
+
+OpenCode 會從目前目錄向上直到專案根目錄，尋找專案中的 `.opencode` 目錄。巢狀路徑會成為 agent ID 的一部分：
+
+```text
+.opencode/agents/team/reviewer.md  →  team/reviewer
+```
+
+## 格式
+
+### Markdown
+
+frontmatter 接受的欄位與 `agents` 設定項目相同。Markdown 本文會成為 agent 的 `system` 提示詞：
+
+```md title=".opencode/agents/explainer.md"
+---
+description: Explains code without changing it
+mode: subagent
+---
+
+Explain the relevant code with short examples. Do not edit files.
+```
+
+V1 的 frontmatter 欄位已棄用。仍使用這些欄位的檔案會如何解析，請參閱 [agent 檔案](/migrate-v1#agent-files)。
+
+### JSONC
+
+在任意 [OpenCode 設定檔](/config)的 `agents` 下定義 agent：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agents": {
+    "reviewer": {
+      "description": "Reviews current changes",
+      "mode": "subagent",
+      "system": "Report findings in severity order.",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+## 選取
+
+設定工作階段尚未選取 agent 時要使用的主要 agent：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "writer",
+  "agents": {
+    "writer": { "mode": "primary" },
+  },
+}
+```
+
+所選的預設 agent 必須存在、可見，並支援作為主要 agent 使用。否則 OpenCode 會改用 `build`，再不行就使用第一個可見且能作為主要 agent 的 agent。變更此設定不會取代既有工作階段中儲存的 agent。
+
+## 模式
+
+依 agent 應執行的位置設定 `mode`：
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "mode": "subagent" },
+  },
+}
+```
+
+| 模式 | 行為 |
+| --- | --- |
+| `primary` | 作為工作階段的主要 agent 執行。這是新建自訂 agent 的預設值。 |
+| `subagent` | 只能透過 `subagent` 工具在子工作階段中執行。 |
+| `all` | 可作為主要 agent 或 subagent 執行。 |
+
+subagent 會在自己的子工作階段中以全新的上下文執行。它們一律在背景執行：子 agent 閒置時父 agent 會收到報告，之後每完成一輪工作也會再次收到報告。父 agent 的 `subagent` 權限決定它可以啟動哪些 agent；子 agent 則使用自己設定的權限。
+
+```jsonc
+{
+  "agents": {
+    "orchestrator": {
+      "permissions": [
+        { "action": "subagent", "resource": "*", "effect": "deny" },
+        { "action": "subagent", "resource": "reviewer", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+## 內建 agent
+
+OpenCode 內建以下可見 agent：
+
+| Agent | 模式 | 用途 |
+| --- | --- | --- |
+| **Build** (`build`) | `primary` | 預設的編碼 agent。預設允許使用工具及存取工作區以外的內容；讀取敏感的環境檔案時會要求核准。 |
+| **Plan** (`plan`) | `primary` | 負責探索與規劃，不會編輯一般專案檔案。你要求時，它可以寫入 OpenCode 計畫檔案；shell 指令仍受權限控制。 |
+| **General** (`general`) | `subagent` | 擁有廣泛的工具存取權，負責研究與多步驟工作，但不能啟動其他 subagent。 |
+| **Explore** (`explore`) | `subagent` | 搜尋並閱讀程式碼或網路來源，不會編輯檔案。 |
+
+使用相同的 ID 即可覆寫內建 agent：
+
+```jsonc
+{
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git push *", "effect": "ask" },
+      ],
+    },
+  },
+}
+```
+
+隱藏的 `compaction`、`title` 與 `summary` agent 負責執行維護工作，無法直接選取。V2 沒有內建的 `scout` agent。
+
+## 合併
+
+agent 定義會依設定順序合併。後出現的純量值會取代先前的值，請求對照表依鍵合併，權限規則則依序附加：
+
+```jsonc
+{
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+  ],
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git status", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+全域 `permissions` 會先於 agent 專屬規則套用，因此後面的 agent 規則可以進一步細化。
+
+## 選項
+
+### 說明
+
+`description` 說明 agent 的用途。請為 subagent 新增此欄位，因為 OpenCode 會把它顯示給負責選擇要啟動哪個 agent 的模型：
+
+```yaml
+description: Reviews database migrations for safety
+```
+
+### 模式
+
+`mode` 接受 `primary`、`subagent` 或 `all`。新建自訂 agent 時若省略，預設為 `primary`：
+
+```yaml
+mode: all
+```
+
+### 模型
+
+`model` 使用 `provider/model`，可附加選用的 `#variant`：
+
+```yaml
+model: anthropic/claude-sonnet-5-5#high
+```
+
+JSON 設定也接受展開形式：
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "model": {
+        "providerID": "anthropic",
+        "model": "claude-sonnet-5-5",
+        "variant": "high",
+      },
+    },
+  },
+}
+```
+
+- subagent 使用自己設定的模型；若未設定，則繼承父工作階段的模型。
+- 工作階段會個別儲存所選的模型。依 ID 選取主要 agent 不會變更該模型。
+
+### 系統提示詞
+
+`system` 設定 agent 的系統提示詞。非空值會取代供應商為該 agent 提供的基礎提示詞：
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "system": "Review only. Do not modify files." },
+  },
+}
+```
+
+專案指示、技能、引用與其他指示來源仍會加入。在 Markdown agent 中，請把這段文字放在文件本文，而不是 frontmatter 的 `system` 欄位。
+
+### 權限
+
+`permissions` 是有序的比對規則清單：
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "permissions": [
+        { "action": "*", "resource": "*", "effect": "deny" },
+        { "action": "read", "resource": "src/**", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+| 欄位 | 意義 |
+| --- | --- |
+| `action` | 工具或權限動作。支援萬用字元。 |
+| `resource` | 動作所比對的路徑、指令、agent ID 或其他值。支援萬用字元。 |
+| `effect` | `allow`、`ask` 或 `deny`。 |
+
+最後一條相符的規則會生效，因此請把範圍較廣的規則放在例外之前。常見動作包括：
+
+| 動作 | 涵蓋範圍 |
+| --- | --- |
+| `shell` | shell 指令 |
+| `edit` | 編輯、寫入與修補工具 |
+| `subagent` | 子 agent |
+| `read`, `glob`, `grep` | 本機探索工具 |
+| `webfetch`, `websearch` | 網路工具 |
+| `skill` | 技能載入 |
+
+對於 `read`、`edit` 與 `external_directory` 資源，OpenCode 會展開 `~` 與 `$HOME`：
+
+```jsonc
+{ "action": "read", "resource": "~/notes/**", "effect": "allow" }
+```
+
+shell 資源仍是原始指令文字，不會展開這些值。
+
+### 步數
+
+`steps` 設定模型步數上限，必須為正數：
+
+```yaml
+steps: 8
+```
+
+在最後一步，OpenCode 會移除工具，並要求模型以文字總結。新的使用者輸入會重設步數額度。
+
+### 隱藏
+
+`hidden` 會把 agent 從一般清單、互動式探索與 subagent 目錄中移除：
+
+```yaml
+hidden: true
+```
+
+這只控制可見性，與安全性無關。如需限制行為，請使用權限。
+
+### 顏色
+
+`color` 使用六位十六進位值設定 agent 的介面顏色：
+
+```yaml
+color: "#ff6b6b"
+```
+
+### 停用
+
+`disabled` 會在設定載入到該位置時移除內建或自訂 agent：
+
+```jsonc
+{
+  "agents": {
+    "plan": { "disabled": true },
+  },
+}
+```
+
+### 請求
+
+`request` 可為個別 agent 疊加請求標頭與 JSON 主體：
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "request": {
+        "headers": { "x-agent": "reviewer" },
+        "body": { "temperature": 0.1 },
+      },
+    },
+  },
+}
+```
+
+<Callout type="warning">
+  V2 工作階段執行器會保留這些值，但目前還不會隨模型請求傳送。請改為在供應商、模型或模型變體上設定實際生效的請求設定。
+</Callout>
+
+請勿在新的 V2 agent 設定中使用 `temperature`、`top_p`、`prompt`、`permission`、`tools`、`disable` 或 `maxSteps` 等舊版頂層欄位。

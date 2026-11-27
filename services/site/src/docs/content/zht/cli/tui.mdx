@@ -1,0 +1,90 @@
+---
+title: "TUI"
+description: "啟動工作階段，並在終端機介面中使用日常的工作流程。"
+---
+
+在專案中執行 OpenCode、輸入請求，然後按 **Enter**。
+
+```bash
+cd ~/code/my-project
+opencode
+```
+
+```text
+Explain how authentication works in this project
+```
+
+按 **Shift+Enter**、**Ctrl+Enter**、**Alt+Enter** 或 **Ctrl+J** 換行。OpenCode 工作時，**Enter** 會引導作用中的工作階段；按 **Ctrl+X** 再按 **Enter**，可將提示詞排入佇列稍後送出。
+
+## 上下文
+
+輸入 `@` 搜尋檔案，然後選取它，將該檔案附加到提示詞。在 `@` 之後繼續輸入可縮小結果範圍。
+
+```text
+Review @src/auth.ts for error handling problems
+```
+
+你可以在路徑後包含一行或一個範圍。
+
+```text
+Explain @src/auth.ts#20-45
+```
+
+## Shell
+
+在空白提示詞開頭輸入 `!` 即可進入 shell 模式。輸入指令並按 **Enter**；按 **Esc** 離開 shell 模式而不執行任何指令。
+
+```text
+!git status
+```
+
+Shell 指令會在工作階段的工作目錄中執行，其輸出會留在工作階段中。
+
+## 指令
+
+輸入 `/` 列出斜線指令。繼續輸入可篩選清單，然後按 **Enter** 執行所選指令。
+
+```text
+/models
+```
+
+常用指令包括 `/new`、`/sessions`、`/models`、`/agents`、`/undo`、`/redo` 與 `/editor`。按 **Ctrl+P** 開啟指令面板，查看目前畫面上所有可用的操作。
+
+更新後，OpenCode 會在主畫面顯示一次版本的新功能。執行 `/highlights` 可再次查看，或在 [`cli.json`](/cli/config#alerts) 中設定 `"highlights": false`，讓它不再自動開啟。
+
+## 附帶問題
+
+執行 `/btw <question>`，就能針對目前為止的對話順便問個問題。回答會使用工作階段的上下文和目前的模型，但不會加入對話，因此不影響之後的提示詞。執行時，輸入框下方會顯示 `/btw`；回答會出現在對話框中，按 **C** 即可複製。
+
+```text
+/btw why did the test in step 2 fail?
+```
+
+## 模型
+
+按 **Ctrl+X** 再按 **M** 選擇模型，或執行 `/models`。按 **F2** 循環切換最近使用的模型。
+
+按 **Ctrl+X** 再按 **A** 選擇 agent，或執行 `/agents`。按 **Shift+Tab** 循環切換 agent。
+
+## 工作階段
+
+按 **Ctrl+X** 再按 **N** 開始新的工作階段。按 **Ctrl+X** 再按 **L**，或執行 `/sessions`，回到既有工作階段；**Ctrl+O** 會同時開啟最近的工作階段與專案。
+
+分頁預設為啟用。使用 **Ctrl+Tab** 與 **Ctrl+Shift+Tab** 在分頁之間移動，按 **Ctrl+X** 再按 **W** 關閉一個分頁，按 **Ctrl+Shift+T** 重新開啟最後關閉的分頁。
+
+## 記錄
+
+按 **Ctrl+X** 再按 **U**，或執行 `/undo`，復原最新的使用者訊息及其後的工作。被復原的提示詞會回到輸入框，讓你編輯。
+
+按 **Ctrl+X** 再按 **R**，或執行 `/redo`，取回剛剛復原的工作。若改為送出新的提示詞，則會確認這次復原，從該時間點繼續。
+
+## 編輯器
+
+設定 `VISUAL` 或 `EDITOR`，然後按 **Ctrl+X** 再按 **E**，或執行 `/editor`，在該編輯器中編輯目前的提示詞。儲存並結束後，文字會回到輸入框，再按 **Enter** 送出。
+
+```bash
+export EDITOR="nvim"
+opencode
+```
+
+Leader 鍵預設為 **Ctrl+X**。如要變更這些快捷鍵，請參閱[快捷鍵](/cli/keybinds)。

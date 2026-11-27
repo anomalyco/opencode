@@ -1,0 +1,238 @@
+---
+title: "壓縮"
+description: "壓縮會自動或依要求摘要較早的對話，讓 OpenCode 工作階段不會因模型的上下文上限而中斷。"
+---
+
+壓縮會用摘要取代較早的對話，為內容較長的工作階段騰出空間，讓對話不會因模型的上下文上限而中斷。
+
+## 運作方式
+
+當工作階段接近模型的上下文上限時，OpenCode 會摘要
+目前的整段對話。它也會在摘要旁保留最近的對話，預設約
+15,000 token，讓最近的確切細節仍然可用。
+
+```text
+before   [ system prompt ][ older conversation ............ ][ recent 15k ][ pending work ]
+request  [ system prompt ][ older conversation ............ ][ recent 15k ][ summary instructions ]
+after    [ system prompt ][ summary of older + recent ][ recent 15k ][ pending work ]
+```
+
+傳送完整對話可讓摘要請求在供應商支援時重用一般請求的
+提示詞快取。之後的壓縮會使用該檢查點以來的對話更新既有
+摘要。
+
+## 開始
+
+自動壓縮預設為開啟：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "keep": { "tokens": 15000 },
+  },
+}
+```
+
+壓縮會遺失部分資訊。若最近的確切細節很重要，請增加 `keep.tokens`，
+或在自動壓縮之前自行要求壓縮。
+
+## 手動
+
+隨時可以要求壓縮，即使對話很短：
+
+```sh
+opencode api post /api/session/ses_example/compact --data '{}'
+```
+
+`api` 指令會探索背景服務並向其驗證。其回應會確認請求已接受，
+不會等待摘要完成。請追蹤 `session.compaction.*` 事件以得知何時完成。完整操作請參閱
+[API 參考](/api)。
+
+| 規則 | 行為 |
+| --- | --- |
+| 時機 | 在下一個安全點執行，早於仍在等待的提示詞。 |
+| 重複 | 已有請求待處理時提出的要求會合併進去。 |
+| 自動化 | 即使 `compaction.auto` 為 `false` 也能運作。 |
+
+傳入 `id` 可讓完全相同的重試具備冪等性。將該 ID 重複用於不同的
+請求會回傳衝突。
+
+```sh
+opencode api post /api/session/ses_example/compact --data '{"id":"msg_compact_once"}'
+```
+
+## 設定
+
+在任意 [OpenCode 設定檔](/config)中加入 `compaction`：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": false,
+    "keep": { "tokens": 24000 },
+    "buffer": "20%",
+  },
+}
+```
+
+| 欄位 | 預設 | 行為 |
+| --- | ---: | --- |
+| `auto` | `true` | 在接近上下文上限時自動壓縮，並在供應商以請求過長為由拒絕時復原一次。手動壓縮一律可用。 |
+| `background` | `true` | 預先撰寫摘要，讓自動壓縮不必等待。請參閱[背景壓縮](#background-compaction)。 |
+| `keep.tokens` | `15000` | 隨摘要一併保留的近期對話量，以約略的 token 數計。值越大，保留的細節越多，但能留給新工作的空間越少。 |
+| `buffer` | `"15%"`，至少 16k | 模型上下文視窗中預留不使用的比例。對話用完其餘空間時，就會開始自動壓縮。值越大，越早壓縮。 |
+
+`keep.tokens` 接受非負整數。
+
+### 緩衝區
+
+`buffer` 是每個模型視窗的百分比，因此一個設定就能適用於所有模型：
+
+| 模型上下文視窗 | 設定 `"buffer": "20%"` 時的壓縮門檻 |
+| ---: | ---: |
+| 128k | 約 102k |
+| 1M | 800k |
+
+- 它是保留為空的空間，不是壓縮開始的位置：`"20%"` 會在滿 80% 時壓縮。
+- 接受 `"1%"` 到 `"99%"`，包括 `"12.5%"` 等小數。
+- `20000` 等 token 數量也可使用。相同數量在小視窗中佔很大比例，在大視窗中則佔很小比例。
+- 大於或等於模型視窗的 token 數量會被忽略，並套用預設值。
+
+## 模型
+
+OpenCode 預設會使用工作階段的模型自行撰寫摘要。設定
+`agents.compaction.model` 以使用另一個模型撰寫摘要：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agents": {
+    "compaction": { "model": "anthropic/claude-sonnet-5-5" },
+  },
+}
+```
+
+若無法解析該模型，OpenCode 會改用工作階段的模型。
+
+## 背景壓縮
+
+OpenCode 會在工作階段繼續進行時預先撰寫摘要，並在需要壓縮時替換進去。
+自動壓縮因此不必暫停工作階段來撰寫摘要：
+
+```text
+60k tokens before the threshold   summary of the conversation so far starts in the background
+                                  the session keeps going; the summary is held, not applied
+threshold                         the held summary is swapped in; everything since it is kept as is
+```
+
+在較小的上下文視窗中，摘要最晚會在上次壓縮後的第一個回應與門檻之間的中點開始。
+
+| 規則 | 行為 |
+| --- | --- |
+| 成本 | 摘要請求會重用提示詞快取。從未使用的摘要（例如工作階段在達到門檻前結束）仍會消耗 token。 |
+| 等待 | 若需要壓縮時摘要仍在撰寫，工作階段會等待它完成。 |
+| 退回 | 若保留摘要以來的對話增長到超過門檻的約 40%，或對話開頭已變更，壓縮會照常重新摘要。 |
+| 略過 | 不用於原生壓縮。切換模型後，或中斷時間超過提示詞快取存留時間後，會改從下一個回應開始。 |
+| 儲存 | 保留的摘要存於記憶體中，重新啟動後會遺失。 |
+
+關閉它，即可只在需要壓縮時撰寫摘要：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "background": false,
+  },
+}
+```
+
+## 供應商
+
+有些供應商可在供應商端壓縮對話。使用 `settings.compaction` 為個別供應商或模型啟用此功能：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-6.1-sol": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}
+```
+
+模型設定會覆寫供應商設定。`native` 使用供應商的
+壓縮；`summary` 使用 OpenCode 自己的壓縮。
+
+使用原生壓縮時，OpenCode 會將對話傳送到供應商的
+壓縮端點。供應商會回傳一個不透明、加密的項目，代替
+較舊的對話。你的最近訊息與附件（最多 `keep.tokens`）會保留在它旁邊：
+
+```text
+before   [ older conversation ........................ ][ recent user messages ]
+after    [ encrypted checkpoint + recent user messages ]
+```
+
+| 主題 | 行為 |
+| --- | --- |
+| 支援 | OpenAI Responses 模型。支援程度依部署與模型而異。 |
+| 門檻 | 與摘要壓縮相同的 `auto` 與 `buffer` 設定。手動請求也可使用。 |
+| 可攜性 | 加密檢查點只能搭配相同的供應商與模型使用。若切換模型，工作階段會改從原始對話繼續。 |
+| 過長 | 若供應商以壓縮內容過長為由拒絕，OpenCode 會以較小的請求重試。它不會改用摘要。 |
+
+## 摘要
+
+摘要的結構可讓另一個 agent 接手工作：
+
+```md
+## Objective
+Finish the authentication migration.
+
+## Next Move
+- Update the callback handler.
+- Verify the login flow.
+```
+
+它涵蓋目標與需求、決策、已完成與進行中的工作、
+阻礙與下一步，以及相關檔案。在保留於一旁的最近對話中，過長的工具輸出會縮短，附件資料則會替換為
+簡短說明。
+
+壓縮後，你的指示檔案目前版本會成為
+工作階段的基準；請參閱[指示](/instructions)。
+
+## 限制
+
+| 限制 | 結果 |
+| --- | --- |
+| 模型 | 摘要壓縮會遵循 `agents.compaction.model`；否則使用工作階段的模型。原生壓縮一律使用工作階段的模型。 |
+| 記錄 | 壓縮需要較舊的對話可供取代。當請求大多是指示與工具 schema 等固定內容時，無法騰出空間。 |
+| 大小 | 若待壓縮的對話本身過長，OpenCode 會傳送縮短的文字版本，並可能省略最舊的交流。 |
+| 復原 | 以過長為由被拒絕的請求會先壓縮並重試一次。第二次拒絕會作為錯誤回傳。 |
+| 儲存 | 較早的訊息仍會儲存，即使不再傳送給模型。 |
+
+例如，壓縮在此無法提供協助：
+
+```text
+128k context = 120k fixed instructions and tools + 8k conversation
+```
+
+## 移轉
+
+V1 使用尾端回合與修剪行為。V2 使用摘要與
+`compaction.keep.tokens`：
+
+```jsonc
+{
+  "compaction": {
+    "keep": { "tokens": 15000 }
+  }
+}
+```
+
+本頁的設定與行為適用於 V2。

@@ -1,0 +1,252 @@
+---
+title: "外掛 RPC"
+description: "將外掛的自訂方法與事件公開給其他外掛與用戶端。"
+---
+
+外掛可以公開在伺服器上執行的自訂方法與事件，供其他外掛或用戶端
+呼叫。
+
+## 定義
+
+使用 `Rpc.define` 列出 RPC 的方法、錯誤與事件。
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+        additionalProperties: false,
+      },
+      errors: {
+        not_found: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: {
+        type: "object",
+        properties: {
+          itemID: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["itemID", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+})
+```
+
+### 驗證
+
+RPC 定義會描述方法、事件與錯誤的輸入和輸出結構，支援兩種 schema 格式：
+
+- JSON Schema，簡單且不需要相依性。
+- 任何符合 Standard Schema 的驗證器
+  - Zod
+  - Valibot
+  - ArkType
+
+### 輸入與輸出
+
+每個方法可以為其引數定義 `input` schema，並為其傳回值定義 `output` schema。若方法不接受或
+不傳回值，請省略對應的 schema。
+
+```ts
+search: {
+  input: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+  },
+  output: {
+    type: "object",
+    properties: { text: { type: "string" } },
+    required: ["text"],
+  },
+}
+```
+
+JSON Schema 值在 TypeScript 中是 `unknown`，因此使用前請先縮窄型別。
+Standard Schema 會推斷輸入與輸出型別。
+
+### 錯誤
+
+在方法中加入 `errors` 對照表，表示預期的失敗。每個鍵會成為
+錯誤的 `type`，其 schema 則定義錯誤的 `data`。
+
+```ts
+errors: {
+  not_found: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+    additionalProperties: false,
+  },
+}
+```
+
+以 `rpc.` 開頭的錯誤名稱由 OpenCode 保留。
+
+### 事件
+
+將事件加入頂層 `events` 對照表。每個事件都有傳送給訂閱者之資料的
+schema。
+
+事件資料必須是物件。沒有資料時請使用空物件 schema：
+
+```ts
+events: {
+  refreshed: {
+    schema: { type: "object", additionalProperties: false },
+  },
+}
+```
+
+純量、陣列、`null` 與 `undefined` 都不是有效的事件資料。
+
+## 實作
+
+在 `setup` 內註冊實作：
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-plugin",
+  async setup(ctx) {
+    const registration = await ctx.rpc.register(Acme, {
+      search: async (input, context) => {
+        const { query } = input as { query: string }
+        const text = await findText(query, { signal: context.signal })
+        if (!text) return context.error("not_found", "Result not found", { query })
+        return { text }
+      },
+    })
+
+    const acme = ctx.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+
+    await registration.events.emit("updated", { itemID: "item-1", text: "ready" })
+  },
+})
+```
+
+註冊 RPC 後，同一個外掛可以透過 `ctx.rpc(Acme)` 呼叫它。
+
+第二個引數包含用於取消的 `signal`，以及用於宣告錯誤的
+`context.error(...)`。你可以回傳或擲出該錯誤。
+
+同一個外掛可以註冊多個 RPC。釋放註冊項目時，就會移除相應的 RPC。
+
+## 呼叫
+
+RPC 註冊後，即可透過 HTTP 或從另一個外掛呼叫。
+
+### HTTP
+
+建立 OpenCode 用戶端，然後使用 `client.rpc` 為該
+RPC 建立子用戶端：
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const acme = client.rpc(Acme)
+const result = await acme.search({ query: "hello" })
+```
+
+### 外掛
+
+外掛已經有 OpenCode 用戶端。例如，TUI 外掛可以從 `context.client` 建立
+相同的 RPC 子用戶端：
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode/plugin/tui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  id: "acme-tui",
+  async setup(context) {
+    const acme = context.client.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+    console.log(result)
+  },
+})
+```
+
+[GUI 外掛](/build/plugins/gui)會從 `ctx.client` 讀取桌面應用程式自有伺服器的用戶端：
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  setup(ctx) {
+    ctx.add(Command, {
+      id: "search",
+      title: "Search Acme",
+      run: async () => {
+        const result = await ctx.client.rpc(Acme).search({ query: "hello" })
+        console.log(result)
+      },
+    })
+  },
+})
+```
+
+每次呼叫時都請重新讀取 `ctx.client`，因為伺服器重新啟動後，用戶端會換掉。
+伺服器無法連線時，每次呼叫都會使 Promise 進入拒絕狀態。
+
+### 訂閱
+
+使用 `events.on` 註冊回呼，並在不再需要監聽器時取消訂閱：
+
+```ts
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+
+unsubscribe()
+```
+
+若要使用非同步可迭代物件，請使用 `events.subscribe("updated")`：
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+事件訂閱僅為即時，因此中斷連接的訂閱者會錯過事件。
+
+- 使用 RPC 內的事件名稱訂閱，例如 `updated`。
+- 收到的型別會加上前綴，例如 `rpc.acme.updated`。
+- 每個事件都包含 `data` 與 `location`。
+- 外掛卸載時會關閉其訂閱。
+
+外部用戶端會收到所有 location 的事件，因此需要時請檢查 `event.location`。
+伺服器外掛仍需要設定並執行中。

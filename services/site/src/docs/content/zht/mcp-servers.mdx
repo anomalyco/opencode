@@ -1,0 +1,567 @@
+---
+title: "MCP 伺服器"
+description: "使用 opencode mcp add 或在設定中將 OpenCode 連接到本機與遠端 Model Context Protocol 伺服器，包括 OAuth 登入。"
+---
+
+OpenCode 會連接 [Model Context Protocol](https://modelcontextprotocol.io/) 伺服器，並對外提供工具、提示詞、資源與指示等能力。MCP 工具會消耗模型上下文，因此請只新增你需要的伺服器。
+
+## 設定
+
+在要使用遠端伺服器的專案中新增該伺服器，然後檢查連線：
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp
+opencode mcp list
+```
+
+此指令會把伺服器寫入專案[設定](/config)。加上 `--global` 即可讓它在每個專案中可用：
+
+```sh
+opencode mcp add context7 --global --url https://mcp.context7.com/mcp
+```
+
+遠端伺服器預設使用 OAuth。若清單顯示 `needs authentication`，請開啟 OpenCode、執行 `/mcps`、選取該伺服器並登入。已連接的伺服器即可供 agent 使用：
+
+```text
+✓ context7  connected
+```
+
+## 設定檔
+
+若要手動設定伺服器，請在 `mcp.servers` 下給它一個唯一名稱。V2 不會把伺服器名稱直接放在 `mcp` 下。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "local",
+        "command": ["npx", "-y", "example-mcp-server"],
+      },
+    },
+  },
+}
+```
+
+伺服器會自動連接。若要保留設定但不連接，請使用 `disabled`，而不是 `enabled` 欄位：
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "local",
+        "command": ["npx", "-y", "example-mcp-server"],
+        "disabled": true,
+      },
+    },
+  },
+}
+```
+
+優先順序較高的專案設定會取代同名的整個伺服器物件。不同連線或帳號請使用不同名稱；否則請在覆寫中重複每個必填欄位：
+
+```jsonc title="opencode.jsonc"
+{
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+      },
+    },
+  },
+}
+```
+
+## 本機
+
+本機伺服器是 OpenCode 透過 MCP stdio 傳輸啟動的指令。請在 `--` 後加上指令來新增：
+
+```sh
+opencode mcp add everything -- npx -y @modelcontextprotocol/server-everything
+```
+
+使用重複的 `--env` 旗標傳遞環境變數：
+
+```sh
+opencode mcp add everything --env LOG_LEVEL=info -- npx -y @modelcontextprotocol/server-everything
+```
+
+其他處理程序選項（例如工作目錄）請使用設定：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "everything": {
+        "type": "local",
+        "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+        "cwd": ".",
+        "environment": {
+          "LOG_LEVEL": "info",
+          "MCP_API_KEY": "{env:MCP_API_KEY}",
+        },
+      },
+    },
+  },
+}
+```
+
+| 欄位 | 必填 | 說明 |
+| --- | --- | --- |
+| `type` | 是 | 必須是 `"local"`。 |
+| `command` | 是 | 可執行檔及其引數。 |
+| `cwd` | 否 | 處理程序目錄。相對路徑會從工作區解析，這也是預設值。 |
+| `environment` | 否 | 加入 OpenCode 繼承之處理程序環境的字串變數。 |
+| `disabled` | 否 | 設為 `true` 時不連接。預設為 `false`。 |
+| `codemode` | 否 | 設為 `false` 可直接提供工具，而不透過 Code Mode。預設為 `true`。 |
+| `timeout` | 否 | 各伺服器的逾時覆寫。 |
+| `protocol` | 否 | `auto`（預設）、`legacy` 或 `2026-07-28`。請參閱[協定版本](#protocol-version)。 |
+| `pool` | 否 | 在目錄之間共用一條連線。預設為 `false`。請參閱[共用連線](#shared-connections)。 |
+
+使用 `{env:NAME}` 替換環境變數。`$NAME` 等 shell 運算式不會在 JSON 字串中展開：
+
+```jsonc
+{
+  "environment": {
+    "MCP_API_KEY": "{env:MCP_API_KEY}",
+  },
+}
+```
+
+## 遠端
+
+遠端伺服器使用 MCP Streamable HTTP 傳輸，且需要絕對 URL：
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp
+```
+
+使用重複的 `--header` 旗標傳遞請求標頭。請為 `{env:NAME}` 引用加上引號，讓 shell 原樣寫入：
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp --header 'CONTEXT7_API_KEY={env:CONTEXT7_API_KEY}'
+```
+
+其他選項請使用設定。請將密鑰存放在環境變數中，而不是檔案裡：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "oauth": false,
+        "headers": {
+          "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}",
+        },
+      },
+    },
+  },
+}
+```
+
+| 欄位 | 必填 | 說明 |
+| --- | --- | --- |
+| `type` | 是 | 必須是 `"remote"`。 |
+| `url` | 是 | 絕對 Streamable HTTP 端點。 |
+| `headers` | 否 | 傳送給端點的字串 HTTP 標頭。 |
+| `oauth` | 否 | OAuth 設定，或設為 `false` 停用 OAuth。 |
+| `disabled` | 否 | 設為 `true` 時不連接。預設為 `false`。 |
+| `codemode` | 否 | 設為 `false` 可直接提供工具，而不透過 Code Mode。預設為 `true`。 |
+| `timeout` | 否 | 各伺服器的逾時覆寫。 |
+| `protocol` | 否 | `auto`（預設）、`legacy` 或 `2026-07-28`。請參閱[協定版本](#protocol-version)。 |
+| `pool` | 否 | 在目錄之間共用一條連線。預設為 `false`。請參閱[共用連線](#shared-connections)。 |
+
+只有在伺服器僅使用 API 金鑰或其他標頭憑證時，才使用 `oauth: false`：
+
+```jsonc
+{
+  "type": "remote",
+  "url": "https://mcp.example.com/mcp",
+  "oauth": false,
+  "headers": { "Authorization": "Bearer {env:MCP_API_KEY}" },
+}
+```
+
+## OAuth
+
+除非 `oauth` 為 `false`，否則遠端伺服器會啟用 OAuth。OpenCode 會尋找授權伺服器、以 PKCE 登入，並更新權杖。憑證會與專案設定分開儲存。
+
+大多數伺服器只需要 URL：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "sentry": {
+        "type": "remote",
+        "url": "https://mcp.sentry.dev/mcp",
+      },
+    },
+  },
+}
+```
+
+若伺服器需要驗證，請執行 `/mcps`、選取它，並在瀏覽器中完成授權。CLI 也可以啟動相同流程：
+
+```sh
+opencode mcp auth sentry
+```
+
+### 瀏覽器位於另一台機器
+
+當 OpenCode 透過 SSH、在容器中或在遠端伺服器上執行時，瀏覽器在你登入後無法連線到 OpenCode，會顯示無法載入的頁面。請從網址列複製該頁面的 URL，貼到登入提示中：
+
+```text
+http://127.0.0.1:52817/callback?code=...&state=...
+```
+
+在 OpenCode 等待瀏覽器時，此提示會出現在 `/mcps`、`opencode mcp auth`，以及桌面與 Web 應用程式的登入對話框中。
+
+### 用戶端註冊
+
+OpenCode 會使用第一個適用的方法向授權伺服器表明身分：
+
+| 方法 | 使用時機 |
+| --- | --- |
+| 預先註冊的用戶端 | 已設定 `oauth.client_id`。 |
+| [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents)（CIMD） | 授權伺服器支援 CIMD 與公開用戶端，且未設定 `oauth.redirect_uri`。 |
+| [動態用戶端註冊](https://datatracker.ietf.org/doc/html/rfc7591)（DCR） | 上述兩者皆不適用。OpenCode 會註冊用戶端，並在之後登入時重複使用。 |
+
+授權伺服器可在中繼資料中宣告支援 CIMD：
+
+```json
+{
+  "issuer": "https://auth.example.com",
+  "client_id_metadata_document_supported": true,
+  "token_endpoint_auth_methods_supported": ["none"]
+}
+```
+
+使用 CIMD 時，OpenCode 會將自己的中繼資料文件 URL 當作 `client_id` 傳送，不另行註冊：
+
+```text
+https://opencode.ai/oauth/opencode/client.json
+```
+
+該文件允許下列不帶連接埠的迴環重新導向：
+
+- `http://127.0.0.1/callback`
+- `http://localhost/callback`
+- `http://127.0.0.1/mcp/oauth/callback`（供較舊的用戶端使用）
+
+授權伺服器會依 [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252#section-7.3) 的要求，接受這些重新導向使用任何迴環連接埠，因此 `callback_port` 可與 CIMD 搭配使用。自訂的 `redirect_uri` 則不行，因此 OpenCode 會改用 DCR。
+
+若授權伺服器既不支援 CIMD 也不支援 DCR，請設定預先註冊的用戶端。
+
+### 預先註冊的用戶端
+
+當供應商提供用戶端憑證時，請使用 V2 的 snake_case OAuth 欄位：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "company-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "oauth": {
+          "client_id": "{env:MCP_CLIENT_ID}",
+          "client_secret": "{env:MCP_CLIENT_SECRET}",
+          "scope": "tools:read tools:execute",
+          "callback_port": 19876,
+          "redirect_uri": "http://127.0.0.1:19876/callback",
+        },
+      },
+    },
+  },
+}
+```
+
+| 欄位 | 說明 |
+| --- | --- |
+| `client_id` | 預先註冊的用戶端 ID。優先於 CIMD 與 DCR。 |
+| `client_secret` | 機密用戶端的密鑰，會放在權杖請求主體中傳送。公開用戶端請省略。 |
+| `scope` | 以空格分隔的要求範圍。預設為伺服器在拒絕未驗證請求時指定的範圍。 |
+| `callback_port` | 本機回呼連接埠，從 `1` 到 `65535`。預設為 `redirect_uri` 的連接埠，否則使用可用的臨時連接埠。 |
+| `redirect_uri` | 預先註冊的迴環 URI，其路徑與連接埠會連到本機回呼監聽器。設定後會停用 CIMD。 |
+| `auth_server_metadata_url` | 授權伺服器的 OAuth 或 OpenID Connect 中繼資料文件 URL。若 MCP 伺服器未發布可辨識授權伺服器的受保護資源中繼資料，就設定此欄位。 |
+
+需要重新登入或切換帳號時，請移除已儲存的 OAuth 憑證：
+
+```sh
+opencode mcp logout sentry
+```
+
+## 逾時
+
+逾時是正整數毫秒。請在 `mcp.timeout` 下設定預設值；伺服器的 `timeout` 物件會覆寫對應的預設值。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "timeout": {
+      "startup": 45000,
+      "catalog": 30000,
+      "execution": 600000,
+    },
+    "servers": {
+      "slow-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "timeout": {
+          "catalog": 60000,
+        },
+      },
+    },
+  },
+}
+```
+
+| 逾時 | 預設 | 適用於 |
+| --- | --- | --- |
+| `startup` | 30 秒 | 傳輸連線與伺服器初始化。 |
+| `catalog` | 30 秒 | 列出工具、提示詞、資源與資源範本。 |
+| `execution` | 12 小時 | 工具呼叫、提示詞擷取與資源讀取。 |
+
+## 協定版本
+
+OpenCode 預設會向每個伺服器探測 2026-07-28 修訂版，並在伺服器不支援時改用傳統 MCP `initialize` 握手。將伺服器的 `protocol` 設為 `legacy` 即可略過探測：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "older": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "protocol": "legacy",
+      },
+    },
+  },
+}
+```
+
+| 值 | 行為 |
+| --- | --- |
+| `auto` | 預設。以 `server/discover` 探測 2026-07-28 修訂版，並在伺服器不支援時改用 `legacy`，包括遠端伺服器以 HTTP 5xx 錯誤回應探測時。 |
+| `legacy` | 傳送 `initialize`，並使用至 2025-11-25 的協定修訂版。 |
+| `2026-07-28` | 要求 2026-07-28 修訂版。對較舊的伺服器會連線失敗。 |
+
+探測較舊的本機伺服器會新增一個短暫的額外處理程序，且當伺服器忽略未知請求時，可能等待到啟動逾時，因此請對你知道早於 2026-07-28 修訂版的伺服器設定 `legacy`。
+
+## 共用連線
+
+一個 OpenCode 伺服器可以開啟許多目錄，而每個目錄會各自連接每個 MCP 伺服器。將 `pool` 設為 `true`，可讓伺服器設定相同的目錄共用一條連線與一份工具清單：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "cloudflare": {
+        "type": "remote",
+        "url": "https://mcp.cloudflare.com/mcp",
+        "pool": true,
+      },
+    },
+  },
+}
+```
+
+- 只有 2026-07-28 修訂版上的連線會共用。以較舊修訂版回應的伺服器，或設為 `legacy` 的伺服器，會為每個目錄保留一條連線。
+- 目錄只有在所有會影響連線的項目都相同時才會共用連線：遠端伺服器的 URL、標頭、OAuth 設定與已登入帳號，以及本機伺服器的指令、工作目錄與環境。逾時與 `protocol` 也必須相同。伺服器名稱不必相同，但登入資訊會依名稱儲存，因此 OAuth 伺服器只有在相同名稱下才會共用。
+- 本機伺服器只會在這台機器上的目錄之間共用，不會在工作區中的目錄之間共用。跨專案共用需要固定的 `cwd`，例如 `"~"`。若沒有，它會在每個專案的資料夾中執行，因此每個專案各自擁有自己的伺服器，OpenCode 會記錄警告。
+- 共用連線沒有根目錄。工具要求輸入時，請求會出現在呼叫它的目錄中。
+- 最後一個使用該連線的目錄關閉或中斷連接伺服器後，連線就會關閉。
+
+## 名稱
+
+OpenCode 會將工具命名為 `<server>_<tool>`。它會把字母、數字、`_` 與 `-` 以外的字元替換為 `_`：
+
+```text
+server: context 7
+tool:   resolve.library/id
+name:   context_7_resolve_library_id
+```
+
+MCP 提示詞會成為名為 `<server>:<prompt>` 的指令，並使用相同的標準化方式。例如：
+
+```text
+/context_7:find_docs
+```
+
+指令文字會依序填入提示詞的引數。請以空格分隔，並為包含空格的值加上引號：
+
+```text
+/context_7:find_docs react "server components"
+```
+
+請選擇標準化後仍保持唯一的簡短伺服器名稱。在預設的 Code Mode 下，工具會依標準化的伺服器名稱分組：
+
+```text
+tools.context_7.resolve_library_id(...)
+```
+
+## 權限
+
+Code Mode 是預設值。當伺服器的工具必須保留在供應商的原生工具清單中時，請將 `codemode` 設為 `false`：
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "codemode": false,
+      },
+    },
+  },
+}
+```
+
+使用權限動作隱藏或拒絕工具，而不中斷其伺服器。請比對標準化的 `<server>_<tool>` 名稱：
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "context7_*",
+      "resource": "*",
+      "effect": "deny",
+    },
+  ],
+}
+```
+
+## 資源
+
+agent 會透過兩個內建工具 `list_mcp_resources` 與 `read_mcp_resource` 讀取 MCP 資源。請使用這些權限動作控制：
+
+| 動作 | 資源 |
+| --- | --- |
+| `opencode_list_mcp_resources` | 伺服器名稱。 |
+| `opencode_read_mcp_resource` | `<server>:<uri>` |
+
+例如，允許從 `docs` 伺服器進行的所有讀取：
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "opencode_read_mcp_resource",
+      "resource": "docs:*",
+      "effect": "allow",
+    },
+  ],
+}
+```
+
+## 伺服器指示
+
+伺服器在初始化期間回傳指示時，OpenCode 會將它們加入系統提示詞：
+
+```text
+<mcp_instructions>
+  <server name="sentry">
+    Search for an existing issue before creating a new one.
+  </server>
+</mcp_instructions>
+```
+
+對於使用 Code Mode 的伺服器，OpenCode 會加入一行說明，指出 agent 可以在哪裡找到伺服器的工具。
+
+當 agent 的權限拒絕伺服器的所有工具時，就會省略該伺服器的指示。若拒絕 `execute`，伺服器的工具會直接列出，並保留其指示，但不含 Code Mode 那一行。
+
+## 輸入請求
+
+伺服器可以在呼叫期間透過 MCP elicitation 要求輸入。OpenCode 會以表單顯示請求，或對 URL 請求顯示可開啟的連結：
+
+```text
+sentry is requesting input
+```
+
+關閉表單會取消請求。
+
+## 上下文
+
+對於代表工作階段發出的呼叫，OpenCode 會在 `CallToolRequest.params._meta["ai.opencode/sessionID"]` 中傳送工作階段 ID。這適用於 stdio 與 Streamable HTTP 上的直接工具與 Code Mode：
+
+```json
+{
+  "method": "tools/call",
+  "params": {
+    "name": "lookup",
+    "arguments": { "query": "example" },
+    "_meta": { "ai.opencode/sessionID": "ses_..." }
+  }
+}
+```
+
+此 ID 是請求的中繼資料，而非工具引數，因此不會出現在模型可見的 schema 中。請只用它來關聯請求，不要解讀 ID 本身：
+
+| 規則 | 行為 |
+| --- | --- |
+| 身分 | 它識別的是發出呼叫的 OpenCode 工作階段，而不是 MCP 傳輸工作階段。 |
+| 存在與否 | 沒有工作階段上下文的呼叫可能不會包含它。 |
+| 安全性 | 請勿單獨用它進行驗證或授權。 |
+| 隱私 | 遠端伺服器會收到原始 ID，並可能記錄或保留它。 |
+
+## 管理
+
+從任何專案列出伺服器及其目前的連線狀態：
+
+```sh
+opencode mcp list
+```
+
+在 OpenCode 中使用 `/mcps` 檢視、連接、中斷連接或驗證伺服器。使用 CLI 新增伺服器並管理 OAuth 憑證：
+
+```sh
+opencode mcp add sentry --url https://mcp.sentry.dev/mcp
+opencode mcp auth sentry
+opencode mcp logout sentry
+```
+
+執行 `opencode mcp auth` 而不帶名稱，即可從支援 OAuth 的伺服器中挑選：
+
+```sh
+opencode mcp auth
+```
+
+若要移除伺服器，請從新增它的專案或全域設定中刪除其項目：
+
+```jsonc
+{
+  "mcp": {
+    "servers": {},
+  },
+}
+```
+
+在 `/mcps` 中斷連接伺服器不會變更設定。OAuth 用戶端設定、逾時、工作目錄，或讓伺服器保持中斷連接，請直接編輯設定：
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "sentry": {
+        "type": "remote",
+        "url": "https://mcp.sentry.dev/mcp",
+        "disabled": true,
+      },
+    },
+  },
+}
+```

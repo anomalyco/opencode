@@ -1,0 +1,179 @@
+---
+title: "Claude Agent"
+description: "透過 Claude Agent 在 OpenCode 中使用 Claude 方案或 Claude Code 登入的帳號。Claude Agent 會在你的電腦上執行 Claude Code。"
+noindex: true
+---
+
+你可以使用自己的 Claude 方案，也可以使用其他已登入 Claude Code 的帳號。Claude Agent 會在你的電腦上執行 Claude Code，因此請先安裝 Claude Code
+2.1.248 或更新版本並登入。
+
+```bash
+claude auth login
+```
+
+接著連接 **Claude Agent** 並選擇模型。模型清單來自 Claude Code。各個推理強度都是模型變體，例如
+`claude-agent/opus#high`。
+
+```text
+/connect
+# Select Claude Agent.
+/models
+```
+
+你也可以從 CLI 使用 `auth login claude-agent` 連接。
+
+OpenCode 會在你的 `PATH` 中找到 `claude`。若要使用其他複本，請在伺服器上設定 `OPENCODE_CLAUDE_PATH`。
+
+```bash
+opencode service set env OPENCODE_CLAUDE_PATH /opt/claude/bin/claude
+```
+
+## 運作方式
+
+Claude Code 會呼叫模型，OpenCode 則負責其他一切。
+
+- Claude 會收到 Claude Code 的系統提示詞，以及你的 agent 提示詞、`AGENTS.md` 檔案、技能與 MCP 指示。
+- Claude 使用 OpenCode 的工具與權限，而不是 Claude Code 的內建工具。
+- 不會載入你的 Claude Code 設定、`CLAUDE.md` 檔案、掛鉤、MCP 伺服器、技能與記憶。
+- OpenCode 會執行壓縮與 subagent。
+- 你可以在同一個工作階段中切換 Claude Agent 與其他模型。
+
+## 成本
+
+成本取決於 Claude Code 的登入方式。
+
+| 登入 | 顯示的成本 |
+| --- | --- |
+| Claude 訂閱 | 無，你的方案已涵蓋 |
+| Anthropic API 金鑰，或 AWS、Google Cloud 上的 Claude Platform | Anthropic 價格 |
+| Amazon Bedrock | Bedrock 價格，或 Bedrock Mantle 上的 Anthropic 價格 |
+| Google Vertex | Vertex 價格 |
+| Microsoft Foundry | Azure 價格 |
+| 自訂基礎 URL | 無 |
+
+## 設定
+
+`claude-agent` 供應商上的連線設定會傳遞給 Claude Code。它們會覆寫你在
+shell 中設定的相同變數。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": {
+        "baseURL": "https://llm-proxy.example.com/anthropic",
+      },
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+    },
+  },
+}
+```
+
+| 設定 | Claude Code 變數 |
+| --- | --- |
+| `settings.baseURL` | `ANTHROPIC_BASE_URL` |
+| `settings.apiKey` | `ANTHROPIC_API_KEY` |
+| `settings.authToken` | `ANTHROPIC_AUTH_TOKEN` |
+| `settings.headerTimeout` | `API_TIMEOUT_MS` |
+| `settings.chunkTimeout` | `CLAUDE_STREAM_IDLE_TIMEOUT_MS` |
+| `settings.configDir` | `CLAUDE_CONFIG_DIR` |
+| `headers` | `ANTHROPIC_CUSTOM_HEADERS` |
+| `body` | `CLAUDE_CODE_EXTRA_BODY` |
+
+在模型上設定它們，即可為該模型覆寫供應商的值。
+
+## 使用第二個 Claude 帳號
+
+在專屬資料夾中登入第二個帳號。你平常的登入不會改變。
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-2" claude auth login
+```
+
+在 PowerShell 中：
+
+```powershell
+$env:CLAUDE_CONFIG_DIR = "$HOME\.claude-2"; claude auth login
+```
+
+接著新增使用該資料夾的模型：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "models": {
+        "sonnet-2": {
+          "modelID": "sonnet",
+          "name": "Sonnet (Claude 2)",
+          "settings": { "configDir": "~/.claude-2" },
+        },
+      },
+    },
+  },
+}
+```
+
+若要讓專案中的每個模型都使用同一個帳號，請改在該專案設定的供應商上設定
+`settings.configDir`。
+
+## 在帳號之間輪替
+
+若你有多個可互換的帳號，OpenCode 可以在某個帳號達到用量上限時改用下一個。
+請在各自的資料夾中登入每個額外帳號。`~/.claude` 中既有的登入可以保持原樣：
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-1" claude auth login
+```
+
+接著列出資料夾：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": { "configDir": ["~/.claude", "~/.claude-1"] },
+    },
+  },
+}
+```
+
+現有對話會沿用上次回覆的帳號，新對話則會使用最近一次成功回覆的帳號。輪替只適用於使用 Claude 訂閱登入的帳號，不適用於 `apiKey` 或 `authToken`。
+
+## 網路搜尋
+
+Claude Agent 也可以使用 Claude Code 的 WebSearch 提供 OpenCode 的網路搜尋，因此搜尋會計入你的 Claude
+方案，而不需要搜尋 API 金鑰。每個模型都能使用它。請在 `opencode.jsonc` 中選取它：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+詳情請參閱[網路搜尋](/websearch#claude-agent)。
+
+## 限制
+
+- Claude Code 必須安裝在與 OpenCode 伺服器相同的機器上。遠端
+  工作區無法使用 Claude Agent。
+- Claude Code 的系統提示詞會取代 OpenCode 的內建提示詞。自訂 agent 提示詞仍會套用。
+- 不支援 temperature、top-p、top-k、seed 與停止序列。
+- 外掛的 `http.request` 與 `http.response` 掛鉤不會執行，因為 API 呼叫是由 Claude Code 發出。
+- Claude Code 的 `/usage`、`/loop`、自動模式與 agent teams 等功能無法使用。
+
+## 錯誤
+
+| 錯誤或徵狀 | 檢查 |
+| --- | --- |
+| `Claude Code is not installed` | 安裝 Claude Code，或將 `OPENCODE_CLAUDE_PATH` 設為其路徑。 |
+| `Claude Code is not logged in` | 執行 `claude auth login`，然後再次連接 Claude Agent。使用 `configDir` 時，請為該資料夾執行錯誤訊息顯示的指令。 |
+| `Claude Code ... is too old` | 執行 `claude update`。 |
