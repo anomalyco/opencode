@@ -4320,6 +4320,19 @@ export type ProviderGetInput = {
 
 export type ProviderGetOutput = { location: LocationPublicRef; data: ProviderInfo }
 
+export type ExperimentalProviderCustomCreateInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly id: string
+  readonly name: string
+  readonly package: "@opencode/ai/providers/openai-compatible" | "@opencode/ai/providers/anthropic-compatible"
+  readonly baseURL: string
+  readonly apiKey?: string | undefined
+  readonly headers?: { readonly [x: string]: string } | undefined
+  readonly models: ReadonlyArray<{ readonly id: string; readonly name?: string }>
+}
+
+export type ExperimentalProviderCustomCreateOutput = void
+
 export type IntegrationListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
 export type IntegrationListOutput = { location: LocationPublicRef; data: Array<IntegrationInfo> }

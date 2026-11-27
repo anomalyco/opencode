@@ -126,6 +126,8 @@ import type {
   ProviderListOutput,
   ProviderGetInput,
   ProviderGetOutput,
+  ExperimentalProviderCustomCreateInput,
+  ExperimentalProviderCustomCreateOutput,
   IntegrationListInput,
   IntegrationListOutput,
   IntegrationGetInput,
@@ -1321,6 +1323,31 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
+      },
+      provider: {
+        custom: {
+          create: (input: ExperimentalProviderCustomCreateInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalProviderCustomCreateOutput>(
+              {
+                method: "POST",
+                path: `/api/experimental/provider/custom`,
+                query: { location: input["location"] },
+                body: {
+                  id: input["id"],
+                  name: input["name"],
+                  package: input["package"],
+                  baseURL: input["baseURL"],
+                  apiKey: input["apiKey"],
+                  headers: input["headers"],
+                  models: input["models"],
+                },
+                successStatus: 204,
+                declaredStatuses: [400, 401, 404, 409],
+                empty: true,
+              },
+              requestOptions,
+            ),
+        },
       },
       integration: {
         wellknown: {

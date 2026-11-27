@@ -1,8 +1,8 @@
 import { Provider } from "@opencode/schema/provider"
 import { Location } from "@opencode/schema/location"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
-import { ProviderNotFoundError, ServiceUnavailableError } from "../errors.js"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
+import { ConflictError, InvalidRequestError, ProviderNotFoundError, ServiceUnavailableError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 export const ProviderGroup = HttpApiGroup.make("server.provider")
@@ -34,6 +34,23 @@ export const ProviderGroup = HttpApiGroup.make("server.provider")
           identifier: "provider.get",
           summary: "Get provider",
           description: "Retrieve a single AI provider so clients can inspect its availability and endpoint settings.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("provider.custom.create", "/api/experimental/provider/custom", {
+      query: LocationQuery,
+      payload: Provider.Custom,
+      success: HttpApiSchema.NoContent,
+      error: [InvalidRequestError, ConflictError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.provider.custom.create",
+          summary: "Create custom provider",
+          description:
+            "Add an OpenAI- or Anthropic-compatible provider to the global configuration and store its API key as a credential. Experimental: may change without compatibility guarantees.",
         }),
       ),
   )

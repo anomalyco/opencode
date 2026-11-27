@@ -56,6 +56,7 @@ test("exposes every standard HTTP API group", () => {
     "session",
     "generate",
     "voice",
+    "provider",
     "integration",
     "mcp",
     "file",

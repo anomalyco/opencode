@@ -634,6 +634,12 @@ export function createProviderDialogController(options: {
     },
     select: (id: string) =>
       dispatch({ type: "provider.selected", provider: id, fromPicker: true, accounts: accountsOf(id) }),
+    location,
+    openCustom: () => dispatch({ type: "custom.opened" }),
+    // A custom provider can't take an ID the catalog, config or an integration already uses.
+    takenIDs: () => new Set([...integrations.list().map((item) => item.id), ...providers.all().keys()]),
+    created: (id: string, first: string | undefined) =>
+      dispatch({ type: "custom.created", provider: id, accounts: accountsOf(id), firstModel: first }),
     input: (event: ProviderConnectEvent) => dispatch({ type: "connect.input", event }),
     rename: accountActions.rename,
     navigate: (target: ProviderBackTarget) => dispatch({ type: "navigate", target }),

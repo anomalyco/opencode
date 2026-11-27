@@ -86,6 +86,8 @@ type DialogMeta = {
 
 export type ProviderDialogState =
   | (DialogMeta & { readonly status: "picker" })
+  /** The custom provider form. Its submission has its own machine (`custom-machine.ts`). */
+  | (DialogMeta & { readonly status: "custom" })
   | (DialogMeta & {
       readonly status: "provider"
       readonly provider: string
@@ -112,6 +114,14 @@ export type ProviderDialogEvent =
       readonly accounts: ProviderAccounts
     }
   | { readonly type: "provider.cleared" }
+  | { readonly type: "custom.opened" }
+  /** The custom provider form saved a provider. `firstModel` is unset when its models did not load in time. */
+  | {
+      readonly type: "custom.created"
+      readonly provider: string
+      readonly accounts: ProviderAccounts
+      readonly firstModel: string | undefined
+    }
   /** User input for the sign-in of the current step. */
   | { readonly type: "connect.input"; readonly event: ProviderConnectEvent }
   /** An async sign-in result. `catalog` comes with `refresh.succeeded`. */
@@ -252,6 +262,21 @@ export function transitionProviderDialog(
     }
   }
 
+  if (event.type === "custom.opened") {
+    if (state.status !== "picker") return unchanged(state)
+
+    return unchanged({ ...meta(state), status: "custom" })
+  }
+
+  if (state.status === "custom") {
+    if (event.type === "navigate" && event.target === "picker")
+      return unchanged({ ...meta(state), status: "picker", session: state.session + 1 })
+
+    if (event.type === "custom.created") return created(state, event)
+
+    return unchanged(state)
+  }
+
   if (state.status === "picker") return unchanged(state)
 
   if (event.type === "provider.cleared") return toPicker(state)
@@ -341,12 +366,13 @@ export function providerBackTarget(state: ProviderDialogState): ProviderBackTarg
 }
 
 /** Which dialog shell the step uses: the searchable list, the model choice, or a provider step. */
-export type ProviderDialogFrame = "picker" | "models" | "accounts" | "provider"
+export type ProviderDialogFrame = "picker" | "models" | "accounts" | "provider" | "custom"
 
 /** The header path of a provider step: the provider list, then the provider. A crumb with a `target` links back. */
 export type ProviderDialogCrumb =
   | { readonly kind: "root"; readonly target?: "picker" }
   | { readonly kind: "provider"; readonly target?: "accounts" | "methods" }
+  | { readonly kind: "custom"; readonly target?: undefined }
 
 export type ProviderDialogBody =
   | { readonly kind: "picker" }
@@ -371,7 +397,9 @@ export function selectProviderDialogView(state: ProviderDialogState) {
   const body = selectBody(state, connect)
 
   const frame: ProviderDialogFrame = !step
-    ? "picker"
+    ? state.status === "custom"
+      ? "custom"
+      : "picker"
     : step.kind === "models" || step.kind === "accounts"
       ? step.kind
       : "provider"
@@ -392,6 +420,8 @@ export function selectProviderDialogView(state: ProviderDialogState) {
 export type ProviderDialogView = ReturnType<typeof selectProviderDialogView>
 
 function crumbs(state: ProviderDialogState, target: ProviderBackTarget | undefined): readonly ProviderDialogCrumb[] {
+  if (state.status === "custom") return [{ kind: "root", target: "picker" }, { kind: "custom" }]
+
   if (state.status !== "provider" || state.step.kind === "models") return []
 
   return [
@@ -809,6 +839,34 @@ function connected(
       : event.event
 
   return connectTransition(state, step, transitionProviderConnect(step.connect, input), event.catalog)
+}
+
+// A saved custom provider continues to its models like any other connection.
+function created(
+  state: Extract<ProviderDialogState, { status: "custom" }>,
+  event: Extract<ProviderDialogEvent, { type: "custom.created" }>,
+): ProviderDialogTransition {
+  const next: ProviderState = {
+    ...meta(state),
+    status: "provider",
+    session: state.session + 1,
+    provider: event.provider,
+    accounts: event.accounts,
+    step: { kind: "models", selectedModel: event.firstModel ?? "", collapsed: {} },
+    closed: false,
+  }
+
+  const finished = finish(next, event.firstModel)
+
+  return {
+    state: finished.state,
+    effects: [
+      { type: "controller.sync", provider: event.provider },
+      { type: "connected.notify", provider: event.provider },
+      { type: "models.reveal", provider: event.provider },
+      ...finished.effects,
+    ],
+  }
 }
 
 function toPicker(state: ProviderState): ProviderDialogTransition {
