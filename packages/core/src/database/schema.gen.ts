@@ -311,6 +311,15 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`space\` (
+          \`space\` text NOT NULL,
+          \`key\` text NOT NULL,
+          \`value\` text,
+          \`revision\` integer NOT NULL,
+          CONSTRAINT \`space_pk\` PRIMARY KEY(\`space\`, \`key\`)
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`workspace\` (
           \`id\` text PRIMARY KEY,
           \`provider\` text NOT NULL,
@@ -369,6 +378,13 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       yield* tx.run(`CREATE INDEX \`session_v2_parent_idx\` ON \`session_v2\` (\`parent_id\`);`)
       yield* tx.run(
         `CREATE INDEX \`session_v2_time_suspended_idx\` ON \`session_v2\` (\`time_suspended\`) WHERE "session_v2"."time_suspended" is not null;`,
+      )
+      yield* tx.run(`CREATE INDEX \`space_revision_idx\` ON \`space\` (\`space\`,\`revision\`);`)
+      yield* tx.run(
+        `CREATE INDEX \`space_live_idx\` ON \`space\` (\`space\`,\`revision\`) WHERE "space"."value" is not null;`,
+      )
+      yield* tx.run(
+        `CREATE INDEX \`space_tombstone_idx\` ON \`space\` (\`space\`,\`revision\`,\`value\`) WHERE "space"."value" is null;`,
       )
     })
   },

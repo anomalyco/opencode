@@ -110,9 +110,10 @@ opencode service status
 The server exposes an HTTP API described at `/openapi.json` (and published at
 <https://opencode.ai/docs/openapi.json>).
 
-In Code Mode, use `tools.opencode.*` first (`search({ namespace: "opencode" })`).
-For anything not covered, use `opencode api`, which handles service discovery
-and auth and accepts either `<method> <path>` or an OpenAPI operation ID:
+Use your built-in tools first (including `tools.opencode.*` and other Code Mode
+namespaces in `search(...)`). Only fall back to `opencode api` for things they
+do not cover; it handles service discovery and auth and accepts either
+`<method> <path>` or an OpenAPI operation ID:
 
 ```sh
 opencode api get /api/info

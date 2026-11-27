@@ -1,0 +1,62 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Witch Hazel",
+  "id": "witchhazel",
+  "light": {
+    "palette": {
+      "neutral": "#f1e6fb",
+      "ink": "#251638",
+      "primary": "#732bc4",
+      "accent": "#ad1f73",
+      "success": "#177050",
+      "warning": "#8a5700",
+      "error": "#b51e49",
+      "info": "#126682",
+      "interactive": "#732bc4",
+      "diffAdd": "#177050",
+      "diffDelete": "#b51e49"
+    },
+    "overrides": {
+      "text-weak": "#574370",
+      "syntax-comment": "#624d7c",
+      "syntax-keyword": "#166b4c",
+      "syntax-string": "#12637d",
+      "syntax-primitive": "#6e27bd",
+      "syntax-property": "#852396",
+      "syntax-type": "#825200",
+      "syntax-constant": "#ad1f73"
+    },
+    "v2Overrides": {
+      "v2-background-bg-contrast": "#461d78"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#282236",
+      "ink": "#f8f8f2",
+      "primary": "#ceb1ff",
+      "accent": "#ffb8d1",
+      "success": "#c2ffdf",
+      "warning": "#fff352",
+      "error": "#ff6e8e",
+      "info": "#1bc5e0",
+      "interactive": "#ceb1ff",
+      "diffAdd": "#c2ffdf",
+      "diffDelete": "#ff6e8e"
+    },
+    "overrides": {
+      "text-weak": "#b5abc9",
+      "syntax-comment": "#9e93b5",
+      "syntax-keyword": "#c2ffdf",
+      "syntax-string": "#7ce4f7",
+      "syntax-primitive": "#ceb1ff",
+      "syntax-property": "#ffb8d1",
+      "syntax-type": "#fff2a6",
+      "syntax-constant": "#c5a3ff"
+    },
+    "v2Overrides": {
+      "v2-background-bg-icon-button-contrast": "#decaff",
+      "v2-icon-icon-inverse": "var(--v2-grey-1100)"
+    }
+  }
+}

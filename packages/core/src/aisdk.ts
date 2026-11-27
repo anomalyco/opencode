@@ -907,7 +907,7 @@ function jsonObject(input: Record<string, unknown>) {
 function jsonValue(input: unknown): JSONValue {
   try {
     const encoded = JSON.stringify(input)
-    return encoded === undefined ? null : (JSON.parse(encoded) as JSONValue)
+    return encoded === undefined ? null : (Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(encoded) as JSONValue)
   } catch {
     return stringify(input)
   }

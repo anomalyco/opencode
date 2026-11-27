@@ -1,5 +1,6 @@
 import { Route, useParams } from "@solidjs/router"
 import { createMemo, lazy, Show, Suspense, type ParentProps } from "solid-js"
+import { AutomationSourceProvider } from "@/automations/source"
 import { Home } from "@/home/route"
 import { ServerProvider } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -23,6 +24,10 @@ const DraftRoute = lazy(() => import("@/new-session/route").then((module) => ({ 
 
 const SettingsScreen = lazy(() => import("@/settings/shell").then((module) => ({ default: module.SettingsScreen })))
 
+const AutomationsScreen = lazy(() =>
+  import("@/automations/route").then((module) => ({ default: module.AutomationsScreen })),
+)
+
 const ConnectServerScreen = lazy(() =>
   import("@/servers/connect/screen").then((module) => ({ default: module.ConnectServerScreen })),
 )
@@ -45,6 +50,8 @@ export function preloadRoute(url: string) {
 
   if (pathname === "/settings") return SettingsScreen.preload().then(() => undefined)
 
+  if (pathname === "/automations") return AutomationsScreen.preload().then(() => undefined)
+
   if (/^\/server\/[^/]+\/session\/[^/]+$/.test(pathname))
     return TargetSessionRouteContent.preload().then(() => undefined)
 
@@ -55,6 +62,7 @@ export function AppRoutes() {
   return (
     <Route component={AppLayout}>
       <Route path="/" component={Home} />
+      <Route path="/automations" component={AutomationsScreen} />
       <Route path="/settings" component={SettingsScreen} />
       <Route
         path="/server/:serverKey/session/:id"
@@ -131,7 +139,9 @@ function AppLayout(props: ParentProps) {
       <LayoutProvider open={open}>
         <SettingsSurfaceProvider>
           <PluginAttachment>
-            <Shell>{props.children}</Shell>
+            <AutomationSourceProvider>
+              <Shell>{props.children}</Shell>
+            </AutomationSourceProvider>
           </PluginAttachment>
         </SettingsSurfaceProvider>
       </LayoutProvider>

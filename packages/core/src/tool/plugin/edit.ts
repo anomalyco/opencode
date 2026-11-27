@@ -319,12 +319,14 @@ export const Plugin = {
                 ? { matches: findOccurrences(source, input.oldString), replace: () => input.newString }
                 : matchView(source, input.oldString, input.newString)
               const replacements = matches.length
-              const replaced = (input.replaceAll === true ? matches : matches.slice(0, 1))
-                .toReversed()
-                .reduce(
-                  (content, match) => `${content.slice(0, match.start)}${replace(match)}${content.slice(match.end)}`,
-                  source,
-                )
+              const selected = input.replaceAll === true ? matches : matches.slice(0, 1)
+              const replaced = [
+                ...selected.flatMap((match, index) => [
+                  source.slice(selected[index - 1]?.end ?? 0, match.start),
+                  replace(match),
+                ]),
+                source.slice(selected.at(-1)?.end ?? 0),
+              ].join("")
               const preview =
                 replacements > 0 && (replacements === 1 || input.replaceAll === true)
                   ? fileDiff(target.resource, source, replaced)

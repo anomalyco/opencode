@@ -15,6 +15,7 @@
  },
  "routes": [],
  "steps": [
+  {"checkpoint":"loaded","until":"alpha beta gamma","masks":[{"x":39,"y":28,"width":22,"height":1,"reason":"TS plugin loading notice (F16)"},{"x":16,"y":14,"width":84,"height":1,"reason":"the placeholder example: random in TS and Rust"}],"fixture":"P.1/p0a-composer/loaded"},
   {"type":"hello world"},
   {"keys":["left","left","left","left","left"]},
   {"keys":["f8"]},

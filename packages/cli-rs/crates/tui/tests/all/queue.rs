@@ -242,16 +242,16 @@ fn a_pending_steer_moves_to_the_queue_or_is_deleted() {
 fn message_actions_revert_and_fork() {
     let kit = Kit::new(vec![]);
     kit.click("Read the parser");
-    let screen = kit.wait_for("Message Actions");
+    let screen = kit.wait_for("Search actions");
     for option in ["Jump to", "Revert", "Copy", "Fork"] {
         assert!(screen.contains(option), "{option}: {screen}");
     }
     kit.app.press("enter");
-    kit.wait_gone("Message Actions");
+    kit.wait_gone("Search actions");
     assert!(kit.writes().is_empty(), "{:?}", kit.writes());
 
     kit.click("Read the parser");
-    kit.wait_for("Message Actions");
+    kit.wait_for("Search actions");
     kit.app.press("down");
     kit.app.press("enter");
     assert_eq!(kit.wait_writes(1), [r#"POST /api/session/ses_a/revert/stage {"messageID":"msg_01"}"#]);
@@ -260,10 +260,10 @@ fn message_actions_revert_and_fork() {
 
     let kit = Kit::new(vec![]);
     kit.click("Read the parser");
-    kit.wait_for("Message Actions");
-    for _ in 0..3 {
-        kit.app.press("down");
-    }
+    kit.wait_for("Search actions");
+    // Typing filters the actions in the title row's search box (#65903).
+    kit.app.type_text("fork");
+    kit.wait_gone("Revert");
     kit.app.press("enter");
     assert_eq!(kit.wait_writes(1), [r#"POST /api/session/ses_a/fork {"before":"msg_01"}"#]);
     kit.wait_for("Forked session");
@@ -276,5 +276,5 @@ fn the_timeline_opens_the_message_actions() {
     kit.app.press("g");
     kit.wait_for("Search timeline");
     kit.app.press("enter");
-    kit.wait_for("Message Actions");
+    kit.wait_for("Search actions");
 }

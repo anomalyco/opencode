@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "64eb82fc-ffd4-4fef-a931-e2103d267314",
-  "prevIds": ["384fb1c4-ea92-4ede-921b-12553639961c", "6fdb1fc8-74cd-4f15-8faa-e109d3030da9"],
+  "id": "673cad98-ac24-479b-a1b2-49e5eedcc54a",
+  "prevIds": ["64eb82fc-ffd4-4fef-a931-e2103d267314", "ea7fb45e-fef3-40b6-8e09-42b781c5bf23"],
   "ddl": [
     {
       "name": "mcp_trusted_host",
@@ -94,6 +94,10 @@
     },
     {
       "name": "session_v2",
+      "entityType": "tables"
+    },
+    {
+      "name": "space",
       "entityType": "tables"
     },
     {
@@ -2046,6 +2050,46 @@
     },
     {
       "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "space",
+      "entityType": "columns",
+      "table": "space"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "key",
+      "entityType": "columns",
+      "table": "space"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "value",
+      "entityType": "columns",
+      "table": "space"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "revision",
+      "entityType": "columns",
+      "table": "space"
+    },
+    {
+      "type": "text",
       "notNull": false,
       "autoincrement": false,
       "default": null,
@@ -2340,6 +2384,13 @@
       "name": "session_part_pk",
       "entityType": "pks",
       "table": "session_part"
+    },
+    {
+      "columns": ["space", "key"],
+      "nameExplicit": false,
+      "name": "space_pk",
+      "entityType": "pks",
+      "table": "space"
     },
     {
       "columns": ["project_id", "directory"],
@@ -2859,6 +2910,64 @@
       "name": "session_v2_time_suspended_idx",
       "entityType": "indexes",
       "table": "session_v2"
+    },
+    {
+      "columns": [
+        {
+          "value": "space",
+          "isExpression": false
+        },
+        {
+          "value": "revision",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "space_revision_idx",
+      "entityType": "indexes",
+      "table": "space"
+    },
+    {
+      "columns": [
+        {
+          "value": "space",
+          "isExpression": false
+        },
+        {
+          "value": "revision",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": "\"space\".\"value\" is not null",
+      "origin": "manual",
+      "name": "space_live_idx",
+      "entityType": "indexes",
+      "table": "space"
+    },
+    {
+      "columns": [
+        {
+          "value": "space",
+          "isExpression": false
+        },
+        {
+          "value": "revision",
+          "isExpression": false
+        },
+        {
+          "value": "value",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": "\"space\".\"value\" is null",
+      "origin": "manual",
+      "name": "space_tombstone_idx",
+      "entityType": "indexes",
+      "table": "space"
     }
   ],
   "renames": []

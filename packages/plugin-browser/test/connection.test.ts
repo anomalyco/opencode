@@ -9,6 +9,7 @@ import { Effect, Fiber, Schedule, Stream } from "effect"
 import { BrowserConnection } from "../src/connection.js"
 import { Browser } from "../src/rpc.js"
 import { BrowserTools } from "../src/tools.js"
+import { BrowserTunnelHost } from "../src/tunnel-host.js"
 
 type Rule = Permission.Rule
 type SessionRow = { id: string; agent: string; parentID?: string; permissions?: Rule[]; location: { directory: string } }
@@ -121,13 +122,13 @@ function plugin(input: {
     sessions,
     storage,
     asserts,
+    invoke: (name: string, input: object) => rpc.handlers![name](input, call),
     commands: () => controls.filter((control) => control.type === "command").length,
     evaluate: (event: PermissionEvaluation) => Effect.forEach(hooks, (hook) => hook(event), { discard: true }).pipe(Effect.as(event)),
     prompt: (sessionID: string) => Effect.forEach(prompts, (hook) => hook({ sessionID }), { discard: true }),
     /** Attaches a desktop to `sessionID` and reports one open tab; interrupting the fiber detaches it. */
-    attach: (sessionID: string) =>
+    attach: (sessionID: string, connectionID: string = crypto.randomUUID()) =>
       Effect.gen(function* () {
-        const connectionID = crypto.randomUUID()
         const attached = yield* Effect.forkChild(rpc.handlers!.attach({ sessionID, connectionID, version: 4 }, call), { startImmediately: true })
         yield* Effect.suspend(() => (controls.some((control) => control.type === "attached" && control.connectionID === connectionID) ? Effect.void : Effect.fail("not attached"))).pipe(
           Effect.retry(Schedule.spaced("5 millis")),
@@ -156,6 +157,37 @@ const session = (id: string, directory: string, extra: Partial<SessionRow> = {})
 
 const until = (check: () => boolean) =>
   Effect.suspend(() => (check() ? Effect.void : Effect.fail("not yet"))).pipe(Effect.retry(Schedule.spaced("5 millis")), Effect.timeout("5 seconds"))
+
+test("changing the experiment only changes new attachments, including legacy RPC traffic", () =>
+  Effect.runPromise(Effect.gen(function* () {
+    const fake = plugin({ directory: "/work", sessions: [session("ses_fixture", "/work")] })
+    const listener = yield* Effect.acquireRelease(
+      Effect.sync(() => Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } })),
+      (server) => Effect.sync(() => server.stop(true)),
+    )
+    let enabled = true
+    yield* BrowserConnection.make(fake.context).pipe(Effect.provideService(BrowserTunnelHost.Reference, {
+      enabled: Effect.sync(() => enabled),
+      reservedLocalPorts: () => new Set([listener.port]),
+      issueTicket: () => Effect.die("Disabled attachment must not mint a ticket"),
+      revokeAttachment: () => Effect.void,
+    }))
+
+    const on = { sessionID: "ses_fixture", connectionID: "on" }
+    const off = { ...on, connectionID: "off" }
+    const target = { host: "127.0.0.1", port: listener.port }
+    const first = yield* fake.attach(on.sessionID, on.connectionID)
+    enabled = false
+    expect(yield* fake.invoke("tunnel.open", { ...on, target }).pipe(Effect.flip)).toMatchObject({ message: expect.stringContaining("blocked") })
+    const second = yield* fake.attach(off.sessionID, off.connectionID)
+    expect(yield* Fiber.join(first)).toBe("replaced")
+    expect(yield* fake.invoke("tunnel.ticket", { ...off, protocol: 1 }).pipe(Effect.flip)).toMatchObject({ message: expect.stringContaining("disabled") })
+    expect(yield* fake.invoke("tunnel.grant", { ...off, target }).pipe(Effect.flip)).toMatchObject({ message: expect.stringContaining("disabled") })
+    const tunnelID = yield* fake.invoke("tunnel.open", { ...off, target })
+    yield* fake.invoke("tunnel.close", { ...off, tunnelID })
+    yield* Fiber.interrupt(second)
+  }).pipe(Effect.scoped)),
+)
 
 // An attached session's grant makes core resolve every browser call to allow, so the plugin's `evaluate` hook is what
 // applies the agent's own rules. When it cannot read them, the grant must not decide alone.

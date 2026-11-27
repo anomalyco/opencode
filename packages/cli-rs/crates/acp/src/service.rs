@@ -4,14 +4,16 @@ use std::sync::{Arc, Mutex};
 use futures_util::future::BoxFuture;
 use opencode_api::client::Client;
 use opencode_api::generated::{
-    AbsolutePath, LocationPublicRef, MessageListInput, SessionCreateInput, SessionForkInput, SessionGetInput,
-    SessionID, SessionInfo, SessionListInput, SessionListInputOrder, SessionRemoveInput, SessionsCursor,
+    AbsolutePath, LocationGetInput, LocationPublicRef, LocationQueryInput, MessageListInput, SessionCreateInput,
+    SessionForkInput, SessionGetInput, SessionID, SessionInfo, SessionListInput, SessionListInputOrder,
+    SessionRemoveInput, SessionsCursor,
 };
 use opencode_util::{json_object, lock};
 use serde_json::{Value, json};
 
 use crate::capabilities::{self, CHILD_SESSION_UPDATES, Capabilities};
 use crate::catalog::Catalogs;
+use crate::child;
 use crate::client::{check, decode_session_id, is_declared};
 use crate::config_option::{config_options, resolve_change};
 use crate::connection::{Connection, Responded};
@@ -158,12 +160,22 @@ impl Service {
             .iter()
             .map(|session| {
                 let additional = directories::list(session);
+                let meta = session.parent_id.as_ref().map(|parent_id| {
+                    json!({
+                        (child::META_KEY): json_object! {
+                            "id": session.id.0,
+                            "parentID": parent_id.0,
+                            "title"?: session.title.as_ref().filter(|title| !title.is_empty()),
+                        },
+                    })
+                });
                 json_object! {
                     "sessionId": session.id.0,
                     "cwd": session.location.directory.0,
                     "additionalDirectories"?: (!additional.is_empty()).then_some(additional),
                     "title": title(session),
                     "updatedAt": iso(session.time.updated),
+                    "_meta"?: meta,
                 }
             })
             .collect();
@@ -285,7 +297,7 @@ impl Service {
         Ok(config_options(&self.catalogs.get(&attached.cwd).await?, &attached.selection()))
     }
 
-    async fn with_reload(&self, attached: &Attached, config_id: &str, value: &str) -> Result<(), Failure> {
+    async fn with_reload(&self, attached: &Arc<Attached>, config_id: &str, value: &str) -> Result<(), Failure> {
         match self.select(attached, config_id, value).await {
             Err(Failure::InvalidModel { .. } | Failure::InvalidMode { .. } | Failure::InvalidEffort { .. }) => {
                 self.catalogs.reload(&attached.cwd).await?;
@@ -295,7 +307,7 @@ impl Service {
         }
     }
 
-    async fn select(&self, attached: &Attached, config_id: &str, value: &str) -> Result<(), Failure> {
+    async fn select(&self, attached: &Arc<Attached>, config_id: &str, value: &str) -> Result<(), Failure> {
         let catalog = self.catalogs.get(&attached.cwd).await?;
         let change = resolve_change(&catalog, &attached.selection(), config_id, value)?;
         self.sessions.select(attached, change).await
@@ -304,10 +316,25 @@ impl Service {
     async fn get_session(&self, session_id: &str, cwd: &str) -> Result<SessionInfo, Failure> {
         let id = decode_session_id(session_id)?;
         let session = check(self.client.session_get(&SessionGetInput { session_id: SessionID(id) }).await)?;
-        if fs_resolve(cwd) != fs_resolve(&session.location.directory.0) {
-            return Err(Failure::SessionDirectoryMismatch { session_id: session_id.to_owned(), cwd: cwd.to_owned() });
+        if fs_resolve(cwd) == fs_resolve(&session.location.directory.0) {
+            return Ok(session);
         }
-        Ok(session)
+        // A session moved into a worktree keeps the client's original cwd, which names the same project.
+        let location = check(
+            self.client
+                .location_get(&LocationGetInput {
+                    location: Some(LocationQueryInput { directory: Some(cwd.to_owned()) }),
+                })
+                .await,
+        )?;
+        if location.project.id.0 != "global" && location.project.id == session.project_id {
+            return Ok(session);
+        }
+        Err(Failure::SessionDirectoryMismatch {
+            session_id: session_id.to_owned(),
+            cwd: cwd.to_owned(),
+            directory: session.location.directory.0,
+        })
     }
 }
 

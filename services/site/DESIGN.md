@@ -22,8 +22,8 @@ To add a rule, add one line under its group. Mark a rule that is still being dec
 ## Type
 
 - Set every font size from the `--fs-*` tokens. Nothing is smaller than 12px, and on phones nothing that carries meaning is smaller than 14px. → [Type scale](/dev/components#type-scale)
-- Use OpenTUI Mono (`--font-mono`), Anomaly's own font, for nav, labels, titles and code, and Inter (`--font-sans`) for body and reading text. → [Fonts](/dev/components#fonts)
-- Serve only fonts we own or that are openly licensed (OpenTUI Mono, the OpenCode font, Inter), never a commercial face. `test/fonts.test.ts` enforces it.
+- Use OpenMono (`--font-mono`), Anomaly's own font, for nav, labels, titles and code, and Inter (`--font-sans`) for body and reading text. → [Fonts](/dev/components#fonts)
+- Serve only fonts we own or that are openly licensed (OpenMono, the OpenCode font, Inter), never a commercial face. `test/fonts.test.ts` enforces it.
 - Step text once, at 960px. Only page titles (`--fs-h1`) and display titles are fluid. → [Type scale](/dev/components#type-scale)
 - Set inputs with `--fs-input`, 16px on touch, so iOS doesn't zoom.
 - Give section titles `--title-size` with the `--title-stroke` faux medium; the current nav item gets the same stroke.

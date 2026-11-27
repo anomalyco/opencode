@@ -14,7 +14,7 @@ import os from "os"
 import opencodeContent from "./skill/opencode.md" with { type: "text" }
 import reportContent from "./skill/report.md" with { type: "text" }
 import apiContent from "./skill/opencode-api.md" with { type: "text" }
-import { files as apiFiles } from "./skill/opencode/api.js"
+import { files } from "./skill/opencode/api.js"
 
 export const OpencodeContent = opencodeContent
 export const ReportContent = reportContent
@@ -41,7 +41,7 @@ export const Plugin = define({
           // With opencode:// fetch, its API section points there instead of the `opencode api` command.
           content: api ? OpencodeContent.replace(/## \[API\][^]*?(?=## \[Client\])/, `${apiContent}\n`) : OpencodeContent,
         }),
-        api ? apiFiles : undefined,
+        api ? files : undefined,
       )
       editor.add(
         Skill.Info.make({

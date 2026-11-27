@@ -716,6 +716,7 @@ export const layer = (options?: Options) =>
             fetch,
             scope: servers,
             lock: locks.withLock(name),
+            endpointLoads: pool.endpointLoads,
             callbacks,
             fork,
             events: {

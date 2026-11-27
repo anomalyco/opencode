@@ -125,7 +125,7 @@ it.live("adds, invites, lists, protects paired machines, and removes machines", 
         })
         linked.send({
           type: "hello",
-          protocol: 2,
+          protocol: 3,
           os: "linux",
           arch: "x64",
           home: "/home/worker",

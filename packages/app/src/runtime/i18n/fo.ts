@@ -672,7 +672,7 @@ export const dict = {
   "settings.about.website": "www.opna koda.ai",
   "settings.about.description": "OpenCode, opna keldukoduumboðnum",
   "settings.about.trademark": "OpenCode er eitt skrásett vørumerki hjá Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Skriftsett í Inter og IBM Plex Mono",
+  "settings.about.typeset": "Skriftsett í Inter og OpenMono",
   "settings.about.tagline": "AI kann ikki byggja góða ritbúnað, uttan teg",
   "settings.about.copyright": "© Anomaly nýskapanir, Inc.",
   "project.settings.title": "Rætta verkætlan",

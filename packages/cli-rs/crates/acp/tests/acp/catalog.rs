@@ -1,8 +1,13 @@
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde_json::json;
 
-use crate::wire::{WireOptions, assert_matches, current_value, second_model, start_wire};
+use crate::wire::{
+    WireOptions, assert_matches, current_value, durable_event, json_response, lock, second_model, start_session,
+    start_wire,
+};
 
 #[tokio::test]
 async fn switches_model_effort_and_mode_against_the_warm_catalog() {
@@ -51,6 +56,87 @@ async fn switches_model_effort_and_mode_against_the_warm_catalog() {
 }
 
 #[tokio::test]
+async fn keeps_the_previous_selection_when_a_model_or_agent_switch_fails() {
+    let failing = Arc::new(Mutex::new(HashSet::<String>::new()));
+    let hook = failing.clone();
+    let acp = start_session(
+        WireOptions {
+            fetch: Some(Arc::new(move |_, request| {
+                if request["method"] != "POST" {
+                    return None;
+                }
+                let kind = request["path"].as_str().and_then(|path| path.rsplit('/').next()).unwrap_or_default();
+                if !lock(&hook).remove(kind) {
+                    return None;
+                }
+                Some(Box::pin(async {
+                    json_response(503, json!({ "_tag": "ServiceUnavailableError", "message": "unavailable" }))
+                }))
+            })),
+            ..WireOptions::default()
+        },
+        json!({}),
+    )
+    .await;
+    let set = |config: &str, value: &str| {
+        acp.request(
+            "session/set_config_option",
+            json!({ "sessionId": acp.session_id, "configId": config, "value": value }),
+        )
+    };
+    set("effort", "high").await.unwrap();
+    {
+        let mut set = lock(&failing);
+        set.insert("model".to_owned());
+        set.insert("agent".to_owned());
+    }
+
+    set("model", "test/second-model").await.unwrap_err();
+    set("mode", "plan").await.unwrap_err();
+    let selected = set("effort", "high").await.unwrap();
+
+    assert_eq!(current_value(&selected, "model"), "test/test-model");
+    assert_eq!(current_value(&selected, "effort"), "high");
+    assert_eq!(current_value(&selected, "mode"), "build");
+}
+
+#[tokio::test]
+async fn answers_with_the_newest_selection_when_an_earlier_switch_echo_lands_late() {
+    let acp = start_session(WireOptions::default(), json!({})).await;
+    let session_id = acp.session_id.clone();
+    let set = |config: &str, value: &str| {
+        acp.request("session/set_config_option", json!({ "sessionId": session_id, "configId": config, "value": value }))
+    };
+    let echo = |id: &str, variant: Option<&str>| {
+        let mut model = json!({ "providerID": "test", "id": id });
+        if let Some(variant) = variant {
+            model["variant"] = json!(variant);
+        }
+        durable_event("session.model.selected", json!({ "sessionID": session_id, "model": model }))
+    };
+
+    set("model", "test/second-model").await.unwrap();
+    set("model", "test/test-model").await.unwrap();
+    acp.server.send(&[
+        echo("second-model", None),
+        // Selection and title events share one stream, so the title arriving means the echo was seen.
+        durable_event("session.renamed", json!({ "sessionID": session_id, "title": "seen" })),
+    ]);
+    acp.wait_for_update("renamed", |item| item["update"]["sessionUpdate"] == "session_info_update").await;
+    let selected = set("effort", "high").await.unwrap();
+
+    assert_eq!(current_value(&selected, "model"), "test/test-model");
+    assert_eq!(current_value(&selected, "effort"), "high");
+    assert!(acp.updates().iter().all(|item| item["update"]["sessionUpdate"] != "config_option_update"));
+
+    // Once its own switches are echoed, another client's switch still reaches this one.
+    acp.server.send(&[echo("test-model", None), echo("test-model", Some("high")), echo("second-model", None)]);
+    let update =
+        acp.wait_for_update("external switch", |item| item["update"]["sessionUpdate"] == "config_option_update").await;
+    assert_eq!(current_value(&update["update"], "model"), "test/second-model");
+}
+
+#[tokio::test]
 async fn answers_the_first_session_after_a_cold_location_activates_its_plugins() {
     let acp = start_wire(WireOptions::default()).await;
     let plugins = {
@@ -81,8 +167,8 @@ async fn answers_the_first_session_after_a_cold_location_activates_its_plugins()
     assert_eq!(
         model["options"],
         json!([
-            { "value": "test/second-model", "name": "test/Second Model" },
-            { "value": "test/test-model", "name": "test/Test Model" },
+            { "value": "test/second-model", "name": "Test Provider / Second Model" },
+            { "value": "test/test-model", "name": "Test Provider / Test Model" },
         ])
     );
     assert_eq!(current_value(&selected, "model"), "test/second-model");

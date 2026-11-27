@@ -280,7 +280,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
         let footer_rows = if narrow { ACTIONS.len() as u16 } else { 1 };
         let gaps = if short { 1 } else { 4 };
         let body = height.saturating_sub(top + footer_rows + gaps).max(2);
-        let scroll = ScrollBox::new(app).scrollbars(false).height(u32::from(body)).shrink(1.0);
+        let scroll = cx.scroll_box().scrollbars(false).height(u32::from(body)).shrink(1.0);
         scroll.add(&used);
         scroll.add(&pitch);
         scroll.add(&link);

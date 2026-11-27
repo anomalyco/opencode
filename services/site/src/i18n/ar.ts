@@ -70,7 +70,8 @@ export const dict = {
   "home.what.anyEditor.body": "متاح كواجهة طرفية، وتطبيق سطح مكتب، وامتداد IDE",
   "home.what.readDocs": "اقرأ الوثائق",
   "home.growth.title": "وكيل برمجة مفتوح المصدر",
-  "home.growth.body": "مع أكثر من <strong>{{stars}}</strong> نجمة على GitHub، و<strong>{{contributors}}</strong> مساهمًا، وأكثر من <strong>{{commits}}</strong> Commit، يستخدم OpenCode ويثق به أكثر من <strong>{{monthlyUsers}}</strong> مطوّر كل شهر.",
+  "home.growth.body":
+    "مع أكثر من <strong>{{stars}}</strong> نجمة على GitHub، و<strong>{{contributors}}</strong> مساهمًا، وأكثر من <strong>{{commits}}</strong> Commit، يستخدم OpenCode ويثق به أكثر من <strong>{{monthlyUsers}}</strong> مطوّر كل شهر.",
   "home.growth.contributors": "المساهمون",
   "home.faq.q1": "ما هو OpenCode؟",
   "home.faq.q2": "كيف أستخدم OpenCode؟",
@@ -80,7 +81,8 @@ export const dict = {
   "home.faq.q4": "هل يمكنني استخدام اشتراكاتي الحالية مع OpenCode؟",
   "home.faq.q5": "هل يمكنني استخدام OpenCode في الطرفية فقط؟",
   "home.faq.q6": "كم تكلفة OpenCode؟",
-  "home.faq.a6": "OpenCode مجاني 100% للاستخدام. كما يأتي مع مجموعة من النماذج المجانية. قد توجد تكاليف إضافية إذا ربطت مزوّدًا آخر.",
+  "home.faq.a6":
+    "OpenCode مجاني 100% للاستخدام. كما يأتي مع مجموعة من النماذج المجانية. قد توجد تكاليف إضافية إذا ربطت مزوّدًا آخر.",
   "home.faq.q7": "ماذا عن البيانات والخصوصية؟",
   "home.faq.a7.p1": "لا يتم تخزين بياناتك ومعلوماتك إلا عندما تستخدم نماذجنا المجانية.",
   "home.faq.a7.p2.beforeModels": "اعرف المزيد عن",
@@ -89,38 +91,47 @@ export const dict = {
   "home.faq.a8.p1": "نعم، OpenCode مفتوح المصدر بالكامل. الكود المصدري متاح علنًا على",
   "home.faq.a8.p2": "بموجب",
   "home.faq.a8.mitLicense": "رخصة MIT",
-  "home.faq.a8.p3": "، مما يعني أن أي شخص يستطيع استخدامه أو تعديله أو المساهمة في تطويره. يمكن لأي شخص من المجتمع فتح قضايا، وتقديم طلبات سحب، وتوسيع الوظائف.",
+  "home.faq.a8.p3":
+    "، مما يعني أن أي شخص يستطيع استخدامه أو تعديله أو المساهمة في تطويره. يمكن لأي شخص من المجتمع فتح قضايا، وتقديم طلبات سحب، وتوسيع الوظائف.",
   "zen.title": "OpenCode Models | مجموعة منسقة من النماذج المحسنة والموثوقة لوكلاء البرمجة",
   "zen.hero.title": "نماذج محسنة وموثوقة لوكلاء البرمجة",
-  "zen.hero.body": "يمنحك OpenCode Models الوصول إلى مجموعة منسقة من نماذج الذكاء الاصطناعي التي اختبرها OpenCode وقاس أداءها خصيصًا لوكلاء البرمجة. لا حاجة للقلق بشأن اختلاف الأداء والجودة، استخدم نماذج محققة تعمل بكفاءة.",
+  "zen.hero.body":
+    "يمنحك OpenCode Models الوصول إلى مجموعة منسقة من نماذج الذكاء الاصطناعي التي اختبرها OpenCode وقاس أداءها خصيصًا لوكلاء البرمجة. لا حاجة للقلق بشأن اختلاف الأداء والجودة، استخدم نماذج محققة تعمل بكفاءة.",
   "zen.faq.q1": "ما هو OpenCode Models؟",
-  "zen.faq.a1": "OpenCode Models هو مجموعة منسقة من نماذج الذكاء الاصطناعي التي تم اختبارها وقياس أدائها لوكلاء البرمجة، أنشأها الفريق المطور لـ OpenCode.",
+  "zen.faq.a1":
+    "OpenCode Models هو مجموعة منسقة من نماذج الذكاء الاصطناعي التي تم اختبارها وقياس أدائها لوكلاء البرمجة، أنشأها الفريق المطور لـ OpenCode.",
   "zen.faq.q2": "ما الذي يجعل OpenCode Models أكثر دقة؟",
-  "zen.faq.a2": "يوفر OpenCode Models فقط النماذج التي تم اختبارها وقياس أدائها خصيصًا لوكلاء البرمجة. لن تستخدم سكين زبدة لقطع شريحة لحم، فلا تستخدم نماذج ضعيفة للبرمجة.",
+  "zen.faq.a2":
+    "يوفر OpenCode Models فقط النماذج التي تم اختبارها وقياس أدائها خصيصًا لوكلاء البرمجة. لن تستخدم سكين زبدة لقطع شريحة لحم، فلا تستخدم نماذج ضعيفة للبرمجة.",
   "zen.faq.q3": "هل OpenCode Models أرخص؟",
-  "zen.faq.a3": "OpenCode Models ليس للربح. يمرر OpenCode Models التكاليف من مزودي النماذج إليك مباشرة. كلما زاد استخدام OpenCode Models، تمكن OpenCode من التفاوض على أسعار أفضل وتمريرها إليك.",
+  "zen.faq.a3":
+    "OpenCode Models ليس للربح. يمرر OpenCode Models التكاليف من مزودي النماذج إليك مباشرة. كلما زاد استخدام OpenCode Models، تمكن OpenCode من التفاوض على أسعار أفضل وتمريرها إليك.",
   "zen.faq.q4": "كم تكلفة OpenCode Models؟",
   "zen.faq.a4.p1.beforePricing": "OpenCode",
   "zen.faq.a4.p1.pricingLink": "يحاسب لكل طلب",
   "zen.faq.a4.p1.afterPricing": "بدون أي هوامش ربح، لذا تدفع بالضبط ما يفرضه مزود النموذج.",
   "zen.faq.a4.p2.beforeAccount": "تعتمد تكلفتك الإجمالية على الاستخدام، ويمكنك تعيين حدود إنفاق شهرية في",
   "zen.faq.a4.p2.accountLink": "حسابك",
-  "zen.faq.a4.p3": "لتغطية التكاليف، يضيف OpenCode فقط رسومًا صغيرة لمعالجة الدفع قدرها 1.23 دولار لكل إعادة شحن رصيد بقيمة 20 دولارًا.",
+  "zen.faq.a4.p3":
+    "لتغطية التكاليف، يضيف OpenCode فقط رسومًا صغيرة لمعالجة الدفع قدرها 1.23 دولار لكل إعادة شحن رصيد بقيمة 20 دولارًا.",
   "zen.faq.q5": "ماذا عن البيانات والخصوصية؟",
-  "zen.faq.a5.beforeExceptions": "تتم استضافة جميع النماذج في OpenCode Models في الولايات المتحدة والاتحاد الأوروبي. يتبع المزودون سياسة عدم الاحتفاظ بالبيانات ولا يستخدمون بياناتك لتدريب النماذج، مع",
+  "zen.faq.a5.beforeExceptions":
+    "تتم استضافة جميع النماذج في OpenCode Models في الولايات المتحدة والاتحاد الأوروبي. يتبع المزودون سياسة عدم الاحتفاظ بالبيانات ولا يستخدمون بياناتك لتدريب النماذج، مع",
   "zen.faq.a5.exceptionsLink": "الاستثناءات التالية",
   "zen.faq.q6": "هل يمكنني تعيين حدود للإنفاق؟",
   "zen.faq.a6": "نعم، يمكنك تعيين حدود إنفاق شهرية في حسابك.",
   "zen.faq.q7": "هل يمكنني الإلغاء؟",
   "zen.faq.a7": "نعم، يمكنك تعطيل الفوترة في أي وقت واستخدام رصيدك المتبقي.",
   "zen.faq.q8": "هل يمكنني استخدام OpenCode Models مع وكلاء برمجة آخرين؟",
-  "zen.faq.a8": "بينما يعمل OpenCode Models بشكل رائع مع OpenCode، يمكنك استخدام OpenCode Models مع أي وكيل. اتبع تعليمات الإعداد في وكيل البرمجة المفضل لديك.",
+  "zen.faq.a8":
+    "بينما يعمل OpenCode Models بشكل رائع مع OpenCode، يمكنك استخدام OpenCode Models مع أي وكيل. اتبع تعليمات الإعداد في وكيل البرمجة المفضل لديك.",
   "zen.cta.start": "ابدأ مع OpenCode Models",
   "zen.pricing.title": "أضف رصيد 20 دولار (دفع حسب الاستخدام)",
   "zen.pricing.fee": "(+1.23 دولار رسوم معالجة البطاقة)",
   "zen.pricing.body": "استخدمه مع أي وكيل. عيّن حدود الإنفاق الشهري. ألغِ في أي وقت.",
   "zen.problem.title": "ما المشكلة التي يحلها OpenCode Models؟",
-  "zen.problem.body": "هناك العديد من النماذج المتاحة، ولكن القليل منها فقط يعمل بشكل جيد مع وكلاء البرمجة. يقوم معظم مقدمي الخدمة بتكوينها بشكل مختلف مما يعطي نتائج متفاوتة.",
+  "zen.problem.body":
+    "هناك العديد من النماذج المتاحة، ولكن القليل منها فقط يعمل بشكل جيد مع وكلاء البرمجة. يقوم معظم مقدمي الخدمة بتكوينها بشكل مختلف مما يعطي نتائج متفاوتة.",
   "zen.problem.subtitle": "نحن نعمل على إصلاح هذا للجميع، وليس فقط لمستخدمي OpenCode.",
   "zen.problem.item1": "اختبار نماذج مختارة واستشارة فرقها",
   "zen.problem.item2": "العمل مع مقدمي الخدمة لضمان تسليمها بشكل صحيح",
@@ -136,16 +147,19 @@ export const dict = {
   "zen.how.step3.title": "شحن تلقائي",
   "zen.how.step3.body": "فعّل الشحن التلقائي الاختياري واختر حد الرصيد ومبلغ الشحن",
   "zen.privacy.title": "خصوصيتك مهمة بالنسبة لنا",
-  "zen.privacy.beforeExceptions": "تتم استضافة جميع النماذج في OpenCode Models في الولايات المتحدة والاتحاد الأوروبي. يتبع المزودون سياسة عدم الاحتفاظ بالبيانات ولا يستخدمون بياناتك لتدريب النماذج، مع",
+  "zen.privacy.beforeExceptions":
+    "تتم استضافة جميع النماذج في OpenCode Models في الولايات المتحدة والاتحاد الأوروبي. يتبع المزودون سياسة عدم الاحتفاظ بالبيانات ولا يستخدمون بياناتك لتدريب النماذج، مع",
   "zen.privacy.exceptionsLink": "الاستثناءات التالية",
   "go.title": "OpenCode Go | نماذج برمجة منخفضة التكلفة للجميع",
   "go.meta.description": "يبلغ سعر Go ‏$10/شهر، مع حدود استخدام سخية ووصول موثوق إلى نماذج البرمجة الرائدة.",
   "go.hero.title": "نماذج برمجة منخفضة التكلفة للجميع",
-  "go.hero.body": "يجلب Go البرمجة الوكيلة للمبرمجين حول العالم. يوفر حدودًا سخية ووصولًا موثوقًا إلى أقوى النماذج مفتوحة المصدر، حتى تتمكن من البناء باستخدام وكلاء أقوياء دون القلق بشأن التكلفة أو التوفر.",
+  "go.hero.body":
+    "يجلب Go البرمجة الوكيلة للمبرمجين حول العالم. يوفر حدودًا سخية ووصولًا موثوقًا إلى أقوى النماذج مفتوحة المصدر، حتى تتمكن من البناء باستخدام وكلاء أقوياء دون القلق بشأن التكلفة أو التوفر.",
   "go.cta.text": "اشترك في Go",
   "go.graph.usageLimits": "حدود الاستخدام",
   "go.problem.title": "ما المشكلة التي يحلها Go؟",
-  "go.problem.body": "نحن نركز على تقديم تجربة OpenCode لأكبر عدد ممكن من الناس. OpenCode Go هو اشتراك منخفض التكلفة بسعر $10/شهر. يوفر حدودا سخية ووصولا موثوقا إلى نماذج المصدر المفتوح الأكثر قدرة.",
+  "go.problem.body":
+    "نحن نركز على تقديم تجربة OpenCode لأكبر عدد ممكن من الناس. OpenCode Go هو اشتراك منخفض التكلفة بسعر $10/شهر. يوفر حدودا سخية ووصولا موثوقا إلى نماذج المصدر المفتوح الأكثر قدرة.",
   "go.problem.item1": "أسعار اشتراك منخفضة التكلفة",
   "go.problem.item2": "حدود سخية ووصول موثوق",
   "go.problem.item3": "مصمم لأكبر عدد ممكن من المبرمجين",
@@ -165,7 +179,8 @@ export const dict = {
   "go.faq.q2": "ما النماذج التي يتضمنها Go؟",
   "go.faq.a2": "يتضمن Go النماذج المدرجة أدناه، مع حدود سخية وإتاحة موثوقة.",
   "go.faq.q3": "هل Go هو نفسه OpenCode Models؟",
-  "go.faq.a3": "لا. يعتمد OpenCode Models على الدفع حسب الاستخدام، بينما يبلغ سعر Go ‏$10/شهر، مع حدود سخية ووصول موثوق إلى مجموعة منسقة من النماذج.",
+  "go.faq.a3":
+    "لا. يعتمد OpenCode Models على الدفع حسب الاستخدام، بينما يبلغ سعر Go ‏$10/شهر، مع حدود سخية ووصول موثوق إلى مجموعة منسقة من النماذج.",
   "go.faq.q4": "كم تكلفة Go؟",
   "go.faq.a4.p1.beforePricing": "تكلفة Go",
   "go.faq.a4.p1.pricingLink": "$10/شهر",
@@ -181,10 +196,12 @@ export const dict = {
   "go.faq.a5.retention0": "0 أيام",
   "go.faq.a5.used": "مستخدَمة",
   "go.faq.a5.notUsed": "غير مستخدَمة",
-  "go.faq.a5.grokRetention": "تعطّل ZDR ميزات API مهمة تعتمد على البيانات المخزنة، بما في ذلك Responses API ذات الحالة، وFiles and Collections، وBatch API.",
-  "go.faq.a5.gptRetention": "تُنشأ سجلات مراقبة إساءة الاستخدام لكل استخدام لميزات API، ويُحتفظ بها لمدة تصل إلى 30 يومًا.",
+  "go.faq.a5.grokRetention":
+    "تعطّل ZDR ميزات API مهمة تعتمد على البيانات المخزنة، بما في ذلك Responses API ذات الحالة، وFiles and Collections، وBatch API.",
+  "go.faq.a5.gptRetention":
+    "تُنشأ سجلات مراقبة إساءة الاستخدام لكل استخدام لميزات API، ويُحتفظ بها لمدة تصل إلى 30 يومًا.",
   "go.faq.a5.learnMore": "اعرف المزيد",
-  "go.faq.a5.deepseekRetention": "تُجدَّد اتفاقية ZDR شهريًا. الاتفاقية الحالية سارية حتى 30 نوفمبر 2026.",
+  "go.faq.a5.deepseekRetention": "تُجدَّد اتفاقية ZDR شهريًا. الاتفاقية الحالية سارية حتى 31 ديسمبر 2026.",
   "go.faq.q6": "هل يمكنني شحن رصيد إضافي؟",
   "go.faq.a6": "إذا كنت بحاجة إلى مزيد من الاستخدام، يمكنك شحن رصيد في حسابك.",
   "go.faq.q7": "هل يمكنني الإلغاء؟",
@@ -192,9 +209,11 @@ export const dict = {
   "go.faq.q8": "هل يمكنني استخدام Go مع وكلاء برمجة آخرين؟",
   "go.faq.a8": "نعم، يمكنك استخدام Go مع أي وكيل. اتبع تعليمات الإعداد في وكيل البرمجة المفضل لديك.",
   "go.faq.q9": "ما الفرق بين النماذج المجانية وGo؟",
-  "go.faq.a9": "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت. يقدّم Go مجموعة منسقة من النماذج مع حصص طلبات أعلى عبر نوافذ متجددة: 20% من الحصة الشهرية لكل 5 ساعات، و50% لكل أسبوع، و100% لكل شهر. وقد تختلف الحصص حسب النموذج (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
+  "go.faq.a9":
+    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت. يقدّم Go مجموعة منسقة من النماذج مع حصص طلبات أعلى عبر نوافذ متجددة: 20% من الحصة الشهرية لكل 5 ساعات، و50% لكل أسبوع، و100% لكل شهر. وقد تختلف الحصص حسب النموذج (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
   "workspace.nav.zen": "OpenCode Models",
-  "workspace.newUser.feature.lockin.body": "استخدم OpenCode Models مع أي وكيل برمجة، واستمر في استخدام موفرين آخرين مع opencode وقتما تشاء.",
+  "workspace.newUser.feature.lockin.body":
+    "استخدم OpenCode Models مع أي وكيل برمجة، واستمر في استخدام موفرين آخرين مع opencode وقتما تشاء.",
   "download.hero.title": "تنزيل OpenCode لسطح المكتب",
   "download.hero.subtitle": "متاح في نسخة تجريبية لـ macOS، Windows، وLinux",
   "download.hero.button": "تنزيل لـ {{os}}",
@@ -222,25 +241,31 @@ export const dict = {
   "changelog.hero.title": "سجل التغييرات",
   "changelog.hero.subtitle": "تحديثات وتحسينات جديدة لـ OpenCode",
   "home.hero.subtitle.a": "ابدأ بالنماذج المجانية أو اربط أيًّا من أكثر من 200 مزوّد.",
-  "home.hero.subtitle.b": "يعمل OpenCode على جهازك، ويمكنك استخدامه من سطح المكتب أو الطرفية أو هاتفك أو من كودك الخاص.",
+  "home.hero.subtitle.b":
+    "يعمل OpenCode على جهازك، ويمكنك استخدامه من سطح المكتب أو الطرفية أو هاتفك أو من كودك الخاص.",
   "home.what.body": "OpenCode وكيل برمجة مفتوح المصدر.",
   "home.growth.githubStars": "نجمة على GitHub",
   "home.growth.monthlyDevs": "مطوّر شهريًا",
   "home.faq.a3.p1": "ليس بالضرورة. يأتي OpenCode مع مجموعة من النماذج المجانية التي يمكنك استخدامها دون إنشاء حساب.",
   "home.faq.a4.p1": "نعم، يمكنك استخدام اشتراكات ChatGPT Plus/Pro أو GitHub Copilot.",
   "download.title": "OpenCode | تنزيل لأنظمة macOS وWindows وLinux والهاتف",
-  "download.meta.description": "نزّل OpenCode لأنظمة macOS وWindows وLinux، واحصل على تطبيقَي iOS وAndroid، أو ثبّت تطبيق الطرفية بأمر واحد. مجاني ومفتوح المصدر.",
-  "download.meta.descriptionAndroidSoon": "نزّل OpenCode لأنظمة macOS وWindows وLinux، واحصل على تطبيق iOS، أو ثبّت تطبيق الطرفية بأمر واحد. تطبيق Android قادم قريبًا.",
+  "download.meta.description":
+    "نزّل OpenCode لأنظمة macOS وWindows وLinux، واحصل على تطبيقَي iOS وAndroid، أو ثبّت تطبيق الطرفية بأمر واحد. مجاني ومفتوح المصدر.",
+  "download.meta.descriptionAndroidSoon":
+    "نزّل OpenCode لأنظمة macOS وWindows وLinux، واحصل على تطبيق iOS، أو ثبّت تطبيق الطرفية بأمر واحد. تطبيق Android قادم قريبًا.",
   "brand.title": "OpenCode | إرشادات العلامة والشعارات والألوان",
-  "brand.meta.description": "إرشادات العلامة التجارية لـ OpenCode. نزّل الشعار والشعارات النصية بنسختيها الفاتحة والداكنة، واطّلع على ألوان العلامة وقواعد استخدامها.",
+  "brand.meta.description":
+    "إرشادات العلامة التجارية لـ OpenCode. نزّل الشعار والشعارات النصية بنسختيها الفاتحة والداكنة، واطّلع على ألوان العلامة وقواعد استخدامها.",
   "changelog.title": "OpenCode | سجل التغييرات وملاحظات كل إصدار",
-  "changelog.meta.description": "ملاحظات كل إصدار من OpenCode، مع الميزات الجديدة والتحسينات والإصلاحات في تطبيق سطح المكتب وواجهة الطرفية وتطبيق الهاتف وSDK.",
+  "changelog.meta.description":
+    "ملاحظات كل إصدار من OpenCode، مع الميزات الجديدة والتحسينات والإصلاحات في تطبيق سطح المكتب وواجهة الطرفية وتطبيق الهاتف وSDK.",
   "nav.data": "البيانات",
   "nav.language": "اللغة",
   "footer.feishu": "Feishu",
   "footer.wordmark.letters": "حروف الشعار النصي لـ OpenCode",
   "footer.wordmark.roleLetter": "حرف قابل للسحب",
-  "footer.wordmark.instructions": "اسحب حرفًا لتحريكه. باستخدام لوحة المفاتيح، اضغط المسافة لالتقاط حرف، ثم مفاتيح الأسهم لتحريكه، ثم المسافة لإفلاته، أو Alt مع سهم لتحريكه مباشرة.",
+  "footer.wordmark.instructions":
+    "اسحب حرفًا لتحريكه. باستخدام لوحة المفاتيح، اضغط المسافة لالتقاط حرف، ثم مفاتيح الأسهم لتحريكه، ثم المسافة لإفلاته، أو Alt مع سهم لتحريكه مباشرة.",
   "footer.wordmark.option": "{{letter}}، الموضع {{position}} من {{count}}",
   "footer.wordmark.picked": "تم التقاط {{letter}} في الموضع {{position}}",
   "footer.wordmark.moved": "تم نقل {{letter}} إلى الموضع {{position}}",
@@ -308,6 +333,7 @@ export const dict = {
   "site.product.isNew": "{{name}} جديد. ستظهر تحديثاته هنا.",
   "site.extensions": "الإضافات",
   "site.contents": "المحتويات",
+  "docs.section.overview": "نظرة عامة",
   "docs.section.build": "التطوير",
   "docs.lockup.sectionDocs": "وثائق {{section}}",
   "docs.lockup.switchLabel": "{{name}}، تبديل الوثائق",
@@ -343,10 +369,12 @@ export const dict = {
   "docs.callout.tip": "نصيحة",
   "docs.callout.caution": "تنبيه",
   "docs.callout.danger": "خطر",
-  "docs.v1.markdownNote": "هذه وثائق OpenCode V1. أحدث الوثائق، الخاصة بـ OpenCode V2، موجودة على https://opencode.ai/docs/llms.txt.",
+  "docs.v1.markdownNote":
+    "هذه وثائق OpenCode V1. أحدث الوثائق، الخاصة بـ OpenCode V2، موجودة على https://opencode.ai/docs/llms.txt.",
   "site.companions": "يعمل بشكل رائع مع OpenCode",
   "site.notFound.title": "الصفحة غير موجودة",
-  "site.arcade.alt": "صالة ألعاب مهجورة ليلًا. لا تزال شاشة إحدى الآلات مضيئة وعليها 404، وأمامها على الأرض قطعة نقدية للعب.",
+  "site.arcade.alt":
+    "صالة ألعاب مهجورة ليلًا. لا تزال شاشة إحدى الآلات مضيئة وعليها 404، وأمامها على الأرض قطعة نقدية للعب.",
   "site.arcade.token": "قطعة نقدية للعب. اضغط Enter لإدخالها في الآلة.",
   "site.arcade.credit": "رصيد 1. الآلة تعمل الآن.",
   "site.arcade.pressStart": "اضغط ابدأ.",
@@ -421,7 +449,8 @@ export const dict = {
   "home.companies.label": "يثق به أكثر من 22M مطوّر",
   "home.providers.label": "يعمل مع",
   "home.tools.title": "أدواتك الخاصة",
-  "home.tools.lead": "اربط الخدمات التي تستخدمها بالفعل عبر [خوادم MCP](mcp)، وتدخّل في OpenCode عبر [الملحقات](plugins)، وعلّم الوكلاء طرق عملك عبر [المهارات](skills).",
+  "home.tools.lead":
+    "اربط الخدمات التي تستخدمها بالفعل عبر [خوادم MCP](mcp)، وتدخّل في OpenCode عبر [الملحقات](plugins)، وعلّم الوكلاء طرق عملك عبر [المهارات](skills).",
   "home.what.anyDevice.title": "أي جهاز",
   "home.what.anyDevice.body": "تطبيق لسطح المكتب، وواجهة طرفية، وتطبيق للهاتف، وSDK لأدواتك",
   "home.what.plugins.title": "الملحقات",
@@ -440,7 +469,8 @@ export const dict = {
   "home.what.undo.body": "تراجع عن التغييرات الأخيرة في ملفاتك ومحادثتك عبر /undo",
   "home.openSource.title": "مفتوح المصدر",
   "home.tools.label": "خدمات لها خوادم MCP",
-  "home.openSource.licence": "[مرخّص بـ MIT](license). يُبنى علنًا بواسطة [Anomaly](anomaly) و[{{count}} مساهمًا](contributors).",
+  "home.openSource.licence":
+    "[مرخّص بـ MIT](license). يُبنى علنًا بواسطة [Anomaly](anomaly) و[{{count}} مساهمًا](contributors).",
   "home.openSource.contributors": "مساهمو OpenCode",
   "home.openSource.avatars": "صور مساهمي OpenCode",
   "home.openSource.avatarCommits": "إيداعات {{login}} في OpenCode",
@@ -451,8 +481,10 @@ export const dict = {
   "home.console.cta": "ابدأ مجانًا",
   "home.console.slimHeadline": "في Console كل ما تحتاجه للعمل مع AI",
   "home.console.sales": "تحدّث مع المبيعات",
-  "home.faq.a1.body": "OpenCode وكيل مفتوح المصدر يساعدك على كتابة الكود وتشغيله مع أي نموذج AI. يتوفر كتطبيق لسطح المكتب وواجهة طرفية وتطبيق للهاتف وSDK.",
-  "home.faq.a5.body": "لا. يتوفر OpenCode أيضًا [كتطبيق لسطح المكتب](desktop) و[تطبيق للهاتف](mobile)، ويتيح لك [SDK](sdk) التحكم فيه من كودك الخاص.",
+  "home.faq.a1.body":
+    "OpenCode وكيل مفتوح المصدر يساعدك على كتابة الكود وتشغيله مع أي نموذج AI. يتوفر كتطبيق لسطح المكتب وواجهة طرفية وتطبيق للهاتف وSDK.",
+  "home.faq.a5.body":
+    "لا. يتوفر OpenCode أيضًا [كتطبيق لسطح المكتب](desktop) و[تطبيق للهاتف](mobile)، ويتيح لك [SDK](sdk) التحكم فيه من كودك الخاص.",
   "brand.ui.downloadLabel": "تنزيل {{label}}",
   "brand.ui.badgeSize": "حجم الشارة",
   "brand.ui.badgeStyle": "نمط الشارة",
@@ -466,8 +498,10 @@ export const dict = {
   "brand.ui.avatarAlt": "صورة OpenCode الرمزية، {{name}}",
   "brand.ui.lockupAlt": "شعار OpenCode × شعار {{partner}}، مع مسافة 3 خطوط على كل جانب من ×.",
   "brand.ui.strokeAlt": "الخط الواحد هو سُمك إطار الشعار، أي ربع عرضه.",
-  "brand.ui.clearSpaceAlt": "الشعار مع مساحة فارغة بقدر خطين على كل جانب. الخط الواحد هو سُمك إطار الشعار، أي ربع عرضه.",
-  "brand.ui.clearSpaceWordmarkAlt": "الشعار النصي مع مساحة فارغة بقدر خطين على كل جانب. الخط الواحد هو سُمك حروف الشعار النصي، أي سُبع ارتفاعه.",
+  "brand.ui.clearSpaceAlt":
+    "الشعار مع مساحة فارغة بقدر خطين على كل جانب. الخط الواحد هو سُمك إطار الشعار، أي ربع عرضه.",
+  "brand.ui.clearSpaceWordmarkAlt":
+    "الشعار النصي مع مساحة فارغة بقدر خطين على كل جانب. الخط الواحد هو سُمك حروف الشعار النصي، أي سُبع ارتفاعه.",
   "press.ui.copy": "نسخ {{label}}",
   "press.ui.copyFor": "نسخ {{label}} لـ {{product}}",
   "press.ui.copyText": "نسخ النص",
@@ -485,13 +519,18 @@ export const dict = {
   "changelog.media.previous": "الشريحة السابقة",
   "changelog.media.next": "الشريحة التالية",
   "product.title": "OpenCode | تطبيقات سطح المكتب والطرفية والهاتف وSDK والمزيد",
-  "product.meta.description": "كل منتجات OpenCode، من تطبيقات سطح المكتب والطرفية والهاتف وSDK إلى الإضافات والمزيد من المشاريع مفتوحة المصدر من Anomaly.",
-  "product.hero.subtitle": "وكيل واحد على كل الشاشات. ابدأ جلسة على سطح المكتب، ووجّهها من هاتفك، وأكملها في الطرفية، أو شغّلها من كودك الخاص.",
-  "home.meta.description": "OpenCode وكيل البرمجة مفتوح المصدر الذي يعمل حيث تعمل. اربط نماذج AI من أكثر من 200 مزوّد، منها Claude وGPT وGemini، أو ابدأ مجانًا.",
+  "product.meta.description":
+    "كل منتجات OpenCode، من تطبيقات سطح المكتب والطرفية والهاتف وSDK إلى الإضافات والمزيد من المشاريع مفتوحة المصدر من Anomaly.",
+  "product.hero.subtitle":
+    "وكيل واحد على كل الشاشات. ابدأ جلسة على سطح المكتب، ووجّهها من هاتفك، وأكملها في الطرفية، أو شغّلها من كودك الخاص.",
+  "home.meta.description":
+    "OpenCode وكيل البرمجة مفتوح المصدر الذي يعمل حيث تعمل. اربط نماذج AI من أكثر من 200 مزوّد، منها Claude وGPT وGemini، أو ابدأ مجانًا.",
   "home.faq.a3.p4.beforeLocal": "ويمكنك أيضًا ربط [نماذجك المحلية](local).",
   "home.faq.a3.providers": "يعمل OpenCode أيضًا مع جميع المزوّدين المشهورين، ومنهم OpenAI وAnthropic وxAI.",
-  "home.faq.a3.models.after": "تمنحك [OpenCode Models](models) الوصول إلى نماذج برمجة مشهورة اختبرناها وقيّمناها لوكلاء البرمجة.",
-  "home.what.lead": "OpenCode وكيل برمجة مفتوح المصدر. استخدمه في تطبيق سطح المكتب أو في الطرفية أو على هاتفك أو من كودك الخاص عبر SDK. [اقرأ الوثائق](docs).",
+  "home.faq.a3.models.after":
+    "تمنحك [OpenCode Models](models) الوصول إلى نماذج برمجة مشهورة اختبرناها وقيّمناها لوكلاء البرمجة.",
+  "home.what.lead":
+    "OpenCode وكيل برمجة مفتوح المصدر. استخدمه في تطبيق سطح المكتب أو في الطرفية أو على هاتفك أو من كودك الخاص عبر SDK. [اقرأ الوثائق](docs).",
   "site.action.forOs": "تنزيل[ لـ {{os}}](os)",
   "site.action.copyCommand": "نسخ[ أمر {{method}}](sr)",
   "site.action.copiedCommand": "نُسخ[ أمر {{method}}](sr)",
@@ -545,7 +584,8 @@ export const dict = {
   "home.providers.aria": "مزوّدو النماذج",
   "home.providers.inline": "استخدم [list](list) أو أيًّا من أكثر من 200 نموذج آخر.",
   "home.providers.grid": "أكثر من 200 مزوّد عبر [models.dev](modelsdev)، ونماذج محلية. [اربط مزوّدًا](providers)",
-  "home.getStarted.moreModels": "للمزيد من النماذج، سجّل الدخول عبر {{subs}}، أو استخدم [OpenCode Go](go) (10$ شهريًا) أو [OpenCode Go Plus](goPlus) (40$ شهريًا).",
+  "home.getStarted.moreModels":
+    "للمزيد من النماذج، سجّل الدخول عبر {{subs}}، أو استخدم [OpenCode Go](go) (10$ شهريًا) أو [OpenCode Go Plus](goPlus) (40$ شهريًا).",
   "home.getStarted.free": "مجاني",
   "home.getStarted.mostPeople": "يبدأ معظم الناس من هنا",
   "home.getStarted.freeDetail": "{{model}} ونماذج مجانية أخرى",
@@ -604,7 +644,8 @@ export const dict = {
   "site.hexPromo.get": "احصل على Hex",
   "site.hexPromo.later": "ربما لاحقًا",
   "site.action.learnMoreAbout": "اعرف المزيد عن {{name}}",
-  "home.console.body": "استدلال عالي الجودة للنماذج المتقدمة ومفتوحة الأوزان، واشتراكات منخفضة التكلفة بحدود سخية، والأدوات التي يحتاجها فريقك لإدارة الإنفاق والتعاون بفعالية.",
+  "home.console.body":
+    "استدلال عالي الجودة للنماذج المتقدمة ومفتوحة الأوزان، واشتراكات منخفضة التكلفة بحدود سخية، والأدوات التي يحتاجها فريقك لإدارة الإنفاق والتعاون بفعالية.",
   "site.action.forOsBeta": "تنزيل لـ {{os}}، نسخة Apple TestFlight التجريبية",
   "site.action.storeBeta": "{{os}}، نسخة Apple TestFlight التجريبية",
   "home.companies.labelShort": "يثق به 22M+ مطوّر",
@@ -615,7 +656,8 @@ export const dict = {
   "legal.status.outage": "انقطاع في الخدمة",
   "legal.status.unknown": "حالة النظام",
   "zen.faq.q9": "هل يمكنني استرداد أموالي؟",
-  "zen.faq.a9": "قد تكون مؤهلًا لاسترداد أموالك إذا تم الخصم خلال آخر 14 يومًا ولم تستخدم الرصيد الناتج عن عملية الشراء هذه. {{contact}} لطلب استرداد الأموال.",
+  "zen.faq.a9":
+    "قد تكون مؤهلًا لاسترداد أموالك إذا تم الخصم خلال آخر 14 يومًا ولم تستخدم الرصيد الناتج عن عملية الشراء هذه. {{contact}} لطلب استرداد الأموال.",
   "go.promo.hy4": "يتوفر Hy4 الآن في Go.",
   "go.hero.tagline": "استخدمه مع أي وكيل. قم بزيادة الرصيد إذا لزم الأمر. الإلغاء في أي وقت.",
   "go.plans.audience": "خطط Go لـ",
@@ -653,11 +695,14 @@ export const dict = {
   "go.graph.limitedRegions": "مناطق محدودة",
   "go.graph.limitedTime": "لفترة محدودة",
   "go.faq.a5.notZdr": "ليست ZDR",
-  "go.faq.a5.museRetention": "أسعار توكنات مخفّضة للغاية مقابل منح الإذن باستخدام مطالباتك وإكمالات النموذج لتدريب نماذج Meta المستقبلية.",
+  "go.faq.a5.museRetention":
+    "أسعار توكنات مخفّضة للغاية مقابل منح الإذن باستخدام مطالباتك وإكمالات النموذج لتدريب نماذج Meta المستقبلية.",
   "go.faq.q10": "هل يمكنني استرداد أموالي؟",
-  "go.faq.a10": "قد تكون مؤهلًا لاسترداد أموالك إذا تم الخصم خلال آخر 14 يومًا ولم تستخدم مخصصات Go خلال فترة الفوترة تلك. {{contact}} لطلب استرداد الأموال.",
+  "go.faq.a10":
+    "قد تكون مؤهلًا لاسترداد أموالك إذا تم الخصم خلال آخر 14 يومًا ولم تستخدم مخصصات Go خلال فترة الفوترة تلك. {{contact}} لطلب استرداد الأموال.",
   "download.platform.windowsArm64": "Windows (ARM64)",
-  "enterprise.form.inferenceSpend.label": "ما هو الإنفاق الشهري الحالي لشركتك على استدلال الذكاء الاصطناعي (بالدولار الأمريكي)؟",
+  "enterprise.form.inferenceSpend.label":
+    "ما هو الإنفاق الشهري الحالي لشركتك على استدلال الذكاء الاصطناعي (بالدولار الأمريكي)؟",
   "enterprise.form.inferenceSpend.placeholder": "اختر نطاقًا (اختياري)",
   "enterprise.form.inferenceSpend.none": "لا يوجد إنفاق بعد",
   "enterprise.form.inferenceSpend.under1k": "أقل من $1K",

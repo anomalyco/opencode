@@ -1,6 +1,7 @@
 import type { SessionUpdate } from "@agentclientprotocol/sdk"
 
 export const UpdateMethod = "opencode/session/child_update"
+export const MetaKey = "opencode/child-session"
 
 export type Session = {
   readonly id: string
@@ -48,7 +49,7 @@ export function project(sessionUpdate: SessionUpdate, child: Session) {
 
 export function meta(child: Session) {
   return {
-    "opencode/child-session": {
+    [MetaKey]: {
       id: child.id,
       parentID: child.parentID,
       depth: child.depth,

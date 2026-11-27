@@ -18,8 +18,8 @@
     "overrides": {
       "syntax-comment": "#6c6f85",
       "syntax-keyword": "#8839ef",
-      "syntax-primitive": "#1e66f5",
-      "syntax-constant": "#fe640b"
+      "syntax-primitive": "#1a62f1",
+      "syntax-constant": "#bd4700"
     }
   },
   "dark": {
@@ -34,7 +34,7 @@
       "info": "#8bd5ca"
     },
     "overrides": {
-      "text-weak": "#b8c0e0",
+      "text-weak": "#a5adcb",
       "syntax-comment": "#939ab7",
       "syntax-keyword": "#c6a0f6",
       "syntax-string": "#a6da95",

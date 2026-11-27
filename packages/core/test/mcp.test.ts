@@ -953,6 +953,34 @@ test("falls back to legacy when a stdio server ignores the version probe", async
   expect(result.tools.map((tool) => tool.name)).toEqual(["echo"])
 })
 
+testEffect(Layer.empty).live("falls back to legacy when a remote server answers the version probe with HTTP 500", () =>
+  Effect.gen(function* () {
+    const probes = { count: 0 }
+    // Spring AI answers methods it has no handler for, server/discover included, with a 500.
+    const server = yield* resourceServer({
+      resources: false,
+      respond: async (request) => {
+        if (request.method !== "POST") return undefined
+        const body: unknown = await request.clone().json()
+        if (typeof body !== "object" || body === null || !("method" in body) || body.method !== "server/discover")
+          return undefined
+        probes.count += 1
+        return new Response("Missing handler for request type: server/discover", { status: 500 })
+      },
+    })
+    const connection = yield* connect(
+      "resources",
+      new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
+      import.meta.dir,
+    )
+
+    expect(connection.modern).toBe(false)
+    expect((yield* connection.tools()).map((tool) => tool.name)).toEqual(["echo"])
+    expect(probes.count).toBe(1)
+    expect(server.state.initializations).toBe(1)
+  }),
+)
+
 test("applies the configured MCP catalog timeout", async () => {
   const result = Effect.runPromise(
     Effect.scoped(
@@ -3288,8 +3316,9 @@ describe("MCP pool", () => {
   })
 
   // A server that is down, or that refuses this client, would refuse a private connection too.
+  // Each of the 3 attempts at a server that is down probes, then tries initialize in case it is legacy.
   for (const [code, what, attempts] of [
-    [503, "was down", 3],
+    [503, "was down", 6],
     [401, "rejected the credentials", 1],
     [403, "refused access", 1],
   ] as const)

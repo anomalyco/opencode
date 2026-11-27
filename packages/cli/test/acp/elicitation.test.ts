@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { CreateElicitationResponse } from "@agentclientprotocol/sdk"
+import type { CreateElicitationResponse, ElicitationSchema } from "@agentclientprotocol/sdk"
 import { ACPElicitation } from "../../src/acp/elicitation"
 import {
   delivered,
@@ -66,11 +66,55 @@ describe("acp elicitation mapping", () => {
       [{ key: "q0", title: "GitHub token", type: "string" }],
       [{ key: "q0", title: "Password", type: "string", hidden: true, default: "" }],
       [{ key: "q0", title: "Setup", description: "Paste your API key", type: "string" }],
-      [{ key: "q0", title: "Setup", type: "string", options: [{ value: "a", label: "Use my access token" }] }],
+      [{ key: "q0", title: "Token count", type: "integer" }],
     ]
     expect(credentials.map((fields) => ACPElicitation.requestedSchema(form(fields), capable))).toEqual(
       credentials.map(() => undefined),
     )
+  })
+
+  test("asks a choice worded like a credential without its typed answer (#61283)", () => {
+    const choice = (custom: boolean): ACPElicitation.AskedForm["fields"] => [
+      {
+        key: "q0",
+        title: "Token",
+        description: "Which API token should I use?",
+        type: "string",
+        options: [
+          { value: "alpha", label: "Alpha" },
+          { value: "beta", label: "Beta" },
+        ],
+        custom,
+      },
+      { key: "q1", title: "Rotate secrets?", type: "boolean" },
+    ]
+    const expected: ElicitationSchema = {
+      type: "object",
+      properties: {
+        q0: {
+          type: "string",
+          title: "Token",
+          description: "Which API token should I use?",
+          oneOf: [
+            { const: "alpha", title: "Alpha", description: undefined },
+            { const: "beta", title: "Beta", description: undefined },
+          ],
+          default: undefined,
+        },
+        q1: { type: "boolean", title: "Rotate secrets?", description: undefined, default: undefined },
+      },
+      required: [],
+    }
+    expect(ACPElicitation.requestedSchema(form(choice(true)), capable)).toEqual(expected)
+    expect(ACPElicitation.requestedSchema(form(choice(false)), capable)).toEqual(expected)
+    expect(
+      ACPElicitation.requestedSchema(
+        form([
+          { key: "q0", title: "Runtime", type: "string", options: [{ value: "bun", label: "Bun" }], custom: true },
+        ]),
+        capable,
+      )?.properties,
+    ).toHaveProperty("q0_custom")
   })
 })
 
