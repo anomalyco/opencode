@@ -1,0 +1,90 @@
+---
+title: "Введение"
+description: "Установите OpenCode — агент для программирования с открытым исходным кодом — как CLI, десктопное приложение, веб-приложение или Docker-образ, а затем подключите провайдера моделей."
+---
+
+OpenCode — агент для программирования с открытым исходным кодом. Он доступен в виде терминального интерфейса, десктопного приложения и веб-приложения.
+
+
+## CLI
+
+<CodeTabs
+  id="install"
+  label="Install method"
+  tabs={[
+    { label: "curl", code: "curl -fsSL https://opencode.ai/v2/install | bash" },
+    { label: "homebrew", code: "brew install anomalyco/tap/opencode-v2" },
+    { label: "npm", code: "npm install -g @opencode/cli" },
+    { label: "bun", code: "bun install -g --trust @opencode/cli" },
+    { label: "pnpm", code: "pnpm add -g --allow-build=@opencode/cli @opencode/cli" },
+    { label: "yarn", code: "yarn global add @opencode/cli" },
+    { label: "vite+", code: "vp install -g @opencode/cli" },
+    { label: "aur", code: "paru -S opencode-beta" },
+    { label: "mise", code: "mise use -g opencode" },
+  ]}
+/>
+
+Пакет npm выбирает нативный бинарник `opencode` для вашей платформы с помощью скрипта postinstall. Команды для Bun и pnpm явно разрешают запуск этого скрипта, а Vite+ не требует дополнительного флага. Для команды mise нужна версия 2026.10.9 или новее: более ранние версии устанавливают OpenCode 1.
+
+Менеджеры пакетов Windows не поддерживаются.
+
+
+Скачайте отдельный бинарник CLI для вашей платформы.
+
+- **macOS:** [Apple silicon](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-arm64.zip) · [Intel](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64.zip) · [Intel (базовая сборка)](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64-baseline.zip)
+- **Windows:** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-arm64.zip) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64.zip) · [x64 (базовая сборка)](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64-baseline.zip)
+- **Linux (glibc):** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-arm64.tar.gz) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64.tar.gz) · [x64 (базовая сборка)](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-baseline.tar.gz)
+- **Linux (musl):** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-arm64-musl.tar.gz) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-musl.tar.gz) · [x64 (базовая сборка)](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-baseline-musl.tar.gz)
+
+## Desktop
+
+Скачайте последнюю сборку OpenCode Desktop для вашей платформы.
+
+- **macOS:** [Apple silicon](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-mac-arm64.dmg) · [Intel](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-mac-x64.dmg)
+- **Windows:** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-win-x64.exe) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-win-arm64.exe)
+- **Linux (.deb):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-amd64.deb) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-arm64.deb)
+- **Linux (.rpm):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-x86_64.rpm) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-aarch64.rpm)
+- **Linux (AppImage):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-x86_64.AppImage) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-arm64.AppImage)
+
+
+## Веб
+
+Откройте веб-интерфейс OpenCode командой `opencode pair`.
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+```
+
+## Docker
+
+Теги Docker-образов содержат номер версии, например `ghcr.io/anomalyco/opencode:2.0.0`.
+
+---
+
+## Подключение
+
+OpenCode поддерживает множество провайдеров LLM из коробки. Подключиться к ним можно напрямую [в TUI](/cli/providers) с помощью `/connect`.
+
+Как настроить собственных провайдеров, см. в разделе [Провайдеры](/providers).
+
+Если вам нужен простой доступ к лучшим моделям для программирования, попробуйте
+[OpenCode Console](/console).
+
+Также можно попробовать [OpenCode Go](/console/go) — подписку за $10 в месяц
+с доступом к лучшим моделям для программирования.
+
+---
+
+## Настройка
+
+Настройте OpenCode под себя: измените [конфигурацию OpenCode](/config), [загрузите плагины](/plugins), [подключите MCP-серверы](/mcp-servers) или [создайте команды](/commands). Темы и сочетания клавиш терминального интерфейса описаны в разделе [Настройки CLI](/cli/config).
+
+---
+
+## Обучение
+
+Если хотите подробнее освоить OpenCode, пройдите отличный курс [AI Coding with OpenCode](https://www.boot.dev/courses/learn-ai-coding), который Boot.dev разработал при консультационной поддержке нашей команды. Все материалы курса можно бесплатно читать и смотреть, но некоторые интерактивные функции могут быть платными.

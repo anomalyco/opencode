@@ -1,0 +1,204 @@
+---
+title: "API списка моделей"
+description: "Получайте список доступных рабочему пространству моделей с их лимитами, ценами, возможностями и URL Console для запросов к каждой модели."
+---
+
+Есть два вида списков моделей. [Список Console](#console-model-list) возвращает всё, что доступно рабочему пространству,
+включая подключённых им провайдеров. [Списки инференса](#inference-model-lists) возвращают публичные каталоги OpenCode Models и
+Go в формате списка OpenAI.
+
+| Список                                              | Что возвращает                                                                                 | Ключ        |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------- |
+| [`/console/api/v1/models`](#console-model-list)     | Все провайдеры и модели, доступные вызывающей стороне, с учётом настроек рабочего пространства. | Обязателен  |
+| [`/inference/v1/models`](#inference-model-lists)    | OpenCode Models. Без ключа — все публичные модели; с ключом — модели, доступные его рабочему пространству. | Необязателен |
+| [`/inference/go/v1/models`](#inference-model-lists) | Модели [Go](/console/go) в тех же формах.                                                      | Необязателен |
+
+Используйте список Console, когда ваш клиент должен предлагать те же модели, что и OpenCode, включая подключённых
+провайдеров. Используйте список инференса, когда нужны только OpenCode Models или Go либо когда ключа ещё нет и нужен
+публичный каталог.
+
+## Список моделей Console
+
+`GET https://opencode.ai/console/api/v1/models` возвращает каждого провайдера, доступного вызывающей стороне, и под каждым —
+модели, которые она может вызвать.
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+Запрос может отправить любой участник рабочего пространства: через сессию в браузере, после входа в OpenCode, с [личным API-ключом](/console/api#personal-api-keys)
+или [ключом сервисного аккаунта](/console/api#service-accounts) с разрешением **Models › Read**. Действуют те же правила, что и
+конфигурация OpenCode, которую генерирует Console, поэтому список совпадает с тем, что показывает `/models` в OpenCode.
+Ответ никогда не кэшируется (`Cache-Control: private, no-store`).
+
+### Провайдеры
+
+Ответ — объект с ключами по ID провайдера, который использует OpenCode.
+
+| ID провайдера               | Провайдер                                                                                                                        |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `opencode`                  | [OpenCode Models](/console/models), запросы оплачиваются с баланса рабочего пространства. |
+| `opencode-go`               | Модели [Go](/console/go). Присутствует только при подписке Go.                                                                   |
+| `console-<connection slug>` | [Подключение](/console/providers), добавленное в рабочем пространстве, например `console-openai`, `console-anthropic` или `console-aws-bedrock`. |
+
+У каждого провайдера есть `id`, `name` и `models`. `name` — имя, которое показывает OpenCode: обычно сначала название рабочего пространства,
+а затем имя провайдера. `models` — объект с ключами по ID модели.
+
+### Пример
+
+Сокращено до одного провайдера и одной модели:
+
+```json
+{
+  "opencode": {
+    "id": "opencode",
+    "name": "Acme Inc. / OpenCode",
+    "models": {
+      "claude-sonnet-5-5": {
+        "type": "chat",
+        "id": "claude-sonnet-5-5",
+        "canonical_id": "anthropic/claude-sonnet-5-5",
+        "name": "Claude Sonnet 5.5",
+        "description": "Fast Claude model for everyday coding, agents, and knowledge work",
+        "family": "claude-sonnet",
+        "open_weights": false,
+        "knowledge": "2026-06",
+        "release_date": "2026-09-28",
+        "last_updated": "2026-09-28",
+        "modalities": {
+          "input": ["text", "image/jpeg", "image/png", "application/pdf"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": { "supported": true },
+          "reasoning": {
+            "supported": true,
+            "effort": ["low", "medium", "high", "xhigh", "max"]
+          }
+        },
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 2,
+              "cache": { "read": 0.1, "write": 2.5 }
+            },
+            "output": { "price": 10 }
+          }
+        },
+        "api": {
+          "messages": {
+            "base_url": "https://opencode.ai/inference/anthropic/v1",
+            "sdk": {
+              "aisdk": "@ai-sdk/anthropic",
+              "opencodeai": "@opencode/ai/providers/anthropic"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### Поля
+
+Каждая модель — это запись v2 из [models.dev](https://models.dev) с учётом настроек рабочего пространства, поэтому поля — те,
+что [публикует models.dev](https://models.dev/experimental/v2.0/api.json). Отключённые модели и модели, которые models.dev
+помечает устаревшими, опускаются.
+
+| Поле           | Значение                                                                                                                                                                                                                                                                            |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`         | Вид модели, например `chat`, `embedding`, `image` или `decision`.                                                                                                                                                                                                                  |
+| `id`           | ID модели для отправки в запросах. Он же ключ в `models`.                                                                                                                                                                                                                          |
+| `name`         | Отображаемое имя.                                                                                                                                                                                                                                                                  |
+| `limit`        | `context` — размер контекстного окна. `input` ограничивает объём входных данных запроса, если модель задаёт такой лимит. `output` ограничивает объём ответа. |
+| `cost`         | Доллары США за 1M токенов: `text.input.price`, `text.input.cache.read`, `text.input.cache.write` и `text.output.price`. `0` означает бесплатно. Отсутствующие поля кэша означают, что у модели нет цены кэша. Некоторые модели добавляют `cost.multipliers`, повышающие цену в указанное время. |
+| `capabilities` | Что умеет модель, например вызовы инструментов и интенсивность рассуждений.                                                                                                                                                                                                        |
+| `modalities`   | Принимаемые типы входа, например `text`, `image/png` или `application/pdf`, и типы выхода.                                                                                                                                                                                         |
+| `api`          | URL Console и SDK для этой модели. См. [API модели](#model-api).                                                                                                                                                                                                                   |
+
+### API модели
+
+`api` содержит одну запись с ключом по протоколу модели: `chat-completions` для OpenAI Chat Completions, `responses`
+для OpenAI Responses, `messages` для Anthropic Messages, `generate-content` для Gemini и `embeddings` для
+[OpenAI Embeddings](/console/models#embedding-models). Это запись протокола из models.dev, где URL поставщика заменён URL Console,
+а остальные протоколы опущены.
+
+| Поле             | Значение                                                                                                                                                                                                                                             |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `base_url`       | Куда отправлять запросы для этой модели. OpenCode Models используют `https://opencode.ai/inference/...`, Go — `https://opencode.ai/inference/go/...`, а подключение — свой URL API Console, `https://opencode.ai/inference/custom/<connection_id>`. |
+| `sdk.aisdk`      | Пакет AI SDK для протокола, тот же, что в таблице [эндпоинтов моделей](/console/models#endpoints).                                                                                                                                                   |
+| `sdk.opencodeai` | Соответствующий модуль провайдера, который загружает OpenCode.                                                                                                                                                                                       |
+
+Модель на добавленном вами подключении выглядит так. Добавьте путь протокола, например `/chat/completions` или
+`/responses`, как описано в разделе об [API провайдеров](/console/api/providers#endpoints).
+
+```json
+"api": {
+  "responses": {
+    "base_url": "https://opencode.ai/inference/custom/conn_...",
+    "sdk": {
+      "aisdk": "@ai-sdk/openai",
+      "opencodeai": "@opencode/ai/providers/openai/responses"
+    }
+  }
+}
+```
+
+## Списки моделей инференса
+
+`GET https://opencode.ai/inference/v1/models` перечисляет OpenCode Models, а `GET https://opencode.ai/inference/go/v1/models` —
+модели Go. Оба эндпоинта возвращают данные в формате списка OpenAI.
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+Сокращено до одной модели и её общих полей:
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "claude-sonnet-5-5",
+      "object": "model",
+      "created": 1795006281,
+      "owned_by": "opencode",
+      "name": "Claude Sonnet 5.5",
+      "type": "chat",
+      "limit": { "context": 1000000, "output": 128000 },
+      "cost": {
+        "text": {
+          "input": { "price": 2, "cache": { "read": 0.1, "write": 2.5 } },
+          "output": { "price": 10 }
+        }
+      }
+    }
+  ]
+}
+```
+
+Без ключа список содержит все публичные модели. С ключом — только модели, доступные его рабочему пространству, поэтому
+ключу сервисного аккаунта нужно **Models › Read**. Передайте его в `Authorization: Bearer` или `x-api-key`. Частные и
+устаревшие модели опускаются.
+
+Каждый элемент начинается с полей OpenAI `id`, `object`, `created` и `owned_by`, затем идут те же поля models.dev, что
+использует [список Console](#fields): `name`, `type`, `limit`, `cost`, `capabilities`, `modalities`, `api`, `family`,
+`release_date` и другие. В отличие от списка Console, списки инференса не включают подключения рабочего пространства. Если данные
+models.dev временно недоступны, элементы всё равно появляются только с полями OpenAI, а `name` равен ID.
+
+У каждой модели Go также есть `go`: её месячный лимит использования на каждом тарифе (`monthly_usage`), обучается ли
+она на данных запросов (`training`), действует ли для неё политика нулевого хранения данных (`zdr`) и ограничен ли доступ к ней в некоторых странах (`limited_regions`).
+
+## Ошибки
+
+| Статус | Значение                                                                                     |
+| ------ | -------------------------------------------------------------------------------------------- |
+| `401`  | Нет учётных данных либо ключ просрочен или отозван.                                          |
+| `403`  | Ключ не может перечислять модели. Ключам сервисных аккаунтов и ограниченным ключам нужно **Models › Read**. |

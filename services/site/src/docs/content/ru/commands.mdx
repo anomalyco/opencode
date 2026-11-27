@@ -1,0 +1,252 @@
+---
+title: "Команды"
+description: "Превращайте промпты в переиспользуемые слеш-команды в Markdown или JSON, с аргументами, выводом shell и вложениями."
+---
+
+Создайте `.opencode/commands/review.md`, чтобы превратить промпт в `/review`:
+
+```md title=".opencode/commands/review.md"
+Review $ARGUMENTS for bugs and missing tests.
+```
+
+Запустите её в TUI, указав цель:
+
+```text
+/review src/auth.ts
+```
+
+OpenCode отправляет `Review src/auth.ts for bugs and missing tests.` как пользовательский промпт.
+
+## Markdown
+
+Глобальные команды храните в `~/.config/opencode/commands/`, команды проекта — в `.opencode/commands/`.
+
+```text
+~/.config/opencode/commands/review.md
+.opencode/commands/review.md
+```
+
+Обнаруживаются только файлы `.md`. Вложенные пути становятся именами команд с разделителями `/`:
+
+```md title=".opencode/commands/team/review.md"
+Review $ARGUMENTS using the team's checklist.
+```
+
+Запустите вложенную команду как `/team/review src/auth.ts`. Каталог `command/` в единственном числе (устаревший) тоже обнаруживается, но для новых файлов используйте `commands/`.
+
+Если команде нужны метаданные, добавьте блок YAML frontmatter. Шаблоном промпта всегда служит текст Markdown без пробельных символов в начале и конце.
+
+```md title=".opencode/commands/review.md"
+---
+description: Review code for correctness
+agent: plan
+model: anthropic/claude-sonnet-5-5#high
+---
+
+Review $ARGUMENTS. Report bugs first.
+```
+
+## JSON
+
+Определите команды в разделе `commands` любого [файла конфигурации](/config) OpenCode в формате JSON или JSONC. Каждой команде требуется `template`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "commands": {
+    "review": {
+      "description": "Review code for correctness",
+      "template": "Review $ARGUMENTS. Report bugs first.",
+    },
+  },
+}
+```
+
+## Поля
+
+Frontmatter Markdown и записи JSON принимают одни и те же поля, за исключением того, что в Markdown `template` берётся из тела файла.
+
+| Поле | Обязательно | Поведение |
+| --- | --- | --- |
+| `template` | Только для JSON | Шаблон промпта. |
+| `description` | Нет | Текст, отображаемый в списках команд и при поиске. |
+| `agent` | Нет | Агент, выбираемый при выполнении команды. |
+| `model` | Нет | Переопределение модели в формате `provider/model` или `provider/model#variant`. |
+| `subagent` | Нет | `true` — запуск в фоновой дочерней сессии; `false` — принудительно в текущей сессии. |
+| `subtask` | Нет | Устаревший псевдоним `subagent`. |
+
+Например, эта JSON-команда задаёт все текущие необязательные поля:
+
+```jsonc title="opencode.jsonc"
+{
+  "commands": {
+    "audit": {
+      "template": "Audit $ARGUMENTS.",
+      "description": "Audit a package",
+      "agent": "general",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "subagent": true,
+    },
+  },
+}
+```
+
+Не указывайте `template` в frontmatter Markdown: его задаёт тело файла.
+
+## Аргументы
+
+Используйте `$ARGUMENTS` для всей строки аргументов в том виде, в каком она введена.
+
+```md title=".opencode/commands/component.md"
+Create a typed React component named $ARGUMENTS.
+```
+
+Для `/component Account Settings` подстановка превращается в `Account Settings`.
+
+## Позиции
+
+Используйте `$1`, `$2` и следующие номера для разобранных позиционных аргументов. Одинарные или двойные кавычки группируют слова и удаляются.
+
+```md title=".opencode/commands/check.md"
+Check $1. Focus on $2.
+```
+
+Для `/check src/auth.ts "error handling"` `$1` превращается в `src/auth.ts`, а `$2` — в `error handling`.
+
+Вместо заполнителя с наибольшим номером подставляется его аргумент и весь текст после него. Вместо отсутствующих аргументов подставляются пустые строки.
+
+```md title=".opencode/commands/compare.md"
+Compare $1 with $2.
+```
+
+Для `/compare api stable branch` OpenCode отправляет `Compare api with stable branch.`
+
+## Запасной вариант
+
+Если в шаблоне нет `$ARGUMENTS` или позиционных подстановок, OpenCode добавляет непустые аргументы после пустой строки.
+
+```md title=".opencode/commands/explain.md"
+Explain this code clearly.
+```
+
+Для `/explain src/cache.ts` промпт становится таким:
+
+```text
+Explain this code clearly.
+
+src/cache.ts
+```
+
+## Shell
+
+Заключите shell-команду в `!` с обратными кавычками, чтобы вставить её вывод до отправки промпта.
+
+```md title=".opencode/commands/review-diff.md"
+Review this diff:
+
+!`git diff --stat && git diff`
+```
+
+OpenCode выполняет каждый блок в настроенной командной оболочке из каталога активного проекта и вставляет объединённый вывод. Перед запуском подставляются значения аргументов:
+
+```md title=".opencode/commands/history.md"
+Summarize these commits:
+
+!`git log --oneline -$1`
+```
+
+Для `/history 5` shell получает `git log --oneline -5`. Не помещайте недоверенные аргументы в shell-блоки.
+
+<Callout type="warning">
+  Shell-блоки выполняются, когда OpenCode вычисляет команду, в обход процесса разрешений инструментов агента.
+  Используйте команды только из источников, которым доверяете.
+</Callout>
+
+## Вложения
+
+Сохранённые шаблоны не раскрывают `@path`; это остаётся обычным текстом промпта.
+
+```md title=".opencode/commands/readme.md"
+Review @README.md.
+```
+
+Чтобы приложить файл, добавьте его через поле ввода при вызове команды. OpenCode сохраняет эти вложения из поля ввода при отправке раскрытого промпта.
+
+## Выполнение
+
+Команды раскрывают аргументы и shell-блоки перед отправкой сохраняемого пользовательского промпта. По умолчанию они выполняются в текущей сессии.
+
+```md title=".opencode/commands/plan.md"
+---
+agent: plan
+---
+
+Plan $ARGUMENTS.
+```
+
+Запуск `/plan migration` переключает текущую сессию на `plan` перед отправкой промпта.
+
+Выбор модели подчиняется следующим правилам:
+
+1. `model` команды переопределяет любую другую модель.
+2. Иначе настроенная модель выбранного агента команды переопределяет модель, активную в момент вызова.
+3. Иначе остаётся активной текущая модель сессии.
+
+Например, эта команда выбирает и агента, и явную модель:
+
+```md title=".opencode/commands/design.md"
+---
+agent: plan
+model: openai/gpt-6.1-sol#high
+---
+
+Design $ARGUMENTS.
+```
+
+## Фоновый режим
+
+Установите `subagent: true`, чтобы выполнять команду в фоновой дочерней сессии.
+
+```md title=".opencode/commands/audit.md"
+---
+description: Audit changes
+agent: general
+subagent: true
+---
+
+Audit $ARGUMENTS for bugs and missing tests.
+```
+
+Родитель остаётся доступным и сохраняет своего агента и модель. Когда дочерний агент завершает работу, OpenCode отправляет родителю результат или сообщение об ошибке.
+
+| Значение | Поведение |
+| --- | --- |
+| `true` | Всегда использовать дочернюю сессию, даже если у выбранного агента `mode: primary`. |
+| `false` | Всегда использовать текущую сессию, даже если у выбранного агента `mode: subagent`. |
+| Не указано | Использовать дочернюю сессию, только если у выбранного агента `mode: subagent`. |
+
+В дочерней сессии используется модель команды. Если она не задана, берётся модель выбранного агента, а если и её нет — модель родительской сессии. Устаревшее поле `subtask` по-прежнему поддерживается, но при наличии обоих полей приоритет у `subagent`.
+
+```yaml
+subagent: false
+subtask: true
+```
+
+Этот пример выполняется в текущей сессии, потому что `subagent` имеет приоритет.
+
+## Загрузка
+
+Команды Markdown и JSON используют один реестр. Более поздние источники заменяют более ранние команды с тем же именем.
+
+```text
+~/.config/opencode/commands/review.md   # Lower priority
+.opencode/commands/review.md           # Replaces the global command
+```
+
+Источники проекта имеют приоритет над глобальными, а более близкие источники проекта — над источниками из родительских каталогов. Пользовательское определение также может заменить более раннюю встроенную команду. OpenCode автоматически перезагружает файлы команд и изменения конфигурации.
+
+```md title=".opencode/commands/review.md"
+Review only the staged changes: !`git diff --cached`
+```
+
+Сохранение этого файла обновляет `/review` без перезапуска OpenCode.
