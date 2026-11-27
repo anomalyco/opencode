@@ -145,8 +145,10 @@ async function checkHreflang() {
             .join("\n")
         : undefined
     if (expected === undefined) {
+      // navigation.ts takes slugs, not localized paths: an English page's fallbacks all name it.
+      const slug = (canonicalPath ?? page).replace(/^.*\/docs\//, "").replace(/\/$/, "") || "index"
       failures.push(
-        `${shown}: no sitemap alternates for ${page}, and ${canonicalPath ?? "no canonical"} is not a listed fallback (add ${page} to navigation.ts or set noindex: true)`,
+        `${shown}: no sitemap alternates for ${page}, and ${canonicalPath ?? "no canonical"} is not a listed fallback (add "${slug}" to navigation.ts or set noindex: true)`,
       )
       continue
     }
