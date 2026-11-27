@@ -1234,8 +1234,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Ny tidslinje",
   "settings.experimental.row.newTimeline.description":
     "En omgjord sessionstidslinje som grupperar vad agenten gjorde, med en statusrad under turen",
-  "settings.experimental.row.newQuestionUI.title": "Nytt frågegränssnitt",
-  "settings.experimental.row.newQuestionUI.description": "Förhandsgranska den tangentbordsstyrda frågepanelen",
   "settings.experimental.row.sidebarOrganize.title": "Ordna vertikalt sidofält",
   "settings.experimental.row.sidebarOrganize.description":
     "Välj hur sessioner listas i sidofältet. Gäller endast sidoflikar.",

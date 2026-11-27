@@ -1277,8 +1277,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Nová časová os",
   "settings.experimental.row.newTimeline.description":
     "Prepracovaná časová os relácie, ktorá zoskupuje činnosť agenta, s jedným stavovým riadkom pod krokom",
-  "settings.experimental.row.newQuestionUI.title": "Nové rozhranie otázok",
-  "settings.experimental.row.newQuestionUI.description": "Ukážka panela otázok ovládaného primárne klávesnicou",
   "settings.experimental.row.sidebarOrganize.title": "Usporiadanie zvislého bočného panela",
   "settings.experimental.row.sidebarOrganize.description":
     "Vyberte, ako sa relácie zobrazujú v bočnom paneli. Platí iba pre bočné karty.",

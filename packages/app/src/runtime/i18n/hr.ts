@@ -1248,8 +1248,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Nova vremenska traka",
   "settings.experimental.row.newTimeline.description":
     "Redizajnirana vremenska traka sesije koja grupira ono što je agent učinio, s jednim retkom statusa ispod koraka",
-  "settings.experimental.row.newQuestionUI.title": "Novo sučelje za pitanja",
-  "settings.experimental.row.newQuestionUI.description": "Isprobajte ploču za pitanja prilagođenu tipkovnici",
   "settings.experimental.row.sidebarOrganize.title": "Organiziraj okomitu bočnu traku",
   "settings.experimental.row.sidebarOrganize.description":
     "Odaberite kako se sesije prikazuju na bočnoj traci. Primjenjuje se samo na bočne kartice.",

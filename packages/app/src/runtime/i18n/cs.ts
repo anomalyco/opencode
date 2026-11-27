@@ -1271,8 +1271,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Nová časová osa",
   "settings.experimental.row.newTimeline.description":
     "Přepracovaná časová osa relace, která seskupuje činnost agenta a pod krokem zobrazuje jeden stavový řádek",
-  "settings.experimental.row.newQuestionUI.title": "Nové rozhraní otázek",
-  "settings.experimental.row.newQuestionUI.description": "Vyzkoušejte panel otázek ovládaný primárně klávesnicí",
   "settings.experimental.row.sidebarOrganize.title": "Uspořádání svislého postranního panelu",
   "settings.experimental.row.sidebarOrganize.description":
     "Zvolte, jak se relace zobrazují v postranním panelu. Platí pouze pro boční karty.",

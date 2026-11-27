@@ -1226,8 +1226,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Täze wagt çyzgysy",
   "settings.experimental.row.newTimeline.description":
     "Agentiň eden işlerini toparlaýan we tapgyryň aşagynda bir ýagdaý setirini görkezýän täzeden işlenen sessiýa wagt çyzgysy",
-  "settings.experimental.row.newQuestionUI.title": "Täze sorag interfeýsi",
-  "settings.experimental.row.newQuestionUI.description": "Klawiatura esasly sorag panelini synap görüň",
   "settings.experimental.row.sidebarOrganize.title": "Dik gapdal paneli tertiplemek",
   "settings.experimental.row.sidebarOrganize.description":
     "Sessiýalaryň gapdal panelde nähili sanalýandygyny saýlaň. Diňe gapdal goýmalara degişli.",

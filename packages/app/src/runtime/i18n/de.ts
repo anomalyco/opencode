@@ -1268,8 +1268,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Neue Timeline",
   "settings.experimental.row.newTimeline.description":
     "Eine neu gestaltete Sitzungs-Timeline, die die Aktionen des Agenten gruppiert, mit einer Statuszeile unter der Runde",
-  "settings.experimental.row.newQuestionUI.title": "Neue Fragen-Oberfläche",
-  "settings.experimental.row.newQuestionUI.description": "Vorschau des tastaturorientierten Fragenbereichs",
   "settings.experimental.row.sidebarOrganize.title": "Vertikale Seitenleiste organisieren",
   "settings.experimental.row.sidebarOrganize.description":
     "Wählen Sie, wie Sitzungen in der Seitenleiste aufgelistet werden. Gilt nur für seitliche Tabs.",

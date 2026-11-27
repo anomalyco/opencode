@@ -1314,8 +1314,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Nova vremenska linija",
   "settings.experimental.row.newTimeline.description":
     "Redizajnirana vremenska linija sesije koja grupiše šta je agent uradio, s jednom statusnom linijom ispod poteza",
-  "settings.experimental.row.newQuestionUI.title": "Novi interfejs za pitanja",
-  "settings.experimental.row.newQuestionUI.description": "Isprobajte panel za pitanja prilagođen tastaturi",
   "settings.experimental.row.sidebarOrganize.title": "Organizuj vertikalnu bočnu traku",
   "settings.experimental.row.sidebarOrganize.description":
     "Odaberite kako se sesije prikazuju na bočnoj traci. Primjenjuje se samo na bočne kartice.",

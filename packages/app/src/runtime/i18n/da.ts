@@ -1285,8 +1285,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Ny tidslinje",
   "settings.experimental.row.newTimeline.description":
     "En nydesignet sessionstidslinje, der grupperer, hvad agenten gjorde, med én statuslinje under turen",
-  "settings.experimental.row.newQuestionUI.title": "Ny spørgsmålsvisning",
-  "settings.experimental.row.newQuestionUI.description": "Prøv den tastaturvenlige spørgsmålsdock",
   "settings.experimental.row.sidebarOrganize.title": "Organiser lodret sidepanel",
   "settings.experimental.row.sidebarOrganize.description":
     "Vælg, hvordan sessioner vises i sidepanelet. Gælder kun sidefaner.",

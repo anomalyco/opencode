@@ -1235,9 +1235,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Rrjedhë kohore e re",
   "settings.experimental.row.newTimeline.description":
     "Një rrjedhë kohore e ridizajnuar e sesionit që grupon atë që bëri agjenti, me një rresht statusi poshtë raundit",
-  "settings.experimental.row.newQuestionUI.title": "Ndërfaqe e re pyetjesh",
-  "settings.experimental.row.newQuestionUI.description":
-    "Shikoni paraprakisht panelin e pyetjeve të orientuar nga tastiera",
   "settings.experimental.row.sidebarOrganize.title": "Organizo shiritin anësor vertikal",
   "settings.experimental.row.sidebarOrganize.description":
     "Zgjidhni si renditen sesionet në shiritin anësor. Vlen vetëm për skedat anësore.",

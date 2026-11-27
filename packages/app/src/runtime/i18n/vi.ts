@@ -1236,8 +1236,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Dòng thời gian mới",
   "settings.experimental.row.newTimeline.description":
     "Dòng thời gian phiên được thiết kế lại, nhóm những gì tác nhân đã làm, với một dòng trạng thái bên dưới lượt",
-  "settings.experimental.row.newQuestionUI.title": "Giao diện câu hỏi mới",
-  "settings.experimental.row.newQuestionUI.description": "Xem trước khu vực câu hỏi ưu tiên bàn phím",
   "settings.experimental.row.sidebarOrganize.title": "Sắp xếp thanh bên dọc",
   "settings.experimental.row.sidebarOrganize.description":
     "Chọn cách liệt kê phiên trong thanh bên. Chỉ áp dụng cho tab bên.",

@@ -1229,8 +1229,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Նոր ժամանակագիծ",
   "settings.experimental.row.newTimeline.description":
     "Վերանախագծված նիստի ժամանակագիծ, որը խմբավորում է գործակալի արածը՝ մեկ կարգավիճակի տողով քայլի տակ",
-  "settings.experimental.row.newQuestionUI.title": "Հարցերի նոր ինտերֆեյս",
-  "settings.experimental.row.newQuestionUI.description": "Նախադիտել ստեղնաշարակենտրոն հարցերի վահանակը",
   "settings.experimental.row.sidebarOrganize.title": "Կազմակերպել ուղղահայաց կողագոտին",
   "settings.experimental.row.sidebarOrganize.description":
     "Ընտրեք, թե ինչպես են նիստերը ցուցադրվում կողագոտում։ Կիրառվում է միայն կողային ներդիրների դեպքում։",

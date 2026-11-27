@@ -1241,8 +1241,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Шинэ цагийн шугам",
   "settings.experimental.row.newTimeline.description":
     "Агентын хийсэн зүйлсийг бүлэглэж, ээлжийн доор нэг төлөвийн мөр харуулдаг шинэчилсэн сессийн цагийн шугам",
-  "settings.experimental.row.newQuestionUI.title": "Асуултын шинэ UI",
-  "settings.experimental.row.newQuestionUI.description": "Гарт тулгуурласан асуултын самбарыг урьдчилан үзэх",
   "settings.experimental.row.sidebarOrganize.title": "Босоо хажуугийн самбарыг цэгцлэх",
   "settings.experimental.row.sidebarOrganize.description":
     "Хажуугийн самбарт сессүүд хэрхэн жагсахыг сонгоно уу. Зөвхөн хажуугийн табуудад хамаарна.",

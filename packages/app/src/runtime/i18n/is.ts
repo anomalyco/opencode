@@ -1214,8 +1214,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Ný tímalína",
   "settings.experimental.row.newTimeline.description":
     "Endurhönnuð tímalína setu sem flokkar það sem fulltrúinn gerði, með einni stöðulínu fyrir neðan umferðina",
-  "settings.experimental.row.newQuestionUI.title": "Nýtt spurningaviðmót",
-  "settings.experimental.row.newQuestionUI.description": "Forskoða spurningaspjald sem er hannað fyrir lyklaborð",
   "settings.experimental.row.sidebarOrganize.title": "Skipuleggja lóðrétta hliðarstiku",
   "settings.experimental.row.sidebarOrganize.description":
     "Veldu hvernig setur eru listaðar í hliðarstikunni. Á aðeins við um hliðarflipa.",

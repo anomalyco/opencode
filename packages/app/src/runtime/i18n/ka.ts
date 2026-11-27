@@ -1232,8 +1232,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "ახალი დროის ხაზი",
   "settings.experimental.row.newTimeline.description":
     "სესიის გადამუშავებული დროის ხაზი, რომელიც აჯგუფებს აგენტის ქმედებებს და სვლის ქვემოთ აჩვენებს ერთ სტატუსის ხაზს",
-  "settings.experimental.row.newQuestionUI.title": "კითხვების ახალი ინტერფეისი",
-  "settings.experimental.row.newQuestionUI.description": "კლავიატურაზე ორიენტირებული კითხვების პანელის წინასწარი ნახვა",
   "settings.experimental.row.sidebarOrganize.title": "ვერტიკალური გვერდითი ზოლის ორგანიზება",
   "settings.experimental.row.sidebarOrganize.description":
     "აირჩიეთ, როგორ ჩამოითვალოს სესიები გვერდით ზოლში. ეხება მხოლოდ გვერდით ჩანართებს.",

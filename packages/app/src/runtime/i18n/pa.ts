@@ -1238,8 +1238,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "نویں ٹائم لائن",
   "settings.experimental.row.newTimeline.description":
     "نویں ڈیزائن آلی سیشن ٹائم لائن جیہڑی ایجنٹ دے کیتے کم نوں گروپ کردی اے، واری دے تھلے اک سٹیٹس لائن نال",
-  "settings.experimental.row.newQuestionUI.title": "نویں سوال UI",
-  "settings.experimental.row.newQuestionUI.description": "کی بورڈ پہلاں آلے سوال ڈاک دا پیش نظارہ ویکھو",
   "settings.experimental.row.sidebarOrganize.title": "کھڑویں سائڈبار نوں ترتیب دیو",
   "settings.experimental.row.sidebarOrganize.description":
     "چنو کہ سائڈبار وچ سیشن کیویں دسے جان۔ صرف پاسے دیاں ٹیباں تے لاگو ہوندا اے۔",

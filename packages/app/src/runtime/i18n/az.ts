@@ -1236,8 +1236,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Yeni zaman xətti",
   "settings.experimental.row.newTimeline.description":
     "Agentin etdiklərini qruplaşdıran və gedişin altında bir status sətri göstərən yenidən dizayn edilmiş sessiya zaman xətti",
-  "settings.experimental.row.newQuestionUI.title": "Yeni sual interfeysi",
-  "settings.experimental.row.newQuestionUI.description": "Klaviatura yönümlü sual panelinə önizləmə",
   "settings.experimental.row.sidebarOrganize.title": "Şaquli yan paneli təşkil et",
   "settings.experimental.row.sidebarOrganize.description":
     "Sessiyaların yan paneldə necə siyahılanacağını seçin. Yalnız yan tablara aiddir.",

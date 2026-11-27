@@ -1256,8 +1256,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Nuova sequenza temporale",
   "settings.experimental.row.newTimeline.description":
     "Una sequenza temporale della sessione riprogettata che raggruppa ciò che ha fatto l'agente, con una riga di stato sotto il turno",
-  "settings.experimental.row.newQuestionUI.title": "Nuova interfaccia delle domande",
-  "settings.experimental.row.newQuestionUI.description": "Anteprima del pannello delle domande pensato per la tastiera",
   "settings.experimental.row.sidebarOrganize.title": "Organizza la barra laterale verticale",
   "settings.experimental.row.sidebarOrganize.description":
     "Scegli come elencare le sessioni nella barra laterale. Si applica solo alle schede laterali.",

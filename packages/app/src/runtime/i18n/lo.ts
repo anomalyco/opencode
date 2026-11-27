@@ -1213,8 +1213,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "ທາມລາຍໃໝ່",
   "settings.experimental.row.newTimeline.description":
     "ທາມລາຍເຊດຊັນທີ່ອອກແບບໃໝ່ ເຊິ່ງຈັດກຸ່ມສິ່ງທີ່ຕົວແທນໄດ້ເຮັດ, ພ້ອມແຖວສະຖານະດຽວຢູ່ລຸ່ມຮອບ",
-  "settings.experimental.row.newQuestionUI.title": "UI ຄຳຖາມໃໝ່",
-  "settings.experimental.row.newQuestionUI.description": "ສະແດງຕົວຢ່າງແຖບຄຳຖາມທີ່ເນັ້ນການໃຊ້ແປ້ນພິມ",
   "settings.experimental.row.sidebarOrganize.title": "ຈັດລະບຽບແຖບດ້ານຂ້າງແນວຕັ້ງ",
   "settings.experimental.row.sidebarOrganize.description":
     "ເລືອກວິທີສະແດງລາຍການເຊດຊັນໃນແຖບດ້ານຂ້າງ. ໃຊ້ກັບແຖບດ້ານຂ້າງເທົ່ານັ້ນ.",

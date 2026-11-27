@@ -1247,8 +1247,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Ҷадвали вақти нав",
   "settings.experimental.row.newTimeline.description":
     "Ҷадвали вақти аз нав тарҳрезишудаи сессия, ки корҳои агентро гурӯҳбандӣ мекунад ва дар зери давр як сатри ҳолат дорад",
-  "settings.experimental.row.newQuestionUI.title": "Интерфейси нави саволҳо",
-  "settings.experimental.row.newQuestionUI.description": "Пешнамоиши панели саволҳо бо идоракунии асосан аз клавиатура",
   "settings.experimental.row.sidebarOrganize.title": "Ташкили панели паҳлӯи амудӣ",
   "settings.experimental.row.sidebarOrganize.description":
     "Интихоб кунед, ки сессияҳо дар панели паҳлӯ чӣ тавр нишон дода шаванд. Танҳо ба варақаҳои паҳлӯ дахл дорад.",

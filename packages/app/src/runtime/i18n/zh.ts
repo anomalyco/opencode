@@ -1241,8 +1241,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "新版时间线",
   "settings.experimental.row.newTimeline.description":
     "重新设计的会话时间线，将智能体的操作分组显示，并在每轮下方显示一行状态",
-  "settings.experimental.row.newQuestionUI.title": "新版问题界面",
-  "settings.experimental.row.newQuestionUI.description": "预览以键盘操作为主的问题面板",
   "settings.experimental.row.sidebarOrganize.title": "整理垂直侧边栏",
   "settings.experimental.row.sidebarOrganize.description": "选择会话在侧边栏中的列出方式。仅适用于侧边标签页。",
   "settings.experimental.sidebarOrganize.recent": "最近",

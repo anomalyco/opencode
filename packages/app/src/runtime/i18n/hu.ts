@@ -1234,8 +1234,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Új idővonal",
   "settings.experimental.row.newTimeline.description":
     "Újratervezett munkamenet-idővonal, amely csoportosítja az ügynök tevékenységét, a kör alatt egyetlen állapotsorral",
-  "settings.experimental.row.newQuestionUI.title": "Új kérdésfelület",
-  "settings.experimental.row.newQuestionUI.description": "A billentyűzetközpontú kérdéspanel előnézete",
   "settings.experimental.row.sidebarOrganize.title": "Függőleges oldalsáv rendezése",
   "settings.experimental.row.sidebarOrganize.description":
     "Válassza ki, hogyan jelenjenek meg a munkamenetek az oldalsávban. Csak oldalsó lapoknál érvényes.",

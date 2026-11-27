@@ -1225,8 +1225,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "خط زمانی جدید",
   "settings.experimental.row.newTimeline.description":
     "خط زمانی بازطراحی‌شده جلسه که کارهای عامل را گروه‌بندی می‌کند و یک خط وضعیت زیر هر نوبت دارد",
-  "settings.experimental.row.newQuestionUI.title": "رابط جدید سؤال",
-  "settings.experimental.row.newQuestionUI.description": "پیش‌نمایش پنل سؤال مبتنی بر صفحه‌کلید",
   "settings.experimental.row.sidebarOrganize.title": "سازمان‌دهی نوار کناری عمودی",
   "settings.experimental.row.sidebarOrganize.description":
     "نحوه فهرست شدن جلسه‌ها در نوار کناری را انتخاب کنید. فقط برای برگه‌های کناری اعمال می‌شود.",

@@ -1240,8 +1240,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Нова временска линија",
   "settings.experimental.row.newTimeline.description":
     "Редизајнирана временска линија на сесијата што групира што направил агентот, со еден статусен ред под одговорот",
-  "settings.experimental.row.newQuestionUI.title": "Нов интерфејс за прашања",
-  "settings.experimental.row.newQuestionUI.description": "Прегледајте ја панелата за прашања прилагодена за тастатура",
   "settings.experimental.row.sidebarOrganize.title": "Организирај вертикална странична лента",
   "settings.experimental.row.sidebarOrganize.description":
     "Изберете како се прикажуваат сесиите во страничната лента. Важи само за страничните картички.",

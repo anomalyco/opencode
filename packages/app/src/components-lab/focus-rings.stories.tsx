@@ -372,7 +372,7 @@ const groups: Group[] = [
       },
       {
         name: "Question progress segment",
-        source: "session-ui/src/components/question-prompt.css, question-prompt-experimental.css",
+        source: "session-ui/src/components/question-prompt.css",
         note: "Was a 1px offset; segments sit 2px apart, so an outset ring overlapped the next one. Now inset.",
         render: () => (
           <div data-component="dock-prompt" data-kind="question">

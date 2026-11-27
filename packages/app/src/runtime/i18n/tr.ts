@@ -1306,8 +1306,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Yeni zaman çizelgesi",
   "settings.experimental.row.newTimeline.description":
     "Ajanın yaptıklarını gruplayan ve turun altında tek bir durum satırı gösteren yeniden tasarlanmış oturum zaman çizelgesi",
-  "settings.experimental.row.newQuestionUI.title": "Yeni soru arayüzü",
-  "settings.experimental.row.newQuestionUI.description": "Klavye öncelikli soru panelini önizleyin",
   "settings.experimental.row.sidebarOrganize.title": "Dikey kenar çubuğunu düzenle",
   "settings.experimental.row.sidebarOrganize.description":
     "Oturumların kenar çubuğunda nasıl listeleneceğini seçin. Yalnızca yan sekmelerde geçerlidir.",

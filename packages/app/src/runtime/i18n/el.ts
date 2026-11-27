@@ -1260,9 +1260,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Νέο χρονολόγιο",
   "settings.experimental.row.newTimeline.description":
     "Ανασχεδιασμένο χρονολόγιο συνεδρίας που ομαδοποιεί όσα έκανε ο πράκτορας, με μία γραμμή κατάστασης κάτω από τον γύρο",
-  "settings.experimental.row.newQuestionUI.title": "Νέο περιβάλλον ερωτήσεων",
-  "settings.experimental.row.newQuestionUI.description":
-    "Προεπισκόπηση του πλαισίου ερωτήσεων με προτεραιότητα στο πληκτρολόγιο",
   "settings.experimental.row.sidebarOrganize.title": "Οργάνωση κάθετης πλευρικής γραμμής",
   "settings.experimental.row.sidebarOrganize.description":
     "Επιλέξτε πώς εμφανίζονται οι συνεδρίες στην πλευρική γραμμή. Ισχύει μόνο για τις πλευρικές καρτέλες.",

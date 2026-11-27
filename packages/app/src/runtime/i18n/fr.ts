@@ -1289,8 +1289,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Nouvelle chronologie",
   "settings.experimental.row.newTimeline.description":
     "Une chronologie de session repensée qui regroupe les actions de l’agent, avec une seule ligne d’état sous le tour",
-  "settings.experimental.row.newQuestionUI.title": "Nouvelle interface des questions",
-  "settings.experimental.row.newQuestionUI.description": "Prévisualiser le panneau de questions pensé pour le clavier",
   "settings.experimental.row.sidebarOrganize.title": "Organiser la barre latérale verticale",
   "settings.experimental.row.sidebarOrganize.description":
     "Choisissez comment les sessions sont listées dans la barre latérale. S’applique uniquement aux onglets latéraux.",

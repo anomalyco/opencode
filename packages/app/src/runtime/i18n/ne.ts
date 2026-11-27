@@ -1232,8 +1232,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "नयाँ समयरेखा",
   "settings.experimental.row.newTimeline.description":
     "एजेन्टले गरेका कामलाई समूहबद्ध गर्ने, पालोको तल एउटा स्थिति लाइनसहितको पुनः डिजाइन गरिएको सत्र समयरेखा",
-  "settings.experimental.row.newQuestionUI.title": "नयाँ प्रश्न UI",
-  "settings.experimental.row.newQuestionUI.description": "किबोर्ड-प्रथम प्रश्न डकको पूर्वावलोकन गर्नुहोस्",
   "settings.experimental.row.sidebarOrganize.title": "ठाडो साइडबार व्यवस्थित गर्नुहोस्",
   "settings.experimental.row.sidebarOrganize.description":
     "साइडबारमा सत्रहरू कसरी सूचीबद्ध हुने छान्नुहोस्। साइड ट्याबहरूमा मात्र लागू हुन्छ।",

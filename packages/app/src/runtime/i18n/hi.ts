@@ -1234,8 +1234,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "नई टाइमलाइन",
   "settings.experimental.row.newTimeline.description":
     "नए डिज़ाइन वाली सेशन टाइमलाइन जो एजेंट के कार्यों को समूहित करती है, और टर्न के नीचे एक स्थिति पंक्ति दिखाती है",
-  "settings.experimental.row.newQuestionUI.title": "नया प्रश्न UI",
-  "settings.experimental.row.newQuestionUI.description": "कीबोर्ड-प्रथम प्रश्न डॉक का पूर्वावलोकन करें",
   "settings.experimental.row.sidebarOrganize.title": "लंबवत साइडबार व्यवस्थित करें",
   "settings.experimental.row.sidebarOrganize.description":
     "चुनें कि साइडबार में सेशन कैसे सूचीबद्ध हों। केवल साइड टैब पर लागू होता है।",

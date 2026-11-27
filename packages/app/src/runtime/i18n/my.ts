@@ -1241,8 +1241,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "အချိန်ဇယားအသစ်",
   "settings.experimental.row.newTimeline.description":
     "အေးဂျင့်လုပ်ဆောင်ခဲ့သည်များကို အုပ်စုဖွဲ့ပြီး အလှည့်အောက်တွင် အခြေအနေလိုင်းတစ်ကြောင်းပြသသော ပြန်လည်ဒီဇိုင်းထားသည့် စက်ရှင်အချိန်ဇယား",
-  "settings.experimental.row.newQuestionUI.title": "မေးခွန်း UI အသစ်",
-  "settings.experimental.row.newQuestionUI.description": "ကီးဘုတ်ဦးစားပေး မေးခွန်းအကွက်ကို အစမ်းကြည့်ပါ",
   "settings.experimental.row.sidebarOrganize.title": "ဒေါင်လိုက် ဘေးဘားကို စီစဉ်ရန်",
   "settings.experimental.row.sidebarOrganize.description":
     "ဘေးဘားတွင် စက်ရှင်များ စာရင်းပြပုံကို ရွေးပါ။ ဘေးတက်ဘ်များတွင်သာ သက်ရောက်သည်။",

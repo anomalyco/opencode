@@ -1216,8 +1216,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "ציר זמן חדש",
   "settings.experimental.row.newTimeline.description":
     "ציר זמן מעוצב מחדש להפעלה שמקבץ את מה שהסוכן עשה, עם שורת מצב אחת מתחת לכל תגובה",
-  "settings.experimental.row.newQuestionUI.title": "ממשק שאלות חדש",
-  "settings.experimental.row.newQuestionUI.description": "תצוגה מקדימה של לוח שאלות המותאם למקלדת",
   "settings.experimental.row.sidebarOrganize.title": "ארגון סרגל צד אנכי",
   "settings.experimental.row.sidebarOrganize.description": "בחר כיצד הפעלות יוצגו בסרגל הצד. חל רק על כרטיסיות צד.",
   "settings.experimental.sidebarOrganize.recent": "אחרונות",

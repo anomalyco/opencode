@@ -1294,8 +1294,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Ny tidslinje",
   "settings.experimental.row.newTimeline.description":
     "En redesignet økttidslinje som grupperer det agenten gjorde, med én statuslinje under runden",
-  "settings.experimental.row.newQuestionUI.title": "Nytt spørsmålsgrensesnitt",
-  "settings.experimental.row.newQuestionUI.description": "Forhåndsvis det tastaturstyrte spørsmålspanelet",
   "settings.experimental.row.sidebarOrganize.title": "Organiser loddrett sidepanel",
   "settings.experimental.row.sidebarOrganize.description":
     "Velg hvordan økter listes i sidepanelet. Gjelder bare sidefaner.",

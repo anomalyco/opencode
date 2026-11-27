@@ -1233,8 +1233,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "নতুন টাইমলাইন",
   "settings.experimental.row.newTimeline.description":
     "নতুনভাবে ডিজাইন করা সেশন টাইমলাইন, যা এজেন্টের কাজগুলোকে গোষ্ঠীবদ্ধ করে এবং টার্নের নিচে একটি স্থিতি লাইন দেখায়",
-  "settings.experimental.row.newQuestionUI.title": "নতুন প্রশ্ন UI",
-  "settings.experimental.row.newQuestionUI.description": "কীবোর্ড-কেন্দ্রিক প্রশ্ন ডকের পূর্বরূপ দেখুন",
   "settings.experimental.row.sidebarOrganize.title": "উল্লম্ব সাইডবার সাজান",
   "settings.experimental.row.sidebarOrganize.description":
     "সাইডবারে সেশনগুলো কীভাবে তালিকাভুক্ত হবে তা বেছে নিন। শুধুমাত্র পাশের ট্যাবে প্রযোজ্য।",

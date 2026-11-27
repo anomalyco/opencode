@@ -5,7 +5,6 @@ export default {
   title: "OpenCode/Requests/Prompt frame",
   id: "components-dock-prompt",
   component: DockPrompt,
-  args: { experimental: false },
   parameters: {
     docs: {
       description: {
@@ -18,10 +17,9 @@ export default {
 
 export const Question = {
   args: { prompt: "Which Session layout should I implement?", hint: "Select one answer" },
-  render: (args: { experimental: boolean; prompt: string; hint: string }) => (
+  render: (args: { prompt: string; hint: string }) => (
     <DockPrompt
       kind="question"
-      variant={args.experimental ? "experimental" : undefined}
       header={
         <>
           <div data-slot="question-header-top">
@@ -51,10 +49,9 @@ export const Question = {
 
 export const Permission = {
   args: { command: "npm publish --tag canary" },
-  render: (args: { experimental: boolean; command: string }) => (
+  render: (args: { command: string }) => (
     <DockPrompt
       kind="permission"
-      variant={args.experimental ? "experimental" : undefined}
       header={<div class="text-13-medium text-text-strong">Permission required</div>}
       footer={
         <>

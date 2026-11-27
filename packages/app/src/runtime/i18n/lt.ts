@@ -1268,8 +1268,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Nauja laiko juosta",
   "settings.experimental.row.newTimeline.description":
     "Pertvarkyta seanso laiko juosta, grupuojanti agento veiksmus, su viena būsenos eilute po etapu",
-  "settings.experimental.row.newQuestionUI.title": "Nauja klausimų sąsaja",
-  "settings.experimental.row.newQuestionUI.description": "Išbandykite klaviatūra valdomą klausimų skydelį",
   "settings.experimental.row.sidebarOrganize.title": "Vertikalios šoninės juostos tvarka",
   "settings.experimental.row.sidebarOrganize.description":
     "Pasirinkite, kaip seansai išdėstomi šoninėje juostoje. Taikoma tik šoniniams skirtukams.",

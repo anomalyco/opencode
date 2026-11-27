@@ -1261,9 +1261,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Cronologie nouă",
   "settings.experimental.row.newTimeline.description":
     "O cronologie a sesiunii reproiectată, care grupează ce a făcut agentul, cu o singură linie de stare sub rundă",
-  "settings.experimental.row.newQuestionUI.title": "Interfață nouă pentru întrebări",
-  "settings.experimental.row.newQuestionUI.description":
-    "Previzualizează panoul de întrebări optimizat pentru tastatură",
   "settings.experimental.row.sidebarOrganize.title": "Organizează bara laterală verticală",
   "settings.experimental.row.sidebarOrganize.description":
     "Alege cum sunt listate sesiunile în bara laterală. Se aplică doar filelor laterale.",

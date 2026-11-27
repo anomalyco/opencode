@@ -1333,9 +1333,6 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "Нова хронологія",
   "settings.experimental.row.newTimeline.description":
     "Перероблена хронологія сесії, що групує дії агента, з одним рядком статусу під кроком",
-  "settings.experimental.row.newQuestionUI.title": "Новий інтерфейс запитань",
-  "settings.experimental.row.newQuestionUI.description":
-    "Попередній перегляд панелі запитань з керуванням із клавіатури",
   "settings.experimental.row.sidebarOrganize.title": "Упорядкування вертикальної бічної панелі",
   "settings.experimental.row.sidebarOrganize.description":
     "Виберіть, як показувати сесії на бічній панелі. Застосовується лише до бічних вкладок.",
