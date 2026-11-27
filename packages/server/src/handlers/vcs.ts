@@ -2,20 +2,27 @@ import { Vcs } from "@opencode/core/vcs"
 import { Project } from "@opencode/core/project"
 import { Worktree } from "@opencode/core/worktree"
 import { Bus } from "@opencode/core/bus"
+import { FileSystem } from "@opencode/core/filesystem"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
+import { VcsGitPlugin } from "@opencode/core/plugin/vcs/git"
+import { VcsHgPlugin } from "@opencode/core/plugin/vcs/hg"
 import { ConflictError, InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { VcsInitNotSupportedError } from "@opencode/protocol/groups/vcs"
-import { Effect } from "effect"
+import { FSUtil } from "@opencode/util/fs-util"
+import { AppProcess } from "@opencode/util/process"
+import { Effect, Option } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Api } from "../api"
-import { response } from "../location"
+import { locationErrors, requestRef, response } from "../location"
 
 export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
   Effect.gen(function* () {
     const project = yield* Project.Service
     const bus = yield* Bus.Service
     const locations = yield* LocationServiceMap.Service
+    const fs = yield* FSUtil.Service
+    const processes = yield* AppProcess.Service
     return handlers
       .handle("vcs.init", (ctx) =>
         Effect.gen(function* () {
@@ -52,13 +59,24 @@ export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
           return HttpApiSchema.NoContent.make()
         }),
       )
-      .handle("vcs.get", () =>
-        response(
-          Effect.gen(function* () {
-            const vcs = yield* Vcs.Service
-            return yield* vcs.info()
-          }),
-        ),
+      .handle("vcs.get", (ctx) =>
+        Effect.gen(function* () {
+          const ref = LocationServiceMap.canonical(requestRef(ctx.request))
+          const loaded = yield* locations.contextEffectOption(ref)
+          if (Option.isSome(loaded)) {
+            return yield* response(Vcs.Service.use((vcs) => vcs.info())).pipe(Effect.provideContext(loaded.value))
+          }
+
+          // Read native repository metadata without starting the Location's plugins or MCP servers.
+          yield* FileSystem.localRoot(fs, ref.directory)
+          const { directory, vcs } = yield* project.resolve(ref.directory, { persist: false })
+          const location = { directory: ref.directory }
+          if (!vcs) return { location, data: { branch: {} } }
+          const info = yield* vcs.type === "git"
+            ? VcsGitPlugin.branchInfo(processes, ref.directory)
+            : VcsHgPlugin.branchInfo(processes, directory)
+          return { location, data: { ...info, provider: vcs.type } }
+        }).pipe(Effect.scoped, locationErrors, Effect.catchTag("FileSystem.DirectoryAccessDeniedError", Effect.die)),
       )
       .handle("vcs.base", () =>
         response(
