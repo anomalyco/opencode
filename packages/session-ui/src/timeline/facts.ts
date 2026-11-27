@@ -289,7 +289,7 @@ function toolFacts(tool: Tool, id: string, scriptDiffs: boolean, scriptSteps = f
     return [
       // A script with no steps to count yet, or none at all, counts as itself.
       ...(steps.length ? steps : [call]),
-      // One fact per change, in order: a file the server couldn't fold into one change can appear more than once.
+      // One fact per change, in order: a script can change the same file more than once.
       ...scriptChanges(tool, read).map((file, index) => scriptFileFactOf(file, index, id, state.status)),
     ]
 
@@ -528,7 +528,7 @@ function scriptFileFactOf(
 
 const fileFactKeys = ["id", "path", "status", "additions", "deletions", "change", "patch", "by", "via"] as const
 
-/** Whether two reads of a change show the same: a later change to its file folds into it, and its status moves. */
+/** Whether two reads of a change show the same: a script's changes never change once made, only its status does. */
 export function sameFileFact(previous: FileFact, next: FileFact) {
   return fileFactKeys.every((key) => previous[key] === next[key])
 }

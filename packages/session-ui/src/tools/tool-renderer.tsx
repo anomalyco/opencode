@@ -1171,9 +1171,9 @@ function scriptChangeRuns(files: readonly FileFact[]): ScriptChangeRun[] {
 
 /**
  * The changes a script made, in order. Changes with a diff that follow one another share one group, a row per file, as
- * a patch's files do: the server folds a file's changes into one, but older sessions, and changes it can't fold, list
- * a file again, and the group draws each of its diffs under the one row. A change without a diff shows what it did as
- * a patch's file header does. Each file opens by the id of its first change.
+ * a patch's files do: a script that changes a file more than once lists it once per change, and the group draws each
+ * of those diffs under the file's one row. A change without a diff shows what it did as a patch's file header does.
+ * Each file opens by the id of its first change.
  */
 export function ScriptChanges(props: {
   files: readonly FileFact[]
