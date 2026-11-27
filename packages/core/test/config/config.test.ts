@@ -1,4 +1,3 @@
-import os from "os"
 import path from "path"
 import fs from "fs/promises"
 import { describe, expect, test } from "bun:test"
@@ -1765,20 +1764,17 @@ describe("Config", () => {
         env: { QUOTED: String.raw`a\"b`, FRAGMENT: '{"k":"v"}' },
       })
       expect(JSON.parse(text)).toEqual({ quoted: 'a"b', fragment: { k: "v" } })
-    }).pipe(Effect.provide(AppNodeBuilder.build(FSUtil.node))),
+    }).pipe(Effect.provide(AppNodeBuilder.build(LayerNode.group([FSUtil.node, Global.node])))),
   )
 
   for (const separator of new Set(["/", path.sep])) {
     it.live(`expands {file:~${separator}...} references against home`, () =>
       withTempDir((tmp) =>
         Effect.gen(function* () {
-          const name = `.opencode-test-home-${path.basename(tmp.path)}.txt`
-          const target = path.join(os.homedir(), name)
-          const raw = separator === "\\" ? `~\\\\${name}` : `~/${name}`
-          yield* Effect.acquireRelease(
-            Effect.promise(() => fs.writeFile(target, "home-secret\n")),
-            () => Effect.promise(() => fs.rm(target, { force: true })),
-          )
+          const home = path.join(tmp.path, "home")
+          const raw = separator === "\\" ? "~\\\\secret.txt" : "~/secret.txt"
+          yield* Effect.promise(() => fs.mkdir(home, { recursive: true }))
+          yield* Effect.promise(() => fs.writeFile(path.join(home, "secret.txt"), "home-secret\n"))
           const text = yield* ConfigVariable.substitute({
             type: "virtual",
             source: "test",
@@ -1786,7 +1782,13 @@ describe("Config", () => {
             text: `{ "token": "{file:${raw}}" }`,
           })
           expect(JSON.parse(text)).toEqual({ token: "home-secret" })
-        }).pipe(Effect.provide(AppNodeBuilder.build(FSUtil.node))),
+        }).pipe(
+          Effect.provide(
+            AppNodeBuilder.build(LayerNode.group([FSUtil.node, Global.node]), [
+              Global.node.replace(Global.layerWith({ home: path.join(tmp.path, "home") })),
+            ]),
+          ),
+        ),
       ),
     )
   }

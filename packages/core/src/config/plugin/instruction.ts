@@ -102,10 +102,7 @@ export const Plugin = define({
       // Relative patterns search upward from the location to the project root. Without
       // project discovery they resolve against the global config directory instead.
       const match = Effect.fn("ConfigInstructionPlugin.match")(function* (source: string) {
-        const expanded =
-          source.startsWith("~/") || (process.platform === "win32" && source.startsWith("~\\"))
-            ? path.join(global.home, source.slice(2))
-            : source
+        const expanded = FSUtil.expandHome(source, global.home)
         const options = { absolute: true, include: "file", dot: true } as const
         if (path.isAbsolute(expanded)) {
           // Keep literal directories working as before. When no literal parent exists, treat

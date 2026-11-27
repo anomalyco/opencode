@@ -247,6 +247,12 @@ export namespace FSUtil {
     }
   }
 
+  export function expandHome(p: string, home: string): string {
+    if (p === "~") return home
+    if (p.startsWith("~/") || (process.platform === "win32" && p.startsWith("~\\"))) return join(home, p.slice(2))
+    return p
+  }
+
   export function windowsPath(p: string): string {
     if (process.platform !== "win32") return p
     return p

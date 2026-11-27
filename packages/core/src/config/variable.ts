@@ -1,10 +1,10 @@
 export * as ConfigVariable from "./variable.js"
 
-import os from "os"
 import path from "path"
 import { Effect } from "effect"
 import { type ParseError, parse } from "jsonc-parser"
 import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
 
 type ParseSource =
   | {
@@ -41,6 +41,7 @@ export const substitute = Effect.fn("ConfigVariable.substitute")(function* (inpu
 
 const substituteFiles = Effect.fnUntraced(function* (input: SubstituteInput, text: string) {
   const fs = yield* FSUtil.Service
+  const global = yield* Global.Service
   const configDir = input.type === "path" ? path.dirname(input.path) : input.dir
   const configSource = input.type === "path" ? input.path : input.source
   let out = ""
@@ -60,13 +61,7 @@ const substituteFiles = Effect.fnUntraced(function* (input: SubstituteInput, tex
     }
 
     const filePath = token.slice("{file:".length, -1)
-    const expandedPath =
-      filePath === "~"
-        ? os.homedir()
-        : filePath.startsWith("~/") || (process.platform === "win32" && filePath.startsWith("~\\"))
-          ? path.join(os.homedir(), filePath.slice(2))
-          : filePath
-    const resolvedPath = path.resolve(configDir, expandedPath)
+    const resolvedPath = path.resolve(configDir, FSUtil.expandHome(filePath, global.home))
     input.references?.add(resolvedPath)
     // Like a missing {env:VAR}, a missing or unreadable file substitutes empty so one stale secret
     // reference cannot take down every Location that loads this config.
