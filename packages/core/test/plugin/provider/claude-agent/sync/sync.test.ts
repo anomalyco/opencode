@@ -213,7 +213,7 @@ describe("history reconciliation", () => {
     expect(JSON.stringify(blocks)).toContain("LEMON-IBIS")
     expect(JSON.stringify(blocks)).not.toContain("PRIVATE")
     expect(blocks.slice(-8)).toEqual([
-      { type: "text", text: "<user>" },
+      { type: "text", text: "<tool>" },
       { type: "text", text: "Attached media from tool result:" },
       {
         type: "document",
@@ -223,7 +223,7 @@ describe("history reconciliation", () => {
         },
       },
       { type: "document", source: { type: "base64", media_type: "application/pdf", data: "AwQ=" } },
-      { type: "text", text: "</user>" },
+      { type: "text", text: "</tool>" },
       { type: "text", text: "</conversation-checkpoint>" },
       { type: "text", text: "Continue" },
       { type: "image", source: { type: "base64", media_type: "image/png", data: "BQY=" } },
