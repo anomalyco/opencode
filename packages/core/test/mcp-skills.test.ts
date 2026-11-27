@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { McpServer, WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/server"
 import { skillEntry, SkillsExtension, type Skill as ServedSkill } from "@modelcontextprotocol/server/ext/skills"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
@@ -11,6 +11,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Environment } from "@opencode/core/environment/index"
 import { Integration } from "@opencode/core/integration"
 import { Location } from "@opencode/core/location"
+import type { McpClient } from "@opencode/core/mcp/client"
 import { Mcp } from "@opencode/core/mcp/index"
 import { McpSkillPlugin } from "@opencode/core/plugin/mcp-skill"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -150,6 +151,39 @@ const connect = Effect.fnUntraced(function* (name: string, url: string, expected
   return yield* eventually(skills.list(), (listed) => expected.every((id) => listed.some((skill) => skill.id === id)))
 })
 
+describe("McpSkillPlugin.parseEntry", () => {
+  const server = Mcp.ServerName.make("team")
+  const entry = (resources: McpClient.Skill["resources"]): Mcp.Skill => ({
+    server,
+    entry: { uri: "skill://acme/pdf/SKILL.md", frontmatter: { name: "pdf", description: "PDFs" }, resources },
+  })
+  const file = (path: string) => ({ uri: `skill://acme/pdf/${path}`, digest: `sha256:${path}`, size: 1 })
+
+  test("keeps SKILL.md's digest and the skill's other files by path", () => {
+    const parsed = McpSkillPlugin.parseEntry(entry([file("SKILL.md"), file("references/FORMS.md")]))
+    if (parsed._tag !== "Served") throw new Error("expected a served skill")
+    expect(parsed.skill.manifest).toBe("sha256:SKILL.md")
+    expect(Array.from(parsed.skill.files, ([path, digest]) => [String(path), digest])).toEqual([
+      ["references/FORMS.md", "sha256:references/FORMS.md"],
+    ])
+  })
+
+  test("leaves out files outside the skill's folder or with unsafe paths", () => {
+    const parsed = McpSkillPlugin.parseEntry(
+      entry([file("SKILL.md"), { uri: "skill://acme/other/x.md", digest: "sha256:x", size: 1 }, file("%2e%2e/secret")]),
+    )
+    expect(parsed._tag === "Served" && parsed.skill.files.size).toBe(0)
+  })
+
+  test("rejects dynamic skills and skills that don't list SKILL.md", () => {
+    expect(McpSkillPlugin.parseEntry(entry("dynamic"))).toMatchObject({ _tag: "Rejected", reason: "dynamic" })
+    expect(McpSkillPlugin.parseEntry(entry([file("references/FORMS.md")]))).toMatchObject({
+      _tag: "Rejected",
+      reason: "no_manifest",
+    })
+  })
+})
+
 describe("MCP skills", () => {
   it.live("lists skills as <server>:<name> without reading, and refuses dynamic ones", () =>
     Effect.gen(function* () {
@@ -246,10 +280,16 @@ describe("MCP skills", () => {
       const skills = yield* Skill.Service
       const content = yield* skills.content(id).pipe(Effect.flip)
       expect(content).toBeInstanceOf(Skill.LoadError)
-      expect(content.message).toStartWith("Failed to load SKILL.md of MCP skill team:deploy: ")
-      expect(content.message).toContain("digest")
+      expect(content.reason).toMatchObject({ _tag: "Mismatch", file: "SKILL.md", check: "digest" })
+      expect(content.message).toStartWith(
+        "Failed to load SKILL.md of skill team:deploy: skill://deploy/SKILL.md has digest ",
+      )
       const file = yield* skills.read(id, script).pipe(Effect.flip)
-      expect(file.message).toContain("digest")
+      expect(file._tag === "Skill.LoadError" && file.reason).toMatchObject({
+        _tag: "Mismatch",
+        file: "scripts/run.sh",
+        check: "digest",
+      })
     }),
   )
 
