@@ -213,6 +213,53 @@
   }
 }
 
+/* The OpenCode group's header: the active account and its plan, then the provider its first models belong to. */
+.model-dialog {
+  [data-slot="model-dialog-header-line"] {
+    min-height: 18px;
+  }
+
+  [data-slot="model-dialog-header-line"][data-sub] {
+    margin-top: 6px;
+  }
+
+  [data-slot="model-dialog-account"] {
+    display: inline-flex;
+    min-width: 0;
+    max-width: 220px;
+    height: 20px;
+    flex-shrink: 1;
+    align-items: center;
+    gap: 4px;
+    margin-inline: -2px;
+    padding-inline: 4px 2px;
+    border-radius: 4px;
+    color: var(--v2-text-text-base);
+  }
+
+  button[data-slot="model-dialog-account"] {
+    border: none;
+    background: none;
+    font: inherit;
+    cursor: default;
+
+    /* Inset, so the ring clears the title beside it and the row below. */
+    &:focus-visible {
+      outline-offset: -2px;
+    }
+
+    &:hover,
+    &[data-expanded] {
+      background: var(--v2-overlay-simple-overlay-hover);
+    }
+
+    [data-slot="icon-svg"] {
+      flex-shrink: 0;
+      color: var(--v2-icon-icon-muted);
+    }
+  }
+}
+
 /* Outranks the list's dark-scheme highlight, which uses a lighter alpha. */
 [data-component="dialog-v2"] .model-dialog [data-component="search-list"] [data-slot="search-list-row"][data-active] {
   background: var(--v2-overlay-simple-overlay-hover);

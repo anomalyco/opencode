@@ -69,7 +69,12 @@ import {
   ProviderModelSections,
 } from "@/providers/models/provider-group"
 import { consoleProviderName } from "@/providers/catalog/console"
-import { pickerSections, splitFreeModels, type PickerSection } from "./picker-sections"
+import { useIntegrations } from "@/providers/catalog/integrations"
+import { CONSOLE_INTEGRATION } from "@/providers/connect/dialog-machine"
+import { providerAccounts } from "@/settings/providers/accounts"
+import { useProviderAccountActions } from "@/settings/providers/account-actions"
+import { pickerSections, signInAccounts, splitFreeModels, type PickerSection } from "./picker-sections"
+import { WorkspaceHeader } from "./picker-header"
 import "@/settings/settings.css"
 import "@/shell/commands/dialog.css"
 import "./select-dialog.css"
@@ -547,6 +552,7 @@ function createProviderLabels(all: () => ModelItem[]) {
   )
 
   return {
+    group: managed,
     name: (provider: ModelItem["provider"]) => {
       const group = managed()
 
@@ -573,7 +579,13 @@ const clamp = (value: number) => Math.max(0, Math.min(1, value))
 
 const round = (value: number) => Math.round(value * 1000) / 1000
 
-type ModelRow = { id: string; item: ModelItem; section: string; list: PickerSection<ModelItem>["list"] }
+type ModelRow = {
+  id: string
+  item: ModelItem
+  section: string
+  list: PickerSection<ModelItem>["list"]
+  workspace: PickerSection<ModelItem>["workspace"]
+}
 
 function createChatgptPlan(current: () => string | undefined) {
   const data = useData()
@@ -614,6 +626,9 @@ function ChatgptPlanFooter() {
 export function DialogSelectModel(props: { provider?: string; model?: ModelState }) {
   const dialog = useDialog()
   const language = useLanguage()
+  const location = useWorkspaceLocation()
+  const integrations = useIntegrations(() => location().directory)
+  const accountActions = useProviderAccountActions(() => location().directory)
 
   const controller = createModelSelectorController({
     model: props.model,
@@ -632,6 +647,12 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
   const labels = createProviderLabels(controller.all)
   const chatgptPlan = createChatgptPlan(controller.current)
   const usage = createModelUsage({ refresh: true })
+
+  const accounts = createMemo(() =>
+    signInAccounts(providerAccounts(integrations.list().find((integration) => integration.id === CONSOLE_INTEGRATION))),
+  )
+
+  const go = () => !!labels.group()?.providers.some((provider) => provider.id === "opencode-go")
 
   // `navigated`: the arrows have moved through the results since the query last changed.
   const [query, setQuery] = createStore({ search: "", navigated: false })
@@ -666,9 +687,12 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
       section.items.map((item): ModelRow => {
         const row = kept.get(modelKey(item))
 
-        return row?.item === item && row.section === section.key && row.list === section.list
+        return row?.item === item &&
+          row.section === section.key &&
+          row.list === section.list &&
+          row.workspace === section.workspace
           ? row
-          : { id: modelKey(item), item, section: section.key, list: section.list }
+          : { id: modelKey(item), item, section: section.key, list: section.list, workspace: section.workspace }
       }),
     )
   }, [])
@@ -717,12 +741,25 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
     void dialog.show(() => <DialogManageModels />)
   }
 
-  const location = useWorkspaceLocation()
-
   const connect = async () => {
     const { DialogConnectProvider } = await import("@/providers/connect/dialog")
     // The model chosen after connecting applies to this composer.
     void dialog.show(() => <DialogConnectProvider directory={location().directory} selection={props.model} />)
+  }
+
+  // Add account signs in to another OpenCode account; Manage accounts opens OpenCode's accounts.
+  const connectOpenCode = async (accounts: boolean) => {
+    const { DialogConnectProvider, useProviderConnectController } = await import("@/providers/connect/dialog")
+    const controller = useProviderConnectController()
+    controller.select(CONSOLE_INTEGRATION)
+    void dialog.show(() => (
+      <DialogConnectProvider
+        directory={location().directory}
+        controller={controller}
+        accounts={accounts}
+        selection={props.model}
+      />
+    ))
   }
 
   const flyoutRect = () => cachedFlyoutRect ?? (flyoutRef?.isConnected ? flyoutRef.getBoundingClientRect() : undefined)
@@ -992,6 +1029,9 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
   const searchButton = (target: EventTarget | null) =>
     target instanceof Element && !!scroller?.contains(target.closest('[data-slot="text-input-v2-trailing"]'))
 
+  const accountTrigger = (target: EventTarget | null): target is HTMLElement =>
+    target instanceof HTMLElement && target.matches('[data-slot="model-dialog-account"]')
+
   const inDialog = (target: EventTarget | null) =>
     target instanceof Node &&
     (!!scroller?.closest('[data-slot="dialog-container"]')?.contains(target) || !!flyoutRef?.contains(target))
@@ -1006,8 +1046,20 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
   )
 
   createEventListener(document, "focusin", (event: FocusEvent) => {
-    if (inDialog(event.target) && event.target !== field() && !searchButton(event.target))
-      field()?.focus({ preventScroll: true })
+    const target = event.target
+
+    // The account menu keeps focus it got from the keyboard. Closing after a click returns focus to it without the
+    // ring, and Kobalte focuses it once more right after, so the field takes focus back once both have run.
+    if (accountTrigger(target)) {
+      if (!target.matches(":focus-visible"))
+        queueMicrotask(() => {
+          if (document.activeElement === target) field()?.focus({ preventScroll: true })
+        })
+
+      return
+    }
+
+    if (inDialog(target) && target !== field() && !searchButton(target)) field()?.focus({ preventScroll: true })
   })
 
   // The flyout is placed once when it opens, so moving the rows under it closes it instead.
@@ -1089,6 +1141,9 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
       <button
         type="button"
         {...row.attrs}
+        // The highlight moves with the arrow keys while the search field keeps focus, so Tab skips the rows and reaches
+        // the controls among them, such as the OpenCode account menu.
+        tabIndex={-1}
         data-option-key={row.model.id}
         aria-current={selected() ? "true" : undefined}
         onMouseMove={(event) => {
@@ -1220,12 +1275,50 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
             key={(row) => row.id}
             section={(row) => row.section}
             header={(row) => (
-              <span data-slot="model-dialog-header-label" class="flex min-w-0 items-center gap-1.5">
-                <span class="min-w-0 truncate">
-                  {row.list ? language.t(listTitles[row.list]) : labels.name(row.item.provider)}
-                </span>
-                <Show when={!row.list && labels.workspace(row.item.provider)}>
-                  {(workspace) => <Badge class="shrink-0">{workspace()}</Badge>}
+              <span data-slot="model-dialog-header-label" class="flex min-w-0 flex-col">
+                <Show when={row.workspace === "lead" && labels.group()}>
+                  {(group) => (
+                    <WorkspaceHeader
+                      workspace={group().workspace}
+                      accounts={accounts()}
+                      go={go()}
+                      onActivate={(account) =>
+                        void accountActions.activate({
+                          integrationID: CONSOLE_INTEGRATION,
+                          provider: language.t("provider.connect.opencode.name"),
+                          account,
+                        })
+                      }
+                      onAdd={() => void connectOpenCode(false)}
+                      onManage={() => void connectOpenCode(true)}
+                    />
+                  )}
+                </Show>
+                {/* OpenCode's own models sit right under the group's header, which also heads Go's when they lead. */}
+                <Show
+                  when={
+                    !(
+                      row.workspace === "lead" &&
+                      (row.item.provider.id === "opencode" || row.item.provider.id === "opencode-go")
+                    )
+                  }
+                >
+                  <span
+                    data-slot="model-dialog-header-line"
+                    data-sub={row.workspace === "lead" ? "" : undefined}
+                    class="flex min-w-0 items-center gap-1.5"
+                  >
+                    <span class="min-w-0 truncate">
+                      {row.list
+                        ? language.t(listTitles[row.list])
+                        : row.workspace && row.item.provider.id === "opencode-go"
+                          ? language.t("dialog.model.group.go")
+                          : labels.name(row.item.provider)}
+                    </span>
+                    <Show when={!row.list && labels.workspace(row.item.provider)}>
+                      {(workspace) => <Badge class="shrink-0">{workspace()}</Badge>}
+                    </Show>
+                  </span>
                 </Show>
               </span>
             )}

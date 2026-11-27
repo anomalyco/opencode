@@ -33,6 +33,8 @@ export function createProviderDialogController(options: {
   /** The Location a sign-in belongs to, fixed when the dialog opens. */
   directory: string | undefined
   standalone: boolean
+  /** The caller's selected provider opens at its accounts when it has any. */
+  accounts?: boolean
   /** The caller's selected provider; the dialog follows it and writes its own selection back. */
   selected: () => string | undefined
   onSelect: (provider: string | undefined) => void
@@ -577,7 +579,12 @@ export function createProviderDialogController(options: {
   const initial = untrack(options.selected)
 
   if (initial)
-    dispatch({ type: "provider.selected", provider: initial, fromPicker: false, accounts: accountsOf(initial) })
+    dispatch({
+      type: "provider.selected",
+      provider: initial,
+      fromPicker: !!options.accounts,
+      accounts: accountsOf(initial),
+    })
 
   createEffect(
     on(

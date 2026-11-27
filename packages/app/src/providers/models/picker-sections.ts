@@ -1,3 +1,4 @@
+import type { ProviderAccount } from "@/settings/providers/accounts"
 import { consoleProviderGroup } from "@/providers/catalog/console"
 import { isFreeModel } from "./models"
 
@@ -27,15 +28,27 @@ export function splitFreeModels<M extends Parameters<typeof isFreeModel>[0]>(gro
   }
 }
 
-/** `list`: the section is Favorites, Recent or Free instead of a provider. */
-export type PickerSection<M> = { key: string; list?: "favorite" | "recent" | "free"; items: readonly M[] }
+/**
+ * `list`: the section is Favorites, Recent or Free instead of a provider. `workspace`: the section is one provider of
+ * the Console workspace's OpenCode group, which its `lead` section heads.
+ */
+export type PickerSection<M> = {
+  key: string
+  list?: "favorite" | "recent" | "free"
+  workspace?: "lead" | "sub"
+  items: readonly M[]
+}
 
 const modelKey = (model: Model) => `${model.provider.id}:${model.id}`
 
+// Within the workspace's group, OpenCode's own models come first and Go's next; the rest keep their order.
+const rank = (providerID: string) => (providerID === "opencode" ? 0 : providerID === "opencode-go" ? 1 : 2)
+
 /**
  * The model picker's sections in display order. Favorites and Recent lead until a search narrows the list, and their
- * models leave their provider. The Console workspace's providers list together at the first one's position. Free
- * models leave their provider for a group of their own, always last.
+ * models leave their provider. The Console workspace's providers list together as one OpenCode group at the first
+ * one's position: OpenCode's own paid models, then Go's, then the workspace's other providers. Free models leave their
+ * provider for a group of their own, always last.
  */
 export function pickerSections<M extends Model>(input: {
   /** Provider groups in the order the picker lists providers. */
@@ -70,8 +83,21 @@ export function pickerSections<M extends Model>(input: {
 
       return split.groups
         .filter((item) => managed.has(item.category))
-        .map((item) => ({ key: item.category, items: item.items }))
+        .toSorted((a, b) => rank(a.category) - rank(b.category))
+        .map((item, order) => ({
+          key: item.category,
+          workspace: order === 0 ? ("lead" as const) : ("sub" as const),
+          items: item.items,
+        }))
     }),
     ...(split.free ? [{ key: "free", list: "free" as const, items: split.free.items }] : []),
   ]
+}
+
+/**
+ * The picker's OpenCode accounts: its sign-in accounts, the active one first. API keys stay in Settings, so an active
+ * key lists none.
+ */
+export function signInAccounts(accounts: readonly ProviderAccount[]) {
+  return accounts[0]?.method === "oauth" ? accounts.filter((account) => account.method === "oauth") : []
 }
