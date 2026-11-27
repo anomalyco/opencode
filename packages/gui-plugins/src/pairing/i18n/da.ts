@@ -1,0 +1,28 @@
+export default {
+  "command.title": "Par en enhed",
+  title: "Parring",
+  description: "Forbind en anden enhed til appens server på denne computer.",
+  "pair.title": "Par en enhed",
+  "pair.description":
+    "Forbind en telefon, tablet eller anden computer, uanset hvor du er. Forbindelsen går gennem en tunnel, der er krypteret fra ende til ende.",
+  "pair.open": "Par enhed",
+  "pair.unavailable": "Parring er ikke tilgængelig lige nu.",
+  "dialog.description": "Scan koden med appen på en anden enhed, eller kopiér linket.",
+  "remote.title": "Fjernadgang",
+  "remote.description":
+    "Parrede enheder kan nå serveren på denne computer via internettet. Slår du fjernadgang fra, mister enhederne forbindelsen, indtil du parrer dem igen.",
+  "remote.error": "Kunne ikke ændre fjernadgangen. Prøv igen.",
+  "setup.title": "Konfigurerer fjernadgang…",
+  "setup.description": "Det kan tage et minut.",
+  "setup.error": "Kunne ikke konfigurere fjernadgang.",
+  retry: "Prøv igen",
+  "screenActive.title": "Hold skærmen tændt",
+  "screenActive.description": "Undgå, at skærmen går på vågeblus, mens appen kører.",
+  "screenActive.error": "Kunne ikke ændre skærmindstillingen. Prøv igen.",
+  qr: "QR-kode til parring",
+  copyLink: "Kopiér link",
+  "copy.error": "Kunne ikke kopiere parringsoplysningerne. Prøv igen.",
+  error: "Kunne ikke opdatere parringsoplysningerne. Prøv igen.",
+  expires: "Udløber om {{time}}",
+  refresh: "Forny kode",
+}
