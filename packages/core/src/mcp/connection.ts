@@ -108,6 +108,26 @@ export function make(input: Input): Connection {
     skills?: ReadonlyArray<McpClient.Skill>
   } = {}
 
+  const requests = new Map<McpClient.Connection, { count: number; scope?: Scope.Closeable }>()
+
+  const request = <A, E>(client: McpClient.Connection, run: (client: McpClient.Connection) => Effect.Effect<A, E>) =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const active: { count: number; scope?: Scope.Closeable } = requests.get(client) ?? { count: 0 }
+        active.count++
+        requests.set(client, active)
+        return active
+      }),
+      () => run(client),
+      (active) =>
+        Effect.suspend(() => {
+          active.count--
+          if (active.count > 0) return Effect.void
+          requests.delete(client)
+          return active.scope ? Scope.close(active.scope, Exit.void) : Effect.void
+        }),
+    )
+
   // Runs a connection callback under the lock, dropping it if the connection is no longer the live
   // client, so late SDK callbacks cannot commit obsolete state.
   const whenLive =
@@ -148,7 +168,7 @@ export function make(input: Input): Connection {
     Effect.gen(function* () {
       if (state.client !== client) return
       yield* Effect.logInfo("mcp session expired, reconnecting", { server: input.name })
-      yield* stop
+      yield* stop(true)
       yield* start
     }).pipe(input.lock)
 
@@ -159,7 +179,7 @@ export function make(input: Input): Connection {
       if (state.client !== client) return
       // A shared connection's holders learn of its end only through `closed`, which stops it.
       if (input.shared) return yield* input.events.closed(message)
-      yield* stop
+      yield* stop()
       yield* input.events.failed({ status: "needs_auth", error: message }, false)
     }).pipe(input.lock)
 
@@ -172,7 +192,7 @@ export function make(input: Input): Connection {
   ) => {
     // A retry after reconnecting runs on the new client, so a refusal there must end that one.
     const attempt = (target: McpClient.Connection) =>
-      run(target).pipe(
+      request(target, run).pipe(
         Effect.tapError((error) =>
           tagged(error, "MCP.NeedsAuthError") ? refused(target, error.message) : Effect.void,
         ),
@@ -270,20 +290,36 @@ export function make(input: Input): Connection {
     ),
   )
 
-  const stop = Effect.gen(function* () {
-    const scope = state.scope
-    if (!scope) return
-    state.scope = undefined
-    state.client = undefined
-    state.tools = undefined
-    state.prompts = undefined
-    state.skills = undefined
-    yield* Scope.close(scope, Exit.void)
-    yield* input.events.changed("tools")
-    yield* input.events.changed("resources")
-    yield* input.events.changed("prompts")
-    yield* input.events.changed("skills")
-  })
+  const stop = (drain = false) =>
+    Effect.gen(function* () {
+      if (!drain) {
+        yield* Effect.forEach(
+          [...requests.values()],
+          (active) => {
+            const scope = active.scope
+            active.scope = undefined
+            return scope ? Scope.close(scope, Exit.void) : Effect.void
+          },
+          { discard: true },
+        )
+      }
+      const scope = state.scope
+      if (!scope) return
+      const active = state.client && requests.get(state.client)
+      state.scope = undefined
+      state.client = undefined
+      state.tools = undefined
+      state.prompts = undefined
+      state.skills = undefined
+      // Closing the SDK rejects every pending request with ConnectionClosed, hiding its own response.
+      // During recovery, let those requests settle so only explicit session-expiry responses are retried.
+      if (drain && active) active.scope = scope
+      else yield* Scope.close(scope, Exit.void)
+      yield* input.events.changed("tools")
+      yield* input.events.changed("resources")
+      yield* input.events.changed("prompts")
+      yield* input.events.changed("skills")
+    })
 
   return {
     get client() {
@@ -299,7 +335,7 @@ export function make(input: Input): Connection {
       return state.skills
     },
     start,
-    stop,
+    stop: stop(),
     recovering,
     catalog: (client) =>
       recovering(client, (client) =>
