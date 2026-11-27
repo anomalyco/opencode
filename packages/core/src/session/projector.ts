@@ -9,7 +9,10 @@ import { Database } from "../database/database.js"
 import { DatabaseBatch } from "../database/batch.js"
 import { Bus } from "../bus.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import type { Event } from "@opencode/schema/event"
+import type { Location } from "@opencode/schema/location"
 import { Model } from "@opencode/schema/model"
+import { SessionLegacy } from "@opencode/schema/session-legacy"
 import { SessionCwdStore } from "./cwd-store.js"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
@@ -42,6 +45,78 @@ const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 const encodeStoredUser = Schema.encodeSync(SessionStored.User)
 
 export class SessionAlreadyProjected extends Error {}
+
+const isSessionEvent = (event: Event.Payload): event is SessionEvent.Event =>
+  Object.hasOwn(SessionEvent.All.cases, event.type)
+
+export function router(db: DatabaseService): Bus.Router {
+  const sessions = new Map<string, Location.Ref>()
+  return {
+    prepare: Effect.fnUntraced(function* (events: readonly Event.Payload[]) {
+      const updates = new Map<string, Location.Ref | undefined>()
+      const resolved = new Map<Event.Payload, readonly Location.Ref[]>()
+      for (const event of events) {
+        if (!isSessionEvent(event)) continue
+        const id = event.data.sessionID
+        if (event.type === "session.created") {
+          updates.set(id, event.data.location)
+          resolved.set(event, [event.location ?? event.data.location])
+          continue
+        }
+        if (event.location && event.type !== "session.forked" && event.type !== "session.moved") {
+          if (event.type === "session.deleted") updates.set(id, undefined)
+          continue
+        }
+        const owner = event.type === "session.forked" ? event.data.parentID : id
+        const cached = updates.has(owner) ? updates.get(owner) : sessions.get(owner)
+        const ref =
+          cached || updates.has(owner)
+            ? cached
+            : yield* db
+                .select({ directory: SessionTable.directory, workspaceID: SessionTable.workspace_id })
+                .from(SessionTable)
+                .where(eq(SessionTable.id, owner))
+                .get()
+                .pipe(
+                  Effect.orDie,
+                  Effect.map((row) =>
+                    row
+                      ? { directory: AbsolutePath.make(row.directory), workspaceID: row.workspaceID ?? undefined }
+                      : undefined,
+                  ),
+                  Effect.tap((found) => Effect.sync(() => updates.set(owner, found))),
+                )
+        if (event.type === "session.moved") {
+          // Both owners need the transition, even if the producer supplied
+          // an envelope location. Later events use only the destination.
+          updates.set(id, event.data.location)
+          resolved.set(event, ref ? [ref, event.data.location] : [event.data.location])
+          continue
+        }
+        if (event.type === "session.forked") updates.set(id, ref)
+        resolved.set(event, event.location ? [event.location] : ref ? [ref] : [])
+        if (event.type === "session.deleted") updates.set(id, undefined)
+      }
+      // Apply only after the projection transaction commits. A failed move
+      // must not redirect events away from the Session's actual location.
+      return {
+        routes: resolved,
+        commit: () => {
+          for (const [id, ref] of updates) {
+            if (ref) {
+              sessions.set(id, ref)
+              continue
+            }
+            sessions.delete(id)
+          }
+        },
+      }
+    }),
+    remove: (aggregateID) => {
+      sessions.delete(aggregateID)
+    },
+  }
+}
 
 type Usage = {
   cost: number
@@ -876,7 +951,10 @@ function projectIdle(
 const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
-    const db = (yield* Database.Service).db
+    const database = yield* Database.Service
+    const db = database.db
+    yield* bus.upcast(SessionLegacy.event)
+    yield* bus.route(router(db))
     yield* bus.project(SessionEvent.Created, (event) =>
       Effect.gen(function* () {
         const stored = yield* db

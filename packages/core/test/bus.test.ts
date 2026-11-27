@@ -11,7 +11,7 @@ import { EventSequenceTable, EventTable } from "@opencode/core/event/sql"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Workspace } from "@opencode/core/workspace"
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { location } from "./fixture/location"
 import { TestDatabase } from "./lib/database"
 import { testEffect } from "./lib/effect"
@@ -29,6 +29,7 @@ const Message = Bus.ephemeral({
   },
 })
 
+class GuardRejected extends Data.TaggedError("Test.GuardRejected") {}
 class CommitRejected extends Data.TaggedError("Test.CommitRejected") {}
 
 const SyncMessage = Bus.durable({
@@ -1386,6 +1387,242 @@ describe("Bus", () => {
           Event.Seq.make(1),
         ])
       }).pipe(Effect.provide(eventLayer))
+    }),
+  )
+
+  it.effect("runs beforeProject inside the transaction before projectors and rolls back on typed failure", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const database = yield* Database.Service
+      const db = database.db
+      const aggregateID = Event.ID.create()
+      const order = new Array<string>()
+      const received = new Array<Event.Payload>()
+      yield* db.run("CREATE TABLE IF NOT EXISTS event_guard_probe (value text NOT NULL)")
+      yield* db.run("DELETE FROM event_guard_probe")
+      yield* bus.project(SyncMessage, (event) =>
+        db.run(sql`INSERT INTO event_guard_probe (value) VALUES (${event.data.text})`).pipe(
+          Effect.orDie,
+          Effect.tap(() => Effect.sync(() => order.push(`project:${event.data.text}`))),
+          Effect.asVoid,
+        ),
+      )
+      yield* bus.listen((event) => Effect.sync(() => received.push(event)))
+
+      const rejected = yield* bus
+        .publish(
+          SyncMessage,
+          { id: aggregateID, text: "blocked" },
+          {
+            beforeProject: () =>
+              Effect.sync(() => {
+                order.push("guard:blocked")
+              }).pipe(Effect.andThen(Effect.fail(new GuardRejected()))),
+            commit: () =>
+              Effect.sync(() => {
+                order.push("commit:blocked")
+              }).pipe(Effect.andThen(Effect.fail(new CommitRejected()))),
+          },
+        )
+        .pipe(Effect.satisfiesErrorType<GuardRejected | CommitRejected>(), Effect.flip)
+
+      expect(rejected).toBeInstanceOf(GuardRejected)
+      expect(order).toEqual(["guard:blocked"])
+      expect(received).toEqual([])
+      expect(yield* db.all("SELECT value FROM event_guard_probe")).toEqual([])
+      expect(yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).all()).toEqual([])
+      expect(
+        yield* db.select().from(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, aggregateID)).all(),
+      ).toEqual([])
+
+      const batchRejected = yield* bus
+        .publishAll([
+          [SyncMessage, { id: aggregateID, text: "first" }],
+          [SyncMessage, { id: aggregateID, text: "second" }, { beforeProject: () => Effect.fail(new GuardRejected()) }],
+        ])
+        .pipe(Effect.satisfiesErrorType<GuardRejected>(), Effect.flip)
+
+      expect(batchRejected).toBeInstanceOf(GuardRejected)
+      expect(received).toEqual([])
+      expect(yield* db.all("SELECT value FROM event_guard_probe")).toEqual([])
+      expect(yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).all()).toEqual([])
+      expect(
+        yield* db.select().from(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, aggregateID)).all(),
+      ).toEqual([])
+
+      order.length = 0
+      yield* bus.publish(
+        SyncMessage,
+        { id: aggregateID, text: "allowed" },
+        {
+          beforeProject: () =>
+            Effect.sync(() => {
+              order.push("guard:allowed")
+            }),
+          commit: (seq) =>
+            Effect.sync(() => {
+              order.push(`commit:${seq}`)
+            }),
+        },
+      )
+
+      expect(order).toEqual(["guard:allowed", "project:allowed", "commit:0"])
+      expect(yield* db.all("SELECT value FROM event_guard_probe")).toEqual([{ value: "allowed" }])
+    }),
+  )
+
+  it.effect("rejects beforeProject hooks on live-only events and skips them during replay", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const aggregateID = Session.ID.create()
+      const guardCalls = new Array<string>()
+      const projected = new Array<string>()
+      yield* bus.project(DurableMessage, (event) =>
+        Effect.sync(() => {
+          projected.push(event.data.title)
+        }),
+      )
+
+      const liveExit = yield* bus
+        .publish(Message, { text: "live" }, { beforeProject: () => Effect.void })
+        .pipe(Effect.exit)
+      expect(String(liveExit)).toContain("Write guard hooks require a durable event")
+
+      yield* bus.publish(DurableMessage, durableData(aggregateID, "published"), {
+        beforeProject: () =>
+          Effect.sync(() => {
+            guardCalls.push("publish")
+          }),
+      })
+      yield* bus.replay({
+        id: Event.ID.create(),
+        created: 0,
+        type: Bus.versionedType(DurableMessage.type, 1),
+        seq: 1,
+        aggregateID,
+        data: durableData(aggregateID, "replayed"),
+      })
+
+      expect(guardCalls).toEqual(["publish"])
+      expect(projected).toEqual(["published", "replayed"])
+    }),
+  )
+
+  itWithoutLocation.effect("applies registered routers and upcasters without coupling Bus to Session", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const database = yield* Database.Service
+      const db = database.db
+      const alpha = Location.Ref.make({ directory: AbsolutePath.make("/alpha") })
+      const beta = Location.Ref.make({ directory: AbsolutePath.make("/beta") })
+      const removed = new Array<string>()
+      const committed = new Array<string>()
+      const owners = new Map<string, Location.Ref>()
+
+      yield* bus.route({
+        prepare: (events) =>
+          Effect.sync(() => {
+            const routes = new Map<Event.Payload, readonly Location.Ref[]>()
+            const pending = new Map<string, Location.Ref>()
+            for (const event of events) {
+              if (event.type !== SyncMessage.type) continue
+              const data = event.data as { readonly id: string; readonly text: string }
+              const target = data.text === "move-beta" ? beta : (pending.get(data.id) ?? owners.get(data.id) ?? alpha)
+              pending.set(data.id, target)
+              routes.set(event, [target])
+            }
+            return {
+              routes,
+              commit: () => {
+                for (const [id, ref] of pending) {
+                  owners.set(id, ref)
+                  committed.push(`${id}:${ref.directory}`)
+                }
+              },
+            }
+          }),
+        remove: (aggregateID) => {
+          owners.delete(aggregateID)
+          removed.push(aggregateID)
+        },
+      })
+
+      const aggregateID = Event.ID.create()
+      const alphaFiber = yield* bus
+        .subscribe(SyncMessage)
+        .pipe(
+          Stream.take(1),
+          Stream.runCollect,
+          Effect.provideService(Location.Service, location(alpha)),
+          Effect.forkScoped({ startImmediately: true }),
+        )
+      const betaFiber = yield* bus
+        .subscribe(SyncMessage)
+        .pipe(
+          Stream.take(1),
+          Stream.runCollect,
+          Effect.provideService(Location.Service, location(beta)),
+          Effect.forkScoped({ startImmediately: true }),
+        )
+
+      // Failed beforeProject must not commit router state.
+      yield* bus
+        .publish(
+          SyncMessage,
+          { id: aggregateID, text: "move-beta" },
+          { beforeProject: () => Effect.fail(new GuardRejected()) },
+        )
+        .pipe(Effect.flip)
+      expect(committed).toEqual([])
+
+      const first = yield* bus.publish(SyncMessage, { id: aggregateID, text: "stay-alpha" })
+      const second = yield* bus.publish(SyncMessage, { id: aggregateID, text: "move-beta" })
+      expect(yield* Fiber.join(alphaFiber)).toEqual([first])
+      expect(yield* Fiber.join(betaFiber)).toEqual([second])
+      expect(first).not.toHaveProperty("location")
+
+      yield* bus.remove(aggregateID)
+      expect(removed).toEqual([aggregateID])
+
+      // Upcaster upgrades legacy stored payloads on both log reads and idempotent replay.
+      yield* bus.upcast((type, data) => {
+        if (type !== DurableMessage.type || typeof data !== "object" || data === null) return data
+        const record = data as Record<string, unknown>
+        if (!("legacyTitle" in record)) return data
+        const { legacyTitle, ...rest } = record
+        return { ...rest, title: legacyTitle }
+      })
+
+      const legacyAggregate = Session.ID.create()
+      const legacyEventID = Event.ID.create()
+      const legacyType = Bus.versionedType(DurableMessage.type, 1)
+      yield* db
+        .run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES (${legacyAggregate}, 0)`)
+        .pipe(Effect.orDie)
+      yield* db
+        .run(
+          sql`INSERT INTO event (id, aggregate_id, seq, created, type, data) VALUES (${legacyEventID}, ${legacyAggregate}, 0, 5, ${legacyType}, ${JSON.stringify({ sessionID: legacyAggregate, legacyTitle: "Upgraded" })})`,
+        )
+        .pipe(Effect.orDie)
+
+      const logged = Array.from(yield* Stream.runCollect(bus.log({ aggregateID: legacyAggregate }))).filter(
+        (item): item is Event.Payload => !Bus.isSynced(item),
+      )
+      expect(logged).toMatchObject([{ id: legacyEventID, data: { sessionID: legacyAggregate, title: "Upgraded" } }])
+
+      yield* bus.replay({
+        id: legacyEventID,
+        created: 5,
+        type: legacyType,
+        seq: 0,
+        aggregateID: legacyAggregate,
+        data: { sessionID: legacyAggregate, legacyTitle: "Upgraded" },
+      })
+
+      const busSource = yield* Effect.promise(() => Bun.file(new URL("../src/bus.ts", import.meta.url)).text())
+      expect(busSource).not.toContain("@opencode/schema/session-")
+      expect(busSource).not.toContain("./session/")
+      expect(busSource).not.toContain("./location.js")
     }),
   )
 })

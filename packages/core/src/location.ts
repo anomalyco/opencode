@@ -1,22 +1,16 @@
-import { Context, Effect, Layer } from "effect"
+import { Effect, Layer } from "effect"
 import { ChildProcessSpawner } from "effect/process"
-import { Info, Ref, response } from "@opencode/schema/location"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { FSUtil } from "@opencode/util/fs-util"
 import { EnvironmentUnavailable } from "./environment/unavailable.js"
 import { Project } from "./project.js"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeLocationNode, tags } from "@opencode/util/effect/app-node"
+import { Info, Ref, response, Service, type Interface } from "./location/service.js"
 
 export * as Location from "./location.js"
 
-export { Info, Ref, response }
-
-export interface Interface extends Info {
-  readonly vcs?: Project.Vcs
-}
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/Location") {}
+export { Info, Ref, response, Service, type Interface }
 
 export const node = LayerNode.unbound(Service, tags.values.location)
 

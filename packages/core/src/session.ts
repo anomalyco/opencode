@@ -17,7 +17,7 @@ import { Plugin } from "./plugin/service.js"
 import { PluginHooks } from "./plugin/hooks.js"
 import { Database } from "./database/database.js"
 import { SessionProjector } from "./session/projector.js"
-import { SessionMessageTable } from "./session/sql.js"
+import { SessionMessageTable, SessionTable } from "./session/sql.js"
 import { SessionBlob } from "./session/blob.js"
 import { SessionSchema } from "./session/schema.js"
 import { RelativePath } from "./schema.js"
@@ -328,23 +328,34 @@ const layer = Layer.effect(
               permissions: input.permissions ?? parent?.permissions,
               model: input.model,
             },
-            { location },
+            {
+              location,
+              beforeProject: () =>
+                db
+                  .select({ id: SessionTable.id })
+                  .from(SessionTable)
+                  .where(eq(SessionTable.id, sessionID))
+                  .get()
+                  .pipe(
+                    Effect.orDie,
+                    Effect.flatMap((row) =>
+                      row ? Effect.fail(new SessionProjector.SessionAlreadyProjected()) : Effect.void,
+                    ),
+                  ),
+            },
           )
           .pipe(
             Effect.as({ type: "created" } as const),
-            Effect.catchDefect((defect) => {
-              if (!(defect instanceof SessionProjector.SessionAlreadyProjected)) {
-                return Effect.die(defect)
-              }
+            Effect.catch((conflict) =>
               // Concurrent creation lost the projection race. The existing Session identity wins.
-              return store
+              store
                 .get(sessionID)
                 .pipe(
                   Effect.flatMap((session) =>
-                    session ? Effect.succeed({ type: "existing", session } as const) : Effect.die(defect),
+                    session ? Effect.succeed({ type: "existing", session } as const) : Effect.die(conflict),
                   ),
-                )
-            }),
+                ),
+            ),
           )
         if (projected.type === "existing") return projected.session
         const inherited =

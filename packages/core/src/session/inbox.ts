@@ -173,13 +173,6 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
   const serialized = <A, E, R>(sessionID: SessionSchema.ID, effect: Effect.Effect<A, E, R>) =>
     locks.withLock(sessionID)(effect)
 
-  const publishMutation = <A, E, R>(input: PendingRef, effect: Effect.Effect<A, E, R>) =>
-    serialized(input.sessionID, effect).pipe(
-      Effect.asVoid,
-      // Bus projectors abort their transaction through the defect channel.
-      Effect.catchDefect((defect) => (defect instanceof LifecycleConflict ? Effect.fail(defect) : Effect.die(defect))),
-    )
-
   /** First admission wins for matching Session and type, without preparing a new payload. */
   const reconcile = Effect.fn("SessionInbox.reconcile")(function* <Type extends Item["type"]>(request: {
     readonly id: SessionMessage.ID
@@ -203,11 +196,17 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     const existing = yield* reconcile({ ...request, type: request.item.type, delivery: request.item.delivery })
     if (existing !== undefined) return existing
     const admitted = yield* bus
-      .publish(SessionEvent.InboxEnqueued, {
-        inboxID: request.id,
-        sessionID: request.sessionID,
-        item: request.item,
-      })
+      .publish(
+        SessionEvent.InboxEnqueued,
+        {
+          inboxID: request.id,
+          sessionID: request.sessionID,
+          item: request.item,
+        },
+        {
+          beforeProject: () => guardAdmit(db, request.id),
+        },
+      )
       .pipe(
         Effect.map((event) =>
           Info.make({
@@ -217,12 +216,10 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
             ...request.item,
           }),
         ),
-        Effect.catchDefect((defect) =>
-          defect instanceof LifecycleConflict
-            ? find(db, request.id).pipe(
-                Effect.flatMap((stored) => (stored === undefined ? Effect.fail(defect) : Effect.succeed(stored))),
-              )
-            : Effect.die(defect),
+        Effect.catchTag("SessionInbox.LifecycleConflict", (conflict) =>
+          reconcile({ ...request, type: request.item.type, delivery: request.item.delivery }).pipe(
+            Effect.flatMap((stored) => (stored === undefined ? Effect.fail(conflict) : Effect.succeed(stored))),
+          ),
         ),
       )
     if (!matches(admitted, { ...request, type: request.item.type }))
@@ -257,35 +254,53 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
   })
 
   const cancel = Effect.fn("SessionInbox.cancel")((input: PendingRef) =>
-    publishMutation(
-      input,
-      bus.publish(SessionEvent.InboxCancelled, {
-        sessionID: input.sessionID,
-        inboxID: input.id,
-      }),
-    ),
+    serialized(
+      input.sessionID,
+      bus.publish(
+        SessionEvent.InboxCancelled,
+        {
+          sessionID: input.sessionID,
+          inboxID: input.id,
+        },
+        {
+          beforeProject: () => guardPending(db, input),
+        },
+      ),
+    ).pipe(Effect.asVoid),
   )
 
   const steer = Effect.fn("SessionInbox.steer")((input: PendingRef) =>
-    publishMutation(
-      input,
-      bus.publish(SessionEvent.InboxDeliveryChanged, {
-        sessionID: input.sessionID,
-        inboxID: input.id,
-        delivery: "steer",
-      }),
-    ),
+    serialized(
+      input.sessionID,
+      bus.publish(
+        SessionEvent.InboxDeliveryChanged,
+        {
+          sessionID: input.sessionID,
+          inboxID: input.id,
+          delivery: "steer",
+        },
+        {
+          beforeProject: () => guardPending(db, { ...input, delivery: "queue" }),
+        },
+      ),
+    ).pipe(Effect.asVoid),
   )
 
   const queue = Effect.fn("SessionInbox.queue")((input: PendingRef) =>
-    publishMutation(
-      input,
-      bus.publish(SessionEvent.InboxDeliveryChanged, {
-        sessionID: input.sessionID,
-        inboxID: input.id,
-        delivery: "queue",
-      }),
-    ),
+    serialized(
+      input.sessionID,
+      bus.publish(
+        SessionEvent.InboxDeliveryChanged,
+        {
+          sessionID: input.sessionID,
+          inboxID: input.id,
+          delivery: "queue",
+        },
+        {
+          beforeProject: () => guardPending(db, { ...input, delivery: "steer" }),
+        },
+      ),
+    ).pipe(Effect.asVoid),
   )
 
   /**
@@ -314,6 +329,42 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
 export const layer = Layer.effect(Service, make())
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node, Bus.node] })
+
+const guardAdmit = Effect.fn("SessionInbox.guardAdmit")(function* (db: DatabaseService, id: SessionMessage.ID) {
+  const message = yield* db
+    .select({ id: SessionMessageTable.id })
+    .from(SessionMessageTable)
+    .where(eq(SessionMessageTable.id, id))
+    .get()
+    .pipe(Effect.orDie)
+  if (message !== undefined) return yield* new LifecycleConflict({ id })
+  const pending = yield* db
+    .select({ id: SessionInboxTable.id })
+    .from(SessionInboxTable)
+    .where(eq(SessionInboxTable.id, id))
+    .get()
+    .pipe(Effect.orDie)
+  if (pending !== undefined) return yield* new LifecycleConflict({ id })
+})
+
+const guardPending = Effect.fn("SessionInbox.guardPending")(function* (
+  db: DatabaseService,
+  input: PendingRef & { readonly delivery?: Delivery },
+) {
+  const row = yield* db
+    .select({ id: SessionInboxTable.id })
+    .from(SessionInboxTable)
+    .where(
+      and(
+        eq(SessionInboxTable.id, input.id),
+        eq(SessionInboxTable.session_id, input.sessionID),
+        input.delivery !== undefined ? eq(SessionInboxTable.delivery, input.delivery) : undefined,
+      ),
+    )
+    .get()
+    .pipe(Effect.orDie)
+  if (row === undefined) return yield* new LifecycleConflict({ id: input.id })
+})
 
 export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(function* (
   db: DatabaseService,
@@ -550,18 +601,22 @@ const publish = Effect.fn("SessionInbox.publish")(function* (
       if (row.type !== "move" && row.type !== "user" && row.type !== "synthetic")
         return Effect.die(new LifecycleConflict({ id: row.id }))
       return bus
-        .publish(SessionEvent.InboxDelivered, {
-          sessionID,
-          inboxID: row.id,
-        })
+        .publish(
+          SessionEvent.InboxDelivered,
+          {
+            sessionID,
+            inboxID: row.id,
+          },
+          {
+            beforeProject: () => guardPending(db, { sessionID, id: row.id }),
+          },
+        )
         .pipe(
-          Effect.catchDefect((defect) =>
-            defect instanceof LifecycleConflict
-              ? promotedFromMessage(db, sessionID, row.id, row.delivery).pipe(
-                  Effect.flatMap((stored) => (stored !== undefined ? Effect.void : Effect.die(defect))),
-                  Effect.orDie,
-                )
-              : Effect.die(defect),
+          Effect.catchTag("SessionInbox.LifecycleConflict", (conflict) =>
+            promotedFromMessage(db, sessionID, row.id, row.delivery).pipe(
+              Effect.flatMap((stored) => (stored !== undefined ? Effect.void : Effect.die(conflict))),
+              Effect.orDie,
+            ),
           ),
         )
     },
@@ -570,12 +625,7 @@ const publish = Effect.fn("SessionInbox.publish")(function* (
   return rows.length
 })
 
-const promoteUnlocked = (
-  db: DatabaseService,
-  bus: Bus.Interface,
-  sessionID: SessionSchema.ID,
-  scope: Promotable,
-) =>
+const promoteUnlocked = (db: DatabaseService, bus: Bus.Interface, sessionID: SessionSchema.ID, scope: Promotable) =>
   Effect.gen(function* () {
     const steers = yield* pendingSteers(db, sessionID)
     if (steers.length > 0 || scope === "steer") {

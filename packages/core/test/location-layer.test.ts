@@ -39,6 +39,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Workspace } from "@opencode/core/workspace"
 import { SessionEvent } from "@opencode/core/session/event"
+import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
@@ -272,6 +273,8 @@ describe("LocationServiceMap", () => {
     Effect.gen(function* () {
       const locations = yield* LocationServiceMap.Service
       const bus = yield* Bus.Service
+      const database = yield* Database.Service
+      yield* bus.route(SessionProjector.router(database.db))
       const ref = Location.Ref.make({ directory: AbsolutePath.make("/project") })
       const sessionID = Session.ID.make("ses_routing_activity")
       yield* Location.Service.pipe(Effect.provide(locations.get(ref)), Effect.scoped)

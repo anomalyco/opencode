@@ -22,7 +22,6 @@ import { Slug } from "../util/slug.js"
 import { SessionBlob } from "./blob.js"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
-import { SessionProjector } from "./projector.js"
 import { SessionMessageTable, SessionTable } from "./sql.js"
 
 export const Data = SessionTransfer.Data
@@ -104,91 +103,91 @@ const layer = Layer.effect(
             location: input.location,
             subpath,
           }))
-        yield* bus
-          .publish(
-            SessionEvent.Created,
-            {
-              sessionID,
-              parentID: input.data.info.parentID,
-              slug: Slug.create(),
-              version: app.version,
-              projectID: project.id,
-              location: input.location,
-              subpath,
-              title: input.data.info.title,
-              agent: input.data.info.agent,
-              model: input.data.info.model,
-              metadata: input.data.info.metadata,
-              permissions: input.data.info.permissions,
-            },
-            {
-              location: input.location,
-              commit: (seq) =>
-                Effect.gen(function* () {
-                  if (messages.length > 0) {
-                    if (media) yield* Effect.forEach(split, (row) => SessionBlob.save(db, row.blobs), { discard: true })
-                    const stored = media
-                      ? messages.map((message, i) => ({ ...message, data: split[i]!.data }))
-                      : messages
-                    for (const batch of DatabaseBatch.insertBatches(SessionMessageTable, stored))
-                      yield* db.insert(SessionMessageTable).values(batch).run().pipe(Effect.orDie)
-                    if (media)
-                      yield* Effect.forEach(
-                        stored,
-                        (message, i) =>
-                          SessionBlob.recordHashes(
-                            db,
-                            { sessionID, messageID: message.id, seq: message.seq },
-                            new Set(split[i]!.blobs.map((blob) => blob.hash)),
-                          ),
-                        { discard: true },
-                      )
-                    yield* Bus.reserveSequence(db, sessionID, seq + messages.length)
-                  }
-                  yield* db
-                    .update(SessionTable)
-                    .set({
-                      cost: input.data.info.cost,
-                      tokens_input: input.data.info.tokens.input,
-                      tokens_output: input.data.info.tokens.output,
-                      tokens_reasoning: input.data.info.tokens.reasoning,
-                      tokens_cache_read: input.data.info.tokens.cache.read,
-                      tokens_cache_write: input.data.info.tokens.cache.write,
-                      time_created: DateTime.toEpochMillis(input.data.info.time.created),
-                      time_updated: importedAt,
-                      time_busy:
-                        input.data.info.time.idle && input.data.info.time.busy
-                          ? Math.min(
-                              DateTime.toEpochMillis(input.data.info.time.idle),
-                              DateTime.toEpochMillis(input.data.info.time.busy),
-                            )
-                          : null,
-                      time_idle: input.data.info.time.idle ? DateTime.toEpochMillis(input.data.info.time.idle) : null,
-                      time_viewed:
-                        input.data.info.time.idle && input.data.info.time.viewed
-                          ? Math.min(
-                              DateTime.toEpochMillis(input.data.info.time.idle),
-                              DateTime.toEpochMillis(input.data.info.time.viewed),
-                            )
-                          : null,
-                      idle_outcome: input.data.info.time.idle ? (input.data.info.outcome ?? null) : null,
-                      time_archived: input.data.info.time.archived
-                        ? DateTime.toEpochMillis(input.data.info.time.archived)
+        yield* bus.publish(
+          SessionEvent.Created,
+          {
+            sessionID,
+            parentID: input.data.info.parentID,
+            slug: Slug.create(),
+            version: app.version,
+            projectID: project.id,
+            location: input.location,
+            subpath,
+            title: input.data.info.title,
+            agent: input.data.info.agent,
+            model: input.data.info.model,
+            metadata: input.data.info.metadata,
+            permissions: input.data.info.permissions,
+          },
+          {
+            location: input.location,
+            beforeProject: () =>
+              db
+                .select({ id: SessionTable.id })
+                .from(SessionTable)
+                .where(eq(SessionTable.id, sessionID))
+                .get()
+                .pipe(
+                  Effect.orDie,
+                  Effect.flatMap((row) => (row ? Effect.fail(new ImportConflictError({ sessionID })) : Effect.void)),
+                ),
+            commit: (seq) =>
+              Effect.gen(function* () {
+                if (messages.length > 0) {
+                  if (media) yield* Effect.forEach(split, (row) => SessionBlob.save(db, row.blobs), { discard: true })
+                  const stored = media ? messages.map((message, i) => ({ ...message, data: split[i]!.data })) : messages
+                  for (const batch of DatabaseBatch.insertBatches(SessionMessageTable, stored))
+                    yield* db.insert(SessionMessageTable).values(batch).run().pipe(Effect.orDie)
+                  if (media)
+                    yield* Effect.forEach(
+                      stored,
+                      (message, i) =>
+                        SessionBlob.recordHashes(
+                          db,
+                          { sessionID, messageID: message.id, seq: message.seq },
+                          new Set(split[i]!.blobs.map((blob) => blob.hash)),
+                        ),
+                      { discard: true },
+                    )
+                  yield* Bus.reserveSequence(db, sessionID, seq + messages.length)
+                }
+                yield* db
+                  .update(SessionTable)
+                  .set({
+                    cost: input.data.info.cost,
+                    tokens_input: input.data.info.tokens.input,
+                    tokens_output: input.data.info.tokens.output,
+                    tokens_reasoning: input.data.info.tokens.reasoning,
+                    tokens_cache_read: input.data.info.tokens.cache.read,
+                    tokens_cache_write: input.data.info.tokens.cache.write,
+                    time_created: DateTime.toEpochMillis(input.data.info.time.created),
+                    time_updated: importedAt,
+                    time_busy:
+                      input.data.info.time.idle && input.data.info.time.busy
+                        ? Math.min(
+                            DateTime.toEpochMillis(input.data.info.time.idle),
+                            DateTime.toEpochMillis(input.data.info.time.busy),
+                          )
                         : null,
-                    })
-                    .where(eq(SessionTable.id, sessionID))
-                    .run()
-                    .pipe(Effect.orDie)
-                }),
-            },
-          )
-          .pipe(
-            Effect.catchDefect((defect) =>
-              defect instanceof SessionProjector.SessionAlreadyProjected
-                ? Effect.fail(new ImportConflictError({ sessionID }))
-                : Effect.die(defect),
-            ),
-          )
+                    time_idle: input.data.info.time.idle ? DateTime.toEpochMillis(input.data.info.time.idle) : null,
+                    time_viewed:
+                      input.data.info.time.idle && input.data.info.time.viewed
+                        ? Math.min(
+                            DateTime.toEpochMillis(input.data.info.time.idle),
+                            DateTime.toEpochMillis(input.data.info.time.viewed),
+                          )
+                        : null,
+                    idle_outcome: input.data.info.time.idle ? (input.data.info.outcome ?? null) : null,
+                    time_archived: input.data.info.time.archived
+                      ? DateTime.toEpochMillis(input.data.info.time.archived)
+                      : null,
+                  })
+                  .where(eq(SessionTable.id, sessionID))
+                  .run()
+                  .pipe(Effect.orDie)
+              }),
+          },
+        )
         return yield* sessions.get(sessionID).pipe(Effect.orDie)
       }),
     })

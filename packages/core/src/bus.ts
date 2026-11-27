@@ -6,16 +6,12 @@ import type { EventLog } from "@opencode/schema/event-log"
 import { and, asc, eq, gt, lte, sql } from "drizzle-orm"
 import { Database } from "./database/database.js"
 import { EventSequenceTable, EventTable } from "./event/sql.js"
-import type { Location } from "@opencode/schema/location"
+import { Location } from "./location/service.js"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { isDeepStrictEqual } from "node:util"
 import { isSqlError } from "effect/sql/SqlError"
 import { Durable } from "@opencode/schema/durable-event-manifest"
-import { SessionEvent } from "@opencode/schema/session-event"
-import { SessionLegacy } from "@opencode/schema/session-legacy"
-import type { SessionID } from "@opencode/schema/session-id"
-import { AbsolutePath } from "@opencode/schema/schema"
 
 export type Subscriber<D extends Event.Definition = Event.Definition> = (event: Event.Payload<D>) => Effect.Effect<void>
 export type Unsubscribe = Effect.Effect<void>
@@ -78,59 +74,65 @@ const requireAggregateID = (type: string, aggregate: string, data: unknown) => {
   return Effect.die(new InvalidDurableEventError({ type, message: `Expected string aggregate field ${aggregate}` }))
 }
 
-// Every stored event decodes through here, so payloads written in older shapes are upgraded in one place.
-const decodeStoredData = (definition: Event.DurableDefinition, data: unknown) =>
-  Schema.decodeUnknownSync(definition.data)(SessionLegacy.event(definition.type, data))
-
-const decodeSerializedEvent = (event: SerializedEvent): Event.Payload => {
-  const definition = Durable.get(event.type)
-  if (!definition?.durable) {
-    throw new InvalidDurableEventError({ type: event.type, message: `Unknown durable event type ${event.type}` })
-  }
-  return {
-    id: event.id,
-    created: event.created ?? 0,
-    type: definition.type,
-    durable: envelope(event.aggregateID, event.seq, definition.durable.version),
-    data: decodeStoredData(definition, event.data),
-  }
+export interface PreparedRoutes {
+  readonly routes: ReadonlyMap<Event.Payload, readonly Location.Ref[]>
+  readonly commit?: () => void
 }
+
+export interface Router {
+  readonly prepare: (events: readonly Event.Payload[]) => Effect.Effect<PreparedRoutes>
+  readonly remove?: (aggregateID: string) => void
+}
+
+export type Upcaster = (type: string, data: unknown) => unknown
 
 export const versionedType = Event.versionedType
 export const durable = Event.durable
 export const ephemeral = Event.ephemeral
 
-export interface PublishOptions<E = never> {
+export interface PublishOptions<E = never, C = E> {
   readonly id?: Event.ID
   readonly metadata?: Record<string, unknown>
   readonly location?: Location.Ref
   readonly global?: boolean
   /**
+   * Write-time guard executed inside the durable event transaction before projectors run.
+   * Not invoked during replay. A failure rolls back the transaction, publishes nothing
+   * and surfaces from `publish` or `publishAll`.
+   */
+  readonly beforeProject?: () => Effect.Effect<void, E>
+  /**
    * Local operational projection committed atomically with a new durable event. Not replayed or serialized.
    * A failure rolls back the transaction, publishes nothing and surfaces from `publish`.
    */
-  readonly commit?: (seq: number) => Effect.Effect<void, E>
+  readonly commit?: (seq: number) => Effect.Effect<void, C>
 }
 
-export type PublishInput<D extends Event.DurableDefinition = Event.DurableDefinition, E = never> = readonly [
+export type PublishInput<D extends Event.DurableDefinition = Event.DurableDefinition, E = never, C = E> = readonly [
   definition: D,
   data: Event.Data<D>,
-  options?: PublishOptions<E>,
+  options?: PublishOptions<E, C>,
 ]
 
-type AnyPublishInput = PublishInput<Event.DurableDefinition, unknown>
+type AnyPublishInput = PublishInput<Event.DurableDefinition, unknown, unknown>
 
 export type PublishResult<I extends readonly AnyPublishInput[]> = {
-  readonly [K in keyof I]: I[K] extends PublishInput<infer D, unknown> ? Event.Payload<D> : never
+  readonly [K in keyof I]: I[K] extends PublishInput<infer D, unknown, unknown> ? Event.Payload<D> : never
 }
 
-export type PublishError<I extends readonly AnyPublishInput[]> = I[number][2] extends infer O
-  ? O extends { readonly commit?: infer C }
-    ? C extends (seq: number) => Effect.Effect<void, infer E>
-      ? E
-      : never
-    : never
-  : never
+type HookError<O> =
+  | (O extends { readonly beforeProject?: infer B }
+      ? B extends () => Effect.Effect<void, infer E>
+        ? E
+        : never
+      : never)
+  | (O extends { readonly commit?: infer C }
+      ? C extends (seq: number) => Effect.Effect<void, infer E>
+        ? E
+        : never
+      : never)
+
+export type PublishError<I extends readonly AnyPublishInput[]> = I[number][2] extends infer O ? HookError<O> : never
 
 /** Marker/event union emitted by `log`. */
 export type LogItem = Event.Payload | EventLog.Synced
@@ -148,8 +150,8 @@ export interface Subscribe {
    * Volatile live channel: every event published from now on, nothing before or
    * across a disconnect. Consumers that need reliability combine it with `log`.
    * With an ambient Location, delivery is restricted to that Location and global
-   * events. Unlocated Session events use the Session's owner at publication time.
-   * Session moves reach both the old and new Location, without changing the event.
+   * events. Registered routers can resolve delivery Locations per event without
+   * changing the public event.
    */
   (): Stream.Stream<Event.Payload>
   <D extends Event.Definition>(definition: D): Stream.Stream<Event.Payload<D>>
@@ -162,11 +164,11 @@ const isDefinition = (input: Event.Definition | readonly Event.Definition[]): in
   !Array.isArray(input)
 
 export interface Interface {
-  readonly publish: <D extends Event.Definition, E = never>(
+  readonly publish: <D extends Event.Definition, E = never, C = never>(
     definition: D,
     data: Event.Data<D>,
-    options?: PublishOptions<E>,
-  ) => Effect.Effect<Event.Payload<D>, E>
+    options?: PublishOptions<E, C>,
+  ) => Effect.Effect<Event.Payload<D>, E | C>
   readonly publishAll: <const I extends readonly [AnyPublishInput, ...AnyPublishInput[]]>(
     events: I,
   ) => Effect.Effect<PublishResult<I>, PublishError<I>>
@@ -186,6 +188,8 @@ export interface Interface {
   /** @deprecated Use `subscribe()` and consume the returned stream. */
   readonly listen: (listener: Subscriber) => Effect.Effect<Unsubscribe>
   readonly project: <D extends Event.Definition>(definition: D, projector: Subscriber<D>) => Effect.Effect<void>
+  readonly route: (router: Router) => Effect.Effect<void>
+  readonly upcast: (upcaster: Upcaster) => Effect.Effect<void>
   readonly replay: (
     event: SerializedEvent,
     options?: { readonly publish?: boolean; readonly ownerID?: string; readonly strictOwner?: boolean },
@@ -211,10 +215,6 @@ export function configured(options?: Options) {
     layer: Layer.effect(
       Service,
       Effect.gen(function* () {
-        // Deferred import: a static one would close the module cycle
-        // bus → location → project → bus and hit the node bindings in TDZ.
-        const { Location } = yield* Effect.promise(() => import("./location.js"))
-        const { SessionTable } = yield* Effect.promise(() => import("./session/sql.js"))
         const pubsub = {
           live: yield* PubSub.unbounded<Event.Payload>(),
           durable: new Map<string, Set<PubSub.PubSub<void>>>(),
@@ -222,66 +222,51 @@ export function configured(options?: Options) {
         }
         const projectors = new Map<string, Subscriber[]>()
         const listeners = new Array<Subscriber>()
+        const routers = new Array<Router>()
+        const upcasters = new Array<Upcaster>()
         const durableLocks = KeyedMutex.makeUnsafe<string>()
-        const { db } = yield* Database.Service
+        const database = yield* Database.Service
+        const db = database.db
         const logReadPageSize = options?.logReadPageSize ?? 512
         const persist = options?.persist ?? false
-        const sessions = new Map<SessionID, Location.Ref>()
         // Keep routing separate from the public event, and retain its snapshot
         // while a slow subscriber drains events queued before a move or deletion.
         const routes = new WeakMap<Event.Payload, readonly Location.Ref[]>()
 
-        const isSessionEvent = (event: Event.Payload): event is SessionEvent.Event =>
-          Object.hasOwn(SessionEvent.All.cases, event.type)
+        const upcastData = (type: string, data: unknown) => upcasters.reduce((current, fn) => fn(type, current), data)
+
+        // Every stored event decodes through here, so payloads written in older shapes are upgraded in one place.
+        const decodeStoredData = (definition: Event.DurableDefinition, data: unknown) =>
+          Schema.decodeUnknownSync(definition.data)(upcastData(definition.type, data))
+
+        const decodeSerializedEvent = (event: SerializedEvent): Event.Payload => {
+          const definition = Durable.get(event.type)
+          if (!definition?.durable) {
+            throw new InvalidDurableEventError({
+              type: event.type,
+              message: `Unknown durable event type ${event.type}`,
+            })
+          }
+          return {
+            id: event.id,
+            created: event.created ?? 0,
+            type: definition.type,
+            durable: envelope(event.aggregateID, event.seq, definition.durable.version),
+            data: decodeStoredData(definition, event.data),
+          }
+        }
 
         const prepareRoutes = Effect.fnUntraced(function* (events: readonly Event.Payload[]) {
-          const updates = new Map<SessionID, Location.Ref | undefined>()
-          const resolved = new Map<Event.Payload, readonly Location.Ref[]>()
-          for (const event of events) {
-            if (!isSessionEvent(event)) continue
-            const id = event.data.sessionID
-            if (event.type === "session.created") {
-              updates.set(id, event.data.location)
-              resolved.set(event, [event.location ?? event.data.location])
-              continue
-            }
-            if (event.location && event.type !== "session.forked" && event.type !== "session.moved") {
-              if (event.type === "session.deleted") updates.set(id, undefined)
-              continue
-            }
-            const owner = event.type === "session.forked" ? event.data.parentID : id
-            let ref = updates.has(owner) ? updates.get(owner) : sessions.get(owner)
-            if (!ref && !updates.has(owner)) {
-              const row = yield* db
-                .select({ directory: SessionTable.directory, workspaceID: SessionTable.workspace_id })
-                .from(SessionTable)
-                .where(eq(SessionTable.id, owner))
-                .get()
-                .pipe(Effect.orDie)
-              ref = row
-                ? { directory: AbsolutePath.make(row.directory), workspaceID: row.workspaceID ?? undefined }
-                : undefined
-              updates.set(owner, ref)
-            }
-            if (event.type === "session.moved") {
-              // Both owners need the transition, even if the producer supplied
-              // an envelope location. Later events use only the destination.
-              updates.set(id, event.data.location)
-              resolved.set(event, ref ? [ref, event.data.location] : [event.data.location])
-              continue
-            }
-            if (event.type === "session.forked") updates.set(id, ref)
-            resolved.set(event, event.location ? [event.location] : ref ? [ref] : [])
-            if (event.type === "session.deleted") updates.set(id, undefined)
-          }
-          // Apply only after the projection transaction commits. A failed move
-          // must not redirect events away from the Session's actual location.
+          if (routers.length === 0) return () => {}
+          const prepared = yield* Effect.forEach(routers, (router) => router.prepare(events))
           return () => {
-            for (const [id, ref] of updates) {
-              if (ref) sessions.set(id, ref)
-              else sessions.delete(id)
+            for (const item of prepared) {
+              item.commit?.()
+              for (const [event, refs] of item.routes) {
+                const existing = routes.get(event)
+                routes.set(event, existing ? [...existing, ...refs] : refs)
+              }
             }
-            for (const [event, ref] of resolved) routes.set(event, ref)
           }
         })
 
@@ -301,7 +286,7 @@ export function configured(options?: Options) {
           }),
         )
 
-        function commitDurableEvent<E = never>(
+        function commitDurableEvent<E = never, C = never>(
           definition: Event.Definition,
           event: Event.Payload,
           input?: {
@@ -310,7 +295,10 @@ export function configured(options?: Options) {
             readonly ownerID?: string
             readonly strictOwner?: boolean
           },
-          commit?: (seq: number) => Effect.Effect<void, E>,
+          hooks?: {
+            readonly beforeProject?: () => Effect.Effect<void, E>
+            readonly commit?: (seq: number) => Effect.Effect<void, C>
+          },
         ) {
           return Effect.gen(function* () {
             const durable = definition.durable
@@ -361,7 +349,7 @@ export function configured(options?: Options) {
                             stored.type === versionedType(definition.type, durable.version) &&
                             stored.created === (event.created ?? 0) &&
                             // Rows written before a payload rename compare in their upgraded shape.
-                            isDeepStrictEqual(SessionLegacy.event(definition.type, stored.data), encode())
+                            isDeepStrictEqual(upcastData(definition.type, stored.data), encode())
                           ) {
                             if (input.ownerID && row?.ownerID == null) {
                               yield* db
@@ -407,6 +395,7 @@ export function configured(options?: Options) {
                               }),
                             )
                         }
+                        if (hooks?.beforeProject) yield* hooks.beforeProject()
                         const committed = {
                           ...event,
                           durable: { aggregateID, seq, version: durable.version },
@@ -415,7 +404,7 @@ export function configured(options?: Options) {
                         for (const projector of list) {
                           yield* projector(committed)
                         }
-                        if (commit) yield* commit(seq)
+                        if (hooks?.commit) yield* hooks.commit(seq)
                         yield* db
                           .insert(EventSequenceTable)
                           .values([{ aggregate_id: aggregateID, seq, owner_id: input?.ownerID }])
@@ -462,28 +451,33 @@ export function configured(options?: Options) {
           })
         }
 
-        function publishEvent<D extends Event.Definition, E>(
+        function publishEvent<D extends Event.Definition, E, C>(
           definition: D,
           event: Event.Payload<D>,
-          commit?: PublishOptions<E>["commit"],
+          hooks?: {
+            readonly beforeProject?: PublishOptions<E, C>["beforeProject"]
+            readonly commit?: PublishOptions<E, C>["commit"]
+          },
         ) {
           return Effect.gen(function* () {
-            if (!definition.durable && commit)
+            if (!definition.durable && (hooks?.beforeProject || hooks?.commit))
               return yield* Effect.die(
                 new InvalidDurableEventError({
                   type: event.type,
-                  message: "Local commit hooks require a durable event",
+                  message: hooks?.commit
+                    ? "Local commit hooks require a durable event"
+                    : "Write guard hooks require a durable event",
                 }),
               )
             if (definition.durable) {
               const aggregateID = (event.data as Record<string, unknown>)[definition.durable.aggregate]
               if (typeof aggregateID !== "string")
-                return yield* commitDurableEvent(definition, event as Event.Payload, undefined, commit).pipe(
+                return yield* commitDurableEvent(definition, event as Event.Payload, undefined, hooks).pipe(
                   Effect.as(event),
                 )
               return yield* durableLocks.withLock(aggregateID)(
                 Effect.gen(function* () {
-                  const committed = yield* commitDurableEvent(definition, event as Event.Payload, undefined, commit)
+                  const committed = yield* commitDurableEvent(definition, event as Event.Payload, undefined, hooks)
                   if (!committed) return event
                   event = committed.event as Event.Payload<D>
                   yield* notify(event as Event.Payload, true)
@@ -524,7 +518,7 @@ export function configured(options?: Options) {
         const makePayload = (
           definition: Event.Definition,
           data: unknown,
-          options: PublishOptions<unknown> | undefined,
+          options: PublishOptions<unknown, unknown> | undefined,
         ) =>
           Effect.gen(function* () {
             const serviceLocation = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
@@ -544,14 +538,17 @@ export function configured(options?: Options) {
             } as Event.Payload
           })
 
-        function publish<D extends Event.Definition, E = never>(
+        function publish<D extends Event.Definition, E = never, C = never>(
           definition: D,
           data: Event.Data<D>,
-          options?: PublishOptions<E>,
+          options?: PublishOptions<E, C>,
         ) {
           return Effect.gen(function* () {
             const event = (yield* makePayload(definition, data, options)) as Event.Payload<D>
-            return yield* publishEvent(definition, event, options?.commit)
+            return yield* publishEvent(definition, event, {
+              beforeProject: options?.beforeProject,
+              commit: options?.commit,
+            })
           })
         }
 
@@ -563,7 +560,8 @@ export function configured(options?: Options) {
                 return {
                   definition,
                   aggregateID,
-                  // The tuple's own commit types are what PublishError<I> reads; the loop erases them to unknown.
+                  // The tuple's own hook error types are what PublishError<I> reads; the loop erases them to unknown.
+                  beforeProject: options?.beforeProject as PublishOptions<PublishError<I>>["beforeProject"],
                   commit: options?.commit as PublishOptions<PublishError<I>>["commit"],
                   event: yield* makePayload(definition, data, options),
                 }
@@ -625,6 +623,7 @@ export function configured(options?: Options) {
                                   }),
                                 )
                             }
+                            if (item.beforeProject) yield* item.beforeProject()
                             const event = queued[index]
                             for (const projector of projectors.get(
                               versionedType(item.definition.type, item.definition.durable.version),
@@ -714,7 +713,11 @@ export function configured(options?: Options) {
               }),
             )
             .pipe(
-              Effect.tap(() => Effect.sync(() => sessions.delete(aggregateID as SessionID))),
+              Effect.tap(() =>
+                Effect.sync(() => {
+                  for (const router of routers) router.remove?.(aggregateID)
+                }),
+              ),
               Effect.orDie,
             )
         }
@@ -913,6 +916,16 @@ export function configured(options?: Options) {
             projectors.set(key, list)
           })
 
+        const route = (router: Router): Effect.Effect<void> =>
+          Effect.sync(() => {
+            routers.push(router)
+          })
+
+        const upcast = (upcaster: Upcaster): Effect.Effect<void> =>
+          Effect.sync(() => {
+            upcasters.push(upcaster)
+          })
+
         return Service.of({
           publish,
           publishAll,
@@ -920,6 +933,8 @@ export function configured(options?: Options) {
           log,
           listen,
           project,
+          route,
+          upcast,
           replay,
           remove,
           claim,
