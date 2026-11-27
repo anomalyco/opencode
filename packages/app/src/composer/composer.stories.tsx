@@ -59,6 +59,8 @@ function ComposerStory(props: {
   inspectRequest?: boolean
   continueOnStop?: boolean
   longLabels?: boolean
+  /** Forty project agents, with a deep one selected, so the agent menu is taller than the space above it. */
+  manyAgents?: boolean
   alternate?: "none" | "queue" | "steer"
   manySuggestions?: boolean
   history?: boolean
@@ -80,6 +82,7 @@ function ComposerStory(props: {
   const [story, setStory] = createStore({
     activity: props.label ?? "Ready",
     variant: STORY_MODEL.variant,
+    agent: props.manyAgents ? "agent-28" : "build",
   })
 
   const modelOption = createMemo(() => ({
@@ -218,9 +221,16 @@ function ComposerStory(props: {
         options: () => [
           { id: "build", label: props.longLabels ? "Build agent with an unusually long name" : "build" },
           { id: "review", label: "review" },
+          ...(props.manyAgents
+            ? Array.from({ length: 40 }, (_, index) => {
+                const id = `agent-${String(index + 1).padStart(2, "0")}`
+
+                return { id, label: id }
+              })
+            : []),
         ],
-        current: () => "build",
-        onSelect: (agent) => setStory("activity", `Selected ${agent}`),
+        current: () => story.agent,
+        onSelect: (agent) => setStory({ agent, activity: `Selected ${agent}` }),
       },
       variant: {
         options: () => [
@@ -566,6 +576,16 @@ export const ToolbarOverflow = {
   render: (args: FlowArgs) => (
     <div class="w-[min(420px,calc(100vw-80px))]">
       <ComposerStory {...args} longLabels />
+    </div>
+  ),
+}
+
+// The composer sits at the bottom of the window, so the agent menu opens upward into less room than its options need.
+export const ManyAgents = {
+  parameters: { layout: "fullscreen" },
+  render: (args: FlowArgs) => (
+    <div class="flex h-dvh flex-col justify-end">
+      <ComposerStory {...args} manyAgents />
     </div>
   ),
 }
