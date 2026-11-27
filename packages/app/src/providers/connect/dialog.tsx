@@ -263,6 +263,8 @@ export const DialogConnectProvider: Component<{
 
 const CLAUDE_CODE_SETUP_URL = "https://code.claude.com/docs/en/setup"
 
+const CONSOLE_URL = "https://opencode.ai/console"
+
 const STEP_CLASS =
   "flex flex-col items-start gap-5 px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
 
@@ -964,11 +966,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
 
     return (
       <form onSubmit={(event) => submitEntry(event, "apiKey")} class={STEP_CLASS}>
-        <p>
-          {isConsole
-            ? language.t("provider.connect.console.serviceKeyDescription")
-            : language.t("provider.connect.apiKey.description", { provider: name() })}
-        </p>
+        <p>{language.t("provider.connect.apiKey.description", { provider: name() })}</p>
         <EntryField
           name="apiKey"
           label={language.t("provider.connect.apiKey.label", { provider: name() })}
@@ -976,6 +974,92 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
           ref={(el) => (apiKey = el)}
         />
         <StepActions>
+          <Button
+            type="submit"
+            variant="submit"
+            data-action="provider-connect-submit"
+            disabled={connect().submitting}
+            aria-busy={connect().submitting}
+          >
+            {language.t("common.continue")}
+          </Button>
+        </StepActions>
+      </form>
+    )
+  }
+
+  const chooseMethod = (index: number | undefined) => {
+    if (index !== undefined) props.controller.input({ type: "method.selected", index })
+  }
+
+  // OpenCode's first screen: the account sign-in brings the workspace, Go and usage; an API key only brings models.
+  function ConsoleStart(input: { body: Extract<ProviderDialogBody, { kind: "console-start" }> }) {
+    return (
+      <div data-component="console-start" class={`${STEP_CLASS} pt-2`}>
+        <div class="flex flex-col gap-1">
+          <h2 class="text-[15px] font-[530] leading-5 tracking-[-0.13px] text-v2-text-text-base">
+            {language.t("provider.connect.console.start.title")}
+          </h2>
+          <p>{language.t("provider.connect.console.start.description")}</p>
+        </div>
+        <div class="flex flex-col items-center gap-2 self-stretch">
+          <Button
+            variant="contrast"
+            size="large"
+            data-action="console-sign-in"
+            class="w-full justify-center"
+            onClick={() => chooseMethod(input.body.signIn)}
+          >
+            {language.t("provider.connect.console.start.signIn")}
+          </Button>
+          <Show when={input.body.apiKey !== undefined}>
+            <Button variant="ghost-muted" data-action="console-api-key" onClick={() => chooseMethod(input.body.apiKey)}>
+              {language.t("provider.connect.console.start.apiKey")}
+            </Button>
+          </Show>
+        </div>
+      </div>
+    )
+  }
+
+  function ConsoleKeyView(input: { body: Extract<ProviderDialogBody, { kind: "console-key" }> }) {
+    let apiKey: HTMLInputElement | undefined
+
+    onMount(() => apiKey?.focus({ preventScroll: true }))
+
+    return (
+      <form onSubmit={(event) => submitEntry(event, "apiKey")} class={STEP_CLASS}>
+        <p>
+          {language.t("provider.connect.console.serviceKeyDescription")}{" "}
+          <a
+            href={CONSOLE_URL}
+            class="inline-flex items-center gap-0.5 font-[530] text-v2-text-text-base hover:text-v2-text-text-muted"
+            onClick={(event) => {
+              event.preventDefault()
+              platform.openExternal(CONSOLE_URL)
+            }}
+          >
+            {language.t("provider.connect.console.key.console")}
+            <Icon name="arrow-up-right" size="small" class="text-v2-icon-icon-muted" />
+          </a>
+        </p>
+        <EntryField
+          name="apiKey"
+          label={language.t("provider.connect.console.key.label")}
+          placeholder={language.t("provider.connect.apiKey.placeholder")}
+          ref={(el) => (apiKey = el)}
+        />
+        <StepActions>
+          <Show when={input.body.signIn !== undefined}>
+            <Button
+              variant="ghost"
+              data-action="console-sign-in"
+              disabled={connect().submitting}
+              onClick={() => chooseMethod(input.body.signIn)}
+            >
+              {language.t("provider.connect.console.key.signIn")}
+            </Button>
+          </Show>
           <Button
             type="submit"
             variant="submit"
@@ -1311,7 +1395,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
         </div>
         <StepActions>
           <Show when={!input.body.catalogPending}>
-            <Button variant="ghost" onClick={() => platform.openExternal("https://opencode.ai/console")}>
+            <Button variant="ghost" onClick={() => platform.openExternal(CONSOLE_URL)}>
               {language.t("provider.connect.console.openAgain")}
             </Button>
           </Show>
@@ -1356,10 +1440,13 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
                   copied={current().copy === "copied"}
                   copyFailed={current().copy === "failed"}
                   onCopy={() => void props.controller.copyLink()}
+                  onOpenBrowser={() => props.controller.input({ type: "browser.open" })}
                 />
               </div>
             )}
           </Match>
+          <Match when={narrow("console-start")}>{(current) => <ConsoleStart body={current()} />}</Match>
+          <Match when={narrow("console-key")}>{(current) => <ConsoleKeyView body={current()} />}</Match>
           <Match when={narrow("claude")}>{(current) => <ClaudeAgentSetup body={current()} />}</Match>
           <Match when={narrow("accounts")}>{(current) => <AccountsView body={current()} />}</Match>
           <Match when={kind("busy")}>

@@ -10,6 +10,7 @@ export function ConsoleAuthorization(props: {
   copied: boolean
   copyFailed: boolean
   onCopy: () => void
+  onOpenBrowser: () => void
 }) {
   const language = useLanguage()
 
@@ -57,6 +58,9 @@ export function ConsoleAuthorization(props: {
       <StepActions>
         <Button variant="ghost" disabled={!props.code} onClick={props.onCopy}>
           {language.t(props.copied ? "provider.connect.console.linkCopied" : "provider.connect.console.copyLink")}
+        </Button>
+        <Button variant="ghost" disabled={!props.code} onClick={props.onOpenBrowser}>
+          {language.t("provider.connect.console.openBrowserAgain")}
         </Button>
         <WaitingButton>
           {language.t(props.code ? "provider.connect.console.waiting" : "provider.connect.console.openingBrowser")}

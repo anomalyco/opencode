@@ -18,6 +18,9 @@ const oauth: ProviderConnectMethod = { id: "device", type: "oauth", label: "Sign
 
 const external: ProviderConnectMethod = { id: "claude-login", type: "external", label: "Claude Code login" }
 
+// OpenCode's first screen for [oauth, key]: the account sign-in, with the API key as the way out.
+const CONSOLE_START = { kind: "console-start", signIn: 0, apiKey: 1 } as const
+
 const none: ProviderAccounts = { count: 0, activeID: undefined, problem: false }
 
 const accounts = (count: number, problem = false): ProviderAccounts => ({
@@ -205,7 +208,7 @@ test("Back from a Console connection without models returns to the sign-in metho
   expect(types(empty.effects)).toEqual(["connected.notify", "models.reveal", "toast.connected"])
 
   const methods = replay([goBack(empty.state)], empty.state)
-  expect(selectProviderDialogView(methods.state).body).toEqual({ kind: "methods" })
+  expect(selectProviderDialogView(methods.state).body).toEqual(CONSOLE_START)
   expect(selectProviderDialogView(methods.state).crumbs).toEqual([
     { kind: "root", target: "picker" },
     { kind: "provider", target: undefined },
@@ -235,7 +238,7 @@ test("Back from a failed Console refresh returns to the sign-in methods", () => 
     { kind: "provider", target: "methods" },
   ])
 
-  expect(selectProviderDialogView(replay([goBack(failed.state)], failed.state).state).body).toEqual({ kind: "methods" })
+  expect(selectProviderDialogView(replay([goBack(failed.state)], failed.state).state).body).toEqual(CONSOLE_START)
 })
 
 test("Back during the Console workspace wait stops the wait", () => {
@@ -243,7 +246,20 @@ test("Back during the Console workspace wait stops the wait", () => {
   const back = replay([goBack(refreshing.state)], refreshing.state)
 
   expect(back.effects).toContainEqual({ type: "settle.cancel" })
-  expect(selectProviderDialogView(back.state).body).toEqual({ kind: "methods" })
+  expect(selectProviderDialogView(back.state).body).toEqual(CONSOLE_START)
+})
+
+test("OpenCode starts on the account sign-in, and its API key step leads back to it", () => {
+  const opened = replay([selected("opencode", false)])
+  const start = replay([loaded(opened.state, [oauth, key])], opened.state)
+  expect(selectProviderDialogView(start.state).body).toEqual(CONSOLE_START)
+
+  const entering = replay([{ type: "connect.input", event: { type: "method.selected", index: 1 } }], start.state)
+  expect(selectProviderDialogView(entering.state).body).toEqual({ kind: "console-key", signIn: 0 })
+
+  const signIn = replay([{ type: "connect.input", event: { type: "method.selected", index: 0 } }], entering.state)
+  expect(connectEffect(signIn.effects, "start").method).toEqual(oauth)
+  expect(selectProviderDialogView(signIn.state).body).toEqual({ kind: "busy" })
 })
 
 test("Back from a Claude Agent check started from Add account returns to the accounts", () => {

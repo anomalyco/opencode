@@ -92,7 +92,7 @@ export const ChooseMethod = {
   render: renderConnection("opencode"),
 }
 
-/** OpenCode Console through a remote server: pick "API key (service account)" to see the note on a form. */
+/** OpenCode through a remote server: pick "Use an API key instead" to see the note on a form. */
 export const ConsoleRemote = { render: renderConnection("opencode", { servers: [REMOTE_SERVER] }) }
 
 // Console with only its browser sign-in, so the story starts on the device code.
