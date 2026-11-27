@@ -851,14 +851,39 @@ fn command_line(program: &str, args: &[String]) -> io::Result<Vec<u16>> {
     line.push('"' as u16);
     line.extend(program.encode_utf16());
     line.push('"' as u16);
+    let cmd = is_cmd(program);
     for arg in args {
         line.push(' ' as u16);
-        append_arg(&mut line, arg);
+        if cmd {
+            append_cmd_arg(&mut line, arg);
+        } else {
+            append_arg(&mut line, arg);
+        }
     }
     // CreateProcessW needs a terminated string; without this it reads past the
     // buffer and runs the last argument plus whatever follows it.
     line.push(0);
     Ok(line)
+}
+
+/// cmd.exe reads the rest of its command line as written instead of with
+/// MSVCRT rules, and has no `\"` escape: a `/c` command must reach it as is.
+fn is_cmd(program: &str) -> bool {
+    let name = program.rsplit(['\\', '/']).next().unwrap_or(program);
+    name.eq_ignore_ascii_case("cmd") || name.eq_ignore_ascii_case("cmd.exe")
+}
+
+/// Quotes an argument for cmd.exe only when it is empty or holds whitespace,
+/// and never escapes the quotes inside it.
+fn append_cmd_arg(line: &mut Vec<u16>, arg: &str) {
+    let quote = arg.is_empty() || arg.contains([' ', '\t']);
+    if quote {
+        line.push('"' as u16);
+    }
+    line.extend(arg.encode_utf16());
+    if quote {
+        line.push('"' as u16);
+    }
 }
 
 /// Quotes one argument only when it needs it, doubling backslashes before a
@@ -1058,6 +1083,25 @@ mod tests {
         // A quoted argument with a trailing backslash keeps the closing quote.
         let line = command_line("x.exe", &[r"C:\a b\".into()]).unwrap();
         assert_eq!(text(&line[..line.len() - 1]), r#""x.exe" "C:\a b\\""#);
+    }
+
+    #[test]
+    fn command_lines_for_cmd_keep_the_quotes_of_the_command() {
+        let line = command_line(
+            r"C:\WINDOWS\system32\cmd.exe",
+            &["/c".into(), r#"echo "hello world""#.into(), String::new()],
+        )
+        .unwrap();
+        assert_eq!(
+            text(&line[..line.len() - 1]),
+            r#""C:\WINDOWS\system32\cmd.exe" /c "echo "hello world"" """#
+        );
+        // Every other program still gets MSVCRT quoting.
+        let line = command_line("pwsh.exe", &["-Command".into(), r#"echo "hi""#.into()]).unwrap();
+        assert_eq!(
+            text(&line[..line.len() - 1]),
+            r#""pwsh.exe" -Command "echo \"hi\"""#
+        );
     }
 
     #[test]
