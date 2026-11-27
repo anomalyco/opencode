@@ -67,6 +67,7 @@ file records how Korean renders those rows and the terms the shared file leaves 
 | skill | 스킬 | |
 | plugin | 플러그인 | |
 | command / slash command | 명령어 / 슬래시 명령어 | |
+| snake case | 스네이크 케이스 | 실제 필드 이름과 코드 리터럴은 그대로 유지 |
 | command palette | 명령어 팔레트 | |
 | formatter | 포매터 | |
 | linter | 린터 | |

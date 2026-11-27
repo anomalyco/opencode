@@ -230,7 +230,7 @@ context.ui.slot({ append: "home.footer", render: () => <markdown content="Ready"
 return () => context.renderer.idle().then(() => style.destroy())
 ```
 
-렌더링 가능 객체의 레이아웃 스타일을 읽으려면 Yoga Node getter의 이름으로 메서드를 호출하세요. 예를 들어 `box.getPadding(Yoga.Edge.Bottom)`이나 `box.getMaxWidth()`입니다. 호스트 렌더링 가능 객체는 플러그인 API의 일부가 아니며 구조와 스타일은 릴리스마다 바뀔 수 있습니다.
+렌더링 가능 객체의 레이아웃 스타일을 읽으려면 Yoga Node에서 해당 값을 조회하는 메서드와 같은 이름의 메서드를 호출하세요. 예를 들어 `box.getPadding(Yoga.Edge.Bottom)`이나 `box.getMaxWidth()`를 호출할 수 있습니다. 호스트 렌더링 가능 객체는 플러그인 API의 일부가 아니며 구조와 스타일은 릴리스마다 바뀔 수 있습니다.
 
 ### OpenTUI 0.5용으로 만든 플러그인
 

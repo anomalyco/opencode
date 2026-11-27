@@ -14,7 +14,7 @@ Console은 팀 규모와 관계없이 무료이며 시트 요금이 없습니다
 2. **Payment methods**에서 **Add**를 클릭하세요.
 3. 결제 수단을 선택하고 Stripe에서 설정을 완료하세요.
 
-다음 결제 수단을 지원합니다.
+지원되는 결제 수단은 다음과 같습니다.
 
 - 카드
 - Link
@@ -47,9 +47,9 @@ Console은 팀 규모와 관계없이 무료이며 시트 요금이 없습니다
 
 ## 잔액 확인
 
-**Activity**의 **Billing** 카드는 소유자와 관리자에게 잔액을 보여 주고 **Settings › Billing**을 엽니다.
+소유자와 관리자는 **Activity**의 **Billing** 카드에서 잔액을 확인할 수 있습니다. 카드를 클릭하면 **Settings › Billing**이 열립니다.
 
-워크스페이스 헤더의 **Billing** 버튼이나 `B` 키를 누르면 결제 패널이 열립니다. 이 패널에서 Go 한도, 크레딧,
+워크스페이스 헤더의 **Billing** 버튼이나 `B` 키를 누르면 결제 패널이 열립니다. 이 패널에서 Go 사용 한도, 크레딧,
 사용량을 실시간으로 확인할 수 있습니다. 소유자와 관리자는 워크스페이스의 잔액, 사용량, 자동 충전 설정을 볼 수
 있으며, 멤버에게는 본인의 사용량과 한도만 표시됩니다.
 
@@ -63,7 +63,7 @@ Upstream request failed: Insufficient account funds
 
 ## 청구서
 
-모든 결제는 상태와 **Download invoice** 또는 **View receipt** 링크와 함께 **Invoices**에 표시됩니다.
+**Invoices**에는 모든 결제의 상태와 **Download invoice** 또는 **View receipt** 링크가 표시됩니다.
 
 | 항목               | 생성 시점                                  |
 | ------------------ | ------------------------------------------ |
@@ -74,7 +74,7 @@ Upstream request failed: Insufficient account funds
 | Go Plus 업그레이드 | Go에서 Go Plus로 업그레이드 시             |
 | Go Teams 업그레이드 | Go 또는 Go Plus에서 Go Teams로 업그레이드 시 |
 | Go Teams 멤버      | Go Teams 워크스페이스에 멤버가 합류할 때   |
-| Monthly Usage      | 청구서 결제                                |
+| 월간 사용량        | 월별 청구서 발행 시                        |
 
 ## 세금 양식
 
@@ -82,7 +82,7 @@ Upstream request failed: Insufficient account funds
 
 ## 청구서 결제
 
-신용 거래 계약을 맺은 워크스페이스는 크레딧을 선불로 충전하는 대신 월별 청구서로 결제할 수 있습니다. 신청하려면 지원팀에 문의하세요.
+신용 거래 계약을 맺은 워크스페이스는 크레딧을 미리 충전하는 대신 월별 청구서로 결제할 수 있습니다. 신청하려면 지원팀에 문의하세요.
 
 - 사용 요금은 선불 잔액이 아닌 신용 한도에서 차감됩니다.
 - 청구서는 매월 1일(UTC)에 발행되며 결제 기한은 발행일로부터 14일입니다.
@@ -92,5 +92,5 @@ Upstream request failed: Insufficient account funds
 ## Go
 
 [OpenCode Go](/console/go) 구독은 같은 결제 수단을 사용하고 같은 청구서 목록에 표시됩니다. [크레딧으로 Go를
-결제](/console/go#pay-with-credit)할 수도 있습니다. Go 한도에 도달한 뒤 크레딧으로 결제하려면 **Go** 페이지에서
+결제](/console/go#pay-with-credit)할 수도 있습니다. Go 사용 한도에 도달한 뒤에도 크레딧으로 계속 이용하려면 **Go** 페이지에서
 **Extra Usage**를 켜세요.

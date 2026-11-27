@@ -258,7 +258,7 @@ V2는 서버를 `mcp.servers` 아래에 묶고, `enabled`를 반대 의미의 `d
 }
 ```
 
-원격 OAuth 필드는 snake case를 사용합니다. `clientId`는 `client_id`, `clientSecret`은 `client_secret`,
+원격 OAuth 필드 이름은 스네이크 케이스로 표기합니다. `clientId`는 `client_id`, `clientSecret`은 `client_secret`,
 `callbackPort`는 `callback_port`, `redirectUri`는 `redirect_uri`가 됩니다. V1 `experimental.mcp_timeout` 값은
 기본 `mcp.timeout.catalog`과 `mcp.timeout.execution` 값도 됩니다. [MCP 서버](/mcp-servers)를 참고하세요.
 
@@ -631,4 +631,3 @@ OPENCODE_PASSWORD=secret opencode serve
 정기 작업에 V2를 사용하기 전에 프로젝트에서 모델, 제공자 자격 증명, 에이전트, 권한, MCP 서버, 플러그인을
 확인하세요. 필요한 V2 동작을 확인할 때까지 V1 설정을 유지하고, 네이티브 V2 형태로 변환한 구성은 V1이 가리키지 않게
 하세요.
-
