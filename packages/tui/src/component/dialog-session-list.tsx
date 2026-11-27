@@ -217,6 +217,8 @@ export function DialogSessionList() {
       skipFilter={true}
       current={currentSessionID()}
       focusCurrent={false}
+      // Keep the cursor on the toggled session when pinning moves it between groups.
+      preserveSelection
       onFilter={(query) => {
         setFilter(query)
         setSearch(query)
