@@ -1309,7 +1309,7 @@ impl Inner {
             let visible = Visible::of(state, &session);
             let plan = self.model.borrow().plan(state, &visible, &self.groups, layout);
             let mut mounted = std::mem::take(&mut self.model.borrow_mut().mounted);
-            let cx = self.context(tui, state, &visible, &keys, &paint, plan.legacy, find.as_ref());
+            let cx = self.context(tui, state, &visible, (&paint, &keys), plan.legacy, find.as_ref());
             self.apply(&cx, &plan, changed, &mut mounted);
             self.model.borrow_mut().commit(plan, mounted, visible.lookup);
             self.trailing(tui, &visible, &keys);
@@ -1389,7 +1389,7 @@ impl Inner {
             };
             stale.sort_unstable();
             stale.dedup();
-            let cx = self.context(tui, state, &visible, &keys, &paint, legacy, find.as_ref());
+            let cx = self.context(tui, state, &visible, (&paint, &keys), legacy, find.as_ref());
             self.update(&cx, stale.iter().map(|index| &specs[*index]), Row::update);
             self.trailing(tui, &visible, &keys);
             stale.clear();
@@ -1432,7 +1432,7 @@ impl Inner {
         };
         tui.data.read(|state| {
             let visible = Visible::of(state, &session);
-            let cx = self.context(tui, state, &visible, &keys, &paint, legacy, find.as_ref());
+            let cx = self.context(tui, state, &visible, (&paint, &keys), legacy, find.as_ref());
             self.update(&cx, specs.iter(), each);
             self.trailing(tui, &visible, &keys);
             let check = check.then(|| self.limits.check(visible.lookup.visible, &|id| state.has_input(&session, id)));
@@ -1466,8 +1466,7 @@ impl Inner {
         tui: &'a Tui,
         state: &'a State,
         visible: &Visible<'a>,
-        keys: &'a Keys,
-        paint: &'a Paint,
+        (paint, keys): (&'a Paint, &'a Keys),
         legacy: bool,
         find: Option<&'a FindSnapshot>,
     ) -> Context<'a> {

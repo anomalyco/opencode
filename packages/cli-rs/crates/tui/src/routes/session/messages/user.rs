@@ -28,7 +28,7 @@ pub struct User {
     color: Cell<Option<Color>>,
     rendered: RefCell<Option<SessionMessageUser>>,
     find_applied: Cell<bool>,
-    find_state: RefCell<Option<UserFind>>,
+    find_state: RefCell<Option<Box<UserFind>>>,
     hover: Rc<Cell<bool>>,
     id: Rc<RefCell<String>>,
     /// The box its hover handler restyles. The handler holds it weakly: a widget whose handler holds the widget
@@ -187,14 +187,14 @@ impl User {
         let current = active.current_occurrence(&key);
         let colors = (cx.theme.find.text.current, cx.theme.find.background.r#match, cx.theme.find.background.current);
         let next = UserFind { pattern_key: active.pattern.key.clone(), current, colors };
-        if self.find_applied.get() && self.find_state.borrow().as_ref() == Some(&next) {
+        if self.find_applied.get() && self.find_state.borrow().as_deref() == Some(&next) {
             return;
         }
         let ranges = find_ranges(&message.text, Some(&active.pattern));
         let spans = paint_spans(linked(&message.text, cx.theme.markdown.link), &ranges, 0, current, cx.theme);
         self.text.set_text(spans);
         self.find_applied.set(true);
-        *self.find_state.borrow_mut() = Some(next);
+        *self.find_state.borrow_mut() = Some(Box::new(next));
         if let Some(occurrence) = current
             && let Some(range) = ranges.get(occurrence)
         {

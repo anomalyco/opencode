@@ -508,12 +508,29 @@ impl FindInner {
         }
         let Some(rect) = self.transcript.find_row_rect(tui, &target.key) else { return };
         let viewport = self.transcript.scroll().rect();
+        let clamped =
+            rect.screen_y < viewport.screen_y && self.spot.borrow().as_ref().is_some_and(|spot| spot.matched == target);
+        let offscreen = rect.screen_y + f64::from(rect.height) <= viewport.screen_y
+            || rect.screen_y >= viewport.screen_y + f64::from(viewport.height);
         if rect.height > 0.0
-            && (rect.screen_y + f64::from(rect.height) <= viewport.screen_y
-                || rect.screen_y >= viewport.screen_y + f64::from(viewport.height))
+            && (offscreen || clamped)
             && let Some(scroll) = self.scroll.upgrade()
         {
-            scroll.center_find(tui, target.key.message_id, rect.screen_y);
+            scroll.center_find(tui, target.key.message_id.clone(), rect.screen_y);
+            after_layout(
+                &tui.app,
+                bind!(self.this, |inner| {
+                    let Some(tui) = inner.tui.upgrade() else { return };
+                    after_layout(
+                        &tui.app,
+                        bind!(inner.this, |inner| {
+                            if let Some(tui) = inner.tui.upgrade() {
+                                inner.locate(&tui, target);
+                            }
+                        }),
+                    );
+                }),
+            );
         }
     }
 
@@ -812,14 +829,22 @@ impl FindMarkdown {
                             .then(|| rect.screen_y + f64::from(wrapped_row(code, *byte_offset, rect.width as u16)))
                     }
                     Some(MatchLoc::Prose { top_index, shown, byte_offset }) => {
+                        let md_rect = md.rect();
                         let rows = md.block_rows();
                         let range = rows.get(*top_index)?;
-                        let width = md.rect().width as u16;
+                        if range.start == 0 && md_rect.screen_y < 0.0 {
+                            return None;
+                        }
+                        let width = md_rect.width as u16;
                         Some(f64::from(range.start) + f64::from(wrapped_row(shown, *byte_offset, width)))
                     }
                     Some(MatchLoc::Table { top_index, row, total_rows }) => {
+                        let md_rect = md.rect();
                         let rows = md.block_rows();
                         let range = rows.get(*top_index)?;
+                        if range.start == 0 && md_rect.screen_y < 0.0 {
+                            return None;
+                        }
                         let height = range.end.saturating_sub(range.start);
                         Some(f64::from(range.start + (height * (*row as u32)) / (*total_rows).max(1) as u32))
                     }
@@ -913,7 +938,7 @@ fn locate_table_cell(inner: &mut FindMarkdownInner, cell_source: &str) -> (usize
     .unwrap_or(rel_start);
     // Line 0 is the header (row 0), line 1 is the delimiter (skipped), line 2+ are body rows (row 1+).
     let raw_line = slice[..hit_rel].bytes().filter(|&byte| byte == b'\n').count();
-    let row = if raw_line <= 1 { 0 } else { raw_line - 1 }.min(total_rows.saturating_sub(1));
+    let row = raw_line.saturating_sub(1).min(total_rows.saturating_sub(1));
     (top_index, row, total_rows)
 }
 
