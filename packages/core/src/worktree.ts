@@ -25,6 +25,7 @@ import { AppProcess } from "@opencode/util/process"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { EnvironmentUnavailable } from "./environment/unavailable.js"
 import { WorktreeStrategies } from "./worktree/strategies.js"
+import { PersistentPty } from "./persistent-pty.js"
 
 export type { Strategy, Editor } from "./worktree/strategies.js"
 
@@ -116,6 +117,7 @@ const layer = Layer.effect(
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const local = spawner !== EnvironmentUnavailable.spawner
     const locations = yield* LocationServiceMap.Service
+    const pty = yield* PersistentPty.Service
     const unavailable = () => new Worktree.OperationError({ message: "Worktrees require a local environment" })
     const project = Effect.fnUntraced(function* (projectID: Project.ID) {
       const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get().pipe(Effect.orDie)
@@ -268,6 +270,15 @@ const layer = Layer.effect(
       if (!stored?.strategy) return yield* new InvalidDirectoryError({ directory: worktreeDirectory })
       const settings = yield* load(row.worktree, current)
       const strategy = yield* getStrategy(stored.strategy, settings.strategies)
+      // A terminal started in the worktree keeps it as its working directory, and Windows then fails the delete after
+      // git has already unregistered the worktree. Ending them first is part of removing the worktree.
+      yield* pty
+        .removeWithin(worktreeDirectory)
+        .pipe(
+          Effect.catchTag("PersistentPty.UnavailableError", (error) =>
+            Effect.logWarning("failed to end terminals in a removed worktree", { directory: worktreeDirectory, error }),
+          ),
+        )
       yield* strategy
         .remove({
           directory: worktreeDirectory,
@@ -345,11 +356,20 @@ const layer = Layer.effect(
   }),
 )
 
-export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.global> = Node.makeGlobalNode({
-  service: Service,
-  layer,
-  deps: [FSUtil.node, Bus.node, Database.node, AppProcess.node, CrossSpawnSpawner.node, LocationServiceMap.node],
-})
+export const node: LayerNode.Provider<Service, PersistentPty.UnavailableError, typeof Node.tags.values.global> =
+  Node.makeGlobalNode({
+    service: Service,
+    layer,
+    deps: [
+      FSUtil.node,
+      Bus.node,
+      Database.node,
+      AppProcess.node,
+      CrossSpawnSpawner.node,
+      LocationServiceMap.node,
+      PersistentPty.node,
+    ],
+  })
 
 function operationError(strategy: StrategyID, operation: string, error: unknown) {
   if (
