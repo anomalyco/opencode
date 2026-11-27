@@ -53,6 +53,52 @@ export class NotSent extends Schema.TaggedError<NotSent>()("Machine.NotSent", {
   }
 }
 
+/** No connection since this home started. */
+export interface Never {
+  readonly _tag: "Never"
+}
+
+/** A connection that is being served. */
+export interface Connected {
+  readonly _tag: "Connected"
+  /** Counts up per machine, so a connection that was replaced can be told apart from the one served. */
+  readonly connection: number
+  readonly hello: Hello
+  readonly describe?: Connection["describe"]
+}
+
+/** The last connection served was lost. */
+export interface Disconnected {
+  readonly _tag: "Disconnected"
+}
+
+/** What this home has seen of a machine's connections. `C` is whatever the driver keeps for the one it serves. */
+export type Link<C extends Connected = Connected> = Never | C | Disconnected | Refused
+
+export type LinkEvent<C extends Connected = Connected> =
+  | { readonly _tag: "Served"; readonly connection: C }
+  | { readonly _tag: "Lost"; readonly connection: number }
+  | { readonly _tag: "Refused"; readonly refused: Refused }
+
+const never: Never = { _tag: "Never" }
+const disconnected: Disconnected = { _tag: "Disconnected" }
+
+/** The only way a machine's link changes. */
+export const step = <C extends Connected>(link: Link<C>, event: LinkEvent<C>): Link<C> => {
+  switch (event._tag) {
+    case "Served":
+      return event.connection
+    case "Lost":
+      return link._tag === "Connected" && link.connection === event.connection ? disconnected : link
+    case "Refused":
+      // A worker redialing before this home saw its last connection drop: that one is served until it is lost.
+      return link._tag === "Connected" ? link : event.refused
+  }
+}
+
+export const notSent = (machine: Environment.ID, link: Link) =>
+  new NotSent({ machine, ...(link._tag === "Refused" ? { refused: link } : {}) })
+
 export class Unknown extends Schema.TaggedError<Unknown>()("Machine.Unknown", { machine: Environment.ID }) {
   override get message() {
     return `Lost connection to ${this.machine}. The command may or may not have started.`
@@ -113,25 +159,19 @@ export interface Interface {
    * waits on an instance that will not be used again.
    */
   readonly close: (error: Error) => void
-  /** The hello of the connection being served, if there is one. */
-  readonly hello: () => Hello | undefined
-  readonly describe: () => typeof ConnectionInfo.Type | undefined
+  readonly state: () => Link
   /** Sends one peer request on the current connection and waits for its answer. */
   readonly peer: (request: PeerRequest) => Effect.Effect<void, PeerFailed | NotSent | Unknown>
   /** The peer links that are up, as the current connection's hello and messages since report them. */
   readonly links: () => ReadonlySet<PeerLink>
-  /** Remembers that a connection was refused before it was served, until the next one is. */
+  /** A connection was refused before it was served. */
   readonly refuse: (refused: Refused) => void
-  /** The last connection's refusal, while no connection has been served since. */
-  readonly refusal: () => Refused | undefined
 }
 
 type Reply = Extract<FromWorker, { type: "fs" }>
 type PeerReply = Extract<FromWorker, { type: "peer" }>
 
-interface Link {
-  readonly describe: Connection["describe"]
-  readonly hello: Hello
+interface Live extends Connected {
   readonly send: Connection["send"]
   readonly lost: Deferred.Deferred<void>
   /** File calls sent on this connection and not yet answered. */
@@ -166,22 +206,29 @@ export const make = (id: Environment.ID): Interface => {
   // interrupted half-way through one, so a command is never reported unsent after it was sent. Hence the plain
   // variables and the `Unsafe` calls.
   const processes = new Map<ProcessID, Process>()
-  let link: Link | undefined
-  let next = Deferred.makeUnsafe<Link>()
+  let link: Link<Live> = never
+  let connections = 0
+  let next = Deferred.makeUnsafe<Live>()
   /** The worker behind the newest connection. Every process in `processes` was started on it. */
   let instance: Instance | undefined
-  let refused: Refused | undefined
   let req = 0
-  const offline = () => new NotSent({ machine: id, ...(refused ? { refused } : {}) })
-  const online = Effect.suspend(() => (link ? Effect.succeed(link) : Deferred.await(next)))
+  const dispatch = (event: LinkEvent<Live>) => {
+    link = step(link, event)
+  }
+  const live = () => (link._tag === "Connected" ? link : undefined)
+  const offline = () => notSent(id, link)
+  const online = Effect.suspend(() => {
+    const current = live()
+    return current ? Effect.succeed(current) : Deferred.await(next)
+  })
   const platform = (method: string) => (cause: Error) =>
     PlatformError.systemError({ _tag: "Unknown", module: "Machine", method, description: cause.message, cause })
   const unsupported = (what: string) =>
     PlatformError.badArgument({ module: "Machine", method: "spawn", description: `${what} not supported on ${id}` })
 
   // Idempotent, so a replaced connection ending later changes nothing.
-  const lose = (current: Link) => {
-    if (link === current) link = undefined
+  const lose = (current: Live) => {
+    dispatch({ _tag: "Lost", connection: current.connection })
     Deferred.doneUnsafe(current.lost, Effect.void)
     current.calls.forEach((call) => Deferred.doneUnsafe(call, Effect.fail(new Unknown({ machine: id }))))
     current.inputs.forEach((input) => Deferred.doneUnsafe(input.reply, Effect.fail(new Unknown({ machine: id }))))
@@ -202,14 +249,18 @@ export const make = (id: Environment.ID): Interface => {
 
   // Ends the machine for good: once its instance is dropped, nothing else can settle what it still tracks.
   const close = (error: Error) => {
-    if (link) lose(link)
+    const current = live()
+    if (current) lose(current)
     for (const [processID, process] of processes) gone(processID, process, error)
   }
 
   const connect = (connection: Connection) =>
     Effect.suspend(() => {
-      if (link) lose(link)
-      const current: Link = {
+      const previous = live()
+      if (previous) lose(previous)
+      const current: Live = {
+        _tag: "Connected",
+        connection: ++connections,
         describe: connection.describe,
         hello: connection.hello,
         send: connection.send,
@@ -249,8 +300,7 @@ export const make = (id: Environment.ID): Interface => {
               : new NotSent({ machine: id }),
         )
       }
-      link = current
-      refused = undefined
+      dispatch({ _tag: "Served", connection: current })
       Deferred.doneUnsafe(next, Effect.succeed(current))
       next = Deferred.makeUnsafe()
       return connection.messages.pipe(
@@ -260,7 +310,7 @@ export const make = (id: Environment.ID): Interface => {
       )
     })
 
-  const receive = (current: Link, message: Exclude<FromWorker, Hello>) => {
+  const receive = (current: Live, message: Exclude<FromWorker, Hello>) => {
     if (link !== current) return
     if (message.type === "stdin") {
       const input = current.inputs.get(message.req)
@@ -387,23 +437,29 @@ export const make = (id: Environment.ID): Interface => {
       // Registered and sent in one step, on the connection that is current in that step. Stopped like a local process
       // when the scope that spawned it closes, a start still unanswered included, but never waiting for a machine that
       // is away: a process still there is forgotten, and stopped when the machine's next hello lists it.
-      const live = yield* Effect.acquireRelease(
+      const served = yield* Effect.acquireRelease(
         Effect.suspend(() => {
-          if (!link) return Effect.fail(platform("spawn")(offline()))
+          const current = live()
+          if (!current) return Effect.fail(platform("spawn")(offline()))
           processes.set(processID, process)
-          link.send(start)
-          return Effect.succeed(link)
+          current.send(start)
+          return Effect.succeed(current)
         }),
         () =>
           stop({ forceKillAfter: options.forceKillAfter ?? CrossSpawnSpawner.RELEASE_FORCE_KILL_AFTER }).pipe(
-            Effect.raceFirst(Effect.suspend(() => (link ? Deferred.await(link.lost) : Effect.void))),
+            Effect.raceFirst(
+              Effect.suspend(() => {
+                const current = live()
+                return current ? Deferred.await(current.lost) : Effect.void
+              }),
+            ),
             Effect.ignore,
             Effect.ensuring(Effect.sync(() => processes.delete(processID))),
           ),
       )
       const pid = yield* Deferred.await(process.started).pipe(
         Effect.raceFirst(
-          Deferred.await(live.lost).pipe(
+          Deferred.await(served.lost).pipe(
             Effect.andThen(Effect.sleep(START_GRACE)),
             Effect.andThen(Effect.fail(new Unknown({ machine: id }))),
           ),
@@ -414,13 +470,14 @@ export const make = (id: Environment.ID): Interface => {
 
       const write = (data: Uint8Array | null) =>
         Effect.suspend(() => {
-          if (!link) return Effect.fail(offline())
-          if ([...link.inputs.values()].some((input) => input.id === processID))
+          const current = live()
+          if (!current) return Effect.fail(offline())
+          if ([...current.inputs.values()].some((input) => input.id === processID))
             return Effect.fail(new Error("stdin write already pending"))
           const reply = Deferred.makeUnsafe<void, Error>()
           const request = ++req
-          link.inputs.set(request, { id: processID, reply })
-          link.send({ type: "stdin", id: processID, req: request, data })
+          current.inputs.set(request, { id: processID, reply })
+          current.send({ type: "stdin", id: processID, req: request, data })
           return Deferred.await(reply)
         }).pipe(
           Effect.mapError((cause) =>
@@ -504,7 +561,7 @@ export const make = (id: Environment.ID): Interface => {
   // The worker keeps the `Files` contract: each call is answered with its own result and only the refusals it allows.
   const call = <A, E extends NotFound | WrongKind = never>(path: string, request: Call) =>
     Effect.suspend(() => {
-      const current = link
+      const current = live()
       if (!current) return Effect.fail(new Failed({ path, cause: offline() }))
       const callID = ++req
       const reply = Deferred.makeUnsafe<Reply, Unknown>()
@@ -526,7 +583,7 @@ export const make = (id: Environment.ID): Interface => {
 
   const peer = (request: PeerRequest) =>
     Effect.suspend((): Effect.Effect<void, PeerFailed | NotSent | Unknown> => {
-      const current = link
+      const current = live()
       if (!current) return Effect.fail(offline())
       const peerID = ++req
       const reply = Deferred.makeUnsafe<PeerReply, Unknown>()
@@ -548,13 +605,9 @@ export const make = (id: Environment.ID): Interface => {
     connect,
     close,
     peer,
-    links: () => link?.links ?? new Set(),
-    refuse: (refusal) => {
-      refused = refusal
-    },
-    refusal: () => refused,
-    hello: () => link?.hello,
-    describe: () => link?.describe?.(),
+    links: () => live()?.links ?? new Set(),
+    refuse: (refused) => dispatch({ _tag: "Refused", refused }),
+    state: () => link,
     environment: Environment.make(
       id,
       {
@@ -576,7 +629,10 @@ export const make = (id: Environment.ID): Interface => {
       {
         path: posix,
         shell: "sh",
-        home: Effect.suspend(() => (link ? Effect.succeed(link.hello.home) : Effect.fail(offline()))),
+        home: Effect.suspend(() => {
+          const current = live()
+          return current ? Effect.succeed(current.hello.home) : Effect.fail(offline())
+        }),
       },
     ),
   }

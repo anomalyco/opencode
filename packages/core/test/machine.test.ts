@@ -335,7 +335,8 @@ describe("machine driver", () => {
       ])
       yield* worker.cut
       yield* worker.restore
-      expect(machine.hello()?.processes).toEqual([])
+      const link = machine.state()
+      expect(link._tag === "Connected" && link.hello.processes).toEqual([])
     }),
   )
 
