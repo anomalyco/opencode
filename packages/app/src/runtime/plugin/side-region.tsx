@@ -1,14 +1,4 @@
-import {
-  For,
-  Show,
-  createEffect,
-  createMemo,
-  createRenderEffect,
-  createSignal,
-  onCleanup,
-  type Accessor,
-  type JSX,
-} from "solid-js"
+import { For, Show, createEffect, createMemo, createRenderEffect, createSignal, onCleanup, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createEventListener } from "@solid-primitives/event-listener"
@@ -568,8 +558,7 @@ function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: (ke
   const menu = createDeferredMenu<SessionPanelMenuEntry>({
     onChoose: (entry) => {
       props.onChoose(entry.key)
-      entry.item.run()
-    },
+      entry.item.run()    },
   })
 
   return (
@@ -680,7 +669,9 @@ function LauncherRow(props: { item: SessionPanelMenuItem; onChoose: () => void }
       }}
     >
       <span class="flex min-w-0 items-center gap-2 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px]">
-        <Show when={props.item.icon}>{(icon) => <Icon name={icon()} class="text-v2-icon-icon-muted" />}</Show>
+        <Show when={props.item.icon}>
+          {(icon) => <Icon name={icon()} class="text-v2-icon-icon-muted" />}
+        </Show>
         <span class="shrink-0 text-v2-text-text-base">{props.item.title}</span>
         <Show when={props.item.description}>
           {(description) => <span class="truncate text-v2-text-text-muted">{description()}</span>}

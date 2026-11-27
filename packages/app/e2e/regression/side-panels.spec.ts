@@ -282,7 +282,8 @@ test("closing side tabs with the mouse keeps the next close button under the poi
   await page.setViewportSize({ width: 1600, height: 700 })
   const directory = "C:/OpenCode/CloseWidths"
   const key = `local\u0000${base64Encode(directory)}/ses_closewidths`
-  const files = Array.from({ length: 8 }, (_, index) => `notes-file-${index}.md`)
+  // A short tab before the last one keeps its own width while the long ones fill the strip.
+  const files = [...Array.from({ length: 6 }, (_, index) => `notes-file-${index}.md`), "b.md", "notes-file-7.md"]
 
   await openSession(page, {
     name: "CloseWidths",
@@ -322,19 +323,20 @@ test("closing side tabs with the mouse keeps the next close button under the poi
 
   await expect(tabs).toHaveCount(files.length)
   await expect(side.getByRole("tab", { name: files[0], exact: true })).toHaveAttribute("aria-selected", "true")
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
   const width = (await tabs.nth(1).boundingBox())!.width
 
   // The next tab slides under the pointer at its old width.
   const middle = await center(files[2])
   await page.mouse.click(middle.x, middle.y)
   await expect(tabs).toHaveCount(files.length - 1)
-  expect(await under(middle)).toBe(`file://${files[3]}`)
+  await expect.poll(() => under(middle)).toBe(`file://${files[3]}`)
 
   // Closing the last tab brings the one before it under the pointer.
   const last = await center(files[7])
   await page.mouse.click(last.x, last.y)
   await expect(tabs).toHaveCount(files.length - 2)
-  expect(await under(last)).toBe(`file://${files[6]}`)
+  await expect.poll(() => under(last)).toBe("file://b.md")
 
   // Once the pointer leaves the strip, the tabs fill it again.
   await page.mouse.move(middle.x, middle.y + 200)
@@ -393,13 +395,7 @@ test("a session open in a shell tab keeps its side tabs when the layout forgets 
       { id: "ses_background", title: "In the background" },
     ],
     fileList: () => [fileNode(directory, "long.txt")],
-    fileContent: (path) => ({
-      type: "text",
-      content:
-        path === "long.txt"
-          ? Array.from({ length: 400 }, (_, index) => `line ${index + 1}`).join("\n")
-          : `contents:${path}`,
-    }),
+    fileContent: (path) => ({ type: "text", content: path === "long.txt" ? Array.from({ length: 400 }, (_, index) => `line ${index + 1}`).join("\n") : `contents:${path}` }),
     seed: {
       panes: { ses_background: { review: true } },
       storage: {
