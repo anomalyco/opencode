@@ -275,8 +275,6 @@ XAI.configure({ apiKey: "xai-key" }).responses("grok-4", {})
 XAI.configure({ apiKey: "xai-key" }).chat("grok-4", {})
 
 DeepSeek.configure({ apiKey: "deepseek-key" }).model("deepseek-chat")
-// @ts-expect-error OpenAI-compatible family selectors only accept model ids.
-DeepSeek.configure({ apiKey: "deepseek-key" }).model("deepseek-chat", {})
 
 CloudflareWorkersAI.configure({ accountId: "account", apiKey: "cf-key" }).model("@cf/meta/llama")
 // @ts-expect-error Cloudflare Workers AI model selectors only accept model ids.

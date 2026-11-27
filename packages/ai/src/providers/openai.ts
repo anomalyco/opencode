@@ -1,7 +1,10 @@
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import type { Route, CompactionOperations } from "../route/client.js"
 import { MediaRoute } from "../route/media.js"
-import type { ProviderPackage } from "../provider-package.js"
+import { Provider } from "../provider.js"
+import { chatBinding } from "./openai/chat.js"
+import { responsesBinding } from "./openai/responses.js"
+import { shared, type Settings } from "./openai/shared.js"
 import {
   mergeTransport,
   ProviderID,
@@ -74,14 +77,9 @@ export const imageGeneration = (options: ImageGenerationOptions = {}) =>
     },
   })
 
-export type Settings = ProviderPackage.Settings &
-  OpenAIProviderOptionsInput & {
-    readonly apiKey?: string | false
-    readonly baseURL?: string
-    readonly organization?: string
-    readonly project?: string
-    readonly queryParams?: Readonly<Record<string, string>>
-  }
+export type { Settings } from "./openai/shared.js"
+
+export const openai = Provider.make({ ...shared, apis: { responses: responsesBinding, chat: chatBinding } })
 
 const auth = (options: ProviderAuthOption<"optional">) => AuthOptions.bearer(options, "OPENAI_API_KEY")
 
@@ -176,16 +174,12 @@ const config = ({
   }
 }
 
-export const model: ProviderPackage.Model<
-  Settings,
-  OpenAIProviderOptionsInput,
-  typeof OpenAIResponses.route.compact
-> = (modelID, settings) => {
-  return configure(config(settings)).responses(modelID)
-}
+export const model = Provider.entrypoint<Settings, OpenAIProviderOptionsInput, typeof OpenAIResponses.api.compact>(
+  openai,
+  "responses",
+)
 
-export const chatModel: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).chat(modelID)
+export const chatModel = Provider.entrypoint<Settings, OpenAIProviderOptionsInput>(openai, "chat")
 export const imageModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
   return configure(input).image(modelID, input.providerOptions)

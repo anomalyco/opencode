@@ -1,8 +1,7 @@
 import { Effect, Option, Schema } from "effect"
 import { Tool } from "@opencode/schema/tool"
-import { Route } from "../route/client.js"
-import { Auth } from "../route/auth.js"
-import { Endpoint } from "../route/endpoint.js"
+import { Api } from "../api.js"
+import { Capabilities } from "../capabilities.js"
 import { Framing } from "../route/framing.js"
 import { HttpTransport } from "../route/transport/index.js"
 import { Protocol } from "../route/protocol.js"
@@ -1422,14 +1421,14 @@ export const protocol = Protocol.make({
 export const framing = Framing.sseWithDone
 export const httpTransport = HttpTransport.sseJson.with<OpenAIChatBody>().with({ framing })
 
-export const route = Route.make({
+export const api = Api.make({
   id: ADAPTER,
-  provider: "openai",
-  providerMetadataKey: "openai",
   protocol,
-  endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
-  auth: Auth.none,
+  path: PATH,
   transport: httpTransport,
+  capabilities: Capabilities.defaults<Capabilities.ChatCompletions>(),
 })
+
+export const route = Api.route(api.at(DEFAULT_BASE_URL), { provider: "openai" })
 
 export * as OpenAIChat from "./openai-chat.js"

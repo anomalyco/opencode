@@ -1,3 +1,6 @@
+export { Api } from "./api.js"
+export { Capabilities } from "./capabilities.js"
+export { Provider } from "./provider.js"
 export { isContextOverflow, isContextOverflowFailure, isRetryable } from "./provider-error.js"
 export {
   ProtocolID,
