@@ -89,7 +89,7 @@ impl Inner {
         let find_enabled = {
             let session = self.session.clone();
             Condition::when(bind!(tui, |tui| {
-                *tui.route() == (Route::Session { id: session.clone() })
+                matches!(&*tui.route(), Route::Session { id } if *id == session)
                     && tui.settings.experiment("session-find")
                     && prompt_available()
             }))
