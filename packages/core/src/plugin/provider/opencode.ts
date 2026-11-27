@@ -1,5 +1,17 @@
 import { isDeepStrictEqual } from "node:util"
-import { Duration, Effect, Equal, FiberHandle, Option, Random, Schema, Scope, Semaphore, Stream } from "effect"
+import {
+  Duration,
+  Effect,
+  Equal,
+  FiberHandle,
+  Option,
+  Random,
+  Schedule,
+  Schema,
+  Scope,
+  Semaphore,
+  Stream,
+} from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
@@ -38,6 +50,7 @@ const clientID = "opencode-cli"
 const methodID = Integration.MethodID.make("device")
 const pollInterval = Duration.minutes(5)
 const pollJitter = Duration.minutes(1)
+const signedOutPollInterval = Duration.hours(1)
 const Device = Schema.Struct({
   device_code: Schema.String,
   user_code: Schema.String,
@@ -221,6 +234,8 @@ export const OpencodePlugin = define<
     const skillDownload = yield* FiberHandle.make<void, never>()
     // Status last reported for the active connection, so inference failures can name the fix.
     let reported: IntegrationConnection.Status | undefined
+    // Whether the last load was refused as signed out. Only a new sign-in fixes that, so polling slows down.
+    let signedOut = false
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
     const watches = yield* OpencodeWatches.make(ctx, http)
     const artifacts = yield* OpencodeArtifacts.make(ctx, http)
@@ -230,6 +245,7 @@ export const OpencodePlugin = define<
       const connection = yield* ctx.integration.connection.active("opencode")
       if (!connection) {
         reported = undefined
+        signedOut = false
         return { remote: undefined, connection, organization: undefined }
       }
       const status = (status: IntegrationConnection.Status | undefined) => {
@@ -292,12 +308,16 @@ export const OpencodePlugin = define<
               })),
             )
         }),
-        Effect.tap(() => status(undefined)),
+        Effect.tap(() => {
+          signedOut = false
+          return status(undefined)
+        }),
         Effect.catch((cause) =>
           Effect.gen(function* () {
             // Only well-formed Console errors change the connection status; anything else may be transient.
             const next = connectionStatus(cause)
             if (next) yield* status(next)
+            signedOut = isSignedOut(cause)
             yield* Effect.logWarning("failed to load OpenCode provider config", { cause })
             // A load that fails for the connection already in place keeps its last config: dropping it
             // would lift organization policy while personal credentials keep working.
@@ -575,17 +595,20 @@ export const OpencodePlugin = define<
     // Only while connected: a signed-out location runs no timer and no credential lookups.
     // Additive jitter stays >= pollInterval so SharedCache never skips a wake-up as still fresh.
     const polling = yield* FiberHandle.make<void, never>()
-    const nextPoll = Effect.gen(function* () {
-      const jitter = yield* Random.nextIntBetween(0, Duration.toMillis(pollJitter))
-      return Duration.millis(Duration.toMillis(pollInterval) + jitter)
-    })
+    // Signed out, only a new sign-in helps, so the Console is asked hourly.
+    const pollSchedule = Schedule.forever.pipe(
+      Schedule.addDelay(() =>
+        Random.nextIntBetween(0, Duration.toMillis(pollJitter)).pipe(
+          Effect.map((jitter) =>
+            Duration.sum(signedOut ? signedOutPollInterval : pollInterval, Duration.millis(jitter)),
+          ),
+        ),
+      ),
+    )
+    // Restarts the timer, so a sign-in after an hourly signed-out wait returns to the usual interval at once.
     const poll = Effect.fnUntraced(function* () {
       if (!snapshot.connection) return yield* FiberHandle.clear(polling)
-      yield* FiberHandle.run(
-        polling,
-        nextPoll.pipe(Effect.flatMap(Effect.sleep), Effect.andThen(check()), Effect.forever),
-        { onlyIfMissing: true },
-      )
+      yield* FiberHandle.run(polling, Effect.schedule(check(), pollSchedule).pipe(Effect.asVoid))
     })
     yield* ProviderRefresh.onSwitch("opencode", refresh().pipe(Effect.andThen(poll())))
     yield* poll()
@@ -670,6 +693,19 @@ function ssoUrl(server: string, connectionID: string) {
       const redirectTo = `${new URL(base).pathname.replace(/\/+$/, "")}/`
       return `${base}/auth/sso/${encodeURIComponent(connectionID)}/start?redirectTo=${encodeURIComponent(redirectTo)}`
     }),
+  )
+}
+
+function isSignedOut(cause: unknown) {
+  if (
+    cause instanceof SignedOutError ||
+    (cause instanceof Integration.AuthorizationError && cause.cause instanceof SignedOutError)
+  )
+    return true
+  return (
+    HttpClientError.isHttpClientError(cause) &&
+    cause.reason._tag === "StatusCodeError" &&
+    cause.reason.response.status === 401
   )
 }
 
