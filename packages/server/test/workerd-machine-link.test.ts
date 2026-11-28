@@ -284,7 +284,7 @@ it.live("make returns 404 when machines are off and 503 after its scope closes",
       models: { fetch: false },
       config: { content: JSON.stringify({ experimental: { machines: false } }) },
     })
-    const disabled = yield* WorkerdMachineLink.make.pipe(Effect.provide(off.context))
+    const disabled = yield* WorkerdMachineLink.make().pipe(Effect.provide(off.context))
     const disabledEffect = disabled(upgrade, pairClass)
     expect(disabledEffect).toBeDefined()
     expect((yield* disabledEffect!).status).toBe(404)
@@ -297,7 +297,7 @@ it.live("make returns 404 when machines are off and 503 after its scope closes",
       config: { content: JSON.stringify({ experimental: { machines: true } }) },
     })
     const closedScope = yield* Scope.make()
-    const link = yield* WorkerdMachineLink.make.pipe(Scope.provide(closedScope), Effect.provide(on.context))
+    const link = yield* WorkerdMachineLink.make().pipe(Scope.provide(closedScope), Effect.provide(on.context))
     yield* Scope.close(closedScope, Exit.void)
     const closedEffect = link(upgrade, pairClass)
     expect(closedEffect).toBeDefined()

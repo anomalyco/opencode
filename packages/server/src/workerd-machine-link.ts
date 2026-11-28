@@ -6,6 +6,7 @@ import { Machines } from "@opencode/core/machine/machines"
 import { MACHINE_LINK_PATH } from "@opencode/protocol/groups/machine"
 import { type Cause, Effect, Queue, Semaphore } from "effect"
 import { HttpServerRequest } from "effect/http"
+import type { CorsOptions } from "./cors"
 import { CLOSE, MAX_FRAME, MAX_HANDSHAKES, MIN_FRAME, machinesEnabled } from "./handlers/machine"
 import { RequestSite } from "./request-site"
 
@@ -43,7 +44,8 @@ declare const WebSocketPair: PairConstructor | undefined
  * the client half of a `WebSocketPair`. Effect's web handler would rebuild that response without it, so the Durable
  * Object's handler asks this before the routes, without running anything: a GET upgrade to exactly the link's path gets
  * the effect that answers it, and anything else `undefined`, for the routes to answer as they do on Node. Cross-site
- * browser upgrades also return `undefined` so `RequestSite.middleware` answers them with 403, matching Node. As on
+ * browser upgrades from origins `options.cors` does not allow also return `undefined` so `RequestSite.middleware`
+ * answers them with 403, matching Node. As on
  * Node, the upgrade takes no password, since the socket carries nothing until the link's handshake has proved a paired
  * key or a valid join secret, and with machines off it gets the 404 of an unknown route.
  *
@@ -54,51 +56,52 @@ declare const WebSocketPair: PairConstructor | undefined
  * Unlike `ws`, workerd's socket can neither ping nor say what waits unsent, so a link here has no idle limit and no limit
  * on what waits behind a slow peer: a peer that is gone is noticed when workerd closes its socket.
  */
-export const make = Effect.gen(function* () {
-  const enabled = yield* machinesEnabled
-  const services = yield* Effect.context<Machines.Service | Identity.Service>()
-  const scope = yield* Effect.scope
-  const handshakes = Semaphore.makeUnsafe(MAX_HANDSHAKES)
-  const upgrade = Effect.fn("WorkerdMachineLink.upgrade")(function* (Pair: PairConstructor) {
-    if (!(yield* enabled)) return new Response(null, { status: 404 })
-    return yield* Effect.uninterruptible(
-      Effect.gen(function* () {
-        if (scope.state._tag === "Closed" || !(yield* handshakes.takeIfAvailable(1)))
-          return new Response(null, { status: 503 })
-        const released = { value: false }
-        const release = Effect.suspend(() => {
-          if (released.value) return Effect.void
-          released.value = true
-          return handshakes.release(1)
-        })
-        const pair = new Pair()
-        return yield* Effect.gen(function* () {
-          pair[1].accept()
-          // Not a `ResponseInit` anywhere but workerd, which alone allows a 101.
-          const init = { status: 101, webSocket: pair[0] }
-          const response = new Response(null, init)
-          // Started at once, so it listens before the 101 is returned and hears the worker's first message, sent as soon
-          // as the worker reads it. `forkIn` leaves the child interruptible when `scope` closes.
-          yield* serve(pair[1], release).pipe(
-            Effect.provide(services),
-            Effect.forkIn(scope, { startImmediately: true }),
+export const make = (options?: CorsOptions) =>
+  Effect.gen(function* () {
+    const enabled = yield* machinesEnabled
+    const services = yield* Effect.context<Machines.Service | Identity.Service>()
+    const scope = yield* Effect.scope
+    const handshakes = Semaphore.makeUnsafe(MAX_HANDSHAKES)
+    const upgrade = Effect.fn("WorkerdMachineLink.upgrade")(function* (Pair: PairConstructor) {
+      if (!(yield* enabled)) return new Response(null, { status: 404 })
+      return yield* Effect.uninterruptible(
+        Effect.gen(function* () {
+          if (scope.state._tag === "Closed" || !(yield* handshakes.takeIfAvailable(1)))
+            return new Response(null, { status: 503 })
+          const released = { value: false }
+          const release = Effect.suspend(() => {
+            if (released.value) return Effect.void
+            released.value = true
+            return handshakes.release(1)
+          })
+          const pair = new Pair()
+          return yield* Effect.gen(function* () {
+            pair[1].accept()
+            // Not a `ResponseInit` anywhere but workerd, which alone allows a 101.
+            const init = { status: 101, webSocket: pair[0] }
+            const response = new Response(null, init)
+            // Started at once, so it listens before the 101 is returned and hears the worker's first message, sent as soon
+            // as the worker reads it. `forkIn` leaves the child interruptible when `scope` closes.
+            yield* serve(pair[1], release).pipe(
+              Effect.provide(services),
+              Effect.forkIn(scope, { startImmediately: true }),
+            )
+            return response
+          }).pipe(
+            Effect.onError(() =>
+              Effect.sync(() => {
+                if (pair[1].readyState === OPEN) pair[1].close(CLOSE)
+              }).pipe(Effect.andThen(release)),
+            ),
           )
-          return response
-        }).pipe(
-          Effect.onError(() =>
-            Effect.sync(() => {
-              if (pair[1].readyState === OPEN) pair[1].close(CLOSE)
-            }).pipe(Effect.andThen(release)),
-          ),
-        )
-      }),
-    )
+        }),
+      )
+    })
+    return (request: Request, pair?: PairConstructor) => {
+      const resolved = pair ?? (typeof WebSocketPair === "undefined" ? undefined : WebSocketPair)
+      return !resolved || !isUpgrade(request, options) ? undefined : upgrade(resolved)
+    }
   })
-  return (request: Request, pair?: PairConstructor) => {
-    const resolved = pair ?? (typeof WebSocketPair === "undefined" ? undefined : WebSocketPair)
-    return !resolved || !isUpgrade(request) ? undefined : upgrade(resolved)
-  }
-})
 
 /**
  * Serves one accepted socket in a scope of its own: the handshake, then `release` however it ends, then the machine it
@@ -164,10 +167,11 @@ export const carrier = Effect.fnUntraced(function* (socket: Socket) {
 /**
  * A same-site GET with `Upgrade: websocket` to the path the router matches. `Upgrade` alone, as Cloudflare's examples
  * check: `Connection` is hop-by-hop, and a Worker forwarding the request to its Durable Object need not keep it.
- * Cross-site browser upgrades return `false` so the router's `RequestSite` middleware rejects them with 403.
+ * Cross-site browser upgrades from origins `options.cors` does not allow return `false` so the router's `RequestSite`
+ * middleware rejects them with 403.
  */
-export const isUpgrade = (request: Request) =>
+export const isUpgrade = (request: Request, options?: CorsOptions) =>
   request.method === "GET" &&
   request.headers.get("upgrade")?.toLowerCase() === "websocket" &&
   URL.parse(request.url, "http://localhost")?.pathname === MACHINE_LINK_PATH &&
-  !RequestSite.rejected(HttpServerRequest.fromWeb(request))
+  !RequestSite.rejected(HttpServerRequest.fromWeb(request), options)

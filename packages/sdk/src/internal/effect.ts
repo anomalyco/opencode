@@ -10,12 +10,24 @@ import type { CreateOptions, Interface } from "../effect/opencode"
 import { EmbeddedHost } from "./host"
 
 /** `OpenCode.create` with the host hooks a runtime profile (such as workerd) needs. */
-export const create: <R = never>(
+export const create = <R = never>(
   options?: CreateOptions<R>,
   embed?: EmbeddedHost.EmbedOptions,
-) => Effect.Effect<Interface, Config.ConfigError | Error, Scope.Scope | R> = Effect.fn("OpenCode.create")(function* <
-  R = never,
->(options: CreateOptions<R> = {}, embed: EmbeddedHost.EmbedOptions = {}) {
+): Effect.Effect<Interface, Config.ConfigError | Error, Scope.Scope | R> =>
+  Effect.map(createWithHost(options, embed), (created) => created.sdk)
+
+/** `create`, returning the host too. */
+export const createWithHost: <R = never>(
+  options?: CreateOptions<R>,
+  embed?: EmbeddedHost.EmbedOptions,
+) => Effect.Effect<
+  { readonly sdk: Interface; readonly host: EmbeddedHost.Interface },
+  Config.ConfigError | Error,
+  Scope.Scope | R
+> = Effect.fn("OpenCode.create")(function* <R = never>(
+  options: CreateOptions<R> = {},
+  embed: EmbeddedHost.EmbedOptions = {},
+) {
   const host = yield* Effect.acquireRelease(EmbeddedHost.create(options, embed), (host) => Effect.promise(host.close))
   const httpClient = yield* HttpClient.HttpClient.pipe(Effect.provide(FetchHttpClient.layer))
   const client = yield* OpenCode.make({ baseUrl: "http://opencode.local" }).pipe(
@@ -26,7 +38,7 @@ export const create: <R = never>(
     ),
   )
 
-  return {
+  const sdk: Interface = {
     ...client,
     sessions: {
       ...client.session,
@@ -44,4 +56,5 @@ export const create: <R = never>(
     },
     plugin: Object.assign(host.plugins.register, client.plugin),
   }
+  return { sdk, host }
 })
