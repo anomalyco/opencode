@@ -270,6 +270,18 @@ function SessionScreenContent(props: {
   const sessionErrorFallback = (cause: unknown, reset: () => void) => {
     createEffect(on(session.identity.sessionKey, reset, { defer: true }))
 
+    // The timeline model lives outside this boundary and can recover its failed read after reconnecting.
+    if (cause === untrack(() => timeline.resource.error))
+      createEffect(
+        on(
+          () => timeline.resource.error,
+          (error) => {
+            if (!error) reset()
+          },
+          { defer: true },
+        ),
+      )
+
     return <SessionErrorFallback error={cause} sessionID={session.identity.params.id} />
   }
 

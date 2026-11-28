@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
+import {
+  ClientError,
+  type SessionMessageAssistant,
+  type SessionMessageInfo,
+  type SessionMessageUser,
+} from "@opencode/client/promise"
 import {
   createTimelineSyncState,
   DISPOSED_TIMELINE_SYNC_EVENT,
@@ -9,6 +14,7 @@ import {
   leadingTurnNeedsParent,
   resolveLeadingAssistant,
   timelineSyncError,
+  timelineSyncRetryDelay,
   transitionTimelineSync,
   type TimelineSyncEffect,
   type TimelineSyncEvent,
@@ -156,6 +162,147 @@ describe("timeline sync", () => {
     expect(timelineSyncError(switched.state, other)).toBeUndefined()
     expect(isTimelineSyncing(switched.state, other)).toBe(true)
     expect(switched.effects).toEqual([{ type: "sync.start", target: other, attempt: switched.state.attempt }])
+  })
+
+  test("reconnecting retries a transport failure without accepting the previous attempt's results", () => {
+    const loading = syncing()
+    const error = new ClientError("Transport", { cause: new TypeError("Load failed") })
+    const failed = transitionTimelineSync(loading, { type: "sync.failed", attempt: loading.attempt, error }).state
+    const retry = transitionTimelineSync(failed, { type: "connection.restored" })
+
+    expect(isTimelineSyncing(retry.state, target)).toBe(true)
+    expect(timelineSyncError(retry.state, target)).toBe(error)
+    expect(timelineSyncError(retry.state, other)).toBeUndefined()
+    expect(retry.effects).toEqual([{ type: "sync.start", target, attempt: retry.state.attempt }])
+    expect(transitionTimelineSync(retry.state, { type: "connection.restored" }).state).toBe(retry.state)
+
+    const stale: TimelineSyncEvent[] = [
+      { type: "sync.failed", attempt: loading.attempt, error },
+      { type: "sync.succeeded", attempt: loading.attempt, assistantID: undefined, needsParent: false, more: false },
+      { type: "sync.timed-out", attempt: loading.attempt },
+    ]
+
+    stale.forEach((event) => expect(transitionTimelineSync(retry.state, event).state).toBe(retry.state))
+
+    const ready = transitionTimelineSync(retry.state, {
+      type: "sync.succeeded",
+      attempt: retry.state.attempt,
+      assistantID: undefined,
+      needsParent: false,
+      more: false,
+    }).state
+
+    expect(isTimelineReady(ready, target, () => true)).toBe(true)
+    expect(timelineSyncError(ready, target)).toBeUndefined()
+    expect(transitionTimelineSync(ready, { type: "connection.restored" }).state).toBe(ready)
+
+    const disposed = transitionTimelineSync(retry.state, DISPOSED_TIMELINE_SYNC_EVENT).state
+    expect(transitionTimelineSync(disposed, { type: "connection.restored" }).state).toBe(disposed)
+  })
+
+  test.each([new Error("render failed"), new ClientError("UnexpectedStatus"), new ClientError("MalformedResponse")])(
+    "reconnecting preserves a non-transport failure: %s",
+    (error) => {
+      const loading = syncing()
+      const failed = transitionTimelineSync(loading, { type: "sync.failed", attempt: loading.attempt, error }).state
+      const next = transitionTimelineSync(failed, { type: "connection.restored" })
+
+      expect(next.state).toBe(failed)
+      expect(next.effects).toEqual([])
+      expect(timelineSyncRetryDelay(failed)).toBeUndefined()
+      expect(transitionTimelineSync(failed, { type: "sync.retry", attempt: failed.attempt }).state).toBe(failed)
+    },
+  )
+
+  test("bounds transport retries with backoff and replenishes them on a new connection", () => {
+    const error = new ClientError("Transport", { cause: new TypeError("Load failed") })
+    let state = syncing()
+
+    for (const delay of [500, 1_000, 2_000] as const) {
+      state = transitionTimelineSync(state, { type: "sync.failed", attempt: state.attempt, error }).state
+      expect(timelineSyncRetryDelay(state)).toBe(delay)
+      const event = { type: "sync.retry" as const, attempt: state.attempt }
+      const next = transitionTimelineSync(state, event)
+      expect(next.effects).toEqual([{ type: "sync.start", target, attempt: next.state.attempt }])
+      expect(timelineSyncError(next.state, target)).toBe(error)
+      expect(timelineSyncRetryDelay(next.state)).toBeUndefined()
+      expect(transitionTimelineSync(next.state, event).state).toBe(next.state)
+      state = next.state
+    }
+
+    const failed = transitionTimelineSync(state, { type: "sync.failed", attempt: state.attempt, error }).state
+    expect(timelineSyncRetryDelay(failed)).toBeUndefined()
+    expect(timelineSyncError(failed, target)).toBe(error)
+    expect(transitionTimelineSync(failed, { type: "sync.retry", attempt: failed.attempt }).state).toBe(failed)
+
+    const reconnected = transitionTimelineSync(failed, { type: "connection.restored" }).state
+
+    const again = transitionTimelineSync(reconnected, {
+      type: "sync.failed",
+      attempt: reconnected.attempt,
+      error,
+    }).state
+
+    expect(timelineSyncRetryDelay(again)).toBe(500)
+
+    const retry = transitionTimelineSync(again, { type: "sync.retry", attempt: again.attempt }).state
+
+    const enriched = transitionTimelineSync(retry, {
+      type: "sync.succeeded",
+      attempt: retry.attempt,
+      assistantID: "msg_1",
+      needsParent: true,
+      more: true,
+    }).state
+
+    expect(enriched.status).toBe("enriching")
+    expect(timelineSyncError(enriched, target)).toBeUndefined()
+  })
+
+  test.each(["sync.retry", "connection.restored"] as const)("a %s timeout preserves the last error", (type) => {
+    const loading = syncing()
+    const error = new ClientError("Transport")
+    const failed = transitionTimelineSync(loading, { type: "sync.failed", attempt: loading.attempt, error }).state
+    const retry = transitionTimelineSync(failed, { type, attempt: failed.attempt }).state
+    const timedOut = transitionTimelineSync(retry, { type: "sync.timed-out", attempt: retry.attempt })
+    expect(timedOut.state.status).toBe("failed")
+    expect(timelineSyncError(timedOut.state, target)).toBe(error)
+    expect(timedOut.effects).toEqual([{ type: "sync.cancel" }])
+    expect(timelineSyncRetryDelay(timedOut.state)).toBe(type === "sync.retry" ? 1_000 : 500)
+
+    const late = transitionTimelineSync(timedOut.state, {
+      type: "sync.succeeded",
+      attempt: retry.attempt,
+      assistantID: undefined,
+      needsParent: false,
+      more: false,
+    })
+
+    expect(late.state).toBe(timedOut.state)
+    expect(
+      timelineSyncError(transitionTimelineSync(retry, { type: "target.changed", target: other }).state, other),
+    ).toBeUndefined()
+    expect(timelineSyncError(transitionTimelineSync(retry, DISPOSED_TIMELINE_SYNC_EVENT).state, target)).toBeUndefined()
+  })
+
+  test.each<TimelineSyncEvent>([
+    { type: "target.changed", target: other },
+    { type: "target.changed", target: undefined },
+    DISPOSED_TIMELINE_SYNC_EVENT,
+  ])("a pending retry cannot revive history after leaving it: %j", (event) => {
+    const loading = syncing()
+
+    const failed = transitionTimelineSync(loading, {
+      type: "sync.failed",
+      attempt: loading.attempt,
+      error: new ClientError("Transport"),
+    }).state
+
+    const left = transitionTimelineSync(failed, event).state
+    const stale = transitionTimelineSync(left, { type: "sync.retry", attempt: failed.attempt })
+    expect(stale.state).toBe(left)
+    expect(stale.effects).toEqual([])
+    expect(timelineSyncRetryDelay(left)).toBeUndefined()
   })
 
   test("a first sync that never settles reveals the timeline and ignores its late result", () => {
