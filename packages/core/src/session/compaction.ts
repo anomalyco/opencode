@@ -665,6 +665,7 @@ export const layer = Layer.effect(
       if (prepared.event.result) return yield* fromHook(context, prepared.event.result, background)
 
       const policy = yield* SessionRunnerRetry.policy(context.session.id)
+      let recoverContinuation = true
       let rejections = 0
       let rejected: number | undefined
       let asText = shrink.text ?? false
@@ -702,6 +703,14 @@ export const layer = Layer.effect(
         if (Result.isSuccess(attempt)) return attempt.success
         const cause = attempt.failure
         if (!(cause instanceof AIError)) return yield* Effect.fail(cause)
+        if (
+          recoverContinuation &&
+          cause.reason._tag === "Transport" &&
+          (cause.reason.recovery === "retry-full" || cause.reason.recovery === "rotate-and-retry-full")
+        ) {
+          recoverContinuation = false
+          continue
+        }
         const error = toSessionError(cause)
         const tooLarge = cause.reason._tag === "InvalidRequest" && cause.reason.classification === "payload-too-large"
 
