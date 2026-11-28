@@ -8,6 +8,7 @@ import { sqliteLayer } from "@opencode/core/database/sqlite.workerd"
 import type { DurableObjectStorage } from "@opencode/core/database/sqlite.workerd"
 import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { WorkspaceConnector } from "@opencode/core/environment/workspace-connector"
+import { Image } from "@opencode/core/image"
 import { Identity } from "@opencode/core/machine/identity"
 import { Pty } from "@opencode/core/pty"
 import { VideoGeneration } from "@opencode/core/video-generation"
@@ -32,7 +33,7 @@ import { WorkerdMachineLink } from "./workerd-machine-link"
  *   `handler.alarm()` (or `opencode.alarm()` via `@opencode/sdk/workerd`).
  * - Watcher and fff are disabled through their existing option flags; pty, fff,
  *   and photon native modules resolve to inert stubs under the `workerd` bundle
- *   condition.
+ *   condition (pass `options.image` to supply a host image resizer).
  * - Bare locations use a typed no-execution-plane process spawner; FileSystem,
  *   FileSystemSearch, Snapshot, Vcs, and Worktree route or gate through
  *   Environment (working on attached remote workspaces where supported and
@@ -48,6 +49,11 @@ import { WorkerdMachineLink } from "./workerd-machine-link"
  * `bun build src/workerd.ts --conditions=workerd --target=node`
  * (see `script/workerd-probe.ts`).
  */
+export type ImageLimits = Image.Limits
+export type ImageResizerInput = Image.ResizerInput
+export type ImageResizerOutput = Image.ResizerOutput
+export type ImageResizer = Image.Resizer
+
 export interface Options {
   /** Durable Object storage whose SQLite database backs the opencode database. */
   readonly storage: DurableObjectStorage
@@ -59,6 +65,15 @@ export interface Options {
   readonly models?: ServerOptions["models"]
   /** Replaces `globalThis.fetch` for OpenCode's own HTTP requests, e.g. to route them through a Service Binding. */
   readonly fetch?: ServerOptions["fetch"]
+  /**
+   * Host-supplied image resizer for runtimes without the bundled Photon WASM
+   * module, e.g. backed by Cloudflare's Images binding. The resizer should
+   * enforce `limits.maxWidth` / `limits.maxHeight`, output `image/png`,
+   * `image/jpeg`, `image/gif`, or `image/webp`, and return `undefined` when
+   * an image already fits. When omitted, image normalization reports
+   * `ResizerUnavailableError` and images pass through unchanged.
+   */
+  readonly image?: ImageResizer
 }
 
 export interface Handler {
@@ -134,5 +149,6 @@ export function replacements(options: Options): LayerNode.Replacements {
     // Precompiled (internal and SDK) plugins only: no plugin-directory scan, npm
     // install, or import of plugin code from disk.
     ConfigPluginSource.node.replace(ConfigPluginSource.empty),
+    ...(options.image === undefined ? [] : [Image.node.replace(Image.configured(options.image))]),
   ]
 }

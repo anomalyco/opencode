@@ -6,6 +6,10 @@ import type { LogOptions } from "./logging"
 import { OpenCode } from "./opencode"
 
 export type Configuration = WorkerdProfile.Configuration
+export type ImageLimits = WorkerdProfile.ImageLimits
+export type ImageResizerInput = WorkerdProfile.ImageResizerInput
+export type ImageResizerOutput = WorkerdProfile.ImageResizerOutput
+export type ImageResizer = WorkerdProfile.ImageResizer
 
 export interface CreateOptions extends WorkerdProfile.Options {
   readonly log?: LogOptions
