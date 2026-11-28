@@ -6,6 +6,7 @@ import { ConfigReference } from "@opencode/schema/config/reference"
 import path from "path"
 import { Effect } from "effect"
 import { Config } from "../../config.js"
+import { FileAccess } from "../../file-access.js"
 import { Reference } from "../../reference.js"
 import { AbsolutePath } from "../../schema.js"
 import { Global } from "@opencode/util/global"
@@ -31,8 +32,9 @@ export const Plugin = define({
             local(entry)
               ? Reference.LocalSource.make({
                   type: "local",
+                  // Resolved like a tool's path: `~`, `~/` and, on Windows, `~\` expand to the home directory.
                   path: AbsolutePath.make(
-                    localPath(directory, global.home, typeof entry === "string" ? entry : entry.path),
+                    FileAccess.resolvePath(directory, typeof entry === "string" ? entry : entry.path, global.home),
                   ),
                   ...(description === undefined ? {} : { description }),
                   ...(hidden === undefined ? {} : { hidden }),
@@ -57,11 +59,6 @@ function validAlias(name: string) {
 
 function local(entry: ConfigReference.Entry): entry is string | ConfigReference.Local {
   return typeof entry === "string"
-    ? entry.startsWith(".") || entry.startsWith("/") || entry.startsWith("~")
+    ? entry.startsWith(".") || entry.startsWith("/") || entry.startsWith("~") || path.isAbsolute(entry)
     : "path" in entry
-}
-
-function localPath(directory: string, home: string, value: string) {
-  if (value.startsWith("~/")) return path.join(home, value.slice(2))
-  return path.isAbsolute(value) ? value : path.resolve(directory, value)
 }
