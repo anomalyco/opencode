@@ -196,6 +196,8 @@ export type ModelCacheFormat = "anthropic" | "alibaba"
 
 export type ModelMediaInput = "assets" | "state" | "root"
 
+export type ModelToolChoice = "auto" | "none" | "required" | "tool"
+
 export type ToolFreeformFormat = "text" | "regex" | "lark"
 
 export type ModelSpeed = { base: string; id: string; faster: boolean }
@@ -769,6 +771,7 @@ export type ProviderCompatibility = {
 
 export type ModelCapabilities = {
   tools: boolean
+  toolChoice?: Array<ModelToolChoice>
   freeform?: Array<ToolFreeformFormat>
   input: Array<string>
   output: Array<string>

@@ -1,7 +1,7 @@
 export * as SessionGenerate from "./generate.js"
 
 import type { FileSystem } from "../filesystem.js"
-import { AIError, LLMClient, Message, SystemPart, ToolChoice } from "@opencode/ai/effect"
+import { AIError, LLMClient, type LLMRequest, Message, SystemPart, ToolChoice } from "@opencode/ai/effect"
 import { Effect, type JsonSchema } from "effect"
 import { Agent } from "../agent.js"
 import { Bus } from "../bus.js"
@@ -122,26 +122,20 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       providerID: prepared.model.ref.providerID,
       modelID: prepared.model.ref.id,
     })
-    const send = llm.generate(prepared.prepared.request, prepared.prepared.options).pipe(ModelRetry.retry)
+    // A model whose API accepts only auto/none (models.dev `capabilities.tools.choice`, such as Claude 5.5) rejects
+    // the forced output tool, so it gets "auto" from the start instead of a request that can only 400.
+    const request =
+      input.output === undefined || acceptsForcedChoice(prepared.model)
+        ? prepared.prepared.request
+        : unforced(prepared.prepared.request)
+    const send = llm.generate(request, prepared.prepared.options).pipe(ModelRetry.retry)
     // Providers or gateways that only accept tool_choice: "auto" reject named toolChoice (#45953). Fall back once to
     // "auto" with only the output tool offered, nudging the model to call it.
     const response = yield* input.output === undefined
       ? send
       : send.pipe(
           Effect.catchIf(isToolChoiceRejected, () =>
-            llm
-              .generate(
-                {
-                  ...prepared.prepared.request,
-                  toolChoice: new ToolChoice({ type: "auto" }),
-                  system: [
-                    ...prepared.prepared.request.system,
-                    SystemPart.make(`Return your answer by calling the \`${OUTPUT_TOOL}\` tool.`),
-                  ],
-                },
-                prepared.prepared.options,
-              )
-              .pipe(ModelRetry.retry),
+            llm.generate(unforced(prepared.prepared.request), prepared.prepared.options).pipe(ModelRetry.retry),
           ),
         )
     const usage = SessionUsage.record(response.usage, prepared.model.cost)
@@ -159,7 +153,19 @@ const isToolChoiceRejected = (error: unknown): error is AIError => {
   return /tool[_ ]?choice/i.test(`${error.reason.message}\n${error.reason.body ?? ""}`)
 }
 
-// Only the output tool, so the model has nothing else to call; the forced choice makes it answer through it.
+/** Whether the model's API accepts forcing the named tool that carries the output. */
+const acceptsForcedChoice = (model: { readonly capabilities: Model.Capabilities }) =>
+  model.capabilities.toolChoice === undefined || model.capabilities.toolChoice.includes("tool")
+
+/** The same request without the forcing, nudging the model to answer through the output tool. */
+const unforced = (request: LLMRequest) => ({
+  ...request,
+  toolChoice: new ToolChoice({ type: "auto" }),
+  system: [...request.system, SystemPart.make(`Return your answer by calling the \`${OUTPUT_TOOL}\` tool.`)],
+})
+
+// Only the output tool, so the model has nothing else to call; the forced choice, where the API accepts one, makes it
+// answer through it.
 const outputTools = (schema: JsonSchema.JsonSchema): Snapshot => ({
   definitions: [
     { type: "tool", name: OUTPUT_TOOL, description: "Return your answer by calling this tool.", inputSchema: schema },

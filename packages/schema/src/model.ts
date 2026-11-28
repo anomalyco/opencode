@@ -78,9 +78,20 @@ export const Overlays = {
   body: Schema.Record(Schema.String, Schema.Any).pipe(optional),
 }
 
+/** A tool choice an API may accept: `required` forces some tool, `tool` forces a named one. */
+export const ToolChoice = Schema.Literals(["auto", "none", "required", "tool"]).annotate({
+  identifier: "Model.ToolChoice",
+})
+export type ToolChoice = typeof ToolChoice.Type
+
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
 export const Capabilities = Schema.Struct({
   tools: Schema.Boolean,
+  /**
+   * Tool choices the selected API accepts. Absent means all of them: some models, such as Claude 5.5, accept only
+   * `auto` and `none` and reject a forced choice with a 400.
+   */
+  toolChoice: Schema.Array(ToolChoice).pipe(optional),
   /** Freeform tool input formats advertised by the selected API. Absent or empty means JSON tools only. */
   freeform: Schema.Array(FreeformFormat).pipe(optional),
   input: Schema.Array(Schema.String),
