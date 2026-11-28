@@ -1,6 +1,6 @@
 export * as Link from "./link.js"
 
-import { Effect, Schema } from "effect"
+import { Cause, Effect, Schema } from "effect"
 import type { Environment } from "../environment/index.js"
 import { Frames } from "./frames.js"
 import { Identity } from "./identity.js"
@@ -122,6 +122,19 @@ const authenticateMachine =
     )
 
 /**
+ * Logs why this side refused a handshake, then fails with the bare `Refused`: the peer still learns nothing. Defects
+ * (such as an unexpected crypto crash) warn; ordinary refusals (bad key, timeout, closed peer) stay at debug so an
+ * unauthenticated peer cannot spam warnings.
+ */
+const refuse = (step: string) => (cause: Cause.Cause<unknown>) =>
+  (Cause.hasInterruptsOnly(cause)
+    ? Effect.void
+    : Cause.hasDies(cause)
+      ? Effect.logWarning(`${step} refused the link`, cause)
+      : Effect.logDebug(`${step} refused the link`, cause)
+  ).pipe(Effect.andThen(Effect.fail(new Refused())))
+
+/**
  * The home's side, called with the carrier of a connection it received.
  *
  * Proves the home's key to the peer, then requires the peer's proof of its own key. A key the home has paired is a
@@ -138,7 +151,7 @@ export const accept = Effect.fn("Link.accept")(
     return yield* handshake(carrier, authenticateMachine(machines), fixed)
   },
   Effect.timeout(DEADLINE),
-  Effect.catchCause(() => Effect.fail(new Refused())),
+  Effect.catchCause(refuse("Link.accept")),
 )
 
 export const decodeHello = Effect.fnUntraced(function* (machine: Environment.ID, bytes: Uint8Array) {
@@ -158,10 +171,7 @@ const serveWith = Effect.fnUntraced(function* (carrier: Carrier, authenticate: A
     const accepted = yield* handshake(carrier, authenticate, fixed)
     const hello = yield* decodeHello(accepted.machine, yield* Frames.read(carrier, accepted.receive))
     return { ...accepted, hello }
-  }).pipe(
-    Effect.timeout(DEADLINE),
-    Effect.catchCause(() => Effect.fail(new Refused())),
-  )
+  }).pipe(Effect.timeout(DEADLINE), Effect.catchCause(refuse("Link.serve")))
   const frames = yield* Frames.open(carrier, link, workerCodec)
   return {
     machine: link.machine,
@@ -259,7 +269,7 @@ export const dial = Effect.fn("Link.dial")(
     if (!isValidWelcomeName(welcome)) return yield* new Refused()
     return { machine: welcome, send: ciphers.send, receive: ciphers.receive }
   },
-  Effect.catchCause(() => Effect.fail(new Refused())),
+  Effect.catchCause(refuse("Link.dial")),
 )
 
 /**

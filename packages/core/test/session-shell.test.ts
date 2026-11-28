@@ -376,15 +376,16 @@ describe("Session.shell", () => {
     }),
   )
 
-  it.live("admits a spawn failure without waking the model before failing the caller", () =>
+  it.live("admits a spawn failure without waking the model before failing the caller with a typed error", () =>
     Effect.gen(function* () {
       const fixture = yield* setup
       // Keep the Location initialized, but invalidate the real child's working directory.
       yield* Effect.promise(() => fs.rm(fixture.tmp.path, { recursive: true, force: true }))
       const command = "echo should-not-start"
-      const exit = yield* fixture.session.shell({ sessionID: fixture.created.id, command }).pipe(Effect.exit)
+      const error = yield* fixture.session.shell({ sessionID: fixture.created.id, command }).pipe(Effect.flip)
 
-      expect(Exit.isFailure(exit)).toBe(true)
+      // A failure, not a defect, so the server answers with a declared status instead of an undeclared 500.
+      expect(error).toMatchObject({ _tag: "Session.ShellStartError", sessionID: fixture.created.id })
       expect(yield* fixture.session.messages({ sessionID: fixture.created.id })).toEqual([])
       const inbox = yield* fixture.session.inbox(fixture.created.id)
       expect(inbox).toHaveLength(1)

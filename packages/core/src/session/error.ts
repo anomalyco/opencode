@@ -100,6 +100,12 @@ export class InboxConflictError extends Schema.TaggedError<InboxConflictError>()
   inboxID: SessionMessage.ID,
 }) {}
 
+/** A user shell command that could not start, for example because the session's workspace failed to wake. */
+export class ShellStartError extends Schema.TaggedError<ShellStartError>()("Session.ShellStartError", {
+  sessionID: SessionSchema.ID,
+  message: Schema.String,
+}) {}
+
 export class SkillNotFoundError extends Schema.TaggedError<SkillNotFoundError>()("Session.SkillNotFoundError", {
   skill: Skill.ID,
 }) {}

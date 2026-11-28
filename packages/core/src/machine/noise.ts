@@ -1,16 +1,8 @@
 export * as Noise from "./noise.js"
 
-import {
-  createCipheriv,
-  createDecipheriv,
-  createHash,
-  createHmac,
-  createPrivateKey,
-  createPublicKey,
-  diffieHellman,
-  randomBytes,
-} from "node:crypto"
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from "node:crypto"
 import { Result } from "effect"
+import { derivePublicKey, sharedSecret } from "#x25519"
 
 // Noise_XX_25519_AESGCM_SHA256 as the Noise Protocol Framework, revision 34, defines it:
 // https://noiseprotocol.org/noise.html. Section numbers below refer to that text.
@@ -25,9 +17,6 @@ const TAGLEN = 16
 const MAX_MESSAGE = 65_535
 const MAX_NONCE = 2n ** 64n - 1n
 const EMPTY = new Uint8Array(0)
-// PKCS8 and SPKI DER wrap an X25519 key with a fixed prefix each, so keys cross this module as raw 32 bytes.
-const PKCS8 = Buffer.from("302e020100300506032b656e04220420", "hex")
-const SPKI = Buffer.from("302a300506032b656e032100", "hex")
 // Section 7.5. XX has no pre-messages; the initiator writes messages 1 and 3, the responder message 2.
 const PATTERN = [["e"], ["e", "ee", "s", "es"], ["s", "se"]] as const
 
@@ -256,21 +245,15 @@ const cipherState = (initial: Uint8Array | undefined) => {
 }
 
 /**
- * Section 12.1 DH. The spec allows an invalid public key to be an error. This runtime's X25519 already refuses
- * low-order points; the zero check keeps them refused on one that returns the all-zero output instead.
+ * Section 12.1 DH. Uses `#x25519` (native `node:crypto` on Node/Bun, RFC 7748 JS on `workerd` where `node:crypto`
+ * cannot use an SPKI-imported peer key). Refuses both runtime rejections and all-zero low-order outputs.
  */
 const dh = (keyPair: KeyPair, publicKey: Uint8Array) => {
-  try {
-    const shared = diffieHellman({
-      privateKey: privateKeyObject(keyPair.privateKey),
-      publicKey: createPublicKey({ key: Buffer.concat([SPKI, publicKey]), format: "der", type: "spki" }),
-    })
-    // OR every byte rather than stop at the first non-zero one, so the time taken says nothing about the secret.
-    if (shared.reduce((bits, byte) => bits | byte, 0) === 0) return badMessage
-    return Result.succeed(new Uint8Array(shared))
-  } catch {
-    return badMessage
-  }
+  const shared = sharedSecret(keyPair.privateKey, publicKey)
+  if (!shared) return badMessage
+  // OR every byte rather than stop at the first non-zero one, so the time taken says nothing about the secret.
+  if (shared.reduce((bits, byte) => bits | byte, 0) === 0) return badMessage
+  return Result.succeed(shared)
 }
 
 /** Section 12.3 AESGCM: 32 zero bits, then the counter as a 64-bit big-endian integer. */
@@ -280,20 +263,26 @@ const nonce = (n: bigint) => {
   return bytes
 }
 
+// workerd's AES-GCM fails `final` with "Authentication failed" after `setAAD` or `update` with zero bytes, which every
+// transport message's empty ad and every empty payload would hit. GCM defines empty ad and empty text as no ad and no
+// text (NIST SP 800-38D), so skipping those calls gives the same bytes on every runtime.
+
 /** Section 12.3 ENCRYPT: the 16-byte tag is appended to the ciphertext. */
 const encrypt = (k: Uint8Array, n: bigint, ad: Uint8Array, plaintext: Uint8Array) => {
   const cipher = createCipheriv("aes-256-gcm", k, nonce(n), { authTagLength: TAGLEN })
-  cipher.setAAD(ad)
-  return new Uint8Array(Buffer.concat([cipher.update(plaintext), cipher.final(), cipher.getAuthTag()]))
+  if (ad.length > 0) cipher.setAAD(ad)
+  const body = plaintext.length > 0 ? cipher.update(plaintext) : EMPTY
+  return new Uint8Array(Buffer.concat([body, cipher.final(), cipher.getAuthTag()]))
 }
 
 /** Section 12.3 DECRYPT. The tag check inside `final` is the only comparison of secrets this module makes. */
 const decrypt = (k: Uint8Array, n: bigint, ad: Uint8Array, ciphertext: Uint8Array) => {
   if (ciphertext.length < TAGLEN) return badMessage
   const decipher = createDecipheriv("aes-256-gcm", k, nonce(n), { authTagLength: TAGLEN })
-  decipher.setAAD(ad)
+  if (ad.length > 0) decipher.setAAD(ad)
   decipher.setAuthTag(ciphertext.subarray(ciphertext.length - TAGLEN))
-  const plaintext = decipher.update(ciphertext.subarray(0, ciphertext.length - TAGLEN))
+  const plaintext =
+    ciphertext.length > TAGLEN ? decipher.update(ciphertext.subarray(0, ciphertext.length - TAGLEN)) : EMPTY
   try {
     return Result.succeed(new Uint8Array(Buffer.concat([plaintext, decipher.final()])))
   } catch {
@@ -311,9 +300,7 @@ const hkdf = (chainingKey: Uint8Array, inputKeyMaterial: Uint8Array) => {
 const hmac = (key: Uint8Array, data: Uint8Array) => new Uint8Array(createHmac("sha256", key).update(data).digest())
 
 const derive = (privateKey: Uint8Array): KeyPair => ({
-  publicKey: new Uint8Array(
-    createPublicKey(privateKeyObject(privateKey)).export({ format: "der", type: "spki" }).subarray(SPKI.length),
-  ),
+  publicKey: derivePublicKey(privateKey),
   privateKey,
 })
 
@@ -321,6 +308,3 @@ const copyKeyPair = (pair: KeyPair): KeyPair => ({
   publicKey: new Uint8Array(pair.publicKey),
   privateKey: new Uint8Array(pair.privateKey),
 })
-
-const privateKeyObject = (privateKey: Uint8Array) =>
-  createPrivateKey({ key: Buffer.concat([PKCS8, privateKey]), format: "der", type: "pkcs8" })
