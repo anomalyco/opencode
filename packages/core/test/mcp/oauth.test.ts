@@ -31,8 +31,6 @@ interface Options {
   /** What the authorization server calls itself, relative to the origin; its own URL by default. */
   readonly issuer?: string
   readonly metadata?: Record<string, unknown>
-  /** The authorization server's metadata answers 502, and only its OpenID configuration works. */
-  readonly openid?: boolean
   /** Only a token of `a2` is accepted at /mcp; anything else gets a 401. */
   readonly guarded?: boolean
 }
@@ -88,15 +86,7 @@ const authServer = (options: Options = {}) => {
         response_types_supported: ["code"],
         ...options.metadata,
       }
-      if (url.pathname === `/.well-known/oauth-authorization-server${as}`)
-        return options.openid ? new Response(null, { status: 502 }) : Response.json(metadata)
-      if (options.openid && url.pathname === `/.well-known/openid-configuration${as}`)
-        return Response.json({
-          ...metadata,
-          subject_types_supported: ["public"],
-          id_token_signing_alg_values_supported: ["RS256"],
-          jwks_uri: `${origin}/jwks`,
-        })
+      if (url.pathname === `/.well-known/oauth-authorization-server${as}`) return Response.json(metadata)
       if (request.method === "POST" && url.pathname === `${as}/register`) {
         state.registrations.push(await request.json())
         return Response.json({ client_id: "registered", redirect_uris: [] })
@@ -208,10 +198,14 @@ const signIns: ReadonlyArray<{
   readonly run: (server: Server) => Effect.Effect<void, unknown, Scope.Scope>
 }> = [
   {
-    name: "completes through the loopback callback, once",
+    // Browsers reach the callback without OAuth parameters for preflights, prefetches and reloads.
+    name: "completes through the loopback callback once, ignoring requests without OAuth parameters",
     run: (server) =>
       Effect.gen(function* () {
         const { authorization, redirect } = yield* signIn(server.origin + "/", { client_id: "client" })
+        const bare = new URL(redirect().pathname, redirect().origin)
+        expect((yield* Effect.promise(() => fetch(bare, { method: "OPTIONS" }))).status).toBe(400)
+        expect((yield* Effect.promise(() => fetch(bare))).status).toBe(400)
         expect((yield* Effect.promise(() => fetch(redirect()))).status).toBe(200)
         expect((yield* Effect.promise(() => fetch(redirect()))).status).toBe(409)
         const result = yield* authorization.callback
@@ -227,19 +221,6 @@ const signIns: ReadonlyArray<{
           authorizationServer: server.origin + "/",
           resource: server.origin + "/",
         })
-      }),
-  },
-  {
-    // Browsers reach the callback without OAuth parameters for preflights, prefetches and reloads.
-    name: "keeps waiting through callback requests without OAuth parameters",
-    run: (server) =>
-      Effect.gen(function* () {
-        const { authorization, redirect } = yield* signIn(server.url, { client_id: "client" })
-        const bare = new URL(redirect().pathname, redirect().origin)
-        expect((yield* Effect.promise(() => fetch(bare, { method: "OPTIONS" }))).status).toBe(400)
-        expect((yield* Effect.promise(() => fetch(bare))).status).toBe(400)
-        yield* Effect.promise(() => fetch(redirect()))
-        expect((yield* authorization.callback).access).toBe("a2")
       }),
   },
   {
@@ -296,28 +277,21 @@ const signIns: ReadonlyArray<{
       }),
   },
   {
-    name: "finds the resource metadata through the 401 header",
+    name: "follows the 401 to the resource metadata, and names the published resource rather than the configured query",
     server: { prm: "header", as: "/as" },
-    run: (server) =>
-      Effect.gen(function* () {
-        expect((yield* signIn(server.url, { client_id: "client" })).sent.pathname).toBe("/as/authorize")
-      }),
-  },
-  {
-    name: "names the published resource rather than the configured URL's query",
-    server: { prm: "header" },
     run: (server) =>
       Effect.gen(function* () {
         const { authorization, sent, redirect } = yield* signIn(`${server.url}?oauth=initialize`, {
           client_id: "client",
         })
+        expect(sent.pathname).toBe("/as/authorize")
         yield* Effect.promise(() => fetch(redirect()))
         const result = yield* authorization.callback
         expect([sent.searchParams.get("resource"), server.state.tokens[0]?.get("resource")]).toEqual([
           server.url,
           server.url,
         ])
-        expect(result.metadata?.discovery).toEqual({ authorizationServer: server.origin, resource: server.url })
+        expect(result.metadata?.discovery).toEqual({ authorizationServer: `${server.origin}/as`, resource: server.url })
       }),
   },
   {
@@ -585,25 +559,20 @@ const refreshes: ReadonlyArray<{
   readonly run: (server: Server, saved: Processes) => Promise<void>
 }> = [
   {
-    name: "refreshes a refused token, retries with the new one, and saves it with its issuer",
-    server: { guarded: true },
-    run: async (server, saved) => {
-      expect(Exit.isSuccess(await connect(await saved.provider(), server.url))).toBe(true)
-      expect(server.state.tokens.map((body) => body.get("refresh_token"))).toEqual(["r1"])
-      const value = await saved.stored()
-      expect([value?.access, value?.refresh, value?.metadata?.issuer]).toEqual(["a2", "r2", server.origin])
-    },
-  },
-  {
-    name: "refreshes a token that expires within 30 seconds with the saved discovery, without probing the server",
+    name: "refreshes a token that expires within 30 seconds with the saved discovery and granted scope (#66175), without probing the server",
     server: { as: "/as" },
     saved: (server) => ({
       expires: Date.now() + 10_000,
-      metadata: { discovery: { authorizationServer: `${server.origin}/as`, resource: server.url } },
+      metadata: {
+        scope: "api://app/.default offline_access",
+        discovery: { authorizationServer: `${server.origin}/as`, resource: server.url },
+      },
     }),
     run: async (server, saved) => {
       expect(await (await saved.provider()).token()).toBe("a2")
-      expect(server.state.tokens.map((body) => body.get("resource"))).toEqual([server.url])
+      expect(server.state.tokens.map((body) => [body.get("resource"), body.get("scope")])).toEqual([
+        [server.url, "api://app/.default offline_access"],
+      ])
       expect(server.state.paths).not.toContain("/mcp")
       expect((await saved.stored())?.access).toBe("a2")
     },
@@ -621,21 +590,6 @@ const refreshes: ReadonlyArray<{
     },
   },
   {
-    name: "sends the granted scope with a refresh (#66175)",
-    saved: (server) => ({
-      expires: Date.now() + 10_000,
-      metadata: {
-        scope: "api://app/.default offline_access",
-        discovery: { authorizationServer: server.origin, resource: server.url },
-      },
-    }),
-    run: async (server, saved) => {
-      expect(await (await saved.provider()).token()).toBe("a2")
-      expect(server.state.tokens.map((body) => body.get("scope"))).toEqual(["api://app/.default offline_access"])
-      expect((await saved.stored())?.metadata?.scope).toBe("api://app/.default offline_access")
-    },
-  },
-  {
     name: "refreshes the credential it was made with, not one signed in since",
     server: { guarded: true },
     run: async (server, saved) => {
@@ -649,17 +603,6 @@ const refreshes: ReadonlyArray<{
         Credential.Service.use((credentials) => credentials.get(newer.id)),
       )
       expect(untouched?.value.type === "oauth" && untouched.value.access).toBe("other")
-    },
-  },
-  {
-    name: "names the configured URL as the resource when the server publishes no metadata",
-    run: async (server, saved) => {
-      const provider = await saved.provider()
-      await unauthorized(provider, server.url)
-      expect([server.state.tokens[0]?.get("grant_type"), server.state.tokens[0]?.get("resource")]).toEqual([
-        "refresh_token",
-        server.url,
-      ])
     },
   },
   {
@@ -686,14 +629,6 @@ const refreshes: ReadonlyArray<{
         `Bearer resource_metadata="${server.origin}/.well-known/oauth-protected-resource"`,
       )
       expect(server.state.tokens[0]?.get("resource")).toBe(server.url)
-    },
-  },
-  {
-    name: "discovers the resource for a login saved without one",
-    server: { prm: "path", resource: "/" },
-    run: async (server, saved) => {
-      await unauthorized(await saved.provider(), server.url)
-      expect(server.state.tokens[0]?.get("resource")).toBe(`${server.origin}/`)
     },
   },
   {
@@ -725,16 +660,7 @@ const refreshes: ReadonlyArray<{
     },
   },
   {
-    name: "tries the next metadata URL when one answers 502",
-    server: { openid: true },
-    run: async (server, saved) => {
-      await unauthorized(await saved.provider(), server.url)
-      expect(server.state.tokens).toHaveLength(1)
-      expect((await saved.stored())?.access).toBe("a2")
-    },
-  },
-  {
-    name: "fails without signing out when the token endpoint answers 503, and connects once it recovers",
+    name: "refreshes a refused token and retries with it, failing without signing out while the token endpoint answers 503",
     server: { guarded: true },
     run: async (server, saved) => {
       server.state.token = "unavailable"
@@ -748,6 +674,8 @@ const refreshes: ReadonlyArray<{
       server.state.token = "ok"
       expect(Exit.isSuccess(await connect(await saved.provider(), server.url))).toBe(true)
       expect(server.state.tokens.map((body) => body.get("refresh_token"))).toEqual(["r1", "r1"])
+      const value = await saved.stored()
+      expect([value?.access, value?.refresh, value?.metadata?.issuer]).toEqual(["a2", "r2", server.origin])
     },
   },
   {

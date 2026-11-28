@@ -76,22 +76,26 @@ export const stdio = (
   })
 
 const unused = () => Effect.die("unused integration service")
-const integration = Layer.mock(Integration.Service, {
-  revision: () => 0,
-  transform: () => Effect.succeed({ dispose: Effect.void }),
-  connection: {
-    active: unused,
-    resolve: unused,
-    key: unused,
-    external: unused,
-    activate: unused,
-    update: unused,
-    remove: unused,
-    status: unused,
-  },
-  oauth: { connect: unused, status: unused, complete: unused, cancel: unused },
-  command: { connect: unused, status: unused, cancel: unused },
-})
+/** Registers every OAuth server as an integration, or fails each registration through `transform`. */
+export const integration = (
+  transform: Integration.Interface["transform"] = () => Effect.succeed({ dispose: Effect.void }),
+) =>
+  Layer.mock(Integration.Service, {
+    revision: () => 0,
+    transform,
+    connection: {
+      active: unused,
+      resolve: unused,
+      key: unused,
+      external: unused,
+      activate: unused,
+      update: unused,
+      remove: unused,
+      status: unused,
+    },
+    oauth: { connect: unused, status: unused, complete: unused, cancel: unused },
+    command: { connect: unused, status: unused, cancel: unused },
+  })
 
 // The plugins that turn config into servers and MCP catalogs into skills and commands, as a Location loads them.
 // Without config, nothing transforms the service until the test does, so its first transform is its startup.
@@ -138,6 +142,8 @@ export interface Open extends Configuration {
   readonly permission?: Layer.Layer<Permission.Service>
   readonly directory?: string
   readonly flags?: string
+  /** Registers OAuth servers as integrations; a stub that accepts every registration by default. */
+  readonly integration?: Layer.Layer<Integration.Service>
   /** Where local servers run; the host by default. */
   readonly environment?: Layer.Layer<Environment.Service>
 }
@@ -191,7 +197,7 @@ export const world = Effect.gen(function* () {
           Flag.node.replace(Flag.testLayer([], { overrides: input.flags ?? "mcp_skills" })),
           Location.node.replace(Layer.succeed(Location.Service, Location.Service.of(location({ directory })))),
           Environment.node.replace(input.environment ?? hostEnvironmentLayer),
-          Integration.node.replace(integration),
+          Integration.node.replace(input.integration ?? integration()),
         ],
       ),
       scope,

@@ -7,7 +7,7 @@ import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { testEffect } from "../lib/effect"
 import { serve, type Fixture } from "./fixture/http"
-import { remote, until, world } from "./harness"
+import { integration, remote, until, world } from "./harness"
 
 const it = testEffect(Layer.empty)
 
@@ -318,6 +318,15 @@ describe("MCP startup", () => {
       expect(yield* place.status("fixture")).toEqual({ status: "pending" })
       // Closing the Location waits for the held handshake.
       yield* gate.release
+
+      // Nor does a server whose registration failed.
+      const failing = yield* (yield* world).open({
+        integration: integration(() => Effect.die("integration unavailable")),
+      })
+      yield* failing.mcp.add("remote", remote(server.url, { oauth: undefined })).pipe(Effect.exit)
+      const waiting = yield* failing.mcp.awaitStartup().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Effect.yieldNow
+      expect(waiting.pollUnsafe()).toBeDefined()
     }),
   )
 })

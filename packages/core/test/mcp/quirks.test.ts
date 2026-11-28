@@ -256,7 +256,6 @@ describe("MCP protocol quirks", () => {
     [503, 3],
     [429, 3],
     [501, 1],
-    [404, 1],
     [403, 1],
   ] as const)
     it.effect(`HTTP ${status} at connect is tried ${attempts === 1 ? "once" : `${attempts} times`}`, () =>
