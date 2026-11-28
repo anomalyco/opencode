@@ -1,6 +1,7 @@
 import { DESKTOP_NATIVE_ENGLISH } from "./desktop-native"
 
 export const dict = {
+  "shell.skipToContent": "Skip to content",
   "experiment.voiceCalls": "Voice calls",
   "automations.title": "Automations",
   "automations.new": "New automation",
