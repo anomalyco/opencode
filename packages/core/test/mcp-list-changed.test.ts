@@ -1,0 +1,244 @@
+import { describe, expect, spyOn } from "bun:test"
+import { Client, InMemoryTransport, type JSONRPCMessage } from "@modelcontextprotocol/client"
+import { McpClient } from "@opencode/core/mcp/client"
+import { Effect } from "effect"
+import { hostEnvironmentLayer } from "./fixture/environment"
+import { testEffect } from "./lib/effect"
+
+const it = testEffect(hostEnvironmentLayer)
+
+/**
+ * A 2026-07-28 MCP server speaking raw JSON-RPC that offers tool list changes and records the listen streams opened
+ * on it, so a test can end one the way a server shutdown, proxy idle timeout or serverless response limit would.
+ */
+const catalogServer = Effect.fnUntraced(function* () {
+  const [transport, server] = InMemoryTransport.createLinkedPair()
+  const state = {
+    tools: [] as Array<{ name: string; inputSchema: Record<string, unknown> }>,
+    listens: [] as Array<{ id: string | number; params: unknown; at: number }>,
+    cancelled: [] as unknown[],
+    refuse: false,
+    refuseFirst: false,
+    hangUp: false,
+  }
+  const capabilities = { tools: { listChanged: true } }
+  const reply = (id: string | number, result: Record<string, unknown>) =>
+    server.send({ jsonrpc: "2.0", id, result: { resultType: "complete", ...result } })
+  server.onmessage = (message: JSONRPCMessage) => {
+    if (!("method" in message)) return
+    // Every 2026-07-28 request carries the protocol envelope in `_meta`.
+    const { _meta: meta, ...params } = message.params ?? {}
+    if (message.method === "notifications/cancelled") state.cancelled.push(params.requestId)
+    if (!("id" in message)) return
+    if (message.method === "server/discover")
+      void reply(message.id, {
+        _meta: { "io.modelcontextprotocol/serverInfo": { name: "catalog", version: "1.0.0" } },
+        supportedVersions: ["2026-07-28"],
+        capabilities,
+      })
+    if (message.method === "initialize")
+      void reply(message.id, {
+        protocolVersion: params.protocolVersion,
+        capabilities,
+        serverInfo: { name: "catalog", version: "1.0.0" },
+      })
+    if (message.method === "tools/list")
+      // The result, like every 2026-07-28 listing, carries a cache envelope.
+      void reply(message.id, { tools: state.tools, ttlMs: 0, cacheScope: "private" })
+    if (message.method === "subscriptions/listen") {
+      state.listens.push({ id: message.id, params, at: Date.now() })
+      // A refusal is a ProtocolError, which the follow loop must not retry. Refusing only the first leaves the SDK's
+      // connect-time open failed and the stream to us.
+      if (state.refuse || (state.refuseFirst && state.listens.length === 1)) {
+        void server.send({ jsonrpc: "2.0", id: message.id, error: { code: -32600, message: "refused" } })
+        return
+      }
+      void server.send({
+        jsonrpc: "2.0",
+        method: "notifications/subscriptions/acknowledged",
+        params: { notifications: params.notifications, _meta: { "io.modelcontextprotocol/subscriptionId": message.id } },
+      })
+      // A server that acknowledges and then ends the stream at once, as a proxy closing each response would.
+      if (state.hangUp) void reply(message.id, {})
+    }
+  }
+  yield* Effect.promise(() => server.start())
+  return {
+    state,
+    transport,
+    // The spec's graceful-close signal for a subscription is the empty listen result, which is what a server shutdown
+    // sends. A dropped stream settles the same promise with "remote".
+    end: (id: string | number) => Effect.promise(() => reply(id, {})),
+    change: (id: string | number) =>
+      Effect.promise(() =>
+        server.send({
+          jsonrpc: "2.0",
+          method: "notifications/tools/list_changed",
+          params: { _meta: { "io.modelcontextprotocol/subscriptionId": id } },
+        }),
+      ),
+    add: (name: string) => Effect.sync(() => state.tools.push({ name, inputSchema: { type: "object" } })),
+  }
+})
+
+// Waits for an observed count rather than an exact one: a refresh and a notification can both land between two polls.
+const until = (check: () => boolean) =>
+  Effect.promise(async () => {
+    const deadline = Date.now() + 10_000
+    while (!check()) {
+      if (Date.now() > deadline) throw new Error("timed out")
+      await Bun.sleep(1)
+    }
+  })
+
+const gaps = (listens: ReadonlyArray<{ at: number }>) =>
+  listens.slice(1).map((listen, index) => listen.at - listens[index].at)
+
+describe("MCP list changes", () => {
+  it.live("reopens the list change stream a server ended, so the catalog keeps updating", () =>
+    Effect.gen(function* () {
+      const server = yield* catalogServer()
+      const connection = yield* McpClient.connect({
+        server: "catalog",
+        config: { type: "attached", transport: server.transport, protocol: "2026-07-28" },
+        directory: import.meta.dir,
+      })
+      const changes = { tools: 0 }
+      connection.onToolsChanged(() => {
+        changes.tools += 1
+      })
+      expect(yield* connection.tools()).toEqual([])
+
+      // The first stream is the SDK's own, so it is not refreshed and no second stream is opened for it.
+      yield* until(() => server.state.listens.length === 1)
+      expect(changes.tools).toBe(0)
+      const filter = server.state.listens[0].params
+
+      // A stream the server ended must come back with the filter it honored, instead of leaving the server
+      // "connected" with a frozen catalog.
+      yield* server.end(server.state.listens[0].id)
+      yield* until(() => server.state.listens.length === 2)
+      expect(server.state.listens[1].params).toEqual(filter)
+
+      // Reopening refreshes once, so a change announced while the stream was down is not lost.
+      yield* until(() => changes.tools >= 1)
+      const caughtUp = changes.tools
+      // And the reopened stream is actually open: a subscription released as soon as it opened would have been
+      // cancelled here, which is what the earlier version of this change got wrong.
+      expect(server.state.cancelled).toEqual([])
+
+      // And the reopened stream delivers changes again.
+      yield* server.add("added")
+      yield* server.change(server.state.listens[1].id)
+      yield* until(() => changes.tools > caughtUp)
+      expect(server.state.cancelled).toEqual([])
+      expect((yield* connection.tools()).map((tool) => tool.name)).toEqual(["added"])
+    }),
+  )
+
+  it.live("waits out the backoff between reopens when a server ends every stream at once", () =>
+    Effect.gen(function* () {
+      const server = yield* catalogServer()
+      server.state.hangUp = true
+      const connection = yield* McpClient.connect({
+        server: "catalog",
+        config: { type: "attached", transport: server.transport, protocol: "2026-07-28" },
+        directory: import.meta.dir,
+      })
+      yield* connection.tools()
+
+      // Every open is acknowledged and then ended by the server. Without the schedule covering the close as well as
+      // a refused open, this reopens as fast as the transport allows; with it, the gaps grow from about a second.
+      // The first gap is the handover from the SDK's stream to ours, which is immediate by design.
+      yield* until(() => server.state.listens.length >= 4)
+      const observed = gaps(server.state.listens).slice(1)
+      expect(observed.every((gap) => gap >= 800)).toBe(true)
+      expect(observed[1]).toBeGreaterThan(observed[0])
+    }),
+  )
+
+  it.live("opens a stream when the connect-time listen was refused", () =>
+    Effect.gen(function* () {
+      const server = yield* catalogServer()
+      // The SDK's own open at connect is refused, so `autoOpenedSubscription` never exists and nothing else would
+      // ever open a stream for this connection.
+      server.state.refuseFirst = true
+      const connection = yield* McpClient.connect({
+        server: "catalog",
+        config: { type: "attached", transport: server.transport, protocol: "2026-07-28" },
+        directory: import.meta.dir,
+      })
+      const changes = { tools: 0 }
+      connection.onToolsChanged(() => {
+        changes.tools += 1
+      })
+      yield* connection.tools()
+
+      yield* until(() => server.state.listens.length >= 2)
+      const stream = server.state.listens[server.state.listens.length - 1]
+
+      yield* server.add("added")
+      yield* server.change(stream.id)
+      yield* until(() => changes.tools >= 1)
+      expect((yield* connection.tools()).map((tool) => tool.name)).toEqual(["added"])
+    }),
+  )
+
+  it.live("stops following when the server refuses the reopened stream", () =>
+    Effect.gen(function* () {
+      const server = yield* catalogServer()
+      const connection = yield* McpClient.connect({
+        server: "catalog",
+        config: { type: "attached", transport: server.transport, protocol: "2026-07-28" },
+        directory: import.meta.dir,
+      })
+      yield* connection.tools()
+      yield* until(() => server.state.listens.length === 1)
+
+      // The reopen is refused, as when access was revoked or the server dropped the capability. Retrying a refusal
+      // would hammer the server for the life of the connection, so the follow loop ends after the first one. Proving
+      // that nothing follows needs a window, so it is the schedule's first step plus a small margin, not a round
+      // number: a retry would have arrived inside it.
+      server.state.refuse = true
+      yield* server.end(server.state.listens[0].id)
+      yield* until(() => server.state.listens.length === 2)
+      yield* Effect.sleep("1200 millis")
+      expect(server.state.listens.length).toBe(2)
+    }),
+  )
+
+  it.live("does not follow list changes over a legacy connection", () =>
+    Effect.gen(function* () {
+      // A legacy server advertises listChanged too, and the SDK delivers those notifications over the initialize
+      // connection. `listen` is not part of that era, so it throws instantly instead of reaching the server.
+      const server = yield* catalogServer()
+      const calls: unknown[] = []
+      const listen = Client.prototype.listen
+      const spy = spyOn(Client.prototype, "listen").mockImplementation(function (
+        this: Client,
+        ...args: Parameters<Client["listen"]>
+      ) {
+        calls.push(args[0])
+        return listen.apply(this, args)
+      })
+      try {
+        const connection = yield* McpClient.connect({
+          server: "catalog",
+          config: { type: "attached", transport: server.transport, protocol: "legacy" },
+          directory: import.meta.dir,
+        })
+        yield* connection.tools()
+        expect(connection.modern).toBe(false)
+
+        // The fallback used to run here: its first open threw at once, the error was not a `ProtocolError`, and the
+        // backoff retried it for the connection's whole life with nothing logged. One step of that backoff is well
+        // under a second, so an attempt inside this window would be one of them.
+        yield* Effect.sleep("1200 millis")
+        expect(calls).toEqual([])
+        expect(server.state.listens).toEqual([])
+      } finally {
+        spy.mockRestore()
+      }
+    }),
+  )
+})
