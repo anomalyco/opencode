@@ -619,6 +619,37 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("normalizes Mistral-family tool call IDs without collapsing them", () =>
+    Effect.gen(function* () {
+      const mistral = model.route.with({ provider: "mistral" }).model({ id: "mistral/zai-glm-5-3-flash" })
+      const ids = ["chatcmpl-tool-99557ad68a6e6efc", "chatcmpl-tool-a1b2c3d4e5f6g7h8"]
+      const request = ai.request({
+        id: "req_mistral_tool_ids",
+        model: mistral,
+        messages: [
+          Message.assistant(ids.map((id) => ToolCallPart.make({ id, name: "lookup", input: { city: id } }))),
+          ...ids.map((id) => Message.tool({ id, name: "lookup", result: "Sunny" })),
+        ],
+      })
+      const first = yield* compileRequest(request)
+      const second = yield* compileRequest(request)
+      type Messages = typeof first.body.messages
+      const calls = (messages: Messages) =>
+        messages.flatMap((message) => (message.role === "assistant" ? (message.tool_calls ?? []) : []))
+      const results = (messages: Messages) =>
+        messages.flatMap((message) => (message.role === "tool" ? [message.tool_call_id] : []))
+      const firstCalls = calls(first.body.messages).map((call) => call.id)
+      const secondCalls = calls(second.body.messages).map((call) => call.id)
+      const firstResults = results(first.body.messages)
+
+      expect(firstCalls).toHaveLength(2)
+      expect(new Set(firstCalls).size).toBe(2)
+      expect(firstResults).toEqual(firstCalls)
+      for (const id of [...firstCalls, ...firstResults]) expect(id).toMatch(/^[A-Za-z0-9]{9}$/)
+      expect(secondCalls).toEqual(firstCalls)
+    }),
+  )
+
   it.effect("replays Gemini thought signatures as tool call extra content", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
