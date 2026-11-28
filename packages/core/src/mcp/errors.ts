@@ -9,6 +9,12 @@ export class NeedsAuthError extends Schema.TaggedError<NeedsAuthError>()("MCP.Ne
   message: Schema.String,
 }) {}
 
+/** A server's config can't be used as written, so it is never connected or offered for sign-in. */
+export class InvalidConfigError extends Schema.TaggedError<InvalidConfigError>()("MCP.InvalidConfigError", {
+  server: Schema.String,
+  message: Schema.String,
+}) {}
+
 export class ConnectError extends Schema.TaggedError<ConnectError>()("MCP.ConnectError", {
   server: Schema.String,
   message: Schema.String,

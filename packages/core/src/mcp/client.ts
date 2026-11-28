@@ -50,6 +50,7 @@ import type { Session } from "@opencode/schema/session"
 import { isRecord } from "@opencode/util/record"
 import { codecFor } from "../tool/runtime.js"
 import { McpStdio } from "./stdio.js"
+import { McpTarget } from "./target.js"
 import { EventStreamRejectedError, EventStreamTerminatedError, reopen } from "./event-stream.js"
 import { ConnectError, NeedsAuthError, SessionExpiredError, SkillMismatchError } from "./errors.js"
 
@@ -330,7 +331,7 @@ export interface Attached {
 
 export interface ConnectOptions {
   readonly server: string
-  readonly config: typeof ConfigMCP.Server.Type | Attached
+  readonly target: McpTarget.Target | Attached
   /** Resolves a relative stdio `cwd` and is the default one, and is the root `roots/list` answers with. */
   readonly directory: string
   /** Remote only. A 401 the provider cannot recover from ends in UnauthorizedError → needs_auth. */
@@ -352,13 +353,13 @@ export interface ConnectOptions {
  */
 export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   const server = options.server
-  const config = options.config
+  const target = options.target
   const elicitation = options.elicitation
   // The SDK takes list-changed handlers at construction, but consumers register after connect. On a
   // modern connection the SDK opens the subscriptions/listen stream behind these itself.
   const timeout: (typeof ConfigMCP.Server.Type)["timeout"] =
-    config.type === "attached" ? { execution: ATTACHED_EXECUTION_TIMEOUT } : config.timeout
-  const protocol = config.protocol ?? (config.type === "attached" ? "legacy" : "auto")
+    target.type === "attached" ? { execution: ATTACHED_EXECUTION_TIMEOUT } : target.config.timeout
+  const protocol = target.type === "attached" ? (target.protocol ?? "legacy") : (target.config.protocol ?? "auto")
   const changed = { tools: () => {}, prompts: () => {}, resources: () => {} }
   const listChanged = (key: keyof typeof changed) => ({
     autoRefresh: false,
@@ -537,18 +538,18 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   }
 
   const exit = yield* Effect.gen(function* () {
-    if (config.type === "attached") return yield* initialize(config.transport, protocol)
-    if (config.type === "local") {
-      const [command, ...args] = config.command
+    if (target.type === "attached") return yield* initialize(target.transport, protocol)
+    if (target.type === "local") {
+      const command = target.command
       const spawn = (protocol: ConfigMCP.Protocol) =>
         McpStdio.make({
           server,
           command,
-          args,
-          cwd: McpStdio.resolveCwd(options.directory, config.cwd),
+          args: target.args,
+          cwd: McpStdio.resolveCwd(options.directory, target.config.cwd),
           environment: {
             ...(command === "opencode" ? { BUN_BE_BUN: "1" } : {}),
-            ...config.environment,
+            ...target.config.environment,
           },
         }).pipe(Effect.flatMap((transport) => initialize(transport, protocol)))
       // Some legacy servers exit on the auto probe's unknown request (Python SDK 1.3 does), so respawn for initialize.
@@ -566,14 +567,10 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     }
     const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
     const fetch = yield* McpOAuth.loggedFetch({ server, directory: options.directory })
-    // Servers that bundle their own Code Mode (Cloudflare and others) expose raw tools when asked
-    // with ?codemode=false, which is what our Code Mode wants. The configured URL stays the OAuth identity.
-    const url = new URL(config.url)
-    const addedCodemode = config.codemode !== false && !url.searchParams.has("codemode") && !rejectsUnknownQuery(url)
-    if (addedCodemode) url.searchParams.set("codemode", "false")
+    const dialed = McpTarget.dialUrl(target.url, target.config.codemode)
     const open = Effect.fnUntraced(function* (url: URL, protocol: ConfigMCP.Protocol, startup?: number) {
       session.transport = new StreamableHTTPClientTransport(url, {
-        requestInit: config.headers ? { headers: config.headers } : undefined,
+        requestInit: target.config.headers ? { headers: target.config.headers } : undefined,
         authProvider: options.authProvider,
         fetch,
       })
@@ -601,12 +598,12 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
 
     return yield* retrying(
       "MCP connect",
-      negotiate(url).pipe(
+      negotiate(dialed ?? target.url).pipe(
         Effect.catch((error) => {
-          if (!addedCodemode || !(error instanceof SdkHttpError) || (error.status !== 400 && error.status !== 404))
+          if (!dialed || !(error instanceof SdkHttpError) || (error.status !== 400 && error.status !== 404))
             return Effect.fail(error)
           // Servers that reject unknown query params get one retry at the configured URL.
-          return negotiate(new URL(config.url))
+          return negotiate(target.url)
         }),
       ),
       deadline,
@@ -1069,17 +1066,6 @@ function repeats(error: unknown): boolean {
     isTransient(error) ||
     PlatformError.isPlatformError(error)
   )
-}
-
-// These servers reject any unknown query parameter and have no Code Mode of their own, so adding
-// ?codemode=false only costs a failed request before the retry at the configured URL.
-function rejectsUnknownQuery(url: URL) {
-  // Google Workspace MCP (gmailmcp, drivemcp, calendarmcp, ...) returns 404.
-  if (url.hostname.endsWith(".googleapis.com")) return true
-  // Zoho MCP gateways (zohomcp.com, zohomcp.eu, ...) return 400.
-  if (/(^|\.)zohomcp\.[a-z.]+$/.test(url.hostname)) return true
-  // Loopback servers run on this machine (Figma Desktop's Dev Mode MCP returns 404), so they are not hosted Code Mode servers.
-  return url.hostname === "localhost" || url.hostname === "[::1]" || /^127(\.\d+){3}$/.test(url.hostname)
 }
 
 // Legacy sends the plain initialize handshake with no discover probe.

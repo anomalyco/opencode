@@ -8,6 +8,7 @@ import { Environment } from "../environment/index.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
 import type { McpClient } from "./client.js"
 import { McpError } from "./errors.js"
+import type { McpTarget } from "./target.js"
 
 export type Failure = Extract<Mcp.Status, { readonly status: "failed" | "needs_auth" }>
 
@@ -45,7 +46,7 @@ export interface Events {
 /** Everything about the server to connect to and what capabilities to negotiate with it. */
 export interface Spec {
   readonly name: string
-  readonly config: Mcp.ServerConfig
+  readonly target: McpTarget.Target
   readonly directory: string
   readonly clientInfo?: { readonly name: string; readonly version: string }
   /** Lists the server's MCP Skills when it offers them. */
@@ -135,6 +136,21 @@ type State = { readonly _tag: "Idle" } | Connected
 type Opened =
   | { readonly _tag: "Legacy"; readonly client: McpClient.Connection }
   | { readonly _tag: "Listed"; readonly client: McpClient.Connection; readonly tools: ReadonlyArray<McpClient.Tool> }
+
+/** A server whose config could not be parsed: every attempt fails with the reason, and nothing ever connects. */
+export const invalid = (events: Events, error: McpError.InvalidConfigError): Connection => ({
+  client: undefined,
+  tools: undefined,
+  prompts: undefined,
+  skills: undefined,
+  start: events.connecting.pipe(
+    Effect.andThen(events.failed({ status: "failed", error: error.message }, false)),
+    Effect.ensuring(events.settled),
+  ),
+  stop: Effect.void,
+  recovering: (client, run) => run(client),
+  catalog: readCatalog,
+})
 
 export function make(input: Input): Connection {
   let state: State = { _tag: "Idle" }
@@ -237,10 +253,7 @@ export function make(input: Input): Connection {
   const start: Effect.Effect<void> = Effect.suspend(() =>
     Effect.gen(function* () {
       yield* input.events.connecting
-      // Checked before the OAuth provider is built, which parses the URL too.
-      const config = input.spec.config
-      if (config.type === "remote" && !URL.canParse(config.url))
-        return yield* input.events.failed({ status: "failed", error: `Invalid MCP server URL: ${config.url}` }, false)
+      const target = input.spec.target
       // The attempt owns its scope until a connection takes it over, and closes it on any other exit, interruption
       // included, before the outcome is reported.
       const result = yield* Effect.acquireUseRelease(
@@ -270,7 +283,9 @@ export function make(input: Input): Connection {
               Effect.provideService(FetchHttpClient.Fetch, input.fetch),
               Scope.provide(scope),
               (effect) =>
-                config.type === "remote" && !input.shared ? input.endpointLoads.withLock(config.url)(effect) : effect,
+                target.type === "remote" && !input.shared
+                  ? input.endpointLoads.withLock(target.config.url)(effect)
+                  : effect,
             )
             switch (opened._tag) {
               case "Legacy":

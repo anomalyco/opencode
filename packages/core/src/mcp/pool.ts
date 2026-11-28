@@ -14,6 +14,7 @@ import { SharedCache } from "../shared-cache.js"
 import { canonicalJson } from "../util/canonical-json.js"
 import type { McpClient } from "./client.js"
 import { McpConnection } from "./connection.js"
+import { McpTarget } from "./target.js"
 
 export interface Input extends Omit<McpConnection.Input, "endpointLoads" | "shared"> {
   /**
@@ -51,7 +52,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Mc
  * keyed or left out on purpose with `null`.
  */
 export const key = (
-  input: Omit<McpConnection.Spec, "name" | "directory" | "config"> &
+  input: Omit<McpConnection.Spec, "name" | "directory" | "target"> &
     (
       | {
           readonly config: Mcp.RemoteConfig
@@ -68,7 +69,7 @@ export const key = (
   const spec = {
     clientInfo: input.clientInfo ?? null,
     skills: input.skills ?? false,
-  } satisfies Record<keyof Omit<McpConnection.Spec, "name" | "directory" | "config">, Schema.Json>
+  } satisfies Record<keyof Omit<McpConnection.Spec, "name" | "directory" | "target">, Schema.Json>
   const timeout = {
     startup: input.config.timeout?.startup ?? null,
     catalog: input.config.timeout?.catalog ?? null,
@@ -372,8 +373,8 @@ export const layer = Layer.effect(
         },
         start: Effect.gen(function* () {
           if (
-            input.spec.config.type === "local" &&
-            input.spec.config.cwd === undefined &&
+            input.spec.target.type === "local" &&
+            input.spec.target.config.cwd === undefined &&
             !unfixed.has(input.spec.name)
           ) {
             unfixed.add(input.spec.name)
@@ -386,13 +387,13 @@ export const layer = Layer.effect(
           }
           const selected = yield* input.select
           if (!unpoolable.has(selected.key) && (yield* join(selected))) return
-          const config =
+          const target =
             unpoolable.get(selected.key) === "legacy"
-              ? { ...input.spec.config, protocol: "legacy" as const }
-              : input.spec.config
+              ? McpTarget.withProtocol(input.spec.target, "legacy")
+              : input.spec.target
           const own = McpConnection.make({
             ...input,
-            spec: { ...input.spec, config },
+            spec: { ...input.spec, target },
             authProvider: selected.authProvider,
             endpointLoads,
           })

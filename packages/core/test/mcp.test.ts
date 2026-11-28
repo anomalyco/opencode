@@ -31,6 +31,7 @@ import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
 import { McpClient } from "@opencode/core/mcp/client"
 import { McpPool } from "@opencode/core/mcp/pool"
+import { McpTarget } from "@opencode/core/mcp/target"
 import { McpStdio } from "@opencode/core/mcp/stdio"
 import { Permission } from "@opencode/core/permission"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -56,6 +57,7 @@ import {
   PubSub,
   Queue,
   Ref,
+  Result,
   Schedule,
   Schema,
   Scope,
@@ -472,8 +474,10 @@ function resourceMcpLayer(
   )
 }
 
+const target = (config: typeof ConfigMCP.Server.Type) => Result.getOrThrow(McpTarget.parse("test", config))
+
 const connect = (server: string, config: typeof ConfigMCP.Server.Type, directory: string) =>
-  McpClient.connect({ server, config, directory }).pipe(Effect.provide(hostEnvironmentLayer))
+  McpClient.connect({ server, target: target(config), directory }).pipe(Effect.provide(hostEnvironmentLayer))
 
 // Reads no longer wait for startup, so tests that assert on a connected server settle it first.
 const settled = (service: Mcp.Interface, name = "resources") =>
@@ -746,7 +750,11 @@ test("spawns local MCP servers through the location environment", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const connection = yield* McpClient.connect({ server: "environment", config, directory: import.meta.dir })
+        const connection = yield* McpClient.connect({
+          server: "environment",
+          target: target(config),
+          directory: import.meta.dir,
+        })
         yield* connection.tools()
       }),
     ).pipe(Effect.provide(recordingEnvironmentLayer(spawns))),
@@ -1942,7 +1950,7 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
   )
 })
 
-test("marks a remote MCP server with an invalid URL as failed", async () => {
+test("marks an MCP server with an invalid config as failed", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -1956,6 +1964,14 @@ test("marks a remote MCP server with an invalid URL as failed", async () => {
 
           yield* service.add("broken", new ConfigMCP.Remote({ type: "remote", url: "not a url" }))
           expect(yield* status("broken")).toEqual({ status: "failed", error: "Invalid MCP server URL: not a url" })
+          expect((yield* service.servers()).find((server) => server.name === "broken")?.integrationID).toBeUndefined()
+          yield* service.add("empty", new ConfigMCP.Local({ type: "local", command: [] }))
+          expect(yield* status("empty")).toEqual({ status: "failed", error: "MCP server command is empty" })
+          yield* service.add("redirect", new ConfigMCP.Remote({ ...config, oauth: { redirect_uri: "not a url" } }))
+          expect(yield* status("redirect")).toEqual({
+            status: "failed",
+            error: "Invalid MCP OAuth redirect_uri: not a url",
+          })
           expect(yield* status("resources")).toEqual({ status: "connected" })
 
           yield* service.add("broken", new ConfigMCP.Remote(config))
@@ -4005,7 +4021,7 @@ describe("MCP pool", () => {
           const scope = yield* Effect.scope
           const run = yield* FiberSet.makeRuntime<never, void, never>()
           const connection = pool.connection({
-            spec: { name, config, directory },
+            spec: { name, target: target(config), directory },
             authProvider: Effect.undefined,
             elicitation: {
               create: (request) =>
