@@ -32,11 +32,17 @@ const auth = (options: ProviderAuthOption<"optional">) =>
   AuthOptions.apiKey(options, "ANTHROPIC_API_KEY", Auth.header("x-api-key"))
 
 export const configure = (input: Config = {}) => {
-  const { apiKey: _, auth: _auth, baseURL, ...rest } = input
+  const { apiKey: _, auth: _auth, baseURL = AnthropicMessages.DEFAULT_BASE_URL, ...rest } = input
   const compatible = AnthropicCompatible.configure({
     ...rest,
+    // Every step resends the whole transcript, and api.anthropic.com decodes gzip bodies (not zstd or br).
+    // A proxy or gateway at another URL may not, so it keeps plain JSON unless asked.
+    http:
+      baseURL.replace(/\/+$/, "") === AnthropicMessages.DEFAULT_BASE_URL
+        ? { ...rest.http, encoding: rest.http?.encoding ?? "gzip" }
+        : rest.http,
     auth: auth(input),
-    baseURL: baseURL ?? AnthropicMessages.DEFAULT_BASE_URL,
+    baseURL,
     provider: id,
   })
   return {

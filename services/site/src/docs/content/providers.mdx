@@ -192,7 +192,8 @@ times before giving up.
 `settings.encoding` compresses HTTP request bodies with `"zstd"` or `"gzip"`, or sends plain JSON with `"none"`. Set it
 on a provider, model, or variant; the most specific value wins. Only enable an encoding the endpoint decodes: most
 providers and gateways reject compressed bodies. OpenAI defaults to `"zstd"` when signed in with ChatGPT and no custom
-`baseURL` is configured; API keys send plain JSON. WebSocket messages are unaffected.
+`baseURL` is configured; API keys send plain JSON. Anthropic defaults to `"gzip"` when requests go to
+`https://api.anthropic.com/v1`. WebSocket messages are unaffected.
 
 ```jsonc title="opencode.jsonc"
 {

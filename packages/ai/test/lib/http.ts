@@ -1,3 +1,4 @@
+import { gunzipSync, zstdDecompressSync } from "node:zlib"
 import { Effect, Fiber, Layer, Ref } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
@@ -48,13 +49,22 @@ export const settle = <A, E, R>(program: Effect.Effect<A, E, R>, seconds: number
     return yield* Fiber.join(fiber)
   })
 
+const requestText = async (request: Request) => {
+  const bytes = new Uint8Array(await request.arrayBuffer())
+  const encoding = request.headers.get("content-encoding")
+  if (encoding === "gzip") return gunzipSync(bytes).toString()
+  if (encoding === "zstd") return zstdDecompressSync(bytes).toString()
+  return new TextDecoder().decode(bytes)
+}
+
 export const handlerLayer = (handler: Handler): Layer.Layer<HttpClient.HttpClient> =>
   Layer.succeed(
     HttpClient.HttpClient,
     HttpClient.make((request) =>
       Effect.gen(function* () {
         const web = yield* HttpClientRequest.toWeb(request).pipe(Effect.orDie)
-        const text = yield* Effect.promise(() => web.text())
+        // Compressed bodies arrive as the JSON they carry, like the recorder stores them.
+        const text = yield* Effect.promise(() => requestText(web))
         return yield* handler({
           request,
           text,
