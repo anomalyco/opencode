@@ -25,6 +25,31 @@ describe("partial JSON", () => {
     })
   })
 
+  test("keeps already-parsed fields when repairing incomplete objects and arrays", () => {
+    expect(parse('{"path":"A\\H","text":"first\tsecond')).toEqual({
+      path: "A\\H",
+      text: "first\tsecond",
+    })
+    expect(parse('{"a":"x\\n","b":"hello\tworld')).toEqual({
+      a: "x\n",
+      b: "hello\tworld",
+    })
+    expect(parse('["A\\H","first\tsecond')).toEqual(["A\\H", "first\tsecond"])
+    expect(parse('{"path":"C:\\users\\me')).toEqual({
+      path: "C:\\users\\me",
+    })
+    expect(parse('{"a":"x\\\\","b":"abc\\')).toEqual({
+      a: "x\\",
+      b: "abc",
+    })
+  })
+
+  test("truncates unfinished keys in partial objects", () => {
+    expect(parse('{"a":"ok","unfin')).toEqual({
+      a: "ok",
+    })
+  })
+
   test("preserves prototype keys in partial objects", () => {
     const object = parse('{"__proto__":{"safe":true}') as Record<string, unknown>
 
