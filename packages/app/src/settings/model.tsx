@@ -162,6 +162,7 @@ const appearanceSchema = Persistence.struct({
   tabGrouping: Persistence.optional(Schema.Literals(["none", "project", "server"])),
   sidebarOpen: Persistence.optional(Schema.Boolean),
   reduceMotion: Schema.Literals(["system", "on", "off"]),
+  codeWrap: Schema.Boolean,
 })
 
 const permissionsSchema = Persistence.struct({
@@ -324,7 +325,15 @@ export const defaultSettings: Settings = {
     followUpBehavior: "steer",
     questionSubmitKey: "enter",
   },
-  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", reduceMotion: "system" },
+  appearance: {
+    fontSize: 14,
+    mono: "",
+    sans: "",
+    terminal: "",
+    tabLayout: "horizontal",
+    reduceMotion: "system",
+    codeWrap: false,
+  },
   keybinds: {},
   permissions: { autoApprove: false, autoApproveProjects: {} },
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
@@ -416,6 +425,14 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     createEffect(() => {
       if (typeof document === "undefined") return
       document.documentElement.dataset.timelineWidth = timelineWidth()
+    })
+
+    const codeWrap = withFallback(() => store.appearance?.codeWrap, defaultSettings.appearance.codeWrap)
+
+    // Markdown code blocks key off this attribute to wrap long lines instead of scrolling.
+    createEffect(() => {
+      if (typeof document === "undefined") return
+      document.documentElement.dataset.codeWrap = codeWrap() ? "on" : "off"
     })
 
     const autoApproveDefault = withFallback(
@@ -567,6 +584,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         reduceMotion,
         setReduceMotion(value: ReduceMotion) {
           setStore("appearance", "reduceMotion", value)
+        },
+        codeWrap,
+        setCodeWrap(value: boolean) {
+          setStore("appearance", "codeWrap", value)
         },
       },
       keybinds: {
