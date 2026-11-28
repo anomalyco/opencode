@@ -11,6 +11,10 @@ import {
   type RGBA,
   type StyledText,
 } from "@opentui/core"
+import { drawClassDiagramGrid } from "./class/drawing.js"
+import { parseMermaidClassDiagram } from "./class/parser.js"
+import { renderClassGridStyledText } from "./class/render-grid.js"
+import { resolveClassStyleColors } from "./class/style.js"
 import { MermaidSyntaxError } from "./diagnostics.js"
 import type { OpenCodeDiagramPalette } from "./palette.js"
 import { DiagramCanvasSizeError } from "./core/canvas.js"
@@ -118,6 +122,29 @@ function prepareDiagram(
   const colors = options.colors ?? {}
   const compact = options.compact ?? true
   switch (kind) {
+    case "class": {
+      const grid = drawClassDiagramGrid(parseMermaidClassDiagram(source), { compact, layoutMaxWidth })
+      const size = grid.getTextSize({ trimTop: true, trimBottom: true })
+      return {
+        kind,
+        source,
+        text: renderClassGridStyledText(
+          grid,
+          resolveClassStyleColors({
+            classTitle: color(colors.boxText ?? colors.primary),
+            classText: color(colors.boxText ?? colors.primary),
+            classBorder: color(colors.boxBorder ?? colors.muted),
+            annotation: color(colors.secondary),
+            edge: color(colors.line ?? colors.secondary),
+            label: color(colors.text),
+            namespace: color(colors.group ?? colors.muted),
+            namespaceLabel: color(colors.groupText ?? colors.group ?? colors.muted),
+          }),
+          { label: color(colors.labelBackground) },
+        ),
+        height: size.height,
+      }
+    }
     case "flowchart": {
       const grid = drawFlowchartDiagramGrid(parseMermaidFlowchartDiagram(source), {
         compact,
