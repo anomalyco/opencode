@@ -22,14 +22,16 @@ const PATTERN = [["e"], ["e", "ee", "s", "es"], ["s", "se"]] as const
 
 /**
  * Every failure ends the handshake or cipher it came from: later calls fail with `WrongStep`. `BadKey` is a key that
- * is not 32 bytes, refused before a key pair or handshake exists.
+ * is not 32 bytes, refused before a key pair, handshake or restored transport exists; `BadNonce` a restored nonce
+ * that is negative or spent.
  */
-export type Failure = "WrongStep" | "BadMessage" | "TooLong" | "BadKey"
+export type Failure = "WrongStep" | "BadMessage" | "TooLong" | "BadKey" | "BadNonce"
 
 const wrongStep = Result.fail<Failure>("WrongStep")
 const badMessage = Result.fail<Failure>("BadMessage")
 const tooLong = Result.fail<Failure>("TooLong")
 const badKey = Result.fail<Failure>("BadKey")
+const badNonce = Result.fail<Failure>("BadNonce")
 
 /** The two CipherStates of section 5.2's Split: one for the messages this side sends, one for those it receives. */
 export interface Transport {
@@ -42,6 +44,23 @@ export interface Transport {
     readonly decrypt: (ciphertext: Uint8Array) => Result.Result<Uint8Array, Failure>
     readonly rekey: () => void
   }
+  /**
+   * Both CipherStates as they stand, for `restoreTransport`, or `WrongStep` once either has failed. A snapshot is the
+   * right to use its nonces: restoring one while this transport, or another restored from the same snapshot, still
+   * sends would encrypt two messages under one key and nonce.
+   */
+  readonly snapshot: () => Result.Result<TransportSnapshot, Failure>
+}
+
+/** One CipherState of section 5.1: its key k, and n, the nonce of the next message it encrypts or decrypts. */
+export interface CipherStateSnapshot {
+  readonly key: Uint8Array
+  readonly nonce: bigint
+}
+
+export interface TransportSnapshot {
+  readonly send: CipherStateSnapshot
+  readonly receive: CipherStateSnapshot
 }
 
 /**
@@ -196,23 +215,52 @@ export const handshake = (options: Options) => {
       if (failed || taken || step < PATTERN.length) return guard(wrongStep)
       taken = true
       const [initiatorToResponder, responderToInitiator] = hkdf(ck, EMPTY)
-      const send = cipherState(initiator ? initiatorToResponder : responderToInitiator)
-      const receive = cipherState(initiator ? responderToInitiator : initiatorToResponder)
-      return Result.succeed<Transport>({
-        send: { encrypt: (plaintext) => send.encryptWithAd(EMPTY, plaintext), rekey: send.rekey },
-        receive: { decrypt: (ciphertext) => receive.decryptWithAd(EMPTY, ciphertext), rekey: receive.rekey },
-      })
+      return Result.succeed(
+        transport(
+          cipherState(initiator ? initiatorToResponder : responderToInitiator),
+          cipherState(initiator ? responderToInitiator : initiatorToResponder),
+        ),
+      )
     },
   })
 }
 
 /**
+ * The transport a `snapshot` was taken of, carrying on from its nonces: what it encrypts, decrypts and rekeys is
+ * byte for byte what the original would have. `BadKey` when a key is not 32 bytes, `BadNonce` when a nonce is
+ * negative or spent. The snapshot's owner keeps the rule `snapshot` gives: one live copy of each nonce.
+ */
+export const restoreTransport = (snapshot: TransportSnapshot) => {
+  const states = [snapshot.send, snapshot.receive]
+  if (!states.every((state) => state.key.length === DHLEN)) return badKey
+  if (!states.every((state) => state.nonce >= 0n && state.nonce < MAX_NONCE)) return badNonce
+  return Result.succeed(
+    transport(
+      cipherState(new Uint8Array(snapshot.send.key), snapshot.send.nonce),
+      cipherState(new Uint8Array(snapshot.receive.key), snapshot.receive.nonce),
+    ),
+  )
+}
+
+const transport = (send: CipherState, receive: CipherState): Transport => ({
+  send: { encrypt: (plaintext) => send.encryptWithAd(EMPTY, plaintext), rekey: send.rekey },
+  receive: { decrypt: (ciphertext) => receive.decryptWithAd(EMPTY, ciphertext), rekey: receive.rekey },
+  snapshot: () => {
+    const sending = send.state()
+    const receiving = receive.state()
+    return sending && receiving ? Result.succeed({ send: sending, receive: receiving }) : wrongStep
+  },
+})
+
+type CipherState = ReturnType<typeof cipherState>
+
+/**
  * Section 5.1. Unlike the spec, which keeps n after a failed DECRYPT so a caller may skip the message, any failure ends
  * the CipherState: on an ordered link a forged or lost message ends the link.
  */
-const cipherState = (initial: Uint8Array | undefined) => {
+const cipherState = (initial: Uint8Array | undefined, nonce = 0n) => {
   let k = initial
-  let n = 0n
+  let n = nonce
   let failed = false
   const usable = () => !failed && n < MAX_NONCE
   const advance = (result: Result.Result<Uint8Array, Failure>) => {
@@ -241,6 +289,9 @@ const cipherState = (initial: Uint8Array | undefined) => {
     rekey: () => {
       if (k !== undefined) k = encrypt(k, MAX_NONCE, EMPTY, new Uint8Array(32)).slice(0, 32)
     },
+    /** A copy of k with n, or undefined once failed or without a key. */
+    state: (): CipherStateSnapshot | undefined =>
+      failed || k === undefined ? undefined : { key: new Uint8Array(k), nonce: n },
   }
 }
 

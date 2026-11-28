@@ -79,6 +79,13 @@ export interface Connection {
   readonly send: (message: ToWorker) => void
   /** The messages after `hello`. Ends when the connection is lost. */
   readonly messages: Stream.Stream<Exclude<FromWorker, Hello>>
+  /**
+   * Told once when the connection is served, then on every change while it is current, whether the machine has work in
+   * flight on it: a process, a file call, stdin write or peer request not yet answered, or a peer link up. Work in
+   * flight lives in this home's memory alone, so an endpoint that can lose that memory with the connection still open
+   * (a hibernating Durable Object) must not resume the connection without it.
+   */
+  readonly busy?: (busy: boolean) => void
 }
 
 export interface Interface {
@@ -111,6 +118,7 @@ type PeerReply = Extract<FromWorker, { type: "peer" }>
 
 interface Link {
   readonly describe: Connection["describe"]
+  readonly busy: Connection["busy"]
   readonly hello: Hello
   readonly send: Connection["send"]
   readonly lost: Deferred.Deferred<void>
@@ -145,8 +153,23 @@ export const make = (id: Environment.ID): Interface => {
   // Each change to this state, with the messages it sends, is one synchronous step: nothing else runs and nothing is
   // interrupted half-way through one, so a command is never reported unsent after it was sent. Hence the plain
   // variables and the `Unsafe` calls.
-  const processes = new Map<ProcessID, Process>()
+  // Every collection `busy` counts reports its changes, so no change is missed wherever it is made.
+  const processes = new Watched<ProcessID, Process>(() => report())
   let link: Link | undefined
+  let told: { readonly link: Link; readonly busy: boolean } | undefined
+  const report = () => {
+    const current = link
+    if (!current?.busy) return
+    const busy =
+      processes.size > 0 ||
+      current.calls.size > 0 ||
+      current.inputs.size > 0 ||
+      current.peers.size > 0 ||
+      current.links.size > 0
+    if (told?.link === current && told.busy === busy) return
+    told = { link: current, busy }
+    current.busy(busy)
+  }
   let next = Deferred.makeUnsafe<Link>()
   /** The worker behind the newest connection. Every process in `processes` was started on it. */
   let instance: Instance | undefined
@@ -191,13 +214,14 @@ export const make = (id: Environment.ID): Interface => {
       if (link) lose(link)
       const current: Link = {
         describe: connection.describe,
+        busy: connection.busy,
         hello: connection.hello,
         send: connection.send,
         lost: Deferred.makeUnsafe(),
-        calls: new Map(),
-        inputs: new Map(),
-        peers: new Map(),
-        links: new Set(connection.hello.links),
+        calls: new Watched(report),
+        inputs: new Watched(report),
+        peers: new Watched(report),
+        links: new WatchedSet(report, connection.hello.links),
       }
       const restarted = connection.hello.instance !== instance
       instance = connection.hello.instance
@@ -231,6 +255,7 @@ export const make = (id: Environment.ID): Interface => {
         )
       }
       link = current
+      report()
       Deferred.doneUnsafe(next, Effect.succeed(current))
       next = Deferred.makeUnsafe()
       return connection.messages.pipe(
@@ -564,6 +589,53 @@ export const make = (id: Environment.ID): Interface => {
         return rules(reported ?? {}).shell
       },
     },
+  }
+}
+
+/** A Map that calls `changed` after each change to what it holds. */
+class Watched<K, V> extends Map<K, V> {
+  constructor(private readonly changed: () => void) {
+    super()
+  }
+  override set(key: K, value: V) {
+    super.set(key, value)
+    this.changed()
+    return this
+  }
+  override delete(key: K) {
+    const deleted = super.delete(key)
+    if (deleted) this.changed()
+    return deleted
+  }
+  override clear() {
+    super.clear()
+    this.changed()
+  }
+}
+
+/** A Set that calls `changed` after each change to what it holds. */
+class WatchedSet<T> extends Set<T> {
+  constructor(
+    private readonly changed: () => void,
+    values: Iterable<T> = [],
+  ) {
+    // Not `super(values)`, which would call `add` before `changed` is set.
+    super()
+    for (const value of values) super.add(value)
+  }
+  override add(value: T) {
+    super.add(value)
+    this.changed()
+    return this
+  }
+  override delete(value: T) {
+    const deleted = super.delete(value)
+    if (deleted) this.changed()
+    return deleted
+  }
+  override clear() {
+    super.clear()
+    this.changed()
   }
 }
 

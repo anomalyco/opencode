@@ -426,4 +426,65 @@ describe("Noise", () => {
     expect(messages[0][0]).not.toEqual(messages[1][0])
     expect(messages[0][1].subarray(0, 32)).not.toEqual(messages[1][1].subarray(0, 32))
   })
+  test("a restored transport carries on byte for byte, before and across a rekey", () => {
+    const sides = transport()
+    const say = (index: number) => text(`message ${index}`)
+    // A few messages each way first, so both nonces are past zero.
+    for (const index of [0, 1, 2]) {
+      expect(ok(sides.responder.receive.decrypt(ok(sides.initiator.send.encrypt(say(index)))))).toEqual(say(index))
+      expect(ok(sides.initiator.receive.decrypt(ok(sides.responder.send.encrypt(say(index)))))).toEqual(say(index))
+    }
+    const snapshot = ok(sides.initiator.snapshot())
+    expect(snapshot.send.nonce).toBe(3n)
+    expect(snapshot.receive.nonce).toBe(3n)
+    const restored = ok(Noise.restoreTransport(snapshot))
+    // A copy each way: filling the snapshot's key changes neither transport.
+    snapshot.send.key.fill(0)
+    expect(ok(restored.snapshot()).send.key).toEqual(ok(sides.initiator.snapshot()).send.key)
+
+    // The same message at the same nonce under the same key: the original and the restored copy agree on every byte.
+    // Only the copy goes on to send, as a resumed link does.
+    const twin = (index: number) => {
+      const sealed = ok(restored.send.encrypt(say(index)))
+      expect(ok(sides.initiator.send.encrypt(say(index)))).toEqual(sealed)
+      expect(ok(sides.responder.receive.decrypt(sealed))).toEqual(say(index))
+      const answer = ok(sides.responder.send.encrypt(say(index)))
+      expect(ok(restored.receive.decrypt(answer))).toEqual(say(index))
+    }
+    twin(3)
+    for (const side of [restored, sides.initiator]) side.send.rekey()
+    sides.responder.receive.rekey()
+    twin(4)
+
+    // Snapshotted right after a rekey: the rekeyed key travels, the nonce is kept.
+    restored.receive.rekey()
+    sides.responder.send.rekey()
+    const after = ok(restored.snapshot())
+    expect(after.send.nonce).toBe(5n)
+    const again = ok(Noise.restoreTransport(after))
+    expect(ok(sides.responder.receive.decrypt(ok(again.send.encrypt(say(5)))))).toEqual(say(5))
+    expect(ok(again.receive.decrypt(ok(sides.responder.send.encrypt(say(5)))))).toEqual(say(5))
+  })
+
+  test("restoreTransport refuses a key that is not 32 bytes and a nonce that is negative or spent", () => {
+    const valid = ok(transport().initiator.snapshot())
+    const send = (patch: Partial<Noise.CipherStateSnapshot>) => ({ ...valid, send: { ...valid.send, ...patch } })
+    const receive = (patch: Partial<Noise.CipherStateSnapshot>) => ({
+      ...valid,
+      receive: { ...valid.receive, ...patch },
+    })
+    expect(Noise.restoreTransport(send({ key: new Uint8Array(31) }))).toEqual(Result.fail("BadKey"))
+    expect(Noise.restoreTransport(receive({ key: new Uint8Array(33) }))).toEqual(Result.fail("BadKey"))
+    expect(Noise.restoreTransport(send({ nonce: -1n }))).toEqual(Result.fail("BadNonce"))
+    expect(Noise.restoreTransport(receive({ nonce: 2n ** 64n - 1n }))).toEqual(Result.fail("BadNonce"))
+    expect(Result.isSuccess(Noise.restoreTransport(receive({ nonce: 2n ** 64n - 2n })))).toBe(true)
+  })
+
+  test("a transport whose cipher failed has no snapshot", () => {
+    const sides = transport()
+    expect(sides.responder.receive.decrypt(flip(ok(sides.initiator.send.encrypt(text("x"))), 0))).toEqual(
+      Result.fail("BadMessage"),
+    )
+    expect(sides.responder.snapshot()).toEqual(Result.fail("WrongStep"))
+  })
 })

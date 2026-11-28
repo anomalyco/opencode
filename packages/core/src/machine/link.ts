@@ -1,7 +1,7 @@
 export * as Link from "./link.js"
 
-import { Cause, Effect, Schema } from "effect"
-import type { Environment } from "../environment/index.js"
+import { Cause, Effect, Result, Schema } from "effect"
+import { Environment } from "../environment/index.js"
 import { Frames } from "./frames.js"
 import { Identity } from "./identity.js"
 import type { Machine } from "./index.js"
@@ -55,6 +55,32 @@ const THIRD = KEY + TAG + (KEY + SIGNATURE + 1 + KEY) + TAG
 const DEADLINE = "10 seconds"
 /** Each direction rekeys after this many transport messages: 2^20 frames of at most 64 KiB is 64 GiB per AES-GCM key. */
 const REKEY_INTERVAL = 2 ** 20
+
+/** A CipherState as JSON: its key in base64url and its nonce in decimal, so a nonce past 2^53 keeps every digit. */
+const CipherStateSnapshot = Schema.Struct({ key: Schema.Uint8ArrayFromBase64Url, nonce: Schema.BigIntFromString })
+
+/**
+ * What `resume` needs to carry on a link `serve` was serving, with no handshake and no hello: the machine the handshake
+ * proved, the hello the driver is given, and both ciphers as they stand. Its JSON form fits a Durable Object WebSocket
+ * attachment. The transport inside is a live key and nonce: whoever holds it must keep a single copy in use, see
+ * `Noise.Transport.snapshot`.
+ */
+export const Resumable = Schema.Struct({
+  machine: Environment.ID,
+  hello: Hello,
+  transport: Schema.Struct({ send: CipherStateSnapshot, receive: CipherStateSnapshot }),
+})
+export type Resumable = typeof Resumable.Type
+
+export interface ServeOptions {
+  /**
+   * Called with the link's state once its hello is read, then after every transport message it encrypts or decrypts,
+   * in the same synchronous step as the cipher's change, so a caller that saves it never holds a nonce already used.
+   * `undefined` while a message is half across in either direction: resuming then would splice its pieces. Nothing is
+   * called during the handshake: a link cut before its hello cannot be resumed.
+   */
+  readonly persist?: (state: Resumable | undefined) => void
+}
 
 /** The carrier ended: the connection under it closed. */
 export class Closed extends Schema.TaggedError<Closed>()("Link.Closed", {}) {}
@@ -148,7 +174,8 @@ const refuse = (step: string) => (cause: Cause.Cause<unknown>) =>
 export const accept = Effect.fn("Link.accept")(
   function* (carrier: Carrier, fixed: Fixed = {}) {
     const machines = yield* Machines.Service
-    return yield* handshake(carrier, authenticateMachine(machines), fixed)
+    const accepted = yield* handshake(carrier, authenticateMachine(machines), fixed)
+    return { machine: accepted.machine, send: accepted.ciphers.send, receive: accepted.ciphers.receive }
   },
   Effect.timeout(DEADLINE),
   Effect.catchCause(refuse("Link.accept")),
@@ -166,13 +193,62 @@ export const decodeHello = Effect.fnUntraced(function* (machine: Environment.ID,
   return yield* Schema.decodeUnknownEffect(Hello)(message)
 })
 
-const serveWith = Effect.fnUntraced(function* (carrier: Carrier, authenticate: Authenticate, fixed: Fixed) {
+const serveWith = Effect.fnUntraced(function* (
+  carrier: Carrier,
+  authenticate: Authenticate,
+  fixed: Fixed,
+  options: ServeOptions,
+) {
   const link = yield* Effect.gen(function* () {
     const accepted = yield* handshake(carrier, authenticate, fixed)
-    const hello = yield* decodeHello(accepted.machine, yield* Frames.read(carrier, accepted.receive))
+    const hello = yield* decodeHello(accepted.machine, yield* Frames.read(carrier, accepted.ciphers.receive))
     return { ...accepted, hello }
   }).pipe(Effect.timeout(DEADLINE), Effect.catchCause(refuse("Link.serve")))
-  const frames = yield* Frames.open(carrier, link, workerCodec)
+  return yield* open(carrier, link, options)
+})
+
+/** A link past its hello: its frames, and `options.persist` told of every change to its ciphers from now on. */
+const open = Effect.fnUntraced(function* (
+  carrier: Carrier,
+  link: {
+    readonly machine: Environment.ID
+    readonly hello: Hello
+    readonly transport: Noise.Transport
+    readonly ciphers: Frames.Ciphers
+  },
+  options: ServeOptions,
+) {
+  const persist = options.persist
+  const half = { sending: false, receiving: false }
+  const save = () => {
+    // A failed cipher ends the link: nothing is resumable.
+    const transport = link.transport.snapshot()
+    persist?.(
+      Result.isSuccess(transport) && !half.sending && !half.receiving
+        ? { machine: link.machine, hello: link.hello, transport: transport.success }
+        : undefined,
+    )
+  }
+  save()
+  const ciphers: Frames.Ciphers = persist
+    ? {
+        send: {
+          encrypt: (plaintext) =>
+            Result.tap(link.ciphers.send.encrypt(plaintext), () => {
+              half.sending = Frames.continues(plaintext)
+              save()
+            }),
+        },
+        receive: {
+          decrypt: (ciphertext) =>
+            Result.tap(link.ciphers.receive.decrypt(ciphertext), (plaintext) => {
+              half.receiving = Frames.continues(plaintext)
+              save()
+            }),
+        },
+      }
+    : link.ciphers
+  const frames = yield* Frames.open(carrier, ciphers, workerCodec)
   return {
     machine: link.machine,
     connection: { hello: link.hello, send: frames.send, messages: frames.messages, describe: carrier.describe },
@@ -187,9 +263,37 @@ const serveWith = Effect.fnUntraced(function* (carrier: Carrier, authenticate: A
  * the caller serves it with `Machines.connect(machine, connection)` in the scope the link's fibers live in, and closes
  * that scope and the carrier once it returns. Anything else before that is `Refused`, as with `accept`.
  */
-export const serve = Effect.fn("Link.serve")(function* (carrier: Carrier, fixed: Fixed = {}) {
+export const serve = Effect.fn("Link.serve")(function* (
+  carrier: Carrier,
+  fixed: Fixed = {},
+  options: ServeOptions = {},
+) {
   const machines = yield* Machines.Service
-  return yield* serveWith(carrier, authenticateMachine(machines), fixed)
+  return yield* serveWith(carrier, authenticateMachine(machines), fixed, options)
+})
+
+/**
+ * Carries on a link `serve` was serving, from the state `options.persist` last saved, over the same carrier: no
+ * handshake and no hello, so the worker sees nothing happen. Returns what `serve` does, for `Machines.connect`.
+ * `Refused` when the state holds no usable cipher. The caller must have stopped the copy it resumes from, and
+ * `fixed.rekeyInterval` must be the one the link was served with.
+ */
+export const resume = Effect.fn("Link.resume")(function* (
+  carrier: Carrier,
+  state: Resumable,
+  fixed: Fixed = {},
+  options: ServeOptions = {},
+) {
+  const transport = yield* Effect.fromResult(Noise.restoreTransport(state.transport)).pipe(
+    Effect.mapError(() => new Refused()),
+  )
+  const interval = fixed.rekeyInterval ?? REKEY_INTERVAL
+  // Only the count since the last rekey matters, and it stays exact however large the nonce.
+  const ciphers = Frames.rekeying(transport, interval, {
+    sent: Number(state.transport.send.nonce % BigInt(interval)),
+    received: Number(state.transport.receive.nonce % BigInt(interval)),
+  })
+  return yield* open(carrier, { machine: state.machine, hello: state.hello, transport, ciphers }, options)
 })
 
 /**
@@ -208,6 +312,7 @@ export const serveDirect = Effect.fn("Link.serveDirect")(function* (
     (peer) =>
       !peer.hasSecret && same(peer.key, expected) ? Effect.succeed(options.machine) : Effect.fail(new Refused()),
     fixed,
+    {},
   )
 })
 
@@ -229,9 +334,10 @@ const handshake = Effect.fnUntraced(function* (carrier: Carrier, authenticate: A
   const secret = payload.slice(KEY + SIGNATURE + 1)
   if (flag > 1 || (flag === 0 && !same(secret, NO_SECRET))) return yield* new Refused()
   const machine = yield* authenticate({ key, hasSecret: flag === 1, secret })
-  const ciphers = Frames.rekeying(yield* Effect.fromResult(noise.split()), fixed.rekeyInterval ?? REKEY_INTERVAL)
+  const transport = yield* Effect.fromResult(noise.split())
+  const ciphers = Frames.rekeying(transport, fixed.rekeyInterval ?? REKEY_INTERVAL)
   yield* carrier.send(yield* Effect.fromResult(ciphers.send.encrypt(text(toWelcomeName(machine)))))
-  return { machine, send: ciphers.send, receive: ciphers.receive }
+  return { machine, transport, ciphers }
 })
 
 /**

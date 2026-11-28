@@ -33,6 +33,9 @@ export interface Codec<In, Out> {
   readonly encode: (message: Out) => Effect.Effect<Uint8Array, unknown>
 }
 
+/** Whether a frame's plaintext is a piece the next frame continues, so its message is still half across. */
+export const continues = (frame: Uint8Array) => frame[0] === MORE
+
 /** The next message's bytes, reassembled from its frames, failing on a bad frame or a message over `MAX_MESSAGE`. */
 export const read = (carrier: Carrier, cipher: Ciphers["receive"]) =>
   Effect.gen(function* () {
@@ -110,10 +113,11 @@ export const open = <In, Out>(carrier: Carrier, ciphers: Ciphers, codec: Codec<I
 
 // Each direction rekeys itself after every `interval`th transport message it carries, the welcome included: the sender
 // once it has encrypted that message and the receiver once it has decrypted it. Both sides count the same messages, so
-// nothing on the wire says when.
-export const rekeying = (transport: Noise.Transport, interval: number) => {
-  let sent = 0
-  let received = 0
+// nothing on the wire says when. A transport restored from a snapshot counts on from its nonces: each direction's count
+// is the nonce of its next message, since both start at zero and step once per message.
+export const rekeying = (transport: Noise.Transport, interval: number, counted = { sent: 0, received: 0 }) => {
+  let sent = counted.sent
+  let received = counted.received
   return {
     send: {
       encrypt: (plaintext: Uint8Array) =>

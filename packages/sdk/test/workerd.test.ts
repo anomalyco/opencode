@@ -27,6 +27,8 @@ async function withWebSocketPair<A>(f: () => Promise<A>) {
     send: () => {},
     close: () => {},
     addEventListener: () => {},
+    serializeAttachment: () => {},
+    deserializeAttachment: () => null,
   }
   try {
     Object.assign(globalThis, {
@@ -120,9 +122,54 @@ test("Effect OpenCodeWorkerd serves fetch behind its password and allowed CORS o
       expect(upgrades.result).toEqual([101, 403])
       expect(upgrades.accepted).toEqual(["accept"])
       expect((yield* opencode.server.info()).version).toBeString()
+      expect(typeof opencode.webSocketMessage).toBe("function")
       yield* opencode.alarm
     }).pipe(Effect.scoped),
   )
+})
+
+test("OpenCodeWorkerd with state accepts machine links for hibernation and closes on wake what it cannot resume", async () => {
+  const closed: string[] = []
+  const socket = (name: string) => {
+    const made = {
+      readyState: 1,
+      send: () => {},
+      close: (code: number) => {
+        made.readyState = 3
+        closed.push(`${name} ${code}`)
+      },
+      serializeAttachment: () => {},
+      deserializeAttachment: () => null,
+    }
+    return made
+  }
+  const tags: string[][] = []
+  // Cut during its handshake before the object hibernated, so nothing was saved to resume it from.
+  const handshaking = socket("handshaking")
+  await using opencode = await OpenCodeWorkerd.create({
+    storage: makeDurableObjectStorage(),
+    state: {
+      acceptWebSocket: (_socket, accepted = []) => void tags.push(accepted),
+      getWebSockets: () => [handshaking],
+    },
+    config: { experimental: { machines: true } },
+    models: { fetch: false },
+  })
+  expect(closed).toEqual(["handshaking 1008"])
+
+  const upgraded = await withWebSocketPair(() => opencode.fetch(link()))
+  expect(upgraded.result.status).toBe(101)
+  // `ctx.acceptWebSocket` takes the socket, not `accept()`.
+  expect(upgraded.accepted).toEqual([])
+  expect(tags).toEqual([["opencode-machine-link"]])
+
+  // A message for a socket no link holds closes it.
+  opencode.webSocketMessage(socket("stranger"), new ArrayBuffer(32))
+  // A peer's close is answered, as workerd leaves that to the object for a hibernatable socket.
+  const closing = socket("closing")
+  closing.readyState = 2
+  opencode.webSocketClose(closing, 4000, "", true)
+  expect(closed).toEqual(["handshaking 1008", "stranger 1008", "closing 4000"])
 })
 
 test("Promise OpenCode.create runs workspaceProviders through sdk.workspace", async () => {

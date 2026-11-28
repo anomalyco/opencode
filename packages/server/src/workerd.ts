@@ -44,7 +44,9 @@ import { WorkerdMachineLink } from "./workerd-machine-link"
  * - Config is injected as a string (no filesystem); plugin discovery is
  *   precompiled-only, and stdio MCP reports the same no-plane failure as Shell.
  * - With the `machines` flag on, workers dial in to `machine.link` as on Node,
- *   upgraded through a `WebSocketPair` (see `WorkerdMachineLink`).
+ *   upgraded through a `WebSocketPair` (see `WorkerdMachineLink`). Given the
+ *   Durable Object's `state`, links use WebSocket Hibernation: an idle link
+ *   leaves the object free to hibernate, and a wake carries it on unchanged.
  *
  * Bundle with the `workerd` condition, e.g.
  * `bun build src/workerd.ts --conditions=workerd --target=node`
@@ -53,6 +55,15 @@ import { WorkerdMachineLink } from "./workerd-machine-link"
 export interface Options {
   /** Durable Object storage whose SQLite database backs the opencode database. */
   readonly storage: DurableObjectStorage
+  /**
+   * The Durable Object's `ctx`, to accept machine links with WebSocket Hibernation. Forward the object's
+   * `webSocketMessage`, `webSocketClose` and `webSocketError` to the handler's methods of the same name. Omit it and
+   * links are `accept()`ed, keeping the object awake while any is open.
+   *
+   * Build at most one live handler per `ctx`, for example once inside `ctx.blockConcurrencyWhile` in the Durable
+   * Object's constructor: a second leaves the links the first holds alone, and receives none of their messages.
+   */
+  readonly state?: WorkerdMachineLink.State
   readonly app?: ServerOptions["app"]
   /** Enforces HTTP Basic auth (user `opencode`) on every route but the machine link; omit to serve unauthenticated. */
   readonly password?: string
@@ -66,7 +77,7 @@ export interface Options {
   readonly fetch?: ServerOptions["fetch"]
 }
 
-export interface Handler {
+export interface Handler extends WorkerdMachineLink.Hibernation {
   (request: Request): Promise<Response>
   /** Suspends any workspaces past their idle threshold; call from the Durable Object's `alarm()` method. */
   readonly alarm: () => Promise<void>
@@ -98,12 +109,13 @@ export function routes(options: Options, overrides: LayerNode.Replacements = [])
 }
 
 /**
- * Serves a context built from `routes`: resumes suspended Sessions, then answers machine-link upgrades through a
- * `WebSocketPair` and every other request through the routes behind the `RequestSite` and CORS middleware.
+ * Serves a context built from `routes`: resumes suspended Sessions and, with `state`, the machine links the Durable
+ * Object hibernated with, then answers machine-link upgrades through a `WebSocketPair` and every other request through
+ * the routes behind the `RequestSite` and CORS middleware.
  */
 export const serve = Effect.fn("ServerWorkerd.serve")(function* (
   context: Context.Context<Layer.Success<ReturnType<typeof routes>>>,
-  options: Pick<Options, "cors">,
+  options: Pick<Options, "cors" | "state">,
 ) {
   const handler = yield* ServerFetch.serve(context, ServerFetch.middleware(options))
   const run = Effect.runPromiseWith(yield* withoutParentSpan(Effect.context()))
@@ -114,7 +126,12 @@ export const serve = Effect.fn("ServerWorkerd.serve")(function* (
       const upgrade = link(request)
       return upgrade ? run(upgrade) : handler(request)
     },
-    { alarm: () => run(Effect.asVoid(workspace.suspendIdle())) },
+    {
+      alarm: () => run(Effect.asVoid(workspace.suspendIdle())),
+      webSocketMessage: link.webSocketMessage,
+      webSocketClose: link.webSocketClose,
+      webSocketError: link.webSocketError,
+    },
   )
   return served
 })
