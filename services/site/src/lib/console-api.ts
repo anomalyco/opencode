@@ -180,8 +180,8 @@ export function install() {
         "opencode.install.pick()": "choose one with the arrow keys and copy it",
         "opencode.download()": "desktop builds; download('mac-arm') starts one",
         "opencode.mobile()": androidSoon
-          ? "the iPhone beta on TestFlight, Android coming soon"
-          : "the iPhone beta and the Android app",
+          ? "the iPhone app on the App Store, Android coming soon"
+          : "the iPhone and Android apps",
         "opencode.sdk()": "the TypeScript SDK",
         "opencode.models()": "the free models, live from models.dev",
         "opencode.docs('agents')": "open a docs page; docs() lists them",

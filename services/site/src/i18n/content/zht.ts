@@ -601,7 +601,7 @@ export const content = {
     steps: {
       "get-the-app": {
         title: "取得應用程式",
-        body: "在 iPhone 上透過 TestFlight 安裝 OpenCode 測試版，或在 Android 手機上安裝 OpenCode 應用程式。",
+        body: "在 iPhone 上透過 App Store 安裝 OpenCode，或在 Android 手機上透過 Google Play 安裝。",
       },
       "run-this-on-your-computer": {
         title: "在電腦上執行",

@@ -650,7 +650,7 @@ export const content = {
     steps: {
       "get-the-app": {
         title: "앱 받기",
-        body: "iPhone에서는 TestFlight로 OpenCode 베타를, Android 휴대폰에서는 OpenCode 앱을 설치하세요.",
+        body: "iPhone에서는 App Store에서, Android 휴대폰에서는 Google Play에서 OpenCode를 설치하세요.",
       },
       "run-this-on-your-computer": {
         title: "컴퓨터에서 실행",
