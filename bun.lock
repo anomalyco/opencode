@@ -29,7 +29,7 @@
     },
     "packages/ai": {
       "name": "@opencode/ai",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@aws-sdk/credential-providers": "3.1057.0",
         "@opencode/schema": "workspace:*",
@@ -51,7 +51,7 @@
     },
     "packages/app": {
       "name": "@opencode/app",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@corvu/drawer": "catalog:",
         "@dnd-kit/abstract": "0.5.0",
@@ -106,7 +106,7 @@
     },
     "packages/cli": {
       "name": "@opencode/cli",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "bin": {
         "opencode": "./bin/opencode.cjs",
         "opencode2": "./bin/opencode2.cjs",
@@ -187,7 +187,7 @@
     },
     "packages/client": {
       "name": "@opencode/client",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@opencode/protocol": "workspace:*",
         "@opencode/schema": "workspace:*",
@@ -213,7 +213,7 @@
     },
     "packages/codemode": {
       "name": "@opencode/codemode",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "acorn": "8.15.0",
         "effect": "catalog:",
@@ -227,7 +227,7 @@
     },
     "packages/core": {
       "name": "@opencode/core",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@ai-sdk/provider": "3.0.19",
         "@effect/platform-node": "catalog:",
@@ -307,7 +307,7 @@
     },
     "packages/data/app": {
       "name": "@opencode/data-app",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode/data-core": "workspace:*",
@@ -336,7 +336,7 @@
     },
     "packages/data/core": {
       "name": "@opencode/data-core",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@planetscale/database": "1.19.0",
         "drizzle-orm": "catalog:",
@@ -353,7 +353,7 @@
     },
     "packages/data/server": {
       "name": "@opencode/data-server",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@opencode/data-core": "workspace:*",
         "effect": "catalog:",
@@ -369,7 +369,7 @@
     },
     "packages/desktop": {
       "name": "@opencode/desktop",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@zip.js/zip.js": "2.7.62",
         "electron-context-menu": "5.0.0",
@@ -417,7 +417,7 @@
     },
     "packages/gui-plugins": {
       "name": "@opencode/gui-plugins",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@betteroffice/docx": "0.4.3",
         "@betteroffice/fonts": "0.4.0",
@@ -464,7 +464,7 @@
     },
     "packages/http-recorder": {
       "name": "@opencode/http-recorder",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@effect/platform-node-shared": "catalog:",
       },
@@ -483,7 +483,7 @@
     },
     "packages/httpapi-codegen": {
       "name": "@opencode/httpapi-codegen",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "effect": "catalog:",
         "prettier": "3.6.2",
@@ -496,7 +496,7 @@
     },
     "packages/latex": {
       "name": "@opencode/latex",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@opencode/plugin": "workspace:*",
         "@opentui/core": "catalog:",
@@ -519,7 +519,7 @@
     },
     "packages/merman": {
       "name": "@opencode/merman",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@opencode/plugin": "workspace:*",
         "@opentui/core": "catalog:",
@@ -534,7 +534,7 @@
     },
     "packages/nav-menus": {
       "name": "@opencode/nav-menus",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "devDependencies": {
         "@happy-dom/global-registrator": "20.0.11",
         "@types/bun": "catalog:",
@@ -545,7 +545,7 @@
     },
     "packages/patchmark": {
       "name": "@opencode/patchmark",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "devDependencies": {
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
@@ -558,7 +558,7 @@
     },
     "packages/plugin": {
       "name": "@opencode/plugin",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@ai-sdk/provider": "3.0.8",
         "@opencode/ai": "workspace:*",
@@ -603,7 +603,7 @@
     },
     "packages/plugin-browser": {
       "name": "@opencode/plugin-browser",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@opencode/plugin": "workspace:*",
         "@opencode/schema": "workspace:*",
@@ -619,7 +619,7 @@
     },
     "packages/plugins/figma": {
       "name": "@opencode/plugin-figma",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "gray-matter": "4.0.3",
       },
@@ -634,7 +634,7 @@
     },
     "packages/protocol": {
       "name": "@opencode/protocol",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@opencode/schema": "workspace:*",
         "effect": "catalog:",
@@ -649,7 +649,7 @@
     },
     "packages/schema": {
       "name": "@opencode/schema",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@standard-schema/spec": "catalog:",
         "effect": "catalog:",
@@ -673,7 +673,7 @@
     },
     "packages/sdk": {
       "name": "@opencode/sdk",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@opencode/client": "workspace:*",
         "@opencode/core": "workspace:*",
@@ -694,7 +694,7 @@
     },
     "packages/server": {
       "name": "@opencode/server",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@effect/platform-node": "catalog:",
         "@effect/platform-node-shared": "catalog:",
@@ -717,7 +717,7 @@
     },
     "packages/session-ui": {
       "name": "@opencode/session-ui",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@kitlangton/solid-motion": "0.2.2",
         "@kobalte/core": "catalog:",
@@ -749,7 +749,7 @@
     },
     "packages/simulation": {
       "name": "@opencode/simulation",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@opencode/ai": "workspace:*",
         "@opencode/core": "workspace:*",
@@ -787,7 +787,7 @@
     },
     "packages/theme": {
       "name": "@opencode/theme",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@opentui/core": "catalog:",
         "effect": "catalog:",
@@ -801,7 +801,7 @@
     },
     "packages/tui": {
       "name": "@opencode/tui",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@opencode/client": "workspace:*",
         "@opencode/core": "workspace:*",
@@ -833,7 +833,7 @@
     },
     "packages/ui": {
       "name": "@opencode/ui",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@kitlangton/solid-motion": "0.2.2",
         "@kobalte/core": "catalog:",
@@ -869,7 +869,7 @@
     },
     "packages/util": {
       "name": "@opencode/util",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "@effect/opentelemetry": "catalog:",
         "@effect/platform-node": "catalog:",
@@ -1009,7 +1009,7 @@
     },
     "services/update": {
       "name": "@opencode/update",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "dependencies": {
         "jose": "6.0.11",
         "semver": "catalog:",
