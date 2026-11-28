@@ -109,6 +109,7 @@ export function createLineCommentAnnotationRenderer<T, C, D>(props: {
       host: HTMLDivElement
       dispose: VoidFunction
       setMeta: (meta: LineCommentAnnotationMeta<T>) => void
+      refocus: VoidFunction
     }
   >()
 
@@ -145,7 +146,26 @@ export function createLineCommentAnnotationRenderer<T, C, D>(props: {
       return props.draftElement(view)
     }, host)
 
-    const node = { host, dispose, setMeta: setCurrent }
+    // Pierre takes the host out of the page while it redraws the diff, which drops focus from a draft being typed.
+    // Keep the focused element until Pierre hands the host back, unless focus left while the host stayed in the page.
+    let focused: HTMLElement | undefined
+    host.addEventListener("focusin", (event) => {
+      if (event.target instanceof HTMLElement) focused = event.target
+    })
+    host.addEventListener("focusout", (event) => {
+      queueMicrotask(() => {
+        if (host.isConnected && focused === event.target) focused = undefined
+      })
+    })
+    const refocus = () => {
+      const target = focused
+      if (!target) return
+      queueMicrotask(() => {
+        if (document.activeElement === document.body) target.focus({ preventScroll: true })
+      })
+    }
+
+    const node = { host, dispose, setMeta: setCurrent, refocus }
     nodes.set(meta.key, node)
 
     return node
@@ -157,6 +177,7 @@ export function createLineCommentAnnotationRenderer<T, C, D>(props: {
 
     if (!node) return
     node.setMeta(meta)
+    node.refocus()
 
     return node.host
   }
