@@ -284,6 +284,8 @@ export function make(input: Input): Connection {
                   prompts: [],
                   skills: [],
                 }
+                // In the same step as the state, so no interruption can leave a live client unwatched.
+                watch(opened.client)
                 return opened
               default:
                 return absurd<Opened>(opened)
@@ -305,7 +307,6 @@ export function make(input: Input): Connection {
         case "Legacy":
           return yield* input.events.legacy?.(opened.client.protocolVersion) ?? Effect.void
         case "Listed":
-          watch(opened.client)
           yield* input.events.connected
           whenLive(opened.client)(refreshPrompts(opened.client))
           whenLive(opened.client)(refreshSkills(opened.client))
