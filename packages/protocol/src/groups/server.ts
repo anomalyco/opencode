@@ -64,7 +64,7 @@ export const ServerGroup = HttpApiGroup.make("server.server")
     ),
   )
   .add(
-    HttpApiEndpoint.get("server.connect", PAIRING_CONNECT_PATH, {
+    HttpApiEndpoint.post("server.connect", PAIRING_CONNECT_PATH, {
       params: { code: Schema.String },
       success: PairingSession,
       error: UnauthorizedError,
@@ -73,7 +73,23 @@ export const ServerGroup = HttpApiGroup.make("server.server")
         identifier: "server.connect",
         summary: "Redeem pairing code",
         description:
-          "Redeem a pairing code. Browsers receive a session cookie and a redirect to the web app; requests that accept JSON receive a session token to use as the password.",
+          "Redeem a pairing code. Browsers submitting the pairing page receive a session cookie and a redirect to the web app; other clients receive a session token to use as the password.",
+      }),
+    ),
+  )
+  // Opening a link must not spend its code: link checkers, chat previews and HEAD probes fetch it before the user does.
+  // Omitted from generated clients.
+  .add(
+    HttpApiEndpoint.get("server.connectPage", PAIRING_CONNECT_PATH, {
+      params: { code: Schema.String },
+      success: PairingSession,
+      error: UnauthorizedError,
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "server.connectPage",
+        summary: "Open pairing link",
+        description:
+          "Show browsers a page that redeems the pairing code when the user confirms; the code stays valid until then. Deprecated: a GET that does not ask for HTML still redeems the code for a session token, for clients built before POST. Removed in the next minor.",
       }),
     ),
   )

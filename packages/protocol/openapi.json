@@ -91,7 +91,7 @@
       }
     },
     "/auth/connect/{code}": {
-      "get": {
+      "post": {
         "tags": ["server"],
         "operationId": "server.connect",
         "parameters": [
@@ -137,8 +137,57 @@
             }
           }
         },
-        "description": "Redeem a pairing code. Browsers receive a session cookie and a redirect to the web app; requests that accept JSON receive a session token to use as the password.",
+        "description": "Redeem a pairing code. Browsers submitting the pairing page receive a session cookie and a redirect to the web app; other clients receive a session token to use as the password.",
         "summary": "Redeem pairing code"
+      },
+      "get": {
+        "tags": ["server"],
+        "operationId": "server.connectPage",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "PairingSession",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Show browsers a page that redeems the pairing code when the user confirms; the code stays valid until then. Deprecated: a GET that does not ask for HTML still redeems the code for a session token, for clients built before POST. Removed in the next minor.",
+        "summary": "Open pairing link"
       }
     },
     "/api/location": {

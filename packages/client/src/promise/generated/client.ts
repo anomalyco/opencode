@@ -531,7 +531,7 @@ export function make(options: ClientOptions) {
       connect: (input: ServerConnectInput, requestOptions?: RequestOptions) =>
         request<ServerConnectOutput>(
           {
-            method: "GET",
+            method: "POST",
             path: `/auth/connect/${encodeURIComponent(input.code)}`,
             successStatus: 200,
             declaredStatuses: [400, 401],
