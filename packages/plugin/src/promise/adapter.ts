@@ -2,7 +2,8 @@ import { Tool } from "@opencode/schema/tool"
 import type { Rpc } from "@opencode/schema/rpc"
 import type { OpenCodeEvent } from "@opencode/client"
 import type { RpcCallOptions, RpcEventPayload, SelectedEvent, SubscribeOptions } from "@opencode/client/promise/api"
-import { Effect, Schema, SchemaAST, Stream } from "effect"
+import { AsyncLocalStorage } from "node:async_hooks"
+import { Effect, FiberSet, Schema, SchemaAST, Stream } from "effect"
 import type { Scope } from "effect"
 import { HttpApiEndpoint, HttpApiSchema } from "effect/http-api"
 import { define } from "../effect/plugin.js"
@@ -28,6 +29,7 @@ interface CompiledEndpoint {
 
 const compiledEndpoints = new WeakMap<object, CompiledEndpoint>()
 const JsonInput = Schema.fromJsonString(Schema.Unknown)
+const toolCall = new AsyncLocalStorage<typeof Effect.runPromise>()
 
 interface HostRpcCallContext {
   readonly error: (type: string, message: string, data?: unknown) => unknown
@@ -249,12 +251,13 @@ export function fromPromise(plugin: Plugin) {
             dispose: () => Effect.runPromiseWith(runtime)(registration.dispose),
           }))
 
-        const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(runtime)(effect)
+        const run = Effect.runPromiseWith(runtime)
+        const runTool: typeof Effect.runPromise = (effect, options) => (toolCall.getStore() ?? run)(effect, options)
 
         const promiseExecutor =
           (execute: Tool.Info["execute"]): Info["execute"] =>
           (input, context) =>
-            Effect.runPromiseWith(runtime)(
+            runTool(
               execute(input, {
                 ...context,
                 progress: (update) => Effect.promise(() => context.progress(update)),
@@ -541,7 +544,7 @@ export function fromPromise(plugin: Plugin) {
             get: adaptApiMethod(PermissionEndpoints["session.permission.get"], host.permission.get),
             reply: adaptApiMethod(PermissionEndpoints["session.permission.reply"], host.permission.reply),
             assert: (input) =>
-              run(Schema.decodeUnknownEffect(AssertInput)(input).pipe(Effect.flatMap(host.permission.assert))),
+              runTool(Schema.decodeUnknownEffect(AssertInput)(input).pipe(Effect.flatMap(host.permission.assert))),
           },
           plugin: {
             list: adaptApiMethod(PluginEndpoints["plugin.list"], host.plugin.list),
@@ -741,13 +744,13 @@ const toolError = (error: unknown) =>
     ? error
     : new Tool.Error({ message: error instanceof Error ? error.message : String(error), error })
 
-const executePromiseTool = (tool: Info, input: any, context: Tool.Context) =>
-  Effect.tryPromise({
+const executePromiseTool = Effect.fnUntraced(function* (tool: Info, input: unknown, context: Tool.Context) {
+  const run = yield* FiberSet.makeRuntimePromise()
+  return yield* Effect.tryPromise({
     try: (interrupted) => {
       // `signal` aborts when the call is interrupted, and also when the user stops the call once the tool has read
       // it. Reading it awaits `cancel`, which tells the step this tool stops on its own instead of being interrupted.
       const stopped = new AbortController()
-      const finished = new AbortController()
       const signal = AbortSignal.any([interrupted, stopped.signal])
       // `cancel` stays out of the promise context; promise tools stop through `signal`.
       const { cancel, ...rest } = context
@@ -755,21 +758,22 @@ const executePromiseTool = (tool: Info, input: any, context: Tool.Context) =>
       const listen = () => {
         if (listening || !cancel) return
         listening = true
-        Effect.runPromise(cancel, { signal: AbortSignal.any([interrupted, finished.signal]) }).then(
+        run(cancel).then(
           () => stopped.abort(),
           () => {},
         )
       }
-      return Promise.resolve(
+      return toolCall.run(run, () =>
         tool.execute(input, {
           ...rest,
           get signal() {
             listen()
             return signal
           },
-          progress: (update) => Effect.runPromise(context.progress(update), { signal: interrupted }),
+          progress: (update) => run(context.progress(update), { signal: interrupted }),
         }),
-      ).finally(() => finished.abort())
+      )
     },
     catch: toolError,
   })
+}, Effect.scoped)

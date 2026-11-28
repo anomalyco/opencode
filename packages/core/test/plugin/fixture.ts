@@ -103,7 +103,7 @@ const permissionLayer = Layer.succeed(
 )
 
 export const makePluginTestLayer = (
-  permission = permissionLayer,
+  permission: Layer.Layer<Permission.Service> | typeof Permission.node = permissionLayer,
   generate = generateLayer,
   replacements: LayerNode.Replacements = [],
 ) =>
