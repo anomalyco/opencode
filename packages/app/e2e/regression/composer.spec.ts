@@ -1589,7 +1589,10 @@ test("a sent shell command returns the composer to prompt mode, and ! enters she
 })
 
 test("marks a Console provider with its workspace only when it is also connected directly", async ({ page }) => {
-  const model = (id: string, name: string) => ({ [id]: { id, name, limit: { context: 200_000 } } })
+  // Paid, so the workspace's own OpenCode model is not listed with the free models.
+  const model = (id: string, name: string) => ({
+    [id]: { id, name, cost: { input: 1, output: 1 }, limit: { context: 200_000 } },
+  })
 
   const managed = (id: string, canonical: string, name: string, models: ReturnType<typeof model>) => ({
     id,

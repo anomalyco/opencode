@@ -7,6 +7,7 @@ import { useFilteredList } from "@opencode/ui/hooks"
 import { createMemo, For, Show, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/providers/models/selection"
+import { isFreeModel } from "@/providers/models/models"
 import { popularProviders } from "@/providers/catalog/providers"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -30,12 +31,13 @@ export const DialogManageModels: Component = () => {
     void dialog.show(() => <DialogConnectProvider directory={directory()} />)
   }
 
-  const providerList = (providerID: string) => local.model.list().filter((x) => x.provider.id === providerID)
-
-  const setProviderVisibility = (providerID: string, checked: boolean) => {
-    providerList(providerID).forEach((x) => {
-      local.model.setVisibility({ modelID: x.id, providerID: x.provider.id }, checked)
-    })
+  const setProviderVisibility = (providerID: string, checked: boolean, free: boolean) => {
+    local.model
+      .list()
+      .filter((x) => x.provider.id === providerID && isFreeModel(x) === free)
+      .forEach((x) => {
+        local.model.setVisibility({ modelID: x.id, providerID: x.provider.id }, checked)
+      })
   }
 
   const setModelVisibility = (item: ModelItem, checked: boolean) => {
