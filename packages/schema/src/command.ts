@@ -10,6 +10,7 @@ export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   name: Schema.String,
   description: Schema.String.pipe(optional),
+  source: Schema.Literal("builtin").pipe(optional),
 }).annotate({ identifier: "Command.Info" })
 
 export const Event = {
