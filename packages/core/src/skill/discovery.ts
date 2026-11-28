@@ -90,8 +90,10 @@ const layer = Layer.effect(
 
     return Service.of({
       pull: Effect.fn("SkillDiscovery.pull")(function* (url) {
-        const base = url.endsWith("/") ? url : `${url}/`
-        const source = new URL(base)
+        // Child resources resolve against the directory, so the slash belongs on the pathname, not after a query or fragment.
+        const source = new URL(url)
+        if (!source.pathname.endsWith("/")) source.pathname = `${source.pathname}/`
+        const base = source.href
         const index = new URL("index.json", source).href
         const data = yield* HttpClientRequest.get(index).pipe(
           HttpClientRequest.acceptJson,
