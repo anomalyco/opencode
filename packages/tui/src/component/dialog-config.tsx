@@ -57,6 +57,15 @@ export const settings: Setting[] = [
     keywords: ["motion", "effects"],
   },
   {
+    title: "Open Inbox on launch",
+    category: "Inbox",
+    path: ["session", "inbox"],
+    description: "Start with the Inbox overlay open",
+    default: false,
+    values: [false, true],
+    labels: ["off", "on"],
+  },
+  {
     title: "Sidebar",
     category: "Session",
     path: ["session", "sidebar"],
