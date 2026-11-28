@@ -42,8 +42,8 @@ platform:
 
 Windows reserves ports from 49152 up, and WSL mirrored networking reserves
 another block below that, which is why Windows defaults to 28894. Hyper-V
-and WinNAT also reserve blocks of that range at boot, so a port outside the
-default dynamic range can still be unavailable. When a configured port
+and WinNAT can also reserve blocks below 49152 at boot, so a port outside
+the default dynamic range can still be unavailable. When a configured port
 falls in such a range, the service reports the excluded range instead of
 claiming another process holds the port. Print the current address with
 `opencode service status`:
