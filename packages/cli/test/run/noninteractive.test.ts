@@ -898,4 +898,289 @@ describe("runNonInteractivePrompt", () => {
     closed.reject(new ClientError("Transport", { detail: "ECONNRESET" }))
     expect(await output).toMatchObject({ stdout: "", stderr: "", exitCode: 0 })
   })
+
+  test("streams inbox-delivered synthetic reports in place before the woken reply without duplicating on reconcile", async () => {
+    const lists: ExperimentalJobListOutput[] = [[subagentJob], []]
+    const reportText = '<subagent sessionID="ses_child" state="completed">\nAudit ok\n</subagent>'
+    const reportMetadata = { source: "subagent", childID: "ses_child", agent: "explore", state: "completed" }
+    const compactionTokens = { input: 1200, output: 150, reasoning: 0, cache: { read: 0, write: 0 } }
+    const output = await capture({
+      format: "json",
+      jobs: () => lists.shift() ?? [],
+      messages: (messageID) => [
+        idleMessage("succeeded", "msg_after_report"),
+        {
+          id: "msg_woken_reply",
+          type: "assistant",
+          agent: "build",
+          model: { providerID: "test", id: "test-model" },
+          content: [{ type: "text", text: "Handled audit report." }],
+          finish: "stop",
+          time: { created: 5, completed: 6 },
+        },
+        {
+          id: "msg_compact",
+          type: "compaction",
+          status: "completed",
+          reason: "auto",
+          summary: "Summary of prior context",
+          cost: 0.002,
+          tokens: compactionTokens,
+          time: { created: 3 },
+        },
+        {
+          id: "msg_subagent_report",
+          type: "synthetic",
+          text: reportText,
+          description: "scan repo",
+          metadata: reportMetadata,
+          time: { created: 2 },
+        },
+        { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+      ],
+      turn: (id) => [
+        prompted(id),
+        settled(),
+        {
+          id: "evt_report_enqueued",
+          created: 2,
+          type: "session.inbox.enqueued",
+          durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+          data: {
+            sessionID: "ses_1",
+            inboxID: "msg_subagent_report",
+            item: {
+              type: "synthetic",
+              delivery: "queue",
+              payload: {
+                text: reportText,
+                description: "scan repo",
+                metadata: reportMetadata,
+              },
+            },
+          },
+        },
+        {
+          id: "evt_report_delivered",
+          created: 2,
+          type: "session.inbox.delivered",
+          durable: { aggregateID: "ses_1", seq: 3, version: 1 },
+          data: {
+            sessionID: "ses_1",
+            inboxID: "msg_subagent_report",
+          },
+        },
+        {
+          id: "evt_compact",
+          created: 3,
+          type: "session.compaction.started",
+          durable: { aggregateID: "ses_1", seq: 4, version: 1 },
+          data: { sessionID: "ses_1", reason: "auto" },
+        },
+        {
+          id: "evt_compact_done",
+          created: 4,
+          type: "session.compaction.ended",
+          durable: { aggregateID: "ses_1", seq: 5, version: 1 },
+          data: {
+            sessionID: "ses_1",
+            reason: "auto",
+            text: "Summary of prior context",
+            cost: 0.002,
+            tokens: compactionTokens,
+          },
+        },
+        {
+          id: "evt_woken_step",
+          created: 5,
+          type: "session.step.started",
+          durable: { aggregateID: "ses_1", seq: 6, version: 1 },
+          data: {
+            started: 5,
+            sessionID: "ses_1",
+            assistantMessageID: "msg_woken_reply",
+            agent: "build",
+            model: { providerID: "test", id: "test-model" },
+          },
+        },
+        {
+          id: "evt_woken_text",
+          created: 5,
+          type: "session.text.ended",
+          durable: { aggregateID: "ses_1", seq: 7, version: 1 },
+          data: {
+            sessionID: "ses_1",
+            assistantMessageID: "msg_woken_reply",
+            ordinal: 0,
+            text: "Handled audit report.",
+          },
+        },
+        settled(),
+      ],
+    })
+
+    const events = jsonLines(output.stdout).filter((event) => event.type !== "background_wait")
+    expect(events.map((event) => event.type)).toEqual(["synthetic", "compaction", "step_start", "text"])
+    expect(events[0]).toMatchObject({
+      type: "synthetic",
+      sessionID: "ses_1",
+      part: {
+        id: "prt_report_delivered",
+        sessionID: "ses_1",
+        messageID: "msg_subagent_report",
+        type: "synthetic",
+        text: reportText,
+        description: "scan repo",
+        metadata: reportMetadata,
+      },
+    })
+    expect(events[1]).toMatchObject({
+      type: "compaction",
+      sessionID: "ses_1",
+      part: {
+        id: "prt_compact_done",
+        sessionID: "ses_1",
+        messageID: "msg_compact",
+        type: "compaction",
+        reason: "auto",
+        summary: "Summary of prior context",
+        cost: 0.002,
+        tokens: compactionTokens,
+      },
+    })
+  })
+
+  test("reconciles missed synthetic and completed compaction messages when live events were not seen", async () => {
+    const compactionTokens = { input: 800, output: 100, reasoning: 0, cache: { read: 0, write: 0 } }
+    const output = await capture({
+      format: "json",
+      messages: (messageID) => [
+        idleMessage("succeeded", "msg_reconcile_idle"),
+        {
+          id: "msg_missed_compact",
+          type: "compaction",
+          status: "completed",
+          reason: "manual",
+          summary: "Compacted history",
+          tokens: compactionTokens,
+          time: { created: 3 },
+        },
+        {
+          id: "msg_missed_shell",
+          type: "synthetic",
+          text: '<shell id="sh_1" state="completed" command="echo ok">\nok\n</shell>',
+          description: "echo ok",
+          metadata: { source: "shell", shellID: "sh_1", state: "completed", exit: 0 },
+          time: { created: 2 },
+        },
+        { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+      ],
+      turn: (id) => [prompted(id), settled()],
+    })
+
+    const events = jsonLines(output.stdout)
+    expect(events.map((event) => event.type)).toEqual(["synthetic", "compaction"])
+    expect(events[0]).toMatchObject({
+      type: "synthetic",
+      part: {
+        messageID: "msg_missed_shell",
+        type: "synthetic",
+        metadata: { source: "shell", shellID: "sh_1", state: "completed", exit: 0 },
+      },
+    })
+    expect(events[1]).toMatchObject({
+      type: "compaction",
+      part: {
+        messageID: "msg_missed_compact",
+        type: "compaction",
+        reason: "manual",
+        summary: "Compacted history",
+        tokens: compactionTokens,
+      },
+    })
+  })
+
+  test("streams an already-queued synthetic report before its woken reply on an existing session", async () => {
+    const reportText = '<subagent sessionID="ses_child" state="completed">\nPrior report\n</subagent>'
+    const reportMetadata = { source: "subagent", childID: "ses_child", agent: "explore", state: "completed" }
+    const output = await capture({
+      format: "json",
+      messages: (messageID) => [
+        idleMessage("succeeded", "msg_after_prior_report"),
+        {
+          id: "msg_woken_existing",
+          type: "assistant",
+          agent: "build",
+          model: { providerID: "test", id: "test-model" },
+          content: [{ type: "text", text: "Handled prior report." }],
+          finish: "stop",
+          time: { created: 4, completed: 5 },
+        },
+        {
+          id: "msg_prior_report",
+          type: "synthetic",
+          text: reportText,
+          description: "prior scan",
+          metadata: reportMetadata,
+          time: { created: 2 },
+        },
+        { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+      ],
+      turn: (id) => [
+        prompted(id),
+        {
+          id: "evt_prior_report_delivered",
+          created: 2,
+          type: "session.inbox.delivered",
+          durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+          data: {
+            sessionID: "ses_1",
+            inboxID: "msg_prior_report",
+          },
+        },
+        {
+          id: "evt_woken_existing_step",
+          created: 4,
+          type: "session.step.started",
+          durable: { aggregateID: "ses_1", seq: 3, version: 1 },
+          data: {
+            started: 4,
+            sessionID: "ses_1",
+            assistantMessageID: "msg_woken_existing",
+            agent: "build",
+            model: { providerID: "test", id: "test-model" },
+          },
+        },
+        {
+          id: "evt_woken_existing_text",
+          created: 4,
+          type: "session.text.ended",
+          durable: { aggregateID: "ses_1", seq: 4, version: 1 },
+          data: {
+            sessionID: "ses_1",
+            assistantMessageID: "msg_woken_existing",
+            ordinal: 0,
+            text: "Handled prior report.",
+          },
+        },
+        settled(),
+      ],
+    })
+
+    const events = jsonLines(output.stdout)
+    expect(events.map((event) => event.type)).toEqual(["synthetic", "step_start", "text"])
+    expect(events[0]).toMatchObject({
+      type: "synthetic",
+      sessionID: "ses_1",
+      part: {
+        id: "prt_prior_report_delivered",
+        sessionID: "ses_1",
+        messageID: "msg_prior_report",
+        type: "synthetic",
+        text: reportText,
+        description: "prior scan",
+        metadata: reportMetadata,
+      },
+    })
+  })
 })
