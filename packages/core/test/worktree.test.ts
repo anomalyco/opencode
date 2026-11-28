@@ -928,6 +928,44 @@ describe("Worktree", () => {
       }),
     )
   })
+  for (const separator of new Set(["/", path.sep])) {
+    it.live(`expands worktree directory config written as ~ and ~${separator}copies`, () =>
+      Effect.gen(function* () {
+        const input = yield* setup()
+        const config = yield* Config.Test
+        const global = yield* Global.Service
+        const worktrees = yield* fixtureWorktree()
+        const home = abs(path.join(input.root.path, "home"))
+        yield* config.setEntries([
+          new Document({
+            type: "document",
+            path: abs(path.join(input.sourceDirectory, "opencode.json")),
+            info: new Info({ worktree: { directory: `~${separator}copies` } }),
+          }),
+        ])
+        yield* ConfigWorktreePlugin.Plugin.effect(host()).pipe(
+          Effect.provideService(Global.Service, { ...global, home }),
+        )
+
+        const nested = yield* worktrees.create({ name: "nested" })
+        expect(nested.directory).toBe(abs(path.join(home, "copies", "nested")))
+
+        yield* config.setEntries([
+          new Document({
+            type: "document",
+            path: abs(path.join(input.sourceDirectory, "opencode.json")),
+            info: new Info({ worktree: { directory: "~" } }),
+          }),
+        ])
+        yield* ConfigWorktreePlugin.Plugin.effect(host()).pipe(
+          Effect.provideService(Global.Service, { ...global, home }),
+        )
+
+        const direct = yield* worktrees.create({ name: "direct" })
+        expect(direct.directory).toBe(abs(path.join(home, "direct")))
+      }),
+    )
+  }
 
   it.effect("normalization retains worktree directory and rejects invalid configuration", () =>
     Effect.sync(() => {

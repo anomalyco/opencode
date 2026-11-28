@@ -213,6 +213,33 @@ describe("ConfigSkillPlugin.Plugin", () => {
     ),
   )
 
+  for (const separator of new Set(["/", path.sep])) {
+    it.live(`expands configured skill directories written as ~ and ~${separator}shared`, () =>
+      Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+        Effect.flatMap((tmp) =>
+          Effect.gen(function* () {
+            const home = path.join(tmp.path, "home")
+            const shared = path.join(home, "shared")
+            const directory = path.join(tmp.path, "project")
+            yield* Effect.promise(() => Promise.all([fs.mkdir(shared, { recursive: true }), fs.mkdir(directory)]))
+
+            yield* startEntries(
+              [new Document({ type: "document", info: decode({ skills: ["~", `~${separator}shared`] }) })],
+              directory,
+              home,
+              emptyDiscovery,
+              { claude: [], agents: [] },
+            )
+            const watcher = yield* Watcher.Test
+            expect(yield* watcher.subscriptions()).toEqual(
+              [home, shared].map((item) => ({ path: item, type: "directory", ignore: SkillScan.ignore.toSorted() })),
+            )
+          }),
+        ),
+      ),
+    )
+  }
+
   it.live("loads directory and individual downloaded skill roots with later-source precedence", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>

@@ -385,6 +385,49 @@ describe("ConfigInstructionPlugin.Plugin", () => {
     ),
   )
 
+  for (const separator of new Set(["/", path.sep])) {
+    it.live(`expands configured instruction paths written as ~${separator}home.md and globs`, () =>
+      tmpdirScoped().pipe(
+        Effect.flatMap((tmp) => {
+          const project = path.join(tmp.path, "repo")
+          const home = path.join(tmp.path, "home")
+          const homeFile = path.join(home, "home.md")
+          const nested = path.join(home, "notes", "sub", "guide.md")
+          return Effect.gen(function* () {
+            yield* Effect.promise(async () => {
+              await fs.mkdir(project, { recursive: true })
+              await fs.mkdir(path.dirname(nested), { recursive: true })
+              await Promise.all([fs.writeFile(homeFile, "home"), fs.writeFile(nested, "guide")])
+            })
+
+            const discovery = yield* start()
+            const initialized = yield* readInitial(yield* discovery.load())
+            expect(initialized.text).toBe(
+              [`Instructions from: ${homeFile}\nhome`, `Instructions from: ${nested}\nguide`].join("\n\n"),
+            )
+          }).pipe(
+            Effect.provide(
+              instructionLayer({
+                config: path.join(tmp.path, "global"),
+                home,
+                instructions: [`~${separator}home.md`, `~${separator}notes${separator}**${separator}*.md`],
+                locationServiceLayer: Layer.succeed(
+                  Location.Service,
+                  Location.Service.of(
+                    location(
+                      { directory: AbsolutePath.make(project) },
+                      { projectDirectory: AbsolutePath.make(project) },
+                    ),
+                  ),
+                ),
+              }),
+            ),
+          )
+        }),
+      ),
+    )
+  }
+
   it.live("reloads configured sources on config updates and keeps the last fetched URL", () =>
     tmpdirScoped().pipe(
       Effect.flatMap((tmp) => {

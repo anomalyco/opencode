@@ -1777,8 +1777,34 @@ describe("Config", () => {
         env: { QUOTED: String.raw`a\"b`, FRAGMENT: '{"k":"v"}' },
       })
       expect(JSON.parse(text)).toEqual({ quoted: 'a"b', fragment: { k: "v" } })
-    }).pipe(Effect.provide(AppNodeBuilder.build(FSUtil.node))),
+    }).pipe(Effect.provide(AppNodeBuilder.build(LayerNode.group([FSUtil.node, Global.node])))),
   )
+
+  for (const separator of new Set(["/", path.sep])) {
+    it.live(`expands {file:~${separator}...} references against home`, () =>
+      withTempDir((tmp) =>
+        Effect.gen(function* () {
+          const home = path.join(tmp.path, "home")
+          const raw = separator === "\\" ? "~\\\\secret.txt" : "~/secret.txt"
+          yield* Effect.promise(() => fs.mkdir(home, { recursive: true }))
+          yield* Effect.promise(() => fs.writeFile(path.join(home, "secret.txt"), "home-secret\n"))
+          const text = yield* ConfigVariable.substitute({
+            type: "virtual",
+            source: "test",
+            dir: tmp.path,
+            text: `{ "token": "{file:${raw}}" }`,
+          })
+          expect(JSON.parse(text)).toEqual({ token: "home-secret" })
+        }).pipe(
+          Effect.provide(
+            AppNodeBuilder.build(LayerNode.group([FSUtil.node, Global.node]), [
+              Global.node.replace(Global.layerWith({ home: path.join(tmp.path, "home") })),
+            ]),
+          ),
+        ),
+      ),
+    )
+  }
 
   it.live("does not load legacy config.json files", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
