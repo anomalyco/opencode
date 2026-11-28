@@ -419,11 +419,11 @@ export interface SettingsPage {
   readonly section?: "general"
   /**
    * The nav group of a page. Omit it to list the page after the app's own pages, such as Shortcuts.
-   * - `top`: in the first group, right after the app's own pages, for an account or subscription the user checks
-   *   often.
+   * - `server`: first in the server's group, above Providers, for an account that belongs to the server, as its
+   *   providers do.
    * - `about`: below About, in its group, for pages about the app itself such as release notes.
    */
-  readonly group?: "top" | "about"
+  readonly group?: "server" | "about"
   /** Nav label of a page; search shows it as the section of every entry, except rows placed in a host `section`. */
   readonly title: string
   /** The page's nav icon. */

@@ -91,7 +91,7 @@ export default {
 /** Signed out of OpenCode: Subscribe, and Sign in. */
 export const SignedOut = story({ signedIn: false, limits: null })
 
-/** Signed in to a workspace without Go. */
+/** Signed in to a workspace without an active Go subscription. */
 export const NotSubscribed = story({ signedIn: true, limits: { workspace, budgets: [] } })
 
 /** Signed in with an API key, which names no workspace: the server reports no limits. */

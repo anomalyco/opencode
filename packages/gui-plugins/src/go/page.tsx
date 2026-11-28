@@ -77,6 +77,16 @@ export default function GoPage(props: { server: Accessor<GoServer | undefined> }
     return "loading"
   })
 
+  const description = () => {
+    const workspace = limits()?.workspace
+
+    return workspace ? ctx.t("signedIn", { workspace: workspace.name ?? workspace.id }) : ctx.t("description")
+  }
+
+  // A workspace without Go looks the same whether it never subscribed or its plan lapsed. A sign-in that names no
+  // workspace, such as an API key, has no limits to tell.
+  const subscribe = () => (limits() ? "renew" : "subscribe")
+
   const duration = (until: number) => {
     const minutes = Math.max(1, Math.floor((until - Date.now()) / 60_000))
 
@@ -91,7 +101,7 @@ export default function GoPage(props: { server: Accessor<GoServer | undefined> }
   return (
     <ui.SettingsLayout
       title={ctx.t("title")}
-      description={ctx.t("description")}
+      description={description()}
       actions={
         <ui.Button variant="ghost" icon="square-arrow-top-right" onClick={() => system.openExternal(DOCS_URL)}>
           {ctx.t("details")}
@@ -135,7 +145,7 @@ export default function GoPage(props: { server: Accessor<GoServer | undefined> }
               </Show>
             }
           >
-            <ui.SettingsRow title={ctx.t("subscribe.title")} description={ctx.t("subscribe.description")}>
+            <ui.SettingsRow title={ctx.t(`${subscribe()}.title`)} description={ctx.t(`${subscribe()}.description`)}>
               <ui.Button variant="submit" onClick={() => system.openExternal(limits()?.workspace.goURL ?? GO_URL)}>
                 {ctx.t("subscribe.action")}
               </ui.Button>

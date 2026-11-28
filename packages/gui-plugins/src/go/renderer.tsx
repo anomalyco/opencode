@@ -28,7 +28,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     () => {
       ctx.add(SettingsPage, {
         id: "go",
-        group: "top",
+        group: "server",
         icon: ctx.icons.go,
         get title() {
           return ctx.t("title")
