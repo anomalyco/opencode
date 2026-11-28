@@ -145,13 +145,17 @@ const home = Effect.fnUntraced(function* (machines: boolean) {
   }
 })
 
-/** A worker's endpoint on loopback, and a dial of the home key over it whose stream is the link's carrier. */
-const workerEndpoint = Effect.fnUntraced(function* (home: Endpoint) {
+/**
+ * A worker's endpoint on loopback, its Iroh key from `seed` when given, and a dial of the home key over it whose stream
+ * is the link's carrier.
+ */
+const workerEndpoint = Effect.fnUntraced(function* (home: Endpoint, seed?: Uint8Array) {
   const binding = yield* Effect.promise(() => loadBinding())
   if (!binding) return yield* Effect.die(new Error("no Iroh build for this platform"))
   const builder = binding.Endpoint.builder()
   builder.applyMinimal()
   builder.bindAddr("127.0.0.1:0")
+  if (seed) builder.secretKey(Array.from(seed))
   const endpoint = yield* Effect.acquireRelease(
     Effect.promise(() => builder.bind()),
     (endpoint) => Effect.promise(() => endpoint.close()),
@@ -225,6 +229,40 @@ it.live("pairs a worker over Iroh, carries its frames, and refuses a bad join wi
     yield* files.write("/note.bin", bytes)
     expect(Buffer.compare((yield* files.read("/note.bin")).bytes, bytes)).toBe(0)
     expect(server.state.loads).toBe(1)
+  }),
+)
+
+it.live("reports the path of a worker that dials again while its old Iroh connection is still open", () =>
+  Effect.gen(function* () {
+    const server = yield* home(true)
+    const added = yield* Effect.promise(() => server.api.experimental.machine.add({ name: "gpu", reach: [] }))
+    const join = Option.getOrThrow(Join.decode(added.join))
+    // As when a worker restarts or redials before the home's idle timeout: Iroh keeps the first connection's path
+    // selected for the key, so no path of the second connection is marked selected on the home.
+    const seed = randomBytes(32)
+    const first = yield* workerEndpoint(server.state.endpoint!, seed)
+    yield* first(join.home)
+    const dial = yield* workerEndpoint(server.state.endpoint!, seed)
+    const identity = Identity.fromSeed(randomBytes(32))
+    const fake = yield* makeWorker({
+      connect: (connection) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const dialed = yield* dial(join.home)
+            const linked = yield* Link.connect(dialed.carrier, { home: join.home, identity, secret: join.secret })
+            linked.send(connection.hello)
+            yield* Effect.raceFirst(
+              Stream.runForEach(linked.messages, (message) => Effect.sync(() => connection.send(message))),
+              Stream.runForEach(connection.messages, (message) => Effect.sync(() => linked.send(message))),
+            )
+          }),
+        ),
+    })
+    yield* fake.restore
+    yield* until(Effect.map(server.machines.list(), (list) => list.some((machine) => machine.online)))
+    const listed = yield* Effect.promise(() => server.api.experimental.machine.list())
+    expect(listed[0].connection).toMatchObject({ kind: "iroh", path: "direct" })
+    expect(listed[0].connection?.rtt).toBeGreaterThanOrEqual(0)
   }),
 )
 
