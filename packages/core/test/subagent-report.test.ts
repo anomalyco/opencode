@@ -12,10 +12,12 @@ import { JobTable } from "@opencode/core/job/sql"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
 import { Model } from "@opencode/core/model"
+import { Money } from "@opencode/schema/money"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
+import { SessionEvent } from "@opencode/core/session/event"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SubagentReport } from "@opencode/core/session/execution/subagent-report"
 import { SessionInbox } from "@opencode/core/session/inbox"
@@ -79,16 +81,19 @@ describe("SubagentReport settlement", () => {
   it.effect("keeps an automation run's child quiet unless the parent followed up through a Job", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
+      const bus = yield* Bus.Service
       const jobs = yield* Job.Service
       const parent = sessionID("ses_automation_parent")
       const child = Automation.runSessionID(Automation.ID.make("aut_quiet"), 1)
       yield* seedSessions(database, [parent])
       yield* seedSessions(database, [child], { parent_id: parent, agent: "explore", title: "Morning triage" })
-      yield* seedAssistant(database, child, 100, "Triage done")
 
+      const replies = ["Triage done", "Follow-up done"]
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
-      const context = yield* buildExecution(scope, () => Effect.void)
+      const context = yield* buildExecution(scope, ({ sessionID: current }) =>
+        current === child && replies.length > 0 ? publishAssistant(bus, child, replies.shift()!) : Effect.void,
+      )
       const execution = Context.get(context, SessionExecution.Service)
 
       yield* execution.wake(child)
@@ -98,7 +103,6 @@ describe("SubagentReport settlement", () => {
       expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
 
       // A follow-up the parent sends with the subagent tool runs as a Job, and that reports as usual.
-      yield* seedAssistant(database, child, 200, "Follow-up done")
       const job = yield* jobs.start({
         id: child,
         type: "subagent",
@@ -116,6 +120,7 @@ describe("SubagentReport settlement", () => {
       const reports = yield* SessionInbox.list(database.db, parent)
       expect(reports).toHaveLength(1)
       expect(text(reports[0])).toContain("Follow-up done")
+      expect(text(reports[0])).not.toContain("Triage done")
     }),
   )
 
@@ -221,6 +226,7 @@ describe("SubagentReport settlement", () => {
   it.effect("reports each later busy period with its own boundary and without stale running work", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
+      const bus = yield* Bus.Service
       const jobs = yield* Job.Service
       const parent = sessionID("ses_period_parent")
       const child = sessionID("ses_period_child")
@@ -235,12 +241,14 @@ describe("SubagentReport settlement", () => {
         background: true,
         run: Deferred.await(shellDone).pipe(Effect.as("done")),
       })
+      const replies = ["Started tests", "Tests green", "Follow-up answer"]
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
-      const context = yield* buildExecution(scope, () => Effect.void)
+      const context = yield* buildExecution(scope, ({ sessionID: current }) =>
+        current === child && replies.length > 0 ? publishAssistant(bus, child, replies.shift()!) : Effect.void,
+      )
       const execution = Context.get(context, SessionExecution.Service)
 
-      yield* seedAssistant(database, child, 100, "Started tests")
       yield* execution.wake(child)
       yield* execution.awaitIdle(child)
       const first = yield* SessionInbox.list(database.db, parent)
@@ -253,7 +261,6 @@ describe("SubagentReport settlement", () => {
       const marker = (yield* jobs.pendingBackground)[0]
       if (!marker) return yield* Effect.die("shell marker missing")
       yield* jobs.completeBackground(marker.notificationID)
-      yield* seedAssistant(database, child, 200, "Tests green")
       yield* execution.wake(child)
       yield* execution.awaitIdle(child)
 
@@ -265,7 +272,6 @@ describe("SubagentReport settlement", () => {
       expect(text(second[1])).not.toContain("Background work still running:")
 
       // A human or parent follow-up prompt is another period with its own answer.
-      yield* seedAssistant(database, child, 300, "Follow-up answer")
       const inbox = yield* SessionInbox.Service
       yield* inbox.admit({
         id: SessionMessage.ID.create(),
@@ -475,6 +481,60 @@ describe("SubagentReport settlement", () => {
       expect(marker).toMatchObject({ id: child, status: "running" })
       if (marker) yield* jobs.completeBackground(marker.notificationID)
     }),
+  )
+
+  it.effect(
+    "preserves earlier terminal replies across coalesced wakes in the same busy period while skipping client tool steps",
+    () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const parent = sessionID("ses_coalesced_parent")
+        const child = sessionID("ses_coalesced_child")
+        yield* seedSessions(database, [parent])
+        yield* seedSessions(database, [child], { parent_id: parent, agent: "explore", title: "Coalesced audit" })
+
+        const scope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+        let execution: SessionExecution.Interface | undefined
+        let drains = 0
+        const context = yield* buildExecution(scope, ({ sessionID: current }) =>
+          Effect.gen(function* () {
+            if (current !== child) return
+            drains += 1
+            if (drains === 1) {
+              yield* seedAssistant(database, child, 100, "Checking files...", [toolPart("call_1")])
+              yield* seedAssistant(database, child, 101, "Main report")
+              // Ring pendingWake before this drain exits so the coordinator coalesces another drain.
+              if (execution) yield* execution.wake(child)
+              return
+            }
+            yield* seedAssistant(database, child, 102, "Checking shell output...", [toolPart("call_2")])
+            yield* seedAssistant(database, child, 103, "Addendum: nothing changed.")
+          }),
+        )
+        execution = Context.get(context, SessionExecution.Service)
+
+        yield* execution.wake(child)
+        yield* execution.awaitIdle(child)
+        yield* execution.awaitIdle(parent)
+
+        expect(drains).toBe(2)
+        expect(yield* SessionInbox.list(database.db, parent)).toMatchObject([
+          {
+            type: "synthetic",
+            payload: {
+              text: [
+                `<background-result kind="subagent" sessionID="${child}" state="completed" description="Coalesced audit">`,
+                "Main report",
+                "",
+                "Addendum: nothing changed.",
+                "</background-result>",
+              ].join("\n"),
+              metadata: { source: "subagent", childID: child, agent: "explore", state: "completed" },
+            },
+          },
+        ])
+      }),
   )
 })
 
@@ -699,6 +759,67 @@ describe("SubagentReport outbox", () => {
       if (marker) yield* jobs.completeBackground(marker.notificationID)
     }),
   )
+
+  it.effect(
+    "keeps provider-executed tool replies, ignores empty trailing replies, and falls back when only tool steps exist",
+    () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const store = yield* SessionStore.Service
+        const jobs = yield* Job.Service
+        const inbox = yield* SessionInbox.Service
+        const parent = sessionID("ses_terminal_filter_parent")
+        const hostedChild = sessionID("ses_terminal_filter_hosted")
+        const toolOnlyChild = sessionID("ses_terminal_filter_tool_only")
+        const unboundChild = sessionID("ses_terminal_filter_unbound")
+        yield* seedSessions(database, [parent])
+        yield* seedSessions(database, [hostedChild, toolOnlyChild, unboundChild], {
+          parent_id: parent,
+          agent: "explore",
+          title: "Filter audit",
+        })
+
+        const report = SubagentReport.make({
+          store,
+          jobs,
+          inbox,
+          draining: Effect.succeed(new Set()),
+          wake: () => Effect.void,
+        })
+
+        // Provider-executed tools stay terminal, and an empty trailing turn must not erase an earlier reply.
+        yield* seedAssistant(database, hostedChild, 100, "Hosted tool report", [toolPart("call_hosted", true)])
+        yield* seedAssistant(database, hostedChild, 101, "")
+        report.started(hostedChild, { startedSeq: 0 })
+        const hosted = yield* report.prepare(hostedChild, { type: "succeeded" })
+        yield* hosted.commit()
+        yield* hosted.deliver
+
+        // When every completed assistant in the period called a client tool, fall back to the newest one.
+        yield* seedAssistant(database, toolOnlyChild, 100, "First tool step", [toolPart("call_a")])
+        yield* seedAssistant(database, toolOnlyChild, 101, "Final tool step", [toolPart("call_b")])
+        report.started(toolOnlyChild, { startedSeq: 0 })
+        const toolOnly = yield* report.prepare(toolOnlyChild, { type: "succeeded" })
+        yield* toolOnly.commit()
+        yield* toolOnly.deliver
+
+        // Without a period boundary (startedSeq undefined), only the newest assistant is reported.
+        yield* seedAssistant(database, unboundChild, 100, "Earlier period reply")
+        yield* seedAssistant(database, unboundChild, 200, "Latest period reply")
+        const unbound = yield* report.prepare(unboundChild, { type: "succeeded" })
+        yield* unbound.commit()
+        yield* unbound.deliver
+
+        const items = yield* SessionInbox.list(database.db, parent)
+        expect(items).toHaveLength(3)
+        expect(text(items[0])).toContain("Hosted tool report")
+        expect(text(items[0])).not.toContain("Subagent completed without a text response.")
+        expect(text(items[1])).toContain("Final tool step")
+        expect(text(items[1])).not.toContain("First tool step")
+        expect(text(items[2])).toContain("Latest period reply")
+        expect(text(items[2])).not.toContain("Earlier period reply")
+      }),
+  )
 })
 
 function sessionID(value: string): SessionID {
@@ -787,7 +908,13 @@ function seedSessions(
 
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 
-function seedAssistant(database: Database.Service["Service"], sessionID: SessionID, seq: number, text: string) {
+function seedAssistant(
+  database: Database.Service["Service"],
+  sessionID: SessionID,
+  seq: number,
+  text: string,
+  extra: ReadonlyArray<SessionMessage.AssistantContent> = [],
+) {
   const id = SessionMessage.ID.make(`msg_seed_${sessionID}_${seq}`)
   const {
     id: _,
@@ -799,7 +926,7 @@ function seedAssistant(database: Database.Service["Service"], sessionID: Session
       type: "assistant",
       agent: Agent.ID.make("build"),
       model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
-      content: [SessionMessage.AssistantText.make({ type: "text", text })],
+      content: [SessionMessage.AssistantText.make({ type: "text", text }), ...extra],
       time: { created: DateTime.makeUnsafe(0), completed: DateTime.makeUnsafe(1) },
     }),
   )
@@ -808,6 +935,43 @@ function seedAssistant(database: Database.Service["Service"], sessionID: Session
     .values({ id, session_id: sessionID, type, seq, time_created: 0, data })
     .run()
     .pipe(Effect.orDie)
+}
+
+function publishAssistant(bus: Bus.Interface, sessionID: SessionID, text: string) {
+  return Effect.gen(function* () {
+    const assistantMessageID = SessionMessage.ID.create()
+    yield* bus.publish(SessionEvent.Step.Started, {
+      sessionID,
+      assistantMessageID,
+      agent: Agent.ID.make("build"),
+      model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
+      started: 0,
+    })
+    yield* bus.publish(SessionEvent.Text.Started, { sessionID, assistantMessageID, ordinal: 0 })
+    yield* bus.publish(SessionEvent.Text.Ended, { sessionID, assistantMessageID, ordinal: 0, text })
+    yield* bus.publish(SessionEvent.Step.Ended, {
+      sessionID,
+      assistantMessageID,
+      finish: "stop",
+      cost: Money.USD.make(0),
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    })
+  })
+}
+
+function toolPart(id: string, executed?: boolean) {
+  return SessionMessage.AssistantTool.make({
+    type: "tool",
+    id,
+    name: "shell",
+    ...(executed === undefined ? {} : { executed }),
+    state: {
+      status: "completed",
+      input: { command: "echo ok" },
+      content: [{ type: "text", text: "ok" }],
+    },
+    time: { created: DateTime.makeUnsafe(0), completed: DateTime.makeUnsafe(1) },
+  })
 }
 
 function claimValue(database: Database.Service["Service"], sessionID: SessionID) {
