@@ -145,7 +145,11 @@ starts a pipe process: any command without a terminal. Both return
 - On Unix the child gets its own process group and an empty signal mask with
   default actions (the daemon blocks SIGTERM and SIGINT, and std keeps the
   mask across exec). On Windows it is created with `CREATE_NO_WINDOW` (no
-  console) inside a kill-on-close job. For a bare executable name,
+  console) inside a kill-on-close job. When the program is a Store app (such
+  as Store PowerShell 7), the processes it starts stay inside its package, and
+  so in the job, instead of breaking away. A Store app started by another
+  process in the job, such as `cmd.exe`, still breaks away with everything it
+  starts. For a bare executable name,
   `CreateProcessW` searches the directory containing the daemon executable,
   the daemon's current directory, the 32-bit and then 16-bit Windows system
   directories, the Windows directory, and finally the directories in the

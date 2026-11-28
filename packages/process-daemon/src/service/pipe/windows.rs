@@ -50,9 +50,9 @@ use windows_sys::Win32::System::Threading::{
     CREATE_NO_WINDOW, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, CreateProcessW,
     DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT, GetCurrentProcess,
     GetExitCodeProcess, INFINITE, InitializeProcThreadAttributeList,
-    PROC_THREAD_ATTRIBUTE_HANDLE_LIST, PROCESS_INFORMATION, ResetEvent, ResumeThread,
-    STARTF_USESTDHANDLES, STARTUPINFOEXW, SetEvent, TerminateProcess, UpdateProcThreadAttribute,
-    WaitForMultipleObjects, WaitForSingleObject,
+    PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+    PROCESS_INFORMATION, ResetEvent, ResumeThread, STARTF_USESTDHANDLES, STARTUPINFOEXW, SetEvent,
+    TerminateProcess, UpdateProcThreadAttribute, WaitForMultipleObjects, WaitForSingleObject,
 };
 
 use super::{DRAIN_AFTER_EXIT, Exit, OutputSink, exit_message, start_pipe};
@@ -946,6 +946,14 @@ fn compare_keys(a: &[u16], b: &[u16]) -> Ordering {
     }
 }
 
+/// PROCESS_CREATION_DESKTOP_APP_BREAKAWAY_DISABLE_PROCESS_TREE, which
+/// windows-sys does not define. By default a Store app such as Store
+/// PowerShell 7 starts its children outside its package, and so outside every
+/// job; with this policy they stay in the job. It only helps when the Store app
+/// is the program itself: one started further down the tree, e.g. by cmd.exe,
+/// still breaks away with its children.
+static KEEP_DESKTOP_APP_CHILDREN: u32 = 0x02;
+
 /// An initialized process-attribute list and the buffer it points into, freed
 /// in the right order. The lifetime ties it to the handle array its value
 /// points into.
@@ -959,10 +967,22 @@ struct Attributes<'a> {
 
 impl<'a> Attributes<'a> {
     fn new(handles: &'a [HANDLE]) -> io::Result<Self> {
+        let entries = [
+            (
+                PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                handles.as_ptr().cast::<c_void>(),
+                size_of_val(handles),
+            ),
+            (
+                PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY,
+                (&raw const KEEP_DESKTOP_APP_CHILDREN).cast::<c_void>(),
+                size_of_val(&KEEP_DESKTOP_APP_CHILDREN),
+            ),
+        ];
         let mut bytes = 0;
         // SAFETY: the first call only reports the required size.
         unsafe {
-            InitializeProcThreadAttributeList(null_mut(), 1, 0, &mut bytes);
+            InitializeProcThreadAttributeList(null_mut(), entries.len() as u32, 0, &mut bytes);
         }
         if bytes == 0 {
             return Err(io::Error::last_os_error());
@@ -971,7 +991,9 @@ impl<'a> Attributes<'a> {
         let list = buffer.as_mut_ptr().cast::<c_void>();
         // SAFETY: the buffer is at least `bytes` long, `usize`-aligned, and
         // outlives the list.
-        if unsafe { InitializeProcThreadAttributeList(list, 1, 0, &mut bytes) } == 0 {
+        if unsafe { InitializeProcThreadAttributeList(list, entries.len() as u32, 0, &mut bytes) }
+            == 0
+        {
             return Err(io::Error::last_os_error());
         }
         let this = Self {
@@ -979,21 +1001,23 @@ impl<'a> Attributes<'a> {
             list,
             _attached: PhantomData,
         };
-        // SAFETY: the list was initialized for one attribute; the handle array
-        // outlives the list.
-        if unsafe {
-            UpdateProcThreadAttribute(
-                this.list,
-                0,
-                PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
-                handles.as_ptr().cast::<c_void>(),
-                size_of_val(handles),
-                null_mut(),
-                null(),
-            )
-        } == 0
-        {
-            return Err(io::Error::last_os_error());
+        for (attribute, value, length) in entries {
+            // SAFETY: the list was initialized for exactly `entries.len()`
+            // attributes; every value outlives the list and is only read.
+            if unsafe {
+                UpdateProcThreadAttribute(
+                    this.list,
+                    0,
+                    attribute as usize,
+                    value,
+                    length,
+                    null_mut(),
+                    null(),
+                )
+            } == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
         }
         Ok(this)
     }

@@ -579,6 +579,54 @@ fn signal_reaches_a_grandchild_in_the_job() {
 }
 
 #[test]
+fn signal_reaches_a_grandchild_of_store_powershell() {
+    // Only where PowerShell 7 is installed from the Microsoft Store.
+    let Some(alias) = env::var_os("LOCALAPPDATA")
+        .map(|dir| Path::new(&dir).join(r"Microsoft\WindowsApps\pwsh.exe"))
+        .filter(|alias| alias.exists())
+    else {
+        return;
+    };
+    let service = TerminalService::default();
+    let pid_file = TempPath::new("store-grandchild-pid");
+    let script = TempPath::script("store-grandchild", "ps1");
+    fs::write(
+        &script.0,
+        format!(
+            r#"
+            $child = [System.Diagnostics.Process]::Start('ping.exe', '-n 60 127.0.0.1')
+            [System.IO.File]::WriteAllText('{}', "$($child.Id)")
+            Start-Sleep -Seconds 60
+            "#,
+            ps_path(&pid_file.0)
+        ),
+    )
+    .unwrap();
+    let (info, _file) = start(&service, |file| {
+        pipe(
+            alias.to_str().unwrap(),
+            vec![
+                "-NoProfile".into(),
+                "-NonInteractive".into(),
+                "-ExecutionPolicy".into(),
+                "Bypass".into(),
+                "-File".into(),
+                script.0.display().to_string(),
+            ],
+            file,
+            base_env(),
+        )
+    });
+    let grandchild = KillOnDrop(read_pid(&pid_file.0));
+    assert!(alive(grandchild.0));
+    service.signal(info.id, ProcessSignal::Kill).unwrap();
+    let exit = service.wait(info.id).unwrap().recv().unwrap();
+    assert_eq!(exit.signal.as_deref(), Some("SIGKILL"));
+    wait_dead(grandchild.0);
+    service.terminate(info.id).unwrap();
+}
+
+#[test]
 fn terminate_does_not_hang_on_a_grandchild() {
     let service = TerminalService::default();
     let tree = grandchild_tree("terminate", None);
