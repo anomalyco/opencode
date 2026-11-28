@@ -5,13 +5,14 @@ import type { Event } from "electron"
 import { Context, Effect, Layer } from "effect"
 import { DeepLinks } from "../deep-links"
 import { jumpList, jumpTask } from "../native/jump-list"
+import { Toasts } from "../notifications"
 import { deepLinkArguments, takeLaunchLinks } from "./launch-links"
 import { DesktopLogging, scoped } from "../native/logging"
 import { sendMenuCommand } from "../native/menu"
 import { onNativeTranslations } from "../native/translations"
 import { DesktopStorage } from "../storage"
 import { safeWebContentsOrigin } from "../windows/state"
-import { getLastFocusedWindow, mainWindows } from "../windows"
+import { getLastFocusedWindow, getMainWindows, mainWindows } from "../windows"
 import type { Scope } from "@opencode/plugin/gui/host"
 import { marks } from "./marks"
 import { createBackgroundNotice } from "./background-notice"
@@ -138,14 +139,20 @@ const runtime = Layer.effect(
         return
       }
 
-      const urls = deepLinkArguments(argv)
+      const links = deepLinkArguments(argv)
+
+      // A toast's button answers where the person is, without bringing the app forward. A link that answers nothing
+      // brings a window forward instead, also when none has had the focus yet in this run.
+      const urls = links.filter(
+        (url) => !Toasts.activate(url, () => focusWindow(getLastFocusedWindow() ?? getMainWindows()[0] ?? null)),
+      )
 
       if (urls.length) {
         runFork(Effect.logInfo("deep link received via second-instance", { urls }))
         deepLinks.receive(urls)
       }
 
-      if (!urls.length) focusWindow(getLastFocusedWindow())
+      if (!links.length) focusWindow(getLastFocusedWindow())
     }
 
     const openUrl = (event: Event, url: string) => {

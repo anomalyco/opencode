@@ -56,13 +56,20 @@ type PlatformBase = {
 
   /**
    * Send a system notification. `options.tag` names it so a later one with the same tag replaces it and
-   * `dismissNotification` can take it back; `options.detail` is a second line saying what it is about.
+   * `dismissNotification` can take it back; `options.detail` is a second line saying what it is about. With a tag,
+   * `options.actions` are buttons where the system supports them, and `options.onAction` gets the clicked one's id; when
+   * it rejects, the click counts as one on the notification's body.
    */
   notify(
     title: string,
     description?: string,
     onClick?: () => void,
-    options?: { tag?: string; detail?: string },
+    options?: {
+      tag?: string
+      detail?: string
+      actions?: ReadonlyArray<{ id: string; label: string }>
+      onAction?: (id: string) => Promise<void>
+    },
   ): Promise<void>
 
   /** Take back the system notification sent with this tag, when it is still shown (desktop only) */

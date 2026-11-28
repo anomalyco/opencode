@@ -36,6 +36,15 @@ const requestTitles = {
   "websearch.provider": "notification.permission.title",
 } as const
 
+// A permission toast's buttons. Not "always": a click outside the app approves this one request at most, and a lasting
+// rule is made in the app, where its pattern shows.
+const permissionDecisions = ["once", "reject"] as const
+
+const decisionLabels = {
+  once: "ui.permission.allowOnce",
+  reject: "ui.permission.deny",
+} as const
+
 export function openNotificationSession(tabs: NotificationTabs, server: ServerConnection.Key, sessionID: string) {
   const tab = tabs.addSessionTab({ server, sessionId: sessionID })
 
@@ -439,12 +448,28 @@ export function createServerNotificationState(input: {
       ])
       void platform.requestAttention?.().catch(() => undefined)
 
-      return platform.notify(
-        language.t(requestTitles[kind]),
-        session.title ?? sessionID,
-        () => openNotificationSession(tabs, input.key, target),
-        { tag: requestTag(requestID), detail: requestDetail(input.data, kind, sessionID, requestID) },
-      )
+      const open = () => openNotificationSession(tabs, input.key, target)
+
+      const tag = requestTag(requestID)
+
+      const detail = requestDetail(input.data, kind, sessionID, requestID)
+
+      if (kind !== "permission")
+        return platform.notify(language.t(requestTitles[kind]), session.title ?? sessionID, open, { tag, detail })
+
+      // A permission's toast answers it as its dock does. An answer that fails (the request was answered elsewhere or
+      // expired) rejects, and the click then brings the session forward to answer there.
+      return platform.notify(language.t(requestTitles[kind]), session.title ?? sessionID, open, {
+        tag,
+        detail,
+        actions: permissionDecisions.map((decision) => ({ id: decision, label: language.t(decisionLabels[decision]) })),
+        onAction: async (id) => {
+          const decision = permissionDecisions.find((item) => item === id)
+
+          if (!decision) throw new Error(`not a toast answer: ${id}`)
+          await input.data.session.permission.reply({ sessionID, requestID, decision })
+        },
+      })
     })
   }
 

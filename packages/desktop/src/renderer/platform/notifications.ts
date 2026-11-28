@@ -13,8 +13,10 @@ const DETAIL_LIMIT = 160
 
 const activeNotifications = new Set<Notification>()
 
-// What each Windows toast main posted for this window runs when clicked, by tag.
-const toasts = new Map<string, () => void>()
+type Toast = { readonly onClick?: () => void; readonly onAction?: (id: string) => Promise<void> }
+
+// What each Windows toast main posted for this window runs when clicked, on its body or a button, by tag.
+const toasts = new Map<string, Toast>()
 
 export function createDesktopNotify(
   api: DesktopNotifyAPI,
@@ -23,10 +25,22 @@ export function createDesktopNotify(
   const windows = os === "windows"
 
   if (windows) {
-    api.onToastActivated((tag) => {
-      const onClick = toasts.get(tag)
-      toasts.delete(tag)
-      onClick?.()
+    // A body click arrives with the window already brought forward by main. A button doesn't bring it forward, so a
+    // button that answers nothing (its answer failed, or this page lost the toast in a reload) does it here instead.
+    const fallBack = (toast: Toast | undefined) => {
+      void Promise.all([api.showWindow(), api.setWindowFocus()])
+      toast?.onClick?.()
+    }
+
+    api.onToastActivated((activation) => {
+      const toast = toasts.get(activation.tag)
+      toasts.delete(activation.tag)
+
+      if (!activation.action) return toast?.onClick?.()
+
+      if (!toast?.onAction) return fallBack(toast)
+
+      toast.onAction(activation.action).catch(() => fallBack(toast))
     })
   }
 
@@ -38,10 +52,11 @@ export function createDesktopNotify(
 
       // On Windows a tagged notification is a toast main posts, so a repeat replaces it and an answer takes it back.
       if (windows && options?.tag) {
-        remember(options.tag, onClick ?? (() => {}))
+        remember(options.tag, { onClick, onAction: options.onAction })
         const body = [description, clip(options.detail)].filter(Boolean).join("\n")
+        const actions = options.onAction ? (options.actions ?? []) : []
 
-        return api.showToast({ tag: options.tag, title, body }).catch(() => undefined)
+        return api.showToast({ tag: options.tag, title, body, actions }).catch(() => undefined)
       }
 
       const notification = new Notification(title, {
@@ -84,7 +99,7 @@ export function createDesktopNotify(
   }
 }
 
-function remember(tag: string, onClick: () => void) {
+function remember(tag: string, toast: Toast) {
   toasts.delete(tag)
 
   if (toasts.size >= MAX_ACTIVE_NOTIFICATIONS) {
@@ -93,7 +108,7 @@ function remember(tag: string, onClick: () => void) {
     if (oldest !== undefined) toasts.delete(oldest)
   }
 
-  toasts.set(tag, onClick)
+  toasts.set(tag, toast)
 }
 
 function clip(value: string | undefined) {
