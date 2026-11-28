@@ -55,6 +55,13 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
             }),
       ),
     )
+    // JavaScript plugins may resolve to anything, and `in` throws on a non-object. Report the broken
+    // contract as a tool error instead of letting that TypeError escape as a defect.
+    if (!isToolResult(result))
+      return yield* new Tool.Error({
+        message:
+          "Tool did not return a result object. Return { content }, and output when the tool declares an output schema.",
+      })
     const outputSchema = overrides?.output ?? tool.output
     if (outputSchema === undefined) {
       if ("output" in result) return yield* Effect.die(new Error("Tool result declared output without an output schema"))
@@ -72,6 +79,8 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
       ...(result.metadata === undefined ? {} : { metadata: result.metadata }),
     }
   })
+
+const isToolResult = (value: unknown): value is Tool.Result => isRecord(value)
 
 const decodeInput = (tool: Pick<Tool.Info, "name" | "options">, schema: Tool.ValueSchema<any>, value: unknown) =>
   Effect.gen(function* () {

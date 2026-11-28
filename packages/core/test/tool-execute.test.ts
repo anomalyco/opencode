@@ -205,6 +205,32 @@ test("declared outputs cannot bypass validation and raw outputs stay JSON-compat
   )
 })
 
+test("a plugin result that is not an object settles as Tool.Error instead of throwing", async () => {
+  // JavaScript plugins resolve to whatever their function returns, so `undefined` and bare values reach
+  // this boundary. The `in` checks that read the result must not see them.
+  const nothing: Info = {
+    name: "nothing",
+    description: "Returns nothing",
+    input: Schema.Struct({}),
+    execute: () => Effect.succeed(undefined as never),
+  }
+  const bare: Info = {
+    name: "bare",
+    description: "Returns a bare string",
+    input: Schema.Struct({}),
+    output: Schema.String,
+    execute: () => Effect.succeed("bare" as never),
+  }
+
+  const errors = await Effect.runPromise(
+    Effect.forEach([nothing, bare], (tool) => execute(tool, {}, context).pipe(Effect.flip)),
+  )
+  for (const error of errors) {
+    expect(error).toBeInstanceOf(Tool.Error)
+    expect(error.message).toContain("Tool did not return a result object")
+  }
+})
+
 test("foreign typed failures settle as Tool.Error at the untrusted boundary", async () => {
   class ForeignFailure extends Schema.TaggedError<ForeignFailure>()("Plugin.ForeignFailure", {
     message: Schema.String,
