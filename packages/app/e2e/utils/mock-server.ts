@@ -69,6 +69,9 @@ export interface MockServerConfig {
   // Records `POST /api/experimental/fs/write` (attachment uploads), which answers the requested path.
   // Without it, writes answer 501 MockUnsupported.
   onFileWrite?: (input: { path: string; directory: string; body: string }) => void
+  // Runs on POST /api/experimental/fs/mkdir with the requested absolute path; the mock answers that path.
+  // Without it, mkdir answers 501 MockUnsupported.
+  onFileMkdir?: (input: { path: string; directory: string }) => void
   configEntries?: unknown[]
   directory: string
   project: unknown
@@ -1160,6 +1163,19 @@ function mockHandlers(
             const directory = requestDirectory(config, ctx.request)
             const path = new URL(ctx.request.url, "http://localhost").searchParams.get("path") ?? ""
             write({ path, directory, body: new TextDecoder().decode(ctx.payload) })
+
+            return { location: location(config, directory), data: { path } }
+          })
+        },
+        fsMkdir: (ctx) => {
+          const mkdir = config.onFileMkdir
+
+          if (!mkdir) return unsupported("create folders", "onFileMkdir")
+
+          return Effect.sync(() => {
+            const directory = requestDirectory(config, ctx.request)
+            const path = new URL(ctx.request.url, "http://localhost").searchParams.get("path") ?? ""
+            mkdir({ path, directory })
 
             return { location: location(config, directory), data: { path } }
           })

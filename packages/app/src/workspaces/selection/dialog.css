@@ -127,6 +127,32 @@
   border-bottom: 0.5px solid var(--v2-border-border-base);
 }
 
+.directory-picker-new-folder-button {
+  flex-shrink: 0;
+}
+
+.directory-picker-new-folder {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 0.5px solid var(--v2-border-border-base);
+}
+
+.directory-picker-new-folder-input {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.directory-picker-new-folder-error {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0 10px 8px;
+  color: var(--v2-state-fg-danger);
+  font-size: 12px;
+}
+
 .directory-picker-breadcrumbs {
   display: flex;
   min-width: 0;

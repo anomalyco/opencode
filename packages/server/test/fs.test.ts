@@ -7,6 +7,51 @@ import { it } from "../../core/test/lib/effect"
 import { startServer } from "./fixture/server"
 
 it.live(
+  "creates a folder with missing parents through the experimental mkdir route",
+  () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const current = path.join(tmp.path, "project")
+      yield* Effect.promise(() => fs.mkdir(current, { recursive: true }))
+      const server = yield* startServer(path.join(tmp.path, "config"))
+      const create = (target: string) =>
+        Effect.promise(async () => {
+          const url = new URL("/api/experimental/fs/mkdir", server.base)
+          url.searchParams.set("location[directory]", current)
+          url.searchParams.set("path", target)
+
+          return fetch(url, { method: "POST", headers: server.headers })
+        })
+      const target = path.join(current, "new", "nested")
+      const created = yield* create(target)
+      expect(created.status).toBe(200)
+      expect(yield* Effect.promise(() => created.json())).toMatchObject({
+        location: { directory: current },
+        data: { path: target },
+      })
+      expect((yield* Effect.promise(() => fs.stat(target))).isDirectory()).toBe(true)
+
+      // The picker can create a folder that already exists without failing.
+      expect((yield* create(target)).status).toBe(200)
+
+      // The endpoint is intentionally unconfined, so a new project can sit beside the current location.
+      const outside = path.join(tmp.path, "outside")
+      expect((yield* create(outside)).status).toBe(200)
+      expect((yield* Effect.promise(() => fs.stat(outside))).isDirectory()).toBe(true)
+
+      expect((yield* create("")).status).toBe(400)
+
+      const relative = yield* create("relative/folder")
+      expect(relative.status).toBe(400)
+      expect(yield* Effect.promise(() => relative.json())).toMatchObject({ _tag: "InvalidRequestError" })
+      expect(
+        yield* Effect.promise(() => fs.stat(path.join(current, "relative")).catch(() => undefined)),
+      ).toBeUndefined()
+    }),
+  15_000,
+)
+
+it.live(
   "browsing parents and siblings reuses the current Location and its MCP process",
   () =>
     Effect.gen(function* () {

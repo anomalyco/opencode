@@ -38,6 +38,7 @@ import {
   listPickerDirectory,
   pickerRelativePath,
   pickerAbsolutePath,
+  pickerFolderPath,
 } from "./domain"
 import {
   createPickerTreeState,
@@ -75,6 +76,8 @@ interface DirectoryPickerDialogProps {
   start?: string
 }
 
+type NewFolderState = { open: boolean; name: string; busy: boolean; error?: string }
+
 export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
   const servers = useServers()
   const serverCtx = useServer().ctx
@@ -94,6 +97,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     tree: createPickerTreeState(),
     combobox: createPickerComboboxState(),
   })
+  const [newFolder, setNewFolder] = createSignal<NewFolderState>({ open: false, name: "", busy: false })
 
   const treeMachine = createMemo(() => machines().tree)
   const treeView = createMemo(() => pickerTreeView(treeMachine(), policy))
@@ -105,6 +109,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
   let tree: FileTree | undefined
   let container: HTMLDivElement | undefined
   let pathArea: HTMLDivElement | undefined
+  let newFolderTrigger: HTMLButtonElement | undefined
 
   const knownGitRepos = createMemo(() => {
     const keys = new Set<string>()
@@ -193,6 +198,41 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
   function choose(directory: string) {
     dispatchCombobox({ type: "dismissed" })
     dispatchTree({ type: "directory.chosen", ...navigation(directory), fromInput: false })
+  }
+
+  function closeNewFolder() {
+    setNewFolder({ open: false, name: "", busy: false })
+    newFolderTrigger?.focus()
+  }
+
+  async function createFolder() {
+    if (newFolder().busy) return
+    const base = treeView().root
+    const requestLocation = location()
+
+    if (!base || !requestLocation) return
+
+    const path = pickerFolderPath(base, newFolder().name, home())
+
+    if (!path) {
+      setNewFolder((state) => ({ ...state, error: language.t("dialog.directory.newFolder.invalid") }))
+
+      return
+    }
+
+    setNewFolder((state) => ({ ...state, busy: true, error: undefined }))
+
+    try {
+      const created = await sdk.api.experimental.file.mkdir({ location: requestLocation, path })
+      closeNewFolder()
+      choose(created.data.path)
+    } catch {
+      setNewFolder((state) => ({
+        ...state,
+        busy: false,
+        error: language.t("dialog.directory.newFolder.failed"),
+      }))
+    }
   }
 
   function navigation(path: string) {
@@ -832,7 +872,72 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
                 )}
               </For>
             </nav>
+            <Show when={policy.action === "directory"}>
+              <Button
+                ref={newFolderTrigger}
+                size="small"
+                variant="ghost-muted"
+                icon="plus"
+                class="directory-picker-new-folder-button"
+                disabled={!location() || !treeView().root || newFolder().busy}
+                onClick={() => setNewFolder({ open: true, name: "", busy: false })}
+              >
+                {language.t("dialog.directory.newFolder")}
+              </Button>
+            </Show>
           </div>
+          <Show when={newFolder().open}>
+            <form
+              class="directory-picker-new-folder"
+              data-owns-escape=""
+              onKeyDown={(event) => {
+                if (event.key !== "Escape" || event.isComposing) return
+                event.preventDefault()
+                if (newFolder().busy) return
+                event.stopPropagation()
+                closeNewFolder()
+              }}
+              onSubmit={(event) => {
+                event.preventDefault()
+                void createFolder()
+              }}
+            >
+              <TextInput
+                class="directory-picker-new-folder-input"
+                appearance="small"
+                value={newFolder().name}
+                placeholder={language.t("dialog.directory.newFolder.placeholder")}
+                autofocus
+                autocomplete="off"
+                spellcheck={false}
+                aria-label={language.t("dialog.directory.newFolder.placeholder")}
+                invalid={!!newFolder().error}
+                onInput={(event) =>
+                  setNewFolder((state) => ({ ...state, name: event.currentTarget.value, error: undefined }))
+                }
+              />
+              <Button
+                type="submit"
+                size="small"
+                variant="contrast"
+                disabled={newFolder().busy || !newFolder().name.trim()}
+              >
+                {newFolder().busy
+                  ? language.t("dialog.directory.newFolder.creating")
+                  : language.t("dialog.directory.newFolder.create")}
+              </Button>
+              <Button type="button" size="small" variant="neutral" disabled={newFolder().busy} onClick={closeNewFolder}>
+                {language.t("common.cancel")}
+              </Button>
+            </form>
+            <Show when={newFolder().error}>
+              {(error) => (
+                <p class="directory-picker-new-folder-error" role="alert">
+                  {error()}
+                </p>
+              )}
+            </Show>
+          </Show>
           <div
             class="directory-picker-browser"
             ref={container}

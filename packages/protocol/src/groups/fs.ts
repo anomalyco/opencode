@@ -3,7 +3,7 @@ import { Location } from "@opencode/schema/location"
 import { PositiveInt } from "@opencode/schema/schema"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
-import { FileNotFoundError, ServiceUnavailableError } from "../errors.js"
+import { FileNotFoundError, InvalidRequestError, ServiceUnavailableError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 const ListQuery = Schema.Struct({
@@ -18,6 +18,13 @@ const WriteQuery = Schema.Struct({
   path: Schema.String.annotate({
     description:
       "An absolute path or a path relative to the requested location. Missing parent directories are created.",
+  }),
+})
+
+const MkdirQuery = Schema.Struct({
+  ...LocationQuery.fields,
+  path: Schema.String.annotate({
+    description: "An absolute path in the requested location's environment. Missing parent directories are created.",
   }),
 })
 
@@ -92,6 +99,22 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
           summary: "Write file",
           description:
             "Write the raw request body to an absolute path or a path relative to the requested location, creating parent directories, and return the resolved absolute path. Unlike read, the target is not confined to the location. Experimental: may change without compatibility guarantees.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("fs.mkdir", "/api/experimental/fs/mkdir", {
+      query: MkdirQuery,
+      success: Location.response(FileSystem.Mkdir),
+      error: InvalidRequestError,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.fs.mkdir",
+          summary: "Create directory",
+          description:
+            "Create a directory at an absolute path in the requested location's environment, creating missing parent directories, and return the path. Unlike read, the target is not confined to the location. Experimental: may change without compatibility guarantees.",
         }),
       ),
   )
