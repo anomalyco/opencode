@@ -431,7 +431,7 @@ export function TimelineQuote(props: { controller: Pick<TimelineQuoteController,
             data-prevent-autofocus
             role="toolbar"
             aria-label={language.t("session.quote.actions")}
-            class="fixed z-50 flex items-center gap-0.5 rounded-[8px] p-0.5 shadow-[var(--v2-elevation-raised)]"
+            class="fixed z-50 flex items-center gap-0.5 rounded-[8px] p-0.5 shadow-[var(--v2-elevation-floating)]"
             style={{
               top: `${place().top}px`,
               left: `${place().left}px`,
