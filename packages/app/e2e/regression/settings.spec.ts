@@ -174,9 +174,13 @@ test("Questions settings default independently of old Permissions settings and s
     "Errors",
     "Interface",
   ])
+  await expect(settings.getByRole("switch")).toHaveCount(5)
+  for (const name of ["Agent", "Permissions", "Questions", "Errors", "Interface"]) {
+    await expect(settings.getByRole("switch", { name, exact: true })).toHaveCount(1)
+  }
   const questions = settings.getByRole("switch", { name: "Questions", exact: true })
 
-  const permissions = settings.locator('[data-action="settings-notifications-permissions"]').getByRole("switch")
+  const permissions = settings.getByRole("switch", { name: "Permissions", exact: true })
 
   const questionSound = settings.locator('[data-action="settings-sounds-questions"]')
 
