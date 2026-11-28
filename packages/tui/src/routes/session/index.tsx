@@ -1784,14 +1784,8 @@ export function Session(props: {
                       if (renderer.getSelection()?.getSelectedText()) return
                       collapseExpandedGroup(group)
                     }}
-                    onScroll={(event) => {
-                      if (firstJump()) clearMessageNavigation()
-                      if (event.scroll?.direction === "up" && revealOlderRows()) return
-                      if (event.scroll?.direction === "down" && revealNewerRows()) return
-                      // Reuse the scrollbox's wheel handling so acceleration and the configured scroll speed match.
-                      scroll.processMouseEvent(event)
-                      updateAwayFromBottom()
-                    }}
+                    // Reuse the transcript's own wheel handling: navigation reset, row reveals, acceleration and speed.
+                    onScroll={(event) => scroll.processMouseEvent(event)}
                   />
                 )}
               </Show>
