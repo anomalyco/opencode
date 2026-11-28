@@ -1369,6 +1369,39 @@ it.effect("automatic compaction waits for a background summary still being writt
   }).pipe(Effect.ensuring(Effect.sync(() => (beforeResponse = Effect.void)))),
 )
 
+it.effect("automatic compaction stops waiting for a stalled background summary and summarizes as usual", () =>
+  Effect.gen(function* () {
+    requests = []
+    // Only the background request stalls; the compaction's own request answers.
+    beforeResponse = Effect.suspend(() => (requests.length === 1 ? Effect.never : Effect.void))
+    const bus = yield* Bus.Service
+    const store = yield* SessionStore.Service
+    const compaction = yield* SessionCompaction.Service
+    const sessionID = Session.ID.make("ses_precompute_stalled")
+    const session = yield* insertSession(sessionID)
+    const history = precomputeHistory()
+    yield* storeMessages(sessionID, history.due)
+    const started = yield* bus
+      .subscribe(SessionEvent.Compaction.Started)
+      .pipe(Stream.take(1), Stream.runCollect, Effect.forkChild({ startImmediately: true }))
+
+    yield* compaction.precompute(Effect.succeed(loaded(session, history.near)))
+    const compacting = yield* compaction
+      .compact({ reason: "auto", context: loaded(session, history.due) })
+      .pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Fiber.join(started)
+    yield* Effect.yieldNow
+    yield* TestClock.adjust("1 minute")
+    expect(compacting.pollUnsafe()).toBeUndefined()
+    yield* TestClock.adjust("2 minutes")
+
+    expect(yield* Fiber.join(compacting)).toEqual({ status: "completed" })
+    expect(requests).toHaveLength(2)
+    expect(JSON.stringify(requests[1].messages)).toContain("Third answer")
+    expect(yield* store.context(sessionID)).toMatchObject([{ type: "compaction", reason: "auto" }])
+  }).pipe(Effect.ensuring(Effect.sync(() => (beforeResponse = Effect.void)))),
+)
+
 it.effect("traces the background summary and the wait for it", () =>
   Effect.gen(function* () {
     requests = []
