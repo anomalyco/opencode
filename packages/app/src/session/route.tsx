@@ -116,7 +116,7 @@ export function TargetSessionRouteContent() {
               <Match when={failure()} keyed>
                 {(value) => (
                   <SessionStatePanel>
-                    <ErrorPage error={value.error} />
+                    <ErrorPage error={value.error} onRetry={resolution.retry} />
                   </SessionStatePanel>
                 )}
               </Match>
