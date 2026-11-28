@@ -70,6 +70,30 @@ it.live(
 )
 
 it.live(
+  "serves the branch from the first read after a Location opens",
+  () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-vcs-first-read-")))
+      yield* Effect.promise(() => $`git init -b main`.cwd(tmp.path).quiet())
+      yield* Effect.promise(() => Bun.write(path.join(tmp.path, "hello.txt"), "hello\n"))
+      const server = yield* serveRoutes({
+        database: { path: ":memory:" },
+        config: { directory: path.join(tmp.path, "config") },
+        fs: { filewatcher: false },
+        models: { fetch: false },
+      })
+      const url = new URL("/api/vcs", "http://opencode.local")
+      url.searchParams.set("location[directory]", tmp.path)
+      const response = yield* Effect.promise(() => server.fetch(url))
+      expect(response.status).toBe(200)
+      expect(yield* Effect.promise(() => response.json())).toMatchObject({
+        data: { provider: "git", branch: { current: "main" } },
+      })
+    }),
+  15_000,
+)
+
+it.live(
   "does not create a project directory while initializing Git",
   () =>
     Effect.gen(function* () {

@@ -4,6 +4,7 @@ import { Worktree } from "@opencode/core/worktree"
 import { Bus } from "@opencode/core/bus"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
+import { Plugin } from "@opencode/core/plugin"
 import { ConflictError, InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { VcsInitNotSupportedError } from "@opencode/protocol/groups/vcs"
 import { Effect } from "effect"
@@ -55,6 +56,9 @@ export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
       .handle("vcs.get", () =>
         response(
           Effect.gen(function* () {
+            // A Location's plugins load after its services exist, so a read that races the load
+            // would answer with no provider; wait for activation so the first read has the branch.
+            yield* Plugin.awaitActivation
             const vcs = yield* Vcs.Service
             return yield* vcs.info()
           }),
