@@ -354,7 +354,7 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         `CREATE INDEX \`automation_active_idx\` ON \`automation\` (\`next_due_at\`) WHERE "automation"."status" = 'active';`,
       )
       yield* tx.run(
-        `CREATE INDEX \`blob_v2_session_idx\` ON \`blob_v2\` (\`session_id\`,\`id\`) WHERE "blob_v2"."session_id" is not null;`,
+        `CREATE INDEX \`blob_v2_session_idx\` ON \`blob_v2\` (\`session_id\`,\`time_created\`) WHERE "blob_v2"."session_id" is not null;`,
       )
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)

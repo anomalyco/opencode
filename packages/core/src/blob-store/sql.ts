@@ -6,7 +6,7 @@ import { Timestamps } from "../database/schema.sql.js"
 
 /**
  * One row per stored blob. Width, height and duration are read from the bytes once, when the blob is written; name and
- * metadata are the client's. `session_id` is only a label, so it has no foreign key. IDs sort newest first.
+ * metadata are the client's. `session_id` is only a label, so it has no foreign key.
  */
 export const BlobV2Table = sqliteTable(
   "blob_v2",
@@ -24,7 +24,7 @@ export const BlobV2Table = sqliteTable(
   },
   (table) => [
     index("blob_v2_session_idx")
-      .on(table.session_id, table.id)
+      .on(table.session_id, table.time_created)
       .where(sql`${table.session_id} is not null`),
   ],
 )

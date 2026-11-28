@@ -1,7 +1,7 @@
 export * as BlobStore from "./blob-store.js"
 
 import path from "path"
-import { and, asc, eq } from "drizzle-orm"
+import { and, asc, desc, eq } from "drizzle-orm"
 import { Media } from "@opencode/ai/effect"
 import { BlobStore } from "@opencode/schema/blob-store"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -91,7 +91,8 @@ const layer = Layer.effect(
         .select()
         .from(BlobV2Table)
         .where(input?.sessionID === undefined ? undefined : eq(BlobV2Table.session_id, input.sessionID))
-        .orderBy(asc(BlobV2Table.id))
+        // IDs sort newest first only within one ~795-day cycle of their 48-bit clock, so they just break ties.
+        .orderBy(desc(BlobV2Table.time_created), asc(BlobV2Table.id))
         .all()
         .pipe(Effect.orDie)
       return rows.map(toInfo)

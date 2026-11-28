@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration.js"
 
 const migration: DatabaseMigration.Migration = {
-  id: "20261128192234_blob_catalog",
+  id: "20261128193337_blob_catalog",
   up(tx) {
     return Effect.gen(function* () {
       yield* tx.run(`
@@ -30,7 +30,7 @@ const migration: DatabaseMigration.Migration = {
         );
       `)
       yield* tx.run(
-        `CREATE INDEX \`blob_v2_session_idx\` ON \`blob_v2\` (\`session_id\`,\`id\`) WHERE "blob_v2"."session_id" is not null;`,
+        `CREATE INDEX \`blob_v2_session_idx\` ON \`blob_v2\` (\`session_id\`,\`time_created\`) WHERE "blob_v2"."session_id" is not null;`,
       )
     })
   },
