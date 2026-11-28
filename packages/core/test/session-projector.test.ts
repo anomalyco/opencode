@@ -1299,6 +1299,62 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("seeds a missing event sequence from projected messages", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const inboxID = SessionMessage.ID.make("msg_resume_inbox")
+      // Projected history without a counter row, as left behind by a V1 migration.
+      yield* db
+        .insert(SessionMessageTable)
+        .values([
+          {
+            id: SessionMessage.ID.make("msg_old_user_0"),
+            session_id: sessionID,
+            type: "user",
+            seq: 0,
+            time_created: 0,
+            data: { text: "old", time: { created: 0 } },
+          },
+          {
+            id: SessionMessage.ID.make("msg_old_user_1"),
+            session_id: sessionID,
+            type: "user",
+            seq: 1,
+            time_created: 1,
+            data: { text: "old", time: { created: 1 } },
+          },
+          assistantRow(SessionMessage.ID.make("msg_old_assistant"), 2, { created, completed: created }),
+        ])
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionInboxTable)
+        .values({
+          id: inboxID,
+          session_id: sessionID,
+          type: "user",
+          payload: { text: "hello again" },
+          delivery: "queue",
+          enqueued_seq: 3,
+          time_created: 3,
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID })
+
+      const delivered = yield* db
+        .select({ seq: SessionMessageTable.seq })
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, inboxID))
+        .get()
+        .pipe(Effect.orDie)
+      expect(delivered?.seq).toBe(3)
+      expect(yield* Bus.latestSequence(db, sessionID)).toBe(3)
+    }),
+  )
+
   it.effect("replaces refs to missing blobs with an unavailable placeholder on read", () =>
     Effect.gen(function* () {
       const db = yield* seedSession()
