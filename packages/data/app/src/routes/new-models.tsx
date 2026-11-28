@@ -1,6 +1,7 @@
 import { ProviderIcon } from "@opencode/ui/provider-icon"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { ChartDataTable } from "../component/chart-data-table"
+import { useI18n } from "../context/i18n"
 import { useLanguage } from "../context/language"
 import { selectBreakout } from "../lib/breakout"
 import { formatTokens } from "../lib/format"
@@ -12,13 +13,12 @@ import "./new-models.css"
 
 type NewModel = HomePageData["newModels"][number]
 
-const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-
 export function NewModelsSection(props: {
   data: NewModel[]
   catalogLabs: readonly string[]
   colorFor: (model: string) => string
 }) {
+  const i18n = useI18n()
   const language = useLanguage()
   const breakout = createMemo(() => selectBreakout(props.data))
   const [selected, setSelected] = createSignal<string>()
@@ -36,8 +36,8 @@ export function NewModelsSection(props: {
           <section id="new-models" data-section="new-models">
             <SectionHeading
               href="#new-models"
-              title="New Models"
-              description="The biggest launch of the past 30 days."
+              title={i18n.t("home.newModelsTitle")}
+              description={i18n.t("home.newModelsDescription")}
             />
             <a
               data-slot="breakout-card"
@@ -50,17 +50,24 @@ export function NewModelsSection(props: {
                   <span>
                     <strong>{model().name}</strong>
                     <em>
-                      {known() ? `${model().author}, released` : "Released"} {formatDay(model().releaseDate)}
+                      {known()
+                        ? i18n.t("newModels.releasedBy", {
+                            author: model().author,
+                            date: formatDay(language.tag(language.locale()), model().releaseDate),
+                          })
+                        : i18n.t("newModels.released", {
+                            date: formatDay(language.tag(language.locale()), model().releaseDate),
+                          })}
                     </em>
                     <Show when={model().free}>
-                      <em>Free on OpenCode</em>
+                      <em>{i18n.t("newModels.free")}</em>
                     </Show>
                   </span>
                 </span>
                 <span data-slot="breakout-tokens">{formatTokens(model().tokens)}</span>
-                <span data-slot="breakout-caption">tokens since launch</span>
+                <span data-slot="breakout-caption">{i18n.t("newModels.tokensSinceLaunch")}</span>
                 <span data-slot="breakout-users">{formatCount(model().users)}</span>
-                <span data-slot="breakout-caption">users tried it</span>
+                <span data-slot="breakout-caption">{i18n.t("newModels.usersTried")}</span>
               </span>
               <span
                 data-slot="breakout-chart"
@@ -78,7 +85,9 @@ export function NewModelsSection(props: {
                         </i>
                       </span>
                       <small data-end={index() > 0 ? "true" : undefined}>
-                        {index() === 0 || index() === days().length - 1 ? formatDay(day.date) : ""}
+                        {index() === 0 || index() === days().length - 1
+                          ? formatDay(language.tag(language.locale()), day.date)
+                          : ""}
                       </small>
                     </span>
                   )}
@@ -94,7 +103,7 @@ export function NewModelsSection(props: {
             </a>
             <Show when={others().length > 0}>
               <p data-slot="breakout-also">
-                <span>Also new</span>
+                <span>{i18n.t("newModels.alsoNew")}</span>
                 <For each={others()}>
                   {(other) => (
                     <button type="button" onClick={() => setSelected(other.model)}>
@@ -105,8 +114,8 @@ export function NewModelsSection(props: {
               </p>
             </Show>
             <ChartDataTable
-              caption={`${model().name} daily usage`}
-              headers={["Date", "Tokens", "Rank", "Users"]}
+              caption={i18n.t("newModels.dailyUsage", { model: model().name })}
+              headers={[i18n.t("chart.date"), i18n.t("model.tokens"), i18n.t("table.rank"), i18n.t("nav.users")]}
               rows={days().map((day) => [day.date, formatTokens(day.tokens), day.rank, formatCount(day.users)])}
             />
           </section>
@@ -121,7 +130,8 @@ function formatCount(value: number) {
   return String(Math.round(value))
 }
 
-function formatDay(value: string) {
-  const date = new Date(`${value}T00:00:00Z`)
-  return `${months[date.getUTCMonth()]} ${date.getUTCDate()}`
+function formatDay(locale: string, value: string) {
+  return new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", timeZone: "UTC" }).format(
+    new Date(`${value}T00:00:00Z`),
+  )
 }

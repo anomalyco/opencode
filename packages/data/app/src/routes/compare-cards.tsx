@@ -101,12 +101,16 @@ export function ComparisonCardsSection(props: {
 }
 
 function FeaturedComparisonCard(props: { pair: ComparisonPair }) {
+  const i18n = useI18n()
   return (
     <a data-component="compare-home-card" href={canonicalComparisonHref(props.pair.first, props.pair.second)}>
       <span data-slot="compare-home-card-head">
         <span>
           <strong>{props.pair.detail}</strong>
-          <em>{props.pair.description ?? `${props.pair.first.name} vs ${props.pair.second.name}`}</em>
+          <em>
+            {props.pair.description ??
+              `${props.pair.first.name} ${i18n.t("share.card.versus")} ${props.pair.second.name}`}
+          </em>
         </span>
         <ComparisonCardIcon />
       </span>
