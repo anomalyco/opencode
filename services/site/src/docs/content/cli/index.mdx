@@ -25,6 +25,26 @@ Suggested terminals:
 Truecolor support gives themes their most accurate colors; terminals without it use an approximation of the available
 palette.
 
+## Terminal font
+
+The terminal interface draws its status marks, tool icons, and spinners (blocks and Braille) as text, so they come from
+your terminal's font. A font without one of them shows an empty box or takes it from another font.
+
+OpenMono Nerd is Anomaly's own terminal font, made for OpenCode. It has every symbol the interface draws, Braille, and
+the [Nerd Fonts](https://www.nerdfonts.com) icons that shell prompts and command-line tools print, each one cell wide.
+It is free under the SIL Open Font License 1.1.
+
+Install OpenMono Nerd, then select the family `OpenMono Nerd` in your terminal:
+
+| Terminal  | Setting                                             |
+| --------- | --------------------------------------------------- |
+| Ghostty   | `font-family = OpenMono Nerd`                       |
+| WezTerm   | `config.font = wezterm.font("OpenMono Nerd")`       |
+| Kitty     | `font_family OpenMono Nerd`                         |
+| Alacritty | `[font.normal]` `family = "OpenMono Nerd"`          |
+| iTerm2    | Settings > Profiles > Text > Font                   |
+| VS Code   | `"terminal.integrated.fontFamily": "OpenMono Nerd"` |
+
 ## Automation
 
 Use `opencode run` to submit a prompt without opening the interactive interface. It is designed for scripts, CI jobs, and
