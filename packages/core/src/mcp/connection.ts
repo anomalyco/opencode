@@ -2,7 +2,7 @@ export * as McpConnection from "./connection.js"
 
 import type { AuthProvider } from "@modelcontextprotocol/client"
 import type { Mcp } from "@opencode/schema/mcp"
-import { Cause, Effect, Exit, Scope } from "effect"
+import { absurd, Cause, Effect, Exit, Scope } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { Environment } from "../environment/index.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
@@ -132,10 +132,32 @@ type State = { readonly _tag: "Idle" } | { readonly _tag: "Connecting"; readonly
 
 export function make(input: Input): Connection {
   let state: State = { _tag: "Idle" }
-  const current = () => (state._tag === "Connected" ? state : undefined)
+  const current = (): Connected | undefined => {
+    switch (state._tag) {
+      case "Connected":
+        return state
+      case "Idle":
+      case "Connecting":
+        return undefined
+      default:
+        return absurd(state)
+    }
+  }
+  const opened = (): Scope.Closeable | undefined => {
+    switch (state._tag) {
+      case "Connecting":
+      case "Connected":
+        return state.scope
+      case "Idle":
+        return undefined
+      default:
+        return absurd(state)
+    }
+  }
   // Replaces a catalog listed by `client`, unless another connection has replaced it since.
   const update = (client: McpClient.Connection, catalogs: Partial<Pick<Connected, "tools" | "prompts" | "skills">>) => {
-    if (state._tag === "Connected" && state.client === client) state = { ...state, ...catalogs }
+    const live = current()
+    if (live?.client === client) state = { ...live, ...catalogs }
   }
 
   // Runs a connection callback under the lock, dropping it if the connection is no longer the live
@@ -288,8 +310,8 @@ export function make(input: Input): Connection {
   )
 
   const stop = Effect.gen(function* () {
-    if (state._tag === "Idle") return
-    const scope = state.scope
+    const scope = opened()
+    if (!scope) return
     state = { _tag: "Idle" }
     yield* Scope.close(scope, Exit.void)
     for (const kind of KINDS) yield* input.events.changed(kind)
