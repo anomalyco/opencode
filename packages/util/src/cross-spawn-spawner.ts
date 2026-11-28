@@ -26,6 +26,7 @@ import {
 } from "effect/process/ChildProcessSpawner"
 // ast-grep-ignore: no-star-import
 import * as NodeChildProcess from "node:child_process"
+import { win32 as win32Path } from "node:path"
 import { PassThrough } from "node:stream"
 import launch from "cross-spawn"
 import { makeGlobalNode } from "./effect/app-node.js"
@@ -382,11 +383,28 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     )
   }
 
+  // cmd.exe parses everything after `/c` as one command line, so Node must not re-quote it: an
+  // embedded `"` would reach cmd.exe as `\"` (`echo "hello world"` became `echo \"hello world\"`).
+  // PowerShell and pwsh split their own command line first, so they keep Node's quoting; passing them
+  // verbatim would drop the quotes from the `-Command` payload.
+  const isCmdShell = (file: string) => {
+    if (globalThis.process.platform !== "win32") return false
+    return win32Path.basename(file).toLowerCase().replace(/\.exe$/, "") === "cmd"
+  }
+
+  // cmd strips the first and last quote of the payload unless `/s` is passed, which mangles commands
+  // that start with a quoted program path. Use the same `/d /s /c "<command>"` shape as cross-spawn.
+  const rewritesCmdArgs = (file: string, args: readonly string[]) =>
+    isCmdShell(file) && args.length === 2 && args[0] === "/c"
+
+  const shellArgs = (file: string, args: string[]) =>
+    rewritesCmdArgs(file, args) ? ["/d", "/s", "/c", `"${args[1] ?? ""}"`] : args
+
   const launchProcess = (command: ChildProcess.StandardCommand, file: string, opts: NodeChildProcess.SpawnOptions) =>
     Effect.callback<Spawned, PlatformError.PlatformError>((resume) => {
       const closed = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const exited = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
-      const proc = launch(file, command.args.map(unwrap), opts)
+      const proc = launch(file, shellArgs(file, command.args.map(unwrap)), opts)
       let settle = () => {}
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
@@ -562,6 +580,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
               detached: command.options.detached ?? process.platform !== "win32",
               shell: command.options.shell,
               windowsHide: process.platform === "win32",
+              windowsVerbatimArguments: rewritesCmdArgs(command.command, command.args.map(unwrap)),
             }),
             Effect.fnUntraced(
               function* ([proc, closed, exited, stopOutput]) {
