@@ -68,7 +68,7 @@ export function permissionPresentation(
     return {
       icon: "#",
       title: "Shell command",
-      lines: command ? [`$ ${command}`] : resources.map((item) => `- ${item}`),
+      lines: resources.length > 0 ? resources.map((item) => `- ${item}`) : command ? [`$ ${command}`] : [],
     }
   }
 

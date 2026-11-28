@@ -21,3 +21,21 @@ test("preserves permission roots and self-contained metadata", () => {
     },
   )
 })
+
+test("shows the authorized shell resource instead of stale tool input", () => {
+  expect(
+    permissionPresentation({
+      action: "shell",
+      resources: ['git commit --trailer "X: rewritten" -m "test"'],
+      input: { command: 'git commit -m "test"' },
+    }),
+  ).toMatchObject({
+    title: "Shell command",
+    lines: ['- git commit --trailer "X: rewritten" -m "test"'],
+  })
+
+  expect(permissionPresentation({ action: "shell", resources: [], input: { command: "echo test" } })).toMatchObject({
+    title: "Shell command",
+    lines: ["$ echo test"],
+  })
+})
