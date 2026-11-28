@@ -6,6 +6,7 @@ type Message = {
   type: string
   time: { created: number; firstToken?: number; streamed?: number; completed?: number }
   tokens?: { output: number; reasoning: number }
+  content?: { type: string; text?: string }[]
 }
 
 test("measures turn duration from the user prompt across assistant steps", () => {
@@ -17,7 +18,12 @@ test("measures turn duration from the user prompt across assistant steps", () =>
 
 test("measures decode throughput from the first streamed token", () => {
   const first = step("assistant-1", { created: 6_000, firstToken: 8_000, streamed: 10_000, completed: 20_000 }, 20, 5)
-  const final = step("assistant-2", { created: 24_000, firstToken: 25_000, streamed: 28_000, completed: 31_000 }, 30, 10)
+  const final = step(
+    "assistant-2",
+    { created: 24_000, firstToken: 25_000, streamed: 28_000, completed: 31_000 },
+    30,
+    10,
+  )
   const messages = [input("user-1", 1_000), first, final]
 
   // 65 tokens over the 5s the provider spent streaming them, not the 10s that include waiting for the first.
@@ -26,11 +32,49 @@ test("measures decode throughput from the first streamed token", () => {
 
 test("falls back to the request window for steps recorded without a first token", () => {
   const first = step("assistant-1", { created: 6_000, streamed: 10_000, completed: 20_000 }, 20, 5)
-  const final = step("assistant-2", { created: 24_000, firstToken: 25_000, streamed: 28_000, completed: 31_000 }, 30, 10)
+  const final = step(
+    "assistant-2",
+    { created: 24_000, firstToken: 25_000, streamed: 28_000, completed: 31_000 },
+    30,
+    10,
+  )
   const messages = [input("user-1", 1_000), first, final]
 
   // The old step counts its 4s request window, the new one its 3s decode window.
   expect(SessionTurn.tokensPerSecond(messages, final)).toBe(65 / 7)
+})
+
+test("falls back to the request window when tokens arrive in a burst after the first token", () => {
+  // Hidden reasoning before the first output event: 236 tokens land within 13ms after a 3.6s wait.
+  const first = step("assistant-1", { created: 0, firstToken: 3_600, streamed: 3_613, completed: 4_000 }, 36, 200)
+  // A normally streamed step keeps its decode window.
+  const final = step("assistant-2", { created: 5_000, firstToken: 6_000, streamed: 9_000, completed: 9_500 }, 300, 0)
+  const messages = [input("user-1", 0), first, final]
+
+  // 536 tokens over the burst step's 3.613s request window plus the streamed step's 3s decode window.
+  expect(SessionTurn.tokensPerSecond(messages, final)).toBe(536 / 6.613)
+})
+
+test("falls back to the request window when reasoning happened out of view", () => {
+  // 20s of hidden reasoning (4,000 tokens, a short summary), then 300 output tokens streamed over 3s.
+  const hidden = step(
+    "assistant-1",
+    { created: 0, firstToken: 20_000, streamed: 23_000, completed: 23_500 },
+    300,
+    4_000,
+  )
+  hidden.content = [
+    { type: "reasoning", text: "Planned the patch." },
+    { type: "text", text: "Done." },
+  ]
+  const messages = [input("user-1", 0), hidden]
+
+  // 4,300 tokens over the 23s request window, not ~1,430 tok/s over the 3s after the first token.
+  expect(SessionTurn.tokensPerSecond(messages, hidden)).toBe(4_300 / 23)
+
+  // Reasoning that streamed in full keeps the decode window.
+  hidden.content = [{ type: "reasoning", text: "x".repeat(16_000) }]
+  expect(SessionTurn.tokensPerSecond(messages, hidden)).toBe(4_300 / 3)
 })
 
 test("measures request throughput including reasoning without tool time", () => {
