@@ -22,7 +22,10 @@ export const Plugin = define({
     const hook = (event: SessionHooks["context"]) =>
       Effect.gen(function* () {
         const model = yield* OptimizePlugin.resolveModel(ctx, event)
-        event.system.splice(1, 0, SystemPart.make(identity({ name: model.name, ref: event.model })))
+        event.system.splice(1, 0, {
+          ...SystemPart.make(identity({ name: model.name, ref: event.model })),
+          metadata: { experimental: { key: "core/identity" } },
+        })
       }).pipe(Effect.catch(() => Effect.void))
     yield* ctx.session.hook("context", hook)
     yield* ctx.session.hook("compaction", hook)

@@ -543,7 +543,7 @@ describe("ClaudeAgentPlugin session hooks", () => {
       const hooks = yield* PluginHooks.Service
       const event = hookEvent((yield* newSession).id)
       event.system = [
-        SystemPart.make("OPENCODE-PROMPT"),
+        { ...SystemPart.make("OPENCODE-PROMPT"), metadata: { experimental: { key: "core/prompt" } } },
         {
           ...SystemPart.make("JOINED-INSTRUCTIONS"),
           metadata: {
@@ -561,6 +561,70 @@ describe("ClaudeAgentPlugin session hooks", () => {
       ]
       const context = yield* hooks.trigger("session", "context", event)
       expect(context.options[ClaudeSystemPrompt.INSTRUCTIONS_OPTION]).toBe("SKILLS\n\nENTRY\n\nPLUGIN-PART")
+    }),
+  )
+
+  // Built-in provider hooks register before user plugins, so a plugin's `context` hook runs after the
+  // provider has already read `event.system`. Instructions added there must still reach Claude.
+  it.live("keeps system text a plugin adds after the provider's context hook", () =>
+    Effect.gen(function* () {
+      yield* addPlugin(FakeIO.make({ claude: FakeClaude.make([]) }))
+      yield* addAgents
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register(
+        "session",
+        "context",
+        (event) =>
+          Effect.sync(() => {
+            event.system.push(SystemPart.make("The project codename is ZEBRA-4417."))
+          }),
+      )
+      const event = hookEvent((yield* newSession).id)
+      event.system = [SystemPart.make("OPENCODE-PROMPT")]
+      const context = yield* hooks.trigger("session", "context", event)
+      expect(context.options[ClaudeSystemPrompt.INSTRUCTIONS_OPTION]).toContain("ZEBRA-4417")
+    }),
+  )
+
+  it.live("skips the parts Claude Code supplies by tag, not by position", () =>
+    Effect.gen(function* () {
+      yield* addPlugin(FakeIO.make({ claude: FakeClaude.make([]) }))
+      yield* addAgents
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("session", "context", (event) =>
+        Effect.sync(() => {
+          event.system.unshift(SystemPart.make("FIRST-PLUGIN-PART"))
+          event.system.push(SystemPart.make(""), SystemPart.make("LAST-PLUGIN-PART"))
+        }),
+      )
+      const event = hookEvent((yield* newSession).id)
+      event.system = [
+        { ...SystemPart.make("OPENCODE-PROMPT"), metadata: { experimental: { key: "core/prompt" } } },
+        { ...SystemPart.make("IDENTITY"), metadata: { experimental: { key: "core/identity" } } },
+        SystemPart.make("RULES"),
+      ]
+      const context = yield* hooks.trigger("session", "context", event)
+      expect(context.options[ClaudeSystemPrompt.INSTRUCTIONS_OPTION]).toBe(
+        "FIRST-PLUGIN-PART\n\nRULES\n\nLAST-PLUGIN-PART",
+      )
+    }),
+  )
+
+  it.live("lets a later plugin override the instructions outright", () =>
+    Effect.gen(function* () {
+      yield* addPlugin(FakeIO.make({ claude: FakeClaude.make([]) }))
+      yield* addAgents
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register(
+        "session",
+        "context",
+        (event) =>
+          Effect.sync(() => {
+            event.options[ClaudeSystemPrompt.INSTRUCTIONS_OPTION] = "PLUGIN-OVERRIDE"
+          }),
+      )
+      const context = yield* hooks.trigger("session", "context", hookEvent((yield* newSession).id))
+      expect(context.options[ClaudeSystemPrompt.INSTRUCTIONS_OPTION]).toBe("PLUGIN-OVERRIDE")
     }),
   )
 
