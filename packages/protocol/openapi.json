@@ -17440,6 +17440,111 @@
         "summary": "Get usage limits"
       }
     },
+    "/api/experimental/usage/go": {
+      "get": {
+        "tags": ["usage"],
+        "operationId": "experimental.usage.go",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Absolute path of the directory."
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.PublicRef"
+                    },
+                    "data": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/UsageLimits.GoConnection"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Experimental: may change without compatibility guarantees. Return how OpenCode Go is connected at the location, through the OpenCode account or an API key, with that credential's Go allowance, or null when nothing connects it.",
+        "summary": "Get OpenCode Go connection"
+      }
+    },
     "/api/experimental/flag": {
       "get": {
         "tags": ["flag"],
@@ -19056,6 +19161,9 @@
                 "type": "boolean"
               },
               "browser_stream_tunnel": {
+                "type": "boolean"
+              },
+              "go_settings": {
                 "type": "boolean"
               },
               "video_generate": {
@@ -28054,6 +28162,39 @@
           }
         },
         "required": ["rolling", "weekly", "monthly"],
+        "additionalProperties": false
+      },
+      "UsageLimits.GoConnection": {
+        "type": "object",
+        "properties": {
+          "connection": {
+            "type": "string",
+            "enum": ["account", "key"]
+          },
+          "integrationID": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "goURL": {
+                "type": "string"
+              }
+            },
+            "required": ["id", "goURL"],
+            "additionalProperties": false
+          },
+          "usage": {
+            "$ref": "#/components/schemas/UsageLimits.Go"
+          }
+        },
+        "required": ["connection", "integrationID"],
         "additionalProperties": false
       },
       "UsageLimits.Info": {

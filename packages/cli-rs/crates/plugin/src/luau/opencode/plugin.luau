@@ -2003,6 +2003,7 @@ export type ConfigInfoEncoded = {
         compaction_jobs: boolean?,
         sqlite_fts: boolean?,
         browser_stream_tunnel: boolean?,
+        go_settings: boolean?,
         video_generate: (boolean | {
             model: (string | {
                 providerID: string,
@@ -4629,6 +4630,17 @@ export type UsageLimitsGo = {
     monthly: UsageLimitsMeter,
 }
 
+export type UsageLimitsGoConnection = {
+    connection: ("account" | "key"),
+    integrationID: string,
+    workspace: {
+        id: string,
+        name: string?,
+        goURL: string,
+    }?,
+    usage: UsageLimitsGo?,
+}
+
 export type UsageLimitsInfo = {
     workspace: {
         id: string,
@@ -5554,6 +5566,12 @@ export type Client = {
             }?, string?),
         },
         usage: {
+            go: (input: {
+                location: { directory: string? }?,
+            }?) -> ({
+                location: LocationPublicRef,
+                data: UsageLimitsGoConnection?,
+            }?, string?),
             limits: (input: {
                 location: { directory: string? }?,
             }?) -> ({
