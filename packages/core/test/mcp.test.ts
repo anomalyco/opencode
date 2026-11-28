@@ -3497,15 +3497,16 @@ describe("MCP pool", () => {
     const remote = new ConfigMCP.Remote({
       type: "remote",
       url: "https://mcp.example.com",
-      headers: { authorization: "secret" },
+      headers: { authorization: "hunter2" },
     })
-    const local = new ConfigMCP.Local({ type: "local", command: ["server"], environment: { TOKEN: "secret" } })
-    const key = (input: Partial<Parameters<typeof McpPool.key>[0]> = {}) => McpPool.key({ config: remote, ...input })
-    const localKey = (input: Partial<Parameters<typeof McpPool.key>[0]> = {}) =>
+    const local = new ConfigMCP.Local({ type: "local", command: ["server"], environment: { TOKEN: "hunter2" } })
+    const key = (input: Partial<Extract<Parameters<typeof McpPool.key>[0], { credential: unknown }>> = {}) =>
+      McpPool.key({ config: remote, credential: undefined, ...input })
+    const localKey = (input: Partial<Extract<Parameters<typeof McpPool.key>[0], { cwd: unknown }>> = {}) =>
       McpPool.key({ config: local, cwd: "/a", ...input })
 
-    expect(key()).not.toContain("secret")
-    expect(localKey()).not.toContain("secret")
+    expect(key()).not.toContain("hunter2")
+    expect(localKey()).not.toContain("hunter2")
     expect(key({ credential: "cred_a" })).not.toBe(key({ credential: "cred_b" }))
     expect(key({ config: new ConfigMCP.Remote({ ...remote, headers: { authorization: "other" } }) })).not.toBe(key())
     expect(key({ config: new ConfigMCP.Remote({ ...remote, codemode: false }) })).not.toBe(key())
@@ -3516,6 +3517,21 @@ describe("MCP pool", () => {
     )
     expect(localKey({ clientInfo: { name: "other", version: "1" } })).not.toBe(localKey())
     expect(key({ skills: true })).not.toBe(key({ skills: false }))
+  })
+
+  test("keys equivalent configs alike", () => {
+    const remote = (config: Partial<ConfigMCP.Remote> = {}) =>
+      McpPool.key({ config: { type: "remote", url: "https://mcp.example.com", ...config }, credential: undefined })
+    const local = (input: Partial<ConfigMCP.Local> = {}, clientInfo?: { name: string; version: string }) =>
+      McpPool.key({ config: { type: "local", command: ["server"], ...input }, cwd: "/a", clientInfo })
+    // Config files give every server a timeout, and leaving an option out means its default.
+    expect(remote({ timeout: {}, protocol: "auto", oauth: {}, headers: {}, codemode: true })).toBe(remote())
+    expect(remote({ timeout: { startup: 1, catalog: 2 }, oauth: { scope: "a", client_id: "b" } })).toBe(
+      remote({ timeout: { catalog: 2, startup: 1 }, oauth: { client_id: "b", scope: "a" } }),
+    )
+    expect(remote({ oauth: false })).not.toBe(remote())
+    expect(local({ environment: {}, timeout: {}, protocol: "auto" })).toBe(local())
+    expect(local({}, { name: "a", version: "1" })).toBe(local({}, { version: "1", name: "a" }))
   })
 
   live("keeps a server that negotiates legacy private to each Location", () => {
@@ -3939,7 +3955,10 @@ describe("MCP pool", () => {
               closed: () => Effect.void,
               changed: () => Effect.void,
             },
-            select: Effect.succeed({ key: McpPool.key({ config }), authProvider: Effect.undefined }),
+            select: Effect.succeed({
+              key: McpPool.key({ config, credential: undefined }),
+              authProvider: Effect.undefined,
+            }),
           })
           yield* connection.start
           return { connection, forms, asked }

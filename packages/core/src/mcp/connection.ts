@@ -226,15 +226,12 @@ export function make(input: Input): Connection {
       // leaving it connected with a silently empty tool list and no path to recover. A shared connection
       // decides first: it can only be shared on 2026-07-28, so an older server is never asked to list.
       const result = yield* McpClient.connect({
+        ...input.spec,
         server: input.spec.name,
-        config,
-        directory: input.spec.directory,
         authProvider,
         elicitation: input.elicitation,
-        clientInfo: input.spec.clientInfo,
         roots: !input.shared,
         events: true,
-        skills: input.spec.skills,
       }).pipe(
         Effect.flatMap(
           (client): Effect.Effect<{ client: McpClient.Connection; tools?: ReadonlyArray<McpClient.Tool> }, Error> =>
