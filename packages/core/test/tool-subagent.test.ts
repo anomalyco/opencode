@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect"
 import { AIError, InvalidRequestError, LanguageModel, LLMEvent } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
@@ -223,6 +223,19 @@ const withSubagent = (location: Location.Ref) =>
   })
 
 describe("SubagentTool", () => {
+  test("advertises the full continuation session ID pattern", () => {
+    const schema = Schema.toJsonSchemaDocument(SubagentTool.Input).schema
+    expect(schema).toHaveProperty(["properties", "sessionID", "pattern"], "^ses_[0-9A-Za-z]{26}$")
+
+    const decode = Schema.decodeUnknownSync(SubagentTool.Input)
+    const input = { agent: "reviewer", description: "follow up", prompt: "continue" }
+    const sessionID = Session.ID.create()
+    expect(decode({ ...input, sessionID }).sessionID).toBe(sessionID)
+    expect(decode(input).sessionID).toBeUndefined()
+    expect(() => decode({ ...input, sessionID: "ses" })).toThrow()
+    expect(() => decode({ ...input, sessionID: sessionID.slice(0, -1) })).toThrow()
+  })
+
   completionIt.live("admits one durable completion across live delivery and restart replay", () =>
     tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
@@ -695,12 +708,12 @@ describe("SubagentTool", () => {
                 type: "tool-call",
                 id: "call-malformed-child-id",
                 name: SubagentTool.name,
-                input: { agent: "reviewer", description: "follow up", prompt: "continue", sessionID: "placeholder" },
+                input: { agent: "reviewer", description: "follow up", prompt: "continue", sessionID: "ses" },
               },
             }),
           ).toMatchObject({
             status: "error",
-            error: { message: expect.stringContaining('sessionID: Expected a string starting with "ses"') },
+            error: { message: expect.stringContaining("sessionID:") },
           })
           expect(yield* call(parent.id, "call-parent-id")).toEqual({
             status: "error",

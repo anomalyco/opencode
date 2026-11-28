@@ -38,8 +38,11 @@ export const Input = Schema.Struct({
     description:
       'NEVER set this unless the user explicitly asks for a particular model or variant. It must be a chat model; image and decision models can\'t run subagents. The value is written as "providerID/modelID", or "providerID/modelID#variant" to include a variant. Do not guess the ID: look the model up with the models tool, filtering to your own provider first.',
   }),
-  sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
-    description: "Send a follow-up to an existing subagent, running or finished. Omit to start a new one.",
+  sessionID: Schema.optionalKey(
+    Schema.String.check(Schema.isPattern(/^ses_[0-9A-Za-z]{26}$/u)).pipe(Schema.brand("SessionID")),
+  ).annotate({
+    description:
+      "Send a follow-up to an existing subagent, running or finished. Copy the full sessionID from the previous tool result. Omit to start a new one.",
   }),
 })
 
