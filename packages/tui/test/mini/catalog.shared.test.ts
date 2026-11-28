@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode } from "@opencode/client/promise"
-import { loadRunReferences, runProviders } from "../../src/mini/catalog.shared"
-import { catalogModel, catalogProvider } from "./fixture/catalog"
+import { loadRunAgents, loadRunReferences, runProviders } from "../../src/mini/catalog.shared"
+import { catalogAgent, catalogModel, catalogProvider } from "./fixture/catalog"
 
 afterEach(() => {
   mock.restore()
@@ -35,6 +35,37 @@ describe("run catalog shared", () => {
 
     expect(list).toHaveBeenCalledWith({ location: { directory: "/tmp" } })
     expect(references).toMatchObject([{ name: "effect", path: "/repos/effect", description: "Effect v4 sources" }])
+  })
+
+  test("carries the agent model through the server-to-mini mapping", async () => {
+    const client = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const list = spyOn(client.agent, "list").mockImplementation(
+      () =>
+        Promise.resolve({
+          location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
+          data: [
+            catalogAgent({
+              id: "example",
+              model: { providerID: "mock", id: "agent-model", variant: "high" },
+            }),
+            catalogAgent({ id: "plain" }),
+          ],
+        }) as never,
+    )
+
+    const agents = await loadRunAgents(client, { directory: "/tmp" })
+
+    expect(list).toHaveBeenCalledWith({ location: { directory: "/tmp" } })
+    expect(agents).toEqual([
+      {
+        id: "example",
+        name: "example",
+        mode: "primary",
+        hidden: false,
+        model: { providerID: "mock", modelID: "agent-model", variant: "high" },
+      },
+      { id: "plain", name: "plain", mode: "primary", hidden: false, model: undefined },
+    ])
   })
 
   test("merges current providers and models into the footer catalog shape", () => {

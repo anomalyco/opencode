@@ -1,5 +1,11 @@
 import { spyOn } from "bun:test"
-import type { LocationRef, ModelListOutput, OpenCodeClient, ProviderListOutput } from "@opencode/client/promise"
+import type {
+  AgentListOutput,
+  LocationRef,
+  ModelListOutput,
+  OpenCodeClient,
+  ProviderListOutput,
+} from "@opencode/client/promise"
 
 export function catalogProvider(id: string, name: string): ProviderListOutput["data"][number] {
   return {
@@ -7,6 +13,23 @@ export function catalogProvider(id: string, name: string): ProviderListOutput["d
     name,
     activation: "auto",
     package: "",
+  }
+}
+
+export function catalogAgent(input: {
+  id: string
+  name?: string
+  model?: { providerID: string; id: string; variant?: string }
+  mode?: "subagent" | "primary" | "all"
+}): AgentListOutput["data"][number] {
+  return {
+    id: input.id,
+    name: input.name ?? input.id,
+    ...(input.model ? { model: input.model } : {}),
+    request: { settings: {}, headers: {}, body: {} },
+    mode: input.mode ?? "primary",
+    hidden: false,
+    permissions: [],
   }
 }
 
@@ -43,6 +66,7 @@ export function stubCatalogLists(
     location?: LocationRef
     providers?: ProviderListOutput["data"]
     models?: ModelListOutput["data"]
+    agents?: AgentListOutput["data"]
   } = {},
 ) {
   const location = {
@@ -55,7 +79,7 @@ export function stubCatalogLists(
   return {
     provider: spyOn(sdk.provider, "list").mockResolvedValue({ location, data: input.providers ?? [] } as never),
     model: spyOn(sdk.model, "list").mockResolvedValue({ location, data: input.models ?? [] } as never),
-    agent: spyOn(sdk.agent, "list").mockResolvedValue(empty as never),
+    agent: spyOn(sdk.agent, "list").mockResolvedValue({ location, data: input.agents ?? [] } as never),
     reference: spyOn(sdk.reference, "list").mockResolvedValue(empty as never),
     command: spyOn(sdk.command, "list").mockResolvedValue(empty as never),
     skill: spyOn(sdk.skill, "list").mockResolvedValue(empty as never),

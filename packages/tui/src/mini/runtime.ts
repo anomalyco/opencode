@@ -14,6 +14,7 @@ import type { Config } from "../config"
 import { newSessionLocation } from "../config/new-session-location"
 import { errorMessage } from "../util/error"
 import { loadRunAgents, loadRunCommands, loadRunReferences } from "./catalog.shared"
+import { agentModelRef, resolveAgentModel } from "./model-preference"
 import {
   resolveMiniSettings,
   resolveModelInfo,
@@ -28,6 +29,7 @@ import type {
   LocalReplayRow,
   MiniHost,
   MiniSettings,
+  RunAgent,
   RunInput,
   RunPrompt,
   RunProvider,
@@ -117,6 +119,16 @@ type RuntimeState = {
   shown: boolean
   model: RunInput["model"]
   defaultModel: RunInput["model"]
+  // The active agent's configured model, resolved from the agent catalog.
+  // Display-only: it is never sent and never persisted onto the session.
+  // The server resolves it per step when no explicit model is set.
+  agentModel: RunInput["model"]
+  agentVariant: string | undefined
+  agents: RunAgent[]
+  agentsLoaded: boolean
+  // Key of the last unavailable-agent-model warning shown, so the fallback
+  // line is appended once per agent model instead of on every refresh.
+  agentModelWarning: string | undefined
   providers: RunProvider[]
   variants: string[]
   activeVariant: string | undefined
@@ -213,6 +225,11 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     shown: !session.first,
     model: ctx.model ?? session.model,
     defaultModel: undefined,
+    agentModel: undefined,
+    agentVariant: undefined,
+    agents: [],
+    agentsLoaded: false,
+    agentModelWarning: undefined,
     providers: [],
     variants: [],
     activeVariant: resolveVariant(ctx.variant, session.variant, savedVariant, []),
@@ -291,7 +308,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       await settleForm(next.sessionID, next.formID)
     },
     onCycleVariant: () => {
-      const model = state.model ?? state.defaultModel
+      const model = state.model ?? state.agentModel ?? state.defaultModel
       if (!model || state.variants.length === 0) {
         return {
           status: "no variants available",
@@ -309,6 +326,12 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     },
     onAgentSelect: (agent) => {
       state.agent = agent
+      // An explicit or session model wins; otherwise the footer follows the
+      // newly selected agent's configured model (or the server default when
+      // the agent has none).
+      if (state.model) return
+      refreshDisplayModel(clientAttempt())
+      if (!state.agentModel && !state.defaultModel) loadDefaultModel(clientAttempt())
     },
     onModelSelect: async (model) => {
       if (state.model?.providerID === model.providerID && state.model.modelID === model.modelID) {
@@ -345,7 +368,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
     },
     onVariantSelect: async (variant) => {
-      const model = state.model ?? state.defaultModel
+      const model = state.model ?? state.agentModel ?? state.defaultModel
       if (!model || state.variants.length === 0) {
         return {
           status: "no variants available",
@@ -573,12 +596,17 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     attempt: ClientAttempt,
   ) => {
     if (!currentClient(attempt)) return
+    state.agents = catalog.agents
+    state.agentsLoaded = true
     footer.event({
       type: "catalog",
       agents: catalog.agents,
       references: catalog.references,
       commands: catalog.commands,
     })
+    // The agent catalog may have arrived after the model load; re-evaluate
+    // the footer model so the agent model replaces the server default.
+    if (!state.model) refreshDisplayModel(attempt)
   }
 
   const fetchCatalog = async (attempt: ClientAttempt) => {
@@ -602,6 +630,47 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     if (catalog) applyCatalog(catalog, attempt)
   }
 
+  // Resolves the active agent's configured model from the loaded catalogs.
+  // When the agent declares a model the catalog does not offer, the footer
+  // falls back to the server default and says so once, in the transcript.
+  function refreshAgentModel() {
+    const resolved = resolveAgentModel(state.agents, state.agent, state.providers)
+    state.agentModel = resolved?.model
+    state.agentVariant = resolved?.variant
+    if (state.model || footer.isClosed || state.providers.length === 0) return
+    const ref = agentModelRef(state.agents, state.agent)
+    if (!ref || resolved) return
+    const key = `${ref.providerID}/${ref.modelID}`
+    if (state.agentModelWarning === key) return
+    state.agentModelWarning = key
+    footer.append({
+      kind: "system",
+      text: `Agent model ${key} is unavailable or its provider is not connected. Falling back to the server default.`,
+      phase: "final",
+      source: "system",
+    })
+  }
+
+  // Recomputes the footer model from the current precedence — explicit or
+  // session model, then the active agent's configured model, then the server
+  // default — and emits it. The agent model is display-only: it never
+  // becomes the sent model here.
+  function refreshDisplayModel(attempt: ClientAttempt) {
+    if (!currentClient(attempt)) return
+    refreshAgentModel()
+    const model = state.model ?? state.agentModel ?? state.defaultModel
+    state.variants = variantsFor(state.providers, model)
+    const displayVariant = state.model ? state.activeVariant : (state.activeVariant ?? state.agentVariant)
+    if (footer.isClosed) return
+    footer.event({ type: "variants", variants: state.variants, current: displayVariant })
+    if (model)
+      footer.event({
+        type: "model",
+        model: formatModelLabel(model, displayVariant, state.providers),
+        selection: model,
+      })
+  }
+
   function applyModelInfo(
     info: Awaited<ReturnType<typeof resolveModelInfo>>,
     current: string | undefined,
@@ -611,22 +680,21 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
   ) {
     if (!currentClient(attempt)) return
     state.providers = info.providers
-    const model = state.model ?? state.defaultModel
+    refreshAgentModel()
+    const model = state.model ?? state.agentModel ?? state.defaultModel
     state.variants = variantsFor(state.providers, model)
+    // When no model is known yet the variant list is empty because the
+    // catalog has not loaded, not because the model has no variants — keep
+    // the current variant (e.g. --variant) instead of dropping it, so the
+    // default load can still attach it to the resolved model.
     state.activeVariant = boot
       ? resolveVariant(ctx.variant, current, saved, state.variants)
-      : current && !state.variants.includes(current)
+      : current && model && !state.variants.includes(current)
         ? undefined
         : current
     if (footer.isClosed) return
     footer.event({ type: "models", providers: info.providers })
-    footer.event({ type: "variants", variants: state.variants, current: state.activeVariant })
-    if (model)
-      footer.event({
-        type: "model",
-        model: formatModelLabel(model, state.activeVariant, state.providers),
-        selection: model,
-      })
+    refreshDisplayModel(attempt)
   }
 
   let catalogRefresh:
@@ -660,9 +728,27 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         const model = { providerID: result.data.providerID, modelID: result.data.id }
         const changed =
           state.defaultModel?.providerID !== model.providerID || state.defaultModel.modelID !== model.modelID
+        // When an agent is selected but its catalog has not loaded yet, wait
+        // for the catalog before choosing a display model: promoting the
+        // server default now would stick the wrong model on the session once
+        // a variant is active. The catalog refresh re-runs this load.
+        if (state.agent && !state.agentsLoaded) {
+          state.defaultModel = model
+          return
+        }
+        state.defaultModel = model
+        refreshAgentModel()
+        // The agent model, when available, is the display model. The server
+        // default stays a fallback and is never promoted into the sent model.
+        if (state.agentModel) {
+          // A variant was explicitly requested (--variant, or cycling); attach
+          // it to the agent model, not the server default.
+          if (state.activeVariant) state.model = state.agentModel
+          refreshDisplayModel(attempt)
+          return
+        }
         const saved = changed ? await input.host.preferences.resolveVariant(model) : undefined
         if (state.model || !currentClient(attempt)) return
-        state.defaultModel = model
         state.variants = variantsFor(state.providers, model)
         if (changed) state.activeVariant = resolveVariant(ctx.variant, state.activeVariant, saved, state.variants)
         if (state.activeVariant) state.model = model
