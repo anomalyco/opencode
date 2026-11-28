@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { consumeTerminalMetaKey, terminalKeyInput, terminalLinkTarget } from "./terminal-key-event"
+import { consumeTerminalMetaKey, terminalKeyInput, terminalLinkTarget, terminalScrollKey } from "./terminal-key-event"
 
 function keyEvent(init: KeyboardEventInit) {
   return new KeyboardEvent("keydown", { cancelable: true, ...init })
@@ -64,5 +64,20 @@ describe("terminalLinkTarget", () => {
     expect(terminalLinkTarget({ ...click, shiftKey: true }, web)).toBe("system")
     expect(terminalLinkTarget({ ...click, shiftKey: true, ctrlKey: true }, web)).toBe("system")
     expect(terminalLinkTarget({ ...click, shiftKey: true, metaKey: true }, web)).toBe("system")
+  })
+})
+
+describe("terminalScrollKey", () => {
+  test("reads Shift+PageUp, PageDown, Home and End as scrollback moves", () => {
+    expect(terminalScrollKey(keyEvent({ key: "PageUp", shiftKey: true }))).toBe("pageUp")
+    expect(terminalScrollKey(keyEvent({ key: "PageDown", shiftKey: true }))).toBe("pageDown")
+    expect(terminalScrollKey(keyEvent({ key: "Home", shiftKey: true }))).toBe("top")
+    expect(terminalScrollKey(keyEvent({ key: "End", shiftKey: true }))).toBe("bottom")
+  })
+
+  test("leaves the keys without Shift, with another modifier, and on key release to the shell", () => {
+    expect(terminalScrollKey(keyEvent({ key: "PageUp" }))).toBeUndefined()
+    expect(terminalScrollKey(keyEvent({ key: "Home", shiftKey: true, ctrlKey: true }))).toBeUndefined()
+    expect(terminalScrollKey(new KeyboardEvent("keyup", { key: "PageUp", shiftKey: true }))).toBeUndefined()
   })
 })

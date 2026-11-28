@@ -22,7 +22,7 @@ import {
 import type { TerminalProps } from "./props"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "./runtime-adapters"
 import { terminalLinkLabel } from "./hover-label"
-import { consumeTerminalMetaKey, terminalKeyInput, terminalLinkTarget } from "./terminal-key-event"
+import { consumeTerminalMetaKey, terminalKeyInput, terminalLinkTarget, terminalScrollKey } from "./terminal-key-event"
 import { TerminalQuote } from "./quote"
 
 type TerminalColors = {
@@ -472,6 +472,20 @@ export const Terminal = (props: TerminalProps) => {
 
       if (input) {
         t.input(input, true)
+
+        return true
+      }
+
+      const scroll = terminalScrollKey(event)
+
+      if (scroll && t.buffer.active.type === "normal") {
+        if (scroll === "pageUp") t.scrollPages(-1)
+
+        if (scroll === "pageDown") t.scrollPages(1)
+
+        if (scroll === "top") t.scrollToTop()
+
+        if (scroll === "bottom") t.scrollToBottom()
 
         return true
       }

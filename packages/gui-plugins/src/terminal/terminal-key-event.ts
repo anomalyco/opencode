@@ -6,6 +6,22 @@ export function terminalKeyInput(event: KeyboardEvent) {
   return "\x15"
 }
 
+/**
+ * Shift+PageUp / PageDown / Home / End read back through the scrollback, as in Windows Terminal and xterm, instead of
+ * reaching the shell. The caller leaves them to a full-screen program on the alternate screen.
+ */
+export function terminalScrollKey(event: KeyboardEvent) {
+  if (event.type !== "keydown" || !event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return
+
+  if (event.key === "PageUp") return "pageUp"
+
+  if (event.key === "PageDown") return "pageDown"
+
+  if (event.key === "Home") return "top"
+
+  if (event.key === "End") return "bottom"
+}
+
 // ghostty-web sends the raw character to the PTY for Command chords, so consume them here.
 // Returning true makes ghostty-web preventDefault, so physical KeyV/KeyC are left alone
 // (whatever character the layout gives them, e.g. RTL) so native paste and copy still run.
