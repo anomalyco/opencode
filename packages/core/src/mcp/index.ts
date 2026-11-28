@@ -937,7 +937,12 @@ export const layer = (options?: Options) =>
           yield* entry.connection.start
         }).pipe(
           // Settle startup even when registration fails or replacement is interrupted, so readers cannot hang.
-          Effect.ensuring(entry.startup.open),
+          Effect.ensuring(
+            Effect.suspend(() => {
+              advance(entry, { _tag: "Settled" })
+              return entry.startup.open
+            }),
+          ),
         )
       })
 
@@ -1342,10 +1347,11 @@ export const layer = (options?: Options) =>
             name: input.name,
             arguments: input.arguments,
             status: { status: "pending" },
-            position: {
-              cursor: input.cursor === undefined ? (existing?.position.cursor ?? null) : input.cursor,
-              seen: existing?.position.seen ?? [],
-            },
+            // Only a resumed subscription keeps the event IDs it delivered; one given a cursor starts over from it.
+            position:
+              input.cursor === undefined
+                ? (existing?.position ?? { cursor: null, seen: [] })
+                : { cursor: input.cursor, seen: [] },
           }
           followed.set(id, sub)
           yield* bus.publish(McpEvent.ExperimentalSubscriptionChanged, { id })

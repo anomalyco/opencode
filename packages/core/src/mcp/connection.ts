@@ -128,7 +128,13 @@ interface Connected {
   readonly skills: ReadonlyArray<McpClient.Skill>
 }
 
-type State = { readonly _tag: "Idle" } | { readonly _tag: "Connecting"; readonly scope: Scope.Closeable } | Connected
+// A connection exists only once it is connected: until then an attempt owns its scope, so no exit leaves it open.
+type State = { readonly _tag: "Idle" } | Connected
+
+// What a handshake produced. A shared connection to a server older than 2026-07-28 stops before listing tools.
+type Opened =
+  | { readonly _tag: "Legacy"; readonly client: McpClient.Connection }
+  | { readonly _tag: "Listed"; readonly client: McpClient.Connection; readonly tools: ReadonlyArray<McpClient.Tool> }
 
 export function make(input: Input): Connection {
   let state: State = { _tag: "Idle" }
@@ -136,18 +142,6 @@ export function make(input: Input): Connection {
     switch (state._tag) {
       case "Connected":
         return state
-      case "Idle":
-      case "Connecting":
-        return undefined
-      default:
-        return absurd(state)
-    }
-  }
-  const opened = (): Scope.Closeable | undefined => {
-    switch (state._tag) {
-      case "Connecting":
-      case "Connected":
-        return state.scope
       case "Idle":
         return undefined
       default:
@@ -247,58 +241,78 @@ export function make(input: Input): Connection {
       const config = input.spec.config
       if (config.type === "remote" && !URL.canParse(config.url))
         return yield* input.events.failed({ status: "failed", error: `Invalid MCP server URL: ${config.url}` }, false)
-      const scope = yield* Scope.fork(input.scope)
-      state = { _tag: "Connecting", scope }
-      const authProvider = yield* input.authProvider
-      const { McpClient } = yield* Effect.promise(() => import("./client.js"))
-      // List tools as part of connect so a failure here marks the server failed rather than
-      // leaving it connected with a silently empty tool list and no path to recover. A shared connection
-      // decides first: it can only be shared on 2026-07-28, so an older server is never asked to list.
-      const result = yield* McpClient.connect({
-        ...input.spec,
-        server: input.spec.name,
-        authProvider,
-        elicitation: input.elicitation,
-        roots: !input.shared,
-        events: true,
-      }).pipe(
-        Effect.flatMap(
-          (client): Effect.Effect<{ client: McpClient.Connection; tools?: ReadonlyArray<McpClient.Tool> }, Error> =>
-            input.shared && !client.modern
-              ? Effect.succeed({ client })
-              : client.tools().pipe(Effect.map((tools) => ({ client, tools }))),
-        ),
-        Effect.provideService(Environment.Service, input.environment),
-        Effect.provideService(FetchHttpClient.Fetch, input.fetch),
-        Scope.provide(scope),
-        (effect) =>
-          config.type === "remote" && !input.shared ? input.endpointLoads.withLock(config.url)(effect) : effect,
-        Effect.exit,
-      )
-      if (Exit.isSuccess(result)) {
-        const client = result.value.client
-        const tools = result.value.tools
-        if (!tools) {
-          state = { _tag: "Idle" }
-          yield* Scope.close(scope, Exit.void)
-          return yield* input.events.legacy?.(client.protocolVersion) ?? Effect.void
-        }
-        state = { _tag: "Connected", scope, client, tools, prompts: [], skills: [] }
-        watch(client)
-        yield* input.events.connected
-        whenLive(client)(refreshPrompts(client))
-        whenLive(client)(refreshSkills(client))
-        return
+      // The attempt owns its scope until a connection takes it over, and closes it on any other exit, interruption
+      // included, before the outcome is reported.
+      const result = yield* Effect.acquireUseRelease(
+        Scope.fork(input.scope),
+        (scope) =>
+          Effect.gen(function* () {
+            const authProvider = yield* input.authProvider
+            const { McpClient } = yield* Effect.promise(() => import("./client.js"))
+            // List tools as part of connect so a failure here marks the server failed rather than
+            // leaving it connected with a silently empty tool list and no path to recover. A shared connection
+            // decides first: it can only be shared on 2026-07-28, so an older server is never asked to list.
+            const opened = yield* McpClient.connect({
+              ...input.spec,
+              server: input.spec.name,
+              authProvider,
+              elicitation: input.elicitation,
+              roots: !input.shared,
+              events: true,
+            }).pipe(
+              Effect.flatMap(
+                (client): Effect.Effect<Opened, Error> =>
+                  input.shared && !client.modern
+                    ? Effect.succeed({ _tag: "Legacy", client })
+                    : client.tools().pipe(Effect.map((tools) => ({ _tag: "Listed", client, tools }) as const)),
+              ),
+              Effect.provideService(Environment.Service, input.environment),
+              Effect.provideService(FetchHttpClient.Fetch, input.fetch),
+              Scope.provide(scope),
+              (effect) =>
+                config.type === "remote" && !input.shared ? input.endpointLoads.withLock(config.url)(effect) : effect,
+            )
+            switch (opened._tag) {
+              case "Legacy":
+                return opened
+              case "Listed":
+                state = {
+                  _tag: "Connected",
+                  scope,
+                  client: opened.client,
+                  tools: opened.tools,
+                  prompts: [],
+                  skills: [],
+                }
+                return opened
+              default:
+                return absurd<Opened>(opened)
+            }
+          }),
+        (scope) => (current()?.scope === scope ? Effect.void : Scope.close(scope, Exit.void)),
+      ).pipe(Effect.exit)
+      if (Exit.isFailure(result)) {
+        const error = Cause.squash(result.cause)
+        return yield* input.events.failed(
+          error instanceof McpError.NeedsAuthError
+            ? { status: "needs_auth", error: error.message }
+            : { status: "failed", error: error instanceof Error ? error.message : String(error) },
+          error instanceof McpError.ConnectError && error.answered === true,
+        )
       }
-      state = { _tag: "Idle" }
-      yield* Scope.close(scope, Exit.void)
-      const error = Cause.squash(result.cause)
-      yield* input.events.failed(
-        error instanceof McpError.NeedsAuthError
-          ? { status: "needs_auth", error: error.message }
-          : { status: "failed", error: error instanceof Error ? error.message : String(error) },
-        error instanceof McpError.ConnectError && error.answered === true,
-      )
+      const opened = result.value
+      switch (opened._tag) {
+        case "Legacy":
+          return yield* input.events.legacy?.(opened.client.protocolVersion) ?? Effect.void
+        case "Listed":
+          watch(opened.client)
+          yield* input.events.connected
+          whenLive(opened.client)(refreshPrompts(opened.client))
+          whenLive(opened.client)(refreshSkills(opened.client))
+          return
+        default:
+          return absurd<void>(opened)
+      }
     }).pipe(
       Effect.ensuring(input.events.settled),
       Effect.annotateLogs({
@@ -310,7 +324,7 @@ export function make(input: Input): Connection {
   )
 
   const stop = Effect.gen(function* () {
-    const scope = opened()
+    const scope = current()?.scope
     if (!scope) return
     state = { _tag: "Idle" }
     yield* Scope.close(scope, Exit.void)

@@ -369,6 +369,7 @@ function resourceMcpLayer(
     /** The configured server's name; "resources" unless given. */
     name?: string
     credentials?: Partial<Credential.Interface>
+    integration?: Partial<Integration.Interface>
     bus?: Layer.Layer<Bus.Service>
     /** `OPENCODE_FLAGS`, such as `-machines`. */
     flags?: string
@@ -462,6 +463,7 @@ function resourceMcpLayer(
             status: unusedIntegration,
             cancel: unusedIntegration,
           },
+          ...overrides?.integration,
         }),
         Layer.mock(Credential.Service, { list: () => Effect.succeed([]), ...overrides?.credentials }),
         overrides?.environment ?? hostEnvironmentLayer,
@@ -807,6 +809,32 @@ test("rejects sends before the stdio transport is started", async () => {
     ),
   )
 })
+
+testEffect(Layer.empty).effect("stops waiting for a server whose registration failed", () =>
+  Effect.gen(function* () {
+    const mcp = yield* Mcp.Service
+    // The failed registration fails the add too.
+    yield* mcp.add("remote", new ConfigMCP.Remote({ type: "remote", url: "https://mcp.example.com" })).pipe(Effect.exit)
+    yield* mcp.servers().pipe(
+      Effect.filterOrFail((servers) => servers.some((server) => server.name === "remote")),
+      Effect.retry({ times: 100 }),
+    )
+    const startup = yield* mcp.awaitStartup().pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Effect.yieldNow
+    expect(startup.pollUnsafe()).toBeDefined()
+  }).pipe(
+    Effect.provide(
+      resourceMcpLayer(
+        new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true }),
+        undefined,
+        undefined,
+        {
+          integration: { transform: () => Effect.die("integration unavailable") },
+        },
+      ),
+    ),
+  ),
+)
 
 test("joins concurrent stdio transport closes", async () => {
   await Effect.runPromise(
@@ -3810,7 +3838,7 @@ describe("MCP pool", () => {
       for (const location of [a, b])
         expect(
           yield* status(location.mcp).pipe(
-            Effect.filterOrFail((status) => status?.status !== "connected"),
+            Effect.filterOrFail((status) => status?.status !== "connected" && status?.status !== "pending"),
             Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
           ),
         ).toMatchObject({ status: "needs_auth" })
@@ -4573,17 +4601,24 @@ describe("MCP events", () => {
         yield* mcp.subscribe("resources", { name: "job.finished" })
         const first = yield* server.opened
         first.send("notifications/events/active", { cursor: "c1", truncated: false, heartbeatMs: 30_000 })
+        first.send("notifications/events/event", finishedEvent("e1", "c2"))
+        yield* bus.delivered(1)
         first.send("notifications/events/terminated", terminated)
         yield* ended
 
         yield* mcp.subscribe("resources", { name: "job.finished" })
         const resumed = yield* server.opened
-        expect(resumed.params).toMatchObject({ cursor: "c1" })
+        expect(resumed.params).toMatchObject({ cursor: "c2" })
         resumed.send("notifications/events/terminated", terminated)
         yield* ended
 
+        // Starting over from now forgets the events delivered before, so a server replaying one delivers it again.
         yield* mcp.subscribe("resources", { name: "job.finished", cursor: null })
-        expect((yield* server.opened).params).toMatchObject({ cursor: null })
+        const fresh = yield* server.opened
+        expect(fresh.params).toMatchObject({ cursor: null })
+        fresh.send("notifications/events/active", { cursor: "c1", truncated: false, heartbeatMs: 30_000 })
+        fresh.send("notifications/events/event", finishedEvent("e1", "c2"))
+        expect(yield* bus.delivered(2)).toMatchObject([{ data: { eventId: "e1" } }, { data: { eventId: "e1" } }])
       }).pipe(Effect.provide(subscriptionLayer(server.url, bus.layer)))
     }),
   )
