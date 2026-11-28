@@ -19,6 +19,7 @@ import { SessionStats } from "@opencode/core/session/stats"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { DateTime, Effect, Layer, Schema } from "effect"
+import { eq } from "drizzle-orm"
 import { TestClock } from "effect/testing"
 import { makeDurableObjectStorage } from "./fixture/durable-object-storage"
 import { testEffect } from "./lib/effect"
@@ -396,6 +397,60 @@ describe("SessionStats", () => {
       })
       expect(stats.cost).toBe(Money.USD.make(120 * 1.5 + 1))
     }),
+  )
+
+  Object.entries({ bun: it, durable: durableIt }).forEach(([name, runner]) =>
+    runner.effect(`filters compaction usage by live session, project, source and range (${name})`, () =>
+      Effect.gen(function* () {
+        const db = (yield* Database.Service).db
+        const bus = yield* Bus.Service
+        yield* db
+          .insert(ProjectTable)
+          .values([
+            { id: projectID, worktree: AbsolutePath.make("/stats"), name: "stats", sandboxes: [] },
+            { id: otherProjectID, worktree: AbsolutePath.make("/other"), name: "other", sandboxes: [] },
+          ])
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .insert(SessionTable)
+          .values([
+            { id: usageOnlyID, project_id: projectID, slug: "usage", directory: "/stats", version: "test" },
+            { id: sessionID, project_id: projectID, slug: "deleted", directory: "/stats", version: "test" },
+            { id: otherSessionID, project_id: otherProjectID, slug: "other", directory: "/other", version: "test" },
+          ])
+          .run()
+          .pipe(Effect.orDie)
+        const from = Date.UTC(2026, 0, 1)
+        const to = from + 1_000
+        for (const event of [
+          { sessionID: usageOnlyID, time: from, source: "compaction", cost: 1 },
+          { sessionID: usageOnlyID, time: to - 1, source: "compaction", cost: 2 },
+          { sessionID: usageOnlyID, time: from - 1, source: "compaction", cost: 4 },
+          { sessionID: usageOnlyID, time: to, source: "compaction", cost: 8 },
+          { sessionID: usageOnlyID, time: from, source: "title", cost: 16 },
+          { sessionID: otherSessionID, time: from, source: "compaction", cost: 32 },
+          { sessionID, time: from, source: "compaction", cost: 64 },
+        ] as const) {
+          yield* TestClock.setTime(event.time)
+          yield* bus.publish(SessionEvent.UsageRecorded, {
+            sessionID: event.sessionID,
+            source: event.source,
+            cost: Money.USD.make(event.cost),
+            tokens: { input: event.cost, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          })
+        }
+        yield* db.delete(SessionTable).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
+
+        const scoped = yield* SessionStats.get({ from, to, projectID, tools: "none" })
+        expect(scoped.cost).toBe(Money.USD.make(3))
+        expect(scoped.tokens.input).toBe(3)
+        expect(scoped.steps).toBe(0)
+        const global = yield* SessionStats.get({ from, to, tools: "none" })
+        expect(global.cost).toBe(Money.USD.make(35))
+        expect(global.tokens.input).toBe(35)
+      }),
+    ),
   )
 })
 
