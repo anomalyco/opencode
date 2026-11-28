@@ -183,6 +183,14 @@ permissions: [{ action: edit, resource: "*", effect: deny }]`,
       expect(Permission.evaluate("external_directory", "C:\\Users\\test\\cache\\files\\*", permissions).effect).toBe(
         "deny",
       )
+      expect(permissions).toContainEqual({
+        action: "external_directory",
+        resource: "C:\\Users\\test\\docs\\**",
+        effect: "deny",
+      })
+      expect(Permission.evaluate("external_directory", "C:\\Users\\test\\docs\\api\\*", permissions).effect).toBe(
+        "deny",
+      )
     }),
   )
 
@@ -814,6 +822,7 @@ function loadHomePermissions(home: string) {
             permission: {
               external_directory: {
                 "~/p/**": "allow",
+                "~\\docs\\**": "deny",
                 "/some/~/path": "deny",
                 "$HOMELESS/**": "deny",
               },
