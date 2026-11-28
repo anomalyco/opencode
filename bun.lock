@@ -229,6 +229,7 @@
       "name": "@opencode/core",
       "version": "2.4.1",
       "dependencies": {
+        "@agentclientprotocol/sdk": "1.6.0",
         "@ai-sdk/provider": "3.0.19",
         "@effect/platform-node": "catalog:",
         "@effect/platform-node-shared": "catalog:",

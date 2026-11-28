@@ -43,6 +43,10 @@
       "node": "./src/pty/pty.node.ts",
       "default": "./src/pty/pty.bun.ts"
     },
+    "#antigravity-acp": {
+      "workerd": "./src/plugin/provider/antigravity/antigravity/acp-client.workerd.ts",
+      "default": "./src/plugin/provider/antigravity/antigravity/acp-client.ts"
+    },
     "#claude-agent-sdk": {
       "workerd": "./src/plugin/provider/claude-agent/claude/agent-sdk.workerd.ts",
       "default": "./src/plugin/provider/claude-agent/claude/agent-sdk.ts"
@@ -118,6 +122,7 @@
     "miniflare": "4.20260708.1"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "1.6.0",
     "@ai-sdk/provider": "3.0.19",
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
