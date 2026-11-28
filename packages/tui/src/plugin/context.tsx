@@ -26,6 +26,7 @@ import { useConfig } from "../config"
 import { useTuiLifecycle } from "../context/runtime"
 import { useClient } from "../context/client"
 import { useData } from "../context/data"
+import { useLocation } from "../context/location"
 import { errorMessage } from "../util/error"
 import { createPluginContext, usePluginHost, type Dispose, type RegisteredSlot, type SlotRender } from "./api"
 import { createSourceWatcher } from "./watch"
@@ -92,6 +93,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
   const lifecycle = useTuiLifecycle()
   const client = useClient()
   const data = useData()
+  const location = useLocation()
   const [serverPlugins, setServerPlugins] = createSignal<readonly PluginInfo[]>([])
   const serverTuiPlugins = createMemo(() =>
     serverPlugins().filter(
@@ -536,10 +538,15 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
       },
     ),
   )
-  const syncServerPlugins = () =>
-    client.api.plugin
-      .list({ location: data.location.default() })
+  // A location switch can start a second request before the first answers. Only the newest
+  // answer may replace the list; a stale one would unload the plugins of the location in view.
+  let serverSync = 0
+  const syncServerPlugins = () => {
+    const attempt = ++serverSync
+    return client.api.plugin
+      .list({ location: location.ref ?? data.location.default() })
       .then((response) => {
+        if (attempt !== serverSync) return
         const failed = response.data.filter(
           (plugin) =>
             plugin.state.status === "failed" &&
@@ -560,9 +567,10 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
         })
       })
       .catch(() => undefined)
+  }
   createEffect(
     on(
-      () => JSON.stringify(data.location.default()),
+      () => JSON.stringify([location.ref, data.location.default()]),
       () => void syncServerPlugins(),
     ),
   )
