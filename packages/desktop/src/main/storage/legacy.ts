@@ -88,7 +88,7 @@ export const importLegacyStores = Effect.fn("DesktopStorage.importLegacyStores")
   return { imported: rows.length, removed: candidates.map((file) => file.name) }
 })
 
-function isStoreFile(name: string) {
+export function isStoreFile(name: string) {
   return name === "default.dat" || /^opencode\..+\.dat$/.test(name)
 }
 
