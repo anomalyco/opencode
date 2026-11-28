@@ -20,6 +20,7 @@ export function Sidebar(props: { sessionID: string }) {
   return (
     <Show when={session()}>
       <box
+        id="session-sidebar"
         backgroundColor={theme.background.raised.base}
         width={SESSION_SIDEBAR_WIDTH}
         height="100%"

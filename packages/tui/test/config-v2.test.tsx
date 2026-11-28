@@ -47,6 +47,12 @@ test("validates the session tabs setting", () => {
   expect(() => decode({ session: { new_location: "current" } })).toThrow()
 })
 
+test("validates the session sidebar position setting", () => {
+  expect(decodeInfo({ session: { sidebar_position: "left" } })).toEqual({ session: { sidebar_position: "left" } })
+  expect(decodeInfo({ session: { sidebar_position: "right" } })).toEqual({ session: { sidebar_position: "right" } })
+  expect(() => decodeInfo({ session: { sidebar_position: "top" } })).toThrow()
+})
+
 test("resolves nested config and keybind defaults", () => {
   const config = resolve(
     {
