@@ -560,6 +560,19 @@ describe("WebSearch", () => {
     )
   })
 
+  it.effect("keeps an explicit provider disabled when web search is turned off", () =>
+    Effect.gen(function* () {
+      const exa = yield* register("exa")
+      const websearch = yield* WebSearch.Service
+      yield* websearch.select(false)
+
+      expect(yield* websearch.query({ query: "effect", providerID: exa.providerID }).pipe(Effect.flip)).toBeInstanceOf(
+        WebSearch.DisabledError,
+      )
+      expect(exa.calls).toEqual([])
+    }),
+  )
+
   it.effect("fails when web search is explicitly disabled", () =>
     Effect.gen(function* () {
       yield* register("exa")
