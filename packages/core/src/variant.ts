@@ -617,6 +617,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/azure": openaiResponses,
   "@opencode/ai/providers/azure/responses": openaiResponses,
   "@opencode/ai/providers/amazon-bedrock/mantle": openaiResponses,
+  "@opencode/ai/providers/amazon-bedrock/responses": openResponses,
   "@opencode/ai/providers/amazon-bedrock/mantle/responses": openaiResponses,
   "@opencode/ai/providers/alibaba/responses": openaiResponses,
   "@opencode/ai/providers/meta": openaiResponses,
@@ -636,6 +637,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/openai-compatible": openaiCompatible,
   "@opencode/ai/providers/openai/chat": openaiChat,
   "@opencode/ai/providers/azure/chat": openaiChat,
+  "@opencode/ai/providers/amazon-bedrock/chat": openaiChat,
   "@opencode/ai/providers/amazon-bedrock/mantle/chat": openaiChat,
   "@opencode/ai/providers/google-vertex/chat": vertexChat,
   "@opencode/ai/providers/alibaba": alibabaChat,
@@ -664,6 +666,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
 
   "@opencode/ai/providers/anthropic": anthropicMessages,
   "@opencode/ai/providers/anthropic-compatible": anthropicMessages,
+  "@opencode/ai/providers/amazon-bedrock/messages": anthropicMessages,
   "@opencode/ai/providers/amazon-bedrock/mantle/messages": anthropicMessages,
   "@opencode/ai/providers/azure/messages": anthropicMessages,
   "@opencode/ai/providers/google-vertex/messages": anthropicMessages,
@@ -684,6 +687,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/google-vertex/interactions": googleInteractions,
 
   "@opencode/ai/providers/amazon-bedrock": bedrockConverse,
+  "@opencode/ai/providers/amazon-bedrock/converse": bedrockConverse,
   "@opencode/ai/providers/cohere": cohere,
   "@opencode/ai/providers/openrouter": openrouter,
 

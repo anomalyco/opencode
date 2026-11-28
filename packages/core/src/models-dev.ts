@@ -201,6 +201,10 @@ type Route = {
 // only happens when no baseURL is set. The catalog's URL for them is a template or SDK default.
 const BUILDS_OWN_URL = new Set([
   "@opencode/ai/providers/amazon-bedrock",
+  "@opencode/ai/providers/amazon-bedrock/chat",
+  "@opencode/ai/providers/amazon-bedrock/converse",
+  "@opencode/ai/providers/amazon-bedrock/messages",
+  "@opencode/ai/providers/amazon-bedrock/responses",
   "@opencode/ai/providers/azure/chat",
   "@opencode/ai/providers/azure/images",
   "@opencode/ai/providers/azure/messages",
@@ -396,7 +400,18 @@ function route(
   }
   const eligible = ([, entry, opencodeai]: (typeof apis)[number]) =>
     model.type === "chat" ? opencodeai || entry.sdk?.aisdk : opencodeai?.endsWith(`/${model.type}s`)
-  const preferred = recommended ? apis.find((api) => api[0] === model.recommended_api && eligible(api)) : undefined
+  const preferred = apis.find(([protocol, entry, opencodeai]) => {
+    if (protocol !== model.recommended_api || !eligible([protocol, entry, opencodeai])) return false
+    // Some Bedrock models document limitations on Converse. Honor catalog recommendations for
+    // native Runtime routes without opting the rest of the catalog into recommended APIs.
+    return (
+      recommended ||
+      (providerID === Provider.ID.amazonBedrock &&
+        ((protocol === "chat-completions" && opencodeai === "@opencode/ai/providers/amazon-bedrock/chat") ||
+          (protocol === "messages" && opencodeai === "@opencode/ai/providers/amazon-bedrock/messages") ||
+          (protocol === "responses" && opencodeai === "@opencode/ai/providers/amazon-bedrock/responses")))
+    )
+  })
   const [protocol, api, opencodeai] = preferred ?? apis.find(eligible) ?? []
   if (!protocol || !api) return undefined
   const aisdk = api.sdk?.aisdk
