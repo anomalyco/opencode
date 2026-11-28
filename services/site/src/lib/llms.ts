@@ -1,4 +1,5 @@
 import { extensionPages } from "~/component/site/extension-data"
+import { anomalyProducts, appLink } from "~/component/site/links"
 import { installs, productPages } from "~/component/site/product-data"
 import { config } from "~/config"
 import { docsUrl } from "~/lib/docs"
@@ -38,6 +39,16 @@ export async function llmsText(locale: Locale) {
             .join("\n"),
         ]
       : []),
+    "## More from Anomaly",
+    [
+      // The list /product and the product pages read, minus the apps already listed under Products.
+      ...anomalyProducts
+        .filter((app) => !extensionPages.some((extension) => extension.product && extension.slug === app.id))
+        .map((app) => `- ${link(app.name, appLink(app, context.route).href)}: ${app.body}`),
+      // No card on /product yet, so llms.txt is the only place these two are named.
+      `- ${link("Spaceman", "https://anoma.ly/spaceman")}: a macOS tiling window manager with stable logical windows`,
+      `- ${link("Models.dev", "https://models.dev")}: an open-source database of AI models, their specs and prices`,
+    ].join("\n"),
     "## Console",
     [
       `- ${link("Console", "/console.md")}: model inference, Go subscriptions and tools for teams`,
