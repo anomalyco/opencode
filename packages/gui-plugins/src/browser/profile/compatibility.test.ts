@@ -16,6 +16,20 @@ test("review groups by registrable site without collapsing private suffix tenant
   expect(reviewAccess(manifest({ host_permissions: ["<all_urls>"] }), original.grants).added?.access).toEqual(["allSites"])
 })
 
+// Grants saved before the review named request rules hold the permission but not the access line.
+test("an update asks again only for access its permissions add, not for a line the review learned to say since", () => {
+  const blocker = manifest({ permissions: ["declarativeNetRequest", "storage"], host_permissions: ["https://*.example.com/*"] })
+  const saved = { access: ["someSites" as const], hosts: ["https://*.example.com/*"], permissions: ["declarativeNetRequest", "storage"] }
+
+  expect(reviewAccess(blocker, saved).added).toBeUndefined()
+  expect(reviewAccess(manifest({ ...blocker, permissions: ["declarativeNetRequest", "storage", "management"] }), saved).added).toEqual({
+    access: ["extensions"],
+    hosts: [],
+    permissions: ["management"],
+  })
+  expect(reviewAccess(blocker, { ...saved, permissions: ["storage"] }).added?.access).toEqual(["requests"])
+})
+
 test("review counts distinct hosts across grants and content scripts and puts broad patterns before the display cutoff", () => {
   const sites = Array.from({ length: 12 }, (_, i) => `https://example${i}.test/*`)
   const hosts = reviewHosts(manifest({ host_permissions: sites, permissions: [sites[0], "cookies"], content_scripts: [{ matches: ["*://*.com/*", "<all_urls>"] }] }))
@@ -163,6 +177,22 @@ test.each([
     name: "a Manifest V2 extension with hosts among its permissions",
     manifest: manifest({ manifest_version: 2, permissions: ["*://*/*", "storage"] }),
     expected: ["allSites"],
+  },
+  {
+    // uBlock Origin Lite: its rules block and redirect requests on every page with no host permission at all.
+    name: "a rule-based content blocker",
+    manifest: manifest({ permissions: ["declarativeNetRequest", "declarativeNetRequestFeedback", "scripting"] }),
+    expected: ["requests", "activity"],
+  },
+  {
+    name: "a proxy switcher",
+    manifest: manifest({ permissions: ["proxy", "storage"] }),
+    expected: ["allSites"],
+  },
+  {
+    name: "an extension manager",
+    manifest: manifest({ permissions: ["management", "declarativeNetRequestWithHostAccess"] }),
+    expected: ["requests", "extensions"],
   },
   { name: "a formatter that asks for nothing", manifest: manifest({ permissions: ["storage"] }), expected: [] },
 ])("$name asks for $expected", (row) => {

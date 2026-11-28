@@ -43,7 +43,11 @@ export function accessSummary(access: Extract<InstallResult, { token: string }>[
 
   if (access.includes("cookies")) return "review.summary.cookies"
 
+  if (access.includes("requests")) return "review.summary.requests"
+
   if (access.includes("activity")) return "review.summary.activity"
+
+  if (access.includes("extensions")) return "review.summary.extensions"
 
   return access.includes("clipboard") ? "review.summary.clipboard" : "review.summary.none"
 }

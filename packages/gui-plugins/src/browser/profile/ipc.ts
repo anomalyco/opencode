@@ -60,7 +60,15 @@ export type ExtensionCompatibility = typeof ExtensionCompatibility.Type
  * - `cookies`: read and change cookies, sign-ins included, on those sites.
  * - `activity`: see the address of every page the user visits. `clipboard`: read what the user copies.
  */
-export const ExtensionAccess = Schema.Literals(["allSites", "someSites", "cookies", "activity", "clipboard"])
+export const ExtensionAccess = Schema.Literals([
+  "allSites",
+  "someSites",
+  "cookies",
+  "requests",
+  "activity",
+  "extensions",
+  "clipboard",
+])
 
 export type ExtensionAccess = typeof ExtensionAccess.Type
 

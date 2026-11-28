@@ -28,8 +28,15 @@ export function reviewAccess(manifest: Manifest, previous?: ReviewedGrants) {
     return domain || !authority?.[1] ? site : `*.${site}`
   }))].sort()
 
-  const added = previous && {
-    access: access.filter((item) => !previous.access.includes(item) && !(item === "someSites" && previous.access.includes("allSites"))),
+  // Also read again from the agreed permissions and hosts: grants saved before the review named an access hold its
+  // permission but not its line, and the person already agreed to that permission.
+  const agreed = previous && [
+    ...previous.access,
+    ...extensionAccess({ ...manifest, permissions: previous.permissions, host_permissions: previous.hosts, content_scripts: [] }),
+  ]
+
+  const added = previous && agreed && {
+    access: access.filter((item) => !agreed.includes(item) && !(item === "someSites" && agreed.includes("allSites"))),
     hosts: hosts.filter((item) => !previous.hosts.some((grant) => grant === item || coversPattern(grant, item))),
     permissions: permissions.filter((item) => !previous.permissions.includes(item)),
   }
