@@ -73,7 +73,13 @@ const SourceApi = Schema.Struct({
   capabilities: Schema.optional(
     Schema.Struct({
       // Format names this version doesn't know are skipped when the route is built.
-      tools: Schema.optional(Schema.Struct({ freeform: Schema.optional(Schema.Array(Schema.String)) })),
+      tools: Schema.optional(
+        Schema.Struct({
+          freeform: Schema.optional(Schema.Array(Schema.String)),
+          // Tool-choice modes this version doesn't know are skipped when the route is built.
+          choice: Schema.optional(Schema.Array(Schema.String)),
+        }),
+      ),
       // Mid-conversation changes the API takes without breaking the prompt cache.
       effort_updates: Schema.optional(Schema.Boolean),
       system_updates: Schema.optional(Schema.Boolean),
@@ -151,6 +157,7 @@ const decodeContext = Schema.decodeUnknownOption(ContextCondition)
 const decodeMaxTokensField = Schema.decodeUnknownOption(MaxTokensField)
 const decodeMediaInput = Schema.decodeUnknownOption(MediaInput)
 const knownFreeformFormat = Schema.is(FreeformFormat)
+const knownToolChoice = Schema.is(Model.ToolChoice)
 const decodeStatus = Schema.decodeUnknownOption(Schema.Literals(["alpha", "beta", "deprecated"]))
 
 /** A realtime model that answers in speech and calls tools, by the API it speaks (`live`, `realtime`…). */
@@ -192,6 +199,7 @@ type Route = {
   readonly protocol: string
   /** Unset for a realtime model: a voice session starts through its API, not a package. */
   readonly package?: string
+  readonly toolChoice?: Model.Capabilities["toolChoice"]
   readonly freeform?: Model.Capabilities["freeform"]
   readonly baseURL?: string
   readonly compatibility?: Model.Compatibility
@@ -424,6 +432,7 @@ function route(
   return {
     protocol,
     package: packageName,
+    toolChoice: api.capabilities?.tools?.choice?.filter(knownToolChoice),
     freeform: api.capabilities?.tools?.freeform?.filter(knownFreeformFormat),
     // An empty base_url is how models.dev says it has no URL for the API.
     ...(BUILDS_OWN_URL.has(packageName) || !api.base_url ? {} : { baseURL: api.base_url }),
@@ -651,6 +660,7 @@ function modelInfo(
     settings: Object.keys(settings).length === 0 ? undefined : settings,
     capabilities: {
       tools: model.capabilities.tools.supported,
+      ...(source.route.toolChoice && { toolChoice: source.route.toolChoice }),
       ...(source.route.freeform && { freeform: source.route.freeform }),
       input: modalities(model.modalities.input),
       output: modalities(model.modalities.output),

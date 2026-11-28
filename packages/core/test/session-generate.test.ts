@@ -28,7 +28,7 @@ import { Instructions } from "@opencode/core/instructions/index"
 import { InstructionBuiltIns } from "@opencode/core/instructions/builtins"
 import { Location } from "@opencode/core/location"
 import { McpInstructions } from "@opencode/core/mcp/instructions"
-import { ID } from "@opencode/core/model"
+import { ID, type ToolChoice } from "@opencode/core/model"
 import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
 import { ReferenceInstructions } from "@opencode/core/reference/instructions"
@@ -63,6 +63,8 @@ import { testEffect } from "./lib/effect"
 const requests: LLMRequest[] = []
 const options: Array<StreamOptions | undefined> = []
 let instruction: string | Instructions.Unavailable = "Initial context"
+// The tool choices the run's model advertises; undefined means the API accepts all of them.
+let modelToolChoice: ReadonlyArray<ToolChoice> | undefined
 const sessionID = SessionSchema.ID.make("ses_generate_test")
 
 const model = LanguageModel.make({ id: "generate-model", provider: "test", route: OpenAIChat.route })
@@ -99,7 +101,12 @@ const models = Layer.mock(SessionRunnerModel.Service)({
   resolve: () =>
     Effect.succeed(
       SessionRunnerModel.resolved(model, {
-        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+        capabilities: {
+          tools: true,
+          ...(modelToolChoice === undefined ? {} : { toolChoice: modelToolChoice }),
+          input: ["text", "image"],
+          output: ["text"],
+        },
         cost: [
           {
             input: Money.USDPerMillionTokens.make(1),
@@ -497,6 +504,55 @@ it.effect(
       expect(requests).toEqual([])
       expect(yield* durableState(db, sessionID)).toEqual(before)
       expect(yield* usageState(db, sessionID)).toEqual(usageBefore)
+    }),
+  { timeout: 15_000 },
+)
+
+it.effect(
+  "forces the output tool for a model whose API accepts it",
+  () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      instruction = "Initial context"
+      modelToolChoice = ["auto", "none", "required", "tool"]
+      const { session, instances } = yield* setup
+
+      yield* SessionGenerate.generate({
+        session,
+        prompt: "Classify this",
+        history: false,
+        output: { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"] },
+      }).pipe(Effect.provideService(Instance.Service, instances))
+
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.tools.map((tool) => tool.name)).toEqual(["respond"])
+      expect(requests[0]?.toolChoice).toMatchObject({ type: "tool", name: "respond" })
+    }),
+  { timeout: 15_000 },
+)
+
+it.effect(
+  "asks for the output tool unforced when the model rejects a forced choice",
+  () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      instruction = "Initial context"
+      modelToolChoice = ["auto", "none"]
+      const { session, instances } = yield* setup
+
+      const result = yield* SessionGenerate.generate({
+        session,
+        prompt: "Classify this",
+        history: false,
+        output: { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"] },
+      }).pipe(Effect.provideService(Instance.Service, instances))
+
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.tools.map((tool) => tool.name)).toEqual(["respond"])
+      expect(requests[0]?.toolChoice).toMatchObject({ type: "auto" })
+      expect(requests[0]?.system.map((part) => part.text).join("\n")).toContain("call")
+      expect(requests[0]?.system.map((part) => part.text).join("\n")).toContain("`respond`")
+      expect(result.output).toBeUndefined()
     }),
   { timeout: 15_000 },
 )

@@ -489,6 +489,33 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.effect("keeps the tool choices a model's API accepts, skipping ones it doesn't know", () =>
+    Effect.gen(function* () {
+      const [acme] = yield* ModelsDev.decodeSnapshot(
+        JSON.stringify({
+          acme: {
+            ...fixture.acme,
+            models: {
+              ...fixture.acme.models,
+              claude: sourceModel("claude", {
+                api: {
+                  messages: {
+                    base_url: "https://claude.acme.test/v1",
+                    sdk: { opencodeai: "@opencode/ai/providers/anthropic" },
+                    capabilities: { tools: { choice: ["auto", "none", "future-mode"] } },
+                  },
+                },
+              }),
+            },
+          },
+        }),
+      )
+      const model = (id: string) => acme?.models.find((item) => item.id === id)
+      expect(model("claude")?.capabilities.toolChoice).toEqual(["auto", "none"])
+      expect(model("acme-1")?.capabilities.toolChoice).toBeUndefined()
+    }),
+  )
+
   it.effect("skips APIs whose opencode entrypoint this build doesn't have", () =>
     Effect.gen(function* () {
       const unknown = (path: string) => ({
@@ -725,7 +752,6 @@ describe("ModelsDev Service", () => {
         experimental: speed("kimi", "priority"),
         body: { service_tier: "priority" },
       })
-
     }),
   )
 

@@ -28,11 +28,15 @@ export type Compatibility = Model.Compatibility
 export const Capabilities = Model.Capabilities
 export type Capabilities = Model.Capabilities
 
+export const ToolChoice = Model.ToolChoice
+export type ToolChoice = Model.ToolChoice
+
 /** Merges partial config capabilities onto a base model's capabilities, defaulting unset fields. */
 export const mergeCapabilities = (config: Partial<Capabilities>, base: Capabilities | undefined) => {
   const fallback = base ?? Capabilities.default()
   return {
     tools: config.tools ?? fallback.tools,
+    toolChoice: (config.toolChoice ?? base?.toolChoice)?.slice(),
     freeform: (config.freeform ?? base?.freeform)?.slice(),
     input: [...(config.input ?? fallback.input)],
     output: [...(config.output ?? fallback.output)],
