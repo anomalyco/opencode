@@ -1,11 +1,10 @@
-import { existsSync } from "node:fs"
-import { join } from "node:path"
 import { dialog } from "electron"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { builtinMainContext } from "@opencode/plugin/gui/builtin"
 import { MenubarItem, type Plugin } from "@opencode/plugin/gui/main"
 import { Updater } from "@opencode/plugin/gui/updater"
 import { UpdaterPreferences } from "./contract"
+import { disabledReason } from "./installation"
 import { logContext } from "./log"
 import { make } from "./machine"
 
@@ -13,15 +12,14 @@ const setup: Plugin.MainSetup = async (ctx) => {
   const builtin = builtinMainContext(ctx)
   const build = ctx.app
   const lifecycle = builtin.lifecycle
-  // electron-updater reads its feed from app-update.yml. Distro packages that update the app themselves (such as the
-  // AUR's opencode-desktop-bin) delete it, and every check would then fail.
-  const enabled = build.packaged && existsSync(join(process.resourcesPath, "app-update.yml"))
+  const reason = build.packaged ? disabledReason(process.resourcesPath, process.env.FLATPAK_ID) : undefined
+  const enabled = build.packaged && !reason
   // Holds no resources, so it needs no cleanup.
   const context = logContext(ctx.log.write)
   const runPromise = Effect.runPromiseWith(context)
   const runFork = Effect.runForkWith(context)
 
-  if (build.packaged && !enabled) runFork(Effect.logInfo("auto updater disabled, app-update.yml is missing"))
+  if (reason) runFork(Effect.logInfo(`auto updater disabled, ${reason}`))
 
   // The update main staged for the next start; stored before in the updater's settings file.
   const ready = builtin.storage.store("ready", {
