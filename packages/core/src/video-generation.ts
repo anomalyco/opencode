@@ -155,7 +155,7 @@ const layer = Layer.effect(
         .get()
         .pipe(Effect.orDie)
       if (updated === undefined && outcome.status === "completed")
-        yield* Effect.forEach(outcome.blobs, blobs.remove, { discard: true })
+        yield* Effect.forEach(outcome.blobs, (blob) => blobs.remove(blob).pipe(Effect.ignore), { discard: true })
     })
 
     const generate = <A>(
@@ -189,7 +189,9 @@ const layer = Layer.effect(
                 ),
           ),
         ),
-      ).pipe(Effect.onError(() => Effect.forEach(written, blobs.remove, { discard: true })))
+      ).pipe(
+        Effect.onError(() => Effect.forEach(written, (blob) => blobs.remove(blob).pipe(Effect.ignore), { discard: true })),
+      )
       return written
     })
 
@@ -245,10 +247,8 @@ const layer = Layer.effect(
       if (job.status === "error")
         return { id, status: "error", reason: job.reason, error: job.error } satisfies VideoJob
       // A deleted blob is dropped.
-      const found = yield* Effect.forEach(job.blobs, (blob) => blobs.read(blob).pipe(Effect.option))
-      const infos = found.flatMap((blob) =>
-        Option.isSome(blob) ? [{ id: blob.value.id, mime: blob.value.mime, bytes: blob.value.bytes }] : [],
-      )
+      const found = yield* Effect.forEach(job.blobs, (blob) => blobs.get(blob).pipe(Effect.option))
+      const infos = found.flatMap(Option.toArray)
       if (infos.length === 0) return yield* missing
       return { id, status: "completed", blobs: infos } satisfies VideoJob
     })

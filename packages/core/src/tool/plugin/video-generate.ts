@@ -5,7 +5,6 @@ import { Media, ToolFailure, VideoAspectRatio } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { Document, Entry } from "@opencode/schema/config"
 import type { VideoID } from "@opencode/schema/generate"
-import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Effect, Schema, Scope, Stream } from "effect"
 import { toolFailure } from "../runtime.js"
@@ -25,7 +24,6 @@ import { VideoGeneration } from "../../video-generation.js"
 
 export const name = "generate_video"
 export const MAX_INPUT_BYTES = 100 * 1024 * 1024
-const CHUNK = 4 * 1024 * 1024
 const URL_TYPES: Record<string, string> = {
   mp4: "video/mp4",
   mov: "video/quicktime",
@@ -106,7 +104,6 @@ export const track = Effect.fnUntraced(function* (input: {
   readonly sessions: Pick<Session.Interface, "synthetic">
   readonly videos: VideoGeneration.Interface
   readonly blobs: BlobStore.Interface
-  readonly fs: FSUtil.Interface
   readonly files: Environment.Files
   readonly scope: Scope.Scope
   readonly notificationID: SessionMessage.ID
@@ -118,15 +115,13 @@ export const track = Effect.fnUntraced(function* (input: {
   const run = Effect.gen(function* () {
     const job = yield* input.videos.wait(input.videoID)
     if (job.status === "error") return yield* Effect.fail(new Error(job.error))
-    // The blob is on the server's disk; the copy is a workspace write, streamed so a video is never held in memory.
+    // The copy is a workspace write, streamed so a video is never held in memory.
     const files = yield* Effect.forEach(job.blobs, (blob, index) =>
       Effect.gen(function* () {
         const file = videoPath(input.path, index)
-        const content = yield* input.blobs.read(blob.id)
+        const content = yield* input.blobs.content(blob.id)
         yield* input.files.write(file, new Uint8Array())
-        yield* input.fs
-          .stream(content.path, { chunkSize: CHUNK })
-          .pipe(Stream.runForEach((chunk) => input.files.append(file, chunk)))
+        yield* content.pipe(Stream.runForEach((chunk) => input.files.append(file, chunk)))
         return file
       }),
     )
@@ -178,7 +173,6 @@ export const Plugin = {
     const environment = yield* Environment.Service
     const videos = yield* VideoGeneration.Service
     const blobs = yield* BlobStore.Service
-    const fs = yield* FSUtil.Service
     const global = yield* Global.Service
     const jobs = yield* Job.Service
     const scope = yield* Scope.Scope
@@ -354,7 +348,6 @@ export const Plugin = {
                 sessions,
                 videos,
                 blobs,
-                fs,
                 files: target?.environment.files ?? environment.files,
                 scope,
                 notificationID: SessionMessage.ID.create(),

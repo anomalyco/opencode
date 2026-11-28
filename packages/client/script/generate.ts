@@ -11,6 +11,7 @@ import {
 import { Agent } from "@opencode/schema/agent"
 import { Artifact } from "@opencode/schema/artifact"
 import { Automation } from "@opencode/schema/automation"
+import { BlobStore } from "@opencode/schema/blob-store"
 import { Command } from "@opencode/schema/command"
 import { Config } from "@opencode/schema/config"
 import { Credential } from "@opencode/schema/credential"
@@ -70,6 +71,7 @@ const effectContract = compile(ClientApi, {
 const effectTypeReferences = [
   ...namespaceTypes("Agent", "@opencode/schema/agent", Agent),
   ...namespaceTypes("Artifact", "@opencode/schema/artifact", Artifact),
+  ...namespaceTypes("BlobStore", "@opencode/schema/blob-store", BlobStore),
   ...namespaceTypes("Automation", "@opencode/schema/automation", Automation),
   ...namespaceTypes("Command", "@opencode/schema/command", Command),
   ...namespaceTypes("Config", "@opencode/schema/config", Config),

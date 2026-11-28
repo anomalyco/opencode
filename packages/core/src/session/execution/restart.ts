@@ -4,7 +4,6 @@ import { Cause, Context, Effect, Layer, Option, Schema } from "effect"
 import { isReadonlyArrayNonEmpty } from "effect/Array"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { ID } from "@opencode/schema/shell"
-import { FSUtil } from "@opencode/util/fs-util"
 import { BlobStore } from "../../blob-store.js"
 import { Bus } from "../../bus.js"
 import { Database } from "../../database/database.js"
@@ -235,7 +234,6 @@ export const layer = (options?: Options) =>
           ? yield* Effect.all([
               Effect.serviceOption(VideoGeneration.Service),
               Effect.serviceOption(BlobStore.Service),
-              Effect.serviceOption(FSUtil.Service),
               Effect.serviceOption(Environment.Service),
             ]).pipe(
               Effect.map((found) => Option.all(found)),
@@ -244,13 +242,12 @@ export const layer = (options?: Options) =>
             )
           : Option.none()
         if (Option.isNone(services)) return yield* recoverToolJob(background, recovery)
-        const [videos, blobs, fs, environment] = services.value
+        const [videos, blobs, environment] = services.value
         yield* VideoGenerateTool.track({
           jobs,
           sessions: notices,
           videos,
           blobs,
-          fs,
           files: environment.files,
           scope,
           notificationID: background.notificationID,

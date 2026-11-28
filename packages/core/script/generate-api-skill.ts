@@ -98,7 +98,7 @@ const SHOWN = [
   "GET /api/provider*",
   // Generation, and the stored blobs it returns.
   "* /api/experimental/generate*",
-  "GET /api/experimental/blob/*",
+  "* /api/experimental/blob*",
 ]
 
 const INDEX_HEADER = [

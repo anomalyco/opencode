@@ -37,6 +37,7 @@ import type { FileSystem } from "@opencode/schema/filesystem"
 import type { Command } from "@opencode/schema/command"
 import type { OpenCodeEvent } from "@opencode/protocol/groups/event"
 import type { Pty } from "@opencode/schema/pty"
+import type { BlobStore } from "@opencode/schema/blob-store"
 import type { Automation } from "@opencode/schema/automation"
 import type { Artifact } from "@opencode/schema/artifact"
 import type { Job } from "@opencode/schema/job"
@@ -2434,6 +2435,34 @@ export type ExperimentalPersistentPtyConnectTokenOperation<E = never> = (
   input: ExperimentalPersistentPtyConnectTokenInput,
 ) => Effect.Effect<ExperimentalPersistentPtyConnectTokenOutput, E>
 
+export type ExperimentalBlobListInput = { readonly sessionID?: Session.ID | undefined }
+export type ExperimentalBlobListOutput = ReadonlyArray<BlobStore.Info>
+export type ExperimentalBlobListOperation<E = never> = (
+  input?: ExperimentalBlobListInput,
+) => Effect.Effect<ExperimentalBlobListOutput, E>
+
+export type ExperimentalBlobGetInput = { readonly blobID: BlobStore.ID }
+export type ExperimentalBlobGetOutput = BlobStore.Info
+export type ExperimentalBlobGetOperation<E = never> = (
+  input: ExperimentalBlobGetInput,
+) => Effect.Effect<ExperimentalBlobGetOutput, E>
+
+export type ExperimentalBlobUpdateInput = {
+  readonly blobID: BlobStore.ID
+  readonly name?: string | undefined
+  readonly metadata?: BlobStore.Metadata | undefined
+}
+export type ExperimentalBlobUpdateOutput = BlobStore.Info
+export type ExperimentalBlobUpdateOperation<E = never> = (
+  input: ExperimentalBlobUpdateInput,
+) => Effect.Effect<ExperimentalBlobUpdateOutput, E>
+
+export type ExperimentalBlobRemoveInput = { readonly blobID: BlobStore.ID }
+export type ExperimentalBlobRemoveOutput = void
+export type ExperimentalBlobRemoveOperation<E = never> = (
+  input: ExperimentalBlobRemoveInput,
+) => Effect.Effect<ExperimentalBlobRemoveOutput, E>
+
 export type ExperimentalBrowserTunnelOutput = boolean
 export type ExperimentalBrowserTunnelOperation<E = never> = () => Effect.Effect<ExperimentalBrowserTunnelOutput, E>
 
@@ -2748,6 +2777,12 @@ export interface ExperimentalApi<E = never> {
     readonly snapshot: ExperimentalPersistentPtySnapshotOperation<E>
     readonly remove: ExperimentalPersistentPtyRemoveOperation<E>
     readonly connectToken: ExperimentalPersistentPtyConnectTokenOperation<E>
+  }
+  readonly blob: {
+    readonly list: ExperimentalBlobListOperation<E>
+    readonly get: ExperimentalBlobGetOperation<E>
+    readonly update: ExperimentalBlobUpdateOperation<E>
+    readonly remove: ExperimentalBlobRemoveOperation<E>
   }
   readonly browser: { readonly tunnel: ExperimentalBrowserTunnelOperation<E> }
   readonly automation: {

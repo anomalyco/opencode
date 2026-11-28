@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "ea7fb45e-fef3-40b6-8e09-42b781c5bf23",
-  "prevIds": ["6fdb1fc8-74cd-4f15-8faa-e109d3030da9"],
+  "id": "22f74f1b-284d-4d0f-8ec3-a561c9cf62f5",
+  "prevIds": ["ea7fb45e-fef3-40b6-8e09-42b781c5bf23"],
   "ddl": [
     {
       "name": "account_state",
@@ -18,6 +18,14 @@
     },
     {
       "name": "automation",
+      "entityType": "tables"
+    },
+    {
+      "name": "blob_data",
+      "entityType": "tables"
+    },
+    {
+      "name": "blob_v2",
       "entityType": "tables"
     },
     {
@@ -513,6 +521,146 @@
       "name": "time_updated",
       "entityType": "columns",
       "table": "automation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "blob_id",
+      "entityType": "columns",
+      "table": "blob_data"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "seq",
+      "entityType": "columns",
+      "table": "blob_data"
+    },
+    {
+      "type": "blob",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "data",
+      "entityType": "columns",
+      "table": "blob_data"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "blob_v2"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "blob_v2"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "mime",
+      "entityType": "columns",
+      "table": "blob_v2"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "bytes",
+      "entityType": "columns",
+      "table": "blob_v2"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "blob_v2"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "width",
+      "entityType": "columns",
+      "table": "blob_v2"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "height",
+      "entityType": "columns",
+      "table": "blob_v2"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "duration_ms",
+      "entityType": "columns",
+      "table": "blob_v2"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "metadata",
+      "entityType": "columns",
+      "table": "blob_v2"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "blob_v2"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_updated",
+      "entityType": "columns",
+      "table": "blob_v2"
     },
     {
       "type": "text",
@@ -2106,6 +2254,17 @@
       "table": "account_state"
     },
     {
+      "columns": ["blob_id"],
+      "tableTo": "blob_v2",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_blob_data_blob_id_blob_v2_id_fk",
+      "entityType": "fks",
+      "table": "blob_data"
+    },
+    {
       "columns": ["aggregate_id"],
       "tableTo": "event_sequence",
       "columnsTo": ["aggregate_id"],
@@ -2256,6 +2415,13 @@
       "table": "control_account"
     },
     {
+      "columns": ["blob_id", "seq"],
+      "nameExplicit": false,
+      "name": "blob_data_pk",
+      "entityType": "pks",
+      "table": "blob_data"
+    },
+    {
       "columns": ["project_id", "directory"],
       "nameExplicit": false,
       "name": "project_directory_pk",
@@ -2316,6 +2482,13 @@
       "nameExplicit": false,
       "name": "automation_pk",
       "table": "automation",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "blob_v2_pk",
+      "table": "blob_v2",
       "entityType": "pks"
     },
     {
@@ -2464,6 +2637,24 @@
       "name": "automation_active_idx",
       "entityType": "indexes",
       "table": "automation"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        },
+        {
+          "value": "time_created",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": "\"blob_v2\".\"session_id\" is not null",
+      "origin": "manual",
+      "name": "blob_v2_session_idx",
+      "entityType": "indexes",
+      "table": "blob_v2"
     },
     {
       "columns": [

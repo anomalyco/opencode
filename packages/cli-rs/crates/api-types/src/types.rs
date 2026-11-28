@@ -5609,12 +5609,41 @@ pub struct ExperimentalGenerateVideoGetInput {
 
 string_type!(BlobID, "`Blob.ID`");
 
+/// `Blob.Metadata`
+pub type BlobMetadata = IndexMap<String, serde_json::Value>;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct BlobInfoTime {
+    #[serde(serialize_with = "crate::ser::number")]
+    pub created: f64,
+    #[serde(serialize_with = "crate::ser::number")]
+    pub updated: f64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct BlobInfo {
     pub id: BlobID,
+    #[serde(rename = "sessionID", default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<SessionID>,
     pub mime: String,
     #[serde(serialize_with = "crate::ser::number")]
     pub bytes: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<BlobMetadata>,
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
+    pub width: Option<f64>,
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
+    pub height: Option<f64>,
+    #[serde(
+        rename = "durationMs",
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub duration_ms: Option<f64>,
+    pub time: BlobInfoTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -7467,21 +7496,13 @@ pub struct PermissionSavedListInput {
 string_type!(PermissionSavedID, "`PermissionSaved.ID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PermissionSavedInfoTime {
-    #[serde(serialize_with = "crate::ser::number")]
-    pub created: f64,
-    #[serde(serialize_with = "crate::ser::number")]
-    pub updated: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PermissionSavedInfo {
     pub id: PermissionSavedID,
     #[serde(rename = "projectID")]
     pub project_id: ProjectID,
     pub action: String,
     pub resource: String,
-    pub time: PermissionSavedInfoTime,
+    pub time: BlobInfoTime,
 }
 
 /// Output of `Client::permission_saved_list`.
@@ -10781,10 +10802,56 @@ pub struct ExperimentalMediaGetInput {
     pub hash: MediaHash,
 }
 
+/// Input of `Client::experimental_blob_list`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalBlobListInput {
+    pub session_id: Option<SessionID>,
+}
+
+/// Output of `Client::experimental_blob_list`.
+pub type ExperimentalBlobListOutput = Vec<BlobInfo>;
+
+/// Input of `Client::experimental_blob_create`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalBlobCreateInput {
+    pub name: Option<String>,
+    pub session_id: Option<SessionID>,
+    pub payload: bytes::Bytes,
+}
+
+/// Output of `Client::experimental_blob_create`.
+pub type ExperimentalBlobCreateOutput = BlobInfo;
+
 /// Input of `Client::experimental_blob_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalBlobGetInput {
-    pub id: BlobID,
+    pub blob_id: BlobID,
+}
+
+/// Output of `Client::experimental_blob_get`.
+pub type ExperimentalBlobGetOutput = BlobInfo;
+
+/// Input of `Client::experimental_blob_content`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalBlobContentInput {
+    pub blob_id: BlobID,
+}
+
+/// Input of `Client::experimental_blob_update`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalBlobUpdateInput {
+    pub blob_id: BlobID,
+    pub name: Option<String>,
+    pub metadata: Option<BlobMetadata>,
+}
+
+/// Output of `Client::experimental_blob_update`.
+pub type ExperimentalBlobUpdateOutput = BlobInfo;
+
+/// Input of `Client::experimental_blob_remove`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalBlobRemoveInput {
+    pub blob_id: BlobID,
 }
 
 /// Output of `Client::experimental_browser_tunnel`.
@@ -11110,7 +11177,7 @@ pub struct AutomationInfo {
     pub last_output: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<serde_json::Value>,
-    pub time: PermissionSavedInfoTime,
+    pub time: BlobInfoTime,
 }
 
 /// Output of `Client::experimental_automation_create`.
@@ -13156,6 +13223,8 @@ pub struct ConfigEntryDocumentInfoExperimental {
     pub media_blob: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifacts: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blob_catalog: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub console_watches: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -212,6 +212,8 @@ export type GenerateVideoID = string
 
 export type BlobID = string
 
+export type BlobMetadata = { [x: string]: JsonValue }
+
 export type GenerateVideoErrorReason = "failed" | "cancelled" | "expired" | "unknown"
 
 export type GeneratePredicateAnswer = { type: "predicate"; name: string; probability: number }
@@ -784,7 +786,18 @@ export type ModelCost = {
 
 export type GenerateVideoRunning = { id: GenerateVideoID; status: "running" }
 
-export type BlobInfo = { id: BlobID; mime: string; bytes: number }
+export type BlobInfo = {
+  id: BlobID
+  sessionID?: SessionID | undefined
+  mime: string
+  bytes: number
+  name?: string | undefined
+  metadata?: BlobMetadata | undefined
+  width?: number | undefined
+  height?: number | undefined
+  durationMs?: number | undefined
+  time: { created: number; updated: number }
+}
 
 export type GenerateVideoError = {
   id: GenerateVideoID
@@ -2772,6 +2785,7 @@ export type ConfigEntry =
           todo?: boolean
           media_blob?: boolean
           artifacts?: boolean
+          blob_catalog?: boolean
           console_watches?: boolean
           recommended_api?: boolean
           full_codemode?: boolean
@@ -4878,9 +4892,37 @@ export type ExperimentalMediaGetInput = { readonly hash: string }
 
 export type ExperimentalMediaGetOutput = globalThis.Uint8Array
 
-export type ExperimentalBlobGetInput = { readonly id: string }
+export type ExperimentalBlobListInput = { readonly sessionID?: string | undefined }
 
-export type ExperimentalBlobGetOutput = globalThis.Uint8Array
+export type ExperimentalBlobListOutput = { data: Array<BlobInfo> }["data"]
+
+export type ExperimentalBlobCreateInput = {
+  readonly name?: string | undefined
+  readonly sessionID?: string | undefined
+  readonly payload: globalThis.Uint8Array | globalThis.Blob
+}
+
+export type ExperimentalBlobCreateOutput = { data: BlobInfo }["data"]
+
+export type ExperimentalBlobGetInput = { readonly blobID: string }
+
+export type ExperimentalBlobGetOutput = { data: BlobInfo }["data"]
+
+export type ExperimentalBlobContentInput = { readonly blobID: string }
+
+export type ExperimentalBlobContentOutput = globalThis.Uint8Array
+
+export type ExperimentalBlobUpdateInput = {
+  readonly blobID: string
+  readonly name?: string | undefined
+  readonly metadata?: { readonly [x: string]: JsonValue } | undefined
+}
+
+export type ExperimentalBlobUpdateOutput = { data: BlobInfo }["data"]
+
+export type ExperimentalBlobRemoveInput = { readonly blobID: string }
+
+export type ExperimentalBlobRemoveOutput = void
 
 export type ExperimentalBrowserTunnelOutput = boolean
 
