@@ -24,7 +24,8 @@
     "test": "bun run ../core/script/test.ts",
     "typecheck": "bun check --no-script -b",
     "typecheck:tsc": "tsc -b",
-    "probe:workerd": "bun run script/workerd-probe.ts"
+    "probe:workerd": "bun run script/workerd-probe.ts",
+    "probe:workerd-machine-link": "bun run script/workerd-machine-link.ts"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
