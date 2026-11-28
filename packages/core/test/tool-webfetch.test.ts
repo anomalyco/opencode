@@ -629,6 +629,52 @@ describe("WebFetchTool registration", () => {
     }),
   )
 
+  it.effect("converts XHTML served as application/xhtml+xml", () =>
+    Effect.gen(function* () {
+      // A strict `text/html` check left `<h1>Guide</h1>` as raw markup for markdown and text (#63888).
+      reset()
+      respond = () =>
+        Effect.succeed(
+          new Response('<html xmlns="http://www.w3.org/1999/xhtml"><body><h1>Guide</h1></body></html>', {
+            headers: { "content-type": "application/xhtml+xml; charset=utf-8" },
+          }),
+        )
+      const registry = yield* Tool.Service
+
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1", format: "markdown" }))).toMatchObject({
+        status: "completed",
+        content: [{ type: "text", text: "# Guide" }],
+      })
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1", format: "text" }))).toMatchObject({
+        status: "completed",
+        content: [{ type: "text", text: "Guide" }],
+      })
+    }),
+  )
+
+  it.effect("converts HTML whose media type uses different casing", () =>
+    Effect.gen(function* () {
+      // HTTP media types are case-insensitive; the old `includes("text/html")` test was not (#49322).
+      reset()
+      respond = () =>
+        Effect.succeed(
+          new Response("<h1>Hello</h1>", {
+            headers: { "content-type": "Text/HTML; Charset=UTF-8" },
+          }),
+        )
+      const registry = yield* Tool.Service
+
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1", format: "markdown" }))).toMatchObject({
+        status: "completed",
+        content: [{ type: "text", text: "# Hello" }],
+      })
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1", format: "text" }))).toMatchObject({
+        status: "completed",
+        content: [{ type: "text", text: "Hello" }],
+      })
+    }),
+  )
+
   it.effect("rejects declared and streamed oversized bodies", () =>
     Effect.gen(function* () {
       reset()
