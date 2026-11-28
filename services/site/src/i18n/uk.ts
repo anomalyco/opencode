@@ -344,8 +344,8 @@ export const dict = {
   "docs.nav.plugins": "Плагіни",
   "docs.nav.client": "Клієнт",
   "docs.nav.workspace": "Робочий простір",
-
-  "docs.nav.console": "Console",  "docs.lockup.sectionDocs": "Документація {{section}}",
+  "docs.nav.console": "Console",
+  "docs.lockup.sectionDocs": "Документація {{section}}",
   "docs.lockup.switchLabel": "{{name}}, змінити документацію",
   "docs.lockup.home": "{{name}}, головна",
   "docs.lockup.switch": "Змінити документацію",

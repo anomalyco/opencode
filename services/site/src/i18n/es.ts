@@ -360,8 +360,8 @@ export const dict = {
   "docs.nav.plugins": "Complementos",
   "docs.nav.client": "Cliente",
   "docs.nav.workspace": "Espacio de trabajo",
-
-  "docs.nav.console": "Console",  "docs.lockup.sectionDocs": "Docs de {{section}}",
+  "docs.nav.console": "Console",
+  "docs.lockup.sectionDocs": "Docs de {{section}}",
   "docs.lockup.switchLabel": "{{name}}, cambiar de docs",
   "docs.lockup.home": "Inicio de {{name}}",
   "docs.lockup.switch": "Cambiar de docs",
