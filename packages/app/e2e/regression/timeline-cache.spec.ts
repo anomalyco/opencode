@@ -387,6 +387,50 @@ for (const scenario of ["after reconnecting", "with the stream connected", "when
   })
 }
 
+test("keeps a cold history error visible until a retry succeeds", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const transport = await installSseTransport(page, { server: fixture.serverKey })
+  await openTabs(page, { pageMessages: placeholderHistory })
+  const url = `**/api/session/${fixture.sourceID}/message?*`
+  let reads = 0
+  await page.route(url, (route) => (++reads <= 3 ? route.abort("failed") : route.fallback()))
+  const first = await holdRoute(page, url)
+  let held = first
+
+  try {
+    await page.goto(sessionHref(fixture.sourceID), { waitUntil: "domcontentloaded" })
+    await first.arrived
+    await transport.waitForConnection()
+    const editor = page.getByRole("textbox", { name: "Prompt", exact: true })
+    await expect(editor).toBeEditable()
+    held = await holdRoute(page, url)
+    first.release()
+    const error = page.getByRole("heading", { name: "Something went wrong", exact: true })
+    await expect(error).toBeVisible()
+    const original = await error.elementHandle()
+
+    for (const attempt of [1, 2, 3]) {
+      await held.arrived
+      await expect(error).toBeVisible()
+      // A remounted error screen would hide a flash between two failed reads.
+      expect(await original!.evaluate((element) => element.isConnected)).toBe(true)
+      const current = held
+
+      if (attempt < 3) held = await holdRoute(page, url)
+      current.release()
+    }
+
+    await expect(page.getByText(`History for ${fixture.sourceID}`, { exact: true })).toBeVisible()
+    await expect(error).toHaveCount(0)
+    await expect(editor).toBeEditable()
+    expect(reads).toBe(4)
+    expect(await transport.connections()).toHaveLength(1)
+  } finally {
+    first.release()
+    held.release()
+  }
+})
+
 test("recovers from a failed cold history load when another session is selected", async ({ page }) => {
   const transport = await installSseTransport(page, { server: fixture.serverKey })
   await openTabs(page, { pageMessages: placeholderHistory })

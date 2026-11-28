@@ -31,6 +31,8 @@ export type TimelineSyncState =
       readonly target: TimelineSyncTarget
       readonly attempt: number
       readonly retries: number
+      /** Keep the last failure visible until a retry succeeds. */
+      readonly error: object | undefined
     }
   | {
       readonly status: "enriching"
@@ -128,7 +130,7 @@ export function transitionTimelineSync(state: TimelineSyncState, event: Timeline
     const attempt = state.attempt + 1
 
     return {
-      state: { status: "syncing", target: state.target, attempt, retries: 0 },
+      state: { status: "syncing", target: state.target, attempt, retries: 0, error: state.error },
       effects: [{ type: "sync.start", target: state.target, attempt }],
     }
   }
@@ -143,7 +145,7 @@ export function transitionTimelineSync(state: TimelineSyncState, event: Timeline
     const attempt = state.attempt + 1
 
     return {
-      state: { status: "syncing", target, attempt, retries: 0 },
+      state: { status: "syncing", target, attempt, retries: 0, error: undefined },
       effects: [...cancel(state), { type: "sync.start", target, attempt }],
     }
   }
@@ -155,7 +157,7 @@ export function transitionTimelineSync(state: TimelineSyncState, event: Timeline
     if (event.type !== "sync.retry" || timelineSyncRetryDelay(state) === undefined) return unchanged(state)
 
     return {
-      state: { status: "syncing", target: state.target, attempt, retries: state.retries + 1 },
+      state: { status: "syncing", target: state.target, attempt, retries: state.retries + 1, error: state.error },
       effects: [{ type: "sync.start", target: state.target, attempt }],
     }
   }
@@ -167,7 +169,13 @@ export function transitionTimelineSync(state: TimelineSyncState, event: Timeline
         effects: NO_EFFECTS,
       }
 
-    if (event.type === "sync.timed-out") return ready(state.target, attempt, SYNC_CANCEL)
+    if (event.type === "sync.timed-out")
+      return state.error
+        ? {
+            state: { status: "failed", target: state.target, attempt, retries: state.retries, error: state.error },
+            effects: SYNC_CANCEL,
+          }
+        : ready(state.target, attempt, SYNC_CANCEL)
 
     if (event.type !== "sync.succeeded") return unchanged(state)
 
@@ -219,7 +227,8 @@ export function isTimelineSyncing(state: TimelineSyncState, target: TimelineSync
 }
 
 export function timelineSyncError(state: TimelineSyncState, target: TimelineSyncTarget | undefined) {
-  if (!target || state.status !== "failed" || !sameTarget(state.target, target)) return undefined
+  if (!target || (state.status !== "failed" && state.status !== "syncing") || !sameTarget(state.target, target))
+    return undefined
 
   return state.error
 }
