@@ -1,4 +1,4 @@
-The openmono-*.woff2 files in this folder are subsets of OpenMono 1.000, made by
+The openmono-*.woff2 files in this folder are subsets of OpenMono 1.001, made by
 services/site/script/openmono.py from the app build (no ligatures, every
 character one cell wide). OpenMono is Anomaly's typeface, built on Iosevka by
 Renzhi Li (Belleve Invis). The font declares no Reserved Font Name.
