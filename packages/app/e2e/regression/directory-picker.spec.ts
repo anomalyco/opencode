@@ -8,7 +8,7 @@ test.use({ viewport: { width: 1440, height: 900 } })
 const directory = "C:/OpenCode/Picker"
 
 // Opens the folder picker from Settings > Projects once its root has listed.
-async function openPicker(page: Page, input: Pick<MockServerConfig, "fileList" | "findFiles">) {
+async function openPicker(page: Page, input: Pick<MockServerConfig, "fileList" | "findFiles" | "onFileMkdir">) {
   await openSettings(page, { name: "Picker", seed: { tabs: [] }, ...input })
   await page.getByTestId("settings-screen").getByRole("tab", { name: "Projects", exact: true }).click()
   await page.getByRole("button", { name: "Add project", exact: true }).click()
@@ -43,6 +43,50 @@ test("Tab and Enter while suggestions load act on the typed folder, not the prev
   await expect(input).toHaveValue("C:\\OpenCode\\Picker\\beta\\")
   await expect(picker.getByRole("treeitem", { name: "beta", exact: true })).toHaveAttribute("aria-selected", "true")
   search.release()
+})
+
+test("creates a folder in the server picker and selects it", async ({ page }) => {
+  const created: string[] = []
+  const picker = await openPicker(page, {
+    fileList: (path) => (path === directory ? [fileNode(directory, "alpha", "directory")] : []),
+    onFileMkdir: ({ path }) => void created.push(path),
+  })
+
+  await picker.getByRole("treeitem", { name: "alpha", exact: true }).click()
+  await picker.getByRole("button", { name: "New folder", exact: true }).click()
+  await picker.getByRole("textbox", { name: "Folder name or path", exact: true }).fill("beta")
+  await picker.getByRole("button", { name: "Create", exact: true }).click()
+
+  await expect.poll(() => created).toEqual([`${directory}/beta`])
+  await expect(picker.getByRole("navigation", { name: "Folder path" })).toContainText("beta")
+
+  await picker.getByRole("button", { name: "New folder", exact: true }).click()
+  await picker.getByRole("textbox", { name: "Folder name or path", exact: true }).fill("C:/OpenCode/Elsewhere")
+  await picker.getByRole("button", { name: "Create", exact: true }).click()
+
+  await expect.poll(() => created).toEqual([`${directory}/beta`, "C:/OpenCode/Elsewhere"])
+  await expect(picker.getByRole("navigation", { name: "Folder path" })).toContainText("Elsewhere")
+  await picker.getByRole("button", { name: "Select folder", exact: true }).click()
+  await expect(picker).toBeHidden()
+})
+
+test("keeps the new folder form open through a rejected name and a failed create", async ({ page }) => {
+  const picker = await openPicker(page, { fileList: () => [] })
+
+  await picker.getByRole("button", { name: "New folder", exact: true }).click()
+  const input = picker.getByRole("textbox", { name: "Folder name or path", exact: true })
+  await input.fill("a/b")
+  await picker.getByRole("button", { name: "Create", exact: true }).click()
+  await expect(picker.getByRole("alert")).toContainText("Enter a folder name")
+
+  await input.fill("beta")
+  await picker.getByRole("button", { name: "Create", exact: true }).click()
+  await expect(picker.getByRole("alert")).toContainText("Couldn’t create the folder")
+  await expect(input).toHaveValue("beta")
+
+  await picker.getByRole("button", { name: "Create", exact: true }).press("Escape")
+  await expect(picker).toBeVisible()
+  await expect(picker.getByRole("button", { name: "New folder", exact: true })).toBeFocused()
 })
 
 test("a folder that cannot be listed leaves the root readable and retries when expanded", async ({ page }) => {

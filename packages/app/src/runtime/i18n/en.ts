@@ -489,6 +489,12 @@ export const dict = {
   "dialog.directory.recentProject": "{{name}} ({{path}})",
   "dialog.directory.gitRepo": "git repo",
   "dialog.directory.readError": "Unable to read this folder",
+  "dialog.directory.newFolder": "New folder",
+  "dialog.directory.newFolder.placeholder": "Folder name or path",
+  "dialog.directory.newFolder.create": "Create",
+  "dialog.directory.newFolder.creating": "Creating…",
+  "dialog.directory.newFolder.invalid": "Enter a folder name or an absolute path.",
+  "dialog.directory.newFolder.failed": "Couldn’t create the folder.",
 
   "dialog.server.add.title": "Add server",
   "dialog.server.add.url": "Server address",

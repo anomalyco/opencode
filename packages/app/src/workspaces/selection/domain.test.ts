@@ -16,6 +16,8 @@ import {
   pickerParent,
   pickerRoot,
   pickerAbsoluteInput,
+  pickerFolderName,
+  pickerFolderPath,
 } from "./domain"
 
 type Sdk = Parameters<typeof listPickerDirectory>[0]
@@ -600,4 +602,38 @@ test("wraps autocomplete keyboard navigation", () => {
   expect(nextSuggestionIndex(3, 1, 4)).toBe(0)
   expect(nextSuggestionIndex(0, -1, 4)).toBe(3)
   expect(nextSuggestionIndex(0, 1, 0)).toBe(-1)
+})
+
+test.each([
+  ["repo", "repo"],
+  ["  repo  ", "repo"],
+  ["my folder", "my folder"],
+  ["", undefined],
+  ["   ", undefined],
+  [".", undefined],
+  ["..", undefined],
+  ["a/b", undefined],
+  ["a\\b", undefined],
+  ["a\u0000b", undefined],
+])("accepts %p as a folder name", (input, expected) => {
+  expect(pickerFolderName(input)).toBe(expected)
+})
+
+test.each([
+  ["/repo", "new", "/home/luke", "/repo/new"],
+  ["/repo/", "new", "/home/luke", "/repo/new"],
+  ["/", "new", "/home/luke", "/new"],
+  ["/repo", "/new", "/home/luke", "/new"],
+  ["/repo", "~/new", "/home/luke", "/home/luke/new"],
+  ["/repo", "D:/new", "/home/luke", "D:/new"],
+  ["/repo", "//Server/Share/new", "/home/luke", "//Server/Share/new"],
+  ["C:/Users/luke", "new", "C:/Users/luke", "C:/Users/luke/new"],
+  ["C:/Users/luke/", "new", "C:/Users/luke", "C:/Users/luke/new"],
+  ["//Server/Share", "new", "C:/Users/luke", "//Server/Share/new"],
+  ["/repo", "a/b", "/home/luke", undefined],
+  ["/repo", "..", "/home/luke", undefined],
+  ["/repo", "", "/home/luke", undefined],
+  ["/repo", "~/new", "", undefined],
+])("resolves %p and %p (home %p) to %p", (parent, value, home, expected) => {
+  expect(pickerFolderPath(parent, value, home)).toBe(expected)
 })

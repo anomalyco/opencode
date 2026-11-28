@@ -68,6 +68,32 @@ export function pickerFileSearchQuery(root: string, input: string, home: string)
   return value
 }
 
+/** A single folder name, or undefined when it is empty or could escape the directory. */
+export function pickerFolderName(value: string) {
+  const name = value.trim()
+
+  if (!name || name === "." || name === ".." || /[\\/\u0000]/.test(name)) return
+
+  return name
+}
+
+/** The absolute path of a new folder, or undefined when the input is neither a name nor an absolute path. */
+export function pickerFolderPath(directory: string, value: string, home: string) {
+  const input = value.trim()
+
+  if (!input) return
+
+  if (input.startsWith("~") || pickerRoot(input)) {
+    if (input.startsWith("~") && !home.trim()) return
+
+    return pickerAbsoluteInput(input, home, directory)
+  }
+
+  const name = pickerFolderName(input)
+
+  return name ? joinPickerPath(directory, name) : undefined
+}
+
 export function pickerAbsoluteInput(input: string, home: string, current: string) {
   const value = normalizePickerDrive(input).replace(/^~(?=\/|$)/, normalizePickerDrive(home))
 

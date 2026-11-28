@@ -322,6 +322,13 @@ const Group = HttpApiGroup.make("mock")
       error: Unsupported,
     }),
   )
+  .add(
+    HttpApiEndpoint.post("fsMkdir", "/api/experimental/fs/mkdir", {
+      query: Query,
+      success: Json,
+      error: Unsupported,
+    }),
+  )
   .add(HttpApiEndpoint.post("fsWatch", "/api/experimental/fs/watch", { success: NoContent }))
   .add(HttpApiEndpoint.delete("fsUnwatch", "/api/experimental/fs/watch", { success: NoContent }))
   .add(HttpApiEndpoint.get("shell", "/api/shell", { success: Json }))
