@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process"
+import { access, constants, stat } from "node:fs/promises"
 import { homedir } from "node:os"
+import { delimiter, join } from "node:path"
 import util from "node:util"
 import { Effect, FileSystem, Path } from "effect"
 import { detectHex, hexPaths } from "./hex"
@@ -15,7 +17,8 @@ export const checkAppExists = Effect.fn("DesktopFiles.checkAppExists")(function*
 
   if (process.platform === "win32") return (yield* resolveAppPath(appName)) !== null
 
-  if (process.platform === "linux") return true
+  // Linux launches the bare command, so an app is installed only if that command is an executable on PATH.
+  if (process.platform === "linux") return yield* isExecutableOnPath(appName)
 
   return yield* checkMacosApp(appName)
 })
@@ -196,6 +199,24 @@ const installedAt = Effect.fnUntraced(function* (appName: string) {
 
   return null
 })
+
+// Looks the command up on PATH directly, since minimal distros ship no `which` binary.
+function isExecutableOnPath(appName: string) {
+  const files = (process.env.PATH ?? "")
+    .split(delimiter)
+    .filter((dir) => dir.length > 0)
+    .map((dir) => join(dir, appName))
+
+  return Effect.promise(() => Promise.all(files.map(isExecutableFile))).pipe(
+    Effect.map((found) => found.includes(true)),
+  )
+}
+
+function isExecutableFile(file: string) {
+  return stat(file)
+    .then((info) => info.isFile() && access(file, constants.X_OK).then(() => true))
+    .catch(() => false)
+}
 
 function exists(fs: FileSystem.FileSystem, path: string) {
   return fs.exists(path).pipe(Effect.orElseSucceed(() => false))

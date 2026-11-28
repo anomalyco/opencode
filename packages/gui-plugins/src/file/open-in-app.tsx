@@ -45,7 +45,8 @@ const LINUX_OPEN_APPS = [
   { id: "vscode", label: "open.app.vscode", icon: "vscode", openWith: "code" },
   { id: "cursor", label: "open.app.cursor", icon: "cursor", openWith: "cursor" },
   { id: "zed", label: "open.app.zed", icon: "zed", openWith: "zed" },
-  { id: "sublime-text", label: "open.app.sublimeText", icon: "sublime-text", openWith: "Sublime Text" },
+  // Linux runs openWith as a command, and Sublime Text installs `subl`.
+  { id: "sublime-text", label: "open.app.sublimeText", icon: "sublime-text", openWith: "subl" },
 ] as const
 
 function openAppsForOS(os: OS) {
