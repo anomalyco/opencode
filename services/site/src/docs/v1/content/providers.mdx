@@ -192,6 +192,37 @@ Don't see a provider here? Submit a PR.
 
 ---
 
+### AI Stupid Level
+
+[AI Stupid Level](https://aistupidlevel.info/router) is an OpenAI-compatible router. It sends each request to a model picked from its coding, reasoning, and tool-use benchmark scores, and calls that model with the provider keys you add to your account.
+
+1. Head over to [AI Stupid Level](https://aistupidlevel.info/router), create an account, add a key for at least one model provider under **Provider keys**, and generate an API key under **Router API keys**.
+
+2. Run the `/connect` command and search for **AI Stupid Level**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your AI Stupid Level API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a routing mode like _Auto Coding_ or _Auto Tool Use_.
+
+   ```txt
+   /models
+   ```
+
+   Each model is a routing mode: the router picks the model that answers each request. The modes have no price on Models.dev, because each request is billed by that model's provider to the provider key you added.
+
+---
+
 ### Amazon Bedrock
 
 To use Amazon Bedrock with OpenCode:
