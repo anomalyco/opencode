@@ -1,8 +1,9 @@
 import { createStore } from "solid-js/store"
 import { dedupeWith } from "effect/Array"
 import { createSimpleContext } from "./helper"
-import { batch, createMemo, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, on, onCleanup, untrack } from "solid-js"
 import { useEvent } from "./event"
+import { useClient } from "./client"
 import path from "path"
 import { useTuiPaths } from "./runtime"
 import { useArgs } from "./args"
@@ -713,6 +714,59 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const session = createSession()
+
+    const client = useClient()
+    const autoApproved = new Set<string>()
+    onCleanup(
+      event.on("permission.replied", (evt) => {
+        autoApproved.delete(evt.data.requestID)
+      }),
+    )
+    createEffect(() => {
+      if (permission.mode !== "autoaccept") {
+        autoApproved.clear()
+        return
+      }
+      for (const sessionID of data.session.permission.sessions()) {
+        for (const request of data.session.permission.list(sessionID) ?? []) {
+          if (autoApproved.has(request.id)) continue
+          autoApproved.add(request.id)
+          void data.session.permission
+            .reply({
+              sessionID: request.sessionID,
+              decision: "once",
+              requestID: request.id,
+            })
+            .catch((error) => {
+              autoApproved.delete(request.id)
+              toast.error(error)
+            })
+        }
+      }
+    })
+    // Sweep active and locally loaded sessions on connect/reconnect or when autoaccept turns on,
+    // catching prompts asked while disconnected (such as sessions resumed on service restart).
+    createEffect(
+      on([() => permission.mode, () => client.connection.status()], ([mode, status]) => {
+        if (mode !== "autoaccept" || status !== "connected") return
+        const controller = new AbortController()
+        onCleanup(() => controller.abort())
+        void (async () => {
+          const active = await client.api.session.active({ signal: controller.signal }).catch(() => undefined)
+          if (controller.signal.aborted) return
+          const ids = new Set([
+            ...Object.keys(active ?? {}),
+            ...untrack(() => data.session.list()).map((item) => item.id),
+          ])
+          await Promise.allSettled(
+            Array.from(ids, (sessionID) => {
+              data.session.permission.invalidate(sessionID)
+              return data.session.permission.sync(sessionID)
+            }),
+          )
+        })()
+      }),
+    )
 
     const result = {
       model,
