@@ -1,7 +1,7 @@
 export * as ConfigExperimental from "./experimental.js"
 
 import { Record, Schema } from "effect"
-import { NonNegativeInt, optional } from "../schema.js"
+import { NonNegativeInt, PositiveInt, optional } from "../schema.js"
 import { ConfigFlag } from "./flag.js"
 import { ConfigModel } from "./model.js"
 import { ConfigPolicy } from "./policy.js"
@@ -59,6 +59,10 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     }),
   subagent_depth: NonNegativeInt.pipe(optional).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1.",
+  }),
+  stream_delta_interval_ms: PositiveInt.pipe(optional).annotate({
+    description:
+      "Milliseconds to wait between published batches of streamed text and reasoning deltas while a step is generating. Lower values publish smaller batches more often. Defaults to 100.",
   }),
   location_idle_timeout: Schema.Union([Schema.DurationFromString, Schema.Literal(false)])
     .pipe(optional)

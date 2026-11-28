@@ -11,6 +11,7 @@ import type { Agent } from "@opencode/schema/agent"
 import { Cause, Clock, Data, Deferred, Effect, Exit, Fiber, Option, Stream } from "effect"
 import { SessionError } from "@opencode/schema/session-error"
 import { Bus } from "../../bus.js"
+import { Config } from "../../config.js"
 import { Permission } from "../../permission.js"
 import { Snapshot } from "../../snapshot.js"
 import { Tool } from "../../tool.js"
@@ -91,6 +92,10 @@ export const make = Effect.gen(function* () {
       "gen_ai.agent.name": input.agent,
       ...(input.retryAttempt === undefined ? {} : { "opencode.retry.attempt": input.retryAttempt }),
     })
+    const config = yield* Effect.serviceOption(Config.Service)
+    const deltaBatchInterval = Option.isNone(config)
+      ? undefined
+      : Config.latest(yield* config.value.entries(), "experimental")?.stream_delta_interval_ms
     const publisher = createLLMEventPublisher(bus, {
       sessionID: input.sessionID,
       assistantMessageID: input.assistantMessageID,
@@ -99,6 +104,7 @@ export const make = Effect.gen(function* () {
       providerMetadataKey: input.model.model.route.providerMetadataKey ?? input.model.model.provider,
       pendingSnapshot: Fiber.join(pendingStartSnapshot),
       started,
+      deltaBatchInterval,
     })
     let endsTurn = false
     const toolRuns: Array<{
