@@ -23,6 +23,7 @@ import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 import { permissionService } from "./lib/permission"
+import { noToolCalls } from "./lib/tool"
 
 const context = {
   sessionID: Session.ID.make("ses_execute"),
@@ -30,6 +31,7 @@ const context = {
   messageID: SessionMessage.ID.make("msg_execute"),
   id: Tool.CallID.make("call_execute"),
   progress: () => Effect.void,
+  tool: noToolCalls,
 }
 
 const allowAll = permissionService({ assert: () => Effect.void })

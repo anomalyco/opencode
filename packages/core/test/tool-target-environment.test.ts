@@ -30,7 +30,7 @@ import { WriteTool } from "@opencode/core/tool/plugin/write"
 import { elsewhere } from "./fixture/target-environment"
 import { withTempDir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
+import { executeTool, noToolCalls, registerToolPlugin, toolIdentity } from "./lib/tool"
 
 const fileToolsNode = makeLocationNode({
   name: "test/file-tool-plugins",
@@ -150,7 +150,7 @@ describe("Code Mode Bun", () => {
               await notes.delete()
               return [...first, second, await notes.exists(), new Bun.Glob("notes.txt").scanSync()]`,
           },
-          { sessionID, ...toolIdentity, id: Tool.CallID.make("call_bun"), progress: () => Effect.void },
+          { sessionID, ...toolIdentity, id: Tool.CallID.make("call_bun"), progress: () => Effect.void, tool: noToolCalls },
         )
 
         expect(JSON.parse(result.output.output)).toEqual([4, 4, "one\n", true, 4, true, "two\n", false, []])

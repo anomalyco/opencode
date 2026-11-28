@@ -36,6 +36,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { location } from "./fixture/location"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
+import { noToolCalls } from "./lib/tool"
 
 const it = testEffect(Layer.empty)
 
@@ -45,6 +46,7 @@ const makeContext = (sessionID: SessionSchema.ID) => ({
   messageID: SessionMessage.ID.make("msg_cd"),
   id: ToolSchema.CallID.make("call_cd"),
   progress: () => Effect.void,
+  tool: noToolCalls,
 })
 
 const makeSandboxDriver = (calls: string[], memory = makeMemoryDriver()) =>

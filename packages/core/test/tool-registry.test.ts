@@ -1211,6 +1211,120 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("lets a tool call another through context.tool.call, with that tool's checks and hooks", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const hooks = yield* PluginHooks.Service
+      const before: Array<{ tool: string; id: string }> = []
+      yield* hooks.register("tool", "execute.before", (event) =>
+        Effect.sync(() => void before.push({ tool: event.tool, id: event.id })),
+      )
+      yield* transform(service, { echo: make() })
+      yield* transform(
+        service,
+        {
+          outer: {
+            name: "outer",
+            description: "Calls echo",
+            input: Schema.Struct({ text: Schema.String }),
+            output: Schema.Unknown,
+            execute: ({ text }, context) =>
+              Effect.gen(function* () {
+                const result = yield* context.tool.call("echo", { text: `inner ${text}` })
+                const invalid = yield* context.tool
+                  .call("echo", { text: 1 })
+                  .pipe(Effect.match({ onFailure: (error) => error.message, onSuccess: () => "succeeded" }))
+                const missing = yield* context.tool
+                  .call("nope", {})
+                  .pipe(Effect.match({ onFailure: (error) => error.message, onSuccess: () => "succeeded" }))
+                return { output: { result: result.output, invalid, missing } }
+              }),
+          },
+        },
+        { codemode: false },
+      )
+      const result = yield* executeTool(service, call("outer", "call-outer"))
+      expect(result).toMatchObject({
+        status: "completed",
+        output: {
+          result: { text: "inner outer" },
+          invalid: expect.stringContaining("text"),
+          missing: 'No tool named "nope" is available to this call.',
+        },
+      })
+      expect(before.map((item) => item.tool)).toEqual(["outer", "echo", "echo"])
+      // Each nested call gets an ID of its own.
+      expect(new Set(before.map((item) => item.id)).size).toBe(3)
+    }),
+  )
+
+  it.effect("only reaches tools the request offers, by registry ID or Code Mode path", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { echo: make() }, { codemode: false, namespace: "demo" })
+      yield* transform(service, { secret: constant("secret") }, { codemode: false })
+      yield* transform(
+        service,
+        {
+          outer: {
+            name: "outer",
+            description: "Calls other tools",
+            input: Schema.Struct({ text: Schema.String }),
+            output: Schema.Unknown,
+            execute: (_, context) =>
+              Effect.gen(function* () {
+                const byID = yield* context.tool.call("demo_echo", { text: "id" })
+                const byPath = yield* context.tool.call("demo.echo", { text: "path" })
+                const denied = yield* context.tool
+                  .call("secret", { text: "x" })
+                  .pipe(Effect.match({ onFailure: (error) => error.message, onSuccess: () => "succeeded" }))
+                return { output: [byID.output, byPath.output, denied] }
+              }),
+          },
+        },
+        { codemode: false },
+      )
+      const snapshot = yield* service.snapshot(
+        Permission.Policy.fromRules([{ action: "secret", resource: "*", effect: "deny" }]),
+      )
+      const result = yield* snapshot.execute(call("outer", "call-outer"))
+      expect(result.output).toEqual([
+        { text: "id" },
+        { text: "path" },
+        'No tool named "secret" is available to this call.',
+      ])
+    }),
+  )
+
+  it.effect("lets a tool inside Code Mode call a direct tool", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { direct: constant("direct") }, { codemode: false })
+      yield* transform(service, {
+        caller: {
+          name: "caller",
+          description: "Calls the direct tool",
+          input: Schema.Struct({}),
+          output: Schema.Unknown,
+          execute: (_, context) =>
+            context.tool.call("direct", { text: "x" }).pipe(Effect.map((result) => ({ output: result.output }))),
+        },
+      })
+      const snapshot = yield* service.snapshot()
+      const result = yield* snapshot.execute({
+        sessionID,
+        ...identity,
+        call: {
+          type: "tool-call",
+          id: "call-program",
+          name: "execute",
+          input: { code: "return await tools.caller({})" },
+        },
+      })
+      expect(result.output).toMatchObject({ output: JSON.stringify({ text: "direct" }) })
+    }),
+  )
+
   it.effect("passes complete call identity to tool execution", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
@@ -1235,7 +1349,13 @@ describe("Tool", () => {
         call: { type: "tool-call", id: "call-context", name: "context", input: {} },
       })
       expect(contexts).toEqual([
-        { sessionID, ...identity, id: Tool.CallID.make("call-context"), progress: expect.any(Function) },
+        {
+          sessionID,
+          ...identity,
+          id: Tool.CallID.make("call-context"),
+          progress: expect.any(Function),
+          tool: { call: expect.any(Function) },
+        },
       ])
     }),
   )

@@ -1168,6 +1168,7 @@ describe("SessionRunnerLLM", () => {
         id: Tool.CallID.make("call-location"),
         progress: expect.any(Function),
         cancel: expect.anything(),
+        tool: { call: expect.any(Function) },
       },
     ])
     expect(Array.from(yield* Fiber.join(progressFiber))[0]?.data.metadata).toEqual({ phase: "reading" })

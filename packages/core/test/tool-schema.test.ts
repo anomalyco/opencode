@@ -8,6 +8,7 @@ import { SessionMessage } from "@opencode/schema/session-message"
 import type { Info } from "@opencode/schema/tool"
 import { Tool } from "../src/tool"
 import { definition, execute } from "../src/tool/runtime"
+import { noToolCalls } from "./lib/tool"
 
 const context = {
   sessionID: Session.ID.make("ses_tool_schema"),
@@ -15,6 +16,7 @@ const context = {
   messageID: SessionMessage.ID.make("msg_tool_schema"),
   id: Tool.CallID.make("call_tool_schema"),
   progress: () => Effect.void,
+  tool: noToolCalls,
 } satisfies Tool.Context
 
 test("tools are structural values", async () => {

@@ -7,6 +7,7 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionSchema } from "@opencode/core/session/schema"
 import { CallID } from "@opencode/schema/tool"
 import { Effect, Result } from "effect"
+import { noToolCalls } from "../lib/tool"
 
 const runtime = CodeMode.make({ tools: {}, extensions: [CodeModeAgents.extension] })
 
@@ -24,6 +25,7 @@ const execute = (code: string) =>
         messageID: SessionMessage.ID.make("msg_test"),
         id: CallID.make("call_test"),
         progress: () => Effect.void,
+        tool: noToolCalls,
         signal: new AbortController().signal,
       }),
     ),

@@ -197,7 +197,8 @@ const layer = Layer.effect(
 
     const nested: Interface["nested"] = (call, parent) =>
       Effect.acquireRelease(
-        Effect.sync(() => void parents.set(call, parent)),
+        // A call nested in a nested call shows on the row the outer one shows on.
+        Effect.sync(() => void parents.set(call, parents.get(parent) ?? parent)),
         () => Effect.sync(() => void parents.delete(call)),
       )
 
