@@ -913,7 +913,8 @@ const layer = Layer.effectDiscard(
           path: event.data.subpath,
           ...(event.data.projectID ? { project_id: event.data.projectID } : {}),
           workspace_id: event.data.location.workspaceID ?? null,
-          time_updated: event.created,
+          // Self-assignment suppresses the column's $onUpdate: a move is not activity.
+          time_updated: sql`${SessionTable.time_updated}`,
         })
       }),
     )
@@ -1061,7 +1062,8 @@ const layer = Layer.effectDiscard(
           item: event.data.item,
           timeCreated: event.created,
         })
-        yield* touch(db, event)
+        // A move is not conversation activity; keep the session's recency.
+        if (event.data.item.type !== "move") yield* touch(db, event)
       }),
     )
     yield* bus.project(SessionEvent.InboxCancelled, (event) =>

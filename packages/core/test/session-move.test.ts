@@ -2,6 +2,7 @@ import type { FileSystem } from "@opencode/core/filesystem"
 import { describe, expect } from "bun:test"
 import path from "path"
 import { chmod, mkdir, readdir, rm } from "fs/promises"
+import { eq } from "drizzle-orm"
 import { Cause, Context, Deferred, Duration, Effect, Exit, Fiber, Layer, LayerMap, Queue } from "effect"
 import { Worktree } from "@opencode/schema/worktree"
 import { Workspace } from "@opencode/schema/workspace"
@@ -21,6 +22,7 @@ import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionMove } from "@opencode/core/session/move"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionRunner } from "@opencode/core/session/runner/index"
+import { SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -87,7 +89,7 @@ const itWithUnavailableDestination = testEffect(
   ),
 )
 const itWithExecution = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Session.node, SessionExecution.node]), [
+  AppNodeBuilder.build(LayerNode.group([Database.node, Session.node, SessionExecution.node]), [
     Global.node.replace(tempGlobalLayer),
     offlineModels,
   ]),
@@ -230,6 +232,36 @@ describe("Session.move", () => {
       { timeout: 15_000 },
     )
   }
+
+  itWithExecution.live(
+    "keeps a moved idle session's recency",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* tmpdirScoped()
+        const source = AbsolutePath.make(path.join(tmp.path, "source"))
+        const destination = AbsolutePath.make(path.join(tmp.path, "destination"))
+        yield* Effect.promise(() => Promise.all([mkdir(source), mkdir(destination)]))
+        const session = yield* Session.Service
+        const execution = yield* SessionExecution.Service
+        const db = (yield* Database.Service).db
+        const created = yield* session.create({ location: Location.Ref.make({ directory: source }) })
+        yield* db
+          .update(SessionTable)
+          .set({ time_created: 1, time_updated: 1 })
+          .where(eq(SessionTable.id, created.id))
+          .run()
+        const before = yield* session.get(created.id)
+
+        yield* session.move({ sessionID: created.id, directory: destination })
+        yield* execution.awaitIdle(created.id)
+
+        const moved = yield* session.get(created.id)
+        expect(moved.location.directory).toBe(destination)
+        expect(moved.time.created).toEqual(before.time.created)
+        expect(moved.time.updated).toEqual(before.time.updated)
+      }),
+    { timeout: 15_000 },
+  )
 
   itWithPermissions(
     "recovers an idle session from an unreadable source directory",
