@@ -47,14 +47,14 @@ describe("pretty signature rendering", () => {
     expect(inputTypeScript(listIssues, true)).toBe(
       [
         "{",
-        "  /** Repository owner */",
-        "  owner: string,",
         "  /** Cursor from the previous response's pageInfo */",
         "  after?: string,",
-        "  /** Results per page. @default 30 */",
-        "  perPage?: number,",
         "  /** Filter by labels. @minItems 1 @maxItems 10 */",
         "  labels?: Array<string>,",
+        "  /** Repository owner */",
+        "  owner: string,",
+        "  /** Results per page. @default 30 */",
+        "  perPage?: number,",
         '  state?: "open" | "closed",',
         "}",
       ].join("\n"),
@@ -63,7 +63,7 @@ describe("pretty signature rendering", () => {
 
   test("compact mode output is unchanged by the pretty machinery", () => {
     expect(inputTypeScript(listIssues)).toBe(
-      '{ owner: string; after?: string; perPage?: number; labels?: Array<string>; state?: "open" | "closed" }',
+      '{ after?: string; labels?: Array<string>; owner: string; perPage?: number; state?: "open" | "closed" }',
     )
     expect(inputTypeScript(lookupOrder)).toBe("{ id: string; verbose?: boolean }")
     expect(outputTypeScript(lookupOrder)).toBe("{ status: string }")
@@ -147,6 +147,11 @@ describe("pretty signature rendering", () => {
     expect(jsonSchemaToTypeScript(schema, true)).toBe(
       [
         "{",
+        "  /** Each item: Display name */",
+        "  names?: Array<string>,",
+        "  plain?: {",
+        "    [key: string]: string,",
+        "  },",
         "  /**",
         "   * People to notify. @minItems 1",
         "   * Each item: Email address. @format email",
@@ -156,16 +161,11 @@ describe("pretty signature rendering", () => {
         "  scores?: {",
         "    [key: string]: number,",
         "  },",
-        "  /** Each item: Display name */",
-        "  names?: Array<string>,",
-        "  plain?: {",
-        "    [key: string]: string,",
-        "  },",
         "}",
       ].join("\n"),
     )
     expect(jsonSchemaToTypeScript(schema)).toBe(
-      "{ recipients?: Array<string>; scores?: { [key: string]: number }; names?: Array<string>; plain?: { [key: string]: string } }",
+      "{ names?: Array<string>; plain?: { [key: string]: string }; recipients?: Array<string>; scores?: { [key: string]: number } }",
     )
   })
 
@@ -216,12 +216,6 @@ describe("pretty signature rendering", () => {
     ).toBe(
       [
         "{",
-        "  /** Each item: @format email */",
-        "  recipients?: Array<string> | null,",
-        "  /** Each value: @minimum 0 */",
-        "  scores?: {",
-        "      [key: string]: number,",
-        "    } | null,",
         "  /**",
         "   * Each item: @minLength 1",
         "   * Each value: @minimum 0",
@@ -229,6 +223,12 @@ describe("pretty signature rendering", () => {
         "  either?: Array<string> | {",
         "      [key: string]: number,",
         "    },",
+        "  /** Each item: @format email */",
+        "  recipients?: Array<string> | null,",
+        "  /** Each value: @minimum 0 */",
+        "  scores?: {",
+        "      [key: string]: number,",
+        "    } | null,",
         "}",
       ].join("\n"),
     )
@@ -289,11 +289,11 @@ describe("pretty signature rendering", () => {
     ).toBe(
       [
         "{",
+        "  choices?: Array<string | number>,",
         "  /** Each item: @minItems 2 */",
         "  matrix?: Array<Array<number>>,",
         "  /** Each item: Recipient */",
         "  refs?: Array<string>,",
-        "  choices?: Array<string | number>,",
         "}",
       ].join("\n"),
     )
@@ -345,13 +345,13 @@ describe("pretty signature rendering", () => {
     ).toBe(
       [
         "{",
+        "  amount?: number,",
+        "  choice?: number | string,",
         "  /** @integer */",
         "  count?: number,",
-        "  amount?: number,",
-        "  name?: string,",
         "  enabled?: boolean,",
+        "  name?: string,",
         "  values?: Array<unknown>,",
-        "  choice?: number | string,",
         "}",
       ].join("\n"),
     )
@@ -531,6 +531,75 @@ describe("pretty signature rendering", () => {
   })
 })
 
+describe("member order does not change rendered signatures", () => {
+  test("object fields render in key order regardless of wire order", () => {
+    const ordered = {
+      type: "object",
+      properties: {
+        category: { type: "string" },
+        refresh: { type: "boolean" },
+        includeEngines: { type: "boolean" },
+        includeDisabled: { type: "boolean" },
+      },
+    } as const
+    const reordered = {
+      type: "object",
+      properties: {
+        includeEngines: { type: "boolean" },
+        includeDisabled: { type: "boolean" },
+        category: { type: "string" },
+        refresh: { type: "boolean" },
+      },
+    } as const
+    for (const pretty of [false, true]) {
+      expect(jsonSchemaToTypeScript(ordered, pretty)).toBe(jsonSchemaToTypeScript(reordered, pretty))
+    }
+    expect(jsonSchemaToTypeScript(ordered)).toBe(
+      "{ category?: string; includeDisabled?: boolean; includeEngines?: boolean; refresh?: boolean }",
+    )
+    // A genuine change still renders differently.
+    expect(
+      jsonSchemaToTypeScript({
+        type: "object",
+        properties: {
+          category: { type: "string" },
+          refresh: { type: "boolean" },
+          includeEngines: { type: "boolean" },
+        },
+      }),
+    ).not.toBe(jsonSchemaToTypeScript(ordered))
+  })
+
+  test("nested objects are ordered too, while array order is preserved", () => {
+    const ordered = {
+      type: "object",
+      properties: {
+        filter: {
+          type: "object",
+          properties: { query: { type: "string" }, page: { type: "number" } },
+        },
+        state: { type: "string", enum: ["open", "closed"] },
+      },
+    } as const
+    const reordered = {
+      type: "object",
+      properties: {
+        state: { type: "string", enum: ["open", "closed"] },
+        filter: {
+          type: "object",
+          properties: { page: { type: "number" }, query: { type: "string" } },
+        },
+      },
+    } as const
+    for (const pretty of [false, true]) {
+      expect(jsonSchemaToTypeScript(ordered, pretty)).toBe(jsonSchemaToTypeScript(reordered, pretty))
+    }
+    expect(jsonSchemaToTypeScript(ordered)).toBe(
+      '{ filter?: { page?: number; query?: string }; state?: "open" | "closed" }',
+    )
+  })
+})
+
 describe("JSON Schema definition scope", () => {
   test.each(["Lookup Input", "café", "A/B~C% D#E"])(
     "resolves Effect definition %s in signatures and input metadata",
@@ -581,9 +650,9 @@ describe("JSON Schema definition scope", () => {
         sibling: { $ref: "#/$defs/Value" },
       },
     }
-    expect(jsonSchemaToTypeScript(schema)).toBe("{ nested?: boolean; inherited?: string; sibling?: number }")
+    expect(jsonSchemaToTypeScript(schema)).toBe("{ inherited?: string; nested?: boolean; sibling?: number }")
     expect(jsonSchemaToTypeScript(schema, true)).toBe(
-      ["{", "  nested?: boolean,", "  inherited?: string,", "  sibling?: number,", "}"].join("\n"),
+      ["{", "  inherited?: string,", "  nested?: boolean,", "  sibling?: number,", "}"].join("\n"),
     )
   })
 })
@@ -606,7 +675,7 @@ describe("non-identifier property names render as quoted keys", () => {
 
   test("compact rendering quotes non-identifier keys and leaves identifiers bare", () => {
     expect(jsonSchemaToTypeScript(rawSchema)).toBe(
-      '{ "123"?: number; "foo-bar"?: string; "@type": string; "x.y"?: number; plain?: boolean }',
+      '{ "123"?: number; "@type": string; "foo-bar"?: string; plain?: boolean; "x.y"?: number }',
     )
   })
 
@@ -615,11 +684,11 @@ describe("non-identifier property names render as quoted keys", () => {
       [
         "{",
         '  "123"?: number,',
-        '  "foo-bar"?: string,',
         '  "@type": string,',
+        '  "foo-bar"?: string,',
+        "  plain?: boolean,",
         "  /** Dotted name */",
         '  "x.y"?: number,',
-        "  plain?: boolean,",
         "}",
       ].join("\n"),
     )
@@ -685,15 +754,15 @@ describe("union schemas render every alternative", () => {
     })
     const tool = Tool.make({ description: "Numbers", input: schema, output: schema, execute: Effect.succeed })
     const compact = [
-      "{ plain: number",
+      "{ bounded: number",
       "count: number",
-      "bounded: number",
-      "positive: number",
-      "maybe?: number",
-      "nullable: number | null",
       "list: Array<number>",
-      "scores: { [key: string]: number }",
-      "nested: { first: number; second: number } }",
+      "maybe?: number",
+      "nested: { first: number; second: number }",
+      "nullable: number | null",
+      "plain: number",
+      "positive: number",
+      "scores: { [key: string]: number } }",
     ].join("; ")
     expect(inputTypeScript(tool)).toBe(compact)
     expect(outputTypeScript(tool)).toBe(compact)
@@ -882,13 +951,13 @@ describe("JSDoc signatures in catalogs and search results", () => {
       "{",
       "  /** @integer @minimum 0 @maximum 10 */",
       "  count: number,",
-      "  /** @minLength 1 @maxLength 20 @pattern ^[a-z]+$ */",
-      "  name: string,",
       "  /**",
       "   * @minItems 1 @maxItems 5",
       "   * Each item: @minLength 1",
       "   */",
       "  labels: Array<string>,",
+      "  /** @minLength 1 @maxLength 20 @pattern ^[a-z]+$ */",
+      "  name: string,",
       "  /** Each value: @integer @minimum 0 */",
       "  scores: {",
       "    [key: string]: number,",
@@ -918,14 +987,14 @@ describe("JSDoc signatures in catalogs and search results", () => {
     expect(item.signature).toBe(
       [
         "tools.github.list_issues({",
-        "  /** Repository owner */",
-        "  owner: string,",
         "  /** Cursor from the previous response's pageInfo */",
         "  after?: string,",
-        "  /** Results per page. @default 30 */",
-        "  perPage?: number,",
         "  /** Filter by labels. @minItems 1 @maxItems 10 */",
         "  labels?: Array<string>,",
+        "  /** Repository owner */",
+        "  owner: string,",
+        "  /** Results per page. @default 30 */",
+        "  perPage?: number,",
         '  state?: "open" | "closed",',
         "}): Promise<unknown>",
       ].join("\n"),
@@ -1070,9 +1139,9 @@ describe("empty object signatures", () => {
         extra: Schema.optionalKey(Schema.Struct({}).annotate({ description: "Extra data" })),
       }),
     )
-    expect(outputTypeScript(tool)).toBe("{ meta: {}; extra?: {} }")
+    expect(outputTypeScript(tool)).toBe("{ extra?: {}; meta: {} }")
     expect(outputTypeScript(tool, true)).toBe(
-      ["{", "  meta: {},", "  /** Extra data */", "  extra?: {},", "}"].join("\n"),
+      ["{", "  /** Extra data */", "  extra?: {},", "  meta: {},", "}"].join("\n"),
     )
   })
 
@@ -1103,7 +1172,7 @@ describe("non-identifier tool paths", () => {
 
   test("catalog signatures use bracket notation for dashed tool names", () => {
     expect(runtime.catalog[0]?.signature).toBe(
-      'tools.context7["resolve-library-id"]({\n  query: string,\n  libraryName: string,\n}): Promise<unknown>',
+      'tools.context7["resolve-library-id"]({\n  libraryName: string,\n  query: string,\n}): Promise<unknown>',
     )
   })
 

@@ -207,7 +207,14 @@ const renderSchema = (
   if (schema.type === "array") return `Array<${renderSchema(schema.items ?? {}, nested, depth + 1, seen)}>`
   if (schema.type === "object" || schema.properties) {
     const required = new Set(schema.required ?? [])
-    const properties = Object.entries(schema.properties ?? {})
+    // JSON object member order is not semantic, and MCP servers and proxies may re-serialize schemas in any order.
+    // Render fields in key order so the same schema always produces the same signature, and a reordering alone is
+    // never reported as a changed tool listing.
+    const properties = Object.entries(schema.properties ?? {}).toSorted(([left], [right]) => {
+      if (left < right) return -1
+      if (left > right) return 1
+      return 0
+    })
     const additional = schema.additionalProperties
     const indexType =
       additional && typeof additional === "object" ? renderSchema(additional, nested, depth + 1, seen) : undefined

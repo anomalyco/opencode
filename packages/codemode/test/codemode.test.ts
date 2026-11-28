@@ -631,7 +631,7 @@ describe("CodeMode schema flexibility", () => {
       {
         path: "adapter.call",
         description: "Call an adapter-described tool",
-        signature: "tools.adapter.call({\n  id: string,\n  count?: number,\n}): Promise<void>",
+        signature: "tools.adapter.call({\n  count?: number,\n  id: string,\n}): Promise<void>",
       },
     ])
 
@@ -749,7 +749,7 @@ describe("CodeMode schema flexibility", () => {
       {
         path: "users.lookup",
         description: "Look up a user",
-        signature: "tools.users.lookup({\n  login: string,\n}): Promise<{\n  login: string,\n  id: number,\n}>",
+        signature: "tools.users.lookup({\n  login: string,\n}): Promise<{\n  id: number,\n  login: string,\n}>",
       },
     ])
 
