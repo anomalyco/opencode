@@ -43,6 +43,33 @@ export function sessionFamily<T extends SessionNode>(sessions: readonly T[], ses
   return walk(root(current).id, [])
 }
 
+// The viewed session plus descendants. Ancestors and siblings stay out so a
+// subagent view does not inherit the parent's blockers, but its own requests
+// remain visible and auto-acceptable.
+export function sessionTreeIDs<T extends SessionNode>(sessions: readonly T[], sessionID: string) {
+  const children = new Map<string, string[]>()
+  for (const session of sessions) {
+    if (!session.parentID) continue
+    const list = children.get(session.parentID)
+    if (list) {
+      list.push(session.id)
+      continue
+    }
+    children.set(session.parentID, [session.id])
+  }
+
+  const ids = [sessionID]
+  const seen = new Set([sessionID])
+  for (const id of ids) {
+    for (const child of children.get(id) ?? []) {
+      if (seen.has(child)) continue
+      seen.add(child)
+      ids.push(child)
+    }
+  }
+  return ids
+}
+
 export function contextUsage(
   messages: ReadonlyArray<SessionMessageInfo>,
   models: ReadonlyArray<ModelInfo> | undefined,
