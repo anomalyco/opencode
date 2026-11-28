@@ -10,10 +10,11 @@ import { Environment } from "../environment/index.js"
 import { Location } from "../location.js"
 import { Ripgrep } from "../ripgrep.js"
 import { RelativePath } from "../schema.js"
+import { UnavailableError } from "./error.js"
 import { Protected } from "./protected.js"
 
 export interface Interface {
-  readonly find: (input: FileSystem.FindInput) => Effect.Effect<FileSystem.Entry[]>
+  readonly find: (input: FileSystem.FindInput) => Effect.Effect<FileSystem.Entry[], UnavailableError>
 }
 
 export interface Options {
@@ -109,10 +110,12 @@ const ripgrepLayer = Layer.effect(
     })
     return Service.of({
       find: (input) =>
-        Effect.gen(function* () {
-          yield* refresh
-          return search(index, input, sep)
-        }),
+        environment.rg
+          ? Effect.gen(function* () {
+              yield* refresh
+              return search(index, input, sep)
+            })
+          : Effect.fail(new UnavailableError({ message: "Search is not available in this environment" })),
     })
   }),
 )

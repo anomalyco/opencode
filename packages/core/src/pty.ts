@@ -78,10 +78,15 @@ export class ExitedError extends Schema.TaggedError<ExitedError>()("Pty.ExitedEr
   ptyID: ID,
 }) {}
 
+/** The runtime cannot host pseudo-terminals, which need a local host process. */
+export class UnavailableError extends Schema.TaggedError<UnavailableError>()("Pty.UnavailableError", {
+  message: Schema.String,
+}) {}
+
 export interface Interface {
   readonly list: () => Effect.Effect<Info[]>
   readonly get: (id: ID) => Effect.Effect<Info, NotFoundError>
-  readonly create: (input: CreateInput) => Effect.Effect<Info>
+  readonly create: (input: CreateInput) => Effect.Effect<Info, UnavailableError>
   readonly update: (id: ID, input: UpdateInput) => Effect.Effect<Info, NotFoundError>
   readonly remove: (id: ID) => Effect.Effect<void, NotFoundError>
   readonly write: (id: ID, data: string) => Effect.Effect<void, NotFoundError>
@@ -310,7 +315,7 @@ export const unsupportedLayer = Layer.succeed(
   Service.of({
     list: () => Effect.succeed([]),
     get: (ptyID) => Effect.fail(new NotFoundError({ ptyID })),
-    create: () => Effect.die(new Error("Pty.create is not supported in this runtime")),
+    create: () => Effect.fail(new UnavailableError({ message: "PTY sessions are not available in this runtime" })),
     update: (ptyID) => Effect.fail(new NotFoundError({ ptyID })),
     remove: (ptyID) => Effect.fail(new NotFoundError({ ptyID })),
     write: (ptyID) => Effect.fail(new NotFoundError({ ptyID })),

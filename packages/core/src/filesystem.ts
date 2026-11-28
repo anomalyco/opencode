@@ -5,10 +5,13 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Context, Effect, Layer, Option, PlatformError, Schema, Stream } from "effect"
 import { Environment } from "./environment/index.js"
+import { EnvironmentUnavailable } from "./environment/unavailable.js"
+import { UnavailableError } from "./filesystem/error.js"
 import { FileSystemSearch } from "./filesystem/search.js"
 import { Location } from "./location.js"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema.js"
 export { Entry, Match, Submatch } from "@opencode/schema/filesystem"
+export { UnavailableError } from "./filesystem/error.js"
 
 export interface ReadInput {
   readonly path: RelativePath
@@ -96,15 +99,17 @@ export interface File {
 }
 
 export interface Interface {
-  readonly read: (input: ReadInput) => Effect.Effect<File, NotFoundError>
+  readonly read: (input: ReadInput) => Effect.Effect<File, NotFoundError | UnavailableError>
   /** Fails with `NotFoundError` when the path is missing or is not a directory. */
-  readonly list: (input?: ListInput) => Effect.Effect<Entry[], NotFoundError>
-  readonly find: (input: FindInput) => Effect.Effect<Entry[]>
+  readonly list: (input?: ListInput) => Effect.Effect<Entry[], NotFoundError | UnavailableError>
+  readonly find: (input: FindInput) => Effect.Effect<Entry[], UnavailableError>
   /** Writes a file at an absolute path or one relative to the location; not confined to it. */
-  readonly write: (input: WriteInput) => Effect.Effect<Write>
+  readonly write: (input: WriteInput) => Effect.Effect<Write, UnavailableError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem") {}
+
+const UNAVAILABLE_MESSAGE = "Filesystem is not available in this environment (no execution plane)"
 
 const mapMissing = <A>(
   effect: Effect.Effect<A, Environment.NotFound | Environment.WrongKind | Environment.Failed>,
@@ -140,6 +145,9 @@ const baseLayer = Layer.effect(
     const location = yield* Location.Service
     const search = yield* FileSystemSearch.Service
     const envPath = environment.path
+    // A location with no execution plane cannot serve files; every other environment reports real
+    // I/O failures through Environment.Failed, which stays a defect instead of a retryable 503.
+    const unavailable = environment.spawner === EnvironmentUnavailable.spawner
 
     // Directories outside the server host do not live on the host filesystem,
     // so a host realpath probe at boot would consult the wrong filesystem and
@@ -231,9 +239,14 @@ const baseLayer = Layer.effect(
     const readFile = environment.local ? readLocal : readRemote
 
     return Service.of({
-      find: search.find,
-      read: Effect.fn("FileSystem.read")((input) => readFile(input.path)),
+      find: (input) =>
+        unavailable ? Effect.fail(new UnavailableError({ message: UNAVAILABLE_MESSAGE })) : search.find(input),
+      read: Effect.fn("FileSystem.read")(function* (input) {
+        if (unavailable) return yield* new UnavailableError({ message: UNAVAILABLE_MESSAGE })
+        return yield* readFile(input.path)
+      }),
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
+        if (unavailable) return yield* new UnavailableError({ message: UNAVAILABLE_MESSAGE })
         // Navigation can leave the cwd without activating another Location.
         const directory = envPath.resolve(location.directory, input.path ?? ".")
         const items = yield* mapMissing(environment.files.list(directory), RelativePath.make(input.path ?? "."))
@@ -254,6 +267,7 @@ const baseLayer = Layer.effect(
       // Unlike read, write is not confined to the location so clients can stage files in the
       // environment's temp directory (e.g. /tmp) for tools to reference.
       write: Effect.fn("FileSystem.write")(function* (input) {
+        if (unavailable) return yield* new UnavailableError({ message: UNAVAILABLE_MESSAGE })
         const target = envPath.resolve(location.directory, input.path)
         yield* environment.files.write(target, input.data).pipe(Effect.orDie)
         return Write.make({ path: AbsolutePath.make(target) })

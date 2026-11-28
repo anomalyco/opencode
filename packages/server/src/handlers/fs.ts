@@ -21,13 +21,13 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
         Effect.gen(function* () {
           const path = yield* decodeRequestPath(ctx.request.url)
           const fs = yield* FileSystem.Service
-          const file = yield* fs
-            .read({ path })
-            .pipe(
-              Effect.mapError(
-                (error) => new FileNotFoundError({ path: error.path, message: `File not found: ${error.path}` }),
-              ),
-            )
+          const file = yield* fs.read({ path }).pipe(
+            Effect.catchTags({
+              "FileSystem.NotFoundError": (error) =>
+                Effect.fail(new FileNotFoundError({ path: error.path, message: `File not found: ${error.path}` })),
+              "FileSystem.UnavailableError": (error) => Effect.fail(serviceUnavailable(error)),
+            }),
+          )
           return serveFile(ctx.request, file, ContentHeaders.download({ path, mime: file.mime }))
         }),
       )
@@ -35,13 +35,15 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
         response(
           Effect.gen(function* () {
             const fs = yield* FileSystem.Service
-            return yield* fs
-              .list(ctx.query)
-              .pipe(
-                Effect.mapError(
-                  (error) => new FileNotFoundError({ path: error.path, message: `Directory not found: ${error.path}` }),
-                ),
-              )
+            return yield* fs.list(ctx.query).pipe(
+              Effect.catchTags({
+                "FileSystem.NotFoundError": (error) =>
+                  Effect.fail(
+                    new FileNotFoundError({ path: error.path, message: `Directory not found: ${error.path}` }),
+                  ),
+                "FileSystem.UnavailableError": (error) => Effect.fail(serviceUnavailable(error)),
+              }),
+            )
           }),
         ),
       )
@@ -49,7 +51,7 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
         response(
           Effect.gen(function* () {
             const fs = yield* FileSystem.Service
-            return yield* fs.find(ctx.query)
+            return yield* fs.find(ctx.query).pipe(Effect.mapError(serviceUnavailable))
           }),
         ),
       )
@@ -57,7 +59,9 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
         response(
           Effect.gen(function* () {
             const fs = yield* FileSystem.Service
-            return yield* fs.write({ path: ctx.query.path, data: ctx.payload })
+            return yield* fs
+              .write({ path: ctx.query.path, data: ctx.payload })
+              .pipe(Effect.mapError(serviceUnavailable))
           }),
         ),
       )
@@ -72,13 +76,13 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
           const fs = yield* FileSystem.Service
           const location = yield* Location.Service
           // Same confinement as read: the file must exist inside the location.
-          yield* fs
-            .read({ path: RelativePath.make(ctx.payload.path) })
-            .pipe(
-              Effect.mapError(
-                (error) => new FileNotFoundError({ path: error.path, message: `File not found: ${error.path}` }),
-              ),
-            )
+          yield* fs.read({ path: RelativePath.make(ctx.payload.path) }).pipe(
+            Effect.catchTags({
+              "FileSystem.NotFoundError": (error) =>
+                Effect.fail(new FileNotFoundError({ path: error.path, message: `File not found: ${error.path}` })),
+              "FileSystem.UnavailableError": (error) => Effect.fail(serviceUnavailable(error)),
+            }),
+          )
           yield* fileWatch
             .watch({
               location: { directory: location.directory, workspaceID: location.workspaceID },
@@ -104,6 +108,9 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
       )
   }),
 )
+
+const serviceUnavailable = (error: FileSystem.UnavailableError) =>
+  new ServiceUnavailableError({ message: error.message, service: "filesystem" })
 
 function decodeRequestPath(url: string) {
   const raw = new URL(url, "http://localhost").pathname.slice(13)

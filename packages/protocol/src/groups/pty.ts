@@ -3,7 +3,7 @@ import { PtyTicket } from "@opencode/schema/pty-ticket"
 import { Location } from "@opencode/schema/location"
 import { Context, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/http-api"
-import { ForbiddenError, LocationNotFoundError, PtyNotFoundError } from "../errors.js"
+import { ForbiddenError, LocationNotFoundError, PtyNotFoundError, ServiceUnavailableError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 export const PTY_CONNECT_TICKET_QUERY = "ticket"
@@ -40,6 +40,7 @@ export const makePtyGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
         query: LocationQuery,
         payload: Pty.CreateInput,
         success: Location.response(Pty.Info),
+        error: ServiceUnavailableError,
       })
         .annotateMerge(locationQueryOpenApi)
         .annotateMerge(

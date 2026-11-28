@@ -37,7 +37,7 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
     HttpApiEndpoint.get("fs.read", "/api/fs/read/*", {
       query: LocationQuery,
       success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
-      error: FileNotFoundError,
+      error: [FileNotFoundError, ServiceUnavailableError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
@@ -53,7 +53,7 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
     HttpApiEndpoint.get("fs.list", "/api/fs/list", {
       query: ListQuery,
       success: Location.response(Schema.Array(FileSystem.Entry)),
-      error: FileNotFoundError,
+      error: [FileNotFoundError, ServiceUnavailableError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
@@ -69,6 +69,7 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
     HttpApiEndpoint.get("fs.find", "/api/fs/find", {
       query: FindQuery,
       success: Location.response(Schema.Array(FileSystem.Entry)),
+      error: ServiceUnavailableError,
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
@@ -84,6 +85,7 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
       query: WriteQuery,
       payload: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
       success: Location.response(FileSystem.Write),
+      error: ServiceUnavailableError,
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
