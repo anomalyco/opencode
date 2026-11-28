@@ -1482,11 +1482,41 @@ test("configured app binding opens settings", async () => {
   expect(settings).toContain("Animations")
 })
 
+test("choosing a slash command that takes an argument runs it right away", async () => {
+  await using setup = await createAppFixture()
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("commands"))
+  await setup.mockInput.typeText("/sess")
+  await setup.waitForFrame((frame) => frame.includes("Switch session"))
+
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("Sessions"))
+})
+
+test("choosing a slash command that needs an argument keeps it in the prompt", async () => {
+  await using setup = await createAppFixture()
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("commands"))
+  await setup.mockInput.typeText("/cd")
+  await setup.waitForFrame((frame) => frame.includes("Change working directory"))
+
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("Change working directory"))
+  expect(setup.captureCharFrame()).toContain("/cd")
+
+  // The prompt keeps the command and its suggestions open, so dismiss them before the next test.
+  setup.mockInput.pressEscape()
+  await setup.waitForFrame((frame) => !frame.includes("Change working directory"))
+  setup.mockInput.pressKey("u", { ctrl: true })
+  await setup.waitForFrame((frame) => !frame.includes("/cd"))
+})
+
 test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => {
   await using setup = await createAppFixture()
   await setup.ready
   await setup.waitForFrame((frame) => frame.includes("commands"))
   await setup.mockInput.typeText("/theme")
+  console.log("CTRLC FRAME:", JSON.stringify(setup.captureCharFrame().split("\n").filter((l) => l.trim()).join(" | ")))
   await setup.waitForFrame((frame) => frame.includes("Switch theme"))
 
   setup.mockInput.pressKey("c", { ctrl: true })

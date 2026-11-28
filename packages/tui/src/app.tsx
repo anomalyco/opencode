@@ -786,9 +786,24 @@ function App() {
         title: "Switch session",
         category: "Session",
         suggested: data.session.list().length > 0,
-        slash: { name: "sessions", aliases: ["resume", "continue"] },
-        run: () => {
-          dialog.replace(() => <DialogSessionList />)
+        slash: { name: "sessions", aliases: ["resume", "continue"], arguments: true as const, optional: true as const },
+        run: (input?: string) => {
+          const sessionID = input?.trim()
+          if (!sessionID) {
+            dialog.replace(() => <DialogSessionList />)
+            return
+          }
+          // A pasted session ID opens that session directly; anything else falls back to the picker.
+          void client.api.session
+            .get({ sessionID })
+            .then((session) => {
+              route.navigate({ type: "session", sessionID: session.id })
+              dialog.clear()
+            })
+            .catch(() => {
+              toast.show({ message: `Session not found: ${sessionID}`, variant: "error", duration: 5000 })
+              dialog.replace(() => <DialogSessionList />)
+            })
         },
       },
       {

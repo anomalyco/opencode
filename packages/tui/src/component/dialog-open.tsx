@@ -20,6 +20,7 @@ import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
 import { stringWidth } from "../util/string-width"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
+import { isSessionID } from "@opencode/schema/session-id"
 import { sessionStatusGutter } from "./dialog-session-list"
 import { Spinner } from "./spinner"
 import { projectName } from "../util/project"
@@ -141,7 +142,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
   const [matched] = createResource(
     () => {
       const value = filter().trim()
-      return /^ses_[0-9A-Za-z]{26}$/.test(value) ? value : undefined
+      return isSessionID(value) ? value : undefined
     },
     (sessionID) =>
       client.api.session

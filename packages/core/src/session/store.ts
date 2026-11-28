@@ -7,6 +7,7 @@ import { Workspace } from "@opencode/schema/workspace"
 import { AbsolutePath, PositiveInt, RelativePath } from "@opencode/schema/schema"
 import { Database } from "../database/database.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { looksLikeSessionID } from "@opencode/schema/session-id"
 import { SessionHistory } from "./history.js"
 import { MessageDecodeError } from "./error.js"
 import { SessionMessage } from "./message.js"
@@ -160,7 +161,16 @@ const layer = Layer.effect(
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
         if ("project" in input && input.subpath !== undefined) conditions.push(eq(SessionTable.path, input.subpath))
-        if (input.search) conditions.push(sql`${SessionTable.title} GLOB ${titlePattern(input.search)}`)
+        // A search that looks like a session ID matches the ID column too. Without that guard, a short title query
+        // would match the random characters of nearly every ID and bury the title matches.
+        if (input.search) {
+          const title = sql`${SessionTable.title} GLOB ${titlePattern(input.search)}`
+          conditions.push(
+            looksLikeSessionID(input.search)
+              ? or(title, sql`${SessionTable.id} GLOB ${idPattern(input.search)}`)!
+              : title,
+          )
+        }
         if (input.parentID !== undefined)
           conditions.push(
             input.parentID === null ? isNull(SessionTable.parent_id) : eq(SessionTable.parent_id, input.parentID),
@@ -304,6 +314,17 @@ const layer = Layer.effect(
 )
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node] })
+
+// Session IDs are matched by prefix and literally: "_" is a plain character in an ID, not the LIKE single-character
+// wildcard, and the ID alphabet is case-sensitive, so a case-folding pattern would match the wrong session. A prefix
+// is the right shape because the leading characters of an ID are shared by every session created around the same time.
+function idPattern(search: string) {
+  const chars = Array.from(search, (char) => {
+    if ("*?[".includes(char)) return `[${char}]`
+    return char
+  })
+  return `${chars.join("")}*`
+}
 
 // SQLite's LIKE folds case for ASCII only, and none of our drivers (bun, node, Durable Objects) ships ICU or lets us
 // register a lowercase function everywhere. GLOB is case-sensitive but supports character classes, so each cased
