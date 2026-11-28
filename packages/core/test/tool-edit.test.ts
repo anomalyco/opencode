@@ -1,6 +1,6 @@
 import fs from "fs/promises"
 import path from "path"
-import { describe, expect } from "bun:test"
+import { describe, expect, spyOn } from "bun:test"
 import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -129,6 +129,29 @@ const call = (input: typeof EditTool.Input.Type, id = "call-edit") => ({
 const it = testEffect(Layer.succeed(Flag.Overrides, undefined))
 
 describe("EditTool", () => {
+  it.live("edits a file whose parent rejects recursive mkdir", () =>
+    withTempDir((tmp) =>
+      withTool(tmp.path, makeEditFixture(), (registry) =>
+        Effect.gen(function* () {
+          const target = path.join(tmp.path, "hello.txt")
+          yield* Effect.promise(() => fs.writeFile(target, "before"))
+          // Windows drive roots reject mkdir even when the file itself is writable.
+          using mkdir = spyOn(fs, "mkdir").mockRejectedValue(
+            Object.assign(new Error("operation not permitted"), { code: "EPERM" }),
+          )
+
+          const result = yield* executeTool(
+            registry,
+            call({ path: "hello.txt", oldString: "before", newString: "after" }),
+          )
+          expect(result.status).toBe("completed")
+          expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after")
+          expect(mkdir).not.toHaveBeenCalled()
+        }),
+      ),
+    ),
+  )
+
   it.live("registers and replaces relative exact text through FileMutation once", () =>
     withTempDir((tmp) => {
       const edit = makeEditFixture()
