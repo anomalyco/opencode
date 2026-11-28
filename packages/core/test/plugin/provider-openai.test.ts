@@ -180,7 +180,6 @@ describe("OpenAIPlugin", () => {
       const provider = required(yield* catalog.get(Provider.ID.openai))
       expect(provider.package).toBe("@opencode/ai/providers/openai")
       expect(provider.settings).toMatchObject({ baseURL: "https://chatgpt.com/backend-api/codex" })
-      expect(provider.settings?.encoding).toBe("zstd")
       expect(provider.headers).toMatchObject({
         originator: "opencode",
         "chatgpt-account-id": "acct_123",

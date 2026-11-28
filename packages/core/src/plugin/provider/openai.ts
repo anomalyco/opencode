@@ -11,7 +11,6 @@ import { OauthRedirect } from "../../oauth/redirect.js"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
-import { configuredSettings } from "./configured.js"
 import { storedCredential } from "./credential-settings.js"
 import { OpenAISubscriptionModels } from "./openai-subscription-models.js"
 import { ProviderRefresh } from "./refresh.js"
@@ -263,8 +262,6 @@ export const OpenAIPlugin = define({
     yield* load()
     // Temporary: the Codex list from models.dev, see openai-subscription-models.ts.
     const plan = yield* OpenAISubscriptionModels.track("openai-codex", ctx.provider.reload())
-    // Config applies after provider plugins, so read it here: a custom baseURL may not decode zstd.
-    const configured = yield* configuredSettings(Provider.ID.openai)
     yield* ctx.provider.transform((providers) => {
       const item = providers.get(Provider.ID.openai)
       if (!item) return
@@ -273,8 +270,6 @@ export const OpenAIPlugin = define({
         provider.settings = Provider.mergeOverlay(provider.settings, {
           transport: provider.settings?.transport ?? "websocket",
           ...(chatgpt ? { baseURL: codexBaseURL } : {}),
-          // The ChatGPT backend rejects uncompressed bodies over ~1 MiB and decodes zstd.
-          ...(chatgpt && configured?.baseURL === undefined ? { encoding: provider.settings?.encoding ?? "zstd" } : {}),
         })
         if (!chatgpt) return
         provider.headers = Provider.mergeHeaders(provider.headers, {

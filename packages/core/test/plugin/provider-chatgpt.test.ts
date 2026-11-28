@@ -804,7 +804,8 @@ describe("ChatGPTPlugin", () => {
       yield* catalog.transform((catalog) => {
         catalog.update(Provider.ID.openai, (draft) => {
           draft.package = "@opencode/ai/providers/openai"
-          draft.settings = { transport: "websocket" }
+          // models.dev gives the provider its own URL; that isn't a custom baseURL.
+          draft.settings = { transport: "websocket", baseURL: "https://api.openai.com/v1" }
         })
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-6.2-sol"), (model) => {
           model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
@@ -879,6 +880,7 @@ describe("ChatGPTPlugin", () => {
       expect(provider.package).toBe("@opencode/ai/providers/openai")
       expect(provider.settings?.transport).toBe("http")
       expect(provider.settings?.baseURL).toBe("https://api.openai.com/v1")
+      expect(provider.settings?.encoding).toBe("zstd")
       expect(provider.headers).not.toHaveProperty("x-openai-chatpass-test")
       expect(direct.baseURL).toBe("https://api.openai.com/v1")
       expect(direct.headers).toEqual({

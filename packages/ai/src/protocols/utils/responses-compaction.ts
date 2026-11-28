@@ -132,8 +132,8 @@ export const make = (
       ProviderShared.jsonPost({
         url: parts.url,
         body: parts.bodyText,
+        // OpenAI's `/responses/compact` rejects compressed bodies (415) even where `/responses` takes zstd.
         headers: parts.headers,
-        encoding: request.http?.encoding,
       }),
       RequestExecutor.withFetch(request.fetch, options?.http),
     )
