@@ -7,6 +7,7 @@ import { randomBytes } from "crypto"
 import path from "path"
 import { selfCommand } from "../util/process"
 import { RemoteTunnel } from "./remote-tunnel"
+import { AllowElevated } from "../commands/commands"
 
 // The CLI's service configuration file, plus the Service.EnsureOptions binding that
 // points the client package's service operations at this CLI: which
@@ -143,6 +144,7 @@ export function processEnv(env: Info["env"]) {
 
 export const registrationFile = Effect.fnUntraced(function* () {
   const { file, legacyRegistrationFiles } = yield* paths
+  const allowElevated = yield* Effect.serviceOption(AllowElevated).pipe(Effect.map(Option.getOrElse(() => false)))
   yield* Effect.forEach(legacyRegistrationFiles, (legacy) => migrateRegistration(legacy, file))
   return file
 })
@@ -152,7 +154,7 @@ export const options = Effect.fnUntraced(function* (input: { readonly checkVersi
     file: yield* registrationFile(),
     version: input.checkVersion ? OPENCODE_VERSION : undefined,
     env: processEnv((yield* read()).env),
-    command: [...selfCommand(), "serve", "--service"],
+    command: [...selfCommand(), "serve", "--service", ...(allowElevated ? ["--allow-elevated"] : [])],
   }
 })
 
