@@ -45,18 +45,21 @@ export async function removePluginConfig(configPath: string, spec: string) {
     throw new Error(`Invalid global configuration: ${configPath}`)
   const plugins = "plugins" in config ? config.plugins : undefined
   if (plugins !== undefined && !Array.isArray(plugins)) throw new Error(`Invalid plugins configuration: ${configPath}`)
-  if (!configured(plugins, spec)) return false
+  // The config loader combines native plugins with the supported legacy plugin list.
+  const legacy = "plugin" in config && Array.isArray(config.plugin) ? config.plugin : undefined
+  const edits = [
+    { key: "plugins", before: plugins, after: plugins?.filter((entry) => !matches(entry, spec)) },
+    { key: "plugin", before: legacy, after: legacy?.filter((entry) => !matchesLegacy(entry, spec)) },
+  ].filter((entry) => entry.before?.length !== entry.after?.length)
+  if (!edits.length) return false
 
-  const updated = applyEdits(
+  const updated = edits.reduce(
+    (current, edit) =>
+      applyEdits(
+        current,
+        modify(current, [edit.key], edit.after, { formattingOptions: { tabSize: 2, insertSpaces: true } }),
+      ),
     text,
-    modify(
-      text,
-      ["plugins"],
-      plugins?.filter((entry) => !matches(entry, spec)),
-      {
-        formattingOptions: { tabSize: 2, insertSpaces: true },
-      },
-    ),
   )
   const temporary = configPath + ".tmp"
   await writeFile(temporary, updated.endsWith("\n") ? updated : updated + "\n", { mode: 0o600 })
@@ -70,4 +73,16 @@ function configured(plugins: readonly unknown[] | undefined, spec: string) {
 
 function matches(entry: unknown, spec: string) {
   return entry === spec || (typeof entry === "object" && entry !== null && "package" in entry && entry.package === spec)
+}
+
+function matchesLegacy(entry: unknown, spec: string) {
+  return (
+    entry === spec ||
+    (Array.isArray(entry) &&
+      entry.length === 2 &&
+      entry[0] === spec &&
+      typeof entry[1] === "object" &&
+      entry[1] !== null &&
+      !Array.isArray(entry[1]))
+  )
 }
