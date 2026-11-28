@@ -276,7 +276,26 @@ function resourceServer(
             })
             const structured = request.params.arguments?.structured
             const text = request.params.arguments?.text
-            const content = typeof text === "string" ? [{ type: "text" as const, text }] : []
+            const resource = request.params.arguments?.resource
+            const textResource =
+              resource !== null &&
+              typeof resource === "object" &&
+              "uri" in resource &&
+              typeof resource.uri === "string" &&
+              "text" in resource &&
+              typeof resource.text === "string"
+                ? {
+                    uri: resource.uri,
+                    text: resource.text,
+                    ...("mimeType" in resource && typeof resource.mimeType === "string"
+                      ? { mimeType: resource.mimeType }
+                      : {}),
+                  }
+                : undefined
+            const content = [
+              ...(typeof text === "string" ? [{ type: "text" as const, text }] : []),
+              ...(textResource ? [{ type: "resource" as const, resource: textResource }] : []),
+            ]
             return Promise.resolve(structured === undefined ? { content } : { content, structuredContent: structured })
           })
         }
@@ -567,11 +586,21 @@ const mcp = Layer.mock(Mcp.Service, {
     Effect.sync(() => {
       calls += 1
       invocations.push(input)
-      if (input.name === "fail")
+      if (input.name === "fail") {
+        if (input.args?.structured !== undefined)
+          return {
+            isError: true,
+            structured: input.args.structured,
+            content:
+              typeof input.args.summary === "string"
+                ? [{ type: "text", text: input.args.summary }]
+                : [],
+          } satisfies Mcp.ToolResult
         return {
           isError: true,
           content: [{ type: "text", text: "search index unavailable" }],
         } satisfies Mcp.ToolResult
+      }
       if (input.name === "media")
         return {
           isError: false,
@@ -603,11 +632,24 @@ const mcp = Layer.mock(Mcp.Service, {
           isError: false,
           content: [{ type: "text", text: "hello" }],
         } satisfies Mcp.ToolResult
-      if (input.name === "issues" || input.name === "typed")
+      if (input.name === "issues" || input.name === "typed") {
+        if (typeof input.args?.resourceText === "string")
+          return {
+            isError: false,
+            content: [
+              {
+                type: "text",
+                text: input.args.resourceText,
+                uri: "config://app.json",
+                mimeType: "application/json",
+              },
+            ],
+          } satisfies Mcp.ToolResult
         return {
           isError: false,
           content: [{ type: "text", text: '{"issues":[{"id":1}]}' }],
         } satisfies Mcp.ToolResult
+      }
       if (input.name === "count")
         return {
           isError: false,
@@ -616,7 +658,10 @@ const mcp = Layer.mock(Mcp.Service, {
       return {
         isError: false,
         structured: { ok: true },
-        content: [],
+        content:
+          typeof input.args?.summary === "string"
+            ? [{ type: "text", text: input.args.summary }]
+            : [],
       } satisfies Mcp.ToolResult
     }),
 })
@@ -642,6 +687,37 @@ const it = testEffect(
 test("MCP tool names match V1 sanitization", () => {
   expect(McpTool.namespace("context 7")).toBe("context_7")
   expect(McpTool.name("context 7", "resolve.library/id")).toBe("context_7_resolve_library_id")
+})
+
+test("preserves URI and MIME metadata on text EmbeddedResource tool results", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer()
+        const connection = yield* connect(
+          "text-resource",
+          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
+          import.meta.dir,
+        )
+        const withMime = yield* connection.callTool({
+          name: "echo",
+          args: {
+            resource: { uri: "config://app.yaml", mimeType: "application/yaml", text: "port: 8080" },
+          },
+        })
+        const withoutMime = yield* connection.callTool({
+          name: "echo",
+          args: {
+            resource: { uri: "config://plain", text: "ok" },
+          },
+        })
+        expect(withMime.content).toEqual([
+          { type: "text", text: "port: 8080", uri: "config://app.yaml", mimeType: "application/yaml" },
+        ])
+        expect(withoutMime.content).toEqual([{ type: "text", text: "ok", uri: "config://plain" }])
+      }),
+    ),
+  )
 })
 
 test("passes session IDs as MCP request metadata", async () => {
@@ -3144,6 +3220,143 @@ it.effect("fails the call when MCP reports isError", () =>
     })
 
     expect(execution).toMatchObject({ status: "error", error: { message: "search index unavailable" } })
+  }),
+)
+
+it.effect("forwards structuredContent alongside summary text without duplicating compact or pretty-printed JSON shims", () =>
+  Effect.gen(function* () {
+    assertion = yield* Deferred.make<Permission.AssertInput>()
+    decision = Effect.void
+    const registry = yield* Tool.Service
+    const registration = yield* McpTool.Service
+    yield* registration.flush
+
+    const summaryAndPayload = yield* executeTool(registry, {
+      sessionID: Session.ID.make("ses_mcp_structured_summary"),
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call_mcp_structured_summary",
+        name: "direct_lookup",
+        input: { summary: "1 item" },
+      },
+    })
+    expect(summaryAndPayload).toMatchObject({
+      output: { ok: true },
+      content: [
+        { type: "text", text: "1 item" },
+        { type: "text", text: '{"ok":true}' },
+      ],
+    })
+
+    assertion = yield* Deferred.make<Permission.AssertInput>()
+    const prettyShim = '{\n  "ok": true\n}'
+    const dedupedPretty = yield* executeTool(registry, {
+      sessionID: Session.ID.make("ses_mcp_structured_dedup"),
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call_mcp_structured_dedup",
+        name: "direct_lookup",
+        input: { summary: prettyShim },
+      },
+    })
+    expect(dedupedPretty).toMatchObject({
+      output: { ok: true },
+      content: [{ type: "text", text: prettyShim }],
+    })
+
+    assertion = yield* Deferred.make<Permission.AssertInput>()
+    const directJsonResource = yield* executeTool(registry, {
+      sessionID: Session.ID.make("ses_mcp_json_resource_direct"),
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call_mcp_json_resource_direct",
+        name: "direct_issues",
+        input: { resourceText: '{"port":8080}' },
+      },
+    })
+    expect(directJsonResource).toMatchObject({
+      output: { port: 8080 },
+      content: [{ type: "text", text: '[Resource config://app.json (application/json)]\n{"port":8080}' }],
+    })
+
+    assertion = yield* Deferred.make<Permission.AssertInput>()
+    const toolSet = yield* registry.snapshot()
+    const codeModeJsonResource = yield* toolSet.execute({
+      sessionID: Session.ID.make("ses_mcp_json_resource_codemode"),
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call_mcp_json_resource_codemode",
+        name: "execute",
+        input: { code: `return (await tools.demo.issues({ resourceText: '{"port":8080}' })).port` },
+      },
+    })
+    expect(codeModeJsonResource).toMatchObject({
+      output: { output: "8080" },
+    })
+  }),
+)
+
+it.effect("includes structuredContent details when MCP reports isError without duplicating pretty-printed JSON", () =>
+  Effect.gen(function* () {
+    assertion = yield* Deferred.make<Permission.AssertInput>()
+    decision = Effect.void
+    const registry = yield* Tool.Service
+    const registration = yield* McpTool.Service
+    yield* registration.flush
+
+    const emptyTextError = yield* executeTool(registry, {
+      sessionID: Session.ID.make("ses_mcp_structured_fail_1"),
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call_mcp_structured_fail_1",
+        name: "direct_fail",
+        input: { structured: { code: "QUOTA_EXCEEDED", retryAfter: 30 } },
+      },
+    })
+    expect(emptyTextError).toMatchObject({
+      status: "error",
+      error: { message: '{"code":"QUOTA_EXCEEDED","retryAfter":30}' },
+    })
+
+    assertion = yield* Deferred.make<Permission.AssertInput>()
+    const prettyError = yield* executeTool(registry, {
+      sessionID: Session.ID.make("ses_mcp_structured_fail_pretty"),
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call_mcp_structured_fail_pretty",
+        name: "direct_fail",
+        input: {
+          summary: '{\n  "code": "QUOTA_EXCEEDED",\n  "retryAfter": 30\n}',
+          structured: { code: "QUOTA_EXCEEDED", retryAfter: 30 },
+        },
+      },
+    })
+    expect(prettyError).toMatchObject({
+      status: "error",
+      error: { message: '{"code":"QUOTA_EXCEEDED","retryAfter":30}' },
+    })
+
+    assertion = yield* Deferred.make<Permission.AssertInput>()
+    const summaryError = yield* executeTool(registry, {
+      sessionID: Session.ID.make("ses_mcp_structured_fail_2"),
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call_mcp_structured_fail_2",
+        name: "direct_fail",
+        input: { summary: "Rate limit hit", structured: { code: "QUOTA_EXCEEDED", retryAfter: 30 } },
+      },
+    })
+    expect(summaryError).toMatchObject({
+      status: "error",
+      error: { message: 'Rate limit hit\n{"code":"QUOTA_EXCEEDED","retryAfter":30}' },
+    })
   }),
 )
 

@@ -4,6 +4,7 @@ import { ToolFailure } from "@opencode/ai/effect"
 import { McpEvent } from "@opencode/schema/mcp-event"
 import { Context, Effect, Fiber, type JsonSchema, Layer, Option, PubSub, Schema, Semaphore, Stream } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { isDeepStrictEqual } from "node:util"
 import { extension } from "mime-types"
 import { Bus } from "../bus.js"
 
@@ -13,7 +14,7 @@ import { Permission } from "../permission.js"
 import { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
 import { ReadToolFileSystem } from "./read-filesystem.js"
-import { effectiveName, normalizedName } from "./runtime.js"
+import { effectiveName, normalizedName, stringify } from "./runtime.js"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
@@ -81,16 +82,18 @@ export const layer = Layer.effect(
                           "MCP.ToolCallError": (error) => new ToolFailure({ message: error.message }),
                         }),
                       )
-                    if (result.isError)
-                      return yield* new ToolFailure({
-                        message:
-                          result.content
-                            .flatMap((part) => (part.type === "text" ? [part.text] : []))
-                            .join("\n")
-                            .trim() || "MCP tool returned an error",
+                    if (result.isError) return yield* new ToolFailure({ message: errorMessage(result) })
+                    const baseContent = yield* Effect.forEach(result.content, (part) => toContent(part, toolOutput))
+                    // Build Code Mode's fallback `output` before model-only `[Resource ...]` headers on UTF-8 text
+                    // resources, so schemaless JSON text resources still parse as objects in Code Mode.
+                    const text = result.content
+                      .flatMap((part, index) => {
+                        if (part.type === "text") return [part.text]
+                        const converted = baseContent[index]
+                        return converted?.type === "text" ? [converted.text] : []
                       })
-                    const content = yield* Effect.forEach(result.content, (part) => toContent(part, toolOutput))
-                    const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+                      .join("\n")
+                    const content = modelContent(baseContent, result.structured)
                     const output = () => {
                       if (result.structured !== undefined) return result.structured
                       if (text === "") return null
@@ -152,16 +155,59 @@ export const layer = Layer.effect(
   }),
 )
 
+function formatResourceText(text: string, uri: string | undefined, mimeType?: string): string {
+  if (uri === undefined) return text
+  const header = mimeType ? `[Resource ${uri} (${mimeType})]` : `[Resource ${uri}]`
+  return `${header}\n${text}`
+}
+
+function decodeTextualMedia(part: Extract<Mcp.ToolResultContent, { type: "media" }>): string | undefined {
+  const mime = part.mimeType.split(";", 1)[0].trim().toLowerCase()
+  if (!Mime.isTextual(mime)) return undefined
+  return formatResourceText(Buffer.from(part.data, "base64").toString("utf8"), part.uri ?? "content", part.mimeType)
+}
+
+function matchesStructured(text: string, structured: unknown, serialized: string): boolean {
+  const trimmed = text.trim()
+  if (trimmed === serialized) return true
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return false
+  return Option.match(decodeJson(trimmed), {
+    onNone: () => false,
+    onSome: (parsed) => isDeepStrictEqual(parsed, structured),
+  })
+}
+
+function modelContent(content: Tool.Content[], structured: unknown): Tool.Content[] {
+  if (content.length === 0 || structured === undefined || structured === null) return content
+  const serialized = stringify(structured)
+  if (content.some((part) => part.type === "text" && matchesStructured(part.text, structured, serialized)))
+    return content
+  return [...content, { type: "text", text: serialized }]
+}
+
+function errorMessage(result: Mcp.ToolResult): string {
+  const parts = result.content.flatMap((part) => {
+    if (part.type === "text") return [formatResourceText(part.text, part.uri, part.mimeType)]
+    const decoded = decodeTextualMedia(part)
+    return decoded === undefined ? [] : [decoded]
+  })
+  const text = parts.join("\n").trim()
+  if (result.structured === undefined || result.structured === null) return text || "MCP tool returned an error"
+  const serialized = stringify(result.structured)
+  if (text === "" || matchesStructured(text, result.structured, serialized)) return serialized
+  return `${text}\n${serialized}`
+}
+
 // Only media the read tool also accepts is sent inline; other types would fail request lowering on every later turn.
 const toContent = Effect.fnUntraced(function* (part: Mcp.ToolResultContent, toolOutput: ToolOutput.Interface) {
-  if (part.type === "text") return { type: "text" as const, text: part.text }
+  if (part.type === "text") return { type: "text" as const, text: formatResourceText(part.text, part.uri, part.mimeType) }
   const mime = part.mimeType.split(";", 1)[0].trim().toLowerCase()
   if (ReadToolFileSystem.MEDIA_MIMES.has(mime))
     return { type: "file" as const, uri: `data:${part.mimeType};base64,${part.data}`, mime: part.mimeType }
+  const decoded = decodeTextualMedia(part)
+  if (decoded !== undefined) return { type: "text" as const, text: decoded }
   const bytes = Buffer.from(part.data, "base64")
   const label = part.uri ?? "content"
-  if (Mime.isTextual(mime))
-    return { type: "text" as const, text: `[Resource ${label} (${part.mimeType})]\n${bytes.toString("utf8")}` }
   const ext = extension(mime)
   const file = yield* toolOutput.save(bytes, ext ? `.${ext}` : "")
   return {

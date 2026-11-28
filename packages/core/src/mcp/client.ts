@@ -201,7 +201,7 @@ export interface Tool {
 }
 
 export type CallToolContent =
-  | { readonly type: "text"; readonly text: string }
+  | { readonly type: "text"; readonly text: string; readonly uri?: string; readonly mimeType?: string }
   | { readonly type: "media"; readonly data: string; readonly mimeType: string; readonly uri?: string }
 
 export interface CallToolResult {
@@ -1087,7 +1087,15 @@ function toCallToolResult(result: SdkCallToolResult): CallToolResult {
       if (part.type === "resource_link") return [{ type: "text", text: part.uri }]
       if (part.type === "resource") {
         const resource = part.resource
-        if ("text" in resource) return [{ type: "text", text: resource.text }]
+        if ("text" in resource)
+          return [
+            {
+              type: "text",
+              text: resource.text,
+              uri: resource.uri,
+              ...(resource.mimeType !== undefined ? { mimeType: resource.mimeType } : {}),
+            },
+          ]
         if ("blob" in resource && resource.mimeType !== undefined)
           return [{ type: "media", data: resource.blob, mimeType: resource.mimeType, uri: resource.uri }]
         return [{ type: "text", text: resource.uri }]
