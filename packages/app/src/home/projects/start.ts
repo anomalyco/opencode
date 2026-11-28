@@ -7,14 +7,31 @@ import { useSettingsSurface } from "@/settings/surface"
 import { useLayout } from "@/shell/state/layout"
 import { tabKey, useTabs } from "@/shell/tabs/tabs"
 import { tabProjectDirectory } from "@/shell/tabs/project-sessions"
-import { pathKey } from "@/workspaces/path-key"
 import { useDirectoryPicker } from "@/workspaces/selection/picker"
 import { createProjectActions } from "./actions"
 
 type StartTarget =
   | { type: "loading"; connection?: ServerConnection.Any; project?: undefined }
   | { type: "reconnect" | "add"; connection: ServerConnection.Any; project?: undefined }
-  | { type: "new"; connection: ServerConnection.Any; project: Project }
+  | { type: "new"; connection: ServerConnection.Any; project: Project; directory: string }
+
+/** A selected sibling clone keeps its directory; the server's canonical project still supplies the identity. */
+export function resolveStartProject(
+  preferred: string | undefined,
+  forDirectory: (directory: string) => Project | undefined,
+  used: readonly Project[],
+  last: Project | undefined,
+  selected?: Project,
+) {
+  const matched = preferred ? forDirectory(preferred) : undefined
+  const byPath = matched && used.find((item) => item.id === matched.id)
+  const bySelection = selected && used.find((item) => item.id === selected.id)
+  const project = byPath ?? bySelection ?? last ?? used[0]
+
+  if (!project) return
+
+  return { directory: preferred && (byPath || bySelection) ? preferred : project.worktree, project }
+}
 
 export function useProjectStart() {
   const layout = useLayout()
@@ -57,15 +74,21 @@ export function useProjectStart() {
 
     const preferred = directory ?? (last.server === key ? last.directory : undefined)
 
-    const worktree = preferred && (ctx.projects.forDirectory(preferred)?.worktree ?? preferred)
+    const lastUsed = ctx.projects.last()
 
-    const selected = worktree && used.find((project) => pathKey(project.worktree) === pathKey(worktree))
+    const projectID = last.server === key && "projectID" in last ? last.projectID : undefined
 
-    const lastID = ctx.projects.last()?.id
+    const selected = projectID ? used.find((project) => project.id === projectID) : undefined
 
-    const project = selected || used.find((project) => project.id === lastID) || used[0]
+    const resolved = resolveStartProject(
+      preferred,
+      (directory) => ctx.projects.forDirectory(directory),
+      used,
+      lastUsed && used.find((project) => project.id === lastUsed.id),
+      selected,
+    )
 
-    if (project) return { type: "new", project, connection }
+    if (resolved) return { type: "new", project: resolved.project, directory: resolved.directory, connection }
 
     return { type: ctx.sync.project.ready() ? "add" : "loading", connection }
   }
@@ -91,8 +114,8 @@ export function useProjectStart() {
     }
 
     if (next.type === "new") {
-      global.serverCtx(server)?.projects.touch(next.project.worktree)
-      void tabs.newDraft({ server, directory: next.project.worktree, draftID })
+      global.serverCtx(server)?.projects.touch(next.directory)
+      void tabs.newDraft({ server, directory: next.directory, draftID })
 
       return true
     }
