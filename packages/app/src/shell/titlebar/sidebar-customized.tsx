@@ -202,8 +202,10 @@ export function SidebarCustomized(props: {
           active: current === tab,
           parentKey: undefined,
           status: "idle",
-          updated: 0,
-          created: 0,
+          // A draft has no session yet. Treat it as the newest row so a new session
+          // shows at the top of its group under "Updated" and "Created" ordering.
+          updated: Number.POSITIVE_INFINITY,
+          created: Number.POSITIVE_INFINITY,
           order,
           conn: connOf(tab.server),
           tab,
