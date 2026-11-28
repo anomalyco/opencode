@@ -24,7 +24,7 @@ export const BASE = Uint8Array.of(9, ...new Uint8Array(31))
 export const derivePublicKey = (privateKey: Uint8Array) => scalarMult(privateKey, BASE)
 
 export const sharedSecret = (privateKey: Uint8Array, peerPublicKey: Uint8Array): Uint8Array | undefined =>
-  scalarMult(privateKey, peerPublicKey)
+  privateKey.length === 32 && peerPublicKey.length === 32 ? scalarMult(privateKey, peerPublicKey) : undefined
 
 /**
  * RFC 7748 X25519(k, u): the u-coordinate of k times the point at `u`, both 32 bytes little-endian. `k` is clamped

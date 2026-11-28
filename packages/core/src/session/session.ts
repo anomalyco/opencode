@@ -212,7 +212,10 @@ export const make = Effect.fn("Session.make")(function* () {
             description: input.command,
             metadata: { source: "shell", state: "error" },
             resume: false,
-          }),
+          }).pipe(
+            Effect.catchTag("Session.NotFoundError", () => Effect.void),
+            Effect.orDie,
+          ),
         ),
         Effect.mapError((error) => new ShellStartError({ sessionID, message: error.message })),
       )

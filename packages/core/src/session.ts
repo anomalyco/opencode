@@ -40,6 +40,7 @@ import {
   MessageNotFoundError,
   NotFoundError,
   PromptConflictError,
+  ShellStartError,
   SkillNotFoundError,
   SyntheticConflictError,
 } from "./session/error.js"
@@ -119,6 +120,7 @@ export {
   MessageNotFoundError,
   NotFoundError,
   PromptConflictError,
+  ShellStartError,
   SkillNotFoundError,
   SyntheticConflictError,
 }
