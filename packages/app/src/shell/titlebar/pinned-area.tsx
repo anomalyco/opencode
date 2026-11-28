@@ -40,7 +40,8 @@ import {
   type PinRef,
   type PinsState,
 } from "@/shell/tabs/pins"
-import { AUTO_TAB_GROUP_COLORS, nextManualGroupColor, type TabGroupColor } from "./tab-groups"
+import { nextManualGroupColor, type TabGroupColor } from "./tab-groups"
+import { GroupColorPicker } from "./tab-groups-ui"
 import { TabNavItem } from "./tab-nav"
 import { syncInactiveSession, type TabStripLeading } from "./tab-strip"
 import "./tab-groups.css"
@@ -456,7 +457,7 @@ function PinnedGroupView(props: { group: PinGroup; orientation: Orientation }) {
   )
 }
 
-/** The group's name, in the same bare field as the new session project search, then its color as a radio list. */
+/** The group's name, in the same bare field as the new session project search, then its color as a row of swatches. */
 function GroupEditor(props: { group: PinGroup }) {
   const pins = usePins()
   const language = useLanguage()
@@ -478,24 +479,9 @@ function GroupEditor(props: { group: PinGroup }) {
         />
       </div>
       <Menu.Separator />
-      <Menu.RadioGroup
-        value={props.group.color}
-        onChange={(color) => {
-          const next = AUTO_TAB_GROUP_COLORS.find((item) => item === color)
-
-          if (next) pins.recolor(props.group.id, next)
-        }}
-        aria-label={language.t("tabs.groups.color")}
-      >
-        <For each={AUTO_TAB_GROUP_COLORS}>
-          {(color) => (
-            <Menu.RadioItem value={color}>
-              <GroupSquare color={color} />
-              {language.t(`tabs.groups.color.${color}`)}
-            </Menu.RadioItem>
-          )}
-        </For>
-      </Menu.RadioGroup>
+      <div class="px-2 py-1.5" onKeyDown={(event) => event.stopPropagation()}>
+        <GroupColorPicker value={props.group.color} onChange={(color) => pins.recolor(props.group.id, color)} />
+      </div>
     </>
   )
 }
