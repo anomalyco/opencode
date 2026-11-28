@@ -28,7 +28,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Effect, Layer, Schema } from "effect"
 import { testEffect } from "./lib/effect"
 import { readInitial } from "./lib/instructions"
-import { codeModeListings, registerToolPlugin } from "./lib/tool"
+import { codeModeListings, registerToolPlugin, registerCodeMode } from "./lib/tool"
 import { PluginTestLayer } from "./plugin/fixture"
 
 const makeModel = (
@@ -141,6 +141,7 @@ const setupContext = Effect.gen(function* () {
   const fullCodeMode = yield* flags.enabled("full_codemode")
 
   yield* Effect.all([
+    registerCodeMode(),
     registerToolPlugin(EditTool.Plugin),
     registerToolPlugin(WriteTool.Plugin),
     registerToolPlugin(PatchTool.Plugin),

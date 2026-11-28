@@ -27,7 +27,7 @@ import { SessionInstructions } from "@opencode/core/session/instructions"
 import { Environment } from "@opencode/core/environment/index"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodes } from "./lib/tool"
 
 const readToolNode = makeLocationNode({
   name: "test/read-tool-plugin",
@@ -129,7 +129,7 @@ const unavailableImage = Layer.mock(Image.Service, {
 })
 const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
   Layer.mergeAll(
-    AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode, Skill.node]), [
+    AppNodeBuilder.build(LayerNode.group([toolNodes, readToolNode, Skill.node]), [
       Environment.node.replace(environment),
       Permission.node.replace(permission),
       Config.node.replace(config),
@@ -158,7 +158,7 @@ const readReal = (directory: string, file: string) =>
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode, Skill.node]), [
+        AppNodeBuilder.build(LayerNode.group([toolNodes, readToolNode, Skill.node]), [
           Environment.node.replace(hostEnvironmentLayer),
           Permission.node.replace(permission),
           Config.node.replace(config),

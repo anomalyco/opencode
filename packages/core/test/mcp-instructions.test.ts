@@ -12,7 +12,7 @@ import { McpTool } from "@opencode/core/tool/mcp"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { it } from "./lib/effect"
 import { readInitial, readUpdate } from "./lib/instructions"
-import { toolNodeReplacements } from "./lib/tool"
+import { toolNodeReplacements, toolNodes } from "./lib/tool"
 
 const instructions = (server: string, text: string) =>
   ({ server: Mcp.ServerName.make(server), instructions: text }) satisfies Mcp.ServerInstructions
@@ -22,7 +22,7 @@ const tool = (server: string, name = "search") =>
   ({ server: Mcp.ServerName.make(server), name, inputSchema: schema }) satisfies Mcp.Tool
 
 const layer = (catalog: () => Mcp.ServerInstructions[], tools: () => Mcp.Tool[]) =>
-  AppNodeBuilder.build(LayerNode.group([McpInstructions.node, McpTool.node, Tool.node]), [
+  AppNodeBuilder.build(LayerNode.group([McpInstructions.node, McpTool.node, toolNodes]), [
     ...toolNodeReplacements(),
     Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
     Mcp.node.replace(

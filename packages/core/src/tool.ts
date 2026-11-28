@@ -1,6 +1,6 @@
 export * as Tool from "./tool.js"
 export { CallID, Content, Error, FileContent, TextContent } from "@opencode/schema/tool"
-export type { Calls, Context, Info, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
+export type { Calls, Context, Info, Metadata, Namespace, Options, Reachable, Result } from "@opencode/schema/tool"
 
 import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
 import type { CodeMode } from "@opencode/codemode"
@@ -67,15 +67,6 @@ export interface Policy {
 }
 
 export interface SnapshotOptions {
-  /**
-   * With `full_codemode`, Code Mode gets the experimental `path` and `Bun` globals, which act through `services`: the
-   * session's Location and file services.
-   */
-  readonly services?: Context.Context<CodeModeTool.Services>
-  /** What `opencode://` fetch sends requests through; see the `opencode_api` flag. */
-  readonly api?: Context.Context<CodeModeTool.Api>
-  /** With `codemode_agents`, what runs Code Mode's agent() and llm(). */
-  readonly agents?: Context.Context<CodeModeTool.Agents>
   readonly tools?: Policy
 }
 
@@ -181,7 +172,7 @@ const layer = Layer.effect(
       name: string,
       input: unknown,
       context: Call,
-      reachable: ReadonlyMap<string, Tool.Info>,
+      reachable: Tool.Reachable,
     ) {
       yield* Effect.annotateCurrentSpan({
         "gen_ai.tool.name": name,
@@ -237,7 +228,7 @@ const layer = Layer.effect(
       name: string,
       input: unknown,
       context: Call,
-      reachable: ReadonlyMap<string, Tool.Info> = tools,
+      reachable: Tool.Reachable,
     ) {
       const event = yield* beforeExecute(name, tool, input, context)
       const selected = event.tool === name ? tool : tools.get(event.tool)
@@ -247,29 +238,34 @@ const layer = Layer.effect(
 
     // `tool.call` for a call: runs another of the tools it may reach as a nested call, whose permission requests show
     // on the call the model made.
-    const calls = (tools: ReadonlyMap<string, Tool.Info>, parent: Call): Tool.Calls => ({
-      call: (name, input) =>
+    const calls = (reachable: Tool.Reachable, parent: Call): Tool.Calls => ({
+      list: () => reachable,
+      call: (name, input, options) =>
         Effect.gen(function* () {
+          // A Code Mode call reaches only the tools inside Code Mode, and plugins may rename it only among those.
+          const tools = options?.codemode ? reachable.codemode : new Map([...reachable.direct, ...reachable.codemode])
           const found = CodeModeTool.find({ tools }, name)
           if (!found) return yield* new Tool.Error({ message: `No tool named "${name}" is available to this call.` })
           const id = Tool.CallID.make(`call_${Identifier.ascending()}`)
           yield* permission.nested(id, parent.id)
           // The call the transcript shows, which tools such as shell record their work under, as in Code Mode.
           const outer = (yield* CodeModeTool.Parent) ?? parent.id
-          return yield* run(tools, found.registration, found.id, input, {
-            ...parent,
-            id,
-            // Progress belongs to the outer call, and a stop is its to handle.
-            progress: () => Effect.void,
-            cancel: undefined,
-          }).pipe(Effect.provideService(CodeModeTool.Parent, outer))
+          const context = { ...parent, id, codemode: options?.codemode }
+          // Progress belongs to the outer call, and a stop is its to handle.
+          return yield* run(
+            tools,
+            found.registration,
+            found.id,
+            input,
+            { ...context, progress: () => Effect.void, cancel: undefined },
+            reachable,
+          ).pipe(Effect.provideService(CodeModeTool.Parent, outer))
         }).pipe(Effect.scoped),
     })
 
     type CachedCatalog = {
       readonly inventory: CodeModeTool.Inventory
       readonly value: CodeModeCatalog.Inventory
-      readonly definition: ToolDefinition
     }
     let catalogData: Data | undefined
     const catalogs = new Map<string, CachedCatalog>()
@@ -345,9 +341,9 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const policy = input ?? PermissionPolicy.empty
           // Without Code Mode its tools would be unreachable, so expose them as direct tools instead.
-          const codeModeEnabled = codeModeAvailable(policy)
-          const full = codeModeEnabled && options?.services !== undefined && (yield* flags.enabled("full_codemode"))
           const data = state.get()
+          const codeModeEnabled =
+            codeModeAvailable(policy) && data.tools.has("execute") && !options?.tools?.hidden?.has("execute")
           if (catalogData !== data) {
             catalogData = data
             catalogs.clear()
@@ -365,12 +361,10 @@ const layer = Layer.effect(
             }
             direct.set(name, tool)
           }
-          // Every tool this request offers, directly or inside Code Mode, which a call's `tool.call` may reach.
-          const reachable = new Map([...direct, ...codemodeEntries])
           const codemode = !codeModeEnabled
             ? undefined
             : (() => {
-                const key = `${full ? "1" : "0"}\0${codemodeEntries.map(([name]) => name).join("\0")}`
+                const key = codemodeEntries.map(([name]) => name).join("\0")
                 // Discovery is immutable for a registry revision and visible tool set. Keep executors
                 // fresh, but share the inventory, whose prepared runtime and much larger rendered catalog
                 // are cached by identity, and the execute tool's definition across steps.
@@ -384,19 +378,7 @@ const layer = Layer.effect(
                   namespaces: data.namespaces,
                   definitions: data.definitions,
                 }
-                const tool = CodeModeTool.create(
-                  inventory,
-                  (name, item, input, context) => run(inventory.tools, item, name, input, context, reachable),
-                  permission,
-                  full ? options.services : undefined,
-                  options?.api,
-                  options?.agents,
-                )
-                const entry = cached ?? {
-                  inventory,
-                  value: CodeModeTool.catalog(inventory),
-                  definition: definition(tool),
-                }
+                const entry = cached ?? { inventory, value: CodeModeTool.catalog(inventory) }
                 if (!cached) {
                   if (catalogs.size >= CATALOG_CACHE_LIMIT) {
                     const oldest = catalogs.keys().next().value
@@ -404,15 +386,18 @@ const layer = Layer.effect(
                   }
                   catalogs.set(key, entry)
                 }
-                return { tool, inventory, catalog: entry.value, definition: entry.definition }
+                return { inventory, catalog: entry.value }
               })()
+          // Every tool this request offers, directly or inside Code Mode, which a call's `tool.call` may reach.
+          const reachable = { direct, codemode: codemode?.inventory.tools ?? new Map(), namespaces: data.namespaces }
           return {
             ...(codemode === undefined ? {} : { codeModeCatalog: codemode.catalog }),
             definitions: [
-              ...Array.from(direct)
-                .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-                .map(([name]) => data.definitions.get(name)!),
-              ...(codemode ? [codemode.definition] : []),
+              ...Array.from(direct.keys())
+                .filter((name) => !codemode || name !== "execute")
+                .sort()
+                .map((name) => data.definitions.get(name)!),
+              ...(codemode ? [data.definitions.get("execute")!] : []),
             ],
             execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
               const call: Call = {
@@ -425,11 +410,10 @@ const layer = Layer.effect(
               }
               const context: Tool.Context = { ...call, tool: calls(reachable, call) }
               const initialName = input.definitions?.get(input.call.name)?.name ?? input.call.name
-              const initial = initialName === "execute" && codemode ? codemode.tool : direct.get(initialName)
-              const event = yield* beforeExecute(input.call.name, initial, input.call.input, context)
+              const event = yield* beforeExecute(input.call.name, direct.get(initialName), input.call.input, context)
               const requested = input.definitions?.get(event.tool)
               // Preserve session context removal and alias resolution, now after the repair hook.
-              if (!requested && input.definitions && (direct.has(event.tool) || codemode?.tool.name === event.tool))
+              if (!requested && input.definitions && direct.has(event.tool))
                 return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
               const name = requested?.name ?? event.tool
               // A tool this request only offers inside Code Mode, called by the model at the top level or renamed there by
@@ -446,10 +430,10 @@ const layer = Layer.effect(
                 const run = (ctx: Tool.Context) =>
                   found
                     ? executeTool(found.registration, found.id, event.input, { ...ctx, codemode: true }, reachable)
-                    : executeTool(codemode.tool, name, event.input, ctx, reachable)
+                    : executeTool(direct.get(name)!, name, event.input, ctx, reachable)
                 const background = yield* CodeModeJob.Current
                 return yield* background
-                  ? background(context, run, full && !found ? executeOptions(event.input) : undefined)
+                  ? background(context, run, found ? undefined : executeOptions(event.input))
                   : run(context)
               }
               const tool = direct.get(name)
@@ -477,13 +461,14 @@ const layer = Layer.effect(
         )
         const callSeq = yield* Ref.make(0)
         const full = input.services !== undefined && (yield* flags.enabled("full_codemode"))
+        const reachable = { direct: new Map(), codemode: tools, namespaces: data.namespaces }
         return yield* CodeModeTool.check(
           { tools, namespaces: data.namespaces, definitions: data.definitions },
           {
             ...input,
             context: (() => {
               const call = { ...input.context, id: Tool.CallID.make(`call_${input.context.messageID}_execute`) }
-              return { ...call, tool: calls(tools, call) }
+              return { ...call, tool: calls(reachable, call) }
             })(),
             permission,
             services: full ? input.services : undefined,
@@ -496,7 +481,7 @@ const layer = Layer.effect(
                 id: Tool.CallID.make(`call_${input.context.messageID}_${index}`),
                 codemode: true,
               }
-              return yield* run(tools, tool, name, toolInput, context)
+              return yield* run(tools, tool, name, toolInput, context, reachable)
             }),
         )
       }),
@@ -563,7 +548,7 @@ function register(id: string, tool: Tool.Info): Result.Result<ToolDefinition, Re
   const name = normalizedName(tool)
   if (!/^[A-Za-z0-9_-]+$/.test(name))
     return Result.fail(new RegistrationError({ name, message: `Invalid tool name: ${name}` }))
-  if (!defaultCodeMode(tool) && id === "execute")
+  if (!defaultCodeMode(tool) && id === "execute" && !CodeModeTool.isTool(tool))
     return Result.fail(new RegistrationError({ name: id, message: 'Tool name "execute" is reserved for CodeMode' }))
   // Standard Schema libraries such as ArkType make schemas that are functions.
   if (!isSchemaValue(tool.input))

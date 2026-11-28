@@ -22,7 +22,7 @@ import { tmpdir, withTempDir } from "./fixture/tmpdir"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodes } from "./lib/tool"
 
 const patchToolNode = makeLocationNode({
   name: "test/patch-tool-plugin",
@@ -103,7 +103,7 @@ const withTool = <A, E, R>(
     return yield* body(yield* Tool.Service)
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(LayerNode.group([Tool.node, FileAccess.node, FileMutation.node, patchToolNode]), [
+      AppNodeBuilder.build(LayerNode.group([toolNodes, FileAccess.node, FileMutation.node, patchToolNode]), [
         Environment.node.replace(
           transformEnvironmentFiles((files) => ({
             read: (target, range) =>

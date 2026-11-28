@@ -14,7 +14,7 @@ import { WebFetchTool } from "@opencode/core/tool/plugin/webfetch"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodeReplacements } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodeReplacements, toolNodes } from "./lib/tool"
 
 const webFetchToolNode = makeLocationNode({
   name: "test/webfetch-tool-plugin",
@@ -55,7 +55,7 @@ const permission = permissionLayer({
     ),
 })
 const toolLayer = (replacements: LayerNode.Replacements = []) =>
-  AppNodeBuilder.build(LayerNode.group([Tool.node, webFetchToolNode]), [
+  AppNodeBuilder.build(LayerNode.group([toolNodes, webFetchToolNode]), [
     ...toolNodeReplacements(permission),
     ...replacements,
   ])

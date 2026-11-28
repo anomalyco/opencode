@@ -42,7 +42,7 @@ import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { registerToolPlugin } from "./lib/tool"
+import { registerCodeMode, registerToolPlugin } from "./lib/tool"
 
 const e2e = testEffect(Layer.empty)
 
@@ -51,6 +51,7 @@ const pluginSupervisor = makeLocationNode({
   layer: Layer.effectDiscard(
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
+      yield* registerCodeMode()
       yield* registerToolPlugin(CodeModeAgentsPlugin.Plugin, {
         session: { hook: (name, callback, options) => hooks.register("session", name, callback, options) },
       })

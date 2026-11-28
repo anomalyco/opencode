@@ -22,13 +22,13 @@ import { tempLocationLayer } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
-import { executeTool, toolIdentity } from "./lib/tool"
+import { executeTool, toolIdentity, toolNodes } from "./lib/tool"
 
 // Attached clients are never OAuth integrations.
 const unused = () => Effect.die("unused integration service")
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Mcp.node, Bus.node]), [
+  AppNodeBuilder.build(LayerNode.group([toolNodes, McpTool.node, Mcp.node, Bus.node]), [
     Location.node.replace(tempLocationLayer),
     Environment.node.replace(hostEnvironmentLayer),
     Integration.node.replace(

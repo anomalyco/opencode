@@ -14,7 +14,7 @@ import { Document, Info } from "@opencode/schema/config"
 import type { CommandDefinition } from "@opencode/plugin/effect/command"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { codeModeListings, executeTool, registerToolPlugin, toolIdentity, toolNodeReplacements } from "./lib/tool"
+import { codeModeListings, executeTool, registerToolPlugin, toolIdentity, toolNodeReplacements, toolNodes } from "./lib/tool"
 
 const sessionID = Session.ID.make("ses_automation_tool_test")
 const otherSessionID = Session.ID.make("ses_automation_tool_other")
@@ -31,7 +31,7 @@ const names = [
   "automation_delete",
 ].map((name) => name.replace("automation_", "automation."))
 
-const it = testEffect(AppNodeBuilder.build(Tool.node, toolNodeReplacements()))
+const it = testEffect(AppNodeBuilder.build(toolNodes, toolNodeReplacements()))
 
 /** An in-memory Automation service. The real one is covered in automation.test.ts; this exercises the tool layer. */
 const memory = () => {

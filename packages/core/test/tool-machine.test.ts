@@ -20,12 +20,12 @@ import { location } from "./fixture/location"
 import { permissionLayer } from "./lib/permission"
 import { makePeers, makeWorker, type Peers } from "./fixture/machine-worker"
 import { testEffect } from "./lib/effect"
-import { codeModeListings, executeTool, registerToolPlugin, toolIdentity, toolNodeReplacements } from "./lib/tool"
+import { codeModeListings, executeTool, registerToolPlugin, toolIdentity, toolNodeReplacements, toolNodes } from "./lib/tool"
 
 /** Every approval the tools asked for, in order. */
 const assertions: Permission.AssertInput[] = []
 const graph = AppNodeBuilder.build(
-  LayerNode.group([Tool.node, Machines.node, FileAccess.node, FileWrite.node, Permission.node]),
+  LayerNode.group([toolNodes, Machines.node, FileAccess.node, FileWrite.node, Permission.node]),
   [
     ...toolNodeReplacements(permissionLayer({ assert: (input) => Effect.sync(() => void assertions.push(input)) })),
     Location.node.replace(
@@ -83,7 +83,7 @@ describe("MachineTools", () => {
   it.effect("registers nothing while the flag is off", () =>
     Effect.gen(function* () {
       const registry = yield* setup("-machines")
-      expect(yield* registry.list()).toEqual([])
+      expect((yield* registry.list()).map((tool) => tool.id)).toEqual(["execute"])
       expect(yield* paths(registry)).toEqual([])
     }),
   )
