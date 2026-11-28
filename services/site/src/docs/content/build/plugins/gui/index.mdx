@@ -1678,6 +1678,23 @@ never both, and can pin single tokens with `overrides`.
   window shows the default theme until the theme returns.
 - At startup, the window shows the colors cached from the last run until the plugin contributes the theme again.
 
+Chat markdown uses the theme's text colors. To color it, set any of these tokens in a variant's `v2Overrides`:
+
+```json
+"v2Overrides": {
+  "v2-markdown-heading": "#bd93f9",
+  "v2-markdown-strong": "#ffb86c",
+  "v2-markdown-emphasis": "#f1fa8c",
+  "v2-markdown-code": "#50fa7b",
+  "v2-markdown-list-item": "#8be9fd",
+  "v2-markdown-block-quote": "#f1fa8c"
+}
+```
+
+- `v2-markdown-heading` colors every heading level, `v2-markdown-code` colors inline code and its tint, and
+  `v2-markdown-list-item` colors bullets and numbers.
+- A token the theme leaves out keeps the default color. Links already follow `v2-text-text-accent`.
+
 ## Host APIs
 
 Host APIs are properties of `ctx`. None of them throw before the app interface mounts: reads return their documented

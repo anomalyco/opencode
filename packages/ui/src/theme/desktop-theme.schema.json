@@ -158,6 +158,32 @@
         "v2Overrides": {
           "type": "object",
           "description": "Optional direct overrides for any v2 CSS variable (without -- prefix)",
+          "properties": {
+            "v2-markdown-heading": {
+              "type": "string",
+              "description": "Markdown headings in chat. Defaults to the base text color, or the muted color for h4 to h6"
+            },
+            "v2-markdown-strong": {
+              "type": "string",
+              "description": "Bold markdown text in chat. Defaults to the base text color"
+            },
+            "v2-markdown-emphasis": {
+              "type": "string",
+              "description": "Italic markdown text in chat. Defaults to the surrounding text color"
+            },
+            "v2-markdown-code": {
+              "type": "string",
+              "description": "Inline markdown code in chat, and the tint behind it. Defaults to the base text color"
+            },
+            "v2-markdown-list-item": {
+              "type": "string",
+              "description": "Markdown list bullets and numbers in chat. Defaults to the muted text color"
+            },
+            "v2-markdown-block-quote": {
+              "type": "string",
+              "description": "Markdown block quote text in chat. Defaults to the muted text color"
+            }
+          },
           "additionalProperties": {
             "type": "string"
           }

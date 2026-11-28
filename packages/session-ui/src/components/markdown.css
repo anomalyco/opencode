@@ -99,10 +99,11 @@
     text-wrap-style: auto;
   }
 
-  /* Headings: Sized by level, distinguished by color and spacing */
+  /* Headings: Sized by level, distinguished by color and spacing. A theme can color prose through the optional
+     v2-markdown-* tokens in its v2Overrides; each falls back to the neutral color. */
   h1 {
     font-size: 17px;
-    color: var(--v2-text-text-base);
+    color: var(--v2-markdown-heading, var(--v2-text-text-base));
     font-weight: 600;
     margin-top: 28px;
     margin-bottom: 12px;
@@ -111,7 +112,7 @@
 
   h2 {
     font-size: 15px;
-    color: var(--v2-text-text-base);
+    color: var(--v2-markdown-heading, var(--v2-text-text-base));
     font-weight: 600;
     margin-top: 24px;
     margin-bottom: 10px;
@@ -120,7 +121,7 @@
 
   h3 {
     font-size: 14px;
-    color: var(--v2-text-text-base);
+    color: var(--v2-markdown-heading, var(--v2-text-text-base));
     font-weight: var(--font-weight-bold);
     margin-top: 20px;
     margin-bottom: 8px;
@@ -131,7 +132,7 @@
   h5,
   h6 {
     font-size: 14px;
-    color: var(--v2-text-text-muted);
+    color: var(--v2-markdown-heading, var(--v2-text-text-muted));
     font-weight: var(--font-weight-medium);
     margin-top: 20px;
     margin-bottom: 8px;
@@ -147,8 +148,19 @@
   /* Emphasis & Strong: Neutral strong color */
   strong,
   b {
-    color: var(--v2-text-text-base);
+    color: var(--v2-markdown-strong, var(--v2-text-text-base));
     font-weight: var(--font-weight-bold);
+  }
+
+  em,
+  i {
+    color: var(--v2-markdown-emphasis, currentColor);
+  }
+
+  /* Italic text in a link label keeps the link color. */
+  a em,
+  a i {
+    color: inherit;
   }
 
   /* Paragraphs */
@@ -269,7 +281,7 @@
   }
 
   li::marker {
-    color: var(--v2-text-text-muted);
+    color: var(--v2-markdown-list-item, var(--v2-text-text-muted));
   }
 
   /* Nested lists spacing */
@@ -289,7 +301,7 @@
     border-inline-start: 0.5px solid var(--v2-border-border-base);
     margin: 1rem 0;
     padding-inline-start: 0.5rem;
-    color: var(--v2-text-text-muted);
+    color: var(--v2-markdown-block-quote, var(--v2-text-text-muted));
     font-style: normal;
   }
 
@@ -504,11 +516,15 @@
     unicode-bidi: isolate;
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
-    color: var(--v2-text-text-base);
+    color: var(--v2-markdown-code, var(--v2-text-text-base));
     font-weight: var(--font-weight-medium);
     padding: 0 4px;
     border-radius: 4px;
-    background: color-mix(in oklch, var(--v2-text-text-base) var(--markdown-inline-code-bg-mix), transparent);
+    background: color-mix(
+      in oklch,
+      var(--v2-markdown-code, var(--v2-text-text-base)) var(--markdown-inline-code-bg-mix),
+      transparent
+    );
   }
 
   /* A path turns into a link after an async existence check, so it keeps the plain code box and only fades its colours. */
