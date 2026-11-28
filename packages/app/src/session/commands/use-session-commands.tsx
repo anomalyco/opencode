@@ -78,6 +78,12 @@ async function loadDialog(kind: SessionDialogKind, context: SessionCommandContex
     return () => <DialogJumpToMessage session={context.session} onJump={context.jumpToMessage} />
   }
 
+  if (kind === "favorites") {
+    const { DialogFavorites } = await import("./dialog-favorites")
+
+    return () => <DialogFavorites session={context.session} onJump={context.jumpToMessage} />
+  }
+
   if (kind === "fork") {
     const { DialogFork } = await import("@/session/commands/fork-dialog")
 
@@ -289,7 +295,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (effect.type === "dialog.show") {
       const render = dialogs[effect.kind]
 
-      if (render) dialog.show(render, undefined, effect.kind === "jump" ? jumpDialog : undefined)
+      if (render)
+        dialog.show(render, undefined, effect.kind === "jump" || effect.kind === "favorites" ? jumpDialog : undefined)
 
       return
     }
@@ -756,6 +763,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "mod+alt+g",
       disabled: !actions.session.identity.params.id,
       onSelect: () => openDialog("jump"),
+    }),
+    sessionCommand({
+      id: "session.favorites",
+      title: language.t("dialog.favorites.title"),
+      description: language.t("command.session.favorites.description"),
+      keybind: "mod+alt+s",
+      disabled: !actions.session.identity.params.id,
+      onSelect: () => openDialog("favorites"),
     }),
     sessionCommand({
       id: "message.previous",

@@ -773,6 +773,9 @@ function MessageTimelineView(
                         <Menu.Item disabled={props.action.exporting(id)} onSelect={() => props.action.export(id)}>
                           {language.t("common.export")}…
                         </Menu.Item>
+                        <Menu.Item onSelect={() => command.trigger("session.favorites")}>
+                          {language.t("dialog.favorites.title")}…
+                        </Menu.Item>
                         <Menu.Separator />
                         <Menu.Item onSelect={() => props.action.showDelete(id)}>
                           {language.t("common.delete")}…

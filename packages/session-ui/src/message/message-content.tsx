@@ -428,6 +428,23 @@ export function CurrentUserMessageDisplay(props: {
 
                 {i18n.t("ui.message.copyMessage")}
               </Menu.Item>
+              <Show when={props.actions?.favorites}>
+                {(favorites) => (
+                  <Menu.Item
+                    onSelect={() =>
+                      favorites().toggle({
+                        messageID: props.message.id,
+                        role: "user",
+                        text: props.message.text,
+                        created: props.message.time.created,
+                      })
+                    }
+                  >
+                    <Icon name={favorites().has(props.message.id) ? "star-filled" : "star"} />
+                    {i18n.t(favorites().has(props.message.id) ? "ui.message.unfavorite" : "ui.message.favorite")}
+                  </Menu.Item>
+                )}
+              </Show>
               {/* Like the iOS app, a Voice message also offers the full prompt the session received. */}
               <Show when={props.voice}>
                 <Menu.Item onSelect={() => void writeClipboard(props.message.text)}>
@@ -1072,6 +1089,9 @@ export function AssistantTextContent(props: {
   /** The finished turn's web searches and fetches, shown as a chip in its footer. */
   sources?: TurnSources
   onOpenSources?: () => void
+  favorites?: NonNullable<SessionUserActions["favorites"]>
+  /** The prompt row that owns this assistant message; the timeline only anchors prompts. */
+  anchorID?: string
 }) {
   const data = useData()
   const i18n = useI18n()
@@ -1136,6 +1156,9 @@ export function AssistantTextContent(props: {
 
   const copy = createCopyFeedback()
 
+  const favoriteText = () =>
+    props.message.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n\n") || props.text
+
   return (
     <Show when={props.text}>
       <div data-component="text-part" data-timeline-part-id={props.id}>
@@ -1174,6 +1197,34 @@ export function AssistantTextContent(props: {
           onClick={() => copy.copy(props.text)}
           aria-label={copy.copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
         />
+        <Show when={props.favorites}>
+          {(favorites) => {
+            const saved = () => favorites().has(props.message.id)
+            const label = () => i18n.t(saved() ? "ui.message.unfavorite" : "ui.message.favorite")
+
+            return (
+              <Tooltip appearance="compact" value={label()} placement="top" gutter={4}>
+                <IconButton
+                  icon={<Icon name={saved() ? "star-filled" : "star"} />}
+                  size="small"
+                  variant="ghost-muted"
+                  aria-label={label()}
+                  aria-pressed={saved()}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() =>
+                    favorites().toggle({
+                      messageID: props.message.id,
+                      anchorID: props.anchorID,
+                      role: "assistant",
+                      text: favoriteText(),
+                      created: props.message.time.created,
+                    })
+                  }
+                />
+              </Tooltip>
+            )
+          }}
+        </Show>
         <Show when={meta().length > 0}>
           <span data-slot="text-part-meta">
             <MetaItems items={meta()} slot="text-part" />

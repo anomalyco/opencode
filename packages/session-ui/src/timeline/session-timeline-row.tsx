@@ -692,6 +692,8 @@ export function createSessionTimelineRowRenderer(input: {
                 turnTokensPerSecond={turnTokensPerSecond()}
                 sources={turnSourcesValue()}
                 onOpenSources={() => sourcesHost?.open(row().userMessageID)}
+                favorites={input.actions?.favorites}
+                anchorID={row().userMessageID}
                 defaultOpen={defaultOpen()}
                 toolOpen={input.disclosure.value(disclosureKey()) ?? defaultOpen()}
                 onToolOpenChange={(open) => input.disclosure.set(disclosureKey(), open)}

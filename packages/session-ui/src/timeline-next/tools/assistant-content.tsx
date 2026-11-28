@@ -1,5 +1,6 @@
 import type { SessionMessageAssistant } from "@opencode/client/promise"
 import { Match, Switch } from "solid-js"
+import type { SessionUserActions } from "../../actions"
 import { AssistantTextContent } from "../../message/message-content"
 import {
   currentToolError,
@@ -30,6 +31,9 @@ export function AssistantContent(props: {
   toolOpen?: boolean
   onToolOpenChange?: (open: boolean) => void
   onContentRendered?: () => void
+  favorites?: NonNullable<SessionUserActions["favorites"]>
+  /** The prompt row that owns this assistant message, which is the row the timeline can scroll to. */
+  anchorID?: string
 }) {
   return (
     <Switch>
@@ -45,6 +49,8 @@ export function AssistantContent(props: {
             turnTokensPerSecond={props.turnTokensPerSecond}
             sources={props.sources}
             onOpenSources={props.onOpenSources}
+            favorites={props.favorites}
+            anchorID={props.anchorID}
           />
         )}
       </Match>

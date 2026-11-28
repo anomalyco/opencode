@@ -75,7 +75,7 @@ describe("transitionSessionCommands", () => {
     expect(lateCompact?.effects).toEqual([])
   })
 
-  test.each<SessionDialogKind>(["fork", "palette", "mcp"])(
+  test.each<SessionDialogKind>(["favorites", "fork", "palette", "mcp"])(
     "a repeated request while the %s dialog loads opens it once",
     (kind) => {
       const [first, repeat, loaded, again] = replay([
