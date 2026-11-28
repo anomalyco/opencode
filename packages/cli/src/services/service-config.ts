@@ -8,6 +8,11 @@ import path from "path"
 import { selfCommand } from "../util/process"
 import { RemoteTunnel } from "./remote-tunnel"
 
+// Captured at import time, before the CLI switches into the requested project directory. Passing this as
+// EnsureOptions.cwd keeps the managed server in the CLI's startup directory for module resolution while leaving
+// the client package's default behaviour unchanged for the desktop app and SDK callers.
+const startupDirectory = process.cwd()
+
 // The CLI's service configuration file, plus the Service.EnsureOptions binding that
 // points the client package's service operations at this CLI: which
 // registration file (by channel), which version, and how to spawn opencode.
@@ -153,6 +158,7 @@ export const options = Effect.fnUntraced(function* (input: { readonly checkVersi
     version: input.checkVersion ? OPENCODE_VERSION : undefined,
     env: processEnv((yield* read()).env),
     command: [...selfCommand(), "serve", "--service"],
+    cwd: startupDirectory,
   }
 })
 
