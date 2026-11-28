@@ -319,6 +319,7 @@ export type FooterSubagentTab = {
   description: string
   status: "running" | "completed" | "cancelled" | "error"
   title?: string
+  model?: { providerID: string; modelID: string }
 }
 
 export type FooterSubagentDetail = {

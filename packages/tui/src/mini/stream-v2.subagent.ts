@@ -105,6 +105,7 @@ type ChildState = {
   description: string
   status: FooterSubagentTab["status"]
   title?: string
+  model?: { providerID: string; modelID: string }
   lastUpdatedAt: number
   frames: Frame[]
   fragments: FragmentReconciler
@@ -193,6 +194,7 @@ function tab(child: ChildState): FooterSubagentTab {
     description: child.description || child.title || "",
     status: child.status,
     title: child.title,
+    model: child.model,
   }
 }
 
@@ -672,6 +674,9 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       touch(child, event.created)
       if (child.label === FALLBACK_LABEL && event.data.agent) child.label = Locale.titlecase(event.data.agent)
       if (child.status !== "running") child.status = "running"
+      if (event.data.model?.providerID && event.data.model?.id) {
+        child.model = { providerID: event.data.model.providerID, modelID: event.data.model.id }
+      }
       input.emit()
       return
     }

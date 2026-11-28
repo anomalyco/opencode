@@ -35,6 +35,7 @@ import { footerStatuslinePolicy } from "./footer.width"
 import { Keymap } from "../context/keymap"
 import type { ClipboardService } from "../context/clipboard"
 import { modelInfo } from "./variant.shared"
+import { descendantActivityModel } from "./session-data"
 import { monoShortcut } from "./mono"
 import { stringWidth } from "../util/string-width"
 import { formatContextUsage } from "../util/session"
@@ -410,11 +411,18 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     if (notice()) return notice()
     if (!footerDetails()) return shell() ? "Shell" : ""
+    if (stateStatus() === "reconnecting") return "reconnecting"
+    const s = stateStatus()
+    if (s.startsWith("task:")) {
+      const childModel = descendantActivityModel(subagent())
+      const info = childModel ? modelInfo(props.providers(), childModel) : undefined
+      if (info?.model) return `${s.split(" · ")[0]} · ${info.model}`
+      return s
+    }
     if (busy()) {
-      if (stateStatus() === "reconnecting") return "reconnecting"
       return interruptLabel() ? `${interruptLabel()} stop` : "Running"
     }
-    return stateStatus() || (shell() ? "Shell" : "")
+    return s || (shell() ? "Shell" : "")
   })
   const agentStatus = createMemo(() => {
     if (!footerDetails() || !prompt() || shell()) return undefined
