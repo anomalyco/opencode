@@ -21,8 +21,16 @@ const arch =
   platform === "windows" && nodeArch === "x64" && process.env.PROCESSOR_IDENTIFIER?.startsWith("ARM")
     ? "arm64"
     : nodeArch
-// Windows cannot spawn npm's .cmd shim directly, so reuse the npm CLI that runs this script.
-const npm = process.env.npm_execpath?.endsWith("npm-cli.js") ? [process.execPath, process.env.npm_execpath] : ["npm"]
+// Windows cannot spawn npm's .cmd shim directly, so start npm's CLI with node. npm names it in npm_execpath; a manual
+// run leaves that unset and other package managers name themselves, so fall back to the copy bundled beside node.
+const nodeNpmCli = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js")
+const npm = process.env.npm_execpath?.endsWith("npm-cli.js")
+  ? [process.execPath, process.env.npm_execpath]
+  : platform === "windows" && fs.existsSync(nodeNpmCli)
+    ? [process.execPath, nodeNpmCli]
+    : ["npm"]
+// Reported only if every candidate fails: a later one may already be installed and need no npm.
+let npmStartError
 const sourceBinary = platform === "windows" ? `${sourceCommand}.exe` : sourceCommand
 const targetBinary = path.resolve(directory, packageJson.bin[command])
 const dependencies = packageJson.optionalDependencies ?? {}
@@ -152,6 +160,8 @@ function installPackage(name) {
       ],
       { stdio: "inherit", windowsHide: true },
     )
+    // Only a spawn that never reached npm says why; an npm run that failed on its own reports nothing useful.
+    if (result.error) npmStartError = result.error.code ?? result.error.message
     if (result.status !== 0) return false
     copyBinary(path.join(temp, "node_modules", name, "bin", sourceBinary))
     return true
@@ -181,7 +191,8 @@ function main() {
   }
 
   throw new Error(
-    `Failed to install OpenCode. Try manually installing ${names.map((name) => JSON.stringify(name)).join(" or ")}.`,
+    `Failed to install OpenCode. Try manually installing ${names.map((name) => JSON.stringify(name)).join(" or ")}.` +
+      (npmStartError ? ` npm could not be started: ${npmStartError}.` : ""),
   )
 }
 
