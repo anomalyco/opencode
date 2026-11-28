@@ -188,6 +188,8 @@ export interface Interface {
     readonly restore: (input: {
       repository: Repository
       files: ReadonlyMap<RelativePath, TreeID>
+      /** Source repository whose ignore rules decided which paths the trees record. */
+      ignores?: Repository
     }) => Effect.Effect<void, OperationError>
   }
   readonly objects: {
@@ -1136,7 +1138,7 @@ const layer = Layer.effect(
 
     /** Batched paths cost one ls-tree and one checkout per source tree instead of two processes per file. */
     const restore = Effect.fn("Git.tree.restore")(
-      (input: { repository: Repository; files: ReadonlyMap<RelativePath, TreeID> }) =>
+      (input: { repository: Repository; files: ReadonlyMap<RelativePath, TreeID>; ignores?: Repository }) =>
         locked(
           input.repository,
           Effect.gen(function* () {
@@ -1146,8 +1148,11 @@ const layer = Layer.effect(
                 input.files,
                 ([file, tree]) =>
                   Effect.gen(function* () {
-                    if (!(yield* hasEntry(input.repository, tree, file)))
+                    if (!(yield* hasEntry(input.repository, tree, file))) {
+                      if (input.ignores && (yield* ignored({ repository: input.ignores, paths: [file] })).has(file))
+                        return
                       return yield* removePath(input.repository, file)
+                    }
                     yield* withTemporaryIndex(input.repository, (index) =>
                       repositoryOperation(
                         "restore",
@@ -1188,8 +1193,14 @@ const layer = Layer.effect(
                   { discard: true },
                 ),
               )
+            const absent = plan.flatMap((item) => item.absent)
+            // A tree never records a path the source ignores, so a path that is ignored once the checkouts have
+            // restored the ignore files is missing from its tree for that reason, not because it did not exist.
+            const kept = input.ignores
+              ? yield* ignored({ repository: input.ignores, paths: absent })
+              : new Set<RelativePath>()
             yield* Effect.forEach(
-              plan.flatMap((item) => item.absent),
+              absent.filter((file) => !kept.has(file)),
               (file) => removePath(input.repository, file),
               { concurrency: 16, discard: true },
             )
