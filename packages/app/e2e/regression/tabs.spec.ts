@@ -1123,17 +1123,19 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   expect(gutter.x + gutter.width).toBe(chat.x)
 
   const actions = await Promise.all(
-    ["vertical-tabs-home", "vertical-tabs-search", "vertical-tabs-new-session"].map(async (action) => {
-      const box = await sidebar.locator(`[data-action="${action}"]`).boundingBox()
+    ["vertical-tabs-home", "vertical-tabs-search", "vertical-tabs-automations", "vertical-tabs-new-session"].map(
+      async (action) => {
+        const box = await sidebar.locator(`[data-action="${action}"]`).boundingBox()
 
-      if (!box) throw new Error(`${action} is not rendered`)
+        if (!box) throw new Error(`${action} is not rendered`)
 
-      return box
-    }),
+        return box
+      },
+    ),
   )
 
   const gaps = actions.slice(1).map((box, index) => box.y - (actions[index].y + actions[index].height))
-  expect(gaps).toEqual([3, 3])
+  expect(gaps).toEqual([3, 3, 3])
 
   const handle = sidebar.locator('[data-component="resize-handle"]')
 
