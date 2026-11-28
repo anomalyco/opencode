@@ -109,11 +109,10 @@ export const loadShellEnv = Effect.fn("ShellEnv.load")(function* (shell: string)
     return interactive.value
   }
 
-  if (interactive.type === "Timeout") {
-    yield* Effect.logInfo(`[server] Interactive shell env probe timed out: ${shell}`)
-
-    return null
-  }
+  // A timeout usually means a slow interactive rc file, which `-l` does not read, so the login profile can still
+  // supply PATH. Giving up here leaves the session, and the background service it starts, on the app's environment.
+  if (interactive.type === "Timeout")
+    yield* Effect.logWarning(`[server] Interactive shell env probe timed out, trying -l: ${shell}`)
 
   const login = yield* probe(shell, "-l")
 
@@ -123,7 +122,7 @@ export const loadShellEnv = Effect.fn("ShellEnv.load")(function* (shell: string)
     return login.value
   }
 
-  yield* Effect.logInfo(`[server] Falling back to app environment: ${shell}`)
+  yield* Effect.logWarning(`[server] Falling back to app environment: ${shell}`)
 
   return null
 })
