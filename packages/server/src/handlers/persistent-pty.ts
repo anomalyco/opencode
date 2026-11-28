@@ -18,7 +18,7 @@ import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
 import { makeArtifact } from "./artifact"
-import { makeBlobGet } from "./blob"
+import { makeBlob } from "./blob"
 import { makeBrowserTunnel } from "./experimental/browser-tunnel"
 import { makeAutomation } from "./automation"
 import { makeJob } from "./job"
@@ -37,7 +37,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const job = yield* makeJob
     const space = yield* makeSpace
     const mediaGet = yield* makeMediaGet
-    const blobGet = yield* makeBlobGet
+    const blob = yield* makeBlob
     const automation = yield* makeAutomation
     const machine = yield* makeMachine
     const machineLink = yield* makeMachineLink
@@ -46,7 +46,12 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
 
     return handlers
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
-      .handleRaw("blob.get", (ctx) => blobGet(ctx.params.id, ctx.request))
+      .handle("blob.list", (ctx) => blob.list(ctx.query))
+      .handleRaw("blob.create", (ctx) => blob.create(ctx.query, ctx.request))
+      .handle("blob.get", (ctx) => blob.get(ctx.params.blobID))
+      .handleRaw("blob.content", (ctx) => blob.content(ctx.params.blobID, ctx.request))
+      .handle("blob.update", (ctx) => blob.update(ctx.params.blobID, ctx.payload))
+      .handle("blob.remove", (ctx) => blob.remove(ctx.params.blobID))
       .handleRaw("browser.tunnel", (ctx) => browserTunnel(ctx.request))
       .handle("job.list", (ctx) => job.list(ctx.query))
       .handle("job.cancel", (ctx) => job.cancel(ctx.params.id))

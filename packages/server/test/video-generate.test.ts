@@ -1,4 +1,3 @@
-import fs from "node:fs/promises"
 import path from "node:path"
 import { expect } from "bun:test"
 import { Generate } from "@opencode/core/generate"
@@ -41,6 +40,7 @@ const serve = (dir: string) =>
       config: {
         directory: dir,
         project: false,
+        content: JSON.stringify({ experimental: { blob_catalog: true } }),
       },
       models: { fetch: false },
       fs: { filewatcher: false },
@@ -79,13 +79,10 @@ it.live("generates a video in the background and serves its blob with Range and 
       ),
       (body: { data: Record<string, unknown> }) => body.data.status !== "running",
     )
-    expect(completed.data).toEqual({
-      id: data.id,
-      status: "completed",
-      blobs: [{ id: expect.stringMatching(/^blob_/), mime: "video/mp4", bytes: 20 }],
-    })
     const blob = (completed.data.blobs as { id: string }[])[0].id
-    const route = `${base}/blob/${blob}`
+    expect(blob.startsWith("blob_")).toBe(true)
+    expect(completed.data).toMatchObject({ id: data.id, status: "completed", blobs: [{ mime: "video/mp4", bytes: 20 }] })
+    const route = `${base}/blob/${blob}/content`
 
     const full = yield* call(route)
     expect(full.status).toBe(200)
@@ -117,8 +114,8 @@ it.live("generates a video in the background and serves its blob with Range and 
     const reread = yield* Effect.promise(() => restarted(new Request(`${base}/generate/video/${data.id}`)))
     expect(((yield* Effect.promise(() => reread.json())) as { data: unknown }).data).toEqual(completed.data)
 
-    // Once its file is gone, the blob and the job are gone.
-    yield* Effect.promise(() => fs.rm(path.join(dir, "data", "blobs", blob)))
+    // Once the blob is deleted, the job is gone too.
+    expect((yield* call(`${base}/blob/${blob}`, { method: "DELETE" })).status).toBe(204)
     expect((yield* call(route)).status).toBe(404)
     expect((yield* call(`${base}/generate/video/${data.id}`)).status).toBe(404)
 
@@ -128,4 +125,38 @@ it.live("generates a video in the background and serves its blob with Range and 
   }).pipe(Effect.scoped),
   // The first status check runs at the next 5-second check.
   15_000,
+)
+
+it.live("uploads a blob, labels it with a session and edits its metadata", () =>
+  Effect.gen(function* () {
+    const dir = (yield* tmpdirScoped("opencode-blob-route-")).path
+    const handler = yield* serve(dir)
+    const call = (url: string, init?: RequestInit) => Effect.promise(() => handler(new Request(url, init)))
+    const json = (response: Response) => Effect.promise(() => response.json() as Promise<{ data: any }>)
+    const sessionID = "ses_" + "0".repeat(26)
+
+    const created = yield* call(`${base}/blob?name=clip.mp4&sessionID=${sessionID}`, {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream" },
+      body: video,
+    })
+    expect(created.status).toBe(200)
+    const info = (yield* json(created)).data
+    expect(info).toMatchObject({ name: "clip.mp4", sessionID, mime: "video/mp4", bytes: 20 })
+
+    expect((yield* json(yield* call(`${base}/blob?sessionID=${sessionID}`))).data).toEqual([info])
+    const updated = yield* call(`${base}/blob/${info.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ metadata: { starred: true } }),
+    })
+    expect((yield* json(updated)).data).toMatchObject({ name: "clip.mp4", metadata: { starred: true } })
+    const tooBig = yield* call(`${base}/blob/${info.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ metadata: { note: "x".repeat(5000) } }),
+    })
+    expect(tooBig.status).toBe(400)
+    expect((yield* json(yield* call(`${base}/blob/${info.id}`))).data).toMatchObject({ metadata: { starred: true } })
+  }).pipe(Effect.scoped),
 )

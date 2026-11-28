@@ -26,7 +26,7 @@ Returns: `GenerateImageResponse`
 
 ## POST /api/experimental/generate/video (experimental)
 
-Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the finished videos as blobs; read the job with GET /api/experimental/generate/video/:id and the video with GET /api/experimental/blob/:id.
+Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the finished videos as blobs; read the job with GET /api/experimental/generate/video/:id and the video with GET /api/experimental/blob/:blobID/content.
 
 Body:
 - `model: Model.Ref`
@@ -60,7 +60,7 @@ Returns: `GenerateDecisionsResponse`
 
 ## Types
 
-- `Blob.Info`: `{ id: string; mime: string; bytes: number }`
+- `Blob.Info`: `{ id: string; sessionID?: string; mime: string; bytes: number; name?: string; metadata?: Record<string, unknown>; width?: number; height?: number; durationMs?: number; time: { created, updated } }`
 - `Generate.ChoiceAnswer`: `{ type: "choice"; name: string; choice: Generate.ChoiceValue; probabilities: { value, probability }[]; confidence: number }`
 - `Generate.ChoiceQuestion`: `{ type: "choice"; name: string; instructions: string; choices: { value, description }[] }` Pick one value from a fixed set
 - `Generate.ChoiceValue`: `string | boolean` Choice values are typed: true and "true" are different values

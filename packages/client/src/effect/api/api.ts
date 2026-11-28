@@ -39,6 +39,7 @@ import type { OpenCodeEvent } from "@opencode/protocol/groups/event"
 import type { Pty } from "@opencode/schema/pty"
 import type { Automation } from "@opencode/schema/automation"
 import type { Artifact } from "@opencode/schema/artifact"
+import type { BlobStore } from "@opencode/schema/blob-store"
 import type { Job } from "@opencode/schema/job"
 import type { Push } from "@opencode/schema/push"
 import type { Reference } from "@opencode/schema/reference"
@@ -2551,6 +2552,34 @@ export type ExperimentalArtifactsDeleteOperation<E = never> = (
   input: ExperimentalArtifactsDeleteInput,
 ) => Effect.Effect<ExperimentalArtifactsDeleteOutput, E>
 
+export type ExperimentalBlobListInput = { readonly sessionID?: Session.ID | undefined }
+export type ExperimentalBlobListOutput = ReadonlyArray<BlobStore.Info>
+export type ExperimentalBlobListOperation<E = never> = (
+  input?: ExperimentalBlobListInput,
+) => Effect.Effect<ExperimentalBlobListOutput, E>
+
+export type ExperimentalBlobGetInput = { readonly blobID: BlobStore.ID }
+export type ExperimentalBlobGetOutput = BlobStore.Info
+export type ExperimentalBlobGetOperation<E = never> = (
+  input: ExperimentalBlobGetInput,
+) => Effect.Effect<ExperimentalBlobGetOutput, E>
+
+export type ExperimentalBlobUpdateInput = {
+  readonly blobID: BlobStore.ID
+  readonly name?: string | undefined
+  readonly metadata?: BlobStore.Metadata | undefined
+}
+export type ExperimentalBlobUpdateOutput = BlobStore.Info
+export type ExperimentalBlobUpdateOperation<E = never> = (
+  input: ExperimentalBlobUpdateInput,
+) => Effect.Effect<ExperimentalBlobUpdateOutput, E>
+
+export type ExperimentalBlobRemoveInput = { readonly blobID: BlobStore.ID }
+export type ExperimentalBlobRemoveOutput = void
+export type ExperimentalBlobRemoveOperation<E = never> = (
+  input: ExperimentalBlobRemoveInput,
+) => Effect.Effect<ExperimentalBlobRemoveOutput, E>
+
 export type ExperimentalJobListInput = {
   readonly sessionID?: Session.ID | undefined
   readonly kind?: Job.Kind | undefined
@@ -2765,6 +2794,12 @@ export interface ExperimentalApi<E = never> {
     readonly get: ExperimentalArtifactsGetOperation<E>
     readonly update: ExperimentalArtifactsUpdateOperation<E>
     readonly delete: ExperimentalArtifactsDeleteOperation<E>
+  }
+  readonly blob: {
+    readonly list: ExperimentalBlobListOperation<E>
+    readonly get: ExperimentalBlobGetOperation<E>
+    readonly update: ExperimentalBlobUpdateOperation<E>
+    readonly remove: ExperimentalBlobRemoveOperation<E>
   }
   readonly job: { readonly list: ExperimentalJobListOperation<E>; readonly cancel: ExperimentalJobCancelOperation<E> }
   readonly machine: {

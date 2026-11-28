@@ -22,7 +22,12 @@ Call any endpoint below from Code Mode with `fetch("opencode:///api/...")`. Each
 
 ## api/blob.md
 
-- GET /api/experimental/blob/{id} (experimental): Read a blob
+- GET /api/experimental/blob (experimental): List blobs
+- POST /api/experimental/blob (experimental): Create blob
+- GET /api/experimental/blob/{blobID} (experimental): Get blob
+- PATCH /api/experimental/blob/{blobID} (experimental): Update blob
+- DELETE /api/experimental/blob/{blobID} (experimental): Delete blob
+- GET /api/experimental/blob/{blobID}/content (experimental): Read blob content
 
 ## api/command.md
 

@@ -146,7 +146,7 @@ export const VideoCompleted = Schema.Struct({
   id: VideoID,
   status: Schema.Literal("completed"),
   blobs: Schema.Array(BlobStore.Info).annotate(
-    description("The finished videos, usually one. Read each with GET /api/experimental/blob/:id"),
+    description("The finished videos, usually one. Read each with GET /api/experimental/blob/:blobID/content"),
   ),
 }).annotate({ identifier: "Generate.VideoCompleted" })
 

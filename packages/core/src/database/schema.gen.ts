@@ -64,6 +64,30 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`blob_data\` (
+          \`blob_id\` text NOT NULL,
+          \`seq\` integer NOT NULL,
+          \`data\` blob NOT NULL,
+          CONSTRAINT \`blob_data_pk\` PRIMARY KEY(\`blob_id\`, \`seq\`),
+          CONSTRAINT \`fk_blob_data_blob_id_blob_v2_id_fk\` FOREIGN KEY (\`blob_id\`) REFERENCES \`blob_v2\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`blob_v2\` (
+          \`id\` text PRIMARY KEY,
+          \`session_id\` text,
+          \`mime\` text NOT NULL,
+          \`bytes\` integer NOT NULL,
+          \`name\` text,
+          \`width\` integer,
+          \`height\` integer,
+          \`duration_ms\` integer,
+          \`metadata\` text,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`credential\` (
           \`id\` text PRIMARY KEY,
           \`integration_id\` text,
@@ -328,6 +352,9 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       yield* tx.run(`CREATE INDEX \`automation_session_idx\` ON \`automation\` (\`session_id\`);`)
       yield* tx.run(
         `CREATE INDEX \`automation_active_idx\` ON \`automation\` (\`next_due_at\`) WHERE "automation"."status" = 'active';`,
+      )
+      yield* tx.run(
+        `CREATE INDEX \`blob_v2_session_idx\` ON \`blob_v2\` (\`session_id\`,\`id\`) WHERE "blob_v2"."session_id" is not null;`,
       )
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)

@@ -167,7 +167,6 @@ impl Client {
     endpoint!(" `DELETE /api/experimental/persistent-pty/:ptyID` (`persistentPty.remove`)", experimental_persistent_pty_remove, experimental_persistent_pty_remove_call, empty, (), input: ExperimentalPersistentPtyRemoveInput);
     endpoint!(" `POST /api/experimental/persistent-pty/:ptyID/connect-token` (`persistentPty.connectToken`)", experimental_persistent_pty_connect_token, experimental_persistent_pty_connect_token_call, data, ExperimentalPersistentPtyConnectTokenOutput, input: ExperimentalPersistentPtyConnectTokenInput);
     endpoint!(" `GET /api/experimental/media/:hash` (`media.get`)", experimental_media_get, experimental_media_get_call, binary, bytes::Bytes, input: ExperimentalMediaGetInput);
-    endpoint!(" `GET /api/experimental/blob/:id` (`blob.get`)", experimental_blob_get, experimental_blob_get_call, binary, bytes::Bytes, input: ExperimentalBlobGetInput);
     endpoint!(
         " `GET /api/experimental/browser/tunnel` (`browser.tunnel`)",
         experimental_browser_tunnel,
@@ -188,6 +187,12 @@ impl Client {
     endpoint!(" `PATCH /api/experimental/artifacts/:artifactID` (`artifacts.update`)", experimental_artifacts_update, experimental_artifacts_update_call, json, ExperimentalArtifactsUpdateOutput, input: ExperimentalArtifactsUpdateInput);
     endpoint!(" `DELETE /api/experimental/artifacts/:artifactID` (`artifacts.delete`)", experimental_artifacts_delete, experimental_artifacts_delete_call, empty, (), input: ExperimentalArtifactsDeleteInput);
     endpoint!(" `GET /api/experimental/artifacts/:artifactID/view/*` (`artifacts.view`)", experimental_artifacts_view, experimental_artifacts_view_call, binary, bytes::Bytes, input: ExperimentalArtifactsViewInput);
+    endpoint!(" `GET /api/experimental/blob` (`blob.list`)", experimental_blob_list, experimental_blob_list_call, data, ExperimentalBlobListOutput, input: ExperimentalBlobListInput);
+    endpoint!(" `POST /api/experimental/blob` (`blob.create`)", experimental_blob_create, experimental_blob_create_call, data, ExperimentalBlobCreateOutput, input: ExperimentalBlobCreateInput);
+    endpoint!(" `GET /api/experimental/blob/:blobID` (`blob.get`)", experimental_blob_get, experimental_blob_get_call, data, ExperimentalBlobGetOutput, input: ExperimentalBlobGetInput);
+    endpoint!(" `GET /api/experimental/blob/:blobID/content` (`blob.content`)", experimental_blob_content, experimental_blob_content_call, binary, bytes::Bytes, input: ExperimentalBlobContentInput);
+    endpoint!(" `PATCH /api/experimental/blob/:blobID` (`blob.update`)", experimental_blob_update, experimental_blob_update_call, data, ExperimentalBlobUpdateOutput, input: ExperimentalBlobUpdateInput);
+    endpoint!(" `DELETE /api/experimental/blob/:blobID` (`blob.remove`)", experimental_blob_remove, experimental_blob_remove_call, empty, (), input: ExperimentalBlobRemoveInput);
     endpoint!(" `GET /api/experimental/job` (`job.list`)", experimental_job_list, experimental_job_list_call, data, ExperimentalJobListOutput, input: ExperimentalJobListInput);
     endpoint!(" `POST /api/experimental/job/:id/cancel` (`job.cancel`)", experimental_job_cancel, experimental_job_cancel_call, empty, (), input: ExperimentalJobCancelInput);
     endpoint!(

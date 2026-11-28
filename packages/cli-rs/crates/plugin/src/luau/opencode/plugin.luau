@@ -1844,14 +1844,26 @@ export type AutomationTriggerEvery = {
     tz: string?,
 }
 
---- A stored blob, such as a generated video, which outlives the job that made it
+--- A stored blob, such as a generated video or an uploaded image
 export type BlobID = string
 
 export type BlobInfo = {
     id: BlobID,
+    sessionID: SessionID?,
     mime: string,
     bytes: number,
+    name: string?,
+    metadata: BlobMetadata?,
+    width: number?,
+    height: number?,
+    durationMs: number?,
+    time: {
+        created: number,
+        updated: number,
+    },
 }
+
+export type BlobMetadata = { [string]: any }
 
 export type CommandInfo = {
     name: string,
@@ -1991,6 +2003,7 @@ export type ConfigInfoEncoded = {
         todo: boolean?,
         media_blob: boolean?,
         artifacts: boolean?,
+        blob_catalog: boolean?,
         console_watches: boolean?,
         recommended_api: boolean?,
         full_codemode: boolean?,
@@ -5215,9 +5228,28 @@ export type Client = {
             }) -> (AutomationInfo?, string?),
         },
         blob: {
-            get: (input: {
-                id: string,
+            content: (input: {
+                blobID: string,
             }) -> (string?, string?),
+            create: (input: {
+                name: string?,
+                sessionID: string?,
+                payload: string,
+            }) -> (BlobInfo?, string?),
+            get: (input: {
+                blobID: string,
+            }) -> (BlobInfo?, string?),
+            list: (input: {
+                sessionID: string?,
+            }?) -> ({ BlobInfo }?, string?),
+            remove: (input: {
+                blobID: string,
+            }) -> (nil, string?),
+            update: (input: {
+                blobID: string,
+                name: string?,
+                metadata: BlobMetadata?,
+            }) -> (BlobInfo?, string?),
         },
         browser: {
             tunnel: (input: {}?) -> (boolean?, string?),
