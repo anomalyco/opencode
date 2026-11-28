@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, mock, test } from "bun:test"
 import { EventEmitter } from "node:events"
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import type { Rectangle } from "electron"
@@ -164,11 +164,45 @@ describe("window state", () => {
 
     const matching = (bounds: Rectangle) => (bounds.x >= second.x - 16 ? second : primary)
 
-    manageWindowState(fake, file, initial, { ...displays, matching })
+    manageWindowState(fake, file, initial, { ...displays, matching }, (error) => {
+      throw error
+    })
     events.emit("close")
     events.emit("closed")
 
     const written: unknown = JSON.parse(readFileSync(file, "utf8"))
     expect(written).toEqual(expected.displayBounds ? expected : { ...expected, displayBounds: second })
   })
+})
+
+test("a failed window-state save reports the error and allows closing to continue", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "opencode-window-close-"))
+  const file = path.join(dir, "window.json")
+  const report = mock((_error: Error) => {})
+  const closed = mock(() => {})
+
+  const win = Object.assign(new EventEmitter(), {
+    maximize: () => {},
+    setFullScreen: () => {},
+    getNormalBounds: () => ({ x: 10, y: 20, width: 800, height: 600 }),
+    isDestroyed: () => false,
+    getBounds: () => ({ x: 10, y: 20, width: 800, height: 600 }),
+    isMaximized: () => false,
+    isMinimized: () => false,
+    isFullScreen: () => false,
+  })
+
+  try {
+    writeFileSync(file, "previous state")
+    mkdirSync(`${file}.tmp`)
+    manageWindowState(win, file, defaults, displays, report)
+    win.on("closed", closed)
+    win.emit("close")
+    expect(() => win.emit("closed")).not.toThrow()
+    expect(closed).toHaveBeenCalledTimes(1)
+    expect(report).toHaveBeenCalledWith(expect.any(Error))
+    expect(readFileSync(file, "utf8")).toBe("previous state")
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
