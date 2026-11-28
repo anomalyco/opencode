@@ -189,6 +189,14 @@ This section is the single source for what may move or restyle the session timel
 - A control that shows a keybind reads `command.keybind()` or `command.keybindParts()`, which change only when a keybind does. Do not read `command.options` for a label.
 - Keeper: "the header keeps its controls while the transcript changes" in `e2e/regression/session-header.spec.ts`.
 
+### History paging
+
+- A reader who scrolls up must not reach the top of the loaded messages and wait there. A scroll toward the top with less than a runway of loaded history above the view asks for the next older page: 2,400 px, or two screens in a taller window (`historyRunway` in `src/session/timeline/history-machine.ts`). With the old 200 px, up to 5 of 17 wheel bursts stopped at the top when a page took 150 to 300 ms.
+- Paging follows the reader and never runs ahead by itself. After a page lands, the next one loads only when the reader scrolls toward the top again, or is within 200 px of the top.
+  - Do not page until a distance is filled. Rows can be far shorter than the messages they hold (a run of tool calls is one row), and a row that is not measured yet counts 60 px, so that loop can load a whole session after one wheel notch.
+  - A page that lands moves the scroll offset down the list. That scroll is not the reader's: only a lower offset counts as moving toward the top.
+- Keeper: "loads the next older page while the reader is two screens from the top, then waits for the reader" in `e2e/regression/timeline-history.spec.ts`.
+
 ## Localization
 
 - NEVER hardcode user-visible English strings in production code. ALWAYS use an i18n key for visible copy, placeholders, accessible labels, tooltips, menus, dialogs, toasts, empty states, and displayed errors.

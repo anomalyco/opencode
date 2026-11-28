@@ -17,6 +17,7 @@ import {
   HISTORY_RETRY_COOLDOWN_MS,
   HISTORY_SCROLL_THRESHOLD,
   historySeekStatus,
+  scrollLoadsHistory,
   SCROLL_TOP_EVENT,
   SEEK_REQUESTED_EVENT,
   transitionTimelineHistory,
@@ -78,6 +79,8 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
   let historyProbe: (() => void) | undefined
   let historyLoad: { controller: AbortController; timer: ReturnType<typeof setTimeout> } | undefined
   let historyCooldown: ReturnType<typeof setTimeout> | undefined
+  // The offset at the last scroll: a lower one now is the reader moving toward the top.
+  let historyTop = 0
   // Changes only when an older page lands or the transcript is replaced, not while a reply streams.
   const oldestMessage = createMemo(() => timeline.messages()[0]?.id)
   const visibleUserMessages = timeline.visibleUserMessages
@@ -231,6 +234,8 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
 
   const setScrollRef = (element: HTMLDivElement | undefined) => {
     scroller = element
+    // Another timeline's offset says nothing about this one: its first scroll is not one toward the top.
+    historyTop = 0
     setState("refs", "scroller", element)
 
     if (!element) return
@@ -239,13 +244,13 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
   }
 
   const onHistoryScroll = () => {
-    if (
-      !scroller ||
-      scroller.scrollTop >= HISTORY_SCROLL_THRESHOLD ||
-      !canRequestScrollPage(untrack(historyState)) ||
-      untrack(follow.following)
-    )
-      return
+    if (!scroller) return
+    const previousTop = historyTop
+    historyTop = scroller.scrollTop
+
+    if (untrack(follow.following) || !canRequestScrollPage(untrack(historyState))) return
+
+    if (!scrollLoadsHistory(historyTop, previousTop, scroller.clientHeight)) return
     dispatchHistory(SCROLL_TOP_EVENT)
   }
 

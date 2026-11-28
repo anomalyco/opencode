@@ -1,5 +1,13 @@
-// A detached reader within this distance of the top loads the next older page.
+// A detached reader within this distance of the top loads the next older page, and the one after it while they stay
+// there.
 export const HISTORY_SCROLL_THRESHOLD = 200
+
+// The least loaded history, in pixels, that a reader who scrolls toward the top keeps above the view. A wheel covers
+// about this much while a page is on its way, and it is no slower in a short window.
+export const HISTORY_RUNWAY_MIN = 2400
+
+// The same in screens, for page keys, which move a screen at a time.
+export const HISTORY_RUNWAY_SCREENS = 2
 
 // A page that never settles fails, so paging cannot stay "loading" forever.
 export const HISTORY_LOAD_TIMEOUT_MS = 30_000
@@ -60,7 +68,7 @@ export type TimelineHistoryEvent =
       /** The oldest loaded message. */
       readonly oldest: string | undefined
     }
-  /** A detached reader scrolled near the top. */
+  /** A detached reader scrolled at the top, or toward it with less than the runway above the view. */
   | { readonly type: "scroll.top" }
   /** The content or the view changed size while following. */
   | { readonly type: "fill.requested" }
@@ -170,7 +178,22 @@ export function transitionTimelineHistory(
   ])
 }
 
-/** A detached reader near the top may request the next page. */
+/** The loaded history a reader who scrolls toward the top keeps above a view `viewportHeight` tall. */
+export function historyRunway(viewportHeight: number) {
+  return Math.max(HISTORY_RUNWAY_MIN, viewportHeight * HISTORY_RUNWAY_SCREENS)
+}
+
+/**
+ * Whether a detached reader's scroll asks for the next older page: any scroll at the top, and one toward the top with
+ * less than the runway above the view, so the page lands before the reader gets there. Inside the runway only a
+ * scroll toward the top counts. A page that lands pushes the offset the other way, and rows can be far shorter than
+ * the messages they hold, so paging until the runway is full could load a whole session unasked.
+ */
+export function scrollLoadsHistory(top: number, previousTop: number, viewportHeight: number) {
+  return top < HISTORY_SCROLL_THRESHOLD || (top < previousTop && top < historyRunway(viewportHeight))
+}
+
+/** A scroll that asks for a page may request it. */
 export function canRequestScrollPage(state: TimelineHistoryState) {
   return state.status === "idle" || (state.status === "failed" && !state.coolingDown)
 }

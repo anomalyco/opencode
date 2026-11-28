@@ -7,6 +7,7 @@ import {
   DISPOSED_HISTORY_EVENT,
   FILL_REQUESTED_EVENT,
   historySeekStatus,
+  scrollLoadsHistory,
   SCROLL_TOP_EVENT,
   SEEK_REQUESTED_EVENT,
   transitionTimelineHistory,
@@ -213,6 +214,18 @@ describe("history machine", () => {
     const rested = settled(false)
     expect(rested.state).toEqual({ status: "idle", target: sessionA, attempt: attempt(prepended.state) })
     expect(rested.effects).toEqual([])
+  })
+
+  test.each<{ name: string; top: number; previousTop: number; viewport: number; loads: boolean }>([
+    { name: "any scroll at the top", top: 150, previousTop: 100, viewport: 800, loads: true },
+    { name: "a scroll toward the top with less than the runway above", top: 2000, previousTop: 2100, viewport: 800, loads: true },
+    // A page that lands moves the offset this way. Counting it kept paging until the runway was full.
+    { name: "a scroll away from the top", top: 2000, previousTop: 1900, viewport: 800, loads: false },
+    { name: "a scroll toward the top with the runway above", top: 2500, previousTop: 2600, viewport: 800, loads: false },
+    // A page key moves a screen at a time, so a tall window keeps two screens.
+    { name: "a scroll toward the top with less than two screens above", top: 2500, previousTop: 2600, viewport: 1600, loads: true },
+  ])("$name asks for a page: $loads", (input) => {
+    expect(scrollLoadsHistory(input.top, input.previousTop, input.viewport)).toBe(input.loads)
   })
 
   test("a following view probes the fill again after a prepend", () => {
