@@ -216,7 +216,10 @@ const layer = Layer.effect(
           }
           session.buffer += chunk
           if (session.buffer.length <= BUFFER_LIMIT) return
-          session.buffer = session.buffer.slice(session.buffer.length - BUFFER_LIMIT)
+          const excess = session.buffer.length - BUFFER_LIMIT
+          const first = session.buffer.charCodeAt(excess)
+          // Keep both halves of a surrogate pair so replay stays encodable.
+          session.buffer = session.buffer.slice(first >= 0xdc00 && first <= 0xdfff ? excess - 1 : excess)
         }),
         proc.onExit(({ exitCode }) => {
           if (session.info.status === "exited") return
