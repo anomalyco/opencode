@@ -376,7 +376,7 @@ export const dict = {
   "docs.codeExamples": "コード例",
   "docs.code.terminal": "ターミナル",
   "docs.code.files": "ファイル",
-  "docs.code.diff": "差分",
+  "docs.code.diff": "Diff",
   "docs.callout.note": "ノート",
   "docs.callout.tip": "ヒント",
   "docs.callout.caution": "注意",

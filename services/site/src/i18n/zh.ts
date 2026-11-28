@@ -364,7 +364,7 @@ export const dict = {
   "docs.codeExamples": "代码示例",
   "docs.code.terminal": "终端",
   "docs.code.files": "文件",
-  "docs.code.diff": "差异",
+  "docs.code.diff": "Diff",
   "docs.callout.note": "注意",
   "docs.callout.tip": "提示",
   "docs.callout.caution": "警告",

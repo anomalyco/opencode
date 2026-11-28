@@ -370,7 +370,7 @@ export const dict = {
   "docs.codeExamples": "Приклади коду",
   "docs.code.terminal": "Термінал",
   "docs.code.files": "Файли",
-  "docs.code.diff": "Зміни",
+  "docs.code.diff": "Diff",
   "docs.callout.note": "Примітка",
   "docs.callout.tip": "Порада",
   "docs.callout.caution": "Увага",

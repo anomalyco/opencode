@@ -370,7 +370,7 @@ export const dict = {
   "docs.codeExamples": "程式碼範例",
   "docs.code.terminal": "終端機",
   "docs.code.files": "檔案",
-  "docs.code.diff": "差異",
+  "docs.code.diff": "Diff",
   "docs.callout.note": "注意",
   "docs.callout.tip": "提示",
   "docs.callout.caution": "警告",

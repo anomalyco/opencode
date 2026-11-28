@@ -351,7 +351,7 @@ export const dict = {
   "docs.section.build": "Entwickeln",
   "docs.nav.configure": "Konfiguration",
   "docs.nav.plugins": "Erweiterungen",
-  "docs.nav.client": "Klient",
+  "docs.nav.client": "Client",
   "docs.nav.workspace": "Arbeitsbereich",
   "docs.nav.console": "Console",
   "docs.lockup.sectionDocs": "{{section}}-Doku",

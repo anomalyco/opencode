@@ -363,7 +363,7 @@ export const dict = {
   "docs.codeExamples": "Примеры кода",
   "docs.code.terminal": "Терминал",
   "docs.code.files": "Файлы",
-  "docs.code.diff": "Изменения",
+  "docs.code.diff": "Diff",
   "docs.callout.note": "Заметка",
   "docs.callout.tip": "Совет",
   "docs.callout.caution": "Осторожно",

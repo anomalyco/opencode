@@ -384,7 +384,7 @@ export const dict = {
   "docs.codeExamples": "Przykłady kodu",
   "docs.code.terminal": "Terminal",
   "docs.code.files": "Pliki",
-  "docs.code.diff": "Zmiany",
+  "docs.code.diff": "Diff",
   "docs.callout.note": "Notatka",
   "docs.callout.tip": "Wskazówka",
   "docs.callout.caution": "Uwaga",

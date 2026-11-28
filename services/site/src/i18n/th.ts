@@ -382,7 +382,7 @@ export const dict = {
   "docs.codeExamples": "ตัวอย่างโค้ด",
   "docs.code.terminal": "เทอร์มินัล",
   "docs.code.files": "ไฟล์",
-  "docs.code.diff": "ส่วนต่าง",
+  "docs.code.diff": "Diff",
   "docs.callout.note": "หมายเหตุ",
   "docs.callout.tip": "เคล็ดลับ",
   "docs.callout.caution": "คำเตือน",

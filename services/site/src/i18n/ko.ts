@@ -376,7 +376,7 @@ export const dict = {
   "docs.codeExamples": "코드 예제",
   "docs.code.terminal": "터미널",
   "docs.code.files": "파일",
-  "docs.code.diff": "변경 사항",
+  "docs.code.diff": "Diff",
   "docs.callout.note": "참고",
   "docs.callout.tip": "팁",
   "docs.callout.caution": "주의",

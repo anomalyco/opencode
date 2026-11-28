@@ -386,7 +386,7 @@ export const dict = {
   "docs.codeExamples": "Kod örnekleri",
   "docs.code.terminal": "Terminal",
   "docs.code.files": "Dosyalar",
-  "docs.code.diff": "Farklar",
+  "docs.code.diff": "Diff",
   "docs.callout.note": "Not",
   "docs.callout.tip": "İpucu",
   "docs.callout.caution": "Dikkat",
