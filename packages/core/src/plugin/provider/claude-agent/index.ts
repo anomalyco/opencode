@@ -56,8 +56,8 @@ export const make = (io: ClaudeIO.Interface, registry = ClaudeSessions.registry(
       yield* ctx.session.hook("experimental.idle", (event) =>
         Effect.gen(function* () {
           if (event.background.length > 0) return
-          const session = yield* ctx.session.get({ sessionID: event.sessionID }).pipe(Effect.orDie)
-          if (session.parentID) yield* sessions.retire(event.sessionID)
+          const session = yield* ctx.session.get({ sessionID: event.sessionID }).pipe(Effect.option)
+          if (Option.isSome(session) && session.value.parentID) yield* sessions.retire(event.sessionID)
         }),
       )
       yield* ClaudeProvider.register(ctx, status, io)
