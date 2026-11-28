@@ -10,6 +10,7 @@ import { Wildcard } from "../util/wildcard.js"
 
 type Part = { type: string; text: string; raw: string; unquotedTilde?: boolean }
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
+const ESCALATION_WRAPPERS = new Set(["sudo", "su", "doas"])
 const POWERSHELL_LITERAL_FLAG_RE = /^-(?:lp|l(?:i(?:t(?:e(?:r(?:a(?:l(?:p(?:a(?:t(?:h)?)?)?)?)?)?)?)?)?)?|psp(?:a(?:t(?:h)?)?)?):?$/i
 const POWERSHELL_STACK_FLAG_RE = /^-(?:stack(?:name|nam|na|n)?|st):?$/i
 
@@ -27,6 +28,7 @@ export class OpaqueError extends Schema.TaggedError<OpaqueError>()("ShellParse.O
 }
 
 const ARITY: Record<string, number> = {
+  apt: 2,
   cat: 1,
   cd: 1,
   chmod: 1,
@@ -126,6 +128,7 @@ const ARITY: Record<string, number> = {
   "openssl x509": 3,
   pip: 2,
   pipenv: 2,
+  pkg: 2,
   pnpm: 2,
   "pnpm dlx": 3,
   "pnpm exec": 3,
@@ -195,6 +198,9 @@ export function scan(
         continue
       }
       const words = item.redirectWordCount === undefined ? item.rawWords : item.rawWords.slice(0, item.redirectWordCount)
+      // Name resolution reads the decoded words (quoting is spelling, not structure) while saved patterns keep
+      // the raw tokens.
+      const decoded = words.map((word, index) => item.words[index] ?? word)
       // Bare statement-head foreach blocks act as PowerShell control flow rather than cmdlet invocations.
       if (
         powershell &&
@@ -236,8 +242,12 @@ export function scan(
         output.directories.push(...resolved.directories)
         if (directoryCommand === parts && resolved.complete) continue
       }
-      const selected = prefix(words.slice(0, PREFIX_LENGTH))
-      const conventional = `${selected.join(" ")} *`
+      const selected = prefix(words, decoded)
+      // A wrapper whose options cannot be unwrapped saves the exact command rather than any wildcard. The
+      // pattern syntax has no escape for `*` or `?`, so a resource containing them saved as the exact
+      // command would still match other commands; save nothing instead.
+      const conventional =
+        selected.length > 0 ? `${selected.join(" ")} *` : /[*?]/.test(item.resource) ? "" : item.resource
       const end = item.wordEnds?.[selected.length - 1]
       // Keep existing grants stable unless normalized spacing loses the original source boundary.
       const save =
@@ -645,10 +655,167 @@ function environment(key: string) {
   return name ? process.env[name] : undefined
 }
 
-function prefix(tokens: string[]) {
-  for (let length = tokens.length; length > 0; length--) {
-    const arity = ARITY[tokens.slice(0, length).join(" ")]
+const SUDO_SHORT_STANDALONE_RE = /^-[AbEHkKnNPSvV]+$/
+const SUDO_SHORT_VALUE_RE = /^-[ugCDRTUhprt]/
+const SUDO_LONG_STANDALONE = [
+  "--preserve-env",
+  "--non-interactive",
+  "--set-home",
+  "--preserve-groups",
+  "--stdin",
+  "--askpass",
+  "--background",
+  "--reset-timestamp",
+  "--remove-timestamp",
+]
+const SUDO_LONG_VALUE = [
+  "--user",
+  "--group",
+  "--chdir",
+  "--chroot",
+  "--close-from",
+  "--other-user",
+  "--host",
+  "--prompt",
+  "--role",
+  "--type",
+  "--command-timeout",
+]
+
+function sudoOptionTokens(token: string): number | undefined {
+  if (SUDO_SHORT_STANDALONE_RE.test(token)) return 1
+  // An exact short value flag consumes its value from the next token; an attached one like -uroot carries it.
+  if (SUDO_SHORT_VALUE_RE.test(token)) return token.length === 2 ? 2 : 1
+  if (SUDO_LONG_STANDALONE.some((flag) => token === flag || token.startsWith(`${flag}=`))) return 1
+  for (const flag of SUDO_LONG_VALUE) {
+    if (token === flag) return 2
+    if (token.startsWith(`${flag}=`)) return 1
+  }
+  return undefined
+}
+
+function doasOptionTokens(token: string): number | undefined {
+  if (/^-[nS]+$/.test(token)) return 1
+  if (/^-[uCa]$/.test(token)) return 2
+  if (/^-[uCa]/.test(token)) return 1
+  return undefined
+}
+
+// Interpreters and command runners execute arbitrary commands, so their own prefix would approve every
+// command run through them.
+const COMMAND_RUNNERS = new Set([
+  // Shells.
+  "sh",
+  "bash",
+  "zsh",
+  "ksh",
+  "dash",
+  "ash",
+  "csh",
+  "tcsh",
+  "fish",
+  // Scripting interpreters.
+  "python",
+  "python2",
+  "python3",
+  "pypy",
+  "pypy3",
+  "perl",
+  "ruby",
+  "raku",
+  "php",
+  "lua",
+  "node",
+  "nodejs",
+  "deno",
+  "bun",
+  "npx",
+  "bunx",
+  "awk",
+  "gawk",
+  "mawk",
+  "nawk",
+  "expect",
+  "osascript",
+  // Remote and container/cluster runners.
+  "ssh",
+  "scp",
+  "sftp",
+  "mosh",
+  "docker",
+  "podman",
+  "nerdctl",
+  "kubectl",
+  // Programs that execute their arguments as a command.
+  "env",
+  "xargs",
+  "find",
+  "watch",
+  "busybox",
+  "nohup",
+  "nice",
+  "ionice",
+  "taskset",
+  "time",
+  "timeout",
+  "setsid",
+  "stdbuf",
+  "strace",
+  "ltrace",
+  "chroot",
+  "screen",
+  "tmux",
+  "script",
+])
+
+// Path-qualified and version-qualified tokens (`/bin/bash`, `python3.13`) resolve to the same command as
+// their bare names, so callers normalize before set membership checks. The trailing slash of
+// `/usr/bin/sudo/` would otherwise leave an empty final segment.
+function commandBase(token: string): string {
+  return (token.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "").toLowerCase().replace(/\.exe$/, "")
+}
+
+function prefix(tokens: string[], names: string[]): string[] {
+  const head = names[0] ? commandBase(names[0]) : undefined
+  if (head && ESCALATION_WRAPPERS.has(head)) return escalationPrefix(tokens, names, head)
+  for (let length = Math.min(tokens.length, PREFIX_LENGTH); length > 0; length--) {
+    const arity = ARITY[names.slice(0, length).map(commandBase).join(" ")]
     if (arity !== undefined) return tokens.slice(0, arity)
   }
   return tokens.slice(0, 1)
+}
+
+// Resolves an escalation wrapper's options so the saved pattern covers the wrapped command rather than every
+// command run through the wrapper. Returns [] when the wrapper cannot be unwrapped to a concrete inner
+// command, which saves the exact command instead of a bare escalation wildcard.
+function escalationPrefix(tokens: string[], names: string[], wrapper: string): string[] {
+  // `su` takes its command through -c or a login shell, so its arguments never unwrap to an inner command.
+  if (wrapper === "su") return []
+  let index = 1
+  while (index < tokens.length) {
+    // Name and option resolution reads the decoded words: quoting is spelling, not structure, so `"-u"`
+    // is an option the same way `-u` is. The saved pattern keeps the raw tokens.
+    const token = names[index]
+    // sudo takes VAR=value environment assignments before the command.
+    if (wrapper === "sudo" && /^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) {
+      index++
+      continue
+    }
+    if (!token.startsWith("-")) break
+    if (token === "--") {
+      index++
+      break
+    }
+    const consumed = wrapper === "sudo" ? sudoOptionTokens(token) : doasOptionTokens(token)
+    if (consumed === undefined) return []
+    index += consumed
+  }
+  if (index >= tokens.length || names[index].startsWith("-")) return []
+  // Path-qualified and version-qualified runners (`/bin/bash`, `python3.13`) run the same wrapped commands
+  // as their bare names, so normalize the token before the COMMAND_RUNNERS check.
+  const base = commandBase(names[index])
+  if (COMMAND_RUNNERS.has(base) || COMMAND_RUNNERS.has(base.replace(/\d+(?:\.\d+)*$/, ""))) return []
+  const inner = prefix(tokens.slice(index), names.slice(index))
+  if (inner.length === 0) return []
+  return [...tokens.slice(0, index), ...inner]
 }

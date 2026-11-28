@@ -248,4 +248,90 @@ describe("ShellParse", () => {
     )
     expect(powershell.directories).toEqual(["/workspace/src", "/usr/local/bin"])
   })
+
+  test("derives reusable prefixes for escalation wrappers", async () => {
+    const dumpsys = await Effect.runPromise(
+      ShellParse.scan("sudo dumpsys service | grep -E pattern", "/bin/bash", "/workspace"),
+    )
+    expect(dumpsys.commands[0]?.save).toBe("sudo dumpsys *")
+
+    const ls = await Effect.runPromise(ShellParse.scan("sudo ls", "/bin/bash", "/workspace"))
+    expect(ls.commands[0]?.save).toBe("sudo ls *")
+  })
+
+  test("unwraps sudo and doas options before the wrapped command's prefix", async () => {
+    const sudoUser = await Effect.runPromise(ShellParse.scan("sudo -u root rm -rf /", "/bin/bash", "/workspace"))
+    expect(sudoUser.commands[0]?.save).toBe("sudo -u root rm *")
+
+    const sudoEnv = await Effect.runPromise(ShellParse.scan("sudo -E apt install x", "/bin/bash", "/workspace"))
+    expect(sudoEnv.commands[0]?.save).toBe("sudo -E apt install *")
+
+    const doasUser = await Effect.runPromise(
+      ShellParse.scan("doas -u root git push origin", "/bin/bash", "/workspace"),
+    )
+    expect(doasUser.commands[0]?.save).toBe("doas -u root git push *")
+
+    const sudoAssign = await Effect.runPromise(
+      ShellParse.scan("sudo FOO=bar rm -rf /", "/bin/bash", "/workspace"),
+    )
+    expect(sudoAssign.commands[0]?.save).toBe("sudo FOO=bar rm *")
+  })
+
+  test("saves the exact command when a wrapper's options cannot be unwrapped", async () => {
+    const su = await Effect.runPromise(ShellParse.scan("su -c 'rm -rf /'", "/bin/bash", "/workspace"))
+    expect(su.commands).toEqual([{ resource: "su -c 'rm -rf /'", save: "su -c 'rm -rf /'" }])
+
+    const bash = await Effect.runPromise(ShellParse.scan('sudo bash -c "rm -rf /"', "/bin/bash", "/workspace"))
+    expect(bash.commands).toEqual([{ resource: 'sudo bash -c "rm -rf /"', save: 'sudo bash -c "rm -rf /"' }])
+
+    const bashPath = await Effect.runPromise(ShellParse.scan('sudo /bin/bash -c "rm -rf /"', "/bin/bash", "/workspace"))
+    expect(bashPath.commands).toEqual([{ resource: 'sudo /bin/bash -c "rm -rf /"', save: 'sudo /bin/bash -c "rm -rf /"' }])
+
+    const pythonVersion = await Effect.runPromise(
+      ShellParse.scan('sudo python3.13 -c "print(1)"', "/bin/bash", "/workspace"),
+    )
+    expect(pythonVersion.commands).toEqual([
+      { resource: 'sudo python3.13 -c "print(1)"', save: 'sudo python3.13 -c "print(1)"' },
+    ])
+  })
+
+  test("normalizes a path-qualified escalation wrapper before the wrapper check", async () => {
+    const nested = await Effect.runPromise(ShellParse.scan("sudo /usr/bin/sudo rm -rf /", "/bin/bash", "/workspace"))
+    expect(nested.commands[0]?.save).toBe("sudo /usr/bin/sudo rm *")
+
+    const direct = await Effect.runPromise(ShellParse.scan("/usr/bin/sudo rm -rf /", "/bin/bash", "/workspace"))
+    expect(direct.commands[0]?.save).toBe("/usr/bin/sudo rm *")
+  })
+
+  test("normalizes a quoted escalation wrapper before the wrapper check", async () => {
+    const quotedPath = await Effect.runPromise(ShellParse.scan('"/usr/bin/sudo" rm -rf /', "/bin/bash", "/workspace"))
+    expect(quotedPath.commands[0]?.save).toBe('"/usr/bin/sudo" rm *')
+
+    const quotedBare = await Effect.runPromise(ShellParse.scan('"sudo" rm -rf /', "/bin/bash", "/workspace"))
+    expect(quotedBare.commands[0]?.save).toBe('"sudo" rm *')
+
+    const trailingSlash = await Effect.runPromise(ShellParse.scan("/usr/bin/sudo/ rm -rf /", "/bin/bash", "/workspace"))
+    expect(trailingSlash.commands[0]?.save).toBe("/usr/bin/sudo/ rm *")
+
+    const quotedArity = await Effect.runPromise(ShellParse.scan('"git" status', "/bin/bash", "/workspace"))
+    expect(quotedArity.commands[0]?.save).toBe('"git" status *')
+
+    const interiorQuotes = await Effect.runPromise(ShellParse.scan('s""udo rm -rf /', "/bin/bash", "/workspace"))
+    expect(interiorQuotes.commands[0]?.save).toBe('s""udo rm *')
+
+    const quotedOption = await Effect.runPromise(
+      ShellParse.scan('"/usr/bin/sudo" "-u" root rm -rf /', "/bin/bash", "/workspace"),
+    )
+    expect(quotedOption.commands[0]?.save).toBe('"/usr/bin/sudo" "-u" root rm *')
+  })
+
+  test("saves nothing when the exact command contains a wildcard character", async () => {
+    // Wildcard.match has no escape for `*` or `?`, so an exact save containing them would still match other
+    // commands; the caller persists no rule when the save is empty.
+    const star = await Effect.runPromise(ShellParse.scan("sudo bash -c 'rm /tmp/*.log'", "/bin/bash", "/workspace"))
+    expect(star.commands).toEqual([{ resource: "sudo bash -c 'rm /tmp/*.log'", save: "" }])
+
+    const question = await Effect.runPromise(ShellParse.scan("su -c 'rm /tmp/file?.log'", "/bin/bash", "/workspace"))
+    expect(question.commands).toEqual([{ resource: "su -c 'rm /tmp/file?.log'", save: "" }])
+  })
 })

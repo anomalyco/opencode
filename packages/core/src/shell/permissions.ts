@@ -51,7 +51,7 @@ export const requests = Effect.fnUntraced(function* <E>(
       ? {
           action: "shell",
           resources: parsed.commands.length > 0 ? parsed.commands.map((command) => command.resource) : [input.command],
-          save: parsed.commands.map((command) => command.save),
+          save: parsed.commands.map((command) => command.save).filter((save) => save.length > 0),
         }
       : undefined
   return [external, command].flatMap((request) =>
