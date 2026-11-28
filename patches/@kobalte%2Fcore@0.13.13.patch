@@ -1,16 +1,17 @@
 diff --git a/dist/chunk/3ARTUDH2.jsx b/dist/chunk/3ARTUDH2.jsx
-index 4a2cfa59cfd0adec119e46de043c590af12ceb60..f132981eadbeaadeb579fa8e7ccc9fbe70459efc 100644
+index 4a2cfa59cfd0adec119e46de043c590af12ceb60..eeb910652f9f6b150a5bf348f574d477ef70545d 100644
 --- a/dist/chunk/3ARTUDH2.jsx
 +++ b/dist/chunk/3ARTUDH2.jsx
-@@ -197,6 +197,7 @@ function Menu(props) {
+@@ -197,6 +197,8 @@ function Menu(props) {
    ]);
    let pointerGraceTimeoutId = 0;
    let pointerGraceIntent = null;
 +  let pointerGraceOrigin = [0, 0];
++  let pointerGraceHeld;
    let pointerDir = "right";
    const [triggerId, setTriggerId] = createSignal();
    const [contentId, setContentId] = createSignal();
-@@ -263,7 +264,32 @@ function Menu(props) {
+@@ -263,12 +265,55 @@ function Menu(props) {
    };
    const isPointerMovingToSubmenu = (e) => {
      const isMovingTowards = pointerDir === pointerGraceIntent?.side;
@@ -37,14 +38,37 @@ index 4a2cfa59cfd0adec119e46de043c590af12ceb60..f132981eadbeaadeb579fa8e7ccc9fbe
 +    }
 +    pointerGraceOrigin = [e.clientX, e.clientY];
 +    window.clearTimeout(pointerGraceTimeoutId);
-+    pointerGraceTimeoutId = window.setTimeout(() => {
-+      pointerGraceIntent = null;
-+    }, 300);
++    pointerGraceTimeoutId = window.setTimeout(endPointerGrace, 300);
 +    return true;
++  };
++  // Patched: an item the pointer came to rest on while the grace held it back gets the pointer once the grace ends, as
++  // if the pointer had moved on it again. Otherwise it stays dead until the pointer moves, while the submenu the pointer
++  // never reached stays open.
++  const endPointerGrace = () => {
++    pointerGraceIntent = null;
++    const held = pointerGraceHeld;
++    pointerGraceHeld = void 0;
++    if (!held?.element.isConnected || !held.element.matches(":hover")) {
++      return;
++    }
++    held.element.dispatchEvent(new PointerEvent("pointermove", {
++      bubbles: true,
++      pointerType: "mouse",
++      clientX: held.clientX,
++      clientY: held.clientY
++    }));
    };
    const onItemEnter = (e) => {
      if (isPointerMovingToSubmenu(e)) {
-@@ -277,9 +303,12 @@ function Menu(props) {
+       e.preventDefault();
++      pointerGraceHeld = { element: e.currentTarget, clientX: e.clientX, clientY: e.clientY };
++      return;
+     }
++    pointerGraceHeld = void 0;
+   };
+   const onItemLeave = (e) => {
+     if (isPointerMovingToSubmenu(e)) {
+@@ -277,9 +322,12 @@ function Menu(props) {
      focusContent();
    };
    const onTriggerLeave = (e) => {
@@ -57,20 +81,27 @@ index 4a2cfa59cfd0adec119e46de043c590af12ceb60..f132981eadbeaadeb579fa8e7ccc9fbe
    };
    createHideOutside({
      isDisabled: () => {
-@@ -355,7 +384,11 @@ function Menu(props) {
+@@ -355,7 +403,13 @@ function Menu(props) {
      onTriggerLeave,
      setPointerDir: (dir) => pointerDir = dir,
      setPointerGraceTimeoutId: (id) => pointerGraceTimeoutId = id,
 -    setPointerGraceIntent: (intent) => pointerGraceIntent = intent,
++    endPointerGrace,
 +    setPointerGraceIntent: (intent) => {
 +      pointerGraceIntent = intent;
++      pointerGraceHeld = void 0;
 +      // The grace area starts 5px behind the pointer.
 +      pointerGraceOrigin = intent ? [intent.area[0][0] + (intent.side === "right" ? 5 : -5), intent.area[0][1]] : [0, 0];
 +    },
      registerNestedMenu,
      registerItemToParentDomCollection: parentDomCollectionContext?.registerItem,
      registerTriggerId: createRegisterId(setTriggerId),
-@@ -1503,8 +1536,7 @@ function MenuSubTrigger(props) {
+@@ -1499,12 +1553,11 @@ function MenuSubTrigger(props) {
+       });
+       window.clearTimeout(parentMenuContext?.pointerGraceTimeoutId());
+       const pointerGraceTimeoutId = window.setTimeout(() => {
+-        parentMenuContext?.setPointerGraceIntent(null);
++        parentMenuContext?.endPointerGrace();
        }, 300);
        parentMenuContext?.setPointerGraceTimeoutId(pointerGraceTimeoutId);
      } else {
@@ -81,18 +112,19 @@ index 4a2cfa59cfd0adec119e46de043c590af12ceb60..f132981eadbeaadeb579fa8e7ccc9fbe
        }
        parentMenuContext?.setPointerGraceIntent(null);
 diff --git a/dist/chunk/HGKTPMYY.js b/dist/chunk/HGKTPMYY.js
-index a8fa9b06a97cb3d4d5029fc0c929d78dfdc6edd4..42fb6a330c42eaf0479360cb121c6e2a7c9bd401 100644
+index a8fa9b06a97cb3d4d5029fc0c929d78dfdc6edd4..6c005c52ccf0a84dbd38415c21dfd2c5ad43af5b 100644
 --- a/dist/chunk/HGKTPMYY.js
 +++ b/dist/chunk/HGKTPMYY.js
-@@ -119,6 +119,7 @@ function Menu(props) {
+@@ -119,6 +119,8 @@ function Menu(props) {
    const [local, others] = splitProps(mergedProps, ["open", "defaultOpen", "onOpenChange"]);
    let pointerGraceTimeoutId = 0;
    let pointerGraceIntent = null;
 +  let pointerGraceOrigin = [0, 0];
++  let pointerGraceHeld;
    let pointerDir = "right";
    const [triggerId, setTriggerId] = createSignal();
    const [contentId, setContentId] = createSignal();
-@@ -187,7 +188,32 @@ function Menu(props) {
+@@ -187,12 +189,55 @@ function Menu(props) {
    };
    const isPointerMovingToSubmenu = (e) => {
      const isMovingTowards = pointerDir === pointerGraceIntent?.side;
@@ -119,14 +151,37 @@ index a8fa9b06a97cb3d4d5029fc0c929d78dfdc6edd4..42fb6a330c42eaf0479360cb121c6e2a
 +    }
 +    pointerGraceOrigin = [e.clientX, e.clientY];
 +    window.clearTimeout(pointerGraceTimeoutId);
-+    pointerGraceTimeoutId = window.setTimeout(() => {
-+      pointerGraceIntent = null;
-+    }, 300);
++    pointerGraceTimeoutId = window.setTimeout(endPointerGrace, 300);
 +    return true;
++  };
++  // Patched: an item the pointer came to rest on while the grace held it back gets the pointer once the grace ends, as
++  // if the pointer had moved on it again. Otherwise it stays dead until the pointer moves, while the submenu the pointer
++  // never reached stays open.
++  const endPointerGrace = () => {
++    pointerGraceIntent = null;
++    const held = pointerGraceHeld;
++    pointerGraceHeld = void 0;
++    if (!held?.element.isConnected || !held.element.matches(":hover")) {
++      return;
++    }
++    held.element.dispatchEvent(new PointerEvent("pointermove", {
++      bubbles: true,
++      pointerType: "mouse",
++      clientX: held.clientX,
++      clientY: held.clientY
++    }));
    };
    const onItemEnter = (e) => {
      if (isPointerMovingToSubmenu(e)) {
-@@ -201,9 +227,12 @@ function Menu(props) {
+       e.preventDefault();
++      pointerGraceHeld = { element: e.currentTarget, clientX: e.clientX, clientY: e.clientY };
++      return;
+     }
++    pointerGraceHeld = void 0;
+   };
+   const onItemLeave = (e) => {
+     if (isPointerMovingToSubmenu(e)) {
+@@ -201,9 +246,12 @@ function Menu(props) {
      focusContent();
    };
    const onTriggerLeave = (e) => {
@@ -139,20 +194,27 @@ index a8fa9b06a97cb3d4d5029fc0c929d78dfdc6edd4..42fb6a330c42eaf0479360cb121c6e2a
    };
    createHideOutside({
      isDisabled: () => {
-@@ -276,7 +305,11 @@ function Menu(props) {
+@@ -276,7 +324,13 @@ function Menu(props) {
      onTriggerLeave,
      setPointerDir: (dir) => pointerDir = dir,
      setPointerGraceTimeoutId: (id) => pointerGraceTimeoutId = id,
 -    setPointerGraceIntent: (intent) => pointerGraceIntent = intent,
++    endPointerGrace,
 +    setPointerGraceIntent: (intent) => {
 +      pointerGraceIntent = intent;
++      pointerGraceHeld = void 0;
 +      // The grace area starts 5px behind the pointer.
 +      pointerGraceOrigin = intent ? [intent.area[0][0] + (intent.side === "right" ? 5 : -5), intent.area[0][1]] : [0, 0];
 +    },
      registerNestedMenu,
      registerItemToParentDomCollection: parentDomCollectionContext?.registerItem,
      registerTriggerId: createRegisterId(setTriggerId),
-@@ -1217,8 +1250,7 @@ function MenuSubTrigger(props) {
+@@ -1213,12 +1267,11 @@ function MenuSubTrigger(props) {
+       });
+       window.clearTimeout(parentMenuContext?.pointerGraceTimeoutId());
+       const pointerGraceTimeoutId = window.setTimeout(() => {
+-        parentMenuContext?.setPointerGraceIntent(null);
++        parentMenuContext?.endPointerGrace();
        }, 300);
        parentMenuContext?.setPointerGraceTimeoutId(pointerGraceTimeoutId);
      } else {

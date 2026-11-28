@@ -2080,6 +2080,8 @@ test("the Windows titlebar menu keeps a submenu open while the pointer crosses o
   await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
   await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
   await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+  // Only `runFor` moves time, so Playwright's round trips don't slow the pointer below the speed the move simulates.
+  await holdClock(page)
   const file = page.getByRole("menuitem", { name: "File", exact: true })
   const fileBox = (await file.boundingBox())!
   const from = { x: fileBox.x + fileBox.width / 2, y: fileBox.y + fileBox.height / 2 }
@@ -2109,6 +2111,8 @@ test("the Windows titlebar menu highlights each parent item the pointer drifts d
   await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
   await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
   await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+  // Only `runFor` moves time, so the pointer doesn't linger on the items it crosses on the way to View.
+  await holdClock(page)
   const view = page.getByRole("menuitem", { name: "View", exact: true })
   const box = (await view.boundingBox())!
   const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
@@ -2125,6 +2129,36 @@ test("the Windows titlebar menu highlights each parent item the pointer drifts d
   }
 
   await expect(go).toHaveAttribute("data-highlighted", "")
+})
+
+// A pointer that stopped on another parent item while heading for the open submenu left that item dead until the
+// pointer moved again, with the submenu it never reached still open.
+test("the Windows titlebar menu opens the parent item the pointer stops on while heading for another submenu", async ({
+  page,
+}) => {
+  await page.clock.install()
+  await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+  await holdClock(page)
+  const edit = page.getByRole("menuitem", { name: "Edit", exact: true })
+  const view = page.getByRole("menuitem", { name: "View", exact: true })
+  const editBox = (await edit.boundingBox())!
+  await page.mouse.move(editBox.x + 20, editBox.y + editBox.height / 2, { steps: 4 })
+  await page.clock.runFor(100)
+  await expect(edit).toHaveAttribute("aria-expanded", "true")
+
+  // One move down and to the right lands on View, on the way to Edit's submenu, and the pointer stops there.
+  const viewBox = (await view.boundingBox())!
+  await page.mouse.move(viewBox.x + viewBox.width / 2, viewBox.y + viewBox.height / 2)
+  await expect(edit).toHaveAttribute("data-highlighted", "")
+
+  // Kobalte's 300ms way to the submenu, then its hover delay.
+  await page.clock.runFor(300)
+  await expect(view).toHaveAttribute("data-highlighted", "")
+  await page.clock.runFor(100)
+  await expect(view).toHaveAttribute("aria-expanded", "true")
+  await expect(page.locator('[role="menu"].desktop-app-menu-sub')).toHaveCount(1)
 })
 
 test("the Windows menu shares the vertical sidebar's icon lane", async ({ page }) => {
