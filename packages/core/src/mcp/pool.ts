@@ -1,15 +1,17 @@
 export * as McpPool from "./pool.js"
 
 import type { AuthProvider } from "@modelcontextprotocol/client"
+import type { Mcp } from "@opencode/schema/mcp"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { httpFetch } from "@opencode/util/effect/app-node-platform"
-import { Cause, Context, Deferred, Effect, Exit, Fiber, FiberSet, Layer, Scope, Semaphore } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Fiber, FiberSet, Layer, Schema, Scope, Semaphore } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { Environment } from "../environment/index.js"
 import { SharedCache } from "../shared-cache.js"
+import { canonicalJson } from "../util/canonical-json.js"
 import type { McpClient } from "./client.js"
 import { McpConnection } from "./connection.js"
 
@@ -45,46 +47,81 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Mc
 /**
  * Everything that could make two connections behave differently, so only identical ones are shared.
  * The server's name is left out; each Location keeps its own. Secrets appear only as fingerprints.
+ * Each mapping below names every field of what it keys, so a new field fails to compile until it is
+ * keyed or left out on purpose with `null`.
  */
 export const key = (
-  input: Omit<McpConnection.Spec, "name" | "directory"> & {
-    /** Local only: the directory the server runs in, as `McpStdio.resolveCwd` resolves it for the spawn. */
-    readonly cwd?: string
-    /** The active OAuth credential's ID, which a token refresh keeps and a sign-in replaces. */
-    readonly credential?: string
-  },
+  input: Omit<McpConnection.Spec, "name" | "directory" | "config"> &
+    (
+      | {
+          readonly config: Mcp.RemoteConfig
+          /** The active OAuth credential's ID, which a token refresh keeps and a sign-in replaces. */
+          readonly credential: string | undefined
+        }
+      | {
+          readonly config: Mcp.LocalConfig
+          /** The directory the server runs in, as `McpStdio.resolveCwd` resolves it for the spawn. */
+          readonly cwd: string
+        }
+    ),
 ) => {
-  const config = input.config
-  const common = [config.protocol, config.timeout ?? null, input.clientInfo ?? null, input.skills ?? false]
-  if (config.type === "remote")
-    return JSON.stringify([
-      "remote",
-      config.url,
-      fingerprint(config.headers),
-      config.oauth ? { ...config.oauth, client_secret: fingerprint(config.oauth.client_secret) } : config.oauth,
-      // A remote server's URL gains ?codemode=false unless Code Mode is off.
-      config.codemode !== false,
-      input.credential ?? null,
+  const spec = {
+    clientInfo: input.clientInfo ?? null,
+    skills: input.skills ?? false,
+  } satisfies Record<keyof Omit<McpConnection.Spec, "name" | "directory" | "config">, Schema.Json>
+  const timeout = {
+    startup: input.config.timeout?.startup ?? null,
+    catalog: input.config.timeout?.catalog ?? null,
+    execution: input.config.timeout?.execution ?? null,
+  } satisfies Record<keyof Mcp.TimeoutConfig, Schema.Json>
+  // `disabled` and `pool` decide whether this connection opens, not how it behaves.
+  const common = {
+    type: input.config.type,
+    timeout,
+    protocol: input.config.protocol ?? "auto",
+    disabled: null,
+    pool: null,
+  }
+  if ("credential" in input) {
+    const oauth = input.config.oauth
+    return canonicalJson({
+      ...spec,
       ...common,
-    ])
+      credential: input.credential ?? null,
+      url: input.config.url,
+      headers: fingerprint(input.config.headers),
+      oauth:
+        oauth === false
+          ? false
+          : ({
+              client_id: oauth?.client_id ?? null,
+              client_secret: fingerprint(oauth?.client_secret),
+              scope: oauth?.scope ?? null,
+              callback_port: oauth?.callback_port ?? null,
+              redirect_uri: oauth?.redirect_uri ?? null,
+              auth_server_metadata_url: oauth?.auth_server_metadata_url ?? null,
+            } satisfies Record<keyof Mcp.OAuthConfig, Schema.Json>),
+      // A remote server's URL gains ?codemode=false unless Code Mode is off.
+      codemode: input.config.codemode !== false,
+    } satisfies Record<keyof Mcp.RemoteConfig | "credential", Schema.Json>)
+  }
   // Only Locations on this host share local servers, so the execution plane is always the host.
-  return JSON.stringify([
-    "local",
-    "host",
-    config.command,
-    input.cwd ?? null,
-    fingerprint(config.environment),
+  return canonicalJson({
+    ...spec,
     ...common,
-  ])
+    plane: "host",
+    command: input.config.command,
+    // Where the configured `cwd` resolves to, so equal paths written differently still match.
+    cwd: input.cwd,
+    environment: fingerprint(input.config.environment),
+    // Decides how this Location exposes the tools, not how the connection behaves.
+    codemode: null,
+  } satisfies Record<keyof Mcp.LocalConfig | "plane", Schema.Json>)
 }
 
-function fingerprint(secret: string | Record<string, string> | undefined) {
-  if (secret === undefined) return null
-  return SharedCache.fingerprint(
-    typeof secret === "string"
-      ? secret
-      : JSON.stringify(Object.entries(secret).toSorted(([a], [b]) => a.localeCompare(b))),
-  )
+function fingerprint(secret: string | Readonly<Record<string, string>> | undefined) {
+  if (secret === undefined || (typeof secret === "object" && Object.keys(secret).length === 0)) return null
+  return SharedCache.fingerprint(typeof secret === "string" ? secret : canonicalJson(secret))
 }
 
 // A Location holding a shared connection. The pool reaches Locations only through the holders
@@ -109,11 +146,12 @@ interface Slot {
 
 type Mode =
   | { readonly _tag: "Idle" }
+  | { readonly _tag: "Joining"; readonly claim: Scope.Closeable; readonly holder: Holder }
   | {
       readonly _tag: "Shared"
       readonly claim: Scope.Closeable
       readonly holder: Holder
-      readonly connection?: McpConnection.Connection
+      readonly connection: McpConnection.Connection
     }
   | { readonly _tag: "Private"; readonly connection: McpConnection.Connection }
 
@@ -126,11 +164,10 @@ export const layer = Layer.effect(
     const fetch = yield* FetchHttpClient.Fetch
     const slots = new Map<string, Slot>()
     const endpointLoads = KeyedMutex.makeUnsafe<string>()
-    // Keys whose server negotiated legacy or refused the pooled handshake. Kept for the life of the process.
-    const unpoolable = new Set<string>()
-    // The subset that negotiated legacy. Their private connections skip the 2026-07-28 probe; a refusal
-    // proves nothing about the protocol, so those keep the configured one.
-    const legacy = new Set<string>()
+    // Keys whose server refused the pooled handshake or negotiated legacy. Kept for the life of the process.
+    // Legacy ones' private connections skip the 2026-07-28 probe; a refusal proves nothing about the
+    // protocol, so those keep the configured one.
+    const unpoolable = new Map<string, "refused" | "legacy">()
     // Names of local servers already warned about for having no cwd, which keeps each project's folder in the key.
     const unfixed = new Set<string>()
 
@@ -174,7 +211,7 @@ export const layer = Layer.effect(
               Effect.gen(function* () {
                 detach(key, slot)
                 if (answered) {
-                  unpoolable.add(key)
+                  unpoolable.set(key, "refused")
                   yield* Effect.logWarning("mcp pool ignored: server refused the shared connection", {
                     server: spec.name,
                     error: failure.error,
@@ -185,8 +222,7 @@ export const layer = Layer.effect(
             legacy: (version) =>
               Effect.gen(function* () {
                 detach(key, slot)
-                unpoolable.add(key)
-                legacy.add(key)
+                unpoolable.set(key, "legacy")
                 yield* Effect.logWarning("mcp pool ignored: server speaks an older protocol", {
                   server: spec.name,
                   version,
@@ -262,7 +298,7 @@ export const layer = Layer.effect(
 
     const connection = (input: Input): McpConnection.Connection => {
       let mode: Mode = { _tag: "Idle" }
-      const live = () => (mode._tag === "Idle" ? undefined : mode.connection)
+      const live = () => (mode._tag === "Shared" || mode._tag === "Private" ? mode.connection : undefined)
       // The shared connection carries the name of the Location that opened it; forms show this Location's.
       const elicit: McpClient.ElicitationHandler["create"] = (request) =>
         input.elicitation.create({ ...request, server: input.spec.name })
@@ -271,14 +307,13 @@ export const layer = Layer.effect(
       // claim they belong to is the current one.
       const current = (holder: Holder, effect: () => Effect.Effect<void>) =>
         input.callbacks(
-          Effect.suspend(() => (mode._tag === "Shared" && mode.holder === holder ? effect() : Effect.void)).pipe(
-            input.lock,
-            Effect.ignore,
-          ),
+          Effect.suspend(() =>
+            (mode._tag === "Joining" || mode._tag === "Shared") && mode.holder === holder ? effect() : Effect.void,
+          ).pipe(input.lock, Effect.ignore),
         )
 
       const clear = Effect.suspend(() => {
-        if (mode._tag !== "Shared") return Effect.void
+        if (mode._tag !== "Joining" && mode._tag !== "Shared") return Effect.void
         const claim = mode.claim
         mode = { _tag: "Idle" }
         return Scope.close(claim, Exit.void)
@@ -295,7 +330,7 @@ export const layer = Layer.effect(
             closed: (reason) => current(holder, () => input.events.closed(reason)),
             changed: (kind) => current(holder, () => input.events.changed(kind)),
           }
-          mode = { _tag: "Shared", claim, holder }
+          mode = { _tag: "Joining", claim, holder }
           const outcome = yield* acquire(selected.key, input.spec, holder).pipe(
             Scope.provide(claim),
             Effect.onInterrupt(() => clear),
@@ -351,21 +386,15 @@ export const layer = Layer.effect(
           }
           const selected = yield* input.select
           if (!unpoolable.has(selected.key) && (yield* join(selected))) return
-          const config = legacy.has(selected.key)
-            ? { ...input.spec.config, protocol: "legacy" as const }
-            : input.spec.config
+          const config =
+            unpoolable.get(selected.key) === "legacy"
+              ? { ...input.spec.config, protocol: "legacy" as const }
+              : input.spec.config
           const own = McpConnection.make({
+            ...input,
             spec: { ...input.spec, config },
             authProvider: selected.authProvider,
-            elicitation: input.elicitation,
-            environment: input.environment,
-            fetch: input.fetch,
-            scope: input.scope,
-            lock: input.lock,
             endpointLoads,
-            callbacks: input.callbacks,
-            fork: input.fork,
-            events: input.events,
           })
           mode = { _tag: "Private", connection: own }
           yield* own.start
@@ -384,8 +413,7 @@ export const layer = Layer.effect(
           yield* input.events.changed("skills")
         }),
         recovering: (client, request) => {
-          if (mode._tag === "Shared" && mode.connection)
-            return mode.connection.recovering(client, (client) => request(bind(client)))
+          if (mode._tag === "Shared") return mode.connection.recovering(client, (client) => request(bind(client)))
           if (mode._tag === "Private") return mode.connection.recovering(client, request)
           return request(client)
         },

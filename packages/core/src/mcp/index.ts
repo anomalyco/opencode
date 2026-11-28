@@ -744,7 +744,7 @@ export const layer = (options?: Options) =>
                   if (base.spec.config.type === "remote") {
                     const credential = yield* selectCredential(entry)
                     return {
-                      key: McpPool.key({ ...base.spec, credential: credential?.id }),
+                      key: McpPool.key({ ...base.spec, config: base.spec.config, credential: credential?.id }),
                       authProvider: connectProvider(name, entry, credential),
                     }
                   }
@@ -753,6 +753,7 @@ export const layer = (options?: Options) =>
                   return {
                     key: McpPool.key({
                       ...base.spec,
+                      config: base.spec.config,
                       cwd: McpStdio.resolveCwd(base.spec.directory, base.spec.config.cwd),
                     }),
                     authProvider: base.authProvider,
