@@ -122,8 +122,9 @@ const EventError = Schema.Struct({
 })
 export type EventError = typeof EventError.Type
 // An absent cursor means null: the event type has no replay.
-const Cursor = Schema.optional(Schema.NullOr(Schema.String))
-const Subscribed = { _meta: Schema.Struct({ [SUBSCRIPTION_ID]: Schema.Union([Schema.String, Schema.Int]) }) }
+const Cursor = Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null)))
+const Subscription = Schema.Struct({ [SUBSCRIPTION_ID]: Schema.Union([Schema.String, Schema.Int]) })
+const Subscribed = { _meta: Subscription }
 // Each event type is decoded on its own, so one malformed type doesn't hide the rest.
 const EventList = Schema.toStandardSchemaV1(
   Schema.Struct({ events: Schema.Array(Schema.Unknown), nextCursor: Schema.optional(Schema.String) }),
@@ -135,7 +136,7 @@ const AnyValue = Schema.toStandardSchemaV1(Schema.Unknown)
 const ActiveNotification = Schema.toStandardSchemaV1(
   Schema.Struct({
     cursor: Cursor,
-    truncated: Schema.optional(Schema.Boolean),
+    truncated: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
     heartbeatMs: Schema.Int.check(Schema.isGreaterThan(0)),
     ...Subscribed,
   }),
@@ -445,39 +446,33 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     if (options.roots !== false)
       client.setRequestHandler("roots/list", () => ({ roots: [{ uri: pathToFileURL(options.directory).href }] }))
     if (options.events) {
-      const deliver = (
-        params: { readonly _meta: { readonly [SUBSCRIPTION_ID]: string | number } },
-        message: EventMessage,
-      ) => {
-        const open = streams.get(String(params._meta[SUBSCRIPTION_ID]))
+      const opened = (meta: typeof Subscription.Type) => streams.get(String(meta[SUBSCRIPTION_ID]))
+      const deliver = (meta: typeof Subscription.Type, message: EventMessage) => {
+        const open = opened(meta)
         if (!open) return
         Queue.offerUnsafe(open.heard, undefined)
         Queue.offerUnsafe(open.queue, message)
       }
       client.setNotificationHandler("notifications/events/active", { params: ActiveNotification }, (params) => {
+        const { _meta, heartbeatMs, ...active } = params
         // The server's grant is authoritative, and it comes with every `active`.
-        const open = streams.get(String(params._meta[SUBSCRIPTION_ID]))
-        if (open) open.silence = Duration.millis(params.heartbeatMs * MISSED_HEARTBEATS)
-        deliver(params, { type: "active", cursor: params.cursor ?? null, truncated: params.truncated === true })
+        const open = opened(_meta)
+        if (open) open.silence = Duration.millis(heartbeatMs * MISSED_HEARTBEATS)
+        deliver(_meta, { type: "active", ...active })
       })
-      client.setNotificationHandler("notifications/events/event", { params: EventNotification }, (params) =>
-        deliver(params, {
-          type: "event",
-          eventId: params.eventId,
-          name: params.name,
-          timestamp: params.timestamp,
-          data: params.data,
-          cursor: params.cursor ?? null,
-        }),
+      client.setNotificationHandler(
+        "notifications/events/event",
+        { params: EventNotification },
+        ({ _meta, ...event }) => deliver(_meta, { type: "event", ...event }),
       )
       client.setNotificationHandler("notifications/events/heartbeat", { params: HeartbeatNotification }, (params) =>
-        deliver(params, { type: "heartbeat", cursor: params.cursor ?? null }),
+        deliver(params._meta, { type: "heartbeat", cursor: params.cursor }),
       )
       client.setNotificationHandler("notifications/events/error", { params: ErrorNotification }, (params) =>
-        deliver(params, { type: "error", error: params.error }),
+        deliver(params._meta, { type: "error", error: params.error }),
       )
       client.setNotificationHandler("notifications/events/terminated", { params: ErrorNotification }, (params) => {
-        const open = streams.get(String(params._meta[SUBSCRIPTION_ID]))
+        const open = opened(params._meta)
         if (open)
           Queue.failCauseUnsafe(open.queue, Cause.fail(new EventStreamTerminatedError({ server, ...params.error })))
       })
@@ -523,12 +518,11 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     )
       return new NeedsAuthError({ server, message: describe(error) })
     if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return new Error(explain(error))
+    const body = typeof error.data.text === "string" ? error.data.text : ""
     // Some servers answer a method they don't implement with a 404 that carries a JSON-RPC method-not-found error.
     const expired =
-      (error.status === 404 && !methodNotFound(error.data.text)) ||
-      (error.status === 400 &&
-        typeof error.data.text === "string" &&
-        error.data.text.includes("Bad Request: Server not initialized"))
+      (error.status === 404 && Option.isNone(decodeMethodNotFound(body))) ||
+      (error.status === 400 && body.includes("Bad Request: Server not initialized"))
     if (!expired) return new Error(explain(error))
     if (!session.reported) {
       session.reported = true
@@ -1050,7 +1044,6 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
 const decodeMethodNotFound = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Struct({ error: Schema.Struct({ code: Schema.Literal(-32601) }) })),
 )
-const methodNotFound = (body: unknown) => typeof body === "string" && Option.isSome(decodeMethodNotFound(body))
 
 // Connecting again would fail the same way: the server could not be spawned or reached, did not answer in
 // time, is overloaded or down for now, or refused this client's access. A failed auto probe wraps the error it hit.
