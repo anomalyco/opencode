@@ -288,7 +288,11 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
         )
         const deadline = Duration.isFinite(total) ? started + Duration.toMillis(total) : undefined
         const response = yield* withBodyTimeouts(raw, {
-          chunk: timeoutDuration(limits.chunk, DEFAULT_CHUNK_TIMEOUT_MS),
+          // `statusError` reads an error body whole, outside any caller's frame timer, so it keeps a chunk limit.
+          chunk: timeoutDuration(
+            raw.status >= 400 && limits.chunk === false ? undefined : limits.chunk,
+            DEFAULT_CHUNK_TIMEOUT_MS,
+          ),
           deadline,
         })
         return yield* statusError(response)

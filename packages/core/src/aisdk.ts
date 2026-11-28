@@ -74,7 +74,8 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   const decoder = new TextDecoder()
   let deadline: number | undefined
   const parser = makeParser((event) => {
-    if (event._tag === "Event") deadline = Date.now() + ms
+    // Anthropic's `ping` carries no model output, so it doesn't count as progress.
+    if (event._tag === "Event" && event.event !== "ping") deadline = Date.now() + ms
   })
   const body = new ReadableStream<Uint8Array>({
     async pull(ctrl) {

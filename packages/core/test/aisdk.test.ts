@@ -643,7 +643,7 @@ it.effect("normalizes file data across AI SDK prompt parts", () =>
   }),
 )
 
-it.effect("does not treat SSE comment heartbeats as model progress", () =>
+it.effect("does not treat SSE comment heartbeats or ping events as model progress", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
     const encoder = new TextEncoder()
@@ -658,7 +658,15 @@ it.effect("does not treat SSE comment heartbeats as model progress", () =>
                   'data: {"id":"response-1","object":"chat.completion.chunk","created":0,"model":"api-model","choices":[{"index":0,"delta":{"content":"partial"},"finish_reason":null}]}\n\n',
                 ),
               )
-              heartbeat = setInterval(() => controller.enqueue(encoder.encode(": keepalive\n\n")), 5)
+              heartbeat = setInterval(
+                () =>
+                  controller.enqueue(
+                    encoder.encode(
+                      ': keepalive\n\nevent: ping\ndata: {"id":"response-1","object":"chat.completion.chunk","created":0,"model":"api-model","choices":[]}\n\n',
+                    ),
+                  ),
+                5,
+              )
             },
             cancel() {
               if (heartbeat) clearInterval(heartbeat)
