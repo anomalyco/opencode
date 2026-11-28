@@ -141,6 +141,7 @@ export const make = (deps: Deps) => {
       return {
         commit: () => deps.store.release(sessionID),
         deliver: Effect.void,
+        discard: Effect.void,
       }
     }
     const running = initial?.parentID
@@ -196,7 +197,14 @@ export const make = (deps: Deps) => {
       }),
     )
 
-    return { commit, deliver }
+    // Without a terminal event, clean up only the captured Job. The session ID
+    // could already have been reused by another process.
+    const discard =
+      jobState.mode === "background"
+        ? Effect.uninterruptible(deps.jobs.completeBackground(jobState.notificationID))
+        : Effect.void
+
+    return { commit, deliver, discard }
   })
 
   return { started, clear, prepare }

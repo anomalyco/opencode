@@ -64,6 +64,28 @@ export const layer = Layer.effect(
     const inbox = yield* SessionInbox.Service
     const scope = yield* Effect.scope
     const db = (yield* Database.Service).db
+    const commitForSession = (sessionID: SessionSchema.ID, commit: Effect.Effect<void>) =>
+      Effect.gen(function* () {
+        // The session can disappear between checking it and starting the event transaction.
+        if (!(yield* store.get(sessionID))) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
+        yield* commit
+      })
+
+    const publishWhilePresent = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
+      Effect.gen(function* () {
+        if (!(yield* store.get(sessionID))) return
+        return yield* effect.pipe(
+          Effect.catchCause((cause) =>
+            Effect.gen(function* () {
+              if (Cause.hasInterrupts(cause)) return yield* Effect.failCause(cause)
+              const current = yield* store.get(sessionID).pipe(Effect.exit)
+              if (Exit.isSuccess(current) && current.value === undefined) return
+              return yield* Effect.failCause(cause)
+            }),
+          ),
+        )
+      })
+
     const reportLifecycle = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
       effect.pipe(
         Effect.tapCause((cause) =>
@@ -81,7 +103,7 @@ export const layer = Layer.effect(
     // terminal is the signature of a process that died without teardown (crash, SIGKILL, eviction);
     // recovery is a property of the database, never of a shutdown hook that may not run.
     const claimOnCommit = (sessionID: SessionSchema.ID) => ({
-      commit: () => store.claim(sessionID),
+      commit: () => commitForSession(sessionID, store.claim(sessionID)),
     })
     // The report coordinator is built first so the run coordinator's hooks can use it, while its
     // wake and draining dependencies bind late to the coordinator the hooks belong to.
@@ -108,7 +130,7 @@ export const layer = Layer.effect(
       promotable: SessionInbox.Promotable,
     ): Effect.fn.Return<void, SessionRunner.RunError> {
       const session = yield* store.get(sessionID)
-      if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
+      if (!session) return
       const result = yield* SessionRunner.Service.use((runner) =>
         runner.drain({
           sessionID,
@@ -119,10 +141,14 @@ export const layer = Layer.effect(
       ).pipe(
         Effect.provideServiceEffect(CodeModeJob.Current, background),
         instances.provide(session),
-        Effect.tapCause((cause) =>
-          Cause.hasInterruptsOnly(cause)
-            ? Effect.void
-            : Effect.logError("Failed to drain Session", cause).pipe(Effect.annotateLogs({ sessionID })),
+        Effect.catchCause((cause) =>
+          Effect.gen(function* () {
+            if (Cause.hasInterrupts(cause)) return yield* Effect.failCause(cause)
+            const current = yield* store.get(sessionID).pipe(Effect.exit)
+            if (Exit.isSuccess(current) && current.value === undefined) return SessionRunner.DrainResult.Complete()
+            yield* Effect.logError("Failed to drain Session", cause).pipe(Effect.annotateLogs({ sessionID }))
+            return yield* Effect.failCause(cause)
+          }),
         ),
       )
       return yield* SessionRunner.DrainResult.$match(result, {
@@ -139,7 +165,11 @@ export const layer = Layer.effect(
             // Bind before the started publication yields to SQLite so a cancel arriving during
             // that window still matches this generation.
             const before = yield* jobs.currentGeneration(sessionID)
-            const event = yield* bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID))
+            const event = yield* publishWhilePresent(
+              sessionID,
+              bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID)),
+            )
+            if (!event) return
             const bound = before?.running ? before : yield* jobs.currentGeneration(sessionID)
             subagentReport.started(sessionID, {
               startedSeq: event.durable.seq,
@@ -157,16 +187,25 @@ export const layer = Layer.effect(
             if (outcome.type === "interrupted" && outcome.reason === "shutdown") {
               subagentReport.clear(sessionID)
               // Shutdown keeps the claim and the running Job row for restart continuity.
-              yield* bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: "shutdown" })
+              yield* publishWhilePresent(
+                sessionID,
+                bus.publish(
+                  SessionEvent.Execution.Interrupted,
+                  { sessionID, reason: "shutdown" },
+                  { commit: () => commitForSession(sessionID, Effect.void) },
+                ),
+              )
               return
             }
             // Claim the Job generation before cancelling it so the settlement commit owns its outbox row.
             const settlement = yield* subagentReport.prepare(sessionID, outcome)
             if (outcome.type === "interrupted") yield* jobs.cancel(sessionID)
-            yield* publishTerminal(bus, sessionID, outcome, settlement.commit)
-            // Post-commit delivery is best effort: a retained outbox marker is recovered on the
-            // next restart, and a delivery defect must not fail the settled hook.
-            yield* settlement.deliver.pipe(
+            const published = yield* publishWhilePresent(
+              sessionID,
+              publishTerminal(bus, sessionID, outcome, () => commitForSession(sessionID, settlement.commit())),
+            )
+            // A retained outbox marker is recovered on restart if delivery or cleanup fails.
+            yield* (published ? settlement.deliver : settlement.discard).pipe(
               Effect.ignoreCause({ log: "Error", message: "Subagent report delivery failed" }),
             )
           }),
@@ -208,11 +247,14 @@ function publishTerminal(
   outcome: ReturnType<typeof terminal>,
   commit: (seq: number) => Effect.Effect<void>,
 ) {
-  if (outcome.type === "succeeded") return bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, { commit })
+  if (outcome.type === "succeeded")
+    return bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, { commit }).pipe(Effect.as(true))
   if (outcome.type === "interrupted") {
-    return bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: outcome.reason }, { commit })
+    return bus
+      .publish(SessionEvent.Execution.Interrupted, { sessionID, reason: outcome.reason }, { commit })
+      .pipe(Effect.as(true))
   }
-  return bus.publish(SessionEvent.Execution.Failed, { sessionID, error: outcome.error }, { commit })
+  return bus.publish(SessionEvent.Execution.Failed, { sessionID, error: outcome.error }, { commit }).pipe(Effect.as(true))
 }
 
 export const node = makeGlobalNode({
