@@ -1,0 +1,250 @@
+---
+title: "CLI 테마"
+description: "OpenCode 터미널 인터페이스에 기본 제공 테마를 선택하거나, 터미널 자체 색상을 사용하거나, 직접 만든 테마를 추가하세요."
+---
+
+OpenCode에는 라이트 및 다크 모드용 기본 테마가 많이 포함되어 있습니다. 설정에서 하나를 고르거나 직접 색상을 조합하세요.
+
+## 테마 선택
+
+`Ctrl+P`를 누르고 **Open settings**를 선택한 다음 **Theme**을 여세요. 기본 테마는 `opencode`입니다. 이전 기본 테마도 `opencode-classic`으로 계속 사용할 수 있습니다.
+
+전역 [CLI 설정](/cli/config)에서 테마와 모드를 설정할 수도 있습니다.
+
+```json title="~/.config/opencode/cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "theme": {
+    "name": "tokyonight",
+    "mode": "dark"
+  }
+}
+```
+
+설정을 열지 않고 테마를 바꾸려면 `/themes`를 실행하세요.
+
+## 시스템 색상
+
+OpenCode가 터미널 팔레트를 읽을 수 있으면 테마 선택기에 `system` 테마가 포함됩니다. 이 테마는 터미널의 전경색, 배경색, ANSI 팔레트에서 색상을 가져옵니다.
+
+테마 이름을 `system`으로 지정하면 터미널 색상을 사용합니다. 모드를 `system`으로 지정하면 터미널의 라이트 또는 다크 모드를 따릅니다.
+
+## 모드
+
+터미널 모양을 따르려면 `system`을, 테마를 라이트 또는 다크 모드로 고정하려면 다음 값을 사용하세요.
+
+| 모드     | 동작                                              |
+| -------- | ------------------------------------------------- |
+| `system` | 감지된 터미널의 라이트 또는 다크 모양을 따릅니다. |
+| `dark`   | 항상 테마의 다크 색상을 사용합니다.               |
+| `light`  | 항상 테마의 라이트 색상을 사용합니다.             |
+
+CLI 구성의 `mode` 필드에 이 값을 설정하세요. 이 필드는 `theme` 안에 있습니다. 커스텀 테마가 한 가지 모드만 제공하면 다른 모드를 선택해도 OpenCode는 테마가 제공하는 모드를 사용합니다.
+
+## 테마 추가
+
+직접 내려받았거나 다른 사람에게 받은 테마를 추가하려면 JSON 파일을 전역 테마 디렉터리에 복사하세요.
+
+```bash
+cp theme.json ~/.config/opencode/themes/
+```
+
+테마를 프로젝트의 `.opencode/themes` 디렉터리에 넣으면 해당 프로젝트에서만 사용할 수도 있습니다.
+
+파일 이름이 테마 이름이 됩니다. 예를 들어 `my-theme.json`은 `my-theme`으로 표시됩니다. 파일을 추가한 뒤 OpenCode를 다시 시작하고 `/themes`를 실행해 선택하세요.
+
+OpenCode는 `.json` 파일만 읽습니다. 현재 디렉터리에 가까운 테마가 같은 이름의 전역 또는 상위 테마를 대체합니다.
+
+## 플러그인에서 테마 사용
+
+[TUI 플러그인](/build/plugins/cli)은 `context.theme`으로 해석된 색상을, `context.themeMode`로 활성 모드를 읽습니다. 플러그인이 선택한 테마를 따르도록 시맨틱 토큰을 사용하세요.
+
+```tsx title="Inside a TUI plugin component"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>Ready</text>
+}
+```
+
+공개 TUI 플러그인 API로는 테마를 등록할 수 없습니다. 위 디렉터리에 JSON 파일로 커스텀 테마 정의를 추가하세요.
+
+## 테마 만들기
+
+[테마 도구](https://opencode.ai/theme/)로 테마를 만들거나 편집하세요. 이 도구를 쓰면 구조를 이해하고, 변경하고, 커스텀 색상을 정의하기 쉽습니다. 아래 설명은 참고용입니다.
+
+테마는 공유 시맨틱 토큰과 모드별 팔레트를 분리합니다.
+
+| 섹션            | 용도                                                 |
+| --------------- | ---------------------------------------------------- |
+| `base`          | 모든 모드가 공유하는 완전한 토큰 트리입니다.         |
+| `light`, `dark` | 해당 모드의 완전한 색상 팔레트와 선택적 토큰 재정의입니다. |
+
+모든 테마는 완전한 `base`를 제공하고 `light` 또는 `dark` 중 하나 이상을 정의합니다. 모드는 파일의 `base`를 상속하며, OpenCode 기본 제공 테마나 서로에게서 상속하지 않습니다.
+
+아래 예제는 각 개념과 관련된 섹션만 보여 줍니다. 커스터마이즈하기 전에 테마 편집기로 완전한 파일을 생성하세요.
+
+### 구조
+
+두 모드가 모두 사용하는 색상은 `base`에 두고, 필요하면 `light`나 `dark` 안에서 재정의하세요.
+
+```json title="theme.json (excerpt)"
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "base": {
+    "text": {
+      "base": "$hue.neutral.200",
+      "muted": "$hue.neutral.400"
+    }
+  },
+  "light": {
+    "hue": {}
+  },
+  "dark": {
+    "hue": {},
+    "text": {
+      "muted": "$hue.neutral.300"
+    }
+  }
+}
+```
+
+완전한 `base`는 모든 시맨틱 토큰을 제공합니다. 각 모드는 필요한 모든 색상 계열을 제공하며, base 토큰 트리의 일부를 재정의할 수 있습니다.
+
+### 색상과 참조
+
+색상은 16진수 값, `"transparent"`, 또는 다른 테마 색상에 대한 참조가 될 수 있습니다.
+
+```json title="Inside base or a mode"
+{
+  "text": {
+    "base": "#eeeeee",
+    "muted": "$hue.neutral.400"
+  },
+  "border": {
+    "base": "$text.muted"
+  }
+}
+```
+
+### 색상 계열
+
+색상 계열은 9단계 색상 스케일입니다. 모든 모드는 8개의 기본 색상 계열과 3개의 별칭을 정의합니다.
+
+| 종류 | 값                                                              |
+| ---- | --------------------------------------------------------------- |
+| 기본 | `gray`, `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple` |
+| 별칭 | `accent`, `interactive`, `neutral`                              |
+| 단계 | `100`, `200`, `300`, `400`, `500`, `600`, `700`, `800`, `900`   |
+
+기본 색상 계열의 9단계를 모두 정의하거나, 한 색상 계열을 다른 색상 계열의 별칭으로 지정하세요.
+
+```json title="Inside light or dark"
+{
+  "hue": {
+    "purple": {
+      "100": "#b38ff4",
+      "200": "#9d7cd8",
+      "300": "#8869bd",
+      "400": "#7357a2",
+      "500": "#5f4688",
+      "600": "#4b356f",
+      "700": "#392557",
+      "800": "#271640",
+      "900": "#17072b"
+    },
+    "accent": "$hue.purple"
+  }
+}
+```
+
+색상 단계는 모드의 대비 방향을 따릅니다. 라이트 테마는 `100`의 어두운 색에서 `900`의 밝은 색으로, 다크 테마는 `100`의 밝은 색에서 `900`의 어두운 색으로 이어집니다.
+
+`categorical` 배열은 `base`에서 에이전트와 반복되는 다른 항목을 구분하는 데 쓰이는 색상 계열의 순서를 정합니다.
+
+```json title="Inside base"
+{
+  "categorical": ["accent", "purple", "green", "blue"]
+}
+```
+
+### 시맨틱 토큰
+
+시맨틱 토큰은 UI 역할에 색상을 지정합니다. 컴포넌트는 색상을 직접 고르지 않고 이 역할을 사용합니다.
+
+| 그룹                 | 용도                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------ |
+| `text`               | 기본, 흐린, 옅은, 선택, 액션, 양식 필드, 피드백 텍스트입니다. `faint`의 기본값은 `muted`입니다. |
+| `background`         | 기본 배경, 선택 영역, 떠 있는 UI 요소, 액션, 양식 필드, 피드백에 쓰는 배경색입니다.                              |
+| `border`, `scrollbar` | 테두리와 스크롤바 색상입니다.                                                             |
+| `diff`               | 추가, 삭제, 컨텍스트, 강조, 줄 번호 색상입니다.                                            |
+| `syntax`             | 소스 코드 강조입니다.                                                                      |
+| `markdown`           | Markdown 요소입니다.                                                                       |
+
+예를 들어 `text.muted`는 보조 텍스트를 제어하고, `background.raised`는 떠 있는 UI 요소의 높이 단계별 배경색을 정의합니다.
+
+```json title="Inside base"
+{
+  "text": {
+    "base": "$hue.neutral.200",
+    "muted": "$hue.neutral.400"
+  },
+  "background": {
+    "base": "$hue.neutral.800",
+    "raised": {
+      "base": "$hue.neutral.700",
+      "high": "$hue.neutral.600",
+      "max": "$hue.neutral.500"
+    }
+  }
+}
+```
+
+`text.selection`과 `background.selection`은 마우스나 키보드로 선택한 텍스트에 색을 입힙니다. 기본값은 포커스된 기본 액션인 `text.action.primary.$focused`이며, 배경은 `background.action.primary.$focused`입니다.
+
+구문 키는 `comment`, `keyword`, `function`, `variable`, `string`, `number`, `type`, `operator`, `punctuation`입니다.
+
+Markdown 키는 `text`, `heading`, `link`, `linkText`, `code`, `blockQuote`, `emphasis`, `strong`, `horizontalRule`, `listItem`, `listEnumeration`, `image`, `imageText`, `codeBlock`입니다.
+
+### 액션과 상태
+
+액션에는 `primary`, `secondary`, `destructive` 변형이 있습니다. 액션과 양식 필드는 `base`와 선택적 상호작용 상태를 사용합니다.
+
+```json title="Inside base or a mode"
+{
+  "text": {
+    "action": {
+      "primary": {
+        "base": "$hue.interactive.400",
+        "$hovered": "$hue.interactive.300",
+        "$disabled": "$hue.neutral.600"
+      }
+    }
+  }
+}
+```
+
+상태 키는 `$hovered`, `$focused`, `$pressed`, `$selected`, `$disabled`입니다. 지정하지 않은 상태는 해당 액션이나 양식 필드의 `base` 색상을 사용합니다.
+
+### 대화 상자 표면
+
+패널, 대화 상자, 메뉴, 토스트는 `background.raised`에 정의된 높이 단계에 따라 배경색을 선택합니다. 대화 상자는 `@dialog`로 시맨틱 토큰을 추가로 재정의할 수 있습니다.
+
+```json title="Inside base or a mode"
+{
+  "@dialog": {
+    "background": {
+      "base": "$background.raised.base",
+      "action": {
+        "primary": {
+          "$hovered": "$background.raised.high"
+        }
+      }
+    }
+  }
+}
+```
+
+TUI는 `@dialog`를 적용한 뒤 참조를 다시 해석하므로 `$background.base`를 참조하는 토큰은 대화 상자의 배경을 따릅니다. 상황별 액션의 `base`는 지정하지 않은 상태의 대체값이 되며, 명시적인 상태 재정의가 여전히 우선합니다.
+

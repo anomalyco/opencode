@@ -1,5 +1,5 @@
 ---
-title: "TUI"
+title: "Building TUI plugins"
 description: "Build the TUI part of an OpenCode plugin for the terminal UI using @opencode/plugin/tui."
 ---
 
@@ -426,10 +426,10 @@ await context.ui.dialog.select({
 - Escape, `clear()`, or showing another dialog resolves `undefined`.
 - Do not bind `ctrl+n` or `ctrl+p`. The dialog reserves them for navigation, and its own bindings take precedence.
 
-Custom JSX dialogs can set their size and close themselves.
+Custom JSX dialogs can set their size and close themselves. Call `set` after `show`: showing a dialog resets it
+to `medium` and not centered. `medium`, `large` and `xlarge` are 60, 88 and 116 columns wide.
 
 ```tsx
-context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.show(
   () => (
     <box>
@@ -438,6 +438,7 @@ context.ui.dialog.show(
   ),
   () => console.log("closed"),
 )
+context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.clear()
 ```
 
@@ -646,8 +647,8 @@ Expose the TUI plugin through `./tui`; add OpenTUI peers when the plugin renders
     "@opencode/plugin": "latest"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.6.6",
-    "@opentui/solid": ">=0.6.6",
+    "@opentui/core": ">=0.8.0",
+    "@opentui/solid": ">=0.8.0",
     "solid-js": ">=1.9.0"
   }
 }

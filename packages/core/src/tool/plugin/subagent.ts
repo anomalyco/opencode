@@ -11,6 +11,7 @@ import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
+import { SubagentDepth } from "../../session/subagent-depth.js"
 import { SubagentJob } from "../../session/subagent-job.js"
 
 export const name = "subagent"
@@ -19,7 +20,7 @@ const backgroundResult = (sessionID: SessionSchema.ID) => ({
   sessionID,
   status: "running" as const,
   output: [
-    `The subagent is working in the background (sessionID: ${sessionID}). You will receive a <subagent> message when it goes idle, and again after each later round of work.`,
+    `The subagent is working in the background (sessionID: ${sessionID}). You will receive a <background-result kind="subagent"> message when it goes idle, and again after each later round of work.`,
     "DO NOT sleep, poll, proactively check on its progress, or duplicate this subagent's work.",
     "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
     "To send it follow-ups or change its instructions while it runs, call subagent again with this sessionID.",
@@ -49,7 +50,7 @@ export const Output = Schema.Struct({
 })
 export const description = [
   "Spawns an agent in a child session to work on the specified task.",
-  "Subagents always run in the background: the call returns immediately with a sessionID, and you receive a `<subagent>` message each time the child goes idle, including after later work.",
+  'Subagents always run in the background: the call returns immediately with a sessionID, and you receive a `<background-result kind="subagent">` message each time the child goes idle, including after later work.',
   "Keep working on non-overlapping tasks, or briefly tell the user what you launched and end your response. Do not sleep, poll, or proactively check on the child's progress.",
   "New child sessions start with fresh context, so include all relevant context and instructions when you don't pass a sessionID.",
   "Pass the returned sessionID to continue that specific child conversation. A follow-up to a running child joins its current run.",
@@ -66,36 +67,7 @@ export const Plugin = {
     const models = yield* Model.Service
     const subagents = yield* SubagentJob.Service
 
-    const resolveModel = Effect.fn("SubagentTool.resolveModel")(function* (input: string) {
-      const ref = yield* Effect.try({
-        try: () => Model.Ref.parse(input),
-        catch: () =>
-          new ToolFailure({
-            message: `Invalid model "${input}". Use "providerID/modelID" or "providerID/modelID#variant".`,
-          }),
-      })
-      const model = (yield* models.available()).find(
-        (model) => model.providerID === ref.providerID && model.id === ref.id,
-      )
-      if (model === undefined) {
-        const other = (yield* models.available(["image", "decision"])).find(
-          (model) => model.providerID === ref.providerID && model.id === ref.id,
-        )
-        return yield* new ToolFailure({
-          message: other
-            ? `Model "${ref.providerID}/${ref.id}" is ${other.type === "image" ? "an image" : "a decision"} model; subagents need a chat model. Use the models tool to find one.`
-            : `Model "${ref.providerID}/${ref.id}" is not available. Use the models tool to see what is available.`,
-        })
-      }
-      if (ref.variant !== undefined && !model.variants.some((variant) => variant.id === ref.variant))
-        return yield* new ToolFailure({
-          message:
-            model.variants.length === 0
-              ? `Model "${ref.providerID}/${ref.id}" has no variants. Omit the variant.`
-              : `Variant "${ref.variant}" is not available for "${ref.providerID}/${ref.id}". Available: ${model.variants.map((variant) => variant.id).join(", ")}.`,
-        })
-      return ref
-    })
+    const resolveModel = (input: string) => resolveModelRef(models, input)
 
     yield* ctx.tool
       .transform((editor) =>
@@ -114,20 +86,12 @@ export const Plugin = {
                     (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
                   ),
                 )
-              let current = parent
-              let depth = 0
-              while (current.parentID) {
-                depth++
-                current = yield* sessions
-                  .get(current.parentID)
-                  .pipe(
-                    Effect.mapError(
-                      (error) => new ToolFailure({ message: `Parent session not found: ${current.parentID}`, error }),
-                    ),
-                  )
-              }
-              const limit = Config.latest(yield* config.entries(), "experimental")?.subagent_depth ?? 1
-              if (depth >= limit)
+              const limit = yield* SubagentDepth.reached(parent, sessions, config).pipe(
+                Effect.mapError(
+                  (error) => new ToolFailure({ message: `Parent session not found: ${error.sessionID}`, error }),
+                ),
+              )
+              if (limit !== undefined)
                 return yield* new ToolFailure({
                   message: `Subagent depth limit reached (${limit}). Increase "experimental.subagent_depth" to allow nested subagents.`,
                 })
@@ -274,3 +238,36 @@ export const Plugin = {
     yield* ctx.session.hook("generate", hook)
   }),
 }
+
+/** A model a caller named as "providerID/modelID" or "providerID/modelID#variant", checked to be an available chat model. */
+export const resolveModelRef = Effect.fn("SubagentTool.resolveModel")(function* (
+  models: Model.Interface,
+  input: string,
+) {
+  const ref = yield* Effect.try({
+    try: () => Model.Ref.parse(input),
+    catch: () =>
+      new ToolFailure({
+        message: `Invalid model "${input}". Use "providerID/modelID" or "providerID/modelID#variant".`,
+      }),
+  })
+  const model = (yield* models.available()).find((model) => model.providerID === ref.providerID && model.id === ref.id)
+  if (model === undefined) {
+    const other = (yield* models.available(["image", "video", "decision"])).find(
+      (model) => model.providerID === ref.providerID && model.id === ref.id,
+    )
+    return yield* new ToolFailure({
+      message: other
+        ? `Model "${ref.providerID}/${ref.id}" is ${other.type === "image" ? "an image" : other.type === "video" ? "a video" : "a decision"} model; subagents need a chat model. Use the models tool to find one.`
+        : `Model "${ref.providerID}/${ref.id}" is not available. Use the models tool to see what is available.`,
+    })
+  }
+  if (ref.variant !== undefined && !model.variants.some((variant) => variant.id === ref.variant))
+    return yield* new ToolFailure({
+      message:
+        model.variants.length === 0
+          ? `Model "${ref.providerID}/${ref.id}" has no variants. Omit the variant.`
+          : `Variant "${ref.variant}" is not available for "${ref.providerID}/${ref.id}". Available: ${model.variants.map((variant) => variant.id).join(", ")}.`,
+    })
+  return ref
+})

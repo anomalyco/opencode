@@ -7,7 +7,8 @@ import {
   inputTypeScript,
   jsonSchemaToTypeScript,
   outputTypeScript,
-} from "../src/tool-schema.js"
+} from "../src/codemode/tool-schema.js"
+import type { JsonSchema } from "../src/codemode/tool.js"
 
 // A raw JSON Schema tool in the shape an MCP adapter produces: render-only input schema
 // whose property descriptions and constraints must surface as JSDoc in pretty signatures.
@@ -803,6 +804,39 @@ describe("union schemas render every alternative", () => {
         pretty,
       ),
     ).toBe("string")
+  })
+
+  test("allOf checks refs shared across branches", () => {
+    const diamond = (leaf: JsonSchema) => ({
+      allOf: [{ $ref: "#/$defs/D0" }],
+      $defs: {
+        ...Object.fromEntries(
+          Array.from({ length: 30 }, (_, index) => [
+            `D${index}`,
+            { allOf: [{ $ref: `#/$defs/D${index + 1}` }, { $ref: `#/$defs/D${index + 1}` }] },
+          ]),
+        ),
+        D30: leaf,
+      },
+    })
+    expect(jsonSchemaToTypeScript(diamond({ properties: { id: { $ref: "#/$defs/Missing" } } }))).toBe("unknown")
+    expect(jsonSchemaToTypeScript(diamond({ properties: { next: { $ref: "#/$defs/D0" } } }))).toBe("unknown")
+    expect(
+      jsonSchemaToTypeScript({
+        allOf: [{ $ref: "#/$defs/A" }, { $ref: "#/$defs/B" }],
+        $defs: {
+          A: { properties: { shared: { $ref: "#/$defs/Shared" } } },
+          B: { properties: { shared: { $ref: "#/$defs/Shared" } } },
+          Shared: { properties: { a: { $ref: "#/$defs/A" } } },
+        },
+      }),
+    ).toBe("unknown")
+    expect(
+      jsonSchemaToTypeScript({
+        allOf: [{ $ref: "#/$defs/Shared" }, { properties: { again: { $ref: "#/$defs/Shared" } } }],
+        $defs: { Shared: { type: "object", properties: { count: { type: "number" } } } },
+      }),
+    ).toBe("{ count?: number } & { again?: { count?: number } }")
   })
 })
 

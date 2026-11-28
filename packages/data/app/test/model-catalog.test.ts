@@ -1,8 +1,5 @@
-import { describe, expect, mock, test } from "bun:test"
-
-// The catalog module defines a router query at import time, which throws outside a Solid server runtime.
-mock.module("@solidjs/router", () => ({ query: (fn: unknown) => fn }))
-const { buildModelCatalog } = await import("../src/routes/model-catalog")
+import { describe, expect, test } from "bun:test"
+import { buildModelCatalog } from "../src/routes/model-catalog"
 
 const listing = (overrides: Record<string, unknown> = {}) => ({
   id: "exo-free",
@@ -12,6 +9,23 @@ const listing = (overrides: Record<string, unknown> = {}) => ({
   limit: { context: 1048576, input: 524288, output: 524288 },
   cost: { input: 0, output: 0 },
   ...overrides,
+})
+
+describe("free models", () => {
+  test("lists current $0 OpenCode offerings and drops ended or paid ones", () => {
+    const catalog = buildModelCatalog([], {
+      opencode: {
+        models: {
+          "hy4-flash-free": listing({ id: "hy4-flash-free" }),
+          "ended-free": listing({ id: "ended-free", status: "deprecated" }),
+          paid: listing({ id: "paid", cost: { input: 1, output: 2 } }),
+        },
+      },
+      openrouter: { models: { "other-free": listing({ id: "other-free" }) } },
+    })
+
+    expect(catalog.freeModels).toEqual(["hy4-flash"])
+  })
 })
 
 describe("stealth model specs", () => {

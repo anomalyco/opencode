@@ -32,8 +32,9 @@ import { useTheme } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "../../util/locale"
-import type { PromptInfo, PromptPartRef } from "../../prompt/history"
+import type { ChipData, PromptInfo, PromptPartRef } from "../../prompt/history"
 import { useFrecency } from "../../prompt/frecency"
+import { deleteCells } from "../../prompt/content"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { mentionTriggerIndex, slashTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@opencode/client"
@@ -183,12 +184,7 @@ export function Autocomplete(props: {
     const prefix = "@"
     const append = prefix + text + (needsSpace ? " " : "")
 
-    input.cursorOffset = store.index
-    const startCursor = input.logicalCursor
-    input.cursorOffset = currentCursorOffset
-    const endCursor = input.logicalCursor
-
-    input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+    deleteCells(input, store.index, currentCursorOffset)
     input.insertText(append)
 
     const virtualText = prefix + text
@@ -204,6 +200,7 @@ export function Autocomplete(props: {
       virtual: true,
       styleId,
       typeId: props.promptPartTypeId(),
+      data: { [part.type]: part.value } satisfies ChipData,
     })
 
     props.setPrompt((draft) => {
@@ -328,12 +325,7 @@ export function Autocomplete(props: {
 
   function insertDirectory(directory: string) {
     const input = props.input()
-    const cursorOffset = input.cursorOffset
-    input.cursorOffset = store.index
-    const start = input.logicalCursor
-    input.cursorOffset = cursorOffset
-    const end = input.logicalCursor
-    input.deleteRange(start.row, start.col, end.row, end.col)
+    deleteCells(input, store.index, input.cursorOffset)
     input.insertText(directory)
   }
 
@@ -670,12 +662,7 @@ export function Autocomplete(props: {
       return
     }
 
-    input.cursorOffset = store.index
-    const startCursor = input.logicalCursor
-    input.cursorOffset = currentCursorOffset
-    const endCursor = input.logicalCursor
-
-    input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+    deleteCells(input, store.index, currentCursorOffset)
     input.insertText("@" + selectedPath + "/")
 
     setStore("selected", 0)
@@ -761,12 +748,7 @@ export function Autocomplete(props: {
   function hide(removeToken = false) {
     if (removeToken && store.visible === "command") {
       const input = props.input()
-      const cursorOffset = input.cursorOffset
-      input.cursorOffset = store.index
-      const start = input.logicalCursor
-      input.cursorOffset = cursorOffset
-      const end = input.logicalCursor
-      input.deleteRange(start.row, start.col, end.row, end.col)
+      deleteCells(input, store.index, input.cursorOffset)
       // Sync the prompt store immediately since onContentChange is async
       props.setPrompt((draft) => {
         draft.text = input.plainText
@@ -900,7 +882,7 @@ export function Autocomplete(props: {
         scrollAcceleration={scrollAcceleration()}
       >
         <Index
-          each={options()}
+          each={store.visible ? options() : []}
           fallback={
             <AutocompleteRail enabled={newDesigns()}>
               <box

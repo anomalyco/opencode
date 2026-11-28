@@ -13,7 +13,9 @@ export const sitemapFiles = [
   "/sitemap-pages.xml", // this app's pages, built below
   "/docs/sitemap.xml", // the V2 docs (src/docs)
   "/data/sitemap.xml", // the Data pages, from the stats app
-  "/console/sitemap.xml", // the Console pages, from the Console app
+  "/console/sitemap.xml", // the Console pages, from the Console app, in English
+  // The same pages from the Console app in the site's other languages.
+  ...LOCALES.filter((locale) => locale !== "en").map((locale) => `/${locale}/console/sitemap.xml`),
 ]
 
 /** The sitemaps as a sitemaps.org `sitemapindex`. */

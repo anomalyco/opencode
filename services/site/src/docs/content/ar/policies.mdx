@@ -1,0 +1,329 @@
+---
+title: "السياسات"
+description: "اسمح لـ OpenCode بتنفيذ إجراءات على موارد مسمّاة أو امنعه منها. وتعلو السياسات المُدارة وسياسات المؤسسة على إعدادات المستخدم والمشروع."
+---
+
+تقرر السياسات ما إذا كان يجوز لـ OpenCode تنفيذ إجراء على مورد مسمّى. وتُكتب
+تحت `policies`، ويمكن أيضًا أن تصلك من مساحة عمل
+[OpenCode Console](/console) مرتبطة.
+
+والسياسات منفصلة عن [الأذونات](/permissions). فالأذونات قواعد أدوات لكل وكيل
+يمكنها `allow` أو `deny` أو `ask`. أما السياسات فثنائية، ولا تسأل أبدًا، ولا تفعل سوى
+تضييق ما كانت الأذونات والمزوّدون سيسمحون به.
+
+## الإعداد
+
+ارفض مزوّدًا واحدًا في كل مكان بإضافة عبارة إلى `opencode.jsonc`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+ويختفي المزوّد المرفوض من الكتالوج واختيار النماذج حتى عندما تكون لديه
+بيانات اعتماد صالحة.
+
+قرأت الإصدارات السابقة السياسات من `experimental.policies`. ولا يزال ذلك المفتاح يعمل
+ويُدمج في `policies`:
+
+```jsonc
+{
+  "experimental": {
+    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+  },
+}
+```
+
+## العبارات
+
+لكل عبارة ثلاثة حقول:
+
+| الحقل      | القيم                                                                                                                      | المعنى                                              |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `action`   | `provider.use` و`tool.use` و`integration.connect` و`integration.use` و`mcp.use` و`skill.use` و`plugin.use` و`websearch.use` | العملية التي تُضبط                       |
+| `resource` | سلسلة أو نمط بأحرف بدل                                                                                                  | ما تنطبق عليه العبارة؛ ويعتمد على الإجراء |
+| `effect`   | `allow` و`deny`                                                                                                             | القرار عندما تطابق هذه العبارة             |
+
+والعبارات التي تفشل في التحقق تُسقط مع تحذير في سجل الخادم،
+وتظل بقية القائمة سارية. تحقق من السجل بعد تحرير `deny`.
+
+## المطابقة
+
+تطابق أحرف البدل قيمة المورد كاملةً، كما في الأذونات: يطابق `*` أيّ عدد من الأحرف، بما في ذلك
+صفر، ويطابق `?` حرفًا واحدًا.
+
+```jsonc
+{
+  "policies": [{ "action": "provider.use", "resource": "company-*", "effect": "deny" }],
+}
+```
+
+فهذا يرفض `company-us` و`company-eu`. والنمط المنتهي بـ ` *` يطابق أيضًا
+القيمة بلا وسائط، لذا يغطي `shell:git push *` الأمر `git push` وحده.
+
+## الترتيب
+
+عندما تطابق عدة عبارات، تفوز الأخيرة. ولا توجد قاعدة تخصيص، فضع
+العبارات الواسعة أولًا والاستثناءات بعدها. وإذا لم يطابق شيء،
+يُسمح بالإجراء.
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+  ],
+}
+```
+
+فلا يبقى متاحًا إلا Anthropic.
+
+## المزوّدون
+
+يتحكم `provider.use` في إمكانية استخدام المزوّد أصلًا. والمورد هو
+معرّف المزوّد: `anthropic` أو `openai` أو `opencode` أو معرّف مخصّص من
+[`providers`](/providers).
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+إدخال `providers` يضبط نقطة النهاية؛ والعبارات تجعله المزوّد الوحيد
+الذي يستخدمه OpenCode. وتنطبق السياسة كيفما عُرف المزوّد: بيانات الكتالوج،
+أو متغيّرات البيئة، أو الحسابات المحفوظة، أو الملحقات المدمجة، أو الإعداد.
+
+استخدم `provider.use` بدل قائمتَي `enabled_providers` و`disabled_providers`
+في V1. وما زالت ملفات V1 تُحمَّل؛ راجع
+[الترحيل من V1](/migrate-v1#supported-fields-without-direct-native-equivalents).
+
+## الأدوات
+
+ترفض عبارات `tool.use` فحص [إذن](/permissions) رفضًا قاطعًا. والمورد
+`<action>:<value>`، ويُطابق ضد كل مورد تفحصه الأداة.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "edit:*.env", "effect": "deny" },
+    { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
+  ],
+}
+```
+
+ويفشل الفحص المرفوض بـ`Blocked by configuration policy` بدل السؤال. وهو
+ينطبق بعد قواعد الوكيل والموافقات المحفوظة، فيتجاوز `ask` وموافقة
+«Allow always» على السواء.
+
+| النمط                      | يحجب                                      |
+| ---------------------------- | ------------------------------------------- |
+| `shell:*`                    | كل أمر shell                         |
+| `read:*/.ssh/*`              | قراءة مواد SSH                        |
+| `external_directory:*`       | أي وصول خارج الموقع أو worktree |
+| `subagent:general`           | تشغيل وكيل فرعي واحد                      |
+| `github_delete_repository:*` | أداة MCP واحدة                                |
+| `*`                          | كل ما لم يُرفض بعد               |
+
+وعبارة `tool.use` ذات `allow` لا تمنح وصولًا أبدًا. إنها ترفع فقط `deny` أوسع
+سابقًا، وبعدها تقرر قواعد الوكيل نفسها.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git status *", "effect": "allow" },
+  ],
+}
+```
+
+فيعود `git status` إلى قاعدة `shell` لدى الوكيل؛ ويُحجب كل أمر آخر.
+
+## التكاملات
+
+التكامل هو أي شيء تربطه في `/connect`: OpenCode Console
+(`opencode`)، أو مزوّد مثل `anthropic`، أو خدمة بحث على الويب مثل `exa`،
+أو مصدر إعدادات معروف مثل `https://ai.acme.com`. لا تؤثر سياسات التكامل في تسجيل الدخول إلى خوادم
+MCP؛ استخدم `mcp.use` للتحكم فيها.
+
+ويتحكم `integration.connect` في التكاملات التي يسردها `/connect` والتي يمكن
+ربطها. والمورد هو معرّف التكامل.
+
+ويتحكم `integration.use` في كل ما يقدّمه تكامل: مزوّدوه
+ونماذجه والبحث على الويب، وكذلك خوادم MCP والإعدادات التي توفّرها مساحة عمل في Console أو
+مصدر إعدادات معروف. صيغة المورد هي `<integration>#<account>`، والجزء الخاص بالحساب هو معرّف المؤسسة أو الحساب
+المرتبط، كما في المثال
+`opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1`. إذا لم يكن هناك حساب مرتبط، فيُستخدم
+معرّف التكامل وحده: `opencode` للخطة المجانية دون تسجيل دخول، و`ANTHROPIC_API_KEY` من متغيّرات البيئة يُمثَّل بالمعرّف
+`anthropic`، أما المزوّد المضبوط في `opencode.json` فيُستخدم معرّفه.
+
+وتشترط سياسة MDM هذه مساحة عمل Console واحدة ولا شيء غيرها. راجع [المؤسسات](/enterprise) لمزيد من الأمثلة:
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}
+```
+
+فلا يعرض `/connect` إلا Console ليتمكن الأعضاء من تسجيل الدخول. وتكون الخطة المجانية
+وحسابات Console الشخصية والمؤسسات الأخرى ومفاتيح API من متغيّرات البيئة ومزوّدو
+`opencode.json` كلها غير متاحة. أما مزوّدو مساحة العمل وخوادم MCP والبحث على الويب
+فتعمل، وتغييرها في Console لا يحتاج ملف تعريف MDM جديدًا.
+
+ولا تستطيع إلا السياسات المُدارة حجب خوادم MCP والإعداد التي يقدّمها تكامل؛
+وتظل سياساته سارية في كل الأحوال.
+
+## خوادم MCP والمهارات والملحقات
+
+| الإجراء       | المورد                                                          |
+| ------------ | ----------------------------------------------------------------- |
+| `mcp.use`    | [خادم MCP](/mcp-servers) باسمه المضبوط              |
+| `skill.use`  | [مهارة](/skills) بمعرّفها                                      |
+| `plugin.use` | [ملحق](/plugins) باسم حزمة بلا إصدار أو بمسار مطلق |
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "plugin.use", "resource": "opencode-acme-cli", "effect": "deny" },
+  ],
+}
+```
+
+فخادم MCP أو المهارة المرفوضة يُزال، والملحق المرفوض لا يُحمَّل، كيفما
+كان إعداده.
+
+### الترقية من `integration.use`
+
+قبل OpenCode 2.2.3، كان `integration.use` يغطي خوادم MCP والمهارات والملحقات
+عبر بادئة `mcp:` أو `skill:` أو `plugin:`. وما زالت العبارات ذات البادئة تُحمَّل
+وتُحوَّل إلى `mcp.use` أو `skill.use` أو `plugin.use`.
+
+أما العبارة التي بلا إحدى تلك البادئات، بما في ذلك `*` وحدها، فتنطبق الآن على
+التكاملات بدلًا من ذلك. فروض واسع مثل
+
+```jsonc
+{ "action": "integration.use", "resource": "*", "effect": "deny" }
+```
+
+لم يعد يحجب خوادم MCP ولا المهارات ولا الملحقات. بل يحجب كل مزوّد،
+بما في ذلك الخطة المجانية، إلا إذا سمحت عبارة لاحقة بتكامل. وللاحتفاظ
+بالمعنى القديم، استبدله بـ:
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "skill.use", "resource": "*", "effect": "deny" },
+    { "action": "plugin.use", "resource": "*", "effect": "deny" },
+  ],
+}
+```
+
+وتنتقل الاستثناءات بالطريقة نفسها: فيصبح `integration.use` `mcp:github` هو `mcp.use`
+`github`، ويصبح `skill:team:review` هو `skill.use` `team:review`.
+
+وتتجاهل العملاء الأقدم من 2.2.3 كلا من `integration.connect` و`integration.use` (بمعناه الجديد)
+و`mcp.use` و`skill.use` و`plugin.use`، فاشترط 2.2.3 أو أحدث
+حيثما تعتمد عليها.
+
+## البحث على الويب
+
+يتحكم `websearch.use` في مزوّدي البحث على الويب الذين يمكن لأداة `websearch` استخدامهم. والمورد
+هو معرّف المزوّد: `opencode` لـ OpenCode Web Search من Console، أو
+مزوّد مدمج مثل `exa` أو `firecrawl` أو `parallel` أو `tavily` أو `tinyfish`، أو
+معرّف مزوّد يضيفه ملحق.
+
+```jsonc
+{
+  "policies": [
+    { "action": "websearch.use", "resource": "*", "effect": "deny" },
+    { "action": "websearch.use", "resource": "opencode", "effect": "allow" },
+  ],
+}
+```
+
+وتُزال المزوّدون المرفوضون حتى عندما يعملون دون مفتاح API، مثل Exa و
+TinyFish. وعندما يُرفض كل مزوّد، لا تُعرض أداة `websearch` بعد ذلك.
+وتتجاهل العملاء الأقدم من 2.2.6 كلا من `websearch.use`.
+
+## الأسبقية
+
+تتيح الإعدادات العادية للإعداد الأقرب أن يفوز. أما السياسات فتعكس ذلك: عبارات
+الإعداد الأوسع تُقيَّم لاحقًا، فتتجاوز الأضيق. والإعداد المُدار
+وConsole المرتبط يتجاوزان دائمًا ملفات المستخدم والمشروع.
+
+| الجهة   | المصدر                                                                                                         |
+| ----------- | -------------------------------------------------------------------------------------------------------------- |
+| 1 (الأعلى) | تفضيلات macOS المُدارة (`/Library/Managed Preferences/ai.opencode.managed.plist`)                           |
+| 2           | `opencode.json(c)` في النظام (`/Library/Application Support/opencode` و`/etc/opencode` و`%ProgramData%\opencode`) |
+| 3           | مساحة عمل OpenCode Console المرتبطة                                                                           |
+| 4           | `~/.config/opencode/opencode.json(c)` العام                                                                   |
+| 5           | `opencode.json(c)` المباشر؛ والمجلدات الخارجية تتجاوز الداخلية                                                   |
+| 6 (الأدنى)  | `.opencode/opencode.json(c)`؛ والمجلدات الخارجية تتجاوز الداخلية                                                |
+
+ولا يستطيع مستودع إعادة تمكين مزوّد ترفضه عمومًا:
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+```jsonc title="project/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "allow" }],
+}
+```
+
+فيبقى `openai` مرفوضًا. وداخل الملف الواحد، تحتفظ العبارات بترتيب كتابتها.
+
+## Console
+
+تُصرّف مساحة عمل على [OpenCode Console](/console) سياسات Providers وTools
+إلى عبارات `policies` عادية في إعداد مساحة العمل. ويدمج OpenCode
+ذلك الإعداد كملف إعدادات يصنّف مباشرة تحت التفضيلات المُدارة
+وملف النظام، فلا يمكن لمستودع أو مستخدم رفع `deny` صادر عن مؤسسة
+بـ`allow`، ويرفع `allow` الصادر عن مؤسسة `deny` أقل سلطة.
+وتبقى التفضيلات المُدارة وملف النظام متجاوزة لمساحة العمل.
+
+وتسمّي حالات الرفض من هذه العبارات مساحة العمل:
+
+```text
+Blocked by Acme's policy
+```
+
+وتتبع العبارات الحساب المرتبط.
+
+| الحدث                       | النتيجة                                              |
+| --------------------------- | --------------------------------------------------- |
+| تغيّر سياسة Console      | تُطبَّق عند الجلب التالي، نحو كل خمس دقائق |
+| التبديل إلى مساحة عمل أخرى | تُستبدل العبارات بعبارات تلك مساحة العمل           |
+| قطع الاتصال                  | تُمسح العبارات                                  |
+| تعذّر الوصول إلى Console         | تبقى آخر عبارات لذلك الاتصال سارية  |
+
+ولا يمكن تعطيل ملحق Console وملحق السياسات من `plugins`؛ راجع
+[التحكم في الملحقات](/plugins#control).
+
+<Callout type="note">
+  لا تضبط السياسات نقاط النهاية ولا بيانات الاعتماد، ولا تستطيع جعل مزوّد غير صالح للاستخدام صالحًا. كما أنها لا
+  تعزل كود الملحقات: فالمزوّد المرفوض يُحجب في مسار المزوّد والنموذج العادي.
+</Callout>

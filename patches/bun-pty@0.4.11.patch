@@ -1,0 +1,21 @@
+diff --git a/src/terminal.ts b/src/terminal.ts
+index 71ae27d183812cf0feb5d55b84adb7d702c90d13..cbd6bfd43666295f5105a94de66cdfcef342e1b1 100644
+--- a/src/terminal.ts
++++ b/src/terminal.ts
+@@ -261,7 +261,15 @@ export class Terminal implements IPty {
+ 					this._onData.fire(remaining);
+ 				}
+ 				const exitCode = lib.symbols.bun_pty_get_exit_code(this.handle);
+-				this._onExit.fire({ exitCode });
++				// Release the native handle: only kill() closed it, so every child that
++				// exited on its own leaked the pty pair. Mark closing first so write(),
++				// resize() and kill() from an onExit listener don't touch the handle.
++				this._closing = true;
++				try {
++					this._onExit.fire({ exitCode });
++				} finally {
++					lib.symbols.bun_pty_close(this.handle);
++				}
+ 				break;
+ 			} else if (n < 0) {
+ 				// error - flush decoder before breaking

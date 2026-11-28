@@ -1,0 +1,36 @@
+---
+title: "控制台簡介"
+description: "OpenCode 控制台是選用的服務，提供團隊工作區、模型推論、預算、原則與託管的網路搜尋。"
+---
+
+[OpenCode 控制台](https://opencode.ai/console)是選用服務。無論你是獨自使用 OpenCode，還是與團隊一起使用，
+都可以透過控制台取得以下功能。
+
+- [工作區](/console/workspaces)，讓你與[團隊](/console/members)分享存取權
+- [推論](/console/models)，適用於專有與開源模型
+- [供應商](/console/providers)，讓你透過控制台閘道連接自己的供應商帳號
+- 用量追蹤與[預算](/console/budgets)控制
+- 部署團隊範圍的原則，以控制 OpenCode 行為
+- [網路搜尋](/console/websearch)
+- [Harness](/console/harnesses)，讓你從 Claude Code、Codex 與其他 agent 使用控制台模型
+- [OpenCode Go、Go Plus 與 Go Teams](/console/go) 是開源模型訂閱方案，月費分別為 $10、$40 及每位成員 $20
+
+## 開始使用
+
+使用控制台不需要團隊。每個帳號都會從 **Personal** 工作區開始，你是唯一的
+成員。
+
+1. 登入[控制台](https://opencode.ai/console)。
+2. 訂閱 [Go](/console/go)、新增[額度](/console/billing#add-credits)，或連接[供應商](/console/providers)。
+3. 在 OpenCode 中執行 `/connect` 並選擇工作區。
+4. 可選擇性地[邀請](/console/members#invite-members)你的團隊。
+
+```text
+/connect
+```
+
+## 原則
+
+「原則」頁面中的供應商與工具規則會套用至連接到該工作區的每個 OpenCode 用戶端。
+這些規則以[原則](/policies#console)陳述式下發，優先於成員的使用者與專案設定，約一分鐘內生效。
+受管理偏好設定和系統設定檔的優先順序仍高於工作區設定。請參閱[優先順序](/policies#precedence)。

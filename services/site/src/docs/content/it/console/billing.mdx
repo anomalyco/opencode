@@ -1,0 +1,94 @@
+---
+title: "Fatturazione"
+description: "Aggiungi crediti, configura la ricarica automatica, gestisci i metodi di pagamento e scarica le fatture in OpenCode Console."
+---
+
+Console è gratuita per i team di qualsiasi dimensione, senza costi per posto. Paghi solo l'utilizzo effettivo, con crediti prepagati condivisi
+da tutto lo spazio di lavoro. I proprietari e gli amministratori gestiscono la fatturazione in **Settings › Billing**.
+
+Se usi i [tuoi provider](/console/providers), ti fatturano loro, non Console.
+
+## Aggiungere un metodo di pagamento
+
+1. Apri **Settings › Billing**.
+2. In **Payment methods**, fai clic su **Add**.
+3. Scegli un metodo e completa la configurazione di Stripe.
+
+Metodi di pagamento supportati:
+
+- Carta
+- Link
+- Alipay
+- UPI
+- WeChat Pay
+
+Usa **⋯ › Make default** per scegliere come pagare gli addebiti automatici. Se rimuovi un metodo di pagamento, la ricarica automatica e i rinnovi Go
+che lo usano potrebbero interrompersi.
+
+## Aggiungere crediti
+
+1. In **Credits**, fai clic su **Add credits**.
+2. Scegli $10, $50 o $100, oppure **Other** e inserisci un importo.
+3. Scegli un metodo di pagamento e fai clic su **Confirm and pay**.
+
+Al pagamento si aggiunge una commissione del 4.6% + $0.31. Se ricarichi $50, paghi $52.61 e al saldo si aggiungono tutti i $50.
+
+## Ricarica automatica
+
+Con la ricarica automatica, Console acquista crediti per te quando il saldo scende sotto la soglia che hai impostato.
+
+1. In **Auto-recharge**, fai clic su **Add rule**.
+2. Imposta la soglia di saldo che fa scattare l'addebito e l'importo da aggiungere.
+3. Fai clic su **Save**.
+
+La ricarica automatica usa il metodo di pagamento predefinito e include la commissione di pagamento. Se un addebito non va a buon fine, la ricarica automatica
+si disattiva finché non la configuri di nuovo.
+
+## Controllare il saldo
+
+Il riquadro **Billing** in **Activity** mostra il saldo ai proprietari e agli amministratori. Fai clic sul riquadro per aprire **Settings › Billing**.
+
+Il pulsante **Billing** nell'intestazione dello spazio di lavoro, o il tasto `B`, apre un pannello con i limiti Go, i crediti e l'utilizzo in tempo reale.
+I proprietari e gli amministratori vedono il saldo, l'utilizzo e la ricarica automatica dello spazio di lavoro; i membri vedono solo il proprio utilizzo e i propri limiti.
+
+## Quando i crediti finiscono
+
+Quando il saldo arriva a zero, le richieste a pagamento restituiscono HTTP `402`. Il saldo non scende mai sotto zero.
+
+```text
+Upstream request failed: Insufficient account funds
+```
+
+## Fatture
+
+Ogni pagamento compare in **Invoices** con il suo stato e un link a **Download invoice** o **View receipt**.
+
+| Voce              | Creata da                                |
+| ----------------- | ---------------------------------------- |
+| Ricarica del saldo | Aggiunta di crediti                      |
+| Ricarica automatica | Ricarica automatica                     |
+| Abbonamento Go    | Abbonamento a Go, Go Plus o Go Teams     |
+| Rinnovo Go        | Rinnovo mensile di Go                    |
+| Passaggio a Go Plus | Passaggio da Go a Go Plus              |
+| Passaggio a Go Teams | Passaggio da Go o Go Plus a Go Teams  |
+| Membro Go Teams   | Un membro che entra in uno spazio di lavoro con Go Teams |
+| Utilizzo mensile  | Pagamento su fattura                     |
+
+## Moduli fiscali
+
+I clienti statunitensi possono scaricare il [W-9 di Anomaly Innovations Inc.](/assets/anomaly-w9.pdf).
+
+## Pagamento su fattura
+
+Gli spazi di lavoro con un accordo di credito possono ricevere una fattura mensile invece di acquistare crediti. Contatta l'assistenza per attivare questa modalità di pagamento.
+
+- L'importo maturato con l'utilizzo si accumula fino al limite di credito, anziché essere scalato da un saldo prepagato.
+- La fattura mensile è emessa il primo giorno del mese (UTC) e scade 14 giorni dopo.
+- Per le fatture in sospeso è disponibile il pulsante **Pay now**.
+- Le richieste restituiscono HTTP `402` se raggiungi il limite di credito o hai una fattura scaduta.
+
+## Go
+
+Gli abbonamenti [OpenCode Go](/console/go) usano gli stessi metodi di pagamento e compaiono nello stesso elenco di fatture. Puoi
+anche [pagare Go con i crediti](/console/go#pay-with-credit). Attiva **Extra Usage** nella pagina **Go** per pagare con
+i crediti quando raggiungi un limite Go.

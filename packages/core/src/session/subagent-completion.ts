@@ -1,6 +1,7 @@
 export * as SubagentCompletion from "./subagent-completion.js"
 
 import { Effect } from "effect"
+import { BackgroundResult } from "./background-result.js"
 import type { Job } from "../job.js"
 import type { SessionBackground } from "./background.js"
 import type { SessionMessage } from "./message.js"
@@ -32,7 +33,14 @@ export function text(message: SessionMessage.Info | undefined) {
   )
 }
 
-const clean = (value: string) => value.replace(/\s+/g, " ").trim()
+/** `value` on one line, with runs of whitespace collapsed. */
+export const clean = (value: string) => value.replace(/\s+/g, " ").trim()
+
+/** `value` cut to at most `max` characters, ending with an ellipsis when cut, never splitting a surrogate pair. */
+export const truncate = (value: string, max: number) => {
+  const chars = Array.from(value)
+  return chars.length <= max ? value : `${chars.slice(0, max - 1).join("")}…`
+}
 
 const STILL_RUNNING = "\n\nBackground work still running:\n"
 
@@ -42,14 +50,17 @@ export function formatBody(
   background?: ReadonlyArray<RunningBackgroundItem>,
 ): string {
   if (!background || background.length === 0) return body
-  const lines = background.map((item) => {
-    if (item.kind === "shell")
-      return `- shell (${item.shellID}${item.sessionID !== childSessionID ? `, in ${item.sessionID}` : ""}): ${clean(item.command)}`
-    if (item.kind === "image")
-      return `- image (${item.model}${item.sessionID !== childSessionID ? `, in ${item.sessionID}` : ""}): ${item.path}`
-    return `- subagent (${item.agent}, sessionID: ${item.childSessionID}): ${clean(item.description)}`
-  })
-  return `${body}${STILL_RUNNING}${lines.join("\n")}`
+  return `${body}${STILL_RUNNING}${background.map((item) => line(item, childSessionID)).join("\n")}`
+}
+
+/** One running background item as a list line, naming the session it runs in when that is not `owner`. */
+export function line(item: RunningBackgroundItem, owner: SessionSchema.ID) {
+  const location = item.sessionID !== owner ? `, in ${item.sessionID}` : ""
+  if (item.kind === "codemode") return `- Code Mode script (${item.jobID}${location})`
+  if (item.kind === "shell") return `- shell (${item.shellID}${location}): ${clean(item.command)}`
+  if (item.kind === "image") return `- image (${item.model}${location}): ${item.path}`
+  if (item.kind === "video") return `- video (${item.path}${location})`
+  return `- subagent (${item.agent}, sessionID: ${item.childSessionID}): ${clean(item.description)}`
 }
 
 export const deliver = Effect.fnUntraced(function* <E>(
@@ -74,7 +85,10 @@ export const deliver = Effect.fnUntraced(function* <E>(
     ...(input.notificationID ? { id: input.notificationID } : {}),
     sessionID: recovery.parentSessionID,
     description: recovery.description,
-    text: `<subagent sessionID="${recovery.childSessionID}" state="${state}" description="${recovery.description}">\n${formatted}\n</subagent>`,
+    text: BackgroundResult.render(
+      `kind="subagent" sessionID="${recovery.childSessionID}" state="${state}" description="${recovery.description}"`,
+      formatted,
+    ),
     metadata: { source: "subagent", childID: recovery.childSessionID, agent: recovery.agent, state: input.status },
   })
   if (input.notificationID) yield* jobs.completeBackground(input.notificationID)

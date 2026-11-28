@@ -1,0 +1,104 @@
+---
+title: "使用量エクスポート API"
+description: "ワークスペースの日次使用量を、日ごと、メンバーごと、プロバイダーごと、モデルごとのリクエスト数、トークン、コストとともに CSV としてダウンロードします。"
+---
+
+`GET https://opencode.ai/console/api/v2/usage/export` は、ワークスペースの使用量を CSV で返します。行は UTC の日付、メンバーまたはサービスアカウント、プロバイダー、モデルの組み合わせごとに 1 行です。**Activity › Usage** の **Export usage** ボタンでダウンロードされるファイルと同じものです。
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v2/usage/export?range=30d" \
+  --header "Authorization: Bearer oc_sk_..." \
+  --output usage-30d.csv
+```
+
+## 認証
+
+[API キー](/console/api#api-keys)をベアラートークンとして送信します。そのキーを作成したワークスペースの使用量がエクスポートされます。
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+キーには **Usage › Read** が必要です。**All** または **Read only** のキーには含まれています。制限付きキーでは次の設定が必要です。
+
+```text
+Permissions: Restricted
+Usage:       Read
+```
+
+定期的にエクスポートする場合は[サービスアカウントキー](/console/api#service-accounts)を使います。オーナーまたは管理者の[パーソナル API キー](/console/api#personal-api-keys)も使用できます。一般メンバーにはワークスペースの使用量を読み取る権限がないため、そのキーでリクエストすると `403` が返ります。
+
+## リクエスト
+
+| パラメーター | 必須   | 値                                                                                                                    |
+| ------------ | ------ | --------------------------------------------------------------------------------------------------------------------- |
+| `range`      | はい   | `7d`、`30d`、`90d`。                                                                                                  |
+| `user_id`    | いいえ | メンバー ID（`user_...`）またはサービスアカウント ID（`svcacct_...`）。そのメンバーまたはサービスアカウントの行だけを返します。 |
+
+`range` は UTC の日付で数え、当日も含みます。たとえば `7d` は当日とその前の 6 日間です。当日分の使用量は、翌日の 00:00 UTC まで集計され続けます。
+
+1 つのサービスアカウントの使用量をエクスポートするには、以前のエクスポートの `user_id` 列にある ID を渡します。
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v2/usage/export?range=7d&user_id=svcacct_01JD8Z4Q2W7N3K5M6P9R0S1T2V" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+ワークスペースに存在しない ID を指定すると、ヘッダー行だけが返ります。
+
+## レスポンス
+
+成功すると、`Content-Type: text/csv; charset=utf-8` とともに `200` を返します。最初の行がヘッダーで、その後に新しい日付の行から順に続きます。
+
+```csv
+day,user_type,user_id,user_name,provider,model,requests,input_tokens,output_tokens,cache_read_tokens,cache_write_5m_tokens,cache_write_1h_tokens,cost_micro_cents,cost_usd
+2026-11-24,service_account,svcacct_01JD8Z4Q2W7N3K5M6P9R0S1T2V,CI Pipeline,opencode,claude-sonnet-5-5,412,1830211,96402,5120330,210044,0,1512334800,15.123348
+2026-11-24,member,user_01JC2X7Y8Z9A0B1C2D3E4F5G6H,ada@example.com,opencode,claude-haiku-5-5,57,402118,31877,880012,0,0,214500000,2.145
+2026-11-23,member,user_01JC2X7Y8Z9A0B1C2D3E4F5G6H,ada@example.com,opencode,claude-sonnet-5-5,96,711560,48210,2204118,61022,0,587000000,5.87
+```
+
+- 行は `\r\n` で終わります。
+- 使用量のない日には行がありません。
+- レスポンスはダウンロードとして返され（`Content-Disposition: attachment; filename="usage-30d.csv"`）、キャッシュされません（`Cache-Control: private, no-store`）。
+- `=`、`+`、`-`、`@` で始まるテキストセルには先頭に `'` が付き、表計算ソフトで数式として実行されません。
+
+### 列
+
+| 列                      | 意味                                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `day`                   | UTC の日付（`YYYY-MM-DD`）。                                                                                  |
+| `user_type`             | `member` または `service_account`。                                                                           |
+| `user_id`               | メンバーまたはサービスアカウントの ID。                                                                       |
+| `user_name`             | メンバーのメールアドレス、またはサービスアカウントの名前。空の場合もあります。                                |
+| `provider`              | リクエストを処理したプロバイダー。[OpenCode Models](/console/models) の場合は `opencode` など。              |
+| `model`                 | モデル ID。                                                                                                   |
+| `requests`              | リクエスト数。                                                                                                |
+| `input_tokens`          | 入力トークン。                                                                                                |
+| `output_tokens`         | 出力トークン。                                                                                                |
+| `cache_read_tokens`     | プロンプトキャッシュから読み取ったトークン。                                                                  |
+| `cache_write_5m_tokens` | 有効期間 5 分でプロンプトキャッシュに書き込んだトークン。                                                     |
+| `cache_write_1h_tokens` | 有効期間 1 時間でプロンプトキャッシュに書き込んだトークン。                                                   |
+| `cost_micro_cents`      | マイクロセント単位の整数で表したコスト。1 米ドルは `100000000` です。                                        |
+| `cost_usd`              | 同じコストを米ドルで表したもの。小数点以下 2 桁以上の正確な小数（`2.145` や `0.00` など）。                    |
+
+### 含まれるもの
+
+- ワークスペースのメンバーとサービスアカウントによるすべてのモデルリクエスト。
+- 無料モデルへのリクエストと、メンバーが自分の Claude Code、Codex、OpenCode のサブスクリプションを通じて行うリクエストは、トークンとともにコスト 0 で含まれます。
+- [Web 検索](/console/websearch)やその他のホスト型サービスは含まれません。
+- 合計には、新しいリクエストが反映されるまで約 1 分かかることがあります。
+
+## 制限
+
+- 1 回のエクスポートは最大 90 日分です。より長い履歴を保持するには、定期的にファイルを保存してください。
+- リクエストは、アカウントあたり毎分 300 リクエストという Console API の制限（他のエンドポイントと共有）に計上されます。パーソナル API キーは、所有するメンバーに対して計上されます。
+
+## エラー
+
+| ステータス | 意味                                                                                                  |
+| ---------- | ----------------------------------------------------------------------------------------------------- |
+| `400`      | `range` がない、`7d`、`30d`、`90d` のいずれでもない、または `user_id` がメンバー ID でもサービスアカウント ID でもない。 |
+| `401`      | 認証情報がない、またはキーが期限切れか失効している。                                                  |
+| `403`      | キーに **Usage › Read** がない、またはオーナーでも管理者でもないメンバーのキーである。                |
+| `429`      | レート制限を超えている。`Retry-After` ヘッダーの秒数だけ待ってから再試行してください。                 |
+| `503`      | 日次合計がまだ利用できない。後でリクエストを再試行してください。                                      |

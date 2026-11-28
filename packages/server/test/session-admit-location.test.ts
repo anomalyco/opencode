@@ -12,7 +12,7 @@ import { Location } from "@opencode/schema/location"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
-import { Context, Effect, Layer, RcMap } from "effect"
+import { Context, Effect, Layer } from "effect"
 import { HttpEffect, HttpRouter, HttpServer } from "effect/http"
 import { tempGlobalLayer } from "../../core/test/fixture/global"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
@@ -65,18 +65,18 @@ it.live("admits synthetic messages and compaction requests without booting or re
 
     // Remove the worktree directory after session creation to model a pruned worktree.
     yield* Effect.promise(() => fs.rm(deletedDir.path, { recursive: true, force: true }))
-    expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+    expect(yield* locations.keys).toEqual([])
 
     const coldSynthetic = yield* post(`/api/session/${coldSession.id}/synthetic`, {
       text: "background notice",
       resume: false,
     })
     expect(coldSynthetic.status).toBe(200)
-    expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+    expect(yield* locations.keys).toEqual([])
 
     const coldCompact = yield* post(`/api/session/${coldSession.id}/compact`, {})
     expect(coldCompact.status).toBe(200)
-    expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+    expect(yield* locations.keys).toEqual([])
 
     const strandedSynthetic = yield* post(`/api/session/${strandedSession.id}/synthetic`, {
       text: "note on deleted worktree",

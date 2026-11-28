@@ -4,6 +4,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
 import {
+  mergeTransport,
   ProviderID,
   type ModelID,
   type OpenString,
@@ -236,6 +237,7 @@ const responsesProtocol = Protocol.make({
       ),
   },
   stream: OpenResponses.protocol.stream,
+  supportsEffortUpdates: OpenResponses.protocol.supportsEffortUpdates,
 })
 
 export const route = Route.make({
@@ -268,8 +270,7 @@ export const configure = (input: Config = {}) => {
     providerMetadataKey: "openrouter",
     endpoint: options.endpoint,
     auth: options.auth,
-    headers: input.headers,
-    http: input.http,
+    ...mergeTransport(input),
   })
   const media = MediaRoute.deployment({ ...input, baseURL: options.endpoint.baseURL }, options.auth)
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
@@ -293,8 +294,7 @@ export const configure = (input: Config = {}) => {
     provider: id,
     endpoint: options.endpoint,
     auth: options.auth,
-    headers: input.headers,
-    http: input.http,
+    ...mergeTransport(input),
   })
   const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     embeddingRoute.model<OpenRouterEmbeddingOptions>({ id: modelID, providerOptions })

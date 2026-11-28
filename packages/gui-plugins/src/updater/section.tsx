@@ -1,13 +1,21 @@
+import { showToast } from "@opencode/ui/toast"
 import { Show } from "solid-js"
 import { usePlugin } from "@opencode/plugin/gui"
+import { UpdaterPreferences } from "./contract"
 import type definition from "./index"
 import type en from "./i18n/en"
 
-/** The one update action the row offers: its label, and whether it runs now. */
-export type UpdatesAction = { readonly label: keyof typeof en; readonly run?: string }
+/** The one update action the row offers: its label, a description replacing the row's own, and whether it runs now. */
+export type UpdatesAction = {
+  readonly label: keyof typeof en
+  readonly description?: keyof typeof en
+  readonly run?: string
+}
 
 export default function UpdatesSection(props: {
   action: () => UpdatesAction
+  /** Desktop only: true when this build cannot self-update (for example, managed by a package manager). */
+  updaterDisabled?: () => boolean
   run: () => void
   /** Web only: drop the saved copy of the app and load the server's build. */
   reset?: () => void
@@ -15,6 +23,7 @@ export default function UpdatesSection(props: {
   const ctx = usePlugin<typeof definition>()
   const ui = ctx.ui
   const releaseNotes = ctx.stores.releaseNotes
+  const preferences = ctx.desktop ? ctx.main(UpdaterPreferences) : undefined
 
   return (
     <ui.SettingsSection title={ctx.t("section.title")}>
@@ -35,7 +44,46 @@ export default function UpdatesSection(props: {
         />
       </ui.SettingsRow>
 
-      <ui.SettingsRow id="settings-check-updates" title={ctx.t("check.title")} description={ctx.t("check.description")}>
+      <Show when={preferences}>
+        {(client) => (
+          <ui.SettingsRow
+            id="settings-install-on-quit"
+            title={ctx.t("installOnQuit.title")}
+            description={ctx.t(
+              !props.updaterDisabled?.() &&
+                !client().state()?.installOnQuit &&
+                client().state()?.pendingQuitInstall
+                ? "installOnQuit.pendingMac"
+                : "installOnQuit.description",
+            )}
+          >
+            <ui.Switch
+              label={ctx.t("installOnQuit.title")}
+              hideLabel
+              disabled={client().state() === undefined || Boolean(props.updaterDisabled?.())}
+              checked={props.updaterDisabled?.() ? false : (client().state()?.installOnQuit ?? false)}
+              onChange={(checked) =>
+                void client()
+                  .setInstallOnQuit(checked)
+                  .catch((cause: unknown) => {
+                    if (ctx.signal.aborted) return
+
+                    showToast({
+                      title: ctx.t("common.requestFailed"),
+                      description: cause instanceof Error && cause.message ? cause.message : undefined,
+                    })
+                  })
+              }
+            />
+          </ui.SettingsRow>
+        )}
+      </Show>
+
+      <ui.SettingsRow
+        id="settings-check-updates"
+        title={ctx.t("check.title")}
+        description={ctx.t(props.action().description ?? "check.description")}
+      >
         <ui.Button disabled={!props.action().run} onClick={() => props.run()}>
           {ctx.t(props.action().label)}
         </ui.Button>

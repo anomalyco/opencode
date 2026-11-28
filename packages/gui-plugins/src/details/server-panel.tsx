@@ -986,7 +986,7 @@ function ServiceConfigLink(props: { owner: ServiceProps; service: Service }) {
         onClick={action.activate}
       >
         <Icon
-          name={local() ? "settings-gear" : action.view().copied ? "check" : "outline-copy"}
+          name={local() ? "settings-gear" : action.view().copied ? "check" : "copy"}
           class="shrink-0 text-v2-icon-icon-muted"
         />
         <span class="session-summary-label">{label()}</span>

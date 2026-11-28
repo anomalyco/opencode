@@ -1,0 +1,44 @@
+---
+title: "Console-websøgning"
+description: "Hostet websøgning til OpenCode gennem Console."
+---
+
+Console tilbyder hostet websøgning til tilsluttede OpenCode-brugere. En ejer eller administrator af et arbejdsområde aktiverer den én gang for arbejdsområdet, uden at medlemmerne skal have en separat søgeudbydernøgle.
+
+Hver gennemført søgning koster **$0.01**. Beløbet trækkes fra arbejdsområdets saldo og tæller med i medlemmernes forbrugsgrænser.
+
+## Aktivér
+
+1. Log ind på [Console](https://opencode.ai/console) som ejer eller administrator af arbejdsområdet.
+2. Åbn **Integrations**, og klik på **Set up** under **Hosted Web Search**.
+3. Klik på **Enable**.
+
+Hvert medlem forbinder derefter OpenCode til arbejdsområdet med `/connect`.
+
+```text
+/connect
+```
+
+Arbejdsområdets konfiguration vælger **OpenCode Web Search** som standardudbyder. Medlemmerne skal ikke angive `websearch.provider` eller tilføje en API-nøgle til en udbyder. Et medlem, der angiver sin egen `websearch.provider`, beholder i stedet dette valg.
+
+## Søgning
+
+Bed OpenCode om aktuelle oplysninger i en prompt. Søgningerne kører fra OpenCode og ikke fra en interaktiv side i Console.
+
+```text
+Find the latest Bun release and summarize the changes with source links.
+```
+
+Den hostede udbyder søger på det offentlige web og returnerer op til otte resultater. OpenCode bruger resultaterne til at besvare prompten og citere kilder.
+
+Se [guiden til websøgning](/websearch) for at konfigurere tilladelser eller deaktivere værktøjet.
+
+## Fakturering
+
+Console opkræver **$0.01**, når en søgning returnerer et gyldigt resultatsæt. Mislykkede søgninger og søgninger, der rammer rate limits, faktureres ikke.
+
+Websøgning vises separat fra modelforbrug i **Activity › Usage**, **Activity › Overview**, medlemsaktivitet, fakturaer og CSV-eksport. Gældende budgetpolitikker for samlet forbrug omfatter udgifter til websøgning.
+
+## Privatliv
+
+Ved hostet websøgning gemmes der ingen data. Console og søgeudbyderen behandler hver søgeforespørgsel og dens resultater uden at gemme indholdet.

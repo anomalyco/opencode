@@ -6,7 +6,6 @@ export function AttachmentCard(props: {
   title: string
   active?: boolean
   clickable?: boolean
-  wide?: boolean
   surface?: "base"
   /** native title attribute */
   hover?: string
@@ -19,7 +18,6 @@ export function AttachmentCard(props: {
       data-component="attachment-card"
       data-active={props.active ? "true" : undefined}
       data-clickable={props.clickable ? "true" : undefined}
-      data-wide={props.wide ? "true" : undefined}
       data-surface={props.surface}
       role={props.clickable ? "button" : undefined}
       tabIndex={props.clickable ? 0 : undefined}

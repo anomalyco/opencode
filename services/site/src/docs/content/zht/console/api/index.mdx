@@ -1,0 +1,152 @@
+---
+title: "API 總覽"
+description: "使用個人 API 金鑰或服務帳號金鑰向 OpenCode 控制台 API 驗證，並限定每個金鑰可執行的操作。"
+---
+
+控制台 API 讓你的指令碼與整合呼叫模型並匯出用量。每個請求都會以 API
+金鑰驗證。
+
+```bash
+curl --fail-with-body "https://opencode.ai/inference/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+| API | 端點 |
+| --- | --- |
+| [模型](/console/api/models) | `https://opencode.ai/console/api/v1/models` |
+| [推論](/console/api/inference) | `https://opencode.ai/inference/...` |
+| [供應商](/console/api/providers) | `https://opencode.ai/inference/custom/...` |
+| [用量匯出](/console/api/usage-export) | `https://opencode.ai/console/api/v2/usage/export` |
+
+## API 金鑰
+
+工作區成員與服務帳號都可以擁有 API 金鑰。請以 bearer 權杖傳送金鑰。
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+| | 個人 API 金鑰 | 服務帳號金鑰 |
+| --- | --- | --- |
+| 建立者 | 任何成員，為自己建立 | 擁有者與管理員 |
+| 建立位置 | **Account › Personal API keys** | **Settings › Service accounts** |
+| 代表身分 | 建立它的成員 | 服務帳號 |
+| 用量計入 | 成員的[預算](/console/budgets#member-budgets) | 服務帳號的[預算](/console/budgets#service-account-budgets) |
+| 最適合 | 你自己的指令碼與 [harness](/console/harnesses) | CI、共用機器與整合 |
+
+- 每個金鑰只能在建立時選擇的一個工作區中使用。不需要工作區標頭。
+- 完整金鑰只會在建立後顯示一次。之後控制台只會顯示其前綴。
+- **Expiration** 是選用的：**Never**、**1 day**、**7 days**、**30 days** 或 **Custom**（1 到 365 天）。過期的
+  金鑰無法續期，請建立新的金鑰。
+
+## 個人 API 金鑰
+
+個人金鑰代表你本人。你的角色、[預算](/console/budgets#member-budgets)與模型規則都會套用至它。
+
+1. 從帳號選單開啟 **Account**，找到 **Personal API keys**。
+2. 點選 **Add API key**。
+3. 選擇 **Workspace**、**Key name** 與選用的 **Expiration**。擁有者與管理員還會選擇
+   **Permissions**。
+4. 點選 **Create** 並複製金鑰。
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+金鑰的權限取決於你目前在工作區的存取權。你的角色變更時，金鑰的權限也會跟著變更。
+如果工作區強制使用 [SSO](/console/sso#sso-enforcement)，除非你是擁有者，否則金鑰只在你的 SSO 工作階段仍有效時可用。
+
+## 服務帳號
+
+服務帳號是工作區中的非人類成員，擁有自己的 API 金鑰、用量與
+[預算](/console/budgets#service-account-budgets)。請為自動化使用服務帳號，讓用量不綁定在個人身上。擁有者與
+管理員可以管理它們。
+
+1. 開啟 **Settings › Service accounts**，點選 **Add Service Account**，然後命名，例如 `CI Pipeline`。
+2. 開啟該服務帳號並點選 **Add API Key**。
+3. 選擇 **Key name**、選用的 **Expiration** 與 **Permissions**，然後點選 **Create**。
+4. 複製金鑰。
+
+```bash
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+擁有者與管理員之後可以在金鑰動作選單中使用 **Edit…** 重新命名服務帳號金鑰或變更其權限。
+
+## 權限
+
+每個金鑰都有權限等級，在建立時於 **Permissions** 下選擇。
+
+| 權限 | 允許 |
+| --- | --- |
+| **All** | 成員或服務帳號能做的所有事，但 **This account's API keys** 除外。 |
+| **Restricted** | 只有你選擇的資源。 |
+| **Read only** | 可讀取所有資源。金鑰可用來列出模型，但不能呼叫模型。 |
+
+金鑰永遠不會超越它所代表的身分。個人金鑰受成員目前角色限制，服務
+帳號金鑰則受[服務帳號能做的事](#limitations)限制。
+
+### 受限金鑰
+
+將每個資源設為 **None**、**Read** 或 **Write**。**Write** 包含 **Read**。
+
+| 資源 | 等級 |
+| --- | --- |
+| **Models** | **Read**、**Request** |
+| **Usage** | **Read** |
+| **Budgets** | **Read**、**Write** |
+| **Members** | **Read**、**Write** |
+| **Providers** | **Read**、**Write** |
+| **Billing** | **Read**、**Write** |
+| **Workspace settings** | **Read**、**Write** |
+| **SSO** | **Read** |
+| **Service accounts** | **Read** |
+| **This account's API keys** | **Write** |
+
+**Models › Read** 會列出模型，**Models › Request** 則還會透過[推論](/console/api/inference)
+與[供應商](/console/api/providers) API 呼叫它們。例如，只呼叫模型的金鑰需要：
+
+```text
+Permissions: Restricted
+Models:      Request
+```
+
+在引進範圍權限之前建立為 **Inference only** 的金鑰，會顯示為 **Restricted**，並將 **Models** 設為 **Request**。
+
+### 誰可以授予什麼
+
+- **Members** 只能建立可列出與呼叫模型的個人金鑰。控制台會顯示「This key can list and call
+  models as you.」，而不顯示權限選項。
+- **Owners and admins** 可以將個人金鑰設為 **All**、**Restricted** 或 **Read only**，但金鑰的權限不得超過自身角色。
+  預設為 **Restricted**，並將 **Models** 設為 **Request**。日後若調降角色，金鑰權限也會隨之縮減。
+- **服務帳號金鑰**預設為 **All**。擁有者與管理員選擇其權限。
+
+### 限制
+
+有些動作一律需要有人在控制台登入，而使用金鑰建立金鑰受到嚴格限制。
+
+- 任何 API 金鑰都無法變更 SSO 設定或刪除工作區。
+- 服務帳號金鑰無法邀請成員、變更角色、移除成員、管理帳單、變更工作區設定、
+  管理模型，或建立或移除服務帳號，即使具有 **All** 也一樣。
+- **This account's API keys** 僅適用於服務帳號金鑰，且 **All** 不包含它。具有此權限的金鑰
+  只能為自己的服務帳號建立與撤銷金鑰。新金鑰必須是 **Restricted**、位於
+  建立金鑰的權限範圍內，且不能包含 **This account's API keys**。
+- 個人金鑰永遠無法取得 **This account's API keys**，且任何 API 金鑰都無法建立或撤銷個人 API 金鑰。
+
+超出金鑰權限的請求會回傳 HTTP `403`。
+
+## 撤銷
+
+| 金鑰 | 誰可以撤銷 | 位置 |
+| --- | --- | --- |
+| 個人 API 金鑰 | 擁有它的成員 | **Account › Personal API keys**，然後 **Revoke** |
+| 個人 API 金鑰 | 擁有者與管理員 | **Settings › Members** 中的成員頁面，位於 **API Keys** 下 |
+| 服務帳號金鑰 | 擁有者與管理員 | **Settings › Service accounts** 中的服務帳號頁面，位於 **API Keys** 下 |
+
+金鑰也會自動撤銷：
+
+- 離開或被移出工作區，或透過 [SCIM](/console/scim) 取消佈建，會撤銷該人員在其中建立的每個金鑰，
+  包括服務帳號金鑰。同一服務帳號上的其他金鑰仍會繼續運作。
+- 移除服務帳號會撤銷其所有金鑰。
+
+已撤銷與過期的金鑰會立即停止運作，並回傳 HTTP `401`。

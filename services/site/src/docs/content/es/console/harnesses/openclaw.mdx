@@ -1,0 +1,91 @@
+---
+title: "OpenClaw"
+description: "Usa los modelos de Console y Go desde OpenClaw."
+---
+
+[OpenClaw](https://openclaw.ai) incluye proveedores de OpenCode para el pago por uso y Go. Elige la API correcta para cada
+modelo de pago o de Go y envía un ID de sesión con cada solicitud de Go. Los modelos de chat del nivel gratuito requieren OpenCode;
+si los llamas desde OpenClaw, recibes HTTP `403`.
+
+<Callout>
+  La [CLI de Console](/console/harnesses#console-cli) configura OpenClaw con un solo comando, incluidas las políticas del
+  espacio de trabajo, los servidores MCP, las skills y las instrucciones. Ejecuta `npx @opencode/console setup openclaw` y luego `openclaw gateway
+  restart`. Los pasos siguientes lo configuran a mano.
+</Callout>
+
+| Proveedor     | Plan          | Prefijo de modelo |
+| ------------- | ------------- | ----------------- |
+| `opencode`    | Pago por uso  | `opencode/...`    |
+| `opencode-go` | Go            | `opencode-go/...` |
+
+El proveedor de Go viene con OpenClaw. El proveedor de pago por uso es un plugin; instálalo si `openclaw models list`
+no lo muestra.
+
+```bash
+openclaw plugins install @openclaw/opencode-provider
+```
+
+## Iniciar sesión
+
+Inicia sesión desde el navegador en lugar de pegar una clave. Requiere OpenClaw 2026.11.7 o posterior.
+
+```bash
+openclaw models auth login --provider opencode-go --method oauth
+```
+
+Abre el enlace que imprime OpenClaw, confirma el código en Console y elige un espacio de trabajo con una suscripción de [Go](/console/go).
+OpenClaw conserva y renueva la sesión automáticamente.
+
+Debes iniciar sesión por separado para cada proveedor. Inicia sesión también en `opencode` para usar los modelos de pago por uso.
+
+```bash
+openclaw models auth login --provider opencode --method oauth
+```
+
+También puedes elegir **OpenCode Go (browser sign-in)** durante `openclaw onboard`, con `/login` en el chat o desde
+**Settings › Models › Add account**.
+
+## Usar una clave de API
+
+Ambos proveedores leen la misma clave de `OPENCODE_API_KEY`. Crea una [clave de API personal](/console/harnesses#get-an-api-key)
+y pásala al asistente de configuración inicial.
+
+```bash
+openclaw onboard --opencode-go-api-key "$OPENCODE_API_KEY"
+```
+
+O defínela en `~/.openclaw/openclaw.json`.
+
+```json5 title="~/.openclaw/openclaw.json"
+{
+  env: { vars: { OPENCODE_API_KEY: "oc_sk_..." } },
+  agents: { defaults: { model: { primary: "opencode-go/kimi-k3" } } },
+}
+```
+
+Una clave de un espacio de trabajo sin Go sigue mostrando los modelos de Go, pero las solicitudes fallan hasta que el espacio de trabajo se suscriba.
+
+## Modelos
+
+Selecciona un modelo como `<provider>/<model-id>`, usando los ID de la tabla de [Console](/console/models#endpoints) o
+[Go](/console/go#endpoints). OpenClaw lee la lista de modelos desde Console, así que los modelos nuevos aparecen sin actualizar.
+
+```bash
+openclaw models list --provider opencode-go
+```
+
+Define el modelo predeterminado para tus agentes.
+
+```bash
+openclaw config set agents.defaults.model.primary "opencode-go/kimi-k3"
+```
+
+## MCP de Console
+
+Agrega el servidor [MCP de Console](/console/harnesses#console-mcp) con OAuth y luego inicia sesión desde el navegador mientras el Gateway
+está en ejecución.
+
+```bash
+openclaw mcp set opencode-console '{"url":"https://opencode.ai/console/mcp","transport":"streamable-http","auth":"oauth"}'
+openclaw mcp login opencode-console
+```

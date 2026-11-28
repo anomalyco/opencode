@@ -1,0 +1,89 @@
+---
+title: "OpenClaw"
+description: "استخدم نماذج Console وGo من OpenClaw."
+---
+
+يتضمّن [OpenClaw](https://openclaw.ai) مزوّدي OpenCode للدفع حسب الاستخدام ولاشتراك Go. ويختار API المناسبة لكل
+نموذج مدفوع أو نموذج Go ويرسل معرّف جلسة مع كل طلب Go. وتتطلّب نماذج المحادثة المجانية استخدام OpenCode،
+وتُرفض طلباتها من OpenClaw برمز HTTP `403`.
+
+<Callout>
+يتيح لك [Console CLI](/console/harnesses#console-cli) إعداد OpenClaw بأمر واحد، بما يشمل سياسات مساحة العمل
+  وخوادم MCP والمهارات والتعليمات. شغّل `npx @opencode/console setup openclaw`، ثم `openclaw gateway
+  restart`. والخطوات أدناه تعدّه يدويًا.
+</Callout>
+
+| المزوّد        | الخطة          | بادئة النموذج      |
+| ------------- | ------------- | ----------------- |
+| `opencode`    | الدفع حسب الاستخدام | `opencode/...`    |
+| `opencode-go` | Go            | `opencode-go/...` |
+
+يأتي مزوّد Go مع OpenClaw. أما مزوّد الدفع حسب الاستخدام فهو ملحق؛ فثبّته إذا لم يعرضه `openclaw models list`.
+
+```bash
+openclaw plugins install @openclaw/opencode-provider
+```
+
+## تسجيل الدخول
+
+سجّل الدخول من المتصفح بدلًا من لصق مفتاح. يتطلّب هذا الخيار OpenClaw 2026.11.7 أو إصدارًا أحدث.
+
+```bash
+openclaw models auth login --provider opencode-go --method oauth
+```
+
+افتح الرابط الذي يطبعه OpenClaw، وأكّد الرمز في Console، واختر مساحة عمل لديها اشتراك [Go](/console/go).
+ويحفظ OpenClaw تسجيل الدخول ويجدده بنفسه.
+
+ويسجّل كل مزوّد الدخول على حدة. فسجّل الدخول إلى `opencode` أيضًا لنماذج الدفع حسب الاستخدام.
+
+```bash
+openclaw models auth login --provider opencode --method oauth
+```
+
+ويمكنك أيضًا اختيار **OpenCode Go (browser sign-in)** أثناء `openclaw onboard`، أو بـ `/login` في المحادثة، أو من
+**Settings › Models › Add account**.
+
+## استخدام مفتاح API
+
+يقرأ المزوّدان المفتاح نفسه من `OPENCODE_API_KEY`. أنشئ [مفتاح API شخصي](/console/harnesses#get-an-api-key)
+ومرّره إلى الإعداد الأولي.
+
+```bash
+openclaw onboard --opencode-go-api-key "$OPENCODE_API_KEY"
+```
+
+أو اضبطه في `~/.openclaw/openclaw.json`.
+
+```json5 title="~/.openclaw/openclaw.json"
+{
+  env: { vars: { OPENCODE_API_KEY: "oc_sk_..." } },
+  agents: { defaults: { model: { primary: "opencode-go/kimi-k3" } } },
+}
+```
+
+حتى إذا كان المفتاح يخصّ مساحة عمل غير مشتركة في Go، فستظهر نماذج Go في القائمة، لكن طلباتها ستفشل إلى أن تشترك مساحة العمل.
+
+## النماذج
+
+اختر نموذجًا بصيغة `<provider>/<model-id>`، باستخدام المعرّفات من جدول [Console](/console/models#endpoints) أو
+[Go](/console/go#endpoints). ويقرأ OpenClaw قائمة النماذج من Console، فتظهر النماذج الجديدة دون تحديث.
+
+```bash
+openclaw models list --provider opencode-go
+```
+
+واضبط النموذج الافتراضي لوكلائك.
+
+```bash
+openclaw config set agents.defaults.model.primary "opencode-go/kimi-k3"
+```
+
+## Console MCP
+
+أضف خادم [Console MCP](/console/harnesses#console-mcp) مع OAuth، ثم سجّل الدخول من المتصفح بينما تعمل البوابة.
+
+```bash
+openclaw mcp set opencode-console '{"url":"https://opencode.ai/console/mcp","transport":"streamable-http","auth":"oauth"}'
+openclaw mcp login opencode-console
+```

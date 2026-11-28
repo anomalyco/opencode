@@ -4,22 +4,29 @@ import { siteLinks } from "~/component/site/links"
 import { Wordmark } from "~/component/site/marks"
 import { AgentIcon, Bracket, ThemeCycle } from "~/component/site/site-controls"
 import { useI18n } from "~/context/i18n"
+import { route, type Locale } from "~/lib/language"
+import type { DocsSet } from "../config"
+import { DocsLanguagePicker } from "./DocsLanguagePicker"
 import type { V1Locale } from "../lib/v1-navigation"
 
 /**
  * The site's footer as its list layout renders by default (site.tsx): the secondary links and the
  * status, the theme switch with the page's Markdown, the copyright and the wordmark. The latest docs
- * are English; the V1 docs' pages pick their language in a select beside the theme switch. client.ts
- * fills in the status and drives the theme switch and the select.
+ * pick their language where the site does, in the secondary links; the V1 docs' pages have a select
+ * beside the theme switch instead. client.ts fills in the status and drives the theme switch, the
+ * select and the picker.
  */
 export function DocsFooter(props: {
+  set: DocsSet
+  slug: string
+  locale: Locale
   markdown?: string
   languages?: (V1Locale & { href: string })[]
   current?: V1Locale
 }) {
   const i18n = useI18n()
   // Settings › Footer links "community" (the default): no X, and Discord as "Community".
-  const links = siteLinks(i18n.t, (path) => path).secondary.flatMap((item) =>
+  const links = siteLinks(i18n.t, (path) => route(props.locale, path)).secondary.flatMap((item) =>
     "social" in item
       ? []
       : "community" in item
@@ -45,6 +52,12 @@ export function DocsFooter(props: {
                 </li>
               )}
             </For>
+            <Show when={props.set.id === "latest"}>
+              <li data-slot="language">
+                <Bracket />
+                <DocsLanguagePicker set={props.set} slug={props.slug} locale={props.locale} />
+              </li>
+            </Show>
             <li>
               <a
                 href="https://status.opencode.ai"

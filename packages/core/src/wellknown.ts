@@ -138,16 +138,24 @@ const layer = Layer.effect(
       return { origin, integrationID: Integration.ID.make(origin), manifest }
     })
 
+    const loadSource = (origin: string) =>
+      loadEntry(origin).pipe(
+        Effect.catch((error) =>
+          Effect.logWarning("skipping wellknown source", { origin, error }).pipe(Effect.as(undefined)),
+        ),
+      )
+
     const readOrigins = kv.get(sourcesKey).pipe(Effect.map((value) => (Schema.is(Sources)(value) ? value : [])))
 
     const load = Effect.fn("WellKnown.load")(function* () {
       const origins = yield* readOrigins
       const current = yield* Ref.get(cache)
-      const entries = yield* Effect.forEach(origins, (origin) => {
+      const loaded = yield* Effect.forEach(origins, (origin) => {
         const cached = current.get(origin)
         if (cached) return Effect.succeed(cached)
-        return loadEntry(origin)
+        return loadSource(origin)
       })
+      const entries = loaded.filter((entry) => entry !== undefined)
       yield* Ref.set(cache, new Map(entries.map((entry) => [entry.origin, entry])))
       return entries
     })
@@ -156,8 +164,8 @@ const layer = Layer.effect(
       function* () {
         const origins = yield* readOrigins
         if (!origins.length) return false
-        const entries = yield* Effect.forEach(origins, loadEntry)
-        const next = new Map(entries.map((entry) => [entry.origin, entry]))
+        const entries = yield* Effect.forEach(origins, loadSource)
+        const next = new Map(entries.filter((entry) => entry !== undefined).map((entry) => [entry.origin, entry]))
         const changed = !isDeepStrictEqual(Ref.getUnsafe(cache), next)
         if (!changed) return false
         yield* Ref.set(cache, next)

@@ -1,0 +1,201 @@
+---
+title: "Formattatori"
+description: "Formatta i file dopo che OpenCode li modifica, con formattatori integrati come Prettier, Biome, gofmt e Ruff, o con i tuoi comandi."
+---
+
+OpenCode può formattare i file dopo che i suoi strumenti `write`, `edit` o `patch` li modificano.
+I formattatori sono disattivati per impostazione predefinita, quindi abilitali nella tua configurazione:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+## Abilitazione
+
+Imposta `formatter` su `true` per abilitare ogni formattatore integrato. OpenCode esegue un
+integrato solo quando il suo eseguibile e gli eventuali requisiti specifici del progetto sono
+disponibili.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+Un oggetto abilita anche gli integrati e ti permette di sovrascriverli o aggiungere formattatori personalizzati. Un oggetto vuoto conserva le impostazioni ereditate dei formattatori, mentre `true`
+le reimposta sugli integrati.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {},
+}
+```
+
+## Formattatori integrati
+
+OpenCode include queste definizioni di formattatori. La maggior parte richiede che il comando
+indicato sia disponibile; le definizioni con regole di rilevamento aggiuntive le elencano sotto.
+
+| Formattatore | Estensioni | Requisito |
+| --- | --- | --- |
+| `gofmt` | `.go` | comando `gofmt` |
+| `mix` | `.ex`, `.exs`, `.eex`, `.heex`, `.leex`, `.neex`, `.sface` | comando `mix` |
+| `oxfmt` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts` | dipendenza `oxfmt` in `package.json` |
+| `prettier` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts`, `.html`, `.htm`, `.css`, `.scss`, `.sass`, `.less`, `.vue`, `.svelte`, `.json`, `.jsonc`, `.yaml`, `.yml`, `.toml`, `.xml`, `.md`, `.mdx`, `.graphql`, `.gql` | dipendenza `prettier` in `package.json` |
+| `biome` | Le stesse estensioni di `prettier` qui sopra | `biome.json` o `biome.jsonc` e un binario `@biomejs/biome` installato |
+| `zig` | `.zig`, `.zon` | comando `zig` |
+| `clang-format` | `.c`, `.cc`, `.cpp`, `.cxx`, `.c++`, `.h`, `.hh`, `.hpp`, `.hxx`, `.h++`, `.ino`, `.C`, `.H` | comando `clang-format` e `.clang-format` |
+| `ktlint` | `.kt`, `.kts` | comando `ktlint` |
+| `ruff` | `.py`, `.pyi` | comando `ruff` e una configurazione Ruff o una dichiarazione di dipendenza |
+| `air` | `.R` | comando `air` che si identifica come formattatore R |
+| `uv` | `.py`, `.pyi` | comando `uv` con supporto a `uv format` |
+| `rubocop` | `.rb`, `.rake`, `.gemspec`, `.ru` | comando `rubocop` |
+| `standardrb` | `.rb`, `.rake`, `.gemspec`, `.ru` | comando `standardrb` |
+| `htmlbeautifier` | `.erb` | comando `htmlbeautifier` |
+| `dart` | `.dart` | comando `dart` |
+| `ocamlformat` | `.ml`, `.mli` | comando `ocamlformat` e `.ocamlformat` |
+| `terraform` | `.tf`, `.tfvars` | comando `terraform` |
+| `latexindent` | `.tex` | comando `latexindent` |
+| `gleam` | `.gleam` | comando `gleam` |
+| `shfmt` | `.sh`, `.bash` | comando `shfmt` |
+| `nixfmt` | `.nix` | comando `nixfmt` |
+| `rustfmt` | `.rs` | comando `rustfmt` |
+| `pint` | `.php` | `laravel/pint` in `composer.json` |
+| `ormolu` | `.hs` | comando `ormolu` |
+| `cljfmt` | `.clj`, `.cljs`, `.cljc`, `.edn` | comando `cljfmt` |
+| `dfmt` | `.d` | comando `dfmt` |
+
+Ad esempio, abilitare gli integrati permette a OpenCode di scoprire ed eseguire una dipendenza Prettier locale al progetto
+per i file corrispondenti:
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": true,
+}
+```
+
+## Personalizzazione
+
+Aggiungi una voce con nome per cambiare un integrato o definire un formattatore personalizzato. Un formattatore
+personalizzato ha bisogno sia di `command` sia di `extensions` per funzionare.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "environment": {
+        "NODE_ENV": "development",
+      },
+      "extensions": [".js", ".ts"],
+    },
+    "deno-markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+| Campo | Tipo | Comportamento |
+| --- | --- | --- |
+| `disabled` | `boolean` | Rimuove il formattatore con quel nome quando è `true`. |
+| `command` | `string[]` | Sostituisce il comando integrato o definisce un comando personalizzato. |
+| `environment` | `Record<string, string>` | Aggiunge variabili d'ambiente conservando l'ambiente padre. |
+| `extensions` | `string[]` | Sostituisce l'elenco di estensioni integrato o definisce quello personalizzato. Includi il punto iniziale. |
+
+Tutti i campi sono facoltativi. Una voce integrata eredita i valori omessi, mentre una nuova
+voce senza comando o estensioni non può funzionare.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "extensions": [".md", ".mdx"],
+    },
+  },
+}
+```
+
+## Comandi
+
+`command` è un array di argomenti, non una stringa di comando shell. OpenCode sostituisce
+`$FILE` con il percorso assoluto del file ed esegue il comando dalla directory del progetto
+attivo.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "custom": {
+      "command": ["custom-fmt", "--write", "$FILE"],
+      "extensions": [".custom"],
+    },
+  },
+}
+```
+
+## Corrispondenza
+
+OpenCode confronta l'estensione finale del file con `extensions`, distinguendo tra maiuscole e minuscole. Le voci composte come `.part.md` non corrispondono a
+`notes.part.md` perché la sua estensione finale è `.md`.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+Quando più formattatori corrispondono, OpenCode li prova nell'ordine registrato e
+si ferma dopo il primo comando riuscito. Gli integrati mantengono il loro ordine
+integrato; le voci personalizzate seguono l'ordine dell'oggetto. Se uno esce senza successo,
+OpenCode registra il fallimento e prova la corrispondenza successiva.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "preferred": {
+      "command": ["preferred-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+    "fallback": {
+      "command": ["fallback-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+  },
+}
+```
+
+## Disattivazione
+
+La formattazione è disattivata quando nessun file di configurazione imposta `formatter`. Per disattivare
+la formattazione abilitata da un file a priorità più bassa, impostala su `false`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false,
+}
+```
+
+Per disattivare un integrato lasciando attivi gli altri, segna la sua voce con nome
+come disabilitata.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "disabled": true,
+    },
+  },
+}
+```

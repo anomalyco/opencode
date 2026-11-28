@@ -1,0 +1,105 @@
+---
+title: "harness"
+description: "他のコーディングエージェントや AI アプリから Console と Go のモデルを使用します。"
+---
+
+Console は OpenCode 以外のコーディングエージェントでも使用できます。harness の接続先に Console のゲートウェイを指定し、API キーを設定すると、任意の有料モデルや Go のモデルを利用できます。料金は他のリクエストと同様にワークスペースに請求されます。
+
+| harness                                       | 従量課金 | Go       | MCP  |
+| --------------------------------------------- | -------- | -------- | ---- |
+| [Claude Code](/console/harnesses/claude-code) | 対応     | 対応     | 対応 |
+| [Codex](/console/harnesses/codex)             | 対応     | 対応     | 対応 |
+| [Hermes](/console/harnesses/hermes)           | 組み込み | 組み込み | 対応 |
+| [OpenClaw](/console/harnesses/openclaw)       | プラグイン | 組み込み | 対応 |
+| [Pi](/console/harnesses/pi)                   | 組み込み | 組み込み | 対応 |
+| [Raycast](/console/harnesses/raycast)         | 拡張機能 | 拡張機能 | 対応 |
+
+無料枠のチャットモデルは OpenCode 内でのみ利用できます。他の harness がこれらのモデルを要求すると、Console の API キーがあっても HTTP `403` が返ります。有料モデルまたは Go のサブスクリプションを使用してください。
+
+## Console CLI
+
+[Console CLI](https://github.com/anomalyco/opencode-console-cli) を使うと、1 つのコマンドで harness をワークスペースに接続できます。Node.js 22 以降が必要です。
+
+| harness          | コマンド                                       |
+| ---------------- | ---------------------------------------------- |
+| Claude Code      | `npx @opencode/console setup claude-code`      |
+| Codex            | `npx @opencode/console setup codex`            |
+| Hermes           | `npx @opencode/console setup hermes`           |
+| OpenClaw         | `npx @opencode/console setup openclaw`         |
+| Pi               | `npx @opencode/console setup pi`               |
+| DeepSeek Harness | `npx @opencode/console setup deepseek-harness` |
+
+ブラウザで Console が開き、サインインを承認してワークスペースを選択します。その後、harness は次のものを利用できます。
+
+- Console 経由の、ワークスペースのモデル
+- ツール呼び出しのたびに確認される、ワークスペースのポリシー
+- ワークスペースの MCP サーバー、スキル、指示
+
+CLI は harness とワークスペースを同期し続け、自身も更新します。
+
+Claude や ChatGPT のサブスクリプションなど、harness 自身のサインインとモデルを維持するには、`--keep-provider` を追加します。その場合も、harness はワークスペースのポリシー、MCP サーバー、スキル、指示を利用できます。Claude Code、Codex、Hermes、OpenClaw で使用できます。
+
+```bash
+npx @opencode/console setup codex --keep-provider
+```
+
+harness を手動で設定する場合や、CLI が対応していない harness を使う場合は、API キーと以下のベース URL を使用します。
+
+## API キーを取得する
+
+harness は Console の API キーで認証します。最も手軽なのは[パーソナル API キー](/console/api#personal-api-keys)です。このキーを使ったモデルの呼び出しは、キーを作成した本人の操作として扱われます。
+
+1. [Console](https://opencode.ai/console) のアカウントメニューから **Account** を開きます。
+2. **Personal API keys** の下で **Add API key** をクリックします。
+3. ワークスペースを選択し、キーに名前を付けて **Create** をクリックします。
+4. キーをコピーします。キーは一度しか表示されません。
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+使用量は[メンバーの予算](/console/budgets#member-budgets)に計上されます。従量課金にはクレジットのあるワークスペースのキーを、Go には [Go](/console/go) を契約しているワークスペースのキーを使用します。
+
+共有マシンや CI では、オーナーと管理者が代わりに[サービスアカウント](/console/api#service-accounts)のキーを作成できるため、使用量が特定の個人に紐付きません。
+
+## ベース URL
+
+従量課金と Go は異なるベース URL から提供されます。プランに合った方を使用してください。
+
+| プラン     | ベース URL                         |
+| ---------- | ---------------------------------- |
+| 従量課金   | `https://opencode.ai/inference`    |
+| Go         | `https://opencode.ai/inference/go` |
+
+使用する API のパスを追加します。すべての API が、有料と Go のすべてのテキストモデルを提供します。Console は、モデルがその API に対応していればモデル自身のエンドポイントにリクエストを送り、そうでなければ変換します。
+
+| API                     | パス                                            |
+| ----------------------- | ----------------------------------------------- |
+| OpenAI Responses        | `/openai/v1/responses`                          |
+| OpenAI Chat Completions | `/openai/v1/chat/completions`                   |
+| Anthropic Messages      | `/anthropic/v1/messages`                        |
+| Gemini                  | `/google/v1beta/models/<model>:generateContent` |
+
+```text
+https://opencode.ai/inference/go/openai/v1/chat/completions
+```
+
+## セッション
+
+Console が同じ会話を一貫した経路にルーティングし、プロンプトキャッシュを再利用できるよう、会話内のすべてのリクエストに同じセッション ID を付けます。Go では[必須](/console/go#where-can-i-use-it)です。
+
+```text
+x-opencode-session: ses_...
+```
+
+Console は、Claude Code、Codex、Hermes、Pi が送信するネイティブのセッションヘッダーも認識し、OpenClaw は `x-opencode-session` を自身で送信するため、いずれも追加設定は不要です。
+
+## Console MCP
+
+MCP に対応した harness は、Console MCP サーバーを通じてワークスペースを管理できます。動的クライアント登録を伴う OAuth を使用するため、キーを貼り付ける代わりにブラウザからサインインします。
+
+```text
+https://opencode.ai/console/mcp
+```
+
+各 harness のページに追加方法が記載されています。OpenCode は、ワークスペースで有効になると `opencode_console` としてサーバーを自動的に追加し、初回使用時にブラウザからのサインインを求めます。

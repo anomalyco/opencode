@@ -112,7 +112,7 @@ export function JumpToMessage(props: {
                   autocapitalize="off"
                   autofocus
                   showClearButton={!props.opening && !!query()}
-                  clearIcon="circle-xmark"
+                  clearIcon="close"
                   clearLabel={language.t("common.clear")}
                   onClearClick={() => {
                     list.setActive(undefined)

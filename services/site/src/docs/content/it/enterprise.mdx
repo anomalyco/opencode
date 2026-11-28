@@ -1,0 +1,126 @@
+---
+title: "Enterprise"
+description: "Controlla quali modelli, provider e integrazioni le persone della tua organizzazione possono usare in OpenCode."
+---
+
+Usa le [policy](/policies) per controllare cosa può usare OpenCode sulle macchine della tua organizzazione. Mettile nella configurazione gestita,
+così utenti e progetti non possono modificarle.
+
+## Distribuzione
+
+Metti le policy nel file di configurazione di sistema:
+
+| Piattaforma | File                                                  |
+| ----------- | ----------------------------------------------------- |
+| macOS       | `/Library/Application Support/opencode/opencode.json` |
+| Linux       | `/etc/opencode/opencode.json`                         |
+| Windows     | `%ProgramData%\opencode\opencode.json`                |
+
+Su macOS, puoi distribuirle anche con MDM come preferenze gestite per il dominio `ai.opencode.managed`. Vedi
+[posizioni della configurazione](/config#locations).
+
+```jsonc title="/etc/opencode/opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+Le policy in questi file prevalgono sulla configurazione utente e di progetto, quindi un utente o un repository non può consentire ciò che tu neghi.
+Vedi la [precedenza](/policies#precedence).
+
+## Bloccare i modelli gratuiti
+
+Blocca il piano gratuito senza accesso. Tutto il resto continua a funzionare e le persone possono collegare i propri provider e account.
+
+```jsonc
+{
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+Il piano gratuito è l'integrazione `opencode` senza account. Gli account Console con accesso sono `opencode#<account>`, quindi
+questa istruzione non li riguarda.
+
+Uno spazio di lavoro Console può anche offrire modelli gratuiti. Per bloccarli:
+
+- Nel tuo spazio di lavoro, disattiva **Free models** nella scheda Models di Console. Vedi
+  [Modelli di OpenCode](/console/providers#opencode-models).
+- Per nascondere i modelli gratuiti in ogni account, imposta `OPENCODE_DISABLE_FREE_MODELS=1` sul servizio OpenCode. Vedi
+  [modelli gratuiti](/models#free-models).
+
+## Richiedere il tuo spazio di lavoro Console
+
+Consenti solo lo spazio di lavoro Console della tua organizzazione. Nient'altro può essere collegato o usato.
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}
+```
+
+- `/connect` elenca solo OpenCode Console, così le persone possono accedere.
+- Funziona solo il tuo spazio di lavoro. Il piano gratuito, gli account Console personali, le altre organizzazioni, le chiavi API dalle variabili
+  d'ambiente e i provider da `opencode.json` sono bloccati.
+- I modelli, i server MCP e la ricerca web del tuo spazio di lavoro funzionano. Modificali in Console senza ridistribuire la policy.
+
+Sostituisci `org_01M3CAP8H43Z49CER6NT0Y3ZF1` con l'ID organizzazione del tuo spazio di lavoro. Per bloccare anche i modelli gratuiti nello spazio di lavoro,
+disattiva **Free models** in Console.
+
+## Consentire solo provider approvati
+
+Blocca ogni provider, poi consenti quelli approvati. Questo esempio consente solo un gateway interno compatibile con OpenAI.
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+Un provider bloccato viene rimosso anche quando qualcuno ha le credenziali. Vedi [provider](/policies#providers).
+
+## Limitare server MCP e strumenti
+
+Consenti solo i server MCP approvati e blocca gli strumenti che non vuoi che gli agenti eseguano.
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "read:*/.ssh/*", "effect": "deny" },
+  ],
+}
+```
+
+Vedi [Server MCP, skill e plugin](/policies#mcp-servers-skills-and-plugins) e [strumenti](/policies#tools).
+
+## Verificare che funzioni
+
+- Esegui `/connect` e `/models` come utente e verifica che compaia solo ciò che hai consentito.
+- Controlla se il log del server contiene avvisi. OpenCode scarta le istruzioni che non superano la validazione e continua ad applicare le altre.
+- Una chiamata a uno strumento bloccata fallisce con `Blocked by configuration policy`.
+
+## Versioni
+
+| Azione                                                                    | Richiede |
+| ------------------------------------------------------------------------- | -------- |
+| `integration.connect`, `integration.use`, `mcp.use`, `skill.use`, `plugin.use` | 2.2.3    |
+| `websearch.use`                                                           | 2.2.6    |
+
+I client più vecchi ignorano queste istruzioni.

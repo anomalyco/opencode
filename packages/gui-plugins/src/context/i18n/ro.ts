@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Utilizare",
   "usage.cost": "Cost",
   "usage.view": "Vezi utilizarea contextului",
-  "systemPrompt.title": "Prompt sistem",
   "rawMessages.title": "Mesaje brute",
   "export.session": "Exportă sesiunea",
   "stats.session": "Sesiune",

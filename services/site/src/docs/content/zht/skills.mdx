@@ -1,0 +1,246 @@
+---
+title: "技能"
+description: "撰寫 SKILL.md 檔案，為 OpenCode agent 提供可重用的任務指示，只在任務需要時載入。"
+---
+
+建立技能，為 agent 提供特定工作的可重用指示。將 `SKILL.md` 檔案放在 `.opencode/skills/<skill-id>`，並在 `description` 中說明何時使用它。
+
+```markdown title=".opencode/skills/git-release/SKILL.md"
+---
+name: Git Release
+description: Prepare release notes, version bumps, and GitHub releases
+---
+
+## Workflow
+
+1. Read `references/release-policy.md`.
+2. Summarize merged changes since the previous tag.
+3. Propose the version bump before changing files.
+4. Run `scripts/changelog.ts` only after the user approves the version.
+```
+
+OpenCode 會列出與任務相關的技能。agent 可用 `skill` 工具載入技能指示，不必把所有技能都加進每次的提示詞。
+
+## 建立
+
+將相關指令碼、參考資料與範本放在 `SKILL.md` 旁邊：
+
+```text
+.opencode/skills/
+└── git-release/
+    ├── SKILL.md
+    ├── scripts/
+    │   └── changelog.ts
+    └── references/
+        └── release-policy.md
+```
+
+技能檔案內的路徑以 `SKILL.md` 所在的目錄為基準。建議每個技能用獨立的目錄，這樣輔助檔案就有專屬的基礎目錄。
+
+## 探索
+
+OpenCode 會自動搜尋下列位置：
+
+| 範圍 | 來源 |
+| --- | --- |
+| 全域 | `~/.config/opencode/skills` |
+| 全域相容 | `~/.claude/skills`、`~/.agents/skills` |
+| 專案 | `.opencode/skills` |
+| 專案相容 | `.claude/skills`、`.agents/skills` |
+
+對於專案來源，OpenCode 會從目前目錄一路向上搜尋到檔案系統的根目錄，並納入每一層相符的目錄。
+
+每個來源可以包含任一種形式：
+
+```text
+skills/
+├── review.md
+└── git-release/
+    └── SKILL.md
+```
+
+- Markdown 檔案必須位於來源根目錄，例如 `skills/review.md`。
+- 名稱完全為 `SKILL.md` 的檔案可以巢狀放在分組目錄中，例如 `skills/git-release/SKILL.md` 或 `skills/teams/release/SKILL.md`。
+- 包含 `SKILL.md` 的目錄就是一個技能。OpenCode 不會在其內部繼續搜尋更多技能。
+- 隱藏檔案與目錄以及 `node_modules` 會略過。
+- 搜尋會在來源根目錄下六層目錄處停止。
+
+## 來源
+
+使用任意 `opencode.json` 或 `opencode.jsonc` 中的 `skills` 陣列，新增更多本機目錄或 HTTP 目錄：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": [
+    "./team-skills",
+    "~/shared/opencode-skills",
+    "/opt/company-skills",
+    "https://example.com/opencode/skills/",
+  ],
+}
+```
+
+| 值 | 解析方式 |
+| --- | --- |
+| 相對路徑 | 從作用中的 OpenCode 工作目錄，而非設定檔 |
+| `~/` 路徑 | 從目前使用者的主目錄 |
+| 絕對路徑 | 原樣使用 |
+| `http://` 或 `https://` URL | 以 HTTP 目錄載入 |
+
+每個找到的設定檔都會貢獻其項目。`skills` 陣列會合併，而不是取代。
+
+已連接的 [OpenCode 控制台](/console)工作區也可以分享技能。
+
+## 目錄
+
+HTTP 目錄是帶有 `index.json` 檔案的基礎 URL：
+
+```json title="index.json"
+{
+  "skills": [
+    {
+      "name": "git-release",
+      "version": "3",
+      "files": ["git-release.md", "references/release-policy.md"]
+    }
+  ]
+}
+```
+
+對於該項目，OpenCode 會從 `<base-url>/git-release/<file>` 下載每個檔案。
+
+| 規則 | 要求 |
+| --- | --- |
+| 路徑 | 必須安全、相對且同源 |
+| 項目檔案 | 包含 `SKILL.md` 或 `<name>.md`，例如 `git-release.md` |
+| 更新 | 檔案變更時遞增 `version`，讓 OpenCode 重新整理其快取 |
+
+每個下載的技能目錄都會成為以項目命名的來源根目錄，因此 `git-release.md` 與 `SKILL.md` 的 ID 都是 `git-release`。
+
+## Frontmatter
+
+使用前置中繼資料為技能命名，並控制它會顯示在哪裡：
+
+```markdown title="SKILL.md"
+---
+name: Git Release
+description: Prepare a repository release
+metadata:
+  opencode/autoinvoke: false
+---
+
+Prepare the changelog, version bump, tag, and release notes.
+```
+
+| 欄位 | 行為 |
+| --- | --- |
+| `name` | 顯示名稱；預設為由路徑衍生的 ID |
+| `description` | 用於向模型顯示技能的摘要 |
+| `metadata.opencode/autoinvoke` | 設為 `false` 可將技能從模型的可用清單中省略 |
+| `disable-model-invocation` | 設為 `true` 可達到與 `opencode/autoinvoke: false` 相同的效果 |
+
+執行階段不要求任何前置中繼資料欄位。若希望模型能找到該技能，請在 `description` 中清楚說明用途；沒有描述的技能不會提供給模型。
+
+`opencode/autoinvoke: false` 只會將技能從模型的可用清單中隱藏。技能仍會註冊，且仍可依 ID 明確載入。當 `disable-model-invocation` 與 `opencode/autoinvoke` 同時設定時，`opencode/autoinvoke` 優先。V2 接受 `license` 與 `compatibility` 等可攜性欄位，但不會解讀它們。
+
+## ID
+
+檔案路徑決定技能 ID。前置中繼資料中的 `name` 只用於顯示。
+
+| 檔案 | ID |
+| --- | --- |
+| `<source>/git-release.md` | `git-release` |
+| `<source>/git-release/SKILL.md` | `git-release` |
+| `<source>/teams/release/SKILL.md` | `release` |
+
+ID 必須完全相符，且區分大小寫。為了讓技能能在不同環境使用，請採用 kebab-case 格式的唯一 ID，由 1 到 64 個字元組成，一律使用小寫，並與目錄名稱一致：
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+V2 目前不會強制此模式、1 到 64 個字元的建議、`name` 與目錄相符，或描述長度上限。
+
+## 優先順序
+
+技能會依 ID 選取。若兩個來源都定義了 `git-release`，較晚註冊的來源會提供 OpenCode 載入的技能：
+
+```text
+~/.config/opencode/skills/git-release/SKILL.md  ← lower precedence
+.opencode/skills/git-release/SKILL.md           ← loaded
+```
+
+來源會從較低到較高優先順序註冊：
+
+1. 內建技能
+2. `.claude/skills`，先全域，再從最遠的上層目錄到目前目錄
+3. `.agents/skills`，先全域，再從最遠的上層目錄到目前目錄
+4. `~/.config/opencode/skills`
+5. 專案的 `.opencode/skills`，從最上層目錄一路往下到目前目錄
+6. 明確的 `skills` 設定項目，依設定優先順序與陣列順序
+
+除非你想覆寫先前的技能，否則請避免重複的 ID。
+
+## 載入
+
+在每個模型步驟，OpenCode 會列出有描述、且未將 `opencode/autoinvoke` 設為 `false` 的允許技能。清單只包含 ID、名稱與描述，不包含完整的 Markdown 本文。
+
+模型會以確切的 ID 呼叫 `skill` 工具來載入技能：
+
+```json title="skill tool input"
+{
+  "id": "git-release"
+}
+```
+
+接著 OpenCode 會：
+
+1. 為該 ID 選取目前的定義。
+2. 檢查所選 agent 的 `skill` 權限。
+3. 將 Markdown 本文加入對話，不含前置中繼資料。
+4. 提供技能的基礎目錄，以及最多十個輔助檔案路徑的範例。
+
+若要自行載入技能，請在提示詞中以 `@skill-id` 提及它。
+
+輔助檔案的內容不會自動載入。agent 會在技能指示它讀取時才讀取。檔案範例適用於以目錄為基礎的 `SKILL.md` 技能；扁平 Markdown 技能不會收到相鄰檔案清單。
+
+## 權限
+
+使用 `skill` 動作與技能 ID 作為資源。規則會依序執行，最後一條相符的規則生效：
+
+```jsonc title="opencode.jsonc"
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "allow" },
+    { "action": "skill", "resource": "internal-*", "effect": "deny" },
+    { "action": "skill", "resource": "experimental-*", "effect": "ask" },
+  ],
+}
+```
+
+| 效果 | 行為 |
+| --- | --- |
+| `allow` | 公告並在未經核准的情況下載入相符技能 |
+| `ask` | 公告相符技能，並在載入前詢問 |
+| `deny` | 對模型隱藏相符技能並拒絕載入 |
+
+將相同規則放在 `agents.<id>.permissions` 下，即可只套用至單一 agent。
+
+## 疑難排解
+
+例如，這個技能的 ID 是 `release`，而不是前置中繼資料中的名稱 `Git Release`：
+
+```text
+.opencode/skills/release/SKILL.md
+                      └─ ID: release
+```
+
+若技能缺少或載入了錯誤的內容：
+
+1. 確認檔案是根層級的 `*.md`，或名稱完全為 `SKILL.md` 的巢狀檔案。
+2. 檢查由路徑決定、區分大小寫的 ID，而不是前置中繼資料中的 `name`。
+3. 若模型應探索該技能，請加入 `description`。
+4. 檢查 `opencode/autoinvoke` 與所選 agent 的 `skill` 權限。
+5. 尋找較晚定義相同 ID 的來源。
+6. 對於 HTTP 目錄，請確認 `index.json`、同源檔案路徑，以及已變更的 `version`。

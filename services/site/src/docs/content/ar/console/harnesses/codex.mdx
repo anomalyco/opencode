@@ -1,0 +1,96 @@
+---
+title: "Codex"
+description: "استخدم نماذج Console وGo من Codex."
+---
+
+يستخدم Codex واجهة OpenAI Responses API. اربطه بـ Console لتستخدم أي نموذج مدفوع أو نموذج Go، بما في ذلك Claude وGemini
+والنماذج المفتوحة. وتترجم Console الطلب للنماذج التي لا تقبل Responses.
+
+<Callout>
+يتيح لك [Console CLI](/console/harnesses#console-cli) إعداد Codex بأمر واحد، بما يشمل سياسات مساحة العمل
+  وخوادم MCP والمهارات والتعليمات. شغّل `npx @opencode/console setup codex`. والخطوات أدناه تعدّه
+  يدويًا.
+</Callout>
+
+## الإعداد
+
+أضف Console مزوّد نماذج في `~/.codex/config.toml` واجعله الافتراضي.
+
+```toml title="~/.codex/config.toml"
+model = "gpt-6.1-sol"
+model_provider = "opencode"
+
+[model_providers.opencode]
+name = "OpenCode Console"
+base_url = "https://opencode.ai/inference/openai/v1"
+env_key = "OPENCODE_API_KEY"
+wire_api = "responses"
+```
+
+يضيف Codex `/responses` إلى عنوان URL الأساسي ويقرأ المفتاح من `env_key`. أنشئ
+[مفتاح API شخصي](/console/harnesses#get-an-api-key)، ثم صدّره.
+
+```bash
+export OPENCODE_API_KEY="oc_sk_..."
+codex
+```
+
+<Callout>
+  لا يقرأ Codex مزوّدي النماذج إلا من `~/.codex/config.toml`. ولا يستطيع ملف `.codex/config.toml` في مشروع
+  ضبطهم.
+</Callout>
+
+## Go
+
+استخدم عنوان URL الأساسي لـ Go ومفتاحًا من مساحة عمل لديها اشتراك [Go](/console/go).
+
+```toml title="~/.codex/config.toml"
+model = "kimi-k3"
+model_provider = "opencode-go"
+
+[model_providers.opencode-go]
+name = "OpenCode Go"
+base_url = "https://opencode.ai/inference/go/openai/v1"
+env_key = "OPENCODE_API_KEY"
+wire_api = "responses"
+```
+
+## النماذج
+
+اضبط `model` على أي معرّف نموذج من جدول [Console](/console/models#endpoints) أو [Go](/console/go#endpoints). وتجاوزه
+لتشغيل واحد بـ `--model`.
+
+```bash
+codex --model claude-sonnet-5-5
+```
+
+لا يعرف Codex نافذة السياق أو إعدادات الاستدلال للنماذج غير المدرجة في قائمته. ويستخدم لها قيمًا افتراضية
+عامة ويطبع تحذيرًا يمكنك تجاهله.
+
+## Profiles
+
+استخدم profile لإتاحة الدفع حسب الاستخدام وGo في الإعدادات نفسها. عرّف المزوّدين في `~/.codex/config.toml`، ثم أضف
+ملف profile للتبديل إلى Go.
+
+```toml title="~/.codex/go.config.toml"
+model = "kimi-k3"
+model_provider = "opencode-go"
+```
+
+```bash
+codex --profile go
+```
+
+## Console MCP
+
+أضف خادم [Console MCP](/console/harnesses#console-mcp) وسجّل الدخول من المتصفح.
+
+```bash
+codex mcp add opencode-console --url https://opencode.ai/console/mcp
+```
+
+وإذا لم يبدأ تسجيل الدخول تلقائيًا، فشغّله بنفسك.
+
+```bash
+codex mcp login opencode-console
+```

@@ -1,0 +1,181 @@
+---
+title: "JavaScript"
+description: "使用 @opencode/client（OpenCode HTTP API 的 TypeScript 用戶端）將你的應用程式連接到 OpenCode 伺服器。"
+---
+
+`@opencode/client` 是 OpenCode HTTP
+API 的 TypeScript 用戶端。當你的應用程式透過
+網路連接到 OpenCode 伺服器時使用它。它的原生型別與方法會從與
+[API 參考](/api)相同的契約產生。外掛 RPC 型別來自匯入的 RPC 定義。
+
+## 安裝
+
+```sh
+bun add @opencode/client
+```
+
+## 建立用戶端
+
+以伺服器 URL 建立用戶端，然後呼叫依 API 資源分組的方法：
+
+```ts
+import { OpenCode } from "@opencode/client"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const session = await client.session.create({
+  location: { directory: "/workspace" },
+})
+
+await client.session.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+## 標頭與請求
+
+使用 `headers` 將預設驗證或應用程式標頭傳遞給 `OpenCode.make`。你也可以提供自訂的 `fetch` 實作。每個操作
+都接受請求選項作為最後一個引數，用於 `AbortSignal` 或
+個別請求標頭。事件訂閱是例外：它們只接受
+訂閱者本機的取消，並使用基礎用戶端的標頭。
+
+```ts
+const client = OpenCode.make({
+  baseUrl: "https://opencode.example.com",
+  headers: {
+    authorization: `Bearer ${process.env.OPENCODE_TOKEN}`,
+  },
+})
+
+await client.session.list(undefined, {
+  signal: AbortSignal.timeout(10_000),
+})
+```
+
+## 串流事件
+
+串流端點會回傳非同步可迭代物件：
+
+```ts
+for await (const event of client.event.subscribe()) {
+  console.log(event.type)
+}
+```
+
+同一個用戶端的原生與 RPC 事件訂閱者共用一條按需建立的連線。建立用戶端、
+控制代碼或可迭代物件時都不會開啟事件連線，要等到開始取用事件才會連線。中斷迭代或取消訂閱只會結束該迭代器；直到最後一個
+訂閱者離開，連線才會關閉。共用來源會等待所有進行中的訂閱接收每個事件；取用端應先將事件放入緩衝區，
+再執行耗時的工作。
+
+訂閱僅為即時，沒有重播或自動重新連接。來源
+失敗會結束目前的訂閱；復原後請重新訂閱。較晚的原生
+訂閱者會收到目前的 `server.connected` 標記，而不是過去的業務事件。
+
+傳入 `types` 可只接收部分事件類型。事件會相應地具型別，且
+`server.connected` 一律會通過，讓篩選後的訂閱者仍知道何時要重新同步。
+篩選會在用戶端內的共用連線上進行。
+
+```ts
+for await (const event of client.event.subscribe({ types: ["config.updated"] })) {
+  // event.type is "config.updated" | "server.connected"
+}
+```
+
+## 外掛 RPC
+
+匯入外掛的共用契約並傳遞給 `client.rpc`：
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = await acme.search(
+  { query: "hello" },
+  { location: { directory: "/workspace" }, signal: AbortSignal.timeout(10_000) },
+)
+
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+```
+
+第二個選用的方法引數包含 `location`、`signal` 與 `headers`，
+與外掛定義的輸入分開。省略 location 時會遵循原生請求
+預設值：基礎 location 標頭，接著是伺服器的工作目錄。建構子用戶端時不會選取任何
+location。
+
+方法會從定義推斷引數與結果。Schema 解析屬於
+契約邊界；呼叫者傳送可接受的輸入表示，而
+處理常式接收解析後的值。Promise 用戶端接受 Standard Schema 或
+純 JSON Schema 定義，且不會在本機執行 schema 解析器：伺服器會回傳已解析並轉換的
+輸出。Effect Schema 定義需要 Effect 用戶端。
+
+和 Promise 用戶端其他端點的錯誤一樣，方法宣告的錯誤也會使 Promise 進入拒絕狀態；
+捕捉到的錯誤仍不具型別。具型別的子用戶端會移除通用的 HTTP RPC 錯誤外層。
+保留的 `rpc.*` 框架錯誤仍以一般 RPC 錯誤呈現，其他驗證、傳輸與協定錯誤
+則沿用用戶端原本的表示方式。
+
+RPC 訂閱使用本機名稱，並接收該 RPC 在所有 location 的事件。請檢查必要的
+`event.location` 來篩選。`events.subscribe` 與原生非同步可迭代 API 相符：
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+`events.on` 是同一來源的簡便介面，會回傳取消訂閱的函式，並依序等待每個非同步回呼完成。
+回呼或來源發生錯誤時，會寫入日誌並結束該監聽器。原生訂閱與具型別的訂閱都會收到相同的標準
+`rpc.<rpcID>.<event>` 事件封套，事件資料直接以物件提供。即時訂閱不會重播錯過的事件。
+
+伺服器外掛必須已設定並實作該 RPC；只匯入
+定義並不會註冊它。定義與註冊 API 請參閱[外掛 RPC](/build/plugins/rpc)。任何 HTTP 用戶端也可以叫用通用的
+`POST /api/rpc/{rpcID}/{method}` 路由，附上 `{ "input": ... }` 並接收
+`{ "output": ... }`。省略的 input/output 欄位代表沒有值。
+
+## 本機背景服務
+
+主要的用戶端進入點與瀏覽器相容，且不包含本機
+處理程序管理。在 Node 應用程式中，請從 `@opencode/client/service` 匯入原生 Promise 服務
+API。
+
+- `Service.discover()` 會回傳健全的已註冊端點，而不啟動
+  處理程序。
+- `Service.ensure()` 會回傳相容的服務，需要時啟動一個。
+- `Service.stop()` 會停止確切註冊的服務執行個體。
+- `Service.headers(endpoint)` 會為用戶端建立驗證標頭。
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Service } from "@opencode/client/service"
+
+const endpoint = await Service.ensure()
+const client = OpenCode.make({
+  baseUrl: endpoint.url,
+  headers: Service.headers(endpoint),
+})
+
+const info = await client.server.info()
+```
+
+`Service.ensure()` 接受選用的註冊檔、版本、服務
+指令與 `onStart` 回呼。`version` 接受確切值或
+相容性述詞：
+
+```ts
+const endpoint = await Service.ensure({
+  file: "/var/run/opencode/service.json",
+  version: (version) => version.startsWith("2."),
+  command: ["opencode", "serve", "--service"],
+  onStart(reason, previousVersion) {
+    console.log(reason, previousVersion)
+  },
+})
+```
+
+省略這些選項即可使用標準註冊路徑與
+`opencode serve --service` 指令。

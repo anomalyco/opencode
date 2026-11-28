@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import path from "node:path"
 import { Effect } from "effect"
 import { SessionRecord } from "@opencode/core/plugin/provider/claude-agent/sync/record"
 import { RequestKind } from "@opencode/core/plugin/provider/claude-agent/language-model/request-kind"
@@ -16,7 +17,7 @@ describe("Claude history branches", () => {
         FakeClaude.expectStartup(),
         FakeClaude.expectTurn(),
         FakeClaude.expectStartup(),
-        FakeClaude.expectTurn({ recording: "billing-error" }),
+        FakeClaude.expectTurn({ recording: "api-error" }),
         FakeClaude.expectInterrupt(),
         FakeClaude.expectTurn({ index: 1 }),
         FakeClaude.expectInterrupt(),
@@ -26,7 +27,7 @@ describe("Claude history branches", () => {
       const before = yield* SessionRecord.make(test.storage).get("session-a")
       const reply = yield* TestSessions.reply(test.model, TestSessions.followup("Summarize"), "session-a", "compaction")
       const error = reply.find((part) => part.type === "error")
-      expect(String(error?.error)).toContain("extra usage")
+      expect(String(error?.error)).toContain("claude-does-not-exist")
       expect(claude.removed).toEqual([claude.forks[0]!.sessionID])
       expect(yield* SessionRecord.make(test.storage).get("session-a")).toEqual(before)
       expect(TestSessions.text(yield* TestSessions.reply(test.model, TestSessions.followup())).trim()).toBe(
@@ -38,21 +39,25 @@ describe("Claude history branches", () => {
     }),
   )
 
-  it.effect("an unsupported attachment in changed history fails with its own message before forking", () =>
+  it.effect("a branch is forked and deleted in the chat's own Claude config folder", () =>
     Effect.gen(function* () {
       const claude = FakeClaude.make([
         FakeClaude.expectStartup(),
         FakeClaude.expectTurn(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn({ recording: "api-error" }),
+        FakeClaude.expectInterrupt(),
         FakeClaude.expectInterrupt(),
       ])
       const test = yield* TestSessions.start(claude)
-      yield* TestSessions.reply(test.model, first)
-      const edited = TestSessions.followup()
-      edited[2] = { role: "assistant", content: [{ type: "text", text: "An edited reply" }] }
-      edited[3] = { role: "user", content: [{ type: "file", mediaType: "image/svg+xml", data: "PHN2Zy8+" }] }
-      const error = yield* TestSessions.reply(test.model, edited).pipe(Effect.flip)
-      expect(String(error.cause)).toContain("Claude Code does not support image/svg+xml attachments")
-      expect(claude.forks).toHaveLength(0)
+      const folder = path.resolve("/claude-work")
+      const work = yield* TestSessions.model(test.sessions, { configDir: folder })
+      yield* TestSessions.reply(work, first)
+      yield* TestSessions.reply(work, TestSessions.followup("Summarize"), "session-a", "compaction")
+      expect(claude.forks).toHaveLength(1)
+      expect(claude.forks[0]!.configDir).toBe(folder)
+      // The fake reports a removal from a different folder as an error in check().
+      expect(claude.removed).toEqual([claude.forks[0]!.sessionID])
       yield* test.registry.close()
       claude.check()
     }),

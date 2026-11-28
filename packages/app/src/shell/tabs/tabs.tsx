@@ -9,6 +9,7 @@ import { createEffect, createSignal, getOwner, onCleanup, startTransition, untra
 import type { NewSessionStartView } from "@/new-session/machine"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { usePlatform } from "@/runtime/platform/platform"
+import { useSettings } from "@/settings/model"
 import { uuid } from "@opencode/util/uuid"
 import { SessionTabsRemovedDetail } from "@/shell/titlebar/session-events"
 import { sessionHref } from "@/shell/routes/session"
@@ -108,6 +109,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const servers = useServers()
     const pluginServers = usePluginServers()
     const platform = usePlatform()
+    const settings = useSettings()
     const [store, setStore, _, ready] = persisted(Persist.window("tabs"), TabStorage.Tabs, [])
 
     const [recent, setRecent, , recentReady] = persisted(Persist.window("tabs.recent"), TabStorage.Recent, {
@@ -116,6 +118,11 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
     const [info, setInfo, , infoReady] = persisted(Persist.window("tabs.info"), TabStorage.Infos, {})
     const [regions, setRegions, , regionsReady] = persisted(Persist.window("tabs.panes"), TabStorage.Regions, {})
+    // Whether the side region is open in every tab while the shared side panel setting is on.
+    const [sharedSide, setSharedSide] = persisted(Persist.window("tabs.panes.shared"), TabStorage.SharedSide, {})
+
+    const shared = (region: TabRegion) => region === "side" && settings.general.sharedSidePanel()
+
     const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), TabStorage.Closed, [])
     const [promotion, setPromotion] = createSignal(INITIAL_TAB_PROMOTION_STATE)
 
@@ -432,6 +439,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       disposeTab(tab)
     }
 
+    // A sidebar that lists sessions in its own order, rather than as tabs, picks where the route goes when the session
+    // it shows is removed. It answers false to leave the choice to the tab order.
+    let removedSessionSuccessor: ((input: SessionTabsRemovedDetail) => boolean) | undefined
+
     const actions = {
       restoreReady() {
         if (!ready() || !recentReady() || !servers.hydrated()) return false
@@ -725,6 +736,14 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         for (const draftID of drafts) removeDraftPersisted(draftID)
       },
+      /** Lets a sidebar choose the next session when the shown one is archived or deleted, until the returned cleanup. */
+      setRemovedSessionSuccessor(successor: (input: SessionTabsRemovedDetail) => boolean) {
+        removedSessionSuccessor = successor
+
+        return () => {
+          if (removedSessionSuccessor === successor) removedSessionSuccessor = undefined
+        }
+      },
       removeSessions: (input: SessionTabsRemovedDetail) => {
         const targetServer = input.server
 
@@ -746,6 +765,8 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         void commitPromotion(
           () => ({ type: "abandon", keys: abandon }),
           () => {
+            let moved: { next: Tab | undefined } | undefined
+
             setStore(
               produce((tabs) => {
                 const sessionIDs = new Set(input.sessionIDs)
@@ -774,14 +795,18 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
                 if (!removedCurrent) return
 
-                const nextTab =
-                  tabs.slice(currentIndex).find((tab) => tab.type === "session") ??
-                  tabs.slice(0, currentIndex).findLast((tab) => tab.type === "session")
-
-                if (nextTab) navigateTab(nextTab)
-                else navigate("/")
+                moved = {
+                  next:
+                    tabs.slice(currentIndex).find((tab) => tab.type === "session") ??
+                    tabs.slice(0, currentIndex).findLast((tab) => tab.type === "session"),
+                }
               }),
             )
+
+            if (moved && !removedSessionSuccessor?.(input)) {
+              if (moved.next) navigateTab(moved.next)
+              else navigate("/")
+            }
 
             if (removed.some((key) => key === recentKey())) setRecentKey(undefined)
           },
@@ -862,6 +887,27 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         navigate("/")
       },
+      toggleAutomations(input: { automations: boolean; current?: Tab }) {
+        if (input.automations) {
+          const tab = store.find((tab) => tabKey(tab) === recentKey())
+
+          if (tab) {
+            navigateTab(tab)
+
+            return
+          }
+
+          navigate("/")
+
+          return
+        }
+
+        if (input.current) {
+          setRecentKey(tabKey(input.current))
+        }
+
+        navigate("/automations")
+      },
       state<T>(tab: Tab, name: string, init: () => T) {
         return memory.ensure(tabKey(tab), name, init)
       },
@@ -871,10 +917,15 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       region(tab: Tab | undefined, region: TabRegion, fallback = false) {
         if (!tab) return fallback
 
+        if (shared(region)) return sharedSide.opened ?? fallback
+
         return regions[tabKey(tab)]?.[region] ?? fallback
       },
       setRegion(tab: Tab | undefined, region: TabRegion, opened: boolean) {
         if (!tab) return
+
+        if (shared(region)) return setSharedSide("opened", opened)
+
         const key = tabKey(tab)
         const current = regions[key]
 

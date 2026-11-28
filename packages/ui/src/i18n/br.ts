@@ -93,6 +93,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Comentando em ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Adicionar comentário",
+  "ui.lineComment.add": "Adicionar comentário",
+  "ui.lineComment.actions": "Ações da seleção",
   "ui.lineComment.contextPlaceholder": "Adicionar contexto para esta alteração",
   "ui.lineComment.submit": "Comentar",
   "ui.lineComment.cancel": "Cancelar",

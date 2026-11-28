@@ -1,0 +1,103 @@
+---
+title: "Cloudflare"
+description: "使用 @opencode/sdk/workerd 在 Cloudflare Durable Object 內執行 OpenCode，並以該物件的 SQLite 儲存為後端。"
+---
+
+在 Cloudflare Durable Object 內使用 `@opencode/sdk/workerd`。此設定檔會使用物件的 SQLite 儲存、
+為逐出復原保留持久事件，並取代無法使用的本機檔案系統與處理程序服務。
+
+```sh
+bun add @opencode/sdk
+```
+
+請在 Durable Object 執行個體的存留期間保留一個主機，而不是為每個請求建立一個。
+
+```ts
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.server.info())
+  }
+}
+```
+
+`blockConcurrencyWhile` 會在主機準備好之前擋下每個 Durable Object 事件，並在
+初始化失敗時重設物件。保存這個 Promise 後，請求處理常式就能在啟動後直接存取同一個主機。
+
+```ts
+constructor(state: DurableObjectState) {
+  this.opencode = state.blockConcurrencyWhile(() =>
+    OpenCodeWorkerd.create({ storage: state.storage }),
+  )
+}
+```
+
+Wrangler 會透過 `workerd` 套件條件選用可在 Workerd 正常運作的 OpenCode 實作。Cloudflare 可能直接卸載
+Durable Object 而不執行清理，因此即使未呼叫 `close()`，系統仍可正確運作。
+
+```jsonc title="wrangler.jsonc"
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+## 路由對外請求
+
+傳入 `fetch`，即可透過自訂處理常式（例如 Service Binding）路由 OpenCode 的對外 HTTP 請求（OpenCode 控制台設定、模型請求、網路擷取與
+搜尋、well-known 設定，以及遠端 MCP 伺服器）。Code Mode 中的 agent 程式碼
+仍會使用 `globalThis.fetch`。
+
+```ts
+OpenCodeWorkerd.create({
+  storage: state.storage,
+  fetch: (input, init) => {
+    const request = new Request(input, init)
+    return new URL(request.url).hostname === "console.example.com" ? env.CONSOLE.fetch(request) : fetch(request)
+  },
+})
+```
+
+## 自訂
+
+透過註冊與 Worker 一起打包的外掛自訂你的 OpenCode 執行個體。
+將外掛傳遞給 `OpenCodeWorkerd.create()`，即可自訂 agent、模型、
+工具與其他行為：
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [plugin],
+})
+```
+
+外掛掛鉤、轉換、工具與完整外掛上下文的說明請參閱[完整外掛文件](/build/plugins/server)。

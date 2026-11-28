@@ -173,7 +173,22 @@ export function pressContent(t: Translate, route: (path: string) => string) {
           }
         }),
       ),
-      all: { text: "Download all", href: mediaUrl("/press/anomaly/anomaly-logo.zip"), size: "0.3 MB" },
+      // The mark scaled to 0.839 of its 720 px box and centred on its bounds in a 1024 px square, so its
+      // farthest point sits at 65% of the circle's radius, as on the OpenCode avatars (brand-content.ts).
+      // Backgrounds match those too. PNGs made by rsvg-convert.
+      avatars: {
+        body: "Square avatars for X, GitHub, Slack, LinkedIn and other profiles. The mark sits well inside the circle, so it survives a round crop. PNGs are 1024 and 400 px wide.",
+        items: (["dark", "light"] as const).map((tone) => ({
+          name: `Avatar, ${tone}`,
+          // The dark avatar on the light tile and the light one on the dark tile, as on the Brand page.
+          tone: tone === "dark" ? "light" : "dark",
+          file: `anomaly-avatar-${tone}`,
+          svg: `/press/anomaly/anomaly-avatar-${tone}.svg`,
+          png: [1024, 400].map((size) => ({ size, href: `/press/anomaly/anomaly-avatar-${tone}-${size}.png` })),
+        })),
+      },
+      // anomaly-logo-v2.zip adds the avatars; anomaly-logo.zip stays in the bucket for old links.
+      all: { text: "Download all", href: mediaUrl("/press/anomaly/anomaly-logo-v2.zip"), size: "0.3 MB" },
     },
     coverage: {
       title: "Coverage",
@@ -393,6 +408,13 @@ export function pressMarkdown(context: MarkdownContext) {
     content.anomalyLogo.body,
     content.anomalyLogo.assets
       .map((asset) => `- ${asset.name}: ${link("SVG", asset.svg)}, ${link("PNG", asset.png)}`)
+      .join("\n"),
+    content.anomalyLogo.avatars.body,
+    content.anomalyLogo.avatars.items
+      .map(
+        (item) =>
+          `- ${item.name}: ${link("SVG", item.svg)}, ${item.png.map((png) => link(`PNG ${png.size}`, png.href)).join(", ")}`,
+      )
       .join("\n"),
     `${link(content.anomalyLogo.all.text, content.anomalyLogo.all.href)} (${content.anomalyLogo.all.size})`,
     content.coverage.items.length > 0 && `## ${content.coverage.title}`,

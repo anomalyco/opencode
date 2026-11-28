@@ -14,23 +14,28 @@ import {
   questionTab,
   transitionQuestionDock,
   type QuestionDockEvent,
+  type QuestionSendAction,
 } from "./question-machine"
 import { questionCache } from "./question-state"
 
-// The answers, the question shown and the reply of one question dock, shared by both dock variants. Focus, the
-// custom field's editing and minimizing stay with each variant.
-export function createQuestionDock(input: {
-  sdk: Pick<ServerSDK, "scope" | "api" | "event">
-  language: { t: (key: "common.requestFailed") => string }
-  request: () => FormInfo
-  onSubmit: () => void
-}) {
+// The answers, the question shown and the reply of one question dock. Focus, the custom field's editing and
+// minimizing stay with the dock. Without an SDK, `respond` receives the reply instead, as stories do.
+export function createQuestionDock(
+  input: {
+    language: { t: (key: "common.requestFailed") => string }
+    request: () => FormInfo
+    onSubmit: () => void
+  } & (
+    | { sdk: Pick<ServerSDK, "scope" | "api" | "event">; respond?: never }
+    | { sdk?: never; respond: (action: QuestionSendAction) => void }
+  ),
+) {
   const serverSDK = input.sdk
-  const cacheKey = ScopedKey.from(serverSDK.scope, untrack(input.request).id)
+  const cacheKey = serverSDK && ScopedKey.from(serverSDK.scope, untrack(input.request).id)
   const questions = createMemo(() => questionSpecs(input.request()))
 
   const [dockState, setDockState] = createSignal(
-    createQuestionDockState(untrack(questions).length, questionCache.get(cacheKey)),
+    createQuestionDockState(untrack(questions).length, cacheKey ? questionCache.get(cacheKey) : undefined),
   )
 
   let controller: AbortController | undefined
@@ -53,14 +58,20 @@ export function createQuestionDock(input: {
     result.effects.forEach((effect) => {
       if (effect.type === "notify.submit") return input.onSubmit()
 
-      if (effect.type === "cache.save") return questionCache.set(cacheKey, effect.snapshot)
+      if (effect.type === "cache.save") return cacheKey && questionCache.set(cacheKey, effect.snapshot)
 
-      if (effect.type === "cache.delete") return questionCache.delete(cacheKey)
+      if (effect.type === "cache.delete") return cacheKey && questionCache.delete(cacheKey)
 
       if (effect.type === "request.abort") return abort()
 
       if (effect.type === "toast.fail")
         return showToast({ title: input.language.t("common.requestFailed"), description: effect.error })
+
+      if (!serverSDK) {
+        dispatch({ type: "request.succeeded", attempt: effect.attempt })
+
+        return input.respond(effect.action)
+      }
 
       abort()
       const current = new AbortController()
@@ -89,10 +100,12 @@ export function createQuestionDock(input: {
   // The form's settling events are heard until the reply settles, not only while the dock is mounted: a reply whose
   // response stalls after the server accepted it ends on `form.replied`, not on a false timeout. Subscribed outside the
   // owner, since the event bus otherwise drops the listeners when the dock unmounts.
-  const listeners = runWithOwner(null, () => [
-    serverSDK.event.on("form.replied", settled),
-    serverSDK.event.on("form.cancelled", settled),
-  ])
+  const listeners =
+    serverSDK &&
+    runWithOwner(null, () => [
+      serverSDK.event.on("form.replied", settled),
+      serverSDK.event.on("form.cancelled", settled),
+    ])
 
   const unlisten = () => listeners?.forEach((off) => off())
 

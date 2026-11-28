@@ -74,6 +74,7 @@ const experimental = (flags: ConstructorParameters<typeof ConfigExperimental.Inf
   ])
 const mediaBlob = experimental({ media_blob: true })
 const partRows = experimental({ part_rows: true })
+const partRowsOff = experimental({ part_rows: false })
 const mediaBlobPartRows = experimental({ media_blob: true, part_rows: true })
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
@@ -1272,10 +1273,9 @@ describe("SessionProjector", () => {
       })
 
       expect(yield* SessionHistory.firstUserMessage(db, sessionID)).toEqual({ id: userID, text: "user attachment" })
-      expect(yield* SessionInbox.nextPromotable(db, sessionID, "input")).toEqual({
-        id: inboxID,
-        type: "user",
-        delivery: "queue",
+      expect(yield* SessionInbox.boundary(db, sessionID, "input")).toEqual({
+        _tag: "Promote",
+        items: [{ id: inboxID, type: "user", delivery: "queue" }],
       })
 
       yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID })
@@ -2533,7 +2533,32 @@ describe("SessionProjector", () => {
       }),
   )
 
-  it.effect("writes whole messages inline with experimental.part_rows off", () =>
+  it.effect("writes each assistant part as a session_part row when experimental.part_rows is unset", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const store = yield* SessionStore.Service
+      yield* projectTwoSteps(sessionID, () => undefined)
+
+      const parts = yield* db
+        .select({ message: SessionPartTable.message_id, ordinal: SessionPartTable.ordinal })
+        .from(SessionPartTable)
+        .where(eq(SessionPartTable.session_id, sessionID))
+        .orderBy(asc(SessionPartTable.message_id), asc(SessionPartTable.ordinal))
+        .all()
+        .pipe(Effect.orDie)
+      expect(
+        Object.values(Object.groupBy(parts, (part) => part.message)).map((rows) => rows?.map((row) => row.ordinal)),
+      ).toEqual([[0, 1, 2], [0]])
+      for (const row of yield* messageRows(db, sessionID))
+        if (row.type === "assistant") expect(row.data).toMatchObject({ content: [] })
+      const messages = yield* store.messages({ sessionID, order: "asc" })
+      expect(messages.flatMap((message) => (message.type === "assistant" ? [message.content.length] : []))).toEqual([
+        3, 1,
+      ])
+    }),
+  )
+
+  it.effect("writes whole messages inline with experimental.part_rows set to false", () =>
     Effect.gen(function* () {
       const db = yield* seedSession()
       const store = yield* SessionStore.Service
@@ -2601,8 +2626,14 @@ describe("SessionProjector", () => {
   )
 })
 
-/** Two assistant steps, the first with reasoning, text and a tool call. Event `index` is projected with part rows on when `partRowsAt(index)`. */
-const projectTwoSteps = Effect.fnUntraced(function* (session: Session.ID, partRowsAt: (index: number) => boolean) {
+/**
+ * Two assistant steps, the first with reasoning, text and a tool call. Event `index` is projected with
+ * `experimental.part_rows` set to `partRowsAt(index)`, or with no config at all when it returns undefined.
+ */
+const projectTwoSteps = Effect.fnUntraced(function* (
+  session: Session.ID,
+  partRowsAt: (index: number) => boolean | undefined,
+) {
   const bus = yield* Bus.Service
   const first = SessionMessage.ID.make(`msg_${session}_first`)
   const second = SessionMessage.ID.make(`msg_${session}_second`)
@@ -2666,7 +2697,10 @@ const projectTwoSteps = Effect.fnUntraced(function* (session: Session.ID, partRo
     bus.publish(SessionEvent.Text.Ended, { sessionID: session, assistantMessageID: second, ordinal: 0, text: "done" }),
     bus.publish(SessionEvent.Step.Ended, { sessionID: session, assistantMessageID: second, finish: "stop", ...usage }),
   ]
-  for (const [index, event] of events.entries()) yield* partRowsAt(index) ? event.pipe(Effect.provide(partRows)) : event
+  for (const [index, event] of events.entries()) {
+    const enabled = partRowsAt(index)
+    yield* enabled === undefined ? event : event.pipe(Effect.provide(enabled ? partRows : partRowsOff))
+  }
 })
 
 const inlineShot = {

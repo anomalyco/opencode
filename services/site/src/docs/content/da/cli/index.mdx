@@ -1,0 +1,108 @@
+---
+title: "Introduktion til CLI"
+description: "Start OpenCode-terminalbrugerfladen, kør prompts fra scripts og CI, og administrer den delte baggrundstjeneste."
+---
+
+Kør CLI'en i et projekt for at åbne terminalbrugerfladen i fuld skærm:
+
+```bash
+opencode
+```
+
+Angiv en mappe for at arbejde i et andet projekt:
+
+```bash
+opencode ~/code/my-project
+```
+
+Foreslåede terminaler:
+
+- [Ghostty](https://ghostty.org)
+- [WezTerm](https://wezterm.org)
+- [Alacritty](https://alacritty.org)
+- [Kitty](https://sw.kovidgoyal.net/kitty/)
+
+Understøttelse af truecolor giver temaer deres mest præcise farver; terminaler uden det bruger en tilnærmelse af den
+tilgængelige palette.
+
+## Automatisering
+
+Brug `opencode run` til at sende en prompt uden at åbne den interaktive brugerflade. Den er beregnet til scripts, CI-jobs og
+andre arbejdsgange, der har brug for modeloutput direkte i terminalen.
+
+```bash
+opencode run "Explain this repository"
+```
+
+## Mini
+
+Brug `opencode mini` til at starte OpenCodes minimale interaktive brugerflade i stedet for TUI'en i fuld skærm.
+
+```bash
+opencode mini
+```
+
+Kør `opencode mini --help` for at se indstillingerne for session, model, agent, prompt og replay.
+
+## Baggrundstjeneste
+
+Som standard finder eller starter OpenCode én delt baggrundsserver til din brugerkonto. Hver lokal OpenCode-klient
+forbinder til den server, som ejer sessioner, konfiguration, integrationer, tilladelser og værktøjskørsel.
+
+Brug `--standalone` for at køre med en privat server, eller `--server` for at forbinde til en bestemt server-URL:
+
+```bash
+opencode --standalone
+opencode --server http://localhost:4096
+```
+
+Hvis private servere skal være standard for CLI-kommandoer i stedet for at starte den delte tjeneste, skal du deaktivere
+den:
+
+```bash
+opencode service set disabled true
+opencode
+```
+
+Det stopper den kørende baggrundstjeneste. `--server` forbinder stadig til en eksplicit valgt server; `opencode service start`
+kan stadig starte den delte tjeneste eksplicit. Kør `opencode service unset disabled` for at vende tilbage til automatisk
+brug af tjenesten. Pairing kræver den delte tjeneste og er utilgængelig, mens den er deaktiveret.
+
+Se [Fejlfinding](/troubleshooting) for diagnosticering af den delte tjeneste og [API-reference](/api) for
+server-endpoints.
+
+## Stier
+
+Udskriv en bestemt lokal sti til brug med andre værktøjer:
+
+```bash
+opencode debug paths db
+sqlite3 "$(opencode debug paths db)"
+```
+
+Du kan angive `db`, `home`, `data`, `config`, `cache`, `state`, `tmp`, `bin`, `log` eller `repos` for kun at få
+udskrevet stien efterfulgt af et linjeskift. Databasestien afhænger af udgivelseskanalen og `OPENCODE_DB`; hvis du angiver
+en relativ sti til databasen, fortolkes den i forhold til datamappen, og `:memory:` udskrives uændret. Kommandoen starter ikke
+en server og åbner ikke databasen.
+
+Udelad vælgeren for at vise alle stier med labels:
+
+```bash
+opencode debug paths
+```
+
+## Afinstallation
+
+Forhåndsvis de filer og den installation, der fjernes:
+
+```bash
+opencode uninstall --dry-run
+```
+
+Kør `opencode uninstall` for at bekræfte fjernelsen. OpenCode stopper registrerede baggrundstjenester og vedvarende
+terminaler, før den globale cachemappe fjernes; mappen deles af OpenCode-versioner og -kanaler. Sessionsdata,
+konfiguration og state fjernes aldrig.
+
+- `--force` (`-f`) springer bekræftelsen over; brug det til fjernelse uden interaktion.
+- Installationer via pakkehåndtering bruger den fundne pakkehåndtering. Curl-installationer udskriver den sidste kommando,
+  så du kan fjerne programfilen manuelt.

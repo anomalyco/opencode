@@ -1,0 +1,262 @@
+---
+title: "Eklenti RPC"
+description: "Bir eklentinin özel yöntemlerini ve olaylarını diğer eklentilere ve istemcilere sunun."
+---
+
+Eklentiler, sunucuda çalışan ve diğer eklentiler veya istemciler tarafından çağrılabilen özel yöntemler ve olaylar
+sunabilir.
+
+## Tanımlama
+
+RPC'nin yöntemlerini, hatalarını ve olaylarını listelemek için `Rpc.define` kullanın.
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+        additionalProperties: false,
+      },
+      errors: {
+        not_found: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: {
+        type: "object",
+        properties: {
+          itemID: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["itemID", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+})
+```
+
+### Doğrulama
+
+Bir RPC tanımı, yöntemlerin girdi ve çıktılarının, olayların ve hataların biçimlerini açıklar. İki şema biçimini
+destekler:
+
+- JSON Schema, basittir ve bağımlılık gerektirmez.
+- Standard Schema uyumlu herhangi bir doğrulayıcı
+  - Zod
+  - Valibot
+  - ArkType
+
+### Girdi ve çıktı
+
+Her yöntem, argümanı için bir `input` şeması ve dönüş değeri için bir `output` şeması gerektirir. Girdi veya çıktı
+yoksa ilgili alan için boş bir nesne şeması kullanın. Girdi yoksa yöntemi `{}` ile çağırın, çıktı yoksa `{}` döndürün:
+
+```ts
+refresh: {
+  input: { type: "object", additionalProperties: false },
+  output: { type: "object", additionalProperties: false },
+}
+```
+
+`undefined` döndüren bir yöntem `rpc.invalid_output` hatası verir.
+
+```ts
+search: {
+  input: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+  },
+  output: {
+    type: "object",
+    properties: { text: { type: "string" } },
+    required: ["text"],
+  },
+}
+```
+
+JSON Schema değerleri TypeScript'te `unknown` olur; bu nedenle kullanmadan önce daraltın. Standard Schema girdi ve çıktı
+türlerini çıkarır.
+
+### Hatalar
+
+Beklenen başarısızlıklar için bir yönteme `errors` eşlemesi ekleyin. Her anahtar hatanın `type` değeri olur ve şeması
+hatanın `data` değerini tanımlar.
+
+```ts
+errors: {
+  not_found: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+    additionalProperties: false,
+  },
+}
+```
+
+`rpc.` ile başlayan hata adları OpenCode tarafından ayrılmıştır.
+
+### Olaylar
+
+Olayları üst düzey `events` eşlemesine ekleyin. Her olayın abonelere gönderdiği veri için bir şeması vardır. Eşleme
+zorunludur; RPC'nin olayı yoksa `events: {}` kullanın.
+
+Olay verisi bir nesne olmalıdır. Veri yoksa boş bir nesne şeması kullanın:
+
+```ts
+events: {
+  refreshed: {
+    schema: { type: "object", additionalProperties: false },
+  },
+}
+```
+
+Skalerler, diziler, `null` ve `undefined` geçerli olay verisi değildir.
+
+## Uygulama
+
+Uygulamayı `setup` içinde kaydedin:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-plugin",
+  async setup(ctx) {
+    const registration = await ctx.rpc.register(Acme, {
+      search: async (input, context) => {
+        const { query } = input as { query: string }
+        const text = await findText(query, { signal: context.signal })
+        if (!text) return context.error("not_found", "Result not found", { query })
+        return { text }
+      },
+    })
+
+    const acme = ctx.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+
+    await registration.events.emit("updated", { itemID: "item-1", text: "ready" })
+  },
+})
+```
+
+RPC'yi kaydettikten sonra aynı eklenti onu `ctx.rpc(Acme)` üzerinden çağırabilir.
+
+İkinci argüman, iptal için `signal` ve bildirilen hatalar için `context.error(...)` içerir. Hatayı döndürebilir veya
+fırlatabilirsiniz.
+
+Bir eklenti birden fazla RPC kaydedebilir. Kaydı elden çıkarmak onu kaldırır.
+
+## Çağırma
+
+RPC kaydedildikten sonra HTTP üzerinden veya başka bir eklentiden çağrılabilir.
+
+### HTTP
+
+Bir OpenCode istemcisi oluşturun, ardından RPC için bir alt istemci oluşturmak üzere `client.rpc` kullanın:
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const acme = client.rpc(Acme)
+const result = await acme.search({ query: "hello" })
+```
+
+### Eklenti
+
+Eklentilerin zaten bir OpenCode istemcisi vardır. Örneğin bir TUI eklentisi aynı RPC alt istemcisini `context.client`
+üzerinden oluşturabilir:
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode/plugin/tui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  id: "acme-tui",
+  async setup(context) {
+    const acme = context.client.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+    console.log(result)
+  },
+})
+```
+
+Bir [GUI eklentisi](/build/plugins/gui) masaüstü uygulamasının kendi sunucusunun istemcisini `ctx.client` üzerinden
+okur:
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  setup(ctx) {
+    ctx.add(Command, {
+      id: "search",
+      title: "Search Acme",
+      run: async () => {
+        const result = await ctx.client.rpc(Acme).search({ query: "hello" })
+        console.log(result)
+      },
+    })
+  },
+})
+```
+
+`ctx.client` değerini çağırdığınız yerde okuyun: sunucu yeniden başladıktan sonra değişir. Sunucuya ulaşılamadığı sürece
+her çağrı reddeder.
+
+### Abone olma
+
+Geri çağırma için `events.on` kullanın ve dinleyiciye artık ihtiyaç duyulmadığında aboneliği iptal edin:
+
+```ts
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+
+unsubscribe()
+```
+
+Eşzamansız yinelenebilir için `events.subscribe("updated")` kullanın:
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+Olay abonelikleri yalnızca canlıdır; bu nedenle bağlantısı kesilen aboneler olayları kaçırır.
+
+- `updated` gibi yerel adla abone olun.
+- Alınan tür öneklidir, örneğin `rpc.acme.updated`.
+- Her olay `data` ve `location` içerir.
+- Eklenti devreden çıkarıldığında abonelikleri de kapanır.
+
+Dış istemciler olayları her konumdan alır; bu nedenle gerektiğinde `event.location` alanını denetleyin. Sunucu
+eklentisinin yine de yapılandırılmış ve çalışıyor olması gerekir.

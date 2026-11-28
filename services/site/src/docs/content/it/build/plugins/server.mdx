@@ -1,0 +1,1889 @@
+---
+title: "Server"
+description: "Crea la parte server di un plugin OpenCode: strumenti, hook, integrazioni, comandi e agenti."
+---
+
+La parte server di un plugin viene eseguita nel server OpenCode. Modifica il comportamento di OpenCode e aggiunge funzionalità: strumenti,
+hook, integrazioni, comandi e agenti. Vedi la [Panoramica](/build/plugins) per come è strutturato, caricato
+e pubblicato un pacchetto di plugin.
+
+```ts title=".opencode/plugins/example/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})
+```
+
+## Ciclo di vita
+
+`setup` viene eseguito quando il plugin si carica. Può restituire una funzione di pulizia eseguita quando il plugin si scarica.
+
+```ts
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  setup(ctx) {
+    console.log(`loaded in OpenCode ${ctx.app.version}`)
+    return () => console.log("unloaded")
+  },
+})
+```
+
+### Contesto
+
+Il contesto del plugin è essenzialmente un [client del server OpenCode](/build/client).
+I metodi di lettura e di azione accettano gli stessi input e restituiscono le stesse risposte di quelli del client. Il contesto aggiunge
+metodi riservati ai plugin per trasformazioni, hook a runtime, ricaricamenti, registrazioni
+e opzioni.
+
+```ts
+setup(ctx) {
+  console.log(ctx.app.version)
+}
+```
+
+`ctx.location` descrive la location in cui è caricata questa istanza del plugin. Include
+`directory`, l'eventuale `workspaceID` e i metadati del `project` (`id`,
+`directory` e `canonical`). È disponibile sia nei plugin Promise sia in quelli Effect.
+Questa è la location dell'istanza del plugin, non la location di ogni sessione a cui può
+accedere o di ogni evento che riceve.
+
+```ts
+setup(ctx) {
+  console.log(ctx.location.directory)
+  console.log(ctx.location.project.canonical)
+}
+```
+
+### Opzioni
+
+Passa le opzioni del plugin con la forma a oggetto in `opencode.json(c)`.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [
+    {
+      "package": "./plugins/company",
+      "options": {
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+Leggi quei valori da `ctx.options` durante `setup`.
+
+```ts title="plugins/company/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company",
+  setup(ctx) {
+    const strict = ctx.options.strict === true
+  },
+})
+```
+
+## Trasformazioni
+
+Le trasformazioni sono modifiche sincrone allo stato dei domini di OpenCode, e ciascuna si basa sulle registrazioni precedenti nel suo dominio.
+Le letture del registro come `ctx.model.list()` riflettono ogni registrazione finora, anche durante il setup del plugin;
+il batching all'avvio unisce solo le notifiche di aggiornamento e non ritarda mai ciò che restituisce una lettura. Le API di stato delle risorse
+riportano comunque lo stato delle risorse in esecuzione: una definizione registrata non significa che la sua connessione o altro lavoro sulla risorsa sia
+completato.
+
+Le fonti contribuiscono con provider e definizioni immutabili dei modelli tramite `ctx.provider.transform`.
+
+```ts title="plugins/models/index.ts"
+import { Model, Plugin, Provider } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.models",
+  async setup(ctx) {
+    const providerID = Provider.ID.make("acme")
+    const models = [{ ...Model.Info.default(providerID, Model.ID.make("reasoner")), name: "Acme Reasoner" }]
+    await ctx.provider.transform((editor) => {
+      editor.add({
+        info: {
+          ...Provider.Info.empty(providerID),
+          name: "Acme",
+          activation: "enabled",
+          package: "@opencode/ai/providers/openai-compatible",
+          settings: { baseURL: "http://127.0.0.1:8000/v1" },
+        },
+        models,
+      })
+    })
+
+    const available = await ctx.model.list()
+  },
+})
+```
+
+Qualsiasi registrazione, rimozione o `reload()` segna il registro come modificato; la lettura successiva lo ricostruisce riproducendo ogni
+trasformazione attiva nell'ordine di registrazione su un valore nuovo. Mantieni le trasformazioni leggere e ripetibili. Un valore che hai
+già letto non viene mai modificato dalle ricostruzioni successive.
+
+Dopo che le trasformazioni dei provider e la disponibilità sono risolte, OpenCode materializza i modelli dei provider attivi e riproduce
+ogni trasformazione dei modelli in ordine. Una policy dei modelli può ispezionare l'intera raccolta di candidati, comprese le fonti
+appena aggiornate.
+
+```ts title="plugins/model-budget/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.model-budget",
+  async setup(ctx) {
+    await ctx.model.transform((editor) => {
+      editor
+        .list()
+        .filter((model) => model.cost.some((tier) => tier.output > 20))
+        .forEach((model) => {
+          editor.remove(model.providerID, model.id)
+        })
+    })
+  },
+})
+```
+
+Gli input acquisiti non vengono osservati automaticamente. Carica i dati esterni prima del callback sincrono, poi chiama
+`reload()` dopo che quegli input cambiano. Qui `loadFromSource()` restituisce
+voci `{ info: Provider.Info, models: readonly Model.Info[] }`.
+
+```ts title="plugins/models/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.models",
+  async setup(ctx) {
+    const source = { providers: await loadFromSource() }
+
+    await ctx.provider.transform((editor) => {
+      source.providers.forEach((provider) => editor.add(provider))
+    })
+
+    const refresh = async () => {
+      source.providers = await loadFromSource()
+      await ctx.provider.reload()
+    }
+
+    const timer = setInterval(() => void refresh().catch(console.error), 60_000)
+    return () => clearInterval(timer)
+  },
+})
+```
+
+Le modifiche ai provider invalidano l'intero risultato dei modelli attivi, quindi la policy sui prezzi di output filtra comunque i modelli aggiornati.
+Usa `ctx.model.reload()` quando cambia solo un input acquisito da una trasformazione dei modelli.
+
+## API
+
+### Agente
+
+Leggi tutti gli agenti o recuperane uno per ID.
+
+```ts
+const agents = await ctx.agent.list()
+const build = await ctx.agent.get({ agentID: "build" })
+```
+
+Registra una trasformazione per ispezionare, creare, aggiornare o rimuovere agenti, oppure per selezionare quello predefinito.
+
+```ts
+await ctx.agent.transform((editor) => {
+  const agents = editor.list()
+  const build = editor.get("build")
+
+  editor.default("build")
+  editor.update("build", (agent) => {
+    agent.description = "Builds features and fixes bugs"
+  })
+  editor.remove("legacy")
+})
+```
+
+Registra un nuovo agente con `editor.update`. Se l'ID esiste già, il metodo modifica l'agente corrispondente. Altrimenti,
+ne crea uno con `Agent.Info.default(id)` prima di eseguire il callback.
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
+})
+```
+
+Ricarica gli agenti dopo che lo stato esterno usato da una trasformazione cambia.
+
+```ts
+await ctx.agent.reload()
+```
+
+#### Riferimento
+
+Schema: [`Agent.Info`](/api#schema-Agent.Info)
+
+```ts
+interface AgentContext {
+  list(input?: AgentListInput, requestOptions?: RequestOptions): Promise<AgentListOutput>
+  get(input: AgentGetInput, requestOptions?: RequestOptions): Promise<AgentGetOutput>
+  transform(callback: (editor: AgentEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface AgentEditor {
+  list(): readonly AgentInfo[]
+  get(id: string): AgentInfo | undefined
+  default(id: string | undefined): void
+  update(id: string, update: (agent: AgentInfo) => void): void
+  remove(id: string): void
+}
+
+interface Registration {
+  dispose(): Promise<void>
+}
+```
+
+### Provider
+
+Leggi i provider disponibili o ispeziona i metadati di un provider per ID.
+
+```ts
+const providers = await ctx.provider.list()
+const provider = await ctx.provider.get({ providerID: "anthropic" })
+```
+
+Le trasformazioni dei provider modificano impostazioni e definizioni delle fonti. Le letture dell'editor includono i provider inattivi ed espongono
+definizioni immutabili; `models.update` modifica una copia di proprietà di un modello della fonte.
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("anthropic", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("anthropic", "claude-sonnet-5-5", (model) => {
+    model.name = "Team Sonnet"
+  })
+  editor.models.remove("anthropic", "legacy-model")
+  editor.remove("legacy-provider")
+})
+```
+
+Sostituisci l'inventario delle fonti di un provider con `models.set`, poi ricarica dopo che le definizioni acquisite cambiano.
+
+```ts
+const source = { models: await loadModels() }
+await ctx.provider.transform((editor) => {
+  editor.models.set("acme", source.models)
+})
+
+source.models = await loadModels()
+await ctx.provider.reload()
+```
+
+Per rilevare i modelli specifici di un account, passa come `sourceConnection` la connessione usata per caricare l'inventario. OpenCode esclude
+quel provider mentre è selezionata un'altra connessione, finché il tuo plugin non pubblica il suo inventario aggiornato.
+
+```ts
+const connection = await ctx.integration.connection.active("acme")
+if (!connection) return
+const inventory = await loadInventory(connection)
+await ctx.provider.transform((editor) => {
+  editor.add({ info: inventory.provider, models: inventory.models, sourceConnection: connection })
+})
+```
+
+#### Riferimento
+
+Schema: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info)
+
+```ts
+interface ProviderDomain extends ProviderApi {
+  transform(callback: (editor: ProviderEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ProviderRecord {
+  readonly provider: Provider.Info
+  readonly models: ReadonlyMap<string, Model.Info>
+  readonly sourceConnection?: ConnectionInfo
+}
+
+interface ProviderEditor {
+  list(): readonly ProviderRecord[]
+  get(providerID: string): ProviderRecord | undefined
+  add(input: { info: Provider.Info; models: readonly Model.Info[]; sourceConnection?: ConnectionInfo }): void
+  update(providerID: string, update: (provider: DeepMutable<Provider.Info>) => void): void
+  remove(providerID: string): void
+  readonly models: {
+    set(providerID: string, models: readonly Model.Info[]): void
+    update(providerID: string, modelID: string, update: (model: DeepMutable<Model.Info>) => void): void
+    remove(providerID: string, modelID: string): void
+  }
+}
+```
+
+### Modelli
+
+Leggi i modelli disponibili e la selezione predefinita.
+
+```ts
+const models = await ctx.model.list()
+const selected = await ctx.model.default()
+```
+
+Le trasformazioni dei modelli modificano l'intera raccolta di candidati dei provider attivi. I candidati disabilitati restano modificabili finché tutte
+le trasformazioni finiscono; `update` può aggiungere un modello solo sotto un provider disponibile.
+
+```ts
+await ctx.model.transform((editor) => {
+  editor.list("anthropic").forEach((model) => {
+    editor.update(model.providerID, model.id, (draft) => {
+      draft.enabled = draft.capabilities.tools
+    })
+  })
+  editor.default.set("anthropic", "claude-sonnet-5-5")
+  editor.remove("anthropic", "legacy-model")
+})
+```
+
+I callback modificano le sostituzioni grezze dei modelli. I valori predefiniti del provider vengono uniti una volta quando OpenCode conferma il risultato; le letture
+invariate riusano quel risultato. `editor.provider` espone le definizioni immutabili delle fonti, compresi i template inattivi, invece
+dell'output delle trasformazioni dei modelli.
+
+```ts
+await ctx.model.transform((editor) => {
+  const source = editor.provider.get("anthropic")?.models.get("claude-sonnet-5-5")
+  if (!source) return
+  editor.update("anthropic", source.id, (model) => {
+    model.limit.context = Math.min(model.limit.context, source.limit.context)
+  })
+})
+
+await ctx.model.reload()
+```
+
+#### Riferimento
+
+Schema: [`Model.Info`](/api#schema-Model.Info)
+
+```ts
+interface ModelDomain extends ModelApi {
+  transform(callback: (editor: ModelEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ModelEditor {
+  list(providerID?: string): readonly DeepMutable<Model.Info>[]
+  get(providerID: string, modelID: string): DeepMutable<Model.Info> | undefined
+  update(providerID: string, modelID: string, update: (model: DeepMutable<Model.Info>) => void): void
+  remove(providerID: string, modelID: string): void
+  readonly default: {
+    get(): { providerID: string; modelID: string } | undefined
+    set(providerID: string, modelID: string): void
+  }
+  readonly provider: {
+    list(): readonly ProviderRecord[]
+    get(providerID: string): ProviderRecord | undefined
+  }
+}
+```
+
+### Comandi
+
+Leggi i comandi disponibili in una location.
+
+```ts
+const commands = await ctx.command.list()
+```
+
+Registra comandi con una trasformazione. L'executor riceve la sessione, gli allegati del prompt e la modalità di consegna richiesta.
+
+```ts
+await ctx.command.transform((editor) => {
+  editor.add({
+    name: "security-review",
+    description: "Review changes for security issues",
+    execute: async ({ sessionID, prompt, delivery }) => {
+      await ctx.session.prompt({
+        ...prompt,
+        sessionID,
+        text: `Review these changes for security issues.\n\n${prompt.text}`,
+        delivery,
+      })
+    },
+  })
+})
+```
+
+Ricarica i comandi dopo che lo stato esterno usato da una trasformazione cambia.
+
+```ts
+await ctx.command.reload()
+```
+
+#### Riferimento
+
+Schema: [`Command.Info`](/api#schema-Command.Info),
+[`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery)
+
+```ts
+interface CommandContext {
+  list(input?: CommandListInput, requestOptions?: RequestOptions): Promise<CommandListOutput>
+  transform(callback: (editor: CommandEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface CommandEditor {
+  add(definition: CommandDefinition): void
+}
+
+interface CommandDefinition {
+  name: string
+  description?: string
+  execute(input: CommandInvocation): Promise<void>
+}
+
+interface CommandInvocation {
+  sessionID: string
+  prompt: PromptInput
+  delivery: "steer" | "queue"
+}
+```
+
+### Integrazioni
+
+Leggi le integrazioni e ispeziona le credenziali attive.
+
+```ts
+const integrations = await ctx.integration.list()
+const github = await ctx.integration.get({ integrationID: "github" })
+const connection = await ctx.integration.connection.active("github")
+const credential = connection ? await ctx.integration.connection.resolve(connection) : undefined
+```
+
+Collega le integrazioni con una chiave API.
+
+```ts
+await ctx.integration.connect.key({
+  integrationID: "github",
+  key: process.env.GITHUB_TOKEN!,
+})
+```
+
+Avvia, ispeziona, completa o annulla un tentativo di connessione OAuth.
+
+```ts
+const attempt = await ctx.integration.oauth.connect({ integrationID: "github", methodID: "oauth" })
+const status = await ctx.integration.oauth.status({ integrationID: "github", attemptID: attempt.data.attemptID })
+await ctx.integration.oauth.complete({ integrationID: "github", attemptID: attempt.data.attemptID, code })
+await ctx.integration.oauth.cancel({ integrationID: "github", attemptID: attempt.data.attemptID })
+```
+
+Le connessioni basate su comandi espongono lo stesso flusso di avvio, stato e annullamento.
+
+```ts
+const attempt = await ctx.integration.command.connect({ integrationID: "acme", methodID: "cli" })
+const status = await ctx.integration.command.status({ integrationID: "acme", attemptID: attempt.data.attemptID })
+await ctx.integration.command.cancel({ integrationID: "acme", attemptID: attempt.data.attemptID })
+```
+
+Registra una trasformazione per ispezionare le integrazioni e gestirne i metodi di autenticazione.
+
+```ts
+await ctx.integration.transform((editor) => {
+  const integrations = editor.list()
+  const acme = editor.get("acme")
+
+  editor.update("acme", (integration) => {
+    integration.name = "Acme"
+  })
+  editor.method.update({
+    integrationID: "acme",
+    method: { id: "cli", type: "command", label: "Sign in with Acme CLI", command: ["acme", "login"] },
+  })
+
+  const methods = editor.method.list("acme")
+  const legacy = methods.find((method) => method.type === "command" && method.id === "legacy")
+  if (legacy) editor.method.remove("acme", legacy)
+  editor.remove("legacy")
+})
+```
+
+Ricarica le integrazioni dopo che lo stato esterno usato da una trasformazione cambia.
+
+```ts
+await ctx.integration.reload()
+```
+
+#### Riferimento
+
+Schema: [`Integration.Info`](/api#schema-Integration.Info), [`Integration.Method`](/api#schema-Integration.Method),
+[`Connection.Info`](/api#schema-Connection.Info), [`Form.Answer`](/api#schema-Form.Answer)
+
+```ts
+interface IntegrationContext {
+  list(input?: IntegrationListInput, requestOptions?: RequestOptions): Promise<IntegrationListOutput>
+  get(input: IntegrationGetInput, requestOptions?: RequestOptions): Promise<IntegrationGetOutput>
+  connect: {
+    key(input: IntegrationConnectKeyInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  oauth: {
+    connect(
+      input: IntegrationOauthConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationOauthConnectOutput>
+    status(input: IntegrationOauthStatusInput, requestOptions?: RequestOptions): Promise<IntegrationOauthStatusOutput>
+    complete(input: IntegrationOauthCompleteInput, requestOptions?: RequestOptions): Promise<void>
+    cancel(input: IntegrationOauthCancelInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  command: {
+    connect(
+      input: IntegrationCommandConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandConnectOutput>
+    status(
+      input: IntegrationCommandStatusInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandStatusOutput>
+    cancel(input: IntegrationCommandCancelInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  transform(callback: (editor: IntegrationEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+  connection: {
+    active(integrationID: string): Promise<ConnectionInfo | undefined>
+    resolve(connection: ConnectionInfo): Promise<CredentialValue | undefined>
+  }
+}
+
+interface IntegrationEditor {
+  list(): readonly IntegrationRef[]
+  get(id: string): IntegrationRef | undefined
+  update(id: string, update: (integration: IntegrationRef) => void): void
+  remove(id: string): void
+  method: {
+    list(integrationID: string): readonly IntegrationMethod[]
+    update(input: IntegrationMethodRegistration): void
+    remove(integrationID: string, method: IntegrationMethod): void
+  }
+}
+```
+
+### Credenziali
+
+Rendi una credenziale salvata quella attiva per la sua integrazione.
+
+```ts
+await ctx.credential.activate({ credentialID })
+```
+
+#### Riferimento
+
+```ts
+interface CredentialContext {
+  activate(input: CredentialActivateInput, requestOptions?: RequestOptions): Promise<void>
+}
+```
+
+### MCP
+
+Elenca i server MCP e il loro stato di connessione attuale.
+
+```ts
+const servers = await ctx.mcp.list()
+```
+
+I plugin gestiscono i server MCP solo tramite trasformazioni. Usa `editor.set` per aggiungere o sostituire un server, `editor.update` per
+cambiarne la configurazione ed `editor.remove` per rimuoverlo. Ispeziona la configurazione con `editor.list` e `editor.get`.
+
+```ts
+await ctx.mcp.transform((editor) => {
+  const servers = editor.list()
+  const docs = editor.get("docs")
+  editor.set("docs", { type: "remote", url: "https://mcp.example.com" })
+  editor.update("docs", (server) => {
+    server.disabled = false
+  })
+  editor.remove("legacy")
+})
+```
+
+Imposta `disabled: true` in una trasformazione per disabilitare un server e disconnetterlo, o `disabled: false` per abilitarlo e permettere
+a OpenCode di collegarsi. OpenCode riconcilia il ciclo di vita dei server dalla configurazione trasformata.
+
+Chiama `reload()` dopo che lo stato esterno usato da una trasformazione cambia, per riapplicare le trasformazioni e riconciliare i server.
+
+```ts
+await ctx.mcp.reload()
+```
+
+#### Riferimento
+
+Schema: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded),
+[`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded)
+
+```ts
+interface MCPContext {
+  list(input?: McpListInput, requestOptions?: RequestOptions): Promise<McpListOutput>
+  transform(callback: (editor: MCPEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface MCPEditor {
+  list(): readonly (readonly [string, McpServerConfig])[]
+  get(name: string): McpServerConfig | undefined
+  set(name: string, config: McpServerConfig): void
+  update(name: string, update: (config: McpServerConfig) => void): void
+  remove(name: string): void
+}
+```
+
+### Plugin
+
+Elenca i plugin attualmente attivi per una location.
+
+```ts
+const plugins = await ctx.plugin.list()
+```
+
+#### Riferimento
+
+Schema: [`Plugin.Info`](/api#schema-Plugin.Info), [`Plugin.Source`](/api#schema-Plugin.Source)
+
+```ts
+interface PluginContext {
+  list(input?: PluginListInput, requestOptions?: RequestOptions): Promise<PluginListOutput>
+}
+```
+
+### Riferimenti
+
+Leggi i riferimenti disponibili in una location.
+
+```ts
+const references = await ctx.reference.list()
+```
+
+Registra una trasformazione per ispezionare, aggiungere o rimuovere riferimenti locali e Git. `get(name)` restituisce la fonte configurata corrente,
+o `undefined` quando il nome è assente.
+
+```ts
+await ctx.reference.transform((editor) => {
+  const references = editor.list()
+  editor.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
+  editor.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+  const handbook = editor.get("handbook")
+  editor.remove("legacy")
+})
+```
+
+Ricarica i riferimenti dopo che lo stato esterno usato da una trasformazione cambia.
+
+```ts
+await ctx.reference.reload()
+```
+
+#### Riferimento
+
+Schema: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource`](/api#schema-Reference.LocalSource),
+[`Reference.GitSource`](/api#schema-Reference.GitSource)
+
+```ts
+interface ReferenceContext {
+  list(input?: ReferenceListInput, requestOptions?: RequestOptions): Promise<ReferenceListOutput>
+  transform(callback: (editor: ReferenceEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ReferenceEditor {
+  list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+  get(name: string): ReferenceLocalSource | ReferenceGitSource | undefined
+  add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
+  remove(name: string): void
+}
+```
+
+### Generate (sperimentale)
+
+Genera con un modello selezionato senza creare una sessione, invocare strumenti o aggiungere alla cronologia della sessione. Queste API
+possono cambiare. `ctx.generate.text` funziona ancora ma è deprecato in favore di `ctx.experimental.generate.text`.
+
+```ts
+const review = await ctx.experimental.generate.text({
+  model: { providerID: "anthropic", id: "claude-sonnet-5-5" },
+  prompt: "Review this proposed action.",
+})
+
+const { images } = await ctx.experimental.generate.image({
+  model: { providerID: "openai", id: "gpt-image-1-mini" },
+  prompt: "A watercolor fox in the snow",
+  aspect: "16:9",
+})
+
+const { answers } = await ctx.experimental.generate.decisions({
+  model: { providerID: "opencode", id: "jev-1.13" },
+  input: [{ type: "text", text: "I was charged twice, please refund one." }],
+  questions: [{ type: "predicate", name: "refund", instructions: "Is this a refund request?" }],
+})
+```
+
+### Permessi
+
+Chiedi il permesso prima di eseguire un'azione. `assert` valuta le [regole di permesso](/permissions) della sessione,
+comprese le approvazioni salvate, e chiede all'utente quando una regola si risolve in `ask`. Si risolve quando l'azione è consentita.
+
+```ts
+execute: async (input, context) => {
+  await ctx.permission.assert({
+    sessionID: context.sessionID,
+    agent: context.agent,
+    source: { type: "tool", messageID: context.messageID, id: context.id },
+    action: "deploy",
+    resources: [input.environment],
+    save: [input.environment],
+  })
+  return { content: await deploy(input.environment) }
+}
+```
+
+- `action` e `resources` vengono confrontati con le regole. Qualsiasi `deny` blocca l'azione; altrimenti qualsiasi `ask` chiede.
+- `save` elenca i pattern archiviati quando l'utente sceglie di consentire sempre.
+- `agent` indica di quale agente applicare le regole. Il valore predefinito è l'agente della sessione. `source` collega il prompt a una chiamata allo strumento.
+- `metadata` passa dettagli aggiuntivi ai prompt dei permessi e agli hook `evaluate`.
+
+Una regola di negazione o un rifiuto con feedback produce un `Tool.Error` con la motivazione, così il modello la riceve e
+può proseguire. Un rifiuto senza feedback termina il passo corrente. Lascia propagare questi errori invece di restituirli come output dello
+strumento.
+
+Ispeziona o risolvi le richieste di permesso in attesa.
+
+```ts
+const pending = await ctx.permission.list({ sessionID })
+const request = await ctx.permission.get({ sessionID, requestID })
+await ctx.permission.reply({ sessionID, requestID, decision: "once" })
+```
+
+Sostituisci le regole di permesso con ambito sessione. Vengono valutate dopo le regole dell'agente, e vince
+l'ultima regola corrispondente. Le sessioni figlie ereditano le regole in vigore quando vengono create.
+
+```ts
+await ctx.session.update({
+  sessionID,
+  permissions: [{ action: "edit", resource: "/path/to/original/checkout/**", effect: "deny" }],
+})
+```
+
+### Sessioni
+
+Crea o leggi una sessione.
+
+```ts
+const created = await ctx.session.create({ title: "Review" })
+const session = await ctx.session.get({ sessionID })
+const messages = await ctx.session.context({ sessionID })
+```
+
+Elenca le sessioni una pagina alla volta. Per ottenere la pagina successiva, passa `cursor.next` come `cursor`. Il cursore ricorda i tuoi
+filtri, quindi non devi ripeterli.
+
+```ts
+const page = await ctx.session.list({ directory: ctx.location.directory, limit: 20 })
+const next = page.cursor.next ? await ctx.session.list({ cursor: page.cursor.next, limit: 20 }) : undefined
+```
+
+Cambia l'agente o il modello usati dalle richieste successive.
+
+```ts
+await ctx.session.switchAgent({ sessionID, agent: "build" })
+await ctx.session.switchModel({ sessionID, model: { providerID: "anthropic", id: "claude-sonnet-5-5" } })
+```
+
+Invia prompt utente, richieste di generazione temporanee, comandi o messaggi sintetici.
+
+```ts
+const prompt = await ctx.session.prompt({ sessionID, text: "Review the current changes" })
+const generated = await ctx.session.generate({ sessionID, prompt: "Summarize this project" })
+await ctx.session.command({ sessionID, name: "review", text: "--staged" })
+const synthetic = await ctx.session.synthetic({ sessionID, text: "Deployment completed" })
+```
+
+`generate` restituisce il `text` insieme ai `tokens` e al `cost` della chiamata, nella stessa forma in cui li riporta un messaggio
+dell'assistente.
+
+Rinomina, interrompi o aspetta una sessione.
+
+```ts
+await ctx.session.update({ sessionID, title: "Review" })
+await ctx.session.interrupt({ sessionID, resume: false })
+await ctx.session.wait({ sessionID })
+```
+
+Rimuovi una sessione temporanea con `remove`. La rimozione ferma l'esecuzione attiva ed elimina ricorsivamente le sessioni figlie.
+
+```ts
+await ctx.session.remove({ sessionID })
+```
+
+Richiedi la compattazione con `compact`. Il metodo restituisce l'elemento accettato nella inbox, non il riassunto finale.
+Per impostazione predefinita, la compattazione parte al successivo confine tra due passi. Passa `delivery: "queue"` per rispettare l'ordine della coda.
+
+```ts
+const compaction = await ctx.session.compact({ sessionID })
+```
+
+Usa `instructions.entry` per allegare, elencare o rimuovere le voci delle istruzioni della sessione identificate da una chiave. OpenCode le inserisce come blocchi `<context key="...">` nelle istruzioni della sessione e segnala gli aggiornamenti o le rimozioni al confine del passo successivo, senza accodare un nuovo turno di conversazione.
+
+```ts
+await ctx.session.instructions.entry.put({ sessionID, key: "deploy-target", value: "production" })
+const entries = await ctx.session.instructions.entry.list({ sessionID })
+await ctx.session.instructions.entry.remove({ sessionID, key: "deploy-target" })
+```
+
+#### Riferimento
+
+Schema: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
+[`Session.Inbox.User`](/api#schema-Session.Inbox.User), [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic),
+[`InstructionEntry.Info`](/api#schema-InstructionEntry.Info)
+
+```ts
+interface SessionContext {
+  create(input?: SessionCreateInput, requestOptions?: RequestOptions): Promise<SessionInfo>
+  get(input: SessionGetInput, requestOptions?: RequestOptions): Promise<SessionInfo>
+  remove(input: SessionRemoveInput, requestOptions?: RequestOptions): Promise<void>
+  context(input: SessionContextInput, requestOptions?: RequestOptions): Promise<readonly SessionMessageInfo[]>
+  instructions: {
+    entry: {
+      list(
+        input: ExperimentalSessionInstructionsEntryListInput,
+        requestOptions?: RequestOptions,
+      ): Promise<readonly InstructionEntryInfo[]>
+      put(input: ExperimentalSessionInstructionsEntryPutInput, requestOptions?: RequestOptions): Promise<void>
+      remove(input: ExperimentalSessionInstructionsEntryRemoveInput, requestOptions?: RequestOptions): Promise<void>
+    }
+  }
+  switchAgent(input: SessionSwitchAgentInput, requestOptions?: RequestOptions): Promise<void>
+  switchModel(input: SessionSwitchModelInput, requestOptions?: RequestOptions): Promise<void>
+  update(input: SessionUpdateInput, requestOptions?: RequestOptions): Promise<void>
+  move(input: SessionMoveInput, requestOptions?: RequestOptions): Promise<void>
+  prompt(input: SessionPromptInput, requestOptions?: RequestOptions): Promise<SessionInboxUser>
+  generate(input: SessionGenerateInput, requestOptions?: RequestOptions): Promise<{ text: string }>
+  command(input: SessionCommandInput, requestOptions?: RequestOptions): Promise<void>
+  compact(input: SessionCompactInput, requestOptions?: RequestOptions): Promise<SessionInboxCompaction>
+  synthetic(input: SessionSyntheticInput, requestOptions?: RequestOptions): Promise<SessionInboxSynthetic>
+  interrupt(input: SessionInterruptInput, requestOptions?: RequestOptions): Promise<{ interrupted: boolean }>
+  wait(input: ExperimentalSessionWaitInput, requestOptions?: RequestOptions): Promise<void>
+}
+```
+
+### Skill
+
+Leggi le skill disponibili in una location.
+
+```ts
+const skills = await ctx.skill.list()
+```
+
+Registra una trasformazione per ispezionare, aggiungere, aggiornare o rimuovere skill. `get(id)` restituisce la voce corrente dell'editor, o `undefined`
+quando la skill è assente.
+
+```ts
+import { Skill } from "@opencode/plugin"
+
+await ctx.skill.transform((editor) => {
+  const skills = editor.list()
+  editor.add({
+    id: Skill.ID.make("review"),
+    name: Skill.Name.make("Review"),
+    description: "Review the current changes",
+    path: Skill.Info.fields.path.make("/workspace/.opencode/skills/review/SKILL.md"),
+    content: "Review the current changes for correctness and missing tests.",
+  })
+  const review = editor.get("review")
+  editor.update("review", (skill) => {
+    skill.autoinvoke = true
+  })
+  editor.remove("legacy")
+})
+```
+
+Ricarica le skill dopo che lo stato esterno usato da una trasformazione cambia.
+
+```ts
+await ctx.skill.reload()
+```
+
+#### Riferimento
+
+Schema: [`Skill.Info`](/api#schema-Skill.Info)
+
+```ts
+interface SkillContext {
+  list(input?: SkillListInput, requestOptions?: RequestOptions): Promise<SkillListOutput>
+  transform(callback: (editor: SkillEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface SkillEditor {
+  list(): readonly SkillInfo[]
+  get(id: string): SkillInfo | undefined
+  add(skill: SkillInfo): void
+  update(id: string, update: (skill: SkillInfo) => void): void
+  remove(id: string): void
+}
+```
+
+### Archiviazione
+
+Archivia, leggi o rimuovi valori JSON persistenti associati al plugin.
+
+```ts
+await ctx.storage.set("settings", { strict: true })
+const settings = await ctx.storage.get("settings")
+await ctx.storage.remove("settings")
+```
+
+Scansiona le chiavi per prefisso con paginazione a cursore facoltativa.
+
+```ts
+const page = await ctx.storage.scan({ prefix: "cache/", limit: 100 })
+const next = page.next
+```
+
+#### Riferimento
+
+```ts
+interface StorageContext {
+  get(key: string): Promise<Json | undefined>
+  set(key: string, value: Json): Promise<void>
+  remove(key: string): Promise<void>
+  scan(options: StorageScanOptions): Promise<StorageScanResult>
+}
+
+interface StorageScanOptions {
+  prefix: string
+  after?: string
+  limit?: number
+}
+
+interface StorageScanResult {
+  entries: readonly { key: string; value: Json }[]
+  next?: string
+}
+```
+
+### Strumenti
+
+Leggi gli strumenti attualmente registrati, dopo ogni trasformazione, fuori da un callback di trasformazione. Ogni strumento ha un `id`
+che contiene il suo nome effettivo.
+
+```ts
+const tools = await ctx.tool.list()
+const read = tools.find((tool) => tool.id === "read")
+```
+
+Registra, aggiorna e rimuovi strumenti con una trasformazione sincrona, anche nei plugin Promise. Carica i dati esterni
+prima di registrare o ricaricare. Una registrazione valida successiva sovrascrive lo stesso nome effettivo dello strumento.
+
+```ts
+const registration = await ctx.tool.transform((editor) => {
+  editor.namespace({
+    name: "acme",
+    description: "Customer account tools",
+  })
+  editor.add({
+    name: "greeting",
+    description: "Create a greeting",
+    input: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+      additionalProperties: false,
+    },
+    options: { namespace: "acme", codemode: true },
+    execute: async (input, context) => {
+      await context.progress({ status: "greeting" })
+      return { content: `Hello ${(input as { name: string }).name}!` }
+    },
+  })
+})
+```
+
+Gli executor degli strumenti Promise ricevono `context.signal`. Passalo al lavoro annullabile come `fetch`, così fermare la Sessione
+ferma anche l'operazione sottostante.
+
+```ts
+execute: async ({ url }, context) => {
+  const response = await fetch(url, { signal: context.signal })
+  return { content: await response.text() }
+}
+```
+
+#### Input freeform degli strumenti
+
+Uno strumento diretto con esattamente un campo stringa obbligatorio può lasciare che il modello scriva quella stringa senza un wrapper JSON. Imposta `freeform` su `{ type: "text" }`, `{ type: "regex", pattern }` o `{ type: "lark", grammar }`.
+
+```ts
+editor.add({
+  name: "ticket",
+  description: "Look up a ticket by ID",
+  options: { codemode: false },
+  input: Schema.Struct({ id: Schema.String }),
+  freeform: { type: "regex", pattern: "OPS-[0-9]+" },
+  execute: async ({ id }) => ({ content: await lookup(id) }),
+})
+```
+
+Se l'API del modello selezionato elenca `regex` in models.dev, il modello può scrivere `OPS-42` direttamente. Altrimenti Core omette **solo** `freeform`: il modello ha comunque lo strumento `ticket` e lo chiama con `{"id":"OPS-42"}`. Gli elenchi di formati mancanti o vuoti significano nessun supporto freeform. L'executor riceve `{ id }` in entrambi i casi.
+
+Dentro Code Mode (`codemode: true`), uno strumento freeform prende la sua stringa direttamente, come in `await tools.ticket("OPS-42")`. Funziona anche `await tools.ticket({ id: "OPS-42" })`.
+
+Chiama `reload()` dopo aver cambiato i dati di origine acquisiti dal callback. Il ricaricamento riproduce le trasformazioni attive senza
+cambiarne l'ordine e senza rieseguire il setup del plugin.
+
+```ts
+await ctx.tool.reload()
+```
+
+Usa `list()` e `get()` per ispezionare gli strumenti attualmente nell'editor. Gli strumenti hanno un `id` che contiene il loro nome effettivo,
+e `get()` restituisce `undefined` quando quell'ID non è presente. Usa `update` e `remove` con il nome effettivo dello strumento,
+compreso il suo namespace (`acme_greeting` sopra). I punti nei
+namespace diventano `_`. Nei nomi degli strumenti, ogni carattere diverso da lettere, cifre, `_` e `-` diventa `_`.
+L'editor ignora i nomi mancanti. Per creare uno strumento, usa `add` con una definizione completa.
+Gli aggiornamenti preservano nome e namespace. Assegna nuovi schemi o opzioni per sostituirli
+invece di modificare i valori annidati. Gli aggiornamenti non validi vengono registrati e lasciano intatta la definizione precedente.
+
+```ts
+await ctx.tool.transform((editor) => {
+  editor.update("acme_greeting", (tool) => {
+    tool.description = "Greet the user by name"
+  })
+  editor.remove("acme_obsolete")
+})
+```
+
+Aggiornamenti e rimozioni vengono riprodotti in ordine con le aggiunte, anche dopo gli aggiornamenti del catalogo MCP. Eliminare la loro
+registrazione rimuove quelle modifiche e ricostruisce dalle trasformazioni rimanenti.
+
+Elimina una registrazione per rimuovere la sua trasformazione e ricostruire dalle trasformazioni rimanenti, rivelando l'eventuale definizione
+precedente che aveva sovrascritto. L'eliminazione è idempotente, e scaricare il plugin elimina anche le sue registrazioni.
+
+```ts
+await registration.dispose()
+```
+
+Ogni richiesta al modello acquisisce uno snapshot stabile ed eseguibile degli strumenti. Trasformazioni, ricaricamenti ed eliminazioni successivi influiscono sugli snapshot
+futuri, non sulle definizioni, sulle descrizioni del namespace di Code Mode o sugli executor già acquisiti. Gli executor che catturano
+dati modificabili del plugin continuano a vederne le modifiche. Se un valore deve restare legato alla definizione, acquisiscilo
+all'interno della trasformazione.
+
+#### Riferimento
+
+Schema: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
+[`Tool.FileContent`](/api#schema-Tool.FileContent)
+
+```ts
+interface ToolContext {
+  list(): Promise<readonly (ToolInfo & { readonly id: string })[]>
+  transform(callback: (editor: ToolEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ToolEditor {
+  list(): readonly (ToolInfo & { readonly id: string })[]
+  get(id: string): (ToolInfo & { readonly id: string }) | undefined
+  namespace(namespace: { name: string; description: string }): void
+  add(tool: ToolInfo): void
+  update(id: string, update: (tool: Types.Mutable<ToolInfo>) => void): void
+  remove(id: string): void
+}
+```
+
+### VCS
+
+Leggi informazioni del repository, stato della copia di lavoro o diff dei file.
+
+```ts
+const info = await ctx.vcs.get()
+const branches = await ctx.vcs.branch.list({ search: "feature", limit: 10 })
+const changes = await ctx.vcs.status()
+const diff = await ctx.vcs.diff({ mode: "working", context: 3 })
+```
+
+Registra un provider VCS con ambito Location tramite una trasformazione. Un provider che corrisponde al tipo di repository rilevato viene selezionato
+automaticamente; usa `editor.default.set` per selezionare un provider diverso.
+
+```ts
+await ctx.vcs.transform((editor) => {
+  editor.add({
+    id: "custom",
+    name: "Custom VCS",
+    info: async () => ({ branch: { current: "feature", default: "main" } }),
+    branches: async (input, { signal }) => readBranches(input, signal),
+    status: async (scope, { signal }) => readStatus(scope.worktree, signal),
+    diff: async (input, { signal }) => readDiff(input, signal),
+  })
+  editor.default.set("custom")
+})
+```
+
+I callback dei provider ricevono la location corrente, la radice della copia di lavoro, la radice canonica del progetto e l'eventuale store
+del repository. I callback dei diff ricevono anche la modalità selezionata, il contesto richiesto e il limite di byte dell'output. Il rilevamento automatico dei repository
+continua a usare i rilevatori Git e Mercurial integrati di OpenCode.
+
+I provider possono facoltativamente implementare `init(scope, { signal })` per creare un repository in `scope.worktree`. L'inizializzazione
+seleziona il provider per ID (Git per impostazione predefinita), non per il tipo di repository rilevato. Registra un provider con `init` anche
+quando la location non ha ancora un repository; OpenCode controlla che la directory esista e non abbia un repository prima di chiamarlo,
+poi individua di nuovo il progetto. Per i nuovi formati di repository serve comunque il supporto al rilevamento automatico, oltre a questo callback.
+
+#### Riferimento
+
+Schema: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
+[`FileDiff.Info`](/api#schema-FileDiff.Info)
+
+```ts
+interface VcsContext {
+  get(input?: VcsGetInput, requestOptions?: RequestOptions): Promise<VcsGetOutput>
+  branch: {
+    list(input?: VcsBranchListInput, requestOptions?: RequestOptions): Promise<VcsBranchListOutput>
+  }
+  status(input?: VcsStatusInput, requestOptions?: RequestOptions): Promise<VcsStatusOutput>
+  diff(input: VcsDiffInput, requestOptions?: RequestOptions): Promise<VcsDiffOutput>
+  transform(callback: (editor: VcsEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface VcsEditor {
+  add(definition: VcsDefinition): void
+  default: {
+    get(): string | undefined
+    set(providerID: string): void
+  }
+}
+
+interface VcsDefinition {
+  init?(scope: VcsScope, context: { signal: AbortSignal }): Promise<void>
+  // Existing info, branches, status, and diff callbacks are required.
+}
+```
+
+### Worktree
+
+Registra una strategia locale per i worktree usando il normale ciclo di vita del plugin. In questo esempio il modulo di implementazione
+convalida le opzioni e gestisce le operazioni `create`, `remove` e `list` del backend.
+
+```ts title="plugins/worktrees/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { makeStrategy } from "./strategy"
+
+export default Plugin.define({
+  id: "company.worktrees",
+  async setup(ctx) {
+    const strategy = makeStrategy(ctx.options)
+    await ctx.worktree.transform((editor) => {
+      editor.add(strategy)
+    })
+  },
+})
+```
+
+Carica il plugin tramite `plugins` e configura la destinazione comune separatamente:
+
+```jsonc title="opencode.jsonc"
+{
+  "worktree": { "directory": "../worktrees" },
+  "plugins": [{ "package": "./plugins/worktrees", "options": {} }],
+}
+```
+
+- Aggiungere una strategia la seleziona automaticamente. Vince l'ultima registrazione attiva; non serve alcuna configurazione di selezione della strategia.
+- Eliminare la sua registrazione o scaricare il plugin ripristina l'implementazione precedente, in ultima analisi la strategia Git inclusa.
+- `reload()` riapplica le trasformazioni quando cambiano gli input acquisiti, senza rieseguire il setup del plugin.
+- Se la creazione non riesce, OpenCode non riprova con Git. I worktree esistenti mantengono la strategia registrata anche quando cambia quella predefinita.
+- Le strategie gestiscono directory locali. Questa interfaccia non si occupa del provisioning degli spazi di lavoro remoti.
+
+#### Operazioni
+
+Il contesto del plugin espone le stesse operazioni sui worktree basate sul progetto del client. Ogni operazione richiede un
+`projectID`. `list` legge solo l'inventario salvato, compresi i checkout noti dello stesso progetto; non carica
+configurazione, non avvia plugin e non scopre modifiche del filesystem.
+
+```ts
+const projectID = ctx.location.project.id
+const created = await ctx.worktree.create({ projectID, name: "task" })
+const inventory = await ctx.worktree.list({ projectID })
+await ctx.worktree.refresh({ projectID })
+await ctx.worktree.remove({ projectID, directory: created.directory, force: false })
+```
+
+L'operazione di creazione carica la configurazione e i plugin dalla directory `canonical` salvata del progetto e usa la strategia selezionata per quel checkout.
+Accetta una directory padre facoltativa (`directory`), un'origine (`from`), un branch iniziale (`branch`) e un nome (`name`).
+L'origine predefinita è il checkout canonico. Se la cambi con `from`, la nuova origine deve appartenere allo stesso progetto. Scegliere un'origine
+non cambia la radice della configurazione.
+Un ref iniziale fornito deve essere supportato dalla strategia selezionata;
+l'operazione snapshot nativa di Rift, ad esempio, non ha un'opzione di selezione del ref.
+
+La creazione e l'aggiornamento dell'elenco aspettano che si attivino i plugin del checkout canonico. Le chiamate effettuate durante l'inizializzazione dei plugin
+di quel checkout vedono le registrazioni già effettuate e non aspettano che termini l'attivazione del plugin da cui partono.
+
+La rimozione carica la configurazione canonica e attiva i relativi plugin. Usa poi la strategia registrata per il worktree,
+non quella predefinita al momento. Se la strategia registrata non è disponibile, restituisce un errore. La directory del worktree può
+trovarsi altrove:
+
+```ts
+await ctx.worktree.remove({
+  directory: "/worktrees/task",
+  projectID,
+  force: false,
+})
+```
+
+Se la strategia registrata non è disponibile, la rimozione fallisce senza riprovare con Git. Una strategia può lanciare `new Worktree.OperationError({
+message: "Uncommitted changes", forceRequired: true })`, importando `Worktree` da `@opencode/plugin`, per chiedere conferma prima di forzare
+la rimozione, senza dipendere dagli errori di Core o Git.
+
+Per aggiornare l'elenco, OpenCode carica la configurazione canonica e chiede a tutte le strategie disponibili di cercare worktree nelle radici dei checkout noti.
+Combina i risultati, conserva le associazioni già registrate e rimuove le directory mancanti. Se una fonte di rilevamento restituisce un errore,
+OpenCode lo scrive nel log senza interrompere le altre fonti. Le directory esistenti restano salvate anche se nessuna strategia disponibile le restituisce. Osserva
+`worktree.updated` e chiama di nuovo `list` per leggere l'elenco aggiornato.
+
+```ts
+await ctx.worktree.refresh({ projectID })
+```
+
+#### Riferimento
+
+Le implementazioni ricevono una destinazione suggerita dopo la denominazione e la gestione delle collisioni. Restituisci la directory effettiva da
+`create`; può differire quando un backend richiede il proprio layout. OpenCode risolve il percorso restituito e lo usa per
+l'inventario, i comandi di avvio e il risultato dell'API. La directory restituita deve esistere.
+
+Le strategie che scelgono un'altra destinazione gestiscono lì le collisioni di denominazione. OpenCode crea comunque la directory padre suggerita
+prima di chiamare la strategia. `list` deve riportare solo le directory possedute dalla strategia, più eventuali radici di repository.
+
+```ts
+interface WorktreeDefinition {
+  readonly id: string
+  create(
+    input: { sourceDirectory: string; directory: string; branch?: string },
+    context: { signal: AbortSignal },
+  ): Promise<{ directory: string }>
+  remove(input: { directory: string; force: boolean }, context: { signal: AbortSignal }): Promise<void>
+  list(
+    sourceDirectory: string,
+    context: { signal: AbortSignal },
+  ): Promise<readonly { directory: string; type: "root" | "worktree" }[]>
+}
+
+interface WorktreeEditor {
+  add(definition: WorktreeDefinition): void
+}
+
+interface WorktreeDomain extends WorktreeApi {
+  transform(callback: (editor: WorktreeEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+```
+
+I callback Promise devono collaborare con l'annullamento tramite `signal`. I callback Effect restituiscono Effect e usano invece
+l'interruzione di Effect. Le registrazioni restano con ambito il runtime del plugin; le operazioni del progetto usano il registro del checkout canonico.
+Gli adattatori della configurazione Core alimentano le impostazioni delle directory in quel registro.
+
+### Ricerca web
+
+Elenca i provider di ricerca web o esegui una query tramite il provider selezionato.
+
+```ts
+const providers = await ctx.websearch.providers()
+const results = await ctx.websearch.query({ query: "OpenCode plugins", providerID: "internal" })
+```
+
+Registra un provider e seleziona il provider predefinito con una trasformazione.
+
+```ts
+await ctx.websearch.transform((editor) => {
+  editor.add({
+    id: "internal",
+    name: "Internal search",
+    execute: async ({ query }, { signal }) => {
+      const response = await fetch(`https://search.example.com?q=${encodeURIComponent(query)}`, { signal })
+      const result = (await response.json()) as { url: string; title: string; content: string }
+      return [{ url: result.url, title: result.title, content: result.content, time: {} }]
+    },
+  })
+  editor.default.set("internal")
+})
+```
+
+Disattiva la ricerca web selezionando `false`, oppure ricarica i provider dopo che lo stato esterno cambia.
+
+```ts
+await ctx.websearch.transform((editor) => editor.default.set(false))
+await ctx.websearch.reload()
+```
+
+#### Riferimento
+
+Schema: [`WebSearch.Provider`](/api#schema-WebSearch.Provider), [`WebSearch.Result`](/api#schema-WebSearch.Result)
+
+```ts
+interface WebSearchContext {
+  providers(input?: WebsearchProvidersInput, requestOptions?: RequestOptions): Promise<WebsearchProvidersOutput>
+  query(input: WebsearchQueryInput, requestOptions?: RequestOptions): Promise<WebsearchQueryOutput>
+  transform(callback: (editor: WebSearchEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface WebSearchEditor {
+  add(provider: WebSearchDefinition): void
+  default: {
+    get(): string | false | undefined
+    set(providerID: string | false): void
+  }
+}
+```
+
+### Eventi
+
+Sottoscriviti al flusso pubblico degli eventi del server collegato. Annulla lo stream durante la pulizia del plugin. Passa `types`, ad esempio `ctx.event.subscribe({ types: ["config.updated"] })`, per ricevere solo quei tipi di evento; gli eventi sono tipizzati di conseguenza. I plugin vengono eseguiti dentro il server, quindi a differenza dei client SDK non ricevono mai `server.connected`. I nomi di tipo sconosciuti vengono ignorati con un avviso nel log del server.
+
+```ts
+const controller = new AbortController()
+void (async () => {
+  for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+    console.log(event.type)
+  }
+})()
+return () => controller.abort()
+```
+
+#### Riferimento
+
+Schema: [`V2EventEncoded`](/api#schema-V2EventEncoded)
+
+```ts
+type EventType = Exclude<OpenCodeEvent["type"], "server.connected">
+
+interface EventContext {
+  subscribe<Type extends EventType = EventType>(options?: {
+    types?: Type[]
+    signal?: AbortSignal
+  }): AsyncIterable<Extract<OpenCodeEvent, { type: Type }>>
+}
+```
+
+## Hook
+
+Gli hook intercettano operazioni live. Registra un hook sul suo dominio ed elimina la
+registrazione restituita quando non serve più.
+
+```ts
+const registration = await ctx.session.hook("context", () => {})
+await registration.dispose()
+```
+
+Più plugin possono registrare lo stesso hook. OpenCode li esegue nell'ordine dei plugin,
+così gli hook successivi vedono le modifiche fatte dagli hook precedenti.
+
+### Sessioni
+
+Gli hook delle sessioni intercettano l'ammissione dei prompt, le chiamate ai modelli, l'HTTP nativo e i retry.
+
+#### Fork
+
+L'hook `fork` viene eseguito dopo che OpenCode copia la cronologia e prima che la chiamata fork ritorni. `sessionID` identifica la nuova sessione.
+
+```ts
+await ctx.session.hook("fork", ({ sessionID }) => console.log(sessionID))
+```
+
+#### Ammissione del prompt
+
+Intercetta i prompt utente in arrivo prima della risoluzione di allegati e skill e dell'ammissione durevole nella inbox:
+
+```ts
+await ctx.session.hook("prompt", (event) => {
+  event.prompt.text = event.prompt.text.replaceAll("company-secret", "[redacted]")
+  event.prompt.files ??= []
+  event.prompt.files.push({ uri: "file:///project/policy.md" })
+  event.metadata = { ...event.metadata, source: "company-policy" }
+  event.delivery = "queue"
+})
+```
+
+L'hook riceve una bozza modificabile di cui ha il controllo:
+
+- `prompt` contiene `text`, `files`, le menzioni degli agenti in `agents` e le `skills` selezionate.
+- `metadata` contiene i metadati di ammissione definiti dall'applicazione.
+- `delivery` è `"steer"` per impostazione predefinita e può essere cambiato in `"queue"`.
+- Gli ID di sessione e messaggio sono in sola lettura; un hook non può reindirizzare l'ammissione.
+
+I file e le skill aggiunti da un hook seguono il normale percorso di risoluzione e validazione.
+Quando riscrivi il testo, aggiorna o rimuovi gli offset `mention` degli allegati che non
+corrispondono più. Le menzioni degli agenti non cambiano l'agente attivo della sessione.
+
+Gli hook dei prompt vengono eseguiti in queste condizioni:
+
+- Gli hook vengono eseguiti nell'ordine di registrazione dopo che i plugin della location della sessione sono pronti.
+- I comandi che inviano tramite `session.prompt` eseguono l'hook.
+- I messaggi sintetici, i messaggi shell, i controlli di compattazione e i controlli di spostamento no.
+- L'hook viene eseguito una volta durante l'ammissione, non prima di ogni chiamata al modello.
+- L'ambito per provider non è disponibile perché la risoluzione del modello avviene dopo l'ammissione.
+
+Le modifiche diventano l'input utente canonico persistito. Se la preparazione fallisce o viene
+interrotta, OpenCode non ammette il prompt.
+
+Mantieni gli hook dei prompt sicuri per i retry. Non sono un confine di effetti esattamente-una-volta:
+
+- Ripetere un ID già in attesa o consegnato restituisce l'ammissione originale senza rieseguire gli hook.
+- Le sottomissioni concorrenti possono eseguire gli hook più di una volta, ma vince solo la prima ammissione riuscita.
+- Gli hook dei prompt trasformano l'input e non espongono un'API tipizzata di rifiuto.
+
+#### Richieste ai modelli
+
+Modifica istruzioni di sistema, messaggi, strumenti o opzioni di richiesta assemblati subito prima dell'invio al modello. Ogni
+tipo di richiesta emessa da una sessione ha il proprio hook, così un plugin può trattare il ciclo dell'agente e le richieste ausiliarie
+diversamente:
+
+- `context` viene eseguito per il ciclo dell'agente, comprese le continuazioni guidate dagli strumenti.
+- `compaction` viene eseguito per i riassunti dei checkpoint. `messages` contiene la cronologia della conversazione da riassumere; OpenCode aggiunge il suo
+  prompt di riassunto dopo l'esecuzione degli hook. Imposta `result` per registrare tu stesso la compattazione e saltare la chiamata al modello; accetta gli
+  stessi campi di un messaggio di compattazione completato.
+- `generate` viene eseguito per le chiamate temporanee `ctx.session.generate`.
+- `title` viene eseguito per la generazione del titolo. Non ha `agent` né `tools`. Imposta `result` per fornire tu stesso il titolo.
+
+```ts
+await ctx.session.hook("context", (event) => {
+  event.system.push({ type: "text", text: "Keep the review focused on correctness." })
+  delete event.tools.write
+  event.options.temperature = 0.2
+  event.options.maxTokens = 8_000
+})
+
+await ctx.session.hook("compaction", async (event) => {
+  event.result = { summary: await summarize(event.messages) }
+})
+```
+
+Le modifiche influiscono solo sulla chiamata al modello in uscita, non sulla cronologia persistita né sulla configurazione. Un hook che deve applicarsi a
+ogni richiesta deve registrarsi per ogni tipo.
+
+I messaggi negli hook `context`, `compaction` e `generate` portano i `metadata` del messaggio archiviato, in sola lettura
+(ad esempio ciò che ha impostato un hook `prompt`). Non vengono inviati al modello.
+
+La parte `system` che contiene le istruzioni di OpenCode elenca anche ogni fonte in `metadata.experimental.instructions` come
+`{ key, text }`, ad esempio `core/date` o `core/environment`, così un hook può distinguere le fonti. L'elenco è una copia:
+modificare il `text` della parte non lo aggiorna. È sperimentale e può cambiare.
+
+Le sostituzioni delle richieste seguono queste regole:
+
+- `options` parte vuoto per ogni chiamata al modello; non contiene le impostazioni risolte del modello.
+- Le chiavi tipizzate sono impostazioni di generazione; qualsiasi altra chiave viene passata al protocollo selezionato come opzione del provider.
+- Gli hook vengono eseguiti nell'ordine di registrazione e vedono le sostituzioni fatte dagli hook precedenti.
+- Le sostituzioni delle richieste hanno la precedenza sui valori predefiniti del modello, che hanno la precedenza sui valori predefiniti della route.
+- Gli oggetti delle opzioni del provider si uniscono ricorsivamente; array e valori scalari sostituiscono i valori precedenti.
+- Eliminare una sostituzione o impostarla su `undefined` ricade sui valori predefiniti configurati invece di rimuoverli.
+- Gli overlay grezzi del corpo HTTP si applicano dopo la riduzione al protocollo e possono sovrascrivere i campi risultanti.
+
+#### Opzioni del provider
+
+Le opzioni del provider usano i nomi semantici delle opzioni del protocollo selezionato, non i campi grezzi del corpo HTTP. Limita le impostazioni
+specifiche del provider al provider corrispondente. Ad esempio, OpenAI Responses usa `reasoningEffort`:
+
+```ts
+await ctx.session.hook(
+  "context",
+  (event) => {
+    event.options.reasoningEffort = "high"
+  },
+  { providerID: "openai" },
+)
+```
+
+Le opzioni di generazione dipendono dal protocollo e dal modello selezionati:
+
+- `maxTokens` è il limite semantico dei token di output.
+- Gemini supporta `topK`; OpenAI Responses non lo espone.
+
+#### Risoluzione del modello
+
+Sperimentale. Viene eseguito ogni volta che una Sessione risolve il modello per una richiesta, prima che venga costruito qualcosa per essa. `model` parte
+come modello selezionato; cambialo per servire questa richiesta con un altro modello dello stesso provider, compreso uno nascosto
+dal selettore dei modelli. La Sessione mantiene il modello selezionato; la richiesta e il messaggio dell'assistente usano quello nuovo.
+`kind` dice quale richiesta si sta risolvendo, così un router può saltare i titoli o instradare di nuovo dopo la compattazione. Un modello di
+un altro provider fallisce come non disponibile.
+
+```ts
+await ctx.session.hook(
+  "experimental.model.resolve",
+  (event) => {
+    if (event.model.id === "auto" && event.kind !== "title")
+      event.model = { providerID: event.model.providerID, id: pick(event.sessionID) }
+  },
+  { providerID: "acme" },
+)
+```
+
+#### Richiesta al modello
+
+Modifica le impostazioni della richiesta al modello e, facoltativamente, limita l'hook a un provider. L'evento porta lo stesso `kind`
+degli hook HTTP qui sotto.
+
+```ts
+await ctx.session.hook(
+  "model.request",
+  (event) => {
+    event.headers["x-plugin"] = "review"
+  },
+  { providerID: "anthropic" },
+)
+```
+
+#### HTTP nativo
+
+Modifica le richieste o risposte native del provider. I loro corpi sono stream monouso; clona o sostituisci un corpo prima di leggerlo.
+
+Entrambi gli hook vengono eseguiti per ogni richiesta emessa da una sessione. `event.kind` dice quale flusso l'ha emessa: `"primary"` per il ciclo
+dell'agente, `"compaction"` per i riassunti dei checkpoint, `"title"` per la generazione del titolo e `"generate"` per le chiamate temporanee
+`ctx.session.generate`. Usalo invece dell'ID dell'agente per distinguere le richieste ausiliarie.
+
+```ts
+await ctx.session.hook("http.request", (event) => {
+  event.request.headers.set("x-session-id", event.sessionID)
+  if (event.kind === "title") event.request.headers.set("x-priority", "background")
+})
+
+await ctx.session.hook("http.response", (event) => {
+  event.response = new Response(event.response.body, {
+    status: event.response.status,
+    headers: { ...Object.fromEntries(event.response.headers), "x-plugin": "review" },
+  })
+})
+```
+
+#### WebSocket nativo (sperimentale)
+
+I provider che trasmettono su WebSocket aprono una connessione per sessione e la riusano tra le richieste, quindi
+`http.request` e `http.response` non vedono mai quel traffico. L'hook `experimental.ws.handshake` viene eseguito una volta per chiamata al modello
+prima che venga selezionata la connessione. Porta gli stessi `sessionID`, `agent`, `model` e `kind` degli hook
+HTTP, più `url` e `headers` della connessione. Cambiare `url` o `headers` cambia il socket usato dalla richiesta, così un
+bearer token ruotato riapre la connessione.
+
+Gli hook HTTP si applicano comunque a tutte le richieste HTTP, comprese quelle inviate come alternativa al WebSocket.
+
+```ts
+await ctx.session.hook(
+  "experimental.ws.handshake",
+  async (event) => {
+    event.headers.authorization = `Bearer ${await mintToken(event.url)}`
+    delete event.headers["api-key"]
+  },
+  { providerID: "azure" },
+)
+```
+
+`experimental.ws.send` e `experimental.ws.receive` espongono i frame stessi, la controparte WebSocket della modifica del corpo di
+una richiesta o risposta HTTP. `send` viene eseguito dopo che il driver del provider costruisce un frame in uscita e prima che
+venga scritto; `receive` viene eseguito su ogni frame in entrata prima che il driver lo osservi. Entrambi portano il frame come stringa e
+inviano ciò che `frame` contiene quando l'hook ritorna.
+
+OpenCode non valida i frame riscritti. Il driver tiene traccia dello stato dalle risposte del provider, quindi una riscrittura che
+cambia il significato del protocollo è responsabilità del plugin, proprio come un corpo HTTP riscritto.
+
+```ts
+await ctx.session.hook(
+  "experimental.ws.send",
+  (event) => {
+    const body = JSON.parse(event.frame)
+    if (body.type === "response.create") body.metadata = { ...body.metadata, session: event.sessionID }
+    event.frame = JSON.stringify(body)
+  },
+  { providerID: "openai" },
+)
+
+await ctx.session.hook("experimental.ws.receive", (event) => {
+  if (event.frame.includes('"type":"error"')) console.error(event.frame)
+})
+```
+
+Questi hook sono sperimentali e i loro nomi o forme possono cambiare.
+
+#### Policy di retry
+
+Decidi se riprovare dopo un errore del provider o modifica l'attesa in millisecondi. L'hook interviene dopo che OpenCode
+classifica l'errore e propone la propria policy, ma prima di pianificare un nuovo tentativo. L'hook non dà accesso
+al modo in cui OpenCode esegue internamente il tentativo successivo.
+
+```ts
+await ctx.session.hook("retry", (event) => {
+  if (event.error.status === 429) {
+    event.decision = { retry: true, delay: 10_000 }
+    return
+  }
+  if (event.error.type === "provider.invalid-request" && event.attempt === 2) {
+    event.decision = { retry: true, delay: 0 }
+    return
+  }
+  if (event.attempt >= 3) event.decision = { retry: false }
+})
+```
+
+Gli hook di retry possono cambiare la `decision` iniziale di OpenCode rendendo ripetibile un fallimento terminale
+o ponendo il veto a un retry proposto.
+
+Le decisioni di retry seguono queste regole:
+
+- Più hook vengono eseguiti nell'ordine di registrazione, e gli hook successivi vedono la decisione corrente.
+- Il numero massimo di tentativi integrato resta un limite rigido.
+- `attempt` è il numero del tentativo effettivo in esame. La richiesta iniziale è `1`, quindi il primo retry è `2`.
+- I ritardi non validi come `NaN`, infinito o valori negativi ricadono sul ritardo calcolato.
+- Il recupero dall'overflow di contesto è separato perché compatta la conversazione invece di riprovare la stessa richiesta.
+
+#### Riferimento della sessione
+
+```ts
+import type { SessionPrompt } from "@opencode/plugin/promise/session"
+
+interface SessionHooks {
+  prompt: SessionPrompt
+  context: SessionContextHook
+  compaction: SessionContextHook & { result?: SessionCompactionResult }
+  generate: SessionContextHook
+  title: SessionRequestHook & { result?: string }
+  "experimental.model.resolve": SessionModelResolveHook
+  "model.request": SessionModelRequestHook
+  "http.request": SessionHttpRequestHook
+  "http.response": SessionHttpResponseHook
+  "experimental.ws.handshake": SessionWebSocketHandshakeHook
+  "experimental.ws.send": SessionWebSocketSendHook
+  "experimental.ws.receive": SessionWebSocketReceiveHook
+  retry: SessionRetryHook
+}
+
+interface SessionModelResolveHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  model: { providerID: string; id: string; variant?: string }
+}
+
+interface SessionWebSocketHandshakeHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  url: string
+  headers: Record<string, string>
+}
+
+interface SessionWebSocketSendHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  frame: string
+}
+
+interface SessionWebSocketReceiveHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  frame: string
+}
+
+type RetryDecision = { retry: false } | { retry: true; delay: number }
+
+interface SessionRetryHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly error: { type: string; message: string; status?: number }
+  readonly attempt: number
+  decision: RetryDecision
+}
+
+interface SessionRequestHook {
+  readonly sessionID: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  system: SystemPart[]
+  messages: Message[]
+  options: {
+    maxTokens?: number
+    temperature?: number
+    topP?: number
+    topK?: number
+    frequencyPenalty?: number
+    presencePenalty?: number
+    seed?: number
+    stop?: string[]
+  } & Record<string, unknown>
+}
+
+interface SessionContextHook extends SessionRequestHook {
+  readonly agent: string
+  tools: Record<string, { description: string; input: JsonSchema }>
+}
+
+interface SessionCompactionResult {
+  summary: string
+  native?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+  tokens?: TokenUsage
+}
+
+interface SessionHookContext {
+  hook<Name extends keyof SessionHooks>(
+    name: Name,
+    callback: (event: SessionHooks[Name]) => Promise<void> | void,
+    options?: Name extends "prompt" ? never : { providerID?: string },
+  ): Promise<Registration>
+}
+```
+
+### Permessi
+
+Esamina le decisioni di permesso dopo la valutazione delle regole configurate e prima che un'
+azione venga eseguita o che venga pubblicato un prompt di permesso.
+
+```ts
+await ctx.permission.hook("evaluate", async (event) => {
+  if (event.action === "read") return
+
+  const messages = await ctx.session.context({ sessionID: event.sessionID })
+  const review = await ctx.generate.text({
+    model: { providerID: "anthropic", id: "claude-sonnet-5-5" },
+    prompt: buildSafetyPrompt({ messages, action: event.action, resources: event.resources }),
+  })
+  const decision = parseDecision(review.text)
+
+  event.effect = decision.effect
+  event.message = decision.reason
+})
+```
+
+Gli hook dei permessi seguono queste regole:
+
+- Gli hook vengono eseguiti per le decisioni `allow` e `ask`.
+- Un `deny` configurato esplicitamente è definitivo e non invoca l'hook.
+- Un hook può cambiare `effect` in `allow`, `ask` o `deny`.
+- `message` compare in una richiesta di permesso escalata o diventa il motivo del rifiuto.
+
+#### Riferimento
+
+```ts
+interface PermissionEvaluation {
+  readonly sessionID: string
+  readonly agent?: string
+  readonly action: string
+  readonly resources: readonly string[]
+  readonly metadata?: Record<string, unknown>
+  readonly source?: { type: "tool"; messageID: string; id: string }
+  effect: "allow" | "ask" | "deny"
+  message?: string
+}
+```
+
+### Shell
+
+Modifica comandi shell, directory di lavoro, timeout, eseguibili o variabili d'ambiente prima dell'esecuzione.
+
+```ts
+await ctx.shell.hook("create.before", (event) => {
+  event.timeout = Math.min(event.timeout, 60_000)
+  event.env.COMPANY_ENV = "development"
+})
+```
+
+#### Riferimento
+
+```ts
+interface ShellHookContext {
+  hook(name: "create.before", callback: (event: ShellCreateBefore) => Promise<void> | void): Promise<Registration>
+}
+
+interface ShellCreateBefore {
+  command: string
+  cwd: string
+  timeout: number
+  shell: string
+  env: Record<string, string | undefined>
+}
+```
+
+### Strumenti
+
+Ispeziona o sostituisci l'input di uno strumento prima dell'esecuzione.
+
+```ts
+await ctx.tool.hook("execute.before", (event) => {
+  if (event.tool === "read") console.log(event.input)
+})
+```
+
+Ispeziona i risultati riusciti o i fallimenti dopo l'esecuzione.
+
+```ts
+await ctx.tool.hook("execute.after", (event) => {
+  if (event.status === "completed") event.result = { ...event.result, metadata: { observed: true } }
+  if (event.status === "error") console.error(event.error.message)
+})
+```
+
+#### Riferimento
+
+```ts
+interface ToolHooks {
+  "execute.before": ToolExecuteBefore
+  "execute.after": ToolExecuteCompleted | ToolExecuteFailed
+}
+
+interface ToolHookContext {
+  hook<Name extends keyof ToolHooks>(
+    name: Name,
+    callback: (event: ToolHooks[Name]) => Promise<void> | void,
+  ): Promise<Registration>
+}
+```
+
+## Supportare V1
+
+Un plugin può supportare V1 e V2 dallo stesso entrypoint del pacchetto. Esporta come default
+un oggetto con una funzione V1 `server()` e una funzione V2 `setup()`:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default {
+  ...Plugin.define({
+    id: "example",
+    async setup(ctx) {
+      await ctx.tool.hook("execute.before", () => {
+        console.log("A tool is about to run")
+      })
+    },
+  }),
+  async server() {
+    return {
+      "tool.execute.before": async () => {
+        console.log("A tool is about to run")
+      },
+    }
+  },
+}
+```
+
+- V1 chiama `server()` e usa gli hook restituiti.
+- V2 legge `id` e `setup()` del default export (o `effect()` per i plugin Effect), ignorando `server()`.
+- Mantieni ogni implementazione sulla propria API; condividere un export non traduce gli hook V1 in hook V2.
+- Usa la sintassi spread per includere `Plugin.define(...)` nell'oggetto esportato. In questo modo TypeScript verifica i tipi della definizione V2 separatamente da `server()`.
+
+La forma a oggetto V1 è supportata in OpenCode `1.18.29`. Le release V1 più vecchie possono
+aspettarsi invece export di funzioni; prova il pacchetto installato con la release V1 più vecchia
+che intendi supportare e con V2.

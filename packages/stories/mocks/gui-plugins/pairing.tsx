@@ -16,11 +16,18 @@ export const pairingResponses = [
   "Screen read fails",
   "Screen change fails",
   "Tunnel connects slowly",
+  "Code arrives slowly",
   "Code request fails",
+  "Code refresh fails",
   "Copy fails",
 ] as const
 
 type Response = (typeof pairingResponses)[number]
+
+async function slowResponse(signal?: AbortSignal) {
+  await new Promise<void>((resolve) => setTimeout(resolve, 2000))
+  signal?.throwIfAborted()
+}
 
 /** In-memory settings, tunnel discovery, codes and clipboard, scoped to one story instance. */
 export function pairingRemote(input: {
@@ -57,7 +64,9 @@ export function pairingRemote(input: {
 
           return { urls }
         },
-        pair: async () => {
+        pair: async ({ signal }) => {
+          if (input.response === "Code arrives slowly") await slowResponse(signal)
+          if (state.issued > 0) fail("Code refresh fails")
           fail("Code request fails")
           state.issued += 1
           // As with server codes, encode 16 bytes. A new fixture replays the same sequence of QR codes.
@@ -76,8 +85,7 @@ export function pairingRemote(input: {
       return state.enabled
     },
     setRemote: async (enabled, options) => {
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-      options?.signal?.throwIfAborted()
+      await slowResponse(options?.signal)
       fail("Remote change fails")
       state.enabled = enabled
     },

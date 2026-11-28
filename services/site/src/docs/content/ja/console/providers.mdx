@@ -1,0 +1,188 @@
+---
+title: "Console のプロバイダー"
+description: "自分のモデルプロバイダーアカウントを OpenCode Console のワークスペースに接続し、メンバーが使用できるモデルを選択します。"
+---
+
+すでに支払っているプロバイダーアカウント（Anthropic、OpenAI、AWS Bedrock など）を接続し、そのモデルをワークスペースの全員と共有できます。Console が認証情報を保存し、各プロバイダーをゲートウェイ経由で提供するため、メンバーはプロバイダーキーを見ることなくモデルを使用できます。同じゲートウェイは、[プロバイダー API](/console/api/providers) を通じて自分のツールからも利用できます。
+
+オーナーと管理者は **Providers** タブでプロバイダーを管理します。メンバーは `/connect` を実行すると、有効なモデルを OpenCode で利用できるようになります。
+
+## プロバイダーを接続する
+
+1. **Providers** を開き、**Connect Provider** をクリックします。
+2. カタログからプロバイダーを選び、API キーを入力します。
+3. 必要に応じて **Test connection** をクリックし、**Save** をクリックします。
+
+カタログには Anthropic、OpenAI、Google、xAI、DeepSeek、Mistral、Groq、OpenRouter など多数のプロバイダーが含まれます。カタログのプロバイダーはモデルが設定済みです。
+
+### クラウドプロバイダー
+
+クラウドプロバイダーには、いくつか追加の情報が必要です。
+
+| プロバイダー          | 必要な情報                             |
+| --------------------- | -------------------------------------- |
+| Azure                 | リソース名と API キー                  |
+| AWS Bedrock           | リージョンと API キー                  |
+| Google Vertex AI      | リージョンとサービスアカウントの JSON  |
+| Cloudflare AI Gateway | アカウント ID、ゲートウェイ ID、API トークン |
+| Databricks            | ワークスペースの URL とトークン        |
+
+### カスタムプロバイダー
+
+**Add Custom Provider** をクリックすると他のエンドポイントを接続でき、**Add Model** でモデルを追加できます。
+
+| 項目       | 説明                                                                     |
+| ---------- | ------------------------------------------------------------------------ |
+| ベース URL | Console がリクエストを転送する先（例：`https://api.deepseek.com/v1`）。  |
+| 形式       | Chat Completions、Responses API、Anthropic Compatible、Google Generative AI。 |
+| 認証モード | Bearer、API キーヘッダー、カスタムヘッダー。                             |
+| 認証情報   | Console がプロバイダーに送信するキー。                                   |
+
+## モデルを選択する
+
+プロバイダーを開くとモデルが表示されます。メンバーが利用できるのは有効なモデルだけです。
+
+- **Enabled** トグルでモデルのオンとオフを切り替えます。
+- **New models** をオンにすると、今後プロバイダーが追加するモデルが自動的に有効になります。
+
+## モデルを編集する
+
+モデルをクリックすると編集できます。変更はパネルを閉じたときに保存されます。
+
+| セクション | 変更できる内容                                                   |
+| ---------- | ---------------------------------------------------------------- |
+| 一般       | 表示名、API ID、ツール対応、入力と出力の種類                     |
+| バリアント | 独自のヘッダーやボディを持つバリアント                           |
+| 設定       | デフォルトのバリアント、リクエストのヘッダーとボディ、トークン上限 |
+| コスト階層 | 100 万トークンあたりの入力、出力、キャッシュ読み取り、キャッシュ書き込みの料金 |
+
+### カスタム料金
+
+カタログのモデルには、初期値としてプロバイダーの定価が設定されています。OpenAI との割引契約など、個別の契約料金がある場合は、**Cost Tiers** で料金を上書きしてください。実際に支払う金額を使用量レポートと[予算](/console/budgets)に反映できます。
+
+| 項目               | 定価   | 実際の料金 |
+| ------------------ | ------ | ---------- |
+| 入力料金           | $2.50  | $2.00      |
+| 出力料金           | $15.00 | $12.00     |
+| キャッシュ読み取り料金 | $0.25  | $0.20      |
+
+変更した料金はプロバイダーページで強調表示されます。定価に戻すには、項目の **Restore default value**、またはモデルの **⋯ › Restore...** を使用します。
+
+コンテキストが一定のサイズ（たとえば 200K トークン）を超えると料金が上がるモデルでは、**Context** の料金区分を追加します。
+
+### カスタムモデル
+
+**Add Model** をクリックすると、カタログにないモデルを **Display name** と **Model ID** を指定して追加できます。既存のモデルで **⋯ › Duplicate...** を使うと、その設定を引き継いで作成できます。
+
+## OpenCode のモデル
+
+**Models** タブでは、Console が提供する[モデル](/console/models)を管理します。これらのモデルはワークスペースのクレジットから支払われます。プロバイダーページと同様に操作できます。
+
+- 個々のモデルをオンまたはオフにできます。
+- **Free models** をオフにすると、ワークスペースで無料モデルをブロックできます。
+- **New models** をオンにすると、新しい Console モデルが自動的に有効になります。
+
+自分のプロバイダーだけを使う場合は、**⋯ › Disable** からプロバイダー全体を無効にします。
+
+## OpenCode での使用
+
+メンバーは `/connect` を実行してワークスペースを選択します。有効なプロバイダーはワークスペース名に続けてプロバイダー名が表示され、`/models` にはそのプロバイダーで有効なモデルが一覧表示されます。
+
+```text
+Acme Inc. / Anthropic
+```
+
+**Settings › General** で **Managed providers only** をオンにすると、全員の OpenCode をワークスペースのプロバイダーだけに制限できます。
+
+## ID を送信する
+
+自分で運用しているゲートウェイをプロバイダーにする場合は、そのページで **Send identity** をオンにします。Console は、そこへ送るすべてのモデルリクエストに `x-opencode-actor` ヘッダーを追加します。このヘッダーにはリクエストを行ったメンバーまたはサービスアカウントが示されるため、ゲートウェイ側で送信者ごとに記録したり制限したりできます。
+
+```text
+x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZCI6Ii4uLiJ9...
+```
+
+- デフォルトではオフで、ベース URL を変更するとオフになります。
+- ベンダー自身の API（`https://api.openai.com/v1` など）をそのまま使うプロバイダーでは、ベンダーがヘッダーを無視するため、この設定は表示されません。
+- Console はクライアントが送信した `x-opencode-*` ヘッダーを削除するため、ゲートウェイが受け取る `x-opencode-actor` は Console が署名したものだけです。
+- **Test connection** とモデル一覧は、認証情報のみで `GET <base URL>/models` を呼び出すため、このルートではヘッダーを必須にしないでください。
+
+### トークン
+
+このヘッダーは、Console がリクエストごとに署名する JWT です。
+
+| フィールド   | 値                                       |
+| ------------ | ---------------------------------------- |
+| `alg`        | `ES256`                                  |
+| `typ`        | `opencode-actor+jwt`                     |
+| `iss`        | `https://opencode.ai/inference`          |
+| `aud`        | プロバイダーのベース URL（末尾のスラッシュなし） |
+| `iat`, `exp` | `exp` は `iat` の 120 秒後               |
+
+| クレーム             | 値                                                                     |
+| -------------------- | ---------------------------------------------------------------------- |
+| `sub`                | メンバーの場合は `user_id`、それ以外は `service_account_id`            |
+| `workspace_id`       | リクエストが実行されたワークスペース                                   |
+| `user_id`, `email`   | リクエストを送信したメンバー（メンバーの場合）                         |
+| `service_account_id` | リクエストを送信したサービスアカウント（エージェントを含む）           |
+| `session_id`         | クライアントが送信したセッション ID（送信した場合）                    |
+| `request_id`         | クライアントが `x-opencode-log-id` レスポンスヘッダーで受け取る ID     |
+
+メンバーのリクエストには、次のようなペイロードが含まれます。
+
+```json
+{
+  "iss": "https://opencode.ai/inference",
+  "aud": "https://llm.example.com/v1",
+  "sub": "user_...",
+  "workspace_id": "org_...",
+  "user_id": "user_...",
+  "email": "ada@example.com",
+  "session_id": "ses_...",
+  "request_id": "019a6e8f-24a0-7b12-9c3d-4e5f6a7b8c9d",
+  "iat": 1794500000,
+  "exp": 1794500120
+}
+```
+
+### トークンを検証する
+
+Console は公開鍵を `https://opencode.ai/inference/.well-known/jwks.json` で公開し、`Cache-Control: public, max-age=300` を付けて配信します。署名、発行者、対象者、種類、有効期間を確認してから、ワークスペースを確認します。次の例では [jose](https://github.com/panva/jose) を使用します。
+
+```ts
+import { createRemoteJWKSet, jwtVerify } from "jose"
+
+const keys = createRemoteJWKSet(new URL("https://opencode.ai/inference/.well-known/jwks.json"))
+
+export async function sender(request: Request) {
+  const token = request.headers.get("x-opencode-actor")
+  if (!token) throw new Error("Missing x-opencode-actor")
+  const { payload } = await jwtVerify(token, keys, {
+    issuer: "https://opencode.ai/inference",
+    audience: "https://llm.example.com/v1",
+    algorithms: ["ES256"],
+    typ: "opencode-actor+jwt",
+    maxTokenAge: "120s",
+    clockTolerance: "5s",
+  })
+  if (payload.workspace_id !== "org_...") throw new Error("Another workspace")
+  return payload
+}
+```
+
+`audience` には、Console に保存されたプロバイダーのベース URL を末尾のスラッシュなしで設定し、`org_...` は Console の URL にあるワークスペース ID に置き換えます。Console は新しい署名鍵を公開してからその鍵で署名するため、`createRemoteJWKSet` のように `kid` で鍵を検索する検証側は、鍵のローテーション中も動作し続けます。
+
+## 無効化と削除
+
+プロバイダーの **⋯** メニューを開きます。
+
+- **Disable** は、メンバーからプロバイダーとそのモデルを隠しますが、設定は保持します。
+- **Remove...** はプロバイダーとそのモデルを削除します。ダイアログには最近使用したメンバーが表示され、**Disable instead** も選択できます。
+
+キーをローテーションするには、プロバイダーページで認証情報をクリックし、新しいキーを入力します。
+
+## 請求
+
+トークンの料金はプロバイダーから請求され、Console はクレジットを消費しません。それでも Console は各リクエストとそのコストをモデルの料金で記録するため、使用量レポートと[予算](/console/budgets)に含まれます。
+
+OpenCode ではなく自分のツールからプロバイダーを呼び出すには、[プロバイダー API](/console/api/providers) を使用します。

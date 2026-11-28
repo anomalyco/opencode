@@ -3,6 +3,7 @@ import { Integration } from "@opencode/schema/integration"
 import { Provider } from "@opencode/schema/provider"
 import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
+import { Flag } from "../flag.js"
 import { Model } from "../model.js"
 import { ModelsDev } from "../models-dev.js"
 
@@ -35,9 +36,11 @@ export const ModelsDevPlugin = define({
   effect: Effect.fn(function* (ctx) {
     const modelsDev = yield* ModelsDev.Service
     const bus = yield* Bus.Service
+    const flags = yield* Flag.Service
+    const get = Effect.suspend(() => modelsDev.get(flags.current().recommended_api.enabled))
     // Filtering and definition indexes are shared across Locations. Only Model materialization
     // makes mutable copies, after provider configuration and access have been resolved.
-    const loaded = { data: snapshots(yield* modelsDev.get()) }
+    const loaded = { data: snapshots(yield* get) }
     yield* ctx.integration.transform((integrations) => {
       for (const provider of loaded.data) {
         if (provider.environment.length === 0) continue
@@ -66,18 +69,24 @@ export const ModelsDevPlugin = define({
       }
     })
     const apply = (data: readonly ModelsDev.Snapshot[]) => {
-      loaded.data = snapshots(data)
+      const latest = snapshots(data)
+      if (latest === loaded.data) return Effect.void
+      loaded.data = latest
       return ctx.integration.reload().pipe(Effect.andThen(ctx.provider.reload()))
     }
     yield* bus.subscribe(ModelsDev.Event.Refreshed).pipe(
-      Stream.runForEach(() => modelsDev.get().pipe(Effect.flatMap(apply))),
+      Stream.runForEach(() => get.pipe(Effect.flatMap(apply))),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    yield* flags.changes().pipe(
+      Stream.filter((keys) => keys.has("recommended_api")),
+      Stream.runForEach(() => get.pipe(Effect.flatMap(apply))),
       Effect.forkScoped({ startImmediately: true }),
     )
     // A refresh that landed between the initial read and the subscription above published
     // Refreshed to nobody here. On a cold cache that read served the bundled snapshot, so
     // re-read now instead of waiting for the next TTL refresh.
-    const latest = yield* modelsDev.get()
-    if (snapshots(latest) !== loaded.data) yield* apply(latest)
+    yield* get.pipe(Effect.flatMap(apply))
   }),
 })
 

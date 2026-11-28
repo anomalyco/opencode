@@ -48,6 +48,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Шарҳ дар бораи",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Иловаи шарҳ",
+  "ui.lineComment.add": "Иловаи шарҳ",
+  "ui.lineComment.actions": "Амалҳои интихоб",
   "ui.lineComment.contextPlaceholder": "Барои ин тағирот контекст илова кунед",
   "ui.lineComment.submit": "Шарҳ",
   "ui.lineComment.cancel": "Бекор кардан",

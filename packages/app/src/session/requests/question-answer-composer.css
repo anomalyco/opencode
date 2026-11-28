@@ -1,0 +1,172 @@
+/* The question dock that answers from the composer: preset answers in a card, the custom answer and actions below. */
+[data-component="session-question-dock"][data-composer] > [data-component="dock-prompt"][data-kind="question"] {
+  gap: 8px;
+
+  [data-slot="question-body"] {
+    gap: 4px;
+    /* The last answer's highlight sits 6px from the bottom, as from the sides. */
+    padding-block: 10px 6px;
+    padding-inline-start: 16px;
+
+    &:not(:has([data-slot="question-option"]:first-child [data-slot="option-description"])) {
+      gap: 2px;
+    }
+  }
+
+  [data-slot="question-header"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+  }
+
+  /* Dismiss and the progress lines move 3px out so the × stays centred over the number badges. */
+  [data-slot="question-header-top"] {
+    grid-area: 1 / 2;
+    align-self: start;
+    margin-inline-end: -3px;
+  }
+
+  /* The question's first line sits centred on the 28px header buttons. */
+  [data-slot="question-details"] {
+    grid-area: 1 / 1;
+    align-self: start;
+    padding-block-start: calc((28px - var(--line-height-compact)) / 2);
+  }
+
+  [data-slot="question-options"] {
+    --option-inset: 10px;
+    --option-gap: 10px;
+    --option-row-gap: 1px;
+
+    gap: var(--option-row-gap);
+    margin: 0;
+    /* The list holds focus while its highlighted answer shows where the keys act, as in the model picker. */
+    outline: none;
+    /* The highlight reaches 6px from the card's edges; the answers inside stay on the 16px line. */
+    margin-inline: calc(-1 * var(--option-inset)) -6px;
+    padding: 0;
+  }
+
+  /* 7px + 20px label + 2px gap + 16px description + 7px = 52px. Without a description, 34px keeps the same 9px above
+     the box. */
+  [data-slot="question-option"] {
+    gap: var(--option-gap);
+    min-block-size: 34px;
+    padding: 6px var(--option-inset);
+
+    &,
+    &[data-picked="true"] {
+      box-shadow: none;
+    }
+
+    &:has([data-slot="option-description"]) {
+      padding-block: 7px;
+    }
+
+    &:not(:has([data-slot="option-description"])) {
+      align-items: center;
+    }
+
+    [data-slot="question-option-main"] {
+      gap: 2px;
+    }
+  }
+
+  /* The gap between rows belongs to the row below, so the pointer never falls between two answers. */
+  [data-slot="question-option"] + [data-slot="question-option"]::after {
+    content: "";
+    position: absolute;
+    inset-block-start: calc(-1 * var(--option-row-gap));
+    inset-inline: 0;
+    block-size: var(--option-row-gap);
+  }
+
+  [data-slot="option-description"] {
+    text-wrap: balance;
+  }
+
+  [data-slot="question-option-box"][data-picked="false"] {
+    background-color: var(--v2-background-bg-layer-01);
+  }
+
+  /* The number badge sits 10px inside the highlight, like the box on the other side. */
+  [data-slot="question-option-shortcut"] {
+    justify-content: end;
+  }
+
+  [data-slot="question-options"][data-browsing] [data-slot="question-option"]:not([data-picked="true"]) {
+    background-color: var(--v2-background-bg-base);
+  }
+
+  [data-slot="question-option"][data-active]::before {
+    background-color: var(--v2-background-bg-layer-01);
+    opacity: 1;
+  }
+
+  [data-slot="question-option"][data-active][data-picked="true"]::before {
+    background-color: var(--v2-question-answer-bg-selected);
+    background-image: linear-gradient(var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover));
+  }
+
+  @media (forced-colors: active) {
+    [data-slot="question-option"][data-active] {
+      forced-color-adjust: none;
+
+      &::before {
+        background: Highlight;
+      }
+
+      :is([data-slot="option-label"], [data-slot="option-description"]) {
+        color: HighlightText;
+      }
+
+      :is([data-slot="question-option-check"], [data-slot="question-option-shortcut"]) {
+        forced-color-adjust: auto;
+      }
+    }
+  }
+
+  /* Adjacent picked answers read as one group: only its outer corners round. */
+  [data-slot="question-option"][data-picked="true"]:has(+ [data-slot="question-option"][data-picked="true"])::before {
+    border-end-start-radius: 0;
+    border-end-end-radius: 0;
+  }
+
+  [data-slot="question-option"][data-picked="true"] + [data-slot="question-option"][data-picked="true"]::before {
+    border-start-start-radius: 0;
+    border-start-end-radius: 0;
+  }
+
+  /* Styled as the docked chat composer: the raised shadow with no border, on layer 01 in dark (see editor.css). */
+  [data-slot="question-footer"] {
+    border: none;
+    border-radius: var(--radius-xl);
+    background-color: var(--v2-background-bg-base);
+
+    [data-color-scheme="dark"] & {
+      background-color: var(--v2-background-bg-layer-01);
+    }
+
+    box-shadow: var(--v2-elevation-raised);
+    margin-block-start: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: end;
+    gap: 4px;
+    padding: 8px;
+  }
+
+  [data-slot="question-custom-input"] {
+    flex: 1 1 12rem;
+    inline-size: auto;
+    min-inline-size: 0;
+    min-block-size: 28px;
+    padding: 4px 0;
+    padding-inline-start: 8px;
+    line-height: var(--line-height-base);
+
+    &::placeholder {
+      color: var(--v2-text-text-faint);
+    }
+  }
+}

@@ -1,0 +1,348 @@
+---
+title: "에이전트"
+description: "Markdown이나 구성에서 재사용 가능한 에이전트를 정의하세요. 각자 시스템 프롬프트, 모델, 권한, 모드를 가집니다."
+---
+
+Markdown 파일을 만들어 재사용 가능한 에이전트를 추가하세요. 이 예제는 메인 에이전트가 코드 리뷰를 위해 실행할 수 있는 읽기 전용 리뷰어를 추가합니다.
+
+```md title=".opencode/agents/reviewer.md"
+---
+description: Reviews changes for correctness and regressions
+mode: subagent
+model: anthropic/claude-sonnet-5-5#high
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+  - action: shell
+    resource: "*"
+    effect: deny
+---
+
+Review the current changes. List findings in severity order with file and line references.
+```
+
+기본 에이전트에게 이를 사용해 달라고 요청하세요.
+
+```text
+Use the reviewer subagent to review my current changes.
+```
+
+에이전트는 시스템 프롬프트, 선호 모델, 권한, 표시 정보를 한데 묶어 이름을 붙인 어시스턴트 프로필입니다.
+
+## 위치
+
+Markdown 에이전트를 모든 프로젝트에 적용되는 전역으로 저장하거나 프로젝트 안에 저장하세요.
+
+```text
+~/.config/opencode/agents/<name>.md
+.opencode/agents/<name>.md
+```
+
+OpenCode는 현재 디렉터리에서 파일 시스템 루트까지 올라가며 프로젝트의 `.opencode` 디렉터리를 찾습니다. 중첩 경로는 에이전트 ID의 일부가 됩니다.
+
+```text
+.opencode/agents/team/reviewer.md  →  team/reviewer
+```
+
+## 형식
+
+### Markdown
+
+프런트매터는 `agents` 구성 항목과 같은 필드를 받습니다. Markdown 본문이 에이전트의 `system` 프롬프트가 됩니다.
+
+```md title=".opencode/agents/explainer.md"
+---
+description: Explains code without changing it
+mode: subagent
+---
+
+Explain the relevant code with short examples. Do not edit files.
+```
+
+V1 프런트매터 필드는 더 이상 권장하지 않습니다. 여전히 이를 사용하는 파일을 읽는 방법은 [에이전트 파일](/migrate-v1#agent-files)을 참고하세요.
+
+### JSONC
+
+[OpenCode 구성 파일](/config) 중 원하는 곳의 `agents` 아래에 에이전트를 정의하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agents": {
+    "reviewer": {
+      "description": "Reviews current changes",
+      "mode": "subagent",
+      "system": "Report findings in severity order.",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+## 선택
+
+세션이 아직 선택하지 않았을 때 사용할 기본 에이전트를 설정하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "writer",
+  "agents": {
+    "writer": { "mode": "primary" },
+  },
+}
+```
+
+등록되어 있고 목록에 표시되며 기본 에이전트로 실행할 수 있는 에이전트를 지정하세요. 이 조건을 충족하지 않으면 OpenCode는 `build`를 사용하고, 이마저 사용할 수 없으면 목록에 표시되는 에이전트 중 기본 모드를 지원하는 첫 항목을 사용합니다. 이 설정을 바꿔도 기존 세션에 저장된 에이전트는 교체되지 않습니다.
+
+## 모드
+
+에이전트가 실행될 위치에 따라 `mode`를 설정하세요.
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "mode": "subagent" },
+  },
+}
+```
+
+| 모드 | 동작 |
+| --- | --- |
+| `primary` | 세션의 메인 에이전트로 실행됩니다. 새 커스텀 에이전트의 기본값입니다. |
+| `subagent` | `subagent` 도구를 통해 하위 세션에서만 실행됩니다. |
+| `all` | 기본 에이전트 또는 서브에이전트로 실행됩니다. |
+
+서브에이전트는 자체 하위 세션에서 새 컨텍스트로 실행됩니다. 항상 백그라운드에서 실행되며, 하위 세션이 유휴
+상태가 될 때와 이후 작업 라운드마다 상위 세션이 보고를 받습니다. 상위 에이전트의 `subagent` 권한이 어떤
+에이전트를 실행할 수 있는지 제어하며, 하위 에이전트는 자신에게 설정된 권한을 사용합니다.
+
+```jsonc
+{
+  "agents": {
+    "orchestrator": {
+      "permissions": [
+        { "action": "subagent", "resource": "*", "effect": "deny" },
+        { "action": "subagent", "resource": "reviewer", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+## 내장 에이전트
+
+OpenCode에는 다음 표시 에이전트가 포함되어 있습니다.
+
+| 에이전트 | 모드 | 용도 |
+| --- | --- | --- |
+| **Build** (`build`) | `primary` | 기본 코딩 에이전트. 도구와 워크스페이스 밖 접근이 기본으로 허용되며, 민감한 환경 파일 읽기는 승인을 요청합니다. |
+| **Plan** (`plan`) | `primary` | 일반 프로젝트 파일을 편집하지 않고 탐색하고 계획합니다. 요청 시 OpenCode 계획 파일을 쓸 수 있으며, 셸 명령은 계속 권한 제어를 받습니다. |
+| **General** (`general`) | `subagent` | 폭넓은 도구 접근으로 조사와 여러 단계 작업을 처리하지만 서브에이전트를 더 실행할 수는 없습니다. |
+| **Explore** (`explore`) | `subagent` | 파일을 편집하지 않고 코드나 웹 소스를 검색하고 읽습니다. |
+
+같은 ID를 사용해 내장 에이전트를 재정의하세요.
+
+```jsonc
+{
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git push *", "effect": "ask" },
+      ],
+    },
+  },
+}
+```
+
+숨겨진 `compaction`, `title`, `summary` 에이전트는 유지 관리를 수행하며 직접 선택할 수 없습니다. V2에는 내장 `scout` 에이전트가 없습니다.
+
+## 병합
+
+에이전트 정의는 구성 순서대로 병합됩니다. 뒤의 스칼라 값이 앞의 값을 대체하고, 요청 맵은 키별로 병합되며, 권한 규칙은 덧붙습니다.
+
+```jsonc
+{
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+  ],
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git status", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+전역 `permissions`는 에이전트별 규칙보다 먼저 적용되므로 뒤의 에이전트 규칙이 이를 세분화할 수 있습니다.
+
+## 옵션
+
+### Description
+
+`description`은 에이전트의 용도를 설명합니다. OpenCode가 어떤 에이전트를 실행할지 고르는 모델에 이를 보여 주므로 서브에이전트에 추가하세요.
+
+```yaml
+description: Reviews database migrations for safety
+```
+
+### Mode
+
+`mode`는 `primary`, `subagent`, `all`을 받습니다. 새 커스텀 에이전트에서 생략하면 기본값은 `primary`입니다.
+
+```yaml
+mode: all
+```
+
+### Model
+
+`model`은 `provider/model`을 사용하며 `#variant`를 선택적으로 붙입니다.
+
+```yaml
+model: anthropic/claude-sonnet-5-5#high
+```
+
+JSON 구성은 확장 형식도 받습니다.
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "model": {
+        "providerID": "anthropic",
+        "model": "claude-sonnet-5-5",
+        "variant": "high",
+      },
+    },
+  },
+}
+```
+
+- 서브에이전트는 구성된 모델을 사용하고, 없으면 상위 세션의 모델을 상속합니다.
+- 세션은 선택한 모델을 별도로 저장합니다. 기본 에이전트를 ID로 선택해도 그 모델은 바뀌지 않습니다.
+
+### System
+
+`system`은 에이전트의 시스템 프롬프트를 설정합니다. 비어 있지 않은 값은 해당 에이전트에서 제공자의 기본 프롬프트를 대체합니다.
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "system": "Review only. Do not modify files." },
+  },
+}
+```
+
+프로젝트 지침, 스킬, 참조 및 기타 지침 소스는 계속 추가됩니다. Markdown 에이전트에서는 이 텍스트를 `system` 프런트매터 필드가 아니라 문서 본문에 넣으세요.
+
+### Permissions
+
+`permissions`는 일치 규칙의 순서 있는 목록입니다.
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "permissions": [
+        { "action": "*", "resource": "*", "effect": "deny" },
+        { "action": "read", "resource": "src/**", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+| 필드 | 의미 |
+| --- | --- |
+| `action` | 도구 또는 권한 액션. 와일드카드를 지원합니다. |
+| `resource` | 액션이 일치시키는 경로, 명령, 에이전트 ID 또는 기타 값. 와일드카드를 지원합니다. |
+| `effect` | `allow`, `ask`, `deny`. |
+
+마지막으로 일치한 규칙이 우선하므로 포괄 규칙을 예외보다 먼저 두세요. 자주 쓰는 액션은 다음과 같습니다.
+
+| 액션 | 적용 대상 |
+| --- | --- |
+| `shell` | 셸 명령 |
+| `edit` | edit, write, patch 도구 |
+| `subagent` | 하위 에이전트 |
+| `read`, `glob`, `grep` | 로컬 탐색 도구 |
+| `webfetch`, `websearch` | 웹 도구 |
+| `skill` | 스킬 로드 |
+
+`read`, `edit`, `external_directory` 리소스에서는 OpenCode가 `~`와 `$HOME`을 확장합니다.
+
+```jsonc
+{ "action": "read", "resource": "~/notes/**", "effect": "allow" }
+```
+
+셸 리소스는 원시 명령 텍스트로 남으며 그 값을 확장하지 않습니다.
+
+### Steps
+
+`steps`는 양의 최대 모델 단계 수를 설정합니다.
+
+```yaml
+steps: 8
+```
+
+마지막 단계에서 OpenCode는 도구를 제거하고 모델에 텍스트로 요약해 달라고 요청합니다. 새 사용자 입력이 허용량을 초기화합니다.
+
+### Hidden
+
+`hidden`은 일반 목록, 대화형 탐색, 서브에이전트 카탈로그에서 에이전트를 제거합니다.
+
+```yaml
+hidden: true
+```
+
+이는 표시 여부를 제어할 뿐 보안을 제어하지 않습니다. 동작을 제한하려면 권한을 사용하세요.
+
+### Color
+
+`color`는 6자리 16진수 값으로 에이전트의 UI 색상을 설정합니다.
+
+```yaml
+color: "#ff6b6b"
+```
+
+### Disabled
+
+`disabled`는 구성 로드의 해당 시점에서 내장 또는 커스텀 에이전트를 제거합니다.
+
+```jsonc
+{
+  "agents": {
+    "plan": { "disabled": true },
+  },
+}
+```
+
+### Request
+
+`request`는 에이전트별 헤더와 JSON 본문 오버레이를 받습니다.
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "request": {
+        "headers": { "x-agent": "reviewer" },
+        "body": { "temperature": 0.1 },
+      },
+    },
+  },
+}
+```
+
+<Callout type="warning">
+  V2 세션 러너는 이 값을 보존하지만 아직 모델 요청에 함께 보내지 않습니다. 대신 제공자, 모델, 모델 변형에 실제
+  요청 설정을 구성하세요.
+</Callout>
+
+새 V2 에이전트 구성에는 `temperature`, `top_p`, `prompt`, `permission`, `tools`, `disable`, `maxSteps` 같은 이전 최상위 필드를 사용하지 마세요.
+

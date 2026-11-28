@@ -11,15 +11,23 @@ describe("language.route", () => {
     expect(route("de", "/download")).toBe("/de/download")
   })
 
-  test("never prefixes the docs, the Console or the English-only pages", () => {
-    for (const path of ["/docs", "/docs/agents/", "/v2", "/v1/docs/ide/", "/console/go", "/font", "/changelog.xml"]) {
+  test("prefixes the latest docs, English at /docs and the rest under /<locale>/docs", () => {
+    expect(route("ja", "/docs")).toBe("/ja/docs")
+    expect(route("ja", "/docs/agents/")).toBe("/ja/docs/agents/")
+    expect(route("ja", "/ja/docs/agents/")).toBe("/ja/docs/agents/")
+    expect(route("ar", "/docs/agents/?x=1#y")).toBe("/ar/docs/agents/?x=1#y")
+    expect(localized("/docs")).toBe(true)
+    expect(localized("/zh/docs/agents/")).toBe(true)
+    expect(localized("/docsx")).toBe(true)
+    expect(localized("/data")).toBe(true)
+  })
+
+  test("never prefixes the V1 docs, the Console or the English-only pages", () => {
+    for (const path of ["/v2", "/v1/docs/ide/", "/console/go", "/font", "/changelog.xml"]) {
       expect(route("ja", path)).toBe(path)
       expect(route("ja", `/ja${path}`)).toBe(path)
       expect(localized(path)).toBe(false)
     }
-    expect(route("ar", "/docs/agents/?x=1#y")).toBe("/docs/agents/?x=1#y")
-    expect(localized("/docsx")).toBe(true)
-    expect(localized("/data")).toBe(true)
   })
 })
 

@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Uporaba",
   "usage.cost": "Stroški",
   "usage.view": "Oglejte si uporabo konteksta",
-  "systemPrompt.title": "Sistemski poziv",
   "rawMessages.title": "Neobdelana sporočila",
   "export.session": "Izvozna seja",
   "stats.session": "Seja",

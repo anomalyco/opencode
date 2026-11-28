@@ -1,0 +1,264 @@
+---
+title: "السمات"
+description: "أنشئ سمات مخصّصة لطرفية OpenCode كملفات JSON، بأوضاع فاتحة وداكنة وتدرّجات وألوان حالات ورموز."
+---
+
+اختر سمة من واجهة الطرفية بالضغط على `Ctrl+P`، ثم اختيار **Open settings** وفتح **Theme**. ويمكنك أيضًا
+ضبطها مباشرةً في إعداد CLI العام:
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  }
+}
+```
+
+تنتمي السمات إلى عميل الطرفية. فضع اختيار السمة في `cli.json`، لا في `opencode.json`. راجع
+[إعدادات CLI](/cli/config) لموقع الإعداد وغيره من إعدادات الطرفية.
+
+## الأوضاع
+
+استخدم `system` لاتباع مظهر طرفيتك، أو اقفل السمة على وضع واحد:
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "opencode",
+    "mode": "dark"
+  }
+}
+```
+
+| القيمة    | السلوك                                      |
+| -------- | --------------------------------------------- |
+| `system` | يتبع الوضع الفاتح أو الداكن في الطرفية. |
+| `dark`   | يستخدم السمة الداكنة دائمًا.                   |
+| `light`  | يستخدم السمة الفاتحة دائمًا.                  |
+
+وإذا وفّرت سمة مخصّصة وضعًا واحدًا فقط، استخدم OpenCode ذلك الوضع عند طلب الآخر.
+
+## المدمجة
+
+اختر سمة مدمجة باسمها:
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "catppuccin"
+  }
+}
+```
+
+ومن السمات المتاحة:
+
+- `aura` و`ayu` و`carbonfox` و`cobalt2` و`cursor` و`dracula` و`everforest` و`flexoki`
+- `catppuccin` و`catppuccin-frappe` و`catppuccin-macchiato`
+- `github` و`gruvbox` و`kanagawa` و`material` و`matrix` و`mercury` و`monokai` و`nightowl` و`nord`
+- `one-dark` و`opencode` و`opencode-classic` و`orng` و`lucent-orng` و`osaka-jade` و`palenight` و`rosepine`
+- `solarized` و`synthwave84` و`tokyonight` و`vercel` و`vesper` و`zenburn`
+
+وتتوفر سمة `system` عندما يستطيع OpenCode قراءة لوحة ألوان طرفيتك.
+
+## الملفات
+
+لإنشاء سمة عامة باسم `ocean`، استخدم أداة السمات لتوليد ملف كامل في مجلد السمات العام.
+ويبدو هيكلها ذو الصلة هكذا:
+
+```json title="~/.config/opencode/themes/ocean.json (excerpt)"
+{
+  "base": {
+    "text": {
+      "base": "#d8f3ff"
+    }
+  },
+  "dark": {
+    "hue": {
+      "accent": "$hue.cyan"
+    }
+  }
+}
+```
+
+ثم اختر `ocean` في الإعدادات أو اضبط `theme.name` على `ocean` في `cli.json`. واسم الملف، دون `.json`، هو
+اسم السمة.
+
+| النطاق   | المجلد                                  |
+| ------- | ------------------------------------------ |
+| عام  | `~/.config/opencode/themes/`               |
+| المشروع | `.opencode/themes/` في شجرة المشروع    |
+
+لا يقرأ OpenCode إلا ملفات `.json`. والسمة الأقرب إلى المجلد الحالي تحل محل سمة عامة أو في مجلد أعلى
+بالاسم نفسه.
+
+## الصيغة
+
+تعلن كل سمة V2 شجرة رموز `base` كاملة واحدة ولوحة تدرّجات `light` أو `dark` واحدة على الأقل.
+ولا ترث الأوضاع إلا من أساس ذلك الملف؛ فهي لا ترث من سمة OpenCode المدمجة ولا من بعضها. واستخدم
+أداة السمات لتوليد أساس كامل قبل تخصيصه.
+
+وتعرض الأمثلة أدناه الأقسام ذات الصلة بكل مفهوم فقط؛ وهي ليست ملفات سمات كاملة.
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "base": "#16324f"
+    }
+  },
+  "light": {
+    "hue": {}
+  },
+  "dark": {
+    "hue": {},
+    "text": { "base": "#d8f3ff" }
+  }
+}
+```
+
+## الألوان
+
+استخدم لونًا سداسيًا، أو `transparent`، أو إشارة إلى لون سمة آخر:
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "base": "#d8f3ff",
+      "muted": "$hue.neutral.400"
+    },
+    "background": {
+      "base": "transparent"
+    }
+  }
+}
+```
+
+ويمكن أن تستخدم القيم السداسية 3 أو 4 أو 6 أو 8 أرقام. وتبدأ الإشارات بـ `$`؛ وتستخدم إشارات التدرّج الصيغة
+`$hue.<name>.<step>`.
+
+## التدرّجات
+
+تجاوز اسم تدرّج مستعار لتغيير عائلة ألوان مترابطة دفعة واحدة:
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "categorical": ["accent", "purple", "green"]
+  },
+  "dark": {
+    "hue": {
+      "accent": "$hue.cyan",
+      "interactive": "$hue.blue"
+    }
+  }
+}
+```
+
+| النوع    | القيم                                                               |
+| ------- | -------------------------------------------------------------------- |
+| أساس    | `gray` و`red` و`orange` و`yellow` و`green` و`cyan` و`blue` و`purple` |
+| مستعار   | `accent` و`interactive` و`neutral`                                 |
+| درجة    | `100` و`200` و`300` و`400` و`500` و`600` و`700` و`800` و`900`      |
+
+وتتبع درجات التدرّج اتجاه التباين في الوضع: فالسمات الفاتحة تمتد من الداكن عند `100` إلى الفاتح عند `900`، بينما تمتد
+السمات الداكنة من الفاتح عند `100` إلى الداكن عند `900`.
+
+ويضبط `categorical` التدرّجات المرتّبة المستخدمة للتمييز بين الوكلاء وغيرهم من العناصر المتكررة. ويجب أن يحتوي على تدرّج
+أساسي واحد أو اسم مستعار واحد على الأقل.
+
+## الحالات
+
+استخدم مفاتيح الحالات لتغيير الألوان التفاعلية. وتستخدم الحالات غير المحدّدة أقرب قيمة أساسية:
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "action": {
+        "primary": {
+          "base": "$hue.interactive.400",
+          "$hovered": "$hue.interactive.300",
+          "$disabled": "$hue.neutral.600"
+        }
+      }
+    }
+  }
+}
+```
+
+| المجموعة     | القيم                                                    |
+| --------- | --------------------------------------------------------- |
+| الإجراءات   | `primary` و`secondary` و`destructive`                     |
+| الحالات    | `$hovered` و`$focused` و`$pressed` و`$selected` و`$disabled` |
+
+وتستخدم حقول النماذج مفاتيح الحالات نفسها مباشرةً تحت `text.formfield` أو `background.formfield`.
+
+## الرموز
+
+يحتوي `base` الكامل كل مجموعات الرموز. ويمكن للوضع تجاوز أي جزء منه بعد توفير لوحة
+تدرّجاته الكاملة:
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "border": {
+      "base": "$hue.neutral.700"
+    },
+    "syntax": {
+      "comment": "$hue.neutral.500",
+      "keyword": "$hue.accent.400"
+    },
+    "diff": {
+      "text": {
+        "added": "$hue.green.400",
+        "removed": "$hue.red.400"
+      }
+    }
+  }
+}
+```
+
+| المجموعة        | الغرض                                                       |
+| ------------ | ------------------------------------------------------------- |
+| `text`       | النص الأساسي والخافت والأشد خفوتًا، ونصوص التحديد والإجراءات وحقول النماذج ورسائل الحالة |
+| `background` | ألوان ملء الخلفية الأساسية والتحديد والأسطح والإجراءات وحقول النماذج ورسائل الحالة |
+| `border`     | الحدود                                                       |
+| `scrollbar`  | أشرطة التمرير                                                    |
+| `diff`       | ألوان المضاف والمحذوف والسياق والإبراز وأرقام الأسطر     |
+| `syntax`     | إبراز شفرة المصدر                                      |
+| `markdown`   | عناصر Markdown                                              |
+
+مفاتيح Syntax هي `comment` و`keyword` و`function` و`variable` و`string` و`number` و`type` و`operator`
+و`punctuation`. ومفاتيح Markdown هي `text` و`heading` و`link` و`linkText` و`code` و`blockQuote` و`emphasis` و`strong`
+و`horizontalRule` و`listItem` و`listEnumeration` و`image` و`imageText` و`codeBlock`.
+
+## الأسطح المرتفعة
+
+تختار اللوحات ومربعات الحوار والقوائم والإشعارات عمقها من `background.raised`. وتدعم مربعات الحوار إضافةً إلى ذلك
+سطحًا سياقيًا `@dialog`. ويعيد TUI تحليل لوحة الألوان بعد تطبيق `@dialog`، فتتبع الرموز التي تشير إلى
+`$background.base` خلفية مربع الحوار:
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "background": {
+      "base": "#071521",
+      "raised": {
+        "base": "#0c1f2e",
+        "high": "#102a3c",
+        "max": "#16364b"
+      }
+    },
+    "@dialog": {
+      "background": {
+        "base": "$background.raised.base"
+      }
+    }
+  }
+}
+```
+
+ويقبل `@dialog` مجموعات الرموز نفسها التي يقبلها الوضع الأساسي. ويصبح `base` السياقي لإجراء ما بديلًا أيضًا
+لحالاته غير المحدّدة؛ وتبقى أولوية تجاوز الحالة الصريح.

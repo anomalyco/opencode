@@ -1,0 +1,90 @@
+---
+title: "Grundlæggende"
+description: "Opret, skift, omdøb og slet OpenCode Console-arbejdsområder, og forstå medlemsroller."
+---
+
+Et arbejdsområde samler alt i [Console](https://opencode.ai/console): medlemmer, kredit, budgetter, udbydere, politikker og tjenestekonti. Forbrug og fakturering opgøres for hvert arbejdsområde.
+
+Et arbejdsområde kan have et enkelt medlem. Du kan bruge kredit, [dine egne udbydere](/console/providers), budgetter og
+[Go](/console/go) alene og [invitere medlemmer](/console/members), kun når du har brug for det.
+
+## Dit første arbejdsområde
+
+Når du opretter en konto, opretter Console et arbejdsområde med navnet **Personal**, hvor du er ejer og eneste medlem. Hvis du opretter kontoen via en invitation, bliver du i stedet medlem af det arbejdsområde, du er inviteret til, og Console opretter ikke et Personal-arbejdsområde.
+
+## Opret et arbejdsområde
+
+1. Åbn arbejdsområdemenuen i topbjælken.
+2. Klik på **Create Workspace**.
+3. Angiv et **Workspace name**, og klik på **Create**.
+
+Du bliver ejer af det nye arbejdsområde.
+
+## Skift arbejdsområde
+
+Vælg et andet arbejdsområde i arbejdsområdemenuen. Du bliver på den tilsvarende side i Console, så et skift fra `/acme/settings/members` åbner medlemssiden for det andet arbejdsområde.
+
+Ventende invitationer vises øverst i samme menu. Se [Medlemmer](/console/members#accept-an-invitation).
+
+## Forbind OpenCode
+
+Kør `/connect` i OpenCode, og vælg arbejdsområdet i browseren. OpenCode bruger derefter arbejdsområdets modeller,
+politikker og budgetter.
+
+```text
+/connect
+```
+
+Kør `/connect` igen for at skifte OpenCode til et andet arbejdsområde. Arbejdsområdets [politikker](/policies#console)
+erstattes med det nye arbejdsområdes og ryddes, når du afbryder forbindelsen.
+
+## Roller
+
+Hvert medlem har én rolle. Nye medlemmer får altid rollen **Member**.
+
+| Rolle   | Kan                                                                                                                  |
+| ------- | -------------------------------------------------------------------------------------------------------------------- |
+| Member  | Bruge OpenCode og se deres eget forbrug, egne logs og budget.                                                        |
+| Admin   | Alt, hvad et medlem kan, samt administrere medlemmer, fakturering, budgetter, udbydere, politikker, tjenestekonti og indstillinger. |
+| Owner   | Alt, hvad en administrator kan, samt administrere SSO og katalogsynkronisering, give rollen Owner og slette arbejdsområdet. |
+
+Medlemmer kan se deres eget forbrug og egne logfiler under **Activity**. De kan også se ranglisten, hvis den er synlig for medlemmer. Har arbejdsområdet et [Go Teams](/console/go)-abonnement, kan de også se fanen **Go** med deres egne grænser. De kan åbne **Account** i kontomenuen.
+
+### Rolleregler
+
+- Et arbejdsområde kan have flere ejere og har altid mindst én.
+- Du kan ikke tildele en rolle højere end din egen, så kun ejere kan gøre nogen til ejer.
+- Du kan ikke ændre din egen rolle.
+
+### Overdrag ejerskab
+
+1. Åbn **Settings › Members** som ejer, og angiv den nye ejers rolle til **Owner**.
+2. Bed den nye ejer om at ændre din rolle til **Admin** eller **Member**.
+
+## Slet et arbejdsområde
+
+Kun ejere kan slette et arbejdsområde, og kun når de tilhører mindst ét andet arbejdsområde.
+
+1. Åbn **Settings › General**, og klik på **Delete workspace**.
+2. Markér alle bekræftelsesfelter.
+3. Klik på **Delete workspace** for at bekræfte.
+
+Sletningen er øjeblikkelig og kan ikke fortrydes:
+
+- Medlemmer mister adgangen med det samme.
+- Alle API-nøgler til tjenestekonti og ventende invitationer tilbagekaldes.
+- Automatisk optankning stopper.
+- Et aktivt Go-abonnement afsluttes.
+- Du mister et eventuelt restbeløb på kreditsaldoen.
+
+<Callout type="warning">Sletning er blokeret, mens en betaling behandles. Prøv igen om et par minutter.</Callout>
+
+## Forlad et arbejdsområde
+
+1. Åbn **Account** i kontomenuen.
+2. Klik på **Leave** ud for arbejdsområdet under **Connected workspaces**.
+3. Bekræft med **Leave workspace**.
+
+Den sidste ejer kan ikke forlade arbejdsområdet; gør først et andet medlem til ejer. I arbejdsområder med SSO eller
+katalogsynkronisering administrerer din identitetsudbyder medlemskabet, så du kan ikke forlade det fra Console. Hvis du
+vil komme med igen efter at være trådt ud, skal du bede om en ny invitation.

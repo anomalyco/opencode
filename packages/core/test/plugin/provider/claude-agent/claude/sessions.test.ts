@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber } from "effect"
+import path from "node:path"
+import { Effect, Fiber, SubscriptionRef } from "effect"
 import { TestClock } from "effect/testing"
 import { ClaudeSessions } from "@opencode/core/plugin/provider/claude-agent/claude/sessions"
 import { ClaudeAgentLanguageModel } from "@opencode/core/plugin/provider/claude-agent/language-model/claude-agent-language-model"
@@ -48,7 +49,7 @@ describe("Claude sessions", () => {
     }),
   )
 
-  it.effect("a missing Claude transcript is rebuilt from history, even after a rejected attachment", () =>
+  it.effect("a missing Claude transcript is rebuilt from history", () =>
     Effect.gen(function* () {
       const claude = FakeClaude.make([
         FakeClaude.expectStartup(),
@@ -69,20 +70,74 @@ describe("Claude sessions", () => {
         io: { ...test.input.io, sessionExists: async () => false },
       })
       const model = yield* TestSessions.model(sessions)
-      const prompt = TestSessions.followup("Inspect this image")
-      prompt.push({ role: "user", content: [{ type: "file", mediaType: "image/svg+xml", data: "PHN2Zy8+" }] })
-      const error = yield* TestSessions.reply(model, prompt).pipe(Effect.flip)
-      expect(String(error.cause)).toContain("Claude Code does not support image/svg+xml attachments")
       yield* TestSessions.reply(model, TestSessions.followup())
       expect(claude.runs).toHaveLength(2)
       expect(claude.runs[1]!.args.some((arg) => arg.startsWith("--resume="))).toBe(false)
       const user = claude.runs[1]!.received.find((message) => message.type === "user")
       expect(JSON.stringify(user.message.content)).toContain("<conversation-checkpoint>")
       expect(JSON.stringify(user.message.content)).toContain("COPPER-OTTER")
-      expect(JSON.stringify(user.message.content)).not.toContain("image/svg+xml")
       const after = (yield* SessionRecord.make(test.storage).get("session-a"))!
       expect(after.claudeSessionID).not.toBe(before.claudeSessionID)
       yield* registry.close()
+      claude.check()
+    }),
+  )
+
+  it.effect("each Claude config folder keeps its own Claude session, and switching back catches up", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make([
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn({ index: 1 }),
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn({ recording: "text-resume" }),
+        FakeClaude.expectInterrupt(),
+      ])
+      const test = yield* TestSessions.start(claude)
+      const folder = path.resolve("/claude-work")
+      const work = yield* TestSessions.model(test.sessions, { configDir: folder })
+      yield* TestSessions.reply(test.model, first)
+      const id = claude.runs[0]!.args.find((arg) => arg.startsWith("--session-id="))!.split("=")[1]
+      const prompt = TestSessions.followup()
+      yield* TestSessions.reply(work, prompt)
+      prompt.push(
+        { role: "assistant", content: [{ type: "text", text: "COPPER-OTTER" }] },
+        { role: "user", content: [{ type: "text", text: "And once more?" }] },
+      )
+      yield* TestSessions.reply(test.model, prompt)
+      const user = (run: number) =>
+        JSON.stringify(claude.runs[run]!.received.find((message) => message.type === "user").message.content)
+      // The other folder cannot resume this login's transcript, so it starts its own from the whole history.
+      expect(claude.runs[1]!.env.CLAUDE_CONFIG_DIR).toBe(folder)
+      expect(claude.runs[1]!.args.some((arg) => arg.startsWith("--resume="))).toBe(false)
+      expect(user(1)).toContain("Remember the marker COPPER-OTTER")
+      const other = (yield* SessionRecord.make(test.storage).get("session-a", folder))!
+      expect(other.claudeSessionID).not.toBe(id)
+      expect(claude.runs[2]!.args).toContain(`--resume=${id}`)
+      expect(user(2)).toContain("What was the marker?")
+      expect(user(2)).not.toContain("Remember the marker COPPER-OTTER")
+      expect((yield* SessionRecord.make(test.storage).get("session-a"))!.claudeSessionID).toBe(id)
+      yield* test.registry.close()
+      claude.check()
+    }),
+  )
+
+  it.effect("a logged-out model folder fails with the command to log in to it, and leaves the provider's status", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make([
+        FakeClaude.expectStartup({ account: { tokenSource: "none", apiProvider: "firstParty" } }),
+        FakeClaude.expectInterrupt(),
+      ])
+      const test = yield* TestSessions.start(claude)
+      const folder = path.resolve("/claude-work")
+      const work = yield* TestSessions.model(test.sessions, { configDir: folder })
+      const error = yield* TestSessions.reply(work, first).pipe(Effect.flip)
+      expect(String(error.cause)).toContain(`"${folder}"`)
+      expect((yield* SubscriptionRef.get(test.input.status.state)).type).toBe("checking")
+      yield* test.registry.close()
       claude.check()
     }),
   )

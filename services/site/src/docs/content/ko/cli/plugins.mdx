@@ -1,0 +1,63 @@
+---
+title: "CLI 플러그인"
+description: "CLI에서 OpenCode 설정의 TUI 플러그인을 불러오고, CLI 전용 플러그인과 그 옵션을 cli.json에 추가하세요."
+---
+
+CLI는 `opencode.json(c)`에 설정된 플러그인 중 TUI 컴포넌트를 제공하는 플러그인을 자동으로 로드합니다. 플러그인을 만드는
+방법은 [플러그인 만들기](/build/plugins)를 참고하세요. 같은 패키지를 `cli.json`에 추가할 필요는 없습니다. CLI는
+연결된 OpenCode 서버에서 활성 플러그인 목록을 가져오므로 서버가 원격에 있어도 동작합니다.
+
+CLI 전용 플러그인에는 `cli.json`을 사용하세요. 이런 플러그인은 터미널에서 로컬로 실행되며, CLI가 원격 서버에
+연결해도 계속 활성 상태로 남습니다.
+
+```json title="cli.json"
+{
+  "plugins": [
+    "opencode.example",
+    "opencode.example@1.0.0",
+    "@example/opencode-tui",
+    "@example/opencode-tui@1.0.0",
+    "./plugins/status",
+    "../plugins/status",
+    "/home/user/plugins/status",
+    "file:///home/user/plugins/status"
+  ]
+}
+```
+
+항목은 순서대로 처리됩니다. ID나 와일드카드 앞에 `-`를 붙이면 일치하는 플러그인을 비활성화합니다.
+
+```json title="cli.json"
+{
+  "plugins": ["*", "-opencode.notifications", "-team.*"]
+}
+```
+
+플러그인 옵션은 객체 형식으로 전달하세요.
+
+```json title="cli.json"
+{
+  "plugins": [
+    {
+      "package": "@example/opencode-tui",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+OpenCode는 전역 설정 디렉터리와 프로젝트 `.opencode` 디렉터리에서도 플러그인을 찾습니다. 각 플러그인은 게시된
+패키지와 같은 레이아웃을 사용하며, 서버와 TUI 진입점을 함께 둡니다.
+
+```text title="Plugin discovery paths"
+<global-config>/plugins/status/index.ts
+<global-config>/plugins/status/tui.ts
+<project>/.opencode/plugins/status/index.ts
+<project>/.opencode/plugins/status/tui.ts
+```
+
+자동으로 찾은 플러그인에서는 `@opencode/plugin/tui`를 직접 임포트할 수 있습니다. OpenCode가 런타임에 패키지를 찾습니다. 예제는
+[TUI 플러그인 만들기](/build/plugins/cli)를 참고하세요.
+

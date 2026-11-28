@@ -1,0 +1,249 @@
+---
+title: "CLI 主題"
+description: "為 OpenCode 終端機介面選擇內建主題、使用終端機自己的顏色，或新增自己的主題。"
+---
+
+OpenCode 內建許多適用於淺色與深色模式的主題。請在設定中選擇一個，或混搭你自己的顏色。
+
+## 選擇主題
+
+按 `Ctrl+P`、選擇 **Open settings**，然後開啟 **Theme**。預設主題是 `opencode`。先前的預設主題仍以 `opencode-classic` 提供。
+
+你也可以在全域 [CLI 設定](/cli/config)中設定主題與模式：
+
+```json title="~/.config/opencode/cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "theme": {
+    "name": "tokyonight",
+    "mode": "dark"
+  }
+}
+```
+
+執行 `/themes` 即可變更主題，而不開啟設定。
+
+## 系統顏色
+
+當 OpenCode 能讀取你的終端機調色盤時，主題選取器會包含 `system` 主題。它會從終端機的前景、背景與 ANSI 調色盤衍生顏色。
+
+主題名稱 `system` 會選取由終端機衍生的顏色。模式 `system` 會跟隨終端機的淺色或深色外觀。
+
+## 模式
+
+使用 `system` 跟隨終端機外觀，或將主題鎖定為淺色或深色模式：
+
+| 模式 | 行為 |
+| --- | --- |
+| `system` | 跟隨終端機偵測到的淺色或深色外觀。 |
+| `dark` | 一律使用主題的深色。 |
+| `light` | 一律使用主題的淺色。 |
+
+這對應到 CLI 設定中 `theme` 內的 `mode` 欄位。若自訂主題只提供一種模式，OpenCode 會在要求另一種模式時使用該模式。
+
+## 新增主題
+
+若要新增你下載或從他人取得的主題，請將其 JSON 檔案複製到全域主題目錄：
+
+```bash
+cp theme.json ~/.config/opencode/themes/
+```
+
+你也可以將主題放在專案的 `.opencode/themes` 目錄中，讓它只在該專案中可用。
+
+檔案名稱會成為主題名稱。例如，`my-theme.json` 會顯示為 `my-theme`。新增檔案後請重新啟動 OpenCode，然後執行 `/themes` 選取它。
+
+OpenCode 只會讀取 `.json` 檔案。較接近目前目錄的主題會取代同名的全域或上層主題。
+
+## 在外掛中使用主題
+
+[TUI 外掛](/build/plugins/cli)會透過 `context.theme` 讀取解析後的顏色，並透過 `context.themeMode` 讀取作用中的模式。請使用語意 token，讓外掛跟隨所選主題：
+
+```tsx title="Inside a TUI plugin component"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>Ready</text>
+}
+```
+
+公開的 TUI 外掛 API 不會註冊主題。請在上述目錄中以 JSON 檔案新增自訂主題定義。
+
+## 建立主題
+
+使用我們的[主題工具](https://opencode.ai/theme/)建立或編輯主題。此工具可讓你輕鬆了解結構、變更結構並定義自訂顏色。以下說明僅供參考。
+
+主題會將共用的語意 token 與各模式的調色盤分開：
+
+| 區段 | 用途 |
+| --- | --- |
+| `base` | 每個模式共用的完整 token 樹。 |
+| `light`、`dark` | 該模式的完整色相調色盤與選用的 token 覆寫。 |
+
+每個主題都會提供完整的 `base`，並定義 `light` 或 `dark` 其中至少一個。模式會從檔案的 `base` 繼承；它們不會從內建 OpenCode 主題或彼此繼承。
+
+下列範例只顯示各概念相關的區段。自訂前，請使用主題編輯器產生完整檔案。
+
+### 結構
+
+將兩種模式都會用到的顏色放在 `base`，需要時再於 `light` 或 `dark` 中覆寫：
+
+```json title="theme.json (excerpt)"
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "base": {
+    "text": {
+      "base": "$hue.neutral.200",
+      "muted": "$hue.neutral.400"
+    }
+  },
+  "light": {
+    "hue": {}
+  },
+  "dark": {
+    "hue": {},
+    "text": {
+      "muted": "$hue.neutral.300"
+    }
+  }
+}
+```
+
+完整的 `base` 會提供所有語意 token。每種模式都會提供必要的色相，也可以覆寫基礎 token 樹的任何部分。
+
+### 顏色與引用
+
+顏色可以是十六進位值、`"transparent"`，或其他主題顏色的引用：
+
+```json title="Inside base or a mode"
+{
+  "text": {
+    "base": "#eeeeee",
+    "muted": "$hue.neutral.400"
+  },
+  "border": {
+    "base": "$text.muted"
+  }
+}
+```
+
+### 色相
+
+色相是九階的色彩刻度。每個模式都會定義八個基礎色相與三個別名：
+
+| 種類 | 值 |
+| --- | --- |
+| 基礎 | `gray`、`red`、`orange`、`yellow`、`green`、`cyan`、`blue`、`purple` |
+| 別名 | `accent`、`interactive`、`neutral` |
+| 階層 | `100`、`200`、`300`、`400`、`500`、`600`、`700`、`800`、`900` |
+
+為基礎色相定義全部九個階層，或將一個色相設為另一個色相的別名：
+
+```json title="Inside light or dark"
+{
+  "hue": {
+    "purple": {
+      "100": "#b38ff4",
+      "200": "#9d7cd8",
+      "300": "#8869bd",
+      "400": "#7357a2",
+      "500": "#5f4688",
+      "600": "#4b356f",
+      "700": "#392557",
+      "800": "#271640",
+      "900": "#17072b"
+    },
+    "accent": "$hue.purple"
+  }
+}
+```
+
+色相階層會遵循該模式的對比方向。淺色主題從 `100` 的深色到 `900` 的淺色；深色主題則從 `100` 的淺色到 `900` 的深色。
+
+`base` 中的 `categorical` 陣列會設定用來區分 agent 與其他重複項目的有序色相：
+
+```json title="Inside base"
+{
+  "categorical": ["accent", "purple", "green", "blue"]
+}
+```
+
+### 語意 token
+
+語意 token 會將顏色指派給介面角色。元件會使用這些角色，而不是直接選取顏色。
+
+| 群組 | 用途 |
+| --- | --- |
+| `text` | 基礎、柔和、淡化、選取、動作、表單欄位與回饋文字。`faint` 預設為 `muted`。 |
+| `background` | 基礎、選取、浮層、動作、表單欄位與回饋的背景填色。 |
+| `border`、`scrollbar` | 邊框與捲軸顏色。 |
+| `diff` | 新增、移除、上下文、醒目提示與行號顏色。 |
+| `syntax` | 原始碼醒目提示。 |
+| `markdown` | Markdown 元素。 |
+
+例如，`text.muted` 控制次要文字的顏色，`background.raised` 則定義不同浮層的背景：
+
+```json title="Inside base"
+{
+  "text": {
+    "base": "$hue.neutral.200",
+    "muted": "$hue.neutral.400"
+  },
+  "background": {
+    "base": "$hue.neutral.800",
+    "raised": {
+      "base": "$hue.neutral.700",
+      "high": "$hue.neutral.600",
+      "max": "$hue.neutral.500"
+    }
+  }
+}
+```
+
+`text.selection` 與 `background.selection` 會為你用滑鼠或鍵盤選取的文字上色。它們預設為取得焦點的主要動作，也就是 `background.action.primary.$focused` 上的 `text.action.primary.$focused`。
+
+語法鍵為 `comment`、`keyword`、`function`、`variable`、`string`、`number`、`type`、`operator` 與 `punctuation`。
+
+Markdown 鍵為 `text`、`heading`、`link`、`linkText`、`code`、`blockQuote`、`emphasis`、`strong`、`horizontalRule`、`listItem`、`listEnumeration`、`image`、`imageText` 與 `codeBlock`。
+
+### 動作與狀態
+
+動作有 `primary`、`secondary` 與 `destructive` 變體。動作與表單欄位使用 `base` 及選用的互動狀態：
+
+```json title="Inside base or a mode"
+{
+  "text": {
+    "action": {
+      "primary": {
+        "base": "$hue.interactive.400",
+        "$hovered": "$hue.interactive.300",
+        "$disabled": "$hue.neutral.600"
+      }
+    }
+  }
+}
+```
+
+狀態鍵為 `$hovered`、`$focused`、`$pressed`、`$selected` 與 `$disabled`。未指定的狀態會使用該動作或表單欄位的 `base` 顏色。
+
+### 對話框背景
+
+面板、對話框、選單和浮動通知會從 `background.raised` 選用對應層級的背景。對話框還可用 `@dialog` 覆寫語意 token：
+
+```json title="Inside base or a mode"
+{
+  "@dialog": {
+    "background": {
+      "base": "$background.raised.base",
+      "action": {
+        "primary": {
+          "$hovered": "$background.raised.high"
+        }
+      }
+    }
+  }
+}
+```
+
+TUI 會在套用 `@dialog` 後重新解析引用，因此引用 `$background.base` 的 token 會跟隨對話框背景。情境式動作的 `base` 會成為其未指定狀態的備援；明確的狀態覆寫仍會優先。

@@ -1,0 +1,679 @@
+---
+title: "Configuración"
+description: "Configura OpenCode en opencode.json o opencode.jsonc. Consulta dónde van los archivos de configuración, cuáles tienen prioridad y cómo sustituir variables."
+---
+
+Crea `opencode.jsonc` en tu proyecto para configurar OpenCode. Agrega el esquema para la validación del editor y luego define solo las opciones que necesites.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-5-5",
+}
+```
+
+También puedes pedir a OpenCode que actualice este archivo por ti.
+
+## Formato
+
+OpenCode admite JSON y JSONC. Usa JSONC cuando quieras comentarios o comas finales.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Use this model by default.
+  "model": "anthropic/claude-sonnet-5-5",
+}
+```
+
+## Ubicaciones
+
+Pon los ajustes gestionados para toda la máquina en el directorio de configuración del sistema:
+
+| Plataforma | Directorio                              |
+| ---------- | --------------------------------------- |
+| macOS      | `/Library/Application Support/opencode` |
+| Linux      | `/etc/opencode`                         |
+| Windows    | `%ProgramData%\opencode`                |
+
+El directorio del sistema funciona como el directorio global. Además de
+`opencode.json(c)`, carga `agents/`, `commands/`, `skills/` y `plugins/`
+para todos los usuarios de la máquina:
+
+```text
+/etc/opencode/
+├── opencode.json
+├── agents/review.md
+├── commands/release.md
+└── skills/deploy/SKILL.md
+```
+
+En macOS, OpenCode también lee las preferencias gestionadas que las herramientas MDM despliegan para el
+dominio `ai.opencode.managed`. Un perfil específico de usuario sustituye al
+de toda la máquina:
+
+```text
+/Library/Managed Preferences/<user>/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist
+```
+
+Los ajustes gestionados tienen la máxima precedencia, así que los usuarios y los proyectos no pueden
+sobrescribir los valores que definen, y las preferencias gestionadas sobrescriben el directorio del sistema.
+Los ajustes por sí solos no pueden impedir que los usuarios agreguen proveedores, servidores MCP,
+agentes o plugins; usa [políticas](/policies#precedence) en la configuración gestionada
+para aplicar restricciones.
+
+Pon los ajustes de usuario para todos los proyectos en la configuración global:
+
+```text
+~/.config/opencode/opencode.json(c)
+```
+
+Pon los ajustes del proyecto en cualquiera de estos archivos:
+
+```text
+/home/user/projects/my-app/opencode.json(c)
+/home/user/projects/my-app/.opencode/opencode.json(c)
+```
+
+OpenCode busca desde el directorio actual hasta la raíz del sistema de archivos. Primero
+fusiona los archivos `opencode.json(c)` directos desde el directorio más lejano hasta el
+más cercano, y luego fusiona los archivos dentro de los directorios `.opencode` en el mismo orden.
+Esto significa que cada configuración `.opencode` descubierta sobrescribe cada configuración directa.
+Usa una sola forma en todo un árbol de directorios a menos que necesites ese comportamiento.
+
+Por ejemplo, inicia OpenCode desde `/home/user/projects/acme/packages/web`:
+
+```text
+/etc/opencode/opencode.json
+~/.config/opencode/opencode.json
+
+/home/user/projects/acme/
+├── opencode.json
+└── packages/
+    └── web/
+        ├── opencode.json
+        └── src/
+```
+
+OpenCode aplica estos archivos de menor a mayor precedencia:
+
+1. `~/.config/opencode/opencode.json`
+2. `/home/user/projects/acme/opencode.json`
+3. `/home/user/projects/acme/packages/web/opencode.json`
+4. `/etc/opencode/opencode.json`
+
+La configuración del paquete sobrescribe los ajustes coincidentes de la configuración del repositorio,
+que a su vez sobrescribe la configuración global. La configuración del sistema las sobrescribe todas.
+Los ajustes que no entran en conflicto se conservan. Las [políticas](/policies#precedence)
+de los archivos globales y de proyecto se evalúan en orden inverso, y las políticas del sistema
+tienen prioridad sobre todas ellas.
+
+## Esquema
+
+El esquema completo de configuración de OpenCode está disponible en
+[opencode.ai/config.json](https://opencode.ai/config.json).
+
+Agrega el campo `$schema` a tu archivo de configuración para habilitar la validación y
+el autocompletado en los editores compatibles con JSON Schema:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json"
+}
+```
+
+Consulta el esquema para saber qué campos y valores se admiten y cómo se organizan
+los ajustes anidados.
+
+### Shell
+
+Define el shell que usan el terminal y las herramientas de shell.
+
+```jsonc
+{
+  "shell": "/bin/zsh",
+}
+```
+
+### Modelo
+
+Define el modelo predeterminado en formato `provider/model`. El valor predeterminado raíz actualmente
+no conserva un `#variant`; las referencias de modelo de agentes y comandos pueden seleccionar uno.
+
+```jsonc
+{
+  "model": "anthropic/claude-sonnet-5-5",
+}
+```
+
+Consulta la [guía de modelos](/models) para la selección de modelos y los modelos locales.
+
+### Agente
+
+Elige qué agente principal se usa cuando no se selecciona ninguno en la sesión.
+
+```jsonc
+{
+  "default_agent": "build",
+}
+```
+
+Consulta la [guía de agentes](/agents) para los agentes integrados y personalizados.
+
+### Actualizaciones
+
+Controla las comprobaciones de actualización desde la configuración global. Define `update` como `"disable"` para
+omitirlas, `"notify"` para mostrar las actualizaciones disponibles antes de instalarlas, o `"auto"` para instalarlas automáticamente. Cuando se omite, `update` usa `"notify"` de forma predeterminada.
+
+La instalación automática no reinicia un servidor en ejecución. Reinícialo manualmente para activar la actualización instalada.
+Los valores de nivel de proyecto se ignoran.
+
+```jsonc
+{
+  "update": "notify",
+}
+```
+
+### Nombre de usuario
+
+Define un nombre de usuario. OpenCode acepta este campo, pero no lo muestra en
+las conversaciones.
+
+```jsonc
+{
+  "username": "alice",
+}
+```
+
+### Permisos
+
+Define reglas ordenadas que permiten, deniegan o preguntan antes de que un agente use una herramienta sobre un
+recurso coincidente.
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "shell",
+      "resource": "git push *",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Consulta la [guía de permisos](/permissions) para la coincidencia de reglas y las acciones disponibles.
+
+### Políticas
+
+Permite o deniega el uso de un proveedor, deniega de forma estricta una comprobación de permiso o bloquea un servidor
+MCP, una skill o un plugin, con declaraciones ordenadas que la configuración más amplia puede
+sobrescribir.
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+  ],
+}
+```
+
+Consulta la [guía de políticas](/policies) para la coincidencia, la precedencia entre archivos de configuración
+y la política gestionada por Console.
+
+### Agentes
+
+Sobrescribe agentes integrados o define agentes especializados con su propio modelo,
+instrucciones, modo y permisos.
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "description": "Review changes without editing files",
+      "mode": "subagent",
+      "system": "Focus on correctness, security, and missing tests.",
+      "permissions": [{ "action": "edit", "resource": "*", "effect": "deny" }],
+    },
+  },
+}
+```
+
+Consulta la [guía de agentes](/agents) para todas las opciones de agente y los agentes basados en archivos.
+
+### Instantáneas
+
+Habilita o deshabilita las instantáneas del sistema de archivos que usan el deshacer y la reversión.
+
+```jsonc
+{
+  "snapshots": false,
+}
+```
+
+Consulta la [guía de instantáneas](/snapshots) para el comportamiento de deshacer y rehacer.
+
+### Watcher
+
+Ignora archivos y directorios que no deben activar actualizaciones del sistema de archivos.
+
+```jsonc
+{
+  "watcher": {
+    "ignore": ["dist/**", "coverage/**"],
+  },
+}
+```
+
+### Formateador
+
+Formatea archivos después de que las herramientas `write`, `edit` o `patch` los cambien. Define
+`formatter` como `true` para habilitar los formateadores integrados disponibles.
+
+```jsonc
+{
+  "formatter": true,
+}
+```
+
+Consulta la [guía de formateadores](/formatters) para los integrados y los personalizados.
+
+### Medios
+
+Controla cómo se redimensionan o rechazan las imágenes demasiado grandes que carga la herramienta `read`
+antes de enviarlas a un modelo.
+
+```jsonc
+{
+  "media": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880,
+    },
+  },
+}
+```
+
+Consulta la [guía de adjuntos](/attachments) para el procesamiento de imágenes y los límites.
+
+### Salida
+
+Define el número máximo de líneas y bytes que se conservan de un resultado de herramienta.
+
+```jsonc
+{
+  "tool_output": {
+    "max_lines": 2000,
+    "max_bytes": 51200,
+  },
+}
+```
+
+### Búsqueda
+
+Elige cómo busca OpenCode en la web. Usa `"random"` para seleccionar automáticamente un proveedor
+disponible.
+
+```jsonc
+{
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+Consulta la [guía de búsqueda web](/websearch) para los proveedores, las credenciales, la selección,
+los límites de solicitudes y cómo deshabilitar la búsqueda.
+
+### MCP
+
+Configura servidores locales y remotos de Model Context Protocol. Los valores globales
+de `mcp.timeout` se aplican a los servidores definidos en los archivos de configuración; el `timeout` de cada
+servidor los sobrescribe.
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["bunx", "@playwright/mcp"],
+      },
+    },
+  },
+}
+```
+
+Consulta la [guía de MCP](/mcp-servers) para los servidores remotos, OAuth, las variables de entorno y los tiempos de espera.
+
+### Compactación
+
+Controla la compactación automática del contexto y cuánto contexto reciente conserva.
+
+```jsonc
+{
+  "compaction": {
+    "auto": true,
+    "keep": {
+      "tokens": 15000,
+    },
+    "buffer": "15%",
+  },
+}
+```
+
+`buffer` es la parte de la ventana de contexto del modelo que se mantiene libre antes de que empiece la compactación automática.
+
+Los resúmenes locales siguen siendo el valor predeterminado. Opta por la compactación nativa del proveedor tanto para las solicitudes
+automáticas como para las manuales con una política de proveedor o modelo:
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-6.1-sol": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}
+```
+
+Un ajuste de modelo sobrescribe el ajuste de proveedor. La compactación automática usa el
+presupuesto de entrada utilizable del modelo seleccionado. Los puntos de control del proveedor conservan los mensajes recientes del usuario dentro del mismo
+presupuesto `compaction.keep.tokens` que los resúmenes locales usan para su cola retenida.
+`compaction.auto: false` de nivel superior desactiva la nueva compactación automática sin
+descartar los puntos de control instalados. Consulta la [guía de compactación](/compaction) para
+el presupuesto y la recuperación de desbordamientos.
+
+### Calentamiento
+
+Mantén calientes las sesiones de modelo activas recientemente con solicitudes transitorias periódicas.
+El calentamiento está desactivado de forma predeterminada; defínelo como `true` para calentar justo antes de que caduque la caché
+de cada modelo, durante un máximo de 30 minutos.
+
+```jsonc
+{
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "auto",
+    "duration": "30 minutes",
+  },
+}
+```
+
+El `settings.cache.warming` de un proveedor o modelo lo sobrescribe, y
+`settings.cache.ttl` define cuánto tiempo conserva el proveedor la caché. Consulta la
+[guía de calentamiento](/warming) para el comportamiento de las solicitudes, la personalización y las consideraciones de costo,
+y la [duración de la caché](/models#cache-lifetime) para `cache.ttl`.
+
+### Skills
+
+Agrega directorios o URL donde OpenCode deba buscar skills para los agentes.
+
+```jsonc
+{
+  "skills": ["./team-skills", "https://example.com/.well-known/skills/"],
+}
+```
+
+Consulta la [guía de skills](/skills) para ver cómo se estructuran y cómo las detecta OpenCode en `.opencode/skills/`.
+
+### Comandos
+
+Define comandos de barra reutilizables como plantillas de prompt con nombre.
+
+```jsonc
+{
+  "commands": {
+    "review": {
+      "description": "Review the current changes",
+      "template": "Review the current diff for correctness and missing tests.",
+    },
+  },
+}
+```
+
+Consulta la [guía de comandos](/commands) para los argumentos, los modelos, los agentes y los comandos basados en archivos.
+
+### Instrucciones
+
+Declara archivos de instrucciones, globs o URL HTTP(S) adicionales. OpenCode los carga
+junto a los archivos `AGENTS.md` descubiertos.
+
+```jsonc
+{
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md"],
+}
+```
+
+Consulta la [guía de instrucciones](/instructions) para las instrucciones del proyecto y `AGENTS.md`.
+
+### Referencias
+
+Haz que directorios locales o repositorios de Git estén disponibles como contexto de apoyo con nombre.
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Product behavior and terminology",
+    },
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+Consulta la [guía de referencias](/references) para la forma abreviada, la visibilidad y la resolución de rutas.
+
+### Worktrees
+
+Define el directorio padre para los worktrees locales nuevos. OpenCode agrega el nombre de worktree solicitado o generado.
+
+```jsonc
+{
+  "worktree": {
+    "directory": "../worktrees",
+  },
+}
+```
+
+Las rutas relativas se resuelven contra el checkout canónico guardado del proyecto. Esto se aplica tanto a la configuración global como a la
+del proyecto; las rutas absolutas se usan tal cual, y `~/` se resuelve
+contra el directorio home del usuario.
+
+Por ejemplo, esta configuración global coloca los worktrees nuevos bajo el directorio `.lane/trees/` de cada proyecto:
+
+```jsonc
+{
+  "worktree": {
+    "directory": ".lane/trees",
+  },
+}
+```
+
+Sin este ajuste, la creación usa el directorio de datos del servidor en `worktree/<first-six-project-ID-characters>`.
+La creación y la actualización de worktrees cargan la configuración desde el checkout canónico guardado del proyecto, incluso cuando otros
+clones comparten su ID de proyecto. Cambiarlo no mueve los worktrees existentes.
+
+Git es el valor predeterminado integrado. Un [plugin](/build/plugins/server#worktrees) que registra una estrategia se convierte automáticamente en el
+valor predeterminado en el entorno de ejecución de ese plugin. Las operaciones del proyecto usan el entorno de ejecución del checkout canónico. Las opciones específicas de la estrategia
+pertenecen a ese plugin, no al objeto de configuración `worktree`.
+
+### Plugins
+
+Carga plugins desde paquetes o directorios de plugins locales. Usa la forma de objeto cuando un plugin
+acepte opciones.
+
+```jsonc
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugins/local",
+      "options": {
+        "enabled": true,
+      },
+    },
+  ],
+}
+```
+
+Consulta la [guía de plugins](/plugins) para la carga y la configuración de plugins.
+
+### Proveedores
+
+Configura proveedores y agrega o sobrescribe sus modelos, ajustes de solicitud,
+encabezados y variantes de modelo.
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol-custom": {
+          "modelID": "gpt-6.1-sol",
+          "name": "GPT-6.1 Sol Custom",
+          "limit": {
+            "context": 200000,
+            "output": 32000,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+`settings.transport: "websocket"` de un proveedor selecciona su WebSocket de sesión.
+
+Consulta la [guía de proveedores](/providers) para las credenciales, los endpoints personalizados, los paquetes de proveedor, el transporte WebSocket y la configuración de modelos.
+
+## Variables
+
+Puedes usar la sustitución de variables en tus archivos de configuración para hacer referencia a variables de entorno y al contenido de archivos. Coloca las referencias dentro de cadenas JSON.
+
+### Variables de entorno
+
+Usa `{env:VARIABLE_NAME}` para sustituir variables de entorno:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:OPENCODE_MODEL}",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "apiKey": "{env:ANTHROPIC_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+Si la variable de entorno no está definida, se sustituye por una cadena vacía.
+
+### Archivos
+
+Usa `{file:path/to/file}` para sustituir el contenido de un archivo:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": {
+        "apiKey": "{file:~/.secrets/openai-key}",
+      },
+    },
+  },
+}
+```
+
+Las rutas de archivo pueden ser:
+
+- Relativas al directorio del archivo de configuración
+- Absolutas, o empezar por `~/` para tu directorio home
+
+Si el archivo no existe, se sustituye por una cadena vacía.
+
+Esto es útil para:
+
+- Mantener datos sensibles como claves de API en archivos separados.
+- Compartir fragmentos de configuración comunes entre varios archivos de configuración.
+
+## Experimental
+
+<Callout type="warning">
+  Los ajustes experimentales pueden cambiar, romperse o eliminarse en cualquier versión sin aviso. No dependas de ellos para
+  flujos de trabajo estables.
+</Callout>
+
+Todos los ajustes experimentales viven bajo la clave `experimental`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "todo": true,
+    "subagent_depth": 2,
+    "image_generate": { "model": "openai/gpt-image-2" },
+    "location_idle_timeout": "4 hours",
+  },
+}
+```
+
+### Lista de tareas
+
+Define `todo` como `true` para dar a los agentes una herramienta `todowrite` con la que seguir trabajo de varios pasos. Usa `false` de forma predeterminada.
+
+### Profundidad de subagentes
+
+`subagent_depth` define con cuánta profundidad pueden iniciar los subagentes sus propios subagentes. Usa `1` de forma predeterminada, así que un subagente no puede
+iniciar otro subagente.
+
+### Generación de imágenes
+
+`image_generate` define el modelo predeterminado de la herramienta [`generate_image`](/tools#image-generate), como
+`providerID/modelID`, opcionalmente con `#variant`. Cuando ese modelo no está disponible o no puede manejar una solicitud, OpenCode
+elige otro modelo de imagen automáticamente.
+
+```jsonc
+{
+  "experimental": {
+    "image_generate": {
+      "model": "openai/gpt-image-2",
+    },
+  },
+}
+```
+
+### Tiempo de inactividad de la Location
+
+`location_idle_timeout` controla cuánto tiempo puede estar una ubicación de proyecto sin actividad de sesión antes de que OpenCode descargue
+sus servicios. Acepta una duración como `"2 hours"` y usa `"60 minutes"` de forma predeterminada. Las sesiones en ejecución y los trabajos en segundo plano
+mantienen cargada una ubicación. Defínelo como `false` para no descargar nunca las ubicaciones inactivas. La configuración del proyecto puede sobrescribir el valor
+global.
+
+```jsonc
+{
+  "experimental": {
+    "location_idle_timeout": false,
+  },
+}
+```
+
+### Políticas obsoletas
+
+`experimental.policies` está obsoleto. Usa [`policies`](/policies) de nivel superior en su lugar. La clave anterior sigue funcionando y
+se fusiona en `policies`.

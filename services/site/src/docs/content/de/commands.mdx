@@ -1,0 +1,269 @@
+---
+title: "Befehle"
+description: "Mach Prompts zu wiederverwendbaren Slash-Befehlen in Markdown oder JSON, mit Argumenten, Shell-Ausgabe und Anhängen."
+---
+
+Erstelle `.opencode/commands/review.md`, um einen Prompt zu `/review` zu machen:
+
+```md title=".opencode/commands/review.md"
+Review $ARGUMENTS for bugs and missing tests.
+```
+
+Führe ihn aus der TUI mit einem Ziel aus:
+
+```text
+/review src/auth.ts
+```
+
+OpenCode übermittelt `Review src/auth.ts for bugs and missing tests.` als Nutzer-Prompt.
+
+## Markdown
+
+Lege globale Befehle in `~/.config/opencode/commands/` und Projektbefehle in `.opencode/commands/` ab.
+
+```text
+~/.config/opencode/commands/review.md
+.opencode/commands/review.md
+```
+
+Nur `.md`-Dateien werden entdeckt. Verschachtelte Pfade werden zu Befehlsnamen mit `/`-Trennern:
+
+```md title=".opencode/commands/team/review.md"
+Review $ARGUMENTS using the team's checklist.
+```
+
+Führe den verschachtelten Befehl als `/team/review src/auth.ts` aus. Das alte Verzeichnis in der Einzahl, `command/`,
+wird ebenfalls entdeckt, nutze für neue Dateien aber `commands/`.
+
+Füge YAML-Frontmatter hinzu, wenn der Befehl Metadaten braucht. Der getrimmte Markdown-Text ist immer die
+Prompt-Vorlage.
+
+```md title=".opencode/commands/review.md"
+---
+description: Review code for correctness
+agent: plan
+model: anthropic/claude-sonnet-5-5#high
+---
+
+Review $ARGUMENTS. Report bugs first.
+```
+
+## JSON
+
+Definiere Befehle unter `commands` in jeder OpenCode-JSON- oder JSONC-[Konfigurationsdatei](/config). Jeder Befehl
+erfordert ein `template`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "commands": {
+    "review": {
+      "description": "Review code for correctness",
+      "template": "Review $ARGUMENTS. Report bugs first.",
+    },
+  },
+}
+```
+
+## Felder
+
+Markdown-Frontmatter und JSON-Einträge akzeptieren dieselben Felder, außer dass Markdown `template` aus dem Dateitext
+bezieht.
+
+| Feld | Erforderlich | Verhalten |
+| --- | --- | --- |
+| `template` | Nur JSON | Prompt-Vorlage. |
+| `description` | Nein | Text, der in Befehlslisten und bei der Suche gezeigt wird. |
+| `agent` | Nein | Agent, der beim Ausführen des Befehls gewählt wird. |
+| `model` | Nein | Modell-Override im Format `provider/model` oder `provider/model#variant`. |
+| `subagent` | Nein | `true` läuft in einer untergeordneten Hintergrund-Session; `false` erzwingt die aktuelle Session. |
+| `subtask` | Nein | Veralteter Alias für `subagent`. |
+
+Dieser JSON-Befehl setzt zum Beispiel jedes aktuelle optionale Feld:
+
+```jsonc title="opencode.jsonc"
+{
+  "commands": {
+    "audit": {
+      "template": "Audit $ARGUMENTS.",
+      "description": "Audit a package",
+      "agent": "general",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "subagent": true,
+    },
+  },
+}
+```
+
+Setze `template` nicht in Markdown-Frontmatter; der Text liefert es.
+
+## Argumente
+
+Nutze `$ARGUMENTS` für die vollständige Argumentzeichenkette genau wie eingegeben.
+
+```md title=".opencode/commands/component.md"
+Create a typed React component named $ARGUMENTS.
+```
+
+Bei `/component Account Settings` wird der Platzhalter zu `Account Settings`.
+
+## Positionen
+
+Nutze `$1`, `$2` und höhere Zahlen für geparste Positionsargumente. Einfache oder doppelte Anführungszeichen gruppieren
+Wörter und werden entfernt.
+
+```md title=".opencode/commands/check.md"
+Check $1. Focus on $2.
+```
+
+Bei `/check src/auth.ts "error handling"` wird `$1` zu `src/auth.ts` und `$2` zu `error handling`.
+
+Der Platzhalter mit der höchsten Nummer verbraucht sein Argument und alles danach. Fehlende Positionen werden zu leeren
+Strings.
+
+```md title=".opencode/commands/compare.md"
+Compare $1 with $2.
+```
+
+Bei `/compare api stable branch` übermittelt OpenCode `Compare api with stable branch.`
+
+## Fallback
+
+Wenn eine Vorlage kein `$ARGUMENTS` und keinen Positionsplatzhalter hat, hängt OpenCode nicht leere Argumente nach einer
+Leerzeile an.
+
+```md title=".opencode/commands/explain.md"
+Explain this code clearly.
+```
+
+Bei `/explain src/cache.ts` wird der Prompt zu:
+
+```text
+Explain this code clearly.
+
+src/cache.ts
+```
+
+## Shell
+
+Schließe einen Shell-Befehl in `!` gefolgt von Backticks ein, um seine Ausgabe einzufügen, bevor der Prompt übermittelt
+wird.
+
+```md title=".opencode/commands/review-diff.md"
+Review this diff:
+
+!`git diff --stat && git diff`
+```
+
+OpenCode führt jeden Block mit der konfigurierten Shell am aktiven Projektort aus und fügt seine kombinierte Ausgabe
+ein. Argument-Platzhalter werden zuerst expandiert:
+
+```md title=".opencode/commands/history.md"
+Summarize these commits:
+
+!`git log --oneline -$1`
+```
+
+Bei `/history 5` erhält die Shell `git log --oneline -5`. Setze keine nicht vertrauenswürdigen Argumente in
+Shell-Blöcke.
+
+<Callout type="warning">
+  Shell-Blöcke laufen, wenn OpenCode den Befehl auswertet, außerhalb des Tool-Berechtigungsablaufs des Agenten. Nutze
+  nur Befehle aus Quellen, denen du vertraust.
+</Callout>
+
+## Anhänge
+
+Gespeicherte Vorlagen expandieren `@path` nicht; es bleibt normaler Prompt-Text.
+
+```md title=".opencode/commands/readme.md"
+Review @README.md.
+```
+
+Füge Dateien beim Aufrufen des Befehls über das Eingabefeld hinzu. OpenCode übernimmt diese Anhänge, wenn es den
+ausgewerteten Prompt übermittelt.
+
+## Ausführung
+
+Befehle expandieren Argumente und Shell-Blöcke, bevor sie einen dauerhaften Nutzer-Prompt übermitteln. Sie laufen
+standardmäßig in der aktuellen Session.
+
+```md title=".opencode/commands/plan.md"
+---
+agent: plan
+---
+
+Plan $ARGUMENTS.
+```
+
+`/plan migration` schaltet die aktuelle Session auf `plan`, bevor der Prompt übermittelt wird.
+
+Die Modellwahl folgt diesen Regeln:
+
+1. Ein `model` des Befehls überschreibt jedes andere Modell.
+2. Andernfalls überschreibt das konfigurierte Modell des gewählten Befehls-Agenten das beim Aufruf aktive Modell.
+3. Andernfalls bleibt das aktuelle Session-Modell aktiv.
+
+Dieser Befehl wählt zum Beispiel sowohl seinen Agenten als auch ein ausdrückliches Modell:
+
+```md title=".opencode/commands/design.md"
+---
+agent: plan
+model: openai/gpt-6.1-sol#high
+---
+
+Design $ARGUMENTS.
+```
+
+## Hintergrund
+
+Setze `subagent: true`, um einen Befehl in einer untergeordneten Hintergrund-Session auszuführen.
+
+```md title=".opencode/commands/audit.md"
+---
+description: Audit changes
+agent: general
+subagent: true
+---
+
+Audit $ARGUMENTS for bugs and missing tests.
+```
+
+Die übergeordnete Session bleibt verfügbar und behält ihren Agenten und ihr Modell. Sobald die untergeordnete Session
+fertig ist, meldet OpenCode ihr Ergebnis oder ihren Fehler an die übergeordnete Session zurück.
+
+| Wert | Verhalten |
+| --- | --- |
+| `true` | Immer eine untergeordnete Session verwenden, selbst wenn der gewählte Agent `mode: primary` hat. |
+| `false` | Immer die aktuelle Session verwenden, selbst wenn der gewählte Agent `mode: subagent` hat. |
+| Fehlt | Eine untergeordnete Session nur verwenden, wenn der gewählte Agent `mode: subagent` hat. |
+
+Für die untergeordnete Session gilt zuerst das Modell des Befehls, dann das Modell des gewählten Agenten und zuletzt das
+Modell der übergeordneten Session. Das alte `subtask` wird weiterhin akzeptiert; sind beide Felder vorhanden, hat
+`subagent` Vorrang.
+
+```yaml
+subagent: false
+subtask: true
+```
+
+Dieses Beispiel läuft in der aktuellen Session, weil `subagent` Vorrang hat.
+
+## Laden
+
+Markdown- und JSON-Befehle teilen sich eine Registry. Spätere Quellen ersetzen frühere Befehle mit demselben Namen.
+
+```text
+~/.config/opencode/commands/review.md   # Lower priority
+.opencode/commands/review.md           # Replaces the global command
+```
+
+Projektquellen haben Vorrang vor globalen Quellen, und nähere Projektquellen haben Vorrang vor übergeordneten Quellen.
+Eine eigene Definition kann auch einen früheren eingebauten Befehl ersetzen. OpenCode lädt Befehlsdateien und
+Konfigurationsänderungen automatisch neu.
+
+```md title=".opencode/commands/review.md"
+Review only the staged changes: !`git diff --cached`
+```
+
+Das Speichern dieser Datei aktualisiert `/review`, ohne OpenCode neu zu starten.

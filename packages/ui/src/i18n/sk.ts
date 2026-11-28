@@ -76,6 +76,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Komentujete",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Pridať komentár",
+  "ui.lineComment.add": "Pridať komentár",
+  "ui.lineComment.actions": "Akcie výberu",
   "ui.lineComment.contextPlaceholder": "Pridať kontext k tejto zmene",
   "ui.lineComment.submit": "Komentovať",
   "ui.lineComment.cancel": "Zrušiť",

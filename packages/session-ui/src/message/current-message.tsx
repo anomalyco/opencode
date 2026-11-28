@@ -8,7 +8,13 @@ import {
   CurrentReadToolGroup,
   ToolDisplay,
 } from "../tools/tool-renderer"
-import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
+import {
+  currentToolError,
+  currentToolImages,
+  currentToolInput,
+  currentToolMetadata,
+  currentToolOutput,
+} from "./current-tool-state"
 import type { UserRun } from "../timeline/user-runs"
 import type { TurnSources } from "../sources/sources"
 
@@ -66,6 +72,7 @@ export function SessionAssistantContent(props: {
   content: SessionMessageAssistant["content"][number]
   contentID: string
   showAssistantCopyPartID?: string | null
+  keepCopyVisible?: boolean
   turnDurationMs?: number | null
   turnTokensPerSecond?: number
   sources?: TurnSources
@@ -85,6 +92,7 @@ export function SessionAssistantContent(props: {
             text={content().text}
             message={props.message}
             showCopy={props.showAssistantCopyPartID === props.contentID}
+            keepCopyVisible={props.keepCopyVisible}
             turnDurationMs={props.turnDurationMs}
             turnTokensPerSecond={props.turnTokensPerSecond}
             sources={props.sources}
@@ -113,6 +121,7 @@ export function SessionAssistantContent(props: {
             input={currentToolInput(tool())}
             metadata={currentToolMetadata(tool())}
             output={currentToolOutput(tool())}
+            images={currentToolImages(tool())}
             status={tool().state.status}
             error={currentToolError(tool())}
             defaultOpen={props.defaultOpen}

@@ -1,0 +1,157 @@
+---
+title: "Pièces jointes"
+description: "Joignez des fichiers, des répertoires et des images aux prompts OpenCode, et découvrez ce que le modèle reçoit pour chaque format."
+---
+
+## Joindre
+
+Joignez un fichier local, puis demandez à OpenCode de l’utiliser dans votre prompt. Dans le client Desktop ou web, choisissez **Attach file**, collez un fichier ou faites-le glisser dans le prompt.
+
+```text
+Summarize the attached README.md and list the required setup steps.
+```
+
+Dans Desktop, vous pouvez sélectionner jusqu’à 20 Mio de fichiers au total. D’autres interfaces peuvent imposer des limites plus strictes côté client.
+
+<Callout type="warning">
+  Choisissez un modèle acceptant les images en entrée avant de joindre une image. OpenCode peut transmettre les images
+  prises en charge au fournisseur, mais le fournisseur et le modèle appliquent toujours leurs propres formats,
+  dimensions, nombres de fichiers et tailles. Un modèle uniquement texte peut rejeter la requête.
+</Callout>
+
+## Syntaxe
+
+Les entrées de prompt et de commande V2 décrivent une pièce jointe avec un `uri` et, en option, `name` et
+`description` :
+
+```json
+{
+  "uri": "file:///home/me/project/src/server.ts",
+  "name": "server.ts",
+  "description": "HTTP server entrypoint"
+}
+```
+
+Utilisez une URL `file:` absolue pour un fichier ou un répertoire accessible au serveur. Pour les fichiers texte,
+les paramètres positifs `start` et `end` sélectionnent des lignes numérotées à partir de 1.
+
+```text
+file:///home/me/project/src/server.ts?start=20&end=60
+```
+
+Utilisez une URL `data:` pour envoyer du contenu directement :
+
+```json
+{
+  "uri": "data:text/plain;base64,SGVsbG8sIE9wZW5Db2RlIQ==",
+  "name": "greeting.txt"
+}
+```
+
+Les URL HTTP et HTTPS ne sont pas prises en charge pour les pièces jointes. Consultez la [référence de l’API](/api) générée pour savoir comment soumettre des prompts par programmation.
+
+## Formats
+
+Les sessions V2 actuelles rendent ces types de pièces jointes visibles au modèle :
+
+| Entrée | Le modèle reçoit | Exemple |
+| --- | --- | --- |
+| Fichier texte UTF-8 | Nom de fichier et texte décodé | `README.md` |
+| Répertoire | Liste des fichiers et sous-répertoires directs, sans parcours récursif | `file:///home/me/` |
+| PNG, JPEG, GIF ou WebP | Image | `diagram.png` |
+| PDF | Document | `report.pdf` |
+
+Les PDF nécessitent un modèle acceptant les PDF en entrée. Si le modèle ne prend pas en charge le type d’une
+pièce jointe, OpenCode envoie une courte note à sa place.
+
+SVG est traité comme du texte. Les pièces jointes AVIF, BMP, audio, vidéo et autres binaires ne sont pas incluses
+dans la requête au modèle. Convertissez d’abord un binaire non pris en charge en texte ou en image prise en charge ;
+par exemple, convertissez une image BMP en PNG avant de la joindre.
+
+OpenCode lit chaque pièce jointe avant d’admettre le prompt. Il rejette les URL invalides, les chemins illisibles,
+les chemins qui ne sont ni des fichiers ni des répertoires, et les pièces jointes décodées de plus de 20 Mio. Le type
+MIME est détecté à partir des octets : changer un nom de fichier ou le type MIME d’une URL `data:` ne rend donc pas
+visible un binaire non pris en charge.
+
+## Images
+
+Configurez la normalisation des images dans `opencode.json` ou `opencode.jsonc` :
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "media": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880,
+    },
+  },
+}
+```
+
+Tous les champs sont facultatifs :
+
+| Champ | Valeur par défaut | Comportement |
+| --- | --- | --- |
+| `auto_resize` | `true` | Redimensionne une image au-delà d’une limite configurée ; si `false`, rejette l’image. |
+| `max_width` | `2000` | Largeur maximale en pixels ; doit être un entier positif. |
+| `max_height` | `2000` | Hauteur maximale en pixels ; doit être un entier positif. |
+| `max_base64_bytes` | `5242880` | Nombre maximal d’octets de l’image encodée en Base64 ; doit être un entier positif. |
+
+Par exemple, ceci rejette au lieu de redimensionner une image de plus de 1200 pixels de large :
+
+```jsonc title="opencode.jsonc"
+{
+  "media": {
+    "image": {
+      "auto_resize": false,
+      "max_width": 1200,
+    },
+  },
+}
+```
+
+Ces réglages s’appliquent aux images prises en charge jointes aux prompts ainsi qu’aux images renvoyées par
+l’outil `read` intégré.
+
+## Traitement
+
+L’outil `read` reconnaît PNG, JPEG, GIF et WebP d’après leur contenu et lit jusqu’à 20 Mio de données image source.
+Il vérifie la largeur, la hauteur et la longueur Base64 par rapport aux limites d’image configurées.
+
+Avec `auto_resize: true`, OpenCode préserve le rapport d’aspect et réduit l’image jusqu’aux limites de dimension.
+Il essaie ensuite des encodages PNG et JPEG de plus en plus petits jusqu’à respecter la limite Base64, si bien que le
+type MIME de sortie peut changer.
+
+```text
+Input:  4000 × 2000 WebP
+Limits: 2000 × 2000
+Output: 2000 × 1000 PNG or JPEG
+```
+
+Si aucun encodage ne convient, le traitement échoue. Avec `auto_resize: false`, une image dépassant une limite
+échoue sans modification ; une image impossible à décoder échoue également.
+
+```text
+Input:  2400 × 1600 JPEG
+Limit:  max_width = 2000, auto_resize = false
+Result: Image processing fails
+```
+
+Si le redimensionnement est indisponible, OpenCode transmet l’image d’origine sans la modifier. Les réglages d’image limitent donc le traitement, pas l’envoi, et ne constituent pas une protection de sécurité.
+
+## Limites
+
+| Limite | Valeur ou comportement | Exemple |
+| --- | --- | --- |
+| Pièce jointe directe | 20 Mio décodés par élément ; les clients peuvent imposer des limites plus basses | Deux fichiers de 12 Mio respectent la limite par élément |
+| Sélection via le sélecteur Desktop | 20 Mio au total | Deux fichiers de 12 Mio dépassent la limite de sélection |
+| `max_base64_bytes` | Base64 encodé uniquement, hors URL `data:` complète | `SGVsbG8=` compte pour 8 octets |
+| Limites d’image du fournisseur | S’appliquent après le traitement d’OpenCode | Un fournisseur peut rejeter une image acceptée |
+| Prise en charge des pièces jointes texte par le modèle | Ne nécessite pas de modèle multimodal | `notes.txt` est inséré comme texte de prompt |
+| Limites de texte de `read` | Utilise des limites de pagination et de troncature distinctes | Lire un grand journal par pages |
+
+Qu’un client accepte un fichier ne garantit pas que son contenu atteigne le modèle. La pièce jointe doit utiliser un
+format visible par le modèle et respecter à la fois les limites d’OpenCode et celles du fournisseur.

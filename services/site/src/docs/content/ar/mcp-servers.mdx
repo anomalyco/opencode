@@ -1,0 +1,567 @@
+---
+title: "خوادم MCP"
+description: "اربط OpenCode بخوادم Model Context Protocol المحلية والبعيدة بـopencode mcp add أو في الإعدادات، بما في ذلك تسجيل الدخول عبر OAuth."
+---
+
+يتصل OpenCode بخوادم [Model Context Protocol](https://modelcontextprotocol.io/) ويتيح إمكانات مثل الأدوات والمطالبات والموارد والتعليمات. تشغل أدوات MCP جزءًا من سياق النموذج؛ لذا أضف الخوادم التي تحتاج إليها فقط.
+
+## الإعداد
+
+أضف خادمًا بعيدًا من المشروع الذي ينبغي أن يستخدمه، ثم تحقق من اتصاله:
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp
+opencode mcp list
+```
+
+يكتب الأمر الخادم في [إعدادات](/config) المشروع. وأضف `--global` ليتاح في كل مشروع:
+
+```sh
+opencode mcp add context7 --global --url https://mcp.context7.com/mcp
+```
+
+وتستخدم الخوادم البعيدة OAuth افتراضيًا. وإذا أظهرت القائمة `needs authentication`، فافتح OpenCode، وشغّل `/mcps`، واختر الخادم، وسجّل الدخول. والخادم المرتبط جاهز لاستخدام الوكيل:
+
+```text
+✓ context7  connected
+```
+
+## الإعدادات
+
+ولإعداد خادم يدويًا، أعطه اسمًا فريدًا تحت `mcp.servers`. ولا يضع V2 أسماء الخوادم مباشرةً تحت `mcp`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "local",
+        "command": ["npx", "-y", "example-mcp-server"],
+      },
+    },
+  },
+}
+```
+
+وتتصل الخوادم تلقائيًا. واستخدم `disabled`، لا حقل `enabled`، لإبقاء خادم مضبوط دون ربطه:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "local",
+        "command": ["npx", "-y", "example-mcp-server"],
+        "disabled": true,
+      },
+    },
+  },
+}
+```
+
+ويحل إعداد مشروع أعلى أسبقية محل كائن الخادم كاملًا بالاسم نفسه. واستخدم أسماء مختلفة لاتصالات أو حسابات منفصلة؛ وإلا فأعد كل حقل مطلوب في التجاوز:
+
+```jsonc title="opencode.jsonc"
+{
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+      },
+    },
+  },
+}
+```
+
+## المحلي
+
+الخادم المحلي أمر يبدأه OpenCode عبر نقل stdio في MCP. فأضف واحدًا بأمر بعد `--`:
+
+```sh
+opencode mcp add everything -- npx -y @modelcontextprotocol/server-everything
+```
+
+ومرّر متغيّرات البيئة بأعلام `--env` متكررة:
+
+```sh
+opencode mcp add everything --env LOG_LEVEL=info -- npx -y @modelcontextprotocol/server-everything
+```
+
+واستخدم الإعدادات لخيارات العملية الأخرى مثل مجلد العمل:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "everything": {
+        "type": "local",
+        "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+        "cwd": ".",
+        "environment": {
+          "LOG_LEVEL": "info",
+          "MCP_API_KEY": "{env:MCP_API_KEY}",
+        },
+      },
+    },
+  },
+}
+```
+
+| الحقل | مطلوب | الوصف |
+| --- | --- | --- |
+| `type` | نعم | يجب أن يكون `"local"`. |
+| `command` | نعم | ملف تنفيذي تتبعه وسائطه. |
+| `cwd` | لا | مجلد العملية. وتُحل المسارات النسبية من مساحة العمل، وهي الافتراضي أيضًا. |
+| `environment` | لا | متغيّرات نصية تُضاف إلى بيئة العملية الموروثة في OpenCode. |
+| `disabled` | لا | يمنع الاتصال عندما يكون `true`. والافتراضي `false`. |
+| `codemode` | لا | اضبطه على `false` لعرض الأدوات مباشرةً بدل Code Mode. والافتراضي `true`. |
+| `timeout` | لا | تجاوزات مهلة خاصة بالخادم. |
+| `protocol` | لا | `auto` (الافتراضي) أو `legacy` أو `2026-07-28`. راجع [إصدار البروتوكول](#protocol-version). |
+| `pool` | لا | مشاركة اتصال واحد بين المجلدات. والافتراضي `false`. راجع [الاتصالات المشتركة](#shared-connections). |
+
+واستخدم `{env:NAME}` لاستبدال متغيّرات البيئة. ولا تُوسَّع تعبيرات shell مثل `$NAME` في سلاسل JSON:
+
+```jsonc
+{
+  "environment": {
+    "MCP_API_KEY": "{env:MCP_API_KEY}",
+  },
+}
+```
+
+## البعيد
+
+يستخدم الخادم البعيد نقل MCP Streamable HTTP ويشترط عنوان URL مطلقًا:
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp
+```
+
+ومرّر ترويسات الطلب بأعلام `--header` متكررة. وضع مراجع `{env:NAME}` بين علامات تنصيص ليكتبها shell حرفيًا:
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp --header 'CONTEXT7_API_KEY={env:CONTEXT7_API_KEY}'
+```
+
+واستخدم الإعدادات لخيارات أخرى. وخزّن الأسرار في متغيّرات بيئة لا في الملف:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "oauth": false,
+        "headers": {
+          "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}",
+        },
+      },
+    },
+  },
+}
+```
+
+| الحقل | مطلوب | الوصف |
+| --- | --- | --- |
+| `type` | نعم | يجب أن يكون `"remote"`. |
+| `url` | نعم | نقطة نهاية Streamable HTTP مطلقة. |
+| `headers` | لا | ترويسات HTTP نصية تُرسل إلى نقطة النهاية. |
+| `oauth` | لا | إعدادات OAuth، أو `false` لتعطيل OAuth. |
+| `disabled` | لا | يمنع الاتصال عندما يكون `true`. والافتراضي `false`. |
+| `codemode` | لا | اضبطه على `false` لعرض الأدوات مباشرةً بدل Code Mode. والافتراضي `true`. |
+| `timeout` | لا | تجاوزات مهلة خاصة بالخادم. |
+| `protocol` | لا | `auto` (الافتراضي) أو `legacy` أو `2026-07-28`. راجع [إصدار البروتوكول](#protocol-version). |
+| `pool` | لا | مشاركة اتصال واحد بين المجلدات. والافتراضي `false`. راجع [الاتصالات المشتركة](#shared-connections). |
+
+ولا تستخدم `oauth: false` إلا عندما يستخدم الخادم مفتاح API أو بيانة اعتماد ترويسة أخرى حصرًا:
+
+```jsonc
+{
+  "type": "remote",
+  "url": "https://mcp.example.com/mcp",
+  "oauth": false,
+  "headers": { "Authorization": "Bearer {env:MCP_API_KEY}" },
+}
+```
+
+## OAuth
+
+وOAuth مفعّل للخوادم البعيدة إلا إذا كان `oauth` هو `false`. ويكتشف OpenCode خادم التفويض، ويسجّل الدخول بـPKCE، ويحدّث الرموز. وتُخزَّن بيانات الاعتماد خارج إعدادات المشروع.
+
+ومعظم الخوادم تحتاج عنوان URL فقط:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "sentry": {
+        "type": "remote",
+        "url": "https://mcp.sentry.dev/mcp",
+      },
+    },
+  },
+}
+```
+
+وإذا كان الخادم يحتاج مصادقة، فشغّل `/mcps`، واختره، وأكمل التفويض في المتصفح. ويستطيع CLI بدء التدفق نفسه:
+
+```sh
+opencode mcp auth sentry
+```
+
+### المتصفح على جهاز آخر
+
+عندما يعمل OpenCode عبر SSH أو في حاوية أو على خادم بعيد، لا يستطيع المتصفح الوصول إلى OpenCode بعد تسجيل الدخول ويعرض صفحة لا تُحمَّل. فانسخ عنوان URL لتلك الصفحة من شريط العناوين والصقه في مطالبة تسجيل الدخول:
+
+```text
+http://127.0.0.1:52817/callback?code=...&state=...
+```
+
+يظهر طلب لصق العنوان في `/mcps` وفي `opencode mcp auth` وفي مربع حوار تسجيل الدخول في تطبيقي سطح المكتب والويب، بينما ينتظر OpenCode ردّ المتصفح.
+
+### تسجيل العميل
+
+ويعرّف OpenCode نفسه لخادم التفويض بأول طريقة تنطبق:
+
+| الطريقة | تُستخدم عندما |
+| --- | --- |
+| عميل مسجّل مسبقًا | `oauth.client_id` مضبوط. |
+| [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents) (CIMD) | يدعم خادم التفويض CIMD والعملاء العامّين، ولم يُضبط `oauth.redirect_uri`. |
+| [التسجيل الديناميكي للعميل](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | لا ينطبق أيٌّ مما سبق. يسجّل OpenCode عميلًا ويعيد استخدامه في عمليات تسجيل الدخول اللاحقة، ويستمع على المنفذ الذي سجّله. إذا كان المنفذ مشغولًا، يعيد OpenCode التسجيل. |
+
+ويشترك خادم التفويض في CIMD عبر بياناته الوصفية:
+
+```json
+{
+  "issuer": "https://auth.example.com",
+  "client_id_metadata_document_supported": true,
+  "token_endpoint_auth_methods_supported": ["none"]
+}
+```
+
+ومع CIMD، يرسل OpenCode عنوان URL لمستند بياناته الوصفية كـ`client_id` ويتخطى التسجيل:
+
+```text
+https://opencode.ai/oauth/opencode/client.json
+```
+
+ويسمح المستند بعمليات إعادة التوجيه هذه عبر loopback دون منفذ:
+
+- `http://127.0.0.1/callback`
+- `http://localhost/callback`
+- `http://127.0.0.1/mcp/oauth/callback` للعملاء الأقدم
+
+وتقبل خوادم التفويض أي منفذ loopback لإعادة التوجيه هذه، كما يشترط [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252#section-7.3)، لذا يعمل `callback_port` مع CIMD. أما `redirect_uri` المخصّص فلا، فيعود OpenCode إلى DCR.
+
+وإذا لم يدعم خادم التفويض CIMD ولا DCR، فأعدّ عميلًا مسجّلًا مسبقًا.
+
+### العملاء المسجّلون مسبقًا
+
+وعندما يمنحك مزوّد بيانات اعتماد عميل، استخدم حقول OAuth بصيغة snake_case في V2:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "company-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "oauth": {
+          "client_id": "{env:MCP_CLIENT_ID}",
+          "client_secret": "{env:MCP_CLIENT_SECRET}",
+          "scope": "tools:read tools:execute",
+          "callback_port": 19876,
+          "redirect_uri": "http://127.0.0.1:19876/callback",
+        },
+      },
+    },
+  },
+}
+```
+
+| الحقل | الوصف |
+| --- | --- |
+| `client_id` | معرّف العميل المسجّل مسبقًا. وله أولوية على CIMD وDCR. |
+| `client_secret` | سر العميل السري، يُرسل في جسم طلب الرمز. وأغفله للعملاء العامّين. |
+| `scope` | النطاقات المراد طلبها، مفصولة بمسافات. النطاق الافتراضي هو الذي يحدّده الخادم عند رفض طلب لم يخضع للمصادقة. يعيد OpenCode إرسال النطاق الممنوح عند تحديث الرمز. |
+| `callback_port` | منفذ الاستدعاء المحلي من `1` إلى `65535`. يستخدم OpenCode افتراضيًا منفذ `redirect_uri` إن وُجد، ثم منفذ عميل سُجّل في عملية تسجيل دخول سابقة، ثم منفذًا مؤقتًا متاحًا. |
+| `redirect_uri` | URI loopback مسجّل مسبقًا يصل مساره ومنفذه إلى مستمع الاستدعاء المحلي. وضبطه يعطّل CIMD. |
+| `auth_server_metadata_url` | عنوان URL لمستند بيانات OAuth أو OpenID Connect الوصفية لخادم التفويض. اضبطه عندما لا ينشر خادم MCP بيانات وصفية للمورد المحمي تسمّي خادم تفويضه. |
+
+وأزل بيانات اعتماد OAuth المخزّنة عندما تحتاج إلى تسجيل الدخول مجددًا أو تبديل الحساب:
+
+```sh
+opencode mcp logout sentry
+```
+
+## المهل
+
+المهل أعداد صحيحة موجبة بالمللي ثانية. واضبط الافتراضيات تحت `mcp.timeout`؛ ويتجاوز كائن `timeout` الخاص بالخادم الافتراضيات المطابقة.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "timeout": {
+      "startup": 45000,
+      "catalog": 30000,
+      "execution": 600000,
+    },
+    "servers": {
+      "slow-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "timeout": {
+          "catalog": 60000,
+        },
+      },
+    },
+  },
+}
+```
+
+| المهلة | الافتراضي | تنطبق على |
+| --- | --- | --- |
+| `startup` | 30 ثانية | اتصال النقل وتهيئة الخادم. |
+| `catalog` | 30 ثانية | سرد الأدوات والمطالبات والموارد وقوالب الموارد. |
+| `execution` | 12 ساعة | استدعاءات الأدوات وجلب المطالبات وقراءة الموارد. |
+
+## إصدار البروتوكول
+
+يستكشف OpenCode كل خادم بحثًا عن مراجعة 2026-07-28 افتراضيًا، ويعود إلى مصافحة `initialize` الكلاسيكية في MCP عندما لا يدعمها الخادم. واضبط `protocol` في خادم على `legacy` لتخطي الاستكشاف:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "older": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "protocol": "legacy",
+      },
+    },
+  },
+}
+```
+
+| القيمة | السلوك |
+| --- | --- |
+| `auto` | الافتراضي. يستكشف بـ`server/discover` بحثًا عن مراجعة 2026-07-28 ويعود إلى `legacy` عندما لا يدعمها الخادم، بما في ذلك عندما يجيب خادم بعيد على الاستكشاف بخطأ HTTP 5xx. |
+| `legacy` | يرسل `initialize` ويتحدث بمراجعات البروتوكول حتى 2025-11-25. |
+| `2026-07-28` | يشترط مراجعة 2026-07-28. ويفشل الاتصال مع الخوادم الأقدم. |
+
+واستكشاف خادم محلي أقدم يضيف عملية إضافية قصيرة العمر وقد ينتظر حتى مهلة بدء التشغيل عندما يتجاهل الخادم الطلبات غير المعروفة، فاضبط `legacy` على الخوادم التي تعرف أنها أقدم من مراجعة 2026-07-28.
+
+## الاتصالات المشتركة
+
+قد يفتح خادم OpenCode واحد مجلدات كثيرة، ويتصل كل منها بكل خادم MCP على حدة. واضبط `pool` على `true` لتتشارك المجلدات ذات إعدادات الخادم نفسها اتصالًا واحدًا وقائمة أدوات واحدة:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "cloudflare": {
+        "type": "remote",
+        "url": "https://mcp.cloudflare.com/mcp",
+        "pool": true,
+      },
+    },
+  },
+}
+```
+
+- لا تُشارك إلا الاتصالات على مراجعة 2026-07-28. والخادم الذي يجيب بمراجعة أقدم، أو المضبوط على `legacy`، يحتفظ باتصال واحد لكل مجلد.
+- ولا تتشارك المجلدات اتصالًا إلا عندما يطابق كل ما يغيّره: عنوان URL والترويسات وإعدادات OAuth والحساب المسجّل لخادم بعيد، والأمر ومجلد العمل والبيئة لخادم محلي. ويجب أن تطابق المهل و`protocol` أيضًا. ولا يلزم تطابق اسم الخادم، لكن تسجيلات الدخول تُخزَّن لكل اسم، فلا يُشارك خادم OAuth إلا بالاسم نفسه.
+- ولا يُشارك الخادم المحلي إلا بين المجلدات على هذا الجهاز، لا مجلدات مساحة عمل. ومشاركته بين المشاريع تحتاج `cwd` ثابتًا، مثل `"~"`. وبدونه يعمل في مجلد كل مشروع، فيحصل كل مشروع على نسخته ويسجّل OpenCode تحذيرًا.
+- والاتصال المشترك بلا جذور. وعندما تطلب أداة إدخالًا، يظهر الطلب في المجلد الذي استدعاها.
+- ويُغلق الاتصال بمجرد إغلاق آخر مجلد يستخدمه أو قطعه اتصال الخادم.
+
+## الأسماء
+
+يسمّي OpenCode الأداة `<server>_<tool>`. ويستبدل أي حرف غير الحروف والأرقام و`_` و`-` بـ`_`:
+
+```text
+server: context 7
+tool:   resolve.library/id
+name:   context_7_resolve_library_id
+```
+
+وتصبح مطالبات MCP أوامر باسم `<server>:<prompt>` بالتطبيع نفسه. مثلًا:
+
+```text
+/context_7:find_docs
+```
+
+ويملأ نص الأمر وسائط المطالبة بالترتيب. وافصل بينها بمسافات وضع بين علامات تنصيص القيم التي تحتوي مسافات:
+
+```text
+/context_7:find_docs react "server components"
+```
+
+واختر أسماء خوادم قصيرة تبقى فريدة بعد التطبيع. وفي Code Mode الافتراضي، تُجمع الأدوات حسب اسم الخادم المطبّع:
+
+```text
+tools.context_7.resolve_library_id(...)
+```
+
+## الأذونات
+
+Code Mode هو الافتراضي. واضبط `codemode` على `false` عندما يجب أن تبقى أدوات خادم في قائمة أدوات المزوّد الأصلية:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "codemode": false,
+      },
+    },
+  },
+}
+```
+
+واستخدم إجراءات الأذونات لإخفاء الأدوات أو رفضها دون قطع اتصال خادمها. وطابق الاسم المطبّع `<server>_<tool>`:
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "context7_*",
+      "resource": "*",
+      "effect": "deny",
+    },
+  ],
+}
+```
+
+## الموارد
+
+يقرأ الوكلاء موارد MCP بأداتين مدمجتين، `list_mcp_resources` و`read_mcp_resource`. وتحكم فيهما بإجراءات الأذونات هذه:
+
+| الإجراء | المورد |
+| --- | --- |
+| `opencode_list_mcp_resources` | اسم الخادم. |
+| `opencode_read_mcp_resource` | `<server>:<uri>` |
+
+مثلًا، اسمح بكل قراءة من خادم `docs`:
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "opencode_read_mcp_resource",
+      "resource": "docs:*",
+      "effect": "allow",
+    },
+  ],
+}
+```
+
+## تعليمات الخادم
+
+وعندما يعيد خادم تعليمات أثناء التهيئة، يضيفها OpenCode إلى مطالبة النظام:
+
+```text
+<mcp_instructions>
+  <server name="sentry">
+    Search for an existing issue before creating a new one.
+  </server>
+</mcp_instructions>
+```
+
+وللخوادم التي تستخدم Code Mode، يضيف OpenCode سطرًا يوضّح أين يجد الوكيل أدوات الخادم.
+
+وتُغفل تعليمات الخادم عندما ترفض أذون الوكيل كل أدواته. وعندما ترفض `execute`، تُسرد أدوات الخادم مباشرةً وتُحفظ تعليماته دون سطر Code Mode.
+
+## طلبات الإدخال
+
+ويمكن للخوادم طلب إدخال أثناء استدعاء عبر استقصاء MCP. ويعرض OpenCode الطلب كنموذج، أو كرابط يُفتح لطلبات URL:
+
+```text
+sentry is requesting input
+```
+
+وإغلاق النموذج يلغي الطلب.
+
+## السياق
+
+وللاستدعاءات التي تُجرى بالنيابة عن جلسة، يرسل OpenCode معرّف الجلسة في `CallToolRequest.params._meta["ai.opencode/sessionID"]`. وينطبق ذلك على الأدوات المباشرة وCode Mode عبر stdio وStreamable HTTP:
+
+```json
+{
+  "method": "tools/call",
+  "params": {
+    "name": "lookup",
+    "arguments": { "query": "example" },
+    "_meta": { "ai.opencode/sessionID": "ses_..." }
+  }
+}
+```
+
+والمعرّف بيانات وصفية للطلب، لا وسيط أداة، فيغيب من المخطط المرئي للنموذج. فتعامل معه قيمة ربط معتمة:
+
+| القاعدة | السلوك |
+| --- | --- |
+| الهوية | يحدّد جلسة OpenCode المستدعية، لا جلسة نقل MCP. |
+| الوجود | قد يغيب في الاستدعاءات التي بلا سياق جلسة. |
+| الأمان | لا تستخدمه وحده للمصادقة أو التفويض. |
+| الخصوصية | تتلقى الخوادم البعيدة المعرّف الخام وقد تسجّله أو تحتفظ به. |
+
+## الإدارة
+
+اسرد الخوادم وحالة اتصالها الحالية من أي مشروع:
+
+```sh
+opencode mcp list
+```
+
+واستخدم `/mcps` في OpenCode لعرض الخوادم أو ربطها أو قطع اتصالها أو مصادقتها. واستخدم CLI لإضافة الخوادم وإدارة بيانات اعتماد OAuth:
+
+```sh
+opencode mcp add sentry --url https://mcp.sentry.dev/mcp
+opencode mcp auth sentry
+opencode mcp logout sentry
+```
+
+وشغّل `opencode mcp auth` دون اسم للاختيار من الخوادم التي تدعم OAuth:
+
+```sh
+opencode mcp auth
+```
+
+ولإزالة خادم، احذف إدخاله من إعدادات المشروع أو الإعدادات العامة التي أُضيف فيها:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {},
+  },
+}
+```
+
+وقطع اتصال خادم في `/mcps` لا يغيّر الإعدادات. فحرّر الإعدادات مباشرةً لإعدادات عميل OAuth أو المهل أو مجلدات العمل، أو لإبقاء خادم غير متصل:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "sentry": {
+        "type": "remote",
+        "url": "https://mcp.sentry.dev/mcp",
+        "disabled": true,
+      },
+    },
+  },
+}
+```

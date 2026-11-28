@@ -1,5 +1,6 @@
 ---
 title: "Skills"
+description: "Write SKILL.md files that give OpenCode agents reusable instructions for a task, loaded only when the task needs them."
 ---
 
 Create a skill to give an agent reusable instructions for a specific task. Put a `SKILL.md` file in `.opencode/skills/<skill-id>` and describe when to use it in `description`.
@@ -47,7 +48,7 @@ OpenCode automatically searches these locations:
 | Project               | `.opencode/skills`                     |
 | Project compatibility | `.claude/skills`, `.agents/skills`     |
 
-For project sources, OpenCode searches from the current directory up to the project root and includes matching directories at every level.
+For project sources, OpenCode searches from the current directory to the filesystem root and includes matching directories at every level.
 
 Each source can contain either form:
 
@@ -176,7 +177,7 @@ Sources are registered from lower to higher precedence:
 2. `.claude/skills`, global first and then from the farthest ancestor toward the current directory
 3. `.agents/skills`, global first and then from the farthest ancestor toward the current directory
 4. `~/.config/opencode/skills`
-5. Project `.opencode/skills`, from the project root toward the current directory
+5. Project `.opencode/skills`, from the farthest ancestor toward the current directory
 6. Explicit `skills` config entries, in config priority and array order
 
 Avoid duplicate IDs unless you intend to override an earlier skill.

@@ -5,7 +5,6 @@ export default {
   "usage.usage": "ການນໍາໃຊ້",
   "usage.cost": "ຄ່າໃຊ້ຈ່າຍ",
   "usage.view": "ເບິ່ງການໃຊ້ງານບໍລິບົດ",
-  "systemPrompt.title": "System prompt",
   "rawMessages.title": "ຂໍ້ຄວາມດິບ",
   "export.session": "ເຊດຊັນສົ່ງອອກ",
   "stats.session": "ເຊດຊັນ",

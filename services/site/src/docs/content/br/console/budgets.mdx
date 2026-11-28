@@ -1,0 +1,89 @@
+---
+title: "Orçamentos"
+description: "Limite o gasto mensal de um espaço de trabalho, dos membros e das contas de serviço."
+---
+
+Os orçamentos limitam o gasto mensal por meio de políticas. Proprietários e admins os gerenciam em **Controls**.
+
+## Níveis de orçamento
+
+| Escopo da política        | Aplica-se a                                           |
+| ---------------------- | ---------------------------------------------------- |
+| Todo o espaço de trabalho       | Gasto combinado de todos os membros e contas de serviço   |
+| Todos os membros            | Cada membro, ou um limite compartilhado por todos os membros |
+| Membros com as tags    | Membros com as tags escolhidas                         |
+| Estes membros          | Membros específicos                                     |
+| Todas as contas de serviço   | Cada conta de serviço, ou um limite compartilhado        |
+| Estas contas de serviço | Contas de serviço específicas                            |
+
+Uma requisição precisa respeitar todos os orçamentos aplicáveis. Um limite maior nunca se sobrepõe a um menor. Sem nenhum
+orçamento, o gasto é ilimitado.
+
+## Orçamento do espaço de trabalho
+
+O orçamento do espaço de trabalho bloqueia requisições de todos quando o espaço de trabalho o alcança.
+
+1. Abra **Controls** e clique em **Add policy**.
+2. Escolha **Entire workspace** e adicione uma regra **Budget**.
+3. Informe o limite mensal em USD e clique em **Save**.
+
+## Orçamentos de membros
+
+Escolha **All members** em uma política para definir um limite mensal por membro ou um limite compartilhado pelo grupo.
+Escolha membros ou tags específicos para aplicar o orçamento a um grupo menor.
+
+Para definir um orçamento individual:
+
+1. Abra a página do membro em **Settings › Members**.
+2. Clique em **Create budget policy** para abrir o editor de políticas com essa pessoa já selecionada.
+3. Informe o valor e clique em **Save**.
+
+A página do membro lista as políticas que se aplicam. Se um orçamento de todos os membros também o cobrir, os dois limites valem.
+
+## Orçamentos de contas de serviço
+
+Em **Controls**, escolha **All service accounts** ou **These service accounts**, adicione uma regra **Budget** e defina um
+limite mensal individual ou compartilhado. A política cobre todas as chaves dessas contas.
+
+## Valores e reinícios
+
+- Os valores são em dólares americanos, com até duas casas decimais.
+- Os orçamentos são reiniciados no dia 1 de cada mês às 00:00 UTC.
+- Um orçamento de `$0` bloqueia todos os gastos sujeitos a orçamento.
+- Ao adicionar ou alterar um orçamento, os gastos já registrados no mês continuam contando. O valor disponível não é restabelecido.
+
+## O que conta
+
+Por padrão, um orçamento cobre **All spend**. Você pode restringi-lo a modelos selecionados; então só esses modelos contam,
+com um limite para o conjunto ou um limite separado para cada modelo.
+
+| Gasto                                                               | Conta para orçamentos        |
+| ------------------------------------------------------------------- | ---------------------------- |
+| Modelos pagos do Console                                                 | Sim                          |
+| Modelos nos [seus próprios provedores](/console/providers) com preço definido | Sim, pelo preço configurado |
+| [Pesquisa na web](/console/websearch)                                    | Sim, para orçamentos de todos os gastos   |
+| Modelos grátis                                                         | Não                           |
+| Uso do [Go](/console/go) dentro do plano                             | Não                           |
+| Uso extra do Go pago com créditos                                    | Sim                           |
+
+## Quando um orçamento é atingido
+
+Novas requisições falham com HTTP `429` até o orçamento reiniciar ou um proprietário ou admin aumentá-lo. A resposta identifica
+que um limite de orçamento foi atingido, mas não identifica qual. Abra a requisição em **Activity › Logs** para ver a política
+que a bloqueou.
+
+```text
+Upstream request failed: Policy budget exceeded
+```
+
+Os orçamentos são verificados no início da requisição. Requisições em andamento terminam, então o gasto pode ficar um pouco acima do
+limite.
+
+## Acompanhar gastos
+
+Cada membro vê o próprio gasto e limite em **Activity**. Abra **My usage** para **Activity › Overview**,
+incluindo detalhes de orçamento e datas de reinício.
+
+Proprietários e admins podem abrir **Activity › Usage** pelo gráfico de gastos. Ele detalha o custo por dia, modelo e
+pessoa, e o botão **Export usage** baixa os totais diários dos últimos 7, 30 ou 90 dias em CSV. Para baixar o
+mesmo arquivo por um script, use a [API de exportação de uso](/console/api/usage-export).

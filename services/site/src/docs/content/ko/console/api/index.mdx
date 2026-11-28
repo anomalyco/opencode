@@ -1,0 +1,155 @@
+---
+title: "API 개요"
+description: "개인 API 키 또는 서비스 계정 키로 OpenCode Console API 요청을 인증하고 각 키에 허용할 작업을 지정하세요."
+---
+
+Console API를 사용하면 스크립트와 통합에서 모델을 호출하고 사용량을 내보낼 수 있습니다. 모든 요청은 API 키로
+인증합니다.
+
+```bash
+curl --fail-with-body "https://opencode.ai/inference/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+| API                                       | 엔드포인트                                        |
+| ----------------------------------------- | ------------------------------------------------- |
+| [Models](/console/api/models)             | `https://opencode.ai/console/api/v1/models`       |
+| [Inference](/console/api/inference)       | `https://opencode.ai/inference/...`               |
+| [Providers](/console/api/providers)       | `https://opencode.ai/inference/custom/...`        |
+| [Usage export](/console/api/usage-export) | `https://opencode.ai/console/api/v2/usage/export` |
+
+## API 키
+
+워크스페이스 멤버와 서비스 계정 모두 API 키를 가질 수 있습니다. 키는 베어러 토큰으로 보내세요.
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+|                  | 개인 API 키                                            | 서비스 계정 키                                                           |
+| ---------------- | ------------------------------------------------------ | ------------------------------------------------------------------------ |
+| 생성 주체        | 모든 멤버(본인용)                                      | 소유자와 관리자                                                          |
+| 생성 위치        | **Account › Personal API keys**                        | **Settings › Service accounts**                                          |
+| 권한 주체        | 키를 만든 멤버                                         | 서비스 계정                                                              |
+| 사용량 집계      | 멤버의 [예산](/console/budgets#member-budgets)         | 서비스 계정의 [예산](/console/budgets#service-account-budgets)           |
+| 적합한 용도      | 본인의 스크립트와 [harness](/console/harnesses)       | CI, 공유 머신, 통합                                                      |
+
+- 각 키는 만들 때 선택한 하나의 워크스페이스에서만 동작합니다. 워크스페이스 헤더는 필요하지 않습니다.
+- 전체 키는 만든 직후에 한 번만 표시됩니다. 이후 Console은 접두사만 보여 줍니다.
+- **Expiration**은 선택 사항입니다. **Never**, **1 day**, **7 days**, **30 days**, **Custom**(1~365일) 중에서
+  고릅니다. 만료된 키는 갱신할 수 없으므로 새로 만들어야 합니다.
+
+## 개인 API 키
+
+개인 키는 본인 자격으로 동작합니다. 본인의 역할, [예산](/console/budgets#member-budgets), 모델 규칙이 적용됩니다.
+
+1. 계정 메뉴에서 **Account**를 열고 **Personal API keys**를 찾으세요.
+2. **Add API key**를 클릭하세요.
+3. **Workspace**와 **Key name**을 지정하세요. **Expiration**은 선택 사항입니다. 소유자와 관리자는
+   **Permissions**도 선택하세요.
+4. **Create**를 클릭하고 키를 복사하세요.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+키는 현재 워크스페이스 접근 권한을 따릅니다. 역할이 바뀌면 키가 할 수 있는 일도 바뀝니다. 워크스페이스에서
+[SSO](/console/sso#sso-enforcement)를 적용하면 소유자가 아닌 한 활성 SSO 세션이 있는 동안에만 키가 동작합니다.
+
+## 서비스 계정
+
+서비스 계정은 사람이 아닌 작업 주체로 워크스페이스에 참여합니다. 자체 API 키, 사용량, [예산](/console/budgets#service-account-budgets)이 있으며,
+자동화에 사용하면 사용량이 특정 개인에게 귀속되지 않습니다. 소유자와 관리자가 서비스 계정을 관리합니다.
+
+1. **Settings › Service accounts**를 열고 **Add Service Account**를 클릭한 다음 이름을 지정하세요. 예를 들어 `CI Pipeline`으로 지정할 수 있습니다.
+2. 서비스 계정을 열고 **Add API Key**를 클릭하세요.
+3. **Key name**과 **Permissions**를 지정하고 필요하면 **Expiration**도 설정한 뒤 **Create**를 클릭하세요.
+4. 키를 복사하세요.
+
+```bash
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+소유자와 관리자는 나중에 키의 작업 메뉴에서 **Edit…**로 서비스 계정 키의 이름이나 권한을 바꿀 수 있습니다.
+
+## 권한
+
+각 키에는 권한 수준이 있으며, 만들 때 **Permissions**에서 선택합니다.
+
+| 권한           | 허용 범위                                                                            |
+| -------------- | ------------------------------------------------------------------------------------ |
+| **All**        | **This account's API keys**를 제외하고 멤버 또는 서비스 계정이 할 수 있는 모든 작업 |
+| **Restricted** | 선택한 리소스만                                                                      |
+| **Read only**  | 모든 리소스에 대한 읽기 권한. 모델 목록은 볼 수 있지만 호출할 수는 없습니다.         |
+
+키에 계정 자체보다 더 많은 권한을 부여할 수는 없습니다. 개인 키는 멤버의 현재 역할을, 서비스 계정 키는
+[서비스 계정에 허용된 작업](#limitations)의 범위를 넘을 수 없습니다.
+
+### 제한 키
+
+각 리소스를 **None**, **Read**, **Write** 중 하나로 설정합니다. **Write**에는 **Read**가 포함됩니다.
+
+| 리소스                      | 수준                  |
+| --------------------------- | --------------------- |
+| **Models**                  | **Read**, **Request** |
+| **Usage**                   | **Read**              |
+| **Budgets**                 | **Read**, **Write**   |
+| **Members**                 | **Read**, **Write**   |
+| **Providers**               | **Read**, **Write**   |
+| **Billing**                 | **Read**, **Write**   |
+| **Workspace settings**      | **Read**, **Write**   |
+| **SSO**                     | **Read**              |
+| **Service accounts**        | **Read**              |
+| **This account's API keys** | **Write**             |
+
+**Models › Read**는 모델 목록을 조회하고, **Models › Request**는 [Inference](/console/api/inference) 및
+[Providers](/console/api/providers) API를 통해 모델 호출까지 합니다. 예를 들어 모델 호출만 하는 키에는 다음이
+필요합니다.
+
+```text
+Permissions: Restricted
+Models:      Request
+```
+
+범위 지정 권한이 생기기 전에 **Inference only**로 만든 키는 **Models**가 **Request**로 설정된 **Restricted**로
+표시됩니다.
+
+### 부여할 수 있는 범위
+
+- **멤버**는 모델을 조회하고 호출하는 개인 키만 만들 수 있습니다. Console은 권한 선택 대신 “This key can list and
+  call models as you.”를 표시합니다.
+- **소유자와 관리자**는 자신의 역할 범위 안에서 개인 키에 **All**, **Restricted**, **Read only**를 부여할 수
+  있습니다. 기본값은 **Models**가 **Request**로 설정된 **Restricted**입니다. 나중에 역할이 낮아지면 키 권한도
+  그에 맞게 줄어듭니다.
+- **서비스 계정 키**의 기본값은 **All**입니다. 소유자와 관리자가 권한을 선택합니다.
+
+### 제한 사항
+
+일부 작업은 항상 사람이 Console에 로그인해야 하며, 키로 키를 만드는 것은 엄격히 제한됩니다.
+
+- 어떤 API 키도 SSO 설정을 바꾸거나 워크스페이스를 삭제할 수 없습니다.
+- 서비스 계정 키는 **All**이어도 멤버 초대, 역할 변경, 멤버 제거, 결제 관리, 워크스페이스 설정 변경, 모델 관리,
+  서비스 계정 생성이나 제거를 할 수 없습니다.
+- **This account's API keys**는 서비스 계정 키에서만 사용할 수 있으며 **All**에도 포함되지 않습니다. 이 권한이
+  있는 키로는 같은 서비스 계정의 키만 생성하거나 폐기할 수 있습니다. 새 키는 **Restricted**여야 하며, 생성에 사용한 키의
+  권한 범위를 넘거나 **This account's API keys** 권한을 포함할 수 없습니다.
+- 개인 키는 **This account's API keys**를 절대 가질 수 없고, 어떤 API 키도 개인 API 키를 만들거나 폐기할 수
+  없습니다.
+
+키 권한을 벗어난 요청은 HTTP `403`을 반환합니다.
+
+## 폐기
+
+| 키                  | 폐기할 수 있는 사람    | 위치                                                                              |
+| ------------------- | ---------------------- | --------------------------------------------------------------------------------- |
+| 개인 API 키         | 키를 소유한 멤버       | **Account › Personal API keys**에서 **Revoke**                                    |
+| 개인 API 키         | 소유자와 관리자        | **Settings › Members**의 멤버 페이지에 있는 **API Keys**                          |
+| 서비스 계정 키      | 소유자와 관리자        | **Settings › Service accounts**의 서비스 계정 페이지에 있는 **API Keys**          |
+
+다음 경우에도 키가 자동으로 폐기됩니다.
+
+- 워크스페이스를 떠나거나 워크스페이스에서 제거되거나 [SCIM](/console/scim)으로 프로비저닝 해제되면, 그 사람이
+  워크스페이스에서 만든 모든 키(서비스 계정 키 포함)가 폐기됩니다. 같은 서비스 계정의 다른 키는 계속 동작합니다.
+- 서비스 계정을 제거하면 그 키가 모두 폐기됩니다.
+
+폐기되거나 만료된 키는 즉시 동작을 멈추고 HTTP `401`을 반환합니다.

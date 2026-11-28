@@ -10,6 +10,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FileWrite } from "../../file-write.js"
+import { Flag } from "../../flag.js"
 
 export const name = "write"
 
@@ -33,12 +34,22 @@ export const Plugin = {
   id: "opencode.tool.write",
   effect: Effect.fn("WriteTool.Plugin")(function* (ctx: Context) {
     const fileWrite = yield* FileWrite.Service
+    const flags = yield* Flag.Service
 
     yield* ctx.tool
       .transform((editor) =>
         editor.add({
           name,
-          options: { codemode: false, permission: "edit" },
+          options: flags.current().full_codemode.enabled
+            ? {
+                codemode: {
+                  pinned: true,
+                  description:
+                    "Create a new file or overwrite an existing file on the local filesystem, creating missing parent directories automatically. Prefer `edit` for partial changes to existing files.",
+                },
+                permission: "edit",
+              }
+            : { codemode: false, permission: "edit" },
           description:
             "Writes a file to the local filesystem, overwriting if one exists.\n\nMissing parent directories are created automatically.\n\nUse this tool to create new files or overwrite existing files. For partial changes, use the edit tool instead.",
           input: Input,

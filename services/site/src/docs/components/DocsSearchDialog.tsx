@@ -2,14 +2,18 @@ import { SearchIcon } from "~/component/site/icons"
 import { useI18n } from "~/context/i18n"
 import { searchLook } from "~/component/site/search-palette"
 import { siteSettingsDefaults } from "~/component/site/settings"
+import type { Locale } from "~/lib/language"
 import type { DocsSet } from "../config"
+import { docsPagefindHref } from "../lib/navigation"
 
 /**
  * The site's ⌘K palette (search-palette.css) with the default look, searching the docs' full text
- * with Pagefind. Hidden until client.ts opens it and fills in the results. With nothing typed it is
- * just the field: the results list stays empty, so docs.css hides it and the field's divider.
+ * with Pagefind. Each language has its own index, beside the language's pages, so a page searches
+ * its own language (fallback pages included, with their English text). Hidden until client.ts opens
+ * it and fills in the results. With nothing typed it is just the field: the results list stays
+ * empty, so docs.css hides it and the field's divider.
  */
-export function DocsSearchDialog(props: { set: DocsSet }) {
+export function DocsSearchDialog(props: { set: DocsSet; locale: Locale }) {
   const i18n = useI18n()
   const look = siteSettingsDefaults
   return (
@@ -21,7 +25,7 @@ export function DocsSearchDialog(props: { set: DocsSet }) {
       data-motion={look.searchMotion}
       style={searchLook(look)}
       data-search-dialog
-      data-pagefind-path={`${props.set.base}pagefind/pagefind.js`}
+      data-pagefind-path={docsPagefindHref(props.set, props.locale)}
       hidden
     >
       <div data-slot="backdrop" aria-hidden="true" />

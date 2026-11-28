@@ -1,0 +1,401 @@
+---
+title: "Migrar plugins desde V1"
+description: "Adapta las herramientas y los hooks de un plugin de V1 a la API de plugins de V2."
+---
+
+La configuración de los plugins se puede normalizar automáticamente, pero debes adaptar el código de implementación. Las funciones de los plugins de V1
+devuelven un objeto que contiene herramientas y hooks. Un plugin de V2 exporta por defecto una definición con un `id` y `setup(ctx)`;
+`setup` registra hooks, transformaciones, herramientas y suscripciones a través del contexto.
+
+<Callout type="warning">
+  Las implementaciones de plugins de V1 no se ejecutan en V2. Mover un archivo o cambiar el nombre de su entrada de configuración no basta.
+</Callout>
+
+## Migrar la configuración del plugin
+
+Cambia el nombre de `plugin` a `plugins`. Sustituye una tupla de paquete y opciones por un objeto:
+
+```jsonc
+// V1
+{
+  "plugin": [
+    "opencode-example-plugin",
+    ["./plugin/local.ts", { "enabled": true }]
+  ]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+V2 descubre plugins locales tanto en `.opencode/plugin/` como en `.opencode/plugins/`; usa `.opencode/plugins/` para los archivos de V2.
+Las rutas locales de la configuración deben apuntar a directorios. En el ejemplo anterior, mueve la implementación adaptada a
+`./plugin/local/index.ts`. Si dejas configurado el archivo `./plugin/local.ts`, OpenCode lo ignora y registra una advertencia.
+Al mover el plugin, mantén los módulos auxiliares junto a él. Los plugins locales y los distribuidos como paquetes usan la misma API de
+implementación.
+
+## Sustituir el punto de entrada
+
+Cambia la importación del paquete, sustituye la función de plugin exportada por `Plugin.define` y mueve la inicialización a
+`setup`.
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ExamplePlugin: Plugin = async ({ directory, project, client }) => {
+  await client.app.log({
+    body: { service: "example", level: "info", message: `Loaded for ${project.id}` },
+  })
+
+  return {
+    // V1 tools and hooks
+  }
+}
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("last-project", ctx.location.project.id)
+    console.log(`Loaded for ${ctx.location.directory}`)
+  },
+})
+```
+
+Todos los plugins de V2 necesitan un `id` estable. Este ID delimita el almacenamiento del plugin y lo identifica en los datos de estado
+y diagnóstico. Los plugins publicados deberían depender de una versión de `@opencode/plugin` compatible con la versión de OpenCode
+a la que apuntan.
+
+## Migrar el contexto
+
+El contexto de V2 es a la vez un cliente de OpenCode y la API de plugins. La mayoría de las operaciones se agrupan por dominio en lugar de
+estar en una propiedad `client` aparte.
+
+| V1                                      | V2                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------- |
+| `directory`                             | `ctx.location.directory`                                            |
+| `project`                               | `ctx.location.project`                                              |
+| `client`                                | Métodos de dominio como `ctx.session`, `ctx.permission`, `ctx.agent` |
+| argumento de opciones del plugin        | `ctx.options`                                                       |
+| hook `dispose()` devuelto               | función de limpieza devuelta por `setup`                            |
+| hook `event` devuelto                   | `ctx.event.subscribe()`                                             |
+| cambios de configuración, modelo o herramientas devueltos | un `transform(...)` de dominio                    |
+| ayudante de shell `$` de Bun            | importa y gestiona la API de procesos que use tu plugin             |
+
+`ctx.location` describe la ubicación donde se cargó esta instancia del plugin. No es la ubicación de cada sesión o evento
+que el plugin pueda observar. Lee los datos de la sesión o del evento cuando esa distinción importe.
+
+El contexto expone muchos más dominios que los de la tabla, incluidos comandos, integraciones, servidores MCP,
+referencias, skills, almacenamiento, VCS, worktrees y búsqueda web. Consulta el [contexto completo de plugins](/build/plugins/server#api).
+
+### Migrar el dominio del catálogo
+
+Las versiones anteriores de los plugins publicaban proveedores y modelos a través de `ctx.catalog`. OpenCode ahora expone
+`ctx.provider` y `ctx.model` como dominios separados. Por eso, un plugin que llame a `ctx.catalog.transform` no se carga.
+
+| API del catálogo anterior                     | Equivalente actual                                                           |
+| --------------------------------------------- | ---------------------------------------------------------------------------- |
+| `ctx.catalog.transform(draft => …)`           | `ctx.provider.transform(editor => …)` y `ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)`               | `editor.update(id, fn)` en `ctx.provider`                                    |
+| `draft.model.update(providerID, modelID, fn)` | `editor.update(providerID, modelID, fn)` en `ctx.model`                      |
+| `ctx.catalog.reload()`                        | `ctx.provider.reload()` y `ctx.model.reload()`                             |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+Consulta [Proveedores](/build/plugins/server#providers) y [Modelos](/build/plugins/server#models) para ver las API completas de los editores.
+
+## Registrar hooks en `setup`
+
+V1 devuelve los hooks con claves de tipo cadena. V2 registra cada hook en el dominio responsable de la operación. El callback recibe un
+evento mutable en lugar de objetos `input` y `output` separados.
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const GuardPlugin: Plugin = async () => ({
+  "tool.execute.before": async (input, output) => {
+    if (input.tool === "read" && output.args.filePath.includes(".env")) {
+      throw new Error("Do not read .env files")
+    }
+  },
+  "shell.env": async (_input, output) => {
+    output.env.COMPANY_ENV = "development"
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.guard",
+  async setup(ctx) {
+    await ctx.tool.hook("execute.before", (event) => {
+      const input = event.input as { filePath?: string }
+      if (event.tool === "read" && input.filePath?.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    })
+
+    await ctx.shell.hook("create.before", (event) => {
+      event.env.COMPANY_ENV = "development"
+    })
+  },
+})
+```
+
+Los registros siguen activos mientras el plugin está cargado y se retiran cuando este se descarga. Conserva el registro devuelto
+solo cuando el plugin necesite eliminar antes ese hook o transformación con `registration.dispose()`.
+
+Usa esta tabla para encontrar la API de V2 más cercana para cada hook de V1:
+
+| Hook de V1                             | API de V2                                                    |
+| -------------------------------------- | ------------------------------------------------------------ |
+| `event`                                | `ctx.event.subscribe()`                                      |
+| `dispose`                              | función de limpieza devuelta por `setup`                     |
+| `config`                               | transformaciones en los dominios afectados                   |
+| mapa `tool`                            | `ctx.tool.transform(...)`                                    |
+| `auth`                                 | `ctx.integration.transform(...)` y las API de integración    |
+| `provider`                             | `ctx.provider.transform(...)` y `ctx.model.transform(...)`   |
+| `chat.message`                         | `ctx.session.hook("prompt", ...)`                            |
+| `chat.params`                          | `ctx.session.hook("context", ...)`                           |
+| `chat.headers`                         | `ctx.session.hook("model.request", ...)` o `"http.request"`  |
+| `permission.ask`                       | `ctx.permission.hook("evaluate", ...)`                       |
+| `command.execute.before`               | transformaciones de comandos o el hook de prompt, según la intención |
+| `tool.execute.before`                  | `ctx.tool.hook("execute.before", ...)`                       |
+| `tool.execute.after`                   | `ctx.tool.hook("execute.after", ...)`                        |
+| `shell.env`                            | `ctx.shell.hook("create.before", ...)`                       |
+| `tool.definition`                      | `ctx.tool.transform(...)`                                    |
+| `experimental.chat.system.transform`   | `ctx.session.hook("context", ...)` y edita `event.system`    |
+| `experimental.chat.messages.transform` | `ctx.session.hook("context", ...)` y edita `event.messages`  |
+| `experimental.session.compacting`      | `ctx.session.hook("compaction", ...)`                        |
+
+Son equivalencias para la migración, no meros cambios de nombre. En particular, el hook `prompt` de V2 se ejecuta antes de
+guardar el prompt de forma persistente en la bandeja de entrada, mientras que `context` se ejecuta justo antes de una solicitud al modelo del agente. Registra `context`, `compaction`,
+`generate` y `title` por separado si una transformación debe aplicarse a todos los tipos de solicitud al modelo.
+
+No hay un hook de V2 directo correspondiente a cada hook experimental de V1. Reevalúa los plugins que usan
+`experimental.compaction.autocontinue`, `experimental.provider.small_model` o `experimental.text.complete` frente a las
+API de sesión, proveedor, modelo y eventos de V2, en lugar de conservar una suposición sobre el ciclo de vida interno.
+
+`command.execute.before` tampoco tiene un hook global equivalente. Registra un comando con `ctx.command.transform` cuando el
+plugin sea responsable de ese comando. Usa el hook de prompt cuando la intención real sea modificar los prompts enviados por comandos y otras
+fuentes de prompt.
+
+## Migrar hooks de solicitud
+
+V2 separa la admisión del prompt, el contexto visible para el modelo, las opciones semánticas del modelo y el HTTP nativo. Elige la capa
+más concreta que necesite tu plugin.
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const RequestPlugin: Plugin = async () => ({
+  "chat.params": async (_input, output) => {
+    output.temperature = 0.2
+    output.maxOutputTokens = 8_000
+  },
+  "chat.headers": async (_input, output) => {
+    output.headers["x-plugin"] = "review"
+  },
+  "experimental.chat.system.transform": async (_input, output) => {
+    output.system.push("Focus on correctness.")
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "review-request",
+  async setup(ctx) {
+    await ctx.session.hook("context", (event) => {
+      event.system.push({ type: "text", text: "Focus on correctness." })
+      event.options.temperature = 0.2
+      event.options.maxTokens = 8_000
+    })
+
+    await ctx.session.hook("model.request", (event) => {
+      event.headers["x-plugin"] = "review"
+    })
+  },
+})
+```
+
+Usa opciones semánticas del proveedor en `event.options`. Usa `model.request` para los encabezados de solicitud al modelo y los ajustes de solicitud sin procesar,
+y usa `http.request` o `http.response` solo cuando el plugin necesite el intercambio HTTP nativo del proveedor. Los hooks específicos del
+proveedor pueden pasar `{ providerID: "..." }` como tercer argumento a `ctx.session.hook`.
+
+## Migrar herramientas personalizadas
+
+V1 devuelve un mapa `tool` creado con el antiguo ayudante `tool()`. V2 registra definiciones de herramientas mediante un editor
+`ctx.tool.transform` síncrono. Los esquemas de herramientas usan JSON Schema, y la ejecución devuelve contenido estructurado.
+
+```ts title="V1"
+import { tool } from "@opencode-ai/plugin"
+
+export const ToolsPlugin = async () => ({
+  tool: {
+    greeting: tool({
+      description: "Create a greeting",
+      args: { name: tool.schema.string() },
+      async execute(args) {
+        return `Hello ${args.name}!`
+      },
+    }),
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "greeting",
+  async setup(ctx) {
+    await ctx.tool.transform((editor) => {
+      editor.add({
+        name: "greeting",
+        description: "Create a greeting",
+        input: {
+          type: "object",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+          additionalProperties: false,
+        },
+        async execute(input) {
+          return { content: `Hello ${(input as { name: string }).name}!` }
+        },
+      })
+    })
+  },
+})
+```
+
+Las transformaciones modifican el estado y se pueden volver a aplicar. Procura que el callback sea síncrono, consuma pocos recursos y no produzca efectos secundarios que solo deban ocurrir una vez. Carga
+los datos externos antes de registrar la transformación, captúralos en el callback y llama al método `reload()` del dominio cuando esos datos
+cambien. Una transformación posterior de un plugin ve los cambios anteriores y puede actualizarlos, sustituirlos o eliminarlos.
+
+El mismo patrón de transformación sustituye los hooks `config` y `provider` de V1, pero V2 no expone un único objeto de configuración global
+mutable. Registra el cambio en el dominio que lo posee: `ctx.agent`, `ctx.provider`, `ctx.model`, `ctx.command`,
+`ctx.integration`, `ctx.mcp`, `ctx.reference`, `ctx.skill`, `ctx.tool`, `ctx.vcs`, `ctx.websearch` o `ctx.worktree`.
+Los métodos de autenticación pertenecen a las integraciones; las transformaciones de proveedor aportan definiciones de origen y ajustes de proveedor,
+mientras que las transformaciones de modelo aplican restricciones y sobrescrituras a la colección completa de modelos de proveedores activos.
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("anthropic", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+})
+
+await ctx.model.transform((editor) => {
+  editor.list("anthropic").forEach((model) => {
+    if (!model.capabilities.tools) editor.remove(model.providerID, model.id)
+  })
+})
+```
+
+## Migrar eventos y limpieza
+
+La devolución de llamada `event` de V1 pasa a ser una suscripción asíncrona al flujo de eventos públicos del servidor. Cancélala desde la función de limpieza
+devuelta por `setup`.
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "notifications",
+  setup(ctx) {
+    const controller = new AbortController()
+
+    void (async () => {
+      for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+        if (event.type === "session.idle") console.log("Session completed")
+      }
+    })()
+
+    return () => controller.abort()
+  },
+})
+```
+
+Usa la función de limpieza para temporizadores, subprocesos, sockets y otros recursos propiedad del plugin. Los registros de hooks y transformaciones
+tienen ámbito de plugin y se limpian automáticamente.
+
+## Migrar opciones y estado persistente
+
+Lee las opciones de `ctx.options`. Usa `ctx.storage` en lugar de inventar un archivo global cuando el estado pertenezca a un plugin; sus
+valores JSON son duraderos y tienen ámbito de plugin.
+
+```ts
+const strict = ctx.options.strict === true
+await ctx.storage.set("settings", { strict })
+const settings = await ctx.storage.get("settings")
+```
+
+## Admitir V1 y V2 desde un mismo paquete
+
+Un paquete puede exponer temporalmente ambas implementaciones desde una misma exportación predeterminada. V1 llama a `server()` y V2 llama a
+`setup()`. Las API siguen siendo distintas; esta forma no traduce los hooks automáticamente.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default {
+  ...Plugin.define({
+    id: "example",
+    async setup(ctx) {
+      await ctx.tool.hook("execute.before", () => {
+        console.log("A tool is about to run")
+      })
+    },
+  }),
+  async server() {
+    return {
+      "tool.execute.before": async () => {
+        console.log("A tool is about to run")
+      },
+    }
+  },
+}
+```
+
+Los puntos de entrada de objeto de V1 son compatibles con OpenCode `1.18.29` y posteriores. Si das soporte a versiones de V1 anteriores, usa versiones
+o puntos de entrada separados del paquete y prueba la versión más antigua que afirmes admitir. Elimina la implementación de V1 cuando termine tu
+periodo de soporte.
+
+## Verificar un plugin migrado
+
+Para cada plugin:
+
+1. Confirma que su ID y su origen aparecen en la lista de plugins activos.
+2. Prueba cada hook, transformación, herramienta, comando y suscripción a eventos que hayas registrado.
+3. Verifica la limpieza recargando o eliminando el plugin.
+4. Pruega las opciones del plugin y el estado persistido con un proyecto limpio.
+5. Para un paquete publicado, prueba el paquete instalado, no solo una copia enlazada al espacio de trabajo.
+
+Consulta [Servidor](/build/plugins/server) para la API Promise completa, [Plugins de Effect](/build/plugins/effect) para el punto de entrada de Effect,
+[RPC de plugins](/build/plugins/rpc) para los métodos y eventos personalizados, y [Plugins de TUI](/build/plugins/cli) para
+la interfaz de terminal.

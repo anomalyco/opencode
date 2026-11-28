@@ -1,0 +1,175 @@
+---
+title: "Inferens-API"
+description: "Kall OpenAI-, Anthropic- og Gemini-kompatible modeller gjennom Console-inferens med én autentiseringsheader."
+---
+
+Console tilbyr API-er som er kompatible med OpenAI, Anthropic og Gemini, på `https://opencode.ai/inference`. Send en
+JSON-`POST`-forespørsel til endepunktet som samsvarer med modellens API-familie.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kimi-k3",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## Autentisering
+
+Erstatt `<token>` med en [personlig API-nøkkel](/console/api#personal-api-keys) eller en [tjenestekontonøkkel](/console/api#service-accounts) opprettet i [Console](https://opencode.ai/console). Betalte modeller
+krever headeren. Chatmodeller på gratisnivået er bare tilgjengelige fra OpenCode; andre klienter får HTTP `403`,
+selv med en API-nøkkel. Bruk betalte modeller eller et [Go](/console/go)-abonnement fra andre klienter.
+
+```text
+Authorization: Bearer <token>
+```
+
+## Endepunkter
+
+| API                     | Sti                                                       |
+| ----------------------- | --------------------------------------------------------- |
+| OpenAI Chat Completions | `/inference/openai/v1/chat/completions`                   |
+| OpenAI Responses        | `/inference/openai/v1/responses`                          |
+| Anthropic Messages      | `/inference/anthropic/v1/messages`                        |
+| Gemini                  | `/inference/google/v1beta/models/<model>:generateContent` |
+| System One (beslutninger) | `/inference/systemone/v1/systemone`                     |
+| OpenAI Decisions        | `/inference/openai/v1/decisions`                          |
+| OpenAI Embeddings       | `/inference/openai/v1/embeddings`                         |
+
+Hver modell er tilgjengelig via én API-familie. Se tabellen over [modellendepunkter](/console/models#endpoints), eller hent den oppdaterte
+listen:
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+[API-et for modellisten](/console/api/models) beskriver alle feltene i svaret og forklarer også Console-listen, som tar med de
+tilkoblede leverandørene dine.
+
+### OpenAI Chat Completions
+
+Åpne modeller som `kimi-k3`, `glm-5.3` og `minimax-m3` bruker Chat Completions-API-et. Det gjør også gratismodellene.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-5.3",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### OpenAI Responses
+
+GPT-modeller bruker Responses API.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-6.1-sol",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Messages
+
+Claude- og Qwen-modeller bruker Messages API. `max_tokens` er påkrevd.
+
+```bash
+curl -X POST "https://opencode.ai/inference/anthropic/v1/messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Gemini
+
+For Gemini-modeller angir du modellen og metoden i stien. Erstatt `:generateContent` med `:streamGenerateContent` for å
+strømme svaret.
+
+```bash
+curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-4-argon:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+### System One
+
+Decision-modeller som `jev-1.14`, `gemini-decision-1` og `gpt-6-luna-decision` svarer på spørsmål med definerte typer om en
+`state` i stedet for å generere tekst. Se [decision-modeller](/console/models#jev) for spørsmålstyper og medieinndata.
+
+```bash
+curl -X POST "https://opencode.ai/inference/systemone/v1/systemone" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.14",
+    "state": "My card was charged twice and I need a refund today",
+    "questions": { "urgent": { "type": "noul", "instructions": "Is this request urgent?" } }
+  }'
+```
+
+De samme modellene tar også OpenAIs Decisions-format på `/inference/openai/v1/decisions`.
+
+### OpenAI Embeddings
+
+Embedding-modeller som `text-embedding-3-small` og `qwen3-embedding-8b` bruker Embeddings API. Se
+[embedding-modeller](/console/models#embedding-models) for alle modeller og alternativer.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/embeddings" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen3-embedding-8b",
+    "input": "How do I reset my password?"
+  }'
+```
+
+Decision- og embedding-modellene som inngår i [Go](/console/go#endpoints), er tilgjengelige på de samme stiene under
+`/inference/go`.
+
+## Kostnad
+
+Hvert svar oppgir hva forespørselen kostet deg, sammen med brukstallene API-et allerede returnerer: i `usage` for OpenAI og
+Anthropic, og i `usageMetadata` for Gemini. Ved strømming oppgis kostnaden i hendelsen med de endelige brukstallene: den siste
+delen med brukstall for Chat Completions med `stream_options.include_usage`, `response.completed` for Responses,
+`message_delta` for Messages og den siste delen for Gemini.
+
+```json
+"usage": {
+  "prompt_tokens": 1200,
+  "completion_tokens": 300,
+  "cost": 0.00412,
+  "opencode": {
+    "billing_source": "balance",
+    "list_cost": 0.00412,
+    "tokens": { "input": 1200, "output": 300, "reasoning": 120, "cache_read": 8000, "cache_write_5m": 0, "cache_write_1h": 0 }
+  }
+}
+```
+
+| Felt                      | Betydning                                                                                                                    |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `cost`                    | Amerikanske dollar belastet saldoen din. `0` for gratis modeller og for [Go](/console/go)-bruk innenfor grensene. Med din egen leverandørnøkkel, et anslag på det leverandøren din belaster, med mindre den rapporterer sitt eget; utelatt når modellen ikke har noen pris. |
+| `opencode.billing_source` | `free`, `balance`, `go`, `go-plus` eller `byok` (din egen leverandørnøkkel).                                                 |
+| `opencode.list_cost`      | Amerikanske dollar til modellens pris, inkludert rushtid og lang kontekst-prising.                                           |
+| `opencode.estimated`      | `true` når `cost` er et anslag til modellens pris i stedet for et beløp OpenCode belastet. Sett bare med din egen leverandørnøkkel. |
+| `opencode.allowance`      | Bare Go: hvor mye forespørselen talte mot [bruksgrensene](/console/go#usage-limits) dine, i dollar av planens månedlige grense. |
+| `opencode.tokens`         | Tokens du ble belastet for. `input` utelater bufferlesinger og -skrivinger; `output` inkluderer `reasoning`.                |
+
+Bildegenerering returnerer de samme feltene i svaret. Ved strømming følger feltene med hvert ferdige bilde og viser kostnaden så langt.
+Kostnaden er kjent når hele svaret er sendt, før saldoen eller Go-bruken oppdateres. Hvis saldoen blir tom eller du når en Go-grense
+under en forespørsel, kan du belastes mindre enn rapportert, aldri mer.

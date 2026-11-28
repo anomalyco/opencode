@@ -1,0 +1,617 @@
+---
+title: "設定"
+description: "opencode.json または opencode.jsonc で OpenCode を設定します。設定ファイルの場所、優先順位、変数の置換方法を説明します。"
+---
+
+プロジェクトに `opencode.jsonc` を作成して OpenCode を設定します。エディタの検証用にスキーマを追加し、必要なオプションだけを設定します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-5-5",
+}
+```
+
+OpenCode にこのファイルの更新を依頼することもできます。
+
+## 形式
+
+OpenCode は JSON と JSONC をサポートします。コメントや末尾のカンマを使いたい場合は JSONC を使用します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Use this model by default.
+  "model": "anthropic/claude-sonnet-5-5",
+}
+```
+
+## 場所
+
+マシン全体に適用する管理設定は、システム設定ディレクトリに置きます。
+
+| プラットフォーム | ディレクトリ                            |
+| ---------------- | --------------------------------------- |
+| macOS            | `/Library/Application Support/opencode` |
+| Linux            | `/etc/opencode`                         |
+| Windows          | `%ProgramData%\opencode`                |
+
+システムディレクトリはグローバルディレクトリと同様に機能します。`opencode.json(c)` に加えて、マシン上のすべてのユーザー向けに `agents/`、`commands/`、`skills/`、`plugins/` を読み込みます。
+
+```text
+/etc/opencode/
+├── opencode.json
+├── agents/review.md
+├── commands/release.md
+└── skills/deploy/SKILL.md
+```
+
+macOS では、MDM ツールが `ai.opencode.managed` ドメインに配信する管理対象の環境設定も読み取ります。ユーザー固有のプロファイルはマシン全体のプロファイルを置き換えます。
+
+```text
+/Library/Managed Preferences/<user>/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist
+```
+
+管理設定は最も優先されるため、ユーザーやプロジェクトはそこで設定された値を上書きできず、管理対象の環境設定はシステムディレクトリより優先されます。設定だけでは、ユーザーがプロバイダー、MCP サーバー、エージェント、プラグインを追加することを防げません。制限を強制するには、管理設定の[ポリシー](/policies#precedence)を使用します。
+
+すべてのプロジェクトに適用するユーザー設定は、グローバル設定に置きます。
+
+```text
+~/.config/opencode/opencode.json(c)
+```
+
+プロジェクトの設定は、次のいずれかのファイルに置きます。
+
+```text
+/home/user/projects/my-app/opencode.json(c)
+/home/user/projects/my-app/.opencode/opencode.json(c)
+```
+
+OpenCode はカレントディレクトリからファイルシステムのルートまで検索します。まず各ディレクトリ直下の `opencode.json(c)` を、カレントディレクトリから遠い順にマージします。次に、`.opencode` ディレクトリ内のファイルを同じ順序でマージします。つまり、見つかった `.opencode` 内の設定はどれも、各ディレクトリ直下の設定より優先されます。この動作が必要でなければ、ディレクトリツリー全体でどちらか一方の形式に統一してください。
+
+たとえば、`/home/user/projects/acme/packages/web` から OpenCode を起動した場合を考えます。
+
+```text
+/etc/opencode/opencode.json
+~/.config/opencode/opencode.json
+
+/home/user/projects/acme/
+├── opencode.json
+└── packages/
+    └── web/
+        ├── opencode.json
+        └── src/
+```
+
+OpenCode はこれらのファイルを優先度の低い順から高い順に適用します。
+
+1. `~/.config/opencode/opencode.json`
+2. `/home/user/projects/acme/opencode.json`
+3. `/home/user/projects/acme/packages/web/opencode.json`
+4. `/etc/opencode/opencode.json`
+
+パッケージの設定はリポジトリの設定の一致する設定を上書きし、リポジトリの設定はグローバル設定を上書きします。システムの設定はそれらすべてを上書きします。競合しない設定は保持されます。グローバルファイルとプロジェクトファイルの[ポリシー](/policies#precedence)は逆の順序で評価され、システムのポリシーがそれらすべてより優先されます。
+
+## スキーマ
+
+OpenCode の完全な設定スキーマは [opencode.ai/config.json](https://opencode.ai/config.json) で公開されています。
+
+JSON Schema に対応したエディタで検証と補完を有効にするには、設定ファイルに `$schema` フィールドを追加します。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json"
+}
+```
+
+利用可能なフィールド、受け付ける値、ネストした設定の形状については、スキーマを正としてください。
+
+### シェル
+
+ターミナルとシェルツールが使用するシェルを設定します。
+
+```jsonc
+{
+  "shell": "/bin/zsh",
+}
+```
+
+### モデル
+
+デフォルトのモデルを `provider/model` 形式で設定します。ルートのデフォルトは現在 `#variant` を保持しませんが、エージェントとコマンドのモデル参照では指定できます。
+
+```jsonc
+{
+  "model": "anthropic/claude-sonnet-5-5",
+}
+```
+
+モデルの選択とローカルモデルについては[モデルガイド](/models)を参照してください。
+
+### エージェント
+
+セッションが明示的に選択していない場合に使用するプライマリエージェントを選びます。
+
+```jsonc
+{
+  "default_agent": "build",
+}
+```
+
+組み込みエージェントとカスタムエージェントについては[エージェントガイド](/agents)を参照してください。
+
+### 更新
+
+更新の確認はグローバル設定で制御します。`update` を `"disable"` にすると確認をスキップし、`"notify"` にするとインストール前に利用可能な更新を表示し、`"auto"` にすると自動的にインストールします。省略した場合、`update` のデフォルトは `"notify"` です。
+
+自動インストールは実行中のサーバーを再起動しません。インストールされた更新を有効にするには、手動で再起動してください。プロジェクトレベルの値は無視されます。
+
+```jsonc
+{
+  "update": "notify",
+}
+```
+
+### ユーザー名
+
+ユーザー名を設定します。OpenCode はこのフィールドを受け付けますが、会話には表示しません。
+
+```jsonc
+{
+  "username": "alice",
+}
+```
+
+### 権限
+
+エージェントが一致するリソースに対してツールを使用する前に、許可、拒否、確認を行う順序付きのルールを定義します。
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "shell",
+      "resource": "git push *",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+ルールのマッチングと利用可能なアクションについては[権限ガイド](/permissions)を参照してください。
+
+### ポリシー
+
+プロバイダーの使用を許可または拒否し、権限チェックを強制的に拒否し、MCP サーバー、スキル、プラグインをブロックします。順序付きのステートメントを使用し、より広い設定で上書きできます。
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+  ],
+}
+```
+
+マッチング、設定ファイル間の優先順位、Console のマネージドポリシーについては[ポリシーガイド](/policies)を参照してください。
+
+### エージェント定義
+
+組み込みエージェントを上書きするか、独自のモデル、指示、モード、権限を持つ特化型エージェントを定義します。
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "description": "Review changes without editing files",
+      "mode": "subagent",
+      "system": "Focus on correctness, security, and missing tests.",
+      "permissions": [{ "action": "edit", "resource": "*", "effect": "deny" }],
+    },
+  },
+}
+```
+
+すべてのエージェントオプションとファイルベースのエージェントについては[エージェントガイド](/agents)を参照してください。
+
+### スナップショット
+
+元に戻す操作とリバートで使用されるファイルシステムのスナップショットを有効または無効にします。
+
+```jsonc
+{
+  "snapshots": false,
+}
+```
+
+元に戻す操作とやり直しの動作については[スナップショットガイド](/snapshots)を参照してください。
+
+### ウォッチャー
+
+ファイルシステムの更新をトリガーすべきでないファイルとディレクトリを無視します。
+
+```jsonc
+{
+  "watcher": {
+    "ignore": ["dist/**", "coverage/**"],
+  },
+}
+```
+
+### フォーマッター
+
+`write`、`edit`、`patch` ツールがファイルを変更した後にフォーマットします。`formatter` を `true` にすると、利用可能な組み込みフォーマッターが有効になります。
+
+```jsonc
+{
+  "formatter": true,
+}
+```
+
+組み込みとカスタムのフォーマッターについては[フォーマッターガイド](/formatters)を参照してください。
+
+### メディア
+
+`read` ツールが読み込んだ大きな画像を、モデルに送信する前にリサイズするか拒否するかを制御します。
+
+```jsonc
+{
+  "media": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880,
+    },
+  },
+}
+```
+
+画像処理と制限については[添付ファイルガイド](/attachments)を参照してください。
+
+### 出力
+
+ツールの結果から保持する最大行数と最大バイト数を設定します。
+
+```jsonc
+{
+  "tool_output": {
+    "max_lines": 2000,
+    "max_bytes": 51200,
+  },
+}
+```
+
+### 検索
+
+OpenCode の Web 検索方法を選択します。`"random"` を指定すると、利用可能なプロバイダーが自動的に選択されます。
+
+```jsonc
+{
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+プロバイダー、認証情報、選択、レート制限、検索の無効化については [Web 検索ガイド](/websearch)を参照してください。
+
+### MCP
+
+ローカルおよびリモートの Model Context Protocol サーバーを設定します。グローバルの `mcp.timeout` 値は設定ファイルで定義されたサーバーに適用され、各サーバーの `timeout` がそれらを上書きします。
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["bunx", "@playwright/mcp"],
+      },
+    },
+  },
+}
+```
+
+リモートサーバー、OAuth、環境変数、タイムアウトについては [MCP ガイド](/mcp-servers)を参照してください。
+
+### コンパクション
+
+自動のコンテキストコンパクションと、保持する直近のコンテキスト量を制御します。
+
+```jsonc
+{
+  "compaction": {
+    "auto": true,
+    "keep": {
+      "tokens": 15000,
+    },
+    "buffer": "15%",
+  },
+}
+```
+
+`buffer` は、自動コンパクションが始まる前に空けておくモデルのコンテキストウィンドウの割合です。
+
+ローカル要約が引き続きデフォルトです。プロバイダーまたはモデルのポリシーで、自動と手動の両方のリクエストにプロバイダー自身のコンパクションを指定できます。
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-6.1-sol": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}
+```
+
+モデルの設定はプロバイダーの設定を上書きします。自動コンパクションは、選択されたモデルの使用可能な入力バジェットを使用します。プロバイダーのチェックポイントは、ローカル要約が保持する末尾に使うのと同じ `compaction.keep.tokens` のバジェット内で、直近のユーザーメッセージを保持します。トップレベルの `compaction.auto: false` は、インストール済みのチェックポイントを破棄せずに新しい自動コンパクションを無効にします。バジェットとオーバーフローからの復旧については[コンパクションガイド](/compaction)を参照してください。
+
+### ウォーミング
+
+最近アクティブだったモデルセッションを、定期的な一時リクエストでウォームに保ちます。ウォーミングはデフォルトで無効です。`true` にすると、各モデルのキャッシュが失効する直前に、最大 30 分間ウォーミングします。
+
+```jsonc
+{
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "auto",
+    "duration": "30 minutes",
+  },
+}
+```
+
+プロバイダーまたはモデルの `settings.cache.warming` がこれを上書きし、`settings.cache.ttl` がプロバイダーがキャッシュを保持する期間を設定します。リクエストの動作、カスタマイズ、コストの考慮事項については[ウォーミングガイド](/warming)、`cache.ttl` については[キャッシュの有効期間](/models#cache-lifetime)を参照してください。
+
+### スキル
+
+OpenCode がエージェントのスキルを検索するディレクトリまたは URL を追加します。
+
+```jsonc
+{
+  "skills": ["./team-skills", "https://example.com/.well-known/skills/"],
+}
+```
+
+スキルの構造と `.opencode/skills/` 以下の自動検出については[スキルガイド](/skills)を参照してください。
+
+### コマンド
+
+再利用可能なスラッシュコマンドを、名前付きのプロンプトテンプレートとして定義します。
+
+```jsonc
+{
+  "commands": {
+    "review": {
+      "description": "Review the current changes",
+      "template": "Review the current diff for correctness and missing tests.",
+    },
+  },
+}
+```
+
+引数、モデル、エージェント、ファイルベースのコマンドについては[コマンドガイド](/commands)を参照してください。
+
+### 指示
+
+追加の指示ファイル、glob、HTTP(S) の URL を宣言します。OpenCode は検出された `AGENTS.md` ファイルとともにそれらを読み込みます。
+
+```jsonc
+{
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md"],
+}
+```
+
+プロジェクトの指示と `AGENTS.md` については[指示ガイド](/instructions)を参照してください。
+
+### 参照
+
+ローカルディレクトリまたは Git リポジトリを、名前付きの補助コンテキストとして利用できるようにします。
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Product behavior and terminology",
+    },
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+省略形、可視性、パスの解決については[参照ガイド](/references)を参照してください。
+
+### Worktree
+
+新しいローカル worktree の親ディレクトリを設定します。OpenCode は要求された、または生成された worktree 名を追加します。
+
+```jsonc
+{
+  "worktree": {
+    "directory": "../worktrees",
+  },
+}
+```
+
+相対パスは、プロジェクトの基準として保存されているチェックアウトを起点に解決します。グローバル設定とプロジェクト設定のどちらにも同じルールが適用されます。絶対パスはそのまま使い、`~/` はユーザーのホームディレクトリを起点に解決します。
+
+たとえば、次のグローバル設定は、新しい worktree を各プロジェクト自身の `.lane/trees/` ディレクトリの下に配置します。
+
+```jsonc
+{
+  "worktree": {
+    "directory": ".lane/trees",
+  },
+}
+```
+
+この設定がない場合、作成にはサーバーのデータディレクトリの `worktree/<first-six-project-ID-characters>`（プロジェクト ID の先頭 6 文字）が使用されます。worktree の作成と更新は、他のクローンが同じプロジェクト ID を共有している場合も含め、プロジェクトの保存されたカノニカルなチェックアウトから設定を読み込みます。この設定を変更しても既存の worktree は移動しません。
+
+Git が組み込みのデフォルトです。ストラテジーを登録する[プラグイン](/build/plugins/server#worktrees)は、そのプラグインのランタイムで自動的にデフォルトになります。プロジェクトの操作はカノニカルなチェックアウトのランタイムを使用します。ストラテジー固有のオプションは `worktree` 設定オブジェクトではなく、そのプラグインに属します。
+
+### プラグイン
+
+パッケージまたはローカルのプラグインディレクトリからプラグインを読み込みます。プラグインがオプションを受け付ける場合はオブジェクト形式を使用します。
+
+```jsonc
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugins/local",
+      "options": {
+        "enabled": true,
+      },
+    },
+  ],
+}
+```
+
+プラグインの読み込みと設定については[プラグインガイド](/plugins)を参照してください。
+
+### プロバイダー
+
+プロバイダーを設定し、そのモデル、リクエスト設定、ヘッダー、モデルバリアントを追加または上書きします。
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol-custom": {
+          "modelID": "gpt-6.1-sol",
+          "name": "GPT-6.1 Sol Custom",
+          "limit": {
+            "context": 200000,
+            "output": 32000,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+プロバイダーの `settings.transport: "websocket"` は、そのセッション WebSocket を選択します。
+
+認証情報、カスタムエンドポイント、プロバイダーパッケージ、WebSocket トランスポート、モデル設定については[プロバイダーガイド](/providers)を参照してください。
+
+## 変数
+
+設定ファイルでは変数置換を使って、環境変数とファイルの内容を参照できます。参照は JSON 文字列の中に記述します。
+
+### 環境変数
+
+環境変数の値を埋め込むには `{env:VARIABLE_NAME}` を使います。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:OPENCODE_MODEL}",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "apiKey": "{env:ANTHROPIC_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+環境変数が設定されていない場合は、空文字列に置き換えられます。
+
+### ファイル
+
+ファイルの内容を埋め込むには `{file:path/to/file}` を使います。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": {
+        "apiKey": "{file:~/.secrets/openai-key}",
+      },
+    },
+  },
+}
+```
+
+ファイルパスは次のいずれかです。
+
+- 設定ファイルのディレクトリからの相対パス
+- 絶対パス、またはホームディレクトリを表す `~/` で始まるパス
+
+ファイルが存在しない場合は、空文字列に置き換えられます。
+
+これらは次のような場合に便利です。
+
+- API キーなどの機密データを別のファイルに保管する。
+- 共通の設定スニペットを複数の設定ファイルで共有する。
+
+## 実験的な設定
+
+<Callout type="warning">
+  実験的な設定は、どのリリースでも予告なく変わったり、動作しなくなったり、削除されたりする場合があります。安定性が必要なワークフローでは、これらの設定に依存しないでください。
+</Callout>
+
+すべての実験的な設定は `experimental` キーの下にあります。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "todo": true,
+    "subagent_depth": 2,
+    "image_generate": { "model": "openai/gpt-image-2" },
+    "location_idle_timeout": "4 hours",
+  },
+}
+```
+
+### Todo
+
+`todo` を `true` にすると、複数ステップの作業を追跡する `todowrite` ツールがエージェントに与えられます。デフォルトは `false` です。
+
+### サブエージェントの深さ
+
+`subagent_depth` は、サブエージェントが自身のサブエージェントを起動できる深さを設定します。デフォルトは `1` で、サブエージェントは別のサブエージェントを起動できません。
+
+### 画像生成
+
+`image_generate` は、[`generate_image`](/tools#image-generate) ツールのデフォルトモデルを `providerID/modelID` として設定し、任意で `#variant` を付けられます。そのモデルが利用できない、またはリクエストを処理できない場合、OpenCode は別の画像モデルを自動的に選択します。
+
+```jsonc
+{
+  "experimental": {
+    "image_generate": {
+      "model": "openai/gpt-image-2",
+    },
+  },
+}
+```
+
+### Location のアイドルタイムアウト
+
+`location_idle_timeout` は、セッションのアクティビティが途絶えてから OpenCode がプロジェクトの Location のサービスをメモリから解放するまでの時間です。`"2 hours"` のような時間を指定でき、デフォルトは `"60 minutes"` です。実行中のセッションやバックグラウンドジョブがある間は、Location はメモリに保持されます。アイドル状態の Location をメモリから解放しない場合は `false` を指定します。プロジェクトの設定でグローバルの値を上書きできます。
+
+```jsonc
+{
+  "experimental": {
+    "location_idle_timeout": false,
+  },
+}
+```
+
+### 非推奨のポリシー
+
+`experimental.policies` は非推奨です。代わりにトップレベルの [`policies`](/policies) を使用してください。古いキーも引き続き機能し、`policies` にマージされます。

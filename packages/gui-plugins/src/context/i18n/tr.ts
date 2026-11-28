@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Kullanım",
   "usage.cost": "Maliyet",
   "usage.view": "Bağlam kullanımını görüntüle",
-  "systemPrompt.title": "Sistem İstemi",
   "rawMessages.title": "Ham mesajlar",
   "export.session": "Oturumu dışa aktar",
   "stats.session": "Oturum",

@@ -1,0 +1,182 @@
+---
+title: "Claude Agent"
+description: "Користуйтеся тарифом Claude або обліковим записом Claude Code в OpenCode через Claude Agent, який запускає Claude Code на вашому комп'ютері."
+noindex: true
+---
+
+Користуйтеся своїм тарифом Claude або увійдіть у Claude Code іншим способом. Claude Agent запускає Claude Code на вашому
+комп'ютері, тож спершу встановіть Claude Code 2.1.248 або новішу версію й увійдіть.
+
+```bash
+claude auth login
+```
+
+Потім підключіть **Claude Agent** і виберіть модель. Список моделей надає Claude Code. Рівень зусилля міркування
+визначає варіант моделі, наприклад `claude-agent/opus#high`.
+
+```text
+/connect
+# Select Claude Agent.
+/models
+```
+
+Також можна підключитися з CLI командою `auth login claude-agent`.
+
+OpenCode знаходить `claude` у вашому `PATH`. Щоб використати іншу копію, встановіть `OPENCODE_CLAUDE_PATH` на сервері.
+
+```bash
+opencode service set env OPENCODE_CLAUDE_PATH /opt/claude/bin/claude
+```
+
+## Як це працює
+
+Claude Code викликає модель, а OpenCode робить усе інше.
+
+- Claude отримує системний промпт Claude Code, а також промпт вашого агента, файли `AGENTS.md`, навички й інструкції MCP.
+- Claude використовує інструменти й дозволи OpenCode замість вбудованих інструментів Claude Code.
+- Ваші налаштування Claude Code, файли `CLAUDE.md`, хуки, сервери MCP, навички й пам'ять не завантажуються.
+- OpenCode ущільнює контекст і запускає субагентів.
+- Ви можете перемикатися між Claude Agent та іншими моделями в одній сесії.
+
+## Вартість
+
+Вартість залежить від того, як виконано вхід у Claude Code.
+
+| Вхід | Показана вартість |
+| --- | --- |
+| Підписка Claude | Немає, ваш тариф її покриває |
+| API-ключ Anthropic або Claude Platform на AWS чи Google Cloud | Ціни Anthropic |
+| Amazon Bedrock | Ціни Bedrock або ціни Anthropic на Bedrock Mantle |
+| Google Vertex | Ціни Vertex |
+| Microsoft Foundry | Ціни Azure |
+| Власна базова URL-адреса | Немає |
+
+## Налаштування
+
+Налаштування підключення на провайдері `claude-agent` передаються в Claude Code. Вони перекривають ті самі змінні,
+встановлені у вашій оболонці.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": {
+        "baseURL": "https://llm-proxy.example.com/anthropic",
+      },
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+    },
+  },
+}
+```
+
+| Конфігурація | Змінна Claude Code |
+| --- | --- |
+| `settings.baseURL` | `ANTHROPIC_BASE_URL` |
+| `settings.apiKey` | `ANTHROPIC_API_KEY` |
+| `settings.authToken` | `ANTHROPIC_AUTH_TOKEN` |
+| `settings.headerTimeout` | `API_TIMEOUT_MS` |
+| `settings.chunkTimeout` | `CLAUDE_STREAM_IDLE_TIMEOUT_MS` |
+| `settings.configDir` | `CLAUDE_CONFIG_DIR` |
+| `headers` | `ANTHROPIC_CUSTOM_HEADERS` |
+| `body` | `CLAUDE_CODE_EXTRA_BODY` |
+
+Встановіть їх на моделі, щоб перекрити значення провайдера для цієї моделі.
+
+## Другий обліковий запис Claude
+
+Увійдіть у другий обліковий запис в окремому каталозі. Це не вплине на вхід у звичний обліковий запис.
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-2" claude auth login
+```
+
+У PowerShell:
+
+```powershell
+$env:CLAUDE_CONFIG_DIR = "$HOME\.claude-2"; claude auth login
+```
+
+Потім додайте моделі, які використовують цей каталог:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "models": {
+        "sonnet-2": {
+          "modelID": "sonnet",
+          "name": "Sonnet (Claude 2)",
+          "settings": { "configDir": "~/.claude-2" },
+        },
+      },
+    },
+  },
+}
+```
+
+Щоб використовувати один обліковий запис для всіх моделей проєкту, натомість встановіть `settings.configDir` на
+провайдері в конфігурації цього проєкту.
+
+## Перемикання між обліковими записами
+
+Якщо у вас кілька взаємозамінних облікових записів, OpenCode може перейти до наступного, коли обліковий запис
+досягне ліміту використання. Увійдіть у кожен додатковий обліковий запис у його власній теці. Ваш наявний вхід
+у `~/.claude` може лишитися як є:
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-1" claude auth login
+```
+
+Потім перелічіть теки:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": { "configDir": ["~/.claude", "~/.claude-1"] },
+    },
+  },
+}
+```
+
+У поточному чаті OpenCode використовує обліковий запис, через який надійшла остання відповідь, а новий чат починає
+з останнього облікового запису, що спрацював. Перемикання діє лише для входу за підпискою Claude, а не для `apiKey` чи `authToken`.
+
+## Вебпошук
+
+Для вебпошуку в OpenCode Claude Agent може використовувати WebSearch із Claude Code. У такому разі пошукові запити
+зараховуються до лімітів вашого тарифу Claude, а окремий API-ключ для пошуку не потрібен. Цей пошук доступний усім моделям.
+Виберіть його в `opencode.jsonc`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+Дивіться [Вебпошук](/websearch#claude-agent), щоб дізнатися більше.
+
+## Обмеження
+
+- Claude Code має бути встановлений на тій самій машині, що й сервер OpenCode. Claude Agent недоступний у віддалених
+  робочих просторах.
+- Системний промпт Claude Code замінює вбудований промпт OpenCode. Власні промпти агентів усе ще застосовуються.
+- Temperature, top-p, top-k, seed і стоп-послідовності не підтримуються.
+- Хуки плагінів `http.request` і `http.response` не виконуються, бо виклики API робить Claude Code.
+- Функції Claude Code, як-от `/usage`, `/loop`, автоматичний режим і команди агентів, недоступні.
+
+## Помилки
+
+| Помилка або симптом | Що перевірити |
+| --- | --- |
+| `Claude Code is not installed` | Встановіть Claude Code або вкажіть шлях до нього в `OPENCODE_CLAUDE_PATH`. |
+| `Claude Code is not logged in` | Виконайте `claude auth login`, потім підключіть Claude Agent знову. З `configDir` виконайте команду, яку показує помилка для цієї теки. |
+| `Claude Code ... is too old` | Виконайте `claude update`. |

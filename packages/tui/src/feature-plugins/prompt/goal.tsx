@@ -1,9 +1,13 @@
 import type { Plugin } from "@opencode/plugin/tui"
 import { Goal } from "@opencode/schema/goal"
+import type { ScrollBoxRenderable } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, on, onCleanup, Show, type Accessor } from "solid-js"
+import { useConfig } from "../../config"
 import { Keymap } from "../../context/keymap"
 import { useTheme } from "../../context/theme"
 import { DialogFooter, DialogHeader, DialogLayout, type DialogFooterAction } from "../../ui/dialog"
+import { getScrollAcceleration } from "../../util/scroll"
 
 /**
  * The goal `/goal` set on a Session, from the goal plugin's RPC: fetched when the Session changes or the server
@@ -99,12 +103,29 @@ function showGoal(context: Plugin.Context, sessionID: string, goal: Accessor<Goa
   context.ui.dialog.show(() => <GoalDialog context={context} sessionID={sessionID} goal={goal} />)
 }
 
-function GoalDialog(props: {
-  context: Plugin.Context
+export function GoalDialog(props: {
+  context: {
+    ui: {
+      dialog: Pick<Plugin.Context["ui"]["dialog"], "clear">
+      toast: Pick<Plugin.Context["ui"]["toast"], "show">
+    }
+    client: {
+      session: Pick<Plugin.Context["client"]["session"], "command">
+    }
+  }
   sessionID: string
   goal: Accessor<Goal.State | undefined>
 }) {
   const theme = useTheme().surface("dialog")
+  const config = useConfig().data
+  const dimensions = useTerminalDimensions()
+  const maxHeight = createMemo(() =>
+    Math.max(
+      3,
+      Math.min(Math.floor(dimensions().height * 0.6), dimensions().height - Math.ceil(dimensions().height / 4) - 8),
+    ),
+  )
+  const [scroll, setScroll] = createSignal<ScrollBoxRenderable>()
   const goal = props.goal
   const run = (text: "pause" | "resume" | "clear") => {
     if (text === "clear") props.context.ui.dialog.clear()
@@ -144,6 +165,17 @@ function GoalDialog(props: {
         run: () => run("resume"),
       },
       { bind: "x", title: "Clear goal", group: "Dialog", enabled: goal() !== undefined, run: () => run("clear") },
+      ...["up", "k"].map((bind) => ({ bind, title: "Scroll up", group: "Dialog", run: () => scroll()?.scrollBy(-1) })),
+      ...["down", "j"].map((bind) => ({
+        bind,
+        title: "Scroll down",
+        group: "Dialog",
+        run: () => scroll()?.scrollBy(1),
+      })),
+      { bind: "pageup", title: "Previous page", group: "Dialog", run: () => scroll()?.scrollBy(-maxHeight()) },
+      { bind: "pagedown", title: "Next page", group: "Dialog", run: () => scroll()?.scrollBy(maxHeight()) },
+      { bind: "home", title: "Scroll to top", group: "Dialog", run: () => scroll()?.scrollTo(0) },
+      { bind: "end", title: "Scroll to bottom", group: "Dialog", run: () => scroll()?.scrollTo(Infinity) },
     ],
   }))
 
@@ -155,15 +187,23 @@ function GoalDialog(props: {
           footer={{ actions: { primary: actions() } }}
           legacyFooter={<DialogFooter actions={{ primary: actions() }} />}
         >
-          <box gap={1}>
-            <text fg={theme.text.base}>{current().objective}</text>
-            <box>
-              <text fg={goalColor(theme, current())} wrapMode="none">
-                ◎ {current().status === "active" ? "Active" : current().status === "paused" ? "Paused" : "Met"}
-              </text>
-              <Show when={current().reason}>{(reason) => <text fg={theme.text.muted}>{reason()}</text>}</Show>
+          <scrollbox
+            ref={setScroll}
+            maxHeight={maxHeight()}
+            contentOptions={{ minHeight: 0 }}
+            scrollbarOptions={{ visible: false }}
+            scrollAcceleration={getScrollAcceleration(config)}
+          >
+            <box gap={1}>
+              <text fg={theme.text.base}>{current().objective}</text>
+              <box>
+                <text fg={goalColor(theme, current())} wrapMode="none">
+                  ◎ {current().status === "active" ? "Active" : current().status === "paused" ? "Paused" : "Met"}
+                </text>
+                <Show when={current().reason}>{(reason) => <text fg={theme.text.muted}>{reason()}</text>}</Show>
+              </box>
             </box>
-          </box>
+          </scrollbox>
         </DialogLayout>
       )}
     </Show>

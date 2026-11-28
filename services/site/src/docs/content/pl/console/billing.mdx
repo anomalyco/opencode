@@ -1,0 +1,98 @@
+---
+title: "Rozliczenia"
+description: "Dodawaj środki, ustaw automatyczne doładowanie, zarządzaj metodami płatności i pobieraj faktury w OpenCode Console."
+---
+
+Korzystanie z Console jest bezpłatne niezależnie od wielkości zespołu — nie ma opłat za poszczególnych członków. Płacisz tylko za użycie,
+ze wspólnej puli przedpłaconych środków całego obszaru roboczego. Właściciele i administratorzy zarządzają rozliczeniami
+w **Settings › Billing**.
+
+Użycie przez [własnych dostawców](/console/providers) rozlicza dostawca, a nie Console.
+
+## Dodawanie metody płatności
+
+1. Otwórz **Settings › Billing**.
+2. W sekcji **Payment methods** kliknij **Add**.
+3. Wybierz metodę i dokończ konfigurację Stripe.
+
+Obsługiwane metody płatności:
+
+- Karta
+- Link
+- Alipay
+- UPI
+- WeChat Pay
+
+Użyj **⋯ › Make default**, aby wybrać metodę do automatycznych obciążeń. Usunięcie metody może zatrzymać automatyczne
+doładowanie i odnowienia Go, które jej używają.
+
+## Dodawanie środków
+
+1. W sekcji **Credits** kliknij **Add credits**.
+2. Wybierz $10, $50 lub $100 albo kliknij **Other** i wpisz kwotę.
+3. Wybierz metodę płatności i kliknij **Confirm and pay**.
+
+Do kwoty doliczamy opłatę za obsługę płatności w wysokości 4.6% + $0.31. Za doładowanie na $50 zapłacisz $52.61, a do
+salda trafi całe $50.
+
+## Automatyczne doładowanie
+
+Gdy saldo spadnie poniżej ustalonego progu, środki zostaną doładowane automatycznie.
+
+1. W sekcji **Auto-recharge** kliknij **Add rule**.
+2. Ustaw próg salda i kwotę doładowania.
+3. Kliknij **Save**.
+
+Za automatyczne doładowanie wraz z opłatą za obsługę płatności zapłacisz domyślną metodą. Jeśli płatność się
+nie powiedzie, automatyczne doładowanie pozostanie wyłączone, dopóki nie skonfigurujesz go ponownie.
+
+## Sprawdzanie salda
+
+Karta **Billing** w **Activity** pokazuje saldo właścicielom i administratorom i otwiera **Settings › Billing**.
+
+Przycisk **Billing** w nagłówku obszaru roboczego lub klawisz `B` otwiera wysuwany panel z bieżącymi limitami Go, środkami
+i danymi użycia. Właściciele i administratorzy widzą saldo, użycie oraz automatyczne doładowanie obszaru roboczego; członkowie
+widzą tylko swoje użycie i limity.
+
+## Gdy środki się skończą
+
+Płatne żądania kończą się błędem HTTP `402`, gdy saldo osiągnie zero. Saldo nigdy nie schodzi poniżej zera.
+
+```text
+Upstream request failed: Insufficient account funds
+```
+
+## Faktury
+
+Każda płatność pojawia się w **Invoices** ze statusem i linkiem **Download invoice** lub **View receipt**.
+
+| Pozycja           | Utworzona przez                              |
+| ----------------- | -------------------------------------------- |
+| Doładowanie salda | Dodanie środków                              |
+| Automatyczne doładowanie | Automatyczne doładowanie              |
+| Subskrypcja Go    | Zasubskrybowanie Go, Go Plus lub Go Teams    |
+| Odnowienie Go     | Miesięczne odnowienie Go                     |
+| Przejście na Go Plus | Uaktualnienie Go do Go Plus               |
+| Przejście na Go Teams | Uaktualnienie Go lub Go Plus do Go Teams   |
+| Członek Go Teams  | Dołączenie członka do obszaru roboczego w Go Teams |
+| Miesięczne użycie | Rozliczenia na podstawie faktur              |
+
+## Formularze podatkowe
+
+Klienci w USA mogą pobrać [formularz W-9 Anomaly Innovations Inc.](/assets/anomaly-w9.pdf).
+
+## Rozliczenia na podstawie faktur
+
+W obszarze roboczym objętym umową kredytową można rozliczać się co miesiąc na podstawie faktury zamiast doładowywać
+środki z góry. Skontaktuj się z pomocą techniczną, aby włączyć takie rozliczenia.
+
+- Użycie obciąża limit środków zamiast przedpłaconego salda.
+- Fakturę za każdy miesiąc wystawiamy pierwszego dnia (UTC). Termin płatności przypada 14 dni później.
+- Nieopłacone faktury mają przycisk **Pay now**.
+- Żądania kończą się błędem HTTP `402` po osiągnięciu limitu środków lub po upływie terminu płatności nieopłaconej faktury.
+
+## Go
+
+Subskrypcje [OpenCode Go](/console/go) używają tych samych metod płatności i pojawiają się na tej samej liście faktur.
+Możesz też [opłacać Go środkami](/console/go#pay-with-credit). Włącz **Extra Usage** na stronie **Go**, aby po osiągnięciu
+limitu Go płacić ze środków.

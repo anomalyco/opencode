@@ -43,9 +43,8 @@ export default {
   "motion.replay": "ပြန်ဖွင့်ရန်",
   "motion.focus": "အာရုံစိုက်ရန်",
   "motion.enabled": "ဖွင့်ထားသည်",
-  "components.label": "COMPONENTS",
-  "components.tip":
-    "Components lab ကို ဖွင့်ပါ: story တိုင်းကို တိုက်ရိုက်ထိန်းချုပ်မှုများနှင့် ၎င်း၏ အခြေအနေများဖြင့်",
+  "lab.label": "LAB",
+  "lab.tip": "Lab ကို ဖွင့်ပါ: စာမျက်နှာတိုင်းကို တိုက်ရိုက်ထိန်းချုပ်မှုများနှင့် ၎င်း၏ အခြေအနေများဖြင့်",
   "speed.label": "SPEED",
   "speed.tip": "အက်ပ်တစ်ခုလုံး၏ လှုပ်ရှားသက်ဝင်မှု အမြန်နှုန်း။ 0.5× နှင့် 0.25× ကိုဖြတ်ပြီး 1× သို့ ပြန်ရန် နှိပ်ပါ။",
   "slow.label": "SLOW",

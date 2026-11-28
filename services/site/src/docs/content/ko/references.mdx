@@ -1,0 +1,281 @@
+---
+title: "참조"
+description: "현재 프로젝트 밖의 로컬 디렉터리와 Git 저장소에 이름으로 접근할 수 있게 하고, 프롬프트에 첨부하세요."
+---
+
+참조는 OpenCode가 현재 프로젝트 밖의 디렉터리에 이름으로 접근할 수 있게 합니다. `opencode.json`이나
+`opencode.jsonc`에 추가한 다음 필요할 때 클라이언트에서 별칭을 첨부하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+`docs`를 첨부한 뒤 에이전트에 관련 경로를 확인해 달라고 요청하세요.
+
+```text
+Read the attached docs reference and summarize api/authentication.md.
+```
+
+문서, 공유 라이브러리, 예제, 다른 저장소의 소스에 참조를 사용하세요.
+
+## 로컬
+
+로컬 디렉터리에는 `path`를 사용하세요.
+
+```jsonc
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when working with components or design tokens",
+    },
+  },
+}
+```
+
+경로는 다음과 같이 동작합니다.
+
+- 상대 경로는 구성 파일이 있는 디렉터리 기준으로 확인됩니다.
+- 절대 경로를 지원합니다.
+- `~/docs` 같은 홈 기준 경로를 지원합니다.
+
+다른 필드가 필요 없으면 문자열 단축 형식을 사용하세요.
+
+```jsonc
+{
+  "references": {
+    "docs": "../docs",
+    "shared": "~/work/shared",
+  },
+}
+```
+
+<Callout type="note">
+  단축 문자열은 `.`, `/`, `~`로 시작할 때만 로컬 경로입니다. `./docs`를 사용하고 `docs`만
+  쓰지 마세요. `docs` 값은 Git 저장소로 해석됩니다.
+</Callout>
+
+## Git
+
+원격 Git 저장소에는 `repository`를 사용하세요.
+
+```jsonc
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+    "internal-sdk": {
+      "repository": "git@gitlab.example.com:platform/sdk.git",
+      "branch": "release/v2",
+    },
+  },
+}
+```
+
+지원하는 원격 형식:
+
+- GitHub `owner/repo` 단축 표기
+- Git URL
+- 호스트/경로 형식
+- SCP 스타일 원격
+
+로컬 `file:` 저장소는 지원하지 않습니다.
+
+원격의 기본 브랜치를 따르려면 문자열 단축 형식을 사용하세요.
+
+```jsonc
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+    "sdk": "gitlab.com/platform/sdk",
+  },
+}
+```
+
+`branch`가 없으면 OpenCode는 원격의 기본 브랜치를 체크아웃하고 갱신합니다.
+브랜치 이름에는 문자, 숫자, `/`, `_`, `.`, `-`가 들어갈 수 있지만 `-`로 시작하거나 `..`를 포함할 수 없습니다.
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "release/v2.1",
+    },
+  },
+}
+```
+
+## 저장
+
+OpenCode는 각 원격을 정규화하고 전역 데이터 디렉터리 아래에 원격과 브랜치마다 하나의 체크아웃을 저장합니다.
+명시적 브랜치가 없으면 경로는 다음 형태를 사용합니다.
+
+```text
+opencode/repos/<host>/<repository-path>
+```
+
+일반적인 Linux 설치에서 `Effect-TS/effect`는 다음 위치에 저장됩니다.
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect
+```
+
+명시적 브랜치는 인코딩된 `@<branch>` 접미사를 추가합니다.
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect@main
+```
+
+## 갱신
+
+없는 저장소는 비동기로 복제됩니다. 기존 체크아웃은 참조를 로드하거나 다시 로드할 때, 그리고 해당 Location에서 새
+사용자 프롬프트가 접수된 뒤 백그라운드에서 확인합니다.
+
+```text
+Prompt admitted → refresh check starts in background → agent continues
+```
+
+체크아웃은 마지막 갱신 시도가 24시간 이상 전이거나 시도 기록이 없을 때 대상이 됩니다. 갱신할 때는 지정한 브랜치나 원격 저장소의 기본 브랜치를 가져온 뒤 체크아웃을 해당 브랜치 상태로 재설정합니다.
+
+```text
+Last attempt: 25 hours ago → eligible
+Last attempt: 2 hours ago  → skipped
+```
+
+갱신 동작은 다음 규칙을 따릅니다.
+
+- 타임스탬프는 서비스 재시작 후에도 유지됩니다.
+- 같은 체크아웃을 사용하는 Location은 그 타임스탬프를 공유합니다.
+- 실패한 시도는 기록되며 24시간 제한이 계속 적용됩니다.
+- Location을 사용하지 않는 동안에는 주기적 폴링이 없습니다.
+- 복제나 갱신 실패가 다른 참조 로드를 막지는 않습니다.
+
+프롬프트는 복제나 갱신을 기다리지 않습니다. 이후 도구 읽기에서 갱신된 체크아웃을 보더라도 첨부에는 이전 내용이
+들어갈 수 있고, 새 참조는 체크아웃이 준비되기 전에 나타날 수 있습니다.
+
+```text
+Attachment created → cached content
+Background refresh completes → later tool read sees newer content
+```
+
+<Callout type="warning">
+  캐시된 체크아웃은 공유되며 에이전트가 사용하는 동안 갱신될 수 있습니다. 갱신 시 재설정되므로 캐시된
+  체크아웃을 편집하지 마세요.
+</Callout>
+
+## 안내
+
+`description`은 참조가 언제 관련 있는지 에이전트에 알립니다. 설명이 있는 참조는 별칭과 확인된 경로와 함께
+에이전트 지침에 나타납니다.
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+설명이 없는 참조는 클라이언트에서 사용할 수 있지만 자동으로 알려지지 않습니다.
+
+```jsonc
+{
+  "references": {
+    "archive": {
+      "path": "../archive",
+    },
+  },
+}
+```
+
+## 표시 여부
+
+`hidden`을 `true`로 설정하면 대화형 클라이언트 선택기에서 참조를 제거합니다.
+
+```jsonc
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal service behavior",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden`은 대화형 표시 여부에만 영향을 줍니다. 참조는 참조 API에 남고, 설명이 있으면 에이전트 지침에도
+남습니다.
+
+## 사용
+
+클라이언트는 루트 별칭으로 참조를 첨부합니다. 첨부 파일에는 루트 바로 아래에 있는 파일과 디렉터리만 나열합니다. 하위 디렉터리의 내용은 포함하지 않습니다.
+
+```text
+Attached alias: docs
+Ask: Inspect docs/guides/deployment.md and explain the deployment steps.
+```
+
+루트 아래 내용이 필요하면 에이전트에 특정 경로를 확인해 달라고 요청하세요.
+
+## 권한
+
+참조는 추가 도구 권한을 부여하지 않습니다. 활성 Location 밖 접근은 여전히 일반 도구 규칙과
+`external_directory` 권한을 따르며, 편집에는 해당 편집 권한도 필요합니다.
+
+```text
+Read ../product-docs/api.md
+```
+
+활성 권한이 그 외부 읽기를 허용할 때만 요청이 성공합니다.
+
+## 필드
+
+| 필드         | 로컬    | Git      | 설명                                   |
+| ------------- | -------- | -------- | --------------------------------------------- |
+| `path`        | 필수 | 아니요       | 로컬 디렉터리 경로                          |
+| `repository`  | 아니요       | 필수 | 원격 Git 저장소                         |
+| `branch`      | 아니요       | 선택 | 가져와 체크아웃할 브랜치                 |
+| `description` | 선택 | 선택 | 에이전트가 언제 사용해야 하는지 설명하는 안내 |
+| `hidden`      | 선택 | 선택 | 대화형 클라이언트 선택기에서 숨김     |
+
+완전한 Git 항목은 모든 Git 호환 필드를 사용할 수 있습니다.
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "main",
+      "description": "Use for SDK implementation details",
+      "hidden": false,
+    },
+  },
+}
+```
+
+## 별칭
+
+별칭은 비어 있을 수 없으며 `/`, `\`, 공백, 백틱, 쉼표를
+포함할 수 없습니다.
+
+
+```text
+Valid:   docs
+Invalid: product docs
+Invalid: docs/api
+```

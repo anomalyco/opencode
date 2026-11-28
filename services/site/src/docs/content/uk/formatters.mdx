@@ -1,0 +1,202 @@
+---
+title: "Форматувальники"
+description: "Форматуйте файли після того, як OpenCode їх змінить, за допомогою вбудованих форматувальників, як-от Prettier, Biome, gofmt і Ruff, або власних команд."
+---
+
+OpenCode може форматувати файли після того, як їх змінять його інструменти `write`, `edit` або `patch`.
+Форматувальники вимкнені типово, тож увімкніть їх у своїй конфігурації:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+## Увімкнення
+
+Встановіть `formatter` у `true`, щоб увімкнути кожен вбудований форматувальник. OpenCode запускає
+вбудований форматувальник, лише коли доступні його виконуваний файл і будь-які специфічні для проєкту вимоги.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+Об'єкт також вмикає вбудовані форматувальники й дає змогу перевизначити їх або додати власні
+форматувальники. Порожній об'єкт зберігає успадковані налаштування форматувальників, а `true`
+скидає їх до вбудованих.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {},
+}
+```
+
+## Вбудовані форматувальники
+
+Нижче наведено вбудовані форматувальники OpenCode. Для більшості з них потрібна вказана команда.
+Якщо є додаткові умови виявлення, їх наведено в таблиці.
+
+| Форматувальник | Розширення | Вимога |
+| --- | --- | --- |
+| `gofmt` | `.go` | команда `gofmt` |
+| `mix` | `.ex`, `.exs`, `.eex`, `.heex`, `.leex`, `.neex`, `.sface` | команда `mix` |
+| `oxfmt` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts` | залежність `oxfmt` у `package.json` |
+| `prettier` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts`, `.html`, `.htm`, `.css`, `.scss`, `.sass`, `.less`, `.vue`, `.svelte`, `.json`, `.jsonc`, `.yaml`, `.yml`, `.toml`, `.xml`, `.md`, `.mdx`, `.graphql`, `.gql` | залежність `prettier` у `package.json` |
+| `biome` | Ті самі розширення, що й у `prettier` вище | `biome.json` або `biome.jsonc` та встановлений бінарник `@biomejs/biome` |
+| `zig` | `.zig`, `.zon` | команда `zig` |
+| `clang-format` | `.c`, `.cc`, `.cpp`, `.cxx`, `.c++`, `.h`, `.hh`, `.hpp`, `.hxx`, `.h++`, `.ino`, `.C`, `.H` | команда `clang-format` і `.clang-format` |
+| `ktlint` | `.kt`, `.kts` | команда `ktlint` |
+| `ruff` | `.py`, `.pyi` | команда `ruff` і конфігурація Ruff або оголошення залежності |
+| `air` | `.R` | команда `air`, яка ідентифікує себе як форматувальник R |
+| `uv` | `.py`, `.pyi` | команда `uv` з підтримкою `uv format` |
+| `rubocop` | `.rb`, `.rake`, `.gemspec`, `.ru` | команда `rubocop` |
+| `standardrb` | `.rb`, `.rake`, `.gemspec`, `.ru` | команда `standardrb` |
+| `htmlbeautifier` | `.erb` | команда `htmlbeautifier` |
+| `dart` | `.dart` | команда `dart` |
+| `ocamlformat` | `.ml`, `.mli` | команда `ocamlformat` і `.ocamlformat` |
+| `terraform` | `.tf`, `.tfvars` | команда `terraform` |
+| `latexindent` | `.tex` | команда `latexindent` |
+| `gleam` | `.gleam` | команда `gleam` |
+| `shfmt` | `.sh`, `.bash` | команда `shfmt` |
+| `nixfmt` | `.nix` | команда `nixfmt` |
+| `rustfmt` | `.rs` | команда `rustfmt` |
+| `pint` | `.php` | `laravel/pint` у `composer.json` |
+| `ormolu` | `.hs` | команда `ormolu` |
+| `cljfmt` | `.clj`, `.cljs`, `.cljc`, `.edn` | команда `cljfmt` |
+| `dfmt` | `.d` | команда `dfmt` |
+
+Наприклад, з увімкненими вбудованими форматувальниками OpenCode може знайти й запустити локальну для проєкту
+залежність Prettier для відповідних файлів:
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": true,
+}
+```
+
+## Налаштування
+
+Додайте іменований запис, щоб змінити вбудований форматувальник або визначити власний. Власному
+форматувальнику для запуску потрібні і `command`, і `extensions`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "environment": {
+        "NODE_ENV": "development",
+      },
+      "extensions": [".js", ".ts"],
+    },
+    "deno-markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+| Поле | Тип | Поведінка |
+| --- | --- | --- |
+| `disabled` | `boolean` | Видаляє названий форматувальник, коли `true`. |
+| `command` | `string[]` | Замінює вбудовану команду або визначає власну команду. |
+| `environment` | `Record<string, string>` | Додає змінні середовища, зберігаючи батьківське середовище. |
+| `extensions` | `string[]` | Замінює вбудований список розширень або визначає власний список. Включайте початкову крапку. |
+
+Усі поля необов'язкові. Вбудований запис успадковує пропущені значення, а новий
+запис без команди чи розширень не може запуститися.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "extensions": [".md", ".mdx"],
+    },
+  },
+}
+```
+
+## Команди
+
+`command` — це масив аргументів, а не рядок команди оболонки. OpenCode замінює
+`$FILE` на абсолютний шлях файлу й запускає команду з активного
+каталогу проєкту.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "custom": {
+      "command": ["custom-fmt", "--write", "$FILE"],
+      "extensions": [".custom"],
+    },
+  },
+}
+```
+
+## Зіставлення
+
+OpenCode порівнює кінцеве розширення файлу з `extensions`. Зіставлення чутливе до
+регістру, а складені записи, як-от `.part.md`, не збігаються з
+`notes.part.md`, бо його кінцеве розширення — `.md`.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+Коли збігається кілька форматувальників, OpenCode пробує їх у порядку реєстрації й
+зупиняється після першої успішної команди. Вбудовані зберігають свій вбудований
+порядок; власні записи йдуть у порядку об'єкта. Якщо один завершується невдало,
+OpenCode записує помилку в журнал і пробує наступний збіг.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "preferred": {
+      "command": ["preferred-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+    "fallback": {
+      "command": ["fallback-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+  },
+}
+```
+
+## Вимкнення
+
+Форматування вимкнене, коли жоден файл конфігурації не задає `formatter`. Щоб вимкнути
+форматування, увімкнене файлом із нижчим пріоритетом, встановіть `false`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false,
+}
+```
+
+Щоб вимкнути один вбудований форматувальник, залишивши інші ввімкненими, позначте його іменований запис
+як вимкнений.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "disabled": true,
+    },
+  },
+}
+```

@@ -75,11 +75,8 @@ test("reuses D1 reads across lookups for 1 minute", async () => {
   db.insert({ channel: "reuse", version: "1.0.0", time: 1, active: true })
   setSystemTime(new Date("2026-10-13T00:00:00Z"))
 
-  expect(
-    await Promise.all([lookup(db.env, "reuse/cli/opencode"), lookup(db.env, "reuse/cli/opencode")]).then((responses) =>
-      Promise.all(responses.map(version)),
-    ),
-  ).toEqual(["1.0.0", "1.0.0"])
+  expect(await version(await lookup(db.env, "reuse/cli/opencode"))).toBe("1.0.0")
+  expect(await version(await lookup(db.env, "reuse/cli/opencode"))).toBe("1.0.0")
   expect(db.queries).toHaveLength(2)
 
   db.sqlite.query("UPDATE artifact SET active = 0").run()
@@ -90,6 +87,20 @@ test("reuses D1 reads across lookups for 1 minute", async () => {
 
   setSystemTime(new Date("2026-10-13T00:01:01Z"))
   expect(await version(await lookup(db.env, "reuse/cli/opencode"))).toBe("1.0.1")
+  expect(db.queries).toHaveLength(4)
+})
+
+// Workers rejects a request that reads a D1 result stream another request started.
+test("does not share in-flight D1 reads between concurrent lookups", async () => {
+  const db = database()
+  db.insert({ channel: "concurrent", version: "1.0.0", time: 1, active: true })
+  setSystemTime(new Date("2026-10-13T02:00:00Z"))
+
+  expect(
+    await Promise.all([lookup(db.env, "concurrent/cli/opencode"), lookup(db.env, "concurrent/cli/opencode")]).then(
+      (responses) => Promise.all(responses.map(version)),
+    ),
+  ).toEqual(["1.0.0", "1.0.0"])
   expect(db.queries).toHaveLength(4)
 })
 
@@ -148,9 +159,7 @@ test("ignores minimum artifacts outside the latest channel", async () => {
   db.insert({ channel: "dev", version: "0.0.0-dev-18952", time: 2, active: true })
 
   expect(
-    await version(
-      await lookup(db.env, "dev/cli/opencode", { "User-Agent": "opencode/dev/0.0.0-dev-18952/cli" }),
-    ),
+    await version(await lookup(db.env, "dev/cli/opencode", { "User-Agent": "opencode/dev/0.0.0-dev-18952/cli" })),
   ).toBe("0.0.0-dev-18952")
   expect(await version(await lookup(db.env, "dev/cli/opencode?current=garbage"))).toBe("0.0.0-dev-18952")
 })
@@ -202,6 +211,63 @@ test("serves the public API without an Access identity", async () => {
     waitUntil: () => {},
   })
   expect(await version(trailing)).toBe("1.0.0")
+})
+
+test("answers HEAD lookups like GET", async () => {
+  const db = database()
+  db.sqlite
+    .query(
+      "INSERT INTO artifact (channel, name, distribution, version, metadata, active, minimum, time_created, time_updated) VALUES ('head', 'desktop', 'opencode', '1.0.0', ?, 1, 0, 1, 1)",
+    )
+    .run(
+      JSON.stringify({
+        files: { "opencode-desktop-win-x64.exe": { url: "https://example.com/opencode-desktop-win-x64.exe" } },
+        manifests: { "desktop.yml": { path: "opencode-desktop-win-x64.exe" } },
+      }),
+    )
+  const send = (method: string, pathname: string) =>
+    worker.fetch(new Request(`https://opencode.ai/update/api/head/desktop/opencode${pathname}`, { method }), db.env, {
+      waitUntil: () => {},
+    })
+
+  for (const pathname of ["/opencode-desktop-win-x64.exe", "/latest.yml", "", "/missing.dmg"]) {
+    const [get, head] = await Promise.all([send("GET", pathname), send("HEAD", pathname)])
+    expect(head.status).toBe(get.status)
+    expect(head.headers.get("Location")).toBe(get.headers.get("Location"))
+    expect(head.headers.get("Content-Type")).toBe(get.headers.get("Content-Type"))
+  }
+  const file = await send("HEAD", "/opencode-desktop-win-x64.exe")
+  expect(file.status).toBe(302)
+  expect(file.headers.get("Location")).toBe("https://example.com/opencode-desktop-win-x64.exe")
+})
+
+test.each([
+  ["HEAD", "https://opencode.ai/update/admin", 403],
+  ["HEAD", "https://opencode.ai/update/admin/activate", 403],
+  ["PUT", "https://opencode.ai/update/api/latest/cli/opencode", 405],
+  ["DELETE", "https://opencode.ai/update/api/latest/cli/opencode", 405],
+] as const)("keeps %s %s answering %p", async (method, url, status) => {
+  expect((await request(url, { method })).status).toBe(status)
+})
+
+test("logs the data lake send error", async () => {
+  const db = database()
+  const error = new Error("pipeline unavailable")
+  let pending: Promise<unknown> | undefined
+  const logged: unknown[][] = []
+  const original = console.error
+  console.error = (...args: unknown[]) => logged.push(args)
+  try {
+    await worker.fetch(
+      new Request("https://opencode.ai/update/"),
+      { ...db.env, EVENTS: { send: () => Promise.reject(error) } } as unknown as Env,
+      { waitUntil: (promise) => (pending = promise) },
+    )
+    await pending
+  } finally {
+    console.error = original
+  }
+  expect(logged).toEqual([["Failed to send update request event to the data lake", error]])
 })
 
 test("caches rollout fallback reads across caller IPs and overlapping releases", async () => {

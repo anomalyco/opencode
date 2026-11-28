@@ -37,6 +37,7 @@ const WINDOWS_OPEN_APPS = [
   { id: "cursor", label: "open.app.cursor", icon: "cursor", openWith: "cursor" },
   { id: "zed", label: "open.app.zed", icon: "zed", openWith: "zed" },
   { id: "powershell", label: "open.app.powershell", icon: "powershell", openWith: "powershell" },
+  { id: "windows-terminal", label: "open.app.windowsTerminal", icon: "windows-terminal", openWith: "wt" },
   { id: "sublime-text", label: "open.app.sublimeText", icon: "sublime-text", openWith: "Sublime Text" },
 ] as const
 
@@ -216,7 +217,7 @@ export default function OpenInAppButton(props: { session: MountedSession; screen
             aria-label={ctx.t("open.menu")}
             onPointerDown={(event) => event.stopPropagation()}
           >
-            <Icon name="chevron-down" size="small" />
+            <Icon name="chevron-down" />
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content class="open-in-app-v2-menu">
@@ -300,7 +301,7 @@ export function OpenInAppMenuItemsV2(props: {
             props.state.copyPath(path())
           }}
         >
-          <Icon name="copy" size="small" class="text-icon-weak" />
+          <Icon name="copy" class="text-icon-weak" />
           {ctx.t("open.copyPath")}
         </Menu.Item>
       </Show>

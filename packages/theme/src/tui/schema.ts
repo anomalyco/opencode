@@ -90,6 +90,7 @@ const TextDefinition = Schema.Struct({
   base: Schema.optional(ColorValue),
   muted: Schema.optional(ColorValue),
   faint: Schema.optional(ColorValue),
+  selection: Schema.optional(ColorValue),
   action: Schema.optional(ActionColorDefinition),
   formfield: Schema.optional(StatefulColorDefinition),
   feedback: Schema.optional(
@@ -105,6 +106,7 @@ export type TextDefinition = Schema.Schema.Type<typeof TextDefinition>
 
 const BackgroundDefinition = Schema.Struct({
   base: Schema.optional(ColorValue),
+  selection: Schema.optional(ColorValue),
   raised: Schema.optional(
     Schema.Struct({
       base: Schema.optional(ColorValue),
@@ -190,12 +192,22 @@ const DiffDefinition = Schema.Struct({
 })
 export type DiffDefinition = Schema.Schema.Type<typeof DiffDefinition>
 
+// Find-in-session matches. Optional in every theme: unset colors fall back to raised and focused tokens.
+const FindDefinition = Schema.Struct({
+  text: Schema.optional(Schema.Struct({ current: Schema.optional(ColorValue) })),
+  background: Schema.optional(
+    Schema.Struct({ match: Schema.optional(ColorValue), current: Schema.optional(ColorValue) }),
+  ),
+})
+export type FindDefinition = Schema.Schema.Type<typeof FindDefinition>
+
 const ThemeTokensDefinition = Schema.Struct({
   text: Schema.optional(TextDefinition),
   background: Schema.optional(BackgroundDefinition),
   border: Schema.optional(Schema.Struct({ base: Schema.optional(ColorValue) })),
   scrollbar: Schema.optional(Schema.Struct({ base: Schema.optional(ColorValue) })),
   diff: Schema.optional(DiffDefinition),
+  find: Schema.optional(FindDefinition),
   syntax: Schema.optional(SyntaxDefinition),
   markdown: Schema.optional(MarkdownDefinition),
 })
@@ -230,6 +242,7 @@ const CompleteThemeTokensDefinition = Schema.Struct({
     base: ColorValue,
     muted: ColorValue,
     faint: Schema.optional(ColorValue),
+    selection: Schema.optional(ColorValue),
     action: CompleteActionColorDefinition,
     formfield: CompleteStatefulColorDefinition,
     feedback: Schema.Struct({
@@ -241,6 +254,7 @@ const CompleteThemeTokensDefinition = Schema.Struct({
   }),
   background: Schema.Struct({
     base: ColorValue,
+    selection: Schema.optional(ColorValue),
     raised: Schema.Struct({ base: ColorValue, high: ColorValue, max: ColorValue }),
     action: CompleteActionColorDefinition,
     formfield: CompleteStatefulColorDefinition,
@@ -262,6 +276,7 @@ const CompleteThemeTokensDefinition = Schema.Struct({
       background: Schema.Struct({ added: ColorValue, removed: ColorValue }),
     }),
   }),
+  find: Schema.optional(FindDefinition),
   syntax: Schema.Record(SyntaxToken, HueColorValue),
   markdown: Schema.Record(MarkdownToken, HueColorValue),
 })

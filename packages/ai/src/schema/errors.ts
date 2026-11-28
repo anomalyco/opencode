@@ -191,13 +191,24 @@ export class AIError extends Schema.TaggedError<AIError>()("AI.Error", {
   }
 
   /**
+   * The provider's `x-should-retry` answer for a failed response. A successful response's header was sent before the
+   * failure happened, such as a connection dropped while the body streams, so it says nothing about it.
+   */
+  get retryHint(): boolean | undefined {
+    const http = this.reason.http
+    if (http === undefined || http.status < 400) return undefined
+    const header = http.headers["x-should-retry"]
+    if (header === "true") return true
+    if (header === "false") return false
+    return undefined
+  }
+
+  /**
    * Whether a failed call may succeed when sent again: rate limits, provider-side failures, transport failures that did
    * not deliver an accepted write, and unrecognized failures. Callers decide which calls are safe to repeat.
    */
   get isRetryable(): boolean {
-    const override = this.reason.http?.headers["x-should-retry"]
-    if (override === "true") return true
-    if (override === "false") return false
+    if (this.retryHint !== undefined) return this.retryHint
     switch (this.reason._tag) {
       case "RateLimit":
       case "ProviderInternal":
@@ -206,7 +217,8 @@ export class AIError extends Schema.TaggedError<AIError>()("AI.Error", {
       // Read failures can still recover; the caller chooses retry versus continuation from durable output.
       case "Transport":
         return (
-          this.reason.delivery !== "rejected" && (this.reason.delivery !== "accepted" || this.reason.operation === "read")
+          this.reason.delivery !== "rejected" &&
+          (this.reason.delivery !== "accepted" || this.reason.operation === "read")
         )
       case "InvalidProviderOutput":
         return this.reason.classification === "incomplete-stream"

@@ -1,0 +1,79 @@
+---
+title: "Claude Code"
+description: "ใช้โมเดลของ Console และ Go จาก Claude Code"
+---
+
+Claude Code ใช้ Anthropic Messages API ตั้งค่าตัวแปรสภาพแวดล้อมสองตัวให้ส่งคำขอไปยัง Console เพื่อใช้โมเดลแบบเสียค่าใช้จ่ายหรือโมเดล Go ใดก็ได้ รวมถึง GPT, Gemini และโมเดลแบบเปิด หากโมเดลไม่รองรับ Anthropic Messages ระบบ Console จะแปลงรูปแบบคำขอให้
+
+<Callout>
+  [Console CLI](/console/harnesses#console-cli) ตั้งค่า Claude Code ได้ด้วยคำสั่งเดียว รวมถึงนโยบาย
+  เซิร์ฟเวอร์ MCP สกิล และคำแนะนำของเวิร์กสเปซ รัน `npx @opencode/console setup claude-code` ขั้นตอนด้านล่างเป็น
+  การตั้งค่าด้วยตัวเอง
+</Callout>
+
+```bash
+export ANTHROPIC_BASE_URL="https://opencode.ai/inference/anthropic"
+export ANTHROPIC_AUTH_TOKEN="oc_sk_..."
+claude --model claude-sonnet-5-5
+```
+
+แทนที่ `oc_sk_...` ด้วย[คีย์ API ส่วนตัว](/console/harnesses#get-an-api-key)
+
+## การกำหนดค่า
+
+ตั้งค่าตัวแปรใน `~/.claude/settings.json` เพื่อใช้ Console ในทุกเซสชัน จับคู่ alias `opus`, `sonnet` และ `haiku`
+กับโมเดลของ Console เพื่อให้ `/model` และงานเบื้องหลังใช้งานได้
+
+```json title="~/.claude/settings.json"
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://opencode.ai/inference/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "oc_sk_...",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5-5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-5-5"
+  }
+}
+```
+
+Claude Code จะต่อท้าย `/v1/messages` เข้ากับ base URL จึงไม่ต้องใส่พาธนั้น รัน `/status` เพื่อ
+ยืนยันว่า base URL และโทเคนที่ใช้ทำงานได้
+
+<Callout>
+  ใช้ `ANTHROPIC_AUTH_TOKEN` ไม่ใช่ `ANTHROPIC_API_KEY` หากคุณลงชื่อเข้าใช้บัญชี Claude อยู่ ให้รัน `/logout` ก่อน
+  เพื่อไม่ให้ Claude Code ส่งข้อมูลการลงชื่อเข้าใช้นั้นไปยัง Console
+</Callout>
+
+## Go
+
+ใช้ base URL ของ Go และคีย์จากเวิร์กสเปซที่มีการสมัครสมาชิก [Go](/console/go)
+
+```json title="~/.claude/settings.json"
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://opencode.ai/inference/go/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "oc_sk_...",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "minimax-m3",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-5-5"
+  }
+}
+```
+
+## โมเดล
+
+ใช้ ID โมเดลใดก็ได้จากตาราง [Console](/console/models#endpoints) หรือ [Go](/console/go#endpoints) สลับโมเดลใน
+เซสชันด้วย `/model` หรือเลือกโมเดลสำหรับการรันครั้งเดียว
+
+```bash
+claude --model gpt-6.1-sol
+```
+
+## Console MCP
+
+เพิ่มเซิร์ฟเวอร์ [Console MCP](/console/harnesses#console-mcp) สำหรับทุกโปรเจกต์ของคุณ
+
+```bash
+claude mcp add --transport http --scope user opencode-console https://opencode.ai/console/mcp
+```
+
+รัน `/mcp` ใน Claude Code เลือก `opencode-console` แล้วลงชื่อเข้าใช้จากเบราว์เซอร์

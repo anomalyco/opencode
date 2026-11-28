@@ -1,0 +1,401 @@
+---
+title: "ACP"
+description: "OpenCode'u bir Agent Client Protocol istemcisiyle kullanın."
+---
+
+`opencode acp` OpenCode'u bir [Agent Client Protocol](https://agentclientprotocol.com) agent'ı olarak çalıştırır; böylece
+onu Zed gibi bir ACP istemcisinden kullanabilirsiniz. Bu örnek OpenCode'u Zed'e ekler:
+
+```json title="~/.config/zed/settings.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+Diğer ACP istemcileri aynı komutu ve `acp` argümanını kullanır, ancak yapılandırma dosyaları ve alan adları farklı
+olabilir. Grafik arayüzlü bir istemci `opencode` komutunu bulamıyorsa `command` değerini `which opencode` komutunun
+yazdırdığı mutlak yola ayarlayın.
+
+## Kimlik doğrulama
+
+OpenCode zaten sahip olduğu sağlayıcı kimlik bilgilerini kullanır. ACP istemcisini başlatmadan önce bir terminalden oturum
+açın:
+
+```bash
+opencode auth login
+```
+
+OpenCode tek bir kimlik doğrulama yöntemi sunar: `opencode-login`. Varsayılan olarak bu bir agent kimlik doğrulama
+yöntemidir. `authenticate` isteği yalnızca bu yöntemi kabul eder ve kimlik bilgisi toplamaz. Bir sağlayıcı kimlik
+doğrulama gerektirdiği için bir prompt başarısız olursa OpenCode ACP'nin `auth_required` hatasını döndürür.
+
+İstemci `clientCapabilities.auth.terminal` değerini `true` yaparsa kimlik doğrulama yöntemi bir terminal kimlik doğrulama
+yöntemi olur:
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "type": "terminal",
+  "args": ["--login"]
+}
+```
+
+İstemci bu yöntemi `authenticate` isteğine göndermemelidir. Bunun yerine OpenCode'u başlatan komuta `--login` ekler,
+örneğin `opencode acp --login`, ve komutu bir terminalde çalıştırır. OpenCode `opencode auth login` akışını çalıştırır ve
+çıkar. Çıkış durumu 0, oturum açmanın başarılı olduğu anlamına gelir. İstemci ardından yeniden bağlanır ve `initialize`
+isteğini yine gönderir.
+
+İstemci `clientCapabilities._meta["terminal-auth"]` değerini `true` yaparsa kimlik doğrulama yöntemi oturum açma komutunu
+içerir:
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "_meta": { "terminal-auth": { "command": "opencode", "args": ["auth", "login"], "label": "OpenCode Login" } }
+}
+```
+
+## Sorun giderme
+
+`opencode acp` stdin üzerinde ACP mesajlarını bekler; bu nedenle doğrudan bir terminalde çalıştırdığınızda takılmış gibi
+görünür. Bunun yerine bir ACP istemcisinden başlatın.
+
+İstemci sürecin çıktığını veya geçersiz protokol çıktısı yazdığını bildirirse istemcinin argümanlarında `acp` öncesine
+`--print-logs` ekleyin. OpenCode ardından ACP ve özel sunucu günlüklerini stderr'e yazar. Stdout yalnızca ACP mesajlarını
+taşır.
+
+```bash
+opencode --print-logs acp
+```
+
+## Protokol referansı
+
+Bu bölüm ACP istemci geliştiricileri içindir. OpenCode'un desteklediği ACP bölümlerini ve OpenCode'un eklediği `_meta`
+anahtarlarını listeler. Bu anahtarları tanımayan istemciler onları yok sayabilir.
+[ACP belgeleri](https://agentclientprotocol.com) mesajları tanımlar.
+
+### Taşıma
+
+İstemci `opencode acp` komutunu bir alt süreç olarak başlatır. İkisi stdin ve stdout üzerinden satır sonuyla ayrılmış
+JSON-RPC mesajları alışverişi yapar ve ACP protokol sürümü 1'i kullanır.
+
+`opencode acp` kendi kullanımı için özel bir OpenCode sunucusu başlatır. Paylaşılan arka plan hizmetine bağlanmaz ve ACP
+için bir ağ bağlantı noktası açmaz. Tek bir süreç birçok ACP oturumuna hizmet edebilir. İstemci stdin'i kapattığında
+çıkar.
+
+### Yetenekler
+
+OpenCode'un `initialize` yanıtı şu agent yeteneklerini içerir:
+
+```json
+{
+  "loadSession": true,
+  "mcpCapabilities": { "http": true, "sse": false },
+  "promptCapabilities": { "embeddedContext": true, "image": true },
+  "sessionCapabilities": {
+    "additionalDirectories": {},
+    "close": {},
+    "delete": {},
+    "fork": {},
+    "list": {},
+    "resume": {}
+  }
+}
+```
+
+OpenCode şu istemci yeteneklerini okur:
+
+| Yetenek                                | Etkisi                                                          |
+| -------------------------------------- | --------------------------------------------------------------- |
+| `auth.terminal` değeri `true`          | Kimlik doğrulama yöntemi bir [terminal kimlik doğrulama yöntemi](#authentication) olur. |
+| `elicitation.form`                     | OpenCode [soruları](#questions) form olarak sorar.              |
+| `session.compaction`                   | OpenCode [sıkıştırmayı](#compaction) ACP'nin güncellemeleriyle bildirir. |
+| `_meta["terminal-auth"]` değeri `true` | Kimlik doğrulama yöntemi [oturum açma komutunu](#authentication) içerir. |
+
+### Oturumlar
+
+İstemci bir oturum oluştururken çalışma dizinini belirler. OpenCode o dizinin yapılandırmasını kullanır; modelleri,
+agent'ları, komutları, skill'leri, talimatları, eklentileri ve MCP sunucuları dahil.
+
+- `cwd` mutlak bir yol olmalıdır. OpenCode göreli bir `cwd` değerini geçersiz parametre hatasıyla reddeder.
+- `session/load` kaydedilmiş mesajları yeniden oynatır. `session/resume` ve `session/fork` onları yeniden oynatmaz.
+- Bir oturumu yüklemek, sürdürmek veya fork'lamak için istemci o oturumun dizinini ya da aynı projenin başka bir dizinini
+  `cwd` olarak iletmelidir; örneğin bir worktree'ye taşınmış oturumun ana checkout'u. OpenCode diğer her `cwd` değerini,
+  `data.directory` değeri oturumun dizini olan geçersiz parametre hatasıyla reddeder.
+- `session/list` sayfa başına en fazla 100 oturum döndürür. Bir `cwd` filtresi ve bir `cursor` kabul eder. Her subagent
+  oturumu, `id`, `parentID` ve `title` değerlerini taşıyan `_meta["opencode/child-session"]` içerir.
+- OpenCode bir oturumu yeniden adlandırdığında, örneğin bir başlık oluşturduktan sonra, yeni `title` ile
+  `session_info_update` gönderir.
+- `session/close` etkin çalışmayı keser ve oturumu ACP sürecinden ayırır. OpenCode kaydedilmiş oturumu korur.
+- `session/delete` etkin bir promptu `session/cancel` gibi bitirir, ardından oturumu kaldırır. Var olmayan bir oturumu
+  silmek başarılı olur.
+- Bir oturum aynı anda tek bir prompt çalıştırır. İlki etkinken ikinci bir `session/prompt` için OpenCode hata döndürür.
+- Bir prompt başarısız olursa hatanın `data` alanında başarısızlığın `errorName` değeri bulunur. Sağlayıcı gönderdiyse
+  `status` ve `retryAfterMs` de bulunur.
+
+### İptal
+
+`session/cancel` etkin promptu `stopReason: "cancelled"` ile bitirir. Prompt isteği için bir `$/cancel_request` de aynısını
+yapar. OpenCode bekleyen izin isteklerini reddeder. İptalden sonra tamamlanmayan araç çağrılarını `failed` olarak bildirir.
+
+### Ek dizinler
+
+İstemci `session/new`, `session/load`, `session/resume` ve `session/fork` isteklerinde `additionalDirectories`
+iletebilir:
+
+```json
+{ "cwd": "/work/app", "additionalDirectories": ["/work/shared"], "mcpServers": [] }
+```
+
+- Her girdi `*` veya `?` içermeyen mutlak bir yol olmalıdır.
+- OpenCode her kökün içinde harici dizin erişimine izin verir. Okuma, düzenleme ve kabuk izin kuralları yine uygulanır.
+- Her isteğin listesi oturumun önceki listesinin yerini alır;
+  [ek dizinler RFD](https://agentclientprotocol.com/rfds/additional-directories) belgesinin belirttiği gibi.
+- OpenCode izinleri oturumda saklar; böylece başka bir OpenCode istemcisi oturumu kullandığında da uygulanır. Alt oturumlar
+  izinleri OpenCode onları oluşturduğunda kopyalar.
+
+`session/list` her oturumun saklanan listesini `additionalDirectories` içinde döndürür.
+
+### Yapılandırma seçenekleri
+
+Yeni oturumlar dizinin varsayılan modelini ve birincil agent'ını kullanır. `session/new`, `session/load`, `session/resume`
+ve `session/fork` yanıtları şu yapılandırma seçeneklerini içerir:
+
+| Kimlik   | Kategori        | Değerler                                                                      |
+| -------- | --------------- | ----------------------------------------------------------------------------- |
+| `model`  | `model`         | Etkin modeller `provider/model` biçiminde listelenir. `/variant` son eki akıl yürütme düzeyini de ayarlar. |
+| `effort` | `thought_level` | Modelin varyantları ve `default`. Yalnızca varyantı olan modellerde bulunur.   |
+| `mode`   | `mode`          | Görünür birincil agent'lar.                                                    |
+
+Her `model` seçeneği, sağlayıcısının görünen adı ve modelin adıyla adlandırılır; örneğin
+`Anthropic / Claude Sonnet 5.5`. `session/set_config_option` dize değerleri alır:
+
+```json
+{ "sessionId": "ses_123", "configId": "model", "value": "anthropic/claude-sonnet-5-5" }
+```
+
+`session/set_mode` agent'ı da ayarlar. Kullanılabilir modeller veya agent'lar değiştiğinde OpenCode
+`config_option_update` gönderir. Başka bir istemci oturumun modelini veya agent'ını değiştirdiğinde de bir tane gönderir.
+
+### Prompt içeriği
+
+Promptlar metin, görsel, gömülü kaynak ve kaynak bağlantısı içerebilir. OpenCode ses bloklarını yok sayar. Diğer blokları
+şöyle işler:
+
+| Blok                                                  | OpenCode'un yaptığı                                                                    |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `text`                                                | Modele gönderir.                                                                       |
+| Yalnızca `assistant` hedefli `text`                    | Kullanıcının mesajının dışında ayrı bağlam olarak modele gönderir.                     |
+| Yalnızca `user` hedefli `text`                         | Modelin girdisinin dışında bırakır.                                                    |
+| `data` içeren `image`                                  | Prompta ekler.                                                                         |
+| Yalnızca `uri` içeren `image`                          | Kaynak bağlantısı olarak işler.                                                        |
+| `text` içeren `resource`                               | Metni kaynağın yolu veya URI'sinden sonra satır içi ekler.                             |
+| `blob` içeren `resource`                               | Ekler. `mimeType` yoksa URI'nin dosya adından çıkarır.                                 |
+| `file:` URI'sine `resource_link`                       | Dosyayı ekler. Dosya eksik veya okunamıyorsa bunun yerine bir Markdown bağlantısı gönderir. |
+| `path` sorgusu olan `zed://` URI'sine `resource_link`  | `path` konumundaki dosyayı ekler.                                                      |
+| Başka bir URI'ye `resource_link`                       | `[spec](https://example.com/spec.md)` gibi bir Markdown bağlantısı gönderir.           |
+
+Bloğun kime yönelik olduğu `annotations` alanında belirtilir. OpenCode, `data` ve `uri` alanlarının ikisi de eksikse `image` bloğunu reddeder.
+Bu blok yalnızca model için bağlamdır:
+
+```json
+{ "type": "text", "text": "Open file: src/app.ts", "annotations": { "audience": ["assistant"] } }
+```
+
+### Komutlar
+
+`session/new`, `session/load`, `session/resume` veya `session/fork` sonrasında OpenCode, dizinin komutlarını, yerleşik
+`compact` komutunu ve dizinin skill'lerini içeren `available_commands_update` gönderir. Komutlar veya skill'ler
+değiştiğinde bir güncelleme daha gönderir.
+
+```json
+{
+  "sessionUpdate": "available_commands_update",
+  "availableCommands": [{ "name": "compact", "description": "Compact the session" }]
+}
+```
+
+Bir prompt `/` ve kullanılabilir bir komutun adıyla başlarsa OpenCode o komutu metnin geri kalanını argüman olarak
+kullanarak çalıştırır. `/` ve bir skill'in kimliğiyle başlarsa OpenCode promptu o skill eklenmiş olarak gönderir. `/` ile
+başlayan diğer metinleri normal prompt olarak gönderir. `/compact` [sıkıştırmayı](/compaction) çalıştırır. Kimliği bir
+komutla eşleşen bir skill listelenmez.
+
+Bir komut başarısız olursa prompt, komutun kendi mesajıyla, örneğin kullanım bilgisiyle ve `data.service` değeri
+`command` olarak başarısız olur.
+
+### MCP sunucuları
+
+İstemci `session/new`, `session/load`, `session/resume` ve `session/fork` isteklerinde stdio ve HTTP MCP sunucuları
+iletebilir. OpenCode bunları `opencode acp` süreci yaşadığı sürece oturumun dizinine ekler; böylece o dizindeki diğer
+oturumlar da onları kullanabilir. OpenCode boştaki bir dizini boşaltırsa oturumun sonraki promptundan önce onları yeniden
+ekler. OpenCode HTTP başlıklarını iletir ve bu sunucular için OAuth kullanmaz. MCP'yi SSE üzerinden duyurmaz ve MCP'yi
+ACP üzerinden desteklemez.
+
+| Durum                              | Davranış                                                             |
+| ---------------------------------- | -------------------------------------------------------------------- |
+| Yapılandırılmış bir sunucuyla aynı ad | İstemcinin sunucusu o dizindeki yapılandırılmış sunucunun yerini alır. |
+| [Politikalar](/policies)           | `integration.use` kuralları yine uygulanır.                          |
+
+```json
+{ "type": "http", "name": "docs", "url": "https://mcp.example.com", "headers": [] }
+```
+
+### İzinler
+
+İzin istekleri üç seçenek sunar:
+
+```json
+[
+  { "optionId": "once", "kind": "allow_once", "name": "Allow once" },
+  { "optionId": "always", "kind": "allow_always", "name": "Always allow" },
+  { "optionId": "reject", "kind": "reject_once", "name": "Reject" }
+]
+```
+
+Bir istek dosyaları değiştirdiğinde OpenCode, değişikliğin önizlemesini oluşturabiliyorsa `diff` içeriği ekler.
+
+### Sorular
+
+İstemci `elicitation.form` yeteneğini duyurursa OpenCode soruları form modunda `elicitation/create` ile sorar. OpenCode o
+araç çağrısını bu oturum için bir `session/update` olarak gönderdiyse istek `toolCallId` içerir.
+
+```json
+{
+  "mode": "form",
+  "sessionId": "ses_123",
+  "toolCallId": "call_1",
+  "message": "Which package manager?",
+  "requestedSchema": {
+    "type": "object",
+    "properties": { "pm": { "type": "string", "oneOf": [{ "const": "bun", "title": "Bun" }] } },
+    "required": ["pm"]
+  }
+}
+```
+
+- OpenCode gizli bilgi toplayabilecek formlar göndermez. Ancak "Which API token should I use?" gibi bir seçim sorusu,
+  serbest metinle yanıt verme alanı olmadan gönderilir.
+- Bir alan seçeneklerinin yanında yazılı yanıt kabul ediyorsa şema isteğe bağlı bir `<key>_custom` dize özelliği ekler.
+  Tek seçimde boş olmayan özel yanıt seçili seçeneğin yerini alır. Çoklu seçimde OpenCode bunu seçili seçeneklere ekler.
+- Kullanıcı formu reddeder veya iptal ederse OpenCode soruyu iptal eder.
+
+OpenCode bir soruyu gösteremezse soruyu iptal eder ve modele yanıt olmadan devam etmesini söyler.
+
+### Sıkıştırma
+
+İstemci `session.compaction` yeteneğini duyurursa OpenCode sıkıştırmayı, Önizleme aşamasındaki ACP
+[oturum sıkıştırma](https://agentclientprotocol.com/rfds/session-compaction) RFD belgesinin `compaction_update` ve
+`compaction_summary_chunk` güncellemeleriyle bildirir. İstemci bir oturum yüklediğinde OpenCode tamamlanan veya başarısız
+olan her sıkıştırmayı tek bir güncelleme olarak yeniden oynatır.
+
+```json
+{
+  "sessionUpdate": "compaction_update",
+  "compactionId": "msg_123",
+  "status": "completed",
+  "summary": [{ "type": "text", "text": "..." }]
+}
+```
+
+Diğer istemciler bunun yerine [sıkıştırma işaretçisini](#compaction-marker) alır. Alt oturum sıkıştırmaları da öyle.
+
+### Kullanım
+
+Prompt yanıtı, taslak aşamasındaki [tur sonu kullanımı](https://agentclientprotocol.com/rfds/end-turn-token-usage) RFD
+belgesinden gelen `usage` alanını içerir. `usage`, promptun bu oturumdaki model çağrılarını toplar. Alt oturumları
+içermez.
+
+```json
+{ "stopReason": "end_turn", "usage": { "inputTokens": 1200, "outputTokens": 340, "totalTokens": 1540 }, "_meta": {} }
+```
+
+Yanıttan önce OpenCode, [oturum kullanımı](https://agentclientprotocol.com/rfds/session-usage) RFD belgesinden
+`usage_update` gönderir. Bunu yalnızca prompt token kullandıysa ve OpenCode modelin bağlam boyutunu biliyorsa gönderir.
+`cost`, oturumun ve alt oturumlarının USD cinsinden toplam maliyetidir.
+
+```json
+{ "sessionUpdate": "usage_update", "used": 1540, "size": 200000, "cost": { "amount": 0.012, "currency": "USD" } }
+```
+
+### Alt oturumlar
+
+Bir prompt çalışırken OpenCode alt oturumlarından gelen güncellemeleri promptun oturumunda `session/update` bildirimleri
+olarak gönderir. Her güncelleme `_meta["opencode/child-session"]` içerir. OpenCode araç çağrısı kimliklerinin başına
+`<childSessionId>:` ekler. Alt oturumun başlığı varsa araç çağrısı başlıklarının başına alt oturumun başlığını ekler.
+
+```json
+{
+  "sessionUpdate": "tool_call",
+  "toolCallId": "ses_child:call_1",
+  "title": "Explore the codebase: src/app.ts",
+  "_meta": {
+    "opencode/child-session": { "id": "ses_child", "parentID": "ses_123", "depth": 1, "title": "Explore the codebase" }
+  }
+}
+```
+
+| Alan       | Tür      | Açıklama                                                                               |
+| ---------- | -------- | -------------------------------------------------------------------------------------- |
+| `id`       | `string` | Alt oturumun kimliği.                                                                  |
+| `parentID` | `string` | Alt oturumun üst oturumunun kimliği.                                                   |
+| `depth`    | `number` | Promptun oturumunun alt oturumu için 1, o alt oturumun alt oturumu için 2 ve böyle devam eder. |
+| `title`    | `string` | Alt oturumun başlığı. Alt oturumun başlığı yoksa OpenCode bunu atlar.                   |
+
+Alt oturumdan gelen izin istekleri aynı anahtarı `toolCall._meta` üzerinde taşır. Prompt bittikten sonra OpenCode alt
+oturum güncellemelerini göndermeyi durdurur. Alt oturumlardan gelen izin istekleri ve sorular istemciye yine ulaşır.
+
+### Yeniden deneme durumu
+
+Bir model çağrısı başarısız olduğunda ve OpenCode bir yeniden deneme planladığında `_meta["opencode/retry"]` ile
+`session_info_update` gönderir. Yeniden deneme başladığında OpenCode `"opencode/retry": null` gönderir. Prompt yanıtı
+geldiğinde herhangi bir yeniden deneme durumunu temizleyin.
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": {
+    "opencode/retry": {
+      "attempt": 1,
+      "nextRetryAt": "2026-10-02T12:00:05.000Z",
+      "error": { "type": "provider.rate-limit", "message": "Rate limit exceeded", "status": 429 }
+    }
+  }
+}
+```
+
+| Alan          | Tür      | Açıklama                                                                                   |
+| ------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `attempt`     | `number` | Yeniden deneme numarası.                                                                   |
+| `nextRetryAt` | `string` | Sonraki denemenin zamanı, ISO 8601 biçiminde.                                              |
+| `error`       | `object` | `type` ve `message` içerir. Sağlayıcı gönderdiyse `status` ve `response.body` de içerir.    |
+
+### Sıkıştırma işaretçisi
+
+İstemci `session.compaction` yeteneğini duyurmuyorsa OpenCode sıkıştırma ilerlemesini `_meta["opencode/compaction"]` ile
+`session_info_update` olarak bildirir. OpenCode alt oturum sıkıştırmaları için her zaman işaretçiyi kullanır.
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": { "opencode/compaction": { "status": "started", "messageId": "msg_123", "reason": "auto" } }
+}
+```
+
+| Alan        | Tür      | Açıklama                                                                             |
+| ----------- | -------- | ------------------------------------------------------------------------------------ |
+| `status`    | `string` | `started`, `completed` veya `failed`. İptal edilen bir sıkıştırma `failed` olur.       |
+| `messageId` | `string` | Bir sıkıştırmanın başlangıcını bitişiyle eşleştirir. Opak bir anahtar olarak davranın. |
+| `reason`    | `string` | `auto` veya `manual`.                                                                |
+| `error`     | `object` | `status` değeri `failed` olduğunda bulunur. [Yeniden deneme](#retry-status) `error` ile aynı biçimdedir. |
+
+İşaretçi bir özet içermez. Otomatik bir sıkıştırma `started` işaretçisi olmadan başarısız olabilir. İstemci bir oturum
+yüklediğinde OpenCode tamamlanan veya başarısız olan her sıkıştırmayı tek bir işaretçi olarak yeniden oynatır.

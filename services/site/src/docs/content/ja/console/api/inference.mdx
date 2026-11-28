@@ -1,0 +1,161 @@
+---
+title: "推論 API"
+description: "1 つの認証ヘッダーで、OpenAI、Anthropic、Gemini 互換のモデルを Console の推論経由で呼び出します。"
+---
+
+Console の推論は、`https://opencode.ai/inference` から OpenAI、Anthropic、Gemini 互換の API を提供します。モデルの API ファミリーに合ったエンドポイントに JSON の `POST` リクエストを送信します。
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kimi-k3",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## 認証
+
+`<token>` は、[Console](https://opencode.ai/console) で作成した[パーソナル API キー](/console/api#personal-api-keys)または[サービスアカウントキー](/console/api#service-accounts)に置き換えます。有料モデルにはこのヘッダーが必要です。無料枠のチャットモデルは OpenCode 内でのみ利用でき、他のクライアントは API キーがあっても HTTP `403` を受け取ります。他のクライアントからは、有料モデルまたは [Go](/console/go) のサブスクリプションを使用してください。
+
+```text
+Authorization: Bearer <token>
+```
+
+## エンドポイント
+
+| API                     | パス                                                      |
+| ----------------------- | --------------------------------------------------------- |
+| OpenAI Chat Completions | `/inference/openai/v1/chat/completions`                   |
+| OpenAI Responses        | `/inference/openai/v1/responses`                          |
+| Anthropic Messages      | `/inference/anthropic/v1/messages`                        |
+| Gemini                  | `/inference/google/v1beta/models/<model>:generateContent` |
+| System One（決定処理） | `/inference/systemone/v1/systemone`                       |
+| OpenAI Decisions        | `/inference/openai/v1/decisions`                          |
+| OpenAI Embeddings       | `/inference/openai/v1/embeddings`                         |
+
+各モデルは 1 つの API ファミリーによって提供されます。[モデルのエンドポイント](/console/models#endpoints)の表を参照するか、最新の一覧を取得してください。
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+[モデル一覧 API](/console/api/models)では、レスポンスの各フィールドと、接続したプロバイダーを含む Console の一覧について説明しています。
+
+### OpenAI Chat Completions
+
+`kimi-k3`、`glm-5.3`、`minimax-m3` などのオープンモデルと無料モデルは、Chat Completions API を使用します。
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-5.3",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### OpenAI Responses
+
+GPT モデルは Responses API を使用します。
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-6.1-sol",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Messages
+
+Claude と Qwen のモデルは Messages API を使用します。`max_tokens` は必須です。
+
+```bash
+curl -X POST "https://opencode.ai/inference/anthropic/v1/messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Gemini
+
+Gemini モデルは、パスでモデルとメソッドを指定します。レスポンスをストリーミングするには、`:generateContent` を `:streamGenerateContent` に置き換えます。
+
+```bash
+curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-4-argon:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+### System One
+
+`jev-1.14`、`gemini-decision-1`、`gpt-6-luna-decision` などの Decision モデルは、テキストを生成する代わりに、`state` に関する型付きの質問に回答します。質問の種類とメディア入力については、[Decision モデル](/console/models#jev)を参照してください。
+
+```bash
+curl -X POST "https://opencode.ai/inference/systemone/v1/systemone" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.14",
+    "state": "My card was charged twice and I need a refund today",
+    "questions": { "urgent": { "type": "noul", "instructions": "Is this request urgent?" } }
+  }'
+```
+
+同じモデルは、`/inference/openai/v1/decisions` で OpenAI の Decisions 形式も受け付けます。
+
+### OpenAI Embeddings
+
+`text-embedding-3-small`、`qwen3-embedding-8b` などの埋め込みモデルは Embeddings API を使用します。すべてのモデルとオプションについては、[埋め込みモデル](/console/models#embedding-models)を参照してください。
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/embeddings" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen3-embedding-8b",
+    "input": "How do I reset my password?"
+  }'
+```
+
+[Go](/console/go#endpoints) は、含まれる Decision モデルと埋め込みモデルを、`/inference/go` 以下の同じパスで提供します。
+
+## コスト
+
+すべてのレスポンスは、API がすでに返す使用量に加えて、そのリクエストのコストを報告します。OpenAI と Anthropic では `usage`、Gemini では `usageMetadata` に含まれます。ストリームでは、最終的な使用量を含むイベントで報告されます。Chat Completions では `stream_options.include_usage` を指定した場合の最後の使用量チャンク、Responses では `response.completed`、Messages では `message_delta`、Gemini では最後のチャンクです。
+
+```json
+"usage": {
+  "prompt_tokens": 1200,
+  "completion_tokens": 300,
+  "cost": 0.00412,
+  "opencode": {
+    "billing_source": "balance",
+    "list_cost": 0.00412,
+    "tokens": { "input": 1200, "output": 300, "reasoning": 120, "cache_read": 8000, "cache_write_5m": 0, "cache_write_1h": 0 }
+  }
+}
+```
+
+| フィールド                | 意味                                                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `cost`                    | 残高から請求される米ドル。無料モデルと、上限内の [Go](/console/go) の使用量では `0`。自分のプロバイダーキーを使う場合は、プロバイダーが独自に報告しない限り、プロバイダーが請求する額の見積もり。モデルに価格がない場合は含まれません。 |
+| `opencode.billing_source` | `free`、`balance`、`go`、`go-plus`、`byok`（自分のプロバイダーキー）。                                                     |
+| `opencode.list_cost`      | モデルの料金での米ドル。ピーク時間と長いコンテキストの料金を含みます。                                                    |
+| `opencode.estimated`      | `cost` が OpenCode の請求額ではなくモデルの料金に基づく見積もりである場合に `true`。自分のプロバイダーキーを使う場合にのみ設定されます。 |
+| `opencode.allowance`      | Go のみ。そのリクエストが[使用量の上限](/console/go#usage-limits)にどれだけ計上されたか（プランの月間上限のドル額）。     |
+| `opencode.tokens`         | 請求対象になったトークン。`input` はキャッシュの読み取りと書き込みを除き、`output` は `reasoning` を含みます。            |
+
+画像生成でもレスポンスに同じフィールドが含まれます。ストリーミング時は、画像が 1 枚完成するたびに、その時点までのコストが同じフィールドで返ります。コストはレスポンスの終了時点で分かり、その後に残高や Go の使用量が更新されます。リクエスト中に残高や Go の利用枠を使い切った場合、実際の請求額がレスポンスに示された金額を下回ることはありますが、上回ることはありません。

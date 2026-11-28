@@ -11,6 +11,7 @@ import { PluginSettingsSections } from "@/runtime/plugin/settings-page-view"
 import {
   type BackgroundActivity,
   type FollowUpBehavior,
+  type QuestionSubmitKey,
   type TimelineWidth,
   type WorkspaceDefaultDestination,
   useSettings,
@@ -136,6 +137,36 @@ const FollowUpBehaviorSetting: Component = () => {
   )
 }
 
+const QuestionSubmitKeySetting: Component = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+
+  const options = createMemo((): { value: QuestionSubmitKey; label: string }[] => [
+    { value: "enter", label: formatKeybind("enter", language.t) },
+    { value: "mod+enter", label: formatKeybind("mod+enter", language.t) },
+  ])
+
+  return (
+    <SettingsRow
+      title={language.t("settings.general.row.questionSubmitKey.title")}
+      description={language.t("settings.general.row.questionSubmitKey.description", {
+        keybind: formatKeybind(settings.general.questionSubmitKey() === "enter" ? "shift+enter" : "enter", language.t),
+      })}
+    >
+      <Select
+        data-action="settings-question-submit-key"
+        options={options()}
+        current={options().find((option) => option.value === settings.general.questionSubmitKey())}
+        value={(option) => option.value}
+        label={(option) => option.label}
+        placement="bottom-end"
+        gutter={6}
+        onSelect={(option) => option && settings.general.setQuestionSubmitKey(option.value)}
+      />
+    </SettingsRow>
+  )
+}
+
 const BackgroundActivitySetting = () => {
   const language = useLanguage()
   const settings = useSettings()
@@ -232,6 +263,7 @@ export const SettingsGeneral: Component = () => {
   const settings = useSettings()
   const mobile = createMediaQuery("(max-width: 767px)")
   const desktop = createMemo(() => platform.platform === "desktop")
+  const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
 
   const pinchZoom = createOptimisticSetting({
     source: () => (desktop() && "getPinchZoomEnabled" in platform) || undefined,
@@ -249,11 +281,38 @@ export const SettingsGeneral: Component = () => {
     write: (checked) => platform.setSpellcheckEnabled?.(checked),
   })
 
+  const smoothScrolling = createOptimisticSetting({
+    source: () => (linux() && "getSmoothScrollingEnabled" in platform) || undefined,
+    initial: false,
+    initialMeta: undefined,
+    load: async () => ({ value: (await platform.getSmoothScrollingEnabled?.()) ?? false, meta: undefined }),
+    write: (checked) => platform.setSmoothScrollingEnabled?.(checked),
+  })
+
+  const keepServiceRunning = createOptimisticSetting({
+    source: () => (desktop() && "getKeepServiceRunning" in platform) || undefined,
+    initial: true,
+    initialMeta: undefined,
+    load: async () => ({ value: (await platform.getKeepServiceRunning?.()) ?? true, meta: undefined }),
+    write: (checked) => platform.setKeepServiceRunning?.(checked),
+  })
+
   const GeneralSection = () => (
     <div class="settings-section">
       <h3 class="settings-section-title">{language.t("settings.general.section.general")}</h3>
       <SettingsList>
         <InterfaceModeSetting />
+        <SettingsRow
+          title={language.t("settings.general.row.sharedSidePanel.title")}
+          description={language.t("settings.general.row.sharedSidePanel.description")}
+        >
+          <div data-action="settings-shared-side-panel">
+            <Switch
+              checked={settings.general.sharedSidePanel()}
+              onChange={(checked) => settings.general.setSharedSidePanel(checked)}
+            />
+          </div>
+        </SettingsRow>
         <LanguageSetting />
 
         <WorkspaceDestinationSetting />
@@ -273,6 +332,8 @@ export const SettingsGeneral: Component = () => {
 
         <FollowUpBehaviorSetting />
 
+        <QuestionSubmitKeySetting />
+
         <Show when={desktop()}>
           <SettingsRow
             title={language.t("settings.general.row.pinchZoom.title")}
@@ -288,6 +349,25 @@ export const SettingsGeneral: Component = () => {
           >
             <div data-action="settings-spellcheck">
               <Switch checked={spellcheck.value()} onChange={spellcheck.select} />
+            </div>
+          </SettingsRow>
+          <SettingsRow
+            title={language.t("settings.general.row.keepServiceRunning.title")}
+            description={language.t("settings.general.row.keepServiceRunning.description")}
+          >
+            <div data-action="settings-keep-service-running">
+              <Switch checked={keepServiceRunning.value()} onChange={keepServiceRunning.select} />
+            </div>
+          </SettingsRow>
+        </Show>
+
+        <Show when={linux()}>
+          <SettingsRow
+            title={language.t("settings.general.row.smoothScrolling.title")}
+            description={language.t("settings.general.row.smoothScrolling.description")}
+          >
+            <div data-action="settings-smooth-scrolling">
+              <Switch checked={smoothScrolling.value()} onChange={smoothScrolling.select} />
             </div>
           </SettingsRow>
         </Show>
@@ -348,6 +428,20 @@ export const SettingsGeneral: Component = () => {
             <TimelineWidthSetting />
             <BackgroundActivitySetting />
             <SettingsRow
+              title={language.t("settings.timeline.row.foldUserMessages.title")}
+              description={language.t("settings.timeline.row.foldUserMessages.description")}
+            >
+              <div data-action="settings-fold-user-messages">
+                <Switch
+                  checked={settings.general.foldUserMessages()}
+                  onChange={(checked) => settings.general.setFoldUserMessages(checked)}
+                  hideLabel
+                >
+                  {language.t("settings.timeline.row.foldUserMessages.title")}
+                </Switch>
+              </div>
+            </SettingsRow>
+            <SettingsRow
               title={language.t("settings.timeline.row.turnDiffs.title")}
               description={language.t("settings.timeline.row.turnDiffs.description")}
             >
@@ -355,6 +449,17 @@ export const SettingsGeneral: Component = () => {
                 <Switch
                   checked={settings.general.showTurnDiffs()}
                   onChange={(checked) => settings.general.setShowTurnDiffs(checked)}
+                />
+              </div>
+            </SettingsRow>
+            <SettingsRow
+              title={language.t("settings.timeline.row.wrapCodeBlocks.title")}
+              description={language.t("settings.timeline.row.wrapCodeBlocks.description")}
+            >
+              <div data-action="settings-wrap-code-blocks">
+                <Switch
+                  checked={settings.general.wrapCodeBlocks()}
+                  onChange={(checked) => settings.general.setWrapCodeBlocks(checked)}
                 />
               </div>
             </SettingsRow>

@@ -576,8 +576,83 @@ export default function Press() {
             }}
           </For>
         </ul>
+        {/* Each list's live region follows it: the press island announces in the list's next sibling. */}
         <span data-slot="sr-only" aria-live="polite">
-          {copied()?.startsWith("svg:") ? i18n.t("site.action.copied") : ""}
+          {copied()?.startsWith("svg:") && !copied()?.startsWith("svg:anomaly-avatar")
+            ? i18n.t("site.action.copied")
+            : ""}
+        </span>
+        <p data-slot="text">{content().anomalyLogo.avatars.body}</p>
+        <ul data-component="logo-tiles">
+          <For each={content().anomalyLogo.avatars.items}>
+            {(item) => {
+              const detail = i18n.t("press.ui.anomalyAsset", {
+                name: language.locale() === "en" ? item.name.toLowerCase() : item.name,
+              })
+              return (
+                <li>
+                  <span data-slot="name">{item.name}</span>
+                  <div data-slot="preview" data-tone={item.tone} data-kind="avatar">
+                    <img
+                      src={item.svg}
+                      width={1024}
+                      height={1024}
+                      alt={`Anomaly ${language.locale() === "en" ? item.name.toLowerCase() : item.name}`}
+                    />
+                  </div>
+                  <div data-slot="meta">
+                    <div data-slot="actions">
+                      <For each={item.png}>
+                        {(png) => (
+                          <a
+                            href={png.href}
+                            download={`${item.file}-${png.size}.png`}
+                            data-component="site-button"
+                            data-variant="neutral"
+                          >
+                            <Marked
+                              text={i18n.t("press.ui.fileOf", { format: `PNG ${png.size}`, title: detail })}
+                              slots={{ sr: "sr-only" }}
+                            />
+                            <DownloadIcon />
+                          </a>
+                        )}
+                      </For>
+                      <a
+                        href={item.svg}
+                        download={`${item.file}.svg`}
+                        data-component="site-button"
+                        data-variant="neutral"
+                      >
+                        <Marked
+                          text={i18n.t("press.ui.fileOf", { format: "SVG", title: detail })}
+                          slots={{ sr: "sr-only" }}
+                        />
+                        <DownloadIcon />
+                      </a>
+                      <button
+                        type="button"
+                        data-component="site-button"
+                        data-variant="neutral"
+                        data-slot="copy-square"
+                        data-tip={i18n.t("brand.ui.copySvg")}
+                        data-tip-align="center"
+                        aria-label={i18n.t("press.ui.copySvgOf", { detail })}
+                        onClick={() => copySvg(item.file, item.svg)}
+                      >
+                        <Show when={copied() === `svg:${item.file}`} fallback={<CopyIcon />}>
+                          <CheckIcon />
+                        </Show>
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              )
+            }}
+          </For>
+        </ul>
+        <span data-slot="sr-only" aria-live="polite">
+          {copied()?.startsWith("svg:anomaly-avatar") ? i18n.t("site.action.copied") : ""}
         </span>
       </Section>
 

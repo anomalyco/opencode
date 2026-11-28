@@ -1,0 +1,172 @@
+---
+title: "Claude Agent"
+description: "Используйте тариф Claude или вход Claude Code в OpenCode через Claude Agent, который запускает Claude Code на вашей машине."
+noindex: true
+---
+
+Используйте тариф Claude или другой вход Claude Code. Claude Agent запускает Claude Code на вашей машине, поэтому сначала установите Claude Code 2.1.248 или новее и войдите.
+
+```bash
+claude auth login
+```
+
+Затем подключите **Claude Agent** и выберите модель. Список моделей берётся из Claude Code. Уровни интенсивности — это варианты, например `claude-agent/opus#high`.
+
+```text
+/connect
+# Select Claude Agent.
+/models
+```
+
+Также можно подключиться из CLI командой `auth login claude-agent`.
+
+OpenCode находит `claude` в вашем `PATH`. Чтобы использовать другую копию, задайте `OPENCODE_CLAUDE_PATH` на сервере.
+
+```bash
+opencode service set env OPENCODE_CLAUDE_PATH /opt/claude/bin/claude
+```
+
+## Как это работает
+
+Claude Code вызывает модель, а всё остальное делает OpenCode.
+
+- Claude получает системный промпт Claude Code, а также промпт вашего агента, файлы `AGENTS.md`, навыки и инструкции MCP.
+- Claude использует инструменты и разрешения OpenCode вместо встроенных инструментов Claude Code.
+- Ваши настройки Claude Code, файлы `CLAUDE.md`, хуки, MCP-серверы, навыки и память не загружаются.
+- OpenCode сжимает контекст и запускает субагентов.
+- В одной сессии можно переключаться между Claude Agent и другими моделями.
+
+## Стоимость
+
+Стоимость зависит от способа входа в Claude Code.
+
+| Вход | Показываемая стоимость |
+| --- | --- |
+| Подписка Claude | Нет, покрывается вашим тарифом |
+| API-ключ Anthropic или Claude Platform в AWS либо Google Cloud | Цены Anthropic |
+| Amazon Bedrock | Цены Bedrock или цены Anthropic на Bedrock Mantle |
+| Google Vertex | Цены Vertex |
+| Microsoft Foundry | Цены Azure |
+| Пользовательский базовый URL | Нет |
+
+## Настройка
+
+Настройки подключения провайдера `claude-agent` передаются Claude Code. Они переопределяют те же переменные, заданные в вашем shell.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": {
+        "baseURL": "https://llm-proxy.example.com/anthropic",
+      },
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+    },
+  },
+}
+```
+
+| Настройка              | Переменная Claude Code       |
+| ---------------------- | ---------------------------- |
+| `settings.baseURL`     | `ANTHROPIC_BASE_URL`         |
+| `settings.apiKey`      | `ANTHROPIC_API_KEY`          |
+| `settings.authToken`   | `ANTHROPIC_AUTH_TOKEN`       |
+| `settings.headerTimeout` | `API_TIMEOUT_MS`           |
+| `settings.chunkTimeout`  | `CLAUDE_STREAM_IDLE_TIMEOUT_MS` |
+| `settings.configDir`   | `CLAUDE_CONFIG_DIR`          |
+| `headers`              | `ANTHROPIC_CUSTOM_HEADERS`   |
+| `body`                 | `CLAUDE_CODE_EXTRA_BODY`     |
+
+Задайте их на модели, чтобы переопределить значения провайдера для этой модели.
+
+## Второй аккаунт Claude
+
+Войдите во второй аккаунт в его собственном каталоге. Обычный вход останется без изменений.
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-2" claude auth login
+```
+
+В PowerShell:
+
+```powershell
+$env:CLAUDE_CONFIG_DIR = "$HOME\.claude-2"; claude auth login
+```
+
+Затем добавьте модели, использующие этот каталог:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "models": {
+        "sonnet-2": {
+          "modelID": "sonnet",
+          "name": "Sonnet (Claude 2)",
+          "settings": { "configDir": "~/.claude-2" },
+        },
+      },
+    },
+  },
+}
+```
+
+Чтобы использовать один аккаунт для всех моделей проекта, задайте `settings.configDir` у провайдера в конфигурации этого проекта.
+
+## Ротация аккаунтов
+
+Если у вас несколько взаимозаменяемых аккаунтов, OpenCode может перейти к следующему, когда аккаунт достигает лимита использования. Войдите в каждый дополнительный аккаунт в его каталоге. Существующий вход в `~/.claude` может остаться как есть:
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-1" claude auth login
+```
+
+Затем перечислите каталоги:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": { "configDir": ["~/.claude", "~/.claude-1"] },
+    },
+  },
+}
+```
+
+В текущем чате используется аккаунт, через который получен последний ответ. Новый чат начинается с последнего аккаунта, через который удалось получить ответ. Переключение работает только для аккаунтов, подключённых по подписке Claude, а не через `apiKey` или `authToken`.
+
+## Веб-поиск
+
+Claude Agent также может обслуживать веб-поиск OpenCode через WebSearch из Claude Code, поэтому поиски учитываются в вашем тарифе Claude и не требуют API-ключа поиска. Его может использовать любая модель. Выберите его в `opencode.jsonc`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+Подробности см. в разделе [Веб-поиск](/websearch#claude-agent).
+
+## Ограничения
+
+- Claude Code должен быть установлен на той же машине, что и сервер OpenCode. Claude Agent недоступен в удалённых рабочих пространствах.
+- Системный промпт Claude Code заменяет встроенный промпт OpenCode. Промпты пользовательских агентов по-прежнему применяются.
+- Temperature, top-p, top-k, seed и стоп-последовательности не поддерживаются.
+- Хуки плагинов `http.request` и `http.response` не выполняются, потому что вызовы API делает Claude Code.
+- Возможности Claude Code вроде `/usage`, `/loop`, авторежима и команд агентов недоступны.
+
+## Ошибки
+
+| Ошибка или симптом | Что проверить |
+| --- | --- |
+| `Claude Code is not installed` | Установите Claude Code или задайте `OPENCODE_CLAUDE_PATH` с его путём. |
+| `Claude Code is not logged in` | Выполните `claude auth login`, затем снова подключите Claude Agent. С `configDir` выполните команду, которую показывает ошибка для этого каталога. |
+| `Claude Code ... is too old` | Выполните `claude update`. |

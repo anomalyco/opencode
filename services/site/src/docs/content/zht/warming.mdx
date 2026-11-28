@@ -1,0 +1,203 @@
+---
+title: "預熱"
+description: "在提示詞之間暫停時，傳送週期性請求，避免工作階段的供應商提示詞快取到期。"
+---
+
+工作階段預熱會定期向模型發出請求，讓你暫停輸入提示詞時，也能保留供應商端的提示詞快取或其他短暫狀態。預熱預設停用。
+
+在任意 [OpenCode 設定檔](/config)中啟用預熱：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+使用此設定時，OpenCode 會在近期使用過的工作階段中，在提示詞快取即將到期前預熱。預熱間隔為模型 [`cache.ttl`](/models#cache-lifetime) 的 90%；若模型沒有這項設定，就每四分鐘預熱一次。距上次非預熱請求滿 30 分鐘後就會停止。
+
+## 選項
+
+使用物件形式可變更預熱提示詞、閒置間隔或預熱期間：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| 欄位 | 預設 | 用途 |
+| --- | --- | --- |
+| `prompt` | 保持連線指示 | 作為每次預熱請求的短暫使用者訊息附加。預設要求模型不要執行任何工作、不要使用工具，並回覆 `OK`。 |
+| `interval` | `"auto"` | 下一次預熱請求前的閒置時間。`"auto"` 會使用模型 `cache.ttl` 的 90%，沒有時則為四分鐘。 |
+| `duration` | `"30 minutes"` | 從最近一次非預熱模型請求起算的預熱視窗。 |
+
+省略的物件欄位會保留其預設值。例如，下列設定只變更
+間隔：
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## 自動間隔
+
+`interval` 預設為 `"auto"`，會在每個模型的
+提示詞快取到期前進行預熱。OpenCode 會使用模型
+[`cache.ttl`](/models#cache-lifetime) 設定的 90%，因此 `"5m"` 的快取會每 4.5 分鐘預熱一次。沒有 `cache.ttl` 的模型會每四分鐘預熱一次。
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": { "duration": "2 hours" },
+  "providers": {
+    "anthropic": { "settings": { "cache": { "ttl": "1h" } } },
+  },
+}
+```
+
+比 `duration` 更長的快取（例如 `"1h"` 搭配 30 分鐘的
+預設值）不會預熱，因為它的存留時間本來就超過預熱視窗。OpenCode 會為每個工作階段記錄一次。請提高 `duration` 來預熱它。
+
+## 依供應商與模型
+
+在供應商或模型上設定 `settings.cache.warming`，即可只預熱其工作階段，
+或給予它們專屬的時序。它接受與頂層
+`warming` 相同的值（`prompt` 除外），並會覆寫它。模型設定會覆寫
+供應商設定。
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "anthropic": {
+      "settings": { "cache": { "ttl": "5m", "warming": true } },
+      "models": {
+        "claude-haiku-5-5": { "settings": { "cache": { "warming": false } } },
+      },
+    },
+  },
+}
+```
+
+在這裡，Anthropic 工作階段會每 4.5 分鐘預熱一次，Claude Haiku
+5.5 除外，其他供應商則不會預熱。物件形式中省略的欄位會取自
+頂層 `warming`，再取自預設值。無效的設定會記錄警告，並改用頂層 `warming`。
+
+## 持續時間
+
+`interval` 與 `duration` 接受持續時間字串。兩者都必須解析為大於零的有限
+值，且 `interval` 必須短於 `duration`；
+否則 OpenCode 會略過預熱並記錄警告。
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## 時序
+
+預熱會在最上層工作階段中的非預熱模型請求之後開始。
+subagent 工作階段不會預熱。每個間隔會從最近一次
+請求或預熱請求送出時起算，而不是從其回應完成時起算，
+因為供應商在收到請求時就開始計算快取存留時間。預熱請求不會延長預熱期間。
+
+```text
+00:00  normal model request sent
+00:01  response finishes
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+只要模型執行新的非預熱工作（包括壓縮），就會重設兩個計時器。
+明確的間隔若等於或長於持續時間，會遭到拒絕並
+顯示警告；如此長的 `"auto"` 間隔會略過預熱，因為快取
+的存留時間超過視窗。
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+OpenCode 絕不會在模型請求（包括
+壓縮）執行時傳送預熱請求。若間隔到期時請求仍在執行，
+預熱會等待它完成，然後立即傳送，前提是該請求的快取
+尚未過期。若已過期，預熱會停止，直到下一次
+一般請求。
+
+```text
+00:00  normal model request sent
+00:04  interval due; request still running
+00:04:30  response finishes; warming request
+00:08:30  warming request
+```
+
+## 請求
+
+預熱請求會使用工作階段目前的模型、agent、指示與
+對話上下文。OpenCode 會短暫附加設定的提示詞、
+進行一次模型呼叫，然後捨棄回應。
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+此請求不會接納輸入、將訊息加入記錄，或變更持久的
+工作階段狀態。OpenCode 不會派送本機工具呼叫，也不會繼續工具
+迴圈；預設提示詞也會告訴模型不要使用工具。
+
+## 失敗
+
+預熱失敗會記錄在日誌中，不會使工作階段失敗或改變其狀態。OpenCode 會等到下一個間隔再重試，原本的預熱期間仍會繼續倒數。
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+若預熱請求未命中快取（讀取量少於寫入量），
+就會停止該工作階段的預熱，直到下一次非預熱請求。不
+回報快取用量的供應商永遠不會計為未命中。
+
+```text
+00:04  warming request misses the cache; warming stops
+00:10  normal model request; warming resumes
+00:14  warming request
+```
+
+## 成本
+
+預熱請求確實會送到供應商，和其他模型請求一樣，可能消耗 token、產生費用、計入速率限制，也可能失敗。
+
+- 較短的間隔會增加請求量。
+- 較長的持續時間會允許更多預熱請求。
+- 只有在供應商端的好處值得增加的用量時，才啟用預熱。
+
+例如，在沒有 `cache.ttl` 的模型上，預設值允許在一個不中斷的 30 分鐘視窗中最多進行七次
+預熱嘗試：第 4、8、12、16、20、24 與 28 分鐘。
+
+## 停用
+
+將 `warming` 設為 `false` 即可明確停用。省略該欄位也會
+讓預熱保持停用。
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```
