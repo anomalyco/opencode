@@ -227,6 +227,18 @@ const make = Effect.gen(function* () {
       )
   })
 
+  // Homebrew's exit code is not proof of an install: when the local tap is behind the release,
+  // `brew upgrade` prints "already installed", exits 0 and leaves the old version in place.
+  // `brew list --versions` prints every keg in filesystem order, not by version, so the newest
+  // entry is not necessarily the last one. Return them all and let the caller match.
+  const brewInstalledVersions = Effect.fnUntraced(function* (formula: string) {
+    const result = yield* exec(["brew", "list", "--versions", formula]).pipe(Effect.orElseSucceed(() => undefined))
+    if (!result || result.code !== 0) return undefined
+    // The output lists the formula first, then every installed version.
+    const versions = result.stdout.trim().split(/\s+/).slice(1)
+    return versions.length === 0 ? undefined : versions
+  })
+
   const curlPath = path.resolve(
     global.home,
     ".opencode",
@@ -257,7 +269,10 @@ const make = Effect.gen(function* () {
     if (installedWinget) return "winget"
     if (!installedPackage || installedOwner) return
 
-    const parts = executable.toLowerCase().split(path.sep).map((part) => part.replace(/^\./, ""))
+    const parts = executable
+      .toLowerCase()
+      .split(path.sep)
+      .map((part) => part.replace(/^\./, ""))
     const checks: Array<{ method: Method; command: string[] }> = [
       { method: "npm", command: [npm, "list", "-g", "--depth=0", ...npmPrefixArgs, installedPackage] },
       { method: "pnpm", command: ["pnpm", "list", "-g", "--depth=0", installedPackage] },
@@ -483,12 +498,14 @@ const make = Effect.gen(function* () {
   const upgrade = Effect.fnUntraced(function* (method: Method, input: string) {
     if (!parseReleaseVersion(input)) return yield* Effect.fail(new Error(`Invalid version: ${input}`))
     const version = input.trim().replace(/^v/, "")
+    // Homebrew Core builds its own formula, so only a tap release describes what `brew upgrade` installs.
+    const tap = method === "brew" && installedFormula !== "opencode" ? yield* release(method) : undefined
     const packageName =
       method === "winget"
         ? wingetPackage
         : method === "brew" && installedFormula === "opencode"
           ? "opencode"
-          : (yield* release(method)).package
+          : (tap ?? (yield* release(method))).package
     const target = `${packageName}@${version}`
     if (installedPackage && packageName !== installedPackage && (method === "pnpm" || method === "yarn")) {
       return yield* Effect.fail(new Error(`Reinstall ${target} with ${method} to migrate from ${installedPackage}.`))
@@ -554,7 +571,37 @@ const make = Effect.gen(function* () {
             }),
           )
         }
-        if (method === "brew") return yield* runUpgrade({ method, command: ["brew", "upgrade", packageName] })
+        if (method === "brew") {
+          // `brew upgrade` takes no version argument, so the tap formula decides what lands. Asking for
+          // another version used to reach brew, install the tap version and then fail read-back with a
+          // stale-tap message that was not true.
+          if (tap && tap.version !== version)
+            return yield* Effect.fail(
+              new UpgradeError({
+                title: "Homebrew can only install the version in the tap",
+                detail: `The Homebrew tap provides ${tap.package} ${tap.version}, not ${version}. brew upgrade takes no version argument, so it cannot install ${version}.`,
+                retry: `Run opencode upgrade ${tap.version} to take the version the tap provides.`,
+              }),
+            )
+          const result = yield* runUpgrade({ method, command: ["brew", "upgrade", packageName] })
+          // Never report an update that Homebrew did not install. Homebrew Core is skipped: its
+          // formula and index share one source, so a mismatch there is not a stale tap.
+          if (installedFormula && installedFormula !== "opencode") {
+            const installed = yield* brewInstalledVersions(installedFormula)
+            // Homebrew appends `_N` when a formula revision changes, so compare the version part.
+            const match = (entry: string) => entry.replace(/^v/, "").replace(/_\d+$/, "") === version
+            if (installed !== undefined && !installed.some(match))
+              return yield* Effect.fail(
+                new UpgradeError({
+                  title: "Homebrew did not install the OpenCode update",
+                  detail: `Homebrew reported success, but ${installedFormula} is still at ${installed.join(", ")} instead of ${version}. The tap is probably behind the release, so brew upgraded nothing.`,
+                  command: `brew upgrade ${packageName}`,
+                  retry: "Run brew update to refresh the tap, then run opencode upgrade again.",
+                }),
+              )
+          }
+          return result
+        }
         if (method === "winget")
           return yield* retaining(
             method,

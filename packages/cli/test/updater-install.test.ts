@@ -491,7 +491,11 @@ it.live("Homebrew Core installs check and upgrade the Core formula", () =>
       expect(yield* test.updater.method()).toBe("brew")
       expect(yield* test.updater.latest()).toBe("2.3.4")
       yield* test.updater.upgrade("brew", "2.3.4")
-      expect(test.commands).toEqual([["brew", "upgrade", `anomalyco/tap/${formula}`]])
+      expect(test.commands).toEqual([
+        ["brew", "upgrade", `anomalyco/tap/${formula}`],
+        // The installed version is read back so a stale tap cannot report a false success.
+        ["brew", "list", "--versions", formula],
+      ])
       expect(test.requests).toEqual([
         "https://opencode.ai/update/api/local/cli/homebrew?current=local",
         "https://opencode.ai/update/api/local/cli/homebrew?current=local",
@@ -499,6 +503,79 @@ it.live("Homebrew Core installs check and upgrade the Core formula", () =>
     }),
   )
 })
+
+it.live("Homebrew tap upgrades fail when brew leaves the installed version behind", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture(
+      (command) =>
+        command.command === "brew" && command.args[0] === "list" ? { stdout: Buffer.from("opencode-v2 2.1.3\n") } : {},
+      "@opencode/cli",
+      false,
+      "anomalyco/tap/opencode-v2",
+      "opencode-v2",
+    )
+    const error = yield* test.updater.upgrade("brew", "2.3.4").pipe(Effect.flip)
+    expect(error).toBeInstanceOf(Updater.UpgradeError)
+    expect((error as Updater.UpgradeError).title).toBe("Homebrew did not install the OpenCode update")
+    expect(error.message).toContain("still at 2.1.3 instead of 2.3.4")
+    expect(test.commands).toEqual([
+      ["brew", "upgrade", "anomalyco/tap/opencode-v2"],
+      ["brew", "list", "--versions", "opencode-v2"],
+    ])
+  }),
+)
+
+it.live("Homebrew tap upgrades accept the new keg when it is not listed last", () =>
+  Effect.gen(function* () {
+    // Homebrew prints kegs in filesystem order and appends `_N` when the formula revision changed,
+    // so the target can sit in front of a kept old keg and still be a successful upgrade.
+    const test = yield* fixture(
+      (command) =>
+        command.command === "brew" && command.args[0] === "list"
+          ? { stdout: Buffer.from("opencode-v2 2.3.4_1 2.1.3\n") }
+          : {},
+      "@opencode/cli",
+      false,
+      "anomalyco/tap/opencode-v2",
+      "opencode-v2",
+    )
+    yield* test.updater.upgrade("brew", "2.3.4")
+    expect(test.commands).toEqual([
+      ["brew", "upgrade", "anomalyco/tap/opencode-v2"],
+      ["brew", "list", "--versions", "opencode-v2"],
+    ])
+  }),
+)
+
+it.live("Homebrew tap upgrades reject a version the tap cannot install", () =>
+  Effect.gen(function* () {
+    // `brew upgrade` takes no version argument, so asking for another version used to install the tap
+    // version and then report it as a stale tap. It fails before brew runs instead.
+    const test = yield* fixture(() => ({}), "@opencode/cli", false, "opencode-v2", "opencode-v2")
+    const error = yield* test.updater.upgrade("brew", "2.2.5").pipe(Effect.flip)
+    expect(error).toBeInstanceOf(Updater.UpgradeError)
+    expect((error as Updater.UpgradeError).title).toBe("Homebrew can only install the version in the tap")
+    expect(error.message).toContain("provides opencode-v2 2.3.4, not 2.2.5")
+    expect(test.commands).toEqual([])
+  }),
+)
+
+it.live("Homebrew tap upgrades succeed when the installed version cannot be read back", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture(
+      (command) =>
+        command.command === "brew" && command.args[0] === "list"
+          ? { error: new AppProcess.AppProcessError({ command: command.command }) }
+          : {},
+      "@opencode/cli",
+      false,
+      "anomalyco/tap/opencode-v2",
+      "opencode-v2",
+    )
+    yield* test.updater.upgrade("brew", "2.3.4")
+    expect(test.commands).toHaveLength(2)
+  }),
+)
 
 const winget = (search: Partial<AppProcess.RunResult>) =>
   fixture(
