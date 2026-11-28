@@ -272,7 +272,10 @@ describe("SessionExecution lifecycle", () => {
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
       const context = yield* buildExecution(scope, (input) =>
         Effect.suspend(() => {
-          drains.push({ force: input.force, promotable: input.promotable })
+          drains.push({
+            force: input.at !== undefined && input.at._tag === "Fresh" ? input.at.forced : false,
+            promotable: input.promotable,
+          })
           if (drains.length > 1) return Effect.void
           return Deferred.succeed(draining, undefined).pipe(Effect.andThen(Effect.never))
         }),
