@@ -171,6 +171,11 @@ const CACHE_MARGIN = 30_000
 const PRECOMPUTED_TAIL_SHARE = 0.4
 /** Failed background summaries after which no new one starts until the next compaction. */
 const PRECOMPUTE_MAX_FAILURES = 2
+/**
+ * The longest a due compaction waits for a background summary still being written, about twice the time one takes.
+ * Past it the summary is stalled, or failing and being resent, so compaction stops it and summarizes as usual.
+ */
+const PRECOMPUTE_WAIT = 120_000
 
 const SUMMARY_TEMPLATE = `You MUST use this format for your response (you may omit sections that aren't applicable). Do not include the <template> tags in your response.
 <template>
@@ -451,12 +456,28 @@ export const layer = Layer.effect(
 
       const pending = held.fiber.pollUnsafe() === undefined
       const waitStarted = yield* Clock.currentTimeMillis
-      const exit = yield* Fiber.await(held.fiber).pipe(Effect.onInterrupt(() => Fiber.interrupt(held.fiber)))
+      const awaited = yield* Fiber.await(held.fiber).pipe(
+        Effect.timeoutOption(PRECOMPUTE_WAIT),
+        Effect.onInterrupt(() => Fiber.interrupt(held.fiber)),
+      )
+      const timedOut = awaited._tag === "None"
       yield* Effect.annotateCurrentSpan({
         "compaction.background.pending": pending,
         "compaction.background.wait_ms": (yield* Clock.currentTimeMillis) - waitStarted,
-        "compaction.background.failed": Exit.isFailure(exit),
+        "compaction.background.timed_out": timedOut,
+        "compaction.background.failed": !timedOut && Exit.isFailure(awaited.value),
       })
+      if (timedOut) {
+        yield* Effect.logInfo("background compaction discarded", {
+          sessionID: context.session.id,
+          keepID: held.keepID,
+          reason: "timed out",
+        })
+        yield* Fiber.interrupt(held.fiber)
+        return undefined
+      }
+
+      const exit = awaited.value
       if (Exit.isFailure(exit)) return undefined
       // Background calls were billed as they finished; the compaction's message still shows what it cost.
       held.usage.forEach((usage) => addSpent(context.session.id, usage))
